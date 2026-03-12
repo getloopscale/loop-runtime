@@ -8,7 +8,9 @@
 
 LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. The goal is Vercel-quality DX for backends — `loopzero login`, `loopzero init`, `loopzero deploy`, and in under 5 minutes every service is live with TLS, preview environments on every PR, and rollback with one command. No Kubernetes. No infrastructure YAML.
 
-The authoritative specification is **`docs/system-design.md`**. Every state machine, failure mode, concurrency decision, CLI output format, and exit code is documented there. If this file and the system design conflict, the system design wins.
+The authoritative specification is **`docs/technical.md`**. Every state machine, failure mode, concurrency decision, CLI output format, and exit code is documented there. If this file and the system design conflict, the system design wins.
+
+Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
 ---
 
@@ -18,7 +20,7 @@ The authoritative specification is **`docs/system-design.md`**. Every state mach
 No production code without a failing test. Write the test. Run it. Confirm it fails. Then implement. This is not a guideline — it is the development process.
 
 ### Rule 2: Read the spec first
-Before implementing anything, find the relevant section in `docs/system-design.md`. The spec is the design. Do not invent behavior the spec doesn't describe.
+Before implementing anything, find the relevant section in `docs/technical.md`. The spec is the design. Do not invent behavior the spec doesn't describe.
 
 ### Rule 3: No internal terms in user-facing output
 CLI output, error messages, and `--json` responses must never contain:
@@ -78,7 +80,19 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 loopzero/
 ├── CLAUDE.md                          ← you are here
 ├── docs/
-│   └── system-design.md               ← single source of truth
+│   ├── technical.md               ← single source of truth
+│   └── sprints/                       ← sprint details (extracted from §23)
+│       ├── README.md                  ← sprint index + overview table
+│       ├── 00-foundation/
+│       ├── 01-login-init-tenant-controller/
+│       ├── 02-deploy-happy-path/
+│       ├── 03-logs-status-secrets/
+│       ├── 04-rollback-promote-cancel/
+│       ├── 05-preview-environments/
+│       ├── 06-security-supply-chain/
+│       ├── 07-observability/
+│       ├── 08-hardening-chaos/
+│       └── 09-polish-launch/
 ├── cli/                               ← @loopzero/cli (TypeScript)
 │   ├── src/
 │   │   ├── commands/                  ← one file per command
@@ -235,18 +249,20 @@ Run the pre-completion checklist:
 
 ## Sprint Plan
 
-| Sprint | Focus | Exit gate |
-|--------|-------|-----------|
-| **0** | Foundation | `task setup` works, 3 clusters, CRDs, unit tests pass |
-| **1** | `loopzero login` + `loopzero init` | TenantController provisions infra. User sees generated `loopzero.yaml`. |
-| **2** | `loopzero deploy` happy path | CLI → live URL. The "5-minute promise" is testable. |
-| **3** | `loopzero logs` + `loopzero status` + `loopzero secret` | All 5 core workflows functional |
-| **4** | `loopzero rollback` + `loopzero promote` | Rollback in < 30s. Promote works. |
-| **5** | Preview environments | PR → preview URL → PR close → cleanup (automated) |
-| **6** | Security + supply chain | cosign, SBOM, ephemeral creds, RBAC, rate limits |
-| **7** | Observability complete | Incident simulated and resolved via dashboards + runbooks in < 15 min |
-| **8** | Hardening + chaos | 50 concurrent deploys pass. All spec §12 failure modes have passing tests. |
-| **9** | Polish + launch | Non-team-member onboarding unassisted in < 10 min |
+> Full details: `docs/sprints/README.md` and each `docs/sprints/XX-name/sprint.md`
+
+| Sprint | Weeks | Focus | Exit gate | CLI Commands |
+|--------|-------|-------|-----------|--------------|
+| **[0](docs/sprints/00-foundation/sprint.md)** | 1-2 | Foundation | `task setup` boots, Grafana running | — |
+| **[1](docs/sprints/01-login-init-tenant-controller/sprint.md)** | 3-5 | Login + Init + TenantController | `loopzero login` → `loopzero init` → `loopzero.yaml` | `login`, `logout`, `whoami`, `init` |
+| **[2](docs/sprints/02-deploy-happy-path/sprint.md)** | 6-9 | Deploy happy path | CLI → live URL | `deploy` |
+| **[3](docs/sprints/03-logs-status-secrets/sprint.md)** | 10-12 | Logs + Status + Secrets | All daily workflows functional | `logs`, `status`, `inspect`, `secret` |
+| **[4](docs/sprints/04-rollback-promote-cancel/sprint.md)** | 13-15 | Rollback + Promote + Cancel | Recovery in < 30s | `rollback`, `promote`, `build`, `env`, `team`, `project` |
+| **[5](docs/sprints/05-preview-environments/sprint.md)** | 16-18 | Preview environments | PR → preview URL → cleanup | `preview` |
+| **[6](docs/sprints/06-security-supply-chain/sprint.md)** | 19-21 | Security + Supply chain | Signed images, encrypted secrets, RBAC | — |
+| **[7](docs/sprints/07-observability/sprint.md)** | 22-23 | Observability complete | Incident resolved via dashboards in < 15 min | — |
+| **[8](docs/sprints/08-hardening-chaos/sprint.md)** | 24-25 | Hardening + Chaos | 50 concurrent deploys, all chaos passes | — |
+| **[9](docs/sprints/09-polish-launch/sprint.md)** | 26-27 | Polish + Launch | Non-team-member onboards in < 10 min | — |
 
 Check the current sprint before starting any implementation. Only implement what belongs to the current sprint.
 
