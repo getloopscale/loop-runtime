@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `validate:manifests` task and CI job no longer swallow kubeconform failures with `|| true` (#S0-review-3)
 - OTel Collector image tag pinned to `0.96.0` — no longer relies on implicit chart default (#S0-review-3)
 - CI Go version aligned to `1.25` to match workspace and k8s.io/apimachinery requirement (#S0-review-3)
+- golangci-lint upgraded from v1.62.2 to v2.11.3 — v1.x was built with Go 1.23 and cannot analyze Go 1.25 code (#S0-review-3)
 - kubeconform version pinned to `v0.6.7` in CI instead of downloading `/releases/latest/` (#S0-review-3)
 - `lint` task now fails properly instead of silently falling back to `go vet` (#S0-review-3)
 - `.gitignore` comments corrected to reflect Go API (not TypeScript) (#S0-review-3)
