@@ -1,0 +1,26 @@
+resources:
+  limits:
+    cpu: "300m"
+    memory: "128Mi"
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+
+securityContext:
+  runAsNonRoot: true
+
+service:
+  type: LoadBalancer
+
+providers:
+  kubernetesIngress:
+    enabled: true
+  kubernetesCRD:
+    enabled: true
+
+logs:
+  general:
+    format: json
+  access:
+    enabled: true
+    format: json

@@ -1,4 +1,6 @@
-# LoopZero — CLAUDE.md
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 > This file is the contract between Claude and the LoopZero codebase. Read it entirely before touching any file.
 
@@ -11,6 +13,32 @@ LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. The goal i
 The authoritative specification is **`docs/technical.md`**. Every state machine, failure mode, concurrency decision, CLI output format, and exit code is documented there. If this file and the system design conflict, the system design wins.
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
+
+**Current status:** Greenfield — no application code exists yet. Only `docs/` and configuration files. Implementation starts with Sprint 0.
+
+---
+
+## Development Commands
+
+```bash
+# Local environment
+task dev:up              # Boot k3d clusters + dependencies
+tilt up                  # Start dev loop with hot reload
+
+# Tests
+task test                # Run all tests
+task test:unit           # Run unit tests only
+task test:e2e            # Run E2E tests (Ginkgo)
+task lint                # Lint all components
+task validate:manifests  # kubeconform --strict on all manifests
+
+# Per-component (when code exists)
+cd cli  && npm test      # CLI unit tests (Jest)
+cd api  && npm test      # API component tests (Jest + Supertest)
+cd operators && go test ./...  # Operator tests (Ginkgo + envtest)
+```
+
+**Prerequisites:** Go 1.22+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), [Task](https://taskfile.dev)
 
 ---
 

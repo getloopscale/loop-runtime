@@ -1,0 +1,190 @@
+version: "3"
+
+vars:
+  MGMT_CONTEXT: k3d-loopzero-mgmt
+  BUILD_CONTEXT: k3d-loopzero-build
+  WORKLOAD_CONTEXT: k3d-loopzero-workload
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # S0.2: Cluster lifecycle
+  # ---------------------------------------------------------------------------
+  clusters:create:
+    desc: Create all 3 k3d clusters (mgmt, build, workload)
+    cmds:
+      - k3d cluster list -o json | grep -q '"name":"loopzero-mgmt"' || k3d cluster create --config infra/k3d/mgmt-cluster.yaml
+      - k3d cluster list -o json | grep -q '"name":"loopzero-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
+      - k3d cluster list -o json | grep -q '"name":"loopzero-workload"' || k3d cluster create --config infra/k3d/workload-cluster.yaml
+      - task: clusters:verify
+
+  clusters:verify:
+    desc: Verify all clusters are reachable
+    cmds:
+      - kubectl --context {{.MGMT_CONTEXT}} cluster-info
+      - kubectl --context {{.BUILD_CONTEXT}} cluster-info
+      - kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
+
+  clusters:delete:
+    desc: Delete all k3d clusters
+    cmds:
+      - k3d cluster delete loopzero-mgmt || true
+      - k3d cluster delete loopzero-build || true
+      - k3d cluster delete loopzero-workload || true
+
+  # ---------------------------------------------------------------------------
+  # S0.3: Infrastructure install
+  # ---------------------------------------------------------------------------
+  helm:repos:
+    desc: Add all required Helm repositories
+    cmds:
+      - helm repo add bitnami https://charts.bitnami.com/bitnami || true
+      - helm repo add gitea-charts https://dl.gitea.com/charts/ || true
+      - helm repo add minio https://charts.min.io/ || true
+      - helm repo add argo https://argoproj.github.io/argo-helm || true
+      - helm repo add traefik https://traefik.github.io/charts || true
+      - helm repo add jetstack https://charts.jetstack.io || true
+      - helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+      - helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts || true
+      - helm repo update
+
+  infra:install:mgmt:
+    desc: Install platform components in mgmt cluster
+    deps: [helm:repos]
+    cmds:
+      - >-
+        helm upgrade --install postgresql bitnami/postgresql
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace loopzero-system --create-namespace
+        -f infra/helm/postgresql/values.yaml
+        --wait --timeout 3m
+      - >-
+        helm upgrade --install gitea gitea-charts/gitea
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace loopzero-system
+        -f infra/helm/gitea/values.yaml
+        --wait --timeout 3m
+      - >-
+        helm upgrade --install minio minio/minio
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace loopzero-system
+        -f infra/helm/minio/values.yaml
+        --wait --timeout 3m
+      - >-
+        helm upgrade --install argocd argo/argo-cd
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace argocd --create-namespace
+        -f infra/helm/argocd/values.yaml
+        --wait --timeout 3m
+      - >-
+        helm upgrade --install cert-manager jetstack/cert-manager
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace cert-manager --create-namespace
+        -f infra/helm/cert-manager/values.yaml
+        --wait --timeout 3m
+
+  infra:install:build:
+    desc: Install platform components in build cluster
+    deps: [helm:repos]
+    cmds:
+      - >-
+        helm upgrade --install argo-workflows argo/argo-workflows
+        --kube-context {{.BUILD_CONTEXT}}
+        --namespace argo --create-namespace
+        -f infra/helm/argo-workflows/values.yaml
+        --wait --timeout 3m
+
+  infra:install:workload:
+    desc: Install platform components in workload cluster
+    deps: [helm:repos]
+    cmds:
+      - >-
+        helm upgrade --install traefik traefik/traefik
+        --kube-context {{.WORKLOAD_CONTEXT}}
+        --namespace traefik --create-namespace
+        -f infra/helm/traefik/values.yaml
+        --wait --timeout 3m
+
+  infra:install:monitoring:
+    desc: Install Prometheus + Grafana + OTel in mgmt cluster
+    deps: [helm:repos]
+    cmds:
+      - >-
+        helm upgrade --install monitoring prometheus-community/kube-prometheus-stack
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace monitoring --create-namespace
+        -f infra/helm/monitoring/values.yaml
+        --wait --timeout 5m
+      - >-
+        helm upgrade --install otel-collector open-telemetry/opentelemetry-collector
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace monitoring
+        -f infra/helm/otel/values.yaml
+        --wait --timeout 3m
+
+  infra:install:
+    desc: Install all platform components via Helm
+    cmds:
+      - task: infra:install:mgmt
+      - task: infra:install:build
+      - task: infra:install:workload
+      - task: infra:install:monitoring
+
+  # ---------------------------------------------------------------------------
+  # S0.4: CRDs
+  # ---------------------------------------------------------------------------
+  crds:install:
+    desc: Install CRDs into mgmt cluster
+    cmds:
+      - echo "CRD manifests will be generated via controller-gen in Sprint 1"
+      - echo "CRD types defined in operators/api/v1/ — compilation verified by test:unit"
+
+  # ---------------------------------------------------------------------------
+  # S0.5: Database
+  # ---------------------------------------------------------------------------
+  db:migrate:
+    desc: Run database migrations against PostgreSQL
+    cmds:
+      - |
+        kubectl --context {{.MGMT_CONTEXT}} port-forward -n loopzero-system svc/postgresql 5432:5432 &
+        PF_PID=$!
+        trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
+        sleep 2
+        cd api && DATABASE_HOST=localhost DATABASE_PORT=5432 DATABASE_PASSWORD=loopzero-dev-password npx drizzle-kit migrate
+
+  # ---------------------------------------------------------------------------
+  # S0.14: Composite tasks
+  # ---------------------------------------------------------------------------
+  setup:
+    desc: Full setup from scratch — clusters + infra + CRDs + DB
+    cmds:
+      - task: clusters:create
+      - task: infra:install
+      - task: crds:install
+      - task: db:migrate
+
+  dev:up:
+    desc: Boot full dev environment (setup + Tilt)
+    cmds:
+      - task: setup
+      - echo "TODO — tilt up"
+
+  test:unit:
+    desc: Run all unit tests
+    cmds:
+      - cd operators && go test ./... -short
+      - cd api && npm test
+
+  test:e2e:
+    desc: Run E2E tests (requires running clusters)
+    cmds:
+      - echo "TODO"
+
+  lint:
+    desc: Lint all components
+    cmds:
+      - cd operators && go vet ./...
+
+  validate:manifests:
+    desc: Validate all K8s manifests with kubeconform
+    cmds:
+      - kubeconform --strict --skip CustomResourceDefinition operators/config/ || true

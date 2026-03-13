@@ -1,0 +1,28 @@
+mode: standalone
+
+rootUser: loopzero-admin
+rootPassword: loopzero-dev-password
+
+resources:
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+
+podSecurityContext:
+  runAsNonRoot: true
+
+persistence:
+  size: 1Gi
+
+service:
+  type: NodePort
+
+consoleService:
+  type: NodePort
+
+buckets:
+  - name: loopzero-artifacts
+    policy: none

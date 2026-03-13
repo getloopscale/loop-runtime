@@ -1,0 +1,74 @@
+# kube-prometheus-stack values for dev local
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+  service:
+    type: NodePort
+    nodePort: 30004
+
+grafana:
+  adminPassword: loopzero-dev-password
+  service:
+    type: NodePort
+    nodePort: 30002
+  resources:
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          orgId: 1
+          folder: LoopZero
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+  dashboards:
+    default:
+      cluster-health:
+        gnetId: 315
+        revision: 3
+        datasource: Prometheus
+
+alertmanager:
+  enabled: false
+
+nodeExporter:
+  enabled: true
+  resources:
+    limits:
+      cpu: "100m"
+      memory: "64Mi"
+    requests:
+      cpu: "50m"
+      memory: "32Mi"
+
+kubeStateMetrics:
+  resources:
+    limits:
+      cpu: "100m"
+      memory: "128Mi"
+    requests:
+      cpu: "50m"
+      memory: "64Mi"

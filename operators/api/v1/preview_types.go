@@ -1,0 +1,73 @@
+package v1
+
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// PreviewPhase represents the lifecycle phase of a PreviewEnvironment.
+// See state machine spec section 5.3.
+type PreviewPhase string
+
+const (
+	PreviewPhaseCreating      PreviewPhase = "Creating"
+	PreviewPhaseActive        PreviewPhase = "Active"
+	PreviewPhaseExpiring      PreviewPhase = "Expiring"
+	PreviewPhaseDeleted       PreviewPhase = "Deleted"
+	PreviewPhaseFailed        PreviewPhase = "Failed"
+	PreviewPhaseDeleting      PreviewPhase = "Deleting"
+	PreviewPhaseCleanupFailed PreviewPhase = "CleanupFailed"
+)
+
+// PreviewEnvironment is the Schema for the previewenvironments API.
+// It represents a temporary environment created for a pull request.
+type PreviewEnvironment struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   PreviewEnvironmentSpec   `json:"spec,omitempty"`
+	Status PreviewEnvironmentStatus `json:"status,omitempty"`
+}
+
+// PreviewEnvironmentSpec defines the desired state of a PreviewEnvironment
+// as described in spec section 9.2.
+type PreviewEnvironmentSpec struct {
+	// TenantID is the owning tenant identifier.
+	TenantID string `json:"tenantId"`
+
+	// ProjectID is the project this preview belongs to.
+	ProjectID string `json:"projectId"`
+
+	// PRNumber is the pull request number that triggered this preview.
+	PRNumber int `json:"prNumber,omitempty"`
+
+	// Branch is the source branch for the preview.
+	Branch string `json:"branch"`
+
+	// ExpiresAt is the time at which this preview should be automatically cleaned up.
+	ExpiresAt *metav1.Time `json:"expiresAt"`
+
+	// ReleaseID is the release associated with this preview.
+	ReleaseID string `json:"releaseId"`
+}
+
+// PreviewEnvironmentStatus defines the observed state of a PreviewEnvironment.
+type PreviewEnvironmentStatus struct {
+	// Phase represents the current lifecycle phase. See state machine 5.3.
+	Phase PreviewPhase `json:"phase,omitempty"`
+
+	// URL is the publicly accessible URL for this preview environment.
+	URL string `json:"url,omitempty"`
+
+	// CreatedAt is the time the preview environment was actually created.
+	CreatedAt *metav1.Time `json:"createdAt,omitempty"`
+
+	// Conditions represent the latest available observations of the preview's state.
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// PreviewEnvironmentList contains a list of PreviewEnvironment resources.
+type PreviewEnvironmentList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []PreviewEnvironment `json:"items"`
+}

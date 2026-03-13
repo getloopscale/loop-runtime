@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: operators/go.sum
+      - name: Run Go tests
+        working-directory: operators
+        run: go test ./... -short -v
+
+  test-ts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        working-directory: api
+        run: npm ci
+      - name: Run TypeScript tests
+        working-directory: api
+        run: npm test
+
+  lint-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: operators/go.sum
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: operators
+          version: latest
+
+  validate-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          curl -L -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
+          tar xzf kubeconform.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+      - name: Validate manifests
+        run: |
+          find operators/config -name '*.yaml' -o -name '*.yml' | xargs kubeconform --strict --skip CustomResourceDefinition || true
+          find infra/helm -name '*.yaml' -o -name '*.yml' | xargs kubeconform --strict --skip CustomResourceDefinition 2>/dev/null || true
