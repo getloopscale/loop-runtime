@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- ESLint configured for CLI TypeScript with @typescript-eslint, flat config format (ESLint 9+) (#S1.9)
+- XDG_CONFIG_HOME support: `ConfigStore.default()` uses `$XDG_CONFIG_HOME/loopzero/` when set, falls back to `~/.loopzero/` (#S1.10)
+- TenantController with full reconcile loop: namespaces, RBAC, NetworkPolicy, build namespace, Gitea repo provisioning, phase transitions (#S1.1-S1.8)
+- Ginkgo+envtest test suite for TenantController: 44 tests covering creation, deletion, idempotency, partial failure recovery (#S1.8)
+- CLI scaffold: TypeScript + Commander with `--json` global flag, semver versioning (#S1.9)
+- CLI config store: `~/.loopzero/config.json` with 0600 permissions for token, email, team (#S1.10)
+- CLI output formatter: human + JSON + CI mode detection (GitHub Actions, GitLab CI, CircleCI, Jenkins) (#S1.11)
+- CLI API client: Bearer token injection, Correlation-ID (UUID v4), HTTP error → exit code mapping (#S1.12)
+- `loopzero login --token`: validates GitHub token, multi-tenant resolution (auto/select/CI), exit codes 0/4/1 (#S1.13)
+- `loopzero logout` and `loopzero whoami`: full lifecycle with human + JSON output (#S1.14)
+- Monorepo tool detection: Turborepo, Nx, Lerna, pnpm, yarn, npm workspaces, flat detection (#S1.15)
+- Framework detection: 10 frameworks (nextjs, vite, remix, nestjs, express, fastify, fastapi, django, gin, node) with priority-based detection (#S1.16)
+- API HTTP server: chi router, Correlation-ID middleware, request logging, graceful shutdown, health + deep health endpoints (#S1.17)
+- Database migration 000002: users, tenants, tenant_members, projects tables with FKs, composite PKs, unique constraints (#S1.18)
+- Auth middleware: GitHub token validation with 5-minute cache, multi-tenant resolution (Model C), X-LoopZero-Tenant header (#S1.19)
+- GET /api/v1/auth/whoami: returns user info with product language (team, not tenant) (#S1.20)
+- POST /api/v1/projects: RFC 1123 name validation, project creation, Tenant CR bridge to TenantController (#S1.21)
+- `loopzero init`: monorepo + framework detection, loopzero.yaml generation, .gitignore update, API project creation (#S1.22)
+- Idempotency-Key middleware: SHA256 payload hash comparison, cached response replay, 422 on key reuse with different payload (#S1.21)
+- Vertical slice E2E test: proves full convergence from API auth → project creation → Tenant CR → controller reconciliation → K8s objects (#S1.23)
+- Public test helper packages `api/apitest` and `operators/operatortest` for cross-module E2E testing (#S1.23)
 - k3d cluster configurations for 3-cluster topology: mgmt, build, workload with 2 agents each and shared registry (#S0.1)
 - Taskfile with full cluster lifecycle, Helm install, DB migration, registry, and test tasks (#S0.2)
 - Helm value files for all platform components with resource limits, security contexts, and health probes (#S0.3)
@@ -38,6 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Schema test validates migration idempotency (IF NOT EXISTS on all DDL statements) (#S0-review-3)
 
 ### Changed
+- TenantController now uses state machine for all phase transitions — direct status assignment replaced by `tenantSM.Transition()` (#S1.7)
+- Operator entrypoint now enables leader election by default with LeaderElectionID `loopzero-operators.loopzero.io` (#S1.1)
+- Build namespace ResourceQuota now enforces `maxBuildConcurrency` via `count/workflows.argoproj.io` quota (#S1.5)
+- Server route wiring now uses chi `r.Group()` for auth-scoped routes with idempotency middleware on mutating endpoints (#S1.17)
 - `SetCondition` now accepts `observedGeneration` parameter — kubebuilder best practice for tracking resource generation (#S0-review-3)
 - `PlanTier` and `TenantPhase` now have `+kubebuilder:validation:Enum` markers — CRD rejects invalid values (#S0-review-3)
 - Argo Workflows controller now has readinessProbe in addition to livenessProbe (#S0-review-3)

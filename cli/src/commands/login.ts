@@ -1,0 +1,107 @@
+export interface TokenValidationResult {
+  valid: boolean;
+  email: string | null;
+  teams: string[];
+}
+
+export interface LoginDeps {
+  saveToken: (token: string, email: string, team: string) => void;
+  validateToken: (token: string) => Promise<TokenValidationResult>;
+  writeTo: (msg: string) => void;
+  writeError: (msg: string) => void;
+  isCI: boolean;
+}
+
+export interface LoginOptions {
+  token?: string;
+  team?: string;
+  json?: boolean;
+}
+
+export class LoginCommand {
+  private readonly deps: LoginDeps;
+
+  constructor(deps: LoginDeps) {
+    this.deps = deps;
+  }
+
+  async execute(opts: LoginOptions): Promise<number> {
+    if (!opts.token) {
+      this.deps.writeError('Token is required. Use: loopzero login --token <token>');
+      return 1;
+    }
+
+    const result = await this.deps.validateToken(opts.token);
+
+    if (!result.valid || !result.email) {
+      this.deps.writeError('Authentication failed. Check your token and try again.');
+      return 4;
+    }
+
+    const team = this.resolveTeam(result.teams, opts.team);
+    if (team === null) {
+      return this.handleTeamResolutionFailure(result.teams, opts.team);
+    }
+
+    this.deps.saveToken(opts.token, result.email, team);
+
+    if (opts.json) {
+      this.deps.writeTo(
+        JSON.stringify({
+          authenticated: true,
+          email: result.email,
+          team,
+        })
+      );
+    } else {
+      this.deps.writeTo(`Authenticated as ${result.email} (team: ${team})`);
+    }
+
+    return 0;
+  }
+
+  private resolveTeam(teams: string[], requestedTeam?: string): string | null {
+    if (requestedTeam) {
+      return teams.includes(requestedTeam) ? requestedTeam : null;
+    }
+
+    if (teams.length === 1) {
+      return teams[0];
+    }
+
+    if (teams.length === 0) {
+      return null;
+    }
+
+    // Multiple teams, no --team flag — handled by caller
+    if (this.deps.isCI) {
+      return null;
+    }
+
+    // In interactive mode with multiple teams and no --team flag,
+    // for now return null (interactive prompt not yet implemented)
+    return null;
+  }
+
+  private handleTeamResolutionFailure(
+    teams: string[],
+    requestedTeam?: string
+  ): number {
+    if (requestedTeam && !teams.includes(requestedTeam)) {
+      this.deps.writeError(
+        `Team "${requestedTeam}" not found. Available teams: ${teams.join(', ')}`
+      );
+      return 1;
+    }
+
+    if (teams.length > 1) {
+      this.deps.writeError(
+        `Multiple teams available. Use --team to select one: ${teams.join(', ')}`
+      );
+      return 1;
+    }
+
+    this.deps.writeError('No teams available for this account.');
+    return 1;
+  }
+}

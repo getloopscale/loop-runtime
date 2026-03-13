@@ -1,0 +1,232 @@
+import { ApiClient, ApiError } from '../../../src/api/client';
+
+function fakeFetch(
+  status: number,
+  body: Record<string, unknown> = {},
+  headers: Record<string, string> = {}
+): ((url: string, init?: RequestInit) => Promise<Response>) & {
+  lastUrl?: string;
+  lastInit?: RequestInit;
+} {
+  const fn = async (url: string, init?: RequestInit) => {
+    fn.lastUrl = url;
+    fn.lastInit = init;
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      headers: new Headers(headers),
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    } as Response;
+  };
+  fn.lastUrl = undefined as string | undefined;
+  fn.lastInit = undefined as RequestInit | undefined;
+  return fn;
+}
+
+describe('ApiClient', () => {
+  const baseURL = 'http://localhost:3001';
+
+  describe('Authorization header', () => {
+    it('should inject Bearer token in Authorization header', async () => {
+      const fetchFn = fakeFetch(200, { ok: true });
+      const client = new ApiClient({
+        baseURL,
+        token: 'ghp_test123',
+        fetchFn,
+      });
+
+      await client.get('/health');
+      const init = fetchFn.lastInit!;
+      const headers = init.headers as Record<string, string>;
+      expect(headers['Authorization']).toBe('Bearer ghp_test123');
+    });
+
+    it('should omit Authorization header when no token', async () => {
+      const fetchFn = fakeFetch(200, { ok: true });
+      const client = new ApiClient({
+        baseURL,
+        token: null,
+        fetchFn,
+      });
+
+      await client.get('/health');
+      const init = fetchFn.lastInit!;
+      const headers = init.headers as Record<string, string>;
+      expect(headers['Authorization']).toBeUndefined();
+    });
+  });
+
+  describe('Correlation-ID header', () => {
+    it('should inject Correlation-ID as UUID v4', async () => {
+      const fetchFn = fakeFetch(200, { ok: true });
+      const client = new ApiClient({
+        baseURL,
+        token: null,
+        fetchFn,
+      });
+
+      await client.get('/health');
+      const init = fetchFn.lastInit!;
+      const headers = init.headers as Record<string, string>;
+      const correlationId = headers['Correlation-ID'];
+      expect(correlationId).toBeDefined();
+      expect(correlationId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      );
+    });
+  });
+
+  describe('base URL', () => {
+    it('should use provided baseURL', async () => {
+      const fetchFn = fakeFetch(200, {});
+      const client = new ApiClient({
+        baseURL: 'http://api.example.com',
+        token: null,
+        fetchFn,
+      });
+
+      await client.get('/tenants');
+      expect(fetchFn.lastUrl).toBe('http://api.example.com/tenants');
+    });
+
+    it('should default to LOOPZERO_API_URL env var', () => {
+      const original = process.env.LOOPZERO_API_URL;
+      process.env.LOOPZERO_API_URL = 'http://custom-api:8080';
+
+      const client = new ApiClient({ fetchFn: fakeFetch(200) });
+      expect((client as any).baseURL).toBe('http://custom-api:8080');
+
+      if (original !== undefined) {
+        process.env.LOOPZERO_API_URL = original;
+      } else {
+        delete process.env.LOOPZERO_API_URL;
+      }
+    });
+
+    it('should fallback to localhost:3001 when no env var', () => {
+      const original = process.env.LOOPZERO_API_URL;
+      delete process.env.LOOPZERO_API_URL;
+
+      const client = new ApiClient({ fetchFn: fakeFetch(200) });
+      expect((client as any).baseURL).toBe('http://localhost:3001');
+
+      if (original !== undefined) {
+        process.env.LOOPZERO_API_URL = original;
+      }
+    });
+  });
+
+  describe('HTTP methods', () => {
+    it('get() should use GET method', async () => {
+      const fetchFn = fakeFetch(200, { data: 'test' });
+      const client = new ApiClient({ baseURL, token: null, fetchFn });
+
+      const result = await client.get('/tenants');
+      expect(fetchFn.lastInit!.method).toBe('GET');
+      expect(result).toEqual({ data: 'test' });
+    });
+
+    it('post() should use POST method with body', async () => {
+      const fetchFn = fakeFetch(201, { id: 't-1234' });
+      const client = new ApiClient({ baseURL, token: null, fetchFn });
+
+      const result = await client.post('/tenants', { name: 'acme' });
+      const init = fetchFn.lastInit!;
+      const headers = init.headers as Record<string, string>;
+      expect(init.method).toBe('POST');
+      expect(headers['Content-Type']).toBe('application/json');
+      expect(JSON.parse(init.body as string)).toEqual({ name: 'acme' });
+      expect(result).toEqual({ id: 't-1234' });
+    });
+
+    it('del() should use DELETE method', async () => {
+      const fetchFn = fakeFetch(204);
+      const client = new ApiClient({ baseURL, token: null, fetchFn });
+
+      await client.del('/tenants/t-1234');
+      expect(fetchFn.lastInit!.method).toBe('DELETE');
+    });
+  });
+
+  describe('HTTP error → exit code mapping', () => {
+    it('401 → exit code 4 with auth message', async () => {
+      const fetchFn = fakeFetch(401, { error: 'unauthorized' });
+      const client = new ApiClient({ baseURL, token: null, fetchFn });
+
+      try {
+        await client.get('/tenants');
+        fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as ApiError;
+        expect(apiErr.exitCode).toBe(4);
+        expect(apiErr.message).toContain('loopzero login');
+      }
+    });
+
+    it('409 → message about operation in progress', async () => {
+      const fetchFn = fakeFetch(409, { error: 'conflict' });
+      const client = new ApiClient({ baseURL, token: null, fetchFn });
+
+      try {
+        await client.post('/deploys', {});
+        fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as ApiError;
+        expect(apiErr.exitCode).toBe(3);
+        expect(apiErr.message).toContain('already in progress');
+      }
+    });
+
+    it('422 → message about invalid request', async () => {
+      const fetchFn = fakeFetch(422, { error: 'validation failed' });
+      const client = new ApiClient({ baseURL, token: null, fetchFn });
+
+      try {
+        await client.post('/tenants', {});
+        fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as ApiError;
+        expect(apiErr.exitCode).toBe(1);
+        expect(apiErr.message).toContain('Invalid request');
+      }
+    });
+
+    it('500 → message about service unavailable', async () => {
+      const fetchFn = fakeFetch(500, { error: 'internal' });
+      const client = new ApiClient({ baseURL, token: null, fetchFn });
+
+      try {
+        await client.get('/health');
+        fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as ApiError;
+        expect(apiErr.exitCode).toBe(3);
+        expect(apiErr.message).toContain('unavailable');
+      }
+    });
+
+    it('error messages should not contain internal terms', async () => {
+      const forbidden = [
+        'ArgoCD', 'argocd', 'GitOps', 'gitops-push', 'CRD',
+        'tenant_id', 'advisory lock', 'pg_advisory', 'Gitea',
+        'MinIO', 'kubebuilder', 'envtest', 'Kaniko',
+      ];
+
+      const statuses = [401, 409, 422, 500];
+      for (const status of statuses) {
+        const fetchFn = fakeFetch(status, { error: 'err' });
+        const client = new ApiClient({ baseURL, token: null, fetchFn });
+
+        try {
+          await client.get('/test');
+        } catch (err) {
+          const msg = (err as ApiError).message;
+          for (const term of forbidden) {
+            expect(msg).not.toContain(term);
+          }
+        }
+      }
+    });
+  });
+});

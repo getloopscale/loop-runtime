@@ -154,6 +154,7 @@ tasks:
         trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
         sleep 2
         PGPASSWORD=loopzero-dev-password psql -h localhost -p 5432 -U loopzero -d loopzero -f api/internal/db/migrations/000001_initial_schema.up.sql
+        PGPASSWORD=loopzero-dev-password psql -h localhost -p 5432 -U loopzero -d loopzero -f api/internal/db/migrations/000002_auth_tenants.up.sql
 
   # ---------------------------------------------------------------------------
   # S0.14: Composite tasks
@@ -181,6 +182,9 @@ tasks:
 
   test:unit:
     desc: Run all unit tests
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: setup-envtest use -p path 2>/dev/null || echo "$HOME/.local/share/kubebuilder-envtest/k8s/1.35.0-linux-amd64"
     cmds:
       - cd pkg && go test ./... -short
       - cd operators && go test ./... -short
@@ -189,6 +193,9 @@ tasks:
 
   test:integration:
     desc: Run integration tests (requires running clusters)
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: setup-envtest use -p path 2>/dev/null || echo "$HOME/.local/share/kubebuilder-envtest/k8s/1.35.0-linux-amd64"
     cmds:
       - cd operators && go test ./... -tags=integration -v -timeout 5m
       - cd api && go test ./... -tags=integration -v -timeout 5m

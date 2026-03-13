@@ -128,6 +128,10 @@ spec:
                 type: object
               plan:
                 description: 'Plan is the subscription tier: starter, growth, or enterprise.'
+                enum:
+                - starter
+                - growth
+                - enterprise
                 type: string
               preview:
                 description: Preview configures preview environment limits.
@@ -229,6 +233,11 @@ spec:
                 type: integer
               phase:
                 description: Phase represents the overall tenant lifecycle phase.
+                enum:
+                - Provisioning
+                - Active
+                - Suspended
+                - Deleting
                 type: string
               totalReleases:
                 description: TotalReleases is the total number of releases created
