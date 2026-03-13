@@ -26,6 +26,12 @@ const (
 // It reports drift between desired state (Git) and actual state (cluster).
 // The StateReconciler is observational only and never modifies Git or cluster state.
 // See spec section 13.
+//
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.clusterState`
+// +kubebuilder:printcolumn:name="Environment",type=string,JSONPath=`.spec.environment`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type ReconciliationReport struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -120,6 +126,8 @@ type DriftDetail struct {
 }
 
 // ReconciliationReportList contains a list of ReconciliationReport resources.
+//
+// +kubebuilder:object:root=true
 type ReconciliationReportList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

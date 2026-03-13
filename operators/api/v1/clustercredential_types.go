@@ -7,6 +7,12 @@ import (
 // ClusterCredential is the Schema for the clustercredentials API.
 // It manages workload cluster kubeconfigs and distributes minimum-scope
 // credentials to ArgoCD. See spec section 7.3.3.
+//
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.clusterName`
+// +kubebuilder:printcolumn:name="Connected",type=boolean,JSONPath=`.status.connected`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type ClusterCredential struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -52,6 +58,8 @@ type ClusterCredentialStatus struct {
 }
 
 // ClusterCredentialList contains a list of ClusterCredential resources.
+//
+// +kubebuilder:object:root=true
 type ClusterCredentialList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

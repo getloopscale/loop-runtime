@@ -9,4 +9,9 @@ resources:
 securityContext:
   runAsNonRoot: true
 
+livenessProbe:
+  enabled: true
+readinessProbe:
+  enabled: true
+
 installCRDs: true

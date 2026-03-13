@@ -9,6 +9,11 @@ tasks:
   # ---------------------------------------------------------------------------
   # S0.2: Cluster lifecycle
   # ---------------------------------------------------------------------------
+  registry:create:
+    desc: Create shared container registry for local development
+    cmds:
+      - k3d registry list -o json | grep -q '"name":"k3d-loopzero-registry"' || k3d registry create loopzero-registry --port 5000
+
   clusters:create:
     desc: Create all 3 k3d clusters (mgmt, build, workload)
     cmds:
@@ -135,8 +140,7 @@ tasks:
   crds:install:
     desc: Install CRDs into mgmt cluster
     cmds:
-      - echo "CRD manifests will be generated via controller-gen in Sprint 1"
-      - echo "CRD types defined in operators/api/v1/ — compilation verified by test:unit"
+      - kubectl --context {{.MGMT_CONTEXT}} apply -f operators/config/crd/bases/
 
   # ---------------------------------------------------------------------------
   # S0.5: Database
@@ -149,7 +153,7 @@ tasks:
         PF_PID=$!
         trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
         sleep 2
-        cd api && DATABASE_HOST=localhost DATABASE_PORT=5432 DATABASE_PASSWORD=loopzero-dev-password npx drizzle-kit migrate
+        PGPASSWORD=loopzero-dev-password psql -h localhost -p 5432 -U loopzero -d loopzero -f api/internal/db/migrations/000001_initial_schema.up.sql
 
   # ---------------------------------------------------------------------------
   # S0.14: Composite tasks
@@ -157,6 +161,7 @@ tasks:
   setup:
     desc: Full setup from scratch — clusters + infra + CRDs + DB
     cmds:
+      - task: registry:create
       - task: clusters:create
       - task: infra:install
       - task: crds:install
@@ -166,25 +171,46 @@ tasks:
     desc: Boot full dev environment (setup + Tilt)
     cmds:
       - task: setup
-      - echo "TODO — tilt up"
+      - test -f Tiltfile || { echo "Tiltfile not found — skipping tilt (will be added in Sprint 1)"; exit 0; }
+      - tilt up
+
+  test:
+    desc: Run all tests (unit + integration + e2e)
+    cmds:
+      - task: test:unit
 
   test:unit:
     desc: Run all unit tests
     cmds:
+      - cd pkg && go test ./... -short
       - cd operators && go test ./... -short
-      - cd api && npm test
+      - cd api && go test ./... -short
+      - cd infra/tests && go test ./unit/... -short
+
+  test:integration:
+    desc: Run integration tests (requires running clusters)
+    cmds:
+      - cd operators && go test ./... -tags=integration -v -timeout 5m
+      - cd api && go test ./... -tags=integration -v -timeout 5m
 
   test:e2e:
     desc: Run E2E tests (requires running clusters)
     cmds:
-      - echo "TODO"
+      - cd infra/tests && go test ./e2e/... -v -timeout 15m
+
+  test:e2e:chaos:
+    desc: Run chaos engineering tests
+    cmds:
+      - cd infra/tests && go test ./e2e/... -v -run "Chaos" -timeout 15m
 
   lint:
     desc: Lint all components
     cmds:
-      - cd operators && go vet ./...
+      - cd pkg && golangci-lint run ./...
+      - cd operators && golangci-lint run ./...
+      - cd api && golangci-lint run ./...
 
   validate:manifests:
     desc: Validate all K8s manifests with kubeconform
     cmds:
-      - kubeconform --strict --skip CustomResourceDefinition operators/config/ || true
+      - kubeconform --strict --skip CustomResourceDefinition operators/config/

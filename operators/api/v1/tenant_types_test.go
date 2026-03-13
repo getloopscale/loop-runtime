@@ -9,7 +9,7 @@ import (
 func TestSetCondition_AddsNewCondition(t *testing.T) {
 	var conditions []metav1.Condition
 
-	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "Git repository created")
+	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "Git repository created", 1)
 
 	if len(conditions) != 1 {
 		t.Fatalf("expected 1 condition, got %d", len(conditions))
@@ -37,7 +37,7 @@ func TestSetCondition_UpdatesExistingConditionSameStatus(t *testing.T) {
 	}
 	originalTime := conditions[0].LastTransitionTime
 
-	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "new message")
+	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "new message", 1)
 
 	if len(conditions) != 1 {
 		t.Fatalf("expected 1 condition, got %d", len(conditions))
@@ -62,7 +62,7 @@ func TestSetCondition_UpdatesExistingConditionDifferentStatus(t *testing.T) {
 		},
 	}
 
-	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "done")
+	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "done", 1)
 
 	if len(conditions) != 1 {
 		t.Fatalf("expected 1 condition, got %d", len(conditions))
@@ -78,9 +78,9 @@ func TestSetCondition_UpdatesExistingConditionDifferentStatus(t *testing.T) {
 func TestSetCondition_MultipleConditions(t *testing.T) {
 	var conditions []metav1.Condition
 
-	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "done")
-	SetCondition(&conditions, ConditionNamespacesReady, metav1.ConditionFalse, "Pending", "creating")
-	SetCondition(&conditions, ConditionRBACReady, metav1.ConditionTrue, "Applied", "done")
+	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "done", 1)
+	SetCondition(&conditions, ConditionNamespacesReady, metav1.ConditionFalse, "Pending", "creating", 1)
+	SetCondition(&conditions, ConditionRBACReady, metav1.ConditionTrue, "Applied", "done", 1)
 
 	if len(conditions) != 3 {
 		t.Fatalf("expected 3 conditions, got %d", len(conditions))

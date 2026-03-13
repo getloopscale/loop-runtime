@@ -3,6 +3,10 @@ gitea:
     username: loopzero-admin
     password: loopzero-dev-password
     email: admin@loopzero.local
+  livenessProbe:
+    enabled: true
+  readinessProbe:
+    enabled: true
   config:
     database:
       DB_TYPE: sqlite3

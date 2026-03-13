@@ -4,6 +4,10 @@ auth:
   database: loopzero
 
 primary:
+  livenessProbe:
+    enabled: true
+  readinessProbe:
+    enabled: true
   resources:
     limits:
       cpu: "500m"

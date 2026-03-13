@@ -7,6 +7,12 @@ import (
 // AppSecret is the Schema for the appsecrets API.
 // It represents a secret that the AppSecretOperator synchronizes from the
 // management cluster to a workload cluster namespace. See spec section 7.3.2.
+//
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="App",type=string,JSONPath=`.spec.app`
+// +kubebuilder:printcolumn:name="Environment",type=string,JSONPath=`.spec.environment`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type AppSecret struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -83,6 +89,8 @@ type AppSecretStatus struct {
 }
 
 // AppSecretList contains a list of AppSecret resources.
+//
+// +kubebuilder:object:root=true
 type AppSecretList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

@@ -1,8 +1,12 @@
 # OpenTelemetry Collector values for dev local
 image:
   repository: "otel/opentelemetry-collector-contrib"
+  tag: "0.96.0"
 
 mode: deployment
+
+securityContext:
+  runAsNonRoot: true
 
 resources:
   limits:
@@ -12,7 +16,23 @@ resources:
     cpu: "50m"
     memory: "128Mi"
 
+livenessProbe:
+  httpGet:
+    path: /
+    port: 13133
+  initialDelaySeconds: 10
+  periodSeconds: 15
+readinessProbe:
+  httpGet:
+    path: /
+    port: 13133
+  initialDelaySeconds: 10
+  periodSeconds: 15
+
 config:
+  extensions:
+    health_check:
+      endpoint: 0.0.0.0:13133
   receivers:
     otlp:
       protocols:
@@ -33,6 +53,7 @@ config:
       endpoint: 0.0.0.0:8889
 
   service:
+    extensions: [health_check]
     pipelines:
       traces:
         receivers: [otlp]

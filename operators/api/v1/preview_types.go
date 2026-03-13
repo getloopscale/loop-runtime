@@ -20,6 +20,12 @@ const (
 
 // PreviewEnvironment is the Schema for the previewenvironments API.
 // It represents a temporary environment created for a pull request.
+//
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Branch",type=string,JSONPath=`.spec.branch`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type PreviewEnvironment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -66,6 +72,8 @@ type PreviewEnvironmentStatus struct {
 }
 
 // PreviewEnvironmentList contains a list of PreviewEnvironment resources.
+//
+// +kubebuilder:object:root=true
 type PreviewEnvironmentList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

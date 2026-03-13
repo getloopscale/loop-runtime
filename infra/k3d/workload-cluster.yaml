@@ -3,9 +3,12 @@ kind: Simple
 metadata:
   name: loopzero-workload
 servers: 1
-agents: 1
+agents: 2
 kubeAPI:
   hostPort: "6444"
+registries:
+  use:
+    - k3d-loopzero-registry:5000
 options:
   k3d:
     wait: true

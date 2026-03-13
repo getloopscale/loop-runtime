@@ -6,6 +6,7 @@ import (
 )
 
 // PlanTier represents a tenant's subscription plan.
+// +kubebuilder:validation:Enum=starter;growth;enterprise
 type PlanTier string
 
 const (
@@ -15,6 +16,7 @@ const (
 )
 
 // TenantPhase represents the overall lifecycle phase of a Tenant.
+// +kubebuilder:validation:Enum=Provisioning;Active;Suspended;Deleting
 type TenantPhase string
 
 const (
@@ -27,6 +29,12 @@ const (
 // Tenant is the Schema for the tenants API.
 // A Tenant represents a team/account in LoopZero, with its own namespaces,
 // RBAC, quotas, and GitOps repository.
+//
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Plan",type=string,JSONPath=`.spec.plan`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type Tenant struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -122,6 +130,8 @@ type TenantStatus struct {
 }
 
 // TenantList contains a list of Tenant resources.
+//
+// +kubebuilder:object:root=true
 type TenantList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

@@ -2,6 +2,8 @@
 prometheus:
   prometheusSpec:
     retention: 15d
+    securityContext:
+      runAsNonRoot: true
     resources:
       limits:
         cpu: "500m"
@@ -21,7 +23,19 @@ prometheus:
     nodePort: 30004
 
 grafana:
+  securityContext:
+    runAsNonRoot: true
   adminPassword: loopzero-dev-password
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 60
+    periodSeconds: 30
   service:
     type: NodePort
     nodePort: 30002

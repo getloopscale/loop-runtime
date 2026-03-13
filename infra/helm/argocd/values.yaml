@@ -3,6 +3,12 @@ global:
     tag: "v2.13.3"
 
 server:
+  containerSecurityContext:
+    runAsNonRoot: true
+  readinessProbe:
+    enabled: true
+  livenessProbe:
+    enabled: true
   resources:
     limits:
       cpu: "500m"
@@ -15,6 +21,12 @@ server:
     nodePortHttp: 30082
 
 controller:
+  containerSecurityContext:
+    runAsNonRoot: true
+  readinessProbe:
+    enabled: true
+  livenessProbe:
+    enabled: true
   resources:
     limits:
       cpu: "500m"
@@ -24,6 +36,12 @@ controller:
       memory: "256Mi"
 
 repoServer:
+  containerSecurityContext:
+    runAsNonRoot: true
+  readinessProbe:
+    enabled: true
+  livenessProbe:
+    enabled: true
   resources:
     limits:
       cpu: "500m"
@@ -33,6 +51,12 @@ repoServer:
       memory: "128Mi"
 
 redis:
+  containerSecurityContext:
+    runAsNonRoot: true
+  readinessProbe:
+    enabled: true
+  livenessProbe:
+    enabled: true
   resources:
     limits:
       cpu: "200m"

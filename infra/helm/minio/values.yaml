@@ -3,6 +3,11 @@ mode: standalone
 rootUser: loopzero-admin
 rootPassword: loopzero-dev-password
 
+livenessProbe:
+  enabled: true
+readinessProbe:
+  enabled: true
+
 resources:
   limits:
     cpu: "500m"

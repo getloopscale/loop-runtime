@@ -1,6 +1,6 @@
 # ============================================
 # LoopZero — .gitignore
-# Monorepo: TypeScript (CLI + API) + Go (Operators) + Infra
+# Monorepo: TypeScript (CLI) + Go (API + Operators) + Infra
 # ============================================
 
 # --------------------------------------------
@@ -15,9 +15,10 @@ Thumbs.db
 !.vscode/settings.json
 !.vscode/extensions.json
 .idea/
+prompts
 
 # --------------------------------------------
-# Node.js / TypeScript (cli/ + api/)
+# Node.js / TypeScript (cli/)
 # --------------------------------------------
 node_modules/
 dist/

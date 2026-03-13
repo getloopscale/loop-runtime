@@ -6,6 +6,19 @@ resources:
     cpu: "50m"
     memory: "64Mi"
 
+readinessProbe:
+  httpGet:
+    path: /ping
+    port: 9000
+  initialDelaySeconds: 2
+  periodSeconds: 10
+livenessProbe:
+  httpGet:
+    path: /ping
+    port: 9000
+  initialDelaySeconds: 2
+  periodSeconds: 10
+
 securityContext:
   runAsNonRoot: true
 
