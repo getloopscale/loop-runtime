@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
 )
@@ -262,6 +263,49 @@ func TestAuthMiddleware(t *testing.T) {
 
 		if validator.calls != 1 {
 			t.Fatalf("expected 1 validator call (cached), got %d", validator.calls)
+		}
+	})
+
+	t.Run("cache expired: validator called again after TTL elapses", func(t *testing.T) {
+		validator := &fakeTokenValidator{
+			result: &middleware.TokenValidationResult{
+				UserID: "github-lucas", Email: "lucas@acme.dev", GitHubID: 12345,
+			},
+		}
+		store := &fakeMembershipStore{
+			memberships: []middleware.TenantMembership{
+				{TenantID: "acme", Role: "owner"},
+			},
+		}
+		// Use 1ms TTL so the cache expires almost immediately
+		mw := middleware.AuthWithTTL(validator, store, 1*time.Millisecond)
+		handler := mw(okHandler)
+
+		// First call — populates cache
+		req1 := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req1.Header.Set("Authorization", "Bearer ghp_expiry")
+		rec1 := httptest.NewRecorder()
+		handler.ServeHTTP(rec1, req1)
+
+		if validator.calls != 1 {
+			t.Fatalf("expected 1 call after first request, got %d", validator.calls)
+		}
+
+		// Wait for cache expiry
+		time.Sleep(5 * time.Millisecond)
+
+		// Second call — cache expired, should call validator again
+		req2 := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req2.Header.Set("Authorization", "Bearer ghp_expiry")
+		rec2 := httptest.NewRecorder()
+		handler.ServeHTTP(rec2, req2)
+
+		if validator.calls != 2 {
+			t.Fatalf("expected 2 calls after cache expiry, got %d", validator.calls)
+		}
+
+		if rec2.Code != http.StatusOK {
+			t.Fatalf("expected 200 after re-validation, got %d", rec2.Code)
 		}
 	})
 }

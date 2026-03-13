@@ -28,9 +28,9 @@ type CreateProjectInput struct {
 
 // ProjectResult is the result of creating a project.
 type ProjectResult struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	TenantID string `json:"team"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	TeamID string `json:"team"`
 }
 
 // ProjectStore abstracts project persistence (DIP).

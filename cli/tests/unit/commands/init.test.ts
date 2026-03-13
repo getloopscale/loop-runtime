@@ -169,6 +169,51 @@ describe('InitCommand', () => {
     });
   });
 
+  describe('YAML generation with special characters', () => {
+    it('should quote project name containing special characters', async () => {
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 3000 }),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true, name: 'my:project' });
+
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('"my:project"');
+    });
+
+    it('should quote app path containing spaces', async () => {
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue({
+          tool: 'turborepo',
+          workspaces: ['apps/my app'],
+        }),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'next', port: 3000 }),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true });
+
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('"apps/my app"');
+    });
+
+    it('should not quote simple alphanumeric names', async () => {
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 3000 }),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true, name: 'my-saas' });
+
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('project: my-saas');
+      expect(content).not.toContain('"my-saas"');
+    });
+  });
+
   describe('no internal terms', () => {
     it('should not contain forbidden terms in output', async () => {
       const forbidden = [

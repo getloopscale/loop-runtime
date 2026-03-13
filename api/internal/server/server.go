@@ -66,6 +66,9 @@ func NewRouter(cfg Config) *chi.Mux {
 
 // Run starts the HTTP server with graceful shutdown.
 func Run(cfg Config) error {
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
+	}
 	router := NewRouter(cfg)
 
 	srv := &http.Server{

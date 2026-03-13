@@ -148,3 +148,22 @@ func TestServerRouting(t *testing.T) {
 		}
 	})
 }
+
+func TestServerNilLogger(t *testing.T) {
+	t.Run("NewRouter does not panic when Logger is nil", func(t *testing.T) {
+		cfg := server.Config{
+			Port:   "0",
+			Logger: nil,
+			DB:     nil,
+		}
+		router := server.NewRouter(cfg)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+	})
+}

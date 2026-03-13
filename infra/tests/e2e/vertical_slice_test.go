@@ -90,9 +90,9 @@ func (f *fakeProjectStore) CreateProject(_ context.Context, input apitest.Create
 		return apitest.ProjectResult{}, apitest.ErrProjectExists
 	}
 	result := apitest.ProjectResult{
-		ID:       fmt.Sprintf("proj-%s", input.Name),
-		Name:     input.Name,
-		TenantID: input.TenantID,
+		ID:     fmt.Sprintf("proj-%s", input.Name),
+		Name:   input.Name,
+		TeamID: input.TenantID,
 	}
 	f.projects[key] = result
 	return result, nil

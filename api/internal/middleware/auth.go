@@ -71,9 +71,14 @@ type cachedValidation struct {
 }
 
 // Auth returns middleware that validates Bearer tokens and resolves tenant membership.
+// Token validation results are cached for 5 minutes.
 func Auth(validator TokenValidator, store MembershipStore) func(http.Handler) http.Handler {
+	return AuthWithTTL(validator, store, 5*time.Minute)
+}
+
+// AuthWithTTL is like Auth but with a configurable cache TTL.
+func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.Duration) func(http.Handler) http.Handler {
 	cache := &sync.Map{}
-	cacheTTL := 5 * time.Minute
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

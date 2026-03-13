@@ -34,6 +34,8 @@ export class ConfigStore {
     const fd = fs.openSync(this.configPath, 'w', 0o600);
     fs.writeFileSync(fd, JSON.stringify(config, null, 2));
     fs.closeSync(fd);
+    // Ensure permissions are 0600 even if the file pre-existed with broader perms
+    fs.chmodSync(this.configPath, 0o600);
   }
 
   getConfig(): LoopZeroConfig | null {

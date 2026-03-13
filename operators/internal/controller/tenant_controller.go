@@ -69,6 +69,15 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		)
 	}
 
+	// Detect spec change: if generation advanced while Phase is Active, transition back to Provisioning
+	// so all reconcile steps re-execute (condition-gated checks compare ObservedGeneration).
+	if tenant.Status.Phase == loopzerov1.TenantPhaseActive &&
+		tenant.Generation != tenant.Status.ObservedGeneration {
+		tenant.Status.Phase = loopzerov1.TenantPhase(
+			tenantSM.Transition(statemachine.TenantActive, statemachine.TenantSpecChanged),
+		)
+	}
+
 	// S1.2: Reconcile namespaces + ResourceQuota + LimitRange
 	// Skip if NamespacesReady is already True at current generation (crash recovery optimization)
 	if !conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionNamespacesReady, tenant.Generation) {
@@ -109,7 +118,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionGitRepoReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
 			_ = r.Status().Update(ctx, &tenant)
-			return ctrl.Result{Requeue: true}, err
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -200,7 +209,9 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 			tenantSM.Transition(currentPhase, statemachine.TenantDelete),
 		)
 	}
-	_ = r.Status().Update(ctx, tenant)
+	if err := r.Status().Update(ctx, tenant); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	// Phase 1: Issue deletes (idempotent)
 	// Delete all namespaces with tenant label
@@ -595,7 +606,7 @@ func (r *TenantReconciler) reconcileAllowEgressPolicy(ctx context.Context, nsNam
 						},
 					},
 				},
-				// API server: TCP 443 to kube-system (covers kubernetes.default.svc)
+				// API server: TCP 443 to default namespace (covers kubernetes.default.svc)
 				{
 					To: []networkingv1.NetworkPolicyPeer{
 						{

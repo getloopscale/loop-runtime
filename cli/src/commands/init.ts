@@ -131,19 +131,27 @@ export class InitCommand {
 
   private generateYaml(projectName: string, apps: AppSpec[]): string {
     const lines: string[] = [];
-    lines.push(`project: ${projectName}`);
+    lines.push(`project: ${this.quoteYaml(projectName)}`);
     lines.push('');
     lines.push('apps:');
     for (const app of apps) {
-      lines.push(`  ${app.name}:`);
-      lines.push(`    path: ${app.path}`);
-      lines.push(`    framework: ${app.framework}`);
+      lines.push(`  ${this.quoteYaml(app.name)}:`);
+      lines.push(`    path: ${this.quoteYaml(app.path)}`);
+      lines.push(`    framework: ${this.quoteYaml(app.framework)}`);
       if (app.port !== null) {
         lines.push(`    port: ${app.port}`);
       }
       lines.push('');
     }
     return lines.join('\n');
+  }
+
+  /** Quotes a YAML scalar value if it contains special characters. */
+  private quoteYaml(value: string): string {
+    if (/[:#\[\]{}&*!|>'"%@`,?]/.test(value) || value.includes(' ')) {
+      return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+    }
+    return value;
   }
 
   private ensureGitignore(cwd: string): void {
