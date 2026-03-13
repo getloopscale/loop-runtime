@@ -1,0 +1,85 @@
+package unit
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/loopzero/loopzero/api/internal/routes"
+)
+
+func TestWhoamiRoute(t *testing.T) {
+	t.Run("returns 200 with user info when authenticated", func(t *testing.T) {
+		handler := routes.NewAuthHandler()
+
+		uc := &middleware.UserContext{
+			UserID:   "github-lucas",
+			Email:    "lucas@acme.dev",
+			TenantID: "acme",
+			Role:     "owner",
+		}
+		ctx := context.WithValue(context.Background(), middleware.UserContextKeyPublic(), uc)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil).WithContext(ctx)
+		rec := httptest.NewRecorder()
+
+		handler.Whoami(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+
+		var body map[string]string
+		json.NewDecoder(rec.Body).Decode(&body)
+		if body["user_id"] != "github-lucas" {
+			t.Fatalf("expected user_id=github-lucas, got %q", body["user_id"])
+		}
+		if body["email"] != "lucas@acme.dev" {
+			t.Fatalf("expected email=lucas@acme.dev, got %q", body["email"])
+		}
+		if body["team"] != "acme" {
+			t.Fatalf("expected team=acme, got %q", body["team"])
+		}
+		if body["role"] != "owner" {
+			t.Fatalf("expected role=owner, got %q", body["role"])
+		}
+	})
+
+	t.Run("returns 401 when no UserContext (middleware not applied)", func(t *testing.T) {
+		handler := routes.NewAuthHandler()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil)
+		rec := httptest.NewRecorder()
+
+		handler.Whoami(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", rec.Code)
+		}
+	})
+
+	t.Run("response has Correlation-ID header when present in request", func(t *testing.T) {
+		handler := routes.NewAuthHandler()
+
+		uc := &middleware.UserContext{
+			UserID: "github-lucas", Email: "lucas@acme.dev", TenantID: "acme", Role: "owner",
+		}
+		ctx := context.WithValue(context.Background(), middleware.UserContextKeyPublic(), uc)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil).WithContext(ctx)
+		req.Header.Set("Correlation-ID", "test-corr-123")
+		rec := httptest.NewRecorder()
+
+		// Wrap with correlation middleware
+		mw := middleware.CorrelationID(http.HandlerFunc(handler.Whoami))
+		mw.ServeHTTP(rec, req)
+
+		corrID := rec.Header().Get("Correlation-ID")
+		if corrID != "test-corr-123" {
+			t.Fatalf("expected Correlation-ID=test-corr-123, got %q", corrID)
+		}
+	})
+}

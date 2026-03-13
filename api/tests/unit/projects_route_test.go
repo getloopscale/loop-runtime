@@ -1,0 +1,155 @@
+package unit
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/loopzero/loopzero/api/internal/routes"
+)
+
+type fakeProjectStore struct {
+	projects  map[string]bool
+	createErr error
+}
+
+func (f *fakeProjectStore) CreateProject(ctx context.Context, p routes.CreateProjectInput) (routes.ProjectResult, error) {
+	if f.createErr != nil {
+		return routes.ProjectResult{}, f.createErr
+	}
+	key := p.TenantID + "/" + p.Name
+	if f.projects[key] {
+		return routes.ProjectResult{}, routes.ErrProjectExists
+	}
+	f.projects[key] = true
+	return routes.ProjectResult{
+		ID:       "proj-12345678",
+		Name:     p.Name,
+		TenantID: p.TenantID,
+	}, nil
+}
+
+type fakeTenantCRManager struct {
+	calls    int
+	lastSpec routes.TenantCRSpec
+	err      error
+}
+
+func (f *fakeTenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spec routes.TenantCRSpec) error {
+	f.calls++
+	f.lastSpec = spec
+	return f.err
+}
+
+func makeAuthCtx(userID, tenantID, role string) context.Context {
+	uc := &middleware.UserContext{
+		UserID:   userID,
+		Email:    userID + "@test.com",
+		TenantID: tenantID,
+		Role:     role,
+	}
+	return context.WithValue(context.Background(), middleware.UserContextKeyPublic(), uc)
+}
+
+func TestProjectsRoute(t *testing.T) {
+	t.Run("POST /api/v1/projects → 201 with project ID", func(t *testing.T) {
+		store := &fakeProjectStore{projects: make(map[string]bool)}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		body := `{"name":"my-saas","apps":[{"name":"api","framework":"express","port":3000,"path":"."}]}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body)).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		handler.Create(rec, req)
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var result map[string]interface{}
+		json.NewDecoder(rec.Body).Decode(&result)
+		if result["id"] == nil || result["id"] == "" {
+			t.Fatal("expected project ID in response")
+		}
+	})
+
+	t.Run("POST /api/v1/projects → 409 if name already exists in tenant", func(t *testing.T) {
+		store := &fakeProjectStore{
+			projects: map[string]bool{"acme/my-saas": true},
+		}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		body := `{"name":"my-saas"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body)).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		handler.Create(rec, req)
+
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("POST /api/v1/projects → 400 if name is not RFC 1123", func(t *testing.T) {
+		store := &fakeProjectStore{projects: make(map[string]bool)}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		body := `{"name":"My_Invalid Name!"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body)).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		handler.Create(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("POST /api/v1/projects → 401 without auth", func(t *testing.T) {
+		store := &fakeProjectStore{projects: make(map[string]bool)}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		body := `{"name":"my-saas"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		handler.Create(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", rec.Code)
+		}
+	})
+
+	t.Run("POST /api/v1/projects → calls TenantCRManager.EnsureTenant", func(t *testing.T) {
+		store := &fakeProjectStore{projects: make(map[string]bool)}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		body := `{"name":"my-saas"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body)).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		handler.Create(rec, req)
+
+		if crMgr.calls != 1 {
+			t.Fatalf("expected EnsureTenant to be called once, got %d", crMgr.calls)
+		}
+	})
+}

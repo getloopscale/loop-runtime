@@ -9,6 +9,21 @@
 
 ---
 
+## Revisão de Implementação — 2026-03-13
+
+**Veredito: APROVADO COM RESSALVAS**
+
+| Fase | Tasks | Completas | Parciais |
+|------|-------|-----------|----------|
+| Fase 1 — Control Plane | S1.1-S1.8 | 8/8 | 0 |
+| Fase 2 — CLI Foundation | S1.9-S1.16 | 7/8 | 1 (S1.13) |
+| Fase 3 — Vertical Slice | S1.17-S1.24 | 8/8 | 0 |
+| **Total** | **24** | **23** | **1** |
+
+**Ressalva única:** S1.13 — Browser OAuth flow não implementado (apenas `--token`). Não é blocker para o exit gate.
+
+---
+
 ## Decisão arquitetural: modelo de autenticação
 
 **Spec §16 define explicitamente:** LoopZero v1 usa GitHub OAuth token diretamente. Não existe sessão LoopZero, não existe token LoopZero-issued, não existe camada de abstração entre GitHub e a API.
@@ -390,6 +405,7 @@ Cleanup (deletion) — verify-then-remove pattern:
 
 ### Task S1.1: TenantController scaffold + envtest
 
+**Status:** COMPLETO
 **Componente:** operators
 **Agent:** operator-engineer
 **Spec:** §7.3.1 — TenantController
@@ -431,6 +447,7 @@ Cleanup (deletion) — verify-then-remove pattern:
 
 ### Task S1.2: Reconcile — Namespaces + ResourceQuota + LimitRange
 
+**Status:** COMPLETO
 **Componente:** operators
 **Agent:** operator-engineer
 **Spec:** §7.3.1 steps 2-3 · §14 — Multi-tenancy
@@ -500,6 +517,7 @@ Cleanup (deletion) — verify-then-remove pattern:
 
 ### Task S1.3: Reconcile — RBAC (ServiceAccount + Role + RoleBinding)
 
+**Status:** COMPLETO
 **Componente:** operators
 **Agent:** operator-engineer
 **Spec:** §7.3.1 step 4 · §16.3 — RBAC
@@ -555,6 +573,7 @@ Cleanup (deletion) — verify-then-remove pattern:
 
 ### Task S1.4: Reconcile — NetworkPolicy
 
+**Status:** COMPLETO
 **Componente:** operators
 **Agent:** operator-engineer
 **Spec:** §14.4 — Network isolation
@@ -638,6 +657,7 @@ Cleanup (deletion) — verify-then-remove pattern:
 
 ### Task S1.5: Reconcile — Build namespace + QuotaEnforced
 
+**Status:** COMPLETO
 **Componente:** operators
 **Agent:** operator-engineer
 **Spec:** §7.3.1 steps 7-8 · §14 — Multi-tenancy
@@ -690,6 +710,7 @@ Cleanup (deletion) — verify-then-remove pattern:
 
 ### Task S1.6: Reconcile — Gitea repo provisioning
 
+**Status:** COMPLETO
 **Componente:** operators
 **Agent:** operator-engineer
 **Spec:** §7.3.1 step 1
@@ -738,6 +759,7 @@ Cleanup (deletion) — verify-then-remove pattern:
 
 ### Task S1.7: Reconcile — Phase transition + crash recovery + idempotency
 
+**Status:** COMPLETO
 **Componente:** operators
 **Agent:** operator-engineer
 **Spec:** §7.3.1 · §5 — State machines · §20 — Test contracts
@@ -840,6 +862,7 @@ Cleanup (deletion) — verify-then-remove pattern:
 
 ### Task S1.8: Integration test — Tenant reconciliation end-to-end (envtest)
 
+**Status:** COMPLETO
 **Componente:** operators
 **Agent:** test-engineer
 **Spec:** §20 — Test contracts · §7.3.1
@@ -988,6 +1011,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.9: CLI project scaffold (Commander + TypeScript)
 
+**Status:** COMPLETO
 **Componente:** cli
 **Agent:** cli-engineer
 **Spec:** §0.2 — CLI stability contract, §25 — CLI reference
@@ -1022,6 +1046,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.10: Config e token storage module
 
+**Status:** COMPLETO
 **Componente:** cli
 **Agent:** cli-engineer
 **Spec:** §16.1 — Token storage, §25.1 — Authentication
@@ -1057,6 +1082,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.11: CLI output formatting (human + JSON + CI mode)
 
+**Status:** COMPLETO
 **Componente:** cli
 **Agent:** cli-engineer
 **Spec:** §0.3 — Exit codes + JSON schemas + CI mode
@@ -1090,6 +1116,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.12: API client module
 
+**Status:** COMPLETO
 **Componente:** cli
 **Agent:** cli-engineer
 **Spec:** §0.3 — CLI output contract
@@ -1126,6 +1153,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.13: `loopzero login` — GitHub OAuth flow + `--token`
 
+**Status:** PARCIAL — `--token` flow completo, browser OAuth flow não implementado
 **Componente:** cli
 **Agent:** cli-engineer
 **Spec:** §25.1 — Authentication, §16 — Security model
@@ -1189,6 +1217,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.14: `loopzero logout` e `loopzero whoami`
 
+**Status:** COMPLETO
 **Componente:** cli
 **Agent:** cli-engineer
 **Spec:** §25.1 — Authentication
@@ -1221,6 +1250,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.15: Monorepo tool detection
 
+**Status:** COMPLETO
 **Componente:** cli
 **Agent:** cli-engineer
 **Spec:** §25.2 — Monorepo tool detection
@@ -1258,6 +1288,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.16: Framework detection
 
+**Status:** COMPLETO
 **Componente:** cli
 **Agent:** cli-engineer
 **Spec:** §26.5 — Supported frameworks v1
@@ -1292,6 +1323,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.17: API HTTP server scaffold
 
+**Status:** COMPLETO
 **Componente:** api
 **Agent:** api-engineer
 **Spec:** §7.2 — loopzero API
@@ -1328,6 +1360,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.18: Database migration — users, tenants, projects
 
+**Status:** COMPLETO
 **Componente:** api
 **Agent:** api-engineer
 **Spec:** §9 — Data model
@@ -1363,6 +1396,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.19: Auth middleware — GitHub token validation
 
+**Status:** COMPLETO
 **Componente:** api
 **Agent:** api-engineer
 **Spec:** §16 — Security model
@@ -1428,6 +1462,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.20: GET /api/v1/auth/whoami
 
+**Status:** COMPLETO
 **Componente:** api
 **Agent:** api-engineer
 **Spec:** §25.1 — Authentication
@@ -1456,6 +1491,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.21: POST /api/v1/projects — cria projeto e Tenant CR
 
+**Status:** COMPLETO
 **Componente:** api
 **Agent:** api-engineer
 **Spec:** §25.2 — Project initialization, §9 — Data model
@@ -1505,6 +1541,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.22: `loopzero init` — wizard + loopzero.yaml + API call
 
+**Status:** COMPLETO
 **Componente:** cli
 **Agent:** cli-engineer
 **Spec:** §25.2, §26 — loopzero.yaml spec
@@ -1555,6 +1592,7 @@ Describe("TenantController Integration", func() {
 
 ### Task S1.23: Vertical slice integration test
 
+**Status:** COMPLETO
 **Componente:** cross
 **Agent:** test-engineer
 **Spec:** §20 — Test contracts, §24.2 — User onboarding
@@ -1631,6 +1669,7 @@ kubectl get ns build-${TENANT_ID} || exit 1
 
 ### Task S1.24: Atualizar CHANGELOG.md
 
+**Status:** COMPLETO
 **Componente:** cross
 **Agent:** orchestrator
 **Spec:** Keep a Changelog

@@ -123,6 +123,35 @@ var (
 		Message:    "idempotency key was already used with a different request payload",
 		HTTPStatus: 422,
 	}
+
+	// ErrUnauthorized is returned when a request lacks valid authentication.
+	ErrUnauthorized = &LoopZeroError{
+		Code:       "UNAUTHORIZED",
+		Message:    "not authenticated",
+		HTTPStatus: 401,
+	}
+
+	// ErrInvalidRequest is returned when the request body cannot be parsed.
+	ErrInvalidRequest = &LoopZeroError{
+		Code:       "INVALID_REQUEST",
+		Message:    "invalid request body",
+		HTTPStatus: 400,
+	}
+
+	// ErrProjectExists is returned when a project with the same name
+	// already exists within a tenant.
+	ErrProjectExists = &LoopZeroError{
+		Code:       "PROJECT_EXISTS",
+		Message:    "a project with this name already exists in your team",
+		HTTPStatus: 409,
+	}
+
+	// ErrInternalError is returned for unexpected server-side failures.
+	ErrInternalError = &LoopZeroError{
+		Code:       "INTERNAL_ERROR",
+		Message:    "internal server error",
+		HTTPStatus: 500,
+	}
 )
 
 // NewLockTimeout creates a LOCK_TIMEOUT error with optional detail.
