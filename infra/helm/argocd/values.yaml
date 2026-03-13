@@ -1,0 +1,70 @@
+global:
+  image:
+    tag: "v2.13.3"
+
+server:
+  containerSecurityContext:
+    runAsNonRoot: true
+  readinessProbe:
+    enabled: true
+  livenessProbe:
+    enabled: true
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+  service:
+    type: NodePort
+    nodePortHttp: 30082
+
+controller:
+  containerSecurityContext:
+    runAsNonRoot: true
+  readinessProbe:
+    enabled: true
+  livenessProbe:
+    enabled: true
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+
+repoServer:
+  containerSecurityContext:
+    runAsNonRoot: true
+  readinessProbe:
+    enabled: true
+  livenessProbe:
+    enabled: true
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+
+redis:
+  containerSecurityContext:
+    runAsNonRoot: true
+  readinessProbe:
+    enabled: true
+  livenessProbe:
+    enabled: true
+  resources:
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+
+configs:
+  params:
+    server.insecure: true

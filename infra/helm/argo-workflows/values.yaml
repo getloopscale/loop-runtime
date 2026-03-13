@@ -1,0 +1,48 @@
+controller:
+  securityContext:
+    runAsNonRoot: true
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 6060
+    initialDelaySeconds: 30
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 6060
+    initialDelaySeconds: 10
+    periodSeconds: 15
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+
+server:
+  securityContext:
+    runAsNonRoot: true
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 2746
+    initialDelaySeconds: 10
+    periodSeconds: 20
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 2746
+    initialDelaySeconds: 10
+    periodSeconds: 20
+  resources:
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+  service:
+    type: NodePort
+    nodePort: 30081

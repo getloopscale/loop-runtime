@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-pkg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: pkg/go.sum
+      - name: Run pkg tests
+        working-directory: pkg
+        run: go test ./... -short -v
+
+  test-go:
+    runs-on: ubuntu-latest
+    needs: [test-pkg]
+    strategy:
+      matrix:
+        component: [operators, api]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: ${{ matrix.component }}/go.sum
+      - name: Run Go tests
+        working-directory: ${{ matrix.component }}
+        run: go test ./... -short -v
+
+  test-infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: infra/tests/go.sum
+      - name: Run infra tests
+        working-directory: infra/tests
+        run: go test ./unit/... -short -v
+
+  lint-go:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [pkg, operators, api]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: ${{ matrix.component }}/go.sum
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.11.3
+      - name: Run golangci-lint
+        working-directory: ${{ matrix.component }}
+        run: golangci-lint run ./...
+
+  validate-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          curl -L -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar xzf kubeconform.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+      - name: Validate manifests
+        run: |
+          find operators/config -name '*.yaml' -o -name '*.yml' | xargs kubeconform --strict --skip CustomResourceDefinition

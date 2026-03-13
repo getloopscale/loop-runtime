@@ -1,4 +1,6 @@
-# LoopZero — CLAUDE.md
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 > This file is the contract between Claude and the LoopZero codebase. Read it entirely before touching any file.
 
@@ -11,6 +13,32 @@ LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. The goal i
 The authoritative specification is **`docs/technical.md`**. Every state machine, failure mode, concurrency decision, CLI output format, and exit code is documented there. If this file and the system design conflict, the system design wins.
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
+
+**Current status:** Greenfield — no application code exists yet. Only `docs/` and configuration files. Implementation starts with Sprint 0.
+
+---
+
+## Development Commands
+
+```bash
+# Local environment
+task dev:up              # Boot k3d clusters + dependencies
+tilt up                  # Start dev loop with hot reload
+
+# Tests
+task test                # Run all tests
+task test:unit           # Run unit tests only
+task test:e2e            # Run E2E tests (Ginkgo)
+task lint                # Lint all components
+task validate:manifests  # kubeconform --strict on all manifests
+
+# Per-component (when code exists)
+cd cli  && npm test           # CLI unit tests (Jest)
+cd api  && go test ./...      # API tests (Go testing)
+cd operators && go test ./... # Operator tests (Ginkgo + envtest)
+```
+
+**Prerequisites:** Go 1.22+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), [Task](https://taskfile.dev)
 
 ---
 
@@ -56,7 +84,7 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | Component | Technology |
 |-----------|-----------|
 | CLI | TypeScript + Commander · `@loopzero/cli` |
-| API | TypeScript + Fastify + Drizzle ORM · `@loopzero/api` |
+| API | Go + net/http (or chi) + pgx/sqlx · `loopzero/api` |
 | Operators | Go + kubebuilder |
 | Database | PostgreSQL · advisory locks for serialization |
 | Build engine | Argo Workflows + Kaniko |
@@ -68,8 +96,9 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | Local clusters | k3d × 3 (mgmt, build, workload) |
 | Dev loop | Tilt |
 | Task runner | Taskfile |
-| Tests (Go) | Ginkgo + Gomega + envtest |
-| Tests (TS) | Jest + Supertest |
+| Tests (Go) | Go testing + Ginkgo + Gomega + envtest |
+| Tests (TS) | Jest (CLI only) |
+| Migrations | golang-migrate (forward-only) |
 | Image signing | cosign + syft |
 
 ---
@@ -79,6 +108,7 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 ```
 loopzero/
 ├── CLAUDE.md                          ← you are here
+├── go.work                            ← Go workspace (monorepo multi-module)
 ├── docs/
 │   ├── technical.md               ← single source of truth
 │   └── sprints/                       ← sprint details (extracted from §23)
@@ -93,29 +123,33 @@ loopzero/
 │       ├── 07-observability/
 │       ├── 08-hardening-chaos/
 │       └── 09-polish-launch/
+├── pkg/                               ← shared Go module (errors, logging, id)
+│   ├── errors/                        ← LoopZeroError + typed error codes
+│   ├── logging/                       ← structured JSON logging (slog)
+│   └── id/                            ← build/release ID generation
 ├── cli/                               ← @loopzero/cli (TypeScript)
 │   ├── src/
 │   │   ├── commands/                  ← one file per command
 │   │   ├── api/                       ← API client + idempotency key generation
 │   │   └── output/                    ← formatters: human() + json()
 │   └── tests/unit/
-├── api/                               ← @loopzero/api (TypeScript + Fastify)
-│   ├── src/
-│   │   ├── routes/                    ← Fastify route handlers
+├── api/                               ← loopzero/api (Go)
+│   ├── cmd/                           ← entrypoint (main.go)
+│   ├── internal/
+│   │   ├── routes/                    ← HTTP route handlers
 │   │   ├── services/                  ← business logic
-│   │   ├── db/
-│   │   │   ├── schema/                ← Drizzle schema definitions
-│   │   │   └── migrations/            ← forward-only migrations
+│   │   ├── db/                        ← pgx/sqlx queries + migrations + connection
+│   │   ├── correlation/               ← correlation ID generation (UUID v4)
 │   │   ├── lock/                      ← withEnvironmentLock
 │   │   ├── sse/                       ← SSE streaming + event journal
-│   │   ├── middleware/                ← idempotency, auth, correlation-id
-│   │   └── errors/                    ← LoopZeroError + typed error codes
-│   └── tests/component/
+│   │   └── middleware/                ← idempotency, auth, correlation-id
+│   └── tests/
 ├── operators/                         ← Go operators (kubebuilder)
 │   ├── api/v1/                        ← CRD type definitions
 │   ├── internal/
 │   │   ├── controller/                ← reconcile loops + tests
-│   │   └── statemachine/              ← state machines (spec §5)
+│   │   ├── statemachine/              ← state machines (spec §5)
+│   │   └── naming/                    ← K8s namespace naming (RFC 1123)
 │   └── config/crd/bases/
 ├── infra/
 │   ├── k3d/                           ← cluster configs (mgmt, build, workload)
@@ -156,7 +190,7 @@ Owns `cli/`. TypeScript + Commander. DX quality bar is the Vercel CLI.
 - Unit tests cover success + all failure codes + JSON shape
 
 ### API Engineer (`agent:api`)
-Owns `api/`. TypeScript + Fastify + Drizzle.
+Owns `api/`. Go + net/http (or chi) + pgx/sqlx.
 
 **Before any endpoint is done:**
 - `withEnvironmentLock` for state mutations

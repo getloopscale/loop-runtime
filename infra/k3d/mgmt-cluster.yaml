@@ -1,0 +1,42 @@
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: loopzero-mgmt
+servers: 1
+agents: 2
+kubeAPI:
+  hostPort: "6443"
+ports:
+  - port: 3000:30000
+    nodeFilters:
+      - loadbalancer
+  - port: 3001:30001
+    nodeFilters:
+      - loadbalancer
+  - port: 3002:30002
+    nodeFilters:
+      - loadbalancer
+  - port: 9001:30003
+    nodeFilters:
+      - loadbalancer
+  - port: 9090:30004
+    nodeFilters:
+      - loadbalancer
+  - port: 30082:30082
+    nodeFilters:
+      - loadbalancer
+registries:
+  use:
+    - k3d-loopzero-registry:5000
+options:
+  k3d:
+    wait: true
+    timeout: "120s"
+  k3s:
+    extraArgs:
+      - arg: "--disable=traefik"
+        nodeFilters:
+          - server:*
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: false

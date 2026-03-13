@@ -1,0 +1,39 @@
+resources:
+  limits:
+    cpu: "300m"
+    memory: "128Mi"
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+
+readinessProbe:
+  httpGet:
+    path: /ping
+    port: 9000
+  initialDelaySeconds: 2
+  periodSeconds: 10
+livenessProbe:
+  httpGet:
+    path: /ping
+    port: 9000
+  initialDelaySeconds: 2
+  periodSeconds: 10
+
+securityContext:
+  runAsNonRoot: true
+
+service:
+  type: LoadBalancer
+
+providers:
+  kubernetesIngress:
+    enabled: true
+  kubernetesCRD:
+    enabled: true
+
+logs:
+  general:
+    format: json
+  access:
+    enabled: true
+    format: json
