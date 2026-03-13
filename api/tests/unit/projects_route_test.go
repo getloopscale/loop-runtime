@@ -74,7 +74,7 @@ func TestProjectsRoute(t *testing.T) {
 		}
 
 		var result map[string]interface{}
-		json.NewDecoder(rec.Body).Decode(&result)
+		_ = json.NewDecoder(rec.Body).Decode(&result)
 		if result["id"] == nil || result["id"] == "" {
 			t.Fatal("expected project ID in response")
 		}

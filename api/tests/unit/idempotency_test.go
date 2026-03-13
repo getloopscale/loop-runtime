@@ -45,7 +45,7 @@ func dummyHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "proj-12345678"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "proj-12345678"})
 	})
 }
 
@@ -125,7 +125,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 		}
 
 		var result map[string]string
-		json.NewDecoder(rec.Body).Decode(&result)
+		_ = json.NewDecoder(rec.Body).Decode(&result)
 		if result["id"] != "proj-cached" {
 			t.Fatalf("expected cached id=proj-cached, got %q", result["id"])
 		}
@@ -156,7 +156,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 		}
 
 		var body map[string]string
-		json.NewDecoder(rec.Body).Decode(&body)
+		_ = json.NewDecoder(rec.Body).Decode(&body)
 		if body["code"] != "IDEMPOTENCY_MISMATCH" {
 			t.Fatalf("expected code=IDEMPOTENCY_MISMATCH, got %q", body["code"])
 		}

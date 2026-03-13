@@ -31,6 +31,11 @@ jobs:
         with:
           go-version: '1.25'
           cache-dependency-path: ${{ matrix.component }}/go.sum
+      - name: Install envtest binaries
+        if: matrix.component == 'operators'
+        run: |
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+          echo "KUBEBUILDER_ASSETS=$(setup-envtest use -p path)" >> $GITHUB_ENV
       - name: Run Go tests
         working-directory: ${{ matrix.component }}
         run: go test ./... -short -v

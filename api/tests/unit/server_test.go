@@ -106,7 +106,7 @@ func TestServerRouting(t *testing.T) {
 		}
 
 		var body map[string]string
-		json.NewDecoder(rec.Body).Decode(&body)
+		_ = json.NewDecoder(rec.Body).Decode(&body)
 		if body["team"] != "acme" {
 			t.Fatalf("expected team=acme, got %q", body["team"])
 		}

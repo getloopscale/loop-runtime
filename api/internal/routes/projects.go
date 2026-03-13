@@ -100,11 +100,9 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create/update Tenant CR in Kubernetes — this triggers the TenantController
-	if err := h.crMgr.EnsureTenant(r.Context(), uc.TenantID, TenantCRSpec{Plan: "starter"}); err != nil {
-		// Log error but don't fail — the project is already persisted
-		// The Tenant CR can be reconciled later
-	}
+	// Create/update Tenant CR in Kubernetes — this triggers the TenantController.
+	// Best-effort: project is already persisted, Tenant CR can be reconciled later.
+	_ = h.crMgr.EnsureTenant(r.Context(), uc.TenantID, TenantCRSpec{Plan: "starter"})
 
 	writeJSON(w, http.StatusCreated, result)
 }
@@ -112,12 +110,12 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data)
 }
 
 // writeLoopZeroError writes a LoopZeroError as a JSON response with the correct HTTP status.
 func writeLoopZeroError(w http.ResponseWriter, err *loopzeroerrors.LoopZeroError) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(err.HTTPStatus)
-	json.NewEncoder(w).Encode(err.ToJSON())
+	_ = json.NewEncoder(w).Encode(err.ToJSON())
 }

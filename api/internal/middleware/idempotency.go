@@ -85,7 +85,7 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 				// Same key, same payload → return cached response
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(existing.ResponseStatus)
-				w.Write(existing.ResponseBody)
+				_, _ = w.Write(existing.ResponseBody)
 				return
 			}
 
@@ -108,7 +108,7 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 			}
 
 			// Best-effort store — don't fail the request if storage fails
-			store.Store(r.Context(), rec)
+			_ = store.Store(r.Context(), rec)
 		})
 	}
 }
@@ -121,7 +121,7 @@ func hashRequestBody(body []byte) string {
 func writeIdempotencyError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"code":    code,
 		"message": message,
 	})

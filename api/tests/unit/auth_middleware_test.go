@@ -36,7 +36,7 @@ func TestAuthMiddleware(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"user_id":   uc.UserID,
 			"email":     uc.Email,
 			"tenant_id": uc.TenantID,
@@ -59,7 +59,7 @@ func TestAuthMiddleware(t *testing.T) {
 		}
 
 		var body map[string]string
-		json.NewDecoder(rec.Body).Decode(&body)
+		_ = json.NewDecoder(rec.Body).Decode(&body)
 		if body["code"] != "UNAUTHORIZED" {
 			t.Fatalf("expected code=UNAUTHORIZED, got %q", body["code"])
 		}
@@ -107,7 +107,7 @@ func TestAuthMiddleware(t *testing.T) {
 		}
 
 		var body map[string]string
-		json.NewDecoder(rec.Body).Decode(&body)
+		_ = json.NewDecoder(rec.Body).Decode(&body)
 		if body["user_id"] != "github-lucas" {
 			t.Fatalf("expected user_id=github-lucas, got %q", body["user_id"])
 		}
@@ -145,7 +145,7 @@ func TestAuthMiddleware(t *testing.T) {
 		}
 
 		var body map[string]string
-		json.NewDecoder(rec.Body).Decode(&body)
+		_ = json.NewDecoder(rec.Body).Decode(&body)
 		if body["tenant_id"] != "globex" {
 			t.Fatalf("expected tenant_id=globex, got %q", body["tenant_id"])
 		}
@@ -176,7 +176,7 @@ func TestAuthMiddleware(t *testing.T) {
 		}
 
 		var body map[string]string
-		json.NewDecoder(rec.Body).Decode(&body)
+		_ = json.NewDecoder(rec.Body).Decode(&body)
 		if body["code"] != "TENANT_REQUIRED" {
 			t.Fatalf("expected code=TENANT_REQUIRED, got %q", body["code"])
 		}
@@ -202,7 +202,7 @@ func TestAuthMiddleware(t *testing.T) {
 		}
 
 		var body map[string]string
-		json.NewDecoder(rec.Body).Decode(&body)
+		_ = json.NewDecoder(rec.Body).Decode(&body)
 		if body["code"] != "NO_TENANT" {
 			t.Fatalf("expected code=NO_TENANT, got %q", body["code"])
 		}

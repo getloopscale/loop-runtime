@@ -169,7 +169,7 @@ func validateWithCache(ctx context.Context, validator TokenValidator, cache *syn
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"code":    code,
 		"message": message,
 	})

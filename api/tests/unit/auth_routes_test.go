@@ -33,7 +33,7 @@ func TestWhoamiRoute(t *testing.T) {
 		}
 
 		var body map[string]string
-		json.NewDecoder(rec.Body).Decode(&body)
+		_ = json.NewDecoder(rec.Body).Decode(&body)
 		if body["user_id"] != "github-lucas" {
 			t.Fatalf("expected user_id=github-lucas, got %q", body["user_id"])
 		}

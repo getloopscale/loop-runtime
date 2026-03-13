@@ -27,7 +27,7 @@ func NewHealthHandler(db DBHealthChecker) *HealthHandler {
 func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // DeepHealth checks all dependencies (database) and responds accordingly.
@@ -37,7 +37,7 @@ func (h *HealthHandler) DeepHealth(w http.ResponseWriter, r *http.Request) {
 
 	if h.db == nil || h.db.Ping() != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status":   "degraded",
 			"database": "disconnected",
 		})
@@ -45,7 +45,7 @@ func (h *HealthHandler) DeepHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":   "ok",
 		"database": "connected",
 	})
