@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { InitCommand, InitDeps } from '../../../src/commands/init';
+import { ApiError } from '../../../src/api/client';
 
 function createMockDeps(
   tmpDir: string,
@@ -211,6 +212,295 @@ describe('InitCommand', () => {
       const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
       expect(content).toContain('project: my-saas');
       expect(content).not.toContain('"my-saas"');
+    });
+  });
+
+  describe('interactive wizard (no --yes)', () => {
+    it('should show detection summary when confirm dep is provided', async () => {
+      const deps = createMockDeps(tmpDir, {
+        confirm: jest.fn().mockResolvedValue(true),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({});
+
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('turborepo');
+      expect(output).toContain('express');
+    });
+
+    it('should exit 0 without generating files when confirm returns false', async () => {
+      const deps = createMockDeps(tmpDir, {
+        confirm: jest.fn().mockResolvedValue(false),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(0);
+      const yamlPath = path.join(tmpDir, 'loopzero.yaml');
+      expect(fs.existsSync(yamlPath)).toBe(false);
+    });
+
+    it('should generate loopzero.yaml when confirm returns true', async () => {
+      const deps = createMockDeps(tmpDir, {
+        confirm: jest.fn().mockResolvedValue(true),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(0);
+      const yamlPath = path.join(tmpDir, 'loopzero.yaml');
+      expect(fs.existsSync(yamlPath)).toBe(true);
+    });
+
+    it('should prompt for project name when promptText provided and no --name', async () => {
+      const deps = createMockDeps(tmpDir, {
+        confirm: jest.fn().mockResolvedValue(true),
+        promptText: jest.fn().mockResolvedValue('custom-name'),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({});
+
+      expect(deps.promptText).toHaveBeenCalled();
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('custom-name');
+    });
+
+    it('should not prompt for name when --name is provided', async () => {
+      const deps = createMockDeps(tmpDir, {
+        confirm: jest.fn().mockResolvedValue(true),
+        promptText: jest.fn().mockResolvedValue('ignored'),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ name: 'explicit-name' });
+
+      expect(deps.promptText).not.toHaveBeenCalled();
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('explicit-name');
+    });
+
+    it('should generate without prompting when no confirm/promptText deps (backwards compat)', async () => {
+      const deps = createMockDeps(tmpDir);
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(0);
+      const yamlPath = path.join(tmpDir, 'loopzero.yaml');
+      expect(fs.existsSync(yamlPath)).toBe(true);
+    });
+
+    it('should skip prompts with --yes even when confirm/promptText deps exist', async () => {
+      const deps = createMockDeps(tmpDir, {
+        confirm: jest.fn().mockResolvedValue(false),
+        promptText: jest.fn().mockResolvedValue('should-not-use'),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(0);
+      expect(deps.confirm).not.toHaveBeenCalled();
+      expect(deps.promptText).not.toHaveBeenCalled();
+      const yamlPath = path.join(tmpDir, 'loopzero.yaml');
+      expect(fs.existsSync(yamlPath)).toBe(true);
+    });
+
+    it('should include framework and port for each app in detection summary', async () => {
+      const deps = createMockDeps(tmpDir, {
+        confirm: jest.fn().mockResolvedValue(true),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'fastify', port: 8080 }),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({});
+
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('fastify');
+      expect(output).toContain('8080');
+    });
+
+    it('should show final message mentioning loopzero deploy', async () => {
+      const deps = createMockDeps(tmpDir, {
+        confirm: jest.fn().mockResolvedValue(true),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({});
+
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('loopzero deploy');
+    });
+  });
+
+  describe('API unavailable', () => {
+    it('should still generate loopzero.yaml and warn when API fails', async () => {
+      const deps = createMockDeps(tmpDir, {
+        createProject: jest.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(0);
+      const yamlPath = path.join(tmpDir, 'loopzero.yaml');
+      expect(fs.existsSync(yamlPath)).toBe(true);
+
+      const errorOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(errorOutput).toContain('Could not reach server');
+      expect(errorOutput).toContain('loopzero deploy');
+
+      const stdOutput = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(stdOutput).toContain('Generated loopzero.yaml');
+    });
+  });
+
+  describe('--json flag consistency (F-01, F-02, F-03, F-05, F-07)', () => {
+    it('F-01: init --json outputs only valid JSON with no human text mixed in', async () => {
+      const deps = createMockDeps(tmpDir);
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true, name: 'my-saas', json: true });
+
+      expect(exitCode).toBe(0);
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
+      // Should be exactly one writeTo call containing JSON
+      expect(allWrites).toHaveLength(1);
+      const parsed = JSON.parse(allWrites[0]);
+      expect(parsed.project).toBe('my-saas');
+      expect(parsed.id).toBe('proj-12345678');
+      expect(parsed.apps).toBeDefined();
+      // No human text should appear before or after
+      expect(allWrites[0]).not.toContain('Detected');
+      expect(allWrites[0]).not.toContain('Generated');
+    });
+
+    it('F-01: init --json includes detection info in JSON output for monorepo', async () => {
+      const deps = createMockDeps(tmpDir);
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true, name: 'my-saas', json: true });
+
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
+      const parsed = JSON.parse(allWrites[0]);
+      expect(parsed.detected).toBeDefined();
+      expect(parsed.detected.tool).toBe('turborepo');
+    });
+
+    it('F-02: init --json emits JSON when API returns 409', async () => {
+      const deps = createMockDeps(tmpDir, {
+        createProject: jest.fn().mockRejectedValue(
+          new ApiError('Project already exists', 3, 409)
+        ),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true, name: 'my-saas', json: true });
+
+      expect(exitCode).toBe(0);
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
+      expect(allWrites).toHaveLength(1);
+      const parsed = JSON.parse(allWrites[0]);
+      expect(parsed.project).toBe('my-saas');
+      expect(parsed.warning).toBeDefined();
+    });
+
+    it('F-02: init --json emits JSON when API returns non-409 error', async () => {
+      const deps = createMockDeps(tmpDir, {
+        createProject: jest.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true, name: 'my-saas', json: true });
+
+      expect(exitCode).toBe(0);
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
+      expect(allWrites).toHaveLength(1);
+      const parsed = JSON.parse(allWrites[0]);
+      expect(parsed.project).toBe('my-saas');
+      expect(parsed.warning).toBeDefined();
+    });
+
+    it('F-03: init (human) with API 409 shows "Project already registered" not confusing warning', async () => {
+      const deps = createMockDeps(tmpDir, {
+        createProject: jest.fn().mockRejectedValue(
+          new ApiError('Project already exists', 3, 409)
+        ),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true, name: 'my-saas' });
+
+      expect(exitCode).toBe(0);
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      const allErrors = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      // Should NOT show confusing "Could not register project on server" for 409
+      expect(allErrors).not.toContain('Could not register project on server');
+      // Should show success-like message
+      expect(allWrites).toContain('Generated loopzero.yaml');
+    });
+
+    it('F-03: init (human) with connection error shows appropriate warning', async () => {
+      const deps = createMockDeps(tmpDir, {
+        createProject: jest.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true, name: 'my-saas' });
+
+      expect(exitCode).toBe(0);
+      const allErrors = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(allErrors).toContain('Could not reach server');
+      expect(allErrors).toContain('loopzero deploy');
+    });
+
+    it('F-05: init --json with auth error outputs JSON error with exit_code 4', async () => {
+      const deps = createMockDeps(tmpDir, {
+        getToken: jest.fn().mockReturnValue(null),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true, json: true });
+
+      expect(exitCode).toBe(4);
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
+      expect(allWrites).toHaveLength(1);
+      const parsed = JSON.parse(allWrites[0]);
+      expect(parsed.error).toContain('Not authenticated');
+      expect(parsed.exit_code).toBe(4);
+    });
+
+    it('F-07: init --json with loopzero.yaml exists outputs JSON error with exit_code 1', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'loopzero.yaml'), 'existing');
+      const deps = createMockDeps(tmpDir);
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true, json: true });
+
+      expect(exitCode).toBe(1);
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
+      expect(allWrites).toHaveLength(1);
+      const parsed = JSON.parse(allWrites[0]);
+      expect(parsed.error).toContain('loopzero.yaml already exists');
+      expect(parsed.exit_code).toBe(1);
+    });
+
+    it('F-07: init --json with CI mode requires --yes outputs JSON error', async () => {
+      const deps = createMockDeps(tmpDir, { isCI: true });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(1);
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
+      expect(allWrites).toHaveLength(1);
+      const parsed = JSON.parse(allWrites[0]);
+      expect(parsed.error).toContain('--yes');
+      expect(parsed.exit_code).toBe(1);
     });
   });
 

@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	schedulingv1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,8 +19,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/argocd"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
-	"github.com/loopzero/loopzero/operators/internal/statemachine"
+	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
 const tenantFinalizer = "loopzero.io/tenant-cleanup"
@@ -31,7 +33,8 @@ var tenantSM = statemachine.NewTenantMachine()
 // TenantReconciler reconciles a Tenant object.
 type TenantReconciler struct {
 	client.Client
-	GitProvisioner gitea.GitRepoProvisioner
+	GitProvisioner    gitea.GitRepoProvisioner
+	ArgoCDProvisioner argocd.Provisioner
 }
 
 // Reconcile handles the reconciliation loop for Tenant resources.
@@ -122,6 +125,17 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}
 
+	// S1.6b: Reconcile ArgoCD Application per environment
+	// Skip if ArgoCDAppReady is already True at current generation
+	if !conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionArgoCDAppReady, tenant.Generation) {
+		if err := r.reconcileArgoCDApp(ctx, &tenant); err != nil {
+			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionArgoCDAppReady,
+				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
+			_ = r.Status().Update(ctx, &tenant)
+			return ctrl.Result{}, err
+		}
+	}
+
 	// S1.5: Reconcile build namespace + QuotaEnforced
 	// Skip if BOTH BuildNamespaceReady AND QuotaEnforced are True at current generation
 	// (both conditions are set inside reconcileBuildNamespace)
@@ -129,6 +143,17 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		!conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionQuotaEnforced, tenant.Generation) {
 		if err := r.reconcileBuildNamespace(ctx, &tenant); err != nil {
 			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionBuildNamespaceReady,
+				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
+			_ = r.Status().Update(ctx, &tenant)
+			return ctrl.Result{}, err
+		}
+	}
+
+	// S14.3: Reconcile PriorityClass based on tenant plan
+	// Skip if PriorityClassReady is already True at current generation
+	if !conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionPriorityClassReady, tenant.Generation) {
+		if err := r.reconcilePriorityClass(ctx, &tenant); err != nil {
+			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionPriorityClassReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
 			_ = r.Status().Update(ctx, &tenant)
 			return ctrl.Result{}, err
@@ -172,8 +197,10 @@ func allConditionsTrue(conditions []metav1.Condition) bool {
 		loopzerov1.ConditionNamespacesReady,
 		loopzerov1.ConditionRBACReady,
 		loopzerov1.ConditionNetworkPolicyReady,
+		loopzerov1.ConditionArgoCDAppReady,
 		loopzerov1.ConditionBuildNamespaceReady,
 		loopzerov1.ConditionQuotaEnforced,
+		loopzerov1.ConditionPriorityClassReady,
 	}
 	for _, req := range required {
 		found := false
@@ -214,6 +241,12 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	}
 
 	// Phase 1: Issue deletes (idempotent)
+	// Delete ArgoCD Applications for this tenant
+	if err := r.ArgoCDProvisioner.DeleteApplications(ctx, tenant.Name); err != nil {
+		logger.Error(err, "failed to delete ArgoCD applications", "tenant", tenant.Name)
+		// Non-fatal: continue with cleanup
+	}
+
 	// Delete all namespaces with tenant label
 	var nsList corev1.NamespaceList
 	if err := r.List(ctx, &nsList, client.MatchingLabels{"loopzero.io/tenant": tenant.Name}); err != nil {
@@ -420,6 +453,39 @@ func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopzer
 	tenant.Status.GitOpsRepo = repoURL
 	loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionGitRepoReady,
 		metav1.ConditionTrue, "RepoReady", "git repository provisioned", tenant.Generation)
+	return nil
+}
+
+// reconcileArgoCDApp ensures one ArgoCD Application CR exists per environment for the tenant.
+// The Application connects the tenant's Gitea repo to the workload namespace via ArgoCD.
+func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopzerov1.Tenant) error {
+	repoURL := fmt.Sprintf("http://gitea-http.loopzero-system.svc.cluster.local:3000/%s/%s.git",
+		tenant.Name, tenant.Spec.GitOps.RepoName)
+
+	for _, env := range tenant.Spec.Environments {
+		appName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
+		destNS := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
+		path := fmt.Sprintf("environments/%s/", env.Name)
+
+		spec := argocd.ApplicationSpec{
+			Name:           appName,
+			Namespace:      "argocd",
+			TenantID:       tenant.Name,
+			RepoURL:        repoURL,
+			TargetRevision: tenant.Spec.GitOps.Branch,
+			Path:           path,
+			DestinationNS:  destNS,
+			DestinationURL: "https://kubernetes.default.svc",
+		}
+
+		if err := r.ArgoCDProvisioner.EnsureApplication(ctx, spec); err != nil {
+			return fmt.Errorf("argocd application %s: %w", appName, err)
+		}
+		log.FromContext(ctx).Info("argocd application reconciled", "application", appName)
+	}
+
+	loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionArgoCDAppReady,
+		metav1.ConditionTrue, "ApplicationsReady", "ArgoCD applications provisioned", tenant.Generation)
 	return nil
 }
 
@@ -663,13 +729,58 @@ func rbacRulesForPlan(plan loopzerov1.PlanTier) []rbacv1.PolicyRule {
 	return rules
 }
 
+// priorityClassForPlan returns the PriorityClass name, value, and preemption policy for a given plan.
+func priorityClassForPlan(plan loopzerov1.PlanTier) (name string, value int32, preemptionPolicy corev1.PreemptionPolicy) {
+	switch plan {
+	case loopzerov1.PlanGrowth:
+		return "loopzero-tenant-growth", 500, corev1.PreemptLowerPriority
+	case loopzerov1.PlanEnterprise:
+		return "loopzero-tenant-enterprise", 1000, corev1.PreemptLowerPriority
+	default:
+		return "loopzero-tenant-starter", 100, corev1.PreemptNever
+	}
+}
+
+// reconcilePriorityClass ensures the PriorityClass for the tenant's plan exists.
+// PriorityClasses are cluster-scoped and shared across tenants of the same plan,
+// so they must NOT be deleted when a tenant is deleted.
+func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *loopzerov1.Tenant) error {
+	pcName, pcValue, preemptionPolicy := priorityClassForPlan(tenant.Spec.Plan)
+
+	pc := &schedulingv1.PriorityClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: pcName,
+		},
+	}
+	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, pc, func() error {
+		pc.Value = pcValue
+		pc.PreemptionPolicy = &preemptionPolicy
+		pc.GlobalDefault = false
+		pc.Description = fmt.Sprintf("PriorityClass for LoopZero %s plan tenants", string(tenant.Spec.Plan))
+		if pc.Labels == nil {
+			pc.Labels = make(map[string]string)
+		}
+		pc.Labels["loopzero.io/managed-by"] = "tenant-controller"
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("priorityclass %s: %w", pcName, err)
+	}
+
+	log.FromContext(ctx).Info("priorityclass reconciled", "name", pcName, "result", result)
+	loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionPriorityClassReady,
+		metav1.ConditionTrue, "PriorityClassReady", "priority class provisioned", tenant.Generation)
+	return nil
+}
+
 // SetupTenantController registers the TenantController with the manager.
-func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner) error {
+func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.Tenant{}).
 		Named("tenant").
 		Complete(&TenantReconciler{
-			Client:         mgr.GetClient(),
-			GitProvisioner: gitProvisioner,
+			Client:            mgr.GetClient(),
+			GitProvisioner:    gitProvisioner,
+			ArgoCDProvisioner: argoCDProvisioner,
 		})
 }

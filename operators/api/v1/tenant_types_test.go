@@ -141,6 +141,8 @@ func TestConditionTypes_AreDistinct(t *testing.T) {
 		ConditionQuotaEnforced,
 		ConditionNetworkPolicyReady,
 		ConditionBuildNamespaceReady,
+		ConditionPriorityClassReady,
+		ConditionArgoCDAppReady,
 	}
 	seen := make(map[string]bool)
 	for _, ct := range types {

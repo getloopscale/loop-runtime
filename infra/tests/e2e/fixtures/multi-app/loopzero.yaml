@@ -1,0 +1,13 @@
+project: e2e-project
+
+apps:
+  api:
+    type: server
+    framework: node
+    path: apps/api
+    port: 3000
+
+  worker:
+    type: worker
+    framework: node
+    path: apps/worker

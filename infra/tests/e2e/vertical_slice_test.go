@@ -189,7 +189,8 @@ func TestVerticalSlice_APIToControllerConvergence(t *testing.T) {
 	}
 
 	fakeGit := operatortest.NewFakeGitProvisioner()
-	if err := operatortest.SetupTenantController(mgr, fakeGit); err != nil {
+	fakeArgoCD := operatortest.NewFakeArgoCDProvisioner()
+	if err := operatortest.SetupTenantController(mgr, fakeGit, fakeArgoCD); err != nil {
 		t.Fatalf("failed to setup controller: %v", err)
 	}
 

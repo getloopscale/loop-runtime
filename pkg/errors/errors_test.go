@@ -2,6 +2,7 @@ package errors
 
 import (
 	stderrors "errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -108,6 +109,43 @@ func TestPredefinedErrors(t *testing.T) {
 				t.Error("expected non-empty message")
 			}
 		})
+	}
+}
+
+func TestLoopZeroErrorUnwrap(t *testing.T) {
+	t.Run("Unwrap returns the cause", func(t *testing.T) {
+		cause := fmt.Errorf("database connection refused")
+		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "lock timed out", Cause: cause}
+
+		if stderrors.Unwrap(err) != cause {
+			t.Error("Unwrap should return the cause")
+		}
+	})
+
+	t.Run("errors.Is finds cause through Unwrap chain", func(t *testing.T) {
+		cause := fmt.Errorf("database connection refused")
+		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "lock timed out", Cause: cause}
+
+		if !stderrors.Is(err, cause) {
+			t.Error("errors.Is should find cause through Unwrap chain")
+		}
+	})
+
+	t.Run("Unwrap returns nil when no cause", func(t *testing.T) {
+		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "lock timed out"}
+
+		if stderrors.Unwrap(err) != nil {
+			t.Error("Unwrap should return nil when no cause is set")
+		}
+	})
+}
+
+func TestLoopZeroErrorWrapPreservesCause(t *testing.T) {
+	original := NewLockTimeout("test-env")
+	wrapped := original.Wrap("during deploy")
+
+	if stderrors.Unwrap(wrapped) != original {
+		t.Error("Wrap should set the original as cause")
 	}
 }
 

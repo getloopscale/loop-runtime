@@ -13,18 +13,26 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/source"
+	"github.com/loopzero/loopzero/api/internal/sse"
 )
 
 // Config holds the server configuration.
 type Config struct {
-	Port             string
-	Logger           *slog.Logger
-	DB               routes.DBHealthChecker
-	TokenValidator   middleware.TokenValidator
-	MemberStore      middleware.MembershipStore
-	ProjectStore     routes.ProjectStore
-	TenantCRMgr      routes.TenantCRManager
-	IdempotencyStore middleware.IdempotencyStore
+	Port               string
+	Logger             *slog.Logger
+	DB                 routes.DBHealthChecker
+	TokenValidator     middleware.TokenValidator
+	MemberStore        middleware.MembershipStore
+	ProjectStore       routes.ProjectStore
+	TenantCRMgr        routes.TenantCRManager
+	IdempotencyStore   middleware.IdempotencyStore
+	SourceStore        source.SourceStore
+	BuildOrchestrator  routes.BuildOrchestratorService
+	ArgoCallbackSecret string
+	EventStore         sse.EventStore
+	BuildStoreReader   sse.BuildStoreReader
+	SecretStore        routes.SecretStore
 }
 
 // NewRouter creates a chi router with middleware and routes.
@@ -49,6 +57,12 @@ func NewRouter(cfg Config) *chi.Mux {
 			auth := routes.NewAuthHandler()
 			r.Get("/api/v1/auth/whoami", auth.Whoami)
 
+			// Source upload route
+			if cfg.SourceStore != nil {
+				sourceHandler := routes.NewSourceHandler(cfg.SourceStore)
+				r.Post("/api/v1/source/upload", sourceHandler.Upload)
+			}
+
 			// Mutating routes (with idempotency middleware)
 			if cfg.ProjectStore != nil && cfg.TenantCRMgr != nil {
 				projects := routes.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
@@ -58,7 +72,45 @@ func NewRouter(cfg Config) *chi.Mux {
 					r.Post("/api/v1/projects", projects.Create)
 				}
 			}
+
+			// SSE stream route (no idempotency needed — read-only)
+			if cfg.EventStore != nil && cfg.BuildStoreReader != nil {
+				streamHandler := sse.NewStreamHandler(cfg.EventStore, cfg.BuildStoreReader,
+				sse.WithLogger(cfg.Logger),
+			)
+				r.Get("/api/v1/builds/{id}/stream", streamHandler.ServeHTTP)
+			}
+
+			// Secret routes (read-only, no idempotency needed)
+			if cfg.SecretStore != nil {
+				secrets := routes.NewSecretHandler(cfg.SecretStore)
+				r.Get("/api/v1/secrets", secrets.List)
+			}
+
+			// Build routes
+			if cfg.BuildOrchestrator != nil {
+				builds := routes.NewBuildHandler(cfg.BuildOrchestrator, cfg.ArgoCallbackSecret, cfg.Logger)
+
+				// GET does not need idempotency
+				r.Get("/api/v1/builds/{id}", builds.Get)
+
+				// Mutating build routes with idempotency
+				if cfg.IdempotencyStore != nil {
+					r.With(middleware.Idempotency(cfg.IdempotencyStore)).Post("/api/v1/builds", builds.Create)
+					r.With(middleware.Idempotency(cfg.IdempotencyStore)).Post("/api/v1/builds/{id}/cancel", builds.Cancel)
+				} else {
+					r.Post("/api/v1/builds", builds.Create)
+					r.Post("/api/v1/builds/{id}/cancel", builds.Cancel)
+				}
+			}
 		})
+	}
+
+	// Callback route — uses shared secret auth, NOT OAuth middleware.
+	// Registered outside the auth group intentionally.
+	if cfg.BuildOrchestrator != nil && cfg.ArgoCallbackSecret != "" {
+		builds := routes.NewBuildHandler(cfg.BuildOrchestrator, cfg.ArgoCallbackSecret, cfg.Logger)
+		r.Post("/api/v1/builds/{id}/callback", builds.Callback)
 	}
 
 	return r

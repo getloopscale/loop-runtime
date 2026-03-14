@@ -50,7 +50,7 @@ func TestRollbackMachine_SyncFailed(t *testing.T) {
 func TestRollbackMachine_TerminalStatesRejectAllEvents(t *testing.T) {
 	m := NewRollbackMachine()
 
-	terminalStates := []State{RollbackCompleted, RollbackRejected, RollbackBlocked, RollbackRevertFailed}
+	terminalStates := []State{RollbackCompleted, RollbackRejected, RollbackBlocked, RollbackRevertFailed, RollbackSyncFailed}
 	allEvents := []Event{
 		RollbackValidationPassed, RollbackUnacknowledgedEffects,
 		RollbackNoPreviousRelease, RollbackRevertCompleted,
@@ -69,14 +69,14 @@ func TestRollbackMachine_TerminalStatesRejectAllEvents(t *testing.T) {
 func TestRollbackMachine_IsTerminal(t *testing.T) {
 	m := NewRollbackMachine()
 
-	terminal := []State{RollbackCompleted, RollbackRejected, RollbackBlocked, RollbackRevertFailed}
+	terminal := []State{RollbackCompleted, RollbackRejected, RollbackBlocked, RollbackRevertFailed, RollbackSyncFailed}
 	for _, s := range terminal {
 		if !m.IsTerminal(s) {
 			t.Errorf("state %q should be terminal", s)
 		}
 	}
 
-	nonTerminal := []State{RollbackValidating, RollbackReverting, RollbackSyncing, RollbackSyncFailed}
+	nonTerminal := []State{RollbackValidating, RollbackReverting, RollbackSyncing}
 	for _, s := range nonTerminal {
 		if m.IsTerminal(s) {
 			t.Errorf("state %q should not be terminal", s)
@@ -84,9 +84,12 @@ func TestRollbackMachine_IsTerminal(t *testing.T) {
 	}
 }
 
-func TestRollbackMachine_SyncFailedIsNotTerminal(t *testing.T) {
+func TestRollbackMachine_SyncFailedIsTerminal(t *testing.T) {
+	// SYNC_FAILED is terminal: rollbacks are user-initiated operations.
+	// If sync fails, the user should evaluate and issue a new rollback.
+	// Consistent with REVERT_FAILED being terminal.
 	m := NewRollbackMachine()
-	if m.IsTerminal(RollbackSyncFailed) {
-		t.Error("SYNC_FAILED should not be terminal")
+	if !m.IsTerminal(RollbackSyncFailed) {
+		t.Error("SYNC_FAILED should be terminal")
 	}
 }

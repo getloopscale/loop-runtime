@@ -164,8 +164,11 @@ describe('ApiClient', () => {
       }
     });
 
-    it('409 → message about operation in progress', async () => {
-      const fetchFn = fakeFetch(409, { error: 'conflict' });
+    it('409 with server error body → uses server message with actionable hint', async () => {
+      const fetchFn = fakeFetch(409, {
+        code: 'DEPLOY_IN_PROGRESS',
+        message: 'A deploy is already in progress for this environment.',
+      });
       const client = new ApiClient({ baseURL, token: null, fetchFn });
 
       try {
@@ -174,7 +177,37 @@ describe('ApiClient', () => {
       } catch (err) {
         const apiErr = err as ApiError;
         expect(apiErr.exitCode).toBe(3);
+        expect(apiErr.statusCode).toBe(409);
+        expect(apiErr.message).toContain(
+          'A deploy is already in progress for this environment.'
+        );
+        expect(apiErr.message).toContain('loopzero status');
+      }
+    });
+
+    it('409 without parseable body → falls back to default message', async () => {
+      const fn = async (url: string, init?: RequestInit) => {
+        return {
+          ok: false,
+          status: 409,
+          headers: new Headers(),
+          json: async () => {
+            throw new SyntaxError('Unexpected token');
+          },
+          text: async () => 'not json',
+        } as unknown as Response;
+      };
+      const client = new ApiClient({ baseURL, token: null, fetchFn: fn });
+
+      try {
+        await client.post('/deploys', {});
+        fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as ApiError;
+        expect(apiErr.exitCode).toBe(3);
+        expect(apiErr.statusCode).toBe(409);
         expect(apiErr.message).toContain('already in progress');
+        expect(apiErr.message).toContain('loopzero status');
       }
     });
 

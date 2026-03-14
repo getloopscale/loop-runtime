@@ -1,0 +1,34 @@
+# ArgoCD AppProject template for tenant RBAC isolation.
+# Each tenant gets its own AppProject that restricts:
+#   - Source repos to the tenant's Gitea organization
+#   - Destination namespaces to {tenant}-* pattern
+#   - No cluster-scoped resources
+#   - Blacklisted namespace resources managed by TenantController
+#
+# Placeholder:
+#   TENANT_PLACEHOLDER - tenant identifier (e.g., "acme")
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: "TENANT_PLACEHOLDER"
+  namespace: argocd
+  labels:
+    loopzero.io/tenant: "TENANT_PLACEHOLDER"
+    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/managed-by: loopzero-operator
+spec:
+  description: "Tenant project for TENANT_PLACEHOLDER"
+  sourceRepos:
+    - "http://gitea-http.loopzero-system.svc.cluster.local:3000/TENANT_PLACEHOLDER/*"
+  destinations:
+    - namespace: "TENANT_PLACEHOLDER-*"
+      server: "*"
+  clusterResourceWhitelist: []
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+  roles: []

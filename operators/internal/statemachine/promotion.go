@@ -24,7 +24,7 @@ const (
 // NewPromotionMachine returns the promotion state machine per spec section 5.4.
 //
 // States: VALIDATING -> COMMITTING -> SYNCING -> COMPLETED
-// Terminal: COMPLETED, REJECTED, COMMIT_FAILED
+// Terminal: COMPLETED, REJECTED, COMMIT_FAILED, SYNC_FAILED
 func NewPromotionMachine() *Machine {
 	return NewMachine(MachineConfig{
 		Name: "Promotion",
@@ -36,7 +36,7 @@ func NewPromotionMachine() *Machine {
 			{From: PromotionSyncing, Event: PromotionSyncCompleted, To: PromotionCompleted},
 			{From: PromotionSyncing, Event: PromotionSyncFailed_, To: PromotionSyncFailed},
 		},
-		Terminal: []State{PromotionCompleted, PromotionRejected, PromotionCommitFailed},
+		Terminal: []State{PromotionCompleted, PromotionRejected, PromotionCommitFailed, PromotionSyncFailed},
 		Timeouts: nil, // Sync timeout (2 min) is handled by the controller, not the machine.
 	})
 }

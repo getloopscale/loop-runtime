@@ -153,8 +153,57 @@ tasks:
         PF_PID=$!
         trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
         sleep 2
-        PGPASSWORD=loopzero-dev-password psql -h localhost -p 5432 -U loopzero -d loopzero -f api/internal/db/migrations/000001_initial_schema.up.sql
-        PGPASSWORD=loopzero-dev-password psql -h localhost -p 5432 -U loopzero -d loopzero -f api/internal/db/migrations/000002_auth_tenants.up.sql
+        for f in $(ls api/internal/db/migrations/*.up.sql | sort); do
+          echo "Applying $f..."
+          PGPASSWORD=loopzero-dev-password psql -h localhost -p 5432 -U loopzero -d loopzero -f "$f"
+        done
+
+  # ---------------------------------------------------------------------------
+  # S1: Development seed data
+  # ---------------------------------------------------------------------------
+  dev:seed:
+    desc: Seed database with a dev user + tenant for manual testing
+    vars:
+      GITHUB_USER: '{{.GITHUB_USER | default "paulohenriquevn"}}'
+      GITHUB_EMAIL: '{{.GITHUB_EMAIL | default "paulohenriquevn@gmail.com"}}'
+      GITHUB_ID: '{{.GITHUB_ID | default "6766298"}}'
+      TENANT: '{{.TENANT | default "acme"}}'
+      PLAN: '{{.PLAN | default "starter"}}'
+    cmds:
+      - |
+        kubectl --context {{.MGMT_CONTEXT}} port-forward -n loopzero-system svc/postgresql 5432:5432 &
+        PF_PID=$!
+        trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
+        sleep 2
+        PGPASSWORD=loopzero-dev-password psql -h localhost -p 5432 -U loopzero -d loopzero <<SQL
+        -- Idempotent: uses ON CONFLICT DO NOTHING
+        INSERT INTO users (id, email, github_id, display_name)
+        VALUES ('github-{{.GITHUB_USER}}', '{{.GITHUB_EMAIL}}', {{.GITHUB_ID}}, '{{.GITHUB_USER}}')
+        ON CONFLICT (id) DO NOTHING;
+
+        INSERT INTO tenants (id, display_name, plan, owner_id)
+        VALUES ('{{.TENANT}}', '{{.TENANT}}', '{{.PLAN}}', 'github-{{.GITHUB_USER}}')
+        ON CONFLICT (id) DO NOTHING;
+
+        INSERT INTO tenant_members (tenant_id, user_id, role)
+        VALUES ('{{.TENANT}}', 'github-{{.GITHUB_USER}}', 'owner')
+        ON CONFLICT (tenant_id, user_id) DO NOTHING;
+
+        SELECT '✓ User: github-{{.GITHUB_USER}} (' || '{{.GITHUB_EMAIL}}' || ')';
+        SELECT '✓ Tenant: {{.TENANT}} (plan: {{.PLAN}})';
+        SELECT '✓ Membership: owner of {{.TENANT}}';
+        SQL
+
+  # ---------------------------------------------------------------------------
+  # S2: E2E seed data
+  # ---------------------------------------------------------------------------
+  dev:seed:e2e:
+    desc: Seed E2E test data (tenant, user, project) and wait for reconciliation
+    env:
+      DATABASE_URL: '{{.DATABASE_URL | default "postgres://loopzero:loopzero@localhost:5432/loopzero?sslmode=disable"}}'
+      API_URL: '{{.API_URL | default "http://localhost:3001"}}'
+    cmds:
+      - go run infra/scripts/seed_e2e.go
 
   # ---------------------------------------------------------------------------
   # S0.14: Composite tasks
@@ -169,11 +218,10 @@ tasks:
       - task: db:migrate
 
   dev:up:
-    desc: Boot full dev environment (setup + Tilt)
+    desc: Boot dev environment (clusters + Helm deps). Run `tilt up` separately for the dev loop.
     cmds:
       - task: setup
-      - test -f Tiltfile || { echo "Tiltfile not found — skipping tilt (will be added in Sprint 1)"; exit 0; }
-      - tilt up
+      - echo "Clusters and dependencies are ready. Run 'tilt up' to start the dev loop."
 
   test:
     desc: Run all tests (unit + integration + e2e)
@@ -221,3 +269,7 @@ tasks:
     desc: Validate all K8s manifests with kubeconform
     cmds:
       - kubeconform --strict --skip CustomResourceDefinition operators/config/
+      - kubeconform --strict infra/tilt/api-deployment.yaml infra/tilt/operator-deployment.yaml
+      # ArgoCD templates use CRD kinds (AppProject, Application) — skip those
+      - kubeconform --strict --skip AppProject,Application infra/helm/argocd/templates/
+      # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate

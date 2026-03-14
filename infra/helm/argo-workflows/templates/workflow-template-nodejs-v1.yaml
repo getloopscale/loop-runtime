@@ -1,0 +1,652 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: loopzero-build-nodejs-v1
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: loopzero
+spec:
+  entrypoint: build-pipeline
+  onExit: finalize
+  serviceAccountName: loopzero-build-sa
+  arguments:
+    parameters:
+      - name: tenant-id
+        description: "Tenant identifier for isolation"
+      - name: project-id
+        description: "Project identifier"
+      - name: environment
+        description: "Target environment (e.g., production, staging)"
+      - name: commit-sha
+        description: "Git commit SHA to build"
+      - name: apps
+        description: "JSON array of app specs to build"
+        value: "[]"
+      - name: build-id
+        description: "Unique build identifier"
+      - name: api-callback-url
+        description: "API endpoint for build completion callback"
+      - name: callback-secret
+        description: "Bearer token for callback authentication"
+      - name: gitea-url
+        description: "Gitea server URL for source and GitOps repos"
+      - name: gitea-token
+        description: "Ephemeral Gitea token scoped to tenant repos"
+      - name: minio-endpoint
+        description: "MinIO S3-compatible endpoint for cache and artifacts"
+      - name: minio-access-key
+        description: "MinIO access key scoped to tenant prefix"
+      - name: minio-secret-key
+        description: "MinIO secret key scoped to tenant prefix"
+      - name: registry-url
+        description: "Container registry URL for image push"
+  templates:
+    # =========================================================================
+    # Entrypoint: DAG-based build pipeline
+    # =========================================================================
+    - name: build-pipeline
+      dag:
+        tasks:
+          # -- Step 1: setup --------------------------------------------------
+          - name: clone-repo
+            template: clone-repo
+          - name: restore-cache
+            template: restore-cache
+            dependencies:
+              - clone-repo
+
+          # -- Step 2: parallel-1 (after setup) -------------------------------
+          - name: security-scan
+            template: security-scan
+            dependencies:
+              - restore-cache
+          - name: install-deps
+            template: install-deps
+            dependencies:
+              - restore-cache
+
+          # -- Step 3: build (after install-deps) -----------------------------
+          - name: build-apps
+            template: build-apps
+            dependencies:
+              - install-deps
+
+          # -- Step 4: publish (after build) ----------------------------------
+          - name: build-image
+            template: build-image
+            dependencies:
+              - build-apps
+
+          # -- Step 5: release (after publish) --------------------------------
+          - name: generate-manifests
+            template: generate-manifests
+            dependencies:
+              - build-image
+          - name: validate-manifests
+            template: validate-manifests
+            dependencies:
+              - generate-manifests
+          - name: gitops-push
+            template: gitops-push
+            dependencies:
+              - validate-manifests
+
+    # =========================================================================
+    # Step 1: clone-repo
+    # =========================================================================
+    - name: clone-repo
+      container:
+        image: alpine/git:2.43.0
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+            REPO_URL="{{workflow.parameters.gitea-url}}/loopzero-source-{{workflow.parameters.tenant-id}}-{{workflow.parameters.project-id}}.git"
+            CLONE_URL=$(echo "$REPO_URL" | sed "s|://|://oauth2:{{workflow.parameters.gitea-token}}@|")
+            git clone --depth 1 "$CLONE_URL" /workspace
+            cd /workspace
+            git checkout {{workflow.parameters.commit-sha}}
+            echo "Cloned commit {{workflow.parameters.commit-sha}}"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+
+    # =========================================================================
+    # Step 1: restore-cache
+    # =========================================================================
+    - name: restore-cache
+      container:
+        image: amazon/aws-cli:2.15.17
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+            CACHE_KEY="{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/node-modules"
+            CACHE_PATH="s3://loopzero-builds/{{workflow.parameters.tenant-id}}/cache/deps/${CACHE_KEY}.tar.gz"
+
+            export AWS_ACCESS_KEY_ID="{{workflow.parameters.minio-access-key}}"
+            export AWS_SECRET_ACCESS_KEY="{{workflow.parameters.minio-secret-key}}"
+
+            aws s3 cp "$CACHE_PATH" /tmp/cache.tar.gz \
+              --endpoint-url "{{workflow.parameters.minio-endpoint}}" \
+              --no-sign-request=false 2>/dev/null || {
+              echo "Cache miss — no cached dependencies found"
+              exit 0
+            }
+
+            cd /workspace
+            tar xzf /tmp/cache.tar.gz 2>/dev/null || echo "Cache extraction failed — treating as miss"
+            echo "Cache restored from ${CACHE_KEY}"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+      # Cache restore is best-effort — failure should not block the build
+      activeDeadlineSeconds: 120
+
+    # =========================================================================
+    # Step 2: security-scan (allow failure for v1 — warning only)
+    # =========================================================================
+    - name: security-scan
+      container:
+        image: node:20.11.1-alpine
+        command:
+          - sh
+          - -c
+          - |
+            set -uo pipefail
+            cd /workspace
+            if [ -f package-lock.json ]; then
+              npm audit --audit-level=high 2>&1 || {
+                echo "WARNING: npm audit found high-severity vulnerabilities"
+                echo "This is a warning only for v1 — build continues"
+              }
+            else
+              echo "No package-lock.json found — skipping npm audit"
+            fi
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+      # Security scan is non-blocking for v1
+      activeDeadlineSeconds: 300
+
+    # =========================================================================
+    # Step 2: install-deps
+    # =========================================================================
+    - name: install-deps
+      retryStrategy:
+        limit: "3"
+        retryPolicy: "OnFailure"
+        backoff:
+          duration: "5s"
+          factor: "2"
+          maxDuration: "60s"
+      container:
+        image: node:20.11.1-alpine
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+            cd /workspace
+
+            # Detect package manager by lockfile
+            if [ -f pnpm-lock.yaml ]; then
+              corepack enable
+              pnpm install --frozen-lockfile
+            elif [ -f yarn.lock ]; then
+              corepack enable
+              yarn install --frozen-lockfile
+            elif [ -f package-lock.json ]; then
+              npm ci
+            else
+              echo "ERROR: No lockfile found (package-lock.json, yarn.lock, or pnpm-lock.yaml)"
+              exit 1
+            fi
+            echo "Dependencies installed successfully"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+
+    # =========================================================================
+    # Step 3: build-apps
+    # =========================================================================
+    - name: build-apps
+      container:
+        image: node:20.11.1-alpine
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+            cd /workspace
+
+            APPS='{{workflow.parameters.apps}}'
+
+            if [ "$APPS" = "[]" ] || [ -z "$APPS" ]; then
+              echo "No specific apps — running default build"
+              npm run build --if-present
+            else
+              echo "Building apps: $APPS"
+              npm run build --if-present
+            fi
+            echo "Build completed successfully"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+
+    # =========================================================================
+    # Step 4: build-image (Kaniko)
+    # =========================================================================
+    - name: build-image
+      retryStrategy:
+        limit: "3"
+        retryPolicy: "OnFailure"
+        backoff:
+          duration: "5s"
+          factor: "2"
+          maxDuration: "60s"
+      container:
+        image: gcr.io/kaniko-project/executor:v1.23.2
+        command:
+          - /kaniko/executor
+        args:
+          - --dockerfile=/workspace/Dockerfile
+          - --context=/workspace
+          - --destination={{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}
+          - --cache=true
+          - --cache-repo={{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/cache
+          - --snapshot-mode=redo
+          - --compressed-caching=false
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+
+    # =========================================================================
+    # Step 5: generate-manifests
+    # =========================================================================
+    - name: generate-manifests
+      container:
+        image: alpine/helm:3.14.2
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+            cd /workspace
+
+            MANIFEST_DIR="/manifests/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
+            mkdir -p "$MANIFEST_DIR"
+
+            IMAGE="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}"
+
+            # Generate manifests from templates in the workspace
+            if [ -d charts/ ]; then
+              helm template "{{workflow.parameters.project-id}}" charts/ \
+                --set image.repository="$IMAGE" \
+                --set environment="{{workflow.parameters.environment}}" \
+                --namespace "{{workflow.parameters.tenant-id}}-{{workflow.parameters.project-id}}-{{workflow.parameters.environment}}" \
+                > "$MANIFEST_DIR/manifests.yaml"
+            elif [ -f loopzero.yaml ]; then
+              # Generate basic deployment manifest from loopzero.yaml
+              cat > "$MANIFEST_DIR/manifests.yaml" <<MANIFEST_EOF
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: {{workflow.parameters.project-id}}
+              namespace: {{workflow.parameters.tenant-id}}-{{workflow.parameters.project-id}}-{{workflow.parameters.environment}}
+              labels:
+                app: {{workflow.parameters.project-id}}
+                loopzero.io/tenant: {{workflow.parameters.tenant-id}}
+                loopzero.io/environment: {{workflow.parameters.environment}}
+                loopzero.io/build-id: {{workflow.parameters.build-id}}
+            spec:
+              selector:
+                matchLabels:
+                  app: {{workflow.parameters.project-id}}
+              template:
+                metadata:
+                  labels:
+                    app: {{workflow.parameters.project-id}}
+                spec:
+                  containers:
+                    - name: app
+                      image: $IMAGE
+            MANIFEST_EOF
+            fi
+            echo "Manifests generated at $MANIFEST_DIR"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: manifests
+            mountPath: /manifests
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+
+    # =========================================================================
+    # Step 5: validate-manifests
+    # =========================================================================
+    - name: validate-manifests
+      container:
+        image: ghcr.io/yannh/kubeconform:v0.6.4
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+            MANIFEST_DIR="/manifests/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
+            kubeconform --strict --summary "$MANIFEST_DIR/manifests.yaml"
+            echo "Manifest validation passed"
+        volumeMounts:
+          - name: manifests
+            mountPath: /manifests
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+          limits:
+            cpu: "500m"
+            memory: "128Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+
+    # =========================================================================
+    # Step 5: gitops-push (atomic commit to Gitea GitOps repo)
+    # =========================================================================
+    - name: gitops-push
+      retryStrategy:
+        limit: "3"
+        retryPolicy: "OnFailure"
+        backoff:
+          duration: "5s"
+          factor: "2"
+          maxDuration: "60s"
+      container:
+        image: alpine/git:2.43.0
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+
+            GITOPS_REPO="{{workflow.parameters.gitea-url}}/loopzero-gitops-{{workflow.parameters.tenant-id}}.git"
+            CLONE_URL=$(echo "$GITOPS_REPO" | sed "s|://|://oauth2:{{workflow.parameters.gitea-token}}@|")
+            ENV_PATH="{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
+
+            git clone --depth 5 "$CLONE_URL" /tmp/gitops
+            cd /tmp/gitops
+
+            git config user.email "loopzero-build@loopzero.io"
+            git config user.name "LoopZero Build"
+
+            # Copy generated manifests
+            MANIFEST_SRC="/manifests/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
+            mkdir -p "$ENV_PATH"
+            cp "$MANIFEST_SRC/manifests.yaml" "$ENV_PATH/"
+
+            git add "$ENV_PATH/"
+
+            # Commit with mandatory Git trailers (spec 17.5)
+            git commit -m "Deploy {{workflow.parameters.project-id}} to {{workflow.parameters.environment}}
+
+            Release-ID: {{workflow.parameters.build-id}}
+            Correlation-ID: {{workflow.parameters.build-id}}
+            Build-ID: {{workflow.parameters.build-id}}" || {
+              echo "No changes to commit"
+              exit 0
+            }
+
+            # Push with fetch-merge-push on non-fast-forward (spec 7.4)
+            ATTEMPT=0
+            MAX_ATTEMPTS=3
+            while [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; do
+              if git push origin HEAD; then
+                echo "GitOps push succeeded"
+                exit 0
+              fi
+              ATTEMPT=$((ATTEMPT + 1))
+              echo "Push attempt $ATTEMPT failed — fetching and rebasing"
+              git fetch origin
+              git rebase origin/main || git rebase origin/master || true
+            done
+
+            echo "ERROR: GitOps push failed after $MAX_ATTEMPTS attempts"
+            exit 1
+        volumeMounts:
+          - name: manifests
+            mountPath: /manifests
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+
+    # =========================================================================
+    # onExit: finalize (ALWAYS runs — even on failure)
+    # =========================================================================
+    - name: finalize
+      dag:
+        tasks:
+          - name: save-cache
+            template: save-cache
+          - name: emit-summary
+            template: emit-summary
+          - name: notify-api
+            template: notify-api
+
+    # =========================================================================
+    # Finalize: save-cache
+    # =========================================================================
+    - name: save-cache
+      container:
+        image: amazon/aws-cli:2.15.17
+        command:
+          - sh
+          - -c
+          - |
+            set -uo pipefail
+            cd /workspace 2>/dev/null || { echo "No workspace — skipping cache save"; exit 0; }
+
+            CACHE_KEY="{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/node-modules"
+            CACHE_PATH="s3://loopzero-builds/{{workflow.parameters.tenant-id}}/cache/deps/${CACHE_KEY}.tar.gz"
+
+            export AWS_ACCESS_KEY_ID="{{workflow.parameters.minio-access-key}}"
+            export AWS_SECRET_ACCESS_KEY="{{workflow.parameters.minio-secret-key}}"
+
+            if [ -d node_modules ]; then
+              tar czf /tmp/cache.tar.gz node_modules/
+              aws s3 cp /tmp/cache.tar.gz "$CACHE_PATH" \
+                --endpoint-url "{{workflow.parameters.minio-endpoint}}" \
+                --no-sign-request=false 2>/dev/null || echo "Cache save failed — non-fatal"
+              echo "Cache saved to ${CACHE_KEY}"
+            else
+              echo "No node_modules to cache"
+            fi
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+
+    # =========================================================================
+    # Finalize: emit-summary
+    # =========================================================================
+    - name: emit-summary
+      container:
+        image: alpine:3.19.1
+        command:
+          - sh
+          - -c
+          - |
+            echo "============================================"
+            echo "  Build Summary"
+            echo "============================================"
+            echo "  Tenant:      {{workflow.parameters.tenant-id}}"
+            echo "  Project:     {{workflow.parameters.project-id}}"
+            echo "  Environment: {{workflow.parameters.environment}}"
+            echo "  Commit:      {{workflow.parameters.commit-sha}}"
+            echo "  Build ID:    {{workflow.parameters.build-id}}"
+            echo "  Status:      {{workflow.status}}"
+            echo "============================================"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+
+    # =========================================================================
+    # Finalize: notify-api (DA-15 callback — retry 3x with backoff)
+    # =========================================================================
+    - name: notify-api
+      retryStrategy:
+        limit: "3"
+        retryPolicy: "Always"
+        backoff:
+          duration: "5s"
+          factor: "2"
+          maxDuration: "60s"
+      container:
+        image: curlimages/curl:8.6.0
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+
+            # Determine build status from workflow status
+            if [ "{{workflow.status}}" = "Succeeded" ]; then
+              BUILD_STATUS="succeeded"
+            else
+              BUILD_STATUS="failed"
+            fi
+
+            CALLBACK_URL="{{workflow.parameters.api-callback-url}}/{{workflow.parameters.build-id}}/callback"
+
+            BODY="{\"status\":\"${BUILD_STATUS}\",\"apps\":{{workflow.parameters.apps}},\"build_id\":\"{{workflow.parameters.build-id}}\",\"commit_sha\":\"{{workflow.parameters.commit-sha}}\"}"
+
+            HTTP_CODE=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
+              -X POST "$CALLBACK_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer {{workflow.parameters.callback-secret}}" \
+              -d "$BODY" \
+              --connect-timeout 10 \
+              --max-time 30)
+
+            echo "Callback response: HTTP $HTTP_CODE"
+            cat /tmp/response.txt
+
+            # Fail on 5xx to trigger retry; accept 2xx and 4xx
+            if [ "$HTTP_CODE" -ge 500 ]; then
+              echo "ERROR: Server error $HTTP_CODE — will retry"
+              exit 1
+            fi
+
+            echo "Build callback sent successfully (status: $BUILD_STATUS)"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+
+  # ===========================================================================
+  # Volumes shared across steps
+  # ===========================================================================
+  volumes:
+    - name: workspace
+      emptyDir: {}
+    - name: manifests
+      emptyDir: {}

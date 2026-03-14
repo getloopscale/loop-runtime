@@ -1,0 +1,549 @@
+// Package services implements business logic orchestration.
+package services
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/loopzero/loopzero/api/internal/db"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/loopzero/loopzero/pkg/statemachine"
+)
+
+// WorkflowSubmitter abstracts Argo Workflows submission (DIP — no direct coupling).
+type WorkflowSubmitter interface {
+	Submit(ctx context.Context, spec WorkflowSpec) (workflowID string, err error)
+	Cancel(ctx context.Context, workflowID string) error
+}
+
+// WorkflowSpec contains everything needed to submit a build workflow.
+type WorkflowSpec struct {
+	BuildID     string
+	TenantID    string
+	ProjectID   string
+	Environment string
+	CommitSHA   string
+	Apps        []AppSpec
+	CallbackURL string
+}
+
+// AppSpec describes a single app from loopzero.yaml.
+type AppSpec struct {
+	Name string
+	Type string // "server", "worker", "frontend"
+	Port int
+}
+
+// GitOpsPusher abstracts Gitea gitops-push operations (DIP).
+type GitOpsPusher interface {
+	Push(ctx context.Context, req GitOpsPushRequest) (commitSHA string, err error)
+}
+
+// GitOpsPushRequest contains the data for a gitops push.
+type GitOpsPushRequest struct {
+	TenantID    string
+	ProjectID   string
+	Environment string
+	ReleaseID   string
+	Apps        []AppRelease
+}
+
+// AppRelease describes a built app with its image digest and URL.
+type AppRelease struct {
+	Name        string `json:"name"`
+	ImageDigest string `json:"image_digest"`
+	URL         string `json:"url"`
+	DurationMs  int    `json:"duration_ms"`
+}
+
+// HealthProber checks if a deployed app is accessible (DIP).
+type HealthProber interface {
+	Probe(ctx context.Context, url string, path string) error
+}
+
+// SyncClient abstracts ArgoCD sync operations (DIP).
+type SyncClient interface {
+	TriggerSync(ctx context.Context, appName string) error
+	WaitForSync(ctx context.Context, appName string, timeout time.Duration) error
+}
+
+// EnvironmentLocker abstracts the advisory lock acquisition (DIP for testability).
+// In production, this wraps lock.WithEnvironmentLock with a real pgxpool.Pool.
+// In tests, a fake locker executes fn immediately with a nil tx.
+type EnvironmentLocker interface {
+	WithLock(ctx context.Context, tenant, project, env string, fn func(tx db.DBTX) error) error
+}
+
+// SubmitBuildRequest contains the inputs for submitting a new build.
+type SubmitBuildRequest struct {
+	TenantID    string
+	ProjectID   string
+	Environment string
+	CommitSHA   string
+	Apps        []AppSpec
+	CreatedBy   string
+	CallbackURL string
+}
+
+// SubmitBuildResponse is returned after a build is successfully submitted.
+type SubmitBuildResponse struct {
+	BuildID   string `json:"build_id"`
+	StreamURL string `json:"stream_url"`
+}
+
+// BuildCallbackRequest is sent by the build system when a build completes.
+type BuildCallbackRequest struct {
+	Status string       `json:"status"` // "succeeded" or "failed"
+	Apps   []AppRelease `json:"apps"`
+}
+
+// BuildOrchestratorDeps holds all dependencies for BuildOrchestrator.
+type BuildOrchestratorDeps struct {
+	BuildStore     db.BuildStore
+	ReleaseStore   db.ReleaseStore
+	EnvTargetStore db.EnvironmentTargetStore
+	EventStore     interface {
+		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
+	}
+	Workflow WorkflowSubmitter
+	GitOps   GitOpsPusher
+	Health   HealthProber
+	Sync     SyncClient
+	Locker   EnvironmentLocker
+}
+
+// BuildOrchestrator orchestrates the entire deploy flow:
+// build submission, completion callback, release creation, and activation.
+type BuildOrchestrator struct {
+	buildStore     db.BuildStore
+	releaseStore   db.ReleaseStore
+	envTargetStore db.EnvironmentTargetStore
+	eventStore     interface {
+		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
+	}
+	workflow WorkflowSubmitter
+	gitOps   GitOpsPusher
+	health   HealthProber
+	sync     SyncClient
+	locker   EnvironmentLocker
+}
+
+// NewBuildOrchestrator creates a new BuildOrchestrator with all dependencies injected.
+func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
+	return &BuildOrchestrator{
+		buildStore:     deps.BuildStore,
+		releaseStore:   deps.ReleaseStore,
+		envTargetStore: deps.EnvTargetStore,
+		eventStore:     deps.EventStore,
+		workflow:       deps.Workflow,
+		gitOps:         deps.GitOps,
+		health:         deps.Health,
+		sync:           deps.Sync,
+		locker:         deps.Locker,
+	}
+}
+
+// SubmitBuild acquires the environment lock (Lock 1) and submits a new build.
+//
+// Steps (spec §10.1, steps 4-11):
+//  1. Acquire environment lock
+//  2. Check concurrent build (HasActiveBuild) — INSIDE the lock
+//  3. Create Build record (QUEUED)
+//  4. Submit Argo Workflow (via WorkflowSubmitter)
+//  5. Transition Build to RUNNING
+//  6. Emit SSE event (build.started)
+//  7. Release lock (transaction commits)
+//
+// Returns ErrDeployInProgress if another build is active.
+// Returns ErrLockTimeout if the lock cannot be acquired within 5s.
+func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequest) (*SubmitBuildResponse, error) {
+	var resp *SubmitBuildResponse
+
+	err := o.locker.WithLock(ctx, req.TenantID, req.ProjectID, req.Environment, func(tx db.DBTX) error {
+		// Step 2: concurrent build check INSIDE the lock (Rule 6)
+		hasActive, err := o.buildStore.HasActiveBuild(ctx, tx, req.TenantID, req.ProjectID, req.Environment)
+		if err != nil {
+			return fmt.Errorf("submit build: check active builds: %w", err)
+		}
+		if hasActive {
+			return loopzeroerrors.ErrDeployInProgress
+		}
+
+		// Step 3: create Build (QUEUED)
+		build := &db.Build{
+			TenantID:    req.TenantID,
+			ProjectID:   req.ProjectID,
+			Environment: req.Environment,
+			CommitSHA:   req.CommitSHA,
+			CreatedBy:   req.CreatedBy,
+		}
+		if err := o.buildStore.Create(ctx, tx, build); err != nil {
+			return fmt.Errorf("submit build: create build: %w", err)
+		}
+
+		// Step 4: submit workflow
+		wfSpec := WorkflowSpec{
+			BuildID:     build.ID,
+			TenantID:    req.TenantID,
+			ProjectID:   req.ProjectID,
+			Environment: req.Environment,
+			CommitSHA:   req.CommitSHA,
+			Apps:        req.Apps,
+			CallbackURL: req.CallbackURL,
+		}
+		if _, err := o.workflow.Submit(ctx, wfSpec); err != nil {
+			return fmt.Errorf("submit build: submit workflow: %w", err)
+		}
+
+		// Step 5: transition QUEUED → RUNNING
+		if _, err := o.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildStarted)); err != nil {
+			return fmt.Errorf("submit build: transition to RUNNING: %w", err)
+		}
+
+		// Step 6: emit SSE build.started
+		eventData, _ := json.Marshal(map[string]string{
+			"build_id": build.ID,
+			"status":   "running",
+		})
+		if _, err := o.eventStore.Append(ctx, build.ID, "build.started", eventData); err != nil {
+			return fmt.Errorf("submit build: emit SSE event: %w", err)
+		}
+
+		// Build response
+		streamURL := fmt.Sprintf("/api/v1/builds/%s/stream", build.ID)
+		resp = &SubmitBuildResponse{
+			BuildID:   build.ID,
+			StreamURL: streamURL,
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// OnBuildCompleted handles the callback from the build system when a build finishes.
+//
+// Steps 1-4 happen OUTSIDE Lock 2. Steps 7+ happen INSIDE Lock 2 (DA-17).
+//
+// Race condition guard (DA-15 EC-N): If build is QUEUED (Argo finished before
+// SubmitBuild transitioned to RUNNING), transitions QUEUED→RUNNING first.
+//
+// Duplicate callbacks: If build is already in a terminal state, returns nil (no-op).
+func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string, result BuildCallbackRequest) error {
+	// Step 1: get build by ID
+	build, err := o.buildStore.GetByID(ctx, buildID)
+	if err != nil {
+		return fmt.Errorf("on build completed: get build: %w", err)
+	}
+
+	// Step 6 (DA-15): duplicate callback — build already terminal → no-op
+	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+		return nil
+	}
+
+	// Step 5 (DA-15): callback validation — succeeded with empty apps
+	if result.Status == "succeeded" && len(result.Apps) == 0 {
+		return loopzeroerrors.NewLoopZeroError(
+			"INVALID_CALLBACK",
+			"build callback reported success but provided no apps",
+			400,
+		)
+	}
+
+	// Step 2 (DA-15 EC-N): race condition guard — build still in QUEUED
+	if build.Status == string(statemachine.BuildQueued) {
+		if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildStarted)); err != nil {
+			return fmt.Errorf("on build completed: EC-N transition to RUNNING: %w", err)
+		}
+	}
+
+	// Step 3: transition to terminal state
+	if result.Status == "failed" {
+		if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildFailedEvent)); err != nil {
+			return fmt.Errorf("on build completed: transition to FAILED: %w", err)
+		}
+
+		// Emit SSE build.failed
+		eventData, _ := json.Marshal(map[string]string{
+			"build_id": buildID,
+			"status":   "failed",
+		})
+		if _, err := o.eventStore.Append(ctx, buildID, "build.failed", eventData); err != nil {
+			return fmt.Errorf("on build completed: emit build.failed: %w", err)
+		}
+
+		return nil
+	}
+
+	// Step 4: transition to SUCCEEDED
+	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildSucceededEvent)); err != nil {
+		return fmt.Errorf("on build completed: transition to SUCCEEDED: %w", err)
+	}
+
+	// Emit SSE build.succeeded
+	eventData, _ := json.Marshal(map[string]string{
+		"build_id": buildID,
+		"status":   "succeeded",
+	})
+	if _, err := o.eventStore.Append(ctx, buildID, "build.succeeded", eventData); err != nil {
+		return fmt.Errorf("on build completed: emit build.succeeded: %w", err)
+	}
+
+	// Steps 7+: acquire Lock 2 for release creation and activation
+	return o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
+		return o.activateRelease(ctx, tx, build, result)
+	})
+}
+
+// activateRelease runs inside Lock 2 and orchestrates release creation through activation.
+//
+// Steps (spec §10.1, steps 8a-8i):
+//  1. Create release record (READY)
+//  2. Push manifests to gitops store
+//  3. Wait for sync and run health probes
+//  4. Finalize activation or mark as failed
+func (o *BuildOrchestrator) activateRelease(ctx context.Context, tx db.DBTX, build *db.Build, result BuildCallbackRequest) error {
+	release, err := o.createRelease(ctx, tx, build, result)
+	if err != nil {
+		return err
+	}
+
+	if err := o.pushToGitOps(ctx, tx, build, release, result); err != nil {
+		return err
+	}
+
+	probeFailed, err := o.waitForSync(ctx, tx, build, release, result)
+	if err != nil {
+		return err
+	}
+
+	return o.finalizeActivation(ctx, tx, build, release, result, probeFailed)
+}
+
+// createRelease creates a new release record in READY state (step 8a).
+func (o *BuildOrchestrator) createRelease(ctx context.Context, tx db.DBTX, build *db.Build, result BuildCallbackRequest) (*db.Release, error) {
+	appsJSON, err := json.Marshal(result.Apps)
+	if err != nil {
+		return nil, fmt.Errorf("activate release: marshal apps: %w", err)
+	}
+
+	release := &db.Release{
+		BuildID:     build.ID,
+		TenantID:    build.TenantID,
+		ProjectID:   build.ProjectID,
+		Environment: build.Environment,
+		CreatedBy:   build.CreatedBy,
+		Apps:        appsJSON,
+	}
+	if err := o.releaseStore.Create(ctx, tx, release); err != nil {
+		return nil, fmt.Errorf("activate release: create release: %w", err)
+	}
+
+	return release, nil
+}
+
+// pushToGitOps pushes manifests to the gitops store and transitions the release
+// to PENDING state (steps 8b-8d).
+func (o *BuildOrchestrator) pushToGitOps(ctx context.Context, tx db.DBTX, build *db.Build, release *db.Release, result BuildCallbackRequest) error {
+	// Step 8b: gitops push
+	if _, err := o.gitOps.Push(ctx, GitOpsPushRequest{
+		TenantID:    build.TenantID,
+		ProjectID:   build.ProjectID,
+		Environment: build.Environment,
+		ReleaseID:   release.ID,
+		Apps:        result.Apps,
+	}); err != nil {
+		return fmt.Errorf("activate release: gitops push: %w", err)
+	}
+
+	// Step 8c: transition READY → PENDING via GitMirrorCompleted
+	if _, err := o.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseGitMirrorCompleted)); err != nil {
+		return fmt.Errorf("activate release: transition to PENDING: %w", err)
+	}
+
+	// Emit SSE deploy.pending (user-facing: no "release" terminology per Rule 3)
+	pendingData, _ := json.Marshal(map[string]string{
+		"deploy_id": deriveDeployID(release.ID),
+		"status":    "pending",
+	})
+	if _, err := o.eventStore.Append(ctx, build.ID, "deploy.pending", pendingData); err != nil {
+		return fmt.Errorf("activate release: emit deploy.pending: %w", err)
+	}
+
+	// Step 8d: update environment_targets.desired_release_id
+	if err := o.envTargetStore.SetDesired(ctx, tx, build.TenantID, build.ProjectID, build.Environment, release.ID, build.CreatedBy, build.CorrelationID); err != nil {
+		return fmt.Errorf("activate release: set desired: %w", err)
+	}
+
+	return nil
+}
+
+// waitForSync triggers ArgoCD sync and runs health probes against deployed apps
+// (steps 8e-8f). Returns true if any health probe failed.
+func (o *BuildOrchestrator) waitForSync(ctx context.Context, tx db.DBTX, build *db.Build, release *db.Release, result BuildCallbackRequest) (probeFailed bool, err error) {
+	// Step 8e: trigger sync
+	argoAppName := fmt.Sprintf("%s-%s-%s", build.TenantID, build.ProjectID, build.Environment)
+	if err := o.sync.TriggerSync(ctx, argoAppName); err != nil {
+		return false, fmt.Errorf("activate release: trigger sync: %w", err)
+	}
+
+	// Step 8f: health probes
+	for _, app := range result.Apps {
+		if appTypeFromName(app, result.Apps) == "worker" {
+			continue
+		}
+		if app.URL == "" {
+			continue
+		}
+
+		// Emit SSE deploy.health_check checking (user-facing: no "release" terminology per Rule 3)
+		checkingData, _ := json.Marshal(map[string]interface{}{
+			"status": "checking",
+			"app":    app.Name,
+		})
+		if _, err := o.eventStore.Append(ctx, build.ID, "deploy.health_check", checkingData); err != nil {
+			return false, fmt.Errorf("activate release: emit health_check checking: %w", err)
+		}
+
+		probeStart := time.Now()
+		probeErr := o.health.Probe(ctx, app.URL, "/health")
+		probeDuration := time.Since(probeStart)
+
+		if probeErr != nil {
+			failedData, _ := json.Marshal(map[string]interface{}{
+				"status":      "failed",
+				"app":         app.Name,
+				"duration_ms": probeDuration.Milliseconds(),
+				"error":       probeErr.Error(),
+			})
+			if _, err := o.eventStore.Append(ctx, build.ID, "deploy.health_check", failedData); err != nil {
+				return false, fmt.Errorf("activate release: emit health_check failed: %w", err)
+			}
+			return true, nil
+		}
+
+		okData, _ := json.Marshal(map[string]interface{}{
+			"status":      "ok",
+			"app":         app.Name,
+			"duration_ms": probeDuration.Milliseconds(),
+		})
+		if _, err := o.eventStore.Append(ctx, build.ID, "deploy.health_check", okData); err != nil {
+			return false, fmt.Errorf("activate release: emit health_check ok: %w", err)
+		}
+	}
+
+	return false, nil
+}
+
+// finalizeActivation marks the release as ACTIVE or SYNC_FAILED based on health
+// probe results, updates environment targets, and supersedes previous releases
+// (steps 8h-8i).
+func (o *BuildOrchestrator) finalizeActivation(ctx context.Context, tx db.DBTX, build *db.Build, release *db.Release, result BuildCallbackRequest, probeFailed bool) error {
+	if probeFailed {
+		// Step 8i: Release → SYNC_FAILED
+		if _, err := o.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncFailed_)); err != nil {
+			return fmt.Errorf("activate release: transition to SYNC_FAILED: %w", err)
+		}
+
+		failedData, _ := json.Marshal(map[string]interface{}{
+			"deploy_id": deriveDeployID(release.ID),
+			"status":    "sync_failed",
+			"reason":    "HEALTH_PROBE_FAILED",
+		})
+		if _, err := o.eventStore.Append(ctx, build.ID, "deploy.sync_failed", failedData); err != nil {
+			return fmt.Errorf("activate release: emit deploy.sync_failed: %w", err)
+		}
+
+		return nil
+	}
+
+	// Step 8h: all probes passed — Release → ACTIVE
+	if _, err := o.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncCompleted)); err != nil {
+		return fmt.Errorf("activate release: transition to ACTIVE: %w", err)
+	}
+
+	// Emit SSE deploy.active (user-facing: no "release" terminology per Rule 3)
+	activeData, _ := json.Marshal(map[string]string{
+		"deploy_id": deriveDeployID(release.ID),
+		"status":    "active",
+	})
+	if _, err := o.eventStore.Append(ctx, build.ID, "deploy.active", activeData); err != nil {
+		return fmt.Errorf("activate release: emit deploy.active: %w", err)
+	}
+
+	// Update environment_targets.active_release_id
+	if err := o.envTargetStore.SetActive(ctx, tx, build.TenantID, build.ProjectID, build.Environment, release.ID); err != nil {
+		return fmt.Errorf("activate release: set active: %w", err)
+	}
+
+	// Supersede previous active release
+	prevRelease, err := o.releaseStore.GetActiveByEnv(ctx, build.TenantID, build.ProjectID, build.Environment)
+	if err != nil {
+		return fmt.Errorf("activate release: get previous active: %w", err)
+	}
+	if prevRelease != nil && prevRelease.ID != release.ID {
+		if _, err := o.releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.ReleaseNewActivated)); err != nil {
+			return fmt.Errorf("activate release: supersede previous: %w", err)
+		}
+	}
+
+	// Emit deploy.completed with full deploy response (DA-5)
+	deployID := deriveDeployID(release.ID)
+	// F-06: Calculate real duration from build creation to completion
+	durationSecs := int(time.Since(build.CreatedAt).Seconds())
+
+	var deployApps []map[string]interface{}
+	for _, app := range result.Apps {
+		deployApps = append(deployApps, map[string]interface{}{
+			"name":                   app.Name,
+			"status":                 "deployed",
+			"url":                    app.URL,
+			"build_duration_seconds": app.DurationMs / 1000,
+		})
+	}
+
+	deployData, _ := json.Marshal(map[string]interface{}{
+		"deploy_id":        deployID,
+		"status":           "success",
+		"duration_seconds": durationSecs,
+		"apps":             deployApps,
+	})
+	if _, err := o.eventStore.Append(ctx, build.ID, "deploy.completed", deployData); err != nil {
+		return fmt.Errorf("activate release: emit deploy.completed: %w", err)
+	}
+
+	return nil
+}
+
+// deriveDeployID creates a deploy_id in the format d-{4hex} from a release ID.
+// Example: rel-8f3a2b1c → d-8f3a
+func deriveDeployID(releaseID string) string {
+	// Strip the "rel-" prefix to get the hex portion
+	hex := strings.TrimPrefix(releaseID, "rel-")
+	if len(hex) >= 4 {
+		return "d-" + hex[:4]
+	}
+	return "d-" + hex
+}
+
+// appTypeFromName finds the app type from the callback apps list.
+// In the callback, apps carry their name; the original request carries the type.
+// Since we pass apps from the callback result which includes name but
+// the type info comes from the original build request, we store apps info
+// in the build record. For now, we use the URL heuristic: workers have empty URL.
+func appTypeFromName(app AppRelease, apps []AppRelease) string {
+	// Workers have no URL
+	if app.URL == "" {
+		return "worker"
+	}
+	return "server"
+}
+

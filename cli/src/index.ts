@@ -1,14 +1,32 @@
+// Suppress Node.js ExperimentalWarning (buffer.File in Node 20 multipart uploads)
+// Must run before any imports that might trigger the warning.
+const _origEmit = process.emit;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(process as any).emit = function (event: string, ...args: unknown[]) {
+  if (event === 'warning' && args[0] && (args[0] as { name?: string }).name === 'ExperimentalWarning') {
+    return false;
+  }
+  return _origEmit.apply(process, [event, ...args] as Parameters<typeof _origEmit>);
+};
+
 import { Command } from 'commander';
 
 import { ConfigStore } from './config/store';
 import { ApiClient } from './api/client';
+import { SSEClient } from './api/sse-client';
 import { Formatter } from './output/formatter';
 import { LoginCommand } from './commands/login';
 import { LogoutCommand } from './commands/logout';
 import { WhoamiCommand } from './commands/whoami';
 import { InitCommand } from './commands/init';
+import { DeployCommand } from './commands/deploy';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
+
+import { hasGitRepo, hasUncommittedChanges, getHeadCommit, getGitRoot, createGitBundle } from './adapters/git';
+import { findLoopZeroYaml } from './adapters/loopzero-yaml';
+import { cleanupFile } from './adapters/source-bundle';
+import { uploadSource } from './adapters/source-upload';
 
 export function createProgram(): Command {
   const program = new Command();
@@ -37,20 +55,41 @@ export function createProgram(): Command {
     .option('--team <team>', 'Select team')
     .action(async (cmdOpts) => {
       const globalOpts = program.opts();
-      const apiClient = new ApiClient({ token: cmdOpts.token });
 
       const loginCmd = new LoginCommand({
         saveToken: (token, email, team) =>
           configStore.saveToken(token, email, team),
         validateToken: async (token: string) => {
           try {
-            const result = await apiClient.post<{
-              valid: boolean;
-              email: string | null;
-              teams: string[];
-            }>('/auth/validate', { token });
-            return result;
-          } catch {
+            const client = new ApiClient({
+              baseURL: process.env.LOOPZERO_API_URL ?? 'http://localhost:3001',
+              token,
+            });
+            const result = await client.get<{
+              user_id: string;
+              email: string;
+              team: string;
+              role: string;
+            }>('/api/v1/auth/whoami');
+            const username = result.user_id.replace(/^github-/, '');
+            const displayName = result.email || `${username}@users.noreply.github.com`;
+            return {
+              valid: true,
+              email: displayName,
+              teams: [result.team],
+            };
+          } catch (err) {
+            // Network/connection errors — server unreachable
+            const errMsg = (err as Error).message || '';
+            if (errMsg.includes('ECONNREFUSED') || errMsg.includes('ETIMEDOUT') ||
+                errMsg.includes('ENOTFOUND') || errMsg.includes('fetch failed')) {
+              return { valid: false, email: null, teams: [], serverError: true };
+            }
+            // API returned 5xx server error
+            const apiErr = err as { statusCode?: number };
+            if (apiErr.statusCode !== undefined && apiErr.statusCode >= 500) {
+              return { valid: false, email: null, teams: [], serverError: true };
+            }
             return { valid: false, email: null, teams: [] };
           }
         },
@@ -115,7 +154,6 @@ export function createProgram(): Command {
     .action(async (cmdOpts) => {
       const globalOpts = program.opts();
       const token = configStore.getToken();
-      const apiClient = new ApiClient({ token: token ?? undefined });
 
       const initCmd = new InitCommand({
         getToken: () => configStore.getToken(),
@@ -123,8 +161,10 @@ export function createProgram(): Command {
         detectMonorepo: (dir: string) => detectMonorepoTool(dir),
         detectFramework: (dir: string) => detectFramework(dir),
         createProject: async (input) => {
-          return apiClient.post<{ id: string; name: string; team: string }>(
-            '/projects',
+          const baseURL = process.env.LOOPZERO_API_URL ?? 'http://localhost:3001';
+          const authedClient = new ApiClient({ baseURL, token: token ?? undefined });
+          return authedClient.post<{ id: string; name: string; team: string }>(
+            '/api/v1/projects',
             {
               name: input.name,
               apps: input.apps,
@@ -141,6 +181,91 @@ export function createProgram(): Command {
         yes: cmdOpts.yes,
         force: cmdOpts.force,
         name: cmdOpts.name,
+        json: globalOpts.json,
+      });
+      process.exitCode = exitCode;
+    });
+
+  // --- deploy ---
+  program
+    .command('deploy')
+    .description('Deploy your application. Use --json for structured output.')
+    .option('--env <name>', 'Target environment', 'production')
+    .option('--app <name...>', 'Deploy specific app(s)')
+    .option('--no-wait', 'Return immediately after submit')
+    .action(async (cmdOpts) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = process.env.LOOPZERO_API_URL ?? 'http://localhost:3001';
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const { randomUUID } = await import('crypto');
+
+      const deployCmd = new DeployCommand({
+        getToken: () => configStore.getToken(),
+        findLoopZeroYaml: () => {
+          const gitRoot = getGitRoot();
+          if (!gitRoot) return null;
+          return findLoopZeroYaml(process.cwd(), gitRoot);
+        },
+        hasGitRepo,
+        hasUncommittedChanges,
+        getHeadCommit,
+        createGitBundle,
+        uploadSource: (bundlePath: string, loopzeroYamlPath: string) =>
+          uploadSource(baseURL, configStore.getConfig()?.token ?? null, bundlePath, loopzeroYamlPath),
+        submitBuild: async (input) => {
+          const headers: Record<string, string> = {
+            'Idempotency-Key': input.idempotencyKey,
+          };
+          const result = await apiClient.post<{ build_id: string; stream_url: string }>(
+            '/api/v1/builds',
+            {
+              project_id: input.project,
+              environment: input.environment,
+              apps: input.apps.map((a) => ({
+                name: a.name,
+                ...(a.type ? { type: a.type } : {}),
+                ...(a.port ? { port: a.port } : {}),
+              })),
+            },
+            headers,
+          );
+          // F-08: Ensure stream_url is absolute (API returns relative path)
+          if (result.stream_url && result.stream_url.startsWith('/')) {
+            result.stream_url = `${baseURL}${result.stream_url}`;
+          }
+          return result;
+        },
+        connectSSE: (buildId, onEvent) => {
+          const url = `${baseURL}/api/v1/builds/${buildId}/stream`;
+          const client = new SSEClient({
+            url,
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            onEvent: (sseEvent) => {
+              onEvent({ type: sseEvent.event, data: sseEvent.data });
+            },
+          });
+          client.connect();
+          return { close: () => client.close() };
+        },
+        getSecrets: async (project: string, environment: string) => {
+          const result = await apiClient.get<{ secrets: string[] }>(
+            `/api/v1/secrets?env=${encodeURIComponent(environment)}&project=${encodeURIComponent(project)}`
+          );
+          return result.secrets;
+        },
+        cleanupFile,
+        generateIdempotencyKey: () => randomUUID(),
+        writeTo,
+        writeError,
+        isCI,
+        isTTY: process.stdout.isTTY ?? false,
+      });
+
+      const exitCode = await deployCmd.execute({
+        env: cmdOpts.env,
+        app: cmdOpts.app,
+        wait: cmdOpts.wait,
         json: globalOpts.json,
       });
       process.exitCode = exitCode;

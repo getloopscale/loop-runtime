@@ -17,6 +17,20 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
+// Flush delegates to the underlying ResponseWriter if it implements http.Flusher.
+// This is required for SSE streaming to work through the logging middleware.
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap returns the underlying ResponseWriter, enabling http.ResponseController
+// and other unwrapping mechanisms to discover interface implementations.
+func (w *statusWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 // RequestLogging returns middleware that logs every HTTP request.
 // If logger is nil, logging is silently skipped (useful in tests).
 func RequestLogging(logger *slog.Logger) func(http.Handler) http.Handler {

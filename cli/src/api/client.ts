@@ -40,9 +40,10 @@ export class ApiClient {
 
   async post<T = unknown>(
     path: string,
-    body: Record<string, unknown>
+    body: Record<string, unknown>,
+    extraHeaders?: Record<string, string>
   ): Promise<T> {
-    return this.request<T>('POST', path, body);
+    return this.request<T>('POST', path, body, extraHeaders);
   }
 
   async del<T = unknown>(path: string): Promise<T> {
@@ -52,10 +53,12 @@ export class ApiClient {
   private async request<T>(
     method: string,
     path: string,
-    body?: Record<string, unknown>
+    body?: Record<string, unknown>,
+    extraHeaders?: Record<string, string>
   ): Promise<T> {
     const headers: Record<string, string> = {
       'Correlation-ID': randomUUID(),
+      ...extraHeaders,
     };
 
     if (this.token) {
@@ -77,7 +80,13 @@ export class ApiClient {
     const res = await this.fetchFn(url, init);
 
     if (!res.ok) {
-      throw this.mapError(res.status);
+      let errorBody: { code?: string; message?: string } | null = null;
+      try {
+        errorBody = (await res.json()) as { code?: string; message?: string };
+      } catch {
+        /* ignore parse errors */
+      }
+      throw this.mapError(res.status, errorBody);
     }
 
     if (res.status === 204) {
@@ -87,42 +96,51 @@ export class ApiClient {
     return (await res.json()) as T;
   }
 
-  private mapError(status: number): ApiError {
+  private mapError(
+    status: number,
+    body?: { code?: string; message?: string } | null,
+  ): ApiError {
+    const serverMessage = body?.message ?? null;
+
     switch (status) {
       case 401:
         return new ApiError(
-          'Not authenticated. Run: loopzero login',
+          serverMessage || 'Not authenticated. Run: loopzero login',
           4,
           status
         );
       case 403:
         return new ApiError(
-          'Permission denied. Check your account access.',
+          serverMessage || 'Permission denied. Check your account access.',
           4,
           status
         );
       case 409:
+        // Exit code 3 (deploy failure) is used for concurrent rejection per spec §0.3.
+        // No separate "conflict" code exists in the 0-5 range. The message is actionable: suggests loopzero status.
         return new ApiError(
-          'Operation already in progress. Wait for it to complete or cancel it.',
+          (serverMessage
+            ? `${serverMessage} Run: loopzero status to check progress.`
+            : 'A deploy is already in progress for this environment. Run: loopzero status to check progress.'),
           3,
           status
         );
       case 422:
         return new ApiError(
-          'Invalid request. Check your command arguments.',
+          serverMessage || 'Invalid request. Check your command arguments.',
           1,
           status
         );
       default:
         if (status >= 500) {
           return new ApiError(
-            'Service unavailable. Try again in a moment.',
+            serverMessage || 'Service unavailable. Try again in a moment.',
             3,
             status
           );
         }
         return new ApiError(
-          `Request failed (HTTP ${status}).`,
+          serverMessage || `Request failed (HTTP ${status}).`,
           3,
           status
         );

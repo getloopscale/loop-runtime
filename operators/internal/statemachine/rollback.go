@@ -26,7 +26,7 @@ const (
 // NewRollbackMachine returns the rollback state machine per spec section 5.5.
 //
 // States: VALIDATING -> REVERTING -> SYNCING -> COMPLETED
-// Terminal: COMPLETED, REJECTED, BLOCKED, REVERT_FAILED
+// Terminal: COMPLETED, REJECTED, BLOCKED, REVERT_FAILED, SYNC_FAILED
 func NewRollbackMachine() *Machine {
 	return NewMachine(MachineConfig{
 		Name: "Rollback",
@@ -39,7 +39,7 @@ func NewRollbackMachine() *Machine {
 			{From: RollbackSyncing, Event: RollbackSyncCompleted, To: RollbackCompleted},
 			{From: RollbackSyncing, Event: RollbackSyncFailed_, To: RollbackSyncFailed},
 		},
-		Terminal: []State{RollbackCompleted, RollbackRejected, RollbackBlocked, RollbackRevertFailed},
+		Terminal: []State{RollbackCompleted, RollbackRejected, RollbackBlocked, RollbackRevertFailed, RollbackSyncFailed},
 		Timeouts: nil, // Sync timeout is handled by the controller.
 	})
 }

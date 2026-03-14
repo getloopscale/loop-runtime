@@ -17,6 +17,10 @@ type LoopZeroError struct {
 
 	// HTTPStatus is the suggested HTTP status code for API responses.
 	HTTPStatus int
+
+	// Cause is the underlying error that caused this LoopZeroError.
+	// Exposed via Unwrap() for use with errors.Is/errors.As chains.
+	Cause error
 }
 
 // Error implements the error interface.
@@ -32,6 +36,11 @@ func (e *LoopZeroError) Is(target error) bool {
 		return false
 	}
 	return e.Code == t.Code
+}
+
+// Unwrap returns the underlying cause, enabling errors.Is/errors.As chains.
+func (e *LoopZeroError) Unwrap() error {
+	return e.Cause
 }
 
 // NewLoopZeroError creates a new LoopZeroError with the given code, message, and HTTP status.
@@ -50,6 +59,7 @@ func (e *LoopZeroError) Wrap(context string) *LoopZeroError {
 		Code:       e.Code,
 		Message:    fmt.Sprintf("%s: %s", context, e.Message),
 		HTTPStatus: e.HTTPStatus,
+		Cause:      e,
 	}
 }
 
@@ -151,6 +161,42 @@ var (
 		Code:       "INTERNAL_ERROR",
 		Message:    "internal server error",
 		HTTPStatus: 500,
+	}
+
+	// ErrPayloadTooLarge is returned when the request body exceeds the size limit.
+	ErrPayloadTooLarge = &LoopZeroError{
+		Code:       "PAYLOAD_TOO_LARGE",
+		Message:    "request body exceeds the maximum allowed size",
+		HTTPStatus: 413,
+	}
+
+	// ErrValidationFailed is returned when input validation fails with field-specific details.
+	ErrValidationFailed = &LoopZeroError{
+		Code:       "VALIDATION_FAILED",
+		Message:    "validation failed",
+		HTTPStatus: 422,
+	}
+
+	// ErrMissingField is returned when a required field is missing from the request.
+	ErrMissingField = &LoopZeroError{
+		Code:       "MISSING_FIELD",
+		Message:    "a required field is missing",
+		HTTPStatus: 400,
+	}
+
+	// ErrSourceUploadFailed is returned when pushing the bundle to the source store fails.
+	ErrSourceUploadFailed = &LoopZeroError{
+		Code:       "SOURCE_UPLOAD_FAILED",
+		Message:    "failed to push source bundle",
+		HTTPStatus: 500,
+	}
+
+	// ErrPlatformDegraded is returned when the deploy service circuit breaker is open.
+	// The platform is temporarily unable to process sync requests (DA-7).
+	ErrPlatformDegraded = &LoopZeroError{
+		Code:       "PLATFORM_DEGRADED",
+		Message:    "deploy service is temporarily unavailable",
+		HTTPStatus: 503,
 	}
 )
 

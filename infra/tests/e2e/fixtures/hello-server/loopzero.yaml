@@ -1,0 +1,7 @@
+project: e2e-project
+
+apps:
+  api:
+    type: server
+    framework: node
+    port: 3000

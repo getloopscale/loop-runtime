@@ -53,6 +53,8 @@ const (
 	ConditionQuotaEnforced      string = "QuotaEnforced"
 	ConditionNetworkPolicyReady string = "NetworkPolicyReady"
 	ConditionBuildNamespaceReady string = "BuildNamespaceReady"
+	ConditionPriorityClassReady  string = "PriorityClassReady"
+	ConditionArgoCDAppReady      string = "ArgoCDAppReady"
 )
 
 // SetCondition sets or updates a condition on a slice of conditions.

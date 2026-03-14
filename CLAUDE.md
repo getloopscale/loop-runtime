@@ -248,6 +248,7 @@ Use these in Claude Code to trigger structured workflows:
 | `/failure-check <scenario>` | Verify a failure mode from spec §12 has a passing test |
 | `/schema-check <command>` | Validate CLI `--json` output against spec §0.3 schema |
 | `/state-machine <name>` | Inspect implementation vs spec §5 |
+| `/dogfood <scope>` | Dogfooding audit: test product as real user, generate actionable report |
 
 ---
 

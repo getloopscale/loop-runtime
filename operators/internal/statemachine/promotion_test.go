@@ -43,7 +43,7 @@ func TestPromotionMachine_SyncFailed(t *testing.T) {
 func TestPromotionMachine_TerminalStatesRejectAllEvents(t *testing.T) {
 	m := NewPromotionMachine()
 
-	terminalStates := []State{PromotionCompleted, PromotionRejected, PromotionCommitFailed}
+	terminalStates := []State{PromotionCompleted, PromotionRejected, PromotionCommitFailed, PromotionSyncFailed}
 	allEvents := []Event{
 		PromotionValidationPassed, PromotionValidationFailed,
 		PromotionCommitCompleted, PromotionCommitFailed_,
@@ -59,11 +59,13 @@ func TestPromotionMachine_TerminalStatesRejectAllEvents(t *testing.T) {
 	}
 }
 
-func TestPromotionMachine_SyncFailedIsNotTerminal(t *testing.T) {
-	// SYNC_FAILED is not listed as terminal in spec 5.4.
+func TestPromotionMachine_SyncFailedIsTerminal(t *testing.T) {
+	// SYNC_FAILED is terminal: promotions are user-initiated operations.
+	// If sync fails, the user should evaluate and issue a new promotion.
+	// Consistent with COMMIT_FAILED being terminal.
 	m := NewPromotionMachine()
-	if m.IsTerminal(PromotionSyncFailed) {
-		t.Error("SYNC_FAILED should not be terminal")
+	if !m.IsTerminal(PromotionSyncFailed) {
+		t.Error("SYNC_FAILED should be terminal")
 	}
 }
 
@@ -78,5 +80,8 @@ func TestPromotionMachine_IsTerminal(t *testing.T) {
 	}
 	if !m.IsTerminal(PromotionCommitFailed) {
 		t.Error("COMMIT_FAILED should be terminal")
+	}
+	if !m.IsTerminal(PromotionSyncFailed) {
+		t.Error("SYNC_FAILED should be terminal")
 	}
 }
