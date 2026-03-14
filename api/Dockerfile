@@ -23,7 +23,7 @@ RUN cd api && CGO_ENABLED=0 go build -o /loopzero-api ./cmd/main.go
 
 # Runtime image
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates git
 RUN adduser -D -u 1000 loopzero
 USER 1000
 COPY --from=builder /loopzero-api /loopzero-api

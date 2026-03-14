@@ -275,23 +275,7 @@ func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, workflowID string) e
 	return nil
 }
 
-// fakeGitOpsPusher implements services.GitOpsPusher.
-type fakeGitOpsPusher struct {
-	pushed    []services.GitOpsPushRequest
-	commitSHA string
-	err       error
-}
-
-func (f *fakeGitOpsPusher) Push(ctx context.Context, req services.GitOpsPushRequest) (string, error) {
-	if f.err != nil {
-		return "", f.err
-	}
-	f.pushed = append(f.pushed, req)
-	if f.commitSHA == "" {
-		return "gitops-sha-fake", nil
-	}
-	return f.commitSHA, nil
-}
+// NOTE: fakeGitOpsPusher REMOVED — the workflow handles gitops-push (spec §10.1, step 13i).
 
 // fakeHealthProber implements services.HealthProber.
 type fakeHealthProber struct {
@@ -357,7 +341,6 @@ type orchestratorFakes struct {
 	envTargetStore *fakeEnvTargetStoreOrch
 	eventStore    *fakeEventStoreOrch
 	workflow      *fakeWorkflowSubmitter
-	gitops        *fakeGitOpsPusher
 	health        *fakeHealthProber
 	sync          *fakeSyncClient
 	locker        *fakeEnvironmentLocker
@@ -370,7 +353,6 @@ func newOrchestratorFakes() *orchestratorFakes {
 		envTargetStore: newFakeEnvTargetStoreOrch(),
 		eventStore:     newFakeEventStoreOrch(),
 		workflow:       &fakeWorkflowSubmitter{},
-		gitops:         &fakeGitOpsPusher{},
 		health:         newFakeHealthProber(),
 		sync:           &fakeSyncClient{},
 		locker:         &fakeEnvironmentLocker{},
@@ -384,7 +366,6 @@ func (f *orchestratorFakes) buildOrchestrator() *services.BuildOrchestrator {
 		EnvTargetStore: f.envTargetStore,
 		EventStore:     f.eventStore,
 		Workflow:       f.workflow,
-		GitOps:         f.gitops,
 		Health:         f.health,
 		Sync:           f.sync,
 		Locker:         f.locker,
@@ -992,5 +973,128 @@ func TestBuildOrchestrator_DeployCompletedSSE_DeployIDFormat(t *testing.T) {
 	}
 	if payload.Apps[0].Status != "deployed" {
 		t.Errorf("expected app status 'deployed', got %q", payload.Apps[0].Status)
+	}
+}
+
+func TestBuildOrchestrator_CancelBuild_RunningBuild(t *testing.T) {
+	// Arrange
+	fakes := newOrchestratorFakes()
+	orch := fakes.buildOrchestrator()
+
+	// Create a RUNNING build
+	build := &db.Build{
+		ID:          "build-cancel-running",
+		TenantID:    "acme",
+		ProjectID:   "proj-xxx",
+		Environment: "production",
+		WorkflowID:  "wf-12345",
+		CreatedBy:   "github-lucas",
+	}
+	fakes.buildStore.builds[build.ID] = build
+	build.Status = string(statemachine.BuildRunning)
+
+	// Act
+	err := orch.CancelBuild(context.Background(), build.ID)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Build should be CANCELLED
+	updated := fakes.buildStore.builds[build.ID]
+	if updated.Status != string(statemachine.BuildCancelled) {
+		t.Errorf("expected status CANCELLED, got %s", updated.Status)
+	}
+
+	// SSE event should be emitted
+	cancelledEvents := fakes.eventStore.eventsByType("build.cancelled")
+	if len(cancelledEvents) == 0 {
+		t.Error("expected build.cancelled SSE event to be emitted")
+	}
+}
+
+func TestBuildOrchestrator_CancelBuild_QueuedBuild(t *testing.T) {
+	// Arrange
+	fakes := newOrchestratorFakes()
+	orch := fakes.buildOrchestrator()
+
+	// Create a QUEUED build (no workflow yet)
+	build := &db.Build{
+		ID:          "build-cancel-queued",
+		TenantID:    "acme",
+		ProjectID:   "proj-xxx",
+		Environment: "staging",
+		CreatedBy:   "github-lucas",
+	}
+	fakes.buildStore.builds[build.ID] = build
+	build.Status = string(statemachine.BuildQueued)
+
+	// Act
+	err := orch.CancelBuild(context.Background(), build.ID)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// QUEUED → CANCELLED directly (no CANCELLING intermediate)
+	updated := fakes.buildStore.builds[build.ID]
+	if updated.Status != string(statemachine.BuildCancelled) {
+		t.Errorf("expected status CANCELLED, got %s", updated.Status)
+	}
+}
+
+func TestBuildOrchestrator_CancelBuild_AlreadyTerminal(t *testing.T) {
+	// Arrange
+	terminalStates := []statemachine.State{
+		statemachine.BuildSucceeded,
+		statemachine.BuildFailed,
+		statemachine.BuildCancelled,
+	}
+
+	for _, state := range terminalStates {
+		t.Run(string(state), func(t *testing.T) {
+			fakes := newOrchestratorFakes()
+			orch := fakes.buildOrchestrator()
+
+			build := &db.Build{
+				ID:          "build-terminal-" + string(state),
+				TenantID:    "acme",
+				ProjectID:   "proj-xxx",
+				Environment: "production",
+				CreatedBy:   "github-lucas",
+			}
+			fakes.buildStore.builds[build.ID] = build
+			build.Status = string(state)
+
+			// Act
+			err := orch.CancelBuild(context.Background(), build.ID)
+
+			// Assert
+			if err == nil {
+				t.Fatal("expected error for terminal build, got nil")
+			}
+			if !errors.Is(err, loopzeroerrors.ErrBuildAlreadyCompleted) {
+				t.Errorf("expected ErrBuildAlreadyCompleted, got %v", err)
+			}
+		})
+	}
+}
+
+func TestBuildOrchestrator_CancelBuild_NotFound(t *testing.T) {
+	// Arrange
+	fakes := newOrchestratorFakes()
+	orch := fakes.buildOrchestrator()
+
+	// Act
+	err := orch.CancelBuild(context.Background(), "build-nonexistent")
+
+	// Assert
+	if err == nil {
+		t.Fatal("expected error for non-existent build, got nil")
+	}
+	if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+		t.Errorf("expected ErrBuildNotFound, got %v", err)
 	}
 }

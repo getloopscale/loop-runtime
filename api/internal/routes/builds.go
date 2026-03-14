@@ -63,6 +63,7 @@ type BuildOrchestratorService interface {
 	GetBuildStatus(ctx context.Context, buildID string) (*BuildStatusResponse, error)
 	OnBuildCompleted(ctx context.Context, buildID string, result BuildCallbackInput) error
 	IsBuildTerminal(ctx context.Context, buildID string) (bool, error)
+	CancelBuild(ctx context.Context, buildID string) error
 }
 
 // BuildStatusResponse is the JSON response for GET /builds/:id.
@@ -170,7 +171,8 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // Cancel handles POST /api/v1/builds/:id/cancel.
-// Stub for now — validates the route exists and returns 202.
+// Validates auth, delegates to orchestrator which checks terminal state,
+// cancels the workflow, and transitions the build to CANCELLED.
 func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
@@ -179,10 +181,14 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	buildID := chi.URLParam(r, "id")
-	_ = buildID // TODO: implement cancellation via orchestrator
+
+	if err := h.orch.CancelBuild(r.Context(), buildID); err != nil {
+		mapBuildError(w, err)
+		return
+	}
 
 	writeJSON(w, http.StatusAccepted, map[string]string{
-		"status": "cancel_requested",
+		"status": "cancelled",
 	})
 }
 

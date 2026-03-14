@@ -125,6 +125,38 @@ tasks:
         --namespace monitoring
         -f infra/helm/otel/values.yaml
         --wait --timeout 3m
+      - task: dashboards:install
+
+  dashboards:install:
+    desc: Install LoopZero Grafana dashboards and ServiceMonitors
+    cmds:
+      - >-
+        kubectl --context {{.MGMT_CONTEXT}} -n monitoring
+        create configmap loopzero-grafana-dashboards
+        --from-file=infra/helm/monitoring/dashboards/
+        --dry-run=client -o yaml |
+        kubectl --context {{.MGMT_CONTEXT}} label -f - --local --dry-run=client -o yaml
+        grafana_dashboard=1 |
+        kubectl --context {{.MGMT_CONTEXT}} apply -f -
+      # ServiceMonitors for mgmt cluster components (loopzero-api, gitea, minio, tenant-controller)
+      - >-
+        kubectl --context {{.MGMT_CONTEXT}} apply
+        -f infra/helm/monitoring/manifests/servicemonitor.yaml
+        -f infra/helm/monitoring/manifests/servicemonitor-gitea.yaml
+        -f infra/helm/monitoring/manifests/servicemonitor-minio.yaml
+        -f infra/helm/monitoring/manifests/servicemonitor-tenant-controller.yaml
+      # Cross-cluster metrics services (NodePort for Prometheus to scrape via additionalScrapeConfigs)
+      - >-
+        kubectl --context {{.BUILD_CONTEXT}} apply
+        -f infra/helm/monitoring/manifests/metrics-service-argo-workflows.yaml
+      - >-
+        kubectl --context {{.WORKLOAD_CONTEXT}} apply
+        -f infra/helm/monitoring/manifests/metrics-service-traefik.yaml
+      # Alerting rules
+      - >-
+        kubectl --context {{.MGMT_CONTEXT}} apply
+        -f infra/helm/monitoring/manifests/prometheusrule-critical.yaml
+        -f infra/helm/monitoring/manifests/prometheusrule-warning.yaml
 
   infra:install:
     desc: Install all platform components via Helm
@@ -273,3 +305,45 @@ tasks:
       # ArgoCD templates use CRD kinds (AppProject, Application) — skip those
       - kubeconform --strict --skip AppProject,Application infra/helm/argocd/templates/
       # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate
+
+  # ---------------------------------------------------------------------------
+  # Monitoring
+  # ---------------------------------------------------------------------------
+  monitoring:install:
+    desc: Install full monitoring stack (Prometheus + Grafana + OTel + ServiceMonitors + dashboards)
+    cmds:
+      - task: infra:install:monitoring
+      - task: dashboards:install
+
+  monitoring:validate-targets:
+    desc: Validate all Prometheus scrape targets are UP
+    cmds:
+      - |
+        echo "Checking Prometheus targets..."
+        TARGETS=$(curl -sf http://localhost:9090/api/v1/targets | jq -r '.data.activeTargets[] | "\(.labels.job) \(.health)"' 2>/dev/null)
+        if [ -z "$TARGETS" ]; then
+          echo "ERROR: Cannot reach Prometheus at localhost:9090"
+          exit 1
+        fi
+        echo "$TARGETS" | sort | uniq -c | sort -rn
+        echo ""
+        DOWN=$(echo "$TARGETS" | grep -c "down" || true)
+        if [ "$DOWN" -gt 0 ]; then
+          echo "WARNING: $DOWN target(s) are DOWN:"
+          echo "$TARGETS" | grep "down"
+          exit 1
+        fi
+        echo "All targets are UP."
+
+  monitoring:status:
+    desc: Show monitoring stack status (targets, alerts, dashboards)
+    cmds:
+      - |
+        echo "=== Prometheus Targets ==="
+        curl -sf http://localhost:9090/api/v1/targets | jq -r '.data.activeTargets[] | "\(.labels.job)\t\(.health)\t\(.lastScrape)"' 2>/dev/null | column -t || echo "Prometheus not reachable"
+        echo ""
+        echo "=== Active Alerts ==="
+        curl -sf http://localhost:9090/api/v1/alerts | jq -r '.data.alerts[] | "\(.labels.alertname)\t\(.state)\t\(.labels.severity)"' 2>/dev/null | column -t || echo "No alerts or Prometheus not reachable"
+        echo ""
+        echo "=== Grafana Dashboards ==="
+        curl -sf -u REDACTED_SECRET_042 http://localhost:3002/api/search?type=dash-db | jq -r '.[].title' 2>/dev/null || echo "Grafana not reachable"

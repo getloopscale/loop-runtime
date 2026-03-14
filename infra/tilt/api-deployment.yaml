@@ -31,6 +31,44 @@ spec:
               value: "dev-callback-secret"
             - name: LOG_LEVEL
               value: "debug"
+            # W1: MinIO (real source store)
+            - name: MINIO_ENDPOINT
+              value: "minio.loopzero-system.svc.cluster.local:9000"
+            - name: MINIO_ACCESS_KEY
+              value: "loopzero-admin"
+            - name: MINIO_SECRET_KEY
+              value: "loopzero-dev-password"
+            # Gitea — uses NodePort for cross-cluster access (build cluster needs to reach it)
+            - name: GITEA_URL
+              value: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+            # Cross-cluster Gitea URL (for Argo Workflow parameters — build cluster → mgmt Gitea)
+            - name: GITEA_CROSS_CLUSTER_URL
+              value: "http://10.0.1.3:30000"
+            # Cross-cluster API URL (for Argo Workflow callback — build cluster → mgmt API)
+            - name: API_CROSS_CLUSTER_URL
+              value: "http://10.0.1.3:30001"
+            - name: GITEA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-tokens
+                  key: gitea-token
+                  optional: true
+            # W4: ArgoCD (real sync client)
+            - name: ARGOCD_URL
+              value: "http://argocd-server.argocd.svc.cluster.local:80"
+            - name: ARGOCD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-tokens
+                  key: argocd-token
+                  optional: true
+            # W2: Build cluster (real workflow submitter)
+            - name: BUILD_KUBECONFIG
+              value: "/etc/loopzero/build-kubeconfig"
+            - name: BUILD_KUBE_CONTEXT
+              value: "build"
+            - name: REGISTRY_URL
+              value: "k3d-loopzero-registry:5000"
           ports:
             - containerPort: 3001
               name: http
@@ -54,10 +92,26 @@ spec:
             requests:
               cpu: "100m"
               memory: "64Mi"
+          volumeMounts:
+            - name: build-kubeconfig
+              mountPath: /etc/loopzero
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
+        - name: build-kubeconfig
+          configMap:
+            name: loopzero-build-kubeconfig
+            items:
+              - key: config
+                path: build-kubeconfig
 ---
 apiVersion: v1
 kind: Service
@@ -67,10 +121,12 @@ metadata:
   labels:
     app: loopzero-api
 spec:
+  type: NodePort
   selector:
     app: loopzero-api
   ports:
     - port: 3001
       targetPort: 3001
+      nodePort: 30001
       protocol: TCP
       name: http

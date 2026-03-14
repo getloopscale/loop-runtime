@@ -2,6 +2,7 @@ package routes
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -76,7 +77,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate loopzero.yaml
-	_, appNames, err := source.ValidateLoopZeroYAML(loopzeroYAMLContent)
+	cfg, appNames, err := source.ValidateLoopZeroYAML(loopzeroYAMLContent)
 	if err != nil {
 		if ve, ok := err.(*source.ValidationError); ok {
 			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
@@ -102,9 +103,16 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer bundleFile.Close()
 
-	// Push bundle to source store
-	commitSHA, err := h.store.PushBundle(r.Context(), uc.TenantID, "", bundleFile)
+	// Extract project name from loopzero.yaml (supports both 'project' and 'name' fields)
+	projectName := cfg.Project
+	if projectName == "" {
+		projectName = cfg.Name
+	}
+
+	// Push bundle to source store — repo: loopzero-source-{tenant}-{project}
+	commitSHA, err := h.store.PushBundle(r.Context(), uc.TenantID, projectName, bundleFile)
 	if err != nil {
+		slog.Error("source upload failed", "error", err, "tenant_id", uc.TenantID)
 		writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
 		return
 	}

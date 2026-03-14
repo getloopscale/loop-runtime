@@ -1,0 +1,129 @@
+# Warning alerting rules for LoopZero platform (spec §15.5).
+# These indicate potential issues that should be investigated soon.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loopzero-warning-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: loopzero.warning
+      rules:
+        - alert: LoopZeroAPIHighLatency
+          expr: histogram_quantile(0.99, sum(rate(loopzero_api_request_duration_seconds_bucket[5m])) by (le)) > 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "API p99 latency exceeds 5s"
+            description: "API request latency (p99) has been above 5 seconds for 5 minutes."
+            runbook: "Check downstream dependencies (Gitea, Argo, PostgreSQL). Scaling API pods only helps if API itself is the bottleneck."
+
+        - alert: LoopZeroTenantQuotaNearLimit
+          expr: loopzero_tenant_quota_usage_ratio > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Tenant {{ $labels.tenant }} quota usage above 90%"
+            description: "Resource quota for tenant {{ $labels.tenant }} ({{ $labels.resource }}) has been above 90% for 10 minutes."
+            runbook: "Contact tenant to optimize resource usage or discuss plan upgrade."
+
+        - alert: LoopZeroBuildQueueBacklog
+          expr: loopzero_build_queue_depth > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Build queue depth exceeds 10"
+            description: "More than 10 builds are queued for 5+ minutes. Builds may be delayed."
+            runbook: "Check Argo Workflows controller capacity. Consider scaling workflow workers."
+
+        - alert: LoopZeroReconcilerUnhealthy
+          expr: increase(loopzero_reconciler_errors_total[5m]) > 5
+          labels:
+            severity: warning
+          annotations:
+            summary: "Reconciler has 5+ errors in 5 minutes"
+            description: "StateReconciler is producing errors at an elevated rate."
+            runbook: "Check reconciler pod logs. Verify connectivity to ArgoCD and Gitea."
+
+        - alert: LoopZeroSecretSyncFailed
+          expr: increase(loopzero_secret_sync_hash_mismatch_total[15m]) > 3
+          labels:
+            severity: warning
+          annotations:
+            summary: "AppSecretOperator sync failures"
+            description: "3+ secret sync hash mismatches in 15 minutes."
+            runbook: "AppSecretOperator failed to sync secret to workload namespace 3+ times in 15 min. Check operator logs, workload cluster connectivity, and namespace RBAC."
+
+        - alert: LoopZeroTenantPodsStarved
+          expr: histogram_quantile(0.99, loopzero_tenant_pods_pending_duration_seconds) > 300
+          labels:
+            severity: warning
+          annotations:
+            summary: "Tenant {{ $labels.tenant }} pods pending > 5 min"
+            description: "Pods for tenant {{ $labels.tenant }} (plan: {{ $labels.plan }}) have been pending for more than 5 minutes (p99)."
+            runbook: "Check cluster capacity. Higher-priority tenants may be consuming resources. Consider scaling or suggesting plan upgrade."
+
+        - alert: LoopZeroMirrorSyncStale
+          expr: loopzero_git_mirror_status{status="FAILED"} == 1
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Git mirror FAILED for {{ $labels.tenant }}/{{ $labels.env }} > 1h"
+            description: "Gitea mirror has been in FAILED state for more than 1 hour."
+            runbook: "Check Gitea health. If Gitea is up, trigger manual mirror sync via API. If Gitea is down, resolve Gitea first."
+
+        - alert: LoopZeroGitDesiredStateDivergence
+          expr: loopzero_git_desired_state_divergence == 1 and on(tenant, env) loopzero_git_mirror_status{status="FAILED"} == 0 and on(tenant, env) loopzero_git_mirror_status{status="PENDING"} == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Git desired state divergence in {{ $labels.tenant }}/{{ $labels.env }}"
+            description: "Git SHA does not match environment_targets desired release AND no mirror sync is in progress or retrying."
+            runbook: "Git SHA does not match environment_targets desired release AND no mirror sync is in progress or retrying. This indicates unauthorized Git push or data corruption. Check Git audit log and environment_targets table."
+
+        - alert: LoopZeroArgoCDAppCountWarning
+          expr: count(argocd_app_info) > 200
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ArgoCD managing 200+ applications"
+            description: "ArgoCD application count exceeds 200. Performance degradation may begin."
+            runbook: "Monitor ArgoCD reconciliation latency. Consider controller sharding if latency increases."
+
+        - alert: LoopZeroArgoCDAppCountCritical
+          expr: count(argocd_app_info) > 400
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ArgoCD managing 400+ applications — critical threshold"
+            description: "ArgoCD application count exceeds 400. Reconciliation degradation likely."
+            runbook: "Implement application controller sharding (--application-namespaces). Scale controller resources."
+
+        - alert: LoopZeroArgoCDSyncSlow
+          expr: histogram_quantile(0.95, sum(rate(argocd_app_reconcile_duration_seconds_bucket[5m])) by (le)) > 30
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ArgoCD sync duration p95 exceeds 30s"
+            description: "ArgoCD application reconciliation is taking longer than 30 seconds (p95)."
+            runbook: "Check ArgoCD controller resources and application count. May indicate capacity issues."
+
+        - alert: LoopZeroMinIODown
+          expr: up{job=~".*minio.*"} == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "MinIO is down"
+            description: "MinIO has been unreachable for more than 2 minutes. Build cache unavailable. Source uploads will fail."
+            runbook: "Check MinIO pod status. Verify PVC. Builds will run without cache (slower but not blocked)."

@@ -37,19 +37,9 @@ type AppSpec struct {
 	Port int
 }
 
-// GitOpsPusher abstracts Gitea gitops-push operations (DIP).
-type GitOpsPusher interface {
-	Push(ctx context.Context, req GitOpsPushRequest) (commitSHA string, err error)
-}
-
-// GitOpsPushRequest contains the data for a gitops push.
-type GitOpsPushRequest struct {
-	TenantID    string
-	ProjectID   string
-	Environment string
-	ReleaseID   string
-	Apps        []AppRelease
-}
+// NOTE: GitOpsPusher was REMOVED from the API. The Argo Workflow's gitops-push
+// step handles manifest generation and commit to Gitea (spec §10.1, step 13i).
+// The API only transitions the release to PENDING after receiving the callback.
 
 // AppRelease describes a built app with its image digest and URL.
 type AppRelease struct {
@@ -109,7 +99,6 @@ type BuildOrchestratorDeps struct {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
 	Workflow WorkflowSubmitter
-	GitOps   GitOpsPusher
 	Health   HealthProber
 	Sync     SyncClient
 	Locker   EnvironmentLocker
@@ -125,7 +114,6 @@ type BuildOrchestrator struct {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
 	workflow WorkflowSubmitter
-	gitOps   GitOpsPusher
 	health   HealthProber
 	sync     SyncClient
 	locker   EnvironmentLocker
@@ -139,7 +127,6 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		envTargetStore: deps.EnvTargetStore,
 		eventStore:     deps.EventStore,
 		workflow:       deps.Workflow,
-		gitOps:         deps.GitOps,
 		health:         deps.Health,
 		sync:           deps.Sync,
 		locker:         deps.Locker,
@@ -227,6 +214,61 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 	}
 
 	return resp, nil
+}
+
+// CancelBuild cancels a running or queued build.
+//
+// Steps:
+//  1. Get build by ID — verify it exists
+//  2. If build is terminal (SUCCEEDED, FAILED, CANCELLED) → return ErrBuildAlreadyCompleted
+//  3. Transition to CANCELLING (if RUNNING) or CANCELLED (if QUEUED) via state machine
+//  4. Cancel the Argo Workflow via WorkflowSubmitter.Cancel
+//  5. If was RUNNING (now CANCELLING), confirm cancellation → CANCELLED
+//  6. Emit SSE build.cancelled event
+func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) error {
+	build, err := o.buildStore.GetByID(ctx, buildID)
+	if err != nil {
+		return fmt.Errorf("cancel build: get build: %w", err)
+	}
+
+	// Check if already terminal
+	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+		return loopzeroerrors.ErrBuildAlreadyCompleted
+	}
+
+	// Transition via state machine: BuildCancelRequested
+	// QUEUED → CANCELLED (direct), RUNNING → CANCELLING
+	updatedBuild, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildCancelRequested))
+	if err != nil {
+		return fmt.Errorf("cancel build: transition cancel requested: %w", err)
+	}
+
+	// Cancel the workflow (best-effort — workflow may already be done)
+	if build.WorkflowID != "" {
+		if cancelErr := o.workflow.Cancel(ctx, build.WorkflowID); cancelErr != nil {
+			// Log but don't fail — the state transition is what matters
+			// The workflow may already be finished
+			_ = cancelErr
+		}
+	}
+
+	// If transitioned to CANCELLING (was RUNNING), confirm cancellation
+	if statemachine.State(updatedBuild.Status) == statemachine.BuildCancelling {
+		if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildCancelConfirmed)); err != nil {
+			return fmt.Errorf("cancel build: confirm cancellation: %w", err)
+		}
+	}
+
+	// Emit SSE build.cancelled
+	eventData, _ := json.Marshal(map[string]string{
+		"build_id": buildID,
+		"status":   "cancelled",
+	})
+	if _, err := o.eventStore.Append(ctx, buildID, "build.cancelled", eventData); err != nil {
+		return fmt.Errorf("cancel build: emit SSE event: %w", err)
+	}
+
+	return nil
 }
 
 // OnBuildCompleted handles the callback from the build system when a build finishes.
@@ -350,21 +392,12 @@ func (o *BuildOrchestrator) createRelease(ctx context.Context, tx db.DBTX, build
 	return release, nil
 }
 
-// pushToGitOps pushes manifests to the gitops store and transitions the release
-// to PENDING state (steps 8b-8d).
+// transitionToPending transitions the release to PENDING state and updates
+// environment_targets. The gitops-push was already done by the Argo Workflow
+// before calling the callback (spec §10.1, step 13i).
 func (o *BuildOrchestrator) pushToGitOps(ctx context.Context, tx db.DBTX, build *db.Build, release *db.Release, result BuildCallbackRequest) error {
-	// Step 8b: gitops push
-	if _, err := o.gitOps.Push(ctx, GitOpsPushRequest{
-		TenantID:    build.TenantID,
-		ProjectID:   build.ProjectID,
-		Environment: build.Environment,
-		ReleaseID:   release.ID,
-		Apps:        result.Apps,
-	}); err != nil {
-		return fmt.Errorf("activate release: gitops push: %w", err)
-	}
-
-	// Step 8c: transition READY → PENDING via GitMirrorCompleted
+	// Gitops-push already completed by the workflow (step 13i).
+	// Transition READY → PENDING via GitMirrorCompleted.
 	if _, err := o.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseGitMirrorCompleted)); err != nil {
 		return fmt.Errorf("activate release: transition to PENDING: %w", err)
 	}
@@ -390,7 +423,8 @@ func (o *BuildOrchestrator) pushToGitOps(ctx context.Context, tx db.DBTX, build 
 // (steps 8e-8f). Returns true if any health probe failed.
 func (o *BuildOrchestrator) waitForSync(ctx context.Context, tx db.DBTX, build *db.Build, release *db.Release, result BuildCallbackRequest) (probeFailed bool, err error) {
 	// Step 8e: trigger sync
-	argoAppName := fmt.Sprintf("%s-%s-%s", build.TenantID, build.ProjectID, build.Environment)
+	// ArgoCD Application name matches TenantController naming: {tenant}-{env}
+	argoAppName := fmt.Sprintf("%s-%s", build.TenantID, build.Environment)
 	if err := o.sync.TriggerSync(ctx, argoAppName); err != nil {
 		return false, fmt.Errorf("activate release: trigger sync: %w", err)
 	}

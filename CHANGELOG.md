@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Centralized Grafana Home dashboard with health status for all system components — single entry point for operational visibility (#S7-observability)
+- Drift Detection dashboard with timeline, mirror status table, and reconciler health panels (#S7-observability)
+- Failure Investigation dashboard with error timeline, lock contention, and dependency health panels (#S7-observability)
+- ServiceMonitors for Gitea, MinIO, and Tenant Controller — Prometheus auto-discovers and scrapes metrics (#S7-observability)
+- Cross-cluster metrics scraping for Argo Workflows (build cluster) and Traefik (workload cluster) via NodePort + additionalScrapeConfigs (#S7-observability)
+- ArgoCD metrics enabled with ServiceMonitor auto-creation via Helm chart (server, controller, repo-server) (#S7-observability)
+- 23 PrometheusRule alerting rules — 11 critical + 12 warning — all with runbook annotations per spec §15.5 (#S7-observability)
+- Alertmanager enabled with severity-based routing (critical: 10s group_wait, warning: 30s group_wait) (#S7-observability)
+- Taskfile tasks: `monitoring:install`, `monitoring:validate-targets`, `monitoring:status` (#S7-observability)
+- Navigation links between all 6 Grafana dashboards (hub-and-spoke from Home) (#S7-observability)
+- Real `PostgresSecretStore` replaces placeholder `EmptySecretStore` — queries PostgreSQL `secrets` table for metadata, never exposes values (#S3-secrets)
+- Migration `000005_secrets.up.sql` creates `secrets` table with unique constraint on `(tenant_id, project_id, environment, app, name)` (#S3-secrets)
 - CLI deploy command now shows real-time progress during deploy: build started/completed, health checks, and app live events via DeployRenderer (F-04)
 - `LoopZeroError.Unwrap()` method enables `errors.Is`/`errors.As` chains through the `Cause` field; `Wrap()` now preserves the original error as cause (#G19)
 - Exported `IsBuildTerminal()` in `pkg/statemachine` — single source of truth for build terminal state checks (#G2)

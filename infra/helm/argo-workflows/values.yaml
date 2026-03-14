@@ -20,6 +20,10 @@ controller:
     requests:
       cpu: "100m"
       memory: "128Mi"
+  metricsConfig:
+    enabled: true
+    port: 9090
+    path: /metrics
 
 server:
   securityContext:

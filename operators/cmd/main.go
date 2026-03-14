@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"os"
+	"os" // used for Exit and Getenv
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -54,10 +54,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: Replace with real provisioners when available.
-	// In production, these will be configured with API URLs and credentials from environment/secrets.
-	var gitProvisioner gitea.GitRepoProvisioner = gitea.NewFakeProvisioner()
-	var argoCDProvisioner argocd.Provisioner = argocd.NewFakeProvisioner()
+	// Real provisioners — NO fakes.
+	giteaURL := os.Getenv("GITEA_URL")
+	if giteaURL == "" {
+		giteaURL = "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+	}
+	giteaToken := os.Getenv("GITEA_TOKEN")
+	gitProvisioner := gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero")
+
+	argoCDNamespace := os.Getenv("ARGOCD_NAMESPACE")
+	if argoCDNamespace == "" {
+		argoCDNamespace = "argocd"
+	}
+	argoCDProvisioner, err := argocd.NewRealProvisioner(argoCDNamespace)
+	if err != nil {
+		setupLog.Error(err, "unable to create ArgoCD provisioner")
+		os.Exit(1)
+	}
 
 	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner); err != nil {
 		setupLog.Error(err, "unable to setup TenantController")

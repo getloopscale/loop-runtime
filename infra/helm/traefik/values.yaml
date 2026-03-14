@@ -31,6 +31,21 @@ providers:
   kubernetesCRD:
     enabled: true
 
+ports:
+  metrics:
+    port: 9100
+    expose:
+      default: true
+    exposedPort: 9100
+    protocol: TCP
+
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+
 logs:
   general:
     format: json

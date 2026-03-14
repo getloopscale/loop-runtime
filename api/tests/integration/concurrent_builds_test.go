@@ -139,12 +139,6 @@ func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, workflowID string) e
 	return nil
 }
 
-type fakeGitOpsPusher struct{}
-
-func (f *fakeGitOpsPusher) Push(ctx context.Context, req services.GitOpsPushRequest) (string, error) {
-	return "commit-abc123", nil
-}
-
 type fakeHealthProber struct{}
 
 func (f *fakeHealthProber) Probe(ctx context.Context, url string, path string) error {
@@ -225,7 +219,6 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 		EnvTargetStore: envTargetStore,
 		EventStore:     eventStore,
 		Workflow:       &fakeWorkflowSubmitter{},
-		GitOps:         &fakeGitOpsPusher{},
 		Health:         &fakeHealthProber{},
 		Sync:           &fakeSyncClient{},
 		Locker:         locker,

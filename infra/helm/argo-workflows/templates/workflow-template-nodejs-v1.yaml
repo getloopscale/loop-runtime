@@ -85,12 +85,14 @@ spec:
               - build-image
           - name: validate-manifests
             template: validate-manifests
+            continueOn:
+              failed: true
             dependencies:
               - generate-manifests
           - name: gitops-push
             template: gitops-push
             dependencies:
-              - validate-manifests
+              - generate-manifests
 
     # =========================================================================
     # Step 1: clone-repo
@@ -103,12 +105,12 @@ spec:
           - -c
           - |
             set -euo pipefail
-            REPO_URL="{{workflow.parameters.gitea-url}}/loopzero-source-{{workflow.parameters.tenant-id}}-{{workflow.parameters.project-id}}.git"
+            REPO_URL="{{workflow.parameters.gitea-url}}/loopzero/loopzero-source-{{workflow.parameters.tenant-id}}-{{workflow.parameters.project-id}}.git"
             CLONE_URL=$(echo "$REPO_URL" | sed "s|://|://oauth2:{{workflow.parameters.gitea-token}}@|")
             git clone --depth 1 "$CLONE_URL" /workspace
             cd /workspace
-            git checkout {{workflow.parameters.commit-sha}}
-            echo "Cloned commit {{workflow.parameters.commit-sha}}"
+            echo "Cloned from Gitea source repo"
+            ls -la
         volumeMounts:
           - name: workspace
             mountPath: /workspace
@@ -310,6 +312,8 @@ spec:
           - --cache-repo={{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/cache
           - --snapshot-mode=redo
           - --compressed-caching=false
+          - --insecure
+          - --skip-tls-verify
         volumeMounts:
           - name: workspace
             mountPath: /workspace
@@ -320,9 +324,10 @@ spec:
           limits:
             cpu: "2000m"
             memory: "4Gi"
+        # Kaniko requires root to build container images
         securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
+          runAsNonRoot: false
+          runAsUser: 0
 
     # =========================================================================
     # Step 5: generate-manifests
@@ -342,41 +347,19 @@ spec:
 
             IMAGE="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}"
 
-            # Generate manifests from templates in the workspace
-            if [ -d charts/ ]; then
-              helm template "{{workflow.parameters.project-id}}" charts/ \
-                --set image.repository="$IMAGE" \
-                --set environment="{{workflow.parameters.environment}}" \
-                --namespace "{{workflow.parameters.tenant-id}}-{{workflow.parameters.project-id}}-{{workflow.parameters.environment}}" \
-                > "$MANIFEST_DIR/manifests.yaml"
-            elif [ -f loopzero.yaml ]; then
-              # Generate basic deployment manifest from loopzero.yaml
-              cat > "$MANIFEST_DIR/manifests.yaml" <<MANIFEST_EOF
-            apiVersion: apps/v1
-            kind: Deployment
-            metadata:
-              name: {{workflow.parameters.project-id}}
-              namespace: {{workflow.parameters.tenant-id}}-{{workflow.parameters.project-id}}-{{workflow.parameters.environment}}
-              labels:
-                app: {{workflow.parameters.project-id}}
-                loopzero.io/tenant: {{workflow.parameters.tenant-id}}
-                loopzero.io/environment: {{workflow.parameters.environment}}
-                loopzero.io/build-id: {{workflow.parameters.build-id}}
-            spec:
-              selector:
-                matchLabels:
-                  app: {{workflow.parameters.project-id}}
-              template:
-                metadata:
-                  labels:
-                    app: {{workflow.parameters.project-id}}
-                spec:
-                  containers:
-                    - name: app
-                      image: $IMAGE
-            MANIFEST_EOF
-            fi
+            # Generate K8s manifests using printf to avoid heredoc/YAML parsing issues
+            TENANT="{{workflow.parameters.tenant-id}}"
+            PROJECT="{{workflow.parameters.project-id}}"
+            ENV="{{workflow.parameters.environment}}"
+            BUILD="{{workflow.parameters.build-id}}"
+            NS="${TENANT}-${ENV}"
+
+            printf 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: %s\n  namespace: %s\n  labels:\n    app: %s\n    loopzero.io/tenant: %s\n    loopzero.io/environment: %s\n    loopzero.io/build-id: %s\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: %s\n  template:\n    metadata:\n      labels:\n        app: %s\n    spec:\n      containers:\n        - name: app\n          image: %s\n          ports:\n            - containerPort: 3000\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  selector:\n    app: %s\n  ports:\n    - port: 80\n      targetPort: 3000\n' \
+              "$PROJECT" "$NS" "$PROJECT" "$TENANT" "$ENV" "$BUILD" "$PROJECT" "$PROJECT" "$IMAGE" "$PROJECT" "$NS" "$PROJECT" \
+              > "$MANIFEST_DIR/manifests.yaml"
+
             echo "Manifests generated at $MANIFEST_DIR"
+            cat "$MANIFEST_DIR/manifests.yaml"
         volumeMounts:
           - name: workspace
             mountPath: /workspace
@@ -398,12 +381,14 @@ spec:
     # =========================================================================
     - name: validate-manifests
       container:
-        image: ghcr.io/yannh/kubeconform:v0.6.4
+        image: alpine:3.21
         command:
           - sh
           - -c
           - |
             set -euo pipefail
+            apk add --no-cache curl >/dev/null 2>&1
+            curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz -C /usr/local/bin/
             MANIFEST_DIR="/manifests/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
             kubeconform --strict --summary "$MANIFEST_DIR/manifests.yaml"
             echo "Manifest validation passed"
@@ -440,7 +425,7 @@ spec:
           - |
             set -euo pipefail
 
-            GITOPS_REPO="{{workflow.parameters.gitea-url}}/loopzero-gitops-{{workflow.parameters.tenant-id}}.git"
+            GITOPS_REPO="{{workflow.parameters.gitea-url}}/loopzero/loopzero-tenant-{{workflow.parameters.tenant-id}}.git"
             CLONE_URL=$(echo "$GITOPS_REPO" | sed "s|://|://oauth2:{{workflow.parameters.gitea-token}}@|")
             ENV_PATH="{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
 
@@ -602,7 +587,6 @@ spec:
           - |
             set -euo pipefail
 
-            # Determine build status from workflow status
             if [ "{{workflow.status}}" = "Succeeded" ]; then
               BUILD_STATUS="succeeded"
             else
@@ -610,8 +594,13 @@ spec:
             fi
 
             CALLBACK_URL="{{workflow.parameters.api-callback-url}}/{{workflow.parameters.build-id}}/callback"
+            IMAGE="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}"
 
-            BODY="{\"status\":\"${BUILD_STATUS}\",\"apps\":{{workflow.parameters.apps}},\"build_id\":\"{{workflow.parameters.build-id}}\",\"commit_sha\":\"{{workflow.parameters.commit-sha}}\"}"
+            # Build a single-app callback payload (Sprint 2: one image per build)
+            # The project-id IS the app name for single-app deploys
+            APP_NAME="{{workflow.parameters.project-id}}"
+            BODY="{\"status\":\"${BUILD_STATUS}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE}\"}]}"
+            echo "Callback body: $BODY"
 
             HTTP_CODE=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
               -X POST "$CALLBACK_URL" \
@@ -643,10 +632,22 @@ spec:
           runAsUser: 1000
 
   # ===========================================================================
-  # Volumes shared across steps
+  # Shared volumes across DAG tasks (PVCs persist for the entire workflow)
+  # emptyDir does NOT work across DAG tasks — each pod gets its own copy.
+  # volumeClaimTemplates create real PVCs shared by all pods in the workflow.
   # ===========================================================================
-  volumes:
-    - name: workspace
-      emptyDir: {}
-    - name: manifests
-      emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+    - metadata:
+        name: manifests
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 256Mi

@@ -19,6 +19,13 @@ server:
   service:
     type: NodePort
     nodePortHttp: 30082
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: monitoring
+      namespace: monitoring
 
 controller:
   containerSecurityContext:
@@ -34,6 +41,13 @@ controller:
     requests:
       cpu: "100m"
       memory: "256Mi"
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: monitoring
+      namespace: monitoring
 
 repoServer:
   containerSecurityContext:
@@ -49,6 +63,13 @@ repoServer:
     requests:
       cpu: "100m"
       memory: "128Mi"
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: monitoring
+      namespace: monitoring
 
 redis:
   containerSecurityContext:

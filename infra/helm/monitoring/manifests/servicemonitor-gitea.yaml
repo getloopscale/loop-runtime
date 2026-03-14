@@ -1,0 +1,21 @@
+# ServiceMonitor for Gitea git server.
+# Scrapes repository count, access stats, and process metrics.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: loopzero-gitea
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - loopzero-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitea
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

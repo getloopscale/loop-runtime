@@ -6,6 +6,10 @@ servers: 1
 agents: 2
 kubeAPI:
   hostPort: "6444"
+ports:
+  - port: 30091:30091
+    nodeFilters:
+      - loadbalancer
 registries:
   use:
     - k3d-loopzero-registry:5000

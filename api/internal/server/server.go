@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/source"
@@ -39,9 +41,13 @@ type Config struct {
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 
-	// Middleware chain: correlation-id → logging
+	// Middleware chain: metrics → correlation-id → logging
+	r.Use(metrics.HTTPMetrics)
 	r.Use(middleware.CorrelationID)
 	r.Use(middleware.RequestLogging(cfg.Logger))
+
+	// Prometheus metrics endpoint (no auth — standard for scraping)
+	r.Handle("/metrics", promhttp.Handler())
 
 	// Public routes (no auth required)
 	health := routes.NewHealthHandler(cfg.DB)

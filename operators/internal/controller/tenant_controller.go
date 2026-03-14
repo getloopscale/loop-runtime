@@ -459,13 +459,17 @@ func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopzer
 // reconcileArgoCDApp ensures one ArgoCD Application CR exists per environment for the tenant.
 // The Application connects the tenant's Gitea repo to the workload namespace via ArgoCD.
 func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopzerov1.Tenant) error {
-	repoURL := fmt.Sprintf("http://gitea-http.loopzero-system.svc.cluster.local:3000/%s/%s.git",
-		tenant.Name, tenant.Spec.GitOps.RepoName)
+	repoURL := fmt.Sprintf("http://gitea-http.loopzero-system.svc.cluster.local:3000/loopzero/%s.git",
+		tenant.Spec.GitOps.RepoName)
 
 	for _, env := range tenant.Spec.Environments {
 		appName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
 		destNS := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
-		path := fmt.Sprintf("environments/%s/", env.Name)
+		// Path matches what the workflow's gitops-push creates: {project}/{env}/
+		// Since ArgoCD Application is per-env and the repo is per-tenant,
+		// we use "." (root) to catch all project manifests for this environment.
+		// TODO: When multi-project support is added, create one Application per project-env.
+		path := "."
 
 		spec := argocd.ApplicationSpec{
 			Name:           appName,

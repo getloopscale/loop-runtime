@@ -53,6 +53,14 @@ rules:
   - apiGroups: [""]
     resources: ["serviceaccounts"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # ArgoCD Application CRs
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # PriorityClasses (cluster-scoped)
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   # Events
   - apiGroups: [""]
     resources: ["events"]
@@ -104,6 +112,17 @@ spec:
             - "--leader-elect=false"
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8080"
+          env:
+            - name: GITEA_URL
+              value: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+            - name: GITEA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-tokens
+                  key: gitea-token
+                  optional: true
+            - name: ARGOCD_NAMESPACE
+              value: "argocd"
           ports:
             - containerPort: 8081
               name: health

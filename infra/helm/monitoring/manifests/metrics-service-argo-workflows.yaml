@@ -1,0 +1,19 @@
+# NodePort Service to expose Argo Workflows controller metrics for cross-cluster scraping.
+# Deploy to build cluster: kubectl --context k3d-loopzero-build apply -f metrics-service-argo-workflows.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: argo-workflows-metrics
+  namespace: argo
+  labels:
+    app: argo-workflows-metrics
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: argo-workflows-workflow-controller
+  ports:
+    - port: 9090
+      targetPort: 9090
+      nodePort: 30090
+      protocol: TCP
+      name: metrics

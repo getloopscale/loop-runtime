@@ -110,6 +110,14 @@ var (
 		HTTPStatus: 404,
 	}
 
+	// ErrBuildAlreadyCompleted is returned when attempting to cancel a build
+	// that is already in a terminal state (SUCCEEDED, FAILED, or CANCELLED).
+	ErrBuildAlreadyCompleted = &LoopZeroError{
+		Code:       "BUILD_ALREADY_COMPLETED",
+		Message:    "Build already completed.",
+		HTTPStatus: 409,
+	}
+
 	// ErrDeployInProgress is returned when a deploy is already in progress
 	// for the same (tenant, project, environment).
 	ErrDeployInProgress = &LoopZeroError{

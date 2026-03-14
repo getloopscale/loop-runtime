@@ -40,6 +40,10 @@ type fakeBuildOrchestrator struct {
 
 	// For duplicate detection
 	buildTerminal bool
+
+	// CancelBuild
+	cancelErr          error
+	lastCancelBuildID  string
 }
 
 func (f *fakeBuildOrchestrator) SubmitBuild(ctx context.Context, req routes.SubmitBuildInput) (*routes.SubmitBuildResult, error) {
@@ -65,6 +69,11 @@ func (f *fakeBuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID st
 		return f.onCompletedErr
 	}
 	return nil
+}
+
+func (f *fakeBuildOrchestrator) CancelBuild(ctx context.Context, buildID string) error {
+	f.lastCancelBuildID = buildID
+	return f.cancelErr
 }
 
 func (f *fakeBuildOrchestrator) IsBuildTerminal(ctx context.Context, buildID string) (bool, error) {
@@ -776,6 +785,112 @@ func (w *logWriter) Write(p []byte) (n int, err error) {
 
 // Verify that the fake implements the interface (compile-time check)
 var _ routes.BuildOrchestratorService = (*fakeBuildOrchestrator)(nil)
+
+func TestBuildsCancelRoute(t *testing.T) {
+	t.Run("POST /builds/:id/cancel running build returns 202", func(t *testing.T) {
+		// Arrange
+		orch := &fakeBuildOrchestrator{}
+		handler := newBuildHandler(orch, "test-secret")
+		router := buildRouter(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds/build-abcd1234/cancel", nil).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		rec := httptest.NewRecorder()
+
+		// Act
+		router.ServeHTTP(rec, req)
+
+		// Assert
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp["status"] != "cancelled" {
+			t.Errorf("expected status 'cancelled', got '%v'", resp["status"])
+		}
+
+		// Verify orchestrator received the correct build ID
+		if orch.lastCancelBuildID != "build-abcd1234" {
+			t.Errorf("expected CancelBuild called with 'build-abcd1234', got '%s'", orch.lastCancelBuildID)
+		}
+	})
+
+	t.Run("POST /builds/:id/cancel already completed returns 409", func(t *testing.T) {
+		// Arrange
+		orch := &fakeBuildOrchestrator{
+			cancelErr: loopzeroerrors.NewLoopZeroError(
+				"BUILD_ALREADY_COMPLETED",
+				"Build already completed.",
+				409,
+			),
+		}
+		handler := newBuildHandler(orch, "test-secret")
+		router := buildRouter(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds/build-done/cancel", nil).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		rec := httptest.NewRecorder()
+
+		// Act
+		router.ServeHTTP(rec, req)
+
+		// Assert
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp["code"] != "BUILD_ALREADY_COMPLETED" {
+			t.Errorf("expected code 'BUILD_ALREADY_COMPLETED', got '%v'", resp["code"])
+		}
+	})
+
+	t.Run("POST /builds/:id/cancel not found returns 404", func(t *testing.T) {
+		// Arrange
+		orch := &fakeBuildOrchestrator{
+			cancelErr: loopzeroerrors.ErrBuildNotFound,
+		}
+		handler := newBuildHandler(orch, "test-secret")
+		router := buildRouter(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds/build-nonexistent/cancel", nil).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		rec := httptest.NewRecorder()
+
+		// Act
+		router.ServeHTTP(rec, req)
+
+		// Assert
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("POST /builds/:id/cancel auth missing returns 401", func(t *testing.T) {
+		// Arrange
+		orch := &fakeBuildOrchestrator{}
+		handler := newBuildHandler(orch, "test-secret")
+		router := buildRouter(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds/build-abcd1234/cancel", nil)
+		rec := httptest.NewRecorder()
+
+		// Act
+		router.ServeHTTP(rec, req)
+
+		// Assert
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
 
 // Ensure errors.Is works for mapping
 func TestErrorMapping(t *testing.T) {
