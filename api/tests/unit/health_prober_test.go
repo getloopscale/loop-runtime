@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/loopzero/loopzero/api/internal/health"
 )
@@ -41,7 +42,8 @@ func TestHTTPProber_DirectProbe_Unhealthy(t *testing.T) {
 	defer srv.Close()
 
 	prober := &health.HTTPProber{
-		Client: srv.Client(),
+		Client:   srv.Client(),
+		Backoffs: []time.Duration{0}, // Single attempt, no wait — default 10 retries over 120s is for production
 	}
 
 	err := prober.Probe(context.Background(), srv.URL, "/health")
@@ -94,6 +96,7 @@ func TestHTTPProber_IngressOverride_UnhealthyApp(t *testing.T) {
 	prober := &health.HTTPProber{
 		Client:     srv.Client(),
 		IngressURL: srv.URL,
+		Backoffs:   []time.Duration{0}, // Single attempt — see comment on DirectProbe_Unhealthy
 	}
 
 	err := prober.Probe(context.Background(), "http://myapp.acme.loopzero.local", "/health")
