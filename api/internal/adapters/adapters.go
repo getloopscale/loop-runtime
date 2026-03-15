@@ -155,7 +155,7 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		TenantID:    req.TenantID,
 		ProjectID:   req.ProjectID,
 		Environment: req.Environment,
-		CommitSHA:   "dev-local",
+		CommitSHA:   req.CommitSHA,
 		Apps:        apps,
 		CreatedBy:   req.CreatedBy,
 		CallbackURL: "http://localhost/callback",
@@ -197,6 +197,7 @@ func (a *BuildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID
 	}
 	return a.Orch.OnBuildCompleted(ctx, buildID, services.BuildCallbackRequest{
 		Status: result.Status,
+		Error:  result.Error,
 		Apps:   apps,
 	})
 }

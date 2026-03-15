@@ -319,6 +319,34 @@ func TestBuildsRoute(t *testing.T) {
 		}
 	})
 
+	t.Run("POST /builds passes commit_sha to orchestrator", func(t *testing.T) {
+		// Arrange
+		orch := &fakeBuildOrchestrator{
+			submitResp: &routes.SubmitBuildResult{
+				BuildID:   "build-abcd1234",
+				StreamURL: "/api/v1/builds/build-abcd1234/stream",
+			},
+		}
+		handler := newBuildHandler(orch, "test-secret")
+
+		body := `{"project_id":"proj-xxx","environment":"production","commit_sha":"abc123def456","apps":[{"name":"api"}]}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body)).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		// Act
+		handler.Create(rec, req)
+
+		// Assert
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if orch.lastSubmitReq.CommitSHA != "abc123def456" {
+			t.Errorf("expected commit_sha 'abc123def456', got '%s'", orch.lastSubmitReq.CommitSHA)
+		}
+	})
+
 	t.Run("POST /builds lock timeout returns 409", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{

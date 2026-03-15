@@ -36,6 +36,7 @@ interface SubmitBuildInput {
   environment: string;
   apps: AppInput[];
   idempotencyKey: string;
+  commitSha: string;
 }
 
 interface SubmitBuildResult {
@@ -209,6 +210,7 @@ export class DeployCommand {
         environment,
         apps: appInputs,
         idempotencyKey,
+        commitSha: uploadResult.commit_sha,
       });
     } catch (err) {
       return this.handleError(opts, err);
@@ -223,7 +225,7 @@ export class DeployCommand {
           status: 'submitted',
         }));
       } else {
-        this.deps.writeTo(`Deploy started (${buildResult.build_id}). Run: loopzero status to check progress.`);
+        this.deps.writeTo(`Deploy started (${buildResult.build_id}). Wait for it to complete, or try again later.`);
       }
       return 0;
     }
@@ -254,9 +256,9 @@ export class DeployCommand {
       const timeoutId = setTimeout(() => {
         if (!resolved) {
           if (opts.json) {
-            this.deps.writeTo(JSON.stringify({ error: 'Deploy timed out waiting for completion. Run: loopzero status to check progress.', exit_code: 3 }));
+            this.deps.writeTo(JSON.stringify({ error: 'Deploy timed out waiting for completion. Wait for it to complete, or try again later.', exit_code: 3 }));
           } else {
-            this.deps.writeError('Deploy timed out waiting for completion. Run: loopzero status to check progress.');
+            this.deps.writeError('Deploy timed out waiting for completion. Wait for it to complete, or try again later.');
           }
           finish(3);
         }
@@ -294,6 +296,36 @@ export class DeployCommand {
 
           this.displayResult(payload);
           finish(this.resolveExitCode(payload, selectedApps.length));
+          return;
+        }
+
+        if (event.type === 'build.failed') {
+          clearTimeout(timeoutId);
+          const data = event.data as Record<string, unknown>;
+          const reason = String(data.error ?? data.status ?? 'unknown error');
+          if (opts.json) {
+            this.deps.writeTo(JSON.stringify({ error: `Build failed: ${reason}`, exit_code: 2 }));
+          } else {
+            this.deps.writeError(`Build failed: ${reason}`);
+          }
+          finish(2);
+          return;
+        }
+
+        if (event.type === 'deploy.sync_failed') {
+          clearTimeout(timeoutId);
+          const data = event.data as Record<string, unknown>;
+          const reason = String(data.reason ?? 'sync failed');
+          if (opts.json) {
+            this.deps.writeTo(JSON.stringify({
+              error: `Deploy failed: ${reason}`,
+              exit_code: 3,
+              deploy_id: data.deploy_id ?? null,
+            }));
+          } else {
+            this.deps.writeError(`Deploy failed: ${reason}`);
+          }
+          finish(3); // exit code 3 = deploy failure
           return;
         }
 
@@ -338,7 +370,7 @@ export class DeployCommand {
         if (app.url) {
           this.deps.writeTo(`  ${app.name}: ${app.url}`);
         } else {
-          this.deps.writeTo(`  ${app.name}: deployed (background worker)`);
+          this.deps.writeTo(`  ${app.name}: deployed`);
         }
       }
     } else {
@@ -349,7 +381,7 @@ export class DeployCommand {
         } else if (app.url) {
           this.deps.writeTo(`  ${app.name}: ${app.url}`);
         } else {
-          this.deps.writeTo(`  ${app.name}: deployed (background worker)`);
+          this.deps.writeTo(`  ${app.name}: deployed`);
         }
       }
     }
@@ -417,6 +449,6 @@ export class DeployCommand {
     if (err instanceof Error) {
       return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3);
     }
-    return this.exitWithError(opts, 'Unexpected error. Run: loopzero status to check progress.', 3);
+    return this.exitWithError(opts, 'Unexpected error. Wait for it to complete, or try again later.', 3);
   }
 }

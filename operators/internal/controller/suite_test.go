@@ -19,9 +19,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/argocd"
 	"github.com/loopzero/loopzero/operators/internal/controller"
-	"github.com/loopzero/loopzero/operators/internal/gitea"
 )
 
 const (
@@ -36,8 +34,8 @@ var (
 	scheme         *runtime.Scheme
 	ctx            context.Context
 	cancel         context.CancelFunc
-	fakeGitProvider    *gitea.FakeProvisioner
-	fakeArgoCDProvider *argocd.FakeProvisioner
+	fakeGitProvider    *fakeGiteaProvisioner
+	fakeArgoCDProvider *fakeArgoCDProvisioner
 )
 
 func TestControllers(t *testing.T) {
@@ -79,8 +77,8 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	fakeGitProvider = gitea.NewFakeProvisioner()
-	fakeArgoCDProvider = argocd.NewFakeProvisioner()
+	fakeGitProvider = newFakeGiteaProvisioner()
+	fakeArgoCDProvider = newFakeArgoCDProvisioner()
 	err = controller.SetupTenantController(mgr, fakeGitProvider, fakeArgoCDProvider)
 	Expect(err).NotTo(HaveOccurred())
 

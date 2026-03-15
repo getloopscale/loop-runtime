@@ -1,4 +1,23 @@
+import { execSync } from 'child_process';
+import * as path from 'path';
 import { program, createProgram } from '../../src/index';
+
+describe('bin/loopzero entrypoint', () => {
+  const binPath = path.resolve(__dirname, '../../bin/loopzero');
+
+  it('should produce help output when invoked with --help', () => {
+    const output = execSync(`node ${binPath} --help`, { encoding: 'utf-8' });
+    expect(output).toContain('loopzero');
+    expect(output).toContain('Commands:');
+    expect(output).toContain('login');
+    expect(output).toContain('deploy');
+  });
+
+  it('should produce version output when invoked with --version', () => {
+    const output = execSync(`node ${binPath} --version`, { encoding: 'utf-8' });
+    expect(output.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+});
 
 describe('CLI entrypoint', () => {
   it('should export a Commander program named "loopzero"', () => {

@@ -31,6 +31,7 @@ type SubmitBuildInput struct {
 	TenantID    string
 	ProjectID   string
 	Environment string
+	CommitSHA   string
 	Apps        []AppInput
 	CreatedBy   string
 }
@@ -44,6 +45,7 @@ type SubmitBuildResult struct {
 // BuildCallbackInput is the callback payload from the build system.
 type BuildCallbackInput struct {
 	Status string              `json:"status"`
+	Error  string              `json:"error,omitempty"`
 	Apps   []BuildCallbackApp  `json:"apps"`
 }
 
@@ -96,6 +98,7 @@ func NewBuildHandler(orch BuildOrchestratorService, callbackSecret string, logge
 type createBuildRequest struct {
 	ProjectID   string     `json:"project_id"`
 	Environment string     `json:"environment"`
+	CommitSHA   string     `json:"commit_sha,omitempty"`
 	Apps        []AppInput `json:"apps,omitempty"`
 }
 
@@ -146,6 +149,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		TenantID:    uc.TenantID,
 		ProjectID:   req.ProjectID,
 		Environment: req.Environment,
+		CommitSHA:   req.CommitSHA,
 		Apps:        req.Apps,
 		CreatedBy:   uc.UserID,
 	})
@@ -195,6 +199,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 // callbackRequest is the JSON request body for POST /api/v1/builds/:id/callback.
 type callbackRequest struct {
 	Status string             `json:"status"`
+	Error  string             `json:"error,omitempty"`
 	Apps   []BuildCallbackApp `json:"apps"`
 }
 
@@ -264,6 +269,7 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// Run OnBuildCompleted in goroutine — do not block the callback response
 	callbackResult := BuildCallbackInput{
 		Status: req.Status,
+		Error:  req.Error,
 		Apps:   req.Apps,
 	}
 	go func() {

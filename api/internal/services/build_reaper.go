@@ -1,0 +1,201 @@
+// Package services implements business logic orchestration.
+package services
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/pkg/statemachine"
+)
+
+// BuildReaperConfig configures the build reaper thresholds.
+type BuildReaperConfig struct {
+	// QueueTimeout is how long a build can stay in QUEUED before being reaped (spec §5.1: 5min).
+	QueueTimeout time.Duration
+	// RunningTimeout is how long a build can stay in RUNNING before being reaped (spec §5.1: 30min).
+	RunningTimeout time.Duration
+	// CancelTimeout is how long a build can stay in CANCELLING before being reaped (spec §5.1: 60s).
+	CancelTimeout time.Duration
+	// Interval is how often the reaper runs.
+	Interval time.Duration
+}
+
+// DefaultBuildReaperConfig returns the spec-defined timeouts.
+func DefaultBuildReaperConfig() BuildReaperConfig {
+	return BuildReaperConfig{
+		QueueTimeout:   5 * time.Minute,
+		RunningTimeout: 30 * time.Minute,
+		CancelTimeout:  60 * time.Second,
+		Interval:       30 * time.Second,
+	}
+}
+
+// StaleBuild represents a build that has exceeded its timeout.
+type StaleBuild struct {
+	ID    string
+	State statemachine.State
+	Event statemachine.Event
+}
+
+// BuildStaleChecker finds builds that have exceeded their state timeout.
+type BuildStaleChecker interface {
+	FindStaleBuilds(ctx context.Context, queueTimeout, runningTimeout, cancelTimeout time.Duration) ([]StaleBuild, error)
+}
+
+// BuildReaper periodically checks for stale builds and transitions them to FAILED/CANCELLED.
+// This implements the timeout enforcement from spec §5.1.
+type BuildReaper struct {
+	buildStore db.BuildStore
+	checker    BuildStaleChecker
+	locker     EnvironmentLocker
+	logger     *slog.Logger
+	cfg        BuildReaperConfig
+}
+
+// NewBuildReaper creates a new BuildReaper.
+func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker EnvironmentLocker, logger *slog.Logger, cfg BuildReaperConfig) *BuildReaper {
+	return &BuildReaper{
+		buildStore: buildStore,
+		checker:    checker,
+		locker:     locker,
+		logger:     logger,
+		cfg:        cfg,
+	}
+}
+
+// Start runs the reaper loop until the context is cancelled.
+func (r *BuildReaper) Start(ctx context.Context) {
+	ticker := time.NewTicker(r.cfg.Interval)
+	defer ticker.Stop()
+
+	r.logger.Info("build reaper started",
+		"queue_timeout", r.cfg.QueueTimeout,
+		"running_timeout", r.cfg.RunningTimeout,
+		"cancel_timeout", r.cfg.CancelTimeout,
+		"interval", r.cfg.Interval)
+
+	for {
+		select {
+		case <-ctx.Done():
+			r.logger.Info("build reaper stopped")
+			return
+		case <-ticker.C:
+			r.reap(ctx)
+		}
+	}
+}
+
+// ReapOnce runs a single reaper cycle. Exported for testing.
+func (r *BuildReaper) ReapOnce(ctx context.Context) int {
+	return r.reap(ctx)
+}
+
+func (r *BuildReaper) reap(ctx context.Context) int {
+	stale, err := r.checker.FindStaleBuilds(ctx, r.cfg.QueueTimeout, r.cfg.RunningTimeout, r.cfg.CancelTimeout)
+	if err != nil {
+		r.logger.Error("build reaper: failed to find stale builds", "error", err)
+		return 0
+	}
+
+	reaped := 0
+	for _, s := range stale {
+		build, err := r.buildStore.GetByID(ctx, s.ID)
+		if err != nil {
+			r.logger.Error("build reaper: failed to get build", "build_id", s.ID, "error", err)
+			continue
+		}
+
+		// Re-check: build may have transitioned since the query
+		if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+			continue
+		}
+
+		err = r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
+			// Re-fetch inside lock
+			build, err = r.buildStore.GetByID(ctx, s.ID)
+			if err != nil {
+				return err
+			}
+			if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+				return nil
+			}
+
+			_, err = r.buildStore.UpdateStatus(ctx, tx, s.ID, string(s.Event))
+			return err
+		})
+
+		if err != nil {
+			r.logger.Error("build reaper: failed to transition build",
+				"build_id", s.ID, "from", s.State, "event", s.Event, "error", err)
+			continue
+		}
+
+		r.logger.Warn("build reaper: reaped stale build",
+			"build_id", s.ID, "from_state", s.State, "event", s.Event)
+		reaped++
+	}
+
+	if reaped > 0 {
+		r.logger.Info("build reaper: cycle complete", "reaped", reaped)
+	}
+	return reaped
+}
+
+// PostgresStaleBuildChecker implements BuildStaleChecker using PostgreSQL.
+type PostgresStaleBuildChecker struct {
+	DB db.DBTX
+}
+
+// FindStaleBuilds queries for builds that have exceeded their state timeout.
+func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, queueTimeout, runningTimeout, cancelTimeout time.Duration) ([]StaleBuild, error) {
+	query := `
+		SELECT id, status FROM builds
+		WHERE (status = 'QUEUED' AND created_at < $1)
+		   OR (status = 'RUNNING' AND started_at < $2)
+		   OR (status = 'CANCELLING' AND started_at < $3)
+		ORDER BY created_at ASC
+		LIMIT 100
+	`
+
+	now := time.Now()
+	rows, err := c.DB.Query(ctx, query,
+		now.Add(-queueTimeout),
+		now.Add(-runningTimeout),
+		now.Add(-cancelTimeout),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find stale builds: %w", err)
+	}
+	defer rows.Close()
+
+	var result []StaleBuild
+	for rows.Next() {
+		var id, status string
+		if err := rows.Scan(&id, &status); err != nil {
+			return nil, fmt.Errorf("scan stale build: %w", err)
+		}
+
+		var event statemachine.Event
+		switch statemachine.State(status) {
+		case statemachine.BuildQueued:
+			event = statemachine.BuildQueueTimeout
+		case statemachine.BuildRunning:
+			event = statemachine.BuildTimeout
+		case statemachine.BuildCancelling:
+			event = statemachine.BuildCancelTimeout
+		default:
+			continue
+		}
+
+		result = append(result, StaleBuild{
+			ID:    id,
+			State: statemachine.State(status),
+			Event: event,
+		})
+	}
+
+	return result, rows.Err()
+}

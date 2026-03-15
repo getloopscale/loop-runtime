@@ -621,9 +621,10 @@ func TestBuildOrchestrator_OnBuildCompleted_BuildFailed(t *testing.T) {
 		t.Fatalf("SubmitBuild failed: %v", err)
 	}
 
-	// Act — build failed
+	// Act — build failed with error details
 	cbReq := services.BuildCallbackRequest{
 		Status: "failed",
+		Error:  "build-image: Dockerfile not found",
 		Apps:   nil,
 	}
 	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
@@ -645,10 +646,56 @@ func TestBuildOrchestrator_OnBuildCompleted_BuildFailed(t *testing.T) {
 		}
 	}
 
-	// SSE event build.failed
+	// SSE event build.failed with error details
 	failedEvents := fakes.eventStore.eventsByType("build.failed")
 	if len(failedEvents) != 1 {
-		t.Errorf("expected 1 build.failed event, got %d", len(failedEvents))
+		t.Fatalf("expected 1 build.failed event, got %d", len(failedEvents))
+	}
+	var payload map[string]string
+	if err := json.Unmarshal(failedEvents[0].Data, &payload); err != nil {
+		t.Fatalf("failed to unmarshal build.failed data: %v", err)
+	}
+	if payload["error"] != "build-image: Dockerfile not found" {
+		t.Errorf("expected error 'build-image: Dockerfile not found', got %q", payload["error"])
+	}
+}
+
+func TestBuildOrchestrator_OnBuildCompleted_BuildFailedNoError(t *testing.T) {
+	// Verify backward compatibility: build failure without error details
+	// should not include an "error" field in the SSE event.
+
+	// Arrange
+	fakes := newOrchestratorFakes()
+	orch := fakes.buildOrchestrator()
+
+	resp, err := orch.SubmitBuild(context.Background(), defaultSubmitReq())
+	if err != nil {
+		t.Fatalf("SubmitBuild failed: %v", err)
+	}
+
+	// Act — build failed without error details
+	cbReq := services.BuildCallbackRequest{
+		Status: "failed",
+		Apps:   nil,
+	}
+	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Verify build.failed event exists without error field
+	failedEvents := fakes.eventStore.eventsByType("build.failed")
+	if len(failedEvents) != 1 {
+		t.Fatalf("expected 1 build.failed event, got %d", len(failedEvents))
+	}
+	var payload map[string]string
+	if err := json.Unmarshal(failedEvents[0].Data, &payload); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if _, hasError := payload["error"]; hasError {
+		t.Error("expected no error field for callback without error details")
 	}
 }
 

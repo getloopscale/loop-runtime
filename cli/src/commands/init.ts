@@ -156,12 +156,42 @@ export class InitCommand {
       }
     } else {
       const fw = this.deps.detectFramework(this.deps.cwd);
-      apps.push({
-        name: projectName,
-        framework: fw.framework,
-        port: fw.port,
-        path: '.',
-      });
+      if (fw.framework !== 'custom' || fw.port !== null) {
+        // Root directory has a recognizable framework
+        apps.push({
+          name: projectName,
+          framework: fw.framework,
+          port: fw.port,
+          path: '.',
+        });
+      } else {
+        // Root has no framework — scan first-level subdirectories for apps
+        const subdirApps = this.scanSubdirectories(this.deps.cwd);
+        if (subdirApps.length > 0) {
+          for (const sub of subdirApps) {
+            const subFw = this.deps.detectFramework(sub.dir);
+            if (subFw.framework === 'custom' && subFw.port === null) continue;
+            const appName = sub.name;
+            const appType = this.inferAppType(appName, subFw.framework, subFw.port);
+            apps.push({
+              name: appName,
+              framework: subFw.framework,
+              port: appType === 'server' ? subFw.port : null,
+              path: `./${sub.name}`,
+              type: appType,
+            });
+          }
+        }
+        // Fallback: if no subdirectory apps found, use root as custom
+        if (apps.length === 0) {
+          apps.push({
+            name: projectName,
+            framework: fw.framework,
+            port: fw.port,
+            path: '.',
+          });
+        }
+      }
     }
 
     // Interactive wizard: ask for confirmation when not using --yes
@@ -251,6 +281,27 @@ export class InitCommand {
     }
 
     return 'server';
+  }
+
+  /**
+   * Scans first-level subdirectories for potential app directories.
+   * Skips hidden dirs, node_modules, and common non-app directories.
+   */
+  private scanSubdirectories(rootDir: string): Array<{ name: string; dir: string }> {
+    const SKIP = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.cache', 'tmp']);
+    const results: Array<{ name: string; dir: string }> = [];
+    try {
+      const entries = fs.readdirSync(rootDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name.startsWith('.')) continue;
+        if (SKIP.has(entry.name)) continue;
+        results.push({ name: entry.name, dir: path.join(rootDir, entry.name) });
+      }
+    } catch {
+      // Ignore read errors
+    }
+    return results;
   }
 
   private generateYaml(projectName: string, apps: AppSpec[]): string {

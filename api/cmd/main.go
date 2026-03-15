@@ -118,8 +118,13 @@ func main() {
 		locker := &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool}
 
 		// W5: Real health prober — HTTP GET with retries
+		// When WORKLOAD_INGRESS_URL is set, probes go through the Ingress controller
+		// with Host header override. This allows health probing without DNS resolution —
+		// essential for local dev (k3d) and any environment where *.loopzero.local doesn't resolve.
+		workloadIngressURL := os.Getenv("WORKLOAD_INGRESS_URL")
 		healthProber := &health.HTTPProber{
-			Client: &http.Client{Timeout: 10 * time.Second},
+			Client:     &http.Client{Timeout: 10 * time.Second},
+			IngressURL: workloadIngressURL,
 		}
 
 		// W2: Real workflow submitter — Argo Workflows in build cluster
@@ -220,7 +225,17 @@ func main() {
 		// Argo callback secret
 		argoCallbackSecret = os.Getenv("LOOPZERO_ARGO_CALLBACK_SECRET")
 
-		logger.Info("sprint 2 dependencies wired — real implementations required")
+		// Build reaper — enforces spec §5.1 timeouts (QUEUED 5min, RUNNING 30min, CANCELLING 60s)
+		reaper := services.NewBuildReaper(
+			buildStore,
+			&services.PostgresStaleBuildChecker{DB: dbAdapter},
+			locker,
+			logger,
+			services.DefaultBuildReaperConfig(),
+		)
+		go reaper.Start(context.Background())
+
+		logger.Info("sprint 2 dependencies wired — real implementations")
 	} else {
 		logger.Warn("DATABASE_URL not set — running without database")
 	}

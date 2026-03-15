@@ -430,6 +430,161 @@ describe('SSEClient', () => {
     });
   });
 
+  describe('SSE heartbeat filtering', () => {
+    it('should filter comment lines and not emit heartbeat-only blocks', async () => {
+      const sseText =
+        ':heartbeat\n\n' +
+        'id: 1\nevent: build.started\ndata: {"step":"clone"}\n\n' +
+        ':heartbeat\n\n' +
+        ':keepalive\n\n' +
+        'id: 2\nevent: build.progress\ndata: {"step":"compile"}\n\n' +
+        ':heartbeat\n\n';
+
+      const stream = createSSEStream([sseText]);
+      const fetchMock = jest.fn().mockResolvedValue(sseResponse(stream));
+
+      const { events, connect } = createAutoClosingClient({
+        url: 'http://localhost:3001/builds/b1/stream',
+        expectedEvents: 2,
+        fetchFn: fetchMock,
+      });
+
+      await connect();
+
+      expect(events).toHaveLength(2);
+      expect(events[0]).toEqual({
+        id: '1',
+        event: 'build.started',
+        data: { step: 'clone' },
+      });
+      expect(events[1]).toEqual({
+        id: '2',
+        event: 'build.progress',
+        data: { step: 'compile' },
+      });
+    });
+
+    it('should handle blocks with mixed comment and real fields', async () => {
+      // A block that has a comment line mixed in with real fields
+      const sseText =
+        ':comment\nid: 1\nevent: build.started\ndata: {"ok":true}\n\n';
+
+      const stream = createSSEStream([sseText]);
+      const fetchMock = jest.fn().mockResolvedValue(sseResponse(stream));
+
+      const { events, connect } = createAutoClosingClient({
+        url: 'http://localhost:3001/builds/b1/stream',
+        expectedEvents: 1,
+        fetchFn: fetchMock,
+      });
+
+      await connect();
+
+      expect(events).toHaveLength(1);
+      expect(events[0].event).toBe('build.started');
+    });
+  });
+
+  describe('max retries', () => {
+    it('should stop reconnecting after maxRetries is exceeded', async () => {
+      const fetchMock = jest.fn().mockResolvedValue(
+        new Response(null, { status: 404 })
+      );
+
+      const errors: Error[] = [];
+
+      const client = new SSEClient({
+        url: 'http://localhost:3001/builds/b1/stream',
+        onEvent: () => {},
+        onError: (err) => errors.push(err),
+        reconnectDelay: 1,
+        maxRetries: 3,
+        fetchFn: fetchMock,
+      });
+
+      await client.connect();
+
+      // 3 fetch attempts (each throws due to 404), then max retries exceeded
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+
+      // 3 individual errors + 1 final "max retries" error
+      expect(errors).toHaveLength(4);
+      expect(errors[3].message).toContain('failed after 3 retries');
+      expect(errors[3].message).toContain('loopzero status');
+    });
+
+    it('should reset retry counter on successful connection', async () => {
+      // First call: 404 (retry 1)
+      // Second call: 404 (retry 2)
+      // Third call: success with one event, then stream ends
+      // Fourth call: 404 (retry 1 — counter was reset)
+      // Fifth call: 404 (retry 2)
+      // Sixth call: 404 (retry 3 — maxRetries hit)
+      let call = 0;
+      const fetchMock = jest.fn().mockImplementation(() => {
+        call++;
+        if (call === 1 || call === 2) {
+          return Promise.resolve(new Response(null, { status: 404 }));
+        }
+        if (call === 3) {
+          const stream = createSSEStream([
+            'id: 1\nevent: build.started\ndata: {}\n\n',
+          ]);
+          return Promise.resolve(sseResponse(stream));
+        }
+        // Calls 4, 5, 6: all fail
+        return Promise.resolve(new Response(null, { status: 404 }));
+      });
+
+      const errors: Error[] = [];
+      const events: SSEEvent[] = [];
+
+      const client = new SSEClient({
+        url: 'http://localhost:3001/builds/b1/stream',
+        onEvent: (event) => events.push(event),
+        onError: (err) => errors.push(err),
+        reconnectDelay: 1,
+        maxRetries: 3,
+        fetchFn: fetchMock,
+      });
+
+      await client.connect();
+
+      // 6 total fetch calls
+      expect(fetchMock).toHaveBeenCalledTimes(6);
+
+      // Got the event from the successful connection
+      expect(events).toHaveLength(1);
+      expect(events[0].id).toBe('1');
+
+      // Final error mentions max retries
+      const lastError = errors[errors.length - 1];
+      expect(lastError.message).toContain('failed after 3 retries');
+    });
+
+    it('should default maxRetries to 15', async () => {
+      const fetchMock = jest.fn().mockResolvedValue(
+        new Response(null, { status: 404 })
+      );
+
+      const errors: Error[] = [];
+
+      const client = new SSEClient({
+        url: 'http://localhost:3001/builds/b1/stream',
+        onEvent: () => {},
+        onError: (err) => errors.push(err),
+        reconnectDelay: 1,
+        fetchFn: fetchMock,
+      });
+
+      await client.connect();
+
+      expect(fetchMock).toHaveBeenCalledTimes(15);
+      const lastError = errors[errors.length - 1];
+      expect(lastError.message).toContain('failed after 15 retries');
+    });
+  });
+
   describe('no internal terms', () => {
     it('should not contain forbidden internal terms in source', () => {
       const forbidden = [

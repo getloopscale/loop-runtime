@@ -126,10 +126,15 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Use a context that detects client disconnection
+	ctx := r.Context()
+
 	// Handle Last-Event-ID: check if journal has events after that ID
 	if lastEventID > 0 {
-		events, getErr := h.eventStore.GetAfter(r.Context(), buildID, lastEventID)
+		events, getErr := h.eventStore.GetAfter(ctx, buildID, lastEventID)
 		if getErr != nil {
+			h.logger.Error("stream: GetAfter failed (replay with Last-Event-ID)",
+				"build_id", buildID, "last_event_id", lastEventID, "error", getErr)
 			return
 		}
 
@@ -158,8 +163,10 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// No Last-Event-ID: replay all events from the beginning
-		events, getErr := h.eventStore.GetAfter(r.Context(), buildID, 0)
+		events, getErr := h.eventStore.GetAfter(ctx, buildID, 0)
 		if getErr != nil {
+			h.logger.Error("stream: GetAfter failed (initial replay)",
+				"build_id", buildID, "error", getErr)
 			return
 		}
 
@@ -174,8 +181,10 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.logger.Info("stream: entering poll loop",
+		"build_id", buildID, "last_event_id", lastEventID, "build_status", build.Status)
+
 	// Poll loop for new events
-	ctx := r.Context()
 	pollTicker := time.NewTicker(h.pollInterval)
 	heartbeatTicker := time.NewTicker(h.heartbeatInterval)
 	defer pollTicker.Stop()
@@ -185,10 +194,14 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-ctx.Done():
 			// Client disconnected
+			h.logger.Info("stream: client disconnected",
+				"build_id", buildID, "reason", ctx.Err())
 			return
 		case <-heartbeatTicker.C:
 			_, writeErr := fmt.Fprintf(w, ":heartbeat\n\n")
 			if writeErr != nil {
+				h.logger.Info("stream: heartbeat write failed (client gone)",
+					"build_id", buildID, "error", writeErr)
 				return
 			}
 			flusher.Flush()
@@ -196,12 +209,26 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// Re-check build status
 			build, err = h.buildStore.GetByID(ctx, buildID)
 			if err != nil {
+				if ctx.Err() != nil {
+					h.logger.Info("stream: poll cancelled (client gone)",
+						"build_id", buildID)
+				} else {
+					h.logger.Error("stream: GetByID failed in poll loop",
+						"build_id", buildID, "error", err)
+				}
 				return
 			}
 
 			// Poll for new events
 			events, getErr := h.eventStore.GetAfter(ctx, buildID, lastEventID)
 			if getErr != nil {
+				if ctx.Err() != nil {
+					h.logger.Info("stream: poll cancelled (client gone)",
+						"build_id", buildID)
+				} else {
+					h.logger.Error("stream: GetAfter failed in poll loop",
+						"build_id", buildID, "error", getErr)
+				}
 				return
 			}
 
@@ -212,6 +239,8 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			// If build reached terminal state, close stream
 			if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+				h.logger.Info("stream: build terminal, closing",
+					"build_id", buildID, "status", build.Status)
 				return
 			}
 		}

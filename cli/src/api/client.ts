@@ -117,11 +117,10 @@ export class ApiClient {
         );
       case 409:
         // Exit code 3 (deploy failure) is used for concurrent rejection per spec §0.3.
-        // No separate "conflict" code exists in the 0-5 range. The message is actionable: suggests loopzero status.
         return new ApiError(
           (serverMessage
-            ? `${serverMessage} Run: loopzero status to check progress.`
-            : 'A deploy is already in progress for this environment. Run: loopzero status to check progress.'),
+            ? `${serverMessage} Wait for it to complete, or try again later.`
+            : 'A deploy is already in progress for this environment. Wait for it to complete, or try again later.'),
           3,
           status
         );

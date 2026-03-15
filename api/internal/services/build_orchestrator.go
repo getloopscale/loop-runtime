@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -87,6 +88,7 @@ type SubmitBuildResponse struct {
 // BuildCallbackRequest is sent by the build system when a build completes.
 type BuildCallbackRequest struct {
 	Status string       `json:"status"` // "succeeded" or "failed"
+	Error  string       `json:"error,omitempty"`
 	Apps   []AppRelease `json:"apps"`
 }
 
@@ -218,80 +220,98 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 
 // CancelBuild cancels a running or queued build.
 //
+// All state mutations happen INSIDE the environment lock (Rule 6).
+//
 // Steps:
-//  1. Get build by ID — verify it exists
-//  2. If build is terminal (SUCCEEDED, FAILED, CANCELLED) → return ErrBuildAlreadyCompleted
-//  3. Transition to CANCELLING (if RUNNING) or CANCELLED (if QUEUED) via state machine
-//  4. Cancel the Argo Workflow via WorkflowSubmitter.Cancel
-//  5. If was RUNNING (now CANCELLING), confirm cancellation → CANCELLED
-//  6. Emit SSE build.cancelled event
+//  1. Get build by ID — verify it exists and get lock coordinates
+//  2. Acquire environment lock on (tenant, project, environment)
+//  3. Re-fetch build inside lock (state may have changed)
+//  4. If build is terminal → return ErrBuildAlreadyCompleted
+//  5. Transition to CANCELLING (if RUNNING) or CANCELLED (if QUEUED) via state machine
+//  6. Cancel the Argo Workflow via WorkflowSubmitter.Cancel
+//  7. If was RUNNING (now CANCELLING), confirm cancellation → CANCELLED
+//  8. Emit SSE build.cancelled event
 func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) error {
+	// Step 1: get build to determine lock coordinates (tenant, project, env)
 	build, err := o.buildStore.GetByID(ctx, buildID)
 	if err != nil {
 		return fmt.Errorf("cancel build: get build: %w", err)
 	}
 
-	// Check if already terminal
+	// Check if already terminal before acquiring lock (fast path, no race risk)
 	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
 		return loopzeroerrors.ErrBuildAlreadyCompleted
 	}
 
-	// Transition via state machine: BuildCancelRequested
-	// QUEUED → CANCELLED (direct), RUNNING → CANCELLING
-	updatedBuild, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildCancelRequested))
-	if err != nil {
-		return fmt.Errorf("cancel build: transition cancel requested: %w", err)
-	}
-
-	// Cancel the workflow (best-effort — workflow may already be done)
-	if build.WorkflowID != "" {
-		if cancelErr := o.workflow.Cancel(ctx, build.WorkflowID); cancelErr != nil {
-			// Log but don't fail — the state transition is what matters
-			// The workflow may already be finished
-			_ = cancelErr
+	// Step 2: acquire environment lock — all state mutations inside (Rule 6)
+	return o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
+		// Step 3: re-fetch inside lock (state may have changed between pre-check and lock acquisition)
+		build, err = o.buildStore.GetByID(ctx, buildID)
+		if err != nil {
+			return fmt.Errorf("cancel build: re-fetch build: %w", err)
 		}
-	}
 
-	// If transitioned to CANCELLING (was RUNNING), confirm cancellation
-	if statemachine.State(updatedBuild.Status) == statemachine.BuildCancelling {
-		if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildCancelConfirmed)); err != nil {
-			return fmt.Errorf("cancel build: confirm cancellation: %w", err)
+		// Step 4: re-check terminal state inside lock
+		if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+			return loopzeroerrors.ErrBuildAlreadyCompleted
 		}
-	}
 
-	// Emit SSE build.cancelled
-	eventData, _ := json.Marshal(map[string]string{
-		"build_id": buildID,
-		"status":   "cancelled",
+		// Step 5: transition via state machine: BuildCancelRequested
+		// QUEUED → CANCELLED (direct), RUNNING → CANCELLING
+		updatedBuild, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildCancelRequested))
+		if err != nil {
+			return fmt.Errorf("cancel build: transition cancel requested: %w", err)
+		}
+
+		// Step 6: cancel the workflow (best-effort — workflow may already be done)
+		if build.WorkflowID != "" {
+			if cancelErr := o.workflow.Cancel(ctx, build.WorkflowID); cancelErr != nil {
+				// Log but don't fail — the state transition is what matters
+				_ = cancelErr
+			}
+		}
+
+		// Step 7: if transitioned to CANCELLING (was RUNNING), confirm cancellation
+		if statemachine.State(updatedBuild.Status) == statemachine.BuildCancelling {
+			if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildCancelConfirmed)); err != nil {
+				return fmt.Errorf("cancel build: confirm cancellation: %w", err)
+			}
+		}
+
+		// Step 8: emit SSE build.cancelled
+		eventData, _ := json.Marshal(map[string]string{
+			"build_id": buildID,
+			"status":   "cancelled",
+		})
+		if _, err := o.eventStore.Append(ctx, buildID, "build.cancelled", eventData); err != nil {
+			return fmt.Errorf("cancel build: emit SSE event: %w", err)
+		}
+
+		return nil
 	})
-	if _, err := o.eventStore.Append(ctx, buildID, "build.cancelled", eventData); err != nil {
-		return fmt.Errorf("cancel build: emit SSE event: %w", err)
-	}
-
-	return nil
 }
 
 // OnBuildCompleted handles the callback from the build system when a build finishes.
 //
-// Steps 1-4 happen OUTSIDE Lock 2. Steps 7+ happen INSIDE Lock 2 (DA-17).
+// ALL state mutations happen INSIDE the environment lock (Rule 6).
 //
 // Race condition guard (DA-15 EC-N): If build is QUEUED (Argo finished before
 // SubmitBuild transitioned to RUNNING), transitions QUEUED→RUNNING first.
 //
 // Duplicate callbacks: If build is already in a terminal state, returns nil (no-op).
 func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string, result BuildCallbackRequest) error {
-	// Step 1: get build by ID
+	// Step 1: get build by ID (read-only, outside lock — for lock coordinates)
 	build, err := o.buildStore.GetByID(ctx, buildID)
 	if err != nil {
 		return fmt.Errorf("on build completed: get build: %w", err)
 	}
 
-	// Step 6 (DA-15): duplicate callback — build already terminal → no-op
+	// Fast path: duplicate callback — build already terminal → no-op (no lock needed)
 	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
 		return nil
 	}
 
-	// Step 5 (DA-15): callback validation — succeeded with empty apps
+	// Validation before acquiring lock (stateless check)
 	if result.Status == "succeeded" && len(result.Apps) == 0 {
 		return loopzeroerrors.NewLoopZeroError(
 			"INVALID_CALLBACK",
@@ -300,47 +320,63 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		)
 	}
 
-	// Step 2 (DA-15 EC-N): race condition guard — build still in QUEUED
-	if build.Status == string(statemachine.BuildQueued) {
-		if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildStarted)); err != nil {
-			return fmt.Errorf("on build completed: EC-N transition to RUNNING: %w", err)
-		}
-	}
-
-	// Step 3: transition to terminal state
-	if result.Status == "failed" {
-		if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildFailedEvent)); err != nil {
-			return fmt.Errorf("on build completed: transition to FAILED: %w", err)
+	// ALL state mutations inside the environment lock (Rule 6)
+	return o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
+		// Re-fetch build inside lock (state may have changed)
+		build, err = o.buildStore.GetByID(ctx, buildID)
+		if err != nil {
+			return fmt.Errorf("on build completed: re-fetch build: %w", err)
 		}
 
-		// Emit SSE build.failed
+		// Re-check terminal state inside lock (concurrent cancel may have completed)
+		if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+			return nil
+		}
+
+		// EC-N race condition guard: build still in QUEUED (Argo finished before SubmitBuild transitioned)
+		if build.Status == string(statemachine.BuildQueued) {
+			if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildStarted)); err != nil {
+				return fmt.Errorf("on build completed: EC-N transition to RUNNING: %w", err)
+			}
+		}
+
+		// Transition to terminal state
+		if result.Status == "failed" {
+			if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildFailedEvent)); err != nil {
+				return fmt.Errorf("on build completed: transition to FAILED: %w", err)
+			}
+
+			// Emit SSE build.failed with error details
+			failedPayload := map[string]string{
+				"build_id": buildID,
+				"status":   "failed",
+			}
+			if result.Error != "" {
+				failedPayload["error"] = result.Error
+			}
+			eventData, _ := json.Marshal(failedPayload)
+			if _, err := o.eventStore.Append(ctx, buildID, "build.failed", eventData); err != nil {
+				return fmt.Errorf("on build completed: emit build.failed: %w", err)
+			}
+
+			return nil
+		}
+
+		// Transition to SUCCEEDED
+		if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildSucceededEvent)); err != nil {
+			return fmt.Errorf("on build completed: transition to SUCCEEDED: %w", err)
+		}
+
+		// Emit SSE build.succeeded
 		eventData, _ := json.Marshal(map[string]string{
 			"build_id": buildID,
-			"status":   "failed",
+			"status":   "succeeded",
 		})
-		if _, err := o.eventStore.Append(ctx, buildID, "build.failed", eventData); err != nil {
-			return fmt.Errorf("on build completed: emit build.failed: %w", err)
+		if _, err := o.eventStore.Append(ctx, buildID, "build.succeeded", eventData); err != nil {
+			return fmt.Errorf("on build completed: emit build.succeeded: %w", err)
 		}
 
-		return nil
-	}
-
-	// Step 4: transition to SUCCEEDED
-	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildSucceededEvent)); err != nil {
-		return fmt.Errorf("on build completed: transition to SUCCEEDED: %w", err)
-	}
-
-	// Emit SSE build.succeeded
-	eventData, _ := json.Marshal(map[string]string{
-		"build_id": buildID,
-		"status":   "succeeded",
-	})
-	if _, err := o.eventStore.Append(ctx, buildID, "build.succeeded", eventData); err != nil {
-		return fmt.Errorf("on build completed: emit build.succeeded: %w", err)
-	}
-
-	// Steps 7+: acquire Lock 2 for release creation and activation
-	return o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
+		// Release creation and activation (still inside the same lock)
 		return o.activateRelease(ctx, tx, build, result)
 	})
 }
@@ -426,6 +462,11 @@ func (o *BuildOrchestrator) waitForSync(ctx context.Context, tx db.DBTX, build *
 	// ArgoCD Application name matches TenantController naming: {tenant}-{env}
 	argoAppName := fmt.Sprintf("%s-%s", build.TenantID, build.Environment)
 	if err := o.sync.TriggerSync(ctx, argoAppName); err != nil {
+		// Circuit breaker OPEN → fast-fail with PLATFORM_DEGRADED (spec §10.1 health gate)
+		// Release stays in PENDING; caller should transition to SYNC_FAILED
+		if errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+			return true, nil
+		}
 		return false, fmt.Errorf("activate release: trigger sync: %w", err)
 	}
 
@@ -536,12 +577,15 @@ func (o *BuildOrchestrator) finalizeActivation(ctx context.Context, tx db.DBTX, 
 
 	var deployApps []map[string]interface{}
 	for _, app := range result.Apps {
-		deployApps = append(deployApps, map[string]interface{}{
+		appEntry := map[string]interface{}{
 			"name":                   app.Name,
 			"status":                 "deployed",
-			"url":                    app.URL,
-			"build_duration_seconds": app.DurationMs / 1000,
-		})
+			"build_duration_seconds": durationSecs,
+		}
+		if app.URL != "" {
+			appEntry["url"] = app.URL
+		}
+		deployApps = append(deployApps, appEntry)
 	}
 
 	deployData, _ := json.Marshal(map[string]interface{}{

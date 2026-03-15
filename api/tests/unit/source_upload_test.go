@@ -127,8 +127,8 @@ apps:
 			}
 		}
 
-		// Verify bundle was stored
-		if _, ok := store.Bundles["acme:"]; !ok {
+		// Verify bundle was stored (key = tenantID:projectName from loopzero.yaml)
+		if _, ok := store.Bundles["acme:my-saas"]; !ok {
 			t.Error("expected bundle to be stored in fake store")
 		}
 	})

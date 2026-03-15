@@ -36,6 +36,28 @@ tasks:
       - k3d cluster delete loopzero-build || true
       - k3d cluster delete loopzero-workload || true
 
+  clusters:recreate:
+    desc: Recreate a single k3d cluster (e.g., task clusters:recreate -- workload)
+    cmds:
+      - |
+        CLUSTER="{{.CLI_ARGS}}"
+        if [ -z "$CLUSTER" ]; then
+          echo "Usage: task clusters:recreate -- <mgmt|build|workload>"
+          exit 1
+        fi
+        case "$CLUSTER" in
+          mgmt)     CONFIG="infra/k3d/mgmt-cluster.yaml";     INSTALL_TASK="infra:install:mgmt" ;;
+          build)    CONFIG="infra/k3d/build-cluster.yaml";     INSTALL_TASK="infra:install:build" ;;
+          workload) CONFIG="infra/k3d/workload-cluster.yaml";  INSTALL_TASK="infra:install:workload" ;;
+          *)        echo "Unknown cluster: $CLUSTER. Use mgmt, build, or workload."; exit 1 ;;
+        esac
+        echo "Recreating loopzero-${CLUSTER}..."
+        k3d cluster delete "loopzero-${CLUSTER}" 2>/dev/null || true
+        k3d cluster create --config "$CONFIG"
+        echo "Installing components..."
+        task "$INSTALL_TASK"
+        echo "Done. loopzero-${CLUSTER} recreated."
+
   # ---------------------------------------------------------------------------
   # S0.3: Infrastructure install
   # ---------------------------------------------------------------------------

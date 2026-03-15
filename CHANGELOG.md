@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Traefik IngressRoute generated in workflow manifests — deploys now get a real URL `http://{project}.{tenant}.loopzero.local` (#S2-QA2 F-02)
+- CLI handles `build.failed` SSE event as terminal — exits immediately with code 2 and actionable error instead of waiting 5min timeout (#S2-QA2 F-03)
+- Auto-generated Dockerfile for Node.js projects — Kaniko builds succeed without user-provided Dockerfile, respects user Dockerfile if present (#S2-QA3 F-01)
+- `validate-workspace` step in build pipeline — fails fast (~2s) on missing package.json or lockfile instead of 3 retries (~180s) (#S2-QA3 F-05)
+- SSE client max retries (default: 15) — prevents infinite reconnection loops on persistent failures (#S2-QA3 F-07)
+- CLI handles `deploy.sync_failed` SSE event as terminal — exits with code 3 and reason instead of 5min hang (#S2-QA6 F-13)
+- Health prober supports Ingress URL override via `WORKLOAD_INGRESS_URL` — probes through Traefik with Host header, no DNS needed (#S2-QA6 F-14)
+- k3d workload cluster exposes Traefik HTTP on host port 8090 — apps reachable at `localhost:8090` with Host header (#S2-QA6 F-14)
 - Centralized Grafana Home dashboard with health status for all system components — single entry point for operational visibility (#S7-observability)
 - Drift Detection dashboard with timeline, mirror status table, and reconciler health panels (#S7-observability)
 - Failure Investigation dashboard with error timeline, lock contention, and dependency health panels (#S7-observability)
@@ -28,6 +36,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CLI adapter modules: `cli/src/adapters/git.ts`, `source-bundle.ts`, `source-upload.ts`, `loopzero-yaml.ts` — extracted from index.ts (#G7)
 
 ### Changed
+- Image tag now uses real git commit SHA instead of hardcoded `dev-local` — K8s pulls new image on each deploy (#S2-QA2 F-01)
+- `commit_sha` flows from CLI → API → Argo Workflow → Kaniko image tag — full pipeline wired (#S2-QA2 F-01)
+- Deploy output shows `deployed` instead of `deployed (background worker)` for apps without URL (#S2-QA2 F-05)
+- `build_duration_seconds` in SSE `deploy.completed` uses wall-clock time from build creation instead of always-zero callback value (#S2-QA2 F-04)
+- `deploy.completed` SSE omits `url` field when empty instead of sending `""` — consistent null representation (#S2-QA2 F-09)
+- Workflow callback includes generated URL in payload when build succeeds (#S2-QA2 F-02)
+- Build failure error details propagated from Argo Workflow → API callback → SSE → CLI — "Build failed: build-image: Dockerfile not found" instead of "Build failed: failed" (#S2-QA3 F-02)
+- SSE client filters comment lines (`:heartbeat`) per SSE spec — no more spurious `type=message` events (#S2-QA3 F-03)
+- Argo callback includes `{{workflow.failures}}` details (failed step name + message) when build fails (#S2-QA3 F-02)
+- `CancelBuild` and `OnBuildCompleted` now execute ALL state transitions inside the environment lock — eliminates race conditions between concurrent cancel+deploy and duplicate callbacks (#S2-review)
+- PostgreSQL connection pool configured per spec §7.8: `MaxConns=20`, `MinConns=5`, `MaxConnIdleTime=30s`, `statement_timeout=30s`, `ConnectTimeout=5s` — prevents runaway queries and pool exhaustion (#S2-review)
+- Circuit breaker `ErrPlatformDegraded` now handled in deploy flow — ArgoCD unavailable triggers fast-fail SYNC_FAILED instead of 2-minute timeout (#S2-review)
+- `bin/loopzero` entrypoint now calls `program.parseAsync()` — CLI executes correctly when invoked via npm-installed binary (#S2-dogfood F-02)
+- `git bundle create` changed from `-1 HEAD` (shallow, 1 commit) to `--all HEAD` (full history) — first deploys to fresh repos now work (#S2-dogfood F-01)
+- `loopzero init` now scans first-level subdirectories when root has no detectable framework — projects with `api/`, `worker/` subdirs generate correct loopzero.yaml (#S2-dogfood F-04)
+- Error message for source upload failures changed to actionable "Failed to upload source code. Ensure your git history is clean and try again." (#S2-dogfood F-05)
+- Deploy "in progress" message no longer references `loopzero status` (Sprint 3) — now says "Wait for it to complete, or try again later." (#S2-QA F-06)
 - `activateRelease()` decomposed from 180 lines into four focused sub-methods: `createRelease()`, `pushToGitOps()`, `waitForSync()`, `finalizeActivation()` — pure refactoring, no behavior change (#G15)
 - Integration test `concurrent_builds_test.go` now imports adapter types from `api/internal/adapters/` instead of reimplementing them (#G17)
 - `validate:manifests` task now validates infra/tilt/ deployment manifests and infra/helm/argocd/templates/ in addition to operators/config/ (#G8)
@@ -37,7 +62,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - E2E seed script (`infra/scripts/seed_e2e.go`) now delegates to `seed.Run()` package instead of duplicating SQL and CR logic (#G9)
 - `PromotionSyncFailed` and `RollbackSyncFailed` marked as terminal states — eliminates dead-end states in state machines (#G5)
 
+### Removed
+- Duplicate state machines in `operators/internal/statemachine/` — all consumers now import from `pkg/statemachine/` (single source of truth) (#S2-review)
+- Fake provisioners removed from production packages `operators/internal/gitea/fake.go` and `operators/internal/argocd/fake.go` — fakes moved to test-only files (#S2-review)
+- Compiled binaries (`api/main`, `operators/main`, `cmd`, `scripts`) removed from git tracking — added to `.gitignore` (#S2-review)
+
 ### Fixed
+- SSE stream handler: all silent error returns now log the error — enables diagnosing connection drops (#S2-QA7 F-01)
+- SSE stream handler: poll loop distinguishes context cancellation (client disconnect) from DB errors in logs (#S2-QA7 F-01)
+- SSE client `reader.cancel()` now catches rejected Promise — prevents uncaught AbortError crash when `close()` is called during active stream (#S2-QA4 F-10)
+- `validate-workspace` shell script: replaced `ls | while read` with `for/if` loop — `pipefail` no longer kills the step when not all lockfile types exist (#S2-QA5 F-11)
+- Workflow error extraction uses `grep -o` instead of `sed` grouping — BusyBox compatible, with raw fallback (#S2-QA5 F-12)
+- `TestSourceUpload` assertion key corrected from `"acme:"` to `"acme:my-saas"` — test now validates actual store key format (#S2-review)
+- Integration test `concurrent_builds_test.go` adapter updated to implement `CancelBuild` method — tests compile again (#S2-review)
 - SSE events renamed from `release.*` to `deploy.*` — `release.pending`, `release.active`, `release.health_check`, `release.sync_failed` no longer leak internal terminology to users (F-05)
 - Deploy duration now calculated from build creation time instead of callback arrival — `duration_seconds` in `deploy.completed` SSE event reports real end-to-end time (F-06)
 - Validation error message changed from `project_id is required` to `Project name is required. Check your loopzero.yaml.` — no internal field names in user-facing errors (F-07)

@@ -44,6 +44,12 @@ bin/
 *.so
 *.dylib
 
+# Compiled Go binaries (should never be committed)
+api/main
+operators/main
+/cmd
+/scripts
+
 # Test output
 *.test
 *.out

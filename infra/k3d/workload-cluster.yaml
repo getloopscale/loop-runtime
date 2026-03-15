@@ -7,6 +7,11 @@ agents: 2
 kubeAPI:
   hostPort: "6444"
 ports:
+  # Traefik HTTP entrypoint — host:8090 → loadbalancer:80
+  # Allows health probes and local access to deployed apps on the workload cluster
+  - port: 8090:80
+    nodeFilters:
+      - loadbalancer
   - port: 30091:30091
     nodeFilters:
       - loadbalancer

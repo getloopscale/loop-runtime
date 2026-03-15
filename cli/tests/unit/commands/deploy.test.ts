@@ -22,7 +22,7 @@ function createMockDeps(overrides: Partial<DeployDeps> = {}): DeployDeps {
     hasGitRepo: jest.fn().mockReturnValue(true),
     getHeadCommit: jest.fn().mockReturnValue('abc1234'),
     createGitBundle: jest.fn().mockResolvedValue('/tmp/bundle.bundle'),
-    uploadSource: jest.fn().mockResolvedValue({ source_id: 'src-12345678' }),
+    uploadSource: jest.fn().mockResolvedValue({ commit_sha: 'abc1234', apps: ['api', 'web'] }),
     submitBuild: jest.fn().mockResolvedValue({
       build_id: 'build-deadbeef',
       deploy_id: 'd-8f3a',
@@ -89,14 +89,14 @@ describe('DeployCommand', () => {
       );
     });
 
-    it('should send idempotency key with build submission', async () => {
+    it('should send idempotency key and commitSha with build submission', async () => {
       const deps = createMockDeps();
       const cmd = new DeployCommand(deps);
 
       await cmd.execute({});
 
       expect(deps.submitBuild).toHaveBeenCalledWith(
-        expect.objectContaining({ idempotencyKey: 'uuid-key-1234' })
+        expect.objectContaining({ idempotencyKey: 'uuid-key-1234', commitSha: 'abc1234' })
       );
     });
 
@@ -109,7 +109,7 @@ describe('DeployCommand', () => {
       expect(deps.cleanupFile).toHaveBeenCalledWith('/tmp/bundle.bundle');
     });
 
-    it('should display worker apps without URL as background worker', async () => {
+    it('should display worker apps without URL as deployed', async () => {
       const deps = createMockDeps({
         findLoopZeroYaml: jest.fn().mockReturnValue({
           path: '/project/loopzero.yaml',
@@ -146,7 +146,8 @@ describe('DeployCommand', () => {
       expect(exitCode).toBe(0);
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
       expect(output).toContain('api: https://api.example.com');
-      expect(output).toContain('worker: deployed (background worker)');
+      expect(output).toContain('worker: deployed');
+      expect(output).not.toContain('background worker');
     });
   });
 
@@ -364,7 +365,7 @@ describe('DeployCommand', () => {
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
       expect(output).toContain('Deploy started');
       expect(output).toContain('build-deadbeef');
-      expect(output).toContain('loopzero status');
+      expect(output).toContain('try again later');
     });
   });
 
@@ -1524,35 +1525,23 @@ describe('DeployCommand', () => {
       expect(parsed.status).toBe('success');
     });
 
-    it('should display build.failed event in human mode', async () => {
+    it('should exit 2 and display error on build.failed event in human mode', async () => {
       const deps = createMockDeps({
         connectSSE: jest.fn().mockImplementation(
           (_buildId: string, onEvent: (event: SSEEvent) => void) => {
             onEvent({ type: 'build.started', data: { app: 'api' } });
-            onEvent({ type: 'build.failed', data: { app: 'api', error: 'compilation error' } });
-            onEvent({
-              type: 'deploy.completed',
-              data: {
-                deploy_id: 'd-8f3a',
-                status: 'failed',
-                duration_seconds: 8,
-                apps: [
-                  { name: 'api', status: 'failed', error: 'compilation error', build_duration_seconds: 8 },
-                ],
-              },
-            });
+            onEvent({ type: 'build.failed', data: { build_id: 'build-deadbeef', status: 'failed', error: 'compilation error' } });
             return { close: jest.fn() };
           }
         ),
       });
       const cmd = new DeployCommand(deps);
 
-      await cmd.execute({});
+      const exitCode = await cmd.execute({});
 
-      const writeToArgs = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
-
-      expect(writeToArgs.some((msg: string) => msg.includes('Building api'))).toBe(true);
-      expect(writeToArgs.some((msg: string) => msg.includes('compilation error'))).toBe(true);
+      expect(exitCode).toBe(2);
+      expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining('Build failed'));
+      expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining('compilation error'));
     });
 
     it('should render deploy.app_live event with URL', async () => {
@@ -1611,6 +1600,113 @@ describe('DeployCommand', () => {
       const writeToArgs = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
       // CI mode uses [build] prefix without ANSI color codes
       expect(writeToArgs.some((msg: string) => msg.includes('[build] api: building...'))).toBe(true);
+    });
+  });
+
+  describe('build.failed SSE event', () => {
+    it('exits with code 2 when build.failed event received', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'build.failed',
+              data: { build_id: 'build-deadbeef', status: 'failed', error: 'npm install failed' },
+            });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+      const exitCode = await cmd.execute({});
+      expect(exitCode).toBe(2);
+      expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining('Build failed'));
+    });
+
+    it('outputs JSON on build.failed when --json is set', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'build.failed',
+              data: { build_id: 'build-deadbeef', status: 'failed', error: 'npm install failed' },
+            });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+      const exitCode = await cmd.execute({ json: true });
+      expect(exitCode).toBe(2);
+      expect(deps.writeTo).toHaveBeenCalledWith(expect.stringContaining('"exit_code":2'));
+    });
+  });
+
+  describe('deploy.sync_failed SSE event', () => {
+    it('exits with code 3 when deploy.sync_failed received', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'deploy.sync_failed',
+              data: { deploy_id: 'd-1234', status: 'sync_failed', reason: 'HEALTH_PROBE_FAILED' },
+            });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+      const exitCode = await cmd.execute({});
+      expect(exitCode).toBe(3);
+      expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining('Deploy failed'));
+      expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining('HEALTH_PROBE_FAILED'));
+    });
+
+    it('outputs JSON with exit_code 3 on deploy.sync_failed with --json', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'deploy.sync_failed',
+              data: { deploy_id: 'd-1234', status: 'sync_failed', reason: 'HEALTH_PROBE_FAILED' },
+            });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+      const exitCode = await cmd.execute({ json: true });
+      expect(exitCode).toBe(3);
+      const output = (deps.writeTo as jest.Mock).mock.calls[0][0];
+      const parsed = JSON.parse(output);
+      expect(parsed.exit_code).toBe(3);
+      expect(parsed.error).toContain('Deploy failed');
+      expect(parsed.deploy_id).toBe('d-1234');
+    });
+  });
+
+  describe('no background worker label', () => {
+    it('does not show "background worker" for apps without URL', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'deploy.completed',
+              data: {
+                deploy_id: 'd-8f3a',
+                status: 'success',
+                duration_seconds: 45,
+                apps: [{ name: 'worker', status: 'deployed', build_duration_seconds: 20 }],
+              },
+            });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+      await cmd.execute({});
+      const allOutput = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(allOutput).not.toContain('background worker');
+      expect(allOutput).toContain('deployed');
     });
   });
 });

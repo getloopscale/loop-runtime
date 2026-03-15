@@ -115,6 +115,10 @@ func (a *buildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID
 	})
 }
 
+func (a *buildOrchestratorAdapter) CancelBuild(ctx context.Context, buildID string) error {
+	return a.orch.CancelBuild(ctx, buildID)
+}
+
 func (a *buildOrchestratorAdapter) IsBuildTerminal(ctx context.Context, buildID string) (bool, error) {
 	build, err := a.buildStore.GetByID(ctx, buildID)
 	if err != nil {

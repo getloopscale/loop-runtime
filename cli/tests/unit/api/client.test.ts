@@ -181,7 +181,7 @@ describe('ApiClient', () => {
         expect(apiErr.message).toContain(
           'A deploy is already in progress for this environment.'
         );
-        expect(apiErr.message).toContain('loopzero status');
+        expect(apiErr.message).toContain('try again later');
       }
     });
 
@@ -207,7 +207,7 @@ describe('ApiClient', () => {
         expect(apiErr.exitCode).toBe(3);
         expect(apiErr.statusCode).toBe(409);
         expect(apiErr.message).toContain('already in progress');
-        expect(apiErr.message).toContain('loopzero status');
+        expect(apiErr.message).toContain('try again later');
       }
     });
 

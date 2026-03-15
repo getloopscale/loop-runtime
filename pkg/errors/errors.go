@@ -195,7 +195,7 @@ var (
 	// ErrSourceUploadFailed is returned when pushing the bundle to the source store fails.
 	ErrSourceUploadFailed = &LoopZeroError{
 		Code:       "SOURCE_UPLOAD_FAILED",
-		Message:    "failed to push source bundle",
+		Message:    "Failed to upload source code. Ensure your git history is clean and try again.",
 		HTTPStatus: 500,
 	}
 

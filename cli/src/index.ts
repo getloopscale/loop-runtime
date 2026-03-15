@@ -222,6 +222,7 @@ export function createProgram(): Command {
             {
               project_id: input.project,
               environment: input.environment,
+              commit_sha: input.commitSha,
               apps: input.apps.map((a) => ({
                 name: a.name,
                 ...(a.type ? { type: a.type } : {}),

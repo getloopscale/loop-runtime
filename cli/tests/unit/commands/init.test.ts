@@ -215,6 +215,88 @@ describe('InitCommand', () => {
     });
   });
 
+  describe('subdirectory app detection (non-monorepo)', () => {
+    it('should detect apps in subdirectories when root has no framework', async () => {
+      // Create subdirectory with package.json
+      fs.mkdirSync(path.join(tmpDir, 'api'));
+      fs.writeFileSync(
+        path.join(tmpDir, 'api', 'package.json'),
+        '{"name":"api","dependencies":{"express":"^4.0.0"}}',
+      );
+
+      const detectFramework = jest.fn().mockImplementation((dir: string) => {
+        if (dir.endsWith('/api')) {
+          return { framework: 'express', port: 3000 };
+        }
+        return { framework: 'custom', port: null };
+      });
+
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework,
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true });
+
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('api:');
+      expect(content).toContain('path: ./api');
+      expect(content).toContain('port: 3000');
+    });
+
+    it('should detect multiple apps in subdirectories', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'api'));
+      fs.writeFileSync(path.join(tmpDir, 'api', 'package.json'), '{}');
+      fs.mkdirSync(path.join(tmpDir, 'worker'));
+      fs.writeFileSync(path.join(tmpDir, 'worker', 'package.json'), '{}');
+
+      const detectFramework = jest.fn().mockImplementation((dir: string) => {
+        if (dir.endsWith('/api')) return { framework: 'express', port: 3000 };
+        if (dir.endsWith('/worker')) return { framework: 'node', port: 3000 };
+        return { framework: 'custom', port: null };
+      });
+
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework,
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true });
+
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('api:');
+      expect(content).toContain('worker:');
+      expect(content).toContain('type: worker');
+    });
+
+    it('should skip node_modules, .git, and hidden directories', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'node_modules'));
+      fs.mkdirSync(path.join(tmpDir, '.git'));
+      fs.mkdirSync(path.join(tmpDir, 'api'));
+      fs.writeFileSync(path.join(tmpDir, 'api', 'package.json'), '{}');
+
+      const detectFramework = jest.fn().mockImplementation((dir: string) => {
+        if (dir.endsWith('/api')) return { framework: 'express', port: 3000 };
+        return { framework: 'custom', port: null };
+      });
+
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework,
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true });
+
+      // detectFramework should NOT be called with node_modules or .git
+      const calledDirs = detectFramework.mock.calls.map((c: string[]) => c[0]);
+      expect(calledDirs.some((d: string) => d.includes('node_modules'))).toBe(false);
+      expect(calledDirs.some((d: string) => d.includes('.git'))).toBe(false);
+    });
+  });
+
   describe('interactive wizard (no --yes)', () => {
     it('should show detection summary when confirm dep is provided', async () => {
       const deps = createMockDeps(tmpDir, {

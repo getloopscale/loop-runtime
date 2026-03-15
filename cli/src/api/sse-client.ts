@@ -18,6 +18,7 @@ export interface SSEClientOptions {
   pollInterval?: number;
   pollUrl?: string;
   fetchFn?: FetchFn;
+  maxRetries?: number;
 }
 
 /**
@@ -30,6 +31,7 @@ export class SSEClient {
   private switchedToPolling = false;
   private abortController: AbortController | null = null;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryCount = 0;
 
   private readonly url: string;
   private readonly headers: Record<string, string>;
@@ -40,6 +42,7 @@ export class SSEClient {
   private readonly pollInterval: number;
   private readonly pollUrl: string | null;
   private readonly fetchFn: FetchFn;
+  private readonly maxRetries: number;
 
   constructor(options: SSEClientOptions) {
     this.url = options.url;
@@ -51,6 +54,7 @@ export class SSEClient {
     this.pollInterval = options.pollInterval ?? 5000;
     this.pollUrl = options.pollUrl ?? null;
     this.fetchFn = options.fetchFn ?? globalThis.fetch;
+    this.maxRetries = options.maxRetries ?? 15;
   }
 
   getLastEventId(): string | null {
@@ -98,9 +102,20 @@ export class SSEClient {
           return;
         }
 
+        this.retryCount++;
         this.onError(
           err instanceof Error ? err : new ApiError(String(err), 3, 0),
         );
+
+        if (this.retryCount >= this.maxRetries) {
+          this.onError(new ApiError(
+            `SSE connection failed after ${this.maxRetries} retries. The build may still be running — check status with loopzero status.`,
+            3,
+            0,
+          ));
+          this.close();
+          return;
+        }
 
         // Wait before reconnecting
         await this.delay(this.reconnectDelay);
@@ -132,6 +147,9 @@ export class SSEClient {
         response.status,
       );
     }
+
+    // Successful connection — reset retry counter
+    this.retryCount = 0;
 
     const body = response.body;
     if (!body) {
@@ -175,11 +193,9 @@ export class SSEClient {
         }
       }
     } finally {
-      try {
-        reader.cancel();
-      } catch {
-        // Ignore cancel errors on cleanup
-      }
+      // reader.cancel() returns a Promise — must catch rejection to avoid
+      // unhandled AbortError when close() aborts the stream mid-read
+      reader.cancel().catch(() => {});
     }
   }
 
@@ -200,14 +216,26 @@ export class SSEClient {
     let dataStr = '';
 
     const lines = block.split('\n');
+    let hasDataFields = false;
     for (const line of lines) {
+      // SSE spec: lines starting with ':' are comments (heartbeats)
+      if (line.startsWith(':')) {
+        continue;
+      }
       if (line.startsWith('id:')) {
         id = line.slice(3).trim();
       } else if (line.startsWith('event:')) {
         event = line.slice(6).trim();
+        hasDataFields = true;
       } else if (line.startsWith('data:')) {
         dataStr = line.slice(5).trim();
+        hasDataFields = true;
       }
+    }
+
+    // If the block only contained comments (heartbeats), skip it entirely
+    if (!hasDataFields && !id) {
+      return;
     }
 
     // Dedup: skip events with ID <= last seen
