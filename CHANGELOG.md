@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- PoolEnvironmentLocker missing lock timeout detection and panic recovery — now delegates to lock.WithEnvironmentLock (single implementation, no duplication) (#S2-audit B1+B2+H1)
+- Circuit breaker for ArgoCD sync not wired in main.go — CircuitBreakerSyncClient now wraps raw SyncClient (3 failures → OPEN, 2 recoveries → CLOSED) (#S2-audit B4)
+- Git trailers in gitops-push using build-id for all 3 values — Correlation-ID now propagated end-to-end from CLI request through to git commit (#S2-audit B3)
+- Silent error swallowing in CancelBuild workflow cancel (`_ = cancelErr`) — now logged via slog.Warn (#S2-audit C1)
+- Silent error swallowing in activation failure SSE emission (`_ = err`) — now logged via slog.Error (#S2-audit C2)
+- IsBuildTerminal reimplemented locally in adapter instead of using statemachine.IsBuildTerminal() (#S2-audit C3)
+- Idempotency store error silently swallowed — now logged with key context (#S2-audit C4)
+- Operator deployment missing /tmp volumeMount with readOnlyRootFilesystem: true (#S2-audit H5)
+- `--app` partial deploy generates wrong hostname (isMonorepo=false when deploying 1 app from monorepo) — always use per-app hostname format for consistency (#S2-dogfood F-02)
+
+### Changed
+- `test:unit` task now includes CLI tests (`cd cli && npm test`) (#S2-audit H2)
+- `lint` task now includes CLI linting (`cd cli && npx eslint src/`) (#S2-audit M8)
+- `validate:manifests` task now validates monitoring manifests in `infra/helm/monitoring/manifests/` (#S2-audit H3)
+
+### Removed
+- Dead code `CallbackURL` field from `WorkflowSpec` and `SubmitBuildRequest` — WorkflowSubmitter uses config-level CallbackURL (#S2-audit M1)
+
+### Fixed
 - Build stuck in RUNNING permanently when ArgoCD sync fails — split OnBuildCompleted into two-phase transaction (DA-17): Phase 1 commits build SUCCEEDED independently, Phase 2 handles release activation with graceful failure (#S2-dogfood F-01)
 - Health probe failing on fresh deploys due to insufficient retries — extended default backoffs from 3 attempts/6s to 10 attempts/~120s, matching spec §10.1 activation timeout (#S2-dogfood F-03)
 - ArgoCD TriggerSync error propagating as hard error and rolling back entire transaction — sync failures now treated as probe failures, allowing release to be marked SYNC_FAILED instead of silently disappearing (#S2-dogfood F-04)

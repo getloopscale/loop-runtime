@@ -39,6 +39,8 @@ spec:
         description: "MinIO access key scoped to tenant prefix"
       - name: minio-secret-key
         description: "MinIO secret key scoped to tenant prefix"
+      - name: correlation-id
+        description: "Correlation ID for end-to-end request tracing"
       - name: registry-url
         description: "Container registry URL for image push"
   templates:
@@ -493,7 +495,10 @@ spec:
 
             // If no apps specified, fall back to single-app mode
             const appList = apps.length > 0 ? apps : [{name: project, type: 'server', port: 3000, path: '.'}];
-            const isMonorepo = apps.length > 1;
+            // Always use per-app hostname format. This ensures consistency between
+            // full deploys and --app partial deploys. A single-app deploy of "api"
+            // must generate the same hostname as a full deploy that includes "api".
+            const hasExplicitApps = apps.length > 0;
             let manifests = '';
             const callbackApps = [];
 
@@ -501,13 +506,15 @@ spec:
               const appName = app.name;
               const appType = app.type || 'server';
               const appPort = app.port || 3000;
-              const appPath = app.path || (isMonorepo ? 'apps/' + appName : '.');
-              const host = isMonorepo
+              const appPath = app.path || (hasExplicitApps ? 'apps/' + appName : '.');
+              // Always use per-app hostname: {app}-{project}.{tenant}.loopzero.local
+              // This ensures --app deploys generate the same URL as full deploys.
+              const host = hasExplicitApps
                 ? appName + '-' + project + '.' + tenant + '.loopzero.local'
                 : project + '.' + tenant + '.loopzero.local';
 
-              // Command: for monorepo, cd into app dir and npm start; for single app, npm start
-              const cmd = isMonorepo
+              // Command: for explicit apps, cd into app dir and npm start; for single app, npm start
+              const cmd = hasExplicitApps
                 ? 'cd ' + appPath + ' && npm start'
                 : 'npm start';
 
@@ -680,7 +687,7 @@ spec:
             git commit -m "Deploy {{workflow.parameters.project-id}} to {{workflow.parameters.environment}}
 
             Release-ID: {{workflow.parameters.build-id}}
-            Correlation-ID: {{workflow.parameters.build-id}}
+            Correlation-ID: {{workflow.parameters.correlation-id}}
             Build-ID: {{workflow.parameters.build-id}}" || {
               echo "No changes to commit"
               exit 0

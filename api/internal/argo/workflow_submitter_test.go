@@ -70,7 +70,6 @@ func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
 		Apps: []services.AppSpec{
 			{Name: "api", Type: "server", Port: 3000},
 		},
-		CallbackURL: "http://loopzero-api.loopzero-system.svc:3001/api/v1/builds/test-build-001/callback",
 	})
 	if err != nil {
 		t.Fatalf("Submit failed: %v", err)
@@ -103,7 +102,6 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 		Apps: []services.AppSpec{
 			{Name: "web", Type: "frontend", Port: 0},
 		},
-		CallbackURL: "http://localhost:3001/callback",
 	})
 	if err != nil {
 		t.Fatalf("Submit failed: %v", err)
@@ -132,7 +130,6 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 			{Name: "web", Type: "frontend", Port: 0},
 			{Name: "worker", Type: "worker", Port: 0},
 		},
-		CallbackURL: "http://localhost:3001/callback",
 	})
 	if err != nil {
 		t.Fatalf("Submit failed: %v", err)

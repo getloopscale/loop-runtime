@@ -149,7 +149,13 @@ spec:
             requests:
               cpu: "100m"
               memory: "64Mi"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -381,8 +381,7 @@ func defaultSubmitReq() services.SubmitBuildRequest {
 		Apps: []services.AppSpec{
 			{Name: "api", Type: "server", Port: 3000},
 		},
-		CreatedBy:   "user-1",
-		CallbackURL: "https://api.loopzero.dev/callbacks",
+		CreatedBy: "user-1",
 	}
 }
 

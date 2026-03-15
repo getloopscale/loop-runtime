@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 )
 
@@ -108,7 +109,9 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 			}
 
 			// Best-effort store — don't fail the request if storage fails
-			_ = store.Store(r.Context(), rec)
+			if storeErr := store.Store(r.Context(), rec); storeErr != nil {
+				slog.Error("idempotency store failed — retry may reprocess", "key", key, "error", storeErr)
+			}
 		})
 	}
 }

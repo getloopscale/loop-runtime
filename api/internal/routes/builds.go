@@ -29,12 +29,13 @@ type AppInput struct {
 
 // SubmitBuildInput contains the inputs for submitting a new build via the route handler.
 type SubmitBuildInput struct {
-	TenantID    string
-	ProjectID   string
-	Environment string
-	CommitSHA   string
-	Apps        []AppInput
-	CreatedBy   string
+	TenantID      string
+	ProjectID     string
+	Environment   string
+	CommitSHA     string
+	Apps          []AppInput
+	CreatedBy     string
+	CorrelationID string
 }
 
 // SubmitBuildResult is returned after a build is successfully submitted.
@@ -148,12 +149,13 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := h.orch.SubmitBuild(r.Context(), SubmitBuildInput{
-		TenantID:    uc.TenantID,
-		ProjectID:   req.ProjectID,
-		Environment: req.Environment,
-		CommitSHA:   req.CommitSHA,
-		Apps:        req.Apps,
-		CreatedBy:   uc.UserID,
+		TenantID:      uc.TenantID,
+		ProjectID:     req.ProjectID,
+		Environment:   req.Environment,
+		CommitSHA:     req.CommitSHA,
+		Apps:          req.Apps,
+		CreatedBy:     uc.UserID,
+		CorrelationID: r.Header.Get("Correlation-ID"),
 	})
 	if err != nil {
 		mapBuildError(w, err)

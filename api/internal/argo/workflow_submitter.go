@@ -108,6 +108,7 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 						param("commit-sha", spec.CommitSHA),
 						param("apps", string(appsJSON)),
 						param("build-id", spec.BuildID),
+						param("correlation-id", spec.CorrelationID),
 						param("api-callback-url", s.infraParams.CallbackURL),
 						param("callback-secret", s.infraParams.CallbackSecret),
 						param("gitea-url", s.infraParams.GiteaURL),

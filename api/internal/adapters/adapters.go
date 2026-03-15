@@ -11,12 +11,12 @@ package adapters
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/lock"
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/sse"
@@ -91,36 +91,11 @@ type PoolEnvironmentLocker struct {
 }
 
 func (l *PoolEnvironmentLocker) WithLock(ctx context.Context, tenant, project, env string, fn func(tx db.DBTX) error) error {
-	tx, err := l.Pool.BeginTx(ctx, pgx.TxOptions{
-		IsoLevel: pgx.ReadCommitted,
+	_, err := lock.WithEnvironmentLock(ctx, l.Pool, tenant, project, env, func(tx lock.Tx) (struct{}, error) {
+		adapter := &PgxTxDBTX{Tx: tx}
+		return struct{}{}, fn(adapter)
 	})
-	if err != nil {
-		return fmt.Errorf("lock: begin transaction: %w", err)
-	}
-
-	defer func() {
-		_ = tx.Rollback(ctx)
-	}()
-
-	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = '5s'"); err != nil {
-		return fmt.Errorf("lock: set lock_timeout: %w", err)
-	}
-
-	lockKey := fmt.Sprintf("%s:%s:%s", tenant, project, env)
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", lockKey); err != nil {
-		return err
-	}
-
-	adapter := &PgxTxDBTX{Tx: tx}
-	if err := fn(adapter); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("lock: commit transaction: %w", err)
-	}
-
-	return nil
+	return err
 }
 
 // --- BuildOrchestratorAdapter: bridges services.BuildOrchestrator to routes.BuildOrchestratorService ---
@@ -153,13 +128,13 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 	}
 
 	resp, err := a.Orch.SubmitBuild(ctx, services.SubmitBuildRequest{
-		TenantID:    req.TenantID,
-		ProjectID:   req.ProjectID,
-		Environment: req.Environment,
-		CommitSHA:   req.CommitSHA,
-		Apps:        apps,
-		CreatedBy:   req.CreatedBy,
-		CallbackURL: "http://localhost/callback",
+		TenantID:      req.TenantID,
+		ProjectID:     req.ProjectID,
+		Environment:   req.Environment,
+		CommitSHA:     req.CommitSHA,
+		Apps:          apps,
+		CreatedBy:     req.CreatedBy,
+		CorrelationID: req.CorrelationID,
 	})
 	if err != nil {
 		return nil, err
@@ -213,11 +188,7 @@ func (a *BuildOrchestratorAdapter) IsBuildTerminal(ctx context.Context, buildID 
 	if err != nil {
 		return false, err
 	}
-	switch statemachine.State(build.Status) {
-	case statemachine.BuildSucceeded, statemachine.BuildFailed, statemachine.BuildCancelled:
-		return true, nil
-	}
-	return false, nil
+	return statemachine.IsBuildTerminal(statemachine.State(build.Status)), nil
 }
 
 // --- BuildStoreReaderAdapter: bridges db.BuildStore to sse.BuildStoreReader ---

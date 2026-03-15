@@ -194,10 +194,15 @@ func main() {
 		}
 		argocdToken := os.Getenv("ARGOCD_TOKEN")
 
-		syncClient := argocd.NewSyncClient(argocd.SyncClientConfig{
+		rawSyncClient := argocd.NewSyncClient(argocd.SyncClientConfig{
 			BaseURL:  argocdURL,
 			Token:    argocdToken,
 			Insecure: os.Getenv("ARGOCD_INSECURE") == "true",
+		})
+		syncClient := services.NewCircuitBreakerSyncClient(rawSyncClient, services.CircuitBreakerConfig{
+			OpenThreshold:  3,
+			CloseThreshold: 2,
+			RetryInterval:  30 * time.Second,
 		})
 
 		// NOTE: GitOpsPusher REMOVED — the Argo Workflow handles gitops-push

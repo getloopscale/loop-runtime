@@ -69,11 +69,12 @@ spec:
               value: "build"
             - name: REGISTRY_URL
               value: "k3d-loopzero-registry:5000"
-            # Workload cluster ingress — Traefik on k3d-loopzero-workload exposed at host:8090
-            # Uses host.k3d.internal (not localhost) because the API runs inside a pod,
-            # where localhost refers to the pod's loopback, not the Docker host.
+            # Workload cluster ingress — Traefik LoadBalancer on k3d-loopzero-workload.
+            # Uses the Docker IP of k3d-loopzero-workload-serverlb directly because
+            # host.k3d.internal does not resolve from within mgmt cluster pods.
+            # The LB exposes port 80 (Traefik HTTP entrypoint).
             - name: WORKLOAD_INGRESS_URL
-              value: "http://host.k3d.internal:8090"
+              value: "http://10.0.3.6:80"
           ports:
             - containerPort: 3001
               name: http

@@ -233,6 +233,34 @@ describe('DeployCommand', () => {
       expect(deps.hasGitRepo).not.toHaveBeenCalled();
       expect(deps.createGitBundle).not.toHaveBeenCalled();
     });
+
+    it('should exit 4 when token is empty string', async () => {
+      const deps = createMockDeps({
+        getToken: jest.fn().mockReturnValue(''),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(4);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput).toContain('Not authenticated');
+      expect(errOutput).toContain('loopzero login');
+      expect(deps.findLoopZeroYaml).not.toHaveBeenCalled();
+      expect(deps.hasGitRepo).not.toHaveBeenCalled();
+    });
+
+    it('should exit 4 when token is undefined', async () => {
+      const deps = createMockDeps({
+        getToken: jest.fn().mockReturnValue(undefined),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(4);
+      expect(deps.findLoopZeroYaml).not.toHaveBeenCalled();
+    });
   });
 
   describe('partial failure (2+ apps)', () => {

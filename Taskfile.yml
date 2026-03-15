@@ -292,6 +292,7 @@ tasks:
       - cd operators && go test ./... -short
       - cd api && go test ./... -short
       - cd infra/tests && go test ./unit/... -short
+      - cd cli && npm test
 
   test:integration:
     desc: Run integration tests (requires running clusters)
@@ -318,6 +319,7 @@ tasks:
       - cd pkg && golangci-lint run ./...
       - cd operators && golangci-lint run ./...
       - cd api && golangci-lint run ./...
+      - cd cli && npx eslint src/
 
   validate:manifests:
     desc: Validate all K8s manifests with kubeconform
@@ -326,6 +328,8 @@ tasks:
       - kubeconform --strict infra/tilt/api-deployment.yaml infra/tilt/operator-deployment.yaml
       # ArgoCD templates use CRD kinds (AppProject, Application) — skip those
       - kubeconform --strict --skip AppProject,Application infra/helm/argocd/templates/
+      # Monitoring manifests (ServiceMonitor, PrometheusRule are CRD kinds — skip those)
+      - kubeconform --strict --skip ServiceMonitor,PrometheusRule infra/helm/monitoring/manifests/
       # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate
 
   # ---------------------------------------------------------------------------

@@ -72,7 +72,6 @@ func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		CommitSHA:   "abc1234", // Integration test default
 		Apps:        apps,
 		CreatedBy:   req.CreatedBy,
-		CallbackURL: "http://localhost/callback",
 	})
 	if err != nil {
 		return nil, err

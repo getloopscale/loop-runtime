@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -21,13 +22,13 @@ type WorkflowSubmitter interface {
 
 // WorkflowSpec contains everything needed to submit a build workflow.
 type WorkflowSpec struct {
-	BuildID     string
-	TenantID    string
-	ProjectID   string
-	Environment string
-	CommitSHA   string
-	Apps        []AppSpec
-	CallbackURL string
+	BuildID       string
+	TenantID      string
+	ProjectID     string
+	Environment   string
+	CommitSHA     string
+	Apps          []AppSpec
+	CorrelationID string
 }
 
 // AppSpec describes a single app from loopzero.yaml.
@@ -71,13 +72,13 @@ type EnvironmentLocker interface {
 
 // SubmitBuildRequest contains the inputs for submitting a new build.
 type SubmitBuildRequest struct {
-	TenantID    string
-	ProjectID   string
-	Environment string
-	CommitSHA   string
-	Apps        []AppSpec
-	CreatedBy   string
-	CallbackURL string
+	TenantID      string
+	ProjectID     string
+	Environment   string
+	CommitSHA     string
+	Apps          []AppSpec
+	CreatedBy     string
+	CorrelationID string
 }
 
 // SubmitBuildResponse is returned after a build is successfully submitted.
@@ -164,11 +165,12 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 
 		// Step 3: create Build (QUEUED)
 		build := &db.Build{
-			TenantID:    req.TenantID,
-			ProjectID:   req.ProjectID,
-			Environment: req.Environment,
-			CommitSHA:   req.CommitSHA,
-			CreatedBy:   req.CreatedBy,
+			TenantID:      req.TenantID,
+			ProjectID:     req.ProjectID,
+			Environment:   req.Environment,
+			CommitSHA:     req.CommitSHA,
+			CreatedBy:     req.CreatedBy,
+			CorrelationID: req.CorrelationID,
 		}
 		if err := o.buildStore.Create(ctx, tx, build); err != nil {
 			return fmt.Errorf("submit build: create build: %w", err)
@@ -176,13 +178,13 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 
 		// Step 4: submit workflow
 		wfSpec := WorkflowSpec{
-			BuildID:     build.ID,
-			TenantID:    req.TenantID,
-			ProjectID:   req.ProjectID,
-			Environment: req.Environment,
-			CommitSHA:   req.CommitSHA,
-			Apps:        req.Apps,
-			CallbackURL: req.CallbackURL,
+			BuildID:       build.ID,
+			TenantID:      req.TenantID,
+			ProjectID:     req.ProjectID,
+			Environment:   req.Environment,
+			CommitSHA:     req.CommitSHA,
+			Apps:          req.Apps,
+			CorrelationID: req.CorrelationID,
 		}
 		if _, err := o.workflow.Submit(ctx, wfSpec); err != nil {
 			return fmt.Errorf("submit build: submit workflow: %w", err)
@@ -267,8 +269,7 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 		// Step 6: cancel the workflow (best-effort — workflow may already be done)
 		if build.WorkflowID != "" {
 			if cancelErr := o.workflow.Cancel(ctx, build.WorkflowID); cancelErr != nil {
-				// Log but don't fail — the state transition is what matters
-				_ = cancelErr
+				slog.Warn("workflow cancel failed (best-effort)", "workflow_id", build.WorkflowID, "error", cancelErr)
 			}
 		}
 
@@ -430,8 +431,7 @@ func (o *BuildOrchestrator) emitActivationFailure(ctx context.Context, buildID s
 		"error":  activationErr.Error(),
 	})
 	if _, err := o.eventStore.Append(ctx, buildID, "deploy.sync_failed", failedData); err != nil {
-		// Log but don't fail — best effort
-		_ = err
+		slog.Error("failed to emit activation failure event", "build_id", buildID, "error", err)
 	}
 }
 
