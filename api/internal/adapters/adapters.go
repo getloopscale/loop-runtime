@@ -148,6 +148,7 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 			Name: app.Name,
 			Type: appType,
 			Port: appPort,
+			Path: app.Path,
 		})
 	}
 
@@ -192,6 +193,7 @@ func (a *BuildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID
 			Name:        app.Name,
 			ImageDigest: app.ImageDigest,
 			URL:         app.URL,
+			Type:        app.Type,
 			DurationMs:  app.DurationMs,
 		})
 	}

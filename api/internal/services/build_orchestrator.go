@@ -4,7 +4,6 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -33,9 +32,10 @@ type WorkflowSpec struct {
 
 // AppSpec describes a single app from loopzero.yaml.
 type AppSpec struct {
-	Name string
-	Type string // "server", "worker", "frontend"
-	Port int
+	Name string `json:"name"`
+	Type string `json:"type"` // "server", "worker", "frontend"
+	Port int    `json:"port"`
+	Path string `json:"path,omitempty"`
 }
 
 // NOTE: GitOpsPusher was REMOVED from the API. The Argo Workflow's gitops-push
@@ -47,6 +47,7 @@ type AppRelease struct {
 	Name        string `json:"name"`
 	ImageDigest string `json:"image_digest"`
 	URL         string `json:"url"`
+	Type        string `json:"type,omitempty"` // "server", "worker", "frontend"
 	DurationMs  int    `json:"duration_ms"`
 }
 
@@ -293,7 +294,11 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 
 // OnBuildCompleted handles the callback from the build system when a build finishes.
 //
-// ALL state mutations happen INSIDE the environment lock (Rule 6).
+// Two-phase design (DA-17):
+//   - Phase 1 (Lock): Transition build to terminal state (SUCCEEDED/FAILED).
+//     This MUST commit independently so the build never stays stuck in RUNNING.
+//   - Phase 2 (Lock): Activate release (create release, sync, health probe).
+//     If this fails, the build is already SUCCEEDED and a failure event is emitted.
 //
 // Race condition guard (DA-15 EC-N): If build is QUEUED (Argo finished before
 // SubmitBuild transitioned to RUNNING), transitions QUEUED→RUNNING first.
@@ -320,8 +325,9 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		)
 	}
 
-	// ALL state mutations inside the environment lock (Rule 6)
-	return o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
+	// Phase 1 (Lock 1): Transition build to terminal state.
+	// This transaction MUST commit independently so the build never gets stuck in RUNNING.
+	err = o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		// Re-fetch build inside lock (state may have changed)
 		build, err = o.buildStore.GetByID(ctx, buildID)
 		if err != nil {
@@ -376,9 +382,57 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 			return fmt.Errorf("on build completed: emit build.succeeded: %w", err)
 		}
 
-		// Release creation and activation (still inside the same lock)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// If build failed, no activation needed — Phase 1 already emitted build.failed
+	if result.Status == "failed" {
+		return nil
+	}
+
+	// Re-fetch build after Phase 1 commit to get updated state
+	build, err = o.buildStore.GetByID(ctx, buildID)
+	if err != nil {
+		return fmt.Errorf("on build completed: re-fetch after phase 1: %w", err)
+	}
+
+	// If build was cancelled concurrently during Phase 1, skip activation
+	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) && build.Status != string(statemachine.BuildSucceeded) {
+		return nil
+	}
+
+	// Phase 2 (Lock 2): Release activation (create release, sync, health probe).
+	// If this fails, we handle the error gracefully — the build is already SUCCEEDED.
+	activationErr := o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		return o.activateRelease(ctx, tx, build, result)
 	})
+
+	if activationErr != nil {
+		// Activation failed — emit deploy failure event so the CLI knows.
+		// The build stays SUCCEEDED (Phase 1 already committed), which is correct:
+		// the code was built successfully, the deployment just didn't complete.
+		o.emitActivationFailure(ctx, buildID, activationErr)
+	}
+
+	return nil
+}
+
+// emitActivationFailure emits a deploy.sync_failed SSE event when release activation
+// fails after a successful build. This ensures the CLI gets notified instead of
+// waiting for a timeout.
+func (o *BuildOrchestrator) emitActivationFailure(ctx context.Context, buildID string, activationErr error) {
+	failedData, _ := json.Marshal(map[string]interface{}{
+		"status": "sync_failed",
+		"reason": "ACTIVATION_FAILED",
+		"error":  activationErr.Error(),
+	})
+	if _, err := o.eventStore.Append(ctx, buildID, "deploy.sync_failed", failedData); err != nil {
+		// Log but don't fail — best effort
+		_ = err
+	}
 }
 
 // activateRelease runs inside Lock 2 and orchestrates release creation through activation.
@@ -462,17 +516,17 @@ func (o *BuildOrchestrator) waitForSync(ctx context.Context, tx db.DBTX, build *
 	// ArgoCD Application name matches TenantController naming: {tenant}-{env}
 	argoAppName := fmt.Sprintf("%s-%s", build.TenantID, build.Environment)
 	if err := o.sync.TriggerSync(ctx, argoAppName); err != nil {
-		// Circuit breaker OPEN → fast-fail with PLATFORM_DEGRADED (spec §10.1 health gate)
-		// Release stays in PENDING; caller should transition to SYNC_FAILED
-		if errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
-			return true, nil
-		}
-		return false, fmt.Errorf("activate release: trigger sync: %w", err)
+		// Any sync failure (circuit breaker, ArgoCD 400, network error) is treated
+		// as a probe failure — the release will be marked SYNC_FAILED by finalizeActivation.
+		// We MUST NOT propagate this as a hard error because that would rollback the
+		// entire Phase 2 transaction, leaving no release record at all.
+		return true, nil
 	}
 
-	// Step 8f: health probes
+	// Step 8f: health probes (skip workers and frontends — they don't have /health endpoints)
 	for _, app := range result.Apps {
-		if appTypeFromName(app, result.Apps) == "worker" {
+		appType := appTypeFromName(app, result.Apps)
+		if appType == "worker" || appType == "frontend" {
 			continue
 		}
 		if app.URL == "" {
@@ -613,12 +667,13 @@ func deriveDeployID(releaseID string) string {
 }
 
 // appTypeFromName finds the app type from the callback apps list.
-// In the callback, apps carry their name; the original request carries the type.
-// Since we pass apps from the callback result which includes name but
-// the type info comes from the original build request, we store apps info
-// in the build record. For now, we use the URL heuristic: workers have empty URL.
+// When the callback includes a Type field, use it directly.
+// Otherwise, fall back to URL heuristic: empty URL = worker.
 func appTypeFromName(app AppRelease, apps []AppRelease) string {
-	// Workers have no URL
+	if app.Type != "" {
+		return app.Type
+	}
+	// Fallback: workers have no URL
 	if app.URL == "" {
 		return "worker"
 	}

@@ -1023,6 +1023,68 @@ func TestBuildOrchestrator_DeployCompletedSSE_DeployIDFormat(t *testing.T) {
 	}
 }
 
+// TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded tests that
+// when the Argo build succeeds but ArgoCD sync fails, the build MUST transition
+// to SUCCEEDED (not stay in RUNNING). The activation failure must be handled
+// gracefully: emit a deploy failure event, NOT propagate the error (which would
+// cause a transaction rollback leaving the build stuck in RUNNING forever).
+//
+// This is the root cause of the F-01 dogfooding bug: builds stuck in RUNNING
+// permanently when ArgoCD returns "another operation is already in progress".
+func TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded(t *testing.T) {
+	// Arrange
+	fakes := newOrchestratorFakes()
+	fakes.sync.triggerErr = fmt.Errorf("argocd sync: status 400: another operation is already in progress")
+	orch := fakes.buildOrchestrator()
+
+	resp, err := orch.SubmitBuild(context.Background(), defaultSubmitReq())
+	if err != nil {
+		t.Fatalf("SubmitBuild failed: %v", err)
+	}
+
+	cbReq := services.BuildCallbackRequest{
+		Status: "succeeded",
+		Apps: []services.AppRelease{
+			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", Type: "server", DurationMs: 45000},
+		},
+	}
+
+	// Act
+	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
+
+	// Assert — MUST NOT return error (activation failure is handled internally)
+	if err != nil {
+		t.Fatalf("expected OnBuildCompleted to handle sync failure gracefully, got error: %v", err)
+	}
+
+	// Build MUST be in SUCCEEDED (not RUNNING — the critical invariant)
+	build := fakes.buildStore.builds[resp.BuildID]
+	if build.Status != string(statemachine.BuildSucceeded) {
+		t.Errorf("expected build status SUCCEEDED, got %q — build is stuck!", build.Status)
+	}
+
+	// A deploy failure event MUST be emitted so the CLI knows what happened
+	syncFailedEvents := fakes.eventStore.eventsByType("deploy.sync_failed")
+	if len(syncFailedEvents) == 0 {
+		t.Error("expected deploy.sync_failed SSE event to be emitted when sync fails")
+	}
+
+	// There should be a release in SYNC_FAILED state
+	var release *db.Release
+	for _, r := range fakes.releaseStore.releases {
+		if r.BuildID == resp.BuildID {
+			release = r
+			break
+		}
+	}
+	if release == nil {
+		t.Fatal("expected a release to be created even when sync fails")
+	}
+	if release.Status != string(statemachine.ReleaseSyncFailed) {
+		t.Errorf("expected release status SYNC_FAILED, got %q", release.Status)
+	}
+}
+
 func TestBuildOrchestrator_CancelBuild_RunningBuild(t *testing.T) {
 	// Arrange
 	fakes := newOrchestratorFakes()

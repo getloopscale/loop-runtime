@@ -392,10 +392,8 @@ spec:
             cat > Dockerfile << DEOF
             FROM node:20-alpine
             WORKDIR /app
-            COPY package*.json ./
-            COPY yarn.lock* pnpm-lock.yaml* ./
-            RUN npm ci --omit=dev 2>/dev/null || npm install --production
             COPY . .
+            RUN npm ci --omit=dev 2>/dev/null || npm install --production
             EXPOSE ${PORT}
             CMD ["npm", "start"]
             DEOF
@@ -460,40 +458,142 @@ spec:
           runAsUser: 0
 
     # =========================================================================
-    # Step 5: generate-manifests
+    # Step 5: generate-manifests (multi-app monorepo support)
     # =========================================================================
     - name: generate-manifests
       container:
-        image: alpine/helm:3.14.2
+        image: node:20.11.1-alpine
         command:
           - sh
           - -c
           - |
             set -euo pipefail
-            cd /workspace
 
-            MANIFEST_DIR="/manifests/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
+            export MANIFEST_DIR="/manifests/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
             mkdir -p "$MANIFEST_DIR"
 
-            IMAGE="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}"
+            export IMAGE="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}"
+            export TENANT="{{workflow.parameters.tenant-id}}"
+            export PROJECT="{{workflow.parameters.project-id}}"
+            export ENV="{{workflow.parameters.environment}}"
+            export BUILD="{{workflow.parameters.build-id}}"
+            export NS="${TENANT}-${ENV}"
+            export APPS_JSON='{{workflow.parameters.apps}}'
 
-            # Generate K8s manifests using printf to avoid heredoc/YAML parsing issues
-            TENANT="{{workflow.parameters.tenant-id}}"
-            PROJECT="{{workflow.parameters.project-id}}"
-            ENV="{{workflow.parameters.environment}}"
-            BUILD="{{workflow.parameters.build-id}}"
-            NS="${TENANT}-${ENV}"
-            HOST="${PROJECT}.${TENANT}.loopzero.local"
+            node -e "
+            const fs = require('fs');
+            const apps = JSON.parse(process.env.APPS_JSON || '[]');
+            const image = process.env.IMAGE;
+            const tenant = process.env.TENANT;
+            const project = process.env.PROJECT;
+            const env = process.env.ENV;
+            const build = process.env.BUILD;
+            const ns = process.env.NS;
+            const manifestDir = process.env.MANIFEST_DIR;
 
-            printf 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: %s\n  namespace: %s\n  labels:\n    app: %s\n    loopzero.io/tenant: %s\n    loopzero.io/environment: %s\n    loopzero.io/build-id: %s\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: %s\n  template:\n    metadata:\n      labels:\n        app: %s\n    spec:\n      containers:\n        - name: app\n          image: %s\n          ports:\n            - containerPort: 3000\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  selector:\n    app: %s\n  ports:\n    - port: 80\n      targetPort: 3000\n---\napiVersion: traefik.io/v1alpha1\nkind: IngressRoute\nmetadata:\n  name: %s\n  namespace: %s\n  labels:\n    app: %s\n    loopzero.io/tenant: %s\n    loopzero.io/environment: %s\nspec:\n  entryPoints:\n    - web\n  routes:\n    - match: Host(`%s`)\n      kind: Rule\n      services:\n        - name: %s\n          port: 80\n' \
-              "$PROJECT" "$NS" "$PROJECT" "$TENANT" "$ENV" "$BUILD" "$PROJECT" "$PROJECT" "$IMAGE" "$PROJECT" "$NS" "$PROJECT" "$PROJECT" "$NS" "$PROJECT" "$TENANT" "$ENV" "$HOST" "$PROJECT" \
-              > "$MANIFEST_DIR/manifests.yaml"
+            // If no apps specified, fall back to single-app mode
+            const appList = apps.length > 0 ? apps : [{name: project, type: 'server', port: 3000, path: '.'}];
+            const isMonorepo = apps.length > 1;
+            let manifests = '';
+            const callbackApps = [];
 
-            # Write the host to a file for the callback to use
-            echo "$HOST" > /manifests/app-host
+            for (const app of appList) {
+              const appName = app.name;
+              const appType = app.type || 'server';
+              const appPort = app.port || 3000;
+              const appPath = app.path || (isMonorepo ? 'apps/' + appName : '.');
+              const host = isMonorepo
+                ? appName + '-' + project + '.' + tenant + '.loopzero.local'
+                : project + '.' + tenant + '.loopzero.local';
 
-            echo "Manifests generated at $MANIFEST_DIR"
-            cat "$MANIFEST_DIR/manifests.yaml"
+              // Command: for monorepo, cd into app dir and npm start; for single app, npm start
+              const cmd = isMonorepo
+                ? 'cd ' + appPath + ' && npm start'
+                : 'npm start';
+
+              // Deployment (always)
+              manifests += 'apiVersion: apps/v1\n';
+              manifests += 'kind: Deployment\n';
+              manifests += 'metadata:\n';
+              manifests += '  name: ' + appName + '\n';
+              manifests += '  namespace: ' + ns + '\n';
+              manifests += '  labels:\n';
+              manifests += '    app: ' + appName + '\n';
+              manifests += '    loopzero.io/tenant: ' + tenant + '\n';
+              manifests += '    loopzero.io/project: ' + project + '\n';
+              manifests += '    loopzero.io/environment: ' + env + '\n';
+              manifests += '    loopzero.io/build-id: ' + build + '\n';
+              manifests += 'spec:\n';
+              manifests += '  replicas: 1\n';
+              manifests += '  selector:\n';
+              manifests += '    matchLabels:\n';
+              manifests += '      app: ' + appName + '\n';
+              manifests += '  template:\n';
+              manifests += '    metadata:\n';
+              manifests += '      labels:\n';
+              manifests += '        app: ' + appName + '\n';
+              manifests += '    spec:\n';
+              manifests += '      containers:\n';
+              manifests += '        - name: app\n';
+              manifests += '          image: ' + image + '\n';
+              manifests += '          command: [\"sh\", \"-c\", \"' + cmd + '\"]\n';
+              if (appType !== 'worker') {
+                manifests += '          ports:\n';
+                manifests += '            - containerPort: ' + appPort + '\n';
+              }
+              manifests += '          env:\n';
+              manifests += '            - name: PORT\n';
+              manifests += '              value: \"' + appPort + '\"\n';
+              manifests += '            - name: NODE_ENV\n';
+              manifests += '              value: production\n';
+              manifests += '---\n';
+
+              // Service + IngressRoute only for server/frontend (not worker)
+              if (appType !== 'worker') {
+                manifests += 'apiVersion: v1\n';
+                manifests += 'kind: Service\n';
+                manifests += 'metadata:\n';
+                manifests += '  name: ' + appName + '\n';
+                manifests += '  namespace: ' + ns + '\n';
+                manifests += 'spec:\n';
+                manifests += '  selector:\n';
+                manifests += '    app: ' + appName + '\n';
+                manifests += '  ports:\n';
+                manifests += '    - port: 80\n';
+                manifests += '      targetPort: ' + appPort + '\n';
+                manifests += '---\n';
+
+                manifests += 'apiVersion: traefik.io/v1alpha1\n';
+                manifests += 'kind: IngressRoute\n';
+                manifests += 'metadata:\n';
+                manifests += '  name: ' + appName + '\n';
+                manifests += '  namespace: ' + ns + '\n';
+                manifests += '  labels:\n';
+                manifests += '    app: ' + appName + '\n';
+                manifests += '    loopzero.io/tenant: ' + tenant + '\n';
+                manifests += '    loopzero.io/environment: ' + env + '\n';
+                manifests += 'spec:\n';
+                manifests += '  entryPoints:\n';
+                manifests += '    - web\n';
+                manifests += '  routes:\n';
+                manifests += '    - match: Host(\x60' + host + '\x60)\n';
+                manifests += '      kind: Rule\n';
+                manifests += '      services:\n';
+                manifests += '        - name: ' + appName + '\n';
+                manifests += '          port: 80\n';
+                manifests += '---\n';
+
+                callbackApps.push({name: appName, type: appType, url: 'http://' + host});
+              } else {
+                callbackApps.push({name: appName, type: appType, url: ''});
+              }
+            }
+
+            fs.writeFileSync(manifestDir + '/manifests.yaml', manifests);
+            fs.writeFileSync('/manifests/callback-apps.json', JSON.stringify(callbackApps));
+            console.log('Generated manifests for ' + appList.length + ' app(s)');
+            console.log(manifests);
+            "
         volumeMounts:
           - name: workspace
             mountPath: /workspace
@@ -730,37 +830,31 @@ spec:
             CALLBACK_URL="{{workflow.parameters.api-callback-url}}/{{workflow.parameters.build-id}}/callback"
             IMAGE="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}"
 
-            # Read the generated host for URL
-            APP_URL=""
-            if [ -f /manifests/app-host ] && [ "$BUILD_STATUS" = "succeeded" ]; then
-              APP_HOST=$(cat /manifests/app-host)
-              APP_URL="http://${APP_HOST}"
-            fi
-
-            # Build a single-app callback payload (Sprint 2: one image per build)
-            # The project-id IS the app name for single-app deploys
-            APP_NAME="{{workflow.parameters.project-id}}"
-            if [ -n "$APP_URL" ]; then
-              BODY="{\"status\":\"${BUILD_STATUS}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE}\",\"url\":\"${APP_URL}\"}]}"
+            # Build per-app callback payload from generate-manifests output
+            if [ "$BUILD_STATUS" = "succeeded" ] && [ -f /manifests/callback-apps.json ]; then
+              # Read per-app data and add image_digest to each
+              CALLBACK_APPS=$(cat /manifests/callback-apps.json)
+              # Use sed to inject image_digest into each app object
+              APPS_WITH_IMAGE=$(printf '%s' "$CALLBACK_APPS" | sed "s|\"name\"|\"image_digest\":\"${IMAGE}\",\"name\"|g")
+              BODY="{\"status\":\"${BUILD_STATUS}\",\"apps\":${APPS_WITH_IMAGE}}"
             elif [ "$BUILD_STATUS" = "failed" ]; then
               # Include error details from workflow failures
               FAILED_MSG="Build pipeline failed"
               FAILURES='{{workflow.failures}}'
               if [ -n "$FAILURES" ] && [ "$FAILURES" != "<no value>" ] && [ "$FAILURES" != "null" ] && [ "$FAILURES" != "[]" ]; then
-                # Extract displayName and message using grep -o (BusyBox compatible)
                 STEP_NAME=$(printf '%s' "$FAILURES" | grep -o '"displayName":"[^"]*"' | head -1 | cut -d'"' -f4) || true
                 STEP_MSG=$(printf '%s' "$FAILURES" | grep -o '"message":"[^"]*"' | head -1 | cut -d'"' -f4) || true
                 if [ -n "$STEP_NAME" ]; then
                   FAILED_MSG="${STEP_NAME}: ${STEP_MSG:-failed}"
                 elif [ ${#FAILURES} -gt 5 ]; then
-                  # Fallback: include raw failures truncated
                   FAILED_MSG="Build pipeline failed: $(printf '%s' "$FAILURES" | head -c 200)"
                 fi
               fi
-              # Escape quotes in error message for JSON and truncate to 500 chars
               ESCAPED_MSG=$(printf '%s' "$FAILED_MSG" | sed 's/"/\\"/g' | head -c 500)
+              APP_NAME="{{workflow.parameters.project-id}}"
               BODY="{\"status\":\"${BUILD_STATUS}\",\"error\":\"${ESCAPED_MSG}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE}\"}]}"
             else
+              APP_NAME="{{workflow.parameters.project-id}}"
               BODY="{\"status\":\"${BUILD_STATUS}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE}\"}]}"
             fi
             echo "Callback body: $BODY"

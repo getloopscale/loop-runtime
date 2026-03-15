@@ -24,6 +24,7 @@ type AppInput struct {
 	Name string `json:"name"`
 	Type string `json:"type,omitempty"` // "server", "worker", "frontend"
 	Port int    `json:"port,omitempty"`
+	Path string `json:"path,omitempty"`
 }
 
 // SubmitBuildInput contains the inputs for submitting a new build via the route handler.
@@ -54,6 +55,7 @@ type BuildCallbackApp struct {
 	Name        string `json:"name"`
 	ImageDigest string `json:"image_digest"`
 	URL         string `json:"url"`
+	Type        string `json:"type,omitempty"` // "server", "worker", "frontend"
 	DurationMs  int    `json:"duration_ms"`
 }
 

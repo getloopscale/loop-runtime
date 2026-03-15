@@ -1,3 +1,6 @@
+import * as path from 'path';
+import * as fs from 'fs';
+
 export interface LoopZeroYamlApp {
   path: string;
   framework: string;
@@ -74,9 +77,6 @@ export function parseLoopZeroYaml(raw: string): LoopZeroYaml {
  * Walk up from cwd to gitRoot looking for loopzero.yaml, parse it, and return the result.
  */
 export function findLoopZeroYaml(cwd: string, gitRoot: string): LoopZeroYamlResult | null {
-  const path = require('path');
-  const fs = require('fs');
-
   let dir = cwd;
   while (true) {
     const candidate = path.join(dir, 'loopzero.yaml');

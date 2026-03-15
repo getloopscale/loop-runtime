@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Build stuck in RUNNING permanently when ArgoCD sync fails — split OnBuildCompleted into two-phase transaction (DA-17): Phase 1 commits build SUCCEEDED independently, Phase 2 handles release activation with graceful failure (#S2-dogfood F-01)
+- Health probe failing on fresh deploys due to insufficient retries — extended default backoffs from 3 attempts/6s to 10 attempts/~120s, matching spec §10.1 activation timeout (#S2-dogfood F-03)
+- ArgoCD TriggerSync error propagating as hard error and rolling back entire transaction — sync failures now treated as probe failures, allowing release to be marked SYNC_FAILED instead of silently disappearing (#S2-dogfood F-04)
+
 ### Added
+- Multi-app monorepo manifest generation in Argo Workflow — per-app Deployment, Service, and IngressRoute with correct ports and start commands (#S2-monorepo)
+- Per-app callback payload from Argo Workflow — includes `type` field for each app, enabling frontend/worker skip logic (#S2-monorepo)
+- `path` field on `AppSpec`/`AppInput` structs — CLI sends app path from loopzero.yaml through to workflow for correct monorepo `cd apps/<name> && npm start` commands (#S2-monorepo)
+- `type` field on `AppRelease` struct — callback apps now carry type info for health probe skip decisions (#S2-monorepo)
+- `parseLoopZeroYaml` unit tests covering secrets parsing, multi-app, malformed YAML (#S2-monorepo)
 - Traefik IngressRoute generated in workflow manifests — deploys now get a real URL `http://{project}.{tenant}.loopzero.local` (#S2-QA2 F-02)
 - CLI handles `build.failed` SSE event as terminal — exits immediately with code 2 and actionable error instead of waiting 5min timeout (#S2-QA2 F-03)
 - Auto-generated Dockerfile for Node.js projects — Kaniko builds succeed without user-provided Dockerfile, respects user Dockerfile if present (#S2-QA3 F-01)
@@ -36,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CLI adapter modules: `cli/src/adapters/git.ts`, `source-bundle.ts`, `source-upload.ts`, `loopzero-yaml.ts` — extracted from index.ts (#G7)
 
 ### Changed
+- Health probe now skips frontend apps in addition to workers — Next.js and other frontends don't have `/health` endpoints (#S2-monorepo)
+- Dockerfile generation uses `COPY . .` before `npm ci` — monorepo workspace resolution works correctly (#S2-monorepo)
+- Deploy timeout increased from 5 to 10 minutes — monorepo builds with 4 apps need more time (#S2-monorepo)
 - Image tag now uses real git commit SHA instead of hardcoded `dev-local` — K8s pulls new image on each deploy (#S2-QA2 F-01)
 - `commit_sha` flows from CLI → API → Argo Workflow → Kaniko image tag — full pipeline wired (#S2-QA2 F-01)
 - Deploy output shows `deployed` instead of `deployed (background worker)` for apps without URL (#S2-QA2 F-05)
@@ -68,6 +81,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Compiled binaries (`api/main`, `operators/main`, `cmd`, `scripts`) removed from git tracking — added to `.gitignore` (#S2-review)
 
 ### Fixed
+- `parseLoopZeroYaml` secrets parser — leading whitespace was not stripped before removing YAML list dash, causing secret names like `      - DATABASE_URL` instead of `DATABASE_URL` (#S2-monorepo)
+- CLI `getSecrets` response mapping — API returns `{name, environment, app}` objects but CLI was treating them as plain strings, causing all secrets to appear "missing" (#S2-monorepo)
+- Argo Workflow `notify-api` sed delimiter — image URLs containing `/` broke the default sed `/` delimiter, now uses `|` (#S2-monorepo)
+- Argo Workflow `generate-manifests` env vars — shell variables not exported to Node.js child process, causing `undefined` manifest directory (#S2-monorepo)
+- Pre-existing lint errors fixed: `require()` imports replaced with ES imports in `loopzero-yaml.ts`, unused variables removed in `deploy.ts` and `init.ts` (#S2-lint)
 - SSE stream handler: all silent error returns now log the error — enables diagnosing connection drops (#S2-QA7 F-01)
 - SSE stream handler: poll loop distinguishes context cancellation (client disconnect) from DB errors in logs (#S2-QA7 F-01)
 - SSE client `reader.cancel()` now catches rejected Promise — prevents uncaught AbortError crash when `close()` is called during active stream (#S2-QA4 F-10)

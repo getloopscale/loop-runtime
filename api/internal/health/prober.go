@@ -19,7 +19,8 @@ import (
 // testing Ingress controllers in any environment (local, CI, production).
 type HTTPProber struct {
 	Client     *http.Client
-	IngressURL string // Optional: e.g., "http://localhost:8090". When set, probe through Ingress.
+	IngressURL string        // Optional: e.g., "http://localhost:8090". When set, probe through Ingress.
+	Backoffs   []time.Duration // Optional: retry backoffs. Default: 10 retries over ~120s for real deploys.
 }
 
 // Probe sends HTTP GET to url+path and returns nil if the response is 200-399.
@@ -31,7 +32,12 @@ func (p *HTTPProber) Probe(ctx context.Context, appURL string, path string) erro
 		return fmt.Errorf("health probe: %w", err)
 	}
 
-	backoffs := []time.Duration{0, 2 * time.Second, 4 * time.Second}
+	backoffs := p.Backoffs
+	if len(backoffs) == 0 {
+		// Default: ~120s total — gives pods time to pull image and start.
+		// Spec §10.1: activation timeout up to 150s.
+		backoffs = []time.Duration{0, 5 * time.Second, 10 * time.Second, 15 * time.Second, 15 * time.Second, 15 * time.Second, 15 * time.Second, 15 * time.Second, 15 * time.Second, 15 * time.Second}
+	}
 	var lastErr error
 
 	for attempt, wait := range backoffs {
@@ -66,7 +72,7 @@ func (p *HTTPProber) Probe(ctx context.Context, appURL string, path string) erro
 		lastErr = fmt.Errorf("health probe attempt %d: status %d", attempt+1, resp.StatusCode)
 	}
 
-	return fmt.Errorf("health probe failed after 3 attempts: %w", lastErr)
+	return fmt.Errorf("health probe failed after %d attempts: %w", len(backoffs), lastErr)
 }
 
 // resolveEndpoint determines the actual endpoint to probe and the Host header.

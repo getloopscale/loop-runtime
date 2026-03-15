@@ -1,5 +1,5 @@
 import { ApiError } from '../api/client';
-import { DeployRenderer, DeployRendererOptions } from '../output/deploy-renderer';
+import { DeployRenderer } from '../output/deploy-renderer';
 
 interface LoopZeroYamlApp {
   path: string;
@@ -29,6 +29,7 @@ interface AppInput {
   name: string;
   type?: string;  // "server" | "worker" | "frontend"
   port?: number;
+  path?: string;
 }
 
 interface SubmitBuildInput {
@@ -173,8 +174,8 @@ export class DeployCommand {
       }
     }
 
-    // 9. Get HEAD commit
-    const commit = this.deps.getHeadCommit();
+    // 9. Get HEAD commit (validates git has at least one commit)
+    this.deps.getHeadCommit();
 
     // 10. Create git bundle
     let bundlePath: string;
@@ -202,6 +203,7 @@ export class DeployCommand {
       name,
       type: this.resolveAppType(config.apps[name]),
       port: config.apps[name]?.port ?? undefined,
+      path: config.apps[name]?.path ?? undefined,
     }));
     let buildResult: SubmitBuildResult;
     try {
@@ -231,7 +233,7 @@ export class DeployCommand {
     }
 
     // 15. Connect SSE stream and wait for completion
-    const DEPLOY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+    const DEPLOY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
     const deployStartTime = Date.now();
 
     const renderer = new DeployRenderer({

@@ -267,7 +267,7 @@ export class InitCommand {
    * - Names containing "worker", "job", "queue", "cron" → "worker"
    * - Everything else → "server"
    */
-  private inferAppType(name: string, framework: string, port: number | null): 'server' | 'worker' | 'frontend' {
+  private inferAppType(name: string, framework: string, _port: number | null): 'server' | 'worker' | 'frontend' {
     // Frontend frameworks
     if (FRONTEND_FRAMEWORKS.includes(framework)) {
       return 'frontend';

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestHTTPProber_HealthyServer(t *testing.T) {
@@ -17,7 +18,7 @@ func TestHTTPProber_HealthyServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	prober := &HTTPProber{Client: srv.Client()}
+	prober := &HTTPProber{Client: srv.Client(), Backoffs: []time.Duration{0, 0, 0}}
 	err := prober.Probe(context.Background(), srv.URL, "/health")
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
@@ -32,7 +33,7 @@ func TestHTTPProber_ServerReturns500ThreeTimes(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	prober := &HTTPProber{Client: srv.Client()}
+	prober := &HTTPProber{Client: srv.Client(), Backoffs: []time.Duration{0, 0, 0}}
 	err := prober.Probe(context.Background(), srv.URL, "/health")
 	if err == nil {
 		t.Fatal("expected error after 3 failed attempts")
@@ -54,7 +55,7 @@ func TestHTTPProber_FailThenRecover(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	prober := &HTTPProber{Client: srv.Client()}
+	prober := &HTTPProber{Client: srv.Client(), Backoffs: []time.Duration{0, 0, 0}}
 	err := prober.Probe(context.Background(), srv.URL, "/health")
 	if err != nil {
 		t.Fatalf("expected success on 3rd attempt, got: %v", err)
@@ -65,7 +66,7 @@ func TestHTTPProber_FailThenRecover(t *testing.T) {
 }
 
 func TestHTTPProber_UnreachableServer(t *testing.T) {
-	prober := &HTTPProber{Client: &http.Client{}}
+	prober := &HTTPProber{Client: &http.Client{}, Backoffs: []time.Duration{0, 0, 0}}
 	// Port 1 is almost certainly not listening
 	err := prober.Probe(context.Background(), "http://127.0.0.1:1", "/health")
 	if err == nil {
@@ -98,7 +99,7 @@ func TestHTTPProber_Status400IsFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	prober := &HTTPProber{Client: srv.Client()}
+	prober := &HTTPProber{Client: srv.Client(), Backoffs: []time.Duration{0, 0, 0}}
 	err := prober.Probe(context.Background(), srv.URL, "/health")
 	if err == nil {
 		t.Fatal("expected 400 to be failure")
@@ -114,7 +115,7 @@ func TestHTTPProber_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
-	prober := &HTTPProber{Client: srv.Client()}
+	prober := &HTTPProber{Client: srv.Client(), Backoffs: []time.Duration{0, 0, 0}}
 	err := prober.Probe(ctx, srv.URL, "/health")
 	if err == nil {
 		t.Fatal("expected error when context is cancelled")
