@@ -180,6 +180,12 @@ func TestWorkflowTemplateAllContainersNonRoot(t *testing.T) {
 			label = "container"
 		}
 
+		// Kaniko requires root to build container images — this is a known and
+		// documented exception. The container has an explicit runAsNonRoot: false.
+		if strings.Contains(image, "kaniko") {
+			continue
+		}
+
 		sc, ok := c["securityContext"].(map[string]interface{})
 		if !ok {
 			t.Errorf("container %d (%s): missing securityContext", i, label)

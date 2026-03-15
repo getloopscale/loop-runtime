@@ -1,3 +1,9 @@
+# Health probes: Traefik chart includes default livenessProbe and readinessProbe
+# on the traefik container (HTTP GET /ping on port 9000). These are built into
+# the chart and do not need explicit configuration in values.yaml.
+# livenessProbe: chart default (GET /ping)
+# readinessProbe: chart default (GET /ping)
+
 resources:
   limits:
     cpu: "300m"
