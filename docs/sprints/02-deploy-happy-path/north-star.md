@@ -8,19 +8,115 @@
 
 ## 1. O OBJETIVO (Uma Frase)
 
-**Um usuário roda `loopzero deploy` e recebe uma URL com a aplicação rodando.**
+**O dogfood-monorepo deploya via `loopzero deploy` e TODAS as apps ficam live com URLs reais.**
 
-Não é "a API aceita requests". Não é "o build roda". Não é "o pod existe". É:
+Não é "a API aceita requests". Não é "o build roda". Não é "o pod existe". Não é um app hello-world inventado na hora. É:
 
 ```
-loopzero login → loopzero init → loopzero deploy → curl URL → HTTP 200
+loopzero login → cd dogfood-monorepo → loopzero deploy → curl URL/health → HTTP 200
 ```
 
-Se o `curl` no final não retorna 200, o sprint NÃO está completo. Tudo o mais é meio, não fim.
+Se o `curl` no final não retorna 200 para as apps `api` e `gateway`, o sprint NÃO está completo. Tudo o mais é meio, não fim.
 
 ---
 
-## 2. O QUE "PRONTO" SIGNIFICA (Exit Gate)
+## 2. O PROJETO DE REFERÊNCIA — dogfood-monorepo
+
+O exit gate da Sprint 2 é validado exclusivamente contra o **dogfood-monorepo**. Não é um app hello-world de 3 linhas. É um monorepo real que simula o cenário de uso do LoopZero.
+
+**Localização:** `infra/tests/e2e/fixtures/dogfood-monorepo/`
+
+### Estrutura
+
+```
+dogfood-monorepo/
+├── loopzero.yaml              ← projeto: dogfood-saas, 4 apps
+├── package.json            ← npm workspaces + turbo
+├── turbo.json              ← build pipeline (dependsOn: ^build)
+├── package-lock.json       ← lockfile (OBRIGATÓRIO para npm ci)
+├── apps/
+│   ├── api/                ← NestJS, port 3000, type: server
+│   │   └── src/
+│   │       ├── main.ts
+│   │       └── controllers/
+│   │           ├── health.controller.ts   ← GET /health → {status: "ok"}
+│   │           └── tasks.controller.ts
+│   ├── gateway/            ← Express, port 4000, type: server
+│   │   └── src/
+│   │       ├── index.ts
+│   │       └── routes/
+│   │           ├── health.ts              ← GET /health → {status: "ok"}
+│   │           └── proxy.ts
+│   ├── worker/             ← Node.js, type: worker (SEM port, SEM URL)
+│   │   └── src/
+│   │       ├── index.ts                   ← loop infinito com queue
+│   │       └── handlers/
+│   └── web/                ← Next.js, type: frontend
+│       └── src/app/
+└── packages/
+    ├── shared-config/      ← loadConfig() — compartilhado entre apps
+    └── shared-utils/       ← createLogger(), sleep(), retry() — compartilhado
+```
+
+### loopzero.yaml (o contrato)
+
+```yaml
+project: dogfood-saas
+
+apps:
+  api:
+    type: server
+    framework: nestjs
+    path: apps/api
+    port: 3000
+    secrets:
+      - DATABASE_URL
+      - JWT_SECRET
+
+  gateway:
+    type: server
+    framework: express
+    path: apps/gateway
+    port: 4000
+
+  worker:
+    type: worker
+    framework: node
+    path: apps/worker
+    secrets:
+      - DATABASE_URL
+      - REDIS_URL
+
+  web:
+    type: frontend
+    framework: nextjs
+    path: apps/web
+```
+
+### O que torna este monorepo um teste real
+
+| Característica | Por que importa |
+|---------------|----------------|
+| **4 apps** (não 1) | Testa multi-app deploy, partial failure (exit 5), e `--app` filter |
+| **3 tipos diferentes** (`server`, `worker`, `frontend`) | Testa health probe em servers, skip probe em workers, frontend handling |
+| **npm workspaces + turbo** | Testa que `npm ci` funciona com hoisted dependencies e que o build pipeline resolve `^build` dependencies |
+| **Shared packages** (`shared-config`, `shared-utils`) | Testa que packages compartilhados são buildados antes das apps (turbo `dependsOn: ^build`) |
+| **Secrets declarados** | Testa validação de secrets pre-deploy (DA-8) |
+| **Health endpoints reais** | `api:3000/health` e `gateway:4000/health` retornam JSON real — o health probe DEVE funcionar contra eles |
+| **Worker sem port** | Worker é loop infinito — NUNCA recebe health probe, NUNCA recebe URL |
+
+### O que DEVE funcionar no dogfood-monorepo
+
+```
+api      → Pod rodando, /health retorna 200, URL gerada
+gateway  → Pod rodando, /health retorna 200, URL gerada
+worker   → Pod rodando, SEM health probe, SEM URL (type: worker)
+web      → Build Next.js funciona, deploy funciona
+```
+
+---
+
+## 3. O QUE "PRONTO" SIGNIFICA (Exit Gate)
 
 O sprint SÓ está completo quando TODOS estes passos funcionam em sequência, sem intervenção manual:
 
@@ -28,29 +124,53 @@ O sprint SÓ está completo quando TODOS estes passos funcionam em sequência, s
 # 1. Login com token GitHub real
 loopzero login --token $GITHUB_TOKEN
 
-# 2. Init em projeto Node.js
-mkdir /tmp/test-app && cd /tmp/test-app
-cat > package.json << 'EOF'
-{"name":"app","scripts":{"start":"node server.js"}}
-EOF
-cat > server.js << 'EOF'
-require("http").createServer((req,res) => {
-  if (req.url === "/health") { res.writeHead(200); res.end("ok"); return; }
-  res.writeHead(200); res.end("hello from loopzero");
-}).listen(process.env.PORT || 3000);
-EOF
-npm install --package-lock-only
-git init && git add -A && git commit -m "init"
-loopzero init --yes --name test-app
+# 2. Copiar o dogfood-monorepo para diretório temporário e inicializar git
+cp -r infra/tests/e2e/fixtures/dogfood-monorepo /tmp/dogfood-test
+cd /tmp/dogfood-test
+git init && git add -A && git commit -m "initial commit"
 
 # 3. Deploy REAL (não simulado, não fake)
+#    loopzero.yaml já existe no fixture — NÃO precisa de loopzero init
 loopzero deploy
 
-# 4. URL funciona
-curl -f <URL_RETORNADA>/health   # HTTP 200
+# 4. Verificar que apps server têm URLs e respondem
+curl -f <URL_API>/health       # HTTP 200 — {status: "ok"}
+curl -f <URL_GATEWAY>/health   # HTTP 200 — {status: "ok"}
+
+# 5. Verificar JSON output
+loopzero deploy --json
+# Deve conter 4 apps:
+#   api:     status "deployed", url preenchida
+#   gateway: status "deployed", url preenchida
+#   worker:  status "deployed", url VAZIA (type: worker)
+#   web:     status "deployed", url preenchida
+
+# 6. Verificar exit code
+echo $?  # DEVE ser 0
 ```
 
 **Se o passo 4 falha, nada mais importa.**
+
+### Exit Gate Alternativo — Deploy parcial com `--app`
+
+```bash
+# Deploy apenas a API
+cd /tmp/dogfood-test
+loopzero deploy --app api
+curl -f <URL_API>/health   # HTTP 200
+
+# Deploy apenas o worker (sem URL, sem probe)
+loopzero deploy --app worker
+echo $?  # 0 — worker deployado sem health probe
+```
+
+### O que NÃO é exit gate
+
+- Deployar um app hello-world de 3 linhas inventado na hora
+- Testes passando mas nenhum deploy real executado
+- "O pod existe" sem verificar que `/health` retorna 200
+- Builds que completam mas o ArgoCD não sincroniza
+- Pods em `CrashLoopBackOff` ou `ErrImagePull`
 
 ---
 
@@ -152,13 +272,19 @@ Estes testes DEVEM existir e DEVEM passar. Sem exceção.
 | Idempotency mismatch → 422 | `concurrent_builds_test.go` | Key + payload diferente |
 | Crash do holder → lock liberado | `lock_crash_recovery_test.go` (se existir) | pg_advisory_xact_lock auto-release |
 
-### 4.4. Teste E2E (o que prova que o sprint está completo)
+### 4.4. Teste E2E — dogfood-monorepo (o que prova que o sprint está completo)
 
 | Teste | O que valida |
 |-------|-------------|
-| Deploy single app | Pod rodando, URL retorna 200 |
+| Deploy dogfood-monorepo completo | 4 apps deployadas, api e gateway com URL, worker sem URL |
+| `curl <URL_API>/health` | HTTP 200, body `{status: "ok"}` |
+| `curl <URL_GATEWAY>/health` | HTTP 200, body `{status: "ok"}` |
+| Worker sem health probe | Worker deployado sem timeout de probe |
+| `--json` com 4 apps | Schema §0.3 com api, gateway, worker, web |
+| `--app api` (deploy parcial) | Apenas api deployada, exit 0 |
 | Segundo deploy usa cache | Build mais rápido ou log indica cache hit |
 | Dois deploys simultâneos | Um 202, um rejeitado com exit 3 |
+| Shared packages compilam | `shared-config` e `shared-utils` buildados antes das apps |
 
 ### 4.5. Verificações Automáticas
 
@@ -189,6 +315,7 @@ grep -rn 'func isBuildTerminal' api/
 
 | # | Regra | Por quê |
 |---|-------|---------|
+| F0 | **Testar SEMPRE contra o dogfood-monorepo (`infra/tests/e2e/fixtures/dogfood-monorepo/`)** | Este é o projeto de referência. 4 apps, 3 tipos, workspaces, shared packages. Se funciona com hello-world mas falha com dogfood-monorepo, NÃO está pronto. |
 | F1 | **Ler o spec (`docs/technical.md`) ANTES de implementar qualquer coisa** | Implementamos SourceStore 3 vezes porque não lemos o spec. Custo: ~3h de retrabalho. |
 | F2 | **Usar implementações reais contra infraestrutura real** | Fakes escondem 100% dos problemas reais. Os 10 problemas de infra que resolvemos NUNCA teriam aparecido com fakes. |
 | F3 | **Escrever o teste ANTES do código** | Red → Green → Refactor. Sem exceção. Se o teste não falha primeiro, ele não prova nada. |
@@ -207,6 +334,7 @@ grep -rn 'func isBuildTerminal' api/
 
 | # | Regra | Consequência se violar |
 |---|-------|-----------------------|
+| N0 | **NUNCA validar o sprint com app hello-world inventado na hora** | O exit gate é o dogfood-monorepo. 4 apps, 3 tipos, workspaces, shared packages. Hello-world esconde 100% dos problemas reais de monorepo. |
 | N1 | **NUNCA usar Fake* em código de produção (`main.go`, `adapters.go`)** | O deploy inteiro vira simulação. O exit gate nunca é satisfeito. Fakes SÓ existem em `_test.go`. |
 | N2 | **NUNCA implementar sem ler a seção relevante do spec** | Implementação errada. Retrabalho. Já aconteceu 3 vezes neste sprint. |
 | N3 | **NUNCA usar `pg_advisory_lock` (session-scoped)** | Deadlocks em connection pool. Use SOMENTE `pg_advisory_xact_lock`. |
@@ -304,7 +432,12 @@ Entre Lock 1 e Lock 2, o build roda SEM lock. Isso é by-design.
 ## 9. CHECKLIST ANTES DE ABRIR PR
 
 ```
-[ ] Rodei o exit gate completo (seção 2) e o curl retornou 200
+[ ] Deployei o dogfood-monorepo (infra/tests/e2e/fixtures/dogfood-monorepo/)
+[ ] curl <URL_API>/health retornou 200
+[ ] curl <URL_GATEWAY>/health retornou 200
+[ ] Worker deployado sem health probe (type: worker)
+[ ] loopzero deploy --json mostra 4 apps (api, gateway, worker, web)
+[ ] loopzero deploy --app api funciona isoladamente
 [ ] Zero Fake* em código de produção (main.go, adapters.go)
 [ ] Zero termos internos no CLI (grep da seção 4.5)
 [ ] Zero isBuildTerminal duplicado
@@ -319,3 +452,5 @@ Entre Lock 1 e Lock 2, o build roda SEM lock. Isso é by-design.
 ```
 
 **Se qualquer item falha, o PR não está pronto.**
+
+**O primeiro item da checklist é o mais importante. Se o dogfood-monorepo não deploya, nada mais importa.**

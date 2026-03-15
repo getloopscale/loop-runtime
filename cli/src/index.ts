@@ -250,10 +250,10 @@ export function createProgram(): Command {
           return { close: () => client.close() };
         },
         getSecrets: async (project: string, environment: string) => {
-          const result = await apiClient.get<{ secrets: string[] }>(
+          const result = await apiClient.get<{ secrets: Array<{ name: string }> }>(
             `/api/v1/secrets?env=${encodeURIComponent(environment)}&project=${encodeURIComponent(project)}`
           );
-          return result.secrets;
+          return result.secrets.map((s) => s.name);
         },
         cleanupFile,
         generateIdempotencyKey: () => randomUUID(),

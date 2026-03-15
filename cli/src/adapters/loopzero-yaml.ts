@@ -54,7 +54,7 @@ export function parseLoopZeroYaml(raw: string): LoopZeroYaml {
         else if (k === 'port') apps[currentApp].port = parseInt(value, 10) || null;
       }
     } else if (inSecrets && currentApp && /^      - /.test(line)) {
-      const secretName = trimmed.replace(/^- /, '').trim();
+      const secretName = trimmed.trim().replace(/^- /, '').trim();
       if (!apps[currentApp].secrets) apps[currentApp].secrets = [];
       apps[currentApp].secrets!.push(secretName);
     } else if (inSecrets && !/^      /.test(line)) {
