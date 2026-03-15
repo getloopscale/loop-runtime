@@ -2,6 +2,7 @@ package controller_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -49,9 +50,22 @@ var _ = BeforeSuite(func() {
 	ctx, cancel = context.WithCancel(context.TODO())
 
 	By("bootstrapping test environment")
+	// Resolve envtest binary path: KUBEBUILDER_ASSETS env var, then setup-envtest,
+	// then default kubebuilder path. This ensures tests work both via `task test:unit`
+	// (which sets KUBEBUILDER_ASSETS) and direct `go test` invocations. (F-06)
+	binaryDir := os.Getenv("KUBEBUILDER_ASSETS")
+	if binaryDir == "" {
+		// Try common setup-envtest path
+		home, _ := os.UserHomeDir()
+		candidate := filepath.Join(home, ".local", "share", "kubebuilder-envtest", "k8s", "1.35.0-linux-amd64")
+		if _, err := os.Stat(filepath.Join(candidate, "etcd")); err == nil {
+			binaryDir = candidate
+		}
+	}
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
+		BinaryAssetsDirectory: binaryDir,
 	}
 
 	var err error
