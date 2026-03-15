@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -209,8 +210,13 @@ type callbackRequest struct {
 
 // Callback handles POST /api/v1/builds/:id/callback (DA-15).
 // Auth: shared secret (NOT OAuth). Returns 202 immediately, runs OnBuildCompleted in goroutine.
+//
+// RESILIENCE RULE: This endpoint MUST NEVER return 400 for malformed payloads.
+// If the build system (Argo Workflows) terminated and sent a callback, the build
+// must transition to a terminal state regardless of payload quality. A 400 here
+// leaves the build stuck in RUNNING, blocking the entire environment. (F-01)
 func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
-	// Auth: validate shared secret
+	// Auth: validate shared secret — auth failures are the ONLY 4xx we return.
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
@@ -224,24 +230,59 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	buildID := chi.URLParam(r, "id")
 
-	// Parse body
+	// Read body as raw bytes first — never fail on read errors.
+	rawBody, readErr := io.ReadAll(r.Body)
+	if readErr != nil {
+		h.logger.Warn("callback body read failed, treating as failed build",
+			"build_id", buildID,
+			"error", readErr,
+		)
+	}
+
+	// Attempt normal JSON decode
 	var req callbackRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
-		return
+	parsed := false
+	if len(rawBody) > 0 {
+		if err := json.Unmarshal(rawBody, &req); err != nil {
+			// Log the raw payload for diagnostics, then fall back
+			h.logger.Warn("callback JSON decode failed, falling back to failed status",
+				"build_id", buildID,
+				"error", err,
+				"raw_body_len", len(rawBody),
+				"raw_body_preview", truncate(string(rawBody), 500),
+			)
+			// Fallback: try to extract status via simple string search
+			req = fallbackParseCallback(rawBody)
+		} else {
+			parsed = true
+		}
 	}
 
-	// Validate status
+	// If body was empty or completely unparseable, default to failed
+	if req.Status == "" {
+		req.Status = "failed"
+		if req.Error == "" {
+			req.Error = "Build failed (callback payload was empty or unreadable)"
+		}
+	}
+
+	// Validate status — only "succeeded" and "failed" are valid.
+	// Unknown statuses fall back to "failed" instead of returning 400.
 	if req.Status != "succeeded" && req.Status != "failed" {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"INVALID_CALLBACK",
-			"status must be 'succeeded' or 'failed'",
-			400,
-		))
-		return
+		h.logger.Warn("callback has invalid status, treating as failed",
+			"build_id", buildID,
+			"status", req.Status,
+		)
+		req.Status = "failed"
+		if req.Error == "" {
+			req.Error = "Build failed (callback reported unexpected status: " + req.Status + ")"
+		}
 	}
 
-	// Validate succeeded + empty apps (DA-15)
+	// Validate succeeded + empty apps (DA-15) — this IS a hard error because
+	// a succeeded build without apps means the build system has a bug that
+	// would corrupt release state. Unlike malformed payloads, this is a
+	// semantic contract violation that should not be silently accepted.
 	if req.Status == "succeeded" && len(req.Apps) == 0 {
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"INVALID_CALLBACK",
@@ -249,6 +290,11 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 			400,
 		))
 		return
+	}
+
+	// If we fell back from a parse error, ensure error message is populated
+	if !parsed && req.Error == "" {
+		req.Error = "Build failed (callback payload malformed)"
 	}
 
 	// Check build exists and if already terminal (duplicate detection)
@@ -286,6 +332,55 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 			)
 		}
 	}()
+}
+
+// fallbackParseCallback extracts what it can from a malformed JSON body.
+// Used when json.Unmarshal fails (e.g., truncated Argo {{workflow.failures}}).
+func fallbackParseCallback(raw []byte) callbackRequest {
+	s := string(raw)
+	req := callbackRequest{
+		Status: "failed",
+		Error:  "Build failed (callback payload malformed)",
+	}
+
+	// Try to extract "status":"<value>" via simple string matching
+	if idx := strings.Index(s, `"status":"`); idx != -1 {
+		start := idx + len(`"status":"`)
+		if end := strings.Index(s[start:], `"`); end != -1 {
+			extracted := s[start : start+end]
+			if extracted == "succeeded" || extracted == "failed" {
+				req.Status = extracted
+			}
+		}
+	}
+
+	// Try to extract error message
+	if idx := strings.Index(s, `"error":"`); idx != -1 {
+		start := idx + len(`"error":"`)
+		// Take up to 500 chars or the next unescaped quote
+		end := len(s)
+		if end-start > 500 {
+			end = start + 500
+		}
+		// Find the closing quote (not escaped)
+		for i := start; i < end; i++ {
+			if s[i] == '"' && (i == 0 || s[i-1] != '\\') {
+				end = i
+				break
+			}
+		}
+		req.Error = s[start:end]
+	}
+
+	return req
+}
+
+// truncate returns s truncated to maxLen characters.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // mapBuildError maps orchestrator errors to HTTP responses.
