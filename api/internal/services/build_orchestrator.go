@@ -353,6 +353,17 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 				return fmt.Errorf("on build completed: transition to FAILED: %w", err)
 			}
 
+			// Persist error message (F-04: builds must have error_message when FAILED)
+			if result.Error != "" {
+				if err := o.buildStore.SetErrorMessage(ctx, tx, buildID, result.Error); err != nil {
+					slog.Error("failed to set error message on build",
+						"build_id", buildID,
+						"error", err,
+					)
+					// Non-fatal: the build already transitioned to FAILED, which is the critical part
+				}
+			}
+
 			// Emit SSE build.failed with error details
 			failedPayload := map[string]string{
 				"build_id": buildID,

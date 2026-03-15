@@ -124,7 +124,23 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 			}
 
 			_, err = r.buildStore.UpdateStatus(ctx, tx, s.ID, string(s.Event))
-			return err
+			if err != nil {
+				return err
+			}
+
+			// Set descriptive error message (F-04: reaped builds must explain why)
+			var reason string
+			switch s.Event {
+			case statemachine.BuildQueueTimeout:
+				reason = "Build timed out while waiting in queue (5 min limit)"
+			case statemachine.BuildTimeout:
+				reason = "Build timed out while running (30 min limit)"
+			case statemachine.BuildCancelTimeout:
+				reason = "Build cancellation timed out (60s limit)"
+			default:
+				reason = "Build reaped due to timeout"
+			}
+			return r.buildStore.SetErrorMessage(ctx, tx, s.ID, reason)
 		})
 
 		if err != nil {

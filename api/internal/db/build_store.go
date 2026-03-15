@@ -40,6 +40,7 @@ type BuildStore interface {
 	GetByID(ctx context.Context, id string) (*Build, error)
 	HasActiveBuild(ctx context.Context, tx DBTX, tenantID, projectID, env string) (bool, error)
 	UpdateStatus(ctx context.Context, tx DBTX, id string, event string) (*Build, error)
+	SetErrorMessage(ctx context.Context, tx DBTX, id string, errorMessage string) error
 	ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error)
 }
 
@@ -148,6 +149,26 @@ func (s *PostgresBuildStore) UpdateStatus(ctx context.Context, tx DBTX, buildID 
 
 	build.Status = string(newState)
 	return build, nil
+}
+
+// SetErrorMessage stores the error message and finished_at timestamp for a build.
+// Called after UpdateStatus when transitioning to a failed terminal state.
+func (s *PostgresBuildStore) SetErrorMessage(ctx context.Context, tx DBTX, buildID string, errorMessage string) error {
+	executor := tx
+	if executor == nil {
+		executor = s.db
+	}
+	result, err := executor.Exec(ctx,
+		`UPDATE builds SET error_message = $1, finished_at = NOW() WHERE id = $2`,
+		errorMessage, buildID,
+	)
+	if err != nil {
+		return fmt.Errorf("build store: set error message failed: %w", err)
+	}
+	if result.RowsAffected == 0 {
+		return loopzeroerrors.ErrBuildNotFound
+	}
+	return nil
 }
 
 // ListByProject returns builds for a project, ordered by created_at DESC.

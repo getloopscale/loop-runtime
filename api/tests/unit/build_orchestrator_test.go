@@ -83,6 +83,14 @@ func (f *fakeBuildStoreOrch) UpdateStatus(ctx context.Context, tx db.DBTX, id st
 	return &copy, nil
 }
 
+func (f *fakeBuildStoreOrch) SetErrorMessage(ctx context.Context, tx db.DBTX, id string, errorMessage string) error {
+	if b, ok := f.builds[id]; ok {
+		b.ErrorMessage = errorMessage
+		return nil
+	}
+	return fmt.Errorf("build not found: %s", id)
+}
+
 func (f *fakeBuildStoreOrch) ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]db.Build, error) {
 	return []db.Build{}, nil
 }

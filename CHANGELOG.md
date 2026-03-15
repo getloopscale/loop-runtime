@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Build callback endpoint returns 400 on malformed Argo payload, leaving builds permanently stuck in RUNNING — now uses best-effort parsing with fallback to "failed" status, never returns 400 for callback payloads (#S2-dogfood2 F-01)
 - Argo Workflow `notify-api` template dumps raw `{{workflow.failures}}` JSON array into error field, producing malformed callback payload — now extracts only displayName fields, avoiding nested JSON (#S2-dogfood2 F-01)
+- FAILED builds have empty `error_message` in database — error from callback and reaper now persisted via `SetErrorMessage`, including descriptive timeout reasons for reaped builds (#S2-dogfood2 F-04)
 - PoolEnvironmentLocker missing lock timeout detection and panic recovery — now delegates to lock.WithEnvironmentLock (single implementation, no duplication) (#S2-audit B1+B2+H1)
 - Circuit breaker for ArgoCD sync not wired in main.go — CircuitBreakerSyncClient now wraps raw SyncClient (3 failures → OPEN, 2 recoveries → CLOSED) (#S2-audit B4)
 - Git trailers in gitops-push using build-id for all 3 values — Correlation-ID now propagated end-to-end from CLI request through to git commit (#S2-audit B3)

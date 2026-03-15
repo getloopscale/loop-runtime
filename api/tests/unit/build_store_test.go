@@ -457,6 +457,51 @@ func TestBuildStore_UpdateStatus(t *testing.T) {
 	})
 }
 
+func TestBuildStore_SetErrorMessage(t *testing.T) {
+	t.Run("sets error_message on existing build", func(t *testing.T) {
+		// Arrange
+		fakeDB := newFakeBuildDB()
+		now := time.Now().UTC().Truncate(time.Second)
+		fakeDB.addBuild(&db.Build{
+			ID:            "build-err00001",
+			TenantID:      "tenant-1",
+			ProjectID:     "proj-abc12345",
+			Environment:   "production",
+			Status:        "FAILED",
+			CommitSHA:     "abc123",
+			CorrelationID: "corr-001",
+			CreatedBy:     "user-1",
+			CreatedAt:     now,
+			ErrorMessage:  "",
+		})
+
+		store := db.NewPostgresBuildStore(fakeDB)
+
+		// Act
+		err := store.SetErrorMessage(context.Background(), fakeDB, "build-err00001", "Build pipeline failed at: validate-workspace")
+
+		// Assert
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("returns error when executor fails", func(t *testing.T) {
+		// Arrange — simulate DB error
+		fakeDB := newFakeBuildDB()
+		fakeDB.execErr = errors.New("connection refused")
+		store := db.NewPostgresBuildStore(fakeDB)
+
+		// Act
+		err := store.SetErrorMessage(context.Background(), fakeDB, "build-err00001", "some error")
+
+		// Assert — should propagate the DB error
+		if err == nil {
+			t.Fatal("expected error from DB failure, got nil")
+		}
+	})
+}
+
 func TestBuildStore_ListByProject(t *testing.T) {
 	t.Run("returns builds ordered by created_at DESC with limit/offset", func(t *testing.T) {
 		fakeDB := newFakeBuildDB()
