@@ -46,6 +46,18 @@ func NewRouter(cfg Config) *chi.Mux {
 	r.Use(middleware.CorrelationID)
 	r.Use(middleware.RequestLogging(cfg.Logger))
 
+	// Custom 404/405 handlers: return JSON with LoopZeroError format (F-05)
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"code":"NOT_FOUND","message":"The requested endpoint does not exist."}`))
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = w.Write([]byte(`{"code":"METHOD_NOT_ALLOWED","message":"This HTTP method is not supported for this endpoint."}`))
+	})
+
 	// Prometheus metrics endpoint (no auth — standard for scraping)
 	r.Handle("/metrics", promhttp.Handler())
 

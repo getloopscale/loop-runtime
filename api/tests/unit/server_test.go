@@ -149,6 +149,61 @@ func TestServerRouting(t *testing.T) {
 	})
 }
 
+func TestServer404Returns_JSON(t *testing.T) {
+	cfg := server.Config{
+		Port:   "0",
+		Logger: nil,
+		DB:     nil,
+	}
+	router := server.NewRouter(cfg)
+
+	t.Run("GET unknown route returns JSON 404 with LoopZeroError format", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/nonexistent", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", rec.Code)
+		}
+
+		ct := rec.Header().Get("Content-Type")
+		if ct != "application/json" {
+			t.Fatalf("expected Content-Type application/json, got %q", ct)
+		}
+
+		var body map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("expected JSON body, got decode error: %v (body: %s)", err, rec.Body.String())
+		}
+		if body["code"] != "NOT_FOUND" {
+			t.Errorf("expected code NOT_FOUND, got %v", body["code"])
+		}
+	})
+
+	t.Run("POST to GET-only route returns JSON 405", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/health", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("expected 405, got %d", rec.Code)
+		}
+
+		ct := rec.Header().Get("Content-Type")
+		if ct != "application/json" {
+			t.Fatalf("expected Content-Type application/json, got %q", ct)
+		}
+
+		var body map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("expected JSON body, got decode error: %v", err)
+		}
+		if body["code"] != "METHOD_NOT_ALLOWED" {
+			t.Errorf("expected code METHOD_NOT_ALLOWED, got %v", body["code"])
+		}
+	})
+}
+
 func TestServerNilLogger(t *testing.T) {
 	t.Run("NewRouter does not panic when Logger is nil", func(t *testing.T) {
 		cfg := server.Config{
