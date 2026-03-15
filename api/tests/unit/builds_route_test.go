@@ -590,14 +590,10 @@ func TestBuildsCallbackRoute(t *testing.T) {
 		}
 	})
 
-	t.Run("POST /builds/:id/callback invalid status returns 400", func(t *testing.T) {
-		// Arrange
-		orch := &fakeBuildOrchestrator{
-			getBuild: &routes.BuildStatusResponse{
-				BuildID: "build-abcd1234",
-				Status:  "RUNNING",
-			},
-		}
+	t.Run("POST /builds/:id/callback unknown status falls back to failed with 202", func(t *testing.T) {
+		// Arrange — unknown statuses are treated as "failed" instead of returning 400.
+		// The callback endpoint must never leave builds stuck in RUNNING. (F-01)
+		orch := &fakeBuildOrchestrator{}
 		handler := newBuildHandler(orch, "test-callback-secret")
 		router := buildRouter(handler)
 
@@ -610,9 +606,27 @@ func TestBuildsCallbackRoute(t *testing.T) {
 		// Act
 		router.ServeHTTP(rec, req)
 
-		// Assert
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		// Assert — 202 accepted, not 400
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		// Wait for goroutine
+		deadline := time.After(2 * time.Second)
+		for {
+			if orch.onCompletedCalls > 0 {
+				break
+			}
+			select {
+			case <-deadline:
+				t.Fatal("expected OnBuildCompleted to be called for unknown status")
+			default:
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+
+		if orch.lastCallbackReq.Status != "failed" {
+			t.Errorf("expected fallback status 'failed', got %q", orch.lastCallbackReq.Status)
 		}
 	})
 
@@ -674,8 +688,10 @@ func TestBuildsCallbackRoute(t *testing.T) {
 		}
 	})
 
-	t.Run("POST /builds/:id/callback invalid JSON returns 400", func(t *testing.T) {
-		// Arrange
+	t.Run("POST /builds/:id/callback malformed JSON falls back to failed with 202", func(t *testing.T) {
+		// Arrange — callback endpoint must NEVER return 400 for malformed payloads.
+		// If the workflow terminated and sent a callback, the build must transition
+		// to a terminal state regardless of payload quality. (F-01 fix)
 		orch := &fakeBuildOrchestrator{}
 		handler := newBuildHandler(orch, "test-callback-secret")
 		router := buildRouter(handler)
@@ -689,9 +705,110 @@ func TestBuildsCallbackRoute(t *testing.T) {
 		// Act
 		router.ServeHTTP(rec, req)
 
+		// Assert — 202 accepted, not 400
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("expected 202 (fallback to failed), got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		// Wait for goroutine to call OnBuildCompleted
+		deadline := time.After(2 * time.Second)
+		for {
+			if orch.onCompletedCalls > 0 {
+				break
+			}
+			select {
+			case <-deadline:
+				t.Fatal("expected OnBuildCompleted to be called for malformed callback")
+			default:
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+
+		// The fallback should send status=failed with a descriptive error
+		if orch.lastCallbackReq.Status != "failed" {
+			t.Errorf("expected fallback status 'failed', got %q", orch.lastCallbackReq.Status)
+		}
+		if orch.lastCallbackReq.Error == "" {
+			t.Error("expected fallback error message to be non-empty")
+		}
+	})
+
+	t.Run("POST /builds/:id/callback truncated Argo JSON falls back to failed with 202", func(t *testing.T) {
+		// Arrange — this reproduces the exact payload that Argo sends when
+		// {{workflow.failures}} contains nested escaped JSON that gets truncated.
+		// The real payload observed in production:
+		orch := &fakeBuildOrchestrator{}
+		handler := newBuildHandler(orch, "test-callback-secret")
+		router := buildRouter(handler)
+
+		// Simulates the truncated Argo callback payload (key chars cut mid-string)
+		body := `{"status":"failed","error":"Build pipeline failed: \"[{\"displayName\":\"validate-workspace\",\"message\":\"\",\"templateName\":\"build-pipeline\",\"phase\":\"Failed\",\"podName\":\"loopzero-build-build-e49111ce-sjwxf\",\"finishedAt\":\"2026-0","apps":[{"name":"e2e-project","image_digest":"k3d-loopzero-registry:5000/acme/e2e-project:2f62fcf8de347b28227b4df773bfa509515a9f02"}]}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds/build-abcd1234/callback", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer test-callback-secret")
+		rec := httptest.NewRecorder()
+
+		// Act
+		router.ServeHTTP(rec, req)
+
+		// Assert — must accept, not reject
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("expected 202 for truncated Argo payload, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		// Wait for goroutine
+		deadline := time.After(2 * time.Second)
+		for {
+			if orch.onCompletedCalls > 0 {
+				break
+			}
+			select {
+			case <-deadline:
+				t.Fatal("expected OnBuildCompleted to be called for truncated Argo payload")
+			default:
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+
+		if orch.lastCallbackReq.Status != "failed" {
+			t.Errorf("expected status 'failed', got %q", orch.lastCallbackReq.Status)
+		}
+	})
+
+	t.Run("POST /builds/:id/callback empty body falls back to failed with 202", func(t *testing.T) {
+		// Arrange
+		orch := &fakeBuildOrchestrator{}
+		handler := newBuildHandler(orch, "test-callback-secret")
+		router := buildRouter(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds/build-abcd1234/callback", bytes.NewBufferString(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer test-callback-secret")
+		rec := httptest.NewRecorder()
+
+		// Act
+		router.ServeHTTP(rec, req)
+
 		// Assert
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("expected 202 for empty body, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		deadline := time.After(2 * time.Second)
+		for {
+			if orch.onCompletedCalls > 0 {
+				break
+			}
+			select {
+			case <-deadline:
+				t.Fatal("expected OnBuildCompleted to be called for empty body callback")
+			default:
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+
+		if orch.lastCallbackReq.Status != "failed" {
+			t.Errorf("expected fallback status 'failed', got %q", orch.lastCallbackReq.Status)
 		}
 	})
 }

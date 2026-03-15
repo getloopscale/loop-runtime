@@ -845,7 +845,9 @@ spec:
               APPS_WITH_IMAGE=$(printf '%s' "$CALLBACK_APPS" | sed "s|\"name\"|\"image_digest\":\"${IMAGE}\",\"name\"|g")
               BODY="{\"status\":\"${BUILD_STATUS}\",\"apps\":${APPS_WITH_IMAGE}}"
             elif [ "$BUILD_STATUS" = "failed" ]; then
-              # Include error details from workflow failures
+              # Include error details from workflow failures.
+              # IMPORTANT: {{workflow.failures}} expands to a JSON array with nested quotes.
+              # We extract only displayName+message to avoid nested JSON breaking the callback payload.
               FAILED_MSG="Build pipeline failed"
               FAILURES='{{workflow.failures}}'
               if [ -n "$FAILURES" ] && [ "$FAILURES" != "<no value>" ] && [ "$FAILURES" != "null" ] && [ "$FAILURES" != "[]" ]; then
@@ -853,10 +855,18 @@ spec:
                 STEP_MSG=$(printf '%s' "$FAILURES" | grep -o '"message":"[^"]*"' | head -1 | cut -d'"' -f4) || true
                 if [ -n "$STEP_NAME" ]; then
                   FAILED_MSG="${STEP_NAME}: ${STEP_MSG:-failed}"
-                elif [ ${#FAILURES} -gt 5 ]; then
-                  FAILED_MSG="Build pipeline failed: $(printf '%s' "$FAILURES" | head -c 200)"
+                fi
+                # Do NOT dump raw $FAILURES into the error message — it contains nested JSON
+                # that breaks the callback payload. If we couldn't extract step name,
+                # extract all failed step displayNames as a summary.
+                if [ "$FAILED_MSG" = "Build pipeline failed" ]; then
+                  FAILED_STEPS=$(printf '%s' "$FAILURES" | grep -o '"displayName":"[^"]*"' | cut -d'"' -f4 | tr '\n' ', ' | sed 's/,$//' | head -c 200) || true
+                  if [ -n "$FAILED_STEPS" ]; then
+                    FAILED_MSG="Build pipeline failed at: ${FAILED_STEPS}"
+                  fi
                 fi
               fi
+              # Escape any remaining quotes for JSON safety
               ESCAPED_MSG=$(printf '%s' "$FAILED_MSG" | sed 's/"/\\"/g' | head -c 500)
               APP_NAME="{{workflow.parameters.project-id}}"
               BODY="{\"status\":\"${BUILD_STATUS}\",\"error\":\"${ESCAPED_MSG}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE}\"}]}"
