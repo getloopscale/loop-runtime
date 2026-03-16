@@ -10,6 +10,7 @@ spec:
   entrypoint: build-pipeline
   onExit: finalize
   serviceAccountName: loopzero-build-sa
+  parallelism: 4
   arguments:
     parameters:
       - name: tenant-id
@@ -100,14 +101,12 @@ spec:
               - build-image
           - name: validate-manifests
             template: validate-manifests
-            continueOn:
-              failed: true
             dependencies:
               - generate-manifests
           - name: gitops-push
             template: gitops-push
             dependencies:
-              - generate-manifests
+              - validate-manifests
 
     # =========================================================================
     # Step 1: clone-repo
@@ -444,6 +443,7 @@ spec:
           - --compressed-caching=false
           - --insecure
           - --skip-tls-verify
+          - --digest-file=/workspace/image-digest.txt
         volumeMounts:
           - name: workspace
             mountPath: /workspace
@@ -627,16 +627,14 @@ spec:
     # =========================================================================
     - name: validate-manifests
       container:
-        image: alpine:3.21
+        image: ghcr.io/yannh/kubeconform:v0.6.7-alpine
         command:
           - sh
           - -c
           - |
             set -euo pipefail
-            apk add --no-cache curl >/dev/null 2>&1
-            curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz -C /usr/local/bin/
             MANIFEST_DIR="/manifests/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
-            kubeconform --strict --summary "$MANIFEST_DIR/manifests.yaml"
+            /kubeconform --strict --summary "$MANIFEST_DIR/manifests.yaml"
             echo "Manifest validation passed"
         volumeMounts:
           - name: manifests
@@ -840,15 +838,26 @@ spec:
             fi
 
             CALLBACK_URL="{{workflow.parameters.api-callback-url}}/{{workflow.parameters.build-id}}/callback"
-            IMAGE="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}"
+            IMAGE_REF="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}"
+            CORRELATION_ID="{{workflow.parameters.correlation-id}}"
+
+            # Read real image digest from Kaniko --digest-file output (SHA256).
+            # Falls back to image reference if digest file is unavailable (e.g., failed build).
+            IMAGE_DIGEST="$IMAGE_REF"
+            if [ -f /workspace/image-digest.txt ]; then
+              RAW_DIGEST=$(cat /workspace/image-digest.txt)
+              if [ -n "$RAW_DIGEST" ]; then
+                IMAGE_DIGEST="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}@${RAW_DIGEST}"
+              fi
+            fi
 
             # Build per-app callback payload from generate-manifests output
             if [ "$BUILD_STATUS" = "succeeded" ] && [ -f /manifests/callback-apps.json ]; then
               # Read per-app data and add image_digest to each
               CALLBACK_APPS=$(cat /manifests/callback-apps.json)
               # Use sed to inject image_digest into each app object
-              APPS_WITH_IMAGE=$(printf '%s' "$CALLBACK_APPS" | sed "s|\"name\"|\"image_digest\":\"${IMAGE}\",\"name\"|g")
-              BODY="{\"status\":\"${BUILD_STATUS}\",\"apps\":${APPS_WITH_IMAGE}}"
+              APPS_WITH_IMAGE=$(printf '%s' "$CALLBACK_APPS" | sed "s|\"name\"|\"image_digest\":\"${IMAGE_DIGEST}\",\"name\"|g")
+              BODY="{\"status\":\"${BUILD_STATUS}\",\"correlation_id\":\"${CORRELATION_ID}\",\"apps\":${APPS_WITH_IMAGE}}"
             elif [ "$BUILD_STATUS" = "failed" ]; then
               # Include error details from workflow failures.
               # IMPORTANT: {{workflow.failures}} expands to a JSON array with nested quotes.
@@ -874,10 +883,10 @@ spec:
               # Escape any remaining quotes for JSON safety
               ESCAPED_MSG=$(printf '%s' "$FAILED_MSG" | sed 's/"/\\"/g' | head -c 500)
               APP_NAME="{{workflow.parameters.project-id}}"
-              BODY="{\"status\":\"${BUILD_STATUS}\",\"error\":\"${ESCAPED_MSG}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE}\"}]}"
+              BODY="{\"status\":\"${BUILD_STATUS}\",\"correlation_id\":\"${CORRELATION_ID}\",\"error\":\"${ESCAPED_MSG}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE_DIGEST}\"}]}"
             else
               APP_NAME="{{workflow.parameters.project-id}}"
-              BODY="{\"status\":\"${BUILD_STATUS}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE}\"}]}"
+              BODY="{\"status\":\"${BUILD_STATUS}\",\"correlation_id\":\"${CORRELATION_ID}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE_DIGEST}\"}]}"
             fi
             echo "Callback body: $BODY"
 
@@ -885,6 +894,7 @@ spec:
               -X POST "$CALLBACK_URL" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer {{workflow.parameters.callback-secret}}" \
+              -H "Correlation-ID: ${CORRELATION_ID}" \
               -d "$BODY" \
               --connect-timeout 10 \
               --max-time 30)
@@ -900,6 +910,8 @@ spec:
 
             echo "Build callback sent successfully (status: $BUILD_STATUS)"
         volumeMounts:
+          - name: workspace
+            mountPath: /workspace
           - name: manifests
             mountPath: /manifests
         resources:

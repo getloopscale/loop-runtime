@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `validate-manifests` step had `continueOn: failed: true` allowing invalid manifests to reach GitOps repo — removed, now a hard gate; `gitops-push` depends on validation passing (#S2-helena-1)
+- `validate-manifests` downloaded kubeconform via curl at runtime (network-dependent, non-deterministic) — replaced `alpine:3.21` with `ghcr.io/yannh/kubeconform:v0.6.7-alpine` (#S2-helena-4)
+- Callback `image_digest` field contained image tag reference instead of real SHA256 digest — Kaniko now uses `--digest-file` and callback sends `registry/tenant/project@sha256:...` format (#S2-helena-5)
+- Callback body missing `correlation_id` field breaking end-to-end traceability — now included in all 3 callback branches (succeeded, failed, fallback) plus `Correlation-ID` HTTP header (#S2-helena-6)
+
+### Added
+- `spec.parallelism: 4` on WorkflowTemplate — limits concurrent steps per workflow to prevent scheduler pressure (#S2-helena-2)
+- Argo Workflows controller `workflowWorkers: 32` and `podWorkers: 32` — throttles concurrent workflow and pod reconciliations (#S2-helena-2)
+- 6 new workflow template tests: validate-manifests hard gate, no curl download, callback correlation_id, Kaniko digest-file, callback real digest, parallelism limit (#S2-helena)
+
 ### Added
 - QA tooling: `task doctor` — checks all prerequisites, clusters, services with pass/fail/warn and install hints (#QA-tooling)
 - QA tooling: `task status` — shows environment health at a glance (clusters, pods, DB, API, monitoring) (#QA-tooling)

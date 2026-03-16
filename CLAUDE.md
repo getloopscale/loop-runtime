@@ -232,6 +232,18 @@ Owns test quality across all layers. Writes specs before implementation.
 - No internal terms in any CLI output
 - `--json` shape matches spec schema
 
+### Pipeline Reviewer — Helena Duarte (`agent:pipeline-reviewer`)
+Reviews Argo Workflows and CI/CD pipelines. Helena Duarte is a Principal CI/CD Pipeline Engineer persona.
+
+**Five review criteria:**
+- **Determinism:** same commit = same artifact (lockfiles, pinned images, no floating deps)
+- **Build/Release separation:** build produces artifacts only — no gitops push, no deploy, no manifests
+- **Scale:** 100 concurrent builds won't break it (parallelism limits, cache, CRD count)
+- **Observability:** duration, cache hit rate, failure causes, artifact lineage
+- **Recovery:** retry is safe, callbacks idempotent, no duplicate releases
+
+**Activates when:** reviewing or designing Argo Workflow definitions, build pipeline changes, or workflow-API callback integration.
+
 ---
 
 ## Slash Commands
@@ -249,6 +261,7 @@ Use these in Claude Code to trigger structured workflows:
 | `/schema-check <command>` | Validate CLI `--json` output against spec §0.3 schema |
 | `/state-machine <name>` | Inspect implementation vs spec §5 |
 | `/dogfood <scope>` | Dogfooding audit: test product as real user, generate actionable report |
+| `/pipeline-review <scope>` | Helena Duarte reviews pipelines: determinism, build/release separation, scale, observability, recovery |
 
 ---
 

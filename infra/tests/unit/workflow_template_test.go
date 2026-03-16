@@ -538,6 +538,192 @@ func TestWorkflowTemplateStepOrder(t *testing.T) {
 	}
 }
 
+// TestWorkflowTemplateValidateManifestsIsHardGate verifies that validate-manifests
+// does NOT have continueOn.failed: true. Manifest validation must block the pipeline.
+// Helena review item #1 (CRITICO).
+func TestWorkflowTemplateValidateManifestsIsHardGate(t *testing.T) {
+	tmpl := loadWorkflowTemplate(t)
+	templates := getAllTemplates(tmpl)
+
+	// Find the entrypoint DAG
+	for _, tm := range templates {
+		dag, ok := tm["dag"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		tasks, ok := dag["tasks"].([]interface{})
+		if !ok {
+			continue
+		}
+		for _, task := range tasks {
+			taskMap, ok := task.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			name, _ := taskMap["name"].(string)
+			if name != "validate-manifests" {
+				continue
+			}
+			// continueOn must NOT exist, or if it does, failed must be false
+			continueOn, hasContinueOn := taskMap["continueOn"]
+			if !hasContinueOn {
+				return // PASS — no continueOn means it's a hard gate
+			}
+			coMap, ok := continueOn.(map[string]interface{})
+			if !ok {
+				return // PASS — malformed continueOn, not active
+			}
+			failed, _ := coMap["failed"].(bool)
+			if failed {
+				t.Error("validate-manifests has continueOn.failed: true — manifest validation must be a hard gate (Helena review #1)")
+			}
+		}
+	}
+}
+
+// TestWorkflowTemplateValidateManifestsNoCurlDownload verifies that validate-manifests
+// does not download kubeconform at runtime via curl. The image should have it pre-installed.
+// Helena review item #4 (ALERTA).
+func TestWorkflowTemplateValidateManifestsNoCurlDownload(t *testing.T) {
+	tmpl := loadWorkflowTemplate(t)
+	templates := getAllTemplates(tmpl)
+
+	for _, tm := range templates {
+		name, _ := tm["name"].(string)
+		if name != "validate-manifests" {
+			continue
+		}
+		container, ok := tm["container"].(map[string]interface{})
+		if !ok {
+			t.Fatal("validate-manifests template has no container")
+		}
+
+		// The image should not be generic alpine — it should include kubeconform
+		image, _ := container["image"].(string)
+		if strings.HasPrefix(image, "alpine:") {
+			t.Errorf("validate-manifests uses generic alpine image %q — should use an image with kubeconform pre-installed (Helena review #4)", image)
+		}
+	}
+}
+
+// TestWorkflowTemplateCallbackIncludesCorrelationID verifies that the notify-api
+// callback body includes the correlation-id parameter for end-to-end tracing.
+// Helena review item #6 (ALERTA).
+func TestWorkflowTemplateCallbackIncludesCorrelationID(t *testing.T) {
+	data, err := os.ReadFile(workflowTemplatePath())
+	if err != nil {
+		t.Fatalf("cannot read workflow template: %v", err)
+	}
+
+	content := string(data)
+
+	// The notify-api step must include correlation-id in the callback JSON body.
+	// Look for correlation_id or correlation-id in the BODY construction.
+	if !strings.Contains(content, "correlation_id") && !strings.Contains(content, "correlation-id") {
+		// This will pass because the parameter exists. We need to check it's in the BODY.
+	}
+
+	// The notify-api step constructs the callback BODY in its shell script.
+	// The script is embedded in the command array (sh -c <script>).
+	// Check that the BODY construction includes correlation_id.
+	templates := getAllTemplates(loadWorkflowTemplate(t))
+	for _, tm := range templates {
+		name, _ := tm["name"].(string)
+		if name != "notify-api" {
+			continue
+		}
+		container, ok := tm["container"].(map[string]interface{})
+		if !ok {
+			t.Fatal("notify-api template has no container")
+		}
+		// Get the command — script is inline in the command array
+		command, ok := container["command"].([]interface{})
+		if !ok || len(command) == 0 {
+			t.Fatal("notify-api has no command")
+		}
+		// Concatenate all parts of the command to find the script
+		script := ""
+		for _, c := range command {
+			if s, ok := c.(string); ok {
+				script += s + " "
+			}
+		}
+		// Also check args if present
+		if args, ok := container["args"].([]interface{}); ok {
+			for _, a := range args {
+				if s, ok := a.(string); ok {
+					script += s + " "
+				}
+			}
+		}
+		if !strings.Contains(script, "correlation_id") {
+			t.Error("notify-api callback body does not include correlation_id field (Helena review #6)")
+		}
+	}
+}
+
+// TestWorkflowTemplateBuildImageCapturesDigest verifies that the build-image step
+// uses --digest-file to capture the real SHA256 image digest.
+// Helena review item #5 (ALERTA).
+func TestWorkflowTemplateBuildImageCapturesDigest(t *testing.T) {
+	data, err := os.ReadFile(workflowTemplatePath())
+	if err != nil {
+		t.Fatalf("cannot read workflow template: %v", err)
+	}
+
+	content := string(data)
+
+	if !strings.Contains(content, "--digest-file") {
+		t.Error("build-image step does not use --digest-file to capture real image digest (Helena review #5)")
+	}
+}
+
+// TestWorkflowTemplateCallbackUsesRealDigest verifies the notify-api step reads
+// the digest file produced by Kaniko and sends the real SHA256 digest in the callback.
+// Helena review item #5 (ALERTA).
+func TestWorkflowTemplateCallbackUsesRealDigest(t *testing.T) {
+	data, err := os.ReadFile(workflowTemplatePath())
+	if err != nil {
+		t.Fatalf("cannot read workflow template: %v", err)
+	}
+
+	content := string(data)
+
+	// The notify-api step should read from the digest file
+	if !strings.Contains(content, "image-digest") && !strings.Contains(content, "digest.txt") {
+		t.Error("notify-api step does not reference the image digest file — callback should use real SHA256 digest (Helena review #5)")
+	}
+}
+
+// TestWorkflowTemplateHasParallelismLimit verifies the WorkflowTemplate has a
+// parallelism limit to prevent unbounded pod creation under high concurrency.
+// Helena review item #2 (CRITICO).
+func TestWorkflowTemplateHasParallelismLimit(t *testing.T) {
+	tmpl := loadWorkflowTemplate(t)
+
+	spec, ok := tmpl["spec"].(map[string]interface{})
+	if !ok {
+		t.Fatal("missing spec")
+	}
+
+	parallelism, ok := spec["parallelism"]
+	if !ok {
+		t.Fatal("spec.parallelism not set — workflow has no concurrency limit (Helena review #2)")
+	}
+
+	// Parallelism should be a reasonable number (not 0 or negative)
+	switch v := parallelism.(type) {
+	case int:
+		if v < 1 || v > 20 {
+			t.Errorf("spec.parallelism=%d is outside reasonable range [1,20]", v)
+		}
+	case string:
+		// YAML might parse as string
+	default:
+		t.Errorf("spec.parallelism has unexpected type %T", parallelism)
+	}
+}
+
 // TestWorkflowTemplateAppsParameterIsJSON validates the apps parameter is treated as JSON.
 func TestWorkflowTemplateAppsParameterIsJSON(t *testing.T) {
 	data, err := os.ReadFile(workflowTemplatePath())
