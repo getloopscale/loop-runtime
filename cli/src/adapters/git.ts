@@ -32,6 +32,11 @@ export function getGitRoot(): string | null {
   }
 }
 
+export function hasLockfile(): boolean {
+  const fs = require('fs');
+  return fs.existsSync('package-lock.json') || fs.existsSync('yarn.lock') || fs.existsSync('pnpm-lock.yaml');
+}
+
 export async function createGitBundle(): Promise<string> {
   const tmpFile = path.join(os.tmpdir(), `loopzero-bundle-${Date.now()}.bundle`);
   // --all: include full commit history so the bundle is self-contained.

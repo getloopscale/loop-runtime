@@ -1,6 +1,12 @@
 controller:
   securityContext:
     runAsNonRoot: true
+  # Parallelism limits to prevent scheduler pressure under high concurrency.
+  # workflowWorkers: max concurrent workflow reconciliations.
+  # podWorkers: max concurrent pod reconciliations.
+  # These prevent 100 simultaneous builds from overwhelming the build cluster.
+  workflowWorkers: 32
+  podWorkers: 32
   livenessProbe:
     httpGet:
       path: /healthz

@@ -141,14 +141,14 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if len(events) == 0 && statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
 			// Journal expired: we had a Last-Event-ID but no events found,
 			// and build is already terminal
-			writeSSEEvent(w, flusher, "0", "JOURNAL_EXPIRED", json.RawMessage(`{}`))
+			writeSSEEvent(w, flusher, "0", "JOURNAL_EXPIRED", json.RawMessage(`{"reason":"Requested events are no longer available","action":"reconnect_without_last_event_id"}`))
 			return
 		}
 
 		if len(events) == 0 && !statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
 			// Journal expired but build still running — send JOURNAL_EXPIRED
 			// and let the stream continue polling for new events
-			writeSSEEvent(w, flusher, "0", "JOURNAL_EXPIRED", json.RawMessage(`{}`))
+			writeSSEEvent(w, flusher, "0", "JOURNAL_EXPIRED", json.RawMessage(`{"reason":"Requested events are no longer available","action":"reconnect_without_last_event_id"}`))
 		}
 
 		// Send replayed events

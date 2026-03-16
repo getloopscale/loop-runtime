@@ -10,6 +10,13 @@ spec:
   entrypoint: build-pipeline
   onExit: finalize
   serviceAccountName: loopzero-build-sa
+  parallelism: 4
+  # F-05: Auto-cleanup completed workflows and their PVCs to prevent accumulation.
+  # Succeeded workflows are cleaned up after 1 hour, failed after 6 hours (for debugging).
+  ttlStrategy:
+    secondsAfterCompletion: 3600
+    secondsAfterSuccess: 3600
+    secondsAfterFailure: 21600
   arguments:
     parameters:
       - name: tenant-id
@@ -100,14 +107,12 @@ spec:
               - build-image
           - name: validate-manifests
             template: validate-manifests
-            continueOn:
-              failed: true
             dependencies:
               - generate-manifests
           - name: gitops-push
             template: gitops-push
             dependencies:
-              - generate-manifests
+              - validate-manifests
 
     # =========================================================================
     # Step 1: clone-repo
@@ -236,15 +241,18 @@ spec:
 
             # Check package.json exists
             if [ ! -f package.json ]; then
-              echo "ERROR: No package.json found in repository root."
-              echo "Ensure your project has a package.json at the root level."
+              MSG="No package.json found in repository root. Ensure your project has a package.json at the root level."
+              echo "ERROR: $MSG"
+              # F-02: Write error to shared manifests volume so notify-api can include it in the callback
+              mkdir -p /manifests && printf '%s' "validate-workspace: $MSG" > /manifests/build-error.txt
               exit 1
             fi
 
             # Check lockfile exists (prevents 3x retry waste in install-deps)
             if [ ! -f package-lock.json ] && [ ! -f yarn.lock ] && [ ! -f pnpm-lock.yaml ]; then
-              echo "ERROR: No lockfile found (package-lock.json, yarn.lock, or pnpm-lock.yaml)."
-              echo "Run 'npm install' locally and commit the lockfile before deploying."
+              MSG="No lockfile found (package-lock.json, yarn.lock, or pnpm-lock.yaml). Run npm install locally and commit the lockfile."
+              echo "ERROR: $MSG"
+              mkdir -p /manifests && printf '%s' "validate-workspace: $MSG" > /manifests/build-error.txt
               exit 1
             fi
 
@@ -255,6 +263,8 @@ spec:
         volumeMounts:
           - name: workspace
             mountPath: /workspace
+          - name: manifests
+            mountPath: /manifests
         resources:
           requests:
             cpu: "50m"
@@ -444,6 +454,7 @@ spec:
           - --compressed-caching=false
           - --insecure
           - --skip-tls-verify
+          - --digest-file=/workspace/image-digest.txt
         volumeMounts:
           - name: workspace
             mountPath: /workspace
@@ -627,16 +638,22 @@ spec:
     # =========================================================================
     - name: validate-manifests
       container:
-        image: alpine:3.21
+        image: ghcr.io/yannh/kubeconform:v0.6.7-alpine
         command:
           - sh
           - -c
           - |
             set -euo pipefail
-            apk add --no-cache curl >/dev/null 2>&1
-            curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz -C /usr/local/bin/
             MANIFEST_DIR="/manifests/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
-            kubeconform --strict --summary "$MANIFEST_DIR/manifests.yaml"
+            # --strict: reject unknown fields in resources that have schemas.
+            # Two schema locations: default (upstream K8s) + datreeio CRDs-catalog (Traefik, etc).
+            # datreeio/CRDs-catalog contains JSON schemas for 500+ popular CRDs including
+            # Traefik IngressRoute, Middleware, etc. This validates CRDs properly instead of
+            # skipping them with --ignore-missing-schemas.
+            /kubeconform --strict --summary \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              "$MANIFEST_DIR/manifests.yaml"
             echo "Manifest validation passed"
         volumeMounts:
           - name: manifests
@@ -840,44 +857,53 @@ spec:
             fi
 
             CALLBACK_URL="{{workflow.parameters.api-callback-url}}/{{workflow.parameters.build-id}}/callback"
-            IMAGE="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}"
+            IMAGE_REF="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}"
+            CORRELATION_ID="{{workflow.parameters.correlation-id}}"
+
+            # Read real image digest from Kaniko --digest-file output (SHA256).
+            # Falls back to image reference if digest file is unavailable (e.g., failed build).
+            IMAGE_DIGEST="$IMAGE_REF"
+            if [ -f /workspace/image-digest.txt ]; then
+              RAW_DIGEST=$(cat /workspace/image-digest.txt)
+              if [ -n "$RAW_DIGEST" ]; then
+                IMAGE_DIGEST="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}@${RAW_DIGEST}"
+              fi
+            fi
 
             # Build per-app callback payload from generate-manifests output
             if [ "$BUILD_STATUS" = "succeeded" ] && [ -f /manifests/callback-apps.json ]; then
               # Read per-app data and add image_digest to each
               CALLBACK_APPS=$(cat /manifests/callback-apps.json)
               # Use sed to inject image_digest into each app object
-              APPS_WITH_IMAGE=$(printf '%s' "$CALLBACK_APPS" | sed "s|\"name\"|\"image_digest\":\"${IMAGE}\",\"name\"|g")
-              BODY="{\"status\":\"${BUILD_STATUS}\",\"apps\":${APPS_WITH_IMAGE}}"
+              APPS_WITH_IMAGE=$(printf '%s' "$CALLBACK_APPS" | sed "s|\"name\"|\"image_digest\":\"${IMAGE_DIGEST}\",\"name\"|g")
+              BODY="{\"status\":\"${BUILD_STATUS}\",\"correlation_id\":\"${CORRELATION_ID}\",\"apps\":${APPS_WITH_IMAGE}}"
             elif [ "$BUILD_STATUS" = "failed" ]; then
-              # Include error details from workflow failures.
-              # IMPORTANT: {{workflow.failures}} expands to a JSON array with nested quotes.
-              # We extract only displayName+message to avoid nested JSON breaking the callback payload.
+              # F-02: Include step-specific error details in the callback so the CLI
+              # can show the user WHAT failed, not just "Build pipeline failed".
+              #
+              # Strategy 1: Read from /manifests/build-error.txt (written by failing steps).
+              # Strategy 2: Try {{workflow.failures}} (Argo template variable).
+              # Strategy 3: Fall back to generic "Build pipeline failed".
               FAILED_MSG="Build pipeline failed"
-              FAILURES='{{workflow.failures}}'
-              if [ -n "$FAILURES" ] && [ "$FAILURES" != "<no value>" ] && [ "$FAILURES" != "null" ] && [ "$FAILURES" != "[]" ]; then
-                STEP_NAME=$(printf '%s' "$FAILURES" | grep -o '"displayName":"[^"]*"' | head -1 | cut -d'"' -f4) || true
-                STEP_MSG=$(printf '%s' "$FAILURES" | grep -o '"message":"[^"]*"' | head -1 | cut -d'"' -f4) || true
-                if [ -n "$STEP_NAME" ]; then
-                  FAILED_MSG="${STEP_NAME}: ${STEP_MSG:-failed}"
-                fi
-                # Do NOT dump raw $FAILURES into the error message — it contains nested JSON
-                # that breaks the callback payload. If we couldn't extract step name,
-                # extract all failed step displayNames as a summary.
-                if [ "$FAILED_MSG" = "Build pipeline failed" ]; then
-                  FAILED_STEPS=$(printf '%s' "$FAILURES" | grep -o '"displayName":"[^"]*"' | cut -d'"' -f4 | tr '\n' ', ' | sed 's/,$//' | head -c 200) || true
-                  if [ -n "$FAILED_STEPS" ]; then
-                    FAILED_MSG="Build pipeline failed at: ${FAILED_STEPS}"
+              if [ -f /manifests/build-error.txt ]; then
+                FAILED_MSG=$(cat /manifests/build-error.txt | head -c 500)
+              else
+                FAILURES='{{workflow.failures}}'
+                if [ -n "$FAILURES" ] && [ "$FAILURES" != "<no value>" ] && [ "$FAILURES" != "null" ] && [ "$FAILURES" != "[]" ] && [ "$FAILURES" != "" ]; then
+                  STEP_NAME=$(printf '%s' "$FAILURES" | grep -o '"displayName":"[^"]*"' | head -1 | cut -d'"' -f4) || true
+                  STEP_MSG=$(printf '%s' "$FAILURES" | grep -o '"message":"[^"]*"' | head -1 | cut -d'"' -f4) || true
+                  if [ -n "$STEP_NAME" ]; then
+                    FAILED_MSG="${STEP_NAME}: ${STEP_MSG:-failed}"
                   fi
                 fi
               fi
               # Escape any remaining quotes for JSON safety
               ESCAPED_MSG=$(printf '%s' "$FAILED_MSG" | sed 's/"/\\"/g' | head -c 500)
               APP_NAME="{{workflow.parameters.project-id}}"
-              BODY="{\"status\":\"${BUILD_STATUS}\",\"error\":\"${ESCAPED_MSG}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE}\"}]}"
+              BODY="{\"status\":\"${BUILD_STATUS}\",\"correlation_id\":\"${CORRELATION_ID}\",\"error\":\"${ESCAPED_MSG}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE_DIGEST}\"}]}"
             else
               APP_NAME="{{workflow.parameters.project-id}}"
-              BODY="{\"status\":\"${BUILD_STATUS}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE}\"}]}"
+              BODY="{\"status\":\"${BUILD_STATUS}\",\"correlation_id\":\"${CORRELATION_ID}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE_DIGEST}\"}]}"
             fi
             echo "Callback body: $BODY"
 
@@ -885,6 +911,7 @@ spec:
               -X POST "$CALLBACK_URL" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer {{workflow.parameters.callback-secret}}" \
+              -H "Correlation-ID: ${CORRELATION_ID}" \
               -d "$BODY" \
               --connect-timeout 10 \
               --max-time 30)
@@ -900,6 +927,8 @@ spec:
 
             echo "Build callback sent successfully (status: $BUILD_STATUS)"
         volumeMounts:
+          - name: workspace
+            mountPath: /workspace
           - name: manifests
             mountPath: /manifests
         resources:

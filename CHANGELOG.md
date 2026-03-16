@@ -13,6 +13,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Dedicated metrics server on port 9090 — `/metrics` no longer exposed on the public API port (#hardening)
 - Production credential warnings in Helm values for postgresql, gitea, minio (#hardening)
 - PDB manifests validated in `task validate:manifests` pipeline (#hardening)
+- CLI `bin/loopzero` entrypoint — CLI can now be installed and invoked via `npx loopzero` or `npm install -g @loopzero/cli` (#dogfood-S2-F01)
+- CLI lockfile pre-check warns before upload when package-lock.json/yarn.lock/pnpm-lock.yaml is missing (#dogfood-S2-R2-F03)
+- WorkflowTemplate `ttlStrategy` — auto-cleanup of completed workflows (1h) and failed (6h) to prevent PVC accumulation (#dogfood-S2-R2-F05)
+
+### Fixed
+- Build pipeline `validate-manifests` rejected Traefik IngressRoute CRD — added datreeio/CRDs-catalog as secondary schema source for kubeconform so CRDs are validated against real schemas (#dogfood-S2-R2-F01)
+- Build failure error propagated as generic "Build pipeline failed" — failing steps now write specific error to shared volume, callback includes step name and message (#dogfood-S2-R2-F02)
+- CLI mapped `AUTH_SERVICE_UNAVAILABLE` (503) to exit code 3 (deploy failure) — now correctly maps to exit code 4 (auth error) (#dogfood-S2-R2-F04)
+
+### Fixed
+- CLI `--app` flag now correctly scopes secret validation to selected apps only — deploying an app without secrets no longer fails on sibling apps' secrets (#dogfood-F02)
+- SSE `build.started` event now includes `apps` array with app names being built — CLI renders per-app "Building api..." lines instead of empty app name (#dogfood-F01)
+- ArgoCD duplicate resource warnings caused by stale manifests using unprefixed K8s names — WorkflowTemplate updated in cluster to use project-prefixed resource names (#dogfood-F05)
+- CLI error messages now suggest next action in all paths — "Not a git repository" suggests navigating to project, env validation shows example (#dogfood-S2-F03)
+- SSE `JOURNAL_EXPIRED` event now includes `reason` and `action` fields for client recovery (#dogfood-S2-F07)
+- API log in `source.go` replaced `tenant_id` with `team_id` to avoid Rule 3 term leaking into future log views (#dogfood-S2-F05)
+- SSE stream handler test fixtures updated to include `apps[]` in `build.started` events, matching production format (#dogfood-S2-F02)
+- Unit test for `build.started` SSE now asserts `apps[]` field is present — prevents regression of per-app progress rendering (#dogfood-S2-F04)
+
+### Added
+- Typed `code` field in CLI `--json` error responses for machine parsing (e.g., `AUTH_REQUIRED`, `BUILD_FAILED`, `INVALID_ENVIRONMENT`) — `exit_code` retained for backwards compatibility (#dogfood-F03)
+- `build_log` field in `--json` output for failed apps pointing to `loopzero logs --build <id>` per spec §0.3 (#dogfood-F04)
+- `ApiError.code` field propagating API error codes through CLI JSON output (#dogfood-F03)
+
+### Fixed
+- `validate-manifests` step had `continueOn: failed: true` allowing invalid manifests to reach GitOps repo — removed, now a hard gate; `gitops-push` depends on validation passing (#S2-helena-1)
+- `validate-manifests` downloaded kubeconform via curl at runtime (network-dependent, non-deterministic) — replaced `alpine:3.21` with `ghcr.io/yannh/kubeconform:v0.6.7-alpine` (#S2-helena-4)
+- Callback `image_digest` field contained image tag reference instead of real SHA256 digest — Kaniko now uses `--digest-file` and callback sends `registry/tenant/project@sha256:...` format (#S2-helena-5)
+- Callback body missing `correlation_id` field breaking end-to-end traceability — now included in all 3 callback branches (succeeded, failed, fallback) plus `Correlation-ID` HTTP header (#S2-helena-6)
+
+### Added
+- `spec.parallelism: 4` on WorkflowTemplate — limits concurrent steps per workflow to prevent scheduler pressure (#S2-helena-2)
+- Argo Workflows controller `workflowWorkers: 32` and `podWorkers: 32` — throttles concurrent workflow and pod reconciliations (#S2-helena-2)
+- 6 new workflow template tests: validate-manifests hard gate, no curl download, callback correlation_id, Kaniko digest-file, callback real digest, parallelism limit (#S2-helena)
+
+### Added
 - QA tooling: `task doctor` — checks all prerequisites, clusters, services with pass/fail/warn and install hints (#QA-tooling)
 - QA tooling: `task status` — shows environment health at a glance (clusters, pods, DB, API, monitoring) (#QA-tooling)
 - QA tooling: `task test:smoke` — quick platform validation in <30s before running full test suites (#QA-tooling)

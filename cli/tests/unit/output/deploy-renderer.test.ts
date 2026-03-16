@@ -97,6 +97,20 @@ describe('DeployRenderer', () => {
       expect(output).toContain('worker');
     });
 
+    it('should render per-app building lines when apps[] present in build.started (F-01)', () => {
+      const renderer = createRenderer({ isTTY: true, isCI: false, isJSON: false });
+
+      const output = renderer.onEvent({
+        type: 'build.started',
+        data: { apps: ['api', 'web', 'worker'] },
+      });
+
+      expect(output).toBeDefined();
+      expect(output).toContain('Building api');
+      expect(output).toContain('Building web');
+      expect(output).toContain('Building worker');
+    });
+
     it('should render health check event', () => {
       const renderer = createRenderer({ isTTY: true, isCI: false, isJSON: false });
 
@@ -133,6 +147,19 @@ describe('DeployRenderer', () => {
       });
 
       expect(output).toBe('[build] api: building...');
+    });
+
+    it('should render per-app building lines in CI mode when apps[] present (F-01)', () => {
+      const renderer = createRenderer({ isCI: true, isJSON: false, isTTY: false });
+
+      const output = renderer.onEvent({
+        type: 'build.started',
+        data: { apps: ['api', 'gateway'] },
+      });
+
+      expect(output).toBeDefined();
+      expect(output).toContain('[build] api: building...');
+      expect(output).toContain('[build] gateway: building...');
     });
 
     it('should render build complete with duration and [build] prefix', () => {

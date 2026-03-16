@@ -195,10 +195,15 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			return fmt.Errorf("submit build: transition to RUNNING: %w", err)
 		}
 
-		// Step 6: emit SSE build.started
-		eventData, _ := json.Marshal(map[string]string{
+		// Step 6: emit SSE build.started — include app names for CLI per-app rendering (F-01)
+		appNames := make([]string, len(req.Apps))
+		for i, a := range req.Apps {
+			appNames[i] = a.Name
+		}
+		eventData, _ := json.Marshal(map[string]interface{}{
 			"build_id": build.ID,
 			"status":   "running",
+			"apps":     appNames,
 		})
 		if _, err := o.eventStore.Append(ctx, build.ID, "build.started", eventData); err != nil {
 			return fmt.Errorf("submit build: emit SSE event: %w", err)
