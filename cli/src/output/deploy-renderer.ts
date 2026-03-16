@@ -86,8 +86,14 @@ export class DeployRenderer {
     const app = String(event.data.app ?? '');
 
     switch (event.type) {
-      case 'build.started':
-        return `\x1b[36m⠋\x1b[0m Building ${app}...`;
+      case 'build.started': {
+        // F-01: build.started includes apps[] array with all app names being built
+        const apps = event.data.apps as string[] | undefined;
+        if (apps && apps.length > 0) {
+          return apps.map((a) => `\x1b[36m⠋\x1b[0m Building ${a}...`).join('\n');
+        }
+        return `\x1b[36m⠋\x1b[0m Building${app ? ` ${app}` : ''}...`;
+      }
 
       case 'build.completed': {
         const duration = Number(event.data.duration_seconds ?? 0);
@@ -121,8 +127,14 @@ export class DeployRenderer {
     const app = String(event.data.app ?? '');
 
     switch (event.type) {
-      case 'build.started':
-        return `[build] ${app}: building...`;
+      case 'build.started': {
+        // F-01: build.started includes apps[] array with all app names being built
+        const apps = event.data.apps as string[] | undefined;
+        if (apps && apps.length > 0) {
+          return apps.map((a) => `[build] ${a}: building...`).join('\n');
+        }
+        return `[build] ${app || 'all'}: building...`;
+      }
 
       case 'build.completed': {
         const duration = Number(event.data.duration_seconds ?? 0);

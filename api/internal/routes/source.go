@@ -112,7 +112,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// Push bundle to source store — repo: loopzero-source-{tenant}-{project}
 	commitSHA, err := h.store.PushBundle(r.Context(), uc.TenantID, projectName, bundleFile)
 	if err != nil {
-		slog.Error("source upload failed", "error", err, "tenant_id", uc.TenantID)
+		slog.Error("source upload failed", "error", err, "team_id", uc.TenantID)
 		writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
 		return
 	}

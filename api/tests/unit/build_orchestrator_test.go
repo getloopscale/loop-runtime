@@ -438,6 +438,28 @@ func TestBuildOrchestrator_SubmitBuild_HappyPath(t *testing.T) {
 	if len(startedEvents) != 1 {
 		t.Errorf("expected 1 build.started SSE event, got %d", len(startedEvents))
 	}
+
+	// F-01: build.started must include apps[] array for per-app CLI rendering
+	if len(startedEvents) == 1 {
+		var payload map[string]interface{}
+		if err := json.Unmarshal(startedEvents[0].Data, &payload); err != nil {
+			t.Fatalf("failed to unmarshal build.started data: %v", err)
+		}
+		apps, ok := payload["apps"]
+		if !ok {
+			t.Fatal("build.started SSE event missing 'apps' field — CLI cannot render per-app progress")
+		}
+		appsSlice, ok := apps.([]interface{})
+		if !ok {
+			t.Fatalf("expected apps to be an array, got %T", apps)
+		}
+		if len(appsSlice) != 1 {
+			t.Errorf("expected 1 app in build.started, got %d", len(appsSlice))
+		}
+		if appsSlice[0] != "api" {
+			t.Errorf("expected app name 'api', got %v", appsSlice[0])
+		}
+	}
 }
 
 func TestBuildOrchestrator_SubmitBuild_ConcurrentBuild(t *testing.T) {

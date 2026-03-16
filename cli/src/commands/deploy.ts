@@ -74,6 +74,7 @@ export interface DeployDeps {
   findLoopZeroYaml: () => LoopZeroYamlResult | null;
   hasGitRepo: () => boolean;
   hasUncommittedChanges: () => boolean;
+  hasLockfile: () => boolean;
   getHeadCommit: () => string;
   createGitBundle: () => Promise<string>;
   uploadSource: (bundlePath: string, loopzeroYamlPath: string) => Promise<UploadResult>;
@@ -108,23 +109,23 @@ export class DeployCommand {
 
     // 1. Auth check
     if (!this.deps.getToken()) {
-      return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4);
+      return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
 
     // 2. Validate .git exists
     if (!this.deps.hasGitRepo()) {
-      return this.exitWithError(opts, 'Run from inside a git repository.', 1);
+      return this.exitWithError(opts, 'Not a git repository. Run this command from your project directory.', 1, 'NOT_GIT_REPO');
     }
 
     // 3. Find loopzero.yaml
     const yamlResult = this.deps.findLoopZeroYaml();
     if (!yamlResult) {
-      return this.exitWithError(opts, 'No loopzero.yaml found. Run: loopzero init', 1);
+      return this.exitWithError(opts, 'No loopzero.yaml found. Run: loopzero init', 1, 'MISSING_CONFIG');
     }
 
     // 3b. Check for YAML parse errors
     if (yamlResult.parseError) {
-      return this.exitWithError(opts, `Invalid loopzero.yaml: ${yamlResult.parseError}`, 1);
+      return this.exitWithError(opts, `Invalid loopzero.yaml: ${yamlResult.parseError}`, 1, 'INVALID_CONFIG');
     }
 
     const { content: config } = yamlResult;
@@ -132,25 +133,25 @@ export class DeployCommand {
     // 4. Validate apps exist
     const appNames = Object.keys(config.apps);
     if (appNames.length === 0) {
-      return this.exitWithError(opts, 'No apps defined in loopzero.yaml. Add at least one app to deploy.', 1);
+      return this.exitWithError(opts, 'No apps defined in loopzero.yaml. Add at least one app to deploy.', 1, 'INVALID_CONFIG');
     }
 
     // 5. Validate --env (DA-10)
     const envError = this.validateEnvironment(environment);
     if (envError) {
-      return this.exitWithError(opts, envError, 1);
+      return this.exitWithError(opts, envError, 1, 'INVALID_ENVIRONMENT');
     }
 
     // 6. Validate --app flag (DA-19) — fail fast before any upload
     const selectedApps = opts.app ?? appNames;
     for (const app of selectedApps) {
       if (!appNames.includes(app)) {
-        return this.exitWithError(opts, `App "${app}" not found in loopzero.yaml. Available apps: ${appNames.join(', ')}`, 1);
+        return this.exitWithError(opts, `App "${app}" not found in loopzero.yaml. Available apps: ${appNames.join(', ')}`, 1, 'APP_NOT_FOUND');
       }
     }
 
-    // 7. Validate secrets (pre-deploy check)
-    const declaredSecrets = this.collectDeclaredSecrets(config);
+    // 7. Validate secrets (pre-deploy check) — scoped to selected apps only (F-02)
+    const declaredSecrets = this.collectDeclaredSecrets(config, selectedApps);
     if (declaredSecrets.length > 0) {
       const configuredSecrets = await this.deps.getSecrets(config.project, environment);
       const missingSecrets = declaredSecrets.filter((s) => !configuredSecrets.includes(s));
@@ -158,7 +159,7 @@ export class DeployCommand {
         const msg = `Missing secrets for env "${environment}": ${missingSecrets.join(', ')}`;
         const hint = 'Set secrets before deploying. See: https://docs.loopzero.example/secrets';
         if (opts.json) {
-          this.deps.writeTo(JSON.stringify({ error: `${msg}. ${hint}`, exit_code: 1 }));
+          this.deps.writeTo(JSON.stringify({ code: 'MISSING_SECRETS', error: `${msg}. ${hint}`, exit_code: 1 }));
         } else {
           this.deps.writeError(msg);
           this.deps.writeError(hint);
@@ -174,6 +175,13 @@ export class DeployCommand {
       }
     }
 
+    // 8b. Warn about missing lockfile (F-03: fail-fast before upload)
+    if (!this.deps.hasLockfile()) {
+      if (!opts.json) {
+        this.deps.writeTo('Warning: No lockfile found (package-lock.json, yarn.lock, or pnpm-lock.yaml). Build may fail. Run: npm install');
+      }
+    }
+
     // 9. Get HEAD commit (validates git has at least one commit)
     this.deps.getHeadCommit();
 
@@ -182,7 +190,7 @@ export class DeployCommand {
     try {
       bundlePath = await this.deps.createGitBundle();
     } catch (err) {
-      return this.exitWithError(opts, `Failed to create source bundle. ${(err as Error).message}`, 1);
+      return this.exitWithError(opts, `Failed to create source bundle. ${(err as Error).message}`, 1, 'BUNDLE_FAILED');
     }
 
     // 11. Upload source
@@ -258,7 +266,7 @@ export class DeployCommand {
       const timeoutId = setTimeout(() => {
         if (!resolved) {
           if (opts.json) {
-            this.deps.writeTo(JSON.stringify({ error: 'Deploy timed out waiting for completion. Wait for it to complete, or try again later.', exit_code: 3 }));
+            this.deps.writeTo(JSON.stringify({ code: 'DEPLOY_TIMEOUT', error: 'Deploy timed out waiting for completion. Wait for it to complete, or try again later.', exit_code: 3 }));
           } else {
             this.deps.writeError('Deploy timed out waiting for completion. Wait for it to complete, or try again later.');
           }
@@ -286,10 +294,17 @@ export class DeployCommand {
           if (opts.json) {
             const jsonPayload = {
               ...payload,
-              apps: payload.apps.map((app) => ({
-                ...app,
-                url: app.url ?? null,
-              })),
+              apps: payload.apps.map((app) => {
+                const entry: Record<string, unknown> = {
+                  ...app,
+                  url: app.url ?? null,
+                };
+                // F-04: Add build_log pointer for failed apps per spec §0.3
+                if (app.status === 'failed') {
+                  entry.build_log = `loopzero logs --build ${buildResult.build_id}`;
+                }
+                return entry;
+              }),
             };
             this.deps.writeTo(JSON.stringify(jsonPayload));
             finish(this.resolveExitCode(payload, selectedApps.length));
@@ -306,7 +321,7 @@ export class DeployCommand {
           const data = event.data as Record<string, unknown>;
           const reason = String(data.error ?? data.status ?? 'unknown error');
           if (opts.json) {
-            this.deps.writeTo(JSON.stringify({ error: `Build failed: ${reason}`, exit_code: 2 }));
+            this.deps.writeTo(JSON.stringify({ code: 'BUILD_FAILED', error: `Build failed: ${reason}`, exit_code: 2 }));
           } else {
             this.deps.writeError(`Build failed: ${reason}`);
           }
@@ -320,6 +335,7 @@ export class DeployCommand {
           const reason = String(data.reason ?? 'sync failed');
           if (opts.json) {
             this.deps.writeTo(JSON.stringify({
+              code: 'DEPLOY_FAILED',
               error: `Deploy failed: ${reason}`,
               exit_code: 3,
               deploy_id: data.deploy_id ?? null,
@@ -389,10 +405,11 @@ export class DeployCommand {
     }
   }
 
-  private collectDeclaredSecrets(config: LoopZeroYaml): string[] {
+  private collectDeclaredSecrets(config: LoopZeroYaml, selectedApps: string[]): string[] {
     const secretsSet = new Set<string>();
-    for (const app of Object.values(config.apps)) {
-      if (app.secrets) {
+    for (const appName of selectedApps) {
+      const app = config.apps[appName];
+      if (app?.secrets) {
         for (const secret of app.secrets) {
           secretsSet.add(secret);
         }
@@ -421,23 +438,27 @@ export class DeployCommand {
       return 'Environment name cannot be empty.';
     }
     if (env !== env.toLowerCase()) {
-      return 'Environment names must be lowercase.';
+      return `Environment names must be lowercase. Example: --env ${env.toLowerCase()}`;
     }
     if (!/^[a-z]/.test(env)) {
-      return 'Environment name must start with a lowercase letter.';
+      return 'Environment name must start with a lowercase letter. Example: --env staging';
     }
     if (env.length > 63) {
-      return `Environment name too long (${env.length} chars, max 63).`;
+      return `Environment name too long (${env.length} chars, max 63). Use a shorter name.`;
     }
     if (!/^[a-z][a-z0-9-]*$/.test(env)) {
-      return 'Environment name can only contain lowercase letters, numbers, and hyphens.';
+      return 'Environment name can only contain lowercase letters, numbers, and hyphens. Example: --env staging';
     }
     return null;
   }
 
-  private exitWithError(opts: DeployOptions, message: string, exitCode: number): number {
+  private exitWithError(opts: DeployOptions, message: string, exitCode: number, code?: string): number {
     if (opts.json) {
-      this.deps.writeTo(JSON.stringify({ error: message, exit_code: exitCode }));
+      const payload: Record<string, unknown> = { error: message, exit_code: exitCode };
+      if (code) {
+        payload.code = code;
+      }
+      this.deps.writeTo(JSON.stringify(payload));
     } else {
       this.deps.writeError(message);
     }
@@ -446,11 +467,11 @@ export class DeployCommand {
 
   private handleError(opts: DeployOptions, err: unknown): number {
     if (err instanceof ApiError) {
-      return this.exitWithError(opts, err.message, err.exitCode);
+      return this.exitWithError(opts, err.message, err.exitCode, err.code);
     }
     if (err instanceof Error) {
-      return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3);
+      return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');
     }
-    return this.exitWithError(opts, 'Unexpected error. Wait for it to complete, or try again later.', 3);
+    return this.exitWithError(opts, 'Unexpected error. Wait for it to complete, or try again later.', 3, 'UNEXPECTED_ERROR');
   }
 }

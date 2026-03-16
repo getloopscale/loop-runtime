@@ -23,7 +23,7 @@ import { DeployCommand } from './commands/deploy';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
-import { hasGitRepo, hasUncommittedChanges, getHeadCommit, getGitRoot, createGitBundle } from './adapters/git';
+import { hasGitRepo, hasUncommittedChanges, hasLockfile, getHeadCommit, getGitRoot, createGitBundle } from './adapters/git';
 import { findLoopZeroYaml } from './adapters/loopzero-yaml';
 import { cleanupFile } from './adapters/source-bundle';
 import { uploadSource } from './adapters/source-upload';
@@ -209,6 +209,7 @@ export function createProgram(): Command {
         },
         hasGitRepo,
         hasUncommittedChanges,
+        hasLockfile,
         getHeadCommit,
         createGitBundle,
         uploadSource: (bundlePath: string, loopzeroYamlPath: string) =>

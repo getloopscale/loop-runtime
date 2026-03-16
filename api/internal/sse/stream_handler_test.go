@@ -167,7 +167,7 @@ func TestStreamHappyPath(t *testing.T) {
 
 	// Pre-populate events
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"build_id":"build-1","status":"running"}`))
+	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"build_id":"build-1","status":"running","apps":["api"]}`))
 	eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"build_id":"build-1","status":"succeeded"}`))
 	eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-1234","status":"success"}`))
 
@@ -250,7 +250,7 @@ func TestStreamLastEventIDReplay(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	id1, _ := eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
+	id1, _ := eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running","apps":["api"]}`))
 	_, _ = eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
 	_, _ = eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"status":"success"}`))
 
@@ -402,7 +402,7 @@ func TestStreamConnectionAfterTerminalState(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
+	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running","apps":["api"]}`))
 	eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
 	eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-abcd","status":"success"}`))
 
@@ -532,7 +532,7 @@ func TestStreamDeployCompletedEventFormat(t *testing.T) {
 	deployData, _ := json.Marshal(deployPayload)
 
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{}`))
+	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"apps":["api"]}`))
 	eventStore.Append(ctx, "build-1", "deploy.completed", deployData)
 
 	handler := sse.NewStreamHandler(eventStore, buildReader)

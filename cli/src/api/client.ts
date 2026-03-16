@@ -11,12 +11,14 @@ export interface ApiClientOptions {
 export class ApiError extends Error {
   public readonly exitCode: number;
   public readonly statusCode: number;
+  public readonly code: string;
 
-  constructor(message: string, exitCode: number, statusCode: number) {
+  constructor(message: string, exitCode: number, statusCode: number, code?: string) {
     super(message);
     this.name = 'ApiError';
     this.exitCode = exitCode;
     this.statusCode = statusCode;
+    this.code = code ?? 'API_ERROR';
   }
 }
 
@@ -101,19 +103,22 @@ export class ApiClient {
     body?: { code?: string; message?: string } | null,
   ): ApiError {
     const serverMessage = body?.message ?? null;
+    const serverCode = body?.code ?? undefined;
 
     switch (status) {
       case 401:
         return new ApiError(
           serverMessage || 'Not authenticated. Run: loopzero login',
           4,
-          status
+          status,
+          serverCode ?? 'AUTH_REQUIRED',
         );
       case 403:
         return new ApiError(
           serverMessage || 'Permission denied. Check your account access.',
           4,
-          status
+          status,
+          serverCode ?? 'PERMISSION_DENIED',
         );
       case 409:
         // Exit code 3 (deploy failure) is used for concurrent rejection per spec §0.3.
@@ -122,26 +127,39 @@ export class ApiClient {
             ? `${serverMessage} Wait for it to complete, or try again later.`
             : 'A deploy is already in progress for this environment. Wait for it to complete, or try again later.'),
           3,
-          status
+          status,
+          serverCode ?? 'DEPLOY_IN_PROGRESS',
         );
       case 422:
         return new ApiError(
           serverMessage || 'Invalid request. Check your command arguments.',
           1,
-          status
+          status,
+          serverCode ?? 'VALIDATION_FAILED',
         );
       default:
         if (status >= 500) {
+          // F-04/F-06: Auth service errors are exit code 4 (auth), not 3 (deploy failure)
+          if (serverCode === 'AUTH_SERVICE_UNAVAILABLE') {
+            return new ApiError(
+              serverMessage || 'Authentication service is temporarily unavailable. Try again in a moment.',
+              4,
+              status,
+              'AUTH_SERVICE_UNAVAILABLE',
+            );
+          }
           return new ApiError(
             serverMessage || 'Service unavailable. Try again in a moment.',
             3,
-            status
+            status,
+            serverCode ?? 'SERVICE_UNAVAILABLE',
           );
         }
         return new ApiError(
           serverMessage || `Request failed (HTTP ${status}).`,
           3,
-          status
+          status,
+          serverCode ?? 'API_ERROR',
         );
     }
   }

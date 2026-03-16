@@ -20,6 +20,7 @@ function createMockDeps(overrides: Partial<DeployDeps> = {}): DeployDeps {
       },
     }),
     hasGitRepo: jest.fn().mockReturnValue(true),
+    hasLockfile: jest.fn().mockReturnValue(true),
     getHeadCommit: jest.fn().mockReturnValue('abc1234'),
     createGitBundle: jest.fn().mockResolvedValue('/tmp/bundle.bundle'),
     uploadSource: jest.fn().mockResolvedValue({ commit_sha: 'abc1234', apps: ['api', 'web'] }),
@@ -379,6 +380,44 @@ describe('DeployCommand', () => {
       const failedApp = parsed.apps.find((a: Record<string, unknown>) => a.status === 'failed');
       expect(failedApp).toHaveProperty('error');
     });
+
+    it('should include build_log field for failed apps in JSON output (F-04)', async () => {
+      const deps = createMockDeps({
+        submitBuild: jest.fn().mockResolvedValue({
+          build_id: 'build-abc123',
+          stream_url: '/api/v1/builds/build-abc123/stream',
+        }),
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'deploy.completed',
+              data: {
+                deploy_id: 'd-abcd',
+                status: 'partial_failure',
+                duration_seconds: 60,
+                apps: [
+                  { name: 'api', status: 'deployed', url: 'https://api.example.com', build_duration_seconds: 30 },
+                  { name: 'web', status: 'failed', error: 'TS2307 module not found', build_duration_seconds: 30 },
+                ],
+              },
+            });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(5);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      const failedApp = parsed.apps.find((a: Record<string, unknown>) => a.status === 'failed');
+      expect(failedApp.build_log).toBe('loopzero logs --build build-abc123');
+      // Deployed apps should NOT have build_log
+      const deployedApp = parsed.apps.find((a: Record<string, unknown>) => a.status === 'deployed');
+      expect(deployedApp.build_log).toBeUndefined();
+    });
   });
 
   describe('--no-wait', () => {
@@ -408,7 +447,7 @@ describe('DeployCommand', () => {
 
       expect(exitCode).toBe(1);
       const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
-      expect(errOutput).toContain('Run from inside a git repository.');
+      expect(errOutput).toContain('Not a git repository.');
     });
   });
 
@@ -1014,6 +1053,57 @@ describe('DeployCommand', () => {
 
       expect(deps.getSecrets).toHaveBeenCalledWith('my-saas', 'staging');
     });
+
+    it('should only check secrets for selected apps when --app is used (F-02)', async () => {
+      const deps = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue({
+          path: '/project/loopzero.yaml',
+          content: {
+            project: 'my-saas',
+            apps: {
+              api: { path: 'apps/api', framework: 'express', port: 3000, secrets: ['DATABASE_URL', 'JWT_SECRET'] },
+              gateway: { path: 'apps/gateway', framework: 'express', port: 4000 },
+              worker: { path: 'apps/worker', framework: 'node', port: null, secrets: ['DATABASE_URL', 'REDIS_URL'] },
+            },
+          },
+        }),
+        getSecrets: jest.fn().mockResolvedValue([]),
+      });
+      const cmd = new DeployCommand(deps);
+
+      // Deploy only gateway (which has NO secrets) — should succeed without checking secrets
+      const exitCode = await cmd.execute({ app: ['gateway'], wait: false });
+
+      expect(exitCode).toBe(0);
+      // getSecrets should NOT be called because gateway declares no secrets
+      expect(deps.getSecrets).not.toHaveBeenCalled();
+    });
+
+    it('should check only selected app secrets when --app selects app with secrets (F-02)', async () => {
+      const deps = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue({
+          path: '/project/loopzero.yaml',
+          content: {
+            project: 'my-saas',
+            apps: {
+              api: { path: 'apps/api', framework: 'express', port: 3000, secrets: ['DATABASE_URL', 'JWT_SECRET'] },
+              gateway: { path: 'apps/gateway', framework: 'express', port: 4000 },
+              worker: { path: 'apps/worker', framework: 'node', port: null, secrets: ['DATABASE_URL', 'REDIS_URL'] },
+            },
+          },
+        }),
+        getSecrets: jest.fn().mockResolvedValue(['DATABASE_URL']),
+      });
+      const cmd = new DeployCommand(deps);
+
+      // Deploy only api — should fail on JWT_SECRET but NOT on REDIS_URL (worker's secret)
+      const exitCode = await cmd.execute({ app: ['api'] });
+
+      expect(exitCode).toBe(1);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput).toContain('JWT_SECRET');
+      expect(errOutput).not.toContain('REDIS_URL');
+    });
   });
 
   describe('malformed loopzero.yaml (F-05)', () => {
@@ -1120,7 +1210,7 @@ describe('DeployCommand', () => {
       expect(exitCode).toBe(4);
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
       const parsed = JSON.parse(output);
-      expect(parsed).toEqual({ error: 'Not authenticated. Run: loopzero login', exit_code: 4 });
+      expect(parsed).toEqual({ code: 'AUTH_REQUIRED', error: 'Not authenticated. Run: loopzero login', exit_code: 4 });
       expect(deps.writeError).not.toHaveBeenCalled();
     });
 
@@ -1149,7 +1239,7 @@ describe('DeployCommand', () => {
       expect(exitCode).toBe(1);
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
       const parsed = JSON.parse(output);
-      expect(parsed).toEqual({ error: 'Run from inside a git repository.', exit_code: 1 });
+      expect(parsed).toEqual({ code: 'NOT_GIT_REPO', error: 'Not a git repository. Run this command from your project directory.', exit_code: 1 });
       expect(deps.writeError).not.toHaveBeenCalled();
     });
 
@@ -1164,7 +1254,7 @@ describe('DeployCommand', () => {
       expect(exitCode).toBe(1);
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
       const parsed = JSON.parse(output);
-      expect(parsed).toEqual({ error: 'No loopzero.yaml found. Run: loopzero init', exit_code: 1 });
+      expect(parsed).toEqual({ code: 'MISSING_CONFIG', error: 'No loopzero.yaml found. Run: loopzero init', exit_code: 1 });
       expect(deps.writeError).not.toHaveBeenCalled();
     });
 
@@ -1222,6 +1312,33 @@ describe('DeployCommand', () => {
       expect(parsed.error).toContain('DATABASE_URL');
       expect(parsed.exit_code).toBe(1);
       expect(deps.writeError).not.toHaveBeenCalled();
+    });
+
+    it('should include typed code field in all --json error responses (F-03)', async () => {
+      // Test AUTH_REQUIRED
+      const authDeps = createMockDeps({ getToken: jest.fn().mockReturnValue(null) });
+      let exitCode = await new DeployCommand(authDeps).execute({ json: true });
+      let parsed = JSON.parse((authDeps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(''));
+      expect(parsed.code).toBe('AUTH_REQUIRED');
+      expect(exitCode).toBe(4);
+
+      // Test NOT_GIT_REPO
+      const gitDeps = createMockDeps({ hasGitRepo: jest.fn().mockReturnValue(false) });
+      exitCode = await new DeployCommand(gitDeps).execute({ json: true });
+      parsed = JSON.parse((gitDeps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(''));
+      expect(parsed.code).toBe('NOT_GIT_REPO');
+
+      // Test INVALID_ENVIRONMENT
+      const envDeps = createMockDeps();
+      exitCode = await new DeployCommand(envDeps).execute({ env: 'PROD', json: true });
+      parsed = JSON.parse((envDeps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(''));
+      expect(parsed.code).toBe('INVALID_ENVIRONMENT');
+
+      // Test APP_NOT_FOUND
+      const appDeps = createMockDeps();
+      exitCode = await new DeployCommand(appDeps).execute({ app: ['nonexistent'], json: true });
+      parsed = JSON.parse((appDeps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(''));
+      expect(parsed.code).toBe('APP_NOT_FOUND');
     });
 
     it('should output JSON when --json and deploy conflict (409)', async () => {
@@ -1735,6 +1852,51 @@ describe('DeployCommand', () => {
       const allOutput = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
       expect(allOutput).not.toContain('background worker');
       expect(allOutput).toContain('deployed');
+    });
+  });
+
+  describe('lockfile pre-check (F-03)', () => {
+    it('should warn when no lockfile exists (human mode)', async () => {
+      const deps = createMockDeps({
+        hasLockfile: jest.fn().mockReturnValue(false),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      // Should still deploy (warning, not blocking), but emit a warning
+      expect(deps.writeTo).toHaveBeenCalledWith(
+        expect.stringContaining('lockfile')
+      );
+    });
+
+    it('should not warn when lockfile exists', async () => {
+      const deps = createMockDeps({
+        hasLockfile: jest.fn().mockReturnValue(true),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(0);
+      const allOutput = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(allOutput).not.toContain('lockfile');
+    });
+
+    it('should not warn in --json mode', async () => {
+      const deps = createMockDeps({
+        hasLockfile: jest.fn().mockReturnValue(false),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      // In JSON mode, only emit JSON objects — no warning text
+      const allOutput = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      if (allOutput.includes('lockfile')) {
+        // If mentioned, it must be inside JSON
+        expect(() => JSON.parse(allOutput)).not.toThrow();
+      }
     });
   });
 });

@@ -262,4 +262,39 @@ describe('ApiClient', () => {
       }
     });
   });
+
+  describe('F-04/F-06: AUTH_SERVICE_UNAVAILABLE maps to exit code 4', () => {
+    it('should map 503 with AUTH_SERVICE_UNAVAILABLE code to exit code 4', async () => {
+      const fetchFn = fakeFetch(503, {
+        code: 'AUTH_SERVICE_UNAVAILABLE',
+        message: 'Authentication service is temporarily unavailable',
+      });
+      const client = new ApiClient({ baseURL, token: 'tok', fetchFn });
+
+      try {
+        await client.get('/test');
+        fail('Expected ApiError');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).exitCode).toBe(4);
+        expect((err as ApiError).code).toBe('AUTH_SERVICE_UNAVAILABLE');
+      }
+    });
+
+    it('should map generic 503 to exit code 3 (not auth)', async () => {
+      const fetchFn = fakeFetch(503, {
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Service temporarily unavailable',
+      });
+      const client = new ApiClient({ baseURL, token: 'tok', fetchFn });
+
+      try {
+        await client.get('/test');
+        fail('Expected ApiError');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).exitCode).toBe(3);
+      }
+    });
+  });
 });
