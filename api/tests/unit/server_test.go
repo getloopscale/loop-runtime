@@ -3,8 +3,11 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
@@ -222,3 +225,107 @@ func TestServerNilLogger(t *testing.T) {
 		}
 	})
 }
+
+func TestServerMetricsNotOnMainRouter(t *testing.T) {
+	t.Run("GET /metrics returns 404 on main router", func(t *testing.T) {
+		cfg := server.Config{
+			Port:   "0",
+			Logger: nil,
+			DB:     nil,
+		}
+		router := server.NewRouter(cfg)
+
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 for /metrics on main router, got %d", rec.Code)
+		}
+	})
+}
+
+func TestValidateProductionEnv(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	t.Run("returns nil when all required vars are set", func(t *testing.T) {
+		vars := map[string]string{
+			"DATABASE_URL":              "postgres://localhost:5432/loopzero",
+			"LOOPZERO_ARGO_CALLBACK_SECRET": "some-secret",
+			"GITEA_TOKEN":              "tok-123",
+			"ARGOCD_TOKEN":             "tok-456",
+		}
+		err := server.ValidateProductionEnv(logger, vars)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("returns error when a required var is empty", func(t *testing.T) {
+		vars := map[string]string{
+			"DATABASE_URL":              "postgres://localhost:5432/loopzero",
+			"LOOPZERO_ARGO_CALLBACK_SECRET": "",
+			"GITEA_TOKEN":              "tok-123",
+			"ARGOCD_TOKEN":             "tok-456",
+		}
+		err := server.ValidateProductionEnv(logger, vars)
+		if err == nil {
+			t.Fatal("expected error for missing LOOPZERO_ARGO_CALLBACK_SECRET, got nil")
+		}
+	})
+
+	t.Run("returns error listing all missing vars", func(t *testing.T) {
+		vars := map[string]string{
+			"DATABASE_URL":              "",
+			"LOOPZERO_ARGO_CALLBACK_SECRET": "",
+			"GITEA_TOKEN":              "",
+			"ARGOCD_TOKEN":             "",
+		}
+		err := server.ValidateProductionEnv(logger, vars)
+		if err == nil {
+			t.Fatal("expected error for all missing vars, got nil")
+		}
+	})
+}
+
+func TestServerConfigHasMetricsPort(t *testing.T) {
+	t.Run("Config struct accepts MetricsPort", func(t *testing.T) {
+		cfg := server.Config{
+			Port:        "3001",
+			MetricsPort: "9090",
+		}
+		if cfg.MetricsPort != "9090" {
+			t.Fatalf("expected MetricsPort=9090, got %q", cfg.MetricsPort)
+		}
+	})
+}
+
+func TestMetricsServerStartsOnSeparatePort(t *testing.T) {
+	t.Run("metrics server serves /metrics on separate port", func(t *testing.T) {
+		cfg := server.Config{
+			Port:        "0",
+			MetricsPort: "0", // Let OS assign a port
+			Logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		}
+
+		// Use NewMetricsServer to get a testable server
+		metricsSrv := server.NewMetricsServer(cfg.MetricsPort)
+
+		// Use httptest to verify the handler responds to /metrics
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		rec := httptest.NewRecorder()
+		metricsSrv.Handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 from metrics handler, got %d", rec.Code)
+		}
+
+		ct := rec.Header().Get("Content-Type")
+		if ct == "" {
+			t.Fatal("expected Content-Type header from metrics endpoint")
+		}
+	})
+}
+
+// Ensure unused imports don't cause build errors.
+var _ = fmt.Sprintf

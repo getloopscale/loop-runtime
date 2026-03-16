@@ -62,6 +62,24 @@ helm_resource(
 )
 
 # ---------------------------------------------------------------------------
+# PodDisruptionBudgets — protect stateful services during node drain
+# ---------------------------------------------------------------------------
+k8s_yaml([
+    "infra/helm/postgresql/templates/pdb.yaml",
+    "infra/helm/gitea/templates/pdb.yaml",
+    "infra/helm/argocd/templates/pdb.yaml",
+])
+k8s_resource(
+    objects=[
+        "postgresql:poddisruptionbudget",
+        "gitea:poddisruptionbudget",
+        "argocd-server:poddisruptionbudget",
+    ],
+    new_name="pdbs",
+    resource_deps=["postgresql", "gitea"],
+)
+
+# ---------------------------------------------------------------------------
 # CRDs — must be applied before the operator starts
 # ---------------------------------------------------------------------------
 k8s_yaml(listdir("operators/config/crd/bases/"))

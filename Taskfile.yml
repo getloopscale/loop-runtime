@@ -640,6 +640,10 @@ tasks:
         --namespace cert-manager --create-namespace
         -f infra/helm/cert-manager/values.yaml
         --wait --timeout 3m
+      # PodDisruptionBudgets for stateful services
+      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/postgresql/templates/pdb.yaml
+      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/gitea/templates/pdb.yaml
+      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/argocd/templates/pdb.yaml
 
   infra:install:build:
     desc: Install platform components in build cluster
@@ -891,6 +895,10 @@ tasks:
       - kubeconform --strict infra/tilt/api-deployment.yaml infra/tilt/operator-deployment.yaml
       # ArgoCD templates use CRD kinds (AppProject, Application) — skip those
       - kubeconform --strict --skip AppProject,Application infra/helm/argocd/templates/
+      # PodDisruptionBudgets
+      - kubeconform --strict infra/helm/postgresql/templates/pdb.yaml
+      - kubeconform --strict infra/helm/gitea/templates/pdb.yaml
+      - kubeconform --strict infra/helm/argocd/templates/pdb.yaml
       # Monitoring manifests (ServiceMonitor, PrometheusRule are CRD kinds — skip those)
       - kubeconform --strict --skip ServiceMonitor,PrometheusRule infra/helm/monitoring/manifests/
       # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate

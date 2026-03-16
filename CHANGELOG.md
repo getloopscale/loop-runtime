@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- PodDisruptionBudgets for PostgreSQL, Gitea, and ArgoCD — prevents correlated eviction during node drains (#hardening)
+- Production env validation: API fails fast on missing required vars when `LOOPZERO_ENV=production` (#hardening)
+- Dedicated metrics server on port 9090 — `/metrics` no longer exposed on the public API port (#hardening)
+- Production credential warnings in Helm values for postgresql, gitea, minio (#hardening)
+- PDB manifests validated in `task validate:manifests` pipeline (#hardening)
 - QA tooling: `task doctor` — checks all prerequisites, clusters, services with pass/fail/warn and install hints (#QA-tooling)
 - QA tooling: `task status` — shows environment health at a glance (clusters, pods, DB, API, monitoring) (#QA-tooling)
 - QA tooling: `task test:smoke` — quick platform validation in <30s before running full test suites (#QA-tooling)
@@ -22,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - QA tooling: `task db:status` — show database health: tables, row counts, connections, advisory locks (#QA-tooling)
 
 ### Changed
+- HTTP server now enforces `ReadTimeout: 30s` and `IdleTimeout: 120s` — prevents connection exhaustion from slow clients (#hardening)
+- Idempotency middleware limits body read to 10MB via `io.LimitReader` — prevents OOM on large uploads (#hardening)
+- Operator Dockerfile now defaults to `--leader-elect=true` — prevents duplicate reconciliation with 2+ replicas (#hardening)
+- Tilt dev loop continues using `--leader-elect=false` (single replica, no change to local DX) (#hardening)
 - Standardized all PostgreSQL port-forwards to port 15432 (was inconsistent: 5432, 15432, 15433) (#QA-tooling)
 - `task test` now runs unit + lint + manifest validation instead of unit only (#QA-tooling)
 - `task dev:seed:e2e` now manages its own port-forward instead of requiring external DATABASE_URL (#QA-tooling)

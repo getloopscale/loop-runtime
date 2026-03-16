@@ -29,4 +29,4 @@ USER 1000
 COPY --from=builder /tenant-controller /tenant-controller
 EXPOSE 8081
 ENTRYPOINT ["/tenant-controller"]
-CMD ["--leader-elect=false"]
+CMD ["--leader-elect=true"]

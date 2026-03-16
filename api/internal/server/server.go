@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,6 +23,7 @@ import (
 // Config holds the server configuration.
 type Config struct {
 	Port               string
+	MetricsPort        string
 	Logger             *slog.Logger
 	DB                 routes.DBHealthChecker
 	TokenValidator     middleware.TokenValidator
@@ -57,9 +59,6 @@ func NewRouter(cfg Config) *chi.Mux {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		_, _ = w.Write([]byte(`{"code":"METHOD_NOT_ALLOWED","message":"This HTTP method is not supported for this endpoint."}`))
 	})
-
-	// Prometheus metrics endpoint (no auth — standard for scraping)
-	r.Handle("/metrics", promhttp.Handler())
 
 	// Public routes (no auth required)
 	health := routes.NewHealthHandler(cfg.DB)
@@ -134,6 +133,38 @@ func NewRouter(cfg Config) *chi.Mux {
 	return r
 }
 
+// NewMetricsServer creates a separate HTTP server for Prometheus metrics.
+// This keeps /metrics off the main API port so it is not publicly accessible.
+func NewMetricsServer(port string) *http.Server {
+	if port == "" {
+		port = "9090"
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	return &http.Server{
+		Addr:              ":" + port,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+}
+
+// ValidateProductionEnv checks that all security-sensitive environment variables
+// are set. Returns an error listing missing variables. Intended for use when
+// LOOPZERO_ENV=production — in dev mode, fallback defaults are acceptable.
+func ValidateProductionEnv(logger *slog.Logger, vars map[string]string) error {
+	var missing []string
+	for name, val := range vars {
+		if val == "" {
+			missing = append(missing, name)
+			logger.Error("required environment variable not set", "var", name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required environment variables: %v", missing)
+	}
+	return nil
+}
+
 // Run starts the HTTP server with graceful shutdown.
 func Run(cfg Config) error {
 	if cfg.Logger == nil {
@@ -145,7 +176,20 @@ func Run(cfg Config) error {
 		Addr:              ":" + cfg.Port,
 		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		// WriteTimeout intentionally omitted — SSE streams are long-lived.
+		// Non-SSE routes should use http.TimeoutHandler per-route if needed.
 	}
+
+	// Start metrics server on a separate port (not publicly accessible)
+	metricsSrv := NewMetricsServer(cfg.MetricsPort)
+	go func() {
+		cfg.Logger.Info("metrics server starting", "port", metricsSrv.Addr)
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			cfg.Logger.Error("metrics server failed", "error", err)
+		}
+	}()
 
 	// Graceful shutdown
 	shutdown := make(chan os.Signal, 1)
@@ -170,5 +214,11 @@ func Run(cfg Config) error {
 	defer cancel()
 
 	cfg.Logger.Info("shutting down gracefully")
+
+	// Shut down both servers
+	if err := metricsSrv.Shutdown(ctx); err != nil {
+		cfg.Logger.Error("metrics server shutdown failed", "error", err)
+	}
+
 	return srv.Shutdown(ctx)
 }

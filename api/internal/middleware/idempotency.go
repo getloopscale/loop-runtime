@@ -60,8 +60,11 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Read and hash body
-			body, err := io.ReadAll(r.Body)
+			// Limit body read to 10MB for idempotency hashing.
+			// Source uploads (large payloads) should not use idempotency keys,
+			// so this limit only affects API mutation endpoints (builds, projects).
+			const maxIdempotencyBodySize = 10 << 20 // 10 MB
+			body, err := io.ReadAll(io.LimitReader(r.Body, maxIdempotencyBodySize))
 			if err != nil {
 				writeIdempotencyError(w, http.StatusBadRequest, "INVALID_REQUEST", "Failed to read request body")
 				return

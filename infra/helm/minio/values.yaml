@@ -1,7 +1,10 @@
+# PRODUCTION WARNING: Override ALL passwords before deploying to production.
+# Default values are for local development only.
+# Use --set rootPassword=<secure-value> or a values override file.
 mode: standalone
 
 rootUser: loopzero-admin
-rootPassword: loopzero-dev-password
+rootPassword: loopzero-dev-password  # LOCAL DEV ONLY — override for production
 
 livenessProbe:
   enabled: true

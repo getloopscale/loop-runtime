@@ -1,6 +1,9 @@
+# PRODUCTION WARNING: Override ALL passwords before deploying to production.
+# Default values are for local development only.
+# Use --set auth.password=<secure-value> or a values override file.
 auth:
   username: loopzero
-  password: loopzero-dev-password
+  password: loopzero-dev-password  # LOCAL DEV ONLY — override for production
   database: loopzero
 
 primary:

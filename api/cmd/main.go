@@ -27,6 +27,20 @@ import (
 func main() {
 	logger := logging.NewLogger("api")
 
+	// In production, fail fast if security-sensitive env vars are missing.
+	// In dev mode, fallback defaults are acceptable.
+	if os.Getenv("LOOPZERO_ENV") == "production" {
+		required := map[string]string{
+			"DATABASE_URL":              os.Getenv("DATABASE_URL"),
+			"LOOPZERO_ARGO_CALLBACK_SECRET": os.Getenv("LOOPZERO_ARGO_CALLBACK_SECRET"),
+			"GITEA_TOKEN":              os.Getenv("GITEA_TOKEN"),
+			"ARGOCD_TOKEN":             os.Getenv("ARGOCD_TOKEN"),
+		}
+		if err := server.ValidateProductionEnv(logger, required); err != nil {
+			os.Exit(1)
+		}
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3001"
@@ -245,8 +259,14 @@ func main() {
 		logger.Warn("DATABASE_URL not set — running without database")
 	}
 
+	metricsPort := os.Getenv("METRICS_PORT")
+	if metricsPort == "" {
+		metricsPort = "9090"
+	}
+
 	cfg := server.Config{
 		Port:             port,
+		MetricsPort:      metricsPort,
 		Logger:           logger,
 		DB:               dbHealth,
 		TokenValidator:   githubValidator,
