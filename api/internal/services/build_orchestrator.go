@@ -536,7 +536,7 @@ func (o *BuildOrchestrator) waitForSync(ctx context.Context, tx db.DBTX, build *
 
 	// Step 8f: health probes (skip workers and frontends — they don't have /health endpoints)
 	for _, app := range result.Apps {
-		appType := appTypeFromName(app, result.Apps)
+		appType := appTypeFromName(app)
 		if appType == "worker" || appType == "frontend" {
 			continue
 		}
@@ -677,10 +677,10 @@ func deriveDeployID(releaseID string) string {
 	return "d-" + hex
 }
 
-// appTypeFromName finds the app type from the callback apps list.
+// appTypeFromName determines the app type from the callback app.
 // When the callback includes a Type field, use it directly.
 // Otherwise, fall back to URL heuristic: empty URL = worker.
-func appTypeFromName(app AppRelease, apps []AppRelease) string {
+func appTypeFromName(app AppRelease) string {
 	if app.Type != "" {
 		return app.Type
 	}

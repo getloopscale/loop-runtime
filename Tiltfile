@@ -136,11 +136,11 @@ k8s_resource(
 local_resource(
     "dev-seed",
     cmd="""
-        kubectl --context k3d-loopzero-mgmt port-forward -n loopzero-system svc/postgresql 15433:5432 &
+        kubectl --context k3d-loopzero-mgmt port-forward -n loopzero-system svc/postgresql 15432:5432 &
         PF_PID=$!
         trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
         sleep 3
-        PGPASSWORD=loopzero-dev-password psql -h localhost -p 15433 -U loopzero -d loopzero <<'SQL'
+        PGPASSWORD=loopzero-dev-password psql -h localhost -p 15432 -U loopzero -d loopzero <<'SQL'
         INSERT INTO users (id, email, github_id, display_name)
         VALUES ('github-paulohenriquevn', 'paulohenriquevn@gmail.com', 6766298, 'paulohenriquevn')
         ON CONFLICT (id) DO NOTHING;

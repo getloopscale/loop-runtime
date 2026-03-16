@@ -504,6 +504,11 @@ spec:
 
             for (const app of appList) {
               const appName = app.name;
+              // K8s resource names are prefixed with project to prevent collisions
+              // when multiple projects share the same tenant repo and namespace.
+              // Without this, two projects with app "api" would create duplicate
+              // Deployment/api, Service/api in acme-production.
+              const k8sName = hasExplicitApps ? project + '-' + appName : appName;
               const appType = app.type || 'server';
               const appPort = app.port || 3000;
               const appPath = app.path || (hasExplicitApps ? 'apps/' + appName : '.');
@@ -522,10 +527,10 @@ spec:
               manifests += 'apiVersion: apps/v1\n';
               manifests += 'kind: Deployment\n';
               manifests += 'metadata:\n';
-              manifests += '  name: ' + appName + '\n';
+              manifests += '  name: ' + k8sName + '\n';
               manifests += '  namespace: ' + ns + '\n';
               manifests += '  labels:\n';
-              manifests += '    app: ' + appName + '\n';
+              manifests += '    app: ' + k8sName + '\n';
               manifests += '    loopzero.io/tenant: ' + tenant + '\n';
               manifests += '    loopzero.io/project: ' + project + '\n';
               manifests += '    loopzero.io/environment: ' + env + '\n';
@@ -534,11 +539,11 @@ spec:
               manifests += '  replicas: 1\n';
               manifests += '  selector:\n';
               manifests += '    matchLabels:\n';
-              manifests += '      app: ' + appName + '\n';
+              manifests += '      app: ' + k8sName + '\n';
               manifests += '  template:\n';
               manifests += '    metadata:\n';
               manifests += '      labels:\n';
-              manifests += '        app: ' + appName + '\n';
+              manifests += '        app: ' + k8sName + '\n';
               manifests += '    spec:\n';
               manifests += '      containers:\n';
               manifests += '        - name: app\n';
@@ -560,11 +565,11 @@ spec:
                 manifests += 'apiVersion: v1\n';
                 manifests += 'kind: Service\n';
                 manifests += 'metadata:\n';
-                manifests += '  name: ' + appName + '\n';
+                manifests += '  name: ' + k8sName + '\n';
                 manifests += '  namespace: ' + ns + '\n';
                 manifests += 'spec:\n';
                 manifests += '  selector:\n';
-                manifests += '    app: ' + appName + '\n';
+                manifests += '    app: ' + k8sName + '\n';
                 manifests += '  ports:\n';
                 manifests += '    - port: 80\n';
                 manifests += '      targetPort: ' + appPort + '\n';
@@ -573,10 +578,10 @@ spec:
                 manifests += 'apiVersion: traefik.io/v1alpha1\n';
                 manifests += 'kind: IngressRoute\n';
                 manifests += 'metadata:\n';
-                manifests += '  name: ' + appName + '\n';
+                manifests += '  name: ' + k8sName + '\n';
                 manifests += '  namespace: ' + ns + '\n';
                 manifests += '  labels:\n';
-                manifests += '    app: ' + appName + '\n';
+                manifests += '    app: ' + k8sName + '\n';
                 manifests += '    loopzero.io/tenant: ' + tenant + '\n';
                 manifests += '    loopzero.io/environment: ' + env + '\n';
                 manifests += 'spec:\n';
@@ -586,7 +591,7 @@ spec:
                 manifests += '    - match: Host(\x60' + host + '\x60)\n';
                 manifests += '      kind: Rule\n';
                 manifests += '      services:\n';
-                manifests += '        - name: ' + appName + '\n';
+                manifests += '        - name: ' + k8sName + '\n';
                 manifests += '          port: 80\n';
                 manifests += '---\n';
 

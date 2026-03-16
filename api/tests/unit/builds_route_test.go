@@ -628,6 +628,10 @@ func TestBuildsCallbackRoute(t *testing.T) {
 		if orch.lastCallbackReq.Status != "failed" {
 			t.Errorf("expected fallback status 'failed', got %q", orch.lastCallbackReq.Status)
 		}
+		// Verify error message captures the ORIGINAL invalid status, not "failed"
+		if !strings.Contains(orch.lastCallbackReq.Error, "unknown") {
+			t.Errorf("error message should contain original status 'unknown', got %q", orch.lastCallbackReq.Error)
+		}
 	})
 
 	t.Run("POST /builds/:id/callback orchestrator error is logged not silenced", func(t *testing.T) {

@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- QA tooling: `task doctor` — checks all prerequisites, clusters, services with pass/fail/warn and install hints (#QA-tooling)
+- QA tooling: `task status` — shows environment health at a glance (clusters, pods, DB, API, monitoring) (#QA-tooling)
+- QA tooling: `task test:smoke` — quick platform validation in <30s before running full test suites (#QA-tooling)
+- QA tooling: `task db:reset` and `task db:reset:seed` — reset database to clean state with optional re-seed (#QA-tooling)
+- QA tooling: `task db:shell` and `task db:port-forward` — interactive DB access for debugging (#QA-tooling)
+- QA tooling: `task test:e2e:setup` — one-command E2E preparation (smoke + tokens + seed + verify) (#QA-tooling)
+- QA tooling: `task clean` and `task clean:all` — cleanup test artifacts and full environment teardown (#QA-tooling)
+- QA tooling: `task test:report`, `task test:report:unit`, `task test:report:e2e` — JUnit XML output for CI/QA tools via gotestsum (#QA-tooling)
+- QA tooling: `task test:all` — run complete test pyramid (unit + integration + lint + manifests + E2E) (#QA-tooling)
+- QA tooling: `task logs:api`, `task logs:operator`, `task logs:builds` — tail live logs for debugging (#QA-tooling)
+- QA tooling: `task build:cleanup` — clean up completed/failed Argo Workflow pods in build cluster (#QA-tooling)
+- QA tooling: `task db:status` — show database health: tables, row counts, connections, advisory locks (#QA-tooling)
+
+### Changed
+- Standardized all PostgreSQL port-forwards to port 15432 (was inconsistent: 5432, 15432, 15433) (#QA-tooling)
+- `task test` now runs unit + lint + manifest validation instead of unit only (#QA-tooling)
+- `task dev:seed:e2e` now manages its own port-forward instead of requiring external DATABASE_URL (#QA-tooling)
+- `task test:e2e` now sets `LOOPZERO_E2E=1` automatically — no need for manual env var (#QA-tooling)
+- All DB tasks reuse existing port-forwards (e.g., from tilt) instead of conflicting (#QA-tooling)
+- `monitoring:validate-targets` and `monitoring:status` use centralized port variables (#QA-tooling)
+
 ### Fixed
+- K8s resource name collision when multiple projects in same tenant define apps with same name (e.g., both have "api") — manifests now prefix resource names with project-id (e.g., `dogfood-saas-api` instead of `api`) to prevent ArgoCD `RepeatedResourceWarning` and `OutOfSync` failures (#S2-dogfood3 F-01)
+- Callback error message for unknown status always said "unexpected status: failed" instead of showing the original invalid status value — now captures original status before overwriting (#S2-review2)
+- Dead parameter `apps []AppRelease` in `appTypeFromName` — removed unused parameter (#S2-review2)
 - Build callback endpoint returns 400 on malformed Argo payload, leaving builds permanently stuck in RUNNING — now uses best-effort parsing with fallback to "failed" status, never returns 400 for callback payloads (#S2-dogfood2 F-01)
 - Argo Workflow `notify-api` template dumps raw `{{workflow.failures}}` JSON array into error field, producing malformed callback payload — now extracts only displayName fields, avoiding nested JSON (#S2-dogfood2 F-01)
 - FAILED builds have empty `error_message` in database — error from callback and reaper now persisted via `SetErrorMessage`, including descriptive timeout reasons for reaped builds (#S2-dogfood2 F-04)

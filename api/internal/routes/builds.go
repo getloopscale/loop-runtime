@@ -269,13 +269,14 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// Validate status — only "succeeded" and "failed" are valid.
 	// Unknown statuses fall back to "failed" instead of returning 400.
 	if req.Status != "succeeded" && req.Status != "failed" {
+		originalStatus := req.Status
 		h.logger.Warn("callback has invalid status, treating as failed",
 			"build_id", buildID,
-			"status", req.Status,
+			"status", originalStatus,
 		)
 		req.Status = "failed"
 		if req.Error == "" {
-			req.Error = "Build failed (callback reported unexpected status: " + req.Status + ")"
+			req.Error = "Build failed (callback reported unexpected status: " + originalStatus + ")"
 		}
 	}
 
