@@ -7,8 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Split `tenant_controller.go` (790 lines) into 7 focused files by resource type: namespaces, RBAC, network policies, GitOps, build namespace, priority class (#M2)
+- Split `build_orchestrator.go` (699 lines) — release activation methods extracted to `release_activator.go` (#M3)
+
 ### Added
+- Dedicated ArgoCD `loopzero-api` service account with `apiKey` capability — non-expiring tokens replace 24h session tokens that silently broke all deploys (#dogfood-S2-F01)
+- ArgoCD RBAC policy for `loopzero-api`: sync + get on applications only (least privilege) (#dogfood-S2-F01)
+- CLI `LOOPZERO_TOKEN` env var support — overrides config file token for CI/CD pipelines (#dogfood-S2-F02)
+- CLI `deploy --help` now shows `--json` and `--wait` flags (#dogfood-S2-F04)
 - PodDisruptionBudgets for PostgreSQL, Gitea, and ArgoCD — prevents correlated eviction during node drains (#hardening)
+
+### Fixed
+- ArgoCD sync failures caused by expired admin session token (24h TTL) — replaced with non-expiring `apiKey` token from dedicated service account (#dogfood-S2-F01)
+- Stale manifests in Gitea tenant repo prevented ArgoCD sync — cleaned orphan project directories from previous test runs (#dogfood-S2-F01)
+- CLI `--no-wait` message improved from "Wait for it to complete, or try again later" to actionable "Track status: loopzero deploy --env <env> --wait" (#dogfood-S2-F03)
 - Production env validation: API fails fast on missing required vars when `LOOPZERO_ENV=production` (#hardening)
 - Dedicated metrics server on port 9090 — `/metrics` no longer exposed on the public API port (#hardening)
 - Production credential warnings in Helm values for postgresql, gitea, minio (#hardening)

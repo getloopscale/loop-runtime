@@ -48,6 +48,11 @@ export class ConfigStore {
   }
 
   getToken(): string | null {
+    // LOOPZERO_TOKEN env var takes precedence over config file (CI/CD support)
+    const envToken = process.env.LOOPZERO_TOKEN;
+    if (envToken) {
+      return envToken;
+    }
     return this.getConfig()?.token ?? null;
   }
 

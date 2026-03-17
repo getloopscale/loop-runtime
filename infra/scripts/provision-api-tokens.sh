@@ -1,6 +1,12 @@
 #!/bin/bash
 # Provisions API tokens for Gitea and ArgoCD, and build cluster kubeconfig.
 # Idempotent — safe to run multiple times.
+#
+# ArgoCD auth: Uses a dedicated 'loopzero-api' account with apiKey capability.
+# Tokens from apiKey accounts do NOT expire (unlike admin session tokens which expire in 24h).
+# The account is configured in infra/helm/argocd/values.yaml:
+#   accounts.loopzero-api: apiKey   (no login — cannot access UI)
+# RBAC: sync + get on applications only (least privilege).
 set -euo pipefail
 
 MGMT_CTX="k3d-loopzero-mgmt"
@@ -24,20 +30,52 @@ GITEA_TOKEN=$(curl -s -X POST "http://localhost:13000/api/v1/users/loopzero-admi
 kill "$GITEA_PORT_FORWARD_PID" 2>/dev/null; wait "$GITEA_PORT_FORWARD_PID" 2>/dev/null || true
 echo "Gitea token: ${#GITEA_TOKEN} chars"
 
-# 2. ArgoCD token
-echo "Creating ArgoCD API token..."
+# 2. ArgoCD token — dedicated 'loopzero-api' account with apiKey capability
+#
+# The 'loopzero-api' account is defined in argocd-cm (via Helm values):
+#   accounts.loopzero-api: apiKey    (apiKey only, no login — cannot access UI)
+# RBAC grants: sync + get on all applications (least privilege).
+#
+# Unlike admin session tokens (/api/v1/session), apiKey tokens do NOT expire.
+# This eliminates silent 24h expiration that broke all deploys.
+echo "Creating ArgoCD API token (loopzero-api account, non-expiring)..."
 ARGOCD_PASS=$(kubectl --context "$MGMT_CTX" -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)
 
 kubectl --context "$MGMT_CTX" port-forward -n argocd svc/argocd-server 18080:80 &
 ARGOCD_PORT_FORWARD_PID=$!
 sleep 2
 
-ARGOCD_TOKEN=$(curl -s -X POST "http://localhost:18080/api/v1/session" \
+# Step 1: Admin login to get temporary session (just for generating the service token)
+ADMIN_SESSION=$(curl -s -X POST "http://localhost:18080/api/v1/session" \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"admin\",\"password\":\"$ARGOCD_PASS\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
 
+if [ -z "$ADMIN_SESSION" ]; then
+  echo "ERROR: Failed to get admin session. Is ArgoCD running?"
+  echo "  Ensure the ArgoCD Helm chart has been upgraded with the loopzero-api account:"
+  echo "    helm upgrade argocd infra/helm/argocd/ -n argocd"
+  kill "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null; wait "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null || true
+  exit 1
+fi
+
+# Step 2: Generate non-expiring API token for loopzero-api account
+# expiresIn=0 means the token never expires (ArgoCD default for apiKey accounts)
+ARGOCD_TOKEN=$(curl -s -X POST "http://localhost:18080/api/v1/account/loopzero-api/token" \
+  -H "Authorization: Bearer $ADMIN_SESSION" \
+  -H "Content-Type: application/json" \
+  -d "{\"expiresIn\":\"0\",\"id\":\"loopzero-api-$(date +%s)\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+
 kill "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null; wait "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null || true
-echo "ArgoCD token: ${#ARGOCD_TOKEN} chars"
+
+if [ -z "$ARGOCD_TOKEN" ]; then
+  echo "ERROR: Failed to generate loopzero-api token."
+  echo "  Ensure the 'loopzero-api' account exists in argocd-cm:"
+  echo "    accounts.loopzero-api: apiKey"
+  echo "  Run: helm upgrade argocd infra/helm/argocd/ -n argocd --reuse-values"
+  exit 1
+fi
+
+echo "ArgoCD token: ${#ARGOCD_TOKEN} chars (non-expiring, loopzero-api account)"
 
 # 3. Create/update K8s secret with both tokens
 echo "Creating K8s secret loopzero-api-tokens..."
@@ -48,9 +86,7 @@ kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create secret generic loopzero-api
 
 # 4. Build cluster kubeconfig
 echo "Extracting build cluster kubeconfig..."
-BUILD_SERVER=$(kubectl --context "$BUILD_CTX" config view --minify -o jsonpath='{.clusters[0].cluster.server}')
 BUILD_CA=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
-BUILD_TOKEN_NAME=$(kubectl --context "$BUILD_CTX" -n argo get serviceaccount default -o jsonpath='{.secrets[0].name}' 2>/dev/null || echo "")
 
 # For k3d, extract the user credentials directly
 BUILD_CERT=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')

@@ -235,7 +235,7 @@ export class DeployCommand {
           status: 'submitted',
         }));
       } else {
-        this.deps.writeTo(`Deploy started (${buildResult.build_id}). Wait for it to complete, or try again later.`);
+        this.deps.writeTo(`Deploy submitted (${buildResult.build_id}). Track status: loopzero deploy --env ${environment} --wait`);
       }
       return 0;
     }

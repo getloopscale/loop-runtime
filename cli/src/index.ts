@@ -192,7 +192,9 @@ export function createProgram(): Command {
     .description('Deploy your application. Use --json for structured output.')
     .option('--env <name>', 'Target environment', 'production')
     .option('--app <name...>', 'Deploy specific app(s)')
+    .option('--wait', 'Wait for deploy to complete', true)
     .option('--no-wait', 'Return immediately after submit')
+    .option('--json', 'Output in JSON format')
     .action(async (cmdOpts) => {
       const globalOpts = program.opts();
       const token = configStore.getToken();
@@ -268,7 +270,7 @@ export function createProgram(): Command {
         env: cmdOpts.env,
         app: cmdOpts.app,
         wait: cmdOpts.wait,
-        json: globalOpts.json,
+        json: cmdOpts.json || globalOpts.json,
       });
       process.exitCode = exitCode;
     });

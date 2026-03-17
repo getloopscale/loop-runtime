@@ -430,9 +430,9 @@ describe('DeployCommand', () => {
       expect(exitCode).toBe(0);
       expect(deps.connectSSE).not.toHaveBeenCalled();
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
-      expect(output).toContain('Deploy started');
+      expect(output).toContain('Deploy submitted');
       expect(output).toContain('build-deadbeef');
-      expect(output).toContain('try again later');
+      expect(output).toContain('Track status');
     });
   });
 
