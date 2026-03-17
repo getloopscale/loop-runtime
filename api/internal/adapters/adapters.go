@@ -173,9 +173,10 @@ func (a *BuildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID
 		})
 	}
 	return a.Orch.OnBuildCompleted(ctx, buildID, services.BuildCallbackRequest{
-		Status: result.Status,
-		Error:  result.Error,
-		Apps:   apps,
+		Status:    result.Status,
+		Error:     result.Error,
+		Apps:      apps,
+		Manifests: result.Manifests,
 	})
 }
 

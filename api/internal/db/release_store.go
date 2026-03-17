@@ -62,10 +62,10 @@ func (s *PostgresReleaseStore) Create(ctx context.Context, tx DBTX, release *Rel
 	release.Status = string(statemachine.ReleaseReady)
 
 	_, err := tx.Exec(ctx,
-		`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, apps)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, apps, artifacts)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		release.ID, release.BuildID, release.TenantID, release.ProjectID,
-		release.Environment, release.Status, release.CorrelationID, release.CreatedBy, release.Apps,
+		release.Environment, release.Status, release.CorrelationID, release.CreatedBy, release.Apps, release.Artifacts,
 	)
 	if err != nil {
 		return fmt.Errorf("release store: insert failed: %w", err)

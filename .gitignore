@@ -16,6 +16,7 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 prompts
+continue.txt
 
 # --------------------------------------------
 # Node.js / TypeScript (cli/)

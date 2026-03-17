@@ -45,9 +45,25 @@ type AppSpec struct {
 	Secrets []string `json:"secrets,omitempty"` // declared secret names from loopzero.yaml
 }
 
-// NOTE: GitOpsPusher was REMOVED from the API. The Argo Workflow's gitops-push
-// step handles manifest generation and commit to Gitea (spec §10.1, step 13i).
-// The API only transitions the release to PENDING after receiving the callback.
+// GitOpsPusher abstracts the commit-and-push of manifests to the tenant GitOps
+// repo (Gitea). Step 6 architectural fix: the build pipeline no longer touches
+// GitOps — the API owns the entire release flow after a build succeeds.
+type GitOpsPusher interface {
+	// Push commits manifests to the tenant GitOps repo and returns the git commit SHA.
+	// Path inside repo: {projectID}/{environment}/manifests.yaml
+	Push(ctx context.Context, opts GitOpsPushOpts) (commitSHA string, err error)
+}
+
+// GitOpsPushOpts contains everything needed to push manifests to the GitOps repo.
+type GitOpsPushOpts struct {
+	TenantID      string
+	ProjectID     string
+	Environment   string
+	Manifests     string // raw YAML content
+	BuildID       string
+	ReleaseID     string
+	CorrelationID string
+}
 
 // AppRelease describes a built app with its image digest and URL.
 type AppRelease struct {
@@ -95,9 +111,10 @@ type SubmitBuildResponse struct {
 
 // BuildCallbackRequest is sent by the build system when a build completes.
 type BuildCallbackRequest struct {
-	Status string       `json:"status"` // "succeeded" or "failed"
-	Error  string       `json:"error,omitempty"`
-	Apps   []AppRelease `json:"apps"`
+	Status    string       `json:"status"` // "succeeded" or "failed"
+	Error     string       `json:"error,omitempty"`
+	Apps      []AppRelease `json:"apps"`
+	Manifests string       `json:"manifests,omitempty"` // raw K8s YAML from generate-manifests step
 }
 
 // BuildOrchestratorDeps holds all dependencies for BuildOrchestrator.
@@ -112,6 +129,7 @@ type BuildOrchestratorDeps struct {
 	Health   HealthProber
 	Sync     SyncClient
 	Locker   EnvironmentLocker
+	GitOps   GitOpsPusher
 }
 
 // BuildOrchestrator orchestrates the entire deploy flow:
@@ -130,6 +148,7 @@ type BuildOrchestrator struct {
 	health   HealthProber
 	sync     SyncClient
 	locker   EnvironmentLocker
+	gitops   GitOpsPusher
 }
 
 // NewBuildOrchestrator creates a new BuildOrchestrator with all dependencies injected.
@@ -143,6 +162,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		health:         deps.Health,
 		sync:           deps.Sync,
 		locker:         deps.Locker,
+		gitops:         deps.GitOps,
 	}
 }
 

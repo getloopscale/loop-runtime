@@ -18,6 +18,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/server"
 	"github.com/loopzero/loopzero/api/internal/argo"
 	"github.com/loopzero/loopzero/api/internal/argocd"
+	"github.com/loopzero/loopzero/api/internal/gitops"
 	"github.com/loopzero/loopzero/api/internal/health"
 	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/source"
@@ -223,8 +224,15 @@ func main() {
 			RetryInterval:  30 * time.Second,
 		})
 
-		// NOTE: GitOpsPusher REMOVED — the Argo Workflow handles gitops-push
-		// (spec §10.1, step 13i). The API only transitions release state.
+		// Step 6: API owns GitOps push — build pipeline only produces artifacts.
+		// The GitOpsPusher commits manifests to the tenant GitOps repo in Gitea
+		// after a build succeeds, enabling retry-without-rebuild.
+		gitopsPusher := gitops.NewGiteaGitOpsPusher(gitops.GiteaGitOpsPusherConfig{
+			BaseURL: giteaURL,
+			Token:   giteaToken,
+			OrgName: "loopzero",
+		})
+
 		orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
 			BuildStore:     buildStore,
 			ReleaseStore:   releaseStore,
@@ -234,6 +242,7 @@ func main() {
 			Health:         healthProber,
 			Sync:           syncClient,
 			Locker:         locker,
+			GitOps:         gitopsPusher,
 		})
 
 		// Route-level adapter

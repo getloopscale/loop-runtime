@@ -100,7 +100,10 @@ spec:
             dependencies:
               - generate-dockerfile
 
-          # -- Step 5: release (after publish) --------------------------------
+          # -- Step 5: manifests (after publish) --------------------------------
+          # NOTE: gitops-push was REMOVED from the build pipeline (Step 6 fix).
+          # The API now owns the GitOps commit — build only produces artifacts.
+          # Manifests are passed to the API via the build callback payload.
           - name: generate-manifests
             template: generate-manifests
             dependencies:
@@ -109,10 +112,6 @@ spec:
             template: validate-manifests
             dependencies:
               - generate-manifests
-          - name: gitops-push
-            template: gitops-push
-            dependencies:
-              - validate-manifests
 
     # =========================================================================
     # Step 1: clone-repo
@@ -691,82 +690,6 @@ spec:
           runAsUser: 1000
 
     # =========================================================================
-    # Step 5: gitops-push (atomic commit to Gitea GitOps repo)
-    # =========================================================================
-    - name: gitops-push
-      retryStrategy:
-        limit: "3"
-        retryPolicy: "OnFailure"
-        backoff:
-          duration: "5s"
-          factor: "2"
-          maxDuration: "60s"
-      container:
-        image: alpine/git:2.43.0
-        command:
-          - sh
-          - -c
-          - |
-            set -euo pipefail
-
-            GITOPS_REPO="{{workflow.parameters.gitea-url}}/loopzero/loopzero-tenant-{{workflow.parameters.tenant-id}}.git"
-            CLONE_URL=$(echo "$GITOPS_REPO" | sed "s|://|://oauth2:{{workflow.parameters.gitea-token}}@|")
-            ENV_PATH="{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
-
-            git clone --depth 5 "$CLONE_URL" /tmp/gitops
-            cd /tmp/gitops
-
-            git config user.email "loopzero-build@loopzero.io"
-            git config user.name "LoopZero Build"
-
-            # Copy generated manifests
-            MANIFEST_SRC="/manifests/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
-            mkdir -p "$ENV_PATH"
-            cp "$MANIFEST_SRC/manifests.yaml" "$ENV_PATH/"
-
-            git add "$ENV_PATH/"
-
-            # Commit with mandatory Git trailers (spec 17.5)
-            git commit -m "Deploy {{workflow.parameters.project-id}} to {{workflow.parameters.environment}}
-
-            Release-ID: {{workflow.parameters.build-id}}
-            Correlation-ID: {{workflow.parameters.correlation-id}}
-            Build-ID: {{workflow.parameters.build-id}}" || {
-              echo "No changes to commit"
-              exit 0
-            }
-
-            # Push with fetch-merge-push on non-fast-forward (spec 7.4)
-            ATTEMPT=0
-            MAX_ATTEMPTS=3
-            while [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; do
-              if git push origin HEAD; then
-                echo "GitOps push succeeded"
-                exit 0
-              fi
-              ATTEMPT=$((ATTEMPT + 1))
-              echo "Push attempt $ATTEMPT failed — fetching and rebasing"
-              git fetch origin
-              git rebase origin/main || git rebase origin/master || true
-            done
-
-            echo "ERROR: GitOps push failed after $MAX_ATTEMPTS attempts"
-            exit 1
-        volumeMounts:
-          - name: manifests
-            mountPath: /manifests
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
-          limits:
-            cpu: "500m"
-            memory: "256Mi"
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
-
-    # =========================================================================
     # onExit: finalize (ALWAYS runs — even on failure)
     # =========================================================================
     - name: finalize
@@ -864,76 +787,121 @@ spec:
           factor: "2"
           maxDuration: "60s"
       container:
-        image: curlimages/curl:8.6.0
+        # Step 6: switched to python3 image for proper JSON encoding of manifests.
+        # The callback now includes the raw K8s YAML so the API can commit to GitOps.
+        image: python:3.12-alpine
         command:
           - sh
           - -c
           - |
             set -euo pipefail
 
+            # Install curl (alpine base)
+            apk add --no-cache curl >/dev/null 2>&1
+
             if [ "{{workflow.status}}" = "Succeeded" ]; then
-              BUILD_STATUS="succeeded"
+              export BUILD_STATUS="succeeded"
             else
-              BUILD_STATUS="failed"
+              export BUILD_STATUS="failed"
             fi
 
             CALLBACK_URL="{{workflow.parameters.api-callback-url}}/{{workflow.parameters.build-id}}/callback"
             IMAGE_REF="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}:{{workflow.parameters.commit-sha}}"
-            CORRELATION_ID="{{workflow.parameters.correlation-id}}"
+            export CORRELATION_ID="{{workflow.parameters.correlation-id}}"
 
             # Read real image digest from Kaniko --digest-file output (SHA256).
-            # Falls back to image reference if digest file is unavailable (e.g., failed build).
-            IMAGE_DIGEST="$IMAGE_REF"
+            export IMAGE_DIGEST="$IMAGE_REF"
             if [ -f /workspace/image-digest.txt ]; then
               RAW_DIGEST=$(cat /workspace/image-digest.txt)
               if [ -n "$RAW_DIGEST" ]; then
-                IMAGE_DIGEST="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}@${RAW_DIGEST}"
+                export IMAGE_DIGEST="{{workflow.parameters.registry-url}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}@${RAW_DIGEST}"
               fi
             fi
 
-            # Build per-app callback payload from generate-manifests output
-            if [ "$BUILD_STATUS" = "succeeded" ] && [ -f /manifests/callback-apps.json ]; then
-              # Read per-app data and add image_digest to each
-              CALLBACK_APPS=$(cat /manifests/callback-apps.json)
-              # Use sed to inject image_digest into each app object
-              APPS_WITH_IMAGE=$(printf '%s' "$CALLBACK_APPS" | sed "s|\"name\"|\"image_digest\":\"${IMAGE_DIGEST}\",\"name\"|g")
-              BODY="{\"status\":\"${BUILD_STATUS}\",\"correlation_id\":\"${CORRELATION_ID}\",\"apps\":${APPS_WITH_IMAGE}}"
-            elif [ "$BUILD_STATUS" = "failed" ]; then
-              # F-02: Include step-specific error details in the callback so the CLI
-              # can show the user WHAT failed, not just "Build pipeline failed".
-              #
-              # Strategy 1: Read from /manifests/build-error.txt (written by failing steps).
-              # Strategy 2: Try {{workflow.failures}} (Argo template variable).
-              # Strategy 3: Fall back to generic "Build pipeline failed".
-              FAILED_MSG="Build pipeline failed"
-              if [ -f /manifests/build-error.txt ]; then
-                FAILED_MSG=$(cat /manifests/build-error.txt | head -c 500)
-              else
-                FAILURES='{{workflow.failures}}'
-                if [ -n "$FAILURES" ] && [ "$FAILURES" != "<no value>" ] && [ "$FAILURES" != "null" ] && [ "$FAILURES" != "[]" ] && [ "$FAILURES" != "" ]; then
-                  STEP_NAME=$(printf '%s' "$FAILURES" | grep -o '"displayName":"[^"]*"' | head -1 | cut -d'"' -f4) || true
-                  STEP_MSG=$(printf '%s' "$FAILURES" | grep -o '"message":"[^"]*"' | head -1 | cut -d'"' -f4) || true
-                  if [ -n "$STEP_NAME" ]; then
-                    FAILED_MSG="${STEP_NAME}: ${STEP_MSG:-failed}"
-                  fi
-                fi
-              fi
-              # Escape any remaining quotes for JSON safety
-              ESCAPED_MSG=$(printf '%s' "$FAILED_MSG" | sed 's/"/\\"/g' | head -c 500)
-              APP_NAME="{{workflow.parameters.project-id}}"
-              BODY="{\"status\":\"${BUILD_STATUS}\",\"correlation_id\":\"${CORRELATION_ID}\",\"error\":\"${ESCAPED_MSG}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE_DIGEST}\"}]}"
-            else
-              APP_NAME="{{workflow.parameters.project-id}}"
-              BODY="{\"status\":\"${BUILD_STATUS}\",\"correlation_id\":\"${CORRELATION_ID}\",\"apps\":[{\"name\":\"${APP_NAME}\",\"image_digest\":\"${IMAGE_DIGEST}\"}]}"
-            fi
-            echo "Callback body: $BODY"
+            export MANIFEST_DIR="/manifests/{{workflow.parameters.tenant-id}}/{{workflow.parameters.project-id}}/{{workflow.parameters.environment}}"
+
+            # Use Python for safe JSON construction — no shell escaping issues.
+            # Step 6: manifests are included in the callback so the API can commit to GitOps.
+            python3 -c "
+            import json, sys, os
+
+            status = os.environ['BUILD_STATUS']
+            correlation_id = os.environ['CORRELATION_ID']
+            image_digest = os.environ['IMAGE_DIGEST']
+            manifest_dir = os.environ.get('MANIFEST_DIR', '')
+
+            if status == 'succeeded':
+                # Read per-app data
+                apps = []
+                apps_file = '/manifests/callback-apps.json'
+                if os.path.exists(apps_file):
+                    with open(apps_file) as f:
+                        apps = json.load(f)
+                    for app in apps:
+                        app['image_digest'] = image_digest
+
+                # Read manifests YAML (Step 6: API commits to GitOps, not the build)
+                manifests = ''
+                manifest_file = os.path.join(manifest_dir, 'manifests.yaml')
+                if os.path.exists(manifest_file):
+                    with open(manifest_file) as f:
+                        manifests = f.read()
+
+                payload = {
+                    'status': status,
+                    'correlation_id': correlation_id,
+                    'apps': apps,
+                    'manifests': manifests,
+                }
+            elif status == 'failed':
+                error_msg = 'Build pipeline failed'
+                error_file = '/manifests/build-error.txt'
+                if os.path.exists(error_file):
+                    with open(error_file) as f:
+                        error_msg = f.read()[:500]
+                else:
+                    failures = '''{{workflow.failures}}'''
+                    if failures and failures not in ('<no value>', 'null', '[]', ''):
+                        import re
+                        m = re.search(r'\"displayName\":\"([^\"]+)\"', failures)
+                        m2 = re.search(r'\"message\":\"([^\"]+)\"', failures)
+                        if m:
+                            error_msg = m.group(1) + ': ' + (m2.group(1) if m2 else 'failed')
+
+                app_name = '{{workflow.parameters.project-id}}'
+                payload = {
+                    'status': status,
+                    'correlation_id': correlation_id,
+                    'error': error_msg,
+                    'apps': [{'name': app_name, 'image_digest': image_digest}],
+                }
+            else:
+                app_name = '{{workflow.parameters.project-id}}'
+                payload = {
+                    'status': status,
+                    'correlation_id': correlation_id,
+                    'apps': [{'name': app_name, 'image_digest': image_digest}],
+                }
+
+            with open('/tmp/callback-body.json', 'w') as f:
+                json.dump(payload, f)
+            print('Callback payload written (' + str(len(json.dumps(payload))) + ' bytes)')
+            " || {
+              # Fallback: if Python fails, send minimal payload so build doesn't get stuck
+              echo "{\"status\":\"failed\",\"correlation_id\":\"${CORRELATION_ID}\",\"error\":\"callback payload construction failed\",\"apps\":[{\"name\":\"{{workflow.parameters.project-id}}\",\"image_digest\":\"${IMAGE_DIGEST}\"}]}" > /tmp/callback-body.json
+              echo "WARNING: Python JSON construction failed, using fallback payload"
+            }
+
+            echo "Callback body:"
+            cat /tmp/callback-body.json | head -c 2000
+            echo
 
             HTTP_CODE=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
               -X POST "$CALLBACK_URL" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer {{workflow.parameters.callback-secret}}" \
               -H "Correlation-ID: ${CORRELATION_ID}" \
-              -d "$BODY" \
+              -d @/tmp/callback-body.json \
               --connect-timeout 10 \
               --max-time 30)
 
@@ -954,11 +922,11 @@ spec:
             mountPath: /manifests
         resources:
           requests:
-            cpu: "50m"
-            memory: "32Mi"
-          limits:
             cpu: "100m"
             memory: "64Mi"
+          limits:
+            cpu: "500m"
+            memory: "128Mi"
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000

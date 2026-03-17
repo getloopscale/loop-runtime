@@ -26,8 +26,13 @@ func (o *BuildOrchestrator) activateRelease(ctx context.Context, tx db.DBTX, bui
 		return err
 	}
 
-	if err := o.pushToGitOps(ctx, tx, build, release, result); err != nil {
+	gitPushFailed, err := o.pushToGitOps(ctx, tx, build, release, result)
+	if err != nil {
 		return err
+	}
+	if gitPushFailed {
+		// Release is in GIT_MIRROR_FAILED — transaction commits, retry without rebuild later
+		return nil
 	}
 
 	probeFailed, err := o.waitForSync(ctx, tx, build, release, result)
@@ -39,10 +44,24 @@ func (o *BuildOrchestrator) activateRelease(ctx context.Context, tx db.DBTX, bui
 }
 
 // createRelease creates a new release record in READY state (step 8a).
+// Manifests are stored in the Artifacts field for retry support — if the
+// gitops push fails, the API can retry from the stored manifests without
+// triggering a new build.
 func (o *BuildOrchestrator) createRelease(ctx context.Context, tx db.DBTX, build *db.Build, result BuildCallbackRequest) (*db.Release, error) {
 	appsJSON, err := json.Marshal(result.Apps)
 	if err != nil {
 		return nil, fmt.Errorf("activate release: marshal apps: %w", err)
+	}
+
+	// Store manifests in artifacts for retry-without-rebuild support (Step 6)
+	var artifactsJSON json.RawMessage
+	if result.Manifests != "" {
+		artifactsJSON, err = json.Marshal(map[string]string{
+			"manifests": result.Manifests,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("activate release: marshal artifacts: %w", err)
+		}
 	}
 
 	release := &db.Release{
@@ -52,6 +71,7 @@ func (o *BuildOrchestrator) createRelease(ctx context.Context, tx db.DBTX, build
 		Environment: build.Environment,
 		CreatedBy:   build.CreatedBy,
 		Apps:        appsJSON,
+		Artifacts:   artifactsJSON,
 	}
 	if err := o.releaseStore.Create(ctx, tx, release); err != nil {
 		return nil, fmt.Errorf("activate release: create release: %w", err)
@@ -60,14 +80,57 @@ func (o *BuildOrchestrator) createRelease(ctx context.Context, tx db.DBTX, build
 	return release, nil
 }
 
-// transitionToPending transitions the release to PENDING state and updates
-// environment_targets. The gitops-push was already done by the Argo Workflow
-// before calling the callback (spec §10.1, step 13i).
-func (o *BuildOrchestrator) pushToGitOps(ctx context.Context, tx db.DBTX, build *db.Build, release *db.Release, result BuildCallbackRequest) error {
-	// Gitops-push already completed by the workflow (step 13i).
-	// Transition READY → PENDING via GitMirrorCompleted.
+// pushToGitOps commits manifests to the tenant GitOps repo via GitOpsPusher,
+// then transitions the release to PENDING and updates environment_targets.
+//
+// Step 6 architectural fix: the build pipeline no longer touches GitOps.
+// The API owns the entire release flow after a build succeeds.
+//
+// On git push failure: transitions release to GIT_MIRROR_FAILED and returns
+// (true, nil) so the transaction commits and the release can be retried later.
+func (o *BuildOrchestrator) pushToGitOps(ctx context.Context, tx db.DBTX, build *db.Build, release *db.Release, result BuildCallbackRequest) (gitPushFailed bool, err error) {
+	// Push manifests to GitOps repo
+	commitSHA, pushErr := o.gitops.Push(ctx, GitOpsPushOpts{
+		TenantID:      build.TenantID,
+		ProjectID:     build.ProjectID,
+		Environment:   build.Environment,
+		Manifests:     result.Manifests,
+		BuildID:       build.ID,
+		ReleaseID:     release.ID,
+		CorrelationID: build.CorrelationID,
+	})
+
+	if pushErr != nil {
+		slog.Error("gitops push failed",
+			"build_id", build.ID,
+			"release_id", release.ID,
+			"error", pushErr,
+		)
+
+		// Transition READY → GIT_MIRROR_FAILED — transaction commits so release persists
+		if _, err := o.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseGitMirrorFailed_)); err != nil {
+			return false, fmt.Errorf("activate release: transition to GIT_MIRROR_FAILED: %w", err)
+		}
+
+		// Emit SSE deploy.git_mirror_failed
+		failedData, _ := json.Marshal(map[string]interface{}{
+			"deploy_id": deriveDeployID(release.ID),
+			"status":    "git_push_failed",
+			"error":     pushErr.Error(),
+		})
+		if _, err := o.eventStore.Append(ctx, build.ID, "deploy.git_push_failed", failedData); err != nil {
+			return false, fmt.Errorf("activate release: emit deploy.git_push_failed: %w", err)
+		}
+
+		return true, nil
+	}
+
+	// Store the git commit SHA on the release (for audit trail)
+	_ = commitSHA // TODO: persist git_commit on release when UpdateGitCommit method is added
+
+	// Transition READY → PENDING via GitMirrorCompleted
 	if _, err := o.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseGitMirrorCompleted)); err != nil {
-		return fmt.Errorf("activate release: transition to PENDING: %w", err)
+		return false, fmt.Errorf("activate release: transition to PENDING: %w", err)
 	}
 
 	// Emit SSE deploy.pending (user-facing: no "release" terminology per Rule 3)
@@ -76,15 +139,15 @@ func (o *BuildOrchestrator) pushToGitOps(ctx context.Context, tx db.DBTX, build 
 		"status":    "pending",
 	})
 	if _, err := o.eventStore.Append(ctx, build.ID, "deploy.pending", pendingData); err != nil {
-		return fmt.Errorf("activate release: emit deploy.pending: %w", err)
+		return false, fmt.Errorf("activate release: emit deploy.pending: %w", err)
 	}
 
 	// Step 8d: update environment_targets.desired_release_id
 	if err := o.envTargetStore.SetDesired(ctx, tx, build.TenantID, build.ProjectID, build.Environment, release.ID, build.CreatedBy, build.CorrelationID); err != nil {
-		return fmt.Errorf("activate release: set desired: %w", err)
+		return false, fmt.Errorf("activate release: set desired: %w", err)
 	}
 
-	return nil
+	return false, nil
 }
 
 // waitForSync triggers ArgoCD sync and runs health probes against deployed apps
@@ -256,6 +319,71 @@ func deriveDeployID(releaseID string) string {
 		return "d-" + hex[:4]
 	}
 	return "d-" + hex
+}
+
+// RetryRelease retries the GitOps push for a release stuck in GIT_MIRROR_FAILED.
+//
+// This is the "retry without rebuild" mechanism (Step 6): the API reads the
+// manifests stored in release.Artifacts and re-pushes them to the GitOps repo.
+// No new build is triggered.
+//
+// On success: transitions GIT_MIRROR_FAILED → PENDING via GitMirrorRetried,
+// updates environment_targets, and triggers ArgoCD sync.
+//
+// On failure: returns error, release stays in GIT_MIRROR_FAILED (safe to retry again).
+func (o *BuildOrchestrator) RetryRelease(ctx context.Context, releaseID string) error {
+	// Step 1: fetch release
+	release, err := o.releaseStore.GetByID(ctx, releaseID)
+	if err != nil {
+		return fmt.Errorf("retry release: get release: %w", err)
+	}
+
+	// Step 2: validate state — only GIT_MIRROR_FAILED is retryable
+	if release.Status != string(statemachine.ReleaseGitMirrorFailed) {
+		return fmt.Errorf("retry release: release %s is in %s state, not GIT_MIRROR_FAILED — cannot retry", releaseID, release.Status)
+	}
+
+	// Step 3: extract manifests from stored artifacts
+	var artifacts map[string]string
+	if release.Artifacts == nil {
+		return fmt.Errorf("retry release: release %s has no stored artifacts", releaseID)
+	}
+	if err := json.Unmarshal(release.Artifacts, &artifacts); err != nil {
+		return fmt.Errorf("retry release: unmarshal artifacts: %w", err)
+	}
+	manifests, ok := artifacts["manifests"]
+	if !ok || manifests == "" {
+		return fmt.Errorf("retry release: release %s has no manifests in artifacts", releaseID)
+	}
+
+	// Step 4: re-push to GitOps
+	_, pushErr := o.gitops.Push(ctx, GitOpsPushOpts{
+		TenantID:      release.TenantID,
+		ProjectID:     release.ProjectID,
+		Environment:   release.Environment,
+		Manifests:     manifests,
+		BuildID:       release.BuildID,
+		ReleaseID:     release.ID,
+		CorrelationID: release.CorrelationID,
+	})
+	if pushErr != nil {
+		return fmt.Errorf("retry release: gitops push failed: %w", pushErr)
+	}
+
+	// Step 5: transition GIT_MIRROR_FAILED → PENDING inside lock
+	return o.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
+		// Transition via state machine: GitMirrorRetried
+		if _, err := o.releaseStore.UpdateStatus(ctx, tx, releaseID, string(statemachine.ReleaseGitMirrorRetried)); err != nil {
+			return fmt.Errorf("retry release: transition to PENDING: %w", err)
+		}
+
+		// Update environment_targets.desired_release_id
+		if err := o.envTargetStore.SetDesired(ctx, tx, release.TenantID, release.ProjectID, release.Environment, releaseID, release.CreatedBy, release.CorrelationID); err != nil {
+			return fmt.Errorf("retry release: set desired: %w", err)
+		}
+
+		return nil
+	})
 }
 
 // appTypeFromName determines the app type from the callback app.

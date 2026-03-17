@@ -47,9 +47,10 @@ type SubmitBuildResult struct {
 
 // BuildCallbackInput is the callback payload from the build system.
 type BuildCallbackInput struct {
-	Status string              `json:"status"`
-	Error  string              `json:"error,omitempty"`
-	Apps   []BuildCallbackApp  `json:"apps"`
+	Status    string             `json:"status"`
+	Error     string             `json:"error,omitempty"`
+	Apps      []BuildCallbackApp `json:"apps"`
+	Manifests string             `json:"manifests,omitempty"` // raw K8s YAML from build pipeline
 }
 
 // BuildCallbackApp describes a built app in the callback payload.
@@ -203,9 +204,10 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 
 // callbackRequest is the JSON request body for POST /api/v1/builds/:id/callback.
 type callbackRequest struct {
-	Status string             `json:"status"`
-	Error  string             `json:"error,omitempty"`
-	Apps   []BuildCallbackApp `json:"apps"`
+	Status    string             `json:"status"`
+	Error     string             `json:"error,omitempty"`
+	Apps      []BuildCallbackApp `json:"apps"`
+	Manifests string             `json:"manifests,omitempty"` // raw K8s YAML from build pipeline
 }
 
 // Callback handles POST /api/v1/builds/:id/callback (DA-15).
@@ -319,9 +321,10 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	// Run OnBuildCompleted in goroutine — do not block the callback response
 	callbackResult := BuildCallbackInput{
-		Status: req.Status,
-		Error:  req.Error,
-		Apps:   req.Apps,
+		Status:    req.Status,
+		Error:     req.Error,
+		Apps:      req.Apps,
+		Manifests: req.Manifests,
 	}
 	go func() {
 		// Use background context since the request context will be cancelled

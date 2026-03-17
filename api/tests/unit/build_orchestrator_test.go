@@ -320,6 +320,24 @@ func (f *fakeHealthProber) Probe(ctx context.Context, url string, path string) e
 	return nil
 }
 
+// fakeGitOpsPusher implements services.GitOpsPusher.
+type fakeGitOpsPusher struct {
+	pushErr   error
+	pushed    []services.GitOpsPushOpts
+	commitSHA string
+}
+
+func (f *fakeGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpts) (string, error) {
+	f.pushed = append(f.pushed, opts)
+	if f.pushErr != nil {
+		return "", f.pushErr
+	}
+	if f.commitSHA != "" {
+		return f.commitSHA, nil
+	}
+	return "abc123def456abc123def456abc123def456abcd", nil
+}
+
 // fakeSyncClient implements services.SyncClient.
 type fakeSyncClient struct {
 	synced    []string
@@ -366,6 +384,7 @@ type orchestratorFakes struct {
 	health        *fakeHealthProber
 	sync          *fakeSyncClient
 	locker        *fakeEnvironmentLocker
+	gitops        *fakeGitOpsPusher
 }
 
 func newOrchestratorFakes() *orchestratorFakes {
@@ -378,6 +397,7 @@ func newOrchestratorFakes() *orchestratorFakes {
 		health:         newFakeHealthProber(),
 		sync:           &fakeSyncClient{},
 		locker:         &fakeEnvironmentLocker{},
+		gitops:         &fakeGitOpsPusher{},
 	}
 }
 
@@ -391,6 +411,7 @@ func (f *orchestratorFakes) buildOrchestrator() *services.BuildOrchestrator {
 		Health:         f.health,
 		Sync:           f.sync,
 		Locker:         f.locker,
+		GitOps:         f.gitops,
 	})
 }
 
@@ -404,6 +425,20 @@ func defaultSubmitReq() services.SubmitBuildRequest {
 			{Name: "api", Type: "server", Port: 3000},
 		},
 		CreatedBy: "user-1",
+	}
+}
+
+// testManifests is a minimal K8s manifest YAML for test callbacks.
+const testManifests = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\n"
+
+// defaultSucceededCallback returns a standard succeeded callback with manifests.
+func defaultSucceededCallback() services.BuildCallbackRequest {
+	return services.BuildCallbackRequest{
+		Status:    "succeeded",
+		Manifests: testManifests,
+		Apps: []services.AppRelease{
+			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 45000},
+		},
 	}
 }
 
@@ -528,7 +563,8 @@ func TestBuildOrchestrator_OnBuildCompleted_Success_FullFlow(t *testing.T) {
 
 	// Act — build completed successfully
 	cbReq := services.BuildCallbackRequest{
-		Status: "succeeded",
+		Status:    "succeeded",
+		Manifests: testManifests,
 		Apps: []services.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 45000},
 		},
@@ -620,7 +656,8 @@ func TestBuildOrchestrator_OnBuildCompleted_ProbeFails(t *testing.T) {
 
 	// Act
 	cbReq := services.BuildCallbackRequest{
-		Status: "succeeded",
+		Status:    "succeeded",
+		Manifests: testManifests,
 		Apps: []services.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 45000},
 		},
@@ -759,7 +796,8 @@ func TestBuildOrchestrator_OnBuildCompleted_WorkerSkipsHealthProbe(t *testing.T)
 
 	// Act
 	cbReq := services.BuildCallbackRequest{
-		Status: "succeeded",
+		Status:    "succeeded",
+		Manifests: testManifests,
 		Apps: []services.AppRelease{
 			{Name: "bg-worker", ImageDigest: "sha256:abc123", URL: "", DurationMs: 30000},
 		},
@@ -804,7 +842,8 @@ func TestBuildOrchestrator_OnBuildCompleted_EnvironmentTargetsUpdated(t *testing
 
 	// Act
 	cbReq := services.BuildCallbackRequest{
-		Status: "succeeded",
+		Status:    "succeeded",
+		Manifests: testManifests,
 		Apps: []services.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 10000},
 		},
@@ -860,7 +899,8 @@ func TestBuildOrchestrator_OnBuildCompleted_CallbackWithBuildInQueued(t *testing
 
 	// Act — callback arrives while build is still QUEUED
 	cbReq := services.BuildCallbackRequest{
-		Status: "succeeded",
+		Status:    "succeeded",
+		Manifests: testManifests,
 		Apps: []services.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 5000},
 		},
@@ -890,7 +930,8 @@ func TestBuildOrchestrator_OnBuildCompleted_DuplicateCallback(t *testing.T) {
 
 	// First callback — succeeds
 	cbReq := services.BuildCallbackRequest{
-		Status: "succeeded",
+		Status:    "succeeded",
+		Manifests: testManifests,
 		Apps: []services.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 10000},
 		},
@@ -930,8 +971,9 @@ func TestBuildOrchestrator_OnBuildCompleted_SucceededWithEmptyApps(t *testing.T)
 
 	// Act
 	cbReq := services.BuildCallbackRequest{
-		Status: "succeeded",
-		Apps:   []services.AppRelease{}, // empty!
+		Status:    "succeeded",
+		Manifests: testManifests,
+		Apps:      []services.AppRelease{}, // empty!
 	}
 	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
 
@@ -974,7 +1016,8 @@ func TestBuildOrchestrator_OnBuildCompleted_PreviousReleaseSuperseded(t *testing
 	}
 
 	cbReq := services.BuildCallbackRequest{
-		Status: "succeeded",
+		Status:    "succeeded",
+		Manifests: testManifests,
 		Apps: []services.AppRelease{
 			{Name: "api", ImageDigest: "sha256:new", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 20000},
 		},
@@ -1010,7 +1053,8 @@ func TestBuildOrchestrator_DeployCompletedSSE_DeployIDFormat(t *testing.T) {
 	}
 
 	cbReq := services.BuildCallbackRequest{
-		Status: "succeeded",
+		Status:    "succeeded",
+		Manifests: testManifests,
 		Apps: []services.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 10000},
 		},
@@ -1086,7 +1130,8 @@ func TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded(t *test
 	}
 
 	cbReq := services.BuildCallbackRequest{
-		Status: "succeeded",
+		Status:    "succeeded",
+		Manifests: testManifests,
 		Apps: []services.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", Type: "server", DurationMs: 45000},
 		},
@@ -1248,5 +1293,349 @@ func TestBuildOrchestrator_CancelBuild_NotFound(t *testing.T) {
 	}
 	if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
 		t.Errorf("expected ErrBuildNotFound, got %v", err)
+	}
+}
+
+// =============================================================================
+// Step 6 Tests — GitOps Decoupling (build doesn't mutate GitOps)
+// =============================================================================
+
+// TestStep6_GitOpsPushFailure_ReleaseGitMirrorFailed tests that when the
+// gitops push fails (e.g., Gitea unreachable), the release transitions to
+// GIT_MIRROR_FAILED and the build stays SUCCEEDED. The transaction commits
+// so the release record persists and can be retried without a new build.
+func TestStep6_GitOpsPushFailure_ReleaseGitMirrorFailed(t *testing.T) {
+	// Arrange
+	fakes := newOrchestratorFakes()
+	fakes.gitops.pushErr = fmt.Errorf("gitea: connection refused")
+	orch := fakes.buildOrchestrator()
+
+	resp, err := orch.SubmitBuild(context.Background(), defaultSubmitReq())
+	if err != nil {
+		t.Fatalf("SubmitBuild failed: %v", err)
+	}
+
+	// Act
+	cbReq := defaultSucceededCallback()
+	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
+
+	// Assert — no error returned (failure handled internally)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Build MUST be SUCCEEDED (Phase 1 committed independently)
+	build := fakes.buildStore.builds[resp.BuildID]
+	if build.Status != string(statemachine.BuildSucceeded) {
+		t.Errorf("expected build SUCCEEDED, got %q", build.Status)
+	}
+
+	// Release should exist in GIT_MIRROR_FAILED state
+	var release *db.Release
+	for _, r := range fakes.releaseStore.releases {
+		if r.BuildID == resp.BuildID {
+			release = r
+			break
+		}
+	}
+	if release == nil {
+		t.Fatal("expected release to be created even when gitops push fails")
+	}
+	if release.Status != string(statemachine.ReleaseGitMirrorFailed) {
+		t.Errorf("expected release GIT_MIRROR_FAILED, got %q", release.Status)
+	}
+
+	// GitOps pusher should have been called
+	if len(fakes.gitops.pushed) != 1 {
+		t.Errorf("expected 1 gitops push attempt, got %d", len(fakes.gitops.pushed))
+	}
+
+	// ArgoCD sync should NOT have been called (git push failed, no point syncing)
+	if len(fakes.sync.synced) != 0 {
+		t.Errorf("expected 0 ArgoCD syncs (git push failed), got %d", len(fakes.sync.synced))
+	}
+
+	// A deploy failure event should be emitted
+	failEvents := fakes.eventStore.eventsByType("deploy.git_push_failed")
+	if len(failEvents) == 0 {
+		t.Error("expected deploy.git_push_failed SSE event")
+	}
+}
+
+// TestStep6_GitOpsPush_ReceivesManifestsFromCallback tests that the GitOps
+// pusher receives the manifests from the build callback payload. This validates
+// the end-to-end data flow: build generates manifests → callback includes them
+// → API pushes them to GitOps.
+func TestStep6_GitOpsPush_ReceivesManifestsFromCallback(t *testing.T) {
+	// Arrange
+	fakes := newOrchestratorFakes()
+	orch := fakes.buildOrchestrator()
+
+	resp, err := orch.SubmitBuild(context.Background(), defaultSubmitReq())
+	if err != nil {
+		t.Fatalf("SubmitBuild failed: %v", err)
+	}
+
+	// Act
+	customManifests := "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: custom-app\n"
+	cbReq := services.BuildCallbackRequest{
+		Status:    "succeeded",
+		Manifests: customManifests,
+		Apps: []services.AppRelease{
+			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 45000},
+		},
+	}
+	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// GitOps pusher should have received the manifests
+	if len(fakes.gitops.pushed) != 1 {
+		t.Fatalf("expected 1 gitops push, got %d", len(fakes.gitops.pushed))
+	}
+	pushOpts := fakes.gitops.pushed[0]
+	if pushOpts.Manifests != customManifests {
+		t.Errorf("expected manifests %q, got %q", customManifests, pushOpts.Manifests)
+	}
+	if pushOpts.TenantID != "tenant-1" {
+		t.Errorf("expected tenant-1, got %q", pushOpts.TenantID)
+	}
+	if pushOpts.ProjectID != "proj-abc123" {
+		t.Errorf("expected proj-abc123, got %q", pushOpts.ProjectID)
+	}
+	if pushOpts.Environment != "production" {
+		t.Errorf("expected production, got %q", pushOpts.Environment)
+	}
+	if pushOpts.BuildID != resp.BuildID {
+		t.Errorf("expected build ID %q, got %q", resp.BuildID, pushOpts.BuildID)
+	}
+}
+
+// TestStep6_ManifestsStoredInReleaseArtifacts tests that manifests are
+// persisted in the release record's Artifacts field. This enables
+// retry-without-rebuild: if the gitops push fails, the API can read the
+// stored manifests and retry without triggering a new build.
+func TestStep6_ManifestsStoredInReleaseArtifacts(t *testing.T) {
+	// Arrange
+	fakes := newOrchestratorFakes()
+	orch := fakes.buildOrchestrator()
+
+	resp, err := orch.SubmitBuild(context.Background(), defaultSubmitReq())
+	if err != nil {
+		t.Fatalf("SubmitBuild failed: %v", err)
+	}
+
+	// Act
+	cbReq := defaultSucceededCallback()
+	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Assert — find the release and check artifacts
+	var release *db.Release
+	for _, r := range fakes.releaseStore.releases {
+		if r.BuildID == resp.BuildID {
+			release = r
+			break
+		}
+	}
+	if release == nil {
+		t.Fatal("expected release to be created")
+	}
+
+	// Artifacts should contain the manifests
+	if release.Artifacts == nil {
+		t.Fatal("expected release.Artifacts to contain manifests, got nil")
+	}
+	var artifacts map[string]string
+	if err := json.Unmarshal(release.Artifacts, &artifacts); err != nil {
+		t.Fatalf("failed to unmarshal artifacts: %v", err)
+	}
+	if artifacts["manifests"] != testManifests {
+		t.Errorf("expected manifests in artifacts, got %q", artifacts["manifests"])
+	}
+}
+
+// TestStep6_BuildDoesNotCallGitOpsPush_WhenFailed tests that when a build
+// fails, the gitops pusher is NOT called (no manifests to push).
+func TestStep6_BuildDoesNotCallGitOpsPush_WhenFailed(t *testing.T) {
+	// Arrange
+	fakes := newOrchestratorFakes()
+	orch := fakes.buildOrchestrator()
+
+	resp, err := orch.SubmitBuild(context.Background(), defaultSubmitReq())
+	if err != nil {
+		t.Fatalf("SubmitBuild failed: %v", err)
+	}
+
+	// Act — build failed
+	cbReq := services.BuildCallbackRequest{
+		Status: "failed",
+		Error:  "npm install failed",
+		Apps: []services.AppRelease{
+			{Name: "api", ImageDigest: "sha256:abc123"},
+		},
+	}
+	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Assert — gitops push should NOT have been called
+	if len(fakes.gitops.pushed) != 0 {
+		t.Errorf("expected 0 gitops pushes for failed build, got %d", len(fakes.gitops.pushed))
+	}
+
+	// No release should exist
+	for _, r := range fakes.releaseStore.releases {
+		if r.BuildID == resp.BuildID {
+			t.Error("expected no release for failed build")
+		}
+	}
+}
+
+// TestStep6_RetryRelease_WithoutRebuild tests that a release in GIT_MIRROR_FAILED
+// state can be retried by reading manifests from release.Artifacts and re-pushing
+// to GitOps — WITHOUT triggering a new build. This is the core "retry sem rebuild"
+// gate for Step 6.
+func TestStep6_RetryRelease_WithoutRebuild(t *testing.T) {
+	// Arrange — create a build that succeeds but gitops push fails
+	fakes := newOrchestratorFakes()
+	fakes.gitops.pushErr = fmt.Errorf("gitea: connection refused")
+	orch := fakes.buildOrchestrator()
+
+	resp, err := orch.SubmitBuild(context.Background(), defaultSubmitReq())
+	if err != nil {
+		t.Fatalf("SubmitBuild failed: %v", err)
+	}
+
+	// Build completes — release created in GIT_MIRROR_FAILED
+	cbReq := defaultSucceededCallback()
+	if err := orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq); err != nil {
+		t.Fatalf("OnBuildCompleted failed: %v", err)
+	}
+
+	// Find the release in GIT_MIRROR_FAILED
+	var releaseID string
+	for _, r := range fakes.releaseStore.releases {
+		if r.BuildID == resp.BuildID && r.Status == string(statemachine.ReleaseGitMirrorFailed) {
+			releaseID = r.ID
+			break
+		}
+	}
+	if releaseID == "" {
+		t.Fatal("expected a release in GIT_MIRROR_FAILED state")
+	}
+
+	// Act — fix gitops and retry
+	fakes.gitops.pushErr = nil
+	fakes.gitops.pushed = nil // reset push tracking
+	err = orch.RetryRelease(context.Background(), releaseID)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("RetryRelease failed: %v", err)
+	}
+
+	// GitOps pusher should have been called with the stored manifests
+	if len(fakes.gitops.pushed) != 1 {
+		t.Fatalf("expected 1 gitops push on retry, got %d", len(fakes.gitops.pushed))
+	}
+	pushOpts := fakes.gitops.pushed[0]
+	if pushOpts.Manifests != testManifests {
+		t.Errorf("expected stored manifests %q, got %q", testManifests, pushOpts.Manifests)
+	}
+
+	// Release should now be PENDING (GIT_MIRROR_FAILED → PENDING via GitMirrorRetried)
+	release := fakes.releaseStore.releases[releaseID]
+	if release.Status != string(statemachine.ReleasePending) {
+		t.Errorf("expected release PENDING after retry, got %q", release.Status)
+	}
+
+	// No new build should have been submitted
+	if len(fakes.workflow.submitted) != 1 {
+		t.Errorf("expected exactly 1 workflow submission (original), got %d", len(fakes.workflow.submitted))
+	}
+}
+
+// TestStep6_RetryRelease_NotGitMirrorFailed tests that RetryRelease rejects
+// releases that are NOT in GIT_MIRROR_FAILED state.
+func TestStep6_RetryRelease_NotGitMirrorFailed(t *testing.T) {
+	// Arrange — create a successful release (ACTIVE)
+	fakes := newOrchestratorFakes()
+	orch := fakes.buildOrchestrator()
+
+	resp, err := orch.SubmitBuild(context.Background(), defaultSubmitReq())
+	if err != nil {
+		t.Fatalf("SubmitBuild failed: %v", err)
+	}
+	if err := orch.OnBuildCompleted(context.Background(), resp.BuildID, defaultSucceededCallback()); err != nil {
+		t.Fatalf("OnBuildCompleted failed: %v", err)
+	}
+
+	// Find the ACTIVE release
+	var releaseID string
+	for _, r := range fakes.releaseStore.releases {
+		if r.BuildID == resp.BuildID {
+			releaseID = r.ID
+			break
+		}
+	}
+
+	// Act — retry on a non-GIT_MIRROR_FAILED release should fail
+	err = orch.RetryRelease(context.Background(), releaseID)
+
+	// Assert — should get an error
+	if err == nil {
+		t.Fatal("expected error when retrying non-GIT_MIRROR_FAILED release")
+	}
+	if !strings.Contains(err.Error(), "GIT_MIRROR_FAILED") {
+		t.Errorf("expected error about GIT_MIRROR_FAILED state, got: %v", err)
+	}
+}
+
+// TestStep6_RetryRelease_GitPushFailsAgain tests that if the retry also fails,
+// the release stays in GIT_MIRROR_FAILED (no state corruption).
+func TestStep6_RetryRelease_GitPushFailsAgain(t *testing.T) {
+	// Arrange — create a release in GIT_MIRROR_FAILED
+	fakes := newOrchestratorFakes()
+	fakes.gitops.pushErr = fmt.Errorf("gitea: still down")
+	orch := fakes.buildOrchestrator()
+
+	resp, err := orch.SubmitBuild(context.Background(), defaultSubmitReq())
+	if err != nil {
+		t.Fatalf("SubmitBuild failed: %v", err)
+	}
+	if err := orch.OnBuildCompleted(context.Background(), resp.BuildID, defaultSucceededCallback()); err != nil {
+		t.Fatalf("OnBuildCompleted failed: %v", err)
+	}
+
+	var releaseID string
+	for _, r := range fakes.releaseStore.releases {
+		if r.BuildID == resp.BuildID && r.Status == string(statemachine.ReleaseGitMirrorFailed) {
+			releaseID = r.ID
+			break
+		}
+	}
+	if releaseID == "" {
+		t.Fatal("expected a release in GIT_MIRROR_FAILED state")
+	}
+
+	// Act — retry but gitops is still down
+	err = orch.RetryRelease(context.Background(), releaseID)
+
+	// Assert — should return error
+	if err == nil {
+		t.Fatal("expected error when gitops push fails on retry")
+	}
+
+	// Release should STILL be in GIT_MIRROR_FAILED (not corrupted)
+	release := fakes.releaseStore.releases[releaseID]
+	if release.Status != string(statemachine.ReleaseGitMirrorFailed) {
+		t.Errorf("expected release to stay GIT_MIRROR_FAILED, got %q", release.Status)
 	}
 }

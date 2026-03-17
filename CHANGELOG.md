@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **GitOps decoupling (Step 6):** Build pipeline no longer pushes to GitOps repo — API owns the entire release flow after build succeeds, enabling retry-without-rebuild (#S2-step6)
+- `pushToGitOps` in release_activator.go now performs real git commit to Gitea tenant repo via `GitOpsPusher` interface (#S2-step6)
+- Argo Workflow `notify-api` callback now includes generated manifests YAML in payload — API receives manifests instead of assuming gitops-push was done (#S2-step6)
+- Argo Workflow `notify-api` uses `python:3.12-alpine` image for safe JSON encoding of manifests payload (#S2-step6)
+- Release `Artifacts` field now stores manifests for retry support — if git push fails, API retries from stored manifests (#S2-step6)
+
+### Added
+- `GitOpsPusher` interface and `GiteaGitOpsPusher` implementation in `api/internal/gitops/` — commits manifests to tenant GitOps repo with git trailers (#S2-step6)
+- `RetryRelease` method on `BuildOrchestrator` — retries GitOps push for releases in GIT_MIRROR_FAILED state by reading stored manifests from `release.Artifacts`, no new build triggered (#S2-step6)
+- 7 unit tests for Step 6 gate criteria: git push failure → GIT_MIRROR_FAILED, manifests flow from callback to pusher, manifests stored in release artifacts, failed builds skip gitops push, retry-without-rebuild, reject retry on wrong state, retry failure keeps state safe (#S2-step6)
+- 6 integration tests for `GiteaGitOpsPusher`: push manifests, correct file path, git trailers, idempotency, empty manifests rejection, update existing (#S2-step6)
+
+### Removed
+- `gitops-push` step removed from Argo Workflow DAG — build pipeline stops at `validate-manifests` (#S2-step6)
+
+### Changed
 - Split `tenant_controller.go` (790 lines) into 7 focused files by resource type: namespaces, RBAC, network policies, GitOps, build namespace, priority class (#M2)
 - Split `build_orchestrator.go` (699 lines) — release activation methods extracted to `release_activator.go` (#M3)
 - Generated manifests now use `envFrom: secretRef` instead of inline env vars for app secrets — secrets never appear in Git (#hardening-step1)
