@@ -551,10 +551,22 @@ spec:
               manifests += '  selector:\n';
               manifests += '    matchLabels:\n';
               manifests += '      app: ' + k8sName + '\n';
+              // Secret name follows convention: {project}-{app}-secrets (per namespace)
+              // The Secret is created/managed by the TenantController or loopzero secret set.
+              // If no secrets are declared for this app, we skip envFrom entirely.
+              const secretName = project + '-' + appName + '-secrets';
+              const hasSecrets = app.secrets && app.secrets.length > 0;
+
               manifests += '  template:\n';
               manifests += '    metadata:\n';
               manifests += '      labels:\n';
               manifests += '        app: ' + k8sName + '\n';
+              // Annotation for secret-hash rollout (spec §10.1 step 13g).
+              // When secrets change, the hash changes, triggering a rolling update.
+              // Placeholder "none" when app has no secrets — the AppSecretOperator
+              // updates this annotation in-cluster when secrets are set/changed.
+              manifests += '      annotations:\n';
+              manifests += '        loopzero.io/secret-hash: \"none\"\n';
               manifests += '    spec:\n';
               manifests += '      containers:\n';
               manifests += '        - name: app\n';
@@ -569,6 +581,15 @@ spec:
               manifests += '              value: \"' + appPort + '\"\n';
               manifests += '            - name: NODE_ENV\n';
               manifests += '              value: production\n';
+              // Secrets via K8s Secret reference — never inline (spec §10.1 step 13g).
+              // envFrom injects all keys from the Secret as env vars.
+              // If the Secret doesn't exist yet, the pod will fail with clear error
+              // "secret not found" which guides the user to run: loopzero secret set
+              if (hasSecrets) {
+                manifests += '          envFrom:\n';
+                manifests += '            - secretRef:\n';
+                manifests += '                name: ' + secretName + '\n';
+              }
               manifests += '---\n';
 
               // Service + IngressRoute only for server/frontend (not worker)

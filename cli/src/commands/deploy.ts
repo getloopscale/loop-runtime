@@ -30,6 +30,7 @@ interface AppInput {
   type?: string;  // "server" | "worker" | "frontend"
   port?: number;
   path?: string;
+  secrets?: string[];  // declared secret names from loopzero.yaml
 }
 
 interface SubmitBuildInput {
@@ -212,6 +213,7 @@ export class DeployCommand {
       type: this.resolveAppType(config.apps[name]),
       port: config.apps[name]?.port ?? undefined,
       path: config.apps[name]?.path ?? undefined,
+      secrets: config.apps[name]?.secrets ?? undefined,
     }));
     let buildResult: SubmitBuildResult;
     try {

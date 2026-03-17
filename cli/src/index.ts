@@ -230,6 +230,7 @@ export function createProgram(): Command {
                 name: a.name,
                 ...(a.type ? { type: a.type } : {}),
                 ...(a.port ? { port: a.port } : {}),
+                ...(a.secrets && a.secrets.length > 0 ? { secrets: a.secrets } : {}),
               })),
             },
             headers,

@@ -10,8 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - Split `tenant_controller.go` (790 lines) into 7 focused files by resource type: namespaces, RBAC, network policies, GitOps, build namespace, priority class (#M2)
 - Split `build_orchestrator.go` (699 lines) — release activation methods extracted to `release_activator.go` (#M3)
+- Generated manifests now use `envFrom: secretRef` instead of inline env vars for app secrets — secrets never appear in Git (#hardening-step1)
+- Gitea token scope narrowed from `["all"]` to `["write:repository","read:user"]` (least privilege) (#hardening-step1)
+- Build cluster kubeconfig uses scoped ServiceAccount (workflows + configmaps in argo ns) instead of admin cert (#hardening-step1)
 
 ### Added
+- `loopzero.io/secret-hash` annotation in generated Deployment manifests — enables rolling updates when secrets change (#hardening-step1)
 - Dedicated ArgoCD `loopzero-api` service account with `apiKey` capability — non-expiring tokens replace 24h session tokens that silently broke all deploys (#dogfood-S2-F01)
 - ArgoCD RBAC policy for `loopzero-api`: sync + get on applications only (least privilege) (#dogfood-S2-F01)
 - CLI `LOOPZERO_TOKEN` env var support — overrides config file token for CI/CD pipelines (#dogfood-S2-F02)

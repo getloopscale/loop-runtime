@@ -15,8 +15,11 @@ NAMESPACE="loopzero-system"
 
 echo "=== Provisioning API tokens ==="
 
-# 1. Gitea token
-echo "Creating Gitea API token..."
+# 1. Gitea token — minimal scope (read + write repos only)
+#
+# The API only needs: clone source repos + push to GitOps repos.
+# Scopes: write:repository (includes read). Never use "all".
+echo "Creating Gitea API token (repo scope only)..."
 GITEA_PORT_FORWARD_PID=""
 kubectl --context "$MGMT_CTX" port-forward -n "$NAMESPACE" svc/gitea-http 13000:3000 &
 GITEA_PORT_FORWARD_PID=$!
@@ -25,7 +28,7 @@ sleep 2
 GITEA_TOKEN=$(curl -s -X POST "http://localhost:13000/api/v1/users/loopzero-admin/tokens" \
   -u "REDACTED_SECRET_037" \
   -H "Content-Type: application/json" \
-  -d "{\"name\":\"api-$(date +%s)\",\"scopes\":[\"all\"]}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha1',''))")
+  -d "{\"name\":\"api-$(date +%s)\",\"scopes\":[\"write:repository\",\"read:user\"]}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha1',''))")
 
 kill "$GITEA_PORT_FORWARD_PID" 2>/dev/null; wait "$GITEA_PORT_FORWARD_PID" 2>/dev/null || true
 echo "Gitea token: ${#GITEA_TOKEN} chars"
@@ -84,18 +87,101 @@ kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create secret generic loopzero-api
   --from-literal=argocd-token="$ARGOCD_TOKEN" \
   --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f -
 
-# 4. Build cluster kubeconfig
-echo "Extracting build cluster kubeconfig..."
-BUILD_CA=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+# 4. Build cluster kubeconfig — scoped ServiceAccount (not admin)
+#
+# The API only needs: create/get/list Workflows + ConfigMaps in the argo namespace.
+# We create a dedicated ServiceAccount + Role + RoleBinding in the build cluster,
+# then extract a token for kubeconfig. This replaces the overly-broad admin cert.
+echo "Setting up scoped build cluster access..."
 
-# For k3d, extract the user credentials directly
-BUILD_CERT=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
-BUILD_KEY=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
+# Create ServiceAccount + RBAC in build cluster (idempotent)
+kubectl --context "$BUILD_CTX" apply -f - <<'RBAC'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loopzero-workflow-submitter
+  namespace: argo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: loopzero-workflow-submitter
+  namespace: argo
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: loopzero-workflow-submitter
+  namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: loopzero-workflow-submitter
+subjects:
+  - kind: ServiceAccount
+    name: loopzero-workflow-submitter
+    namespace: argo
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: loopzero-workflow-submitter-token
+  namespace: argo
+  annotations:
+    kubernetes.io/service-account.name: loopzero-workflow-submitter
+type: kubernetes.io/service-account-token
+RBAC
+
+# Wait for token to be populated
+sleep 3
+
+# Extract the scoped token
+BUILD_TOKEN=$(kubectl --context "$BUILD_CTX" -n argo get secret loopzero-workflow-submitter-token -o jsonpath='{.data.token}' | base64 -d)
+BUILD_CA=$(kubectl --context "$BUILD_CTX" -n argo get secret loopzero-workflow-submitter-token -o jsonpath='{.data.ca\.crt}' | base64 -w0)
+
+if [ -z "$BUILD_TOKEN" ]; then
+  echo "WARNING: Could not get scoped build token. Falling back to admin cert."
+  BUILD_CERT=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
+  BUILD_KEY=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
+  BUILD_CA=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+  USE_TOKEN=false
+else
+  echo "Build cluster token: scoped to argo namespace (workflows + configmaps only)"
+  USE_TOKEN=true
+fi
 
 # Rewrite server URL to be accessible from mgmt cluster
-# k3d clusters share the Docker network, so we use the k3d server container name
 BUILD_SERVER_INTERNAL="https://k3d-loopzero-build-server-0:6443"
 
+if [ "$USE_TOKEN" = true ]; then
+cat > /tmp/build-kubeconfig.yaml <<KUBECONFIG
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: ${BUILD_SERVER_INTERNAL}
+    certificate-authority-data: ${BUILD_CA}
+  name: build
+contexts:
+- context:
+    cluster: build
+    user: loopzero-workflow-submitter
+    namespace: argo
+  name: build
+current-context: build
+users:
+- name: loopzero-workflow-submitter
+  user:
+    token: ${BUILD_TOKEN}
+KUBECONFIG
+else
 cat > /tmp/build-kubeconfig.yaml <<KUBECONFIG
 apiVersion: v1
 kind: Config
@@ -116,6 +202,7 @@ users:
     client-certificate-data: ${BUILD_CERT}
     client-key-data: ${BUILD_KEY}
 KUBECONFIG
+fi
 
 # Create configmap with the kubeconfig
 kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create configmap loopzero-build-kubeconfig \

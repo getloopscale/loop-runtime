@@ -32,10 +32,11 @@ type WorkflowSpec struct {
 
 // AppSpec describes a single app from loopzero.yaml.
 type AppSpec struct {
-	Name string `json:"name"`
-	Type string `json:"type"` // "server", "worker", "frontend"
-	Port int    `json:"port"`
-	Path string `json:"path,omitempty"`
+	Name    string   `json:"name"`
+	Type    string   `json:"type"`              // "server", "worker", "frontend"
+	Port    int      `json:"port"`
+	Path    string   `json:"path,omitempty"`
+	Secrets []string `json:"secrets,omitempty"` // declared secret names from loopzero.yaml
 }
 
 // NOTE: GitOpsPusher was REMOVED from the API. The Argo Workflow's gitops-push
