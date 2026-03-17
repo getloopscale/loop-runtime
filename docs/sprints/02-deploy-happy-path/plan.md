@@ -202,6 +202,8 @@ Aprovo apenas se:
 
 # 🔄 STEP 2 — Recuperação e Consistência
 
+@sprint-2-final-report.md
+
 ## Owner
 
 Backend (crítico)

@@ -143,6 +143,19 @@ func (s *WorkflowSubmitter) Cancel(ctx context.Context, workflowID string) error
 	return nil
 }
 
+// GetStatus checks the external state of a workflow in the build cluster.
+// Returns (status, nil) if the workflow exists, or (nil, nil) if not found.
+func (s *WorkflowSubmitter) GetStatus(ctx context.Context, workflowID string) (*services.WorkflowStatus, error) {
+	wf, err := s.client.Resource(workflowGVR).Namespace(s.namespace).Get(ctx, workflowID, metav1.GetOptions{})
+	if err != nil {
+		// Not found — workflow was cleaned up or never existed
+		return nil, nil
+	}
+
+	phase, _, _ := unstructured.NestedString(wf.Object, "status", "phase")
+	return &services.WorkflowStatus{Phase: phase}, nil
+}
+
 func param(name, value string) map[string]interface{} {
 	return map[string]interface{}{
 		"name":  name,

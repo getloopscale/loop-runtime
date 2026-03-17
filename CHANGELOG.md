@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Build cluster kubeconfig uses scoped ServiceAccount (workflows + configmaps in argo ns) instead of admin cert (#hardening-step1)
 
 ### Added
+- Startup reconciler: recovers orphaned builds on API boot — checks Argo Workflow state, finalizes or fails builds stuck in RUNNING/QUEUED (#hardening-step2)
+- PG-backed circuit breaker: ArgoCD circuit breaker state shared across all API replicas via `circuit_breakers` table (#hardening-step2)
+- Database migration `000006_circuit_breakers` for shared circuit breaker state (#hardening-step2)
+- `BuildStore.FindActiveBuilds()` for startup reconciler queries (#hardening-step2)
+- `WorkflowSubmitter.GetStatus()` for checking external workflow state during reconciliation (#hardening-step2)
 - `loopzero.io/secret-hash` annotation in generated Deployment manifests — enables rolling updates when secrets change (#hardening-step1)
 - Dedicated ArgoCD `loopzero-api` service account with `apiKey` capability — non-expiring tokens replace 24h session tokens that silently broke all deploys (#dogfood-S2-F01)
 - ArgoCD RBAC policy for `loopzero-api`: sync + get on applications only (least privilege) (#dogfood-S2-F01)

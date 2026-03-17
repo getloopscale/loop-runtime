@@ -213,7 +213,11 @@ func main() {
 			Token:    argocdToken,
 			Insecure: os.Getenv("ARGOCD_INSECURE") == "true",
 		})
-		syncClient := services.NewCircuitBreakerSyncClient(rawSyncClient, services.CircuitBreakerConfig{
+		// PG-backed circuit breaker — shared state across all API replicas.
+		// Replaces in-memory circuit breaker (DA-7 tech debt resolved).
+		cbStore := db.NewCircuitBreakerStore(dbAdapter)
+		syncClient := services.NewPGCircuitBreakerSyncClient(rawSyncClient, cbStore, services.PGCircuitBreakerConfig{
+			Key:            "argocd",
 			OpenThreshold:  3,
 			CloseThreshold: 2,
 			RetryInterval:  30 * time.Second,
@@ -243,6 +247,11 @@ func main() {
 
 		// Argo callback secret
 		argoCallbackSecret = os.Getenv("LOOPZERO_ARGO_CALLBACK_SECRET")
+
+		// Startup reconciler — recovers orphaned builds on boot (spec §12.1).
+		// Runs ONCE before the server starts accepting requests.
+		reconciler := services.NewStartupReconciler(buildStore, workflowSubmitter, locker, logger)
+		reconciler.Reconcile(context.Background())
 
 		// Build reaper — enforces spec §5.1 timeouts (QUEUED 5min, RUNNING 30min, CANCELLING 60s)
 		reaper := services.NewBuildReaper(

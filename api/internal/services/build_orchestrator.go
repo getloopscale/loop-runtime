@@ -13,10 +13,16 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
+// WorkflowStatus represents the external state of a build workflow.
+type WorkflowStatus struct {
+	Phase string // "Succeeded", "Failed", "Running", "Pending", ""
+}
+
 // WorkflowSubmitter abstracts Argo Workflows submission (DIP — no direct coupling).
 type WorkflowSubmitter interface {
 	Submit(ctx context.Context, spec WorkflowSpec) (workflowID string, err error)
 	Cancel(ctx context.Context, workflowID string) error
+	GetStatus(ctx context.Context, workflowID string) (*WorkflowStatus, error)
 }
 
 // WorkflowSpec contains everything needed to submit a build workflow.

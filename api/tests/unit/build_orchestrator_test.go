@@ -95,6 +95,16 @@ func (f *fakeBuildStoreOrch) ListByProject(ctx context.Context, tenantID, projec
 	return []db.Build{}, nil
 }
 
+func (f *fakeBuildStoreOrch) FindActiveBuilds(ctx context.Context) ([]db.Build, error) {
+	var active []db.Build
+	for _, b := range f.builds {
+		if b.Status == string(statemachine.BuildQueued) || b.Status == string(statemachine.BuildRunning) {
+			active = append(active, *b)
+		}
+	}
+	return active, nil
+}
+
 // safeFakeTransition catches panics from the state machine.
 func safeFakeTransition(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (newState statemachine.State, err error) {
 	defer func() {
@@ -281,6 +291,10 @@ func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec services.Workfl
 
 func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, workflowID string) error {
 	return nil
+}
+
+func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, workflowID string) (*services.WorkflowStatus, error) {
+	return &services.WorkflowStatus{Phase: "Succeeded"}, nil
 }
 
 // NOTE: fakeGitOpsPusher REMOVED — the workflow handles gitops-push (spec §10.1, step 13i).

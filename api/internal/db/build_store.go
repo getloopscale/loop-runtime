@@ -42,6 +42,7 @@ type BuildStore interface {
 	UpdateStatus(ctx context.Context, tx DBTX, id string, event string) (*Build, error)
 	SetErrorMessage(ctx context.Context, tx DBTX, id string, errorMessage string) error
 	ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error)
+	FindActiveBuilds(ctx context.Context) ([]Build, error)
 }
 
 // PostgresBuildStore implements BuildStore using PostgreSQL.
@@ -198,6 +199,46 @@ func (s *PostgresBuildStore) ListByProject(ctx context.Context, tenantID, projec
 			&b.DurationSeconds, &b.WorkflowID,
 		); err != nil {
 			return nil, fmt.Errorf("build store: scan failed: %w", err)
+		}
+		builds = append(builds, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("build store: rows error: %w", err)
+	}
+
+	if builds == nil {
+		builds = []Build{}
+	}
+	return builds, nil
+}
+
+// FindActiveBuilds returns all builds in QUEUED or RUNNING state.
+// Used by the startup reconciler to find orphaned builds on boot.
+func (s *PostgresBuildStore) FindActiveBuilds(ctx context.Context) ([]Build, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT id, tenant_id, project_id, environment, status, COALESCE(commit_sha, ''),
+		        correlation_id, created_by, created_at, started_at, finished_at,
+		        COALESCE(error_message, ''), duration_seconds, COALESCE(workflow_id, '')
+		 FROM builds
+		 WHERE status IN ('QUEUED', 'RUNNING')
+		 ORDER BY created_at ASC
+		 LIMIT 100`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build store: find active builds: %w", err)
+	}
+	defer rows.Close()
+
+	var builds []Build
+	for rows.Next() {
+		var b Build
+		if err := rows.Scan(
+			&b.ID, &b.TenantID, &b.ProjectID, &b.Environment, &b.Status,
+			&b.CommitSHA, &b.CorrelationID, &b.CreatedBy,
+			&b.CreatedAt, &b.StartedAt, &b.FinishedAt, &b.ErrorMessage,
+			&b.DurationSeconds, &b.WorkflowID,
+		); err != nil {
+			return nil, fmt.Errorf("build store: scan active build: %w", err)
 		}
 		builds = append(builds, b)
 	}
