@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - ArgoCD RBAC policy for `loopzero-api`: sync + get on applications only (least privilege) (#dogfood-S2-F01)
 - CLI `LOOPZERO_TOKEN` env var support — overrides config file token for CI/CD pipelines (#dogfood-S2-F02)
 - CLI `deploy --help` now shows `--json` and `--wait` flags (#dogfood-S2-F04)
+- Taskfile tasks: `networking:setup`, `tokens:provision`, `tokens:verify` — cross-cluster networking and token provisioning are now part of `task setup` (#dogfood-S2-F01)
+- `task doctor` now verifies ArgoCD/Gitea token validity and expiration (#dogfood-S2-F01)
 - PodDisruptionBudgets for PostgreSQL, Gitea, and ArgoCD — prevents correlated eviction during node drains (#hardening)
 
 ### Fixed

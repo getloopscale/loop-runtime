@@ -97,6 +97,52 @@ tasks:
         done
 
         echo ""
+        echo "=== API Tokens ==="
+        # ArgoCD token check
+        ARGOCD_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath='{.data.argocd-token}' 2>/dev/null | base64 -d 2>/dev/null)
+        if [ -z "$ARGOCD_TOKEN" ]; then
+          echo "  [FAIL] ArgoCD token — not provisioned. Run: task tokens:provision"
+          FAIL=$((FAIL+1))
+        else
+          TOKEN_STATUS=$(echo "$ARGOCD_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | python3 -c "
+        import sys, json, datetime
+        try:
+          data = json.load(sys.stdin)
+          exp = data.get('exp')
+          if exp and datetime.datetime.fromtimestamp(exp) < datetime.datetime.now():
+            print('EXPIRED')
+          elif exp is None:
+            print('NEVER_EXPIRES')
+          else:
+            print('VALID')
+        except:
+          print('UNKNOWN')
+        " 2>/dev/null)
+          if [ "$TOKEN_STATUS" = "EXPIRED" ]; then
+            echo "  [FAIL] ArgoCD token — EXPIRED! Run: task tokens:provision"
+            FAIL=$((FAIL+1))
+          elif [ "$TOKEN_STATUS" = "NEVER_EXPIRES" ]; then
+            echo "  [PASS] ArgoCD token — valid (never expires)"
+            PASS=$((PASS+1))
+          elif [ "$TOKEN_STATUS" = "VALID" ]; then
+            echo "  [PASS] ArgoCD token — valid (has expiration, not yet expired)"
+            PASS=$((PASS+1))
+          else
+            echo "  [WARN] ArgoCD token — could not verify expiration"
+            WARN=$((WARN+1))
+          fi
+        fi
+        # Gitea token check
+        GITEA_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath='{.data.gitea-token}' 2>/dev/null | base64 -d 2>/dev/null)
+        if [ -n "$GITEA_TOKEN" ]; then
+          echo "  [PASS] Gitea token — present (${#GITEA_TOKEN} chars)"
+          PASS=$((PASS+1))
+        else
+          echo "  [FAIL] Gitea token — not provisioned. Run: task tokens:provision"
+          FAIL=$((FAIL+1))
+        fi
+
+        echo ""
         echo "=== Core Services (mgmt cluster) ==="
         for SVC in postgresql gitea-http minio argocd-server; do
           NS="loopzero-system"
@@ -812,16 +858,111 @@ tasks:
           go run infra/scripts/seed_e2e.go
 
   # ---------------------------------------------------------------------------
+  # S0.6: Cross-cluster networking + API tokens
+  # ---------------------------------------------------------------------------
+  networking:setup:
+    desc: Connect k3d cluster networks so mgmt can reach workload/build clusters
+    cmds:
+      - bash infra/scripts/setup-cross-cluster-networking.sh
+
+  tokens:provision:
+    desc: Provision API tokens (Gitea + ArgoCD) and build cluster kubeconfig
+    cmds:
+      - bash infra/scripts/provision-api-tokens.sh
+      - |
+        echo ""
+        echo "Restarting API to pick up new tokens..."
+        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout restart deployment/loopzero-api
+        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout status deployment/loopzero-api --timeout=60s
+
+  tokens:verify:
+    desc: Verify API tokens are valid (non-expired) and services are reachable
+    cmds:
+      - |
+        echo "=== Token Verification ==="
+        PASS=0
+        FAIL=0
+
+        # Check ArgoCD token
+        ARGOCD_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath='{.data.argocd-token}' 2>/dev/null | base64 -d 2>/dev/null)
+        if [ -z "$ARGOCD_TOKEN" ]; then
+          echo "  [FAIL] ArgoCD token — not found in secret loopzero-api-tokens"
+          FAIL=$((FAIL+1))
+        else
+          # Check if token has expiration
+          EXP=$(echo "$ARGOCD_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | python3 -c "
+        import sys, json, datetime
+        try:
+          data = json.load(sys.stdin)
+          exp = data.get('exp')
+          sub = data.get('sub', 'unknown')
+          if exp:
+            remaining = datetime.datetime.fromtimestamp(exp) - datetime.datetime.now()
+            if remaining.total_seconds() < 0:
+              print(f'EXPIRED|{sub}|expired {-remaining.days}d ago')
+            elif remaining.days < 7:
+              print(f'EXPIRING|{sub}|expires in {remaining.days}d')
+            else:
+              print(f'OK|{sub}|expires in {remaining.days}d')
+          else:
+            print(f'OK|{sub}|never expires')
+        except:
+          print('ERROR|unknown|cannot parse token')
+        " 2>/dev/null)
+          STATUS=$(echo "$EXP" | cut -d'|' -f1)
+          SUBJECT=$(echo "$EXP" | cut -d'|' -f2)
+          DETAIL=$(echo "$EXP" | cut -d'|' -f3)
+          if [ "$STATUS" = "OK" ]; then
+            echo "  [PASS] ArgoCD token — $SUBJECT ($DETAIL)"
+            PASS=$((PASS+1))
+          elif [ "$STATUS" = "EXPIRING" ]; then
+            echo "  [WARN] ArgoCD token — $SUBJECT ($DETAIL) — run: task tokens:provision"
+            FAIL=$((FAIL+1))
+          else
+            echo "  [FAIL] ArgoCD token — $SUBJECT ($DETAIL) — run: task tokens:provision"
+            FAIL=$((FAIL+1))
+          fi
+        fi
+
+        # Check Gitea token
+        GITEA_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath='{.data.gitea-token}' 2>/dev/null | base64 -d 2>/dev/null)
+        if [ -z "$GITEA_TOKEN" ]; then
+          echo "  [FAIL] Gitea token — not found"
+          FAIL=$((FAIL+1))
+        else
+          echo "  [PASS] Gitea token — ${#GITEA_TOKEN} chars"
+          PASS=$((PASS+1))
+        fi
+
+        # Check API can reach ArgoCD
+        if curl -sf http://localhost:{{.API_PORT}}/api/v1/health/deep >/dev/null 2>&1; then
+          echo "  [PASS] API health — database connected"
+          PASS=$((PASS+1))
+        else
+          echo "  [FAIL] API health — not reachable or DB down"
+          FAIL=$((FAIL+1))
+        fi
+
+        echo ""
+        echo "  PASS: $PASS  |  FAIL: $FAIL"
+        if [ "$FAIL" -gt 0 ]; then
+          echo "  Fix: task tokens:provision"
+          exit 1
+        fi
+
+  # ---------------------------------------------------------------------------
   # S0.14: Composite tasks
   # ---------------------------------------------------------------------------
   setup:
-    desc: Full setup from scratch — clusters + infra + CRDs + DB
+    desc: Full setup from scratch — clusters + infra + networking + CRDs + DB + tokens
     cmds:
       - task: registry:create
       - task: clusters:create
       - task: infra:install
+      - task: networking:setup
       - task: crds:install
       - task: db:migrate
+      - task: tokens:provision
 
   dev:up:
     desc: Boot dev environment (clusters + Helm deps). Run `tilt up` separately for the dev loop.
