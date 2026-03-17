@@ -1802,8 +1802,8 @@ describe('DeployCommand', () => {
       const cmd = new DeployCommand(deps);
       const exitCode = await cmd.execute({});
       expect(exitCode).toBe(3);
-      expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining('Deploy failed'));
-      expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining('HEALTH_PROBE_FAILED'));
+      expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining("Service didn't become healthy in time"));
+      expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining('loopzero logs --build'));
     });
 
     it('outputs JSON with exit_code 3 on deploy.sync_failed with --json', async () => {
@@ -1824,7 +1824,9 @@ describe('DeployCommand', () => {
       const output = (deps.writeTo as jest.Mock).mock.calls[0][0];
       const parsed = JSON.parse(output);
       expect(parsed.exit_code).toBe(3);
-      expect(parsed.error).toContain('Deploy failed');
+      expect(parsed.error).toContain("Service didn't become healthy in time");
+      expect(parsed.reason).toBe('HEALTH_PROBE_FAILED');
+      expect(parsed.build_id).toBe('build-deadbeef');
       expect(parsed.deploy_id).toBe('d-1234');
     });
   });

@@ -332,16 +332,19 @@ export class DeployCommand {
         if (event.type === 'deploy.sync_failed') {
           clearTimeout(timeoutId);
           const data = event.data as Record<string, unknown>;
-          const reason = String(data.reason ?? 'sync failed');
+          const rawReason = String(data.reason ?? 'sync failed');
+          const userMessage = this.mapSyncFailureReason(rawReason, buildResult.build_id);
           if (opts.json) {
             this.deps.writeTo(JSON.stringify({
               code: 'DEPLOY_FAILED',
-              error: `Deploy failed: ${reason}`,
+              error: userMessage,
+              reason: rawReason,
               exit_code: 3,
               deploy_id: data.deploy_id ?? null,
+              build_id: buildResult.build_id,
             }));
           } else {
-            this.deps.writeError(`Deploy failed: ${reason}`);
+            this.deps.writeError(userMessage);
           }
           finish(3); // exit code 3 = deploy failure
           return;
@@ -450,6 +453,21 @@ export class DeployCommand {
       return 'Environment name can only contain lowercase letters, numbers, and hyphens. Example: --env staging';
     }
     return null;
+  }
+
+  private mapSyncFailureReason(reason: string, buildId: string): string {
+    const knownReasons: Record<string, string> = {
+      'HEALTH_PROBE_FAILED': "Service didn't become healthy in time. Check your app's /health endpoint and logs.",
+      'SYNC_TIMEOUT': 'Deploy timed out waiting for service to start. Check service logs for startup errors.',
+      'IMAGE_PULL_FAILED': 'Could not pull the built image. This is usually a temporary issue — try deploying again.',
+      'RESOURCE_QUOTA_EXCEEDED': 'Deployment exceeds resource limits. Reduce resource requests in your configuration.',
+      'CRASH_LOOP': 'Service keeps crashing on startup. Check your app logs for errors.',
+    };
+
+    const message = knownReasons[reason]
+      ?? `Deploy failed: ${reason.toLowerCase().replace(/_/g, ' ')}. Check service logs for details.`;
+
+    return `${message} Run: loopzero logs --build ${buildId}`;
   }
 
   private exitWithError(opts: DeployOptions, message: string, exitCode: number, code?: string): number {
