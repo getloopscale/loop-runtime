@@ -7,6 +7,8 @@ vars:
   # Standardized port-forward ports (avoid conflicts between tasks)
   PG_PORT: 15432
   PG_HOST: localhost
+  # DEV-ONLY credentials — safe for local k3d clusters, never used in production.
+  # Override via Taskfile.local.yml or environment variables if needed.
   PG_USER: loopzero
   PG_PASS: loopzero-dev-password
   PG_DB: loopzero
@@ -319,21 +321,17 @@ tasks:
     cmds:
       - |
         echo "Cleaning up completed workflow pods..."
-        DELETED=$(kubectl --context {{.BUILD_CONTEXT}} get pods --all-namespaces \
-          --field-selector=status.phase!=Running \
-          -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null | wc -l)
 
-        kubectl --context {{.BUILD_CONTEXT}} get pods --all-namespaces \
-          --field-selector=status.phase=Succeeded \
-          -o jsonpath='{range .items[*]}kubectl --context {{.BUILD_CONTEXT}} -n {.metadata.namespace} delete pod {.metadata.name}{"\n"}{end}' \
-          2>/dev/null | sh 2>/dev/null || true
+        for PHASE in Succeeded Failed; do
+          kubectl --context {{.BUILD_CONTEXT}} get pods -A \
+            --field-selector="status.phase=${PHASE}" \
+            -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' \
+            2>/dev/null | while read -r NS NAME; do
+              [ -n "$NS" ] && kubectl --context {{.BUILD_CONTEXT}} -n "$NS" delete pod "$NAME" 2>/dev/null && echo "  deleted ${NS}/${NAME}"
+            done
+        done
 
-        kubectl --context {{.BUILD_CONTEXT}} get pods --all-namespaces \
-          --field-selector=status.phase=Failed \
-          -o jsonpath='{range .items[*]}kubectl --context {{.BUILD_CONTEXT}} -n {.metadata.namespace} delete pod {.metadata.name}{"\n"}{end}' \
-          2>/dev/null | sh 2>/dev/null || true
-
-        echo "Cleaned up completed/failed pods."
+        echo "Cleanup complete."
 
   # ===========================================================================
   # QA Tooling — Database management
@@ -359,36 +357,23 @@ tasks:
     desc: Open an interactive psql shell to the database
     cmds:
       - |
-        # Reuse existing port-forward if available, otherwise start one
-        PF_PID=""
-        if ! PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -c "SELECT 1" >/dev/null 2>&1; then
-          kubectl --context {{.MGMT_CONTEXT}} port-forward -n loopzero-system svc/postgresql {{.PG_PORT}}:5432 &
-          PF_PID=$!
-          trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
-          sleep 2
-        fi
-        PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}}
+        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
+        psql -h "{{.PG_HOST}}" -p "{{.PG_PORT}}" -U "{{.PG_USER}}" -d "{{.PG_DB}}"
 
   db:status:
     desc: Show database health — tables, row counts, connections, last migration
     cmds:
       - |
-        # Reuse existing port-forward if available, otherwise start one
-        PF_PID=""
-        if ! PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -c "SELECT 1" >/dev/null 2>&1; then
-          kubectl --context {{.MGMT_CONTEXT}} port-forward -n loopzero-system svc/postgresql {{.PG_PORT}}:5432 &
-          PF_PID=$!
-          trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
-          sleep 2
-        fi
+        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
+        PG="psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}}"
 
         echo "=== Database Connection ==="
-        PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -t -c "SELECT 'Connected to ' || current_database() || ' as ' || current_user || ' (version: ' || split_part(version(), ' ', 2) || ')';" 2>/dev/null \
+        $PG -t -c "SELECT 'Connected to ' || current_database() || ' as ' || current_user || ' (version: ' || split_part(version(), ' ', 2) || ')';" 2>/dev/null \
           || { echo "Cannot connect to database"; exit 1; }
 
         echo ""
         echo "=== Active Connections ==="
-        PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -c "
+        $PG -c "
           SELECT datname, usename, state, count(*) as count
           FROM pg_stat_activity
           WHERE datname = '{{.PG_DB}}'
@@ -398,7 +383,7 @@ tasks:
 
         echo ""
         echo "=== Tables and Row Counts ==="
-        PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -c "
+        $PG -c "
           SELECT schemaname || '.' || relname AS table_name,
                  n_live_tup AS row_count
           FROM pg_stat_user_tables
@@ -409,13 +394,13 @@ tasks:
         echo "=== Migration Files Applied ==="
         echo "  Migration files in api/internal/db/migrations/:"
         ls -1 api/internal/db/migrations/*.up.sql 2>/dev/null | while read f; do echo "    $(basename "$f")"; done
-        PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -t -c "
+        $PG -t -c "
           SELECT version, dirty FROM schema_migrations ORDER BY version DESC LIMIT 5;
         " 2>/dev/null && true || echo "  (schema_migrations table not present — using raw SQL migrations)"
 
         echo ""
         echo "=== Advisory Locks (active) ==="
-        PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -c "
+        $PG -c "
           SELECT pid, classid, objid, granted
           FROM pg_locks
           WHERE locktype = 'advisory'
@@ -424,20 +409,13 @@ tasks:
 
   db:reset:
     desc: Reset database to clean state (drop + recreate + migrate)
+    prompt: This will DROP and recreate the '{{.PG_DB}}' database. Are you sure?
     cmds:
       - |
-        echo "Resetting database..."
-        # Reuse existing port-forward if available, otherwise start one
-        PF_PID=""
-        if ! PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -c "SELECT 1" >/dev/null 2>&1; then
-          kubectl --context {{.MGMT_CONTEXT}} port-forward -n loopzero-system svc/postgresql {{.PG_PORT}}:5432 &
-          PF_PID=$!
-          trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
-          sleep 2
-        fi
+        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
 
         echo "Dropping and recreating database..."
-        PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d postgres -c "
+        psql -h "{{.PG_HOST}}" -p "{{.PG_PORT}}" -U "{{.PG_USER}}" -d postgres -c "
           SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{{.PG_DB}}' AND pid <> pg_backend_pid();
           DROP DATABASE IF EXISTS {{.PG_DB}};
           CREATE DATABASE {{.PG_DB}} OWNER {{.PG_USER}};
@@ -446,7 +424,7 @@ tasks:
         echo "Running migrations..."
         for f in $(ls api/internal/db/migrations/*.up.sql | sort); do
           echo "  Applying $(basename $f)..."
-          PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -f "$f"
+          psql -h "{{.PG_HOST}}" -p "{{.PG_PORT}}" -U "{{.PG_USER}}" -d "{{.PG_DB}}" -f "$f"
         done
 
         echo "Database reset complete."
@@ -472,14 +450,7 @@ tasks:
       - |
         echo ""
         echo "=== Step 3/4: Seed E2E data ==="
-        # Reuse existing port-forward if available, otherwise start one
-        PF_PID=""
-        if ! PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -c "SELECT 1" >/dev/null 2>&1; then
-          kubectl --context {{.MGMT_CONTEXT}} port-forward -n loopzero-system svc/postgresql {{.PG_PORT}}:5432 &
-          PF_PID=$!
-          trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
-          sleep 2
-        fi
+        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
         DATABASE_URL="postgres://{{.PG_USER}}:{{.PG_PASS}}@{{.PG_HOST}}:{{.PG_PORT}}/{{.PG_DB}}?sslmode=disable" \
           go run infra/scripts/seed_e2e.go
       - |
@@ -508,8 +479,8 @@ tasks:
         rm -rf {{.REPORT_DIR}} 2>/dev/null || true
         rm -rf /tmp/loopzero-e2e-* 2>/dev/null || true
 
-        # Kill any leftover port-forwards
-        pkill -f "kubectl.*port-forward.*loopzero" 2>/dev/null || true
+        # Kill any leftover PostgreSQL port-forwards (scoped to loopzero-system)
+        pkill -f "kubectl.*port-forward.*loopzero-system.*postgresql" 2>/dev/null || true
 
         # Clean Go test cache
         go clean -testcache 2>/dev/null || true
@@ -545,24 +516,25 @@ tasks:
     desc: Run unit tests with JUnit XML output
     env:
       KUBEBUILDER_ASSETS:
-        sh: setup-envtest use -p path 2>/dev/null || echo "$HOME/.local/share/kubebuilder-envtest/k8s/1.35.0-linux-amd64"
+        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
     cmds:
       - mkdir -p {{.REPORT_DIR}}
       - |
         # Go tests — use gotestsum if available, fallback to go test
+        ROOT="$(pwd)"
         if command -v gotestsum >/dev/null 2>&1; then
           echo "Using gotestsum for JUnit output..."
-          cd pkg && gotestsum --junitfile ../{{.REPORT_DIR}}/pkg-unit.xml -- ./... -short
-          cd ../operators && gotestsum --junitfile ../{{.REPORT_DIR}}/operators-unit.xml -- ./... -short
-          cd ../api && gotestsum --junitfile ../{{.REPORT_DIR}}/api-unit.xml -- ./... -short
-          cd ../infra/tests && gotestsum --junitfile ../../{{.REPORT_DIR}}/infra-unit.xml -- ./unit/... -short
+          (cd pkg && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/pkg-unit.xml" -- ./... -short)
+          (cd operators && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/operators-unit.xml" -- ./... -short)
+          (cd api && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/api-unit.xml" -- ./... -short)
+          (cd infra/tests && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/infra-unit.xml" -- ./unit/... -short)
         else
           echo "gotestsum not found — running go test (no JUnit output)"
           echo "  Install: go install gotest.tools/gotestsum@latest"
-          cd pkg && go test ./... -short -v
-          cd ../operators && go test ./... -short -v
-          cd ../api && go test ./... -short -v
-          cd ../infra/tests && go test ./unit/... -short -v
+          (cd pkg && go test ./... -short -v)
+          (cd operators && go test ./... -short -v)
+          (cd api && go test ./... -short -v)
+          (cd infra/tests && go test ./unit/... -short -v)
         fi
       - |
         # CLI tests — Jest supports JUnit via --reporters
@@ -762,9 +734,21 @@ tasks:
         -f infra/helm/monitoring/manifests/prometheusrule-critical.yaml
         -f infra/helm/monitoring/manifests/prometheusrule-warning.yaml
 
+  infra:install:monitoring-crds:
+    desc: Install Prometheus CRDs + monitoring namespace (required before charts that create ServiceMonitors)
+    deps: [helm:repos]
+    cmds:
+      - kubectl --context {{.MGMT_CONTEXT}} create namespace monitoring --dry-run=client -o yaml | kubectl --context {{.MGMT_CONTEXT}} apply -f -
+      - >-
+        kubectl --context {{.MGMT_CONTEXT}} apply --server-side
+        -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+        -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
+        -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
+
   infra:install:
     desc: Install all platform components via Helm
     cmds:
+      - task: infra:install:monitoring-crds
       - task: infra:install:mgmt
       - task: infra:install:build
       - task: infra:install:workload
@@ -785,17 +769,10 @@ tasks:
     desc: Run database migrations against PostgreSQL
     cmds:
       - |
-        # Reuse existing port-forward if available, otherwise start one
-        PF_PID=""
-        if ! PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -c "SELECT 1" >/dev/null 2>&1; then
-          kubectl --context {{.MGMT_CONTEXT}} port-forward -n loopzero-system svc/postgresql {{.PG_PORT}}:5432 &
-          PF_PID=$!
-          trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
-          sleep 2
-        fi
+        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
         for f in $(ls api/internal/db/migrations/*.up.sql | sort); do
           echo "Applying $f..."
-          PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -f "$f"
+          psql -h "{{.PG_HOST}}" -p "{{.PG_PORT}}" -U "{{.PG_USER}}" -d "{{.PG_DB}}" -f "$f"
         done
 
   # ---------------------------------------------------------------------------
@@ -811,15 +788,8 @@ tasks:
       PLAN: '{{.PLAN | default "starter"}}'
     cmds:
       - |
-        # Reuse existing port-forward if available, otherwise start one
-        PF_PID=""
-        if ! PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -c "SELECT 1" >/dev/null 2>&1; then
-          kubectl --context {{.MGMT_CONTEXT}} port-forward -n loopzero-system svc/postgresql {{.PG_PORT}}:5432 &
-          PF_PID=$!
-          trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
-          sleep 2
-        fi
-        PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} <<SQL
+        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
+        psql -h "{{.PG_HOST}}" -p "{{.PG_PORT}}" -U "{{.PG_USER}}" -d "{{.PG_DB}}" <<SQL
         -- Idempotent: uses ON CONFLICT DO NOTHING
         INSERT INTO users (id, email, github_id, display_name)
         VALUES ('github-{{.GITHUB_USER}}', '{{.GITHUB_EMAIL}}', {{.GITHUB_ID}}, '{{.GITHUB_USER}}')
@@ -845,14 +815,7 @@ tasks:
     desc: Seed E2E test data (tenant, user, project) and wait for reconciliation
     cmds:
       - |
-        # Reuse existing port-forward if available, otherwise start one
-        PF_PID=""
-        if ! PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}} -c "SELECT 1" >/dev/null 2>&1; then
-          kubectl --context {{.MGMT_CONTEXT}} port-forward -n loopzero-system svc/postgresql {{.PG_PORT}}:5432 &
-          PF_PID=$!
-          trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
-          sleep 2
-        fi
+        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
         DATABASE_URL="postgres://{{.PG_USER}}:{{.PG_PASS}}@{{.PG_HOST}}:{{.PG_PORT}}/{{.PG_DB}}?sslmode=disable" \
         API_URL="http://localhost:{{.API_PORT}}" \
           go run infra/scripts/seed_e2e.go
@@ -871,9 +834,13 @@ tasks:
       - bash infra/scripts/provision-api-tokens.sh
       - |
         echo ""
-        echo "Restarting API to pick up new tokens..."
-        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout restart deployment/loopzero-api
-        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout status deployment/loopzero-api --timeout=60s
+        if kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get deployment/loopzero-api >/dev/null 2>&1; then
+          echo "Restarting API to pick up new tokens..."
+          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout restart deployment/loopzero-api
+          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout status deployment/loopzero-api --timeout=60s
+        else
+          echo "API deployment not found (not running yet — tokens will be picked up on first start)."
+        fi
 
   tokens:verify:
     desc: Verify API tokens are valid (non-expired) and services are reachable
@@ -990,7 +957,7 @@ tasks:
     desc: Run all unit tests
     env:
       KUBEBUILDER_ASSETS:
-        sh: setup-envtest use -p path 2>/dev/null || echo "$HOME/.local/share/kubebuilder-envtest/k8s/1.35.0-linux-amd64"
+        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
     cmds:
       - cd pkg && go test ./... -short
       - cd operators && go test ./... -short
@@ -1002,7 +969,7 @@ tasks:
     desc: Run integration tests (requires running clusters)
     env:
       KUBEBUILDER_ASSETS:
-        sh: setup-envtest use -p path 2>/dev/null || echo "$HOME/.local/share/kubebuilder-envtest/k8s/1.35.0-linux-amd64"
+        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
     cmds:
       - cd operators && go test ./... -tags=integration -v -timeout 5m
       - cd api && go test ./... -tags=integration -v -timeout 5m
@@ -1051,7 +1018,6 @@ tasks:
     desc: Install full monitoring stack (Prometheus + Grafana + OTel + ServiceMonitors + dashboards)
     cmds:
       - task: infra:install:monitoring
-      - task: dashboards:install
 
   monitoring:validate-targets:
     desc: Validate all Prometheus scrape targets are UP
