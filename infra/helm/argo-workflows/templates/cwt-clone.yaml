@@ -1,0 +1,47 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: loopzero-clone
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: loopzero
+spec:
+  templates:
+    - name: clone-repo
+      inputs:
+        parameters:
+          - name: gitea-url
+            description: "Gitea server URL for source repos"
+          - name: gitea-token
+            description: "Ephemeral Gitea token scoped to tenant repos"
+          - name: tenant-id
+            description: "Tenant identifier for isolation"
+          - name: project-id
+            description: "Project identifier"
+      container:
+        image: alpine/git:2.43.0
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+            REPO_URL="{{inputs.parameters.gitea-url}}/loopzero/loopzero-source-{{inputs.parameters.tenant-id}}-{{inputs.parameters.project-id}}.git"
+            CLONE_URL=$(echo "$REPO_URL" | sed "s|://|://oauth2:{{inputs.parameters.gitea-token}}@|")
+            git clone --depth 1 "$CLONE_URL" /workspace
+            cd /workspace
+            echo "Cloned from Gitea source repo"
+            ls -la
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000

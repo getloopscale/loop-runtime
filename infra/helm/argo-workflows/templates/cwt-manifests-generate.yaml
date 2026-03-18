@@ -1,0 +1,212 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: loopzero-manifests-generate
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: loopzero
+spec:
+  templates:
+    - name: generate-manifests
+      inputs:
+        parameters:
+          - name: registry-url
+            description: "Container registry URL for image references"
+          - name: tenant-id
+            description: "Tenant identifier for isolation"
+          - name: project-id
+            description: "Project identifier"
+          - name: environment
+            description: "Target environment (e.g., production, staging)"
+          - name: commit-sha
+            description: "Git commit SHA for image tag"
+          - name: build-id
+            description: "Unique build identifier"
+          - name: apps
+            description: "JSON array of app specs to build"
+      container:
+        image: node:20.11.1-alpine
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+
+            export MANIFEST_DIR="/manifests/{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.environment}}"
+            mkdir -p "$MANIFEST_DIR"
+
+            export IMAGE="{{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}:{{inputs.parameters.commit-sha}}"
+            export TENANT="{{inputs.parameters.tenant-id}}"
+            export PROJECT="{{inputs.parameters.project-id}}"
+            export ENV="{{inputs.parameters.environment}}"
+            export BUILD="{{inputs.parameters.build-id}}"
+            export NS="${TENANT}-${ENV}"
+            export APPS_JSON='{{inputs.parameters.apps}}'
+
+            node -e "
+            const fs = require('fs');
+            const apps = JSON.parse(process.env.APPS_JSON || '[]');
+            const image = process.env.IMAGE;
+            const tenant = process.env.TENANT;
+            const project = process.env.PROJECT;
+            const env = process.env.ENV;
+            const build = process.env.BUILD;
+            const ns = process.env.NS;
+            const manifestDir = process.env.MANIFEST_DIR;
+
+            // If no apps specified, fall back to single-app mode
+            const appList = apps.length > 0 ? apps : [{name: project, type: 'server', port: 3000, path: '.'}];
+            // Always use per-app hostname format. This ensures consistency between
+            // full deploys and --app partial deploys. A single-app deploy of \"api\"
+            // must generate the same hostname as a full deploy that includes \"api\".
+            const hasExplicitApps = apps.length > 0;
+            let manifests = '';
+            const callbackApps = [];
+
+            for (const app of appList) {
+              const appName = app.name;
+              // K8s resource names are prefixed with project to prevent collisions
+              // when multiple projects share the same tenant repo and namespace.
+              // Without this, two projects with app \"api\" would create duplicate
+              // Deployment/api, Service/api in acme-production.
+              const k8sName = hasExplicitApps ? project + '-' + appName : appName;
+              const appType = app.type || 'server';
+              const appPort = app.port || 3000;
+              const appPath = app.path || (hasExplicitApps ? 'apps/' + appName : '.');
+              // Always use per-app hostname: {app}-{project}.{tenant}.loopzero.local
+              // This ensures --app deploys generate the same URL as full deploys.
+              const host = hasExplicitApps
+                ? appName + '-' + project + '.' + tenant + '.loopzero.local'
+                : project + '.' + tenant + '.loopzero.local';
+
+              // Runtime command:
+              // - Node apps keep legacy "npm start" behavior.
+              // - Non-Node apps keep image ENTRYPOINT/CMD from their Dockerfile.
+              const framework = (app.framework || '').toLowerCase();
+              const isNodeFramework = framework === '' || ['nextjs', 'vite', 'remix', 'nestjs', 'express', 'node'].includes(framework);
+              const cmd = isNodeFramework
+                ? (hasExplicitApps ? 'cd ' + appPath + ' && npm start' : 'npm start')
+                : '';
+
+              // Deployment (always)
+              manifests += 'apiVersion: apps/v1\n';
+              manifests += 'kind: Deployment\n';
+              manifests += 'metadata:\n';
+              manifests += '  name: ' + k8sName + '\n';
+              manifests += '  namespace: ' + ns + '\n';
+              manifests += '  labels:\n';
+              manifests += '    app: ' + k8sName + '\n';
+              manifests += '    loopzero.io/tenant: ' + tenant + '\n';
+              manifests += '    loopzero.io/project: ' + project + '\n';
+              manifests += '    loopzero.io/environment: ' + env + '\n';
+              manifests += '    loopzero.io/build-id: ' + build + '\n';
+              manifests += 'spec:\n';
+              manifests += '  replicas: 1\n';
+              manifests += '  selector:\n';
+              manifests += '    matchLabels:\n';
+              manifests += '      app: ' + k8sName + '\n';
+              // Secret name follows convention: {project}-{app}-secrets (per namespace)
+              // The Secret is created/managed by the TenantController or loopzero secret set.
+              // If no secrets are declared for this app, we skip envFrom entirely.
+              const secretName = project + '-' + appName + '-secrets';
+              const hasSecrets = app.secrets && app.secrets.length > 0;
+
+              manifests += '  template:\n';
+              manifests += '    metadata:\n';
+              manifests += '      labels:\n';
+              manifests += '        app: ' + k8sName + '\n';
+              // Annotation for secret-hash rollout (spec \u00a710.1 step 13g).
+              // When secrets change, the hash changes, triggering a rolling update.
+              // Placeholder \"none\" when app has no secrets \u2014 the AppSecretOperator
+              // updates this annotation in-cluster when secrets are set/changed.
+              manifests += '      annotations:\n';
+              manifests += '        loopzero.io/secret-hash: \"none\"\n';
+              manifests += '    spec:\n';
+              manifests += '      containers:\n';
+              manifests += '        - name: app\n';
+              manifests += '          image: ' + image + '\n';
+              if (cmd) {
+                manifests += '          command: [\"sh\", \"-c\", \"' + cmd + '\"]\n';
+              }
+              if (appType !== 'worker') {
+                manifests += '          ports:\n';
+                manifests += '            - containerPort: ' + appPort + '\n';
+              }
+              manifests += '          env:\n';
+              manifests += '            - name: PORT\n';
+              manifests += '              value: \"' + appPort + '\"\n';
+              manifests += '            - name: NODE_ENV\n';
+              manifests += '              value: ' + env + '\n';
+              // Secrets via K8s Secret reference \u2014 never inline (spec \u00a710.1 step 13g).
+              // envFrom injects all keys from the Secret as env vars.
+              // If the Secret doesn't exist yet, the pod will fail with clear error
+              // \"secret not found\" which guides the user to run: loopzero secret set
+              if (hasSecrets) {
+                manifests += '          envFrom:\n';
+                manifests += '            - secretRef:\n';
+                manifests += '                name: ' + secretName + '\n';
+              }
+              manifests += '---\n';
+
+              // Service + IngressRoute only for server/frontend (not worker)
+              if (appType !== 'worker') {
+                manifests += 'apiVersion: v1\n';
+                manifests += 'kind: Service\n';
+                manifests += 'metadata:\n';
+                manifests += '  name: ' + k8sName + '\n';
+                manifests += '  namespace: ' + ns + '\n';
+                manifests += 'spec:\n';
+                manifests += '  selector:\n';
+                manifests += '    app: ' + k8sName + '\n';
+                manifests += '  ports:\n';
+                manifests += '    - port: 80\n';
+                manifests += '      targetPort: ' + appPort + '\n';
+                manifests += '---\n';
+
+                manifests += 'apiVersion: traefik.io/v1alpha1\n';
+                manifests += 'kind: IngressRoute\n';
+                manifests += 'metadata:\n';
+                manifests += '  name: ' + k8sName + '\n';
+                manifests += '  namespace: ' + ns + '\n';
+                manifests += '  labels:\n';
+                manifests += '    app: ' + k8sName + '\n';
+                manifests += '    loopzero.io/tenant: ' + tenant + '\n';
+                manifests += '    loopzero.io/environment: ' + env + '\n';
+                manifests += 'spec:\n';
+                manifests += '  entryPoints:\n';
+                manifests += '    - web\n';
+                manifests += '  routes:\n';
+                manifests += '    - match: Host(\x60' + host + '\x60)\n';
+                manifests += '      kind: Rule\n';
+                manifests += '      services:\n';
+                manifests += '        - name: ' + k8sName + '\n';
+                manifests += '          port: 80\n';
+                manifests += '---\n';
+
+                callbackApps.push({name: appName, type: appType, url: 'http://' + host});
+              } else {
+                callbackApps.push({name: appName, type: appType, url: ''});
+              }
+            }
+
+            fs.writeFileSync(manifestDir + '/manifests.yaml', manifests);
+            fs.writeFileSync('/manifests/callback-apps.json', JSON.stringify(callbackApps));
+            console.log('Generated manifests for ' + appList.length + ' app(s)');
+            console.log(manifests);
+            "
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: manifests
+            mountPath: /manifests
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000

@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: loopzero-kaniko
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: loopzero
+spec:
+  templates:
+    - name: build-image
+      inputs:
+        parameters:
+          - name: registry-url
+            description: "Container registry URL for image push"
+          - name: tenant-id
+            description: "Tenant identifier for isolation"
+          - name: project-id
+            description: "Project identifier"
+          - name: commit-sha
+            description: "Git commit SHA to tag the image"
+          - name: dockerfile-path
+            description: "Path to Dockerfile"
+            default: "/workspace/Dockerfile"
+          - name: context-path
+            description: "Build context path"
+            default: "/workspace"
+      retryStrategy:
+        limit: "3"
+        retryPolicy: "OnFailure"
+        backoff:
+          duration: "5s"
+          factor: "2"
+          maxDuration: "60s"
+      container:
+        image: gcr.io/kaniko-project/executor:v1.23.2
+        command:
+          - /kaniko/executor
+        args:
+          - --dockerfile={{inputs.parameters.dockerfile-path}}
+          - --context={{inputs.parameters.context-path}}
+          - --destination={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}:{{inputs.parameters.commit-sha}}
+          - --cache=true
+          - --cache-repo={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/cache
+          - --snapshot-mode=redo
+          - --compressed-caching=false
+          - --insecure
+          - --skip-tls-verify
+          - --digest-file=/workspace/image-digest.txt
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        # Kaniko requires root to build container images
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0

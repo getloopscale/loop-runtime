@@ -1,0 +1,136 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: loopzero-notify
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: loopzero
+spec:
+  templates:
+    - name: notify-api
+      inputs:
+        parameters:
+          - name: api-callback-url
+            description: "API endpoint for build completion callback"
+          - name: callback-secret
+            description: "Bearer token for callback authentication"
+          - name: registry-url
+            description: "Container registry URL for image references"
+          - name: tenant-id
+            description: "Tenant identifier for isolation"
+          - name: project-id
+            description: "Project identifier"
+          - name: environment
+            description: "Target environment (e.g., production, staging)"
+          - name: commit-sha
+            description: "Git commit SHA for image tag"
+          - name: build-id
+            description: "Unique build identifier"
+          - name: correlation-id
+            description: "Correlation ID for end-to-end request tracing"
+          - name: workflow-status
+            description: "Workflow status (Succeeded/Failed) — passed explicitly since CWTs cannot access workflow-level variables"
+      retryStrategy:
+        limit: "3"
+        retryPolicy: "Always"
+        backoff:
+          duration: "5s"
+          factor: "2"
+          maxDuration: "60s"
+      container:
+        # All-Python callback — no curl dependency, no shell escaping issues.
+        # Uses urllib.request (stdlib) for HTTP, json for payload construction.
+        image: python:3.12-alpine
+        command:
+          - python3
+          - -c
+          - |
+            import json, os, sys, urllib.request, urllib.error
+
+            # Determine build status
+            wf_status = "{{inputs.parameters.workflow-status}}"
+            status = "succeeded" if wf_status == "Succeeded" else "failed"
+
+            callback_url = "{{inputs.parameters.api-callback-url}}/{{inputs.parameters.build-id}}/callback"
+            registry = "{{inputs.parameters.registry-url}}"
+            tenant = "{{inputs.parameters.tenant-id}}"
+            project = "{{inputs.parameters.project-id}}"
+            commit = "{{inputs.parameters.commit-sha}}"
+            correlation_id = "{{inputs.parameters.correlation-id}}"
+            callback_secret = "{{inputs.parameters.callback-secret}}"
+
+            image_ref = f"{registry}/{tenant}/{project}:{commit}"
+
+            # Read real image digest if available
+            image_digest = image_ref
+            digest_file = "/workspace/image-digest.txt"
+            if os.path.exists(digest_file):
+                raw = open(digest_file).read().strip()
+                if raw:
+                    image_digest = f"{registry}/{tenant}/{project}@{raw}"
+
+            manifest_dir = f"/manifests/{tenant}/{project}/{{inputs.parameters.environment}}"
+
+            if status == "succeeded":
+                apps = []
+                apps_file = "/manifests/callback-apps.json"
+                if os.path.exists(apps_file):
+                    apps = json.load(open(apps_file))
+                    for app in apps:
+                        app["image_digest"] = image_digest
+                manifests = ""
+                manifest_file = os.path.join(manifest_dir, "manifests.yaml")
+                if os.path.exists(manifest_file):
+                    manifests = open(manifest_file).read()
+                payload = {"status": status, "correlation_id": correlation_id, "apps": apps, "manifests": manifests}
+            else:
+                error_msg = "Build pipeline failed"
+                error_file = "/manifests/build-error.txt"
+                if os.path.exists(error_file):
+                    error_msg = open(error_file).read()[:500]
+                payload = {"status": status, "correlation_id": correlation_id, "error": error_msg, "apps": [{"name": project, "image_digest": image_digest}]}
+
+            body = json.dumps(payload).encode()
+            print(f"Callback: {status} → {callback_url} ({len(body)} bytes)")
+
+            req = urllib.request.Request(
+                callback_url,
+                data=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {callback_secret}",
+                    "Correlation-ID": correlation_id,
+                },
+                method="POST",
+            )
+
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    print(f"Callback response: HTTP {resp.status}")
+                    print(resp.read().decode()[:500])
+            except urllib.error.HTTPError as e:
+                print(f"Callback response: HTTP {e.code}")
+                print(e.read().decode()[:500])
+                if e.code >= 500:
+                    sys.exit(1)  # Retry on 5xx
+            except Exception as e:
+                print(f"Callback failed: {e}")
+                sys.exit(1)
+
+            print(f"Build callback sent (status: {status})")
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: manifests
+            mountPath: /manifests
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+          limits:
+            cpu: "500m"
+            memory: "128Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000

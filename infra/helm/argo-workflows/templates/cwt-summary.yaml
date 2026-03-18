@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: loopzero-summary
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: loopzero
+spec:
+  templates:
+    - name: emit-summary
+      inputs:
+        parameters:
+          - name: tenant-id
+            description: "Tenant identifier for isolation"
+          - name: project-id
+            description: "Project identifier"
+          - name: environment
+            description: "Target environment (e.g., production, staging)"
+          - name: commit-sha
+            description: "Git commit SHA"
+          - name: build-id
+            description: "Unique build identifier"
+          - name: workflow-status
+            description: "Workflow status (Succeeded/Failed) — passed explicitly since CWTs cannot access workflow-level variables"
+      container:
+        image: alpine:3.19.1
+        command:
+          - sh
+          - -c
+          - |
+            echo "============================================"
+            echo "  Build Summary"
+            echo "============================================"
+            echo "  Tenant:      {{inputs.parameters.tenant-id}}"
+            echo "  Project:     {{inputs.parameters.project-id}}"
+            echo "  Environment: {{inputs.parameters.environment}}"
+            echo "  Commit:      {{inputs.parameters.commit-sha}}"
+            echo "  Build ID:    {{inputs.parameters.build-id}}"
+            echo "  Status:      {{inputs.parameters.workflow-status}}"
+            echo "============================================"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
