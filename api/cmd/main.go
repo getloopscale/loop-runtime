@@ -5,11 +5,11 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/loopzero/loopzero/pkg/logging"
 
 	"github.com/loopzero/loopzero/api/internal/adapters"
+	"github.com/loopzero/loopzero/api/internal/config"
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/github"
 	"github.com/loopzero/loopzero/api/internal/k8s"
@@ -27,44 +27,28 @@ import (
 
 func main() {
 	logger := logging.NewLogger("api")
+	cfg := config.Load()
 
 	// In production, fail fast if security-sensitive env vars are missing.
-	// In dev mode, fallback defaults are acceptable.
-	if os.Getenv("LOOPZERO_ENV") == "production" {
+	if cfg.IsProduction() {
 		required := map[string]string{
 			"DATABASE_URL":              os.Getenv("DATABASE_URL"),
 			"LOOPZERO_ARGO_CALLBACK_SECRET": os.Getenv("LOOPZERO_ARGO_CALLBACK_SECRET"),
-			"GITEA_TOKEN":              os.Getenv("GITEA_TOKEN"),
-			"ARGOCD_TOKEN":             os.Getenv("ARGOCD_TOKEN"),
+			"GITEA_TOKEN":               cfg.GiteaToken,
+			"ARGOCD_TOKEN":              cfg.ArgocdToken,
 		}
 		if err := server.ValidateProductionEnv(logger, required); err != nil {
 			os.Exit(1)
 		}
 	}
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "3001"
-	}
-
 	// GitHub token validator
 	githubValidator := &github.TokenValidator{
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
+		HTTPClient: &http.Client{Timeout: cfg.HTTPClientTimeout},
 	}
 
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
-	// Uses in-cluster config when running inside the mgmt cluster (Tilt/production),
-	// falls back to kubeconfig for local development outside the cluster.
-	mgmtKubeconfig := os.Getenv("MGMT_KUBECONFIG")
-	if mgmtKubeconfig == "" {
-		home, _ := os.UserHomeDir()
-		mgmtKubeconfig = home + "/.kube/config"
-	}
-	mgmtContext := os.Getenv("MGMT_KUBE_CONTEXT")
-	if mgmtContext == "" {
-		mgmtContext = "k3d-loopzero-mgmt"
-	}
-	tenantCRMgr, err := k8s.NewTenantCRManager(mgmtKubeconfig, mgmtContext)
+	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
 	if err != nil {
 		logger.Error("failed to create tenant CR manager", "error", err)
 		os.Exit(1)
@@ -86,7 +70,15 @@ func main() {
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
-		poolCfg, err := db.NewPool(context.Background(), dbURL)
+		poolCfg, err := db.NewPool(context.Background(), dbURL, db.PoolConfig{
+			MaxConns:         cfg.DBMaxConns,
+			MinConns:         cfg.DBMinConns,
+			MaxConnIdleTime:  cfg.DBMaxConnIdleTime,
+			MaxConnLifetime:  cfg.DBMaxConnLifetime,
+			HealthCheckPeriod: cfg.DBHealthCheckTime,
+			ConnectTimeout:   cfg.DBConnectTimeout,
+			StatementTimeout: cfg.DBStatementTimeout,
+		})
 		if err != nil {
 			logger.Error("failed to connect to database", "error", err)
 			os.Exit(1)
@@ -106,21 +98,13 @@ func main() {
 		pgEventStore := sse.NewPostgresEventStore(dbAdapter, dbAdapter)
 		eventStore = pgEventStore
 
-		// Secret store — queries PostgreSQL for secret metadata (never values)
+		// Secret store
 		secretStore = &db.PostgresSecretStore{DB: dbAdapter}
 
-		// W1: Real source store — Gitea source repo
-		// Source is pushed to Gitea (loopzero-source-{tenant}-{project}) per spec §7.1.
-		// The Argo Workflow clones from this Gitea repo (step 13a).
-		giteaURL := os.Getenv("GITEA_URL")
-		if giteaURL == "" {
-			giteaURL = "http://gitea-http.loopzero-system.svc.cluster.local:3000"
-		}
-		giteaToken := os.Getenv("GITEA_TOKEN")
-
+		// Source store — Gitea source repo
 		giteaSourceStore, err := source.NewGiteaSourceStore(source.GiteaSourceStoreConfig{
-			BaseURL: giteaURL,
-			Token:   giteaToken,
+			BaseURL: cfg.GiteaURL,
+			Token:   cfg.GiteaToken,
 			OrgName: "loopzero",
 		})
 		if err != nil {
@@ -132,104 +116,50 @@ func main() {
 		// Environment locker using real pgxpool.Pool
 		locker := &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool}
 
-		// W5: Real health prober — HTTP GET with retries
-		// When WORKLOAD_INGRESS_URL is set, probes go through the Ingress controller
-		// with Host header override. This allows health probing without DNS resolution —
-		// essential for local dev (k3d) and any environment where *.loopzero.local doesn't resolve.
-		workloadIngressURL := os.Getenv("WORKLOAD_INGRESS_URL")
+		// Health prober — HTTP GET with retries
 		healthProber := &health.HTTPProber{
-			Client:     &http.Client{Timeout: 10 * time.Second},
-			IngressURL: workloadIngressURL,
+			Client:     &http.Client{Timeout: cfg.HTTPClientTimeout},
+			IngressURL: cfg.WorkloadIngressURL,
 		}
 
-		// W2: Real workflow submitter — Argo Workflows in build cluster
-		buildKubeconfig := os.Getenv("BUILD_KUBECONFIG")
-		if buildKubeconfig == "" {
-			home, _ := os.UserHomeDir()
-			buildKubeconfig = home + "/.kube/config"
-		}
-		buildContext := os.Getenv("BUILD_KUBE_CONTEXT")
-		if buildContext == "" {
-			buildContext = "k3d-loopzero-build"
-		}
-		callbackSecret := os.Getenv("LOOPZERO_ARGO_CALLBACK_SECRET")
-		if callbackSecret == "" {
-			callbackSecret = "loopzero-dev-callback-secret"
-		}
-		minioEndpoint := os.Getenv("MINIO_ENDPOINT")
-		if minioEndpoint == "" {
-			minioEndpoint = "minio.loopzero-system.svc.cluster.local:9000"
-		}
-		minioAccessKey := os.Getenv("MINIO_ACCESS_KEY")
-		if minioAccessKey == "" {
-			minioAccessKey = "loopzero-admin"
-		}
-		minioSecretKey := os.Getenv("MINIO_SECRET_KEY")
-		if minioSecretKey == "" {
-			minioSecretKey = "loopzero-dev-password"
-		}
-		registryURL := os.Getenv("REGISTRY_URL")
-		if registryURL == "" {
-			registryURL = "k3d-loopzero-registry:5000"
-		}
-
-		// Cross-cluster URLs for workflow parameters (build cluster → mgmt services)
-		giteaCrossClusterURL := os.Getenv("GITEA_CROSS_CLUSTER_URL")
-		if giteaCrossClusterURL == "" {
-			giteaCrossClusterURL = giteaURL // fallback to internal URL
-		}
-		apiCrossClusterURL := os.Getenv("API_CROSS_CLUSTER_URL")
-		if apiCrossClusterURL == "" {
-			apiCrossClusterURL = "http://loopzero-api.loopzero-system.svc.cluster.local:3001"
-		}
-
+		// Workflow submitter — Argo Workflows in build cluster
 		workflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-			Kubeconfig:     buildKubeconfig,
-			Context:        buildContext,
-			Namespace:      "argo",
-			TemplateName:   "loopzero-build-nodejs-v1",
-			CallbackSecret: callbackSecret,
-			GiteaURL:       giteaCrossClusterURL,
-			GiteaToken:     giteaToken,
-			MinIOEndpoint:  minioEndpoint,
-			MinIOAccessKey: minioAccessKey,
-			MinIOSecretKey: minioSecretKey,
-			RegistryURL:    registryURL,
-			CallbackURL:    apiCrossClusterURL + "/api/v1/builds",
+			Kubeconfig:     cfg.BuildKubeconfig,
+			Context:        cfg.BuildKubeContext,
+			Namespace:      cfg.ArgoNamespace,
+			TemplateName:   cfg.WorkflowTemplate,
+			CallbackSecret: cfg.ArgoCallbackSecret,
+			GiteaURL:       cfg.GiteaCrossCluster(),
+			GiteaToken:     cfg.GiteaToken,
+			MinIOEndpoint:  cfg.MinIOEndpoint,
+			MinIOAccessKey: cfg.MinIOAccessKey,
+			MinIOSecretKey: cfg.MinIOSecretKey,
+			RegistryURL:    cfg.RegistryURL,
+			CallbackURL:    cfg.APICrossClusterURL + "/api/v1/builds",
 		})
 		if err != nil {
 			logger.Error("failed to create workflow submitter", "error", err)
 			os.Exit(1)
 		}
 
-		// W4: Real ArgoCD sync client
-		argocdURL := os.Getenv("ARGOCD_URL")
-		if argocdURL == "" {
-			argocdURL = "http://argocd-server.argocd.svc.cluster.local:80"
-		}
-		argocdToken := os.Getenv("ARGOCD_TOKEN")
-
+		// ArgoCD sync client with PG-backed circuit breaker
 		rawSyncClient := argocd.NewSyncClient(argocd.SyncClientConfig{
-			BaseURL:  argocdURL,
-			Token:    argocdToken,
-			Insecure: os.Getenv("ARGOCD_INSECURE") == "true",
+			BaseURL:  cfg.ArgocdURL,
+			Token:    cfg.ArgocdToken,
+			Insecure: cfg.ArgocdInsecure,
 		})
-		// PG-backed circuit breaker — shared state across all API replicas.
-		// Replaces in-memory circuit breaker (DA-7 tech debt resolved).
 		cbStore := db.NewCircuitBreakerStore(dbAdapter)
 		syncClient := services.NewPGCircuitBreakerSyncClient(rawSyncClient, cbStore, services.PGCircuitBreakerConfig{
-			Key:            "argocd",
-			OpenThreshold:  3,
-			CloseThreshold: 2,
-			RetryInterval:  30 * time.Second,
+			Key:            cfg.CBKey,
+			OpenThreshold:  cfg.CBOpenThreshold,
+			CloseThreshold: cfg.CBCloseThreshold,
+			RetryInterval:  cfg.CBRetryInterval,
 		})
 
-		// Step 6: API owns GitOps push — build pipeline only produces artifacts.
-		// The GitOpsPusher commits manifests to the tenant GitOps repo in Gitea
-		// after a build succeeds, enabling retry-without-rebuild.
+		// GitOps pusher — commits manifests to Gitea after build succeeds
 		gitopsPusher := gitops.NewGiteaGitOpsPusher(gitops.GiteaGitOpsPusherConfig{
-			BaseURL: giteaURL,
-			Token:   giteaToken,
+			BaseURL: cfg.GiteaURL,
+			Token:   cfg.GiteaToken,
 			OrgName: "loopzero",
 		})
 
@@ -245,30 +175,30 @@ func main() {
 			GitOps:         gitopsPusher,
 		})
 
-		// Route-level adapter
 		buildOrchestrator = &adapters.BuildOrchestratorAdapter{
 			Orch:       orch,
 			BuildStore: buildStore,
 		}
 
-		// SSE stream reader adapter
 		buildStoreReader = &adapters.BuildStoreReaderAdapter{Store: buildStore}
+		argoCallbackSecret = cfg.ArgoCallbackSecret
 
-		// Argo callback secret
-		argoCallbackSecret = os.Getenv("LOOPZERO_ARGO_CALLBACK_SECRET")
-
-		// Startup reconciler — recovers orphaned builds on boot (spec §12.1).
-		// Runs ONCE before the server starts accepting requests.
+		// Startup reconciler — recovers orphaned builds on boot (spec §12.1)
 		reconciler := services.NewStartupReconciler(buildStore, workflowSubmitter, locker, logger)
 		reconciler.Reconcile(context.Background())
 
-		// Build reaper — enforces spec §5.1 timeouts (QUEUED 5min, RUNNING 30min, CANCELLING 60s)
+		// Build reaper — enforces spec §5.1 timeouts
 		reaper := services.NewBuildReaper(
 			buildStore,
 			&services.PostgresStaleBuildChecker{DB: dbAdapter},
 			locker,
 			logger,
-			services.DefaultBuildReaperConfig(),
+			services.BuildReaperConfig{
+				QueueTimeout:   cfg.BuildQueueTimeout,
+				RunningTimeout: cfg.BuildRunningTimeout,
+				CancelTimeout:  cfg.BuildCancelTimeout,
+				Interval:       cfg.BuildReaperInterval,
+			},
 		)
 		go reaper.Start(context.Background())
 
@@ -277,14 +207,9 @@ func main() {
 		logger.Warn("DATABASE_URL not set — running without database")
 	}
 
-	metricsPort := os.Getenv("METRICS_PORT")
-	if metricsPort == "" {
-		metricsPort = "9090"
-	}
-
-	cfg := server.Config{
-		Port:             port,
-		MetricsPort:      metricsPort,
+	srvCfg := server.Config{
+		Port:             cfg.Port,
+		MetricsPort:      cfg.MetricsPort,
 		Logger:           logger,
 		DB:               dbHealth,
 		TokenValidator:   githubValidator,
@@ -303,9 +228,13 @@ func main() {
 		EventStore:         eventStore,
 		BuildStoreReader:   buildStoreReader,
 		SecretStore:        secretStore,
+		ReadHeaderTimeout:  cfg.ReadHeaderTimeout,
+		ReadTimeout:        cfg.ReadTimeout,
+		IdleTimeout:        cfg.IdleTimeout,
+		ShutdownTimeout:    cfg.GracefulShutdownTime,
 	}
 
-	if err := server.Run(cfg); err != nil {
+	if err := server.Run(srvCfg); err != nil {
 		logger.Error("server failed", "error", err)
 		os.Exit(1)
 	}

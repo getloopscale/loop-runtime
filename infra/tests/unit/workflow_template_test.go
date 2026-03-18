@@ -433,27 +433,10 @@ func TestWorkflowTemplateNoLatestImageTags(t *testing.T) {
 	}
 }
 
-func TestWorkflowTemplateGitopsCommitTrailers(t *testing.T) {
-	data, err := os.ReadFile(workflowTemplatePath())
-	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
-	}
-
-	content := string(data)
-
-	// Git commit trailers must be present in the gitops-push step
-	requiredTrailers := []string{
-		"Release-ID",
-		"Correlation-ID",
-		"Build-ID",
-	}
-
-	for _, trailer := range requiredTrailers {
-		if !strings.Contains(content, trailer) {
-			t.Errorf("gitops-push step missing git commit trailer: %s", trailer)
-		}
-	}
-}
+// TestWorkflowTemplateGitopsCommitTrailers was removed:
+// The gitops-push step was removed from the Argo Workflow in Step 6 refactoring.
+// Git commit trailers are now in the API's GiteaGitOpsPusher (api/internal/gitops/).
+// See: api/internal/gitops/gitea_pusher_test.go for trailer tests.
 
 func TestWorkflowTemplateCallbackBodyStructure(t *testing.T) {
 	data, err := os.ReadFile(workflowTemplatePath())

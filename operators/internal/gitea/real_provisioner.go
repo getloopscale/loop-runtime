@@ -43,7 +43,7 @@ func (p *RealProvisioner) EnsureRepo(ctx context.Context, name string, branch st
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 200 {
+	if resp.StatusCode == http.StatusOK {
 		var repo struct {
 			CloneURL string `json:"clone_url"`
 		}
@@ -78,12 +78,12 @@ func (p *RealProvisioner) EnsureRepo(ctx context.Context, name string, branch st
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 409 {
+	if resp.StatusCode == http.StatusConflict {
 		// Repo already exists (race condition) — get it
 		return p.EnsureRepo(ctx, name, branch)
 	}
 
-	if resp.StatusCode != 201 {
+	if resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("gitea: create repo %s: status %d: %s", name, resp.StatusCode, string(respBody))
 	}
@@ -113,7 +113,7 @@ func (p *RealProvisioner) RepoExists(ctx context.Context, name string) (bool, er
 	}
 	resp.Body.Close()
 
-	return resp.StatusCode == 200, nil
+	return resp.StatusCode == http.StatusOK, nil
 }
 
 // ArchiveRepo archives (soft-deletes) a repository.
@@ -136,7 +136,7 @@ func (p *RealProvisioner) ArchiveRepo(ctx context.Context, name string) error {
 	}
 	resp.Body.Close()
 
-	if resp.StatusCode != 200 && resp.StatusCode != 404 {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
 		return fmt.Errorf("gitea: archive repo %s: status %d", name, resp.StatusCode)
 	}
 

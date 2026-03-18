@@ -1,5 +1,9 @@
 import { ApiError } from '../api/client';
 import { DeployRenderer } from '../output/deploy-renderer';
+import {
+  DEPLOY_TIMEOUT_MS,
+  MAX_ENVIRONMENT_NAME_LENGTH,
+} from '../config/constants';
 
 interface LoopZeroYamlApp {
   path: string;
@@ -243,7 +247,7 @@ export class DeployCommand {
     }
 
     // 15. Connect SSE stream and wait for completion
-    const DEPLOY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+    // DEPLOY_TIMEOUT_MS imported from config/constants
     const deployStartTime = Date.now();
 
     const renderer = new DeployRenderer({
@@ -448,8 +452,8 @@ export class DeployCommand {
     if (!/^[a-z]/.test(env)) {
       return 'Environment name must start with a lowercase letter. Example: --env staging';
     }
-    if (env.length > 63) {
-      return `Environment name too long (${env.length} chars, max 63). Use a shorter name.`;
+    if (env.length > MAX_ENVIRONMENT_NAME_LENGTH) {
+      return `Environment name too long (${env.length} chars, max ${MAX_ENVIRONMENT_NAME_LENGTH}). Use a shorter name.`;
     }
     if (!/^[a-z][a-z0-9-]*$/.test(env)) {
       return 'Environment name can only contain lowercase letters, numbers, and hyphens. Example: --env staging';

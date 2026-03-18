@@ -37,6 +37,11 @@ type Config struct {
 	EventStore         sse.EventStore
 	BuildStoreReader   sse.BuildStoreReader
 	SecretStore        routes.SecretStore
+	// HTTP server timeouts (configurable via env vars)
+	ReadHeaderTimeout  time.Duration
+	ReadTimeout        time.Duration
+	IdleTimeout        time.Duration
+	ShutdownTimeout    time.Duration
 }
 
 // NewRouter creates a chi router with middleware and routes.
@@ -175,9 +180,9 @@ func Run(cfg Config) error {
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 		// WriteTimeout intentionally omitted — SSE streams are long-lived.
 		// Non-SSE routes should use http.TimeoutHandler per-route if needed.
 	}
@@ -210,7 +215,11 @@ func Run(cfg Config) error {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	shutdownTimeout := cfg.ShutdownTimeout
+	if shutdownTimeout == 0 {
+		shutdownTimeout = 15 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
 	cfg.Logger.Info("shutting down gracefully")

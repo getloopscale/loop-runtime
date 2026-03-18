@@ -1,4 +1,9 @@
 import { ApiError } from './client';
+import {
+  SSE_RECONNECT_DELAY_MS,
+  SSE_POLL_INTERVAL_MS,
+  SSE_MAX_RETRIES,
+} from '../config/constants';
 
 export interface SSEEvent {
   id: string;
@@ -50,11 +55,11 @@ export class SSEClient {
     this.onEvent = options.onEvent;
     this.onError = options.onError ?? (() => {});
     this.onClose = options.onClose ?? (() => {});
-    this.reconnectDelay = options.reconnectDelay ?? 1000;
-    this.pollInterval = options.pollInterval ?? 5000;
+    this.reconnectDelay = options.reconnectDelay ?? SSE_RECONNECT_DELAY_MS;
+    this.pollInterval = options.pollInterval ?? SSE_POLL_INTERVAL_MS;
     this.pollUrl = options.pollUrl ?? null;
     this.fetchFn = options.fetchFn ?? globalThis.fetch;
-    this.maxRetries = options.maxRetries ?? 15;
+    this.maxRetries = options.maxRetries ?? SSE_MAX_RETRIES;
   }
 
   getLastEventId(): string | null {

@@ -142,10 +142,20 @@ func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, workflowID string) e
 	return nil
 }
 
+func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, workflowID string) (*services.WorkflowStatus, error) {
+	return &services.WorkflowStatus{Phase: "Succeeded"}, nil
+}
+
 type fakeHealthProber struct{}
 
 func (f *fakeHealthProber) Probe(ctx context.Context, url string, path string) error {
 	return nil
+}
+
+type fakeGitOpsPusher struct{}
+
+func (f *fakeGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpts) (string, error) {
+	return "fake-commit-sha", nil
 }
 
 type fakeSyncClient struct{}
@@ -225,6 +235,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 		Health:         &fakeHealthProber{},
 		Sync:           &fakeSyncClient{},
 		Locker:         locker,
+		GitOps:         &fakeGitOpsPusher{},
 	})
 
 	// Create route-level adapter

@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **API config centralization:** All hardcoded values (URLs, timeouts, credentials, pool settings) extracted to `api/internal/config/config.go` with env var overrides (#config-cleanup)
+- **CLI constants:** Magic numbers (timeouts, retries, ports, limits) extracted to `cli/src/config/constants.ts` (#config-cleanup)
+- **DB pool configurable:** `db.NewPool` now accepts `PoolConfig` struct — all pool parameters configurable via env vars (DB_MAX_CONNS, DB_STATEMENT_TIMEOUT, etc.) (#config-cleanup)
+- **State machine timeouts:** Build and release timeout durations extracted to named constants in `pkg/statemachine/` (#config-cleanup)
+- **HTTP status codes:** Operators use `http.StatusOK`/`http.StatusCreated`/etc. instead of raw integers (#config-cleanup)
+- **Server timeouts configurable:** ReadTimeout, IdleTimeout, GracefulShutdown driven by env vars (#config-cleanup)
+- **Taskfile hardening:** DRY port-forward boilerplate via `ensure-pg.sh`, db:reset prompt, build:cleanup safe iteration, monitoring CRD ordering, tokens:provision resilience (#taskfile-review)
+- **Infra fixes:** cert-manager values updated for v1.20, PostgreSQL PDB `maxUnavailable`, OTel collector port conflict resolved, ArgoCD token `expiresIn` type fix (#taskfile-dogfood)
+
+### Added
+- `api/internal/config/config.go` — centralized env-var-driven configuration with 50+ configurable values and dev defaults (#config-cleanup)
+- `cli/src/config/constants.ts` — centralized CLI constants (API URL, timeouts, SSE config, deploy limits) (#config-cleanup)
+- `infra/scripts/ensure-pg.sh` — reusable port-forward helper for Taskfile DB tasks (#taskfile-review)
+- `infra:install:monitoring-crds` Taskfile task — installs Prometheus CRDs before Helm charts that reference ServiceMonitors (#taskfile-dogfood)
+
+### Changed
 - **GitOps decoupling (Step 6):** Build pipeline no longer pushes to GitOps repo — API owns the entire release flow after build succeeds, enabling retry-without-rebuild (#S2-step6)
 - `pushToGitOps` in release_activator.go now performs real git commit to Gitea tenant repo via `GitOpsPusher` interface (#S2-step6)
 - Argo Workflow `notify-api` callback now includes generated manifests YAML in payload — API receives manifests instead of assuming gitops-push was done (#S2-step6)

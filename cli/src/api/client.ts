@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { getDefaultApiUrl, API_REQUEST_TIMEOUT_MS } from '../config/constants';
 
 type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -28,10 +29,7 @@ export class ApiClient {
   private readonly fetchFn: FetchFn;
 
   constructor(opts: ApiClientOptions = {}) {
-    this.baseURL =
-      opts.baseURL ??
-      process.env.LOOPZERO_API_URL ??
-      'http://localhost:3001';
+    this.baseURL = opts.baseURL ?? getDefaultApiUrl();
     this.token = opts.token ?? null;
     this.fetchFn = opts.fetchFn ?? globalThis.fetch;
   }
@@ -76,7 +74,7 @@ export class ApiClient {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
     };
 
     const res = await this.fetchFn(url, init);

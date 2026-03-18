@@ -12,6 +12,7 @@ const _origEmit = process.emit;
 import { Command } from 'commander';
 
 import { ConfigStore } from './config/store';
+import { getDefaultApiUrl } from './config/constants';
 import { ApiClient } from './api/client';
 import { SSEClient } from './api/sse-client';
 import { Formatter } from './output/formatter';
@@ -62,7 +63,7 @@ export function createProgram(): Command {
         validateToken: async (token: string) => {
           try {
             const client = new ApiClient({
-              baseURL: process.env.LOOPZERO_API_URL ?? 'http://localhost:3001',
+              baseURL: getDefaultApiUrl(),
               token,
             });
             const result = await client.get<{
@@ -161,7 +162,7 @@ export function createProgram(): Command {
         detectMonorepo: (dir: string) => detectMonorepoTool(dir),
         detectFramework: (dir: string) => detectFramework(dir),
         createProject: async (input) => {
-          const baseURL = process.env.LOOPZERO_API_URL ?? 'http://localhost:3001';
+          const baseURL = getDefaultApiUrl();
           const authedClient = new ApiClient({ baseURL, token: token ?? undefined });
           return authedClient.post<{ id: string; name: string; team: string }>(
             '/api/v1/projects',
@@ -198,7 +199,7 @@ export function createProgram(): Command {
     .action(async (cmdOpts) => {
       const globalOpts = program.opts();
       const token = configStore.getToken();
-      const baseURL = process.env.LOOPZERO_API_URL ?? 'http://localhost:3001';
+      const baseURL = getDefaultApiUrl();
       const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
       const { randomUUID } = await import('crypto');
 

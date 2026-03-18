@@ -3,6 +3,13 @@ package statemachine
 import "time"
 
 // Release states as defined in spec section 5.2.
+// Release state timeout defaults (spec §5.2).
+const (
+	ReleaseReadyTimeout       = 5 * time.Minute
+	ReleasePendingTimeout     = 2 * time.Minute
+	ReleaseRollingBackTimeout = 2 * time.Minute
+)
+
 const (
 	ReleaseReady           State = "READY"
 	ReleasePending         State = "PENDING"
@@ -72,9 +79,9 @@ func NewReleaseMachine() *Machine {
 		},
 		Terminal: []State{ReleaseSuperseded, ReleaseRolledBack, ReleaseCancelled},
 		Timeouts: []TimeoutConfig{
-			{State: ReleaseReady, Timeout: 5 * time.Minute, Reason: "GIT_PUSH_TIMEOUT"},
-			{State: ReleasePending, Timeout: 2 * time.Minute, Reason: "SYNC_TIMEOUT"},
-			{State: ReleaseRollingBack, Timeout: 2 * time.Minute, Reason: "ROLLBACK_TIMEOUT"},
+			{State: ReleaseReady, Timeout: ReleaseReadyTimeout, Reason: "GIT_PUSH_TIMEOUT"},
+			{State: ReleasePending, Timeout: ReleasePendingTimeout, Reason: "SYNC_TIMEOUT"},
+			{State: ReleaseRollingBack, Timeout: ReleaseRollingBackTimeout, Reason: "ROLLBACK_TIMEOUT"},
 		},
 	})
 }

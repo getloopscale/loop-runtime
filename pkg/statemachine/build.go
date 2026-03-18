@@ -12,6 +12,13 @@ const (
 	BuildCancelled  State = "CANCELLED"
 )
 
+// Build state timeout defaults (spec §5.1).
+const (
+	BuildQueuedTimeout     = 5 * time.Minute
+	BuildRunningTimeout    = 30 * time.Minute
+	BuildCancellingTimeout = 60 * time.Second
+)
+
 // Build events as defined in spec section 5.1.
 const (
 	BuildStarted          Event = "BuildStarted"
@@ -57,9 +64,9 @@ func NewBuildMachine() *Machine {
 		},
 		Terminal: []State{BuildSucceeded, BuildFailed, BuildCancelled},
 		Timeouts: []TimeoutConfig{
-			{State: BuildQueued, Timeout: 5 * time.Minute, Reason: "QUEUE_TIMEOUT"},
-			{State: BuildRunning, Timeout: 30 * time.Minute, Reason: "BUILD_TIMEOUT"},
-			{State: BuildCancelling, Timeout: 60 * time.Second, Reason: "CANCEL_TIMEOUT"},
+			{State: BuildQueued, Timeout: BuildQueuedTimeout, Reason: "QUEUE_TIMEOUT"},
+			{State: BuildRunning, Timeout: BuildRunningTimeout, Reason: "BUILD_TIMEOUT"},
+			{State: BuildCancelling, Timeout: BuildCancellingTimeout, Reason: "CANCEL_TIMEOUT"},
 		},
 	})
 }

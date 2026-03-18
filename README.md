@@ -277,17 +277,67 @@ Being explicit about the boundaries:
 The local dev environment uses k3d and Tilt to run the same Helm charts and operators as production. There is no "development mode" — local and production behavior are identical.
 
 ```bash
-# Start local cluster
-task dev:up
+# Full setup from scratch (clusters + infra + monitoring + networking + CRDs + DB + tokens)
+task setup
 
 # Start Tilt (hot reload for all services)
 tilt up
 
-# Run tests
-task test
+# Check environment health
+task doctor                # Full prerequisite check
+task status                # Cluster, pod, and service status
+task test:smoke            # Quick platform smoke test (<30s)
 
-# Run E2E tests
-task test:e2e
+# Run tests
+task test                  # Unit + lint + manifest validation
+task test:e2e              # E2E tests (requires tilt up)
+
+# Database
+task db:status             # Tables, connections, migrations, advisory locks
+task db:shell              # Interactive psql session
+task db:reset              # Drop + recreate + migrate (with confirmation prompt)
+```
+
+### Observability
+
+The monitoring stack is installed automatically by `task setup`. All tools are available at fixed local ports — no port-forward needed.
+
+| Tool | URL | Credentials | Purpose |
+|------|-----|------------|---------|
+| **Grafana** | [http://localhost:3002](http://localhost:3002) | `admin` / `loopzero-dev-password` | Dashboards and visualization |
+| **Prometheus** | [http://localhost:9090](http://localhost:9090) | (none) | Metrics and alerting |
+| **ArgoCD** | [http://localhost:30082](http://localhost:30082) | `admin` / `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` | GitOps sync status |
+| **MinIO Console** | [http://localhost:9001](http://localhost:9001) | `loopzero-admin` / `loopzero-dev-password` | Artifact storage |
+
+#### Grafana Dashboards
+
+LoopZero ships with 6 custom dashboards (auto-installed):
+
+- **LoopZero — System Home** — top-level health overview
+- **LoopZero — Platform Overview** — API latency, build throughput, deploy success rate
+- **LoopZero — Build Pipeline** — build duration, cache hit rate, queue depth
+- **LoopZero — Per-Tenant Health** — resource usage and quota per tenant
+- **LoopZero — Drift Detection** — Git vs cluster state divergence
+- **LoopZero — Failure Investigation** — drill-down for incident response
+
+Plus 29 Kubernetes infrastructure dashboards from kube-prometheus-stack.
+
+#### Alerting
+
+23 LoopZero-specific alert rules are pre-configured:
+
+| Severity | Examples |
+|----------|----------|
+| **Critical** (11) | `LoopZeroPostgresDown`, `LoopZeroBuildClusterUnreachable`, `LoopZeroArgoCDCircuitOpen`, `LoopZeroDriftDetected` |
+| **Warning** (12) | `LoopZeroAPIHighLatency`, `LoopZeroBuildQueueBacklog`, `LoopZeroReconcilerUnhealthy`, `LoopZeroSecretSyncFailed` |
+
+#### Taskfile Commands
+
+```bash
+task status                       # Quick health overview (clusters, pods, API, monitoring)
+task doctor                       # Full prerequisite and environment check
+task monitoring:status            # Prometheus targets, active alerts, Grafana dashboards
+task monitoring:validate-targets  # Verify all scrape targets are UP
 ```
 
 ### Testing Philosophy
