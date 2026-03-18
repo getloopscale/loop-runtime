@@ -3,8 +3,10 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/loopzero/loopzero/pkg/logging"
 
@@ -28,6 +30,7 @@ import (
 func main() {
 	logger := logging.NewLogger("api")
 	cfg := config.Load()
+	cfg.Validate() // C-03: warn about insecure defaults
 
 	// In production, fail fast if security-sensitive env vars are missing.
 	if cfg.IsProduction() {
@@ -42,9 +45,22 @@ func main() {
 		}
 	}
 
+	// Shared HTTP transport with connection pooling (I-03).
+	// All HTTP clients (GitHub, ArgoCD, health prober) share this transport
+	// so idle connections are reused across components.
+	httpTransport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	httpClient := &http.Client{
+		Timeout:   cfg.HTTPClientTimeout,
+		Transport: httpTransport,
+	}
+
 	// GitHub token validator
 	githubValidator := &github.TokenValidator{
-		HTTPClient: &http.Client{Timeout: cfg.HTTPClientTimeout},
+		HTTPClient: httpClient,
 	}
 
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
@@ -116,9 +132,9 @@ func main() {
 		// Environment locker using real pgxpool.Pool
 		locker := &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool}
 
-		// Health prober — HTTP GET with retries
+		// Health prober — HTTP GET with retries (uses shared transport)
 		healthProber := &health.HTTPProber{
-			Client:     &http.Client{Timeout: cfg.HTTPClientTimeout},
+			Client:     httpClient,
 			IngressURL: cfg.WorkloadIngressURL,
 		}
 
@@ -127,7 +143,6 @@ func main() {
 			Kubeconfig:     cfg.BuildKubeconfig,
 			Context:        cfg.BuildKubeContext,
 			Namespace:      cfg.ArgoNamespace,
-			TemplateName:   cfg.WorkflowTemplate,
 			CallbackSecret: cfg.ArgoCallbackSecret,
 			GiteaURL:       cfg.GiteaCrossCluster(),
 			GiteaToken:     cfg.GiteaToken,
@@ -142,11 +157,26 @@ func main() {
 			os.Exit(1)
 		}
 
+		// ArgoCD HTTP client — shares transport pooling but uses ArgoCD-specific timeout.
+		// When Insecure is true, we need a separate transport for TLS skip.
+		argocdHTTPClient := &http.Client{Timeout: cfg.ArgocdClientTimeout}
+		if cfg.ArgocdInsecure {
+			argocdHTTPClient.Transport = &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+			}
+		} else {
+			argocdHTTPClient.Transport = httpTransport
+		}
+
 		// ArgoCD sync client with PG-backed circuit breaker
 		rawSyncClient := argocd.NewSyncClient(argocd.SyncClientConfig{
-			BaseURL:  cfg.ArgocdURL,
-			Token:    cfg.ArgocdToken,
-			Insecure: cfg.ArgocdInsecure,
+			BaseURL:    cfg.ArgocdURL,
+			Token:      cfg.ArgocdToken,
+			Insecure:   cfg.ArgocdInsecure,
+			HTTPClient: argocdHTTPClient,
 		})
 		cbStore := db.NewCircuitBreakerStore(dbAdapter)
 		syncClient := services.NewPGCircuitBreakerSyncClient(rawSyncClient, cbStore, services.PGCircuitBreakerConfig{
@@ -202,10 +232,31 @@ func main() {
 		)
 		go reaper.Start(context.Background())
 
+		// Idempotency cleaner — prunes expired keys every hour (A-08)
+		idempotencyCleaner := services.NewIdempotencyCleaner(
+			&db.PostgresIdempotencyStore{DB: dbAdapter},
+			logger,
+			1*time.Hour,
+		)
+		go idempotencyCleaner.Start(context.Background())
+
+		// SSE event pruner — removes events older than 24h every hour (C-06)
+		eventPruner := sse.NewEventPruner(
+			pgEventStore,
+			logger,
+			24*time.Hour,
+			1*time.Hour,
+		)
+		go eventPruner.Start(context.Background())
+
 		logger.Info("sprint 2 dependencies wired — real implementations")
 	} else {
 		logger.Warn("DATABASE_URL not set — running without database")
 	}
+
+	// Rate limiter: 60 requests per minute per tenant (C-01).
+	// Generous for normal use but prevents abuse.
+	rateLimiter := middleware.NewRateLimiter(60, 1*time.Minute)
 
 	srvCfg := server.Config{
 		Port:             cfg.Port,
@@ -228,6 +279,7 @@ func main() {
 		EventStore:         eventStore,
 		BuildStoreReader:   buildStoreReader,
 		SecretStore:        secretStore,
+		RateLimiter:        rateLimiter,
 		ReadHeaderTimeout:  cfg.ReadHeaderTimeout,
 		ReadTimeout:        cfg.ReadTimeout,
 		IdleTimeout:        cfg.IdleTimeout,

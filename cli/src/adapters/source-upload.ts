@@ -1,9 +1,34 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import { ApiError } from '../api/client';
 
 export interface UploadResult {
   commit_sha: string;
   apps: string[];
+}
+
+/**
+ * Create a Blob from a file path using streaming when available.
+ *
+ * Prefers `fs.openAsBlob` (Node 20.8+) which streams file content
+ * without loading the entire file into memory. Falls back to
+ * `fs.readFileSync` for older Node versions or test environments.
+ */
+async function fileBlobStreaming(filePath: string, contentType: string): Promise<Blob> {
+  try {
+    // Node 20.8+ provides openAsBlob which streams file content
+    // without loading it entirely into memory — critical for large bundles.
+    const nodeFs = await import('node:fs');
+    if (typeof nodeFs.openAsBlob === 'function') {
+      return await nodeFs.openAsBlob(filePath, { type: contentType });
+    }
+  } catch {
+    // openAsBlob unavailable or file access failed — fall through to readFileSync
+  }
+
+  // Fallback: load into memory (works on all Node 20+ versions and in tests)
+  const data = fs.readFileSync(filePath);
+  return new Blob([data], { type: contentType });
 }
 
 export async function uploadSource(
@@ -12,12 +37,15 @@ export async function uploadSource(
   bundlePath: string,
   loopzeroYamlPath: string,
 ): Promise<UploadResult> {
-  const bundleData = fs.readFileSync(bundlePath);
+  const bundleBlob = await fileBlobStreaming(bundlePath, 'application/octet-stream');
+
+  // loopzero.yaml is always small — readFileSync is fine
   const loopzeroYamlContent = fs.readFileSync(loopzeroYamlPath, 'utf-8');
+  const yamlBlob = new Blob([loopzeroYamlContent], { type: 'text/yaml' });
 
   const formData = new FormData();
-  formData.append('bundle', new Blob([bundleData]), 'bundle.bundle');
-  formData.append('loopzero_yaml', loopzeroYamlContent);
+  formData.append('bundle', bundleBlob, path.basename(bundlePath));
+  formData.append('loopzero_yaml', yamlBlob, 'loopzero.yaml');
 
   const headers: Record<string, string> = {};
   if (token) {

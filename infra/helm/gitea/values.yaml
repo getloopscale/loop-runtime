@@ -12,7 +12,12 @@ gitea:
     enabled: true
   config:
     database:
-      DB_TYPE: sqlite3
+      DB_TYPE: postgres
+      HOST: postgresql.loopzero-system.svc.cluster.local:5432
+      NAME: gitea
+      USER: loopzero
+      PASSWD: loopzero-dev-password  # LOCAL DEV ONLY — override for production
+      SSL_MODE: disable
     server:
       ROOT_URL: http://localhost:3000
       HTTP_PORT: 3000

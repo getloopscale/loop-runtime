@@ -29,6 +29,7 @@ type TenantReconciler struct {
 	client.Client
 	GitProvisioner    gitea.GitRepoProvisioner
 	ArgoCDProvisioner argocd.Provisioner
+	GiteaURL          string
 }
 
 // Reconcile handles the reconciliation loop for Tenant resources.
@@ -81,7 +82,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.reconcileNamespaces(ctx, &tenant); err != nil {
 			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionNamespacesReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			_ = r.Status().Update(ctx, &tenant)
+			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
+			}
 			return ctrl.Result{}, err
 		}
 	}
@@ -92,7 +95,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.reconcileRBAC(ctx, &tenant); err != nil {
 			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionRBACReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			_ = r.Status().Update(ctx, &tenant)
+			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
+			}
 			return ctrl.Result{}, err
 		}
 	}
@@ -103,7 +108,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.reconcileNetworkPolicies(ctx, &tenant); err != nil {
 			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionNetworkPolicyReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			_ = r.Status().Update(ctx, &tenant)
+			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
+			}
 			return ctrl.Result{}, err
 		}
 	}
@@ -114,7 +121,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.reconcileGitRepo(ctx, &tenant); err != nil {
 			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionGitRepoReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			_ = r.Status().Update(ctx, &tenant)
+			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
+			}
 			return ctrl.Result{}, err
 		}
 	}
@@ -125,7 +134,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.reconcileArgoCDApp(ctx, &tenant); err != nil {
 			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionArgoCDAppReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			_ = r.Status().Update(ctx, &tenant)
+			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
+			}
 			return ctrl.Result{}, err
 		}
 	}
@@ -138,7 +149,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.reconcileBuildNamespace(ctx, &tenant); err != nil {
 			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionBuildNamespaceReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			_ = r.Status().Update(ctx, &tenant)
+			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
+			}
 			return ctrl.Result{}, err
 		}
 	}
@@ -149,7 +162,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.reconcilePriorityClass(ctx, &tenant); err != nil {
 			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionPriorityClassReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			_ = r.Status().Update(ctx, &tenant)
+			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
+			}
 			return ctrl.Result{}, err
 		}
 	}
@@ -184,19 +199,23 @@ func conditionIsTrue(conditions []metav1.Condition, conditionType string, genera
 	return false
 }
 
+// requiredProvisioningConditions lists all conditions that must be True
+// for a tenant to transition from PROVISIONING to ACTIVE.
+// Add new conditions here when adding new reconciliation steps.
+var requiredProvisioningConditions = []string{
+	loopzerov1.ConditionGitRepoReady,
+	loopzerov1.ConditionNamespacesReady,
+	loopzerov1.ConditionRBACReady,
+	loopzerov1.ConditionNetworkPolicyReady,
+	loopzerov1.ConditionArgoCDAppReady,
+	loopzerov1.ConditionBuildNamespaceReady,
+	loopzerov1.ConditionQuotaEnforced,
+	loopzerov1.ConditionPriorityClassReady,
+}
+
 // allConditionsTrue checks if all required conditions are True.
 func allConditionsTrue(conditions []metav1.Condition) bool {
-	required := []string{
-		loopzerov1.ConditionGitRepoReady,
-		loopzerov1.ConditionNamespacesReady,
-		loopzerov1.ConditionRBACReady,
-		loopzerov1.ConditionNetworkPolicyReady,
-		loopzerov1.ConditionArgoCDAppReady,
-		loopzerov1.ConditionBuildNamespaceReady,
-		loopzerov1.ConditionQuotaEnforced,
-		loopzerov1.ConditionPriorityClassReady,
-	}
-	for _, req := range required {
+	for _, req := range requiredProvisioningConditions {
 		found := false
 		for _, c := range conditions {
 			if c.Type == req && c.Status == metav1.ConditionTrue {
@@ -237,8 +256,7 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	// Phase 1: Issue deletes (idempotent)
 	// Delete ArgoCD Applications for this tenant
 	if err := r.ArgoCDProvisioner.DeleteApplications(ctx, tenant.Name); err != nil {
-		logger.Error(err, "failed to delete ArgoCD applications", "tenant", tenant.Name)
-		// Non-fatal: continue with cleanup
+		logger.Info("non-fatal cleanup failure, continuing", "step", "argocd-cleanup", "error", err, "tenant", tenant.Name)
 	}
 
 	// Delete all namespaces with tenant label
@@ -256,8 +274,7 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 
 	// Archive Gitea repo (soft delete, idempotent)
 	if err := r.GitProvisioner.ArchiveRepo(ctx, tenant.Spec.GitOps.RepoName); err != nil {
-		logger.Error(err, "failed to archive gitea repo", "repo", tenant.Spec.GitOps.RepoName)
-		// Non-fatal: continue with cleanup
+		logger.Info("non-fatal cleanup failure, continuing", "step", "gitea-archive", "error", err, "repo", tenant.Spec.GitOps.RepoName)
 	}
 
 	// Phase 2: Verify all namespaces are gone
@@ -281,7 +298,13 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 }
 
 // SetupTenantController registers the TenantController with the manager.
-func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner) error {
+// The optional giteaURL parameter configures the Gitea base URL for ArgoCD Application repo references.
+// If not provided, it defaults to the in-cluster Gitea service URL.
+func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner, giteaURL ...string) error {
+	resolvedURL := "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+	if len(giteaURL) > 0 && giteaURL[0] != "" {
+		resolvedURL = giteaURL[0]
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.Tenant{}).
 		Named("tenant").
@@ -289,5 +312,6 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 			Client:            mgr.GetClient(),
 			GitProvisioner:    gitProvisioner,
 			ArgoCDProvisioner: argoCDProvisioner,
+			GiteaURL:          resolvedURL,
 		})
 }

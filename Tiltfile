@@ -1,11 +1,16 @@
 # Tiltfile — LoopZero local development loop
 # Builds and deploys API server + TenantController into the k3d mgmt cluster.
 # Prerequisites: k3d clusters + Helm dependencies must be running (task setup).
+#
+# Ownership Model:
+# - `task setup` owns infrastructure lifecycle (clusters, Helm charts, CRDs, tokens)
+# - `tilt up` owns application lifecycle (API server, TenantController, migrations, dev seed)
+# - `tilt down` does NOT affect infrastructure — PostgreSQL, Gitea, MinIO survive
+# - To destroy everything: `task clean:all`
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-load("ext://helm_resource", "helm_resource", "helm_repo")
 load("ext://namespace", "namespace_create")
 
 # Ensure loopzero-system namespace exists
@@ -18,47 +23,30 @@ allow_k8s_contexts("k3d-loopzero-mgmt")
 # Helm dependencies (PostgreSQL, Gitea, MinIO)
 # ---------------------------------------------------------------------------
 # These are installed via `task infra:install:mgmt` during `task setup`.
-# Tilt watches them as existing resources so we can set up dependency ordering.
-# If you prefer Tilt to manage Helm installs directly, uncomment the helm_resource blocks.
+# Tilt observes them as existing resources for dependency ordering.
+# They are NOT managed by Tilt — `tilt down` will NOT uninstall them.
+# This prevents accidental data loss when stopping the dev loop.
 
-helm_repo("bitnami", "https://charts.bitnami.com/bitnami")
-helm_repo("gitea-charts", "https://dl.gitea.com/charts/")
-helm_repo("minio-charts", "https://charts.min.io/")
-
-helm_resource(
+# Probe existing Helm releases so Tilt can track readiness without managing lifecycle.
+local_resource(
     "postgresql",
-    "bitnami/postgresql",
-    namespace="loopzero-system",
-    flags=[
-        "-f", "infra/helm/postgresql/values.yaml",
-        "--wait",
-        "--timeout", "3m",
-    ],
+    cmd="kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status statefulset/postgresql --timeout=60s",
     resource_deps=[],
+    labels=["infra"],
 )
 
-helm_resource(
+local_resource(
     "gitea",
-    "gitea-charts/gitea",
-    namespace="loopzero-system",
-    flags=[
-        "-f", "infra/helm/gitea/values.yaml",
-        "--wait",
-        "--timeout", "3m",
-    ],
+    cmd="kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deployment/gitea --timeout=60s",
     resource_deps=["postgresql"],
+    labels=["infra"],
 )
 
-helm_resource(
+local_resource(
     "minio",
-    "minio-charts/minio",
-    namespace="loopzero-system",
-    flags=[
-        "-f", "infra/helm/minio/values.yaml",
-        "--wait",
-        "--timeout", "3m",
-    ],
+    cmd="kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deployment/minio --timeout=60s",
     resource_deps=["postgresql"],
+    labels=["infra"],
 )
 
 # ---------------------------------------------------------------------------
@@ -126,7 +114,8 @@ docker_build(
 k8s_yaml("infra/tilt/api-deployment.yaml")
 k8s_resource(
     "loopzero-api",
-    port_forwards=["3001:3001"],
+    # No port_forwards — k3d mgmt-cluster.yaml already maps localhost:3001 → NodePort 30001.
+    # Adding port_forwards here would conflict with k3d's loadbalancer binding.
     resource_deps=["db-migrate", "postgresql"],
     labels=["loopzero"],
 )

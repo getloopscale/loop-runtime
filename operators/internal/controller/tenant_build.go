@@ -10,11 +10,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/naming"
 )
 
 // reconcileBuildNamespace ensures the build-{tenantID} namespace exists with ResourceQuota.
 func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *loopzerov1.Tenant) error {
-	buildNs := fmt.Sprintf("build-%s", tenant.Name)
+	buildNs, err := naming.BuildNamespaceName(tenant.Name)
+	if err != nil {
+		return fmt.Errorf("invalid build namespace name for tenant %s: %w", tenant.Name, err)
+	}
 
 	// Create or update build namespace (NO ownerReference — cross-namespace limitation)
 	ns := &corev1.Namespace{
@@ -22,7 +26,8 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 			Name: buildNs,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, ns, func() error {
+	var createErr error
+	_, createErr = controllerutil.CreateOrUpdate(ctx, r.Client, ns, func() error {
 		if ns.Labels == nil {
 			ns.Labels = make(map[string]string)
 		}
@@ -31,8 +36,8 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		ns.Labels["loopzero.io/managed-by"] = "tenant-controller"
 		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("build namespace %s: %w", buildNs, err)
+	if createErr != nil {
+		return fmt.Errorf("build namespace %s: %w", buildNs, createErr)
 	}
 
 	// ResourceQuota for build namespace

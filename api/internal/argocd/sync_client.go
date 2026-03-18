@@ -14,9 +14,10 @@ import (
 
 // SyncClientConfig holds configuration for connecting to ArgoCD.
 type SyncClientConfig struct {
-	BaseURL  string // e.g., "https://argocd-server.argocd.svc:443"
-	Token    string // ArgoCD API token
-	Insecure bool   // Skip TLS verification (for local dev with self-signed certs)
+	BaseURL    string       // e.g., "https://argocd-server.argocd.svc:443"
+	Token      string       // ArgoCD API token
+	Insecure   bool         // Skip TLS verification (for local dev with self-signed certs)
+	HTTPClient *http.Client // Optional: shared HTTP client with connection pooling. When nil, a default client is created.
 }
 
 // SyncClient implements services.SyncClient using the ArgoCD REST API.
@@ -27,11 +28,18 @@ type SyncClient struct {
 }
 
 // NewSyncClient creates a SyncClient for real ArgoCD operations.
+// When cfg.HTTPClient is provided, it is used directly (connection pooling
+// is shared with other components). Otherwise a default client is created.
+// If cfg.Insecure is true and no custom client is provided, TLS verification
+// is disabled on the default transport.
 func NewSyncClient(cfg SyncClientConfig) *SyncClient {
-	client := &http.Client{Timeout: 30 * time.Second}
-	if cfg.Insecure {
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	client := cfg.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+		if cfg.Insecure {
+			client.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
 		}
 	}
 

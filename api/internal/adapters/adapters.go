@@ -120,10 +120,11 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 			appPort = 8080
 		}
 		apps = append(apps, services.AppSpec{
-			Name: app.Name,
-			Type: appType,
-			Port: appPort,
-			Path: app.Path,
+			Name:      app.Name,
+			Type:      appType,
+			Port:      appPort,
+			Path:      app.Path,
+			Framework: app.Framework,
 		})
 	}
 

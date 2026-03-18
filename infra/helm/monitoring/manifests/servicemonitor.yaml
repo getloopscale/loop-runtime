@@ -15,7 +15,7 @@ spec:
     matchLabels:
       app: loopzero-api
   endpoints:
-    - port: http
+    - port: metrics
       path: /metrics
       interval: 15s
       scrapeTimeout: 10s

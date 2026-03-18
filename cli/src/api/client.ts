@@ -119,12 +119,13 @@ export class ApiClient {
           serverCode ?? 'PERMISSION_DENIED',
         );
       case 409:
-        // Exit code 3 (deploy failure) is used for concurrent rejection per spec §0.3.
+        // Exit code 1 (usage error): the deploy was rejected, not failed.
+        // A concurrent deploy is already in progress — this is a timing/usage issue.
         return new ApiError(
           (serverMessage
             ? `${serverMessage} Wait for it to complete, or try again later.`
             : 'A deploy is already in progress for this environment. Wait for it to complete, or try again later.'),
-          3,
+          1,
           status,
           serverCode ?? 'DEPLOY_IN_PROGRESS',
         );

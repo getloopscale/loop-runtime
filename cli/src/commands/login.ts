@@ -5,21 +5,16 @@ export interface TokenValidationResult {
   serverError?: boolean;
 }
 
-export interface CallbackServerResult {
-  token: string;
-  email: string;
-  teams: string[];
-  shutdown: () => void;
-}
-
 export interface LoginDeps {
   saveToken: (token: string, email: string, team: string) => void;
   validateToken: (token: string) => Promise<TokenValidationResult>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
   isCI: boolean;
+  /** @deprecated Browser OAuth flow removed. Kept for interface compatibility. */
   openBrowser?: (url: string) => Promise<void>;
-  startCallbackServer?: () => Promise<CallbackServerResult>;
+  /** @deprecated Browser OAuth flow removed. Kept for interface compatibility. */
+  startCallbackServer?: () => Promise<{ token: string; email: string; teams: string[]; shutdown: () => void }>;
 }
 
 export interface LoginOptions {
@@ -42,12 +37,12 @@ export class LoginCommand {
         return this.exitWithError(opts, 'In CI mode, use: loopzero login --token <token>', 1);
       }
 
-      // Browser OAuth flow: requires both deps
+      // @deprecated Browser OAuth flow — not wired in production (no callers pass these deps).
+      // Kept because existing tests exercise this path. Will be removed in a future cleanup.
       if (this.deps.openBrowser && this.deps.startCallbackServer) {
         return this.browserOAuthFlow(opts);
       }
 
-      // No browser deps available: backwards-compatible error
       return this.exitWithError(opts, 'Token is required. Use: loopzero login --token <token>', 1);
     }
 
@@ -83,8 +78,12 @@ export class LoginCommand {
     return 0;
   }
 
+  /**
+   * @deprecated Browser OAuth flow — not wired in production CLI.
+   * Kept for test compatibility. Will be removed in a future cleanup.
+   */
   private async browserOAuthFlow(opts: LoginOptions): Promise<number> {
-    let callbackResult: CallbackServerResult | undefined;
+    let callbackResult: { token: string; email: string; teams: string[]; shutdown: () => void } | undefined;
     try {
       callbackResult = await this.deps.startCallbackServer!();
       await this.deps.openBrowser!(`http://localhost:9876/auth`);

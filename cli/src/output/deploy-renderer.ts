@@ -79,7 +79,7 @@ export class DeployRenderer {
       }),
     };
 
-    return JSON.stringify(output, null, 2);
+    return JSON.stringify(output);
   }
 
   private renderTTYEvent(event: DeployEvent): string | null {

@@ -19,16 +19,29 @@ echo "=== Provisioning API tokens ==="
 #
 # The API only needs: clone source repos + push to GitOps repos.
 # Scopes: write:repository (includes read). Never use "all".
-echo "Creating Gitea API token (repo scope only)..."
+echo "Creating Gitea API token (repo + org scope)..."
 GITEA_PORT_FORWARD_PID=""
 kubectl --context "$MGMT_CTX" port-forward -n "$NAMESPACE" svc/gitea-http 13000:3000 &
 GITEA_PORT_FORWARD_PID=$!
 sleep 2
 
+# Ensure 'loopzero' org exists (idempotent — Gitea returns 422 if already exists)
+curl -s -X POST "http://localhost:13000/api/v1/orgs" \
+  -u "REDACTED_SECRET_037" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"loopzero","full_name":"LoopZero Platform","visibility":"private"}' > /dev/null 2>&1
+echo "Gitea org 'loopzero': ensured"
+
+# Scopes: write:repository (clone + push) + write:organization (create repos in org) + read:user
+# Use fixed token name to avoid accumulating stale tokens on repeated runs (E-13).
+TOKEN_NAME="loopzero-api"
+# Delete existing token with this name (idempotent — 404 if not found)
+curl -s -X DELETE "http://localhost:13000/api/v1/users/loopzero-admin/tokens/${TOKEN_NAME}" \
+  -u "REDACTED_SECRET_037" > /dev/null 2>&1 || true
 GITEA_TOKEN=$(curl -s -X POST "http://localhost:13000/api/v1/users/loopzero-admin/tokens" \
   -u "REDACTED_SECRET_037" \
   -H "Content-Type: application/json" \
-  -d "{\"name\":\"api-$(date +%s)\",\"scopes\":[\"write:repository\",\"read:user\"]}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha1',''))")
+  -d "{\"name\":\"${TOKEN_NAME}\",\"scopes\":[\"write:repository\",\"write:organization\",\"read:user\"]}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha1',''))")
 
 kill "$GITEA_PORT_FORWARD_PID" 2>/dev/null; wait "$GITEA_PORT_FORWARD_PID" 2>/dev/null || true
 echo "Gitea token: ${#GITEA_TOKEN} chars"
@@ -144,7 +157,9 @@ sleep 3
 
 # Extract the scoped token
 BUILD_TOKEN=$(kubectl --context "$BUILD_CTX" -n argo get secret loopzero-workflow-submitter-token -o jsonpath='{.data.token}' | base64 -d)
-BUILD_CA=$(kubectl --context "$BUILD_CTX" -n argo get secret loopzero-workflow-submitter-token -o jsonpath='{.data.ca\.crt}' | base64 -w0)
+# ca.crt in K8s secrets is already base64-encoded. The kubeconfig field
+# certificate-authority-data expects base64(PEM), so we use the value directly.
+BUILD_CA=$(kubectl --context "$BUILD_CTX" -n argo get secret loopzero-workflow-submitter-token -o jsonpath='{.data.ca\.crt}')
 
 if [ -z "$BUILD_TOKEN" ]; then
   echo "WARNING: Could not get scoped build token. Falling back to admin cert."

@@ -86,7 +86,7 @@ func (f *fakeBuildOrchestrator) IsBuildTerminal(ctx context.Context, buildID str
 // --- Test helpers ---
 
 func newBuildHandler(orch *fakeBuildOrchestrator, callbackSecret string) *routes.BuildHandler {
-	return routes.NewBuildHandler(orch, callbackSecret, slog.Default())
+	return routes.NewBuildHandler(orch, callbackSecret, slog.Default(), context.Background())
 }
 
 func buildRouter(handler *routes.BuildHandler) *chi.Mux {
@@ -649,7 +649,7 @@ func TestBuildsCallbackRoute(t *testing.T) {
 		orch := &fakeBuildOrchestrator{
 			onCompletedErr: errors.New("gitops push failed"),
 		}
-		handler := routes.NewBuildHandler(orch, "test-callback-secret", logger)
+		handler := routes.NewBuildHandler(orch, "test-callback-secret", logger, context.Background())
 		router := buildRouter(handler)
 
 		body := `{"status":"succeeded","apps":[{"name":"api","image_digest":"sha256:abc123","url":"https://api.example.com","duration_ms":45000}]}`

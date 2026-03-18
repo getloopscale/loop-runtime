@@ -23,6 +23,9 @@ spec:
             description: "MinIO secret key scoped to tenant prefix"
           - name: cache-key
             description: "Cache key identifier (e.g., node-modules)"
+          - name: cache-key-suffix
+            description: "Optional suffix appended to cache key (e.g., lockfile hash for precise invalidation)"
+            default: ""
       container:
         image: amazon/aws-cli:2.15.17
         command:
@@ -30,7 +33,32 @@ spec:
           - -c
           - |
             set -euo pipefail
-            CACHE_KEY="{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.cache-key}}"
+
+            # Compute lockfile hash for cache key precision.
+            # If an explicit suffix is provided, use it. Otherwise, auto-detect
+            # the lockfile from /workspace (available because clone runs first)
+            # and hash it. This ensures cache invalidates when dependencies change.
+            SUFFIX="{{inputs.parameters.cache-key-suffix}}"
+            if [ -z "$SUFFIX" ]; then
+              LOCKFILE=""
+              for f in /workspace/package-lock.json /workspace/yarn.lock /workspace/pnpm-lock.yaml \
+                       /workspace/go.sum /workspace/requirements.txt /workspace/poetry.lock; do
+                if [ -f "$f" ]; then
+                  LOCKFILE="$f"
+                  break
+                fi
+              done
+              if [ -n "$LOCKFILE" ]; then
+                SUFFIX=$(sha256sum "$LOCKFILE" | cut -c1-12)
+                echo "Computed cache suffix from ${LOCKFILE##*/}: ${SUFFIX}"
+              fi
+            fi
+
+            if [ -n "$SUFFIX" ]; then
+              CACHE_KEY="{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.cache-key}}-${SUFFIX}"
+            else
+              CACHE_KEY="{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.cache-key}}"
+            fi
             CACHE_PATH="s3://loopzero-builds/{{inputs.parameters.tenant-id}}/cache/deps/${CACHE_KEY}.tar.gz"
 
             export AWS_ACCESS_KEY_ID="{{inputs.parameters.minio-access-key}}"
@@ -39,7 +67,7 @@ spec:
             aws s3 cp "$CACHE_PATH" /tmp/cache.tar.gz \
               --endpoint-url "{{inputs.parameters.minio-endpoint}}" \
               --no-sign-request=false 2>/dev/null || {
-              echo "Cache miss — no cached dependencies found"
+              echo "Cache miss — no cached dependencies found for ${CACHE_KEY}"
               exit 0
             }
 

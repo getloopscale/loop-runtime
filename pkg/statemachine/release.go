@@ -41,6 +41,7 @@ const (
 	ReleaseGitPushTimeout     Event = "GitPushTimeout"
 	ReleaseSyncTimeout        Event = "SyncTimeout"
 	ReleaseRollbackTimeout    Event = "RollbackTimeout"
+	ReleaseManualResolve      Event = "ManualResolve"
 )
 
 // NewReleaseMachine returns the release state machine per spec section 5.2.
@@ -76,6 +77,10 @@ func NewReleaseMachine() *Machine {
 			{From: ReleaseRollingBack, Event: ReleaseRollbackCompleted, To: ReleaseRolledBack},
 			{From: ReleaseRollingBack, Event: ReleaseRollbackFailed_, To: ReleaseRollbackFailed},
 			{From: ReleaseRollingBack, Event: ReleaseRollbackTimeout, To: ReleaseRollbackFailed},
+
+			// Manual intervention recovery (spec §5.2 — sink state exits)
+			{From: ReleaseDriftAlert, Event: ReleaseManualResolve, To: ReleaseActive},
+			{From: ReleaseRollbackFailed, Event: ReleaseManualResolve, To: ReleaseActive},
 		},
 		Terminal: []State{ReleaseSuperseded, ReleaseRolledBack, ReleaseCancelled},
 		Timeouts: []TimeoutConfig{

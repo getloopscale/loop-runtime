@@ -39,9 +39,26 @@ export function hasLockfile(): boolean {
 
 export async function createGitBundle(): Promise<string> {
   const tmpFile = path.join(os.tmpdir(), `loopzero-bundle-${Date.now()}.bundle`);
-  // --all: include full commit history so the bundle is self-contained.
-  // A shallow bundle (-1 HEAD) requires prerequisite commits that won't exist
-  // in the remote source repo on first deploy, causing every deploy to fail.
-  execSync(`git bundle create ${tmpFile} --all HEAD`, { stdio: 'pipe' });
+  // Bundle only HEAD's reachable history (not --all which includes every branch/tag).
+  // The API's PushBundle does `git pull bundle HEAD`, so only the HEAD ref is needed.
+  execSync(`git bundle create "${tmpFile}" HEAD`, { stdio: 'pipe' });
   return tmpFile;
+}
+
+/**
+ * Check for potentially sensitive files tracked in git.
+ * Returns file paths that match common sensitive patterns.
+ */
+export function checkSensitiveFiles(): string[] {
+  const sensitivePatterns = ['.env', 'credentials', '.key', '.pem', 'secret'];
+  try {
+    const output = execSync('git ls-files', { encoding: 'utf-8' }).trim();
+    if (!output) return [];
+    const files = output.split('\n');
+    return files.filter(f =>
+      sensitivePatterns.some(p => f.toLowerCase().includes(p))
+    );
+  } catch {
+    return [];
+  }
 }

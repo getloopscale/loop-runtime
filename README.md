@@ -59,45 +59,16 @@ $ loopzero deploy
   web → https://production.my-saas.acme.loopzero.example
 ```
 
-### Logs
+### Implemented CLI commands
 
-```bash
-$ loopzero logs --app api --follow
-2026-03-12T14:32:01Z [api] Server listening on port 3000
-2026-03-12T14:32:05Z [api] GET /health 200 2ms
-^C
-```
+The following commands are implemented and functional:
+- `loopzero login` — authenticate via GitHub OAuth
+- `loopzero logout` — remove stored credentials
+- `loopzero whoami` — show authenticated user and team
+- `loopzero init` — detect monorepo and generate `loopzero.yaml`
+- `loopzero deploy` — build and deploy all apps
 
-No `kubectl`. No cluster access. Logs stream directly from the running service.
-
-### Rollback
-
-```bash
-$ loopzero rollback
-Current deploy: d-8f3a (deployed 3 min ago by lucas@acme.dev)
-Revert to: d-7c2e (deployed 2h ago)
-
-⚠ Side effects that cannot be reverted:
-  - Database migrations run by this deploy (if any)
-
-Revert? [Y/n] y
-
-✓ Reverted to d-7c2e
-```
-
-One command. Inline context. No separate `--list` step required.
-
-### Secrets
-
-```bash
-$ loopzero secret set DATABASE_URL=postgresql://...
-✓ Secret set: DATABASE_URL (production)
-
-$ loopzero secret pull --env staging
-✓ Pulled 4 secrets to .env.local (staging)
-```
-
-Secrets are injected automatically into running services. Values are never displayed in `list` output.
+Additional commands (logs, rollback, secret management, inspect, preview) are planned and not yet available.
 
 ### Preview Environments
 
@@ -169,15 +140,13 @@ Node.js, NestJS, Next.js, Vite, Remix, Go, Python/FastAPI, Python/Django, Java/S
 | Command | Purpose | Vercel equivalent |
 |---|---|---|
 | `loopzero login` | Authenticate | `vercel login` |
+| `loopzero whoami` | Show authenticated user/team | `vercel whoami` |
+| `loopzero logout` | Remove stored credentials | N/A |
 | `loopzero init` | Detect monorepo, generate `loopzero.yaml` | `vercel` (first run) |
 | `loopzero deploy` | Build and deploy all apps | `vercel` |
 | `loopzero deploy --env staging` | Deploy to a specific environment | `vercel --prod` |
-| `loopzero status` | Show current deployment status | `vercel ls` |
-| `loopzero logs --app api` | Stream logs from a service | `vercel logs` |
-| `loopzero rollback` | Revert to the previous deploy | `vercel rollback` |
-| `loopzero secret set KEY=value` | Set a secret | `vercel env add` |
-| `loopzero secret pull` | Download secrets to `.env.local` | `vercel env pull` |
-| `loopzero inspect <deploy-id>` | Show deploy details | `vercel inspect` |
+| `loopzero deploy --app api` | Deploy specific app(s) | N/A |
+| `loopzero deploy --no-wait` | Submit deploy and return immediately | N/A |
 
 Full reference: see [CLI Reference](#) in the system design docs.
 
@@ -338,6 +307,25 @@ task status                       # Quick health overview (clusters, pods, API, 
 task doctor                       # Full prerequisite and environment check
 task monitoring:status            # Prometheus targets, active alerts, Grafana dashboards
 task monitoring:validate-targets  # Verify all scrape targets are UP
+```
+
+#### After Recreating Clusters
+
+k3d assigns dynamic Docker IPs to cluster loadbalancers. After `task clusters:delete` + `task setup`, the cross-cluster IPs in `infra/tilt/api-deployment.yaml` must be updated:
+
+```bash
+# Automatic — runs as part of `task networking:setup` (included in `task setup`)
+bash infra/scripts/update-cross-cluster-ips.sh
+
+# Manual verification
+docker inspect k3d-loopzero-mgmt-serverlb --format '{{json .NetworkSettings.Networks}}'
+docker inspect k3d-loopzero-workload-serverlb --format '{{json .NetworkSettings.Networks}}'
+```
+
+After starting Tilt, force Prometheus to pick up the new API metrics target:
+
+```bash
+curl -X POST http://localhost:9090/-/reload
 ```
 
 ### Testing Philosophy

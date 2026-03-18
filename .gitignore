@@ -81,6 +81,7 @@ kubeconfig*
 .env
 .env.*
 !.env.example
+Taskfile.local.yml
 *.pem
 *.key
 credentials.json
@@ -102,3 +103,4 @@ tmp/
 .tmp/
 *.bak
 *.orig
+.env.local

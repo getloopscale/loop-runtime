@@ -7,11 +7,26 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
+
+// maxConcurrentProbes limits the number of parallel health probes during
+// release activation. This prevents overwhelming the network or target
+// services when a deploy contains many apps.
+const maxConcurrentProbes = 5
+
+// probeResult holds the outcome of a single health probe.
+type probeResult struct {
+	App        AppRelease
+	Healthy    bool
+	Skipped    bool
+	Duration   time.Duration
+	Err        error
+}
 
 // activateRelease runs inside Lock 2 and orchestrates release creation through activation.
 //
@@ -152,6 +167,10 @@ func (o *BuildOrchestrator) pushToGitOps(ctx context.Context, tx db.DBTX, build 
 
 // waitForSync triggers ArgoCD sync and runs health probes against deployed apps
 // (steps 8e-8f). Returns true if any health probe failed.
+//
+// Health probes run in parallel (A-09) with a concurrency limit of
+// maxConcurrentProbes to avoid overwhelming target services during
+// multi-app deploys.
 func (o *BuildOrchestrator) waitForSync(ctx context.Context, tx db.DBTX, build *db.Build, release *db.Release, result BuildCallbackRequest) (probeFailed bool, err error) {
 	// Step 8e: trigger sync
 	// ArgoCD Application name matches TenantController naming: {tenant}-{env}
@@ -164,53 +183,81 @@ func (o *BuildOrchestrator) waitForSync(ctx context.Context, tx db.DBTX, build *
 		return true, nil
 	}
 
-	// Step 8f: health probes (skip workers and frontends — they don't have /health endpoints)
-	for _, app := range result.Apps {
-		appType := appTypeFromName(app)
-		if appType == "worker" || appType == "frontend" {
+	// Step 8f: health probes — run in parallel with semaphore (A-09).
+	// Workers and frontends are skipped (they don't have /health endpoints).
+	results := o.probeAppsParallel(ctx, result.Apps)
+
+	// Emit SSE events for each probe result and check for failures.
+	// SSE events are emitted sequentially to maintain a predictable event order.
+	for _, pr := range results {
+		if pr.Skipped {
 			continue
 		}
-		if app.URL == "" {
-			continue
-		}
 
-		// Emit SSE deploy.health_check checking (user-facing: no "release" terminology per Rule 3)
-		checkingData, _ := json.Marshal(map[string]interface{}{
-			"status": "checking",
-			"app":    app.Name,
-		})
-		if _, err := o.eventStore.Append(ctx, build.ID, "deploy.health_check", checkingData); err != nil {
-			return false, fmt.Errorf("activate release: emit health_check checking: %w", err)
-		}
-
-		probeStart := time.Now()
-		probeErr := o.health.Probe(ctx, app.URL, "/health")
-		probeDuration := time.Since(probeStart)
-
-		if probeErr != nil {
+		if pr.Err != nil {
 			failedData, _ := json.Marshal(map[string]interface{}{
 				"status":      "failed",
-				"app":         app.Name,
-				"duration_ms": probeDuration.Milliseconds(),
-				"error":       probeErr.Error(),
+				"app":         pr.App.Name,
+				"duration_ms": pr.Duration.Milliseconds(),
+				"error":       pr.Err.Error(),
 			})
 			if _, err := o.eventStore.Append(ctx, build.ID, "deploy.health_check", failedData); err != nil {
 				return false, fmt.Errorf("activate release: emit health_check failed: %w", err)
 			}
-			return true, nil
+			probeFailed = true
+			continue
 		}
 
 		okData, _ := json.Marshal(map[string]interface{}{
 			"status":      "ok",
-			"app":         app.Name,
-			"duration_ms": probeDuration.Milliseconds(),
+			"app":         pr.App.Name,
+			"duration_ms": pr.Duration.Milliseconds(),
 		})
 		if _, err := o.eventStore.Append(ctx, build.ID, "deploy.health_check", okData); err != nil {
 			return false, fmt.Errorf("activate release: emit health_check ok: %w", err)
 		}
 	}
 
-	return false, nil
+	return probeFailed, nil
+}
+
+// probeAppsParallel runs health probes for all probeable apps concurrently,
+// limited by maxConcurrentProbes. Workers, frontends, and apps without URLs
+// are skipped. Results are returned in the same order as the input slice.
+func (o *BuildOrchestrator) probeAppsParallel(ctx context.Context, apps []AppRelease) []probeResult {
+	results := make([]probeResult, len(apps))
+	sem := make(chan struct{}, maxConcurrentProbes)
+	var wg sync.WaitGroup
+
+	for i, app := range apps {
+		appType := appTypeFromName(app)
+		if appType == "worker" || appType == "frontend" || app.URL == "" {
+			results[i] = probeResult{App: app, Healthy: true, Skipped: true}
+			continue
+		}
+
+		wg.Add(1)
+		sem <- struct{}{} // acquire semaphore slot
+		go func(idx int, a AppRelease) {
+			defer wg.Done()
+			defer func() { <-sem }() // release semaphore slot
+
+			start := time.Now()
+			probeErr := o.health.Probe(ctx, a.URL, "/health")
+			duration := time.Since(start)
+
+			results[idx] = probeResult{
+				App:      a,
+				Healthy:  probeErr == nil,
+				Skipped:  false,
+				Duration: duration,
+				Err:      probeErr,
+			}
+		}(i, app)
+	}
+
+	wg.Wait()
+	return results
 }
 
 // finalizeActivation marks the release as ACTIVE or SYNC_FAILED based on health

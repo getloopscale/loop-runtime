@@ -24,9 +24,11 @@ type ClusterCredential struct {
 // ClusterCredentialSpec defines the desired state of a ClusterCredential.
 type ClusterCredentialSpec struct {
 	// ClusterName is the name of the target cluster.
+	// +kubebuilder:validation:MinLength=1
 	ClusterName string `json:"clusterName"`
 
 	// APIServer is the URL of the target cluster's API server.
+	// +kubebuilder:validation:MinLength=1
 	APIServer string `json:"apiServer"`
 
 	// SecretRef references the Kubernetes Secret containing the kubeconfig.

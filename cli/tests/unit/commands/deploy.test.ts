@@ -677,7 +677,7 @@ describe('DeployCommand', () => {
   });
 
   describe('--app passed to submitBuild', () => {
-    it('should pass selected apps with type info to build submission', async () => {
+    it('should pass selected apps with type/path/framework to build submission', async () => {
       const deps = createMockDeps();
       const cmd = new DeployCommand(deps);
 
@@ -685,7 +685,7 @@ describe('DeployCommand', () => {
 
       expect(deps.submitBuild).toHaveBeenCalledWith(
         expect.objectContaining({
-          apps: [expect.objectContaining({ name: 'api', type: 'server' })],
+          apps: [expect.objectContaining({ name: 'api', type: 'server', path: 'apps/api', framework: 'express' })],
         })
       );
     });
@@ -1828,6 +1828,52 @@ describe('DeployCommand', () => {
       expect(parsed.reason).toBe('HEALTH_PROBE_FAILED');
       expect(parsed.build_id).toBe('build-deadbeef');
       expect(parsed.deploy_id).toBe('d-1234');
+    });
+  });
+
+  describe('stream terminal errors', () => {
+    it('exits with code 3 on stream.error and shows message', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'stream.error',
+              data: { error: 'SSE connection failed with status 503' },
+            });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(3);
+      expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining('Deploy stream error'));
+    });
+
+    it('outputs JSON with exit_code 3 on stream.closed in --json mode', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'stream.closed',
+              data: {},
+            });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(3);
+      const output = (deps.writeTo as jest.Mock).mock.calls[0][0];
+      const parsed = JSON.parse(output);
+      expect(parsed.code).toBe('STREAM_CLOSED');
+      expect(parsed.exit_code).toBe(3);
+      expect(parsed.build_id).toBe('build-deadbeef');
     });
   });
 

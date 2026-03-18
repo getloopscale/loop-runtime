@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -22,10 +24,11 @@ var environmentRegex = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 
 // AppInput describes a single app from the CLI request.
 type AppInput struct {
-	Name string `json:"name"`
-	Type string `json:"type,omitempty"` // "server", "worker", "frontend"
-	Port int    `json:"port,omitempty"`
-	Path string `json:"path,omitempty"`
+	Name      string `json:"name"`
+	Type      string `json:"type,omitempty"`      // "server", "worker", "frontend"
+	Port      int    `json:"port,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Framework string `json:"framework,omitempty"` // "express", "go", "fastapi", etc.
 }
 
 // SubmitBuildInput contains the inputs for submitting a new build via the route handler.
@@ -88,14 +91,35 @@ type BuildHandler struct {
 	orch           BuildOrchestratorService
 	callbackSecret string
 	logger         *slog.Logger
+	shutdownCtx    context.Context    // cancelled on server shutdown; used by callback goroutine (A-05)
+	callbackWg     sync.WaitGroup     // tracks in-flight callback goroutines (C-08)
 }
 
 // NewBuildHandler creates a new BuildHandler.
-func NewBuildHandler(orch BuildOrchestratorService, callbackSecret string, logger *slog.Logger) *BuildHandler {
+// shutdownCtx should be cancelled when the server begins graceful shutdown,
+// so that background goroutines (e.g. callback processing) can drain.
+func NewBuildHandler(orch BuildOrchestratorService, callbackSecret string, logger *slog.Logger, shutdownCtx context.Context) *BuildHandler {
 	return &BuildHandler{
 		orch:           orch,
 		callbackSecret: callbackSecret,
 		logger:         logger,
+		shutdownCtx:    shutdownCtx,
+	}
+}
+
+// WaitForCallbacks blocks until all in-flight callback goroutines complete
+// or the timeout expires. Used during graceful shutdown (C-08).
+func (h *BuildHandler) WaitForCallbacks(timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		h.callbackWg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		h.logger.Info("all in-flight callbacks drained")
+	case <-time.After(timeout):
+		h.logger.Warn("timed out waiting for in-flight callbacks", "timeout", timeout)
 	}
 }
 
@@ -110,7 +134,11 @@ type createBuildRequest struct {
 // Create handles POST /api/v1/builds.
 // Auth required. Idempotency-Key middleware applied externally.
 func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	// C-02: Enforce request deadline so handlers don't hang indefinitely.
+	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -134,7 +162,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.Environment == "" {
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
-			"environment is required",
+			"Environment is required",
 			400,
 		))
 		return
@@ -150,14 +178,14 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.orch.SubmitBuild(r.Context(), SubmitBuildInput{
+	resp, err := h.orch.SubmitBuild(ctx, SubmitBuildInput{
 		TenantID:      uc.TenantID,
 		ProjectID:     req.ProjectID,
 		Environment:   req.Environment,
 		CommitSHA:     req.CommitSHA,
 		Apps:          req.Apps,
 		CreatedBy:     uc.UserID,
-		CorrelationID: r.Header.Get("Correlation-ID"),
+		CorrelationID: r.Header.Get("Correlation-ID"), //nolint:contextcheck // header from original request
 	})
 	if err != nil {
 		mapBuildError(w, err)
@@ -184,7 +212,11 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Validates auth, delegates to orchestrator which checks terminal state,
 // cancels the workflow, and transitions the build to CANCELLED.
 func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	// C-02: Enforce request deadline so handlers don't hang indefinitely.
+	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -192,7 +224,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 
 	buildID := chi.URLParam(r, "id")
 
-	if err := h.orch.CancelBuild(r.Context(), buildID); err != nil {
+	if err := h.orch.CancelBuild(ctx, buildID); err != nil {
 		mapBuildError(w, err)
 		return
 	}
@@ -231,6 +263,9 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	buildID := chi.URLParam(r, "id")
+
+	// A-06: Limit callback body to 10 MB to prevent DoS via oversized payloads.
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
 
 	// Read body as raw bytes first — never fail on read errors.
 	rawBody, readErr := io.ReadAll(r.Body)
@@ -326,9 +361,12 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		Apps:      req.Apps,
 		Manifests: req.Manifests,
 	}
+	h.callbackWg.Add(1) // C-08: track in-flight callback for graceful shutdown
 	go func() {
-		// Use background context since the request context will be cancelled
-		ctx := context.Background()
+		defer h.callbackWg.Done()
+		// A-05: Use shutdown-aware context so in-flight callbacks can drain
+		// during graceful shutdown instead of being orphaned.
+		ctx := h.shutdownCtx
 		if err := h.orch.OnBuildCompleted(ctx, buildID, callbackResult); err != nil {
 			h.logger.Error("build completion failed",
 				"build_id", buildID,
@@ -338,45 +376,14 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-// fallbackParseCallback extracts what it can from a malformed JSON body.
-// Used when json.Unmarshal fails (e.g., truncated Argo {{workflow.failures}}).
+// fallbackParseCallback returns a failed status when JSON parsing fails.
+// No fragile string extraction -- if the payload is malformed, we default to
+// failed with a preview of the raw body for diagnostics.
 func fallbackParseCallback(raw []byte) callbackRequest {
-	s := string(raw)
-	req := callbackRequest{
+	return callbackRequest{
 		Status: "failed",
-		Error:  "Build failed (callback payload malformed)",
+		Error:  "Build callback payload was malformed (raw: " + truncate(string(raw), 200) + ")",
 	}
-
-	// Try to extract "status":"<value>" via simple string matching
-	if idx := strings.Index(s, `"status":"`); idx != -1 {
-		start := idx + len(`"status":"`)
-		if end := strings.Index(s[start:], `"`); end != -1 {
-			extracted := s[start : start+end]
-			if extracted == "succeeded" || extracted == "failed" {
-				req.Status = extracted
-			}
-		}
-	}
-
-	// Try to extract error message
-	if idx := strings.Index(s, `"error":"`); idx != -1 {
-		start := idx + len(`"error":"`)
-		// Take up to 500 chars or the next unescaped quote
-		end := len(s)
-		if end-start > 500 {
-			end = start + 500
-		}
-		// Find the closing quote (not escaped)
-		for i := start; i < end; i++ {
-			if s[i] == '"' && (i == 0 || s[i-1] != '\\') {
-				end = i
-				break
-			}
-		}
-		req.Error = s[start:end]
-	}
-
-	return req
 }
 
 // truncate returns s truncated to maxLen characters.

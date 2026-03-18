@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -76,9 +77,15 @@ func Auth(validator TokenValidator, store MembershipStore) func(http.Handler) ht
 	return AuthWithTTL(validator, store, 5*time.Minute)
 }
 
+// maxTokenCacheSize is the maximum number of entries in the token validation cache.
+// When exceeded, the cache is cleared to prevent unbounded memory growth.
+// The TTL ensures entries expire naturally; this limit is a safety net.
+const maxTokenCacheSize = 10000
+
 // AuthWithTTL is like Auth but with a configurable cache TTL.
 func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.Duration) func(http.Handler) http.Handler {
 	cache := &sync.Map{}
+	var cacheSize atomic.Int64
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -90,8 +97,8 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 			}
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
-			// Validate token (with cache)
-			result, err := validateWithCache(r.Context(), validator, cache, token, cacheTTL)
+			// Validate token (with bounded cache)
+			result, err := validateWithCache(r.Context(), validator, cache, &cacheSize, token, cacheTTL)
 			if err != nil {
 				if errors.Is(err, ErrInvalidToken) {
 					writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired token")
@@ -148,7 +155,7 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 	}
 }
 
-func validateWithCache(ctx context.Context, validator TokenValidator, cache *sync.Map, token string, ttl time.Duration) (*TokenValidationResult, error) {
+func validateWithCache(ctx context.Context, validator TokenValidator, cache *sync.Map, cacheSize *atomic.Int64, token string, ttl time.Duration) (*TokenValidationResult, error) {
 	// Check cache
 	if cached, ok := cache.Load(token); ok {
 		cv := cached.(*cachedValidation)
@@ -156,11 +163,20 @@ func validateWithCache(ctx context.Context, validator TokenValidator, cache *syn
 			return cv.result, nil
 		}
 		cache.Delete(token)
+		cacheSize.Add(-1)
 	}
 
 	result, err := validator.ValidateToken(ctx, token)
 	if err != nil {
 		return nil, err
+	}
+
+	// Bound cache size: if we exceed the limit, reset the entire cache.
+	// This is simple and effective — the TTL ensures entries expire naturally,
+	// and the size limit prevents unbounded memory growth.
+	if cacheSize.Add(1) > maxTokenCacheSize {
+		*cache = sync.Map{}
+		cacheSize.Store(1)
 	}
 
 	cache.Store(token, &cachedValidation{

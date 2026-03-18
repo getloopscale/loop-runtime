@@ -73,7 +73,7 @@ func (s *PostgresEventStore) Append(ctx context.Context, buildID string, eventTy
 // Returns an empty slice (not nil) when no events match.
 func (s *PostgresEventStore) GetAfter(ctx context.Context, buildID string, afterID int64) ([]SSEEvent, error) {
 	rows, err := s.queryDB.Query(ctx,
-		"SELECT id, build_id, event_type, data, created_at FROM sse_events WHERE build_id = $1 AND id > $2 ORDER BY id ASC",
+		"SELECT id, build_id, event_type, data, created_at FROM sse_events WHERE build_id = $1 AND id > $2 ORDER BY id ASC LIMIT 1000",
 		buildID, afterID,
 	)
 	if err != nil {

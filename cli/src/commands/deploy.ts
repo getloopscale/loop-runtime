@@ -34,6 +34,7 @@ interface AppInput {
   type?: string;  // "server" | "worker" | "frontend"
   port?: number;
   path?: string;
+  framework?: string;
   secrets?: string[];  // declared secret names from loopzero.yaml
 }
 
@@ -82,12 +83,13 @@ export interface DeployDeps {
   hasLockfile: () => boolean;
   getHeadCommit: () => string;
   createGitBundle: () => Promise<string>;
+  checkSensitiveFiles?: () => string[];
   uploadSource: (bundlePath: string, loopzeroYamlPath: string) => Promise<UploadResult>;
   submitBuild: (input: SubmitBuildInput) => Promise<SubmitBuildResult>;
   connectSSE: (buildId: string, onEvent: (event: SSEEvent) => void) => SSEConnection;
   getSecrets: (project: string, environment: string) => Promise<string[]>;
   cleanupFile: (filePath: string) => void;
-  generateIdempotencyKey: () => string;
+  generateIdempotencyKey: (commitSha: string, project: string, environment: string, apps: string[]) => string;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
   isCI: boolean;
@@ -190,6 +192,13 @@ export class DeployCommand {
     // 9. Get HEAD commit (validates git has at least one commit)
     this.deps.getHeadCommit();
 
+    // 9b. Warn about potentially sensitive files in git (F-04)
+    const sensitiveFiles = this.deps.checkSensitiveFiles?.() ?? [];
+    if (sensitiveFiles.length > 0 && !opts.json) {
+      this.deps.writeTo(`Warning: Potentially sensitive files detected in git: ${sensitiveFiles.join(', ')}`);
+      this.deps.writeTo('These files will be included in the deploy bundle.');
+    }
+
     // 10. Create git bundle
     let bundlePath: string;
     try {
@@ -210,13 +219,19 @@ export class DeployCommand {
     // 12. Cleanup temp file
     this.deps.cleanupFile(bundlePath);
 
-    // 13. Generate Idempotency-Key and submit build
-    const idempotencyKey = this.deps.generateIdempotencyKey();
+    // 13. Generate deterministic Idempotency-Key (A-01)
+    const idempotencyKey = this.deps.generateIdempotencyKey(
+      uploadResult.commit_sha,
+      config.project,
+      environment,
+      selectedApps,
+    );
     const appInputs: AppInput[] = selectedApps.map((name) => ({
       name,
       type: this.resolveAppType(config.apps[name]),
       port: config.apps[name]?.port ?? undefined,
       path: config.apps[name]?.path ?? undefined,
+      framework: config.apps[name]?.framework ?? undefined,
       secrets: config.apps[name]?.secrets ?? undefined,
     }));
     let buildResult: SubmitBuildResult;
@@ -259,30 +274,44 @@ export class DeployCommand {
     return new Promise<number>((resolve) => {
       let resolved = false;
       let sseConnection: SSEConnection | null = null;
+      let activityTimeout: ReturnType<typeof setTimeout>;
+
+      const resetTimeout = (): void => {
+        if (activityTimeout) clearTimeout(activityTimeout);
+        activityTimeout = setTimeout(() => {
+          if (!resolved) {
+            if (opts.json) {
+              this.deps.writeTo(JSON.stringify({ code: 'DEPLOY_TIMEOUT', error: 'Deploy timed out waiting for completion. Wait for it to complete, or try again later.', exit_code: 3 }));
+            } else {
+              this.deps.writeError('Deploy timed out waiting for completion. Wait for it to complete, or try again later.');
+            }
+            finish(3);
+          }
+        }, DEPLOY_TIMEOUT_MS);
+      };
 
       const finish = (exitCode: number): void => {
         if (resolved) return;
         resolved = true;
+        clearTimeout(activityTimeout);
         if (sseConnection) {
           sseConnection.close();
         }
         resolve(exitCode);
       };
 
-      const timeoutId = setTimeout(() => {
-        if (!resolved) {
-          if (opts.json) {
-            this.deps.writeTo(JSON.stringify({ code: 'DEPLOY_TIMEOUT', error: 'Deploy timed out waiting for completion. Wait for it to complete, or try again later.', exit_code: 3 }));
-          } else {
-            this.deps.writeError('Deploy timed out waiting for completion. Wait for it to complete, or try again later.');
-          }
-          finish(3);
-        }
-      }, DEPLOY_TIMEOUT_MS);
+      // Start the activity-based timeout — resets on every SSE event
+      resetTimeout();
 
       sseConnection = this.deps.connectSSE(buildResult.build_id, (event: SSEEvent) => {
+        if (resolved) {
+          return;
+        }
+
+        // Reset activity timeout on every received event (A-04)
+        resetTimeout();
+
         if (event.type === 'deploy.completed') {
-          clearTimeout(timeoutId);
           const payload = event.data as DeployCompletedPayload;
 
           // F-04: Use wall-clock time when server reports 0 duration
@@ -323,7 +352,6 @@ export class DeployCommand {
         }
 
         if (event.type === 'build.failed') {
-          clearTimeout(timeoutId);
           const data = event.data as Record<string, unknown>;
           const reason = String(data.error ?? data.status ?? 'unknown error');
           if (opts.json) {
@@ -336,7 +364,6 @@ export class DeployCommand {
         }
 
         if (event.type === 'deploy.sync_failed') {
-          clearTimeout(timeoutId);
           const data = event.data as Record<string, unknown>;
           const rawReason = String(data.reason ?? 'sync failed');
           const userMessage = this.mapSyncFailureReason(rawReason, buildResult.build_id);
@@ -353,6 +380,38 @@ export class DeployCommand {
             this.deps.writeError(userMessage);
           }
           finish(3); // exit code 3 = deploy failure
+          return;
+        }
+
+        if (event.type === 'stream.error') {
+          const data = event.data as Record<string, unknown>;
+          const reason = String(data.error ?? 'Stream connection failed');
+          if (opts.json) {
+            this.deps.writeTo(JSON.stringify({
+              code: 'STREAM_ERROR',
+              error: `Deploy stream error: ${reason}`,
+              exit_code: 3,
+              build_id: buildResult.build_id,
+            }));
+          } else {
+            this.deps.writeError(`Deploy stream error: ${reason}`);
+          }
+          finish(3);
+          return;
+        }
+
+        if (event.type === 'stream.closed') {
+          if (opts.json) {
+            this.deps.writeTo(JSON.stringify({
+              code: 'STREAM_CLOSED',
+              error: 'Deploy stream closed before completion. The build may still be running.',
+              exit_code: 3,
+              build_id: buildResult.build_id,
+            }));
+          } else {
+            this.deps.writeError('Deploy stream closed before completion. The build may still be running.');
+          }
+          finish(3);
           return;
         }
 

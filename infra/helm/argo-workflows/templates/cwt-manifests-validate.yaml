@@ -30,11 +30,29 @@ spec:
             # datreeio/CRDs-catalog contains JSON schemas for 500+ popular CRDs including
             # Traefik IngressRoute, Middleware, etc. This validates CRDs properly instead of
             # skipping them with --ignore-missing-schemas.
+            #
+            # RISK: CRD schemas are fetched from GitHub at build time.
+            # If GitHub is unreachable, validation fails and blocks the build.
+            # For air-gapped or production environments, pre-download schemas into
+            # a ConfigMap and mount as a local schema-location path.
+            set +e
             /kubeconform --strict --summary \
               -schema-location default \
               -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
               "$MANIFEST_DIR/manifests.yaml"
-            echo "Manifest validation passed"
+            EXIT_CODE=$?
+            set -e
+            if [ "$EXIT_CODE" -eq 0 ]; then
+              echo "Manifest validation passed"
+            elif [ "$EXIT_CODE" -eq 1 ]; then
+              # Exit code 1 = validation errors (real failures — must block build).
+              echo "ERROR: Manifest validation failed"
+              exit 1
+            else
+              # Any other non-zero = network/schema fetch failure — warn but do not block.
+              echo "WARNING: kubeconform exited with code $EXIT_CODE (possible network issue fetching CRD schemas)"
+              echo "Proceeding with build — manual manifest review recommended"
+            fi
         volumeMounts:
           - name: manifests
             mountPath: /manifests

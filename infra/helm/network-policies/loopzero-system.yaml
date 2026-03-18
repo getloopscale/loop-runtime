@@ -1,0 +1,125 @@
+# NetworkPolicies for loopzero-system namespace.
+# Default deny ingress + explicit allow rules for each component.
+#
+# Pod label references (verified against actual manifests):
+#   loopzero-api:           app: loopzero-api                          (infra/tilt/api-deployment.yaml)
+#   tenant-controller:  app: tenant-controller                 (infra/tilt/operator-deployment.yaml)
+#   postgresql:         app.kubernetes.io/name: postgresql      (Bitnami Helm chart)
+#   gitea:              app.kubernetes.io/name: gitea           (Gitea Helm chart)
+#   minio:              app.kubernetes.io/name: minio           (Bitnami Helm chart)
+---
+# Default deny all ingress in loopzero-system
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: loopzero-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Allow loopzero-api to receive traffic (NodePort from outside + internal)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-ingress
+  namespace: loopzero-system
+spec:
+  podSelector:
+    matchLabels:
+      app: loopzero-api
+  ingress:
+    - ports:
+        - port: 3001
+          protocol: TCP
+        - port: 9090
+          protocol: TCP
+  policyTypes:
+    - Ingress
+---
+# Allow PostgreSQL to receive traffic from loopzero-api and gitea only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgresql-ingress
+  namespace: loopzero-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: loopzero-api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gitea
+      ports:
+        - port: 5432
+          protocol: TCP
+  policyTypes:
+    - Ingress
+---
+# Allow Gitea to receive traffic from loopzero-api and tenant-controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gitea-ingress
+  namespace: loopzero-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: gitea
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: loopzero-api
+        - podSelector:
+            matchLabels:
+              app: tenant-controller
+      ports:
+        - port: 3000
+          protocol: TCP
+  policyTypes:
+    - Ingress
+---
+# Allow MinIO to receive traffic from loopzero-api only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-minio-ingress
+  namespace: loopzero-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: loopzero-api
+      ports:
+        - port: 9000
+          protocol: TCP
+  policyTypes:
+    - Ingress
+---
+# Allow DNS egress for all pods (required for service discovery)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: loopzero-system
+spec:
+  podSelector: {}
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+  policyTypes:
+    - Egress

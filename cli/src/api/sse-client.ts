@@ -122,8 +122,12 @@ export class SSEClient {
           return;
         }
 
-        // Wait before reconnecting
-        await this.delay(this.reconnectDelay);
+        // Exponential backoff: base * 2^(attempt-1), capped at 60s
+        const backoffDelay = Math.min(
+          this.reconnectDelay * Math.pow(2, this.retryCount - 1),
+          60000,
+        );
+        await this.delay(backoffDelay);
 
         if (this.closed) {
           return;

@@ -38,11 +38,12 @@ type WorkflowSpec struct {
 
 // AppSpec describes a single app from loopzero.yaml.
 type AppSpec struct {
-	Name    string   `json:"name"`
-	Type    string   `json:"type"`              // "server", "worker", "frontend"
-	Port    int      `json:"port"`
-	Path    string   `json:"path,omitempty"`
-	Secrets []string `json:"secrets,omitempty"` // declared secret names from loopzero.yaml
+	Name      string   `json:"name"`
+	Type      string   `json:"type"`                        // "server", "worker", "frontend"
+	Port      int      `json:"port"`
+	Path      string   `json:"path,omitempty"`
+	Framework string   `json:"framework,omitempty"`          // "nextjs", "express", "gin", "fastapi", "custom", etc.
+	Secrets   []string `json:"secrets,omitempty"`            // declared secret names from loopzero.yaml
 }
 
 // GitOpsPusher abstracts the commit-and-push of manifests to the tenant GitOps

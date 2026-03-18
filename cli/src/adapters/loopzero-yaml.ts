@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import YAML from 'js-yaml';
 
 export interface LoopZeroYamlApp {
   path: string;
@@ -21,53 +22,46 @@ export interface LoopZeroYamlResult {
 }
 
 /**
- * Simple loopzero.yaml parser (avoids adding a YAML dependency for now).
+ * Parse loopzero.yaml content using js-yaml.
+ * Validates that the required structure (project + apps) is present.
  */
 export function parseLoopZeroYaml(raw: string): LoopZeroYaml {
-  const lines = raw.split('\n');
-  let project = '';
-  const apps: Record<string, LoopZeroYamlApp> = {};
-  let currentApp = '';
-  let inApps = false;
-  let inSecrets = false;
+  const doc = YAML.load(raw) as Record<string, unknown> | null;
 
-  for (const line of lines) {
-    const trimmed = line.trimEnd();
-    if (trimmed.startsWith('project:') || trimmed.startsWith('name:')) {
-      const key = trimmed.startsWith('project:') ? 'project:' : 'name:';
-      project = trimmed.slice(key.length).trim().replace(/^["']|["']$/g, '');
-    } else if (trimmed === 'apps:') {
-      inApps = true;
-    } else if (inApps && /^  \S/.test(line) && !line.startsWith('    ')) {
-      currentApp = trimmed.replace(':', '').trim().replace(/^["']|["']$/g, '');
-      apps[currentApp] = { path: '.', framework: 'unknown', port: null };
-      inSecrets = false;
-    } else if (inApps && currentApp && /^    \S/.test(line)) {
-      const [key, ...rest] = trimmed.split(':');
-      const value = rest.join(':').trim().replace(/^["']|["']$/g, '');
-      const k = key.trim();
-      if (k === 'secrets') {
-        inSecrets = true;
-        apps[currentApp].secrets = [];
-      } else {
-        inSecrets = false;
-        if (k === 'path') apps[currentApp].path = value;
-        else if (k === 'framework') apps[currentApp].framework = value;
-        else if (k === 'type') apps[currentApp].type = value;
-        else if (k === 'port') apps[currentApp].port = parseInt(value, 10) || null;
-      }
-    } else if (inSecrets && currentApp && /^      - /.test(line)) {
-      const secretName = trimmed.trim().replace(/^- /, '').trim();
-      if (!apps[currentApp].secrets) apps[currentApp].secrets = [];
-      apps[currentApp].secrets!.push(secretName);
-    } else if (inSecrets && !/^      /.test(line)) {
-      inSecrets = false;
-    }
+  if (!doc || typeof doc !== 'object') {
+    throw new Error('could not parse loopzero.yaml — check YAML syntax');
   }
 
-  // Validate: if the file had content but we parsed nothing useful, it's likely malformed
-  if (raw.trim().length > 0 && !project && Object.keys(apps).length === 0) {
+  const project = String(doc.project ?? doc.name ?? '');
+  const rawApps = doc.apps;
+
+  if (!project && (!rawApps || typeof rawApps !== 'object')) {
     throw new Error('could not parse loopzero.yaml — check YAML syntax');
+  }
+
+  const apps: Record<string, LoopZeroYamlApp> = {};
+
+  if (rawApps && typeof rawApps === 'object' && !Array.isArray(rawApps)) {
+    for (const [appName, appConfig] of Object.entries(rawApps as Record<string, unknown>)) {
+      const cfg = appConfig as Record<string, unknown> | null;
+      if (!cfg || typeof cfg !== 'object') {
+        apps[appName] = { path: '.', framework: 'unknown', port: null };
+        continue;
+      }
+
+      const port = cfg.port != null ? Number(cfg.port) : null;
+      const secrets = Array.isArray(cfg.secrets)
+        ? cfg.secrets.map((s: unknown) => String(s))
+        : undefined;
+
+      apps[appName] = {
+        path: String(cfg.path ?? '.'),
+        framework: String(cfg.framework ?? 'unknown'),
+        type: cfg.type != null ? String(cfg.type) : undefined,
+        port: port !== null && !isNaN(port) ? port : null,
+        ...(secrets ? { secrets } : {}),
+      };
+    }
   }
 
   return { project, apps };

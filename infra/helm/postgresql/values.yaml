@@ -6,6 +6,14 @@ auth:
   password: loopzero-dev-password  # LOCAL DEV ONLY — override for production
   database: loopzero
 
+# Create additional databases required by platform components.
+# The 'loopzero' database is created by auth.database above.
+# Gitea needs its own database to avoid SQLite limitations (E-06).
+initdb:
+  scripts:
+    create-gitea-db.sql: |
+      CREATE DATABASE gitea OWNER loopzero;
+
 primary:
   livenessProbe:
     enabled: true

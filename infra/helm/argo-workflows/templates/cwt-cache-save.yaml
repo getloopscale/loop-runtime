@@ -23,6 +23,9 @@ spec:
             description: "MinIO secret key scoped to tenant prefix"
           - name: cache-key
             description: "Cache key identifier (e.g., node-modules)"
+          - name: cache-key-suffix
+            description: "Optional suffix appended to cache key (e.g., lockfile hash for precise invalidation)"
+            default: ""
           - name: cache-dirs
             description: "Comma-separated directories to tar (e.g., node_modules)"
       container:
@@ -34,7 +37,28 @@ spec:
             set -uo pipefail
             cd /workspace 2>/dev/null || { echo "No workspace — skipping cache save"; exit 0; }
 
-            CACHE_KEY="{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.cache-key}}"
+            # Compute lockfile hash for cache key precision (mirrors cache-restore logic).
+            SUFFIX="{{inputs.parameters.cache-key-suffix}}"
+            if [ -z "$SUFFIX" ]; then
+              LOCKFILE=""
+              for f in /workspace/package-lock.json /workspace/yarn.lock /workspace/pnpm-lock.yaml \
+                       /workspace/go.sum /workspace/requirements.txt /workspace/poetry.lock; do
+                if [ -f "$f" ]; then
+                  LOCKFILE="$f"
+                  break
+                fi
+              done
+              if [ -n "$LOCKFILE" ]; then
+                SUFFIX=$(sha256sum "$LOCKFILE" | cut -c1-12)
+                echo "Computed cache suffix from ${LOCKFILE##*/}: ${SUFFIX}"
+              fi
+            fi
+
+            if [ -n "$SUFFIX" ]; then
+              CACHE_KEY="{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.cache-key}}-${SUFFIX}"
+            else
+              CACHE_KEY="{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.cache-key}}"
+            fi
             CACHE_PATH="s3://loopzero-builds/{{inputs.parameters.tenant-id}}/cache/deps/${CACHE_KEY}.tar.gz"
 
             export AWS_ACCESS_KEY_ID="{{inputs.parameters.minio-access-key}}"

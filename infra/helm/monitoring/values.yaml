@@ -25,7 +25,9 @@ prometheus:
         metrics_path: /metrics
         static_configs:
           - targets:
-              - "host.k3d.internal:30090"
+              # Build cluster LB IP on k3d-loopzero-build network.
+              # Updated by: bash infra/scripts/update-cross-cluster-ips.sh
+              - "10.0.2.6:30090"
             labels:
               cluster: build
               component: argo-workflows
@@ -35,7 +37,9 @@ prometheus:
         metrics_path: /metrics
         static_configs:
           - targets:
-              - "host.k3d.internal:30091"
+              # Workload cluster LB IP on k3d-loopzero-workload network.
+              # Updated by: bash infra/scripts/update-cross-cluster-ips.sh
+              - "10.0.3.6:30091"
             labels:
               cluster: workload
               component: traefik

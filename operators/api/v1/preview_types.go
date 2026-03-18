@@ -38,15 +38,19 @@ type PreviewEnvironment struct {
 // as described in spec section 9.2.
 type PreviewEnvironmentSpec struct {
 	// TenantID is the owning tenant identifier.
+	// +kubebuilder:validation:MinLength=1
 	TenantID string `json:"tenantId"`
 
 	// ProjectID is the project this preview belongs to.
+	// +kubebuilder:validation:MinLength=1
 	ProjectID string `json:"projectId"`
 
 	// PRNumber is the pull request number that triggered this preview.
+	// +kubebuilder:validation:Minimum=1
 	PRNumber int `json:"prNumber,omitempty"`
 
 	// Branch is the source branch for the preview.
+	// +kubebuilder:validation:MinLength=1
 	Branch string `json:"branch"`
 
 	// ExpiresAt is the time at which this preview should be automatically cleaned up.

@@ -37,6 +37,13 @@ type Config struct {
 	EventStore         sse.EventStore
 	BuildStoreReader   sse.BuildStoreReader
 	SecretStore        routes.SecretStore
+	// ShutdownCtx is cancelled when the server begins graceful shutdown.
+	// Background goroutines (e.g. callback processing) should use this
+	// context so they can drain before the process exits (A-05).
+	ShutdownCtx        context.Context
+	// RateLimiter applies per-tenant rate limiting on mutation routes (C-01).
+	// When nil, rate limiting is disabled.
+	RateLimiter        *middleware.RateLimiter
 	// HTTP server timeouts (configurable via env vars)
 	ReadHeaderTimeout  time.Duration
 	ReadTimeout        time.Duration
@@ -74,25 +81,33 @@ func NewRouter(cfg Config) *chi.Mux {
 	if cfg.TokenValidator != nil && cfg.MemberStore != nil {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Auth(cfg.TokenValidator, cfg.MemberStore))
+			r.Use(middleware.AuditLog(cfg.Logger))
 
 			// Auth routes
 			auth := routes.NewAuthHandler()
 			r.Get("/api/v1/auth/whoami", auth.Whoami)
 
+			// Build the middleware chain for mutation routes.
+			// Rate limiting (C-01) is applied before idempotency so rejected
+			// requests never consume an idempotency key.
+			mutationMiddlewares := make([]func(http.Handler) http.Handler, 0, 2)
+			if cfg.RateLimiter != nil {
+				mutationMiddlewares = append(mutationMiddlewares, cfg.RateLimiter.Middleware())
+			}
+			if cfg.IdempotencyStore != nil {
+				mutationMiddlewares = append(mutationMiddlewares, middleware.Idempotency(cfg.IdempotencyStore))
+			}
+
 			// Source upload route
 			if cfg.SourceStore != nil {
 				sourceHandler := routes.NewSourceHandler(cfg.SourceStore)
-				r.Post("/api/v1/source/upload", sourceHandler.Upload)
+				r.With(mutationMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)
 			}
 
-			// Mutating routes (with idempotency middleware)
+			// Mutating routes (with rate limiting + idempotency middleware)
 			if cfg.ProjectStore != nil && cfg.TenantCRMgr != nil {
 				projects := routes.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
-				if cfg.IdempotencyStore != nil {
-					r.With(middleware.Idempotency(cfg.IdempotencyStore)).Post("/api/v1/projects", projects.Create)
-				} else {
-					r.Post("/api/v1/projects", projects.Create)
-				}
+				r.With(mutationMiddlewares...).Post("/api/v1/projects", projects.Create)
 			}
 
 			// SSE stream route (no idempotency needed — read-only)
@@ -111,19 +126,14 @@ func NewRouter(cfg Config) *chi.Mux {
 
 			// Build routes
 			if cfg.BuildOrchestrator != nil {
-				builds := routes.NewBuildHandler(cfg.BuildOrchestrator, cfg.ArgoCallbackSecret, cfg.Logger)
+				builds := routes.NewBuildHandler(cfg.BuildOrchestrator, cfg.ArgoCallbackSecret, cfg.Logger, cfg.ShutdownCtx)
 
-				// GET does not need idempotency
+				// GET does not need idempotency or rate limiting
 				r.Get("/api/v1/builds/{id}", builds.Get)
 
-				// Mutating build routes with idempotency
-				if cfg.IdempotencyStore != nil {
-					r.With(middleware.Idempotency(cfg.IdempotencyStore)).Post("/api/v1/builds", builds.Create)
-					r.With(middleware.Idempotency(cfg.IdempotencyStore)).Post("/api/v1/builds/{id}/cancel", builds.Cancel)
-				} else {
-					r.Post("/api/v1/builds", builds.Create)
-					r.Post("/api/v1/builds/{id}/cancel", builds.Cancel)
-				}
+				// Mutating build routes with rate limiting + idempotency
+				r.With(mutationMiddlewares...).Post("/api/v1/builds", builds.Create)
+				r.With(mutationMiddlewares...).Post("/api/v1/builds/{id}/cancel", builds.Cancel)
 			}
 		})
 	}
@@ -131,7 +141,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	// Callback route — uses shared secret auth, NOT OAuth middleware.
 	// Registered outside the auth group intentionally.
 	if cfg.BuildOrchestrator != nil && cfg.ArgoCallbackSecret != "" {
-		builds := routes.NewBuildHandler(cfg.BuildOrchestrator, cfg.ArgoCallbackSecret, cfg.Logger)
+		builds := routes.NewBuildHandler(cfg.BuildOrchestrator, cfg.ArgoCallbackSecret, cfg.Logger, cfg.ShutdownCtx)
 		r.Post("/api/v1/builds/{id}/callback", builds.Callback)
 	}
 
@@ -140,6 +150,11 @@ func NewRouter(cfg Config) *chi.Mux {
 
 // NewMetricsServer creates a separate HTTP server for Prometheus metrics.
 // This keeps /metrics off the main API port so it is not publicly accessible.
+//
+// SECURITY: The /metrics endpoint has no authentication. In Kubernetes, expose
+// via ClusterIP Service only (not NodePort/LoadBalancer). For additional
+// protection, use a NetworkPolicy to restrict access to the monitoring
+// namespace (see infra/helm E-11 NetworkPolicy definitions).
 func NewMetricsServer(port string) *http.Server {
 	if port == "" {
 		port = "9090"
@@ -175,6 +190,14 @@ func Run(cfg Config) error {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
+
+	// A-05: Create a context that is cancelled when the server begins
+	// graceful shutdown. Background goroutines (callback processing) use
+	// this to drain in-flight work before the process exits.
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	defer shutdownCancel()
+	cfg.ShutdownCtx = shutdownCtx
+
 	router := NewRouter(cfg)
 
 	srv := &http.Server{
@@ -183,8 +206,17 @@ func Run(cfg Config) error {
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		IdleTimeout:       cfg.IdleTimeout,
-		// WriteTimeout intentionally omitted — SSE streams are long-lived.
-		// Non-SSE routes should use http.TimeoutHandler per-route if needed.
+		// WriteTimeout intentionally omitted — SSE streams (/builds/{id}/stream)
+		// are long-lived connections that must remain open for the duration of a
+		// build (up to 30 minutes). Setting a server-wide WriteTimeout would kill
+		// those connections prematurely.
+		//
+		// Individual mutation handlers enforce their own deadlines via
+		// context.WithTimeout (150s), so non-SSE routes are still bounded:
+		//   - routes/builds.go   → Create(), Cancel()
+		//   - routes/source.go   → Upload()
+		// Read-only routes (health, whoami, secrets list, build get) are
+		// naturally short-lived and protected by ReadTimeout + IdleTimeout.
 	}
 
 	// Start metrics server on a separate port (not publicly accessible)
@@ -209,6 +241,7 @@ func Run(cfg Config) error {
 	select {
 	case sig := <-shutdown:
 		cfg.Logger.Info("shutdown signal received", "signal", sig.String())
+		shutdownCancel() // A-05: signal background goroutines to drain
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
 			return err

@@ -1,5 +1,18 @@
 version: "3"
 
+# Use bash — required for process management and here-docs.
+# Default shell on Ubuntu is dash, which lacks `source` and reliable `$!` / `kill`.
+shell:
+  - bash
+  - --noprofile
+  - --norc
+  - -c
+
+# Load .env.local if present — allows overriding dev credentials without editing Taskfile.
+# Copy .env.example to .env.local and customize. See .env.example for available variables.
+dotenv:
+  - .env.local
+
 vars:
   MGMT_CONTEXT: k3d-loopzero-mgmt
   BUILD_CONTEXT: k3d-loopzero-build
@@ -8,10 +21,10 @@ vars:
   PG_PORT: 15432
   PG_HOST: localhost
   # DEV-ONLY credentials — safe for local k3d clusters, never used in production.
-  # Override via Taskfile.local.yml or environment variables if needed.
-  PG_USER: loopzero
-  PG_PASS: loopzero-dev-password
-  PG_DB: loopzero
+  # Override via .env.local (loaded by dotenv above) or environment variables.
+  PG_USER: '{{.PG_USER | default "loopzero"}}'
+  PG_PASS: '{{.PG_PASS | default "loopzero-dev-password"}}'
+  PG_DB: '{{.PG_DB | default "loopzero"}}'
   API_PORT: 3001
   GRAFANA_PORT: 3002
   PROMETHEUS_PORT: 9090
@@ -165,6 +178,16 @@ tasks:
         done
 
         echo ""
+        echo "=== API Health ==="
+        if curl -sf http://localhost:{{.API_PORT}}/api/v1/health >/dev/null 2>&1; then
+          echo "  [PASS] API /health reachable at localhost:{{.API_PORT}}"
+          PASS=$((PASS+1))
+        else
+          echo "  [FAIL] API /health not reachable at localhost:{{.API_PORT}} — run: tilt up"
+          FAIL=$((FAIL+1))
+        fi
+
+        echo ""
         echo "=== Summary ==="
         echo "  PASS: $PASS  |  WARN: $WARN  |  FAIL: $FAIL"
         if [ "$FAIL" -gt 0 ]; then
@@ -274,14 +297,13 @@ tasks:
         # 3. CRDs installed
         smoke "Tenant CRD exists" kubectl --context {{.MGMT_CONTEXT}} get crd tenants.loopzero.io
 
-        # 4. API health (only if port-forwarded / tilt running)
-        if curl -sf http://localhost:{{.API_PORT}}/api/v1/health >/dev/null 2>&1; then
-          smoke "API /health returns 200" curl -sf http://localhost:{{.API_PORT}}/api/v1/health
-          # Deep health includes DB check
-          smoke "API /health/deep returns 200" curl -sf http://localhost:{{.API_PORT}}/api/v1/health/deep
-        else
-          echo "  [SKIP] API not reachable (is tilt running?)"
-        fi
+        # 4. API health (required for deploy flows)
+        smoke "API /health returns 200" curl -sf http://localhost:{{.API_PORT}}/api/v1/health
+        smoke "API /health/deep returns 200" curl -sf http://localhost:{{.API_PORT}}/api/v1/health/deep
+
+        # 5. API tokens present
+        smoke "ArgoCD token provisioned" sh -c 'kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath="{.data.argocd-token}" 2>/dev/null | grep -q .'
+        smoke "Gitea token provisioned" sh -c 'kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath="{.data.gitea-token}" 2>/dev/null | grep -q .'
 
         echo ""
         echo "=== Result: $PASS passed, $FAIL failed ==="
@@ -355,17 +377,19 @@ tasks:
 
   db:shell:
     desc: Open an interactive psql shell to the database
+    interactive: true
     cmds:
       - |
-        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
-        psql -h "{{.PG_HOST}}" -p "{{.PG_PORT}}" -U "{{.PG_USER}}" -d "{{.PG_DB}}"
+        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system exec -it "$POD" -c postgresql -- \
+          env PGPASSWORD="{{.PG_PASS}}" psql -U "{{.PG_USER}}" -d "{{.PG_DB}}"
 
   db:status:
     desc: Show database health — tables, row counts, connections, last migration
     cmds:
       - |
-        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
-        PG="psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}}"
+        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        PG="kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i $POD -c postgresql -- env PGPASSWORD={{.PG_PASS}} psql -U {{.PG_USER}} -d {{.PG_DB}}"
 
         echo "=== Database Connection ==="
         $PG -t -c "SELECT 'Connected to ' || current_database() || ' as ' || current_user || ' (version: ' || split_part(version(), ' ', 2) || ')';" 2>/dev/null \
@@ -394,9 +418,6 @@ tasks:
         echo "=== Migration Files Applied ==="
         echo "  Migration files in api/internal/db/migrations/:"
         ls -1 api/internal/db/migrations/*.up.sql 2>/dev/null | while read f; do echo "    $(basename "$f")"; done
-        $PG -t -c "
-          SELECT version, dirty FROM schema_migrations ORDER BY version DESC LIMIT 5;
-        " 2>/dev/null && true || echo "  (schema_migrations table not present — using raw SQL migrations)"
 
         echo ""
         echo "=== Advisory Locks (active) ==="
@@ -412,10 +433,11 @@ tasks:
     prompt: This will DROP and recreate the '{{.PG_DB}}' database. Are you sure?
     cmds:
       - |
-        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
+        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        PG="kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i $POD -c postgresql -- env PGPASSWORD={{.PG_PASS}} psql -U {{.PG_USER}}"
 
         echo "Dropping and recreating database..."
-        psql -h "{{.PG_HOST}}" -p "{{.PG_PORT}}" -U "{{.PG_USER}}" -d postgres -c "
+        $PG -d postgres -c "
           SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{{.PG_DB}}' AND pid <> pg_backend_pid();
           DROP DATABASE IF EXISTS {{.PG_DB}};
           CREATE DATABASE {{.PG_DB}} OWNER {{.PG_USER}};
@@ -424,7 +446,7 @@ tasks:
         echo "Running migrations..."
         for f in $(ls api/internal/db/migrations/*.up.sql | sort); do
           echo "  Applying $(basename $f)..."
-          psql -h "{{.PG_HOST}}" -p "{{.PG_PORT}}" -U "{{.PG_USER}}" -d "{{.PG_DB}}" -f "$f"
+          $PG -d "{{.PG_DB}}" < "$f"
         done
 
         echo "Database reset complete."
@@ -450,9 +472,12 @@ tasks:
       - |
         echo ""
         echo "=== Step 3/4: Seed E2E data ==="
-        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
+        kubectl --context "{{.MGMT_CONTEXT}}" port-forward -n loopzero-system svc/postgresql "{{.PG_PORT}}":5432 &
+        PF_PID=$!
+        sleep 2
         DATABASE_URL="postgres://{{.PG_USER}}:{{.PG_PASS}}@{{.PG_HOST}}:{{.PG_PORT}}/{{.PG_DB}}?sslmode=disable" \
           go run infra/scripts/seed_e2e.go
+        kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null || true
       - |
         echo ""
         echo "=== Step 4/4: Verify API health ==="
@@ -662,6 +687,8 @@ tasks:
       - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/postgresql/templates/pdb.yaml
       - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/gitea/templates/pdb.yaml
       - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/argocd/templates/pdb.yaml
+      # NetworkPolicies for loopzero-system namespace
+      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/network-policies/loopzero-system.yaml
 
   infra:install:build:
     desc: Install platform components in build cluster
@@ -673,6 +700,11 @@ tasks:
         --namespace argo --create-namespace
         -f infra/helm/argo-workflows/values.yaml
         --wait --timeout 3m
+      # Apply all ClusterWorkflowTemplates (composable build pipeline blocks)
+      - >-
+        for f in infra/helm/argo-workflows/templates/cwt-*.yaml; do
+          kubectl --context {{.BUILD_CONTEXT}} apply -f "$f";
+        done
 
   infra:install:workload:
     desc: Install platform components in workload cluster
@@ -769,10 +801,12 @@ tasks:
     desc: Run database migrations against PostgreSQL
     cmds:
       - |
-        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
+        # Apply migrations via kubectl exec — no port-forward needed, no orphan processes
+        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
         for f in $(ls api/internal/db/migrations/*.up.sql | sort); do
           echo "Applying $f..."
-          psql -h "{{.PG_HOST}}" -p "{{.PG_PORT}}" -U "{{.PG_USER}}" -d "{{.PG_DB}}" -f "$f"
+          kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system exec -i "$POD" -- \
+            env PGPASSWORD="{{.PG_PASS}}" psql -U "{{.PG_USER}}" -d "{{.PG_DB}}" < "$f"
         done
 
   # ---------------------------------------------------------------------------
@@ -788,8 +822,9 @@ tasks:
       PLAN: '{{.PLAN | default "starter"}}'
     cmds:
       - |
-        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
-        psql -h "{{.PG_HOST}}" -p "{{.PG_PORT}}" -U "{{.PG_USER}}" -d "{{.PG_DB}}" <<SQL
+        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system exec -i "$POD" -c postgresql -- \
+          env PGPASSWORD="{{.PG_PASS}}" psql -U "{{.PG_USER}}" -d "{{.PG_DB}}" <<SQL
         -- Idempotent: uses ON CONFLICT DO NOTHING
         INSERT INTO users (id, email, github_id, display_name)
         VALUES ('github-{{.GITHUB_USER}}', '{{.GITHUB_EMAIL}}', {{.GITHUB_ID}}, '{{.GITHUB_USER}}')
@@ -815,10 +850,14 @@ tasks:
     desc: Seed E2E test data (tenant, user, project) and wait for reconciliation
     cmds:
       - |
-        source infra/scripts/ensure-pg.sh "{{.PG_HOST}}" "{{.PG_PORT}}" "{{.PG_USER}}" "{{.PG_PASS}}" "{{.PG_DB}}" "{{.MGMT_CONTEXT}}"
+        # E2E seed needs a Go script with DATABASE_URL — port-forward required
+        kubectl --context "{{.MGMT_CONTEXT}}" port-forward -n loopzero-system svc/postgresql "{{.PG_PORT}}":5432 &
+        PF_PID=$!
+        sleep 2
         DATABASE_URL="postgres://{{.PG_USER}}:{{.PG_PASS}}@{{.PG_HOST}}:{{.PG_PORT}}/{{.PG_DB}}?sslmode=disable" \
         API_URL="http://localhost:{{.API_PORT}}" \
           go run infra/scripts/seed_e2e.go
+        kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null || true
 
   # ---------------------------------------------------------------------------
   # S0.6: Cross-cluster networking + API tokens
@@ -827,6 +866,7 @@ tasks:
     desc: Connect k3d cluster networks so mgmt can reach workload/build clusters
     cmds:
       - bash infra/scripts/setup-cross-cluster-networking.sh
+      - bash infra/scripts/update-cross-cluster-ips.sh
 
   tokens:provision:
     desc: Provision API tokens (Gitea + ArgoCD) and build cluster kubeconfig
@@ -978,8 +1018,18 @@ tasks:
     desc: Run E2E tests (requires running clusters + tilt up)
     env:
       LOOPZERO_E2E: "1"
+      KUBEBUILDER_ASSETS:
+        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
     cmds:
-      - cd infra/tests && go test ./e2e/... -v -timeout 15m
+      - |
+        set -euo pipefail
+        OUTPUT_FILE="$(mktemp)"
+        trap 'rm -f "$OUTPUT_FILE"' EXIT
+        (cd infra/tests && go test ./e2e/... -v -timeout 15m) | tee "$OUTPUT_FILE"
+        if grep -q "Deploy Happy Path E2E Suite" "$OUTPUT_FILE" && grep -Eq "Ran[[:space:]]+0[[:space:]]+of[[:space:]]+5[[:space:]]+Specs" "$OUTPUT_FILE"; then
+          echo "E2E deploy suite was fully skipped (0/5 specs). Failing to avoid false green."
+          exit 1
+        fi
 
   test:e2e:chaos:
     desc: Run chaos engineering tests
@@ -1007,6 +1057,8 @@ tasks:
       - kubeconform --strict infra/helm/postgresql/templates/pdb.yaml
       - kubeconform --strict infra/helm/gitea/templates/pdb.yaml
       - kubeconform --strict infra/helm/argocd/templates/pdb.yaml
+      # NetworkPolicies
+      - kubeconform --strict infra/helm/network-policies/loopzero-system.yaml
       # Monitoring manifests (ServiceMonitor, PrometheusRule are CRD kinds — skip those)
       - kubeconform --strict --skip ServiceMonitor,PrometheusRule infra/helm/monitoring/manifests/
       # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate

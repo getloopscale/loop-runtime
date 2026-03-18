@@ -1,3 +1,9 @@
+# HA Strategy:
+# - Leader election is enabled in the operator binary (kubebuilder default)
+# - For HA: increase replicas to 2-3. Only the leader reconciles; others are standby.
+# - Failover time: ~15 seconds (leader lease duration)
+# - Current: single replica (acceptable for development)
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -9,63 +15,59 @@ kind: ClusterRole
 metadata:
   name: tenant-controller
 rules:
-  # Tenant CRD access
+  # --- LoopZero CRDs (full CRUD needed for reconciliation) ---
   - apiGroups: ["loopzero.io"]
-    resources: ["tenants"]
+    resources: ["tenants", "appsecrets", "clustercredentials", "previewenvironments", "reconciliationreports"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["loopzero.io"]
-    resources: ["tenants/status"]
+    resources: ["tenants/status", "appsecrets/status", "clustercredentials/status", "previewenvironments/status", "reconciliationreports/status"]
     verbs: ["get", "update", "patch"]
   - apiGroups: ["loopzero.io"]
-    resources: ["tenants/finalizers"]
+    resources: ["tenants/finalizers", "clustercredentials/finalizers", "previewenvironments/finalizers"]
     verbs: ["update"]
-  # ClusterCredential CRD access (Sprint 2 — S2.0b)
-  - apiGroups: ["loopzero.io"]
-    resources: ["clustercredentials"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["loopzero.io"]
-    resources: ["clustercredentials/status"]
-    verbs: ["get", "update", "patch"]
-  - apiGroups: ["loopzero.io"]
-    resources: ["clustercredentials/finalizers"]
-    verbs: ["update"]
-  # Secrets (needed by ClusterCredentialController to read kubeconfigs)
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Namespace management
+
+  # --- Namespaces: create/manage tenant namespaces ---
   - apiGroups: [""]
     resources: ["namespaces"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # RBAC management
-  - apiGroups: ["rbac.authorization.k8s.io"]
-    resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Resource quotas
+    verbs: ["get", "list", "create", "delete"]
+
+  # --- ResourceQuotas + LimitRanges: enforce tenant resource limits ---
   - apiGroups: [""]
     resources: ["resourcequotas", "limitranges"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Network policies
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["networkpolicies"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Service accounts
+    verbs: ["get", "create", "update"]
+
+  # --- RBAC: create Roles/RoleBindings in tenant namespaces ---
+  # No ClusterRoles/ClusterRoleBindings — operator only manages namespace-scoped RBAC
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "create", "update"]
+
+  # --- ServiceAccounts: create in tenant namespaces ---
   - apiGroups: [""]
     resources: ["serviceaccounts"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # ArgoCD Application CRs
-  - apiGroups: ["argoproj.io"]
-    resources: ["applications"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # PriorityClasses (cluster-scoped)
+    verbs: ["get", "create"]
+
+  # --- NetworkPolicies: tenant network isolation ---
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "create", "update", "delete"]
+
+  # --- Secrets: read-only (kubeconfig secrets for ClusterCredentialController) ---
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+
+  # --- PriorityClasses: cluster-scoped, needed for tenant workload priorities ---
   - apiGroups: ["scheduling.k8s.io"]
     resources: ["priorityclasses"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Events
+    verbs: ["get", "create", "update"]
+
+  # --- Events: emit Kubernetes events for observability ---
   - apiGroups: [""]
     resources: ["events"]
-    verbs: ["create", "patch"]
-  # Leader election
+    verbs: ["create"]
+
+  # --- Leader election: coordination lease for HA ---
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

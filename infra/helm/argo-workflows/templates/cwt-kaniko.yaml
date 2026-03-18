@@ -44,6 +44,9 @@ spec:
           - --cache-repo={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/cache
           - --snapshot-mode=redo
           - --compressed-caching=false
+          # DEV-ONLY: --insecure and --skip-tls-verify are for local k3d registry
+          # which does not have valid TLS certificates.
+          # PRODUCTION: Remove these two flags. Registry must have valid TLS certs.
           - --insecure
           - --skip-tls-verify
           - --digest-file=/workspace/image-digest.txt

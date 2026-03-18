@@ -21,6 +21,7 @@ interface CreateProjectResult {
 export interface InitDeps {
   getToken: () => string | null;
   getTeam: () => string | null;
+  hasGitRepo?: () => boolean;
   detectMonorepo: (dir: string) => MonorepoResult | null;
   detectFramework: (dir: string) => FrameworkResult;
   createProject: (input: { name: string; apps: AppSpec[] }) => Promise<CreateProjectResult>;
@@ -53,6 +54,9 @@ interface DetectedInfo {
   apps: DetectedAppInfo[];
 }
 
+// RFC 1123 label: lowercase, starts with letter, letters/digits/hyphens, max 63 chars
+const PROJECT_NAME_REGEX = /^[a-z][a-z0-9-]{0,62}$/;
+
 // Frameworks that are frontends — they serve static assets, not APIs
 const FRONTEND_FRAMEWORKS = ['nextjs', 'vite', 'remix'];
 
@@ -77,6 +81,11 @@ export class InitCommand {
     // Auth check
     if (!this.deps.getToken()) {
       return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4);
+    }
+
+    // Git repo check — loopzero requires a git repository
+    if (this.deps.hasGitRepo && !this.deps.hasGitRepo()) {
+      return this.exitWithError(opts, 'Not a git repository. Run: git init', 1);
     }
 
     // CI mode requires --yes
@@ -210,6 +219,21 @@ export class InitCommand {
       );
     }
 
+    // Validate or sanitize project name
+    if (opts.name) {
+      // Explicitly provided via --name: warn if not RFC 1123 compliant
+      // (downstream API will enforce; CLI allows through for flexibility)
+      if (!PROJECT_NAME_REGEX.test(projectName) && !opts.json) {
+        this.deps.writeTo(
+          `Warning: project name "${projectName}" may not be valid. ` +
+          'Recommended: lowercase, start with a letter, letters/numbers/hyphens only (max 63 chars).',
+        );
+      }
+    } else if (!this.deps.promptText || opts.yes) {
+      // Auto-detected from directory name — sanitize to RFC 1123
+      projectName = this.sanitizeProjectName(projectName);
+    }
+
     // Generate loopzero.yaml
     const yamlContent = this.generateYaml(projectName, apps);
     fs.writeFileSync(yamlPath, yamlContent);
@@ -302,6 +326,27 @@ export class InitCommand {
       // Ignore read errors
     }
     return results;
+  }
+
+  /**
+   * Sanitizes a directory name into a valid RFC 1123 label for use as project name.
+   * Lowercases, replaces invalid chars with hyphens, trims hyphens, truncates to 63 chars.
+   */
+  private sanitizeProjectName(name: string): string {
+    let sanitized = name
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')  // replace invalid chars with hyphens
+      .replace(/-+/g, '-')          // collapse consecutive hyphens
+      .replace(/^-+|-+$/g, '')      // trim leading/trailing hyphens
+      .slice(0, 63);
+
+    // Must start with a letter; if it doesn't, prefix with 'p-'
+    if (sanitized && !/^[a-z]/.test(sanitized)) {
+      sanitized = 'p-' + sanitized;
+      sanitized = sanitized.slice(0, 63);
+    }
+
+    return sanitized || 'project';
   }
 
   private generateYaml(projectName: string, apps: AppSpec[]): string {

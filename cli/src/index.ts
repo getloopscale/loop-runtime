@@ -1,18 +1,17 @@
-// Suppress Node.js ExperimentalWarning (buffer.File in Node 20 multipart uploads)
-// Must run before any imports that might trigger the warning.
-const _origEmit = process.emit;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(process as any).emit = function (event: string, ...args: unknown[]) {
-  if (event === 'warning' && args[0] && (args[0] as { name?: string }).name === 'ExperimentalWarning') {
-    return false;
+// Suppress Node.js ExperimentalWarning (buffer.File in Node 20 multipart uploads).
+// In Node 22+ this warning is gone. Filter instead of monkey-patching process.emit.
+process.removeAllListeners('warning');
+process.on('warning', (warning) => {
+  if (warning.name !== 'ExperimentalWarning') {
+    console.warn(warning);
   }
-  return _origEmit.apply(process, [event, ...args] as Parameters<typeof _origEmit>);
-};
+});
 
 import { Command } from 'commander';
+import { createHash } from 'crypto';
 
 import { ConfigStore } from './config/store';
-import { getDefaultApiUrl } from './config/constants';
+import { getDefaultApiUrl, API_REQUEST_TIMEOUT_MS, DEPLOY_TIMEOUT_MS } from './config/constants';
 import { ApiClient } from './api/client';
 import { SSEClient } from './api/sse-client';
 import { Formatter } from './output/formatter';
@@ -24,10 +23,49 @@ import { DeployCommand } from './commands/deploy';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
-import { hasGitRepo, hasUncommittedChanges, hasLockfile, getHeadCommit, getGitRoot, createGitBundle } from './adapters/git';
+import { hasGitRepo, hasUncommittedChanges, hasLockfile, getHeadCommit, getGitRoot, createGitBundle, checkSensitiveFiles } from './adapters/git';
 import { findLoopZeroYaml } from './adapters/loopzero-yaml';
 import { cleanupFile } from './adapters/source-bundle';
 import { uploadSource } from './adapters/source-upload';
+
+// --- Cleanup registry for graceful signal handling (B-09) ---
+const cleanupFns: Array<() => void> = [];
+
+export function registerCleanup(fn: () => void): void {
+  cleanupFns.push(fn);
+}
+
+export function deregisterCleanup(fn: () => void): void {
+  const idx = cleanupFns.indexOf(fn);
+  if (idx !== -1) cleanupFns.splice(idx, 1);
+}
+
+function runCleanup(): void {
+  for (const fn of cleanupFns) {
+    try { fn(); } catch { /* ignore cleanup errors */ }
+  }
+  cleanupFns.length = 0;
+}
+
+process.on('SIGINT', () => { runCleanup(); process.exit(130); });
+process.on('SIGTERM', () => { runCleanup(); process.exit(143); });
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(message));
+    }, ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
 
 export function createProgram(): Command {
   const program = new Command();
@@ -159,6 +197,7 @@ export function createProgram(): Command {
       const initCmd = new InitCommand({
         getToken: () => configStore.getToken(),
         getTeam: () => configStore.getTeam(),
+        hasGitRepo,
         detectMonorepo: (dir: string) => detectMonorepoTool(dir),
         detectFramework: (dir: string) => detectFramework(dir),
         createProject: async (input) => {
@@ -178,11 +217,22 @@ export function createProgram(): Command {
         cwd: process.cwd(),
       });
 
-      const exitCode = await initCmd.execute({
-        yes: cmdOpts.yes,
-        force: cmdOpts.force,
-        name: cmdOpts.name,
-        json: globalOpts.json,
+      const exitCode = await withTimeout(
+        initCmd.execute({
+          yes: cmdOpts.yes,
+          force: cmdOpts.force,
+          name: cmdOpts.name,
+          json: globalOpts.json,
+        }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Init timed out waiting for API response. Run "loopzero init" again after the API is healthy.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'INIT_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
       process.exitCode = exitCode;
     });
@@ -198,10 +248,19 @@ export function createProgram(): Command {
     .option('--json', 'Output in JSON format')
     .action(async (cmdOpts) => {
       const globalOpts = program.opts();
+      const jsonMode = Boolean(cmdOpts.json || globalOpts.json);
+      let deployOutputCount = 0;
+      const deployWriteTo = (msg: string): void => {
+        deployOutputCount += 1;
+        writeTo(msg);
+      };
+      const deployWriteError = (msg: string): void => {
+        deployOutputCount += 1;
+        writeError(msg);
+      };
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
       const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
-      const { randomUUID } = await import('crypto');
 
       const deployCmd = new DeployCommand({
         getToken: () => configStore.getToken(),
@@ -215,6 +274,7 @@ export function createProgram(): Command {
         hasLockfile,
         getHeadCommit,
         createGitBundle,
+        checkSensitiveFiles,
         uploadSource: (bundlePath: string, loopzeroYamlPath: string) =>
           uploadSource(baseURL, configStore.getConfig()?.token ?? null, bundlePath, loopzeroYamlPath),
         submitBuild: async (input) => {
@@ -231,6 +291,8 @@ export function createProgram(): Command {
                 name: a.name,
                 ...(a.type ? { type: a.type } : {}),
                 ...(a.port ? { port: a.port } : {}),
+                ...(a.path ? { path: a.path } : {}),
+                ...(a.framework ? { framework: a.framework } : {}),
                 ...(a.secrets && a.secrets.length > 0 ? { secrets: a.secrets } : {}),
               })),
             },
@@ -250,6 +312,18 @@ export function createProgram(): Command {
             onEvent: (sseEvent) => {
               onEvent({ type: sseEvent.event, data: sseEvent.data });
             },
+            onError: (err) => {
+              onEvent({
+                type: 'stream.error',
+                data: { error: err.message },
+              });
+            },
+            onClose: () => {
+              onEvent({
+                type: 'stream.closed',
+                data: {},
+              });
+            },
           });
           client.connect();
           return { close: () => client.close() };
@@ -261,19 +335,50 @@ export function createProgram(): Command {
           return result.secrets.map((s) => s.name);
         },
         cleanupFile,
-        generateIdempotencyKey: () => randomUUID(),
-        writeTo,
-        writeError,
+        generateIdempotencyKey: (commitSha: string, project: string, environment: string, apps: string[]) => {
+          const input = [commitSha, project, environment, ...apps.sort()].join(':');
+          return createHash('sha256').update(input).digest('hex').substring(0, 32);
+        },
+        writeTo: deployWriteTo,
+        writeError: deployWriteError,
         isCI,
         isTTY: process.stdout.isTTY ?? false,
       });
 
-      const exitCode = await deployCmd.execute({
-        env: cmdOpts.env,
-        app: cmdOpts.app,
-        wait: cmdOpts.wait,
-        json: cmdOpts.json || globalOpts.json,
+      const exitCode = await withTimeout(
+        deployCmd.execute({
+          env: cmdOpts.env,
+          app: cmdOpts.app,
+          wait: cmdOpts.wait,
+          json: jsonMode,
+        }),
+        DEPLOY_TIMEOUT_MS + 30_000,
+        'Deploy command timed out waiting for completion.',
+      ).catch((err: Error) => {
+        if (jsonMode) {
+          deployWriteTo(JSON.stringify({
+            code: 'DEPLOY_TIMEOUT',
+            error: err.message || 'Deploy command timed out waiting for completion.',
+            exit_code: 3,
+          }));
+        } else {
+          deployWriteError(err.message || 'Deploy command timed out waiting for completion.');
+        }
+        return 3;
       });
+      if (deployOutputCount === 0) {
+        if (jsonMode) {
+          writeTo(JSON.stringify({
+            code: 'EMPTY_OUTPUT',
+            error: 'Deploy finished without output. This is unexpected; check API health and try again.',
+            exit_code: 3,
+          }));
+        } else {
+          writeError('Deploy finished without output. This is unexpected; check API health and try again.');
+        }
+        process.exitCode = 3;
+        return;
+      }
       process.exitCode = exitCode;
     });
 

@@ -82,7 +82,15 @@ spec:
                 manifests = ""
                 manifest_file = os.path.join(manifest_dir, "manifests.yaml")
                 if os.path.exists(manifest_file):
-                    manifests = open(manifest_file).read()
+                    raw_manifests = open(manifest_file).read()
+                    # Limit manifest payload to prevent oversized callbacks (E-09).
+                    # The API can fetch full manifests from Gitea if needed.
+                    MAX_MANIFEST_SIZE = 1 * 1024 * 1024  # 1MB
+                    if len(raw_manifests) > MAX_MANIFEST_SIZE:
+                        print(f"WARNING: Manifests truncated from {len(raw_manifests)} to {MAX_MANIFEST_SIZE} bytes")
+                        manifests = raw_manifests[:MAX_MANIFEST_SIZE]
+                    else:
+                        manifests = raw_manifests
                 payload = {"status": status, "correlation_id": correlation_id, "apps": apps, "manifests": manifests}
             else:
                 error_msg = "Build pipeline failed"

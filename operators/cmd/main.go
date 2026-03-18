@@ -72,7 +72,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner); err != nil {
+	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, giteaURL); err != nil {
 		setupLog.Error(err, "unable to setup TenantController")
 		os.Exit(1)
 	}

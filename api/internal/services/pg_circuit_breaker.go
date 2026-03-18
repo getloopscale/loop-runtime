@@ -9,14 +9,20 @@ import (
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
+// CircuitBreakerStore abstracts the circuit breaker persistence layer (DIP for testability).
+type CircuitBreakerStore interface {
+	Get(ctx context.Context, key string) (*db.CircuitBreakerState, error)
+	RecordFailure(ctx context.Context, key string, openThreshold int) (*db.CircuitBreakerState, error)
+	RecordSuccess(ctx context.Context, key string, closeThreshold int) (*db.CircuitBreakerState, error)
+}
+
 // PGCircuitBreakerSyncClient wraps a SyncClient with PostgreSQL-backed circuit breaker.
 //
-// Unlike the in-memory CircuitBreakerSyncClient, this shares state across all API
-// replicas via the circuit_breakers table. When one replica detects ArgoCD is down,
-// ALL replicas stop sending traffic immediately.
+// State is shared across all API replicas via the circuit_breakers table.
+// When one replica detects ArgoCD is down, ALL replicas stop sending traffic immediately.
 type PGCircuitBreakerSyncClient struct {
 	inner          SyncClient
-	store          *db.CircuitBreakerStore
+	store          CircuitBreakerStore
 	key            string
 	openThreshold  int
 	closeThreshold int
@@ -32,7 +38,7 @@ type PGCircuitBreakerConfig struct {
 }
 
 // NewPGCircuitBreakerSyncClient creates a PG-backed circuit breaker wrapping a SyncClient.
-func NewPGCircuitBreakerSyncClient(inner SyncClient, store *db.CircuitBreakerStore, cfg PGCircuitBreakerConfig) *PGCircuitBreakerSyncClient {
+func NewPGCircuitBreakerSyncClient(inner SyncClient, store CircuitBreakerStore, cfg PGCircuitBreakerConfig) *PGCircuitBreakerSyncClient {
 	return &PGCircuitBreakerSyncClient{
 		inner:          inner,
 		store:          store,

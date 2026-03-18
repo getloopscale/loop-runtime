@@ -1,7 +1,6 @@
 package unit
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,114 +9,406 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// workflowTemplatePath returns the absolute path to the WorkflowTemplate YAML.
-func workflowTemplatePath() string {
-	return filepath.Join(helmDir(), "argo-workflows", "templates", "workflow-template-nodejs-v1.yaml")
+// cwtDir returns the path to the ClusterWorkflowTemplate YAML files.
+func cwtDir() string {
+	return filepath.Join(helmDir(), "argo-workflows", "templates")
 }
 
-// loadWorkflowTemplate reads and parses the WorkflowTemplate YAML file.
-func loadWorkflowTemplate(t *testing.T) map[string]interface{} {
+// loadAllCWTs reads and parses all cwt-*.yaml files from the templates directory.
+func loadAllCWTs(t *testing.T) map[string]map[string]interface{} {
 	t.Helper()
-	data, err := os.ReadFile(workflowTemplatePath())
+	pattern := filepath.Join(cwtDir(), "cwt-*.yaml")
+	files, err := filepath.Glob(pattern)
 	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
+		t.Fatalf("glob cwt files: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatalf("no CWT files found at %s", pattern)
 	}
 
+	cwts := make(map[string]map[string]interface{})
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("cannot read %s: %v", f, err)
+		}
+		var tmpl map[string]interface{}
+		if err := yaml.Unmarshal(data, &tmpl); err != nil {
+			t.Fatalf("invalid YAML in %s: %v", f, err)
+		}
+		name := filepath.Base(f)
+		cwts[name] = tmpl
+	}
+	return cwts
+}
+
+// loadCWT reads and parses a single CWT file by its base name (e.g., "cwt-clone.yaml").
+func loadCWT(t *testing.T, filename string) map[string]interface{} {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(cwtDir(), filename))
+	if err != nil {
+		t.Fatalf("cannot read %s: %v", filename, err)
+	}
 	var tmpl map[string]interface{}
 	if err := yaml.Unmarshal(data, &tmpl); err != nil {
-		t.Fatalf("invalid YAML in workflow template: %v", err)
+		t.Fatalf("invalid YAML in %s: %v", filename, err)
 	}
 	return tmpl
 }
 
-func TestWorkflowTemplateIsValidYAML(t *testing.T) {
-	tmpl := loadWorkflowTemplate(t)
+// ---------------------------------------------------------------------------
+// All CWTs: structural validation
+// ---------------------------------------------------------------------------
 
-	// Verify it is an Argo WorkflowTemplate
-	apiVersion, ok := tmpl["apiVersion"].(string)
-	if !ok || apiVersion != "argoproj.io/v1alpha1" {
-		t.Errorf("expected apiVersion argoproj.io/v1alpha1, got %v", tmpl["apiVersion"])
+func TestCWTs_AllAreValidYAML(t *testing.T) {
+	cwts := loadAllCWTs(t)
+
+	expectedCWTs := []string{
+		"cwt-clone.yaml",
+		"cwt-cache-restore.yaml",
+		"cwt-cache-save.yaml",
+		"cwt-kaniko.yaml",
+		"cwt-manifests-generate.yaml",
+		"cwt-manifests-validate.yaml",
+		"cwt-notify.yaml",
+		"cwt-summary.yaml",
 	}
 
-	kind, ok := tmpl["kind"].(string)
-	if !ok || kind != "WorkflowTemplate" {
-		t.Errorf("expected kind WorkflowTemplate, got %v", tmpl["kind"])
-	}
-
-	metadata, ok := tmpl["metadata"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("missing metadata")
-	}
-	name, ok := metadata["name"].(string)
-	if !ok || name != "loopzero-build-nodejs-v1" {
-		t.Errorf("expected metadata.name loopzero-build-nodejs-v1, got %v", metadata["name"])
-	}
-}
-
-func TestWorkflowTemplateParametersPresent(t *testing.T) {
-	tmpl := loadWorkflowTemplate(t)
-
-	spec, ok := tmpl["spec"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("missing spec")
-	}
-
-	arguments, ok := spec["arguments"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("missing spec.arguments")
-	}
-
-	params, ok := arguments["parameters"].([]interface{})
-	if !ok {
-		t.Fatalf("missing spec.arguments.parameters")
-	}
-
-	requiredParams := []string{
-		"tenant-id",
-		"project-id",
-		"environment",
-		"commit-sha",
-		"apps",
-		"build-id",
-		"api-callback-url",
-		"callback-secret",
-		"gitea-url",
-		"gitea-token",
-		"minio-endpoint",
-		"minio-access-key",
-		"minio-secret-key",
-		"registry-url",
-	}
-
-	paramNames := make(map[string]bool)
-	for _, p := range params {
-		pm, ok := p.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		name, ok := pm["name"].(string)
-		if !ok {
-			continue
-		}
-		paramNames[name] = true
-	}
-
-	for _, required := range requiredParams {
-		if !paramNames[required] {
-			t.Errorf("missing required parameter: %s", required)
+	for _, expected := range expectedCWTs {
+		if _, ok := cwts[expected]; !ok {
+			t.Errorf("missing CWT file: %s", expected)
 		}
 	}
 }
 
-// getAllContainers recursively finds all container specs in the template tree.
+func TestCWTs_AllAreClusterWorkflowTemplates(t *testing.T) {
+	cwts := loadAllCWTs(t)
+
+	for name, tmpl := range cwts {
+		apiVersion, _ := tmpl["apiVersion"].(string)
+		if apiVersion != "argoproj.io/v1alpha1" {
+			t.Errorf("%s: apiVersion = %q, want argoproj.io/v1alpha1", name, apiVersion)
+		}
+
+		kind, _ := tmpl["kind"].(string)
+		if kind != "ClusterWorkflowTemplate" {
+			t.Errorf("%s: kind = %q, want ClusterWorkflowTemplate", name, kind)
+		}
+	}
+}
+
+func TestCWTs_AllHaveLoopZeroPrefix(t *testing.T) {
+	cwts := loadAllCWTs(t)
+
+	for name, tmpl := range cwts {
+		metadata, ok := tmpl["metadata"].(map[string]interface{})
+		if !ok {
+			t.Errorf("%s: missing metadata", name)
+			continue
+		}
+		cwtName, _ := metadata["name"].(string)
+		if !strings.HasPrefix(cwtName, "loopzero-") {
+			t.Errorf("%s: metadata.name = %q, want loopzero-* prefix", name, cwtName)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// All CWTs: security invariants
+// ---------------------------------------------------------------------------
+
+func TestCWTs_AllContainersHaveResourceLimits(t *testing.T) {
+	cwts := loadAllCWTs(t)
+
+	for name, tmpl := range cwts {
+		var containers []map[string]interface{}
+		getAllContainers(tmpl, &containers)
+
+		for i, c := range containers {
+			image, _ := c["image"].(string)
+			label := image
+			if label == "" {
+				label = "container"
+			}
+
+			resources, ok := c["resources"].(map[string]interface{})
+			if !ok {
+				t.Errorf("%s container %d (%s): missing resources", name, i, label)
+				continue
+			}
+			if _, ok := resources["limits"]; !ok {
+				t.Errorf("%s container %d (%s): missing resources.limits", name, i, label)
+			}
+			if _, ok := resources["requests"]; !ok {
+				t.Errorf("%s container %d (%s): missing resources.requests", name, i, label)
+			}
+		}
+	}
+}
+
+func TestCWTs_AllContainersNonRoot_ExceptKaniko(t *testing.T) {
+	cwts := loadAllCWTs(t)
+
+	for name, tmpl := range cwts {
+		var containers []map[string]interface{}
+		getAllContainers(tmpl, &containers)
+
+		for i, c := range containers {
+			image, _ := c["image"].(string)
+
+			// Kaniko requires root to build container images
+			if strings.Contains(image, "kaniko") {
+				continue
+			}
+
+			sc, ok := c["securityContext"].(map[string]interface{})
+			if !ok {
+				t.Errorf("%s container %d (%s): missing securityContext", name, i, image)
+				continue
+			}
+
+			runAsNonRoot, ok := sc["runAsNonRoot"].(bool)
+			if !ok || !runAsNonRoot {
+				t.Errorf("%s container %d (%s): securityContext.runAsNonRoot must be true", name, i, image)
+			}
+		}
+	}
+}
+
+func TestCWTs_NoLatestImageTags(t *testing.T) {
+	cwts := loadAllCWTs(t)
+
+	for name, tmpl := range cwts {
+		var containers []map[string]interface{}
+		getAllContainers(tmpl, &containers)
+
+		for i, c := range containers {
+			image, ok := c["image"].(string)
+			if !ok {
+				continue
+			}
+			if !strings.Contains(image, ":") {
+				t.Errorf("%s container %d: image %q has no tag (implicit latest)", name, i, image)
+				continue
+			}
+			parts := strings.SplitN(image, ":", 2)
+			if parts[1] == "latest" {
+				t.Errorf("%s container %d: image %q uses 'latest' tag", name, i, image)
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// All CWTs: use inputs.parameters (not workflow.parameters)
+// ---------------------------------------------------------------------------
+
+func TestCWTs_NoWorkflowParameterRefs(t *testing.T) {
+	pattern := filepath.Join(cwtDir(), "cwt-*.yaml")
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		content := string(data)
+		name := filepath.Base(f)
+
+		if strings.Contains(content, "workflow.parameters.") {
+			t.Errorf("%s: contains workflow.parameters.* reference — CWTs must use inputs.parameters.*", name)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// All CWTs: no hardcoded URLs
+// ---------------------------------------------------------------------------
+
+func TestCWTs_NoHardcodedValues(t *testing.T) {
+	pattern := filepath.Join(cwtDir(), "cwt-*.yaml")
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+
+	hardcodedPatterns := []struct {
+		pattern string
+		desc    string
+	}{
+		{"http://gitea", "gitea URL is hardcoded"},
+		{"http://minio", "minio endpoint is hardcoded"},
+		{"http://api", "API callback URL is hardcoded"},
+		{"password:", "password appears hardcoded"},
+	}
+
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		content := string(data)
+		name := filepath.Base(f)
+
+		for _, hp := range hardcodedPatterns {
+			if strings.Contains(content, hp.pattern) {
+				t.Errorf("%s: found hardcoded value: %s (%s)", name, hp.pattern, hp.desc)
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cwt-clone: specific validations
+// ---------------------------------------------------------------------------
+
+func TestCWT_Clone_HasRequiredParams(t *testing.T) {
+	tmpl := loadCWT(t, "cwt-clone.yaml")
+	assertCWTHasParams(t, tmpl, "cwt-clone.yaml", []string{
+		"gitea-url", "gitea-token", "tenant-id", "project-id",
+	})
+}
+
+// ---------------------------------------------------------------------------
+// cwt-kaniko: specific validations
+// ---------------------------------------------------------------------------
+
+func TestCWT_Kaniko_HasDigestFile(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(cwtDir(), "cwt-kaniko.yaml"))
+	if err != nil {
+		t.Fatalf("read cwt-kaniko.yaml: %v", err)
+	}
+	if !strings.Contains(string(data), "--digest-file") {
+		t.Error("cwt-kaniko: missing --digest-file flag — callback needs real SHA256 digest (Helena review #5)")
+	}
+}
+
+func TestCWT_Kaniko_HasRetryStrategy(t *testing.T) {
+	tmpl := loadCWT(t, "cwt-kaniko.yaml")
+	templates := getCWTTemplates(tmpl)
+	for _, tm := range templates {
+		if _, ok := tm["retryStrategy"]; !ok {
+			t.Error("cwt-kaniko: missing retryStrategy")
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cwt-notify: specific validations
+// ---------------------------------------------------------------------------
+
+func TestCWT_Notify_HasRetryStrategy(t *testing.T) {
+	tmpl := loadCWT(t, "cwt-notify.yaml")
+	templates := getCWTTemplates(tmpl)
+	for _, tm := range templates {
+		retryStrategy, ok := tm["retryStrategy"].(map[string]interface{})
+		if !ok {
+			t.Error("cwt-notify: missing retryStrategy")
+			continue
+		}
+		limit, _ := retryStrategy["limit"]
+		limitStr := ""
+		switch v := limit.(type) {
+		case string:
+			limitStr = v
+		case int:
+			if v == 3 {
+				limitStr = "3"
+			}
+		}
+		if limitStr != "3" {
+			t.Errorf("cwt-notify: retryStrategy.limit = %v, want 3", limit)
+		}
+	}
+}
+
+func TestCWT_Notify_HasBearerAuth(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(cwtDir(), "cwt-notify.yaml"))
+	if err != nil {
+		t.Fatalf("read cwt-notify.yaml: %v", err)
+	}
+	if !strings.Contains(string(data), "Bearer") {
+		t.Error("cwt-notify: does not use Bearer token auth")
+	}
+}
+
+func TestCWT_Notify_HasCorrelationID(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(cwtDir(), "cwt-notify.yaml"))
+	if err != nil {
+		t.Fatalf("read cwt-notify.yaml: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "correlation_id") && !strings.Contains(content, "correlation-id") {
+		t.Error("cwt-notify: callback does not include correlation_id (Helena review #6)")
+	}
+}
+
+func TestCWT_Notify_UsesDigestFile(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(cwtDir(), "cwt-notify.yaml"))
+	if err != nil {
+		t.Fatalf("read cwt-notify.yaml: %v", err)
+	}
+	if !strings.Contains(string(data), "image-digest") {
+		t.Error("cwt-notify: does not reference image-digest file — callback should use real SHA256 digest (Helena review #5)")
+	}
+}
+
+func TestCWT_Notify_HasRequiredParams(t *testing.T) {
+	tmpl := loadCWT(t, "cwt-notify.yaml")
+	assertCWTHasParams(t, tmpl, "cwt-notify.yaml", []string{
+		"api-callback-url", "callback-secret", "registry-url",
+		"tenant-id", "project-id", "environment",
+		"commit-sha", "build-id", "correlation-id", "workflow-status",
+	})
+}
+
+// ---------------------------------------------------------------------------
+// cwt-manifests-validate: specific validations
+// ---------------------------------------------------------------------------
+
+func TestCWT_ManifestsValidate_UsesKubeconformImage(t *testing.T) {
+	tmpl := loadCWT(t, "cwt-manifests-validate.yaml")
+	templates := getCWTTemplates(tmpl)
+	for _, tm := range templates {
+		container, ok := tm["container"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		image, _ := container["image"].(string)
+		if strings.HasPrefix(image, "alpine:") {
+			t.Errorf("cwt-manifests-validate: uses generic alpine image %q — should use kubeconform image (Helena review #4)", image)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cwt-cache-restore / cwt-cache-save: tenant isolation
+// ---------------------------------------------------------------------------
+
+func TestCWT_CacheRestore_IncludesTenantParam(t *testing.T) {
+	tmpl := loadCWT(t, "cwt-cache-restore.yaml")
+	assertCWTHasParams(t, tmpl, "cwt-cache-restore.yaml", []string{"tenant-id"})
+}
+
+func TestCWT_CacheSave_IncludesTenantParam(t *testing.T) {
+	tmpl := loadCWT(t, "cwt-cache-save.yaml")
+	assertCWTHasParams(t, tmpl, "cwt-cache-save.yaml", []string{"tenant-id"})
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// getAllContainers recursively finds all container specs in the YAML tree.
 func getAllContainers(node interface{}, containers *[]map[string]interface{}) {
 	switch v := node.(type) {
 	case map[string]interface{}:
-		// If this node has a "container" key, it defines a container
 		if container, ok := v["container"].(map[string]interface{}); ok {
 			*containers = append(*containers, container)
 		}
-		// Also check "script" (Argo script templates have container-like spec)
 		if script, ok := v["script"].(map[string]interface{}); ok {
 			*containers = append(*containers, script)
 		}
@@ -131,76 +422,8 @@ func getAllContainers(node interface{}, containers *[]map[string]interface{}) {
 	}
 }
 
-func TestWorkflowTemplateAllContainersHaveResourceLimits(t *testing.T) {
-	tmpl := loadWorkflowTemplate(t)
-
-	var containers []map[string]interface{}
-	getAllContainers(tmpl, &containers)
-
-	if len(containers) == 0 {
-		t.Fatal("no containers found in workflow template")
-	}
-
-	for i, c := range containers {
-		image, _ := c["image"].(string)
-		label := image
-		if label == "" {
-			label = "container"
-		}
-
-		resources, ok := c["resources"].(map[string]interface{})
-		if !ok {
-			t.Errorf("container %d (%s): missing resources", i, label)
-			continue
-		}
-
-		if _, ok := resources["limits"]; !ok {
-			t.Errorf("container %d (%s): missing resources.limits", i, label)
-		}
-		if _, ok := resources["requests"]; !ok {
-			t.Errorf("container %d (%s): missing resources.requests", i, label)
-		}
-	}
-}
-
-func TestWorkflowTemplateAllContainersNonRoot(t *testing.T) {
-	tmpl := loadWorkflowTemplate(t)
-
-	var containers []map[string]interface{}
-	getAllContainers(tmpl, &containers)
-
-	if len(containers) == 0 {
-		t.Fatal("no containers found in workflow template")
-	}
-
-	for i, c := range containers {
-		image, _ := c["image"].(string)
-		label := image
-		if label == "" {
-			label = "container"
-		}
-
-		// Kaniko requires root to build container images — this is a known and
-		// documented exception. The container has an explicit runAsNonRoot: false.
-		if strings.Contains(image, "kaniko") {
-			continue
-		}
-
-		sc, ok := c["securityContext"].(map[string]interface{})
-		if !ok {
-			t.Errorf("container %d (%s): missing securityContext", i, label)
-			continue
-		}
-
-		runAsNonRoot, ok := sc["runAsNonRoot"].(bool)
-		if !ok || !runAsNonRoot {
-			t.Errorf("container %d (%s): securityContext.runAsNonRoot must be true", i, label)
-		}
-	}
-}
-
-// getAllTemplates extracts all template definitions from spec.templates.
-func getAllTemplates(tmpl map[string]interface{}) []map[string]interface{} {
+// getCWTTemplates extracts the templates array from a CWT spec.
+func getCWTTemplates(tmpl map[string]interface{}) []map[string]interface{} {
 	spec, ok := tmpl["spec"].(map[string]interface{})
 	if !ok {
 		return nil
@@ -218,531 +441,37 @@ func getAllTemplates(tmpl map[string]interface{}) []map[string]interface{} {
 	return result
 }
 
-func TestWorkflowTemplateFinalizeStepRunsAlways(t *testing.T) {
-	data, err := os.ReadFile(workflowTemplatePath())
-	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
+// assertCWTHasParams checks that a CWT declares all required input parameters.
+func assertCWTHasParams(t *testing.T, tmpl map[string]interface{}, cwtName string, required []string) {
+	t.Helper()
+	templates := getCWTTemplates(tmpl)
+	if len(templates) == 0 {
+		t.Fatalf("%s: no templates found", cwtName)
 	}
 
-	content := string(data)
-
-	// The finalize step must exist
-	if !strings.Contains(content, "finalize") {
-		t.Fatal("no finalize step found in workflow template")
-	}
-
-	// The DAG/steps structure must have the finalize running always.
-	// In Argo Workflows, this is done via onExit or a step with
-	// when clause that covers all statuses. Check for onExit reference.
-	var tmpl map[string]interface{}
-	if err := yaml.Unmarshal(data, &tmpl); err != nil {
-		t.Fatalf("invalid YAML: %v", err)
-	}
-
-	spec, ok := tmpl["spec"].(map[string]interface{})
+	// Check first template's inputs.parameters
+	inputs, ok := templates[0]["inputs"].(map[string]interface{})
 	if !ok {
-		t.Fatal("missing spec")
+		t.Fatalf("%s: first template has no inputs", cwtName)
 	}
-
-	// Check for onExit hook — the standard Argo way to always run a step
-	onExit, hasOnExit := spec["onExit"].(string)
-	if !hasOnExit {
-		// Alternative: check entrypoint template for hooks with expression "true"
-		t.Fatal("spec.onExit not set — finalize must use onExit to always run")
-	}
-
-	if onExit != "finalize" {
-		t.Errorf("spec.onExit should reference 'finalize', got %q", onExit)
-	}
-
-	// Verify the finalize template exists
-	templates := getAllTemplates(tmpl)
-	found := false
-	for _, tm := range templates {
-		name, _ := tm["name"].(string)
-		if name == "finalize" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("no template named 'finalize' found in spec.templates")
-	}
-}
-
-func TestWorkflowTemplateNotifyAPIStepHasCallbackAndRetry(t *testing.T) {
-	data, err := os.ReadFile(workflowTemplatePath())
-	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
-	}
-
-	content := string(data)
-
-	// notify-api step must reference the callback URL parameter
-	if !strings.Contains(content, "api-callback-url") {
-		t.Error("notify-api step does not reference api-callback-url parameter")
-	}
-
-	// notify-api step must reference callback-secret for auth
-	if !strings.Contains(content, "callback-secret") {
-		t.Error("notify-api step does not reference callback-secret parameter")
-	}
-
-	// Must have retry configuration
-	var tmpl map[string]interface{}
-	if err := yaml.Unmarshal(data, &tmpl); err != nil {
-		t.Fatalf("invalid YAML: %v", err)
-	}
-
-	templates := getAllTemplates(tmpl)
-	found := false
-	for _, tm := range templates {
-		name, _ := tm["name"].(string)
-		if name != "notify-api" {
-			continue
-		}
-		found = true
-
-		retryStrategy, ok := tm["retryStrategy"].(map[string]interface{})
-		if !ok {
-			t.Error("notify-api template missing retryStrategy")
-			break
-		}
-
-		limit, _ := retryStrategy["limit"]
-		// Accept both string "3" and int 3
-		limitStr := ""
-		switch v := limit.(type) {
-		case string:
-			limitStr = v
-		case int:
-			limitStr = "3"
-			if v != 3 {
-				limitStr = ""
-			}
-		}
-		if limitStr != "3" {
-			t.Errorf("notify-api retryStrategy.limit should be 3, got %v", limit)
-		}
-		break
-	}
-
-	if !found {
-		t.Error("no template named 'notify-api' found")
-	}
-}
-
-func TestWorkflowTemplateCacheKeyIncludesTenantID(t *testing.T) {
-	data, err := os.ReadFile(workflowTemplatePath())
-	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
-	}
-
-	content := string(data)
-
-	// Cache key must include tenant-id for isolation
-	// Look for the cache key pattern that includes tenant-id parameter reference
-	hasTenantInCacheKey := strings.Contains(content, "{{workflow.parameters.tenant-id}}") ||
-		strings.Contains(content, "{{ workflow.parameters.tenant-id }}") ||
-		strings.Contains(content, "inputs.parameters.tenant-id")
-
-	if !hasTenantInCacheKey {
-		t.Error("cache key does not include tenant-id — required for tenant isolation (spec 7.4)")
-	}
-
-	// Verify the cache key follows the format: {tenant-id}/{project-id}/...
-	if !strings.Contains(content, "tenant-id") {
-		t.Error("no reference to tenant-id in cache operations")
-	}
-}
-
-func TestWorkflowTemplateNoHardcodedValues(t *testing.T) {
-	data, err := os.ReadFile(workflowTemplatePath())
-	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
-	}
-
-	content := string(data)
-
-	// These values must come from parameters, not be hardcoded
-	hardcodedPatterns := []struct {
-		pattern string
-		desc    string
-	}{
-		{"http://gitea", "gitea URL is hardcoded"},
-		{"http://minio", "minio endpoint is hardcoded"},
-		{"http://api", "API callback URL is hardcoded"},
-		{"password:", "password appears hardcoded"},
-	}
-
-	for _, hp := range hardcodedPatterns {
-		if strings.Contains(content, hp.pattern) {
-			t.Errorf("found hardcoded value: %s (%s)", hp.pattern, hp.desc)
-		}
-	}
-
-	// Verify key values reference workflow parameters
-	paramRefs := []string{
-		"{{workflow.parameters.gitea-url}}",
-		"{{workflow.parameters.minio-endpoint}}",
-		"{{workflow.parameters.api-callback-url}}",
-		"{{workflow.parameters.registry-url}}",
-		"{{workflow.parameters.tenant-id}}",
-		"{{workflow.parameters.project-id}}",
-		"{{workflow.parameters.commit-sha}}",
-		"{{workflow.parameters.build-id}}",
-	}
-
-	for _, ref := range paramRefs {
-		if !strings.Contains(content, ref) {
-			t.Errorf("expected parameter reference %s not found — value may be hardcoded", ref)
-		}
-	}
-}
-
-func TestWorkflowTemplateNoLatestImageTags(t *testing.T) {
-	data, err := os.ReadFile(workflowTemplatePath())
-	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
-	}
-
-	var tmpl map[string]interface{}
-	if err := yaml.Unmarshal(data, &tmpl); err != nil {
-		t.Fatalf("invalid YAML: %v", err)
-	}
-
-	var containers []map[string]interface{}
-	getAllContainers(tmpl, &containers)
-
-	for i, c := range containers {
-		image, ok := c["image"].(string)
-		if !ok {
-			continue
-		}
-
-		// Image must have a tag (contains ':') and tag must not be 'latest'
-		if !strings.Contains(image, ":") {
-			t.Errorf("container %d: image %q has no tag (implicit latest)", i, image)
-			continue
-		}
-		parts := strings.SplitN(image, ":", 2)
-		tag := parts[1]
-		if tag == "latest" {
-			t.Errorf("container %d: image %q uses 'latest' tag", i, image)
-		}
-	}
-}
-
-// TestWorkflowTemplateGitopsCommitTrailers was removed:
-// The gitops-push step was removed from the Argo Workflow in Step 6 refactoring.
-// Git commit trailers are now in the API's GiteaGitOpsPusher (api/internal/gitops/).
-// See: api/internal/gitops/gitea_pusher_test.go for trailer tests.
-
-func TestWorkflowTemplateCallbackBodyStructure(t *testing.T) {
-	data, err := os.ReadFile(workflowTemplatePath())
-	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
-	}
-
-	content := string(data)
-
-	// The notify-api step must send status and apps in the callback body
-	if !strings.Contains(content, "succeeded") && !strings.Contains(content, "Succeeded") {
-		t.Error("notify-api step does not reference 'succeeded' status")
-	}
-	if !strings.Contains(content, "failed") && !strings.Contains(content, "Failed") {
-		t.Error("notify-api step does not reference 'failed' status")
-	}
-
-	// Must reference Bearer token auth with callback-secret
-	if !strings.Contains(content, "Bearer") {
-		t.Error("notify-api step does not use Bearer token auth")
-	}
-
-	// Validate the callback URL includes the build-id
-	if !strings.Contains(content, "build-id") {
-		t.Error("notify-api step does not reference build-id in callback URL")
-	}
-}
-
-// TestWorkflowTemplateStepOrder validates the DAG dependencies are correctly defined.
-func TestWorkflowTemplateStepOrder(t *testing.T) {
-	tmpl := loadWorkflowTemplate(t)
-
-	templates := getAllTemplates(tmpl)
-
-	// Find the entrypoint DAG template
-	var dagTasks []interface{}
-	for _, tm := range templates {
-		dag, ok := tm["dag"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-		tasks, ok := dag["tasks"].([]interface{})
-		if ok {
-			dagTasks = tasks
-			break
-		}
-	}
-
-	if dagTasks == nil {
-		// May use steps instead of DAG — check for steps-based workflow
-		t.Skip("workflow uses steps instead of DAG — skipping DAG order test")
-	}
-
-	// Build dependency map
-	taskDeps := make(map[string][]string)
-	for _, task := range dagTasks {
-		tm, ok := task.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		name, _ := tm["name"].(string)
-		deps, ok := tm["dependencies"].([]interface{})
-		if ok {
-			var depNames []string
-			for _, d := range deps {
-				if s, ok := d.(string); ok {
-					depNames = append(depNames, s)
-				}
-			}
-			taskDeps[name] = depNames
-		} else {
-			taskDeps[name] = nil
-		}
-	}
-
-	// Verify expected task names exist
-	expectedTasks := []string{"clone-repo", "install-deps", "build-apps"}
-	for _, expected := range expectedTasks {
-		if _, ok := taskDeps[expected]; !ok {
-			t.Errorf("expected DAG task %q not found", expected)
-		}
-	}
-}
-
-// TestWorkflowTemplateValidateManifestsIsHardGate verifies that validate-manifests
-// does NOT have continueOn.failed: true. Manifest validation must block the pipeline.
-// Helena review item #1 (CRITICO).
-func TestWorkflowTemplateValidateManifestsIsHardGate(t *testing.T) {
-	tmpl := loadWorkflowTemplate(t)
-	templates := getAllTemplates(tmpl)
-
-	// Find the entrypoint DAG
-	for _, tm := range templates {
-		dag, ok := tm["dag"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-		tasks, ok := dag["tasks"].([]interface{})
-		if !ok {
-			continue
-		}
-		for _, task := range tasks {
-			taskMap, ok := task.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			name, _ := taskMap["name"].(string)
-			if name != "validate-manifests" {
-				continue
-			}
-			// continueOn must NOT exist, or if it does, failed must be false
-			continueOn, hasContinueOn := taskMap["continueOn"]
-			if !hasContinueOn {
-				return // PASS — no continueOn means it's a hard gate
-			}
-			coMap, ok := continueOn.(map[string]interface{})
-			if !ok {
-				return // PASS — malformed continueOn, not active
-			}
-			failed, _ := coMap["failed"].(bool)
-			if failed {
-				t.Error("validate-manifests has continueOn.failed: true — manifest validation must be a hard gate (Helena review #1)")
-			}
-		}
-	}
-}
-
-// TestWorkflowTemplateValidateManifestsNoCurlDownload verifies that validate-manifests
-// does not download kubeconform at runtime via curl. The image should have it pre-installed.
-// Helena review item #4 (ALERTA).
-func TestWorkflowTemplateValidateManifestsNoCurlDownload(t *testing.T) {
-	tmpl := loadWorkflowTemplate(t)
-	templates := getAllTemplates(tmpl)
-
-	for _, tm := range templates {
-		name, _ := tm["name"].(string)
-		if name != "validate-manifests" {
-			continue
-		}
-		container, ok := tm["container"].(map[string]interface{})
-		if !ok {
-			t.Fatal("validate-manifests template has no container")
-		}
-
-		// The image should not be generic alpine — it should include kubeconform
-		image, _ := container["image"].(string)
-		if strings.HasPrefix(image, "alpine:") {
-			t.Errorf("validate-manifests uses generic alpine image %q — should use an image with kubeconform pre-installed (Helena review #4)", image)
-		}
-	}
-}
-
-// TestWorkflowTemplateCallbackIncludesCorrelationID verifies that the notify-api
-// callback body includes the correlation-id parameter for end-to-end tracing.
-// Helena review item #6 (ALERTA).
-func TestWorkflowTemplateCallbackIncludesCorrelationID(t *testing.T) {
-	data, err := os.ReadFile(workflowTemplatePath())
-	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
-	}
-
-	content := string(data)
-
-	// The notify-api step must include correlation-id in the callback JSON body.
-	// Look for correlation_id or correlation-id in the BODY construction.
-	if !strings.Contains(content, "correlation_id") && !strings.Contains(content, "correlation-id") {
-		// This will pass because the parameter exists. We need to check it's in the BODY.
-	}
-
-	// The notify-api step constructs the callback BODY in its shell script.
-	// The script is embedded in the command array (sh -c <script>).
-	// Check that the BODY construction includes correlation_id.
-	templates := getAllTemplates(loadWorkflowTemplate(t))
-	for _, tm := range templates {
-		name, _ := tm["name"].(string)
-		if name != "notify-api" {
-			continue
-		}
-		container, ok := tm["container"].(map[string]interface{})
-		if !ok {
-			t.Fatal("notify-api template has no container")
-		}
-		// Get the command — script is inline in the command array
-		command, ok := container["command"].([]interface{})
-		if !ok || len(command) == 0 {
-			t.Fatal("notify-api has no command")
-		}
-		// Concatenate all parts of the command to find the script
-		script := ""
-		for _, c := range command {
-			if s, ok := c.(string); ok {
-				script += s + " "
-			}
-		}
-		// Also check args if present
-		if args, ok := container["args"].([]interface{}); ok {
-			for _, a := range args {
-				if s, ok := a.(string); ok {
-					script += s + " "
-				}
-			}
-		}
-		if !strings.Contains(script, "correlation_id") {
-			t.Error("notify-api callback body does not include correlation_id field (Helena review #6)")
-		}
-	}
-}
-
-// TestWorkflowTemplateBuildImageCapturesDigest verifies that the build-image step
-// uses --digest-file to capture the real SHA256 image digest.
-// Helena review item #5 (ALERTA).
-func TestWorkflowTemplateBuildImageCapturesDigest(t *testing.T) {
-	data, err := os.ReadFile(workflowTemplatePath())
-	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
-	}
-
-	content := string(data)
-
-	if !strings.Contains(content, "--digest-file") {
-		t.Error("build-image step does not use --digest-file to capture real image digest (Helena review #5)")
-	}
-}
-
-// TestWorkflowTemplateCallbackUsesRealDigest verifies the notify-api step reads
-// the digest file produced by Kaniko and sends the real SHA256 digest in the callback.
-// Helena review item #5 (ALERTA).
-func TestWorkflowTemplateCallbackUsesRealDigest(t *testing.T) {
-	data, err := os.ReadFile(workflowTemplatePath())
-	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
-	}
-
-	content := string(data)
-
-	// The notify-api step should read from the digest file
-	if !strings.Contains(content, "image-digest") && !strings.Contains(content, "digest.txt") {
-		t.Error("notify-api step does not reference the image digest file — callback should use real SHA256 digest (Helena review #5)")
-	}
-}
-
-// TestWorkflowTemplateHasParallelismLimit verifies the WorkflowTemplate has a
-// parallelism limit to prevent unbounded pod creation under high concurrency.
-// Helena review item #2 (CRITICO).
-func TestWorkflowTemplateHasParallelismLimit(t *testing.T) {
-	tmpl := loadWorkflowTemplate(t)
-
-	spec, ok := tmpl["spec"].(map[string]interface{})
+	params, ok := inputs["parameters"].([]interface{})
 	if !ok {
-		t.Fatal("missing spec")
+		t.Fatalf("%s: first template has no inputs.parameters", cwtName)
 	}
 
-	parallelism, ok := spec["parallelism"]
-	if !ok {
-		t.Fatal("spec.parallelism not set — workflow has no concurrency limit (Helena review #2)")
-	}
-
-	// Parallelism should be a reasonable number (not 0 or negative)
-	switch v := parallelism.(type) {
-	case int:
-		if v < 1 || v > 20 {
-			t.Errorf("spec.parallelism=%d is outside reasonable range [1,20]", v)
-		}
-	case string:
-		// YAML might parse as string
-	default:
-		t.Errorf("spec.parallelism has unexpected type %T", parallelism)
-	}
-}
-
-// TestWorkflowTemplateAppsParameterIsJSON validates the apps parameter is treated as JSON.
-func TestWorkflowTemplateAppsParameterIsJSON(t *testing.T) {
-	data, err := os.ReadFile(workflowTemplatePath())
-	if err != nil {
-		t.Fatalf("cannot read workflow template: %v", err)
-	}
-
-	content := string(data)
-
-	// The apps parameter should be referenced and used (JSON array of app specs)
-	if !strings.Contains(content, "workflow.parameters.apps") {
-		t.Error("apps parameter is not referenced in workflow template")
-	}
-
-	// Validate that the default value for apps is valid JSON (if a default exists)
-	var tmpl map[string]interface{}
-	if err := yaml.Unmarshal(data, &tmpl); err != nil {
-		t.Fatalf("invalid YAML: %v", err)
-	}
-
-	spec := tmpl["spec"].(map[string]interface{})
-	arguments := spec["arguments"].(map[string]interface{})
-	params := arguments["parameters"].([]interface{})
-
+	paramNames := make(map[string]bool)
 	for _, p := range params {
-		pm := p.(map[string]interface{})
-		name, _ := pm["name"].(string)
-		if name != "apps" {
+		pm, ok := p.(map[string]interface{})
+		if !ok {
 			continue
 		}
-		// If there is a default value, validate it is valid JSON
-		if defaultVal, ok := pm["value"].(string); ok && defaultVal != "" {
-			var js json.RawMessage
-			if err := json.Unmarshal([]byte(defaultVal), &js); err != nil {
-				t.Errorf("apps parameter default value is not valid JSON: %v", err)
-			}
+		name, _ := pm["name"].(string)
+		paramNames[name] = true
+	}
+
+	for _, req := range required {
+		if !paramNames[req] {
+			t.Errorf("%s: missing required parameter: %s", cwtName, req)
 		}
 	}
 }

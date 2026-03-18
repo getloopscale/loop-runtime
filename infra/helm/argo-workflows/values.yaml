@@ -31,6 +31,18 @@ controller:
     port: 9090
     path: /metrics
 
+# Workflow execution ServiceAccount and RBAC.
+# The WorkflowTemplate (loopzero-build-nodejs-v1) specifies serviceAccountName: loopzero-build-sa.
+# This SA is created by Helm with RBAC for workflow task results.
+# The controller creates pods using its own ClusterRole — the workflow SA just needs to exist
+# and have workflowtaskresults permissions so step pods can report back.
+workflow:
+  serviceAccount:
+    create: true
+    name: loopzero-build-sa
+  rbac:
+    create: true
+
 server:
   securityContext:
     runAsNonRoot: true

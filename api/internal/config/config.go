@@ -4,6 +4,7 @@
 package config
 
 import (
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
@@ -58,8 +59,7 @@ type Config struct {
 	ArgoCallbackSecret string
 
 	// Argo Workflows
-	ArgoNamespace    string
-	WorkflowTemplate string
+	ArgoNamespace string
 
 	// Circuit Breaker
 	CBKey            string
@@ -107,7 +107,7 @@ func Load() Config {
 		GracefulShutdownTime: envDuration("SERVER_GRACEFUL_SHUTDOWN", 15*time.Second),
 
 		// Database Pool
-		DBMaxConns:         int32(envInt("DB_MAX_CONNS", 20)),
+		DBMaxConns:         int32(envInt("DB_MAX_CONNS", 25)),
 		DBMinConns:         int32(envInt("DB_MIN_CONNS", 5)),
 		DBMaxConnIdleTime:  envDuration("DB_MAX_CONN_IDLE_TIME", 30*time.Second),
 		DBMaxConnLifetime:  envDuration("DB_MAX_CONN_LIFETIME", 1*time.Hour),
@@ -142,8 +142,7 @@ func Load() Config {
 		ArgoCallbackSecret: envOr("LOOPZERO_ARGO_CALLBACK_SECRET", "loopzero-dev-callback-secret"),
 
 		// Argo Workflows
-		ArgoNamespace:    envOr("ARGO_NAMESPACE", "argo"),
-		WorkflowTemplate: envOr("WORKFLOW_TEMPLATE_NAME", "loopzero-build-nodejs-v1"),
+		ArgoNamespace: envOr("ARGO_NAMESPACE", "argo"),
 
 		// Circuit Breaker
 		CBKey:            envOr("CB_KEY", "argocd"),
@@ -171,6 +170,14 @@ func Load() Config {
 		BuildRunningTimeout: envDuration("BUILD_RUNNING_TIMEOUT", 30*time.Minute),
 		BuildCancelTimeout:  envDuration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
 		BuildReaperInterval: envDuration("BUILD_REAPER_INTERVAL", 30*time.Second),
+	}
+}
+
+// Validate logs warnings about insecure defaults.
+// Called after Load() to surface non-production configuration (C-03).
+func (c Config) Validate() {
+	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" {
+		slog.Warn("using default callback secret — only acceptable for local development")
 	}
 }
 

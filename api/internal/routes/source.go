@@ -1,11 +1,13 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/source"
@@ -34,7 +36,11 @@ func NewSourceHandler(store source.SourceStore) *SourceHandler {
 // Upload handles POST /api/v1/source/upload.
 // Accepts multipart form with "bundle" (file) and "loopzero_yaml" (text field).
 func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	// C-02: Enforce request deadline so handlers don't hang indefinitely.
+	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -96,7 +102,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
-			"bundle file is required",
+			"Bundle file is required",
 			400,
 		))
 		return
@@ -110,7 +116,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Push bundle to source store — repo: loopzero-source-{tenant}-{project}
-	commitSHA, err := h.store.PushBundle(r.Context(), uc.TenantID, projectName, bundleFile)
+	commitSHA, err := h.store.PushBundle(ctx, uc.TenantID, projectName, bundleFile)
 	if err != nil {
 		slog.Error("source upload failed", "error", err, "team_id", uc.TenantID)
 		writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)

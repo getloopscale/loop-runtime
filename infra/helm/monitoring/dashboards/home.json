@@ -154,7 +154,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=~\".*loopzero-api.*\"}",
+          "expr": "up{job=\"loopzero-api\", endpoint=\"metrics\"}",
           "legendFormat": "",
           "refId": "A"
         }
@@ -339,7 +339,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=~\".*minio.*\"}",
+          "expr": "up{job=\"minio\"}",
           "legendFormat": "",
           "refId": "A"
         }

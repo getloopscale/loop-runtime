@@ -46,12 +46,14 @@ type Tenant struct {
 // TenantSpec defines the desired state of a Tenant as described in spec section 9.2.
 type TenantSpec struct {
 	// DisplayName is the human-readable name of the tenant.
+	// +kubebuilder:validation:MinLength=1
 	DisplayName string `json:"displayName"`
 
 	// Plan is the subscription tier: starter, growth, or enterprise.
 	Plan PlanTier `json:"plan"`
 
 	// Environments lists the environments available to this tenant.
+	// +kubebuilder:validation:MinItems=1
 	Environments []EnvironmentSpec `json:"environments"`
 
 	// GitOps configures the tenant's GitOps repository.

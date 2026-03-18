@@ -24,15 +24,19 @@ type AppSecret struct {
 // AppSecretSpec defines the desired state of an AppSecret.
 type AppSecretSpec struct {
 	// TenantID is the owning tenant identifier.
+	// +kubebuilder:validation:MinLength=1
 	TenantID string `json:"tenantId"`
 
 	// ProjectID is the project this secret belongs to.
+	// +kubebuilder:validation:MinLength=1
 	ProjectID string `json:"projectId"`
 
 	// Environment is the target environment (e.g., "production", "staging").
+	// +kubebuilder:validation:MinLength=1
 	Environment string `json:"environment"`
 
 	// App is the app within the project that uses this secret.
+	// +kubebuilder:validation:MinLength=1
 	App string `json:"app"`
 
 	// SecretRef references the source Kubernetes Secret in the management cluster.
