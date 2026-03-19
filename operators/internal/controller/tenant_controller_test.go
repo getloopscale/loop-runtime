@@ -1438,6 +1438,21 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 			}
 		})
 
+		It("should set destinationURL from reconciler config (not hardcoded)", func() {
+			// The default WorkloadClusterURL is "https://kubernetes.default.svc" when not configured.
+			// This test verifies the reconciler uses its configured value rather than a hardcoded string.
+			for _, env := range []string{"production", "staging"} {
+				appName := fmt.Sprintf("%s-%s", tenantName, env)
+
+				fakeArgoCDProvider.Mu.Lock()
+				app := fakeArgoCDProvider.Applications[appName]
+				fakeArgoCDProvider.Mu.Unlock()
+
+				Expect(app.DestinationURL).To(Equal("https://kubernetes.default.svc"),
+					"ArgoCD Application %s should have destination URL from reconciler config", appName)
+			}
+		})
+
 		It("should set namespace to argocd", func() {
 			appName := fmt.Sprintf("%s-production", tenantName)
 

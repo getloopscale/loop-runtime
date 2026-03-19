@@ -183,13 +183,25 @@ func (o *BuildOrchestrator) phase2cRecordPushResult(ctx context.Context, build *
 	})
 }
 
-// phase2dSyncAndProbe triggers ArgoCD sync and runs health probes OUTSIDE the lock.
-// Returns true if any probe failed.
+// phase2dSyncAndProbe triggers ArgoCD sync, waits for sync completion,
+// and runs health probes OUTSIDE the lock.
+// Returns true if sync or any probe failed.
 func (o *BuildOrchestrator) phase2dSyncAndProbe(ctx context.Context, build *db.Build, release *db.Release, result BuildCallbackRequest) bool {
-	// Trigger ArgoCD sync
 	argoAppName := fmt.Sprintf("%s-%s", build.TenantID, build.Environment)
-	if err := o.sync.TriggerSync(ctx, argoAppName); err != nil {
-		// Sync failure → treated as probe failure, release will be SYNC_FAILED
+
+	// Trigger ArgoCD sync with retry (MOD-1: transient failures are retried)
+	if err := o.triggerSyncWithRetry(ctx, argoAppName); err != nil {
+		slog.Error("argocd trigger sync failed after retries",
+			"build_id", build.ID, "app", argoAppName, "error", err)
+		return true
+	}
+
+	// Wait for ArgoCD to complete sync before health probing (BLOCKER-2 fix).
+	// Without this, health probes could succeed against the OLD deployment,
+	// marking the release as ACTIVE before the new version is actually running.
+	if err := o.sync.WaitForSync(ctx, argoAppName, o.argocdSyncTimeout); err != nil {
+		slog.Error("argocd wait for sync failed",
+			"build_id", build.ID, "app", argoAppName, "error", err)
 		return true
 	}
 
@@ -306,6 +318,31 @@ func (o *BuildOrchestrator) phase2eFinalizeActivation(ctx context.Context, build
 
 		return nil
 	})
+}
+
+// triggerSyncWithRetry retries TriggerSync with exponential backoff (MOD-1).
+// Transient failures (network timeout, ArgoCD temporarily unavailable) are retried
+// up to 3 times with 1s, 2s, 4s backoff.
+func (o *BuildOrchestrator) triggerSyncWithRetry(ctx context.Context, appName string) error {
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if err := o.sync.TriggerSync(ctx, appName); err == nil {
+			return nil
+		} else {
+			lastErr = err
+			slog.Warn("argocd trigger sync failed, retrying",
+				"app", appName, "attempt", attempt+1, "error", err)
+		}
+
+		backoff := time.Duration(1<<uint(attempt)) * time.Second
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+	}
+	return lastErr
 }
 
 // probeAppsParallel runs health probes for all probeable apps concurrently,

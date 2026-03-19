@@ -39,7 +39,8 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 		// Path matches what the workflow's gitops-push creates: {project}/{env}/
 		// Since ArgoCD Application is per-env and the repo is per-tenant,
 		// we use "." (root) to catch all project manifests for this environment.
-		// TODO: When multi-project support is added, create one Application per project-env.
+		// Multi-project isolation (project-scoped Applications) will be handled by the API
+		// when it creates project-scoped Application names (e.g., tenant-project-env).
 		path := "."
 
 		spec := argocd.ApplicationSpec{
@@ -50,7 +51,7 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 			TargetRevision: tenant.Spec.GitOps.Branch,
 			Path:           path,
 			DestinationNS:  destNS,
-			DestinationURL: "https://kubernetes.default.svc",
+			DestinationURL: r.WorkloadClusterURL,
 		}
 
 		if err := r.ArgoCDProvisioner.EnsureApplication(ctx, spec); err != nil {

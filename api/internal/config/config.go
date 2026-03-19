@@ -69,6 +69,7 @@ type Config struct {
 
 	// ArgoCD Sync
 	ArgocdPollInterval time.Duration
+	ArgocdSyncTimeout  time.Duration
 	ArgocdInsecure     bool
 
 	// SSE
@@ -152,6 +153,7 @@ func Load() Config {
 
 		// ArgoCD Sync
 		ArgocdPollInterval: envDuration("ARGOCD_POLL_INTERVAL", 10*time.Second),
+		ArgocdSyncTimeout:  envDuration("ARGOCD_SYNC_TIMEOUT", 120*time.Second),
 		ArgocdInsecure:     os.Getenv("ARGOCD_INSECURE") == "true",
 
 		// SSE

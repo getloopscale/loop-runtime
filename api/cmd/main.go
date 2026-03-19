@@ -194,15 +194,16 @@ func main() {
 		})
 
 		orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
-			BuildStore:     buildStore,
-			ReleaseStore:   releaseStore,
-			EnvTargetStore: envTargetStore,
-			EventStore:     pgEventStore,
-			Workflow:       workflowSubmitter,
-			Health:         healthProber,
-			Sync:           syncClient,
-			Locker:         locker,
-			GitOps:         gitopsPusher,
+			BuildStore:        buildStore,
+			ReleaseStore:      releaseStore,
+			EnvTargetStore:    envTargetStore,
+			EventStore:        pgEventStore,
+			Workflow:          workflowSubmitter,
+			Health:            healthProber,
+			Sync:              syncClient,
+			Locker:            locker,
+			GitOps:            gitopsPusher,
+			ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
 		})
 
 		buildOrchestrator = &adapters.BuildOrchestratorAdapter{

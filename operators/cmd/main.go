@@ -72,7 +72,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, giteaURL); err != nil {
+	workloadClusterURL := os.Getenv("WORKLOAD_CLUSTER_URL")
+	if workloadClusterURL == "" {
+		workloadClusterURL = "https://kubernetes.default.svc"
+	}
+
+	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, controller.TenantControllerConfig{
+		GiteaURL:           giteaURL,
+		WorkloadClusterURL: workloadClusterURL,
+	}); err != nil {
 		setupLog.Error(err, "unable to setup TenantController")
 		os.Exit(1)
 	}

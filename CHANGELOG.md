@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `WaitForSync` call after `TriggerSync` in release activation — deploy no longer marked ACTIVE until ArgoCD confirms the new version is synced (#BLOCKER-2)
+- Retry with exponential backoff on `TriggerSync` (3 attempts, 1s/2s/4s) — transient ArgoCD failures no longer cause immediate SYNC_FAILED (#MOD-1)
+- `ARGOCD_SYNC_TIMEOUT` config (default 120s) — controls how long WaitForSync waits before failing (#BLOCKER-2)
 - `BuildStore.SetWorkflowID()` persists Argo Workflow name on build record — startup reconciler and cancel now correctly correlate builds with external workflows (#BUILD-BLOCKER-1)
 - `ReleaseStore.GetActiveByEnvTx()` reads active release within advisory lock transaction — eliminates read-outside-tx race in release supersession (#BUILD-MOD-4)
 - Kaniko `registry-insecure` parameter — `--insecure` and `--skip-tls-verify` flags now controlled per-workflow via parameter instead of hardcoded in CWT (#BUILD-BLOCKER-3)

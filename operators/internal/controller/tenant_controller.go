@@ -27,9 +27,16 @@ var tenantSM = statemachine.NewTenantMachine()
 // TenantReconciler reconciles a Tenant object.
 type TenantReconciler struct {
 	client.Client
-	GitProvisioner    gitea.GitRepoProvisioner
-	ArgoCDProvisioner argocd.Provisioner
-	GiteaURL          string
+	GitProvisioner     gitea.GitRepoProvisioner
+	ArgoCDProvisioner  argocd.Provisioner
+	GiteaURL           string
+	WorkloadClusterURL string // URL of the workload cluster API server
+}
+
+// TenantControllerConfig holds configuration for the TenantController.
+type TenantControllerConfig struct {
+	GiteaURL           string
+	WorkloadClusterURL string
 }
 
 // Reconcile handles the reconciliation loop for Tenant resources.
@@ -298,20 +305,27 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 }
 
 // SetupTenantController registers the TenantController with the manager.
-// The optional giteaURL parameter configures the Gitea base URL for ArgoCD Application repo references.
-// If not provided, it defaults to the in-cluster Gitea service URL.
-func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner, giteaURL ...string) error {
-	resolvedURL := "http://gitea-http.loopzero-system.svc.cluster.local:3000"
-	if len(giteaURL) > 0 && giteaURL[0] != "" {
-		resolvedURL = giteaURL[0]
+// cfg.GiteaURL configures the Gitea base URL for ArgoCD Application repo references.
+// If empty, it defaults to the in-cluster Gitea service URL.
+// cfg.WorkloadClusterURL configures the workload cluster API server URL for ArgoCD Applications.
+// If empty, it defaults to "https://kubernetes.default.svc" (backward compatible for single-cluster setups).
+func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner, cfg TenantControllerConfig) error {
+	giteaURL := cfg.GiteaURL
+	if giteaURL == "" {
+		giteaURL = "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+	}
+	workloadClusterURL := cfg.WorkloadClusterURL
+	if workloadClusterURL == "" {
+		workloadClusterURL = "https://kubernetes.default.svc"
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.Tenant{}).
 		Named("tenant").
 		Complete(&TenantReconciler{
-			Client:            mgr.GetClient(),
-			GitProvisioner:    gitProvisioner,
-			ArgoCDProvisioner: argoCDProvisioner,
-			GiteaURL:          resolvedURL,
+			Client:             mgr.GetClient(),
+			GitProvisioner:     gitProvisioner,
+			ArgoCDProvisioner:  argoCDProvisioner,
+			GiteaURL:           giteaURL,
+			WorkloadClusterURL: workloadClusterURL,
 		})
 }

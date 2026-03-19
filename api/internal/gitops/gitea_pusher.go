@@ -4,13 +4,16 @@
 package gitops
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/loopzero/loopzero/api/internal/services"
 )
@@ -32,6 +35,7 @@ type GiteaGitOpsPusher struct {
 	baseURL string
 	token   string
 	orgName string
+	client  *http.Client
 }
 
 // NewGiteaGitOpsPusher creates a new GiteaGitOpsPusher.
@@ -40,6 +44,7 @@ func NewGiteaGitOpsPusher(cfg GiteaGitOpsPusherConfig) *GiteaGitOpsPusher {
 		baseURL: cfg.BaseURL,
 		token:   cfg.Token,
 		orgName: cfg.OrgName,
+		client:  &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -52,7 +57,7 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	}
 
 	repoName := fmt.Sprintf("loopzero-tenant-%s", opts.TenantID)
-	remoteURL := p.authenticatedURL(repoName)
+	remoteURL := p.repoURL(repoName)
 
 	// Ensure repo exists in Gitea
 	if err := p.ensureRepo(ctx, repoName); err != nil {
@@ -69,7 +74,8 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	repoDir := filepath.Join(tmpDir, "repo")
 
 	// Clone existing repo (or init fresh if empty)
-	if err := p.gitCmd(ctx, tmpDir, "git", "clone", "--depth", "5", remoteURL, repoDir); err != nil {
+	// SEC-1: Auth via http.extraHeader, not embedded in URL.
+	if err := p.gitCmdWithAuth(ctx, tmpDir, "clone", "--depth", "5", remoteURL, repoDir); err != nil {
 		// Clone failed (empty repo or first push) — init fresh
 		if err := p.gitCmd(ctx, tmpDir, "git", "init", repoDir); err != nil {
 			return "", fmt.Errorf("gitops push: git init: %w", err)
@@ -118,15 +124,16 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	}
 
 	// Push with fetch-rebase-push on conflict (up to 3 attempts)
+	// SEC-1: Network git commands use gitCmdWithAuth (http.extraHeader).
 	for attempt := 0; attempt < 3; attempt++ {
-		if err := p.gitCmd(ctx, repoDir, "git", "push", "origin", "HEAD:refs/heads/main"); err == nil {
+		if err := p.gitCmdWithAuth(ctx, repoDir, "push", "origin", "HEAD:refs/heads/main"); err == nil {
 			break
 		}
 		if attempt == 2 {
 			return "", fmt.Errorf("gitops push: failed after 3 push attempts")
 		}
 		// Fetch and rebase on conflict
-		_ = p.gitCmd(ctx, repoDir, "git", "fetch", "origin")
+		_ = p.gitCmdWithAuth(ctx, repoDir, "fetch", "origin")
 		if err := p.gitCmd(ctx, repoDir, "git", "rebase", "origin/main"); err != nil {
 			return "", fmt.Errorf("gitops push: rebase failed: %w", err)
 		}
@@ -141,7 +148,17 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	return sha, nil
 }
 
+// createRepoRequest is the JSON body for Gitea's create-repo API.
+// SEC-4: Using json.Marshal prevents JSON injection via repo names.
+type createRepoRequest struct {
+	Name          string `json:"name"`
+	AutoInit      bool   `json:"auto_init"`
+	DefaultBranch string `json:"default_branch"`
+	Private       bool   `json:"private"`
+}
+
 // ensureRepo creates the repo under the org via Gitea API if it doesn't exist.
+// MOD-2: Uses p.client (with timeout) instead of http.DefaultClient.
 func (p *GiteaGitOpsPusher) ensureRepo(ctx context.Context, repoName string) error {
 	checkURL := fmt.Sprintf("%s/api/v1/repos/%s/%s", p.baseURL, p.orgName, repoName)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checkURL, nil)
@@ -150,7 +167,7 @@ func (p *GiteaGitOpsPusher) ensureRepo(ctx context.Context, repoName string) err
 	}
 	req.Header.Set("Authorization", "token "+p.token)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("check repo: %w", err)
 	}
@@ -162,16 +179,24 @@ func (p *GiteaGitOpsPusher) ensureRepo(ctx context.Context, repoName string) err
 
 	// Create repo under org
 	createURL := fmt.Sprintf("%s/api/v1/orgs/%s/repos", p.baseURL, p.orgName)
-	body := fmt.Sprintf(`{"name":"%s","auto_init":true,"default_branch":"main","private":true}`, repoName)
+	bodyBytes, err := json.Marshal(createRepoRequest{
+		Name:          repoName,
+		AutoInit:      true,
+		DefaultBranch: "main",
+		Private:       true,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal create repo body: %w", err)
+	}
 
-	req, err = http.NewRequestWithContext(ctx, http.MethodPost, createURL, strings.NewReader(body))
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, createURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Authorization", "token "+p.token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err = http.DefaultClient.Do(req)
+	resp, err = p.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("create repo: %w", err)
 	}
@@ -184,11 +209,29 @@ func (p *GiteaGitOpsPusher) ensureRepo(ctx context.Context, repoName string) err
 	return nil
 }
 
-// authenticatedURL builds the Gitea repo URL with token auth embedded.
-func (p *GiteaGitOpsPusher) authenticatedURL(repoName string) string {
-	url := fmt.Sprintf("%s/%s/%s.git", p.baseURL, p.orgName, repoName)
-	url = strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", p.token), 1)
-	return url
+// repoURL returns the plain Gitea repo URL without embedded credentials.
+// SEC-1: Credentials are injected via http.extraHeader in gitCmdWithAuth,
+// preventing token exposure in /proc/PID/cmdline.
+func (p *GiteaGitOpsPusher) repoURL(repoName string) string {
+	return fmt.Sprintf("%s/%s/%s.git", p.baseURL, p.orgName, repoName)
+}
+
+// gitAuthArgs returns git config args that inject the auth token via HTTP header.
+// SEC-1: This replaces embedding the token in the git remote URL.
+func (p *GiteaGitOpsPusher) gitAuthArgs() []string {
+	return []string{
+		"-c", fmt.Sprintf("http.extraHeader=Authorization: token %s", p.token),
+	}
+}
+
+// gitCmdWithAuth runs a git command with auth headers for network operations
+// (clone, push, fetch). SEC-1: Credentials are passed via http.extraHeader
+// instead of embedded in the URL, preventing token exposure in /proc/PID/cmdline.
+func (p *GiteaGitOpsPusher) gitCmdWithAuth(ctx context.Context, dir string, gitArgs ...string) error {
+	authArgs := p.gitAuthArgs()
+	fullArgs := append([]string{"git"}, authArgs...)
+	fullArgs = append(fullArgs, gitArgs...)
+	return p.gitCmd(ctx, dir, fullArgs...)
 }
 
 // gitCmd runs a git command in the specified directory.

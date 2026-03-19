@@ -93,7 +93,7 @@ var _ = BeforeSuite(func() {
 
 	fakeGitProvider = newFakeGiteaProvisioner()
 	fakeArgoCDProvider = newFakeArgoCDProvisioner()
-	err = controller.SetupTenantController(mgr, fakeGitProvider, fakeArgoCDProvider)
+	err = controller.SetupTenantController(mgr, fakeGitProvider, fakeArgoCDProvider, controller.TenantControllerConfig{})
 	Expect(err).NotTo(HaveOccurred())
 
 	err = controller.SetupClusterCredentialController(mgr)

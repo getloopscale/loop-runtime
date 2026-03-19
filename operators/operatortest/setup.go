@@ -123,7 +123,7 @@ func (f *FakeArgoCDProvisioner) DeleteApplications(_ context.Context, tenantID s
 // SetupTenantController registers the TenantController with the given manager.
 // Use this in E2E tests to start the operator in-process against envtest.
 func SetupTenantController(mgr ctrl.Manager, gitProvisioner GitRepoProvisioner, argoCDProvisioner ArgoCDProvisioner) error {
-	return controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner)
+	return controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, controller.TenantControllerConfig{})
 }
 
 // SetupClusterCredentialController registers the ClusterCredentialController with the given manager.

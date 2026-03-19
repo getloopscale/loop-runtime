@@ -1185,6 +1185,71 @@ func TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded(t *test
 	}
 }
 
+// TestBuildOrchestrator_OnBuildCompleted_WaitForSyncFails tests that when ArgoCD
+// TriggerSync succeeds but WaitForSync fails (e.g., sync timeout, app degraded),
+// the release transitions to SYNC_FAILED instead of ACTIVE. This is the core
+// BLOCKER-2 fix: without WaitForSync, health probes could pass against the OLD
+// deployment, falsely marking the release as active.
+func TestBuildOrchestrator_OnBuildCompleted_WaitForSyncFails(t *testing.T) {
+	// Arrange
+	fakes := newOrchestratorFakes()
+	fakes.sync.waitErr = fmt.Errorf("argocd: app sync timed out after 120s")
+	orch := fakes.buildOrchestrator()
+
+	resp, err := orch.SubmitBuild(context.Background(), defaultSubmitReq())
+	if err != nil {
+		t.Fatalf("SubmitBuild failed: %v", err)
+	}
+
+	cbReq := defaultSucceededCallback()
+
+	// Act
+	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
+
+	// Assert — should NOT return error (activation failure is handled internally)
+	if err != nil {
+		t.Fatalf("expected OnBuildCompleted to handle WaitForSync failure gracefully, got error: %v", err)
+	}
+
+	// Build MUST be SUCCEEDED (build phase completed independently)
+	build := fakes.buildStore.builds[resp.BuildID]
+	if build.Status != string(statemachine.BuildSucceeded) {
+		t.Errorf("expected build status SUCCEEDED, got %q", build.Status)
+	}
+
+	// TriggerSync should have been called (it succeeds)
+	if len(fakes.sync.synced) == 0 {
+		t.Error("expected TriggerSync to have been called")
+	}
+
+	// Health prober should NOT have been called (WaitForSync failed before probes)
+	if len(fakes.health.probed) != 0 {
+		t.Errorf("expected no health probes when WaitForSync fails, got %d: %v",
+			len(fakes.health.probed), fakes.health.probed)
+	}
+
+	// Release should be in SYNC_FAILED state
+	var release *db.Release
+	for _, r := range fakes.releaseStore.releases {
+		if r.BuildID == resp.BuildID {
+			release = r
+			break
+		}
+	}
+	if release == nil {
+		t.Fatal("expected a release to be created even when WaitForSync fails")
+	}
+	if release.Status != string(statemachine.ReleaseSyncFailed) {
+		t.Errorf("expected release status SYNC_FAILED, got %q", release.Status)
+	}
+
+	// A deploy.sync_failed SSE event MUST be emitted
+	syncFailedEvents := fakes.eventStore.eventsByType("deploy.sync_failed")
+	if len(syncFailedEvents) == 0 {
+		t.Error("expected deploy.sync_failed SSE event when WaitForSync fails")
+	}
+}
+
 func TestBuildOrchestrator_CancelBuild_RunningBuild(t *testing.T) {
 	// Arrange
 	fakes := newOrchestratorFakes()

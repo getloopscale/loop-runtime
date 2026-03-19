@@ -126,11 +126,12 @@ type BuildOrchestratorDeps struct {
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	Workflow WorkflowSubmitter
-	Health   HealthProber
-	Sync     SyncClient
-	Locker   EnvironmentLocker
-	GitOps   GitOpsPusher
+	Workflow           WorkflowSubmitter
+	Health             HealthProber
+	Sync               SyncClient
+	Locker             EnvironmentLocker
+	GitOps             GitOpsPusher
+	ArgocdSyncTimeout  time.Duration // 0 = default 120s
 }
 
 // BuildOrchestrator orchestrates the entire deploy flow:
@@ -145,25 +146,34 @@ type BuildOrchestrator struct {
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	workflow WorkflowSubmitter
-	health   HealthProber
-	sync     SyncClient
-	locker   EnvironmentLocker
-	gitops   GitOpsPusher
+	workflow          WorkflowSubmitter
+	health            HealthProber
+	sync              SyncClient
+	locker            EnvironmentLocker
+	gitops            GitOpsPusher
+	argocdSyncTimeout time.Duration
 }
+
+// defaultArgocdSyncTimeout is used when no timeout is configured.
+const defaultArgocdSyncTimeout = 120 * time.Second
 
 // NewBuildOrchestrator creates a new BuildOrchestrator with all dependencies injected.
 func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
+	syncTimeout := deps.ArgocdSyncTimeout
+	if syncTimeout == 0 {
+		syncTimeout = defaultArgocdSyncTimeout
+	}
 	return &BuildOrchestrator{
-		buildStore:     deps.BuildStore,
-		releaseStore:   deps.ReleaseStore,
-		envTargetStore: deps.EnvTargetStore,
-		eventStore:     deps.EventStore,
-		workflow:       deps.Workflow,
-		health:         deps.Health,
-		sync:           deps.Sync,
-		locker:         deps.Locker,
-		gitops:         deps.GitOps,
+		buildStore:        deps.BuildStore,
+		releaseStore:      deps.ReleaseStore,
+		envTargetStore:    deps.EnvTargetStore,
+		eventStore:        deps.EventStore,
+		workflow:          deps.Workflow,
+		health:            deps.Health,
+		sync:              deps.Sync,
+		locker:            deps.Locker,
+		gitops:            deps.GitOps,
+		argocdSyncTimeout: syncTimeout,
 	}
 }
 
