@@ -150,6 +150,7 @@ func main() {
 			MinIOAccessKey: cfg.MinIOAccessKey,
 			MinIOSecretKey: cfg.MinIOSecretKey,
 			RegistryURL:    cfg.RegistryURL,
+			BaseDomain:     cfg.BaseDomain,
 			CallbackURL:    cfg.APICrossClusterURL + "/api/v1/builds",
 		})
 		if err != nil {

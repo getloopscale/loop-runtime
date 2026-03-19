@@ -79,6 +79,8 @@ spec:
             #   docker inspect k3d-loopzero-workload-serverlb --format '{{json .NetworkSettings.Networks}}'
             - name: WORKLOAD_INGRESS_URL
               value: "http://10.0.3.6:80"
+            - name: BASE_DOMAIN
+              value: "loopzero.local"
           ports:
             - containerPort: 3001
               name: http

@@ -16,6 +16,7 @@ func testInfraParams() InfraParams {
 		MinIOAccessKey: "loopzero-admin",
 		MinIOSecretKey: "loopzero-dev-password",
 		RegistryURL:    "k3d-loopzero-registry:5000",
+		BaseDomain:     "loopzero.local",
 	}
 }
 
@@ -391,6 +392,55 @@ func TestWorkflowBuilder_Build_MultiApp_CorrectAppsParam(t *testing.T) {
 		}
 	}
 	t.Error("generate-manifests missing apps parameter")
+}
+
+// ---------------------------------------------------------------------------
+// base-domain parameter
+// ---------------------------------------------------------------------------
+
+func TestWorkflowBuilder_Build_GenerateManifests_PassesBaseDomain(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	wf := builder.Build(testSpec())
+
+	task := findDAGTask(t, wf, "build-pipeline", "generate-manifests")
+	args := task["arguments"].(map[string]interface{})
+	params := args["parameters"].([]interface{})
+
+	paramNames := paramNameSet(params)
+	if !paramNames["base-domain"] {
+		t.Error("generate-manifests missing base-domain parameter")
+	}
+
+	// Verify value matches infra params
+	for _, p := range params {
+		param := p.(map[string]interface{})
+		if param["name"].(string) == "base-domain" {
+			if param["value"].(string) != "loopzero.local" {
+				t.Errorf("base-domain = %v, want loopzero.local", param["value"])
+			}
+			return
+		}
+	}
+}
+
+func TestWorkflowBuilder_Build_CustomBaseDomain(t *testing.T) {
+	params := testInfraParams()
+	params.BaseDomain = "loopzero.cloud"
+	builder := NewWorkflowBuilder(params)
+	wf := builder.Build(testSpec())
+
+	task := findDAGTask(t, wf, "build-pipeline", "generate-manifests")
+	args := task["arguments"].(map[string]interface{})
+	for _, p := range args["parameters"].([]interface{}) {
+		param := p.(map[string]interface{})
+		if param["name"].(string) == "base-domain" {
+			if param["value"].(string) != "loopzero.cloud" {
+				t.Errorf("base-domain = %v, want loopzero.cloud", param["value"])
+			}
+			return
+		}
+	}
+	t.Error("base-domain parameter not found")
 }
 
 // ---------------------------------------------------------------------------

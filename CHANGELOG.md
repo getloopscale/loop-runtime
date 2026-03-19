@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- TLS termination for all deployed apps — Traefik `websecure` entryPoint (port 443) with self-signed CA chain via cert-manager (#INGRESS-BLOCKER-1)
+- Self-signed CA chain: `ClusterIssuer/selfsigned-bootstrap` → `Certificate/loopzero-ca` (isCA) → `ClusterIssuer/loopzero-ca-issuer` → wildcard `Certificate/loopzero-wildcard` for `*.loopzero.local` (#INGRESS-BLOCKER-1)
+- `TLSStore/default` configures Traefik to use wildcard cert for all IngressRoutes with `tls: {}` (#INGRESS-BLOCKER-1)
+- HTTP→HTTPS redirect on Traefik `web` entryPoint — all HTTP traffic redirected to `websecure` (#INGRESS-BLOCKER-1)
+- Traefik high availability: 2 replicas, PodDisruptionBudget (minAvailable: 1), pod anti-affinity by hostname (#INGRESS-BLOCKER-2)
+- HTTPS port mapping (host:8443 → LB:443) in k3d workload cluster config (#INGRESS-BLOCKER-1)
+- `Middleware/rate-limit` in Traefik namespace — 100 req/s average, 200 burst per source IP (#INGRESS-MOD-1)
+- `Middleware/body-limit` in Traefik namespace — 10 MiB max request body (#INGRESS-MOD-2)
+- `Middleware/security-headers` in Traefik namespace — HSTS, X-Content-Type-Options, X-Frame-Options, XSS filter (#INGRESS-SEC-4)
+- `BASE_DOMAIN` env var (default: `loopzero.local`) — configurable base domain for app hostnames, eliminates hardcoded `.loopzero.local` (#INGRESS-MOD-5)
+- `base-domain` parameter on `loopzero-manifests-generate` CWT — receives domain from API config (#INGRESS-MOD-5)
+- `BaseDomain` field on `InfraParams`, `WorkflowSubmitterConfig`, and `Config` structs (#INGRESS-MOD-5)
+- Readiness and liveness probes on generated Deployment manifests (`/health` endpoint) (#INGRESS-LEVE-3)
+- Unit tests for `base-domain` parameter passing and custom domain configuration (#INGRESS-MOD-5)
+
+### Changed
+- **cert-manager moved from mgmt cluster to workload cluster** — cert-manager must be in the same cluster as Traefik and IngressRoutes to issue certificates (#INGRESS-BLOCKER-3)
+- **Manifest generation refactored from string concatenation to JSON.stringify** — eliminates fragile YAML string building, uses valid JSON (subset of YAML) for Kubernetes resources (#INGRESS-MOD-4)
+- **Generated IngressRoutes use `websecure` entryPoint with `tls: {}`** — all deployed apps get TLS automatically (#INGRESS-BLOCKER-1)
+- **Generated IngressRoutes include rate-limit, body-limit, and security-headers middlewares** — cross-namespace middleware references (#INGRESS-MOD-1, #INGRESS-MOD-2, #INGRESS-SEC-4)
+- **Callback app URLs use `https://` scheme** instead of `http://` (#INGRESS-BLOCKER-1)
+- Traefik resource limits increased from 128Mi to 256Mi memory, 300m to 500m CPU — sized for multi-tenant workloads with access logs and Prometheus metrics (#INGRESS-MOD-3)
+- Traefik metrics port no longer exposed on LoadBalancer — scrape via ServiceMonitor/NodePort only (#INGRESS-LEVE-1)
+- Traefik access logs now filter to 4xx/5xx status codes and retry attempts — reduces log volume in production (#INGRESS-LEVE-4)
+- Traefik access log headers filtered: only Host, X-Correlation-ID, User-Agent retained (#INGRESS-LEVE-4)
+- Traefik global timeouts configured: 60s read/write on websecure, 30s dial, 120s idle (#INGRESS-MOD-6)
+- Traefik `allowCrossNamespace: true` on CRD provider — enables tenant IngressRoutes to reference middlewares in `traefik` namespace (#INGRESS-MOD-1)
+
+### Security
+- All deployed apps now served over HTTPS with TLS certificates from self-signed CA — no more plaintext HTTP (#INGRESS-SEC-1)
+- HTTP→HTTPS redirect prevents accidental plaintext communication (#INGRESS-SEC-2)
+- Traefik metrics endpoint no longer publicly accessible via LoadBalancer (#INGRESS-SEC-3)
+- Security headers (HSTS, X-Content-Type-Options, X-Frame-Options, XSS filter) applied to all tenant traffic via Traefik middleware (#INGRESS-SEC-4)
+
 - `WaitForSync` call after `TriggerSync` in release activation — deploy no longer marked ACTIVE until ArgoCD confirms the new version is synced and healthy (#BLOCKER-2)
 - Retry with exponential backoff on `TriggerSync` (3 attempts, 1s/2s/4s) — transient ArgoCD failures no longer cause immediate SYNC_FAILED (#MOD-1)
 - `ARGOCD_SYNC_TIMEOUT` config (default 120s) — controls how long WaitForSync waits before failing (#BLOCKER-2)

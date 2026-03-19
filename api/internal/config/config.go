@@ -50,6 +50,7 @@ type Config struct {
 	MinIOEndpoint        string
 	RegistryURL          string
 	WorkloadIngressURL   string
+	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
 
 	// Credentials (read from env vars or K8s secrets)
 	GiteaToken         string
@@ -134,6 +135,7 @@ func Load() Config {
 		MinIOEndpoint:        envOr("MINIO_ENDPOINT", "minio.loopzero-system.svc.cluster.local:9000"),
 		RegistryURL:          envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
+		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
 
 		// Credentials
 		GiteaToken:         os.Getenv("GITEA_TOKEN"),

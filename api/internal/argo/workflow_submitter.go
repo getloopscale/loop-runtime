@@ -42,6 +42,7 @@ type WorkflowSubmitterConfig struct {
 	MinIOAccessKey string
 	MinIOSecretKey string
 	RegistryURL    string // e.g., "k3d-loopzero-registry:5000"
+	BaseDomain     string // e.g., "loopzero.local" — base domain for app hostnames
 }
 
 // WorkflowSubmitter implements services.WorkflowSubmitter using real Argo Workflows.
@@ -81,6 +82,7 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 		MinIOAccessKey: cfg.MinIOAccessKey,
 		MinIOSecretKey: cfg.MinIOSecretKey,
 		RegistryURL:    cfg.RegistryURL,
+		BaseDomain:     cfg.BaseDomain,
 	})
 
 	return &WorkflowSubmitter{

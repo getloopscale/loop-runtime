@@ -19,7 +19,8 @@ type InfraParams struct {
 	MinIOAccessKey   string
 	MinIOSecretKey   string
 	RegistryURL      string
-	RegistryInsecure bool // true for local dev registries without TLS
+	RegistryInsecure bool   // true for local dev registries without TLS
+	BaseDomain       string // Base domain for app hostnames (e.g., "loopzero.local")
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs
@@ -155,6 +156,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy Lang
 			"commit-sha":   spec.CommitSHA,
 			"build-id":     spec.BuildID,
 			"apps":         appsJSON(spec.Apps),
+			"base-domain":  b.infraParams.BaseDomain,
 		}),
 
 		// Step 5: validate manifests (CWT ref) — depends on generate

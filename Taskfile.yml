@@ -693,12 +693,6 @@ tasks:
         --namespace argocd --create-namespace
         -f infra/helm/argocd/values.yaml
         --wait --timeout 3m
-      - >-
-        helm upgrade --install cert-manager jetstack/cert-manager
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace cert-manager --create-namespace
-        -f infra/helm/cert-manager/values.yaml
-        --wait --timeout 3m
       # PodDisruptionBudgets for stateful services
       - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/postgresql/templates/pdb.yaml
       - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/gitea/templates/pdb.yaml
@@ -726,12 +720,24 @@ tasks:
     desc: Install platform components in workload cluster
     deps: [helm:repos]
     cmds:
+      # cert-manager must be in the workload cluster (same cluster as Traefik + IngressRoutes)
+      - >-
+        helm upgrade --install cert-manager jetstack/cert-manager
+        --kube-context {{.WORKLOAD_CONTEXT}}
+        --namespace cert-manager --create-namespace
+        -f infra/helm/cert-manager/values.yaml
+        --wait --timeout 3m
+      # Self-signed CA chain + wildcard certificate + TLSStore for Traefik
+      - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/cert-manager/cluster-issuer.yaml
+      # Traefik ingress controller with TLS, HA (2 replicas), and PDB
       - >-
         helm upgrade --install traefik traefik/traefik
         --kube-context {{.WORKLOAD_CONTEXT}}
         --namespace traefik --create-namespace
         -f infra/helm/traefik/values.yaml
         --wait --timeout 3m
+      # Traefik middlewares: rate-limit, body-limit, security-headers
+      - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/traefik/middlewares.yaml
 
   infra:install:monitoring:
     desc: Install Prometheus + Grafana + OTel in mgmt cluster

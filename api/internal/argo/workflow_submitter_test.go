@@ -49,6 +49,7 @@ func newTestSubmitter(t *testing.T) *WorkflowSubmitter {
 		MinIOAccessKey: "loopzero-admin",
 		MinIOSecretKey: "loopzero-dev-password",
 		RegistryURL:    "k3d-loopzero-registry:5000",
+		BaseDomain:     "loopzero.local",
 	})
 	if err != nil {
 		t.Fatalf("failed to create workflow submitter: %v", err)
