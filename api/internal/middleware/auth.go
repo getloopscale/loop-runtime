@@ -68,6 +68,7 @@ func GetUserContext(ctx context.Context) *UserContext {
 // cachedValidation holds a cached token validation result.
 type cachedValidation struct {
 	result    *TokenValidationResult
+	createdAt time.Time
 	expiresAt time.Time
 }
 
@@ -171,20 +172,74 @@ func validateWithCache(ctx context.Context, validator TokenValidator, cache *syn
 		return nil, err
 	}
 
-	// Bound cache size: if we exceed the limit, reset the entire cache.
-	// This is simple and effective — the TTL ensures entries expire naturally,
-	// and the size limit prevents unbounded memory growth.
+	// Bound cache size: evict entries when the cache exceeds the limit.
+	// First pass: delete expired entries. Second pass (if still over 80%):
+	// delete oldest entries until under the target.
+	now := time.Now()
 	if cacheSize.Add(1) > maxTokenCacheSize {
-		*cache = sync.Map{}
-		cacheSize.Store(1)
+		evictCache(cache, cacheSize, now)
 	}
 
 	cache.Store(token, &cachedValidation{
 		result:    result,
-		expiresAt: time.Now().Add(ttl),
+		createdAt: now,
+		expiresAt: now.Add(ttl),
 	})
 
 	return result, nil
+}
+
+// evictCache removes entries from the cache to bring it under the size limit.
+// First pass: remove expired entries. If still over 80% capacity, remove the
+// oldest entries until the target is reached. All operations use sync.Map
+// methods — the struct is never replaced.
+func evictCache(cache *sync.Map, cacheSize *atomic.Int64, now time.Time) {
+	target := int64(float64(maxTokenCacheSize) * 0.8)
+
+	// First pass: delete expired entries.
+	cache.Range(func(key, value any) bool {
+		cv := value.(*cachedValidation)
+		if now.After(cv.expiresAt) {
+			cache.Delete(key)
+			cacheSize.Add(-1)
+		}
+		return true
+	})
+
+	if cacheSize.Load() <= target {
+		return
+	}
+
+	// Second pass: find the oldest entries and delete them until under target.
+	// Collect keys with their creation times, then delete the oldest.
+	type entry struct {
+		key       any
+		createdAt time.Time
+	}
+	var entries []entry
+	cache.Range(func(key, value any) bool {
+		cv := value.(*cachedValidation)
+		entries = append(entries, entry{key: key, createdAt: cv.createdAt})
+		return true
+	})
+
+	// Sort oldest first.
+	for i := 0; i < len(entries); i++ {
+		for j := i + 1; j < len(entries); j++ {
+			if entries[j].createdAt.Before(entries[i].createdAt) {
+				entries[i], entries[j] = entries[j], entries[i]
+			}
+		}
+	}
+
+	// Delete oldest until under target.
+	for _, e := range entries {
+		if cacheSize.Load() <= target {
+			break
+		}
+		cache.Delete(e.key)
+		cacheSize.Add(-1)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {

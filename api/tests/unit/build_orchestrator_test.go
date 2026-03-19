@@ -180,6 +180,15 @@ func (f *fakeReleaseStoreOrch) UpdateStatus(ctx context.Context, tx db.DBTX, id 
 	return &copy, nil
 }
 
+func (f *fakeReleaseStoreOrch) SetGitCommit(ctx context.Context, tx db.DBTX, id string, commitSHA string) error {
+	r, ok := f.releases[id]
+	if !ok {
+		return loopzeroerrors.ErrReleaseNotFound
+	}
+	r.GitCommit = commitSHA
+	return nil
+}
+
 func (f *fakeReleaseStoreOrch) GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*db.Release, error) {
 	key := fmt.Sprintf("%s:%s:%s", tenantID, projectID, env)
 	r, ok := f.activeByEnv[key]
@@ -649,8 +658,9 @@ func TestBuildOrchestrator_OnBuildCompleted_Success_FullFlow(t *testing.T) {
 		if !ok {
 			t.Fatal("expected deploy_id in deploy.completed payload")
 		}
-		if !strings.HasPrefix(deployID, "d-") || len(deployID) != 6 {
-			t.Errorf("expected deploy_id format d-{4hex}, got %q", deployID)
+		// MOD-5: deploy_id increased from d-{4hex} (6 chars) to d-{8hex} (10 chars)
+		if !strings.HasPrefix(deployID, "d-") || len(deployID) != 10 {
+			t.Errorf("expected deploy_id format d-{8hex} (10 chars), got %q (len=%d)", deployID, len(deployID))
 		}
 	}
 }
@@ -1099,12 +1109,12 @@ func TestBuildOrchestrator_DeployCompletedSSE_DeployIDFormat(t *testing.T) {
 		t.Fatalf("failed to unmarshal deploy.completed: %v", err)
 	}
 
-	// deploy_id must be d-{4hex} derived from release ID
+	// MOD-5: deploy_id is d-{8hex} derived from release ID (increased from 4 to 8 hex chars)
 	if !strings.HasPrefix(payload.DeployID, "d-") {
 		t.Errorf("deploy_id must start with 'd-', got %q", payload.DeployID)
 	}
-	if len(payload.DeployID) != 6 {
-		t.Errorf("deploy_id must be exactly 6 chars (d-XXXX), got %q (len=%d)", payload.DeployID, len(payload.DeployID))
+	if len(payload.DeployID) != 10 {
+		t.Errorf("deploy_id must be exactly 10 chars (d-XXXXXXXX), got %q (len=%d)", payload.DeployID, len(payload.DeployID))
 	}
 
 	if payload.Status != "success" {

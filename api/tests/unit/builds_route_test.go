@@ -44,6 +44,9 @@ type fakeBuildOrchestrator struct {
 	// CancelBuild
 	cancelErr          error
 	lastCancelBuildID  string
+
+	// SEC-4: tenant ownership check
+	buildTenantID string
 }
 
 func (f *fakeBuildOrchestrator) SubmitBuild(ctx context.Context, req routes.SubmitBuildInput) (*routes.SubmitBuildResult, error) {
@@ -81,6 +84,17 @@ func (f *fakeBuildOrchestrator) IsBuildTerminal(ctx context.Context, buildID str
 		return false, f.getBuildErr
 	}
 	return f.buildTerminal, nil
+}
+
+func (f *fakeBuildOrchestrator) GetBuildTenantID(ctx context.Context, buildID string) (string, error) {
+	if f.getBuildErr != nil {
+		return "", f.getBuildErr
+	}
+	tenantID := f.buildTenantID
+	if tenantID == "" {
+		tenantID = "acme" // default matches the tenant used in makeAuthCtx across existing tests
+	}
+	return tenantID, nil
 }
 
 // --- Test helpers ---
@@ -523,7 +537,10 @@ func TestBuildsCallbackRoute(t *testing.T) {
 		}
 	})
 
-	t.Run("POST /builds/:id/callback empty apps with succeeded returns 400", func(t *testing.T) {
+	t.Run("POST /builds/:id/callback empty apps with succeeded is treated as failed with 202", func(t *testing.T) {
+		// MOD-1: Succeeded + empty apps no longer returns 400 (which would leave build
+		// stuck in RUNNING for 30 min). Instead, it's treated as a failed build to
+		// unblock the environment immediately.
 		// Arrange
 		orch := &fakeBuildOrchestrator{
 			getBuild: &routes.BuildStatusResponse{
@@ -543,18 +560,23 @@ func TestBuildsCallbackRoute(t *testing.T) {
 		// Act
 		router.ServeHTTP(rec, req)
 
-		// Assert
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		// Assert: returns 202 (accepted), not 400
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		var resp map[string]interface{}
-		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-			t.Fatalf("failed to decode response: %v", err)
+		// Wait for callback goroutine using WaitForCallbacks to avoid data race
+		handler.WaitForCallbacks(2 * time.Second)
+
+		// Verify the orchestrator received a "failed" callback (not "succeeded")
+		if orch.lastCallbackReq == nil {
+			t.Fatal("expected OnBuildCompleted to be called")
 		}
-		msg, _ := resp["message"].(string)
-		if !strings.Contains(msg, "at least one app") {
-			t.Errorf("expected message about at least one app, got %q", msg)
+		if orch.lastCallbackReq.Status != "failed" {
+			t.Errorf("expected status 'failed' (demoted from succeeded), got %q", orch.lastCallbackReq.Status)
+		}
+		if !strings.Contains(orch.lastCallbackReq.Error, "no apps") {
+			t.Errorf("expected error about no apps, got %q", orch.lastCallbackReq.Error)
 		}
 	})
 
@@ -611,20 +633,12 @@ func TestBuildsCallbackRoute(t *testing.T) {
 			t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		// Wait for goroutine
-		deadline := time.After(2 * time.Second)
-		for {
-			if orch.onCompletedCalls > 0 {
-				break
-			}
-			select {
-			case <-deadline:
-				t.Fatal("expected OnBuildCompleted to be called for unknown status")
-			default:
-				time.Sleep(10 * time.Millisecond)
-			}
-		}
+		// Wait for goroutine using WaitForCallbacks to avoid data race
+		handler.WaitForCallbacks(2 * time.Second)
 
+		if orch.lastCallbackReq == nil {
+			t.Fatal("expected OnBuildCompleted to be called for unknown status")
+		}
 		if orch.lastCallbackReq.Status != "failed" {
 			t.Errorf("expected fallback status 'failed', got %q", orch.lastCallbackReq.Status)
 		}
@@ -666,29 +680,23 @@ func TestBuildsCallbackRoute(t *testing.T) {
 			t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		// Wait for goroutine to complete and log the error
-		deadline := time.After(2 * time.Second)
-		for {
-			mu.Lock()
-			found := false
-			for _, msg := range loggedMessages {
-				if strings.Contains(msg, "build completion failed") && strings.Contains(msg, "gitops push failed") {
-					found = true
-					break
-				}
-			}
-			mu.Unlock()
-			if found {
+		// Wait for callback goroutine using WaitForCallbacks to avoid data race
+		handler.WaitForCallbacks(2 * time.Second)
+
+		// Verify error was logged
+		mu.Lock()
+		found := false
+		for _, msg := range loggedMessages {
+			if strings.Contains(msg, "build completion failed") && strings.Contains(msg, "gitops push failed") {
+				found = true
 				break
 			}
-			select {
-			case <-deadline:
-				mu.Lock()
-				t.Fatalf("expected error to be logged with 'build completion failed', got logs: %v", loggedMessages)
-				mu.Unlock()
-			default:
-				time.Sleep(10 * time.Millisecond)
-			}
+		}
+		mu.Unlock()
+		if !found {
+			mu.Lock()
+			t.Fatalf("expected error to be logged with 'build completion failed', got logs: %v", loggedMessages)
+			mu.Unlock()
 		}
 	})
 
@@ -714,21 +722,13 @@ func TestBuildsCallbackRoute(t *testing.T) {
 			t.Fatalf("expected 202 (fallback to failed), got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		// Wait for goroutine to call OnBuildCompleted
-		deadline := time.After(2 * time.Second)
-		for {
-			if orch.onCompletedCalls > 0 {
-				break
-			}
-			select {
-			case <-deadline:
-				t.Fatal("expected OnBuildCompleted to be called for malformed callback")
-			default:
-				time.Sleep(10 * time.Millisecond)
-			}
-		}
+		// Wait for callback goroutine using WaitForCallbacks to avoid data race
+		handler.WaitForCallbacks(2 * time.Second)
 
 		// The fallback should send status=failed with a descriptive error
+		if orch.lastCallbackReq == nil {
+			t.Fatal("expected OnBuildCompleted to be called for malformed callback")
+		}
 		if orch.lastCallbackReq.Status != "failed" {
 			t.Errorf("expected fallback status 'failed', got %q", orch.lastCallbackReq.Status)
 		}
@@ -760,20 +760,12 @@ func TestBuildsCallbackRoute(t *testing.T) {
 			t.Fatalf("expected 202 for truncated Argo payload, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		// Wait for goroutine
-		deadline := time.After(2 * time.Second)
-		for {
-			if orch.onCompletedCalls > 0 {
-				break
-			}
-			select {
-			case <-deadline:
-				t.Fatal("expected OnBuildCompleted to be called for truncated Argo payload")
-			default:
-				time.Sleep(10 * time.Millisecond)
-			}
-		}
+		// Wait for callback goroutine using WaitForCallbacks to avoid data race
+		handler.WaitForCallbacks(2 * time.Second)
 
+		if orch.lastCallbackReq == nil {
+			t.Fatal("expected OnBuildCompleted to be called for truncated Argo payload")
+		}
 		if orch.lastCallbackReq.Status != "failed" {
 			t.Errorf("expected status 'failed', got %q", orch.lastCallbackReq.Status)
 		}
@@ -798,19 +790,12 @@ func TestBuildsCallbackRoute(t *testing.T) {
 			t.Fatalf("expected 202 for empty body, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		deadline := time.After(2 * time.Second)
-		for {
-			if orch.onCompletedCalls > 0 {
-				break
-			}
-			select {
-			case <-deadline:
-				t.Fatal("expected OnBuildCompleted to be called for empty body callback")
-			default:
-				time.Sleep(10 * time.Millisecond)
-			}
-		}
+		// Wait for callback goroutine using WaitForCallbacks to avoid data race
+		handler.WaitForCallbacks(2 * time.Second)
 
+		if orch.lastCallbackReq == nil {
+			t.Fatal("expected OnBuildCompleted to be called for empty body callback")
+		}
 		if orch.lastCallbackReq.Status != "failed" {
 			t.Errorf("expected fallback status 'failed', got %q", orch.lastCallbackReq.Status)
 		}

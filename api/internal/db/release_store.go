@@ -40,6 +40,7 @@ type ReleaseStore interface {
 	Create(ctx context.Context, tx DBTX, release *Release) error
 	GetByID(ctx context.Context, id string) (*Release, error)
 	UpdateStatus(ctx context.Context, tx DBTX, id string, event string) (*Release, error)
+	SetGitCommit(ctx context.Context, tx DBTX, id string, commitSHA string) error
 	GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*Release, error)
 	GetActiveByEnvTx(ctx context.Context, tx DBTX, tenantID, projectID, env string) (*Release, error)
 }
@@ -128,6 +129,23 @@ func (s *PostgresReleaseStore) UpdateStatus(ctx context.Context, tx DBTX, releas
 
 	release.Status = string(newState)
 	return release, nil
+}
+
+// SetGitCommit persists the git commit SHA from the GitOps push on a release.
+// LEVE-2: Enables end-to-end audit trail from build → release → git commit.
+func (s *PostgresReleaseStore) SetGitCommit(ctx context.Context, tx DBTX, releaseID string, commitSHA string) error {
+	executor := tx
+	if executor == nil {
+		executor = s.db
+	}
+	_, err := executor.Exec(ctx,
+		`UPDATE releases SET git_commit = $1 WHERE id = $2`,
+		commitSHA, releaseID,
+	)
+	if err != nil {
+		return fmt.Errorf("release store: set git_commit failed: %w", err)
+	}
+	return nil
 }
 
 // GetActiveByEnv retrieves the active release for a given environment.

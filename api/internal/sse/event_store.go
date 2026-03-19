@@ -26,6 +26,10 @@ type EventStore interface {
 	Prune(ctx context.Context, olderThan time.Duration) (int64, error)
 }
 
+// pruneBatchSize limits how many rows a single DELETE removes to avoid
+// long-running locks and I/O spikes when pruning large backlogs.
+const pruneBatchSize = 5000
+
 // PostgresEventStore implements EventStore using PostgreSQL.
 type PostgresEventStore struct {
 	queryDB db.QueryExecutor
@@ -97,17 +101,31 @@ func (s *PostgresEventStore) GetAfter(ctx context.Context, buildID string, after
 	return events, nil
 }
 
-// Prune deletes events older than the given duration and returns the count of deleted rows.
+// Prune deletes events older than the given duration and returns the total count of deleted rows.
+// MOD-2: Deletes in batches of pruneBatchSize to prevent long-running locks and I/O spikes
+// when pruning large backlogs (e.g., after pruner was down for days).
 func (s *PostgresEventStore) Prune(ctx context.Context, olderThan time.Duration) (int64, error) {
 	threshold := time.Now().Add(-olderThan)
+	var totalDeleted int64
 
-	result, err := s.execDB.Exec(ctx,
-		"DELETE FROM sse_events WHERE created_at < $1",
-		threshold,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("event store: prune failed: %w", err)
+	for {
+		if ctx.Err() != nil {
+			return totalDeleted, ctx.Err()
+		}
+
+		result, err := s.execDB.Exec(ctx,
+			"DELETE FROM sse_events WHERE id IN (SELECT id FROM sse_events WHERE created_at < $1 LIMIT $2)",
+			threshold, pruneBatchSize,
+		)
+		if err != nil {
+			return totalDeleted, fmt.Errorf("event store: prune failed: %w", err)
+		}
+
+		totalDeleted += result.RowsAffected
+		if result.RowsAffected < int64(pruneBatchSize) {
+			break
+		}
 	}
 
-	return result.RowsAffected, nil
+	return totalDeleted, nil
 }

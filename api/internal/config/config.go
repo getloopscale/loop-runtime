@@ -4,6 +4,7 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
@@ -74,8 +75,10 @@ type Config struct {
 	ArgocdInsecure     bool
 
 	// SSE
-	SSEHeartbeatInterval time.Duration
-	SSEPollInterval      time.Duration
+	SSEHeartbeatInterval    time.Duration
+	SSEPollInterval         time.Duration
+	SSESafetyTimeout        time.Duration
+	SSEMaxConcurrentStreams int
 
 	// Auth
 	AuthCacheTTL time.Duration
@@ -159,8 +162,10 @@ func Load() Config {
 		ArgocdInsecure:     os.Getenv("ARGOCD_INSECURE") == "true",
 
 		// SSE
-		SSEHeartbeatInterval: envDuration("SSE_HEARTBEAT_INTERVAL", 15*time.Second),
-		SSEPollInterval:      envDuration("SSE_POLL_INTERVAL", 1*time.Second),
+		SSEHeartbeatInterval:    envDuration("SSE_HEARTBEAT_INTERVAL", 15*time.Second),
+		SSEPollInterval:         envDuration("SSE_POLL_INTERVAL", 1*time.Second),
+		SSESafetyTimeout:        envDuration("SSE_SAFETY_TIMEOUT", 5*time.Minute),
+		SSEMaxConcurrentStreams: envInt("SSE_MAX_CONCURRENT_STREAMS", 200),
 
 		// Auth
 		AuthCacheTTL: envDuration("AUTH_CACHE_TTL", 5*time.Minute),
@@ -177,14 +182,17 @@ func Load() Config {
 	}
 }
 
-// Validate logs warnings about insecure defaults.
+// Validate logs warnings about insecure defaults and returns an error for
+// security violations in production that must not be ignored.
 // Called after Load() to surface non-production configuration (C-03).
-func (c Config) Validate() {
+func (c Config) Validate() error {
 	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" {
 		slog.Warn("using default callback secret — only acceptable for local development")
 	}
+	// SEC-2: ARGOCD_INSECURE=true in production is a fatal error, not just a log.
+	// TLS skip allows MITM attacks on ArgoCD API calls.
 	if c.ArgocdInsecure && c.IsProduction() {
-		slog.Error("ARGOCD_INSECURE=true is forbidden in production — TLS verification must be enabled")
+		return fmt.Errorf("ARGOCD_INSECURE=true is forbidden in production — TLS verification must be enabled")
 	}
 	if c.MinIOAccessKey == "loopzero-admin" && c.IsProduction() {
 		slog.Error("MINIO_ACCESS_KEY using default dev credentials in production — override via MINIO_ACCESS_KEY env var")
@@ -192,6 +200,7 @@ func (c Config) Validate() {
 	if c.MinIOSecretKey == "loopzero-dev-password" && c.IsProduction() {
 		slog.Error("MINIO_SECRET_KEY using default dev credentials in production — override via MINIO_SECRET_KEY env var")
 	}
+	return nil
 }
 
 // GiteaCrossCluster returns the Gitea URL accessible from the build cluster.

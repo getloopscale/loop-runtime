@@ -100,6 +100,21 @@ func (r *BuildReaper) ReapOnce(ctx context.Context) int {
 	return r.reap(ctx)
 }
 
+// reaperReason returns a human-readable reason for a reaper timeout event.
+// LEVE-1: Single source of truth for reaper reason strings — eliminates DRY violation.
+func reaperReason(event statemachine.Event) string {
+	switch event {
+	case statemachine.BuildQueueTimeout:
+		return "Build timed out while waiting in queue (5 min limit)"
+	case statemachine.BuildTimeout:
+		return "Build timed out while running (30 min limit)"
+	case statemachine.BuildCancelTimeout:
+		return "Build cancellation timed out (60s limit)"
+	default:
+		return "Build reaped due to timeout"
+	}
+}
+
 func (r *BuildReaper) reap(ctx context.Context) int {
 	stale, err := r.checker.FindStaleBuilds(ctx, r.cfg.QueueTimeout, r.cfg.RunningTimeout, r.cfg.CancelTimeout)
 	if err != nil {
@@ -120,6 +135,8 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 			continue
 		}
 
+		reason := reaperReason(s.Event)
+
 		err = r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 			// Re-fetch inside lock
 			build, err = r.buildStore.GetByID(ctx, s.ID)
@@ -136,17 +153,6 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 			}
 
 			// Set descriptive error message (F-04: reaped builds must explain why)
-			var reason string
-			switch s.Event {
-			case statemachine.BuildQueueTimeout:
-				reason = "Build timed out while waiting in queue (5 min limit)"
-			case statemachine.BuildTimeout:
-				reason = "Build timed out while running (30 min limit)"
-			case statemachine.BuildCancelTimeout:
-				reason = "Build cancellation timed out (60s limit)"
-			default:
-				reason = "Build reaped due to timeout"
-			}
 			return r.buildStore.SetErrorMessage(ctx, tx, s.ID, reason)
 		})
 
@@ -159,17 +165,6 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 		// MOD-5: Emit SSE build.failed so the CLI gets notified immediately
 		// instead of waiting for the deploy timeout (10 minutes).
 		if r.eventStore != nil {
-			var reason string
-			switch s.Event {
-			case statemachine.BuildQueueTimeout:
-				reason = "Build timed out while waiting in queue (5 min limit)"
-			case statemachine.BuildTimeout:
-				reason = "Build timed out while running (30 min limit)"
-			case statemachine.BuildCancelTimeout:
-				reason = "Build cancellation timed out (60s limit)"
-			default:
-				reason = "Build reaped due to timeout"
-			}
 			eventData, _ := json.Marshal(map[string]string{
 				"build_id": s.ID,
 				"status":   "failed",

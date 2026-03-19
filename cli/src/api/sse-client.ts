@@ -11,6 +11,16 @@ export interface SSEEvent {
   data: Record<string, unknown>;
 }
 
+/** Terminal build statuses — when reached, no more SSE events will arrive. */
+const TERMINAL_BUILD_STATUSES = new Set([
+  'SUCCEEDED', 'FAILED', 'CANCELLED',
+]);
+
+/** Returns true if the build status indicates no more events will be produced. */
+function isTerminalBuildStatus(status: string): boolean {
+  return TERMINAL_BUILD_STATUSES.has(status);
+}
+
 type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
 export interface SSEClientOptions {
@@ -335,6 +345,15 @@ export class SSEClient {
             data: data as Record<string, unknown>,
           };
           this.onEvent(pollEvent);
+
+          // LEVE-4: Detect terminal build states during polling fallback.
+          // When JOURNAL_EXPIRED triggers polling, we fetch build status.
+          // If the build is in a terminal state, stop polling — no more events will arrive.
+          const status = (data as Record<string, unknown>)?.status;
+          if (typeof status === 'string' && isTerminalBuildStatus(status)) {
+            this.close();
+            return;
+          }
         }
       } catch (err) {
         if (!this.closed) {

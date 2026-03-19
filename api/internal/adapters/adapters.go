@@ -193,6 +193,15 @@ func (a *BuildOrchestratorAdapter) IsBuildTerminal(ctx context.Context, buildID 
 	return statemachine.IsBuildTerminal(statemachine.State(build.Status)), nil
 }
 
+// GetBuildTenantID returns the tenant that owns a build (SEC-4: authorization check).
+func (a *BuildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID string) (string, error) {
+	build, err := a.BuildStore.GetByID(ctx, buildID)
+	if err != nil {
+		return "", err
+	}
+	return build.TenantID, nil
+}
+
 // --- BuildStoreReaderAdapter: bridges db.BuildStore to sse.BuildStoreReader ---
 
 // BuildStoreReaderAdapter implements sse.BuildStoreReader using db.BuildStore.
@@ -208,8 +217,9 @@ func (a *BuildStoreReaderAdapter) GetByID(ctx context.Context, id string) (*sse.
 		return nil, err
 	}
 	return &sse.BuildInfo{
-		ID:     build.ID,
-		Status: build.Status,
+		ID:       build.ID,
+		TenantID: build.TenantID,
+		Status:   build.Status,
 	}, nil
 }
 

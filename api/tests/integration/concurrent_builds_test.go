@@ -130,6 +130,14 @@ func (a *buildOrchestratorAdapter) IsBuildTerminal(ctx context.Context, buildID 
 	return false, nil
 }
 
+func (a *buildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID string) (string, error) {
+	build, err := a.buildStore.GetByID(ctx, buildID)
+	if err != nil {
+		return "", err
+	}
+	return build.TenantID, nil
+}
+
 // --- Fake external services (Argo Workflows, Gitea, ArgoCD, health probes) ---
 
 type fakeWorkflowSubmitter struct{}
@@ -246,6 +254,10 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 
 	// Create real server with real middleware
 	logger := logging.NewLogger("test")
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { shutdownCancel() })
+
+	buildHandler := routes.NewBuildHandler(orchAdapter, "test-secret", logger, shutdownCtx)
 	router := server.NewRouter(server.Config{
 		Port:               "0",
 		Logger:             logger,
@@ -253,7 +265,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 		TokenValidator:     &fakeTokenValidator{},
 		MemberStore:        &fakeMembershipStore{},
 		IdempotencyStore:   idempotencyStore,
-		BuildOrchestrator:  orchAdapter,
+		BuildHandler:       buildHandler,
 		ArgoCallbackSecret: "test-secret",
 		EventStore:         eventStore,
 	})

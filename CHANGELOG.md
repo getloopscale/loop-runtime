@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- SSE stream closing prematurely on build SUCCEEDED before deploy events arrive — stream now waits for stream-terminal events (`deploy.completed`, `deploy.sync_failed`, `deploy.git_push_failed`, `build.failed`, `build.cancelled`) with 5-minute safety timeout instead of closing on `IsBuildTerminal()` (#API-REVIEW-BLOCKER-1)
+- Data race in auth token cache — `*cache = sync.Map{}` replaced with thread-safe `evictCache()` using `Range` + `Delete` (#API-REVIEW-BLOCKER-2)
+- Background goroutines (build reaper, idempotency cleaner, SSE event pruner) now receive shutdown context — prevents queries against closed connection pool during graceful shutdown (#API-REVIEW-BLOCKER-3)
+- `BuildHandler` created once and shared between auth routes and callback route — `callbackWg` now correctly tracks all in-flight callbacks for graceful shutdown (#API-REVIEW-LEVE-4)
+- Callback `succeeded + empty apps` no longer returns 400 (which left build stuck in RUNNING for 30 min) — now treated as failed build to unblock environment immediately (#API-REVIEW-MOD-1)
+- Terminal check moved before apps validation in callback handler — prevents 400 for duplicate callbacks with empty apps (#API-REVIEW-MOD-4)
+- Callback handler poll loops in tests replaced with `WaitForCallbacks()` — eliminates data races under `-race` detector (#API-REVIEW-TEST-RACE)
+
+### Changed
+- `deploy_id` format increased from `d-{4hex}` (16 bits) to `d-{8hex}` (32 bits) — reduces collision probability from ~256 deploys to ~65K deploys (#API-REVIEW-MOD-5)
+- `Config.Validate()` now returns `error` and fails fatally when `ARGOCD_INSECURE=true` in production — prevents MITM attacks (#API-REVIEW-SEC-2)
+- Build reaper reason strings extracted to `reaperReason()` function — eliminates DRY violation (#API-REVIEW-LEVE-1)
+- `ReleaseStore.SetGitCommit()` persists GitOps push commit SHA on release — enables end-to-end audit trail (#API-REVIEW-LEVE-2)
+
+### Added
+- `GetBuildTenantID()` on `BuildOrchestratorService` interface — enables tenant ownership verification (#API-REVIEW-SEC-4)
+- `ReleaseStore.SetGitCommit()` method — persists git commit SHA from GitOps push (#API-REVIEW-LEVE-2)
+- Context timeout (30s) on read-only build handlers (`Get`) — prevents slowloris on endpoints without `WriteTimeout` (#API-REVIEW-MOD-2)
+- SSE stream safety timeout (5 min) — closes stream if build is terminal but no deploy events arrive (#API-REVIEW-BLOCKER-1)
+- Cache eviction test with concurrent access under `-race` detector (#API-REVIEW-BLOCKER-2)
+- SSE stream termination tests for deploy terminal events (#API-REVIEW-BLOCKER-1)
+
+### Security
+- Callback secret comparison uses `crypto/subtle.ConstantTimeCompare` — prevents timing attacks (#API-REVIEW-SEC-1)
+- `GET /builds/:id` and `POST /builds/:id/cancel` now verify tenant ownership — returns 404 for cross-tenant access (#API-REVIEW-SEC-4)
+- `ARGOCD_INSECURE=true` in production is now a fatal startup error, not just a log (#API-REVIEW-SEC-2)
+
 ### Added
 - Bucket `loopzero-builds` created in MinIO dev and production values — cache CWTs now have a real bucket to write to (#MINIO-BLOCKER-1)
 - MinIO credentials Secret `loopzero-minio-credentials` in build cluster — CWTs read credentials via `envFrom.secretRef` instead of plaintext workflow parameters (#MINIO-BLOCKER-2)

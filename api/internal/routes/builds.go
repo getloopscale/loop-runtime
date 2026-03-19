@@ -2,6 +2,7 @@ package routes
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
@@ -74,6 +75,8 @@ type BuildOrchestratorService interface {
 	OnBuildCompleted(ctx context.Context, buildID string, result BuildCallbackInput) error
 	IsBuildTerminal(ctx context.Context, buildID string) (bool, error)
 	CancelBuild(ctx context.Context, buildID string) error
+	// GetBuildTenantID returns the tenant that owns a build — used for authorization.
+	GetBuildTenantID(ctx context.Context, buildID string) (string, error)
 }
 
 // BuildStatusResponse is the JSON response for GET /builds/:id.
@@ -196,10 +199,33 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // Get handles GET /api/v1/builds/:id.
+// SEC-4: Validates that the authenticated user's tenant owns the build.
 func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
+	// MOD-2: Enforce timeout on read-only handlers to prevent slowloris.
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
+	if uc == nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		return
+	}
+
 	buildID := chi.URLParam(r, "id")
 
-	resp, err := h.orch.GetBuildStatus(r.Context(), buildID)
+	// SEC-4: Verify tenant ownership before returning build data.
+	// Returns 404 (not 403) to avoid leaking build existence across tenants.
+	buildTenantID, err := h.orch.GetBuildTenantID(ctx, buildID)
+	if err != nil {
+		mapBuildError(w, err)
+		return
+	}
+	if buildTenantID != uc.TenantID {
+		writeLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+		return
+	}
+
+	resp, err := h.orch.GetBuildStatus(ctx, buildID)
 	if err != nil {
 		mapBuildError(w, err)
 		return
@@ -209,8 +235,8 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // Cancel handles POST /api/v1/builds/:id/cancel.
-// Validates auth, delegates to orchestrator which checks terminal state,
-// cancels the workflow, and transitions the build to CANCELLED.
+// Validates auth and tenant ownership, delegates to orchestrator which checks
+// terminal state, cancels the workflow, and transitions the build to CANCELLED.
 func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	// C-02: Enforce request deadline so handlers don't hang indefinitely.
 	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
@@ -223,6 +249,18 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	buildID := chi.URLParam(r, "id")
+
+	// SEC-4: Verify tenant ownership before allowing cancel.
+	// Returns 404 (not 403) to avoid leaking build existence across tenants.
+	buildTenantID, err := h.orch.GetBuildTenantID(ctx, buildID)
+	if err != nil {
+		mapBuildError(w, err)
+		return
+	}
+	if buildTenantID != uc.TenantID {
+		writeLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+		return
+	}
 
 	if err := h.orch.CancelBuild(ctx, buildID); err != nil {
 		mapBuildError(w, err)
@@ -257,7 +295,8 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := strings.TrimPrefix(authHeader, "Bearer ")
-	if token != h.callbackSecret {
+	// SEC-1: Use constant-time comparison to prevent timing attacks on the callback secret.
+	if subtle.ConstantTimeCompare([]byte(token), []byte(h.callbackSecret)) != 1 {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
@@ -317,25 +356,13 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Validate succeeded + empty apps (DA-15) — this IS a hard error because
-	// a succeeded build without apps means the build system has a bug that
-	// would corrupt release state. Unlike malformed payloads, this is a
-	// semantic contract violation that should not be silently accepted.
-	if req.Status == "succeeded" && len(req.Apps) == 0 {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"INVALID_CALLBACK",
-			"Callback with succeeded status must include at least one app",
-			400,
-		))
-		return
-	}
-
 	// If we fell back from a parse error, ensure error message is populated
 	if !parsed && req.Error == "" {
 		req.Error = "Build failed (callback payload malformed)"
 	}
 
-	// Check build exists and if already terminal (duplicate detection)
+	// MOD-4: Check terminal state BEFORE apps validation — prevents returning 400
+	// for duplicate callbacks with empty apps when build is already completed.
 	isTerminal, err := h.orch.IsBuildTerminal(r.Context(), buildID)
 	if err != nil {
 		mapBuildError(w, err)
@@ -347,6 +374,17 @@ func (h *BuildHandler) Callback(w http.ResponseWriter, r *http.Request) {
 			"status": "already_completed",
 		})
 		return
+	}
+
+	// MOD-1: Succeeded + empty apps means the build system has a bug, but returning
+	// 400 would leave the build stuck in RUNNING for 30 minutes (violates resilience rule).
+	// Instead, treat it as a failed build so the environment is unblocked immediately.
+	if req.Status == "succeeded" && len(req.Apps) == 0 {
+		h.logger.Error("callback reported succeeded but provided no apps — treating as failed",
+			"build_id", buildID,
+		)
+		req.Status = "failed"
+		req.Error = "Build system reported success but provided no apps (build system bug)"
 	}
 
 	// Return 202 immediately (DA-15 EC-R)

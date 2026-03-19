@@ -32,15 +32,21 @@ type Config struct {
 	TenantCRMgr        routes.TenantCRManager
 	IdempotencyStore   middleware.IdempotencyStore
 	SourceStore        source.SourceStore
-	BuildOrchestrator  routes.BuildOrchestratorService
 	ArgoCallbackSecret string
 	EventStore         sse.EventStore
 	BuildStoreReader   sse.BuildStoreReader
 	SecretStore        routes.SecretStore
 	// ShutdownCtx is cancelled when the server begins graceful shutdown.
-	// Background goroutines (e.g. callback processing) should use this
-	// context so they can drain before the process exits (A-05).
+	// Background goroutines (reaper, cleaner, pruner, callback processing)
+	// should use this context so they stop before the connection pool closes (A-05).
+	// Created in main.go and shared across all components that need shutdown awareness.
 	ShutdownCtx        context.Context
+	// ShutdownCancel cancels ShutdownCtx. Called by Run() on SIGTERM/SIGINT.
+	ShutdownCancel     context.CancelFunc
+	// BuildHandler is the single BuildHandler instance shared between auth
+	// and callback routes. Created in main.go to avoid duplicate instances
+	// with separate callbackWg (C-08).
+	BuildHandler       *routes.BuildHandler
 	// RateLimiter applies per-tenant rate limiting on mutation routes (C-01).
 	// When nil, rate limiting is disabled.
 	RateLimiter        *middleware.RateLimiter
@@ -49,6 +55,11 @@ type Config struct {
 	ReadTimeout        time.Duration
 	IdleTimeout        time.Duration
 	ShutdownTimeout    time.Duration
+	// SSE stream configuration
+	SSEHeartbeatInterval    time.Duration
+	SSEPollInterval         time.Duration
+	SSESafetyTimeout        time.Duration
+	SSEMaxConcurrentStreams int64
 }
 
 // NewRouter creates a chi router with middleware and routes.
@@ -112,9 +123,22 @@ func NewRouter(cfg Config) *chi.Mux {
 
 			// SSE stream route (no idempotency needed — read-only)
 			if cfg.EventStore != nil && cfg.BuildStoreReader != nil {
-				streamHandler := sse.NewStreamHandler(cfg.EventStore, cfg.BuildStoreReader,
-				sse.WithLogger(cfg.Logger),
-			)
+				sseOpts := []sse.StreamOption{
+					sse.WithLogger(cfg.Logger),
+				}
+				if cfg.SSEHeartbeatInterval > 0 {
+					sseOpts = append(sseOpts, sse.WithHeartbeatInterval(cfg.SSEHeartbeatInterval))
+				}
+				if cfg.SSEPollInterval > 0 {
+					sseOpts = append(sseOpts, sse.WithPollInterval(cfg.SSEPollInterval))
+				}
+				if cfg.SSESafetyTimeout > 0 {
+					sseOpts = append(sseOpts, sse.WithSafetyTimeout(cfg.SSESafetyTimeout))
+				}
+				if cfg.SSEMaxConcurrentStreams > 0 {
+					sseOpts = append(sseOpts, sse.WithMaxConcurrentStreams(cfg.SSEMaxConcurrentStreams))
+				}
+				streamHandler := sse.NewStreamHandler(cfg.EventStore, cfg.BuildStoreReader, sseOpts...)
 				r.Get("/api/v1/builds/{id}/stream", streamHandler.ServeHTTP)
 			}
 
@@ -124,25 +148,25 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.Get("/api/v1/secrets", secrets.List)
 			}
 
-			// Build routes
-			if cfg.BuildOrchestrator != nil {
-				builds := routes.NewBuildHandler(cfg.BuildOrchestrator, cfg.ArgoCallbackSecret, cfg.Logger, cfg.ShutdownCtx)
-
+			// Build routes — use the single BuildHandler from Config (C-08).
+			// A single instance ensures one callbackWg tracks all in-flight
+			// callbacks, so WaitForCallbacks drains them all on shutdown.
+			if cfg.BuildHandler != nil {
 				// GET does not need idempotency or rate limiting
-				r.Get("/api/v1/builds/{id}", builds.Get)
+				r.Get("/api/v1/builds/{id}", cfg.BuildHandler.Get)
 
 				// Mutating build routes with rate limiting + idempotency
-				r.With(mutationMiddlewares...).Post("/api/v1/builds", builds.Create)
-				r.With(mutationMiddlewares...).Post("/api/v1/builds/{id}/cancel", builds.Cancel)
+				r.With(mutationMiddlewares...).Post("/api/v1/builds", cfg.BuildHandler.Create)
+				r.With(mutationMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
 			}
 		})
 	}
 
 	// Callback route — uses shared secret auth, NOT OAuth middleware.
 	// Registered outside the auth group intentionally.
-	if cfg.BuildOrchestrator != nil && cfg.ArgoCallbackSecret != "" {
-		builds := routes.NewBuildHandler(cfg.BuildOrchestrator, cfg.ArgoCallbackSecret, cfg.Logger, cfg.ShutdownCtx)
-		r.Post("/api/v1/builds/{id}/callback", builds.Callback)
+	// Uses the same BuildHandler instance so callbackWg is shared (C-08).
+	if cfg.BuildHandler != nil && cfg.ArgoCallbackSecret != "" {
+		r.Post("/api/v1/builds/{id}/callback", cfg.BuildHandler.Callback)
 	}
 
 	return r
@@ -191,12 +215,16 @@ func Run(cfg Config) error {
 		cfg.Logger = slog.Default()
 	}
 
-	// A-05: Create a context that is cancelled when the server begins
-	// graceful shutdown. Background goroutines (callback processing) use
-	// this to drain in-flight work before the process exits.
-	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
-	defer shutdownCancel()
-	cfg.ShutdownCtx = shutdownCtx
+	// A-05: ShutdownCtx and ShutdownCancel are created in main.go and shared
+	// with all background goroutines (reaper, cleaner, pruner, callbacks).
+	// Run() calls ShutdownCancel on SIGTERM/SIGINT so goroutines stop before
+	// the connection pool closes.
+	if cfg.ShutdownCtx == nil || cfg.ShutdownCancel == nil {
+		// Safety fallback — should not happen in production.
+		ctx, cancel := context.WithCancel(context.Background())
+		cfg.ShutdownCtx = ctx
+		cfg.ShutdownCancel = cancel
+	}
 
 	router := NewRouter(cfg)
 
@@ -241,12 +269,16 @@ func Run(cfg Config) error {
 	select {
 	case sig := <-shutdown:
 		cfg.Logger.Info("shutdown signal received", "signal", sig.String())
-		shutdownCancel() // A-05: signal background goroutines to drain
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
 			return err
 		}
 	}
+
+	// Step 1: Cancel the shared shutdown context. This signals ALL background
+	// goroutines (reaper, cleaner, pruner, callback processors) to stop.
+	// They must exit before we close the connection pool.
+	cfg.ShutdownCancel()
 
 	shutdownTimeout := cfg.ShutdownTimeout
 	if shutdownTimeout == 0 {
@@ -257,10 +289,18 @@ func Run(cfg Config) error {
 
 	cfg.Logger.Info("shutting down gracefully")
 
-	// Shut down both servers
+	// Step 2: Wait for in-flight callbacks to drain (C-08).
+	// The BuildHandler tracks goroutines via callbackWg.
+	if cfg.BuildHandler != nil {
+		cfg.BuildHandler.WaitForCallbacks(shutdownTimeout / 2)
+	}
+
+	// Step 3: Shut down HTTP servers (drain in-flight requests).
 	if err := metricsSrv.Shutdown(ctx); err != nil {
 		cfg.Logger.Error("metrics server shutdown failed", "error", err)
 	}
 
+	// Step 4: After Run() returns, main.go's defer dbAdapter.Close() runs,
+	// closing the connection pool. By this point all goroutines have stopped.
 	return srv.Shutdown(ctx)
 }

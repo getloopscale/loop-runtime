@@ -157,8 +157,14 @@ func (o *BuildOrchestrator) phase2cRecordPushResult(ctx context.Context, build *
 			return nil
 		}
 
-		// Store the git commit SHA on the release (for audit trail)
-		_ = commitSHA // TODO: persist git_commit on release when UpdateGitCommit method is added
+		// LEVE-2: Persist the git commit SHA on the release for audit trail.
+		// This enables tracing: build → release → exact Gitea commit.
+		if commitSHA != "" {
+			if err := o.releaseStore.SetGitCommit(ctx, tx, release.ID, commitSHA); err != nil {
+				slog.Warn("failed to persist git_commit on release (non-fatal)",
+					"release_id", release.ID, "commit_sha", commitSHA, "error", err)
+			}
+		}
 
 		// Transition READY → PENDING via GitMirrorCompleted
 		if _, err := o.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseGitMirrorCompleted)); err != nil {
@@ -398,12 +404,15 @@ func (o *BuildOrchestrator) emitActivationFailure(ctx context.Context, buildID s
 	}
 }
 
-// deriveDeployID creates a deploy_id in the format d-{4hex} from a release ID.
-// Example: rel-8f3a2b1c → d-8f3a
+// deriveDeployID creates a deploy_id in the format d-{8hex} from a release ID.
+// MOD-5: Increased from 4 to 8 hex chars (32 bits) to reduce collision probability.
+// With 4 hex chars (16 bits), collisions were guaranteed after ~256 deploys.
+// With 8 hex chars (32 bits), birthday paradox gives 50% collision at ~65K deploys.
+// Example: rel-8f3a2b1c → d-8f3a2b1c
 func deriveDeployID(releaseID string) string {
 	hex := strings.TrimPrefix(releaseID, "rel-")
-	if len(hex) >= 4 {
-		return "d-" + hex[:4]
+	if len(hex) >= 8 {
+		return "d-" + hex[:8]
 	}
 	return "d-" + hex
 }

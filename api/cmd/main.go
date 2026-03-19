@@ -30,7 +30,17 @@ import (
 func main() {
 	logger := logging.NewLogger("api")
 	cfg := config.Load()
-	cfg.Validate() // C-03: warn about insecure defaults
+	// SEC-2: Validate() now returns error for fatal security violations (e.g., ARGOCD_INSECURE=true in production).
+	if err := cfg.Validate(); err != nil {
+		logger.Error("configuration validation failed", "error", err)
+		os.Exit(1)
+	}
+
+	// A-05: Create the shutdown context BEFORE starting any background goroutines.
+	// On SIGTERM/SIGINT, server.Run() calls shutdownCancel, which signals all
+	// goroutines to stop. Only after they exit does the connection pool close.
+	// Shutdown order: signal → cancel context → goroutines stop → server drains → pool closes.
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
 
 	// In production, fail fast if security-sensitive env vars are missing.
 	if cfg.IsProduction() {
@@ -230,7 +240,7 @@ func main() {
 				Interval:       cfg.BuildReaperInterval,
 			},
 		)
-		go reaper.Start(context.Background())
+		go reaper.Start(shutdownCtx)
 
 		// Idempotency cleaner — prunes expired keys every hour (A-08)
 		idempotencyCleaner := services.NewIdempotencyCleaner(
@@ -238,7 +248,7 @@ func main() {
 			logger,
 			1*time.Hour,
 		)
-		go idempotencyCleaner.Start(context.Background())
+		go idempotencyCleaner.Start(shutdownCtx)
 
 		// SSE event pruner — removes events older than 24h every hour (C-06)
 		eventPruner := sse.NewEventPruner(
@@ -247,7 +257,7 @@ func main() {
 			24*time.Hour,
 			1*time.Hour,
 		)
-		go eventPruner.Start(context.Background())
+		go eventPruner.Start(shutdownCtx)
 
 		logger.Info("sprint 2 dependencies wired — real implementations")
 	} else {
@@ -257,6 +267,14 @@ func main() {
 	// Rate limiter: 60 requests per minute per tenant (C-01).
 	// Generous for normal use but prevents abuse.
 	rateLimiter := middleware.NewRateLimiter(60, 1*time.Minute)
+
+	// C-08: Create a SINGLE BuildHandler instance shared between auth routes
+	// and the callback route. Two instances would have separate callbackWg,
+	// making WaitForCallbacks useless on shutdown.
+	var buildHandler *routes.BuildHandler
+	if buildOrchestrator != nil {
+		buildHandler = routes.NewBuildHandler(buildOrchestrator, argoCallbackSecret, logger, shutdownCtx)
+	}
 
 	srvCfg := server.Config{
 		Port:             cfg.Port,
@@ -274,16 +292,22 @@ func main() {
 			return nil
 		}(),
 		SourceStore:        sourceStore,
-		BuildOrchestrator:  buildOrchestrator,
 		ArgoCallbackSecret: argoCallbackSecret,
 		EventStore:         eventStore,
 		BuildStoreReader:   buildStoreReader,
 		SecretStore:        secretStore,
+		BuildHandler:       buildHandler,
+		ShutdownCtx:        shutdownCtx,
+		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,
-		ReadHeaderTimeout:  cfg.ReadHeaderTimeout,
-		ReadTimeout:        cfg.ReadTimeout,
-		IdleTimeout:        cfg.IdleTimeout,
-		ShutdownTimeout:    cfg.GracefulShutdownTime,
+		ReadHeaderTimeout:      cfg.ReadHeaderTimeout,
+		ReadTimeout:            cfg.ReadTimeout,
+		IdleTimeout:            cfg.IdleTimeout,
+		ShutdownTimeout:        cfg.GracefulShutdownTime,
+		SSEHeartbeatInterval:    cfg.SSEHeartbeatInterval,
+		SSEPollInterval:         cfg.SSEPollInterval,
+		SSESafetyTimeout:        cfg.SSESafetyTimeout,
+		SSEMaxConcurrentStreams: int64(cfg.SSEMaxConcurrentStreams),
 	}
 
 	if err := server.Run(srvCfg); err != nil {
