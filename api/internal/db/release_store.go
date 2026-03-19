@@ -41,6 +41,7 @@ type ReleaseStore interface {
 	GetByID(ctx context.Context, id string) (*Release, error)
 	UpdateStatus(ctx context.Context, tx DBTX, id string, event string) (*Release, error)
 	GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*Release, error)
+	GetActiveByEnvTx(ctx context.Context, tx DBTX, tenantID, projectID, env string) (*Release, error)
 }
 
 // PostgresReleaseStore implements ReleaseStore using PostgreSQL.
@@ -144,6 +145,27 @@ func (s *PostgresReleaseStore) GetActiveByEnv(ctx context.Context, tenantID, pro
 	if err != nil {
 		if errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
 			return nil, nil // Not found is not an error for GetActiveByEnv
+		}
+		return nil, err
+	}
+	return release, nil
+}
+
+// GetActiveByEnvTx retrieves the active release using the provided transaction.
+// MOD-4 fix: ensures consistent read within the advisory lock transaction.
+func (s *PostgresReleaseStore) GetActiveByEnvTx(ctx context.Context, tx DBTX, tenantID, projectID, env string) (*Release, error) {
+	release, err := s.scanRelease(tx.QueryRow(ctx,
+		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
+		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
+		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
+		        COALESCE(side_effects, 'null'::jsonb)
+		 FROM releases
+		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND status = 'ACTIVE'`,
+		tenantID, projectID, env,
+	))
+	if err != nil {
+		if errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
+			return nil, nil
 		}
 		return nil, err
 	}

@@ -216,8 +216,14 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			Apps:          req.Apps,
 			CorrelationID: req.CorrelationID,
 		}
-		if _, err := o.workflow.Submit(ctx, wfSpec); err != nil {
+		workflowID, err := o.workflow.Submit(ctx, wfSpec)
+		if err != nil {
 			return fmt.Errorf("submit build: submit workflow: %w", err)
+		}
+
+		// Persist workflow ID for startup reconciler and cancel (BLOCKER-1 fix)
+		if err := o.buildStore.SetWorkflowID(ctx, tx, build.ID, workflowID); err != nil {
+			return fmt.Errorf("submit build: set workflow id: %w", err)
 		}
 
 		// Step 5: transition QUEUED → RUNNING
@@ -451,11 +457,10 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		return nil
 	}
 
-	// Phase 2 (Lock 2): Release activation (create release, sync, health probe).
-	// If this fails, we handle the error gracefully — the build is already SUCCEEDED.
-	activationErr := o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
-		return o.activateRelease(ctx, tx, build, result)
-	})
+	// Phase 2: Release activation (create release, gitops push, sync, health probe).
+	// BLOCKER-2 fix: each sub-phase acquires/releases its own lock. External I/O
+	// (gitops push, ArgoCD sync, health probes) runs OUTSIDE locks.
+	activationErr := o.activateRelease(ctx, build, result)
 
 	if activationErr != nil {
 		// Activation failed — emit deploy failure event so the CLI knows.

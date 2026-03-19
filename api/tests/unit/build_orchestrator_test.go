@@ -83,6 +83,14 @@ func (f *fakeBuildStoreOrch) UpdateStatus(ctx context.Context, tx db.DBTX, id st
 	return &copy, nil
 }
 
+func (f *fakeBuildStoreOrch) SetWorkflowID(_ context.Context, _ db.DBTX, id string, wfID string) error {
+	if b, ok := f.builds[id]; ok {
+		b.WorkflowID = wfID
+		return nil
+	}
+	return fmt.Errorf("build not found: %s", id)
+}
+
 func (f *fakeBuildStoreOrch) SetErrorMessage(ctx context.Context, tx db.DBTX, id string, errorMessage string) error {
 	if b, ok := f.builds[id]; ok {
 		b.ErrorMessage = errorMessage
@@ -180,6 +188,10 @@ func (f *fakeReleaseStoreOrch) GetActiveByEnv(ctx context.Context, tenantID, pro
 	}
 	copy := *r
 	return &copy, nil
+}
+
+func (f *fakeReleaseStoreOrch) GetActiveByEnvTx(_ context.Context, _ db.DBTX, tenantID, projectID, env string) (*db.Release, error) {
+	return f.GetActiveByEnv(context.Background(), tenantID, projectID, env)
 }
 
 // setActiveByEnv manually sets an active release (for test setup).

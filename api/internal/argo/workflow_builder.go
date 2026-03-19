@@ -1,6 +1,7 @@
 package argo
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -10,14 +11,15 @@ import (
 // InfraParams holds infrastructure-level parameters that are injected into every workflow.
 // These come from the API config and are not language-specific.
 type InfraParams struct {
-	CallbackURL    string
-	CallbackSecret string
-	GiteaURL       string
-	GiteaToken     string
-	MinIOEndpoint  string
-	MinIOAccessKey string
-	MinIOSecretKey string
-	RegistryURL    string
+	CallbackURL      string
+	CallbackSecret   string
+	GiteaURL         string
+	GiteaToken       string
+	MinIOEndpoint    string
+	MinIOAccessKey   string
+	MinIOSecretKey   string
+	RegistryURL      string
+	RegistryInsecure bool // true for local dev registries without TLS
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs
@@ -135,12 +137,13 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy Lang
 
 		// Step 4: kaniko (CWT ref) — depends on dockerfile
 		cwtTask("build-image", "loopzero-kaniko", "build-image", []string{"generate-dockerfile"}, map[string]string{
-			"registry-url":   b.infraParams.RegistryURL,
-			"tenant-id":      spec.TenantID,
-			"project-id":     spec.ProjectID,
-			"commit-sha":     spec.CommitSHA,
-			"dockerfile-path": "/workspace/Dockerfile",
-			"context-path":   "/workspace",
+			"registry-url":      b.infraParams.RegistryURL,
+			"tenant-id":         spec.TenantID,
+			"project-id":        spec.ProjectID,
+			"commit-sha":        spec.CommitSHA,
+			"dockerfile-path":   "/workspace/Dockerfile",
+			"context-path":      "/workspace",
+			"registry-insecure": fmt.Sprintf("%v", b.infraParams.RegistryInsecure),
 		}),
 
 		// Step 5: generate manifests (CWT ref) — depends on kaniko
@@ -310,24 +313,15 @@ func resolveStrategyFromApps(apps []services.AppSpec) LanguageStrategy {
 }
 
 // appsJSON serializes apps to JSON for passing as a workflow parameter.
+// Uses json.Marshal for correct escaping of special characters (LEVE-1 fix).
 func appsJSON(apps []services.AppSpec) string {
 	if len(apps) == 0 {
 		return "[]"
 	}
-	// Manual JSON to avoid import cycle and keep it simple.
-	// The generate-manifests CWT uses Node.js to parse this.
-	parts := make([]string, len(apps))
-	for i, a := range apps {
-		secrets := "[]"
-		if len(a.Secrets) > 0 {
-			secretParts := make([]string, len(a.Secrets))
-			for j, s := range a.Secrets {
-				secretParts[j] = fmt.Sprintf("%q", s)
-			}
-			secrets = "[" + strings.Join(secretParts, ",") + "]"
-		}
-		parts[i] = fmt.Sprintf(`{"name":%q,"type":%q,"port":%d,"path":%q,"framework":%q,"secrets":%s}`,
-			a.Name, a.Type, a.Port, a.Path, a.Framework, secrets)
+	data, err := json.Marshal(apps)
+	if err != nil {
+		// Fallback to empty array — should never happen with AppSpec types
+		return "[]"
 	}
-	return "[" + strings.Join(parts, ",") + "]"
+	return string(data)
 }

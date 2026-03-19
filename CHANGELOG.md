@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `BuildStore.SetWorkflowID()` persists Argo Workflow name on build record — startup reconciler and cancel now correctly correlate builds with external workflows (#BUILD-BLOCKER-1)
+- `ReleaseStore.GetActiveByEnvTx()` reads active release within advisory lock transaction — eliminates read-outside-tx race in release supersession (#BUILD-MOD-4)
+- Kaniko `registry-insecure` parameter — `--insecure` and `--skip-tls-verify` flags now controlled per-workflow via parameter instead of hardcoded in CWT (#BUILD-BLOCKER-3)
+- Retry with exponential backoff in `WorkflowSubmitter.Submit()` for transient K8s API server errors — 3 attempts with 1s/2s/4s delays (#BUILD-MOD-1)
+- Build reaper now emits `build.failed` SSE events for reaped builds — CLI gets notified immediately instead of waiting 10 minutes (#BUILD-MOD-5)
+- 60-second context timeout on GitOps push operations — prevents indefinite hangs when Gitea is unresponsive (#BUILD-MOD-2)
+- Token sanitization in gitops pusher logs — Gitea credentials are masked in error output (#BUILD-SEC-3)
 - `getBuildStatus` fallback in CLI deploy — verifies actual build state via API when SSE stream breaks, preventing false timeout failures (#CLI-BLOCKER-1)
 - Retry with exponential backoff in `ApiClient` for transient server errors (502/503/504) and network errors — 3 attempts with 1s/2s/4s delays (#CLI-MOD-3)
 - `User-Agent: loopzero-cli/<version>` header on all API requests for server-side debugging and version tracking (#CLI-LEVE-5)
@@ -16,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `maxRetries` option on `ApiClient` — allows disabling retries in tests (#CLI-MOD-3)
 
 ### Changed
+- **Phase 2 release activation refactored to release-lock-between-I/O pattern** — GitOps push, ArgoCD sync, and health probes now run OUTSIDE advisory locks; locks held only for millisecond DB state mutations (#BUILD-BLOCKER-2)
+- `WorkflowSubmitter.Submit()` now persists returned workflow name via `SetWorkflowID` — startup reconciler and cancel correctly reference external workflows (#BUILD-BLOCKER-1)
+- `appsJSON()` now uses `json.Marshal` instead of manual `fmt.Sprintf` string concatenation — eliminates JSON injection risk from special characters in app names (#BUILD-LEVE-1)
 - `createGitBundle` now uses async `execFile` instead of `execSync` — event loop no longer blocked during bundle creation, SIGINT works on large repos (#CLI-BLOCKER-2)
 - Source upload now uses configurable `UPLOAD_TIMEOUT_MS` constant instead of hardcoded 30s — `LOOPZERO_UPLOAD_TIMEOUT` env var is now functional (#CLI-BLOCKER-3)
 - `checkSensitiveFiles` now uses git pathspec filtering instead of listing all tracked files — efficient on large repos (#CLI-MOD-2)

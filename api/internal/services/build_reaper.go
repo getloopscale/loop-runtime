@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -51,16 +52,22 @@ type BuildReaper struct {
 	buildStore db.BuildStore
 	checker    BuildStaleChecker
 	locker     EnvironmentLocker
-	logger     *slog.Logger
-	cfg        BuildReaperConfig
+	eventStore interface {
+		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
+	}
+	logger *slog.Logger
+	cfg    BuildReaperConfig
 }
 
 // NewBuildReaper creates a new BuildReaper.
-func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker EnvironmentLocker, logger *slog.Logger, cfg BuildReaperConfig) *BuildReaper {
+func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker EnvironmentLocker, eventStore interface {
+	Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
+}, logger *slog.Logger, cfg BuildReaperConfig) *BuildReaper {
 	return &BuildReaper{
 		buildStore: buildStore,
 		checker:    checker,
 		locker:     locker,
+		eventStore: eventStore,
 		logger:     logger,
 		cfg:        cfg,
 	}
@@ -147,6 +154,31 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 			r.logger.Error("build reaper: failed to transition build",
 				"build_id", s.ID, "from", s.State, "event", s.Event, "error", err)
 			continue
+		}
+
+		// MOD-5: Emit SSE build.failed so the CLI gets notified immediately
+		// instead of waiting for the deploy timeout (10 minutes).
+		if r.eventStore != nil {
+			var reason string
+			switch s.Event {
+			case statemachine.BuildQueueTimeout:
+				reason = "Build timed out while waiting in queue (5 min limit)"
+			case statemachine.BuildTimeout:
+				reason = "Build timed out while running (30 min limit)"
+			case statemachine.BuildCancelTimeout:
+				reason = "Build cancellation timed out (60s limit)"
+			default:
+				reason = "Build reaped due to timeout"
+			}
+			eventData, _ := json.Marshal(map[string]string{
+				"build_id": s.ID,
+				"status":   "failed",
+				"error":    reason,
+			})
+			if _, err := r.eventStore.Append(ctx, s.ID, "build.failed", eventData); err != nil {
+				r.logger.Error("build reaper: failed to emit SSE event",
+					"build_id", s.ID, "error", err)
+			}
 		}
 
 		r.logger.Warn("build reaper: reaped stale build",

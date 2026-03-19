@@ -192,15 +192,38 @@ func (p *GiteaGitOpsPusher) authenticatedURL(repoName string) string {
 }
 
 // gitCmd runs a git command in the specified directory.
+// SEC-3: Output is sanitized to prevent token leakage in logs.
 func (p *GiteaGitOpsPusher) gitCmd(ctx context.Context, dir string, args ...string) error {
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s: %w (output: %s)", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
+		sanitized := p.sanitizeOutput(string(output))
+		safeArgs := p.sanitizeArgs(args)
+		return fmt.Errorf("%s: %w (output: %s)", strings.Join(safeArgs, " "), err, strings.TrimSpace(sanitized))
 	}
 	return nil
+}
+
+// sanitizeOutput removes the Gitea token from git command output to prevent leakage in logs.
+func (p *GiteaGitOpsPusher) sanitizeOutput(output string) string {
+	if p.token == "" {
+		return output
+	}
+	return strings.ReplaceAll(output, p.token, "***")
+}
+
+// sanitizeArgs removes credentials from git command arguments for safe logging.
+func (p *GiteaGitOpsPusher) sanitizeArgs(args []string) []string {
+	if p.token == "" {
+		return args
+	}
+	safe := make([]string, len(args))
+	for i, arg := range args {
+		safe[i] = strings.ReplaceAll(arg, p.token, "***")
+	}
+	return safe
 }
 
 // gitOutput runs a git command and returns stdout trimmed.

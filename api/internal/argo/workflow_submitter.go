@@ -4,14 +4,21 @@ package argo
 import (
 	"context"
 	"fmt"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/loopzero/loopzero/api/internal/services"
+)
+
+const (
+	submitMaxRetries    = 3
+	submitBaseDelay     = 1 * time.Second
 )
 
 var workflowGVR = schema.GroupVersionResource{
@@ -84,14 +91,10 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 }
 
 // Submit generates a self-contained Workflow CR via the WorkflowBuilder and creates it
-// in the build cluster. The generated workflow contains CWT refs for reusable steps
-// (clone, cache, kaniko, manifests, notify) and inline templates for language-specific
-// steps (validate, install, build, scan, dockerfile).
+// in the build cluster with retry for transient errors.
 func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSpec) (string, error) {
-	// Build the complete Workflow CR using the composable builder
 	wfObject := s.builder.Build(spec)
 
-	// Set namespace on the generated workflow
 	meta, ok := wfObject["metadata"].(map[string]interface{})
 	if ok {
 		meta["namespace"] = s.namespace
@@ -99,12 +102,35 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 
 	workflow := &unstructured.Unstructured{Object: wfObject}
 
-	created, err := s.client.Resource(workflowGVR).Namespace(s.namespace).Create(ctx, workflow, metav1.CreateOptions{})
-	if err != nil {
+	var lastErr error
+	for attempt := 0; attempt <= submitMaxRetries; attempt++ {
+		if attempt > 0 {
+			delay := submitBaseDelay * time.Duration(1<<(attempt-1))
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		created, err := s.client.Resource(workflowGVR).Namespace(s.namespace).Create(ctx, workflow, metav1.CreateOptions{})
+		if err == nil {
+			return created.GetName(), nil
+		}
+
+		lastErr = err
+
+		// Only retry on transient server errors (5xx), not client errors (4xx)
+		if k8serrors.IsServerTimeout(err) || k8serrors.IsServiceUnavailable(err) ||
+			k8serrors.IsTooManyRequests(err) || k8serrors.IsInternalError(err) {
+			continue
+		}
+
+		// Non-retryable error — fail immediately
 		return "", fmt.Errorf("argo: create workflow: %w", err)
 	}
 
-	return created.GetName(), nil
+	return "", fmt.Errorf("argo: create workflow after %d retries: %w", submitMaxRetries, lastErr)
 }
 
 // Cancel stops a running workflow by setting its shutdown strategy.

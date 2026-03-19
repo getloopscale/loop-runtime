@@ -66,6 +66,15 @@ func (f *fakeReconcilerBuildStore) UpdateStatus(_ context.Context, _ db.DBTX, id
 	return &c, nil
 }
 
+func (f *fakeReconcilerBuildStore) SetWorkflowID(_ context.Context, _ db.DBTX, id string, wfID string) error {
+	b, ok := f.builds[id]
+	if !ok {
+		return errors.New("build not found")
+	}
+	b.WorkflowID = wfID
+	return nil
+}
+
 func (f *fakeReconcilerBuildStore) SetErrorMessage(_ context.Context, _ db.DBTX, id string, msg string) error {
 	b, ok := f.builds[id]
 	if !ok {

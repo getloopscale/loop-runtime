@@ -41,6 +41,7 @@ type BuildStore interface {
 	HasActiveBuild(ctx context.Context, tx DBTX, tenantID, projectID, env string) (bool, error)
 	UpdateStatus(ctx context.Context, tx DBTX, id string, event string) (*Build, error)
 	SetErrorMessage(ctx context.Context, tx DBTX, id string, errorMessage string) error
+	SetWorkflowID(ctx context.Context, tx DBTX, id string, workflowID string) error
 	ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error)
 	FindActiveBuilds(ctx context.Context) ([]Build, error)
 }
@@ -165,6 +166,27 @@ func (s *PostgresBuildStore) SetErrorMessage(ctx context.Context, tx DBTX, build
 	)
 	if err != nil {
 		return fmt.Errorf("build store: set error message failed: %w", err)
+	}
+	if result.RowsAffected == 0 {
+		return loopzeroerrors.ErrBuildNotFound
+	}
+	return nil
+}
+
+// SetWorkflowID stores the Argo Workflow name for a build.
+// Called immediately after workflow submission so the startup reconciler
+// and cancel flow can correlate builds with their external workflows.
+func (s *PostgresBuildStore) SetWorkflowID(ctx context.Context, tx DBTX, buildID string, workflowID string) error {
+	executor := tx
+	if executor == nil {
+		executor = s.db
+	}
+	result, err := executor.Exec(ctx,
+		`UPDATE builds SET workflow_id = $1 WHERE id = $2`,
+		workflowID, buildID,
+	)
+	if err != nil {
+		return fmt.Errorf("build store: set workflow id failed: %w", err)
 	}
 	if result.RowsAffected == 0 {
 		return loopzeroerrors.ErrBuildNotFound

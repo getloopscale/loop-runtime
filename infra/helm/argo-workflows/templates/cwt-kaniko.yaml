@@ -25,6 +25,9 @@ spec:
           - name: context-path
             description: "Build context path"
             default: "/workspace"
+          - name: registry-insecure
+            description: "Set to 'true' for local dev registries without TLS. MUST be 'false' in production."
+            default: "false"
       retryStrategy:
         limit: "3"
         retryPolicy: "OnFailure"
@@ -32,24 +35,29 @@ spec:
           duration: "5s"
           factor: "2"
           maxDuration: "60s"
-      container:
+      # Script template to conditionally add --insecure flags based on parameter.
+      # This avoids hardcoding dev-only flags that compromise production supply chain.
+      script:
         image: gcr.io/kaniko-project/executor:v1.23.2
         command:
-          - /kaniko/executor
-        args:
-          - --dockerfile={{inputs.parameters.dockerfile-path}}
-          - --context={{inputs.parameters.context-path}}
-          - --destination={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}:{{inputs.parameters.commit-sha}}
-          - --cache=true
-          - --cache-repo={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/cache
-          - --snapshot-mode=redo
-          - --compressed-caching=false
-          # DEV-ONLY: --insecure and --skip-tls-verify are for local k3d registry
-          # which does not have valid TLS certificates.
-          # PRODUCTION: Remove these two flags. Registry must have valid TLS certs.
-          - --insecure
-          - --skip-tls-verify
-          - --digest-file=/workspace/image-digest.txt
+          - /bin/sh
+          - -c
+        source: |
+          ARGS="--dockerfile={{inputs.parameters.dockerfile-path}}"
+          ARGS="$ARGS --context={{inputs.parameters.context-path}}"
+          ARGS="$ARGS --destination={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}:{{inputs.parameters.commit-sha}}"
+          ARGS="$ARGS --cache=true"
+          ARGS="$ARGS --cache-repo={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/cache"
+          ARGS="$ARGS --snapshot-mode=redo"
+          ARGS="$ARGS --compressed-caching=false"
+          ARGS="$ARGS --digest-file=/workspace/image-digest.txt"
+
+          if [ "{{inputs.parameters.registry-insecure}}" = "true" ]; then
+            echo "WARNING: Running with --insecure and --skip-tls-verify (dev mode)"
+            ARGS="$ARGS --insecure --skip-tls-verify"
+          fi
+
+          exec /kaniko/executor $ARGS
         volumeMounts:
           - name: workspace
             mountPath: /workspace

@@ -222,6 +222,7 @@ func main() {
 			buildStore,
 			&services.PostgresStaleBuildChecker{DB: dbAdapter},
 			locker,
+			eventStore,
 			logger,
 			services.BuildReaperConfig{
 				QueueTimeout:   cfg.BuildQueueTimeout,
