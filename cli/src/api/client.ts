@@ -21,6 +21,61 @@ export class ApiError extends Error {
     this.statusCode = statusCode;
     this.code = code ?? 'API_ERROR';
   }
+
+  /**
+   * Single source of truth for HTTP status → exit code + message mapping.
+   * Used by both ApiClient and source-upload adapter to avoid divergence.
+   */
+  static fromHttpStatus(status: number, serverMessage?: string | null, serverCode?: string): ApiError {
+    if (status === 401) {
+      return new ApiError(
+        serverMessage || 'Not authenticated. Run: loopzero login',
+        4, status, serverCode ?? 'AUTH_REQUIRED',
+      );
+    }
+    if (status === 403) {
+      return new ApiError(
+        serverMessage || 'Permission denied. Check your account access.',
+        4, status, serverCode ?? 'PERMISSION_DENIED',
+      );
+    }
+    if (status === 409) {
+      return new ApiError(
+        serverMessage
+          ? `${serverMessage} Wait for it to complete, or try again later.`
+          : 'A deploy is already in progress for this environment. Wait for it to complete, or try again later.',
+        3, status, serverCode ?? 'DEPLOY_IN_PROGRESS',
+      );
+    }
+    if (status === 422) {
+      return new ApiError(
+        serverMessage || 'Invalid request. Check your command arguments.',
+        1, status, serverCode ?? 'VALIDATION_FAILED',
+      );
+    }
+    if (status >= 500) {
+      if (serverCode === 'AUTH_SERVICE_UNAVAILABLE') {
+        return new ApiError(
+          serverMessage || 'Authentication service is temporarily unavailable. Try again in a moment.',
+          4, status, 'AUTH_SERVICE_UNAVAILABLE',
+        );
+      }
+      return new ApiError(
+        serverMessage || 'Service unavailable. Try again in a moment.',
+        3, status, serverCode ?? 'SERVICE_UNAVAILABLE',
+      );
+    }
+    if (status >= 400 && status < 500) {
+      return new ApiError(
+        serverMessage || `Request failed (HTTP ${status}). Check your command arguments.`,
+        1, status, serverCode ?? 'API_ERROR',
+      );
+    }
+    return new ApiError(
+      serverMessage || `Request failed (HTTP ${status}).`,
+      3, status, serverCode ?? 'API_ERROR',
+    );
+  }
 }
 
 export class ApiClient {
@@ -100,66 +155,6 @@ export class ApiClient {
     status: number,
     body?: { code?: string; message?: string } | null,
   ): ApiError {
-    const serverMessage = body?.message ?? null;
-    const serverCode = body?.code ?? undefined;
-
-    switch (status) {
-      case 401:
-        return new ApiError(
-          serverMessage || 'Not authenticated. Run: loopzero login',
-          4,
-          status,
-          serverCode ?? 'AUTH_REQUIRED',
-        );
-      case 403:
-        return new ApiError(
-          serverMessage || 'Permission denied. Check your account access.',
-          4,
-          status,
-          serverCode ?? 'PERMISSION_DENIED',
-        );
-      case 409:
-        // Exit code 3 (deploy failure): the deploy was rejected due to conflict.
-        // A concurrent deploy is already in progress — this is a deploy-level failure.
-        return new ApiError(
-          (serverMessage
-            ? `${serverMessage} Wait for it to complete, or try again later.`
-            : 'A deploy is already in progress for this environment. Wait for it to complete, or try again later.'),
-          3,
-          status,
-          serverCode ?? 'DEPLOY_IN_PROGRESS',
-        );
-      case 422:
-        return new ApiError(
-          serverMessage || 'Invalid request. Check your command arguments.',
-          1,
-          status,
-          serverCode ?? 'VALIDATION_FAILED',
-        );
-      default:
-        if (status >= 500) {
-          // F-04/F-06: Auth service errors are exit code 4 (auth), not 3 (deploy failure)
-          if (serverCode === 'AUTH_SERVICE_UNAVAILABLE') {
-            return new ApiError(
-              serverMessage || 'Authentication service is temporarily unavailable. Try again in a moment.',
-              4,
-              status,
-              'AUTH_SERVICE_UNAVAILABLE',
-            );
-          }
-          return new ApiError(
-            serverMessage || 'Service unavailable. Try again in a moment.',
-            3,
-            status,
-            serverCode ?? 'SERVICE_UNAVAILABLE',
-          );
-        }
-        return new ApiError(
-          serverMessage || `Request failed (HTTP ${status}).`,
-          3,
-          status,
-          serverCode ?? 'API_ERROR',
-        );
-    }
+    return ApiError.fromHttpStatus(status, body?.message, body?.code);
   }
 }

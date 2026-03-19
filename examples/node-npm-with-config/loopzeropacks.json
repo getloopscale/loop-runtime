@@ -1,0 +1,10 @@
+{
+  // Custom configuration for this project
+  "deploy": {
+    "startCommand": "node server.js",
+    "aptPackages": ["curl"]
+  },
+  "packages": {
+    "node": "20"
+  }
+}

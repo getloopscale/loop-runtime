@@ -112,35 +112,10 @@ export async function uploadSource(
       // Non-JSON response body — use fallback message
     }
 
-    // Auth service errors (503 with AUTH_SERVICE_UNAVAILABLE) → exit code 4
-    const exitCode = mapStatusToExitCode(resp.status, serverCode);
-    const fallback = defaultMessageForStatus(resp.status);
-    throw new ApiError(serverMessage ?? fallback, exitCode, resp.status, serverCode);
+    // Reuse the same exit code mapping as ApiClient.mapError to avoid
+    // divergence (previously had a duplicate mapStatusToExitCode here).
+    throw ApiError.fromHttpStatus(resp.status, serverMessage, serverCode);
   }
 
   return resp.json() as Promise<UploadResult>;
-}
-
-function mapStatusToExitCode(status: number, serverCode?: string): number {
-  if (status === 401 || status === 403) return 4;
-  // Auth service unavailable (e.g., GitHub API unreachable) is an auth error, not a deploy error
-  if (serverCode === 'AUTH_SERVICE_UNAVAILABLE') return 4;
-  if (status >= 400 && status < 500) return 1;
-  return 3;
-}
-
-function defaultMessageForStatus(status: number): string {
-  switch (status) {
-    case 401:
-      return 'Not authenticated. Run: loopzero login';
-    case 403:
-      return 'Permission denied. Check your account access.';
-    case 422:
-      return 'Invalid request. Check your command arguments.';
-    default:
-      if (status >= 500) {
-        return 'Service unavailable. Try again in a moment.';
-      }
-      return `Upload failed (HTTP ${status}). Check your command arguments.`;
-  }
 }

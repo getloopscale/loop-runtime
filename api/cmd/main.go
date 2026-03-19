@@ -184,7 +184,7 @@ func main() {
 			OpenThreshold:  cfg.CBOpenThreshold,
 			CloseThreshold: cfg.CBCloseThreshold,
 			RetryInterval:  cfg.CBRetryInterval,
-		})
+		}, logger)
 
 		// GitOps pusher — commits manifests to Gitea after build succeeds
 		gitopsPusher := gitops.NewGiteaGitOpsPusher(gitops.GiteaGitOpsPusherConfig{

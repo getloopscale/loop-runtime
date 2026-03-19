@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -23,6 +24,7 @@ type CircuitBreakerStore interface {
 type PGCircuitBreakerSyncClient struct {
 	inner          SyncClient
 	store          CircuitBreakerStore
+	logger         *slog.Logger
 	key            string
 	openThreshold  int
 	closeThreshold int
@@ -38,10 +40,11 @@ type PGCircuitBreakerConfig struct {
 }
 
 // NewPGCircuitBreakerSyncClient creates a PG-backed circuit breaker wrapping a SyncClient.
-func NewPGCircuitBreakerSyncClient(inner SyncClient, store CircuitBreakerStore, cfg PGCircuitBreakerConfig) *PGCircuitBreakerSyncClient {
+func NewPGCircuitBreakerSyncClient(inner SyncClient, store CircuitBreakerStore, cfg PGCircuitBreakerConfig, logger *slog.Logger) *PGCircuitBreakerSyncClient {
 	return &PGCircuitBreakerSyncClient{
 		inner:          inner,
 		store:          store,
+		logger:         logger,
 		key:            cfg.Key,
 		openThreshold:  cfg.OpenThreshold,
 		closeThreshold: cfg.CloseThreshold,
@@ -95,10 +98,22 @@ func (cb *PGCircuitBreakerSyncClient) preCheck(ctx context.Context) error {
 }
 
 // recordResult updates the circuit breaker state in PostgreSQL.
+// Errors are logged but do not fail the caller — the sync result itself
+// is more important than the circuit breaker bookkeeping.
 func (cb *PGCircuitBreakerSyncClient) recordResult(ctx context.Context, err error) {
 	if err != nil {
-		_, _ = cb.store.RecordFailure(ctx, cb.key, cb.openThreshold)
+		if _, storeErr := cb.store.RecordFailure(ctx, cb.key, cb.openThreshold); storeErr != nil {
+			cb.logger.Error("circuit breaker: failed to record failure",
+				"key", cb.key,
+				"error", storeErr,
+			)
+		}
 	} else {
-		_, _ = cb.store.RecordSuccess(ctx, cb.key, cb.closeThreshold)
+		if _, storeErr := cb.store.RecordSuccess(ctx, cb.key, cb.closeThreshold); storeErr != nil {
+			cb.logger.Error("circuit breaker: failed to record success",
+				"key", cb.key,
+				"error", storeErr,
+			)
+		}
 	}
 }
