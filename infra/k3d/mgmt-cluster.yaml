@@ -10,7 +10,7 @@ ports:
   - port: 3000:30000
     nodeFilters:
       - loadbalancer
-  - port: 3001:30001
+  - port: 13001:30001
     nodeFilters:
       - loadbalancer
   - port: 3002:30002

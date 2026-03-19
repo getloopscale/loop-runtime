@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-var buildIDRegexp = regexp.MustCompile(`^build-[0-9a-f]{8}$`)
-var releaseIDRegexp = regexp.MustCompile(`^rel-[0-9a-f]{8}$`)
+var buildIDRegexp = regexp.MustCompile(`^build-[0-9a-f]{16}$`)
+var releaseIDRegexp = regexp.MustCompile(`^rel-[0-9a-f]{16}$`)
 
 func TestGenerateBuildID(t *testing.T) {
-	t.Run("returns build-{8hex} format", func(t *testing.T) {
+	t.Run("returns build-{16hex} format", func(t *testing.T) {
 		id := GenerateBuildID()
 		if !buildIDRegexp.MatchString(id) {
-			t.Errorf("expected build-{8hex}, got %q", id)
+			t.Errorf("expected build-{16hex}, got %q", id)
 		}
 	})
 
@@ -29,10 +29,10 @@ func TestGenerateBuildID(t *testing.T) {
 }
 
 func TestGenerateReleaseID(t *testing.T) {
-	t.Run("returns rel-{8hex} format", func(t *testing.T) {
+	t.Run("returns rel-{16hex} format", func(t *testing.T) {
 		id := GenerateReleaseID()
 		if !releaseIDRegexp.MatchString(id) {
-			t.Errorf("expected rel-{8hex}, got %q", id)
+			t.Errorf("expected rel-{16hex}, got %q", id)
 		}
 	})
 

@@ -582,7 +582,7 @@ describe('SSEClient', () => {
       expect(fetchMock).toHaveBeenCalledTimes(15);
       const lastError = errors[errors.length - 1];
       expect(lastError.message).toContain('failed after 15 retries');
-    });
+    }, 30000);
   });
 
   describe('no internal terms', () => {

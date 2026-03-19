@@ -54,44 +54,47 @@ echo "Gitea token: ${#GITEA_TOKEN} chars"
 #
 # Unlike admin session tokens (/api/v1/session), apiKey tokens do NOT expire.
 # This eliminates silent 24h expiration that broke all deploys.
-echo "Creating ArgoCD API token (loopzero-api account, non-expiring)..."
-ARGOCD_PASS=$(kubectl --context "$MGMT_CTX" -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)
+#
+# ArgoCD is optional — not needed until Sprint 2.
+ARGOCD_TOKEN=""
+if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1; then
+  echo "Creating ArgoCD API token (loopzero-api account, non-expiring)..."
+  ARGOCD_PASS=$(kubectl --context "$MGMT_CTX" -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null)
 
-kubectl --context "$MGMT_CTX" port-forward -n argocd svc/argocd-server 18080:80 &
-ARGOCD_PORT_FORWARD_PID=$!
-sleep 2
+  if [ -n "$ARGOCD_PASS" ]; then
+    kubectl --context "$MGMT_CTX" port-forward -n argocd svc/argocd-server 18080:80 &
+    ARGOCD_PORT_FORWARD_PID=$!
+    sleep 2
 
-# Step 1: Admin login to get temporary session (just for generating the service token)
-ADMIN_SESSION=$(curl -s -X POST "http://localhost:18080/api/v1/session" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"admin\",\"password\":\"$ARGOCD_PASS\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+    # Step 1: Admin login to get temporary session (just for generating the service token)
+    ADMIN_SESSION=$(curl -s -X POST "http://localhost:18080/api/v1/session" \
+      -H "Content-Type: application/json" \
+      -d "{\"username\":\"admin\",\"password\":\"$ARGOCD_PASS\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
 
-if [ -z "$ADMIN_SESSION" ]; then
-  echo "ERROR: Failed to get admin session. Is ArgoCD running?"
-  echo "  Ensure the ArgoCD Helm chart has been upgraded with the loopzero-api account:"
-  echo "    helm upgrade argocd infra/helm/argocd/ -n argocd"
-  kill "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null; wait "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null || true
-  exit 1
+    if [ -z "$ADMIN_SESSION" ]; then
+      echo "WARNING: Failed to get ArgoCD admin session. Skipping ArgoCD token (not needed until Sprint 2)."
+    else
+      # Step 2: Generate non-expiring API token for loopzero-api account
+      # expiresIn=0 means the token never expires (ArgoCD default for apiKey accounts)
+      ARGOCD_TOKEN=$(curl -s -X POST "http://localhost:18080/api/v1/account/loopzero-api/token" \
+        -H "Authorization: Bearer $ADMIN_SESSION" \
+        -H "Content-Type: application/json" \
+        -d "{\"expiresIn\":0,\"id\":\"loopzero-api-$(date +%s)\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+
+      if [ -z "$ARGOCD_TOKEN" ]; then
+        echo "WARNING: Failed to generate loopzero-api token. Skipping ArgoCD token (not needed until Sprint 2)."
+      else
+        echo "ArgoCD token: ${#ARGOCD_TOKEN} chars (non-expiring, loopzero-api account)"
+      fi
+    fi
+
+    kill "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null; wait "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null || true
+  else
+    echo "WARNING: ArgoCD namespace exists but admin secret not found. Skipping ArgoCD token."
+  fi
+else
+  echo "WARNING: ArgoCD namespace not found. Skipping ArgoCD token (not needed until Sprint 2)."
 fi
-
-# Step 2: Generate non-expiring API token for loopzero-api account
-# expiresIn=0 means the token never expires (ArgoCD default for apiKey accounts)
-ARGOCD_TOKEN=$(curl -s -X POST "http://localhost:18080/api/v1/account/loopzero-api/token" \
-  -H "Authorization: Bearer $ADMIN_SESSION" \
-  -H "Content-Type: application/json" \
-  -d "{\"expiresIn\":0,\"id\":\"loopzero-api-$(date +%s)\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
-
-kill "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null; wait "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null || true
-
-if [ -z "$ARGOCD_TOKEN" ]; then
-  echo "ERROR: Failed to generate loopzero-api token."
-  echo "  Ensure the 'loopzero-api' account exists in argocd-cm:"
-  echo "    accounts.loopzero-api: apiKey"
-  echo "  Run: helm upgrade argocd infra/helm/argocd/ -n argocd --reuse-values"
-  exit 1
-fi
-
-echo "ArgoCD token: ${#ARGOCD_TOKEN} chars (non-expiring, loopzero-api account)"
 
 # 3. Create/update K8s secret with both tokens
 echo "Creating K8s secret loopzero-api-tokens..."
