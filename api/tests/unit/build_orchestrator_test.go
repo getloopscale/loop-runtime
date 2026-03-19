@@ -113,6 +113,14 @@ func (f *fakeBuildStoreOrch) FindActiveBuilds(ctx context.Context) ([]db.Build, 
 	return active, nil
 }
 
+func (f *fakeBuildStoreOrch) SetAppsSpec(ctx context.Context, tx db.DBTX, id string, apps []db.BuildAppSpec) error {
+	return nil
+}
+
+func (f *fakeBuildStoreOrch) GetBuildApps(ctx context.Context, buildID string) ([]db.BuildAppSpec, error) {
+	return nil, nil
+}
+
 // safeFakeTransition catches panics from the state machine.
 func safeFakeTransition(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (newState statemachine.State, err error) {
 	defer func() {
@@ -320,27 +328,6 @@ func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, workflowID string
 
 // NOTE: fakeGitOpsPusher REMOVED — the workflow handles gitops-push (spec §10.1, step 13i).
 
-// fakeHealthProber implements services.HealthProber.
-type fakeHealthProber struct {
-	results map[string]error // url → error (nil = success)
-	probed  []string         // urls that were probed
-}
-
-func newFakeHealthProber() *fakeHealthProber {
-	return &fakeHealthProber{
-		results: make(map[string]error),
-	}
-}
-
-func (f *fakeHealthProber) Probe(ctx context.Context, url string, path string) error {
-	fullURL := url + path
-	f.probed = append(f.probed, fullURL)
-	if err, ok := f.results[fullURL]; ok {
-		return err
-	}
-	return nil
-}
-
 // fakeGitOpsPusher implements services.GitOpsPusher.
 type fakeGitOpsPusher struct {
 	pushErr   error
@@ -402,7 +389,6 @@ type orchestratorFakes struct {
 	envTargetStore *fakeEnvTargetStoreOrch
 	eventStore    *fakeEventStoreOrch
 	workflow      *fakeWorkflowSubmitter
-	health        *fakeHealthProber
 	sync          *fakeSyncClient
 	locker        *fakeEnvironmentLocker
 	gitops        *fakeGitOpsPusher
@@ -415,7 +401,6 @@ func newOrchestratorFakes() *orchestratorFakes {
 		envTargetStore: newFakeEnvTargetStoreOrch(),
 		eventStore:     newFakeEventStoreOrch(),
 		workflow:       &fakeWorkflowSubmitter{},
-		health:         newFakeHealthProber(),
 		sync:           &fakeSyncClient{},
 		locker:         &fakeEnvironmentLocker{},
 		gitops:         &fakeGitOpsPusher{},
@@ -429,7 +414,6 @@ func (f *orchestratorFakes) buildOrchestrator() *services.BuildOrchestrator {
 		EnvTargetStore: f.envTargetStore,
 		EventStore:     f.eventStore,
 		Workflow:       f.workflow,
-		Health:         f.health,
 		Sync:           f.sync,
 		Locker:         f.locker,
 		GitOps:         f.gitops,
@@ -665,54 +649,6 @@ func TestBuildOrchestrator_OnBuildCompleted_Success_FullFlow(t *testing.T) {
 	}
 }
 
-func TestBuildOrchestrator_OnBuildCompleted_ProbeFails(t *testing.T) {
-	// Arrange
-	fakes := newOrchestratorFakes()
-	fakes.health.results["https://production.proj-abc123.tenant-1.loopzero.example/health"] = fmt.Errorf("connection refused")
-	orch := fakes.buildOrchestrator()
-
-	resp, err := orch.SubmitBuild(context.Background(), defaultSubmitReq())
-	if err != nil {
-		t.Fatalf("SubmitBuild failed: %v", err)
-	}
-
-	// Act
-	cbReq := services.BuildCallbackRequest{
-		Status:    "succeeded",
-		Manifests: testManifests,
-		Apps: []services.AppRelease{
-			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 45000},
-		},
-	}
-	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
-
-	// Assert — should NOT return error (orchestrator handles internally)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Release should be SYNC_FAILED
-	var release *db.Release
-	for _, r := range fakes.releaseStore.releases {
-		if r.BuildID == resp.BuildID {
-			release = r
-			break
-		}
-	}
-	if release == nil {
-		t.Fatal("expected a release to be created")
-	}
-	if release.Status != string(statemachine.ReleaseSyncFailed) {
-		t.Errorf("expected release status SYNC_FAILED, got %q", release.Status)
-	}
-
-	// SSE event for sync failed
-	failedEvents := fakes.eventStore.eventsByType("deploy.sync_failed")
-	if len(failedEvents) != 1 {
-		t.Errorf("expected 1 deploy.sync_failed event, got %d", len(failedEvents))
-	}
-}
-
 func TestBuildOrchestrator_OnBuildCompleted_BuildFailed(t *testing.T) {
 	// Arrange
 	fakes := newOrchestratorFakes()
@@ -829,11 +765,6 @@ func TestBuildOrchestrator_OnBuildCompleted_WorkerSkipsHealthProbe(t *testing.T)
 	// Assert
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Health prober should NOT have been called
-	if len(fakes.health.probed) != 0 {
-		t.Errorf("expected no health probes for worker app, got %d: %v", len(fakes.health.probed), fakes.health.probed)
 	}
 
 	// Release should still be ACTIVE
@@ -1230,12 +1161,6 @@ func TestBuildOrchestrator_OnBuildCompleted_WaitForSyncFails(t *testing.T) {
 	// TriggerSync should have been called (it succeeds)
 	if len(fakes.sync.synced) == 0 {
 		t.Error("expected TriggerSync to have been called")
-	}
-
-	// Health prober should NOT have been called (WaitForSync failed before probes)
-	if len(fakes.health.probed) != 0 {
-		t.Errorf("expected no health probes when WaitForSync fails, got %d: %v",
-			len(fakes.health.probed), fakes.health.probed)
 	}
 
 	// Release should be in SYNC_FAILED state

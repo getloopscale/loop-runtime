@@ -154,12 +154,6 @@ func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, workflowID string
 	return &services.WorkflowStatus{Phase: "Succeeded"}, nil
 }
 
-type fakeHealthProber struct{}
-
-func (f *fakeHealthProber) Probe(ctx context.Context, url string, path string) error {
-	return nil
-}
-
 type fakeGitOpsPusher struct{}
 
 func (f *fakeGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpts) (string, error) {
@@ -240,7 +234,6 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 		EnvTargetStore: envTargetStore,
 		EventStore:     eventStore,
 		Workflow:       &fakeWorkflowSubmitter{},
-		Health:         &fakeHealthProber{},
 		Sync:           &fakeSyncClient{},
 		Locker:         locker,
 		GitOps:         &fakeGitOpsPusher{},
@@ -254,10 +247,8 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 
 	// Create real server with real middleware
 	logger := logging.NewLogger("test")
-	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
-	t.Cleanup(func() { shutdownCancel() })
 
-	buildHandler := routes.NewBuildHandler(orchAdapter, "test-secret", logger, shutdownCtx)
+	buildHandler := routes.NewBuildHandler(orchAdapter, logger)
 	router := server.NewRouter(server.Config{
 		Port:               "0",
 		Logger:             logger,

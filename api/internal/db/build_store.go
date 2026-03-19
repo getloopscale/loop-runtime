@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -18,20 +19,30 @@ var buildMachine = statemachine.NewBuildMachine()
 
 // Build represents a build record in the database.
 type Build struct {
-	ID              string     `json:"id"`
-	TenantID        string     `json:"tenant_id"`
-	ProjectID       string     `json:"project_id"`
-	Environment     string     `json:"environment"`
-	Status          string     `json:"status"`
-	CommitSHA       string     `json:"commit_sha,omitempty"`
-	CorrelationID   string     `json:"correlation_id"`
-	CreatedBy       string     `json:"created_by"`
-	CreatedAt       time.Time  `json:"created_at"`
-	StartedAt       *time.Time `json:"started_at,omitempty"`
-	FinishedAt      *time.Time `json:"finished_at,omitempty"`
-	ErrorMessage    string     `json:"error_message,omitempty"`
-	DurationSeconds *int       `json:"duration_seconds,omitempty"`
-	WorkflowID      string     `json:"workflow_id,omitempty"`
+	ID              string          `json:"id"`
+	TenantID        string          `json:"tenant_id"`
+	ProjectID       string          `json:"project_id"`
+	Environment     string          `json:"environment"`
+	Status          string          `json:"status"`
+	CommitSHA       string          `json:"commit_sha,omitempty"`
+	CorrelationID   string          `json:"correlation_id"`
+	CreatedBy       string          `json:"created_by"`
+	CreatedAt       time.Time       `json:"created_at"`
+	StartedAt       *time.Time      `json:"started_at,omitempty"`
+	FinishedAt      *time.Time      `json:"finished_at,omitempty"`
+	ErrorMessage    string          `json:"error_message,omitempty"`
+	DurationSeconds *int            `json:"duration_seconds,omitempty"`
+	WorkflowID      string          `json:"workflow_id,omitempty"`
+	AppsSpec        json.RawMessage `json:"apps_spec,omitempty"` // App specs from submission (name, type, port, secrets)
+}
+
+// BuildAppSpec is a single app spec stored at build submission time.
+// Used by the reconcile loop to generate manifests and compute image refs.
+type BuildAppSpec struct {
+	Name    string   `json:"name"`
+	Type    string   `json:"type"`
+	Port    int      `json:"port"`
+	Secrets []string `json:"secrets,omitempty"`
 }
 
 // BuildStore defines the interface for build persistence operations.
@@ -42,6 +53,8 @@ type BuildStore interface {
 	UpdateStatus(ctx context.Context, tx DBTX, id string, event string) (*Build, error)
 	SetErrorMessage(ctx context.Context, tx DBTX, id string, errorMessage string) error
 	SetWorkflowID(ctx context.Context, tx DBTX, id string, workflowID string) error
+	SetAppsSpec(ctx context.Context, tx DBTX, id string, apps []BuildAppSpec) error
+	GetBuildApps(ctx context.Context, buildID string) ([]BuildAppSpec, error)
 	ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error)
 	FindActiveBuilds(ctx context.Context) ([]Build, error)
 }
@@ -192,6 +205,47 @@ func (s *PostgresBuildStore) SetWorkflowID(ctx context.Context, tx DBTX, buildID
 		return loopzeroerrors.ErrBuildNotFound
 	}
 	return nil
+}
+
+// SetAppsSpec stores the app specifications for a build (name, type, port, secrets).
+// Called during build submission so the reconcile loop can generate manifests.
+func (s *PostgresBuildStore) SetAppsSpec(ctx context.Context, tx DBTX, buildID string, apps []BuildAppSpec) error {
+	executor := tx
+	if executor == nil {
+		executor = s.db
+	}
+	appsJSON, err := json.Marshal(apps)
+	if err != nil {
+		return fmt.Errorf("build store: marshal apps spec: %w", err)
+	}
+	_, err = executor.Exec(ctx,
+		`UPDATE builds SET apps_spec = $1 WHERE id = $2`,
+		appsJSON, buildID,
+	)
+	if err != nil {
+		return fmt.Errorf("build store: set apps spec failed: %w", err)
+	}
+	return nil
+}
+
+// GetBuildApps returns the app specifications for a build.
+// These are stored at submission time and used by the reconcile loop
+// to generate manifests and compute image references.
+func (s *PostgresBuildStore) GetBuildApps(ctx context.Context, buildID string) ([]BuildAppSpec, error) {
+	var appsSpec json.RawMessage
+	err := s.db.QueryRow(ctx,
+		`SELECT COALESCE(apps_spec, '[]'::jsonb) FROM builds WHERE id = $1`,
+		buildID,
+	).Scan(&appsSpec)
+	if err != nil {
+		return nil, fmt.Errorf("build store: get build apps: %w", err)
+	}
+
+	var apps []BuildAppSpec
+	if err := json.Unmarshal(appsSpec, &apps); err != nil {
+		return nil, fmt.Errorf("build store: unmarshal apps spec: %w", err)
+	}
+	return apps, nil
 }
 
 // ListByProject returns builds for a project, ordered by created_at DESC.

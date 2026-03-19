@@ -4,116 +4,153 @@ package services
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
-// CircuitBreakerStore abstracts the circuit breaker persistence layer (DIP for testability).
-type CircuitBreakerStore interface {
-	Get(ctx context.Context, key string) (*db.CircuitBreakerState, error)
-	RecordFailure(ctx context.Context, key string, openThreshold int) (*db.CircuitBreakerState, error)
-	RecordSuccess(ctx context.Context, key string, closeThreshold int) (*db.CircuitBreakerState, error)
+// CircuitBreakerConfig configures the in-memory circuit breaker.
+type CircuitBreakerConfig struct {
+	OpenThreshold  int           // consecutive failures to open circuit
+	CloseThreshold int           // consecutive successes to close circuit (during half-open)
+	RetryInterval  time.Duration // time to wait before allowing a recovery probe
 }
 
-// PGCircuitBreakerSyncClient wraps a SyncClient with PostgreSQL-backed circuit breaker.
+// circuitState represents the internal state of the circuit breaker.
+type circuitState int
+
+const (
+	circuitClosed  circuitState = iota // normal operation
+	circuitOpen                        // rejecting requests
+	circuitHalfOpen                    // allowing a single probe
+)
+
+// CircuitBreakerSyncClient wraps a SyncClient with an in-memory circuit breaker.
 //
-// State is shared across all API replicas via the circuit_breakers table.
-// When one replica detects ArgoCD is down, ALL replicas stop sending traffic immediately.
-type PGCircuitBreakerSyncClient struct {
+// M-02 fix: State is held in-memory instead of PostgreSQL. This eliminates
+// write amplification (2 DB writes per sync attempt) and removes the circular
+// dependency where the circuit breaker protecting ArgoCD depends on PostgreSQL,
+// which could also be degraded.
+//
+// Trade-off: state is per-replica, not shared across API instances. This is
+// acceptable because:
+// - Each replica detects ArgoCD failure independently after openThreshold failures
+// - The convergence delay is at most openThreshold × sync attempts (~15s)
+// - Circuit breaker state does not need to survive API restarts — starting
+//   CLOSED and detecting failure naturally is the correct behavior
+type CircuitBreakerSyncClient struct {
 	inner          SyncClient
-	store          CircuitBreakerStore
 	logger         *slog.Logger
-	key            string
 	openThreshold  int
 	closeThreshold int
 	retryInterval  time.Duration
+
+	mu             sync.RWMutex
+	state          circuitState
+	failureCount   int
+	successCount   int
+	lastFailure    time.Time
+	openedAt       time.Time
 }
 
-// PGCircuitBreakerConfig configures the PG-backed circuit breaker.
-type PGCircuitBreakerConfig struct {
-	Key            string // e.g., "argocd"
-	OpenThreshold  int    // consecutive failures to open
-	CloseThreshold int    // consecutive successes to close (during recovery)
-	RetryInterval  time.Duration
-}
-
-// NewPGCircuitBreakerSyncClient creates a PG-backed circuit breaker wrapping a SyncClient.
-func NewPGCircuitBreakerSyncClient(inner SyncClient, store CircuitBreakerStore, cfg PGCircuitBreakerConfig, logger *slog.Logger) *PGCircuitBreakerSyncClient {
-	return &PGCircuitBreakerSyncClient{
+// NewCircuitBreakerSyncClient creates an in-memory circuit breaker wrapping a SyncClient.
+func NewCircuitBreakerSyncClient(inner SyncClient, cfg CircuitBreakerConfig, logger *slog.Logger) *CircuitBreakerSyncClient {
+	return &CircuitBreakerSyncClient{
 		inner:          inner,
-		store:          store,
 		logger:         logger,
-		key:            cfg.Key,
 		openThreshold:  cfg.OpenThreshold,
 		closeThreshold: cfg.CloseThreshold,
 		retryInterval:  cfg.RetryInterval,
+		state:          circuitClosed,
 	}
 }
 
 // TriggerSync delegates to the inner SyncClient with circuit breaker protection.
-func (cb *PGCircuitBreakerSyncClient) TriggerSync(ctx context.Context, appName string) error {
-	if err := cb.preCheck(ctx); err != nil {
+func (cb *CircuitBreakerSyncClient) TriggerSync(ctx context.Context, appName string) error {
+	if err := cb.preCheck(); err != nil {
 		return err
 	}
 
 	err := cb.inner.TriggerSync(ctx, appName)
-	cb.recordResult(ctx, err)
+	cb.recordResult(err)
 	return err
 }
 
 // WaitForSync delegates to the inner SyncClient with circuit breaker protection.
-func (cb *PGCircuitBreakerSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration) error {
-	if err := cb.preCheck(ctx); err != nil {
+func (cb *CircuitBreakerSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration) error {
+	if err := cb.preCheck(); err != nil {
 		return err
 	}
 
 	err := cb.inner.WaitForSync(ctx, appName, timeout)
-	cb.recordResult(ctx, err)
+	cb.recordResult(err)
 	return err
 }
 
-// preCheck reads the circuit breaker state from PostgreSQL.
-// Returns ErrPlatformDegraded if the circuit is open and no recovery probe is due.
-func (cb *PGCircuitBreakerSyncClient) preCheck(ctx context.Context) error {
-	state, err := cb.store.Get(ctx, cb.key)
-	if err != nil {
-		// If we can't read circuit breaker state, allow the call through
-		// (fail-open: better to try than to block all deploys)
-		return nil
-	}
+// preCheck evaluates the circuit state. Returns ErrPlatformDegraded if the
+// circuit is open and no recovery probe is due.
+func (cb *CircuitBreakerSyncClient) preCheck() error {
+	cb.mu.RLock()
+	state := cb.state
+	openedAt := cb.openedAt
+	cb.mu.RUnlock()
 
-	if state.State == "closed" {
+	if state == circuitClosed {
 		return nil
 	}
 
 	// Circuit is open — check if enough time has passed for a recovery probe
-	if state.OpenedAt != nil && time.Since(*state.OpenedAt) < cb.retryInterval {
+	if time.Since(openedAt) < cb.retryInterval {
 		return loopzeroerrors.ErrPlatformDegraded
 	}
 
-	// Allow recovery probe through
+	// Transition to half-open: allow one probe through
+	cb.mu.Lock()
+	if cb.state == circuitOpen {
+		cb.state = circuitHalfOpen
+		cb.successCount = 0
+		cb.logger.Info("circuit breaker: transitioning to half-open, allowing recovery probe")
+	}
+	cb.mu.Unlock()
+
 	return nil
 }
 
-// recordResult updates the circuit breaker state in PostgreSQL.
-// Errors are logged but do not fail the caller — the sync result itself
-// is more important than the circuit breaker bookkeeping.
-func (cb *PGCircuitBreakerSyncClient) recordResult(ctx context.Context, err error) {
+// recordResult updates the circuit breaker state based on the sync result.
+func (cb *CircuitBreakerSyncClient) recordResult(err error) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
 	if err != nil {
-		if _, storeErr := cb.store.RecordFailure(ctx, cb.key, cb.openThreshold); storeErr != nil {
-			cb.logger.Error("circuit breaker: failed to record failure",
-				"key", cb.key,
-				"error", storeErr,
-			)
+		cb.successCount = 0
+		cb.failureCount++
+		cb.lastFailure = time.Now()
+
+		if cb.state == circuitHalfOpen {
+			// Recovery probe failed — back to open
+			cb.state = circuitOpen
+			cb.openedAt = time.Now()
+			cb.logger.Warn("circuit breaker: recovery probe failed, re-opening circuit",
+				"failure_count", cb.failureCount)
+			return
+		}
+
+		if cb.failureCount >= cb.openThreshold && cb.state == circuitClosed {
+			cb.state = circuitOpen
+			cb.openedAt = time.Now()
+			cb.logger.Error("circuit breaker: opened — too many consecutive failures",
+				"failure_count", cb.failureCount, "threshold", cb.openThreshold)
 		}
 	} else {
-		if _, storeErr := cb.store.RecordSuccess(ctx, cb.key, cb.closeThreshold); storeErr != nil {
-			cb.logger.Error("circuit breaker: failed to record success",
-				"key", cb.key,
-				"error", storeErr,
-			)
+		cb.failureCount = 0
+		cb.successCount++
+
+		if cb.state == circuitHalfOpen && cb.successCount >= cb.closeThreshold {
+			cb.state = circuitClosed
+			cb.logger.Info("circuit breaker: closed — recovery confirmed",
+				"success_count", cb.successCount, "threshold", cb.closeThreshold)
+			cb.successCount = 0
 		}
 	}
 }

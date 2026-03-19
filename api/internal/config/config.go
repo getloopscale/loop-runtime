@@ -92,6 +92,9 @@ type Config struct {
 	BuildRunningTimeout time.Duration
 	BuildCancelTimeout  time.Duration
 	BuildReaperInterval time.Duration
+
+	// Build Reconcile Loop (C-01 fix)
+	ReconcileInterval time.Duration
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -179,6 +182,9 @@ func Load() Config {
 		BuildRunningTimeout: envDuration("BUILD_RUNNING_TIMEOUT", 30*time.Minute),
 		BuildCancelTimeout:  envDuration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
 		BuildReaperInterval: envDuration("BUILD_REAPER_INTERVAL", 30*time.Second),
+
+		// Build Reconcile Loop (C-01 fix): polls Argo Workflow CRDs every 5s
+		ReconcileInterval: envDuration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
 	}
 }
 

@@ -32,6 +32,8 @@ type Config struct {
 	TenantCRMgr        routes.TenantCRManager
 	IdempotencyStore   middleware.IdempotencyStore
 	SourceStore        source.SourceStore
+	// ArgoCallbackSecret is deprecated — callback route removed (C-01 fix).
+	// Kept in Config struct for backwards compatibility of env var parsing.
 	ArgoCallbackSecret string
 	EventStore         sse.EventStore
 	BuildStoreReader   sse.BuildStoreReader
@@ -162,12 +164,9 @@ func NewRouter(cfg Config) *chi.Mux {
 		})
 	}
 
-	// Callback route — uses shared secret auth, NOT OAuth middleware.
-	// Registered outside the auth group intentionally.
-	// Uses the same BuildHandler instance so callbackWg is shared (C-08).
-	if cfg.BuildHandler != nil && cfg.ArgoCallbackSecret != "" {
-		r.Post("/api/v1/builds/{id}/callback", cfg.BuildHandler.Callback)
-	}
+	// C-01 fix: Callback route removed. Build completion is now detected by the
+	// BuildReconcileLoop which polls Argo Workflow CRDs from the control plane.
+	// The build cluster no longer calls the API directly.
 
 	return r
 }
@@ -289,18 +288,12 @@ func Run(cfg Config) error {
 
 	cfg.Logger.Info("shutting down gracefully")
 
-	// Step 2: Wait for in-flight callbacks to drain (C-08).
-	// The BuildHandler tracks goroutines via callbackWg.
-	if cfg.BuildHandler != nil {
-		cfg.BuildHandler.WaitForCallbacks(shutdownTimeout / 2)
-	}
-
-	// Step 3: Shut down HTTP servers (drain in-flight requests).
+	// Step 2: Shut down HTTP servers (drain in-flight requests).
 	if err := metricsSrv.Shutdown(ctx); err != nil {
 		cfg.Logger.Error("metrics server shutdown failed", "error", err)
 	}
 
-	// Step 4: After Run() returns, main.go's defer dbAdapter.Close() runs,
+	// Step 3: After Run() returns, main.go's defer dbAdapter.Close() runs,
 	// closing the connection pool. By this point all goroutines have stopped.
 	return srv.Shutdown(ctx)
 }

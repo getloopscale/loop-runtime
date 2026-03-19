@@ -48,10 +48,16 @@ type BuildStaleChecker interface {
 
 // BuildReaper periodically checks for stale builds and transitions them to FAILED/CANCELLED.
 // This implements the timeout enforcement from spec §5.1.
+//
+// M-03 fix: Before marking a build as FAILED, the reaper verifies the actual
+// Argo Workflow status. If the workflow is still Running, the build is NOT reaped —
+// only a warning is logged. This prevents false positives where a legitimately slow
+// build is incorrectly marked FAILED while it's still producing artifacts.
 type BuildReaper struct {
 	buildStore db.BuildStore
 	checker    BuildStaleChecker
 	locker     EnvironmentLocker
+	workflow   WorkflowSubmitter
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -60,13 +66,14 @@ type BuildReaper struct {
 }
 
 // NewBuildReaper creates a new BuildReaper.
-func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker EnvironmentLocker, eventStore interface {
+func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker EnvironmentLocker, workflow WorkflowSubmitter, eventStore interface {
 	Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 }, logger *slog.Logger, cfg BuildReaperConfig) *BuildReaper {
 	return &BuildReaper{
 		buildStore: buildStore,
 		checker:    checker,
 		locker:     locker,
+		workflow:   workflow,
 		eventStore: eventStore,
 		logger:     logger,
 		cfg:        cfg,
@@ -133,6 +140,23 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 		// Re-check: build may have transitioned since the query
 		if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
 			continue
+		}
+
+		// M-03: Verify actual Argo Workflow state before reaping.
+		// If the workflow is still actively running, do NOT reap — the build is
+		// legitimately slow, not stuck. Only reap when the workflow is gone,
+		// failed, or we can't determine its state.
+		if build.WorkflowID != "" && r.workflow != nil {
+			wfStatus, wfErr := r.workflow.GetStatus(ctx, build.WorkflowID)
+			if wfErr != nil {
+				r.logger.Warn("build reaper: cannot verify workflow state, proceeding with reap",
+					"build_id", s.ID, "workflow_id", build.WorkflowID, "error", wfErr)
+			} else if wfStatus != nil && (wfStatus.Phase == "Running" || wfStatus.Phase == "Pending") {
+				r.logger.Warn("build reaper: workflow still active despite timeout — skipping reap",
+					"build_id", s.ID, "workflow_id", build.WorkflowID, "phase", wfStatus.Phase,
+					"state", s.State, "timeout_event", s.Event)
+				continue
+			}
 		}
 
 		reason := reaperReason(s.Event)

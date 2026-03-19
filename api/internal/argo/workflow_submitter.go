@@ -34,8 +34,7 @@ type WorkflowSubmitterConfig struct {
 	Namespace  string // Namespace for workflows (e.g., "argo")
 
 	// Infrastructure parameters passed to every workflow via the WorkflowBuilder.
-	CallbackURL    string // e.g., "http://10.0.1.3:30001/api/v1/builds" (cross-cluster)
-	CallbackSecret string // Shared secret for build callback auth
+	// C-01 fix: CallbackURL/CallbackSecret removed. No more HTTP callback.
 	GiteaURL    string // e.g., "http://10.0.1.3:30000" (cross-cluster for workflow)
 	GiteaToken  string // Admin token for Gitea access
 	RegistryURL string // e.g., "k3d-loopzero-registry:5000"
@@ -73,12 +72,10 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 	}
 
 	builder := NewWorkflowBuilder(InfraParams{
-		CallbackURL:    cfg.CallbackURL,
-		CallbackSecret: cfg.CallbackSecret,
-		GiteaURL:       cfg.GiteaURL,
-		GiteaToken:     cfg.GiteaToken,
-		RegistryURL:    cfg.RegistryURL,
-		BaseDomain:     cfg.BaseDomain,
+		GiteaURL:    cfg.GiteaURL,
+		GiteaToken:  cfg.GiteaToken,
+		RegistryURL: cfg.RegistryURL,
+		BaseDomain:  cfg.BaseDomain,
 	})
 
 	return &WorkflowSubmitter{

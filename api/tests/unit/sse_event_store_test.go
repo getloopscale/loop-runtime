@@ -3,6 +3,7 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,6 +88,11 @@ func (f *fakeSSEQueryExec) Query(ctx context.Context, sql string, args ...any) (
 
 func (f *fakeSSEQueryExec) Exec(ctx context.Context, sql string, args ...any) (db.ExecResult, error) {
 	f.execCalls = append(f.execCalls, fakeExecCall{sql: sql, args: args})
+
+	// A-02: pg_notify calls are no-ops in tests
+	if strings.Contains(sql, "pg_notify") {
+		return db.ExecResult{}, nil
+	}
 
 	// Detect Prune: DELETE WHERE created_at < threshold
 	if len(args) >= 1 {

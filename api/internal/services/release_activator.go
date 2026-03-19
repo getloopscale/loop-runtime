@@ -7,26 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
-// maxConcurrentProbes limits the number of parallel health probes during
-// release activation. This prevents overwhelming the network or target
-// services when a deploy contains many apps.
-const maxConcurrentProbes = 5
-
-// probeResult holds the outcome of a single health probe.
-type probeResult struct {
-	App     AppRelease
-	Healthy bool
-	Skipped bool
-	Duration time.Duration
-	Err     error
-}
 
 // activateRelease orchestrates release creation through activation.
 //
@@ -189,9 +175,19 @@ func (o *BuildOrchestrator) phase2cRecordPushResult(ctx context.Context, build *
 	})
 }
 
-// phase2dSyncAndProbe triggers ArgoCD sync, waits for sync completion,
-// and runs health probes OUTSIDE the lock.
-// Returns true if sync or any probe failed.
+// phase2dSyncAndProbe triggers ArgoCD sync and waits for sync completion OUTSIDE the lock.
+// Returns true if sync failed.
+//
+// A-03 fix: Health validation is delegated entirely to ArgoCD instead of direct HTTP probes.
+// ArgoCD's WaitForSync already verifies both sync status (manifests applied) AND health status
+// (Deployments have ready pods, Services have endpoints, etc.). Direct HTTP probing from the
+// control plane to workload cluster apps was:
+//   - Redundant with ArgoCD's health assessment
+//   - A cross-cluster network dependency (control plane → workload plane)
+//   - Fragile: probes could hit old pods during rollout, apps without /health, etc.
+//
+// ArgoCD health checks are authoritative because they monitor Kubernetes resource status
+// (Deployment.status.readyReplicas, Pod phase, etc.) — not application-level HTTP endpoints.
 func (o *BuildOrchestrator) phase2dSyncAndProbe(ctx context.Context, build *db.Build, release *db.Release, result BuildCallbackRequest) bool {
 	argoAppName := fmt.Sprintf("%s-%s", build.TenantID, build.Environment)
 
@@ -202,41 +198,42 @@ func (o *BuildOrchestrator) phase2dSyncAndProbe(ctx context.Context, build *db.B
 		return true
 	}
 
-	// Wait for ArgoCD to complete sync before health probing (BLOCKER-2 fix).
-	// Without this, health probes could succeed against the OLD deployment,
-	// marking the release as ACTIVE before the new version is actually running.
+	// Emit SSE deploy.syncing
+	syncingData, _ := json.Marshal(map[string]string{
+		"deploy_id": deriveDeployID(release.ID),
+		"status":    "syncing",
+		"app":       argoAppName,
+	})
+	if _, err := o.eventStore.Append(ctx, build.ID, "deploy.syncing", syncingData); err != nil {
+		slog.Error("failed to emit deploy.syncing event", "build_id", build.ID, "error", err)
+	}
+
+	// Wait for ArgoCD to confirm sync + healthy.
+	// ArgoCD checks: manifests applied (Synced) + resources healthy (Healthy).
+	// "Healthy" means: Deployments have ready replicas, Services have endpoints,
+	// Pods are Running, etc. This is more reliable than HTTP probes because it
+	// checks Kubernetes resource status directly in the workload cluster.
 	if err := o.sync.WaitForSync(ctx, argoAppName, o.argocdSyncTimeout); err != nil {
-		slog.Error("argocd wait for sync failed",
+		slog.Error("argocd sync or health check failed",
 			"build_id", build.ID, "app", argoAppName, "error", err)
+
+		// Emit SSE health_check failed event for the app
+		failedData, _ := json.Marshal(map[string]interface{}{
+			"status": "failed",
+			"app":    argoAppName,
+			"error":  err.Error(),
+		})
+		if _, emitErr := o.eventStore.Append(ctx, build.ID, "deploy.health_check", failedData); emitErr != nil {
+			slog.Error("failed to emit health_check failed event", "build_id", build.ID, "error", emitErr)
+		}
 		return true
 	}
 
-	// Health probes — run in parallel with semaphore (A-09)
-	results := o.probeAppsParallel(ctx, result.Apps)
-
-	// Emit SSE events for each probe result
-	for _, pr := range results {
-		if pr.Skipped {
-			continue
-		}
-
-		if pr.Err != nil {
-			failedData, _ := json.Marshal(map[string]interface{}{
-				"status":      "failed",
-				"app":         pr.App.Name,
-				"duration_ms": pr.Duration.Milliseconds(),
-				"error":       pr.Err.Error(),
-			})
-			if _, err := o.eventStore.Append(ctx, build.ID, "deploy.health_check", failedData); err != nil {
-				slog.Error("failed to emit health_check failed event", "build_id", build.ID, "error", err)
-			}
-			return true // At least one probe failed
-		}
-
+	// ArgoCD confirmed sync + healthy — emit success for each app
+	for _, app := range result.Apps {
 		okData, _ := json.Marshal(map[string]interface{}{
-			"status":      "ok",
-			"app":         pr.App.Name,
-			"duration_ms": pr.Duration.Milliseconds(),
+			"status": "ok",
+			"app":    app.Name,
 		})
 		if _, err := o.eventStore.Append(ctx, build.ID, "deploy.health_check", okData); err != nil {
 			slog.Error("failed to emit health_check ok event", "build_id", build.ID, "error", err)
@@ -351,44 +348,6 @@ func (o *BuildOrchestrator) triggerSyncWithRetry(ctx context.Context, appName st
 	return lastErr
 }
 
-// probeAppsParallel runs health probes for all probeable apps concurrently,
-// limited by maxConcurrentProbes. Workers, frontends, and apps without URLs
-// are skipped. Results are returned in the same order as the input slice.
-func (o *BuildOrchestrator) probeAppsParallel(ctx context.Context, apps []AppRelease) []probeResult {
-	results := make([]probeResult, len(apps))
-	sem := make(chan struct{}, maxConcurrentProbes)
-	var wg sync.WaitGroup
-
-	for i, app := range apps {
-		appType := appTypeFromName(app)
-		if appType == "worker" || appType == "frontend" || app.URL == "" {
-			results[i] = probeResult{App: app, Healthy: true, Skipped: true}
-			continue
-		}
-
-		wg.Add(1)
-		sem <- struct{}{} // acquire semaphore slot
-		go func(idx int, a AppRelease) {
-			defer wg.Done()
-			defer func() { <-sem }() // release semaphore slot
-
-			start := time.Now()
-			probeErr := o.health.Probe(ctx, a.URL, "/health")
-			duration := time.Since(start)
-
-			results[idx] = probeResult{
-				App:      a,
-				Healthy:  probeErr == nil,
-				Skipped:  false,
-				Duration: duration,
-				Err:      probeErr,
-			}
-		}(i, app)
-	}
-
-	wg.Wait()
-	return results
-}
 
 // emitActivationFailure emits a deploy.sync_failed SSE event when release activation
 // fails after a successful build. This ensures the CLI gets notified instead of

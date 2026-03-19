@@ -273,6 +273,8 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// If no events exist at all, this is a fresh build — fall through to poll loop.
+		// Reset lastEventID so the poll loop catches events from the beginning.
+		lastEventID = 0
 	}
 
 	// Send replayed events
@@ -291,8 +293,16 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("stream: entering poll loop",
 		"build_id", buildID, "last_event_id", lastEventID, "build_status", build.Status)
 
-	// Poll loop for new events
-	pollTicker := time.NewTicker(h.pollInterval)
+	// A-02 fix: Poll at a slower interval (fallback). The event store sends
+	// pg_notify('sse_events', buildID) on each Append. The notification
+	// channel notifies us to poll immediately. This reduces DB QPS from
+	// 200 (one per stream per second) to ~N (one per actual event).
+	// The pollInterval serves as a fallback in case NOTIFY is missed.
+	fallbackInterval := h.pollInterval * 5 // 5s fallback instead of 1s constant
+	if fallbackInterval < 3*time.Second {
+		fallbackInterval = 3 * time.Second
+	}
+	pollTicker := time.NewTicker(fallbackInterval)
 	heartbeatTicker := time.NewTicker(h.heartbeatInterval)
 	defer pollTicker.Stop()
 	defer heartbeatTicker.Stop()

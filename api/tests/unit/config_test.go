@@ -41,6 +41,7 @@ func TestConfig_Load_PositiveTimeouts(t *testing.T) {
 		"ArgocdPollInterval":   cfg.ArgocdPollInterval,
 		"SSEHeartbeatInterval": cfg.SSEHeartbeatInterval,
 		"SSEPollInterval":      cfg.SSEPollInterval,
+		"SSESafetyTimeout":     cfg.SSESafetyTimeout,
 		"AuthCacheTTL":         cfg.AuthCacheTTL,
 		"BuildQueueTimeout":    cfg.BuildQueueTimeout,
 		"BuildRunningTimeout":  cfg.BuildRunningTimeout,
@@ -66,6 +67,9 @@ func TestConfig_Load_PositivePoolSizes(t *testing.T) {
 	}
 	if cfg.DBMinConns > cfg.DBMaxConns {
 		t.Errorf("DBMinConns (%d) should not exceed DBMaxConns (%d)", cfg.DBMinConns, cfg.DBMaxConns)
+	}
+	if cfg.SSEMaxConcurrentStreams <= 0 {
+		t.Errorf("expected positive SSEMaxConcurrentStreams, got %d", cfg.SSEMaxConcurrentStreams)
 	}
 }
 

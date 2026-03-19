@@ -38,15 +38,13 @@ func newTestSubmitter(t *testing.T) *WorkflowSubmitter {
 	}
 
 	submitter, err := NewWorkflowSubmitter(WorkflowSubmitterConfig{
-		Kubeconfig:     kubeconfig,
-		Context:        context,
-		Namespace:      "argo",
-		CallbackSecret: "test-secret",
-		CallbackURL:    "http://loopzero-api.loopzero-system.svc.cluster.local:3001/api/v1/builds",
-		GiteaURL:       "http://gitea-http.loopzero-system.svc.cluster.local:3000",
-		GiteaToken:     "test-token",
-		RegistryURL:    "k3d-loopzero-registry:5000",
-		BaseDomain:     "loopzero.local",
+		Kubeconfig:  kubeconfig,
+		Context:     context,
+		Namespace:   "argo",
+		GiteaURL:    "http://gitea-http.loopzero-system.svc.cluster.local:3000",
+		GiteaToken:  "test-token",
+		RegistryURL: "k3d-loopzero-registry:5000",
+		BaseDomain:  "loopzero.local",
 	})
 	if err != nil {
 		t.Fatalf("failed to create workflow submitter: %v", err)

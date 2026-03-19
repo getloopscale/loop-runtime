@@ -8,81 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/services"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
 var testLogger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-
-// --- Fake CircuitBreakerStore (implements services.CircuitBreakerStore) ---
-
-type fakeCircuitBreakerStore struct {
-	state      *db.CircuitBreakerState
-	getErr     error
-	failErr    error
-	successErr error
-}
-
-func newClosedCircuitBreakerStore() *fakeCircuitBreakerStore {
-	return &fakeCircuitBreakerStore{
-		state: &db.CircuitBreakerState{
-			Key:   "argocd",
-			State: "closed",
-		},
-	}
-}
-
-func newOpenCircuitBreakerStore(openedAt time.Time) *fakeCircuitBreakerStore {
-	return &fakeCircuitBreakerStore{
-		state: &db.CircuitBreakerState{
-			Key:          "argocd",
-			State:        "open",
-			FailureCount: 3,
-			OpenedAt:     &openedAt,
-		},
-	}
-}
-
-func (f *fakeCircuitBreakerStore) Get(_ context.Context, _ string) (*db.CircuitBreakerState, error) {
-	if f.getErr != nil {
-		return nil, f.getErr
-	}
-	c := *f.state
-	return &c, nil
-}
-
-func (f *fakeCircuitBreakerStore) RecordFailure(_ context.Context, _ string, openThreshold int) (*db.CircuitBreakerState, error) {
-	if f.failErr != nil {
-		return nil, f.failErr
-	}
-	f.state.FailureCount++
-	f.state.SuccessCount = 0
-	now := time.Now()
-	f.state.LastFailure = &now
-	if f.state.FailureCount >= openThreshold {
-		f.state.State = "open"
-		f.state.OpenedAt = &now
-	}
-	c := *f.state
-	return &c, nil
-}
-
-func (f *fakeCircuitBreakerStore) RecordSuccess(_ context.Context, _ string, closeThreshold int) (*db.CircuitBreakerState, error) {
-	if f.successErr != nil {
-		return nil, f.successErr
-	}
-	f.state.SuccessCount++
-	f.state.FailureCount = 0
-	now := time.Now()
-	f.state.LastSuccess = &now
-	if f.state.State == "open" && f.state.SuccessCount >= closeThreshold {
-		f.state.State = "closed"
-		f.state.OpenedAt = nil
-	}
-	c := *f.state
-	return &c, nil
-}
 
 // --- Fake inner SyncClient ---
 
@@ -105,9 +35,8 @@ func (f *fakeInnerSync) WaitForSync(_ context.Context, _ string, _ time.Duration
 
 // --- Helper ---
 
-func defaultCBConfig() services.PGCircuitBreakerConfig {
-	return services.PGCircuitBreakerConfig{
-		Key:            "argocd",
+func defaultCBConfig() services.CircuitBreakerConfig {
+	return services.CircuitBreakerConfig{
 		OpenThreshold:  3,
 		CloseThreshold: 2,
 		RetryInterval:  30 * time.Second,
@@ -119,8 +48,7 @@ func defaultCBConfig() services.PGCircuitBreakerConfig {
 func TestCircuitBreaker_ClosedState_TriggerSyncPassesThrough(t *testing.T) {
 	// Arrange
 	inner := &fakeInnerSync{}
-	store := newClosedCircuitBreakerStore()
-	cb := services.NewPGCircuitBreakerSyncClient(inner, store, defaultCBConfig(), testLogger)
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Act
 	err := cb.TriggerSync(context.Background(), "my-app")
@@ -137,8 +65,7 @@ func TestCircuitBreaker_ClosedState_TriggerSyncPassesThrough(t *testing.T) {
 func TestCircuitBreaker_ClosedState_WaitForSyncPassesThrough(t *testing.T) {
 	// Arrange
 	inner := &fakeInnerSync{}
-	store := newClosedCircuitBreakerStore()
-	cb := services.NewPGCircuitBreakerSyncClient(inner, store, defaultCBConfig(), testLogger)
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Act
 	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second)
@@ -153,13 +80,20 @@ func TestCircuitBreaker_ClosedState_WaitForSyncPassesThrough(t *testing.T) {
 }
 
 func TestCircuitBreaker_OpenState_RejectsTriggerSync(t *testing.T) {
-	// Arrange: circuit opened recently (within retry interval)
-	openedAt := time.Now() // just opened — within 30s retry interval
-	store := newOpenCircuitBreakerStore(openedAt)
-	inner := &fakeInnerSync{}
-	cb := services.NewPGCircuitBreakerSyncClient(inner, store, defaultCBConfig(), testLogger)
+	// Arrange: cause enough failures to open the circuit, then verify rejection
+	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
-	// Act
+	// Open the circuit with 3 consecutive failures
+	for i := 0; i < 3; i++ {
+		_ = cb.TriggerSync(context.Background(), "my-app")
+	}
+
+	// Reset inner to track new calls
+	inner.triggerCalls = 0
+	inner.triggerErr = nil
+
+	// Act: next call should be rejected (circuit is open, retry interval not elapsed)
 	err := cb.TriggerSync(context.Background(), "my-app")
 
 	// Assert
@@ -172,11 +106,15 @@ func TestCircuitBreaker_OpenState_RejectsTriggerSync(t *testing.T) {
 }
 
 func TestCircuitBreaker_OpenState_RejectsWaitForSync(t *testing.T) {
-	// Arrange
-	openedAt := time.Now()
-	store := newOpenCircuitBreakerStore(openedAt)
-	inner := &fakeInnerSync{}
-	cb := services.NewPGCircuitBreakerSyncClient(inner, store, defaultCBConfig(), testLogger)
+	// Arrange: open the circuit
+	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	for i := 0; i < 3; i++ {
+		_ = cb.TriggerSync(context.Background(), "my-app")
+	}
+
+	inner.waitCalls = 0
 
 	// Act
 	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second)
@@ -191,11 +129,26 @@ func TestCircuitBreaker_OpenState_RejectsWaitForSync(t *testing.T) {
 }
 
 func TestCircuitBreaker_HalfOpen_AllowsRecoveryProbe(t *testing.T) {
-	// Arrange: circuit opened long ago (past retry interval) → half-open
-	openedAt := time.Now().Add(-60 * time.Second) // 60s ago, retry interval is 30s
-	store := newOpenCircuitBreakerStore(openedAt)
-	inner := &fakeInnerSync{} // inner succeeds
-	cb := services.NewPGCircuitBreakerSyncClient(inner, store, defaultCBConfig(), testLogger)
+	// Arrange: use a very short retry interval so half-open triggers immediately
+	cfg := services.CircuitBreakerConfig{
+		OpenThreshold:  3,
+		CloseThreshold: 2,
+		RetryInterval:  1 * time.Millisecond, // very short so test doesn't need to sleep
+	}
+	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
+	cb := services.NewCircuitBreakerSyncClient(inner, cfg, testLogger)
+
+	// Open the circuit
+	for i := 0; i < 3; i++ {
+		_ = cb.TriggerSync(context.Background(), "my-app")
+	}
+
+	// Wait past the retry interval
+	time.Sleep(5 * time.Millisecond)
+
+	// Reset inner: succeeds now
+	inner.triggerCalls = 0
+	inner.triggerErr = nil
 
 	// Act
 	err := cb.TriggerSync(context.Background(), "my-app")
@@ -209,113 +162,68 @@ func TestCircuitBreaker_HalfOpen_AllowsRecoveryProbe(t *testing.T) {
 	}
 }
 
-func TestCircuitBreaker_HalfOpen_SuccessRecordsSuccess(t *testing.T) {
-	// Arrange
-	openedAt := time.Now().Add(-60 * time.Second)
-	store := newOpenCircuitBreakerStore(openedAt)
-	inner := &fakeInnerSync{} // succeeds
-	cb := services.NewPGCircuitBreakerSyncClient(inner, store, defaultCBConfig(), testLogger)
-
-	// Act
-	_ = cb.TriggerSync(context.Background(), "my-app")
-
-	// Assert: success was recorded (success_count incremented)
-	if store.state.SuccessCount != 1 {
-		t.Errorf("expected success count 1, got %d", store.state.SuccessCount)
-	}
-}
-
-func TestCircuitBreaker_HalfOpen_FailureRecordsFailure(t *testing.T) {
-	// Arrange
-	openedAt := time.Now().Add(-60 * time.Second)
-	store := newOpenCircuitBreakerStore(openedAt)
-	inner := &fakeInnerSync{triggerErr: errors.New("argocd unreachable")}
-	cb := services.NewPGCircuitBreakerSyncClient(inner, store, defaultCBConfig(), testLogger)
-
-	// Act
-	err := cb.TriggerSync(context.Background(), "my-app")
-
-	// Assert
-	if err == nil {
-		t.Fatal("expected error from inner sync client")
-	}
-	// Failure recorded — failure count should increase
-	if store.state.FailureCount != 4 { // was 3, now 4
-		t.Errorf("expected failure count 4, got %d", store.state.FailureCount)
-	}
-}
-
 func TestCircuitBreaker_ClosedToOpen_AfterThresholdFailures(t *testing.T) {
 	// Arrange: start closed, cause 3 consecutive failures (open threshold)
-	store := newClosedCircuitBreakerStore()
 	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
-	cb := services.NewPGCircuitBreakerSyncClient(inner, store, defaultCBConfig(), testLogger)
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Act: 3 failures
 	for i := 0; i < 3; i++ {
 		_ = cb.TriggerSync(context.Background(), "my-app")
 	}
 
-	// Assert: circuit should be open now
-	if store.state.State != "open" {
-		t.Errorf("expected circuit state 'open' after 3 failures, got %q", store.state.State)
+	// Assert: circuit should be open now (next call rejected)
+	inner.triggerCalls = 0
+	inner.triggerErr = nil
+	err := cb.TriggerSync(context.Background(), "my-app")
+	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+		t.Fatalf("expected circuit to be open (ErrPlatformDegraded), got %v", err)
 	}
-	if store.state.OpenedAt == nil {
-		t.Error("expected OpenedAt to be set when circuit opens")
+	if inner.triggerCalls != 0 {
+		t.Errorf("expected inner NOT to be called when circuit is open, got %d calls", inner.triggerCalls)
 	}
 }
 
 func TestCircuitBreaker_OpenToClosed_AfterThresholdSuccesses(t *testing.T) {
-	// Arrange: circuit is open but past retry interval (half-open)
-	openedAt := time.Now().Add(-60 * time.Second)
-	store := newOpenCircuitBreakerStore(openedAt)
-	inner := &fakeInnerSync{} // succeeds
-	cfg := services.PGCircuitBreakerConfig{
-		Key:            "argocd",
+	// Arrange: open the circuit, then allow recovery probes to close it
+	cfg := services.CircuitBreakerConfig{
 		OpenThreshold:  3,
 		CloseThreshold: 2, // 2 successes to close
-		RetryInterval:  30 * time.Second,
+		RetryInterval:  1 * time.Millisecond,
 	}
-	cb := services.NewPGCircuitBreakerSyncClient(inner, store, cfg, testLogger)
+	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
+	cb := services.NewCircuitBreakerSyncClient(inner, cfg, testLogger)
 
-	// Act: 2 successful recovery probes
+	// Open the circuit
+	for i := 0; i < 3; i++ {
+		_ = cb.TriggerSync(context.Background(), "my-app")
+	}
+
+	// Inner now succeeds
+	inner.triggerErr = nil
+
+	// Act: 2 successful recovery probes (with waits to pass retry interval)
+	time.Sleep(5 * time.Millisecond)
 	_ = cb.TriggerSync(context.Background(), "my-app")
+	time.Sleep(5 * time.Millisecond)
 	_ = cb.TriggerSync(context.Background(), "my-app")
 
-	// Assert: circuit should be closed after 2 successes
-	if store.state.State != "closed" {
-		t.Errorf("expected circuit state 'closed' after 2 successes, got %q", store.state.State)
-	}
-	if store.state.OpenedAt != nil {
-		t.Error("expected OpenedAt to be nil after circuit closes")
-	}
-}
-
-func TestCircuitBreaker_FailOpen_WhenStoreUnreachable(t *testing.T) {
-	// Arrange: Get() returns an error (PG unreachable)
-	store := newClosedCircuitBreakerStore()
-	store.getErr = errors.New("connection refused to PG")
-	inner := &fakeInnerSync{}
-	cb := services.NewPGCircuitBreakerSyncClient(inner, store, defaultCBConfig(), testLogger)
-
-	// Act
+	// Assert: circuit should be closed — next call succeeds without delay
+	inner.triggerCalls = 0
 	err := cb.TriggerSync(context.Background(), "my-app")
-
-	// Assert: fail-open — request should pass through
 	if err != nil {
-		t.Fatalf("expected nil error (fail-open), got %v", err)
+		t.Fatalf("expected circuit to be closed, got %v", err)
 	}
 	if inner.triggerCalls != 1 {
-		t.Errorf("expected inner to be called (fail-open), got %d calls", inner.triggerCalls)
+		t.Errorf("expected inner to be called (circuit closed), got %d calls", inner.triggerCalls)
 	}
 }
 
 func TestCircuitBreaker_InnerErrorPropagated(t *testing.T) {
 	// Arrange: circuit closed, inner returns error
-	store := newClosedCircuitBreakerStore()
 	innerErr := errors.New("argocd 503")
 	inner := &fakeInnerSync{triggerErr: innerErr}
-	cb := services.NewPGCircuitBreakerSyncClient(inner, store, defaultCBConfig(), testLogger)
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Act
 	err := cb.TriggerSync(context.Background(), "my-app")
@@ -331,5 +239,5 @@ func TestCircuitBreaker_InnerErrorPropagated(t *testing.T) {
 
 func TestCircuitBreaker_ImplementsSyncClient(t *testing.T) {
 	// Compile-time check
-	var _ services.SyncClient = (*services.PGCircuitBreakerSyncClient)(nil)
+	var _ services.SyncClient = (*services.CircuitBreakerSyncClient)(nil)
 }

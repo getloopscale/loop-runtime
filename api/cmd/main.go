@@ -21,7 +21,6 @@ import (
 	"github.com/loopzero/loopzero/api/internal/argo"
 	"github.com/loopzero/loopzero/api/internal/argocd"
 	"github.com/loopzero/loopzero/api/internal/gitops"
-	"github.com/loopzero/loopzero/api/internal/health"
 	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/sse"
@@ -89,7 +88,6 @@ func main() {
 	// Sprint 2 dependencies (nil when DATABASE_URL is not set)
 	var sourceStore source.SourceStore
 	var buildOrchestrator routes.BuildOrchestratorService
-	var argoCallbackSecret string
 	var eventStore sse.EventStore
 	var buildStoreReader sse.BuildStoreReader
 	var secretStore routes.SecretStore
@@ -142,23 +140,18 @@ func main() {
 		// Environment locker using real pgxpool.Pool
 		locker := &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool}
 
-		// Health prober — HTTP GET with retries (uses shared transport)
-		healthProber := &health.HTTPProber{
-			Client:     httpClient,
-			IngressURL: cfg.WorkloadIngressURL,
-		}
-
 		// Workflow submitter — Argo Workflows in build cluster
+		// C-01 fix: CallbackURL/CallbackSecret removed from workflow config.
+		// The workflow no longer calls the API. Build completion is detected
+		// by the BuildReconcileLoop polling Argo Workflow CRDs.
 		workflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-			Kubeconfig:     cfg.BuildKubeconfig,
-			Context:        cfg.BuildKubeContext,
-			Namespace:      cfg.ArgoNamespace,
-			CallbackSecret: cfg.ArgoCallbackSecret,
+			Kubeconfig:  cfg.BuildKubeconfig,
+			Context:     cfg.BuildKubeContext,
+			Namespace:   cfg.ArgoNamespace,
 			GiteaURL:    cfg.GiteaCrossCluster(),
 			GiteaToken:  cfg.GiteaToken,
 			RegistryURL: cfg.RegistryURL,
-			BaseDomain:     cfg.BaseDomain,
-			CallbackURL:    cfg.APICrossClusterURL + "/api/v1/builds",
+			BaseDomain:  cfg.BaseDomain,
 		})
 		if err != nil {
 			logger.Error("failed to create workflow submitter", "error", err)
@@ -179,16 +172,17 @@ func main() {
 			argocdHTTPClient.Transport = httpTransport
 		}
 
-		// ArgoCD sync client with PG-backed circuit breaker
+		// ArgoCD sync client with in-memory circuit breaker (M-02 fix).
+		// State is per-replica, not shared via PostgreSQL. This eliminates
+		// write amplification and the circular dependency where the circuit
+		// breaker protecting ArgoCD depended on PostgreSQL being healthy.
 		rawSyncClient := argocd.NewSyncClient(argocd.SyncClientConfig{
 			BaseURL:    cfg.ArgocdURL,
 			Token:      cfg.ArgocdToken,
 			Insecure:   cfg.ArgocdInsecure,
 			HTTPClient: argocdHTTPClient,
 		})
-		cbStore := db.NewCircuitBreakerStore(dbAdapter)
-		syncClient := services.NewPGCircuitBreakerSyncClient(rawSyncClient, cbStore, services.PGCircuitBreakerConfig{
-			Key:            cfg.CBKey,
+		syncClient := services.NewCircuitBreakerSyncClient(rawSyncClient, services.CircuitBreakerConfig{
 			OpenThreshold:  cfg.CBOpenThreshold,
 			CloseThreshold: cfg.CBCloseThreshold,
 			RetryInterval:  cfg.CBRetryInterval,
@@ -207,7 +201,6 @@ func main() {
 			EnvTargetStore:    envTargetStore,
 			EventStore:        pgEventStore,
 			Workflow:          workflowSubmitter,
-			Health:            healthProber,
 			Sync:              syncClient,
 			Locker:            locker,
 			GitOps:            gitopsPusher,
@@ -220,17 +213,31 @@ func main() {
 		}
 
 		buildStoreReader = &adapters.BuildStoreReaderAdapter{Store: buildStore}
-		argoCallbackSecret = cfg.ArgoCallbackSecret
 
-		// Startup reconciler — recovers orphaned builds on boot (spec §12.1)
-		reconciler := services.NewStartupReconciler(buildStore, workflowSubmitter, locker, logger)
-		reconciler.Reconcile(context.Background())
+		// C-01/C-03 fix: BuildReconcileLoop replaces both the HTTP callback
+		// and the StartupReconciler. The control plane POLLS the build cluster's
+		// Workflow CRDs instead of the build cluster calling the API.
+		reconcileLoop := services.NewBuildReconcileLoop(
+			buildStore,
+			workflowSubmitter,
+			orch,
+			locker,
+			pgEventStore,
+			logger,
+			services.BuildReconcileLoopConfig{
+				Interval:    cfg.ReconcileInterval,
+				RegistryURL: cfg.RegistryURL,
+				BaseDomain:  cfg.BaseDomain,
+			},
+		)
+		go reconcileLoop.Start(shutdownCtx)
 
 		// Build reaper — enforces spec §5.1 timeouts
 		reaper := services.NewBuildReaper(
 			buildStore,
 			&services.PostgresStaleBuildChecker{DB: dbAdapter},
 			locker,
+			workflowSubmitter,
 			eventStore,
 			logger,
 			services.BuildReaperConfig{
@@ -268,12 +275,11 @@ func main() {
 	// Generous for normal use but prevents abuse.
 	rateLimiter := middleware.NewRateLimiter(60, 1*time.Minute)
 
-	// C-08: Create a SINGLE BuildHandler instance shared between auth routes
-	// and the callback route. Two instances would have separate callbackWg,
-	// making WaitForCallbacks useless on shutdown.
+	// C-01 fix: BuildHandler no longer handles callbacks. The BuildReconcileLoop
+	// detects build completion by polling Argo Workflow CRDs.
 	var buildHandler *routes.BuildHandler
 	if buildOrchestrator != nil {
-		buildHandler = routes.NewBuildHandler(buildOrchestrator, argoCallbackSecret, logger, shutdownCtx)
+		buildHandler = routes.NewBuildHandler(buildOrchestrator, logger)
 	}
 
 	srvCfg := server.Config{
@@ -292,7 +298,7 @@ func main() {
 			return nil
 		}(),
 		SourceStore:        sourceStore,
-		ArgoCallbackSecret: argoCallbackSecret,
+		ArgoCallbackSecret: "", // C-01 fix: callback route removed
 		EventStore:         eventStore,
 		BuildStoreReader:   buildStoreReader,
 		SecretStore:        secretStore,

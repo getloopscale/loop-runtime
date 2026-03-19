@@ -11,12 +11,16 @@ import (
 // InfraParams holds infrastructure-level parameters that are injected into every workflow.
 // These come from the API config and are not language-specific.
 //
+// C-01 fix: CallbackURL and CallbackSecret removed. The workflow no longer calls
+// the API on completion. Instead, the API's BuildReconcileLoop polls Workflow CRDs.
+//
+// C-02 fix: ManifestGeneration removed from workflow. The API generates manifests
+// after detecting workflow completion. The workflow only builds images.
+//
 // Note: MinIO credentials are NOT passed as workflow parameters (security risk —
 // they would be visible in plaintext in Workflow CR objects). Instead, CWTs read
 // credentials from K8s Secret loopzero-minio-credentials via envFrom.secretRef.
 type InfraParams struct {
-	CallbackURL      string
-	CallbackSecret   string
 	GiteaURL         string
 	GiteaToken       string
 	RegistryURL      string
@@ -91,7 +95,6 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) map[string]interface
 			"templates": templates,
 			"volumeClaimTemplates": []interface{}{
 				volumeClaim("workspace", "2Gi"),
-				volumeClaim("manifests", "256Mi"),
 			},
 		},
 	}
@@ -136,6 +139,8 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy Lang
 		inlineTask("generate-dockerfile", "generate-dockerfile", []string{"build-apps"}),
 
 		// Step 4: kaniko (CWT ref) — depends on dockerfile
+		// C-02 fix: This is now the LAST step. Manifest generation and gitops-push
+		// have been moved to the API (control plane). The workflow only builds images.
 		cwtTask("build-image", "loopzero-kaniko", "build-image", []string{"generate-dockerfile"}, map[string]string{
 			"registry-url":      b.infraParams.RegistryURL,
 			"tenant-id":         spec.TenantID,
@@ -144,25 +149,6 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy Lang
 			"dockerfile-path":   "/workspace/Dockerfile",
 			"context-path":      "/workspace",
 			"registry-insecure": fmt.Sprintf("%v", b.infraParams.RegistryInsecure),
-		}),
-
-		// Step 5: generate manifests (CWT ref) — depends on kaniko
-		cwtTask("generate-manifests", "loopzero-manifests-generate", "generate-manifests", []string{"build-image"}, map[string]string{
-			"registry-url": b.infraParams.RegistryURL,
-			"tenant-id":    spec.TenantID,
-			"project-id":   spec.ProjectID,
-			"environment":  spec.Environment,
-			"commit-sha":   spec.CommitSHA,
-			"build-id":     spec.BuildID,
-			"apps":         appsJSON(spec.Apps),
-			"base-domain":  b.infraParams.BaseDomain,
-		}),
-
-		// Step 5: validate manifests (CWT ref) — depends on generate
-		cwtTask("validate-manifests", "loopzero-manifests-validate", "validate-manifests", []string{"generate-manifests"}, map[string]string{
-			"tenant-id":   spec.TenantID,
-			"project-id":  spec.ProjectID,
-			"environment": spec.Environment,
 		}),
 	}
 
@@ -190,26 +176,14 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, strategy La
 	}
 
 	// summary (CWT ref)
+	// C-01 fix: notify-api step removed. The API's BuildReconcileLoop polls
+	// Workflow CRDs to detect completion. No HTTP callback from build to API.
 	tasks = append(tasks, cwtTask("emit-summary", "loopzero-summary", "emit-summary", nil, map[string]string{
 		"tenant-id":       spec.TenantID,
 		"project-id":      spec.ProjectID,
 		"environment":     spec.Environment,
 		"commit-sha":      spec.CommitSHA,
 		"build-id":        spec.BuildID,
-		"workflow-status":  "{{workflow.status}}",
-	}))
-
-	// notify-api (CWT ref)
-	tasks = append(tasks, cwtTask("notify-api", "loopzero-notify", "notify-api", nil, map[string]string{
-		"api-callback-url": b.infraParams.CallbackURL,
-		"callback-secret":  b.infraParams.CallbackSecret,
-		"registry-url":     b.infraParams.RegistryURL,
-		"tenant-id":        spec.TenantID,
-		"project-id":       spec.ProjectID,
-		"environment":      spec.Environment,
-		"commit-sha":       spec.CommitSHA,
-		"build-id":         spec.BuildID,
-		"correlation-id":   spec.CorrelationID,
 		"workflow-status":  "{{workflow.status}}",
 	}))
 

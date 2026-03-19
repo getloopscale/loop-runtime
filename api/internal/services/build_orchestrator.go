@@ -75,11 +75,6 @@ type AppRelease struct {
 	DurationMs  int    `json:"duration_ms"`
 }
 
-// HealthProber checks if a deployed app is accessible (DIP).
-type HealthProber interface {
-	Probe(ctx context.Context, url string, path string) error
-}
-
 // SyncClient abstracts ArgoCD sync operations (DIP).
 type SyncClient interface {
 	TriggerSync(ctx context.Context, appName string) error
@@ -127,7 +122,6 @@ type BuildOrchestratorDeps struct {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
 	Workflow           WorkflowSubmitter
-	Health             HealthProber
 	Sync               SyncClient
 	Locker             EnvironmentLocker
 	GitOps             GitOpsPusher
@@ -147,7 +141,6 @@ type BuildOrchestrator struct {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
 	workflow          WorkflowSubmitter
-	health            HealthProber
 	sync              SyncClient
 	locker            EnvironmentLocker
 	gitops            GitOpsPusher
@@ -169,7 +162,6 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		envTargetStore:    deps.EnvTargetStore,
 		eventStore:        deps.EventStore,
 		workflow:          deps.Workflow,
-		health:            deps.Health,
 		sync:              deps.Sync,
 		locker:            deps.Locker,
 		gitops:            deps.GitOps,
@@ -231,9 +223,24 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			return fmt.Errorf("submit build: submit workflow: %w", err)
 		}
 
-		// Persist workflow ID for startup reconciler and cancel (BLOCKER-1 fix)
+		// Persist workflow ID for reconcile loop and cancel (BLOCKER-1 fix)
 		if err := o.buildStore.SetWorkflowID(ctx, tx, build.ID, workflowID); err != nil {
 			return fmt.Errorf("submit build: set workflow id: %w", err)
+		}
+
+		// C-01 fix: Persist app specs so the reconcile loop can generate
+		// manifests and compute image references when the workflow completes.
+		var appsSpec []db.BuildAppSpec
+		for _, a := range req.Apps {
+			appsSpec = append(appsSpec, db.BuildAppSpec{
+				Name:    a.Name,
+				Type:    a.Type,
+				Port:    a.Port,
+				Secrets: a.Secrets,
+			})
+		}
+		if err := o.buildStore.SetAppsSpec(ctx, tx, build.ID, appsSpec); err != nil {
+			return fmt.Errorf("submit build: set apps spec: %w", err)
 		}
 
 		// Step 5: transition QUEUED → RUNNING
