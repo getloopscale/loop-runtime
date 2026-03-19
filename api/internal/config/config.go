@@ -186,6 +186,12 @@ func (c Config) Validate() {
 	if c.ArgocdInsecure && c.IsProduction() {
 		slog.Error("ARGOCD_INSECURE=true is forbidden in production — TLS verification must be enabled")
 	}
+	if c.MinIOAccessKey == "loopzero-admin" && c.IsProduction() {
+		slog.Error("MINIO_ACCESS_KEY using default dev credentials in production — override via MINIO_ACCESS_KEY env var")
+	}
+	if c.MinIOSecretKey == "loopzero-dev-password" && c.IsProduction() {
+		slog.Error("MINIO_SECRET_KEY using default dev credentials in production — override via MINIO_SECRET_KEY env var")
+	}
 }
 
 // GiteaCrossCluster returns the Gitea URL accessible from the build cluster.

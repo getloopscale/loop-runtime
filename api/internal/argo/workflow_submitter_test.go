@@ -45,9 +45,6 @@ func newTestSubmitter(t *testing.T) *WorkflowSubmitter {
 		CallbackURL:    "http://loopzero-api.loopzero-system.svc.cluster.local:3001/api/v1/builds",
 		GiteaURL:       "http://gitea-http.loopzero-system.svc.cluster.local:3000",
 		GiteaToken:     "test-token",
-		MinIOEndpoint:  "http://minio.loopzero-system.svc.cluster.local:9000",
-		MinIOAccessKey: "loopzero-admin",
-		MinIOSecretKey: "loopzero-dev-password",
 		RegistryURL:    "k3d-loopzero-registry:5000",
 		BaseDomain:     "loopzero.local",
 	})

@@ -12,8 +12,10 @@ spec:
     matchNames:
       - loopzero-system
   selector:
+    # MinIO Helm chart uses app.kubernetes.io/name label on Services.
+    # Must match exactly — "app: minio" alone may not match.
     matchLabels:
-      app: minio
+      app.kubernetes.io/name: minio
   endpoints:
     - port: http
       path: /minio/v2/metrics/cluster

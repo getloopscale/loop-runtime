@@ -15,12 +15,6 @@ spec:
             description: "Tenant identifier for isolation"
           - name: project-id
             description: "Project identifier"
-          - name: minio-endpoint
-            description: "MinIO S3-compatible endpoint for cache and artifacts"
-          - name: minio-access-key
-            description: "MinIO access key scoped to tenant prefix"
-          - name: minio-secret-key
-            description: "MinIO secret key scoped to tenant prefix"
           - name: cache-key
             description: "Cache key identifier (e.g., node-modules)"
           - name: cache-key-suffix
@@ -28,6 +22,11 @@ spec:
             default: ""
       container:
         image: amazon/aws-cli:2.15.17
+        # Credentials injected from K8s Secret via envFrom — never as workflow parameters.
+        # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
+        envFrom:
+          - secretRef:
+              name: loopzero-minio-credentials
         command:
           - sh
           - -c
@@ -61,18 +60,17 @@ spec:
             fi
             CACHE_PATH="s3://loopzero-builds/{{inputs.parameters.tenant-id}}/cache/deps/${CACHE_KEY}.tar.gz"
 
-            export AWS_ACCESS_KEY_ID="{{inputs.parameters.minio-access-key}}"
-            export AWS_SECRET_ACCESS_KEY="{{inputs.parameters.minio-secret-key}}"
-
             aws s3 cp "$CACHE_PATH" /tmp/cache.tar.gz \
-              --endpoint-url "{{inputs.parameters.minio-endpoint}}" \
-              --no-sign-request=false 2>/dev/null || {
+              --endpoint-url "$MINIO_ENDPOINT" \
+              --cli-connect-timeout 10 \
+              --cli-read-timeout 30 \
+              --no-sign-request=false 2>&1 || {
               echo "Cache miss — no cached dependencies found for ${CACHE_KEY}"
               exit 0
             }
 
             cd /workspace
-            tar xzf /tmp/cache.tar.gz 2>/dev/null || echo "Cache extraction failed — treating as miss"
+            tar xzf /tmp/cache.tar.gz 2>&1 || echo "Cache extraction failed — treating as miss"
             echo "Cache restored from ${CACHE_KEY}"
         volumeMounts:
           - name: workspace

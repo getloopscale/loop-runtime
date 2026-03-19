@@ -233,7 +233,7 @@ spec:
     - Ingress
     - Egress
 ---
-# MinIO: ingress from loopzero-api only + egress for DNS
+# MinIO: ingress from loopzero-api + cross-cluster build pods + egress for DNS
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -244,11 +244,18 @@ spec:
     matchLabels:
       app.kubernetes.io/name: minio
   ingress:
+    # In-cluster: loopzero-api pod
     - from:
         - podSelector:
             matchLabels:
               app: loopzero-api
       ports:
+        - port: 9000
+          protocol: TCP
+    # Cross-cluster: build cluster workflow pods access MinIO for cache
+    # save/restore via Docker networking (not k8s service mesh).
+    # Port-restricted ingress without source selector covers cross-cluster traffic.
+    - ports:
         - port: 9000
           protocol: TCP
   egress:

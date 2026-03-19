@@ -687,6 +687,8 @@ tasks:
         --namespace loopzero-system
         -f infra/helm/minio/values.yaml
         --wait --timeout 3m
+      # MinIO lifecycle rules (cache expiration) — idempotent Job
+      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/minio/lifecycle-job.yaml
       - >-
         helm upgrade --install argocd argo/argo-cd
         --kube-context {{.MGMT_CONTEXT}}
@@ -710,6 +712,9 @@ tasks:
         --namespace argo --create-namespace
         -f infra/helm/argo-workflows/values.yaml
         --wait --timeout 3m
+      # MinIO credentials Secret for cache CWTs (envFrom.secretRef)
+      # CWTs read credentials from this Secret instead of workflow parameters.
+      - kubectl --context {{.BUILD_CONTEXT}} apply -f infra/helm/minio/minio-credentials-secret.yaml
       # Apply all ClusterWorkflowTemplates (composable build pipeline blocks)
       - >-
         for f in infra/helm/argo-workflows/templates/cwt-*.yaml; do

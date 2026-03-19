@@ -23,14 +23,19 @@ podSecurityContext:
   runAsNonRoot: true
 
 persistence:
-  size: 1Gi
+  size: 10Gi  # Sized for ~30 projects with dependency cache (~300MB each compressed)
 
 service:
   type: NodePort
 
+# Console NOT exposed via NodePort — use kubectl port-forward when needed.
+# Exposing console gives full admin access to all buckets and data.
 consoleService:
-  type: NodePort
+  type: ClusterIP
 
+# Buckets must match names used in CWTs (cwt-cache-save.yaml, cwt-cache-restore.yaml)
 buckets:
   - name: loopzero-artifacts
+    policy: none
+  - name: loopzero-builds
     policy: none

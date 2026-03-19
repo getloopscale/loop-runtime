@@ -36,12 +36,11 @@ type WorkflowSubmitterConfig struct {
 	// Infrastructure parameters passed to every workflow via the WorkflowBuilder.
 	CallbackURL    string // e.g., "http://10.0.1.3:30001/api/v1/builds" (cross-cluster)
 	CallbackSecret string // Shared secret for build callback auth
-	GiteaURL       string // e.g., "http://10.0.1.3:30000" (cross-cluster for workflow)
-	GiteaToken     string // Admin token for Gitea access
-	MinIOEndpoint  string // e.g., "minio.loopzero-system.svc:9000"
-	MinIOAccessKey string
-	MinIOSecretKey string
-	RegistryURL    string // e.g., "k3d-loopzero-registry:5000"
+	GiteaURL    string // e.g., "http://10.0.1.3:30000" (cross-cluster for workflow)
+	GiteaToken  string // Admin token for Gitea access
+	RegistryURL string // e.g., "k3d-loopzero-registry:5000"
+	// Note: MinIO credentials are NOT in this config. CWTs read them from
+	// K8s Secret loopzero-minio-credentials in the build cluster (envFrom.secretRef).
 	BaseDomain     string // e.g., "loopzero.local" — base domain for app hostnames
 }
 
@@ -78,9 +77,6 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 		CallbackSecret: cfg.CallbackSecret,
 		GiteaURL:       cfg.GiteaURL,
 		GiteaToken:     cfg.GiteaToken,
-		MinIOEndpoint:  cfg.MinIOEndpoint,
-		MinIOAccessKey: cfg.MinIOAccessKey,
-		MinIOSecretKey: cfg.MinIOSecretKey,
 		RegistryURL:    cfg.RegistryURL,
 		BaseDomain:     cfg.BaseDomain,
 	})

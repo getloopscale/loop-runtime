@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Bucket `loopzero-builds` created in MinIO dev and production values — cache CWTs now have a real bucket to write to (#MINIO-BLOCKER-1)
+- MinIO credentials Secret `loopzero-minio-credentials` in build cluster — CWTs read credentials via `envFrom.secretRef` instead of plaintext workflow parameters (#MINIO-BLOCKER-2)
+- MinIO lifecycle Job `minio-lifecycle-setup` — applies 30-day expiration rule on `loopzero-builds` bucket to prevent unbounded cache growth (#MINIO-MOD-2)
+- `activeDeadlineSeconds: 120` on `cwt-cache-save` — prevents indefinite hangs when MinIO is slow or unreachable (#MINIO-MOD-4)
+- S3 CLI timeouts `--cli-connect-timeout 10 --cli-read-timeout 30` on all `aws s3 cp` commands in cache CWTs (#MINIO-MOD-4)
+- MinIO credential validation in `Config.Validate()` — logs error when production uses default dev credentials (#MINIO-MOD-5)
+
+### Changed
+- **MinIO PVC increased from 1Gi to 10Gi** — sized for ~30 projects with dependency cache (~300MB each compressed) (#MINIO-MOD-1)
+- **MinIO console service changed from NodePort to ClusterIP** — console gives full admin access, use `kubectl port-forward` when needed (#MINIO-LEVE-1)
+- **Production overlay bucket names aligned with CWT code** — `loopzero-cache` renamed to `loopzero-builds` to match `s3://loopzero-builds/` in cache CWTs (#MINIO-BLOCKER-1)
+- **MinIO credentials removed from Workflow CR parameters** — `InfraParams` no longer contains `MinIOEndpoint`, `MinIOAccessKey`, `MinIOSecretKey`; CWTs read from K8s Secret instead (#MINIO-BLOCKER-2)
+- **Cache CWT stderr no longer suppressed** — `2>/dev/null` replaced with `2>&1` so S3 errors are visible in Argo step logs (#MINIO-LEVE-3)
+- **NetworkPolicy `allow-minio` permits cross-cluster ingress** — build cluster workflow pods can now reach MinIO on port 9000 via Docker networking (#MINIO-MOD-6)
+- **ServiceMonitor label selector updated** — `app: minio` → `app.kubernetes.io/name: minio` to match MinIO Helm chart labels (#MINIO-LEVE-4)
+
+### Security
+- MinIO credentials no longer visible in plaintext in Workflow CR objects — moved to K8s Secret with `envFrom.secretRef` (#MINIO-SEC-2)
+- MinIO console no longer exposed via NodePort — reduces attack surface (#MINIO-SEC-5)
+- Production credential validation for MinIO access key and secret key (#MINIO-MOD-5)
+
 - TLS termination for all deployed apps — Traefik `websecure` entryPoint (port 443) with self-signed CA chain via cert-manager (#INGRESS-BLOCKER-1)
 - Self-signed CA chain: `ClusterIssuer/selfsigned-bootstrap` → `Certificate/loopzero-ca` (isCA) → `ClusterIssuer/loopzero-ca-issuer` → wildcard `Certificate/loopzero-wildcard` for `*.loopzero.local` (#INGRESS-BLOCKER-1)
 - `TLSStore/default` configures Traefik to use wildcard cert for all IngressRoutes with `tls: {}` (#INGRESS-BLOCKER-1)

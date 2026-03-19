@@ -12,9 +12,6 @@ func testInfraParams() InfraParams {
 		CallbackSecret: "test-secret",
 		GiteaURL:       "http://gitea:3000",
 		GiteaToken:     "test-gitea-token",
-		MinIOEndpoint:  "http://minio:9000",
-		MinIOAccessKey: "loopzero-admin",
-		MinIOSecretKey: "loopzero-dev-password",
 		RegistryURL:    "k3d-loopzero-registry:5000",
 		BaseDomain:     "loopzero.local",
 	}

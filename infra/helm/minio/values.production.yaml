@@ -45,34 +45,12 @@ podSecurityContext:
   runAsNonRoot: true
 
 # --- Buckets ---
-# Same buckets as development, but with lifecycle policies applied via mc client.
+# Names MUST match CWT references: loopzero-builds (cache) and loopzero-artifacts (assets).
 buckets:
   - name: loopzero-artifacts
     policy: none
-  - name: loopzero-cache
+  - name: loopzero-builds
     policy: none
-
-# --- Lifecycle Policies ---
-# MinIO lifecycle rules for automatic cleanup. Applied via mc client post-install
-# or via ILM configuration. The Helm chart may not support inline lifecycle rules;
-# use a post-install Job or mc command:
-#
-#   mc ilm rule add myminio/loopzero-cache --expire-days 90 --prefix "cache/"
-#   mc ilm rule add myminio/loopzero-cache --expire-days 7 --prefix "temp/"
-#
-# Documented here for operational reference:
-# lifecycle:
-#   rules:
-#     - id: expire-cache
-#       status: Enabled
-#       prefix: "cache/"
-#       expiration:
-#         days: 90
-#     - id: expire-temp
-#       status: Enabled
-#       prefix: "temp/"
-#       expiration:
-#         days: 7
 
 # --- Metrics ---
 # Enable Prometheus metrics endpoint for Grafana dashboards.
