@@ -252,7 +252,7 @@ export class DeployCommand {
       uploadResult = await this.deps.uploadSource(bundlePath, yamlResult.path);
     } catch (err) {
       this.deps.cleanupFile(bundlePath);
-      return this.handleError(opts, err);
+      return this.handleError(opts, err, 'Upload rejected');
     }
 
     // 12. Cleanup temp file
@@ -283,7 +283,7 @@ export class DeployCommand {
         commitSha: uploadResult.commit_sha,
       });
     } catch (err) {
-      return this.handleError(opts, err);
+      return this.handleError(opts, err, 'Deploy rejected');
     }
 
     // 14. --no-wait: return immediately (DA-2)
@@ -591,9 +591,10 @@ export class DeployCommand {
     return exitCode;
   }
 
-  private handleError(opts: DeployOptions, err: unknown): number {
+  private handleError(opts: DeployOptions, err: unknown, context?: string): number {
     if (err instanceof ApiError) {
-      return this.exitWithError(opts, err.message, err.exitCode, err.code);
+      const message = context ? `${context}: ${err.message}` : err.message;
+      return this.exitWithError(opts, message, err.exitCode, err.code);
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');

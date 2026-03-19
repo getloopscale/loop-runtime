@@ -50,7 +50,7 @@ func dummyHandler() http.Handler {
 }
 
 func TestIdempotencyMiddleware(t *testing.T) {
-	t.Run("request without Idempotency-Key passes through", func(t *testing.T) {
+	t.Run("request without Idempotency-Key returns 400", func(t *testing.T) {
 		store := newFakeIdempotencyStore()
 		mw := middleware.Idempotency(store)
 		handler := mw(dummyHandler())
@@ -59,9 +59,17 @@ func TestIdempotencyMiddleware(t *testing.T) {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
-		// Should pass through — idempotency is optional per spec (only required by CLI)
-		if rec.Code != http.StatusCreated {
-			t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var body map[string]string
+		_ = json.NewDecoder(rec.Body).Decode(&body)
+		if body["code"] != "MISSING_IDEMPOTENCY_KEY" {
+			t.Fatalf("expected code=MISSING_IDEMPOTENCY_KEY, got %q", body["code"])
+		}
+		if body["message"] != "Idempotency-Key header is required for this operation." {
+			t.Fatalf("expected specific error message, got %q", body["message"])
 		}
 	})
 

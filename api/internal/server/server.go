@@ -100,27 +100,32 @@ func NewRouter(cfg Config) *chi.Mux {
 			auth := routes.NewAuthHandler()
 			r.Get("/api/v1/auth/whoami", auth.Whoami)
 
-			// Build the middleware chain for mutation routes.
-			// Rate limiting (C-01) is applied before idempotency so rejected
-			// requests never consume an idempotency key.
-			mutationMiddlewares := make([]func(http.Handler) http.Handler, 0, 2)
+			// Rate limiting middleware chain — used for all mutation routes.
+			rateLimitMiddlewares := make([]func(http.Handler) http.Handler, 0, 1)
 			if cfg.RateLimiter != nil {
-				mutationMiddlewares = append(mutationMiddlewares, cfg.RateLimiter.Middleware())
-			}
-			if cfg.IdempotencyStore != nil {
-				mutationMiddlewares = append(mutationMiddlewares, middleware.Idempotency(cfg.IdempotencyStore))
+				rateLimitMiddlewares = append(rateLimitMiddlewares, cfg.RateLimiter.Middleware())
 			}
 
-			// Source upload route
+			// Idempotent mutation middleware chain — rate limiting + idempotency.
+			// Only for routes that must be deduplicated (builds).
+			idempotentMiddlewares := make([]func(http.Handler) http.Handler, 0, 2)
+			idempotentMiddlewares = append(idempotentMiddlewares, rateLimitMiddlewares...)
+			if cfg.IdempotencyStore != nil {
+				idempotentMiddlewares = append(idempotentMiddlewares, middleware.Idempotency(cfg.IdempotencyStore))
+			}
+
+			// Source upload — auth + rate limiting, no idempotency.
+			// Upload is a pre-build step; idempotency belongs on build submission.
 			if cfg.SourceStore != nil {
 				sourceHandler := routes.NewSourceHandler(cfg.SourceStore)
-				r.With(mutationMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)
 			}
 
-			// Mutating routes (with rate limiting + idempotency middleware)
+			// Project creation — auth + rate limiting, no idempotency.
+			// Project names are unique per tenant; the DB constraint handles duplicates.
 			if cfg.ProjectStore != nil && cfg.TenantCRMgr != nil {
 				projects := routes.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
-				r.With(mutationMiddlewares...).Post("/api/v1/projects", projects.Create)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/projects", projects.Create)
 			}
 
 			// SSE stream route (no idempotency needed — read-only)
@@ -158,8 +163,8 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.Get("/api/v1/builds/{id}", cfg.BuildHandler.Get)
 
 				// Mutating build routes with rate limiting + idempotency
-				r.With(mutationMiddlewares...).Post("/api/v1/builds", cfg.BuildHandler.Create)
-				r.With(mutationMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
+				r.With(idempotentMiddlewares...).Post("/api/v1/builds", cfg.BuildHandler.Create)
+				r.With(idempotentMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
 			}
 		})
 	}

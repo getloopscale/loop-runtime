@@ -103,6 +103,11 @@ export class InitCommand {
     const monorepo = this.deps.detectMonorepo(this.deps.cwd);
     let projectName = opts.name || path.basename(this.deps.cwd);
 
+    // Sanitize auto-detected name early so it's clean before use in app specs
+    if (!opts.name && (!this.deps.promptText || opts.yes)) {
+      projectName = this.sanitizeProjectName(projectName);
+    }
+
     const apps: AppSpec[] = [];
     let detected: DetectedInfo | undefined;
 
@@ -219,7 +224,7 @@ export class InitCommand {
       );
     }
 
-    // Validate or sanitize project name
+    // Validate explicitly provided project name
     if (opts.name) {
       // Explicitly provided via --name: warn if not RFC 1123 compliant
       // (downstream API will enforce; CLI allows through for flexibility)
@@ -229,9 +234,6 @@ export class InitCommand {
           'Recommended: lowercase, start with a letter, letters/numbers/hyphens only (max 63 chars).',
         );
       }
-    } else if (!this.deps.promptText || opts.yes) {
-      // Auto-detected from directory name — sanitize to RFC 1123
-      projectName = this.sanitizeProjectName(projectName);
     }
 
     // Generate loopzero.yaml

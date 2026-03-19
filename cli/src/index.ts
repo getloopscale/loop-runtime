@@ -391,6 +391,22 @@ export function createProgram(): Command {
       process.exitCode = exitCode;
     });
 
+  // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)
+  program.action(() => {
+    const globalOpts = program.opts();
+    if (globalOpts.json) {
+      const commandNames = program.commands.map((cmd) => cmd.name());
+      writeTo(JSON.stringify({
+        error: 'No command specified. Run: loopzero --help',
+        commands: commandNames,
+        exit_code: 1,
+      }));
+      process.exitCode = 1;
+    } else {
+      program.help();
+    }
+  });
+
   return program;
 }
 

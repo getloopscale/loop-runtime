@@ -29,19 +29,19 @@ export class LoginCommand {
   async execute(opts: LoginOptions): Promise<number> {
     if (!opts.token) {
       if (this.deps.isCI) {
-        return this.exitWithError(opts, 'In CI mode, use: loopzero login --token <token>', 1);
+        return this.exitWithError(opts, 'In CI mode, use: loopzero login --token <token>', 1, 'MISSING_TOKEN');
       }
 
-      return this.exitWithError(opts, 'Token is required. Use: loopzero login --token <token>', 1);
+      return this.exitWithError(opts, 'Token is required. Use: loopzero login --token <token>', 1, 'MISSING_TOKEN');
     }
 
     const result = await this.deps.validateToken(opts.token);
 
     if (!result.valid || !result.email) {
       if (result.serverError) {
-        return this.exitWithError(opts, 'Service temporarily unavailable. Try again in a moment.', 4);
+        return this.exitWithError(opts, 'Service temporarily unavailable. Try again in a moment.', 4, 'SERVICE_UNAVAILABLE');
       } else {
-        return this.exitWithError(opts, 'Authentication failed. Check your token and try again.', 4);
+        return this.exitWithError(opts, 'Authentication failed. Check your token and try again.', 4, 'AUTH_FAILED');
       }
     }
 
@@ -99,7 +99,8 @@ export class LoginCommand {
       return this.exitWithError(
         opts,
         `Team "${requestedTeam}" not found. Available teams: ${teams.join(', ')}`,
-        1
+        1,
+        'TEAM_NOT_FOUND'
       );
     }
 
@@ -107,16 +108,17 @@ export class LoginCommand {
       return this.exitWithError(
         opts,
         `Multiple teams available. Use --team to select one: ${teams.join(', ')}`,
-        1
+        1,
+        'TEAM_REQUIRED'
       );
     }
 
-    return this.exitWithError(opts, 'No teams available for this account.', 1);
+    return this.exitWithError(opts, 'No teams available for this account.', 1, 'NO_TEAMS');
   }
 
-  private exitWithError(opts: LoginOptions, message: string, exitCode: number): number {
+  private exitWithError(opts: LoginOptions, message: string, exitCode: number, code: string): number {
     if (opts.json) {
-      this.deps.writeTo(JSON.stringify({ error: message, exit_code: exitCode }));
+      this.deps.writeTo(JSON.stringify({ error: message, exit_code: exitCode, code }));
     } else {
       this.deps.writeError(message);
     }

@@ -43,6 +43,7 @@ func (f *fakeSourceStore) PushBundle(_ context.Context, tenantID, projectID stri
 }
 
 // newMultipartRequest creates a multipart/form-data request with optional bundle and loopzero_yaml fields.
+// loopzero_yaml is sent as a text field (WriteField).
 func newMultipartRequest(t *testing.T, bundleContent []byte, loopzeroYAML string) *http.Request {
 	t.Helper()
 
@@ -62,6 +63,47 @@ func newMultipartRequest(t *testing.T, bundleContent []byte, loopzeroYAML string
 
 	if loopzeroYAML != "" {
 		err := writer.WriteField("loopzero_yaml", loopzeroYAML)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err := writer.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/source/upload", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return req
+}
+
+// newMultipartRequestWithFileYAML creates a multipart/form-data request where
+// loopzero_yaml is sent as a file upload (CreateFormFile) rather than a text field.
+// This matches how the CLI sends it via FormData.append('loopzero_yaml', blob, 'loopzero.yaml').
+func newMultipartRequestWithFileYAML(t *testing.T, bundleContent []byte, loopzeroYAML string) *http.Request {
+	t.Helper()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	if bundleContent != nil {
+		part, err := writer.CreateFormFile("bundle", "bundle.git")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = part.Write(bundleContent)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if loopzeroYAML != "" {
+		part, err := writer.CreateFormFile("loopzero_yaml", "loopzero.yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = part.Write([]byte(loopzeroYAML))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -384,6 +426,45 @@ apps:
 		_ = json.NewDecoder(rec.Body).Decode(&errResp)
 		if errResp["code"] != "SOURCE_UPLOAD_FAILED" {
 			t.Errorf("expected code SOURCE_UPLOAD_FAILED, got '%s'", errResp["code"])
+		}
+	})
+
+	t.Run("loopzero_yaml sent as file upload (CLI behavior) returns 200", func(t *testing.T) {
+		// Arrange — the CLI sends loopzero_yaml as a file (Blob with filename),
+		// not as a text field. The API must accept both forms.
+		store := newFakeSourceStore("sha-file-yaml")
+		handler := routes.NewSourceHandler(store)
+
+		req := newMultipartRequestWithFileYAML(t, []byte("fake-bundle-data"), validLoopZeroYAML)
+		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		rec := httptest.NewRecorder()
+
+		// Act
+		handler.Upload(rec, req)
+
+		// Assert
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp routes.SourceUploadResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.CommitSHA != "sha-file-yaml" {
+			t.Errorf("expected commit_sha 'sha-file-yaml', got '%s'", resp.CommitSHA)
+		}
+
+		expectedApps := []string{"api", "worker"}
+		sort.Strings(resp.Apps)
+		if len(resp.Apps) != len(expectedApps) {
+			t.Fatalf("expected %d apps, got %d: %v", len(expectedApps), len(resp.Apps), resp.Apps)
+		}
+		for i, app := range resp.Apps {
+			if app != expectedApps[i] {
+				t.Errorf("expected app[%d] = '%s', got '%s'", i, expectedApps[i], app)
+			}
 		}
 	})
 

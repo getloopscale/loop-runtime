@@ -586,6 +586,104 @@ describe('InitCommand', () => {
     });
   });
 
+  describe('project name sanitization from directory name', () => {
+    it('should sanitize ugly directory names like tmp.DbFESo52xo', async () => {
+      // Create a temp dir with dots in the name to simulate ugly auto-detection
+      const uglyDir = path.join(tmpDir, 'tmp.DbFESo52xo');
+      fs.mkdirSync(uglyDir);
+
+      const deps = createMockDeps(uglyDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 3000 }),
+        createProject: jest.fn().mockResolvedValue({ id: 'proj-123', name: 'tmp-dbfeso52xo', team: 'acme' }),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(path.join(uglyDir, 'loopzero.yaml'), 'utf-8');
+      // Project name should be sanitized
+      expect(content).toContain('project: tmp-dbfeso52xo');
+      // App name in the YAML should also be sanitized (not the raw ugly dir name)
+      expect(content).not.toContain('tmp.DbFESo52xo');
+    });
+
+    it('should lowercase and replace underscores in directory names', async () => {
+      const uglyDir = path.join(tmpDir, 'My_Cool_Project');
+      fs.mkdirSync(uglyDir);
+
+      const deps = createMockDeps(uglyDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 3000 }),
+        createProject: jest.fn().mockResolvedValue({ id: 'proj-123', name: 'my-cool-project', team: 'acme' }),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(path.join(uglyDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('project: my-cool-project');
+      expect(content).not.toContain('My_Cool_Project');
+    });
+
+    it('should collapse consecutive hyphens and trim edges', async () => {
+      const uglyDir = path.join(tmpDir, '--my...project--');
+      fs.mkdirSync(uglyDir);
+
+      const deps = createMockDeps(uglyDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 3000 }),
+        createProject: jest.fn().mockResolvedValue({ id: 'proj-123', name: 'my-project', team: 'acme' }),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(path.join(uglyDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('project: my-project');
+    });
+
+    it('should pass sanitized name to createProject API call', async () => {
+      const uglyDir = path.join(tmpDir, 'tmp.DbFESo52xo');
+      fs.mkdirSync(uglyDir);
+
+      const deps = createMockDeps(uglyDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 3000 }),
+        createProject: jest.fn().mockResolvedValue({ id: 'proj-123', name: 'tmp-dbfeso52xo', team: 'acme' }),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true });
+
+      expect(deps.createProject).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'tmp-dbfeso52xo' })
+      );
+    });
+
+    it('should sanitize app name in loopzero.yaml when using root directory as single app', async () => {
+      const uglyDir = path.join(tmpDir, 'tmp.DbFESo52xo');
+      fs.mkdirSync(uglyDir);
+
+      const deps = createMockDeps(uglyDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 3000 }),
+        createProject: jest.fn().mockResolvedValue({ id: 'proj-123', name: 'tmp-dbfeso52xo', team: 'acme' }),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true });
+
+      const content = fs.readFileSync(path.join(uglyDir, 'loopzero.yaml'), 'utf-8');
+      // The app key should use sanitized name, not the raw directory name
+      expect(content).toContain('tmp-dbfeso52xo:');
+      expect(content).not.toContain('tmp.DbFESo52xo');
+    });
+  });
+
   describe('no internal terms', () => {
     it('should not contain forbidden terms in output', async () => {
       const forbidden = [

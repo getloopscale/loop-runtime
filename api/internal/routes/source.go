@@ -3,6 +3,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -71,8 +72,20 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Extract loopzero_yaml field
+	// Extract loopzero_yaml — accept both text field (FormValue) and file upload (FormFile).
+	// The CLI sends it as a file upload (Blob with filename), while curl/tests may
+	// send it as a text field. Both are valid multipart encodings.
 	loopzeroYAMLContent := r.FormValue("loopzero_yaml")
+	if loopzeroYAMLContent == "" {
+		// Fallback: try reading as file upload (how the CLI sends it)
+		if yamlFile, _, err := r.FormFile("loopzero_yaml"); err == nil {
+			defer yamlFile.Close()
+			yamlBytes, readErr := io.ReadAll(yamlFile)
+			if readErr == nil {
+				loopzeroYAMLContent = string(yamlBytes)
+			}
+		}
+	}
 	if loopzeroYAMLContent == "" {
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"VALIDATION_FAILED",

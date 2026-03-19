@@ -1,4 +1,5 @@
 import { DeployCommand, DeployDeps } from '../../../src/commands/deploy';
+import { ApiError } from '../../../src/api/client';
 
 interface SSEEvent {
   type: string;
@@ -756,6 +757,74 @@ describe('DeployCommand', () => {
       const exitCode = await cmd.execute({});
 
       expect(exitCode).toBe(3);
+    });
+
+    it('should prefix server-side upload errors with "Upload rejected:" in human mode', async () => {
+      const deps = createMockDeps({
+        uploadSource: jest.fn().mockRejectedValue(
+          new ApiError('loopzero.yaml is required', 1, 422, 'VALIDATION_FAILED')
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(1);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput).toContain('Upload rejected:');
+      expect(errOutput).toContain('loopzero.yaml is required');
+    });
+
+    it('should prefix server-side upload errors with "Upload rejected:" in JSON mode', async () => {
+      const deps = createMockDeps({
+        uploadSource: jest.fn().mockRejectedValue(
+          new ApiError('loopzero.yaml is required', 1, 422, 'VALIDATION_FAILED')
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.error).toContain('Upload rejected:');
+      expect(parsed.error).toContain('loopzero.yaml is required');
+    });
+  });
+
+  describe('build submission failure', () => {
+    it('should prefix server-side build submission errors with "Deploy rejected:" in human mode', async () => {
+      const deps = createMockDeps({
+        submitBuild: jest.fn().mockRejectedValue(
+          new ApiError('Project quota exceeded', 1, 422, 'VALIDATION_FAILED')
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(1);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput).toContain('Deploy rejected:');
+      expect(errOutput).toContain('Project quota exceeded');
+    });
+
+    it('should prefix server-side build submission errors with "Deploy rejected:" in JSON mode', async () => {
+      const deps = createMockDeps({
+        submitBuild: jest.fn().mockRejectedValue(
+          new ApiError('Project quota exceeded', 1, 422, 'VALIDATION_FAILED')
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.error).toContain('Deploy rejected:');
+      expect(parsed.error).toContain('Project quota exceeded');
     });
   });
 

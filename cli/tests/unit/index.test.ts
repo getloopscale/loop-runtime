@@ -113,3 +113,44 @@ describe('CLI entrypoint', () => {
     });
   });
 });
+
+describe('loopzero --json with no command', () => {
+  const binPath = path.resolve(__dirname, '../../bin/loopzero');
+
+  it('should output structured JSON when --json is passed without a command', () => {
+    let output: string;
+    let exitCode: number;
+    try {
+      output = execSync(`node ${binPath} --json`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      exitCode = 0;
+    } catch (err: any) {
+      output = err.stdout || '';
+      exitCode = err.status;
+    }
+
+    expect(exitCode).toBe(1);
+    const parsed = JSON.parse(output.trim());
+    expect(parsed).toHaveProperty('error');
+    expect(parsed.error).toContain('No command specified');
+    expect(parsed).toHaveProperty('commands');
+    expect(Array.isArray(parsed.commands)).toBe(true);
+    expect(parsed.commands).toContain('login');
+    expect(parsed.commands).toContain('deploy');
+    expect(parsed).toHaveProperty('exit_code', 1);
+  });
+
+  it('should still show text help when --json is NOT passed and no command is given', () => {
+    let stdout = '';
+    let stderr = '';
+    try {
+      stdout = execSync(`node ${binPath}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    } catch (err: any) {
+      stdout = err.stdout || '';
+      stderr = err.stderr || '';
+    }
+    const combined = stdout + stderr;
+
+    expect(combined).toContain('Usage:');
+    expect(combined).toContain('Commands:');
+  });
+});

@@ -47,7 +47,7 @@ func (rc *responseCapture) Write(b []byte) (int, error) {
 // Idempotency returns middleware that enforces idempotency-key semantics per spec §4.3.
 //
 // Behavior:
-//   - No Idempotency-Key header → passes through (header is optional)
+//   - No Idempotency-Key header → 400 MISSING_IDEMPOTENCY_KEY
 //   - Key exists + same request_hash → returns cached response
 //   - Key exists + different request_hash → 422
 //   - Key new → processes request, stores result
@@ -56,7 +56,8 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			key := r.Header.Get("Idempotency-Key")
 			if key == "" {
-				next.ServeHTTP(w, r)
+				writeIdempotencyError(w, http.StatusBadRequest, "MISSING_IDEMPOTENCY_KEY",
+					"Idempotency-Key header is required for this operation.")
 				return
 			}
 

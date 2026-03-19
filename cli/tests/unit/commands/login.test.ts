@@ -395,6 +395,111 @@ describe('LoginCommand', () => {
     });
   });
 
+  describe('JSON error code field', () => {
+    it('should include code MISSING_TOKEN when --json and no token (non-CI)', async () => {
+      const deps = createMockDeps();
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.code).toBe('MISSING_TOKEN');
+    });
+
+    it('should include code MISSING_TOKEN when --json and CI mode missing token', async () => {
+      const deps = createMockDeps({ isCI: true });
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.code).toBe('MISSING_TOKEN');
+    });
+
+    it('should include code AUTH_FAILED when --json and invalid token', async () => {
+      const deps = createMockDeps({
+        validateToken: jest.fn().mockResolvedValue({ valid: false, email: null, teams: [] }),
+      });
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({ token: 'ghp_bad', json: true });
+
+      expect(exitCode).toBe(4);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.code).toBe('AUTH_FAILED');
+    });
+
+    it('should include code SERVICE_UNAVAILABLE when --json and server error', async () => {
+      const deps = createMockDeps({
+        validateToken: jest.fn().mockResolvedValue({
+          valid: false, email: null, teams: [], serverError: true,
+        }),
+      });
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({ token: 'ghp_valid', json: true });
+
+      expect(exitCode).toBe(4);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.code).toBe('SERVICE_UNAVAILABLE');
+    });
+
+    it('should include code TEAM_NOT_FOUND when --json and team not found', async () => {
+      const deps = createMockDeps({
+        validateToken: jest.fn().mockResolvedValue({
+          valid: true, email: 'user@example.com', teams: ['acme', 'globex'],
+        }),
+      });
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({ token: 'ghp_valid', team: 'nonexistent', json: true });
+
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.code).toBe('TEAM_NOT_FOUND');
+    });
+
+    it('should include code TEAM_REQUIRED when --json and multiple teams without --team', async () => {
+      const deps = createMockDeps({
+        isCI: true,
+        validateToken: jest.fn().mockResolvedValue({
+          valid: true, email: 'user@example.com', teams: ['acme', 'globex'],
+        }),
+      });
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({ token: 'ghp_valid', json: true });
+
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.code).toBe('TEAM_REQUIRED');
+    });
+
+    it('should include code NO_TEAMS when --json and no teams available', async () => {
+      const deps = createMockDeps({
+        validateToken: jest.fn().mockResolvedValue({
+          valid: true, email: 'user@example.com', teams: [],
+        }),
+      });
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({ token: 'ghp_valid', json: true });
+
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.code).toBe('NO_TEAMS');
+    });
+  });
+
   describe('no internal terms', () => {
     it('should not contain forbidden terms in any output', async () => {
       const forbidden = [

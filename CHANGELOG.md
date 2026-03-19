@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Source upload rejected `loopzero.yaml` sent as file upload (how CLI sends it via FormData) — API now accepts both text field (`FormValue`) and file upload (`FormFile`) (#dogfood-full-F01)
+- `loopzero init` without `--name` generated ugly project names from temp directories (e.g., `tmp.DbFESo52xo`) — auto-detected names now sanitized to lowercase with hyphens (#dogfood-full-F02)
+- `Idempotency-Key` header was optional on build mutation routes — now required, returns 400 `MISSING_IDEMPOTENCY_KEY` when absent; source upload and project creation correctly excluded (#dogfood-full-F03)
+- `loopzero --json` without a command showed plain-text help — now returns structured JSON with error message and available commands list (#dogfood-full-F04)
+- Login `--json` error responses missing `code` field — all 7 error paths now include typed error codes (`AUTH_FAILED`, `MISSING_TOKEN`, `SERVICE_UNAVAILABLE`, etc.) (#dogfood-full-F05)
+- Server-side errors in deploy shown without context — upload errors now prefixed with "Upload rejected:" and build errors with "Deploy rejected:" to distinguish from local errors (#dogfood-full-F06)
+
+### Changed
+- Source upload and project creation routes no longer share idempotency middleware with build routes — middleware chain split into `rateLimitMiddlewares` (upload, projects) and `idempotentMiddlewares` (builds) (#dogfood-full-F03)
+
 ### Changed
 - **BREAKING**: HTTP callback route `POST /api/v1/builds/{id}/callback` removed — build completion now detected by BuildReconcileLoop polling Argo Workflow CRDs from the control plane; eliminates cross-cluster HTTP dependency from build plane to control plane (#ARCH-C01)
 - **BREAKING**: `notify-api` step removed from Argo Workflow onExit DAG — workflows no longer call the API; build results are read from Workflow CRDs by the reconcile loop (#ARCH-C01)
