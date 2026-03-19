@@ -1,9 +1,11 @@
 import { ApiError } from '../api/client';
-import { DeployRenderer } from '../output/deploy-renderer';
+import { DeployRenderer, DeployResult } from '../output/deploy-renderer';
 import {
   DEPLOY_TIMEOUT_MS,
   MAX_ENVIRONMENT_NAME_LENGTH,
+  MAX_BUNDLE_SIZE_BYTES,
 } from '../config/constants';
+import * as fs from 'fs';
 
 interface LoopZeroYamlApp {
   path: string;
@@ -75,6 +77,11 @@ interface DeployCompletedPayload {
   apps: AppResult[];
 }
 
+interface BuildStatus {
+  state: string;
+  error_message?: string;
+}
+
 export interface DeployDeps {
   getToken: () => string | null;
   findLoopZeroYaml: () => LoopZeroYamlResult | null;
@@ -90,6 +97,8 @@ export interface DeployDeps {
   getSecrets: (project: string, environment: string) => Promise<string[]>;
   cleanupFile: (filePath: string) => void;
   generateIdempotencyKey: (commitSha: string, project: string, environment: string, apps: string[]) => string;
+  /** Check build state as fallback when SSE stream breaks. */
+  getBuildStatus?: (buildId: string) => Promise<BuildStatus>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
   isCI: boolean;
@@ -160,7 +169,17 @@ export class DeployCommand {
     // 7. Validate secrets (pre-deploy check) — scoped to selected apps only (F-02)
     const declaredSecrets = this.collectDeclaredSecrets(config, selectedApps);
     if (declaredSecrets.length > 0) {
-      const configuredSecrets = await this.deps.getSecrets(config.project, environment);
+      let configuredSecrets: string[];
+      try {
+        configuredSecrets = await this.deps.getSecrets(config.project, environment);
+      } catch {
+        // MOD-6: Network error during secrets check — warn and continue
+        // The build will fail if secrets are truly missing.
+        if (!opts.json) {
+          this.deps.writeTo('Warning: Could not verify secrets. Deploy will continue but may fail if secrets are missing.');
+        }
+        configuredSecrets = declaredSecrets; // skip validation
+      }
       const missingSecrets = declaredSecrets.filter((s) => !configuredSecrets.includes(s));
       if (missingSecrets.length > 0) {
         const msg = `Missing secrets for env "${environment}": ${missingSecrets.join(', ')}`;
@@ -211,6 +230,20 @@ export class DeployCommand {
       bundlePath = await this.deps.createGitBundle();
     } catch (err) {
       return this.exitWithError(opts, `Failed to create source bundle. ${(err as Error).message}`, 1, 'BUNDLE_FAILED');
+    }
+
+    // 10b. Validate bundle size before upload (MOD-5)
+    try {
+      const stat = fs.statSync(bundlePath);
+      if (stat.size > MAX_BUNDLE_SIZE_BYTES) {
+        this.deps.cleanupFile(bundlePath);
+        const sizeMB = Math.ceil(stat.size / (1024 * 1024));
+        return this.exitWithError(opts,
+          `Source bundle too large (${sizeMB}MB, max 500MB). Reduce repository size or use .gitignore to exclude large files.`,
+          1, 'BUNDLE_TOO_LARGE');
+      }
+    } catch {
+      // Can't stat — proceed anyway, server will reject if too large
     }
 
     // 11. Upload source
@@ -296,8 +329,29 @@ export class DeployCommand {
         }, DEPLOY_TIMEOUT_MS);
       };
 
-      const finish = (exitCode: number): void => {
+      const finish = async (exitCode: number): Promise<void> => {
         if (resolved) return;
+
+        // BLOCKER-1: On stream-related failures, verify actual build state
+        // before reporting failure. The build may have completed successfully
+        // even though the stream broke.
+        if (exitCode === 3 && this.deps.getBuildStatus) {
+          try {
+            const status = await this.deps.getBuildStatus(buildResult.build_id);
+            if (status.state === 'SUCCEEDED') {
+              exitCode = 0;
+            } else if (status.state === 'FAILED') {
+              exitCode = 2;
+              if (!opts.json) {
+                this.deps.writeError(`Build failed: ${status.error_message ?? 'unknown error'}`);
+              }
+            }
+            // If still RUNNING/QUEUED, keep exit code 3 (unknown)
+          } catch {
+            // Can't reach API either — keep original exit code
+          }
+        }
+
         resolved = true;
         clearTimeout(activityTimeout);
         if (sseConnection) {
@@ -352,7 +406,14 @@ export class DeployCommand {
             return;
           }
 
-          this.displayResult(payload);
+          // LEVE-2: Use DeployRenderer for final output (single renderer, no duplication)
+          const result: DeployResult = {
+            deploy_id: payload.deploy_id,
+            status: payload.status,
+            duration_seconds: payload.duration_seconds,
+            apps: payload.apps,
+          };
+          this.deps.writeTo(renderer.renderResult(result));
           finish(this.resolveExitCode(payload, selectedApps.length));
           return;
         }
@@ -453,30 +514,6 @@ export class DeployCommand {
     }
 
     return 2;
-  }
-
-  private displayResult(payload: DeployCompletedPayload): void {
-    if (payload.status === 'success') {
-      this.deps.writeTo(`Deploy completed in ${payload.duration_seconds}s`);
-      for (const app of payload.apps) {
-        if (app.url) {
-          this.deps.writeTo(`  ${app.name}: ${app.url}`);
-        } else {
-          this.deps.writeTo(`  ${app.name}: deployed`);
-        }
-      }
-    } else {
-      this.deps.writeError(`Deploy ${payload.status}`);
-      for (const app of payload.apps) {
-        if (app.status === 'failed' && app.error) {
-          this.deps.writeError(`  ${app.name}: ${app.error}`);
-        } else if (app.url) {
-          this.deps.writeTo(`  ${app.name}: ${app.url}`);
-        } else {
-          this.deps.writeTo(`  ${app.name}: deployed`);
-        }
-      }
-    }
   }
 
   private collectDeclaredSecrets(config: LoopZeroYaml, selectedApps: string[]): string[] {

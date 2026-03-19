@@ -71,6 +71,9 @@ export const DEPLOY_TIMEOUT_MS = envInt('LOOPZERO_DEPLOY_TIMEOUT', 10 * 60 * 100
 /** Maximum environment name length (RFC 1123 label). */
 export const MAX_ENVIRONMENT_NAME_LENGTH = 63;
 
+/** Maximum source bundle size in bytes (500MB). Fail fast before upload. */
+export const MAX_BUNDLE_SIZE_BYTES = 500 * 1024 * 1024;
+
 // --- Documentation URLs ---
 
 export const DOCS_BASE_URL = 'https://docs.loopzero.example';

@@ -175,92 +175,8 @@ describe('LoginCommand', () => {
     });
   });
 
-  describe('browser OAuth flow (no --token)', () => {
-    it('should call openBrowser and startCallbackServer when not CI and browser deps provided', async () => {
-      const mockShutdown = jest.fn();
-      const deps = createMockDeps({
-        openBrowser: jest.fn().mockResolvedValue(undefined),
-        startCallbackServer: jest.fn().mockResolvedValue({
-          token: 'ghp_browser_token',
-          email: 'browser@example.com',
-          teams: ['acme'],
-          shutdown: mockShutdown,
-        }),
-      });
-      const cmd = new LoginCommand(deps);
-
-      const exitCode = await cmd.execute({ team: undefined });
-
-      expect(deps.startCallbackServer).toHaveBeenCalled();
-      expect(deps.openBrowser).toHaveBeenCalled();
-      expect(exitCode).toBe(0);
-      expect(mockShutdown).toHaveBeenCalled();
-    });
-
-    it('should authenticate successfully when callback returns valid token', async () => {
-      const mockShutdown = jest.fn();
-      const deps = createMockDeps({
-        validateToken: jest.fn().mockResolvedValue({
-          valid: true,
-          email: 'oauth@example.com',
-          teams: ['my-team'],
-        }),
-        openBrowser: jest.fn().mockResolvedValue(undefined),
-        startCallbackServer: jest.fn().mockResolvedValue({
-          token: 'ghp_oauth_token',
-          email: 'oauth@example.com',
-          teams: ['my-team'],
-          shutdown: mockShutdown,
-        }),
-      });
-      const cmd = new LoginCommand(deps);
-
-      const exitCode = await cmd.execute({ team: undefined });
-
-      expect(deps.validateToken).toHaveBeenCalledWith('ghp_oauth_token');
-      expect(deps.saveToken).toHaveBeenCalledWith('ghp_oauth_token', 'oauth@example.com', 'my-team');
-      expect(exitCode).toBe(0);
-    });
-
-    it('should exit 4 when callback server throws an error', async () => {
-      const deps = createMockDeps({
-        openBrowser: jest.fn().mockResolvedValue(undefined),
-        startCallbackServer: jest.fn().mockRejectedValue(new Error('server failed')),
-      });
-      const cmd = new LoginCommand(deps);
-
-      const exitCode = await cmd.execute({ team: undefined });
-
-      expect(deps.saveToken).not.toHaveBeenCalled();
-      expect(exitCode).toBe(4);
-      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
-      expect(errOutput).toContain('Authentication failed');
-    });
-
-    it('should exit 1 in CI mode without --token with CI-specific message', async () => {
-      const deps = createMockDeps({
-        isCI: true,
-        openBrowser: jest.fn().mockResolvedValue(undefined),
-        startCallbackServer: jest.fn().mockResolvedValue({
-          token: 'ghp_x',
-          email: 'x@x.com',
-          teams: ['t'],
-          shutdown: jest.fn(),
-        }),
-      });
-      const cmd = new LoginCommand(deps);
-
-      const exitCode = await cmd.execute({ team: undefined });
-
-      expect(exitCode).toBe(1);
-      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
-      expect(errOutput).toContain('CI');
-      expect(errOutput).toContain('--token');
-      expect(deps.openBrowser).not.toHaveBeenCalled();
-      expect(deps.startCallbackServer).not.toHaveBeenCalled();
-    });
-
-    it('should exit 1 without --token and without browser deps (backwards compat)', async () => {
+  describe('no --token (non-CI)', () => {
+    it('should exit 1 without --token with actionable message', async () => {
       const deps = createMockDeps();
       const cmd = new LoginCommand(deps);
 
@@ -271,39 +187,16 @@ describe('LoginCommand', () => {
       expect(errOutput).toContain('Token is required');
     });
 
-    it('should still work with --token as before', async () => {
-      const deps = createMockDeps({
-        openBrowser: jest.fn(),
-        startCallbackServer: jest.fn(),
-      });
-      const cmd = new LoginCommand(deps);
-
-      const exitCode = await cmd.execute({ token: 'ghp_direct', team: undefined });
-
-      expect(exitCode).toBe(0);
-      expect(deps.openBrowser).not.toHaveBeenCalled();
-      expect(deps.startCallbackServer).not.toHaveBeenCalled();
-      expect(deps.saveToken).toHaveBeenCalled();
-    });
-
-    it('should shut down callback server even when validation fails', async () => {
-      const mockShutdown = jest.fn();
-      const deps = createMockDeps({
-        validateToken: jest.fn().mockResolvedValue({ valid: false, email: null, teams: [] }),
-        openBrowser: jest.fn().mockResolvedValue(undefined),
-        startCallbackServer: jest.fn().mockResolvedValue({
-          token: 'ghp_bad_oauth',
-          email: 'bad@example.com',
-          teams: [],
-          shutdown: mockShutdown,
-        }),
-      });
+    it('should exit 1 in CI mode without --token with CI-specific message', async () => {
+      const deps = createMockDeps({ isCI: true });
       const cmd = new LoginCommand(deps);
 
       const exitCode = await cmd.execute({ team: undefined });
 
-      expect(exitCode).toBe(4);
-      expect(mockShutdown).toHaveBeenCalled();
+      expect(exitCode).toBe(1);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput).toContain('CI');
+      expect(errOutput).toContain('--token');
     });
   });
 
@@ -487,7 +380,7 @@ describe('LoginCommand', () => {
       expect(parsed.exit_code).toBe(1);
     });
 
-    it('should output JSON error when --json and no token without browser deps', async () => {
+    it('should output JSON error when --json and no token', async () => {
       const deps = createMockDeps();
       const cmd = new LoginCommand(deps);
 
@@ -499,47 +392,6 @@ describe('LoginCommand', () => {
       const parsed = JSON.parse(output);
       expect(parsed.error).toContain('Token is required');
       expect(parsed.exit_code).toBe(1);
-    });
-
-    it('should output JSON error when --json and browser OAuth fails', async () => {
-      const deps = createMockDeps({
-        openBrowser: jest.fn().mockResolvedValue(undefined),
-        startCallbackServer: jest.fn().mockRejectedValue(new Error('server failed')),
-      });
-      const cmd = new LoginCommand(deps);
-
-      const exitCode = await cmd.execute({ json: true });
-
-      expect(exitCode).toBe(4);
-      expect(deps.writeError).not.toHaveBeenCalled();
-      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
-      const parsed = JSON.parse(output);
-      expect(parsed.error).toContain('Authentication failed');
-      expect(parsed.exit_code).toBe(4);
-    });
-
-    it('should output JSON error when --json and browser flow returns invalid token', async () => {
-      const mockShutdown = jest.fn();
-      const deps = createMockDeps({
-        validateToken: jest.fn().mockResolvedValue({
-          valid: false, email: null, teams: [], serverError: true,
-        }),
-        openBrowser: jest.fn().mockResolvedValue(undefined),
-        startCallbackServer: jest.fn().mockResolvedValue({
-          token: 'ghp_bad', email: 'x@x.com', teams: [], shutdown: mockShutdown,
-        }),
-      });
-      const cmd = new LoginCommand(deps);
-
-      const exitCode = await cmd.execute({ json: true });
-
-      expect(exitCode).toBe(4);
-      expect(deps.writeError).not.toHaveBeenCalled();
-      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
-      const parsed = JSON.parse(output);
-      expect(parsed.error).toContain('Service temporarily unavailable');
-      expect(parsed.exit_code).toBe(4);
-      expect(mockShutdown).toHaveBeenCalled();
     });
   });
 

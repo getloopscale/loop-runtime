@@ -1,7 +1,10 @@
-import { execSync } from 'child_process';
+import { execSync, execFile } from 'child_process';
+import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+
+const execFileAsync = promisify(execFile);
 
 export function hasGitRepo(): boolean {
   try {
@@ -41,23 +44,25 @@ export async function createGitBundle(): Promise<string> {
   const tmpFile = path.join(os.tmpdir(), `loopzero-bundle-${Date.now()}.bundle`);
   // Bundle only HEAD's reachable history (not --all which includes every branch/tag).
   // The API's PushBundle does `git pull bundle HEAD`, so only the HEAD ref is needed.
-  execSync(`git bundle create "${tmpFile}" HEAD`, { stdio: 'pipe' });
+  // Uses execFile (async) to avoid blocking the event loop on large repos.
+  await execFileAsync('git', ['bundle', 'create', tmpFile, 'HEAD']);
   return tmpFile;
 }
 
 /**
  * Check for potentially sensitive files tracked in git.
  * Returns file paths that match common sensitive patterns.
+ * Uses git pathspec filtering to avoid listing all tracked files.
  */
 export function checkSensitiveFiles(): string[] {
-  const sensitivePatterns = ['.env', 'credentials', '.key', '.pem', 'secret'];
   try {
-    const output = execSync('git ls-files', { encoding: 'utf-8' }).trim();
+    // Use git pathspec to filter server-side instead of listing all files
+    const output = execSync(
+      'git ls-files -- "*.env" "*.env.*" "*.key" "*.pem" "*credentials*" "*secret*"',
+      { encoding: 'utf-8' },
+    ).trim();
     if (!output) return [];
-    const files = output.split('\n');
-    return files.filter(f =>
-      sensitivePatterns.some(p => f.toLowerCase().includes(p))
-    );
+    return output.split('\n');
   } catch {
     return [];
   }

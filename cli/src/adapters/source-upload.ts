@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ApiError } from '../api/client';
+import { UPLOAD_TIMEOUT_MS } from '../config/constants';
 
 export interface UploadResult {
   commit_sha: string;
@@ -58,7 +59,7 @@ export async function uploadSource(
       method: 'POST',
       headers,
       body: formData,
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
     });
   } catch (err) {
     const isTimeout =

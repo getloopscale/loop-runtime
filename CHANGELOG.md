@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `getBuildStatus` fallback in CLI deploy — verifies actual build state via API when SSE stream breaks, preventing false timeout failures (#CLI-BLOCKER-1)
+- Retry with exponential backoff in `ApiClient` for transient server errors (502/503/504) and network errors — 3 attempts with 1s/2s/4s delays (#CLI-MOD-3)
+- `User-Agent: loopzero-cli/<version>` header on all API requests for server-side debugging and version tracking (#CLI-LEVE-5)
+- Bundle size validation before upload — fails fast with actionable message when source exceeds 500MB limit (#CLI-MOD-5)
+- `MAX_BUNDLE_SIZE_BYTES` constant in CLI config for pre-upload size check (#CLI-MOD-5)
+- `maxRetries` option on `ApiClient` — allows disabling retries in tests (#CLI-MOD-3)
+
+### Changed
+- `createGitBundle` now uses async `execFile` instead of `execSync` — event loop no longer blocked during bundle creation, SIGINT works on large repos (#CLI-BLOCKER-2)
+- Source upload now uses configurable `UPLOAD_TIMEOUT_MS` constant instead of hardcoded 30s — `LOOPZERO_UPLOAD_TIMEOUT` env var is now functional (#CLI-BLOCKER-3)
+- `checkSensitiveFiles` now uses git pathspec filtering instead of listing all tracked files — efficient on large repos (#CLI-MOD-2)
+- Idempotency key now includes 60-second time window — allows retry after build failure without requiring a new commit (#CLI-MOD-4)
+- Secrets validation wraps network errors gracefully — deploy continues with warning instead of crashing on unreachable API (#CLI-MOD-6)
+- Deploy final output now uses `DeployRenderer` for both intermediate and final events — single renderer, no duplication (#CLI-LEVE-2)
+
+### Removed
+- Dead dependencies `chalk` and `ora` from CLI package.json — were declared but never imported (#CLI-LEVE-1)
+- Deprecated browser OAuth flow from `LoginCommand` — dead code path never wired in production (#CLI-LEVE-3)
+- Duplicate `displayResult` method from `DeployCommand` — replaced by `DeployRenderer.renderResult()` (#CLI-LEVE-2)
+
+### Fixed
 - `.env.example` with documented dev credentials and `dotenv` support in Taskfile for override via `.env.local` (#E-01)
 - ADR 0004: encryption at rest for Kubernetes secrets — documents production path and local dev acceptance (#F-03)
 - Table of contents with anchor links to all sections and subsections in docs/technical.md (#H-01)

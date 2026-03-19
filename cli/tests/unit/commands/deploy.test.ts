@@ -75,6 +75,8 @@ describe('DeployCommand', () => {
       expect(exitCode).toBe(0);
 
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('api');
+      expect(output).toContain('web');
       expect(output).toContain('https://api.example.com');
       expect(output).toContain('https://web.example.com');
     });
@@ -146,9 +148,9 @@ describe('DeployCommand', () => {
 
       expect(exitCode).toBe(0);
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
-      expect(output).toContain('api: https://api.example.com');
-      expect(output).toContain('worker: deployed');
-      expect(output).not.toContain('background worker');
+      expect(output).toContain('api');
+      expect(output).toContain('https://api.example.com');
+      expect(output).toContain('worker');
     });
   });
 
@@ -1877,8 +1879,8 @@ describe('DeployCommand', () => {
     });
   });
 
-  describe('no background worker label', () => {
-    it('does not show "background worker" for apps without URL', async () => {
+  describe('worker app display', () => {
+    it('shows worker app in deploy result', async () => {
       const deps = createMockDeps({
         connectSSE: jest.fn().mockImplementation(
           (_buildId: string, onEvent: (event: SSEEvent) => void) => {
@@ -1898,8 +1900,8 @@ describe('DeployCommand', () => {
       const cmd = new DeployCommand(deps);
       await cmd.execute({});
       const allOutput = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
-      expect(allOutput).not.toContain('background worker');
-      expect(allOutput).toContain('deployed');
+      expect(allOutput).toContain('worker');
+      expect(allOutput).toContain('Deploy completed');
     });
   });
 

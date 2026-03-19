@@ -3,10 +3,24 @@ import { getDefaultApiUrl, API_REQUEST_TIMEOUT_MS } from '../config/constants';
 
 type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
+/** HTTP status codes that are safe to retry (server-side transient errors). */
+const RETRYABLE_STATUS_CODES = new Set([502, 503, 504]);
+
+/** Max retry attempts for transient errors. */
+const MAX_RETRIES = 3;
+
+/** Base delay between retries in ms (doubles each attempt: 1s, 2s, 4s). */
+const RETRY_BASE_DELAY_MS = 1000;
+
+/** CLI version for User-Agent header. */
+const CLI_VERSION = '0.1.0';
+
 export interface ApiClientOptions {
   baseURL?: string;
   token?: string | null;
   fetchFn?: FetchFn;
+  /** Max retry attempts for transient errors. Default: 3. Set to 0 to disable. */
+  maxRetries?: number;
 }
 
 export class ApiError extends Error {
@@ -82,11 +96,13 @@ export class ApiClient {
   private readonly baseURL: string;
   private readonly token: string | null;
   private readonly fetchFn: FetchFn;
+  private readonly maxRetries: number;
 
   constructor(opts: ApiClientOptions = {}) {
     this.baseURL = opts.baseURL ?? getDefaultApiUrl();
     this.token = opts.token ?? null;
     this.fetchFn = opts.fetchFn ?? globalThis.fetch;
+    this.maxRetries = opts.maxRetries ?? MAX_RETRIES;
   }
 
   async get<T = unknown>(path: string): Promise<T> {
@@ -113,6 +129,7 @@ export class ApiClient {
   ): Promise<T> {
     const headers: Record<string, string> = {
       'Correlation-ID': randomUUID(),
+      'User-Agent': `loopzero-cli/${CLI_VERSION}`,
       ...extraHeaders,
     };
 
@@ -125,30 +142,82 @@ export class ApiClient {
     }
 
     const url = `${this.baseURL}${path}`;
-    const init: RequestInit = {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
-    };
+    const bodyStr = body !== undefined ? JSON.stringify(body) : undefined;
 
-    const res = await this.fetchFn(url, init);
+    let lastError: ApiError | Error | undefined;
 
-    if (!res.ok) {
-      let errorBody: { code?: string; message?: string } | null = null;
-      try {
-        errorBody = (await res.json()) as { code?: string; message?: string };
-      } catch {
-        /* ignore parse errors */
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
-      throw this.mapError(res.status, errorBody);
+
+      try {
+        const init: RequestInit = {
+          method,
+          headers,
+          body: bodyStr,
+          signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
+        };
+
+        const res = await this.fetchFn(url, init);
+
+        if (!res.ok) {
+          let errorBody: { code?: string; message?: string } | null = null;
+          try {
+            errorBody = (await res.json()) as { code?: string; message?: string };
+          } catch {
+            /* ignore parse errors */
+          }
+
+          const apiError = this.mapError(res.status, errorBody);
+
+          // Only retry on transient server errors (502, 503, 504)
+          if (RETRYABLE_STATUS_CODES.has(res.status) && attempt < this.maxRetries) {
+            lastError = apiError;
+            continue;
+          }
+
+          throw apiError;
+        }
+
+        if (res.status === 204) {
+          return undefined as T;
+        }
+
+        return (await res.json()) as T;
+      } catch (err) {
+        if (err instanceof ApiError) {
+          // Already mapped — if not retryable, throw immediately
+          if (!RETRYABLE_STATUS_CODES.has(err.statusCode)) {
+            throw err;
+          }
+          lastError = err;
+          if (attempt >= this.maxRetries) {
+            throw err;
+          }
+          continue;
+        }
+
+        // Network errors (ECONNRESET, ECONNREFUSED, etc.) — retry
+        const isNetworkError = err instanceof Error && (
+          err.message.includes('ECONNRESET') ||
+          err.message.includes('ECONNREFUSED') ||
+          err.message.includes('fetch failed') ||
+          err.name === 'TimeoutError'
+        );
+
+        if (isNetworkError && attempt < this.maxRetries) {
+          lastError = err as Error;
+          continue;
+        }
+
+        throw err;
+      }
     }
 
-    if (res.status === 204) {
-      return undefined as T;
-    }
-
-    return (await res.json()) as T;
+    // Should not reach here, but safety net
+    throw lastError ?? new ApiError('Request failed after retries.', 3, 0);
   }
 
   private mapError(

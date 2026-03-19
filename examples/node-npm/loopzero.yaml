@@ -1,0 +1,7 @@
+project: node-npm-json-test
+
+apps:
+  node-npm-json-test:
+    path: .
+    framework: express
+    port: 3000

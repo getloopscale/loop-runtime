@@ -269,7 +269,7 @@ describe('ApiClient', () => {
         code: 'AUTH_SERVICE_UNAVAILABLE',
         message: 'Authentication service is temporarily unavailable',
       });
-      const client = new ApiClient({ baseURL, token: 'tok', fetchFn });
+      const client = new ApiClient({ baseURL, token: 'tok', fetchFn, maxRetries: 0 });
 
       try {
         await client.get('/test');
@@ -286,7 +286,7 @@ describe('ApiClient', () => {
         code: 'SERVICE_UNAVAILABLE',
         message: 'Service temporarily unavailable',
       });
-      const client = new ApiClient({ baseURL, token: 'tok', fetchFn });
+      const client = new ApiClient({ baseURL, token: 'tok', fetchFn, maxRetries: 0 });
 
       try {
         await client.get('/test');
@@ -295,6 +295,41 @@ describe('ApiClient', () => {
         expect(err).toBeInstanceOf(ApiError);
         expect((err as ApiError).exitCode).toBe(3);
       }
+    });
+  });
+
+  describe('retry on transient errors', () => {
+    it('should retry on 503 and succeed on second attempt', async () => {
+      let callCount = 0;
+      const fetchFn = async (_url: string, _init?: RequestInit): Promise<Response> => {
+        callCount++;
+        if (callCount === 1) {
+          return { ok: false, status: 503, headers: new Headers(), json: async () => ({ code: 'SERVICE_UNAVAILABLE' }) } as Response;
+        }
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ result: 'ok' }) } as Response;
+      };
+      const client = new ApiClient({ baseURL, token: null, fetchFn, maxRetries: 1 });
+
+      const result = await client.get<{ result: string }>('/test');
+      expect(result.result).toBe('ok');
+      expect(callCount).toBe(2);
+    });
+
+    it('should not retry on 4xx errors', async () => {
+      let callCount = 0;
+      const fetchFn = async (_url: string, _init?: RequestInit): Promise<Response> => {
+        callCount++;
+        return { ok: false, status: 400, headers: new Headers(), json: async () => ({}) } as Response;
+      };
+      const client = new ApiClient({ baseURL, token: null, fetchFn, maxRetries: 3 });
+
+      try {
+        await client.get('/test');
+        fail('should have thrown');
+      } catch (err) {
+        expect((err as ApiError).statusCode).toBe(400);
+      }
+      expect(callCount).toBe(1);
     });
   });
 });

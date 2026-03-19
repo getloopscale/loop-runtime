@@ -335,8 +335,17 @@ export function createProgram(): Command {
           return result.secrets.map((s) => s.name);
         },
         cleanupFile,
+        getBuildStatus: async (buildId: string) => {
+          const result = await apiClient.get<{ state: string; error_message?: string }>(
+            `/api/v1/builds/${encodeURIComponent(buildId)}`
+          );
+          return result;
+        },
         generateIdempotencyKey: (commitSha: string, project: string, environment: string, apps: string[]) => {
-          const input = [commitSha, project, environment, ...apps.sort()].join(':');
+          // Include a 60-second time window to allow retry after failures
+          // while still deduplicating accidental double-submits within the window.
+          const window = Math.floor(Date.now() / 60000);
+          const input = [commitSha, project, environment, ...apps.sort(), String(window)].join(':');
           return createHash('sha256').update(input).digest('hex').substring(0, 32);
         },
         writeTo: deployWriteTo,
