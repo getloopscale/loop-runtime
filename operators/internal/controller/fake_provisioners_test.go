@@ -71,16 +71,30 @@ func (f *fakeGiteaProvisioner) ArchiveRepo(_ context.Context, name string) error
 type fakeArgoCDProvisioner struct {
 	Mu           sync.Mutex
 	Applications map[string]argocd.ApplicationSpec
+	AppProjects  map[string]argocd.AppProjectSpec
 	EnsureErr    error
 	DeleteErr    error
 	EnsureCalls  int
 	DeleteCalls  int
+	ProjectCalls int
 }
 
 func newFakeArgoCDProvisioner() *fakeArgoCDProvisioner {
 	return &fakeArgoCDProvisioner{
 		Applications: make(map[string]argocd.ApplicationSpec),
+		AppProjects:  make(map[string]argocd.AppProjectSpec),
 	}
+}
+
+func (f *fakeArgoCDProvisioner) EnsureAppProject(_ context.Context, spec argocd.AppProjectSpec) error {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	f.ProjectCalls++
+	if f.EnsureErr != nil {
+		return f.EnsureErr
+	}
+	f.AppProjects[spec.Name] = spec
+	return nil
 }
 
 func (f *fakeArgoCDProvisioner) EnsureApplication(_ context.Context, spec argocd.ApplicationSpec) error {
@@ -106,5 +120,15 @@ func (f *fakeArgoCDProvisioner) DeleteApplications(_ context.Context, tenantID s
 			delete(f.Applications, name)
 		}
 	}
+	return nil
+}
+
+func (f *fakeArgoCDProvisioner) DeleteAppProject(_ context.Context, tenantID string) error {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	if f.DeleteErr != nil {
+		return f.DeleteErr
+	}
+	delete(f.AppProjects, tenantID)
 	return nil
 }

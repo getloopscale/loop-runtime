@@ -77,21 +77,35 @@ func (f *FakeGitProvisioner) ArchiveRepo(_ context.Context, name string) error {
 }
 
 // FakeArgoCDProvisioner is a test double for argocd.Provisioner.
-// Tracks created applications in memory.
+// Tracks created applications and app projects in memory.
 type FakeArgoCDProvisioner struct {
 	Mu           sync.Mutex
 	Applications map[string]argocd.ApplicationSpec
+	AppProjects  map[string]argocd.AppProjectSpec
 	EnsureErr    error
 	DeleteErr    error
 	EnsureCalls  int
 	DeleteCalls  int
+	ProjectCalls int // number of EnsureAppProject calls
 }
 
 // NewFakeArgoCDProvisioner returns a fake ArgoCD Provisioner for testing.
 func NewFakeArgoCDProvisioner() *FakeArgoCDProvisioner {
 	return &FakeArgoCDProvisioner{
 		Applications: make(map[string]argocd.ApplicationSpec),
+		AppProjects:  make(map[string]argocd.AppProjectSpec),
 	}
+}
+
+func (f *FakeArgoCDProvisioner) EnsureAppProject(_ context.Context, spec argocd.AppProjectSpec) error {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	f.ProjectCalls++
+	if f.EnsureErr != nil {
+		return f.EnsureErr
+	}
+	f.AppProjects[spec.Name] = spec
+	return nil
 }
 
 func (f *FakeArgoCDProvisioner) EnsureApplication(_ context.Context, spec argocd.ApplicationSpec) error {
@@ -117,6 +131,16 @@ func (f *FakeArgoCDProvisioner) DeleteApplications(_ context.Context, tenantID s
 			delete(f.Applications, name)
 		}
 	}
+	return nil
+}
+
+func (f *FakeArgoCDProvisioner) DeleteAppProject(_ context.Context, tenantID string) error {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	if f.DeleteErr != nil {
+		return f.DeleteErr
+	}
+	delete(f.AppProjects, tenantID)
 	return nil
 }
 

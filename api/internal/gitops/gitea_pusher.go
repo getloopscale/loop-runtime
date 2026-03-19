@@ -29,7 +29,7 @@ type GiteaGitOpsPusherConfig struct {
 // to the tenant GitOps repo in Gitea.
 //
 // Repo naming: loopzero-tenant-{tenantID}
-// File path: {projectID}/{environment}/manifests.yaml
+// File path: {environment}/{projectID}/manifests.yaml
 // Git trailers: Release-ID, Correlation-ID, Build-ID (spec §17.5)
 type GiteaGitOpsPusher struct {
 	baseURL string
@@ -87,8 +87,9 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	_ = p.gitCmd(ctx, repoDir, "git", "config", "user.email", "loopzero-api@loopzero.io")
 	_ = p.gitCmd(ctx, repoDir, "git", "config", "user.name", "LoopZero API")
 
-	// Write manifests to {projectID}/{environment}/manifests.yaml
-	envPath := filepath.Join(repoDir, opts.ProjectID, opts.Environment)
+	// Write manifests to {environment}/{projectID}/manifests.yaml
+	// BLOCKER-3: environment-first hierarchy so ArgoCD Application path scopes to one environment
+	envPath := filepath.Join(repoDir, opts.Environment, opts.ProjectID)
 	if err := os.MkdirAll(envPath, 0755); err != nil {
 		return "", fmt.Errorf("gitops push: create dir: %w", err)
 	}
@@ -98,7 +99,7 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	}
 
 	// Stage changes
-	relPath := filepath.Join(opts.ProjectID, opts.Environment)
+	relPath := filepath.Join(opts.Environment, opts.ProjectID)
 	if err := p.gitCmd(ctx, repoDir, "git", "add", relPath+"/"); err != nil {
 		return "", fmt.Errorf("gitops push: git add: %w", err)
 	}

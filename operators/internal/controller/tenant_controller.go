@@ -266,6 +266,11 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		logger.Info("non-fatal cleanup failure, continuing", "step", "argocd-cleanup", "error", err, "tenant", tenant.Name)
 	}
 
+	// Delete ArgoCD AppProject for this tenant (MOD-5)
+	if err := r.ArgoCDProvisioner.DeleteAppProject(ctx, tenant.Name); err != nil {
+		logger.Info("non-fatal cleanup failure, continuing", "step", "argocd-appproject-cleanup", "error", err, "tenant", tenant.Name)
+	}
+
 	// Delete all namespaces with tenant label
 	var nsList corev1.NamespaceList
 	if err := r.List(ctx, &nsList, client.MatchingLabels{"loopzero.io/tenant": tenant.Name}); err != nil {

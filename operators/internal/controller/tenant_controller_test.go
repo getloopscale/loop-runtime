@@ -1411,9 +1411,10 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 			}
 		})
 
-		It("should set correct path per environment", func() {
-			// Current implementation uses "." (root) for single-project-per-tenant model.
-			// When multi-project support is added, this should change to "environments/{env}/".
+		It("should set correct path per environment (BLOCKER-3: scoped to env directory)", func() {
+			// BLOCKER-3: Path is the environment name, not "." (root).
+			// This scopes each ArgoCD Application to only its environment's manifests,
+			// preventing cross-environment contamination.
 			for _, env := range []string{"production", "staging"} {
 				appName := fmt.Sprintf("%s-%s", tenantName, env)
 
@@ -1421,8 +1422,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 				app := fakeArgoCDProvider.Applications[appName]
 				fakeArgoCDProvider.Mu.Unlock()
 
-				Expect(app.Path).To(Equal("."),
-					"ArgoCD Application %s should have path '.' (root, single-project model)", appName)
+				Expect(app.Path).To(Equal(env),
+					"ArgoCD Application %s should have path '%s' (env-scoped)", appName, env)
 			}
 		})
 

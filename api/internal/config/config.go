@@ -181,6 +181,9 @@ func (c Config) Validate() {
 	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" {
 		slog.Warn("using default callback secret — only acceptable for local development")
 	}
+	if c.ArgocdInsecure && c.IsProduction() {
+		slog.Error("ARGOCD_INSECURE=true is forbidden in production — TLS verification must be enabled")
+	}
 }
 
 // GiteaCrossCluster returns the Gitea URL accessible from the build cluster.

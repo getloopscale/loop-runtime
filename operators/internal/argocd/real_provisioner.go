@@ -3,6 +3,7 @@ package argocd
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -15,6 +16,12 @@ var applicationGVR = schema.GroupVersionResource{
 	Group:    "argoproj.io",
 	Version:  "v1alpha1",
 	Resource: "applications",
+}
+
+var appProjectGVR = schema.GroupVersionResource{
+	Group:    "argoproj.io",
+	Version:  "v1alpha1",
+	Resource: "appprojects",
 }
 
 // RealProvisioner manages ArgoCD Application CRs using the Kubernetes API.
@@ -41,6 +48,59 @@ func NewRealProvisioner(namespace string) (*RealProvisioner, error) {
 	}, nil
 }
 
+// EnsureAppProject creates or updates an ArgoCD AppProject CR for tenant RBAC isolation (MOD-5).
+func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectSpec) error {
+	proj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "argoproj.io/v1alpha1",
+			"kind":       "AppProject",
+			"metadata": map[string]interface{}{
+				"name":      spec.Name,
+				"namespace": p.namespace,
+				"labels": map[string]interface{}{
+					"loopzero.io/tenant":     spec.TenantID,
+					"loopzero.io/managed-by": "tenant-controller",
+				},
+			},
+			"spec": map[string]interface{}{
+				"sourceRepos": toInterfaceSlice(spec.SourceRepos),
+				"destinations": []interface{}{
+					map[string]interface{}{
+						"namespace": spec.TenantID + "-*",
+						"server":    "*",
+					},
+				},
+				"clusterResourceWhitelist": []interface{}{},
+			},
+		},
+	}
+
+	existing, err := p.client.Resource(appProjectGVR).Namespace(p.namespace).Get(ctx, spec.Name, metav1.GetOptions{})
+	if err != nil {
+		_, err = p.client.Resource(appProjectGVR).Namespace(p.namespace).Create(ctx, proj, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("argocd: create appproject %s: %w", spec.Name, err)
+		}
+		return nil
+	}
+
+	proj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = p.client.Resource(appProjectGVR).Namespace(p.namespace).Update(ctx, proj, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("argocd: update appproject %s: %w", spec.Name, err)
+	}
+	return nil
+}
+
+// toInterfaceSlice converts a string slice to an interface slice for unstructured objects.
+func toInterfaceSlice(ss []string) []interface{} {
+	result := make([]interface{}, len(ss))
+	for i, s := range ss {
+		result[i] = s
+	}
+	return result
+}
+
 // EnsureApplication creates or updates an ArgoCD Application CR.
 func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec ApplicationSpec) error {
 	app := &unstructured.Unstructured{
@@ -59,7 +119,7 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 				},
 			},
 			"spec": map[string]interface{}{
-				"project": "default",
+				"project": spec.TenantID,
 				"source": map[string]interface{}{
 					"repoURL":        spec.RepoURL,
 					"targetRevision": spec.TargetRevision,
@@ -117,5 +177,18 @@ func (p *RealProvisioner) DeleteApplications(ctx context.Context, tenantID strin
 		}
 	}
 
+	return nil
+}
+
+// DeleteAppProject removes the ArgoCD AppProject CR for a tenant.
+func (p *RealProvisioner) DeleteAppProject(ctx context.Context, tenantID string) error {
+	err := p.client.Resource(appProjectGVR).Namespace(p.namespace).Delete(ctx, tenantID, metav1.DeleteOptions{})
+	if err != nil {
+		// Check if already gone (idempotent)
+		if strings.Contains(err.Error(), "not found") {
+			return nil
+		}
+		return fmt.Errorf("argocd: delete appproject %s: %w", tenantID, err)
+	}
 	return nil
 }

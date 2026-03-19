@@ -108,7 +108,7 @@ func TestGiteaGitOpsPusher_PushCreatesCorrectPath(t *testing.T) {
 		t.Fatalf("Push failed: %v", err)
 	}
 
-	// Clone and verify file path: pathtest/staging/manifests.yaml
+	// Clone and verify file path: staging/pathtest/manifests.yaml (BLOCKER-3: env-first hierarchy)
 	cloneDir, err := os.MkdirTemp("", "loopzero-gitops-verify-*")
 	if err != nil {
 		t.Fatal(err)
@@ -118,9 +118,9 @@ func TestGiteaGitOpsPusher_PushCreatesCorrectPath(t *testing.T) {
 	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopzero/loopzero-tenant-acme.git"
 	gitRun(t, cloneDir, "git", "clone", cloneURL, filepath.Join(cloneDir, "repo"))
 
-	content, err := os.ReadFile(filepath.Join(cloneDir, "repo", "pathtest", "staging", "manifests.yaml"))
+	content, err := os.ReadFile(filepath.Join(cloneDir, "repo", "staging", "pathtest", "manifests.yaml"))
 	if err != nil {
-		t.Fatalf("expected pathtest/staging/manifests.yaml in gitops repo: %v", err)
+		t.Fatalf("expected staging/pathtest/manifests.yaml in gitops repo: %v", err)
 	}
 	if string(content) != testManifests {
 		t.Errorf("manifest content mismatch:\ngot:  %q\nwant: %q", string(content), testManifests)

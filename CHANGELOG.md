@@ -8,9 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- `WaitForSync` call after `TriggerSync` in release activation — deploy no longer marked ACTIVE until ArgoCD confirms the new version is synced (#BLOCKER-2)
+- `WaitForSync` call after `TriggerSync` in release activation — deploy no longer marked ACTIVE until ArgoCD confirms the new version is synced and healthy (#BLOCKER-2)
 - Retry with exponential backoff on `TriggerSync` (3 attempts, 1s/2s/4s) — transient ArgoCD failures no longer cause immediate SYNC_FAILED (#MOD-1)
 - `ARGOCD_SYNC_TIMEOUT` config (default 120s) — controls how long WaitForSync waits before failing (#BLOCKER-2)
+- `WORKLOAD_CLUSTER_URL` env var for operator — ArgoCD Applications now target configurable workload cluster instead of hardcoded `kubernetes.default.svc` (#BLOCKER-1)
+- `TenantControllerConfig` struct replaces variadic `giteaURL` parameter in `SetupTenantController` — cleaner dependency injection (#BLOCKER-1)
+- `EnsureAppProject` and `DeleteAppProject` on ArgoCD Provisioner interface — each tenant now gets its own AppProject with scoped RBAC isolation (#MOD-5)
+- `ARGOCD_INSECURE=true` logs error in production mode — prevents accidental TLS bypass (#SEC-3)
+
+### Changed
+- **ArgoCD Application path scoped to environment** — path changed from `"."` (root) to `{environment}` to prevent cross-environment manifest contamination (#BLOCKER-3)
+- **GitOps manifest directory hierarchy inverted** — from `{project}/{env}/manifests.yaml` to `{env}/{project}/manifests.yaml` to enable environment-scoped ArgoCD Applications (#BLOCKER-3)
+- **ArgoCD Application project scoped to tenant** — Applications now reference per-tenant AppProject instead of `"default"`, enforcing RBAC isolation between tenants (#MOD-5)
+- **GitOps pusher credentials via HTTP header** — Gitea token passed via `http.extraHeader` instead of embedded in git URL, preventing exposure in `/proc/PID/cmdline` (#SEC-1)
+- **GitOps pusher HTTP client with timeout** — replaced `http.DefaultClient` (no timeout) with dedicated client (15s timeout) in Gitea API calls (#MOD-2)
+- **Gitea source store HTTP client with timeout** — same fix applied to source bundle operations (#MOD-2)
+- **Gitea repo creation uses `json.Marshal`** — replaced `fmt.Sprintf` JSON construction to prevent injection via special characters in repo names (#SEC-4)
+
+### Fixed
+- ArgoCD Applications deployed to management cluster instead of workload cluster — `DestinationURL` now read from `WORKLOAD_CLUSTER_URL` env var (#BLOCKER-1)
+- Deploy marked ACTIVE before ArgoCD completed sync — `WaitForSync` now runs before health probes to confirm new version is actually deployed (#BLOCKER-2)
+- Deploy of project A triggered ArgoCD re-sync of all projects in the tenant — environment-scoped Application path prevents cross-project contamination (#BLOCKER-3)
 - `BuildStore.SetWorkflowID()` persists Argo Workflow name on build record — startup reconciler and cancel now correctly correlate builds with external workflows (#BUILD-BLOCKER-1)
 - `ReleaseStore.GetActiveByEnvTx()` reads active release within advisory lock transaction — eliminates read-outside-tx race in release supersession (#BUILD-MOD-4)
 - Kaniko `registry-insecure` parameter — `--insecure` and `--skip-tls-verify` flags now controlled per-workflow via parameter instead of hardcoded in CWT (#BUILD-BLOCKER-3)

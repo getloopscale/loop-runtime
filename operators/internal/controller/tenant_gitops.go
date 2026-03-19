@@ -30,18 +30,29 @@ func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopzer
 func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	repoURL := fmt.Sprintf("%s/loopzero/%s.git", r.GiteaURL, tenant.Spec.GitOps.RepoName)
 
+	// MOD-5: Ensure AppProject exists for tenant RBAC isolation before creating Applications.
+	// Each tenant gets its own AppProject that restricts source repos and destination namespaces.
+	projSpec := argocd.AppProjectSpec{
+		Name:        tenant.Name,
+		Namespace:   "argocd",
+		TenantID:    tenant.Name,
+		SourceRepos: []string{repoURL},
+	}
+	if err := r.ArgoCDProvisioner.EnsureAppProject(ctx, projSpec); err != nil {
+		return fmt.Errorf("argocd appproject %s: %w", tenant.Name, err)
+	}
+
 	for _, env := range tenant.Spec.Environments {
 		appName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
 		destNS := appName
 		if err := naming.ValidateKubernetesName(destNS); err != nil {
 			return fmt.Errorf("invalid namespace name for env %s: %w", env.Name, err)
 		}
-		// Path matches what the workflow's gitops-push creates: {project}/{env}/
-		// Since ArgoCD Application is per-env and the repo is per-tenant,
-		// we use "." (root) to catch all project manifests for this environment.
-		// Multi-project isolation (project-scoped Applications) will be handled by the API
-		// when it creates project-scoped Application names (e.g., tenant-project-env).
-		path := "."
+		// BLOCKER-3: Path scoped to environment directory.
+		// Manifest hierarchy is {environment}/{projectID}/manifests.yaml.
+		// Each ArgoCD Application watches only its environment's subtree,
+		// preventing cross-environment contamination (e.g., staging manifests applied to production).
+		path := env.Name
 
 		spec := argocd.ApplicationSpec{
 			Name:           appName,
