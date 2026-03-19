@@ -189,8 +189,14 @@ export class DeployCommand {
       }
     }
 
-    // 9. Get HEAD commit (validates git has at least one commit)
-    this.deps.getHeadCommit();
+    // 9. Validate git has at least one commit (HEAD must exist for bundle creation)
+    try {
+      this.deps.getHeadCommit();
+    } catch {
+      return this.exitWithError(opts,
+        'No commits found. Commit your changes first: git add . && git commit -m "initial commit"',
+        1, 'NO_COMMITS');
+    }
 
     // 9b. Warn about potentially sensitive files in git (F-04)
     const sensitiveFiles = this.deps.checkSensitiveFiles?.() ?? [];

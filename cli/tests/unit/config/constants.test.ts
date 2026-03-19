@@ -45,13 +45,13 @@ describe('CLI config/constants', () => {
     it('should return fallback when LOOPZERO_API_URL is empty', () => {
       delete process.env.LOOPZERO_API_URL;
       const constants = loadConstants();
-      expect(constants.getDefaultApiUrl()).toBe('http://localhost:3001');
+      expect(constants.getDefaultApiUrl()).toBe('http://localhost:13001');
     });
 
     it('should return fallback when LOOPZERO_API_URL is empty string', () => {
       process.env.LOOPZERO_API_URL = '';
       const constants = loadConstants();
-      expect(constants.getDefaultApiUrl()).toBe('http://localhost:3001');
+      expect(constants.getDefaultApiUrl()).toBe('http://localhost:13001');
     });
   });
 
@@ -70,9 +70,9 @@ describe('CLI config/constants', () => {
   });
 
   describe('DEFAULT_API_URL_FALLBACK', () => {
-    it('should be localhost:3001', () => {
+    it('should be localhost:13001', () => {
       const constants = loadConstants();
-      expect(constants.DEFAULT_API_URL_FALLBACK).toBe('http://localhost:3001');
+      expect(constants.DEFAULT_API_URL_FALLBACK).toBe('http://localhost:13001');
     });
   });
 

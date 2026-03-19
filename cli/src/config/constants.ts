@@ -16,8 +16,12 @@ function envInt(name: string, defaultValue: number): number {
 
 // --- API Connection ---
 
-/** Default API base URL fallback when LOOPZERO_API_URL is not set. */
-export const DEFAULT_API_URL_FALLBACK = 'http://localhost:3001';
+/**
+ * Default API base URL fallback when LOOPZERO_API_URL is not set.
+ * Port 13001 matches the k3d mgmt cluster NodePort mapping (host:13001 → NodePort:30001).
+ * For production, set LOOPZERO_API_URL to the real API endpoint.
+ */
+export const DEFAULT_API_URL_FALLBACK = 'http://localhost:13001';
 
 /** Returns the API base URL, checking LOOPZERO_API_URL at call time. */
 export function getDefaultApiUrl(): string {

@@ -104,12 +104,12 @@ describe('ApiClient', () => {
       }
     });
 
-    it('should fallback to localhost:3001 when no env var', () => {
+    it('should fallback to localhost:13001 when no env var', () => {
       const original = process.env.LOOPZERO_API_URL;
       delete process.env.LOOPZERO_API_URL;
 
       const client = new ApiClient({ fetchFn: fakeFetch(200) });
-      expect((client as any).baseURL).toBe('http://localhost:3001');
+      expect((client as any).baseURL).toBe('http://localhost:13001');
 
       if (original !== undefined) {
         process.env.LOOPZERO_API_URL = original;

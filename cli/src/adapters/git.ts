@@ -1,4 +1,5 @@
 import { execSync } from 'child_process';
+import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -33,7 +34,6 @@ export function getGitRoot(): string | null {
 }
 
 export function hasLockfile(): boolean {
-  const fs = require('fs');
   return fs.existsSync('package-lock.json') || fs.existsSync('yarn.lock') || fs.existsSync('pnpm-lock.yaml');
 }
 

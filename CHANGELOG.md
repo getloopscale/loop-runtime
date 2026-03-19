@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Metrics endpoint `/metrics` documented as ClusterIP-only — no authentication, relies on NetworkPolicy for access control (#C-05)
 
 ### Fixed
+- NetworkPolicy redesigned: per-component egress rules replace global DNS-only egress that blocked API external access (GitHub auth, cross-cluster) (#dogfood-pre-prod-F01)
+- TenantController ClusterRole: added `watch` for namespaces, `list`+`watch` for resourcequotas, limitranges, priorityclasses, secrets — controller-runtime cache requires these at cluster scope (#dogfood-pre-prod-F02)
+- Deploy command handles `git rev-parse HEAD` failure gracefully — shows actionable message instead of raw git error (#dogfood-pre-prod-F03)
+- Auth service errors (503 AUTH_SERVICE_UNAVAILABLE) now return exit code 4 (auth) instead of 3 (deploy) in source upload (#dogfood-pre-prod-F04)
+- CLI default API URL changed from `localhost:3001` to `localhost:13001` to match k3d NodePort mapping (#dogfood-pre-prod-F05)
+- ESLint error in `git.ts`: replaced `require('fs')` with top-level `import * as fs` (#dogfood-pre-prod-F06)
 - Stale `argocd_client_test.go` removed — replaced by PG circuit breaker tests (#G-02)
 - `builds_route_test.go` updated for `NewBuildHandler` shutdown context parameter (#G-02)
 - CWT notify callback payload capped at 1MB — prevents oversized payloads for large monorepos (#E-09)

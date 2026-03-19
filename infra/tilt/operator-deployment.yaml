@@ -27,40 +27,45 @@ rules:
     verbs: ["update"]
 
   # --- Namespaces: create/manage tenant namespaces ---
+  # controller-runtime cache requires list+watch at cluster scope for all cached types
   - apiGroups: [""]
     resources: ["namespaces"]
-    verbs: ["get", "list", "create", "delete"]
+    verbs: ["get", "list", "watch", "create", "delete"]
 
   # --- ResourceQuotas + LimitRanges: enforce tenant resource limits ---
+  # controller-runtime cache requires list+watch at cluster scope for all cached types
   - apiGroups: [""]
     resources: ["resourcequotas", "limitranges"]
-    verbs: ["get", "create", "update"]
+    verbs: ["get", "list", "watch", "create", "update"]
 
   # --- RBAC: create Roles/RoleBindings in tenant namespaces ---
   # No ClusterRoles/ClusterRoleBindings — operator only manages namespace-scoped RBAC
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings"]
-    verbs: ["get", "create", "update"]
+    verbs: ["get", "list", "watch", "create", "update"]
 
   # --- ServiceAccounts: create in tenant namespaces ---
   - apiGroups: [""]
     resources: ["serviceaccounts"]
-    verbs: ["get", "create"]
+    verbs: ["get", "list", "watch", "create"]
 
   # --- NetworkPolicies: tenant network isolation ---
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
-    verbs: ["get", "create", "update", "delete"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
 
-  # --- Secrets: read-only (kubeconfig secrets for ClusterCredentialController) ---
+  # --- Secrets: kubeconfig secrets for ClusterCredentialController ---
+  # ClusterCredentialController reads secrets and creates ArgoCD cluster secrets.
+  # controller-runtime needs list+watch for caching; create+update+delete for ArgoCD secrets.
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
 
   # --- PriorityClasses: cluster-scoped, needed for tenant workload priorities ---
+  # controller-runtime cache requires list+watch at cluster scope for all cached types
   - apiGroups: ["scheduling.k8s.io"]
     resources: ["priorityclasses"]
-    verbs: ["get", "create", "update"]
+    verbs: ["get", "list", "watch", "create", "update"]
 
   # --- Events: emit Kubernetes events for observability ---
   - apiGroups: [""]

@@ -99,25 +99,32 @@ export async function uploadSource(
 
   if (!resp.ok) {
     let serverMessage: string | null = null;
+    let serverCode: string | undefined;
     try {
       const body = (await resp.json()) as { code?: string; message?: string };
       if (body.message) {
         serverMessage = body.message;
       }
+      if (body.code) {
+        serverCode = body.code;
+      }
     } catch {
       // Non-JSON response body — use fallback message
     }
 
-    const exitCode = mapStatusToExitCode(resp.status);
+    // Auth service errors (503 with AUTH_SERVICE_UNAVAILABLE) → exit code 4
+    const exitCode = mapStatusToExitCode(resp.status, serverCode);
     const fallback = defaultMessageForStatus(resp.status);
-    throw new ApiError(serverMessage ?? fallback, exitCode, resp.status);
+    throw new ApiError(serverMessage ?? fallback, exitCode, resp.status, serverCode);
   }
 
   return resp.json() as Promise<UploadResult>;
 }
 
-function mapStatusToExitCode(status: number): number {
+function mapStatusToExitCode(status: number, serverCode?: string): number {
   if (status === 401 || status === 403) return 4;
+  // Auth service unavailable (e.g., GitHub API unreachable) is an auth error, not a deploy error
+  if (serverCode === 'AUTH_SERVICE_UNAVAILABLE') return 4;
   if (status >= 400 && status < 500) return 1;
   return 3;
 }
