@@ -6,6 +6,21 @@ servers: 1
 agents: 2
 kubeAPI:
   hostPort: "6444"
+ports:
+  # Traefik HTTP entrypoint — host:8090 → loadbalancer:80
+  # HTTP redirects to HTTPS; also used by health probes (direct IP access)
+  - port: 8090:80
+    nodeFilters:
+      - loadbalancer
+  # Traefik HTTPS entrypoint — host:8443 → loadbalancer:443
+  # TLS-terminated traffic for deployed apps
+  - port: 8443:443
+    nodeFilters:
+      - loadbalancer
+  # Traefik metrics NodePort for cross-cluster Prometheus scraping
+  - port: 30091:30091
+    nodeFilters:
+      - loadbalancer
 registries:
   use:
     - k3d-loopzero-registry:5000

@@ -1,0 +1,23 @@
+# ServiceMonitor for MinIO object storage.
+# Scrapes S3 request stats, bucket usage, and disk metrics.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: loopzero-minio
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - loopzero-system
+  selector:
+    # MinIO Helm chart uses app.kubernetes.io/name label on Services.
+    # Must match exactly — "app: minio" alone may not match.
+    matchLabels:
+      app.kubernetes.io/name: minio
+  endpoints:
+    - port: http
+      path: /minio/v2/metrics/cluster
+      interval: 30s
+      scrapeTimeout: 10s

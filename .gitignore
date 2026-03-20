@@ -16,6 +16,7 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 prompts
+continue.txt
 
 # --------------------------------------------
 # Node.js / TypeScript (cli/)
@@ -43,6 +44,12 @@ bin/
 *.dll
 *.so
 *.dylib
+
+# Compiled Go binaries (should never be committed)
+api/main
+operators/main
+/cmd
+/scripts
 
 # Test output
 *.test
@@ -74,6 +81,7 @@ kubeconfig*
 .env
 .env.*
 !.env.example
+Taskfile.local.yml
 *.pem
 *.key
 credentials.json
@@ -85,6 +93,7 @@ secrets.yml
 # --------------------------------------------
 junit*.xml
 test-results/
+.test-reports/
 __snapshots__/
 
 # --------------------------------------------
@@ -94,3 +103,4 @@ tmp/
 .tmp/
 *.bak
 *.orig
+.env.local

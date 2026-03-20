@@ -1,23 +1,35 @@
+# Health probes: Traefik chart includes default livenessProbe and readinessProbe
+# on the traefik container (HTTP GET /ping on port 9000). These are built into
+# the chart and do not need explicit configuration in values.yaml.
+# livenessProbe: chart default (GET /ping)
+# readinessProbe: chart default (GET /ping)
+
+# --- High Availability ---
+deployment:
+  replicas: 2
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+
+# --- Resources (sized for multi-tenant workloads with access logs + metrics) ---
 resources:
   limits:
-    cpu: "300m"
-    memory: "128Mi"
+    cpu: "500m"
+    memory: "256Mi"
   requests:
-    cpu: "50m"
-    memory: "64Mi"
-
-readinessProbe:
-  httpGet:
-    path: /ping
-    port: 9000
-  initialDelaySeconds: 2
-  periodSeconds: 10
-livenessProbe:
-  httpGet:
-    path: /ping
-    port: 9000
-  initialDelaySeconds: 2
-  periodSeconds: 10
+    cpu: "100m"
+    memory: "128Mi"
 
 securityContext:
   runAsNonRoot: true
@@ -30,10 +42,67 @@ providers:
     enabled: true
   kubernetesCRD:
     enabled: true
+    allowCrossNamespace: true
 
+# --- Entrypoints ---
+ports:
+  web:
+    port: 8000
+    expose:
+      default: true
+    exposedPort: 80
+    protocol: TCP
+    # Redirect HTTP → HTTPS
+    redirectTo:
+      port: websecure
+  websecure:
+    port: 8443
+    expose:
+      default: true
+    exposedPort: 443
+    protocol: TCP
+    tls:
+      enabled: true
+  metrics:
+    port: 9100
+    expose:
+      default: false  # Scrape via ServiceMonitor only, not via LoadBalancer
+    exposedPort: 9100
+    protocol: TCP
+
+# --- Global Timeouts ---
+additionalArguments:
+  - "--entryPoints.websecure.transport.respondingTimeouts.readTimeout=60s"
+  - "--entryPoints.websecure.transport.respondingTimeouts.writeTimeout=60s"
+  - "--entryPoints.websecure.transport.respondingTimeouts.idleTimeout=120s"
+  - "--entryPoints.web.transport.respondingTimeouts.readTimeout=10s"
+  - "--entryPoints.web.transport.respondingTimeouts.writeTimeout=10s"
+  - "--serversTransport.forwardingTimeouts.dialTimeout=30s"
+  - "--serversTransport.forwardingTimeouts.responseHeaderTimeout=60s"
+
+# --- Metrics ---
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+
+# --- Logging ---
 logs:
   general:
     format: json
   access:
     enabled: true
     format: json
+    filters:
+      statusCodes:
+        - "400-599"
+      retryAttempts: true
+    fields:
+      headers:
+        defaultMode: drop
+        names:
+          Host: keep
+          X-Correlation-ID: keep
+          User-Agent: keep

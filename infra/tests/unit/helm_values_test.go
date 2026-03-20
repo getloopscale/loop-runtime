@@ -117,7 +117,14 @@ func TestHelmValuesRunAsNonRoot(t *testing.T) {
 
 func TestHelmValuesHaveHealthProbes(t *testing.T) {
 	dir := helmDir()
+	// Charts that manage probes internally (not configurable via values.yaml)
+	skipProbeCheck := map[string]bool{
+		"cert-manager": true, // cert-manager v1.20+ manages probes internally
+	}
 	for _, chart := range helmCharts {
+		if skipProbeCheck[chart] {
+			continue
+		}
 		path := filepath.Join(dir, chart, "values.yaml")
 
 		data, err := os.ReadFile(path)

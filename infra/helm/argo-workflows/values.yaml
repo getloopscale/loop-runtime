@@ -1,6 +1,12 @@
 controller:
   securityContext:
     runAsNonRoot: true
+  # Parallelism limits to prevent scheduler pressure under high concurrency.
+  # workflowWorkers: max concurrent workflow reconciliations.
+  # podWorkers: max concurrent pod reconciliations.
+  # These prevent 100 simultaneous builds from overwhelming the build cluster.
+  workflowWorkers: 32
+  podWorkers: 32
   livenessProbe:
     httpGet:
       path: /healthz
@@ -20,6 +26,30 @@ controller:
     requests:
       cpu: "100m"
       memory: "128Mi"
+  metricsConfig:
+    enabled: true
+    port: 9090
+    path: /metrics
+
+# Workflow execution ServiceAccount and RBAC.
+# The WorkflowTemplate (loopzero-build-nodejs-v1) specifies serviceAccountName: loopzero-build-sa.
+# This SA is created by Helm with RBAC for workflow task results.
+# The controller creates pods using its own ClusterRole — the workflow SA just needs to exist
+# and have workflowtaskresults permissions so step pods can report back.
+workflow:
+  serviceAccount:
+    create: true
+    name: loopzero-build-sa
+  rbac:
+    create: true
+
+# Kaniko image builder configuration.
+# IMPORTANT: Set insecure=false and skipTlsVerify=false in production overlays.
+# These flags disable TLS verification for the container registry and are
+# only appropriate for local development with k3d registries.
+kaniko:
+  insecure: true       # DEV ONLY — allows HTTP registry (no TLS)
+  skipTlsVerify: true  # DEV ONLY — skips TLS certificate validation
 
 server:
   securityContext:

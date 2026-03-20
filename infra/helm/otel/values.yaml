@@ -64,7 +64,16 @@ config:
         processors: [batch]
         exporters: [prometheus]
 
+command:
+  extraArgs:
+    - "--set=service.telemetry.metrics.address=0.0.0.0:8890"
+
 ports:
+  metrics:
+    enabled: true
+    containerPort: 8890
+    servicePort: 8890
+    protocol: TCP
   otlp:
     enabled: true
     containerPort: 4317

@@ -1,0 +1,243 @@
+package unit
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/loopzero/loopzero/api/internal/services"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+)
+
+var testLogger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+// --- Fake inner SyncClient ---
+
+type fakeInnerSync struct {
+	triggerErr   error
+	waitErr      error
+	triggerCalls int
+	waitCalls    int
+}
+
+func (f *fakeInnerSync) TriggerSync(_ context.Context, _ string) error {
+	f.triggerCalls++
+	return f.triggerErr
+}
+
+func (f *fakeInnerSync) WaitForSync(_ context.Context, _ string, _ time.Duration) error {
+	f.waitCalls++
+	return f.waitErr
+}
+
+// --- Helper ---
+
+func defaultCBConfig() services.CircuitBreakerConfig {
+	return services.CircuitBreakerConfig{
+		OpenThreshold:  3,
+		CloseThreshold: 2,
+		RetryInterval:  30 * time.Second,
+	}
+}
+
+// --- Tests ---
+
+func TestCircuitBreaker_ClosedState_TriggerSyncPassesThrough(t *testing.T) {
+	// Arrange
+	inner := &fakeInnerSync{}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	// Act
+	err := cb.TriggerSync(context.Background(), "my-app")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if inner.triggerCalls != 1 {
+		t.Errorf("expected inner TriggerSync to be called 1 time, got %d", inner.triggerCalls)
+	}
+}
+
+func TestCircuitBreaker_ClosedState_WaitForSyncPassesThrough(t *testing.T) {
+	// Arrange
+	inner := &fakeInnerSync{}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	// Act
+	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if inner.waitCalls != 1 {
+		t.Errorf("expected inner WaitForSync to be called 1 time, got %d", inner.waitCalls)
+	}
+}
+
+func TestCircuitBreaker_OpenState_RejectsTriggerSync(t *testing.T) {
+	// Arrange: cause enough failures to open the circuit, then verify rejection
+	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	// Open the circuit with 3 consecutive failures
+	for i := 0; i < 3; i++ {
+		_ = cb.TriggerSync(context.Background(), "my-app")
+	}
+
+	// Reset inner to track new calls
+	inner.triggerCalls = 0
+	inner.triggerErr = nil
+
+	// Act: next call should be rejected (circuit is open, retry interval not elapsed)
+	err := cb.TriggerSync(context.Background(), "my-app")
+
+	// Assert
+	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+		t.Fatalf("expected ErrPlatformDegraded, got %v", err)
+	}
+	if inner.triggerCalls != 0 {
+		t.Errorf("expected inner TriggerSync NOT to be called, got %d calls", inner.triggerCalls)
+	}
+}
+
+func TestCircuitBreaker_OpenState_RejectsWaitForSync(t *testing.T) {
+	// Arrange: open the circuit
+	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	for i := 0; i < 3; i++ {
+		_ = cb.TriggerSync(context.Background(), "my-app")
+	}
+
+	inner.waitCalls = 0
+
+	// Act
+	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second)
+
+	// Assert
+	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+		t.Fatalf("expected ErrPlatformDegraded, got %v", err)
+	}
+	if inner.waitCalls != 0 {
+		t.Errorf("expected inner WaitForSync NOT to be called, got %d calls", inner.waitCalls)
+	}
+}
+
+func TestCircuitBreaker_HalfOpen_AllowsRecoveryProbe(t *testing.T) {
+	// Arrange: use a very short retry interval so half-open triggers immediately
+	cfg := services.CircuitBreakerConfig{
+		OpenThreshold:  3,
+		CloseThreshold: 2,
+		RetryInterval:  1 * time.Millisecond, // very short so test doesn't need to sleep
+	}
+	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
+	cb := services.NewCircuitBreakerSyncClient(inner, cfg, testLogger)
+
+	// Open the circuit
+	for i := 0; i < 3; i++ {
+		_ = cb.TriggerSync(context.Background(), "my-app")
+	}
+
+	// Wait past the retry interval
+	time.Sleep(5 * time.Millisecond)
+
+	// Reset inner: succeeds now
+	inner.triggerCalls = 0
+	inner.triggerErr = nil
+
+	// Act
+	err := cb.TriggerSync(context.Background(), "my-app")
+
+	// Assert: request allowed through (recovery probe)
+	if err != nil {
+		t.Fatalf("expected no error (recovery probe), got %v", err)
+	}
+	if inner.triggerCalls != 1 {
+		t.Errorf("expected inner TriggerSync to be called for recovery probe, got %d", inner.triggerCalls)
+	}
+}
+
+func TestCircuitBreaker_ClosedToOpen_AfterThresholdFailures(t *testing.T) {
+	// Arrange: start closed, cause 3 consecutive failures (open threshold)
+	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	// Act: 3 failures
+	for i := 0; i < 3; i++ {
+		_ = cb.TriggerSync(context.Background(), "my-app")
+	}
+
+	// Assert: circuit should be open now (next call rejected)
+	inner.triggerCalls = 0
+	inner.triggerErr = nil
+	err := cb.TriggerSync(context.Background(), "my-app")
+	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+		t.Fatalf("expected circuit to be open (ErrPlatformDegraded), got %v", err)
+	}
+	if inner.triggerCalls != 0 {
+		t.Errorf("expected inner NOT to be called when circuit is open, got %d calls", inner.triggerCalls)
+	}
+}
+
+func TestCircuitBreaker_OpenToClosed_AfterThresholdSuccesses(t *testing.T) {
+	// Arrange: open the circuit, then allow recovery probes to close it
+	cfg := services.CircuitBreakerConfig{
+		OpenThreshold:  3,
+		CloseThreshold: 2, // 2 successes to close
+		RetryInterval:  1 * time.Millisecond,
+	}
+	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
+	cb := services.NewCircuitBreakerSyncClient(inner, cfg, testLogger)
+
+	// Open the circuit
+	for i := 0; i < 3; i++ {
+		_ = cb.TriggerSync(context.Background(), "my-app")
+	}
+
+	// Inner now succeeds
+	inner.triggerErr = nil
+
+	// Act: 2 successful recovery probes (with waits to pass retry interval)
+	time.Sleep(5 * time.Millisecond)
+	_ = cb.TriggerSync(context.Background(), "my-app")
+	time.Sleep(5 * time.Millisecond)
+	_ = cb.TriggerSync(context.Background(), "my-app")
+
+	// Assert: circuit should be closed — next call succeeds without delay
+	inner.triggerCalls = 0
+	err := cb.TriggerSync(context.Background(), "my-app")
+	if err != nil {
+		t.Fatalf("expected circuit to be closed, got %v", err)
+	}
+	if inner.triggerCalls != 1 {
+		t.Errorf("expected inner to be called (circuit closed), got %d calls", inner.triggerCalls)
+	}
+}
+
+func TestCircuitBreaker_InnerErrorPropagated(t *testing.T) {
+	// Arrange: circuit closed, inner returns error
+	innerErr := errors.New("argocd 503")
+	inner := &fakeInnerSync{triggerErr: innerErr}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	// Act
+	err := cb.TriggerSync(context.Background(), "my-app")
+
+	// Assert: inner error is returned to caller
+	if err == nil {
+		t.Fatal("expected inner error to be propagated")
+	}
+	if err.Error() != "argocd 503" {
+		t.Errorf("expected 'argocd 503', got %q", err.Error())
+	}
+}
+
+func TestCircuitBreaker_ImplementsSyncClient(t *testing.T) {
+	// Compile-time check
+	var _ services.SyncClient = (*services.CircuitBreakerSyncClient)(nil)
+}

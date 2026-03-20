@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 )
 
@@ -46,7 +47,7 @@ func (rc *responseCapture) Write(b []byte) (int, error) {
 // Idempotency returns middleware that enforces idempotency-key semantics per spec §4.3.
 //
 // Behavior:
-//   - No Idempotency-Key header → passes through (header is optional)
+//   - No Idempotency-Key header → 400 MISSING_IDEMPOTENCY_KEY
 //   - Key exists + same request_hash → returns cached response
 //   - Key exists + different request_hash → 422
 //   - Key new → processes request, stores result
@@ -55,12 +56,16 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			key := r.Header.Get("Idempotency-Key")
 			if key == "" {
-				next.ServeHTTP(w, r)
+				writeIdempotencyError(w, http.StatusBadRequest, "MISSING_IDEMPOTENCY_KEY",
+					"Idempotency-Key header is required for this operation.")
 				return
 			}
 
-			// Read and hash body
-			body, err := io.ReadAll(r.Body)
+			// Limit body read to 10MB for idempotency hashing.
+			// Source uploads (large payloads) should not use idempotency keys,
+			// so this limit only affects API mutation endpoints (builds, projects).
+			const maxIdempotencyBodySize = 10 << 20 // 10 MB
+			body, err := io.ReadAll(io.LimitReader(r.Body, maxIdempotencyBodySize))
 			if err != nil {
 				writeIdempotencyError(w, http.StatusBadRequest, "INVALID_REQUEST", "Failed to read request body")
 				return
@@ -108,7 +113,9 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 			}
 
 			// Best-effort store — don't fail the request if storage fails
-			_ = store.Store(r.Context(), rec)
+			if storeErr := store.Store(r.Context(), rec); storeErr != nil {
+				slog.Error("idempotency store failed — retry may reprocess", "key", key, "error", storeErr)
+			}
 		})
 	}
 }

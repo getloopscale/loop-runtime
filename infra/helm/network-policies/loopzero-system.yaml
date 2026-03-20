@@ -1,0 +1,270 @@
+# NetworkPolicies for loopzero-system namespace.
+#
+# Design: default deny ingress + per-component ingress/egress rules.
+# Each component declares exactly what it needs — no global egress policy
+# that accidentally blocks traffic.
+#
+# Pod label references (verified against actual manifests):
+#   loopzero-api:           app: loopzero-api                          (infra/tilt/api-deployment.yaml)
+#   tenant-controller:  app: tenant-controller                 (infra/tilt/operator-deployment.yaml)
+#   postgresql:         app.kubernetes.io/name: postgresql      (Bitnami Helm chart)
+#   gitea:              app.kubernetes.io/name: gitea           (Gitea Helm chart)
+#   minio:              app.kubernetes.io/name: minio           (Bitnami Helm chart)
+#
+# Egress strategy: per-component policies instead of global blanket.
+# A global "Egress" policy with podSelector: {} would restrict ALL pods
+# to only the explicitly allowed ports — breaking any component that needs
+# egress to ports not listed. Each component gets its own egress rules.
+---
+# Default deny all ingress in loopzero-system
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: loopzero-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# loopzero-api: ingress (NodePort + metrics) + egress (GitHub, PostgreSQL, Gitea, MinIO, ArgoCD, DNS, build cluster)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api
+  namespace: loopzero-system
+spec:
+  podSelector:
+    matchLabels:
+      app: loopzero-api
+  ingress:
+    - ports:
+        - port: 3001
+          protocol: TCP
+        - port: 9090
+          protocol: TCP
+  egress:
+    # DNS
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # PostgreSQL (in-namespace)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+          protocol: TCP
+    # Gitea (in-namespace)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gitea
+      ports:
+        - port: 3000
+          protocol: TCP
+    # MinIO (in-namespace)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: minio
+      ports:
+        - port: 9000
+          protocol: TCP
+    # ArgoCD (argocd namespace)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+      ports:
+        - port: 8080
+          protocol: TCP
+    # External HTTPS — GitHub API for token validation, any external webhook
+    - ports:
+        - port: 443
+          protocol: TCP
+    # Cross-cluster communication — build cluster API (Argo Workflows, NodePort range)
+    # and workload cluster (Traefik). Uses IP-based rules because cross-cluster
+    # traffic goes through Docker networking, not k8s service mesh.
+    - ports:
+        - port: 30000
+          protocol: TCP
+        - port: 30001
+          protocol: TCP
+        - port: 30090
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+        - port: 80
+          protocol: TCP
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# tenant-controller: egress to Gitea, ArgoCD, Kubernetes API, DNS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-tenant-controller
+  namespace: loopzero-system
+spec:
+  podSelector:
+    matchLabels:
+      app: tenant-controller
+  ingress:
+    - ports:
+        - port: 8081
+          protocol: TCP
+        - port: 8080
+          protocol: TCP
+  egress:
+    # DNS
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Gitea (in-namespace)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gitea
+      ports:
+        - port: 3000
+          protocol: TCP
+    # Kubernetes API server (for CRD reconciliation, namespace management)
+    - ports:
+        - port: 6443
+          protocol: TCP
+    # ArgoCD (argocd namespace — for creating ArgoCD Applications)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+      ports:
+        - port: 8080
+          protocol: TCP
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# PostgreSQL: ingress from loopzero-api and gitea + egress for replication/metrics
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgresql
+  namespace: loopzero-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: loopzero-api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gitea
+      ports:
+        - port: 5432
+          protocol: TCP
+  egress:
+    # DNS
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow all egress for metrics and replication
+    - {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Gitea: ingress from loopzero-api and tenant-controller + egress for DB and external
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gitea
+  namespace: loopzero-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: gitea
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: loopzero-api
+        - podSelector:
+            matchLabels:
+              app: tenant-controller
+      ports:
+        - port: 3000
+          protocol: TCP
+  egress:
+    # DNS
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # PostgreSQL (in-namespace)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+          protocol: TCP
+    # Valkey (in-namespace)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: valkey-cluster
+      ports:
+        - port: 6379
+          protocol: TCP
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# MinIO: ingress from loopzero-api + cross-cluster build pods + egress for DNS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-minio
+  namespace: loopzero-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+  ingress:
+    # In-cluster: loopzero-api pod
+    - from:
+        - podSelector:
+            matchLabels:
+              app: loopzero-api
+      ports:
+        - port: 9000
+          protocol: TCP
+    # Cross-cluster: build cluster workflow pods access MinIO for cache
+    # save/restore via Docker networking (not k8s service mesh).
+    # Port-restricted ingress without source selector covers cross-cluster traffic.
+    - ports:
+        - port: 9000
+          protocol: TCP
+  egress:
+    # DNS
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+  policyTypes:
+    - Ingress
+    - Egress

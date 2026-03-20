@@ -1,0 +1,214 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: loopzero-manifests-generate
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: loopzero
+spec:
+  templates:
+    - name: generate-manifests
+      inputs:
+        parameters:
+          - name: registry-url
+            description: "Container registry URL for image references"
+          - name: tenant-id
+            description: "Tenant identifier for isolation"
+          - name: project-id
+            description: "Project identifier"
+          - name: environment
+            description: "Target environment (e.g., production, staging)"
+          - name: commit-sha
+            description: "Git commit SHA for image tag"
+          - name: build-id
+            description: "Unique build identifier"
+          - name: apps
+            description: "JSON array of app specs to build"
+          - name: base-domain
+            description: "Base domain for app hostnames (e.g., loopzero.local, loopzero.cloud)"
+            default: "loopzero.local"
+      container:
+        image: node:20.11.1-alpine
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+
+            export MANIFEST_DIR="/manifests/{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.environment}}"
+            mkdir -p "$MANIFEST_DIR"
+
+            export IMAGE="{{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}:{{inputs.parameters.commit-sha}}"
+            export TENANT="{{inputs.parameters.tenant-id}}"
+            export PROJECT="{{inputs.parameters.project-id}}"
+            export ENV="{{inputs.parameters.environment}}"
+            export BUILD="{{inputs.parameters.build-id}}"
+            export NS="${TENANT}-${ENV}"
+            export APPS_JSON='{{inputs.parameters.apps}}'
+            export BASE_DOMAIN="{{inputs.parameters.base-domain}}"
+
+            node -e "
+            const fs = require('fs');
+            const apps = JSON.parse(process.env.APPS_JSON || '[]');
+            const image = process.env.IMAGE;
+            const tenant = process.env.TENANT;
+            const project = process.env.PROJECT;
+            const env = process.env.ENV;
+            const build = process.env.BUILD;
+            const ns = process.env.NS;
+            const manifestDir = process.env.MANIFEST_DIR;
+            const baseDomain = process.env.BASE_DOMAIN || 'loopzero.local';
+
+            const appList = apps.length > 0 ? apps : [{name: project, type: 'server', port: 3000, path: '.'}];
+            const hasExplicitApps = apps.length > 0;
+            const resources = [];
+            const callbackApps = [];
+
+            for (const app of appList) {
+              const appName = app.name;
+              const k8sName = hasExplicitApps ? project + '-' + appName : appName;
+              const appType = app.type || 'server';
+              const appPort = app.port || 3000;
+              const appPath = app.path || (hasExplicitApps ? 'apps/' + appName : '.');
+              const host = hasExplicitApps
+                ? appName + '-' + project + '.' + tenant + '.' + baseDomain
+                : project + '.' + tenant + '.' + baseDomain;
+
+              const framework = (app.framework || '').toLowerCase();
+              const isNodeFramework = framework === '' || ['nextjs', 'vite', 'remix', 'nestjs', 'express', 'node'].includes(framework);
+              const cmd = isNodeFramework
+                ? (hasExplicitApps ? 'cd ' + appPath + ' && npm start' : 'npm start')
+                : '';
+
+              const secretName = project + '-' + appName + '-secrets';
+              const hasSecrets = app.secrets && app.secrets.length > 0;
+
+              // --- Deployment ---
+              const container = {
+                name: 'app',
+                image: image,
+                env: [
+                  {name: 'PORT', value: String(appPort)},
+                  {name: 'NODE_ENV', value: env}
+                ]
+              };
+              if (cmd) container.command = ['sh', '-c', cmd];
+              if (appType !== 'worker') {
+                container.ports = [{containerPort: appPort}];
+                container.readinessProbe = {
+                  httpGet: {path: '/health', port: appPort},
+                  initialDelaySeconds: 5,
+                  periodSeconds: 10,
+                  failureThreshold: 3
+                };
+                container.livenessProbe = {
+                  httpGet: {path: '/health', port: appPort},
+                  initialDelaySeconds: 15,
+                  periodSeconds: 20,
+                  failureThreshold: 3
+                };
+              }
+              if (hasSecrets) {
+                container.envFrom = [{secretRef: {name: secretName}}];
+              }
+
+              const deployment = {
+                apiVersion: 'apps/v1',
+                kind: 'Deployment',
+                metadata: {
+                  name: k8sName,
+                  namespace: ns,
+                  labels: {
+                    app: k8sName,
+                    'loopzero.io/tenant': tenant,
+                    'loopzero.io/project': project,
+                    'loopzero.io/environment': env,
+                    'loopzero.io/build-id': build
+                  }
+                },
+                spec: {
+                  replicas: 1,
+                  selector: {matchLabels: {app: k8sName}},
+                  template: {
+                    metadata: {
+                      labels: {app: k8sName},
+                      annotations: {'loopzero.io/secret-hash': 'none'}
+                    },
+                    spec: {containers: [container]}
+                  }
+                }
+              };
+              resources.push(deployment);
+
+              // --- Service + IngressRoute (server/frontend only) ---
+              if (appType !== 'worker') {
+                const service = {
+                  apiVersion: 'v1',
+                  kind: 'Service',
+                  metadata: {name: k8sName, namespace: ns},
+                  spec: {
+                    selector: {app: k8sName},
+                    ports: [{port: 80, targetPort: appPort}]
+                  }
+                };
+                resources.push(service);
+
+                const ingressRoute = {
+                  apiVersion: 'traefik.io/v1alpha1',
+                  kind: 'IngressRoute',
+                  metadata: {
+                    name: k8sName,
+                    namespace: ns,
+                    labels: {
+                      app: k8sName,
+                      'loopzero.io/tenant': tenant,
+                      'loopzero.io/environment': env
+                    }
+                  },
+                  spec: {
+                    entryPoints: ['websecure'],
+                    routes: [{
+                      match: 'Host(\x60' + host + '\x60)',
+                      kind: 'Rule',
+                      middlewares: [
+                        {name: 'rate-limit', namespace: 'traefik'},
+                        {name: 'body-limit', namespace: 'traefik'},
+                        {name: 'security-headers', namespace: 'traefik'}
+                      ],
+                      services: [{name: k8sName, port: 80}]
+                    }],
+                    tls: {}
+                  }
+                };
+                resources.push(ingressRoute);
+
+                callbackApps.push({name: appName, type: appType, url: 'https://' + host});
+              } else {
+                callbackApps.push({name: appName, type: appType, url: ''});
+              }
+            }
+
+            // Serialize as JSON (valid Kubernetes YAML — JSON is a subset of YAML).
+            // This eliminates the fragile string concatenation approach.
+            const manifests = resources.map(r => JSON.stringify(r)).join('\n---\n');
+            fs.writeFileSync(manifestDir + '/manifests.yaml', manifests);
+            fs.writeFileSync('/manifests/callback-apps.json', JSON.stringify(callbackApps));
+            console.log('Generated manifests for ' + appList.length + ' app(s)');
+            console.log(manifests);
+            "
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: manifests
+            mountPath: /manifests
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000

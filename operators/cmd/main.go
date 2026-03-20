@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"os"
+	"os" // used for Exit and Getenv
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -12,6 +12,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/argocd"
 	"github.com/loopzero/loopzero/operators/internal/controller"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 )
@@ -53,13 +54,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: Replace with real Gitea provisioner when available.
-	// In production, this will be a GiteaProvisioner configured with
-	// the Gitea API URL and credentials from environment/secrets.
-	var gitProvisioner gitea.GitRepoProvisioner = gitea.NewFakeProvisioner()
+	// Real provisioners — NO fakes.
+	giteaURL := os.Getenv("GITEA_URL")
+	if giteaURL == "" {
+		giteaURL = "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+	}
+	giteaToken := os.Getenv("GITEA_TOKEN")
+	gitProvisioner := gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero")
 
-	if err := controller.SetupTenantController(mgr, gitProvisioner); err != nil {
+	argoCDNamespace := os.Getenv("ARGOCD_NAMESPACE")
+	if argoCDNamespace == "" {
+		argoCDNamespace = "argocd"
+	}
+	argoCDProvisioner, err := argocd.NewRealProvisioner(argoCDNamespace)
+	if err != nil {
+		setupLog.Error(err, "unable to create ArgoCD provisioner")
+		os.Exit(1)
+	}
+
+	workloadClusterURL := os.Getenv("WORKLOAD_CLUSTER_URL")
+	if workloadClusterURL == "" {
+		workloadClusterURL = "https://kubernetes.default.svc"
+	}
+
+	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, controller.TenantControllerConfig{
+		GiteaURL:           giteaURL,
+		WorkloadClusterURL: workloadClusterURL,
+	}); err != nil {
 		setupLog.Error(err, "unable to setup TenantController")
+		os.Exit(1)
+	}
+
+	if err := controller.SetupClusterCredentialController(mgr); err != nil {
+		setupLog.Error(err, "unable to setup ClusterCredentialController")
 		os.Exit(1)
 	}
 

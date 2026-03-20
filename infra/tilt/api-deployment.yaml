@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loopzero-api
+  namespace: loopzero-system
+  labels:
+    app: loopzero-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loopzero-api
+  template:
+    metadata:
+      labels:
+        app: loopzero-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: loopzero-api
+          env:
+            - name: PORT
+              value: "3001"
+            - name: DATABASE_URL
+              value: "postgres://loopzero:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/loopzero?sslmode=disable"
+            - name: LOOPZERO_ARGO_CALLBACK_SECRET
+              value: "dev-callback-secret"
+            - name: LOG_LEVEL
+              value: "debug"
+            # W1: MinIO (real source store)
+            - name: MINIO_ENDPOINT
+              value: "minio.loopzero-system.svc.cluster.local:9000"
+            - name: MINIO_ACCESS_KEY
+              value: "loopzero-admin"
+            - name: MINIO_SECRET_KEY
+              value: "loopzero-dev-password"
+            # Gitea — uses NodePort for cross-cluster access (build cluster needs to reach it)
+            - name: GITEA_URL
+              value: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+            # Cross-cluster Gitea URL (for Argo Workflow parameters — build cluster → mgmt Gitea)
+            # IP = mgmt LB on k3d-loopzero-build network. Update after cluster recreate:
+            #   docker inspect k3d-loopzero-mgmt-serverlb --format '{{json .NetworkSettings.Networks}}'
+            - name: GITEA_CROSS_CLUSTER_URL
+              value: "http://10.0.2.7:30000"
+            # Cross-cluster API URL (for Argo Workflow callback — build cluster → mgmt API)
+            - name: API_CROSS_CLUSTER_URL
+              value: "http://10.0.2.7:30001"
+            - name: GITEA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-tokens
+                  key: gitea-token
+                  optional: true
+            # W4: ArgoCD (real sync client)
+            - name: ARGOCD_URL
+              value: "http://argocd-server.argocd.svc.cluster.local:80"
+            - name: ARGOCD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-tokens
+                  key: argocd-token
+                  optional: true
+            # W2: Build cluster (real workflow submitter)
+            - name: BUILD_KUBECONFIG
+              value: "/etc/loopzero/build-kubeconfig"
+            - name: BUILD_KUBE_CONTEXT
+              value: "build"
+            - name: REGISTRY_URL
+              value: "k3d-loopzero-registry:5000"
+            # Workload cluster ingress — Traefik LoadBalancer on k3d-loopzero-workload.
+            # Uses the Docker IP of k3d-loopzero-workload-serverlb directly because
+            # host.k3d.internal does not resolve from within mgmt cluster pods.
+            # The LB exposes port 80 (Traefik HTTP entrypoint).
+            # Workload LB IP on k3d-loopzero-workload network. Update after cluster recreate:
+            #   docker inspect k3d-loopzero-workload-serverlb --format '{{json .NetworkSettings.Networks}}'
+            - name: WORKLOAD_INGRESS_URL
+              value: "http://10.0.3.6:80"
+            - name: BASE_DOMAIN
+              value: "loopzero.local"
+          ports:
+            - containerPort: 3001
+              name: http
+              protocol: TCP
+            - containerPort: 9090
+              name: metrics
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+          volumeMounts:
+            - name: build-kubeconfig
+              mountPath: /etc/loopzero
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
+        - name: build-kubeconfig
+          configMap:
+            name: loopzero-build-kubeconfig
+            items:
+              - key: config
+                path: build-kubeconfig
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loopzero-api
+  namespace: loopzero-system
+  labels:
+    app: loopzero-api
+spec:
+  type: NodePort
+  selector:
+    app: loopzero-api
+  ports:
+    - port: 3001
+      targetPort: 3001
+      nodePort: 30001
+      protocol: TCP
+      name: http
+    - port: 9090
+      targetPort: 9090
+      protocol: TCP
+      name: metrics

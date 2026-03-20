@@ -1,0 +1,74 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: loopzero-kaniko
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: loopzero
+spec:
+  templates:
+    - name: build-image
+      inputs:
+        parameters:
+          - name: registry-url
+            description: "Container registry URL for image push"
+          - name: tenant-id
+            description: "Tenant identifier for isolation"
+          - name: project-id
+            description: "Project identifier"
+          - name: commit-sha
+            description: "Git commit SHA to tag the image"
+          - name: dockerfile-path
+            description: "Path to Dockerfile"
+            default: "/workspace/Dockerfile"
+          - name: context-path
+            description: "Build context path"
+            default: "/workspace"
+          - name: registry-insecure
+            description: "Set to 'true' for local dev registries without TLS. MUST be 'false' in production."
+            default: "false"
+      retryStrategy:
+        limit: "3"
+        retryPolicy: "OnFailure"
+        backoff:
+          duration: "5s"
+          factor: "2"
+          maxDuration: "60s"
+      # Script template to conditionally add --insecure flags based on parameter.
+      # This avoids hardcoding dev-only flags that compromise production supply chain.
+      script:
+        image: gcr.io/kaniko-project/executor:v1.23.2
+        command:
+          - /bin/sh
+          - -c
+        source: |
+          ARGS="--dockerfile={{inputs.parameters.dockerfile-path}}"
+          ARGS="$ARGS --context={{inputs.parameters.context-path}}"
+          ARGS="$ARGS --destination={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}:{{inputs.parameters.commit-sha}}"
+          ARGS="$ARGS --cache=true"
+          ARGS="$ARGS --cache-repo={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/cache"
+          ARGS="$ARGS --snapshot-mode=redo"
+          ARGS="$ARGS --compressed-caching=false"
+          ARGS="$ARGS --digest-file=/workspace/image-digest.txt"
+
+          if [ "{{inputs.parameters.registry-insecure}}" = "true" ]; then
+            echo "WARNING: Running with --insecure and --skip-tls-verify (dev mode)"
+            ARGS="$ARGS --insecure --skip-tls-verify"
+          fi
+
+          exec /kaniko/executor $ARGS
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        # Kaniko requires root to build container images
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0

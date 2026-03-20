@@ -50,7 +50,7 @@ func dummyHandler() http.Handler {
 }
 
 func TestIdempotencyMiddleware(t *testing.T) {
-	t.Run("request without Idempotency-Key passes through", func(t *testing.T) {
+	t.Run("request without Idempotency-Key returns 400", func(t *testing.T) {
 		store := newFakeIdempotencyStore()
 		mw := middleware.Idempotency(store)
 		handler := mw(dummyHandler())
@@ -59,9 +59,17 @@ func TestIdempotencyMiddleware(t *testing.T) {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
-		// Should pass through — idempotency is optional per spec (only required by CLI)
-		if rec.Code != http.StatusCreated {
-			t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var body map[string]string
+		_ = json.NewDecoder(rec.Body).Decode(&body)
+		if body["code"] != "MISSING_IDEMPOTENCY_KEY" {
+			t.Fatalf("expected code=MISSING_IDEMPOTENCY_KEY, got %q", body["code"])
+		}
+		if body["message"] != "Idempotency-Key header is required for this operation." {
+			t.Fatalf("expected specific error message, got %q", body["message"])
 		}
 	})
 
@@ -159,6 +167,45 @@ func TestIdempotencyMiddleware(t *testing.T) {
 		_ = json.NewDecoder(rec.Body).Decode(&body)
 		if body["code"] != "IDEMPOTENCY_MISMATCH" {
 			t.Fatalf("expected code=IDEMPOTENCY_MISMATCH, got %q", body["code"])
+		}
+	})
+
+	t.Run("body larger than 10MB is truncated by LimitReader", func(t *testing.T) {
+		store := newFakeIdempotencyStore()
+		mw := middleware.Idempotency(store)
+		handler := mw(dummyHandler())
+
+		// Create a body larger than 10MB (10MB + 1 byte)
+		const limit = 10 << 20 // 10 MB
+		largeBody := make([]byte, limit+1)
+		for i := range largeBody {
+			largeBody[i] = 'A'
+		}
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewReader(largeBody))
+		req.Header.Set("Idempotency-Key", "key-large-body")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		// The request should still be processed (body is truncated to 10MB for hashing)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected 201 even with large body, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		// Verify the hash was computed on the truncated body (10MB, not 10MB+1)
+		record, _ := store.Get(context.Background(), "key-large-body")
+		if record == nil {
+			t.Fatal("expected idempotency record to be stored")
+		}
+
+		// The hash should match a 10MB body of 'A's, not 10MB+1
+		truncated := make([]byte, limit)
+		for i := range truncated {
+			truncated[i] = 'A'
+		}
+		expectedHash := hashBody(string(truncated))
+		if record.RequestHash != expectedHash {
+			t.Fatal("expected hash to be computed on truncated body (10MB), not full body")
 		}
 	})
 }

@@ -18,6 +18,31 @@ prometheus:
           resources:
             requests:
               storage: 2Gi
+    additionalScrapeConfigs:
+      - job_name: argo-workflows
+        scrape_interval: 15s
+        scrape_timeout: 10s
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              # Build cluster LB IP on k3d-loopzero-build network.
+              # Updated by: bash infra/scripts/update-cross-cluster-ips.sh
+              - "10.0.2.6:30090"
+            labels:
+              cluster: build
+              component: argo-workflows
+      - job_name: traefik
+        scrape_interval: 15s
+        scrape_timeout: 10s
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              # Workload cluster LB IP on k3d-loopzero-workload network.
+              # Updated by: bash infra/scripts/update-cross-cluster-ips.sh
+              - "10.0.3.6:30091"
+            labels:
+              cluster: workload
+              component: traefik
   service:
     type: NodePort
     nodePort: 30004
@@ -26,6 +51,19 @@ grafana:
   securityContext:
     runAsNonRoot: true
   adminPassword: loopzero-dev-password
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      folder: /var/lib/grafana/dashboards/sidecar
+      provider:
+        name: sidecar
+        orgId: 1
+        folder: LoopZero
+        type: file
+        disableDeletion: false
+        editable: true
   readinessProbe:
     httpGet:
       path: /api/health
@@ -66,7 +104,45 @@ grafana:
         datasource: Prometheus
 
 alertmanager:
-  enabled: false
+  enabled: true
+  alertmanagerSpec:
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: default
+      group_by: ['alertname', 'tenant']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - receiver: critical
+          matchers:
+            - severity = critical
+          group_wait: 10s
+          repeat_interval: 1h
+        - receiver: default
+          matchers:
+            - severity = warning
+    receivers:
+      - name: default
+        webhook_configs:
+          - url: 'http://localhost:9093/dev-null'
+            send_resolved: true
+      - name: critical
+        webhook_configs:
+          - url: 'http://localhost:9093/dev-null'
+            send_resolved: true
+  service:
+    type: NodePort
+    nodePort: 30093
 
 nodeExporter:
   enabled: true

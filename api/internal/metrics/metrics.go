@@ -1,0 +1,144 @@
+// Package metrics provides Prometheus instrumentation for the LoopZero API.
+//
+// All metric names follow the spec §15.2 naming convention: loopzero_<subsystem>_<name>.
+// Labels follow Prometheus best practices: lowercase, snake_case, bounded cardinality.
+package metrics
+
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+// HTTP request metrics — emitted by the metrics middleware on every request.
+var (
+	HTTPRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_api_request_duration_seconds",
+		Help:    "HTTP request duration in seconds.",
+		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+	}, []string{"method", "path", "status"})
+
+	HTTPRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_api_requests_total",
+		Help: "Total number of HTTP requests.",
+	}, []string{"method", "path", "status"})
+
+	HTTPRequestsInFlight = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_api_requests_in_flight",
+		Help: "Number of HTTP requests currently being processed.",
+	})
+)
+
+// Build metrics — emitted by the build orchestrator on state transitions.
+var (
+	BuildsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_builds_total",
+		Help: "Total number of builds by final status.",
+	}, []string{"tenant", "environment", "status"})
+
+	BuildDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_build_duration_seconds",
+		Help:    "Build duration from creation to completion.",
+		Buckets: []float64{5, 10, 30, 60, 120, 180, 300, 600},
+	}, []string{"tenant", "environment", "status"})
+
+	BuildsActive = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "loopzero_builds_active",
+		Help: "Number of currently active builds (QUEUED or RUNNING).",
+	}, []string{"tenant"})
+
+	BuildQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_build_queue_depth",
+		Help: "Number of builds waiting in QUEUED state.",
+	})
+)
+
+// Deploy/release metrics — emitted when releases transition states.
+var (
+	DeploysTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_deploys_total",
+		Help: "Total number of deploy attempts by final status.",
+	}, []string{"tenant", "environment", "status"})
+
+	DeployDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_deploy_duration_seconds",
+		Help:    "End-to-end deploy duration from build creation to release ACTIVE.",
+		Buckets: []float64{10, 30, 60, 120, 180, 300, 600, 900},
+	}, []string{"tenant", "environment"})
+)
+
+// Lock contention metrics — emitted by withEnvironmentLock.
+var (
+	LockAcquired = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_lock_acquired_total",
+		Help: "Number of environment lock acquisitions.",
+	}, []string{"tenant", "environment"})
+
+	LockConflicts = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_lock_conflicts_total",
+		Help: "Number of environment lock acquisition failures (409 conflict).",
+	}, []string{"tenant", "environment"})
+
+	LockDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_lock_hold_duration_seconds",
+		Help:    "Duration the environment lock was held.",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.5, 1, 5, 10, 30},
+	}, []string{"tenant", "environment"})
+)
+
+// Idempotency metrics — emitted by idempotency middleware.
+var (
+	IdempotencyHits = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_idempotency_cache_hits_total",
+		Help: "Number of idempotency cache hits (deduplicated requests).",
+	}, []string{"endpoint"})
+
+	IdempotencyMisses = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_idempotency_cache_misses_total",
+		Help: "Number of idempotency cache misses (new requests).",
+	}, []string{"endpoint"})
+)
+
+// Health probe metrics — emitted by the health prober after deploy.
+var (
+	HealthProbeResult = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_health_probe_results_total",
+		Help: "Number of health probe attempts by result.",
+	}, []string{"result"}) // "success" or "failure"
+
+	HealthProbeDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_health_probe_duration_seconds",
+		Help:    "Duration of health probe attempts.",
+		Buckets: []float64{0.5, 1, 2, 5, 10, 15, 30},
+	}, []string{"tenant", "environment"})
+)
+
+// SSE stream metrics — emitted by SSE stream handler.
+var (
+	SSEConnectionsActive = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_sse_connections_active",
+		Help: "Number of active SSE streaming connections.",
+	})
+
+	SSEEventsEmitted = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_sse_events_emitted_total",
+		Help: "Total number of SSE events emitted to clients.",
+	}, []string{"event_type"})
+)
+
+// Database connection pool metrics — emitted by a periodic collector.
+var (
+	DBConnectionsActive = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_postgres_connections_active",
+		Help: "Number of active PostgreSQL connections.",
+	})
+
+	DBConnectionsIdle = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_postgres_connections_idle",
+		Help: "Number of idle PostgreSQL connections.",
+	})
+
+	DBConnectionsTotal = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_postgres_connections_total",
+		Help: "Total number of PostgreSQL connections in the pool.",
+	})
+)

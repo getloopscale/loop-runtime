@@ -1,0 +1,99 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: loopzero-cache-save
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: loopzero
+spec:
+  templates:
+    - name: save-cache
+      inputs:
+        parameters:
+          - name: tenant-id
+            description: "Tenant identifier for isolation"
+          - name: project-id
+            description: "Project identifier"
+          - name: cache-key
+            description: "Cache key identifier (e.g., node-modules)"
+          - name: cache-key-suffix
+            description: "Optional suffix appended to cache key (e.g., lockfile hash for precise invalidation)"
+            default: ""
+          - name: cache-dirs
+            description: "Comma-separated directories to tar (e.g., node_modules)"
+      container:
+        image: amazon/aws-cli:2.15.17
+        # Credentials injected from K8s Secret via envFrom — never as workflow parameters.
+        # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
+        envFrom:
+          - secretRef:
+              name: loopzero-minio-credentials
+        command:
+          - sh
+          - -c
+          - |
+            set -uo pipefail
+            cd /workspace 2>&1 || { echo "No workspace — skipping cache save"; exit 0; }
+
+            # Compute lockfile hash for cache key precision (mirrors cache-restore logic).
+            SUFFIX="{{inputs.parameters.cache-key-suffix}}"
+            if [ -z "$SUFFIX" ]; then
+              LOCKFILE=""
+              for f in /workspace/package-lock.json /workspace/yarn.lock /workspace/pnpm-lock.yaml \
+                       /workspace/go.sum /workspace/requirements.txt /workspace/poetry.lock; do
+                if [ -f "$f" ]; then
+                  LOCKFILE="$f"
+                  break
+                fi
+              done
+              if [ -n "$LOCKFILE" ]; then
+                SUFFIX=$(sha256sum "$LOCKFILE" | cut -c1-12)
+                echo "Computed cache suffix from ${LOCKFILE##*/}: ${SUFFIX}"
+              fi
+            fi
+
+            if [ -n "$SUFFIX" ]; then
+              CACHE_KEY="{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.cache-key}}-${SUFFIX}"
+            else
+              CACHE_KEY="{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.cache-key}}"
+            fi
+            CACHE_PATH="s3://loopzero-builds/{{inputs.parameters.tenant-id}}/cache/deps/${CACHE_KEY}.tar.gz"
+
+            # Build list of dirs to cache from comma-separated input
+            DIRS="{{inputs.parameters.cache-dirs}}"
+            EXISTING_DIRS=""
+            IFS=',' read -ra DIR_ARRAY <<< "$DIRS"
+            for d in "${DIR_ARRAY[@]}"; do
+              d=$(echo "$d" | xargs)  # trim whitespace
+              if [ -d "$d" ]; then
+                EXISTING_DIRS="$EXISTING_DIRS $d/"
+              fi
+            done
+
+            if [ -n "$EXISTING_DIRS" ]; then
+              tar czf /tmp/cache.tar.gz $EXISTING_DIRS
+              aws s3 cp /tmp/cache.tar.gz "$CACHE_PATH" \
+                --endpoint-url "$MINIO_ENDPOINT" \
+                --cli-connect-timeout 10 \
+                --cli-read-timeout 30 \
+                --no-sign-request=false 2>&1 || echo "Cache save failed — non-fatal"
+              echo "Cache saved to ${CACHE_KEY}"
+            else
+              echo "No directories to cache"
+            fi
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+      # Cache save is best-effort — prevent indefinite hangs if MinIO is slow
+      activeDeadlineSeconds: 120

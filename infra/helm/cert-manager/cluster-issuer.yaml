@@ -1,0 +1,78 @@
+# Self-signed CA chain for LoopZero development and staging environments.
+#
+# Architecture:
+#   1. selfsigned-bootstrap: a ClusterIssuer that can issue self-signed certificates
+#   2. loopzero-ca: a CA Certificate issued by the bootstrap issuer (isCA: true)
+#   3. loopzero-ca-issuer: a ClusterIssuer that uses loopzero-ca to issue real certificates
+#
+# IngressRoutes with tls: {} use Traefik's default cert store. Traefik auto-requests
+# certificates from cert-manager via the TLS challenge when configured.
+#
+# For production: replace loopzero-ca-issuer with an ACME-backed ClusterIssuer
+# (e.g., Let's Encrypt) and update the tlsStore default certificate.
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-bootstrap
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: loopzero-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: LoopZero Platform CA
+  secretName: loopzero-ca-secret
+  duration: 87600h  # 10 years
+  renewBefore: 8760h  # 1 year
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-bootstrap
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: loopzero-ca-issuer
+spec:
+  ca:
+    secretName: loopzero-ca-secret
+---
+# Wildcard certificate for *.loopzero.local — covers all tenant app hostnames.
+# In production, this would be replaced by per-tenant or per-environment certificates
+# issued by an ACME ClusterIssuer.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: loopzero-wildcard
+  namespace: traefik
+spec:
+  secretName: loopzero-wildcard-tls
+  duration: 8760h  # 1 year
+  renewBefore: 720h  # 30 days
+  commonName: "*.loopzero.local"
+  dnsNames:
+    - "*.loopzero.local"
+    - "*.*.loopzero.local"
+  issuerRef:
+    name: loopzero-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# TLSStore configures Traefik's default certificate for all IngressRoutes
+# that use tls: {} without specifying a secretName.
+apiVersion: traefik.io/v1alpha1
+kind: TLSStore
+metadata:
+  name: default
+  namespace: traefik
+spec:
+  defaultCertificate:
+    secretName: loopzero-wildcard-tls

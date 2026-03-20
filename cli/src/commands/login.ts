@@ -2,6 +2,7 @@ export interface TokenValidationResult {
   valid: boolean;
   email: string | null;
   teams: string[];
+  serverError?: boolean;
 }
 
 export interface LoginDeps {
@@ -27,20 +28,26 @@ export class LoginCommand {
 
   async execute(opts: LoginOptions): Promise<number> {
     if (!opts.token) {
-      this.deps.writeError('Token is required. Use: loopzero login --token <token>');
-      return 1;
+      if (this.deps.isCI) {
+        return this.exitWithError(opts, 'In CI mode, use: loopzero login --token <token>', 1, 'MISSING_TOKEN');
+      }
+
+      return this.exitWithError(opts, 'Token is required. Use: loopzero login --token <token>', 1, 'MISSING_TOKEN');
     }
 
     const result = await this.deps.validateToken(opts.token);
 
     if (!result.valid || !result.email) {
-      this.deps.writeError('Authentication failed. Check your token and try again.');
-      return 4;
+      if (result.serverError) {
+        return this.exitWithError(opts, 'Service temporarily unavailable. Try again in a moment.', 4, 'SERVICE_UNAVAILABLE');
+      } else {
+        return this.exitWithError(opts, 'Authentication failed. Check your token and try again.', 4, 'AUTH_FAILED');
+      }
     }
 
     const team = this.resolveTeam(result.teams, opts.team);
     if (team === null) {
-      return this.handleTeamResolutionFailure(result.teams, opts.team);
+      return this.handleTeamResolutionFailure(opts, result.teams, opts.team);
     }
 
     this.deps.saveToken(opts.token, result.email, team);
@@ -84,24 +91,37 @@ export class LoginCommand {
   }
 
   private handleTeamResolutionFailure(
+    opts: LoginOptions,
     teams: string[],
     requestedTeam?: string
   ): number {
     if (requestedTeam && !teams.includes(requestedTeam)) {
-      this.deps.writeError(
-        `Team "${requestedTeam}" not found. Available teams: ${teams.join(', ')}`
+      return this.exitWithError(
+        opts,
+        `Team "${requestedTeam}" not found. Available teams: ${teams.join(', ')}`,
+        1,
+        'TEAM_NOT_FOUND'
       );
-      return 1;
     }
 
     if (teams.length > 1) {
-      this.deps.writeError(
-        `Multiple teams available. Use --team to select one: ${teams.join(', ')}`
+      return this.exitWithError(
+        opts,
+        `Multiple teams available. Use --team to select one: ${teams.join(', ')}`,
+        1,
+        'TEAM_REQUIRED'
       );
-      return 1;
     }
 
-    this.deps.writeError('No teams available for this account.');
-    return 1;
+    return this.exitWithError(opts, 'No teams available for this account.', 1, 'NO_TEAMS');
+  }
+
+  private exitWithError(opts: LoginOptions, message: string, exitCode: number, code: string): number {
+    if (opts.json) {
+      this.deps.writeTo(JSON.stringify({ error: message, exit_code: exitCode, code }));
+    } else {
+      this.deps.writeError(message);
+    }
+    return exitCode;
   }
 }

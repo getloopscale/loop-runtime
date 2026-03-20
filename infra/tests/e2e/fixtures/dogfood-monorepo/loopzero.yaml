@@ -1,0 +1,30 @@
+project: dogfood-saas
+
+apps:
+  api:
+    type: server
+    framework: nestjs
+    path: apps/api
+    port: 3000
+    secrets:
+      - DATABASE_URL
+      - JWT_SECRET
+
+  gateway:
+    type: server
+    framework: express
+    path: apps/gateway
+    port: 4000
+
+  worker:
+    type: worker
+    framework: node
+    path: apps/worker
+    secrets:
+      - DATABASE_URL
+      - REDIS_URL
+
+  web:
+    type: frontend
+    framework: nextjs
+    path: apps/web

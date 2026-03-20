@@ -8,14 +8,16 @@ import (
 	"fmt"
 )
 
-// GenerateBuildID returns a unique build identifier in the format "build-{8hex}".
+// GenerateBuildID returns a unique build identifier in the format "build-{16hex}".
+// Uses 8 random bytes (64-bit entropy) for collision resistance (A-07).
 func GenerateBuildID() string {
-	return fmt.Sprintf("build-%s", randomHex(4))
+	return fmt.Sprintf("build-%s", randomHex(8))
 }
 
-// GenerateReleaseID returns a unique release identifier in the format "rel-{8hex}".
+// GenerateReleaseID returns a unique release identifier in the format "rel-{16hex}".
+// Uses 8 random bytes (64-bit entropy) for collision resistance (A-07).
 func GenerateReleaseID() string {
-	return fmt.Sprintf("rel-%s", randomHex(4))
+	return fmt.Sprintf("rel-%s", randomHex(8))
 }
 
 // randomHex generates a random hex string of n*2 characters from n random bytes.

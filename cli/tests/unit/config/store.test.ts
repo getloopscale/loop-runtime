@@ -54,6 +54,50 @@ describe('ConfigStore', () => {
       store.saveToken('ghp_abc', 'user@test.com', 'team1');
       expect(store.getToken()).toBe('ghp_abc');
     });
+
+    it('should prefer LOOPZERO_TOKEN env var over config file', () => {
+      store.saveToken('ghp_from_file', 'user@test.com', 'team1');
+      const original = process.env.LOOPZERO_TOKEN;
+      try {
+        process.env.LOOPZERO_TOKEN = 'ghp_from_env';
+        expect(store.getToken()).toBe('ghp_from_env');
+      } finally {
+        if (original === undefined) {
+          delete process.env.LOOPZERO_TOKEN;
+        } else {
+          process.env.LOOPZERO_TOKEN = original;
+        }
+      }
+    });
+
+    it('should return LOOPZERO_TOKEN when no config file exists', () => {
+      const original = process.env.LOOPZERO_TOKEN;
+      try {
+        process.env.LOOPZERO_TOKEN = 'ghp_env_only';
+        expect(store.getToken()).toBe('ghp_env_only');
+      } finally {
+        if (original === undefined) {
+          delete process.env.LOOPZERO_TOKEN;
+        } else {
+          process.env.LOOPZERO_TOKEN = original;
+        }
+      }
+    });
+
+    it('should ignore empty LOOPZERO_TOKEN and fall back to config file', () => {
+      store.saveToken('ghp_from_file', 'user@test.com', 'team1');
+      const original = process.env.LOOPZERO_TOKEN;
+      try {
+        process.env.LOOPZERO_TOKEN = '';
+        expect(store.getToken()).toBe('ghp_from_file');
+      } finally {
+        if (original === undefined) {
+          delete process.env.LOOPZERO_TOKEN;
+        } else {
+          process.env.LOOPZERO_TOKEN = original;
+        }
+      }
+    });
   });
 
   describe('getEmail', () => {

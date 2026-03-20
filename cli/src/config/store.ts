@@ -28,14 +28,15 @@ export class ConfigStore {
   }
 
   saveToken(token: string, email: string, team: string): void {
-    fs.mkdirSync(this.configDir, { recursive: true });
+    fs.mkdirSync(this.configDir, { recursive: true, mode: 0o700 });
 
     const config: LoopZeroConfig = { token, email, team };
-    const fd = fs.openSync(this.configPath, 'w', 0o600);
-    fs.writeFileSync(fd, JSON.stringify(config, null, 2));
-    fs.closeSync(fd);
-    // Ensure permissions are 0600 even if the file pre-existed with broader perms
-    fs.chmodSync(this.configPath, 0o600);
+    // Atomic write: write to temp file with correct permissions, then rename.
+    // This avoids a window where the file exists with stale permissions
+    // and token content is world-readable.
+    const tmpPath = this.configPath + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2), { mode: 0o600 });
+    fs.renameSync(tmpPath, this.configPath);
   }
 
   getConfig(): LoopZeroConfig | null {
@@ -48,6 +49,11 @@ export class ConfigStore {
   }
 
   getToken(): string | null {
+    // LOOPZERO_TOKEN env var takes precedence over config file (CI/CD support)
+    const envToken = process.env.LOOPZERO_TOKEN;
+    if (envToken) {
+      return envToken;
+    }
     return this.getConfig()?.token ?? null;
   }
 

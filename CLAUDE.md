@@ -232,6 +232,18 @@ Owns test quality across all layers. Writes specs before implementation.
 - No internal terms in any CLI output
 - `--json` shape matches spec schema
 
+### Pipeline Reviewer — Helena Duarte (`agent:pipeline-reviewer`)
+Reviews Argo Workflows and CI/CD pipelines. Helena Duarte is a Principal CI/CD Pipeline Engineer persona.
+
+**Five review criteria:**
+- **Determinism:** same commit = same artifact (lockfiles, pinned images, no floating deps)
+- **Build/Release separation:** build produces artifacts only — no gitops push, no deploy, no manifests
+- **Scale:** 100 concurrent builds won't break it (parallelism limits, cache, CRD count)
+- **Observability:** duration, cache hit rate, failure causes, artifact lineage
+- **Recovery:** retry is safe, callbacks idempotent, no duplicate releases
+
+**Activates when:** reviewing or designing Argo Workflow definitions, build pipeline changes, or workflow-API callback integration.
+
 ---
 
 ## Slash Commands
@@ -248,6 +260,81 @@ Use these in Claude Code to trigger structured workflows:
 | `/failure-check <scenario>` | Verify a failure mode from spec §12 has a passing test |
 | `/schema-check <command>` | Validate CLI `--json` output against spec §0.3 schema |
 | `/state-machine <name>` | Inspect implementation vs spec §5 |
+| `/dogfood <scope>` | Dogfooding audit: test product as real user, generate actionable report |
+| `/pipeline-review <scope>` | Helena Duarte reviews pipelines: determinism, build/release separation, scale, observability, recovery |
+| `/start-loop <prompt>` | Start an iterative self-referential loop (Ralph Wiggum technique) |
+| `/cancel-loop` | Cancel the active loop |
+
+---
+
+## Loop (Ralph Wiggum Technique)
+
+An iterative self-referential loop that feeds the SAME prompt back to Claude on every exit attempt. Claude sees its own previous work in files and git history, enabling autonomous multi-iteration tasks.
+
+Based on Geoffrey Huntley's Ralph Wiggum technique: a Stop hook intercepts session exit, re-injects the original prompt, and Claude iterates until done.
+
+### How it works
+
+```
+Claude receives prompt → works on task → tries to exit
+    ↑                                          ↓
+    └──── Stop hook blocks exit ←── feeds SAME prompt back
+```
+
+Each iteration: same prompt, but files reflect previous work. State tracked in `.claude/loop-state.local.md`.
+
+### Usage
+
+```bash
+# Basic: loop with iteration limit
+/start-loop "Fix all failing tests" --max-iterations 20
+
+# With completion promise: loop until Claude declares done
+/start-loop "Implement auth module" --completion-promise "AUTH COMPLETE" --max-iterations 30
+
+# Dogfood in a loop: iterate until audit is done
+/start-loop "/dogfood sprint-2" --completion-promise "AUDIT COMPLETE" --max-iterations 10
+
+# Cancel a running loop
+/cancel-loop
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--max-iterations <n>` | unlimited | Safety limit — stops after N iterations |
+| `--completion-promise '<text>'` | none | Phrase that signals completion (must be inside `<promise>` tags) |
+
+### Completion promises
+
+To signal that the task is done, Claude must output the exact promise text inside `<promise>` tags:
+
+```
+<promise>AUDIT COMPLETE</promise>
+```
+
+The promise must be TRUE. Claude must not output false promises to escape the loop.
+
+### Monitoring
+
+```bash
+# Check current iteration
+head -10 .claude/loop-state.local.md
+```
+
+### When to use
+
+- Well-defined tasks with clear success criteria (tests passing, audit complete)
+- Tasks requiring iteration and self-correction
+- Running `/dogfood` or `/review` in autonomous mode
+- Greenfield implementation sessions where you can walk away
+
+### When NOT to use
+
+- Tasks requiring human judgment or design decisions
+- One-shot operations
+- Tasks with unclear success criteria
 
 ---
 

@@ -104,12 +104,12 @@ describe('ApiClient', () => {
       }
     });
 
-    it('should fallback to localhost:3001 when no env var', () => {
+    it('should fallback to localhost:13001 when no env var', () => {
       const original = process.env.LOOPZERO_API_URL;
       delete process.env.LOOPZERO_API_URL;
 
       const client = new ApiClient({ fetchFn: fakeFetch(200) });
-      expect((client as any).baseURL).toBe('http://localhost:3001');
+      expect((client as any).baseURL).toBe('http://localhost:13001');
 
       if (original !== undefined) {
         process.env.LOOPZERO_API_URL = original;
@@ -164,8 +164,11 @@ describe('ApiClient', () => {
       }
     });
 
-    it('409 → message about operation in progress', async () => {
-      const fetchFn = fakeFetch(409, { error: 'conflict' });
+    it('409 with server error body → uses server message with actionable hint', async () => {
+      const fetchFn = fakeFetch(409, {
+        code: 'DEPLOY_IN_PROGRESS',
+        message: 'A deploy is already in progress for this environment.',
+      });
       const client = new ApiClient({ baseURL, token: null, fetchFn });
 
       try {
@@ -174,7 +177,37 @@ describe('ApiClient', () => {
       } catch (err) {
         const apiErr = err as ApiError;
         expect(apiErr.exitCode).toBe(3);
+        expect(apiErr.statusCode).toBe(409);
+        expect(apiErr.message).toContain(
+          'A deploy is already in progress for this environment.'
+        );
+        expect(apiErr.message).toContain('try again later');
+      }
+    });
+
+    it('409 without parseable body → falls back to default message', async () => {
+      const fn = async (_url: string, _init?: RequestInit) => {
+        return {
+          ok: false,
+          status: 409,
+          headers: new Headers(),
+          json: async () => {
+            throw new SyntaxError('Unexpected token');
+          },
+          text: async () => 'not json',
+        } as unknown as Response;
+      };
+      const client = new ApiClient({ baseURL, token: null, fetchFn: fn });
+
+      try {
+        await client.post('/deploys', {});
+        fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as ApiError;
+        expect(apiErr.exitCode).toBe(3);
+        expect(apiErr.statusCode).toBe(409);
         expect(apiErr.message).toContain('already in progress');
+        expect(apiErr.message).toContain('try again later');
       }
     });
 
@@ -227,6 +260,76 @@ describe('ApiClient', () => {
           }
         }
       }
+    });
+  });
+
+  describe('F-04/F-06: AUTH_SERVICE_UNAVAILABLE maps to exit code 4', () => {
+    it('should map 503 with AUTH_SERVICE_UNAVAILABLE code to exit code 4', async () => {
+      const fetchFn = fakeFetch(503, {
+        code: 'AUTH_SERVICE_UNAVAILABLE',
+        message: 'Authentication service is temporarily unavailable',
+      });
+      const client = new ApiClient({ baseURL, token: 'tok', fetchFn, maxRetries: 0 });
+
+      try {
+        await client.get('/test');
+        fail('Expected ApiError');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).exitCode).toBe(4);
+        expect((err as ApiError).code).toBe('AUTH_SERVICE_UNAVAILABLE');
+      }
+    });
+
+    it('should map generic 503 to exit code 3 (not auth)', async () => {
+      const fetchFn = fakeFetch(503, {
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Service temporarily unavailable',
+      });
+      const client = new ApiClient({ baseURL, token: 'tok', fetchFn, maxRetries: 0 });
+
+      try {
+        await client.get('/test');
+        fail('Expected ApiError');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).exitCode).toBe(3);
+      }
+    });
+  });
+
+  describe('retry on transient errors', () => {
+    it('should retry on 503 and succeed on second attempt', async () => {
+      let callCount = 0;
+      const fetchFn = async (_url: string, _init?: RequestInit): Promise<Response> => {
+        callCount++;
+        if (callCount === 1) {
+          return { ok: false, status: 503, headers: new Headers(), json: async () => ({ code: 'SERVICE_UNAVAILABLE' }) } as Response;
+        }
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ result: 'ok' }) } as Response;
+      };
+      const client = new ApiClient({ baseURL, token: null, fetchFn, maxRetries: 1 });
+
+      const result = await client.get<{ result: string }>('/test');
+      expect(result.result).toBe('ok');
+      expect(callCount).toBe(2);
+    });
+
+    it('should not retry on 4xx errors', async () => {
+      let callCount = 0;
+      const fetchFn = async (_url: string, _init?: RequestInit): Promise<Response> => {
+        callCount++;
+        return { ok: false, status: 400, headers: new Headers(), json: async () => ({}) } as Response;
+      };
+      const client = new ApiClient({ baseURL, token: null, fetchFn, maxRetries: 3 });
+
+      try {
+        await client.get('/test');
+        fail('should have thrown');
+      } catch (err) {
+        expect((err as ApiError).statusCode).toBe(400);
+      }
+      expect(callCount).toBe(1);
     });
   });
 });

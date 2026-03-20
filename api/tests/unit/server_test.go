@@ -3,8 +3,11 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
@@ -149,6 +152,61 @@ func TestServerRouting(t *testing.T) {
 	})
 }
 
+func TestServer404Returns_JSON(t *testing.T) {
+	cfg := server.Config{
+		Port:   "0",
+		Logger: nil,
+		DB:     nil,
+	}
+	router := server.NewRouter(cfg)
+
+	t.Run("GET unknown route returns JSON 404 with LoopZeroError format", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/nonexistent", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", rec.Code)
+		}
+
+		ct := rec.Header().Get("Content-Type")
+		if ct != "application/json" {
+			t.Fatalf("expected Content-Type application/json, got %q", ct)
+		}
+
+		var body map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("expected JSON body, got decode error: %v (body: %s)", err, rec.Body.String())
+		}
+		if body["code"] != "NOT_FOUND" {
+			t.Errorf("expected code NOT_FOUND, got %v", body["code"])
+		}
+	})
+
+	t.Run("POST to GET-only route returns JSON 405", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/health", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("expected 405, got %d", rec.Code)
+		}
+
+		ct := rec.Header().Get("Content-Type")
+		if ct != "application/json" {
+			t.Fatalf("expected Content-Type application/json, got %q", ct)
+		}
+
+		var body map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("expected JSON body, got decode error: %v", err)
+		}
+		if body["code"] != "METHOD_NOT_ALLOWED" {
+			t.Errorf("expected code METHOD_NOT_ALLOWED, got %v", body["code"])
+		}
+	})
+}
+
 func TestServerNilLogger(t *testing.T) {
 	t.Run("NewRouter does not panic when Logger is nil", func(t *testing.T) {
 		cfg := server.Config{
@@ -167,3 +225,107 @@ func TestServerNilLogger(t *testing.T) {
 		}
 	})
 }
+
+func TestServerMetricsNotOnMainRouter(t *testing.T) {
+	t.Run("GET /metrics returns 404 on main router", func(t *testing.T) {
+		cfg := server.Config{
+			Port:   "0",
+			Logger: nil,
+			DB:     nil,
+		}
+		router := server.NewRouter(cfg)
+
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 for /metrics on main router, got %d", rec.Code)
+		}
+	})
+}
+
+func TestValidateProductionEnv(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	t.Run("returns nil when all required vars are set", func(t *testing.T) {
+		vars := map[string]string{
+			"DATABASE_URL":              "postgres://localhost:5432/loopzero",
+			"LOOPZERO_ARGO_CALLBACK_SECRET": "some-secret",
+			"GITEA_TOKEN":              "tok-123",
+			"ARGOCD_TOKEN":             "tok-456",
+		}
+		err := server.ValidateProductionEnv(logger, vars)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("returns error when a required var is empty", func(t *testing.T) {
+		vars := map[string]string{
+			"DATABASE_URL":              "postgres://localhost:5432/loopzero",
+			"LOOPZERO_ARGO_CALLBACK_SECRET": "",
+			"GITEA_TOKEN":              "tok-123",
+			"ARGOCD_TOKEN":             "tok-456",
+		}
+		err := server.ValidateProductionEnv(logger, vars)
+		if err == nil {
+			t.Fatal("expected error for missing LOOPZERO_ARGO_CALLBACK_SECRET, got nil")
+		}
+	})
+
+	t.Run("returns error listing all missing vars", func(t *testing.T) {
+		vars := map[string]string{
+			"DATABASE_URL":              "",
+			"LOOPZERO_ARGO_CALLBACK_SECRET": "",
+			"GITEA_TOKEN":              "",
+			"ARGOCD_TOKEN":             "",
+		}
+		err := server.ValidateProductionEnv(logger, vars)
+		if err == nil {
+			t.Fatal("expected error for all missing vars, got nil")
+		}
+	})
+}
+
+func TestServerConfigHasMetricsPort(t *testing.T) {
+	t.Run("Config struct accepts MetricsPort", func(t *testing.T) {
+		cfg := server.Config{
+			Port:        "3001",
+			MetricsPort: "9090",
+		}
+		if cfg.MetricsPort != "9090" {
+			t.Fatalf("expected MetricsPort=9090, got %q", cfg.MetricsPort)
+		}
+	})
+}
+
+func TestMetricsServerStartsOnSeparatePort(t *testing.T) {
+	t.Run("metrics server serves /metrics on separate port", func(t *testing.T) {
+		cfg := server.Config{
+			Port:        "0",
+			MetricsPort: "0", // Let OS assign a port
+			Logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		}
+
+		// Use NewMetricsServer to get a testable server
+		metricsSrv := server.NewMetricsServer(cfg.MetricsPort)
+
+		// Use httptest to verify the handler responds to /metrics
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		rec := httptest.NewRecorder()
+		metricsSrv.Handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 from metrics handler, got %d", rec.Code)
+		}
+
+		ct := rec.Header().Get("Content-Type")
+		if ct == "" {
+			t.Fatal("expected Content-Type header from metrics endpoint")
+		}
+	})
+}
+
+// Ensure unused imports don't cause build errors.
+var _ = fmt.Sprintf

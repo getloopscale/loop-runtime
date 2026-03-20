@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -67,6 +68,7 @@ func GetUserContext(ctx context.Context) *UserContext {
 // cachedValidation holds a cached token validation result.
 type cachedValidation struct {
 	result    *TokenValidationResult
+	createdAt time.Time
 	expiresAt time.Time
 }
 
@@ -76,9 +78,15 @@ func Auth(validator TokenValidator, store MembershipStore) func(http.Handler) ht
 	return AuthWithTTL(validator, store, 5*time.Minute)
 }
 
+// maxTokenCacheSize is the maximum number of entries in the token validation cache.
+// When exceeded, the cache is cleared to prevent unbounded memory growth.
+// The TTL ensures entries expire naturally; this limit is a safety net.
+const maxTokenCacheSize = 10000
+
 // AuthWithTTL is like Auth but with a configurable cache TTL.
 func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.Duration) func(http.Handler) http.Handler {
 	cache := &sync.Map{}
+	var cacheSize atomic.Int64
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -90,8 +98,8 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 			}
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
-			// Validate token (with cache)
-			result, err := validateWithCache(r.Context(), validator, cache, token, cacheTTL)
+			// Validate token (with bounded cache)
+			result, err := validateWithCache(r.Context(), validator, cache, &cacheSize, token, cacheTTL)
 			if err != nil {
 				if errors.Is(err, ErrInvalidToken) {
 					writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired token")
@@ -148,7 +156,7 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 	}
 }
 
-func validateWithCache(ctx context.Context, validator TokenValidator, cache *sync.Map, token string, ttl time.Duration) (*TokenValidationResult, error) {
+func validateWithCache(ctx context.Context, validator TokenValidator, cache *sync.Map, cacheSize *atomic.Int64, token string, ttl time.Duration) (*TokenValidationResult, error) {
 	// Check cache
 	if cached, ok := cache.Load(token); ok {
 		cv := cached.(*cachedValidation)
@@ -156,6 +164,7 @@ func validateWithCache(ctx context.Context, validator TokenValidator, cache *syn
 			return cv.result, nil
 		}
 		cache.Delete(token)
+		cacheSize.Add(-1)
 	}
 
 	result, err := validator.ValidateToken(ctx, token)
@@ -163,12 +172,79 @@ func validateWithCache(ctx context.Context, validator TokenValidator, cache *syn
 		return nil, err
 	}
 
+	// Bound cache size: evict entries when the cache exceeds the limit.
+	// First pass: delete expired entries. Second pass (if still over 80%):
+	// delete oldest entries until under the target.
+	now := time.Now()
+	if cacheSize.Add(1) > maxTokenCacheSize {
+		evictCache(cache, cacheSize, now)
+	}
+
 	cache.Store(token, &cachedValidation{
 		result:    result,
-		expiresAt: time.Now().Add(ttl),
+		createdAt: now,
+		expiresAt: now.Add(ttl),
 	})
 
 	return result, nil
+}
+
+// evictCache removes entries from the cache to bring it under the size limit.
+// First pass: remove expired entries. If still over 80% capacity, remove the
+// oldest entries until the target is reached. All operations use sync.Map
+// methods — the struct is never replaced.
+func evictCache(cache *sync.Map, cacheSize *atomic.Int64, now time.Time) {
+	target := int64(float64(maxTokenCacheSize) * 0.8)
+
+	// First pass: delete expired entries.
+	// Use LoadAndDelete to avoid double-decrement when concurrent evictions
+	// race on the same key — Delete is idempotent but cacheSize.Add(-1) is not.
+	cache.Range(func(key, value any) bool {
+		cv := value.(*cachedValidation)
+		if now.After(cv.expiresAt) {
+			if _, loaded := cache.LoadAndDelete(key); loaded {
+				cacheSize.Add(-1)
+			}
+		}
+		return true
+	})
+
+	if cacheSize.Load() <= target {
+		return
+	}
+
+	// Second pass: find the oldest entries and delete them until under target.
+	// Collect keys with their creation times, then delete the oldest.
+	type entry struct {
+		key       any
+		createdAt time.Time
+	}
+	var entries []entry
+	cache.Range(func(key, value any) bool {
+		cv := value.(*cachedValidation)
+		entries = append(entries, entry{key: key, createdAt: cv.createdAt})
+		return true
+	})
+
+	// Sort oldest first.
+	for i := 0; i < len(entries); i++ {
+		for j := i + 1; j < len(entries); j++ {
+			if entries[j].createdAt.Before(entries[i].createdAt) {
+				entries[i], entries[j] = entries[j], entries[i]
+			}
+		}
+	}
+
+	// Delete oldest until under target.
+	// Use LoadAndDelete to prevent double-decrement from concurrent evictions.
+	for _, e := range entries {
+		if cacheSize.Load() <= target {
+			break
+		}
+		if _, loaded := cache.LoadAndDelete(e.key); loaded {
+			cacheSize.Add(-1)
+		}
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {

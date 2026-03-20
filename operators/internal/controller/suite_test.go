@@ -2,6 +2,7 @@ package controller_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -20,7 +21,6 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/controller"
-	"github.com/loopzero/loopzero/operators/internal/gitea"
 )
 
 const (
@@ -35,12 +35,13 @@ var (
 	scheme         *runtime.Scheme
 	ctx            context.Context
 	cancel         context.CancelFunc
-	fakeGitProvider *gitea.FakeProvisioner
+	fakeGitProvider    *fakeGiteaProvisioner
+	fakeArgoCDProvider *fakeArgoCDProvisioner
 )
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "TenantController Suite")
+	RunSpecs(t, "Controller Suite")
 }
 
 var _ = BeforeSuite(func() {
@@ -49,9 +50,22 @@ var _ = BeforeSuite(func() {
 	ctx, cancel = context.WithCancel(context.TODO())
 
 	By("bootstrapping test environment")
+	// Resolve envtest binary path: KUBEBUILDER_ASSETS env var, then setup-envtest,
+	// then default kubebuilder path. This ensures tests work both via `task test:unit`
+	// (which sets KUBEBUILDER_ASSETS) and direct `go test` invocations. (F-06)
+	binaryDir := os.Getenv("KUBEBUILDER_ASSETS")
+	if binaryDir == "" {
+		// Try common setup-envtest path
+		home, _ := os.UserHomeDir()
+		candidate := filepath.Join(home, ".local", "share", "kubebuilder-envtest", "k8s", "1.35.0-linux-amd64")
+		if _, err := os.Stat(filepath.Join(candidate, "etcd")); err == nil {
+			binaryDir = candidate
+		}
+	}
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
+		BinaryAssetsDirectory: binaryDir,
 	}
 
 	var err error
@@ -77,8 +91,12 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	fakeGitProvider = gitea.NewFakeProvisioner()
-	err = controller.SetupTenantController(mgr, fakeGitProvider)
+	fakeGitProvider = newFakeGiteaProvisioner()
+	fakeArgoCDProvider = newFakeArgoCDProvisioner()
+	err = controller.SetupTenantController(mgr, fakeGitProvider, fakeArgoCDProvider, controller.TenantControllerConfig{})
+	Expect(err).NotTo(HaveOccurred())
+
+	err = controller.SetupClusterCredentialController(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
 	go func() {

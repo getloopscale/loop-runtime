@@ -1,0 +1,168 @@
+# HA Strategy:
+# - Leader election is enabled in the operator binary (kubebuilder default)
+# - For HA: increase replicas to 2-3. Only the leader reconciles; others are standby.
+# - Failover time: ~15 seconds (leader lease duration)
+# - Current: single replica (acceptable for development)
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tenant-controller
+  namespace: loopzero-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tenant-controller
+rules:
+  # --- LoopZero CRDs (full CRUD needed for reconciliation) ---
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants", "appsecrets", "clustercredentials", "previewenvironments", "reconciliationreports"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants/status", "appsecrets/status", "clustercredentials/status", "previewenvironments/status", "reconciliationreports/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants/finalizers", "clustercredentials/finalizers", "previewenvironments/finalizers"]
+    verbs: ["update"]
+
+  # --- Namespaces: create/manage tenant namespaces ---
+  # controller-runtime cache requires list+watch at cluster scope for all cached types
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+
+  # --- ResourceQuotas + LimitRanges: enforce tenant resource limits ---
+  # controller-runtime cache requires list+watch at cluster scope for all cached types
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- RBAC: create Roles/RoleBindings in tenant namespaces ---
+  # No ClusterRoles/ClusterRoleBindings — operator only manages namespace-scoped RBAC
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- ServiceAccounts: create in tenant namespaces ---
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch", "create"]
+
+  # --- NetworkPolicies: tenant network isolation ---
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # --- Secrets: kubeconfig secrets for ClusterCredentialController ---
+  # ClusterCredentialController reads secrets and creates ArgoCD cluster secrets.
+  # controller-runtime needs list+watch for caching; create+update+delete for ArgoCD secrets.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # --- PriorityClasses: cluster-scoped, needed for tenant workload priorities ---
+  # controller-runtime cache requires list+watch at cluster scope for all cached types
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- Events: emit Kubernetes events for observability ---
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+
+  # --- Leader election: coordination lease for HA ---
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tenant-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tenant-controller
+subjects:
+  - kind: ServiceAccount
+    name: tenant-controller
+    namespace: loopzero-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tenant-controller
+  namespace: loopzero-system
+  labels:
+    app: tenant-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tenant-controller
+  template:
+    metadata:
+      labels:
+        app: tenant-controller
+    spec:
+      serviceAccountName: tenant-controller
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: controller
+          image: tenant-controller
+          args:
+            - "--leader-elect=false"
+            - "--health-probe-bind-address=:8081"
+            - "--metrics-bind-address=:8080"
+          env:
+            - name: GITEA_URL
+              value: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+            - name: GITEA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-tokens
+                  key: gitea-token
+                  optional: true
+            - name: ARGOCD_NAMESPACE
+              value: "argocd"
+          ports:
+            - containerPort: 8081
+              name: health
+              protocol: TCP
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
