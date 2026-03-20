@@ -167,7 +167,7 @@ var (
 	// ErrInternalError is returned for unexpected server-side failures.
 	ErrInternalError = &LoopZeroError{
 		Code:       "INTERNAL_ERROR",
-		Message:    "internal server error",
+		Message:    "Something went wrong. Try again, or check `loopzero status` for details. If the problem persists, contact support.",
 		HTTPStatus: 500,
 	}
 

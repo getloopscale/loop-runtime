@@ -1,3 +1,32 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loopzero-api
+  namespace: loopzero-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loopzero-api
+rules:
+  # --- Tenant CRs: create/update via EnsureTenant (triggered during loopzero init) ---
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants"]
+    verbs: ["get", "create", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loopzero-api
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loopzero-api
+subjects:
+  - kind: ServiceAccount
+    name: loopzero-api
+    namespace: loopzero-system
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,6 +44,7 @@ spec:
       labels:
         app: loopzero-api
     spec:
+      serviceAccountName: loopzero-api
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -45,10 +75,10 @@ spec:
             # IP = mgmt LB on k3d-loopzero-build network. Update after cluster recreate:
             #   docker inspect k3d-loopzero-mgmt-serverlb --format '{{json .NetworkSettings.Networks}}'
             - name: GITEA_CROSS_CLUSTER_URL
-              value: "http://10.0.2.7:30000"
+              value: "http://10.0.2.8:30000"
             # Cross-cluster API URL (for Argo Workflow callback — build cluster → mgmt API)
             - name: API_CROSS_CLUSTER_URL
-              value: "http://10.0.2.7:30001"
+              value: "http://10.0.2.8:30001"
             - name: GITEA_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -78,7 +108,7 @@ spec:
             # Workload LB IP on k3d-loopzero-workload network. Update after cluster recreate:
             #   docker inspect k3d-loopzero-workload-serverlb --format '{{json .NetworkSettings.Networks}}'
             - name: WORKLOAD_INGRESS_URL
-              value: "http://10.0.3.6:80"
+              value: "http://10.0.3.7:80"
             - name: BASE_DOMAIN
               value: "loopzero.local"
           ports:

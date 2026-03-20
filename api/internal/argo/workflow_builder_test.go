@@ -8,10 +8,13 @@ import (
 
 func testInfraParams() InfraParams {
 	return InfraParams{
-		GiteaURL:    "http://gitea:3000",
-		GiteaToken:  "test-gitea-token",
-		RegistryURL: "k3d-loopzero-registry:5000",
-		BaseDomain:  "loopzero.local",
+		GiteaURL:       "http://gitea:3000",
+		GiteaToken:     "test-gitea-token",
+		RegistryURL:    "k3d-loopzero-registry:5000",
+		BaseDomain:     "loopzero.local",
+		MinIOEndpoint:  "minio.loopzero-system.svc.cluster.local:9000",
+		MinIOAccessKey: "test-minio-access",
+		MinIOSecretKey: "test-minio-secret",
 	}
 }
 
@@ -84,15 +87,21 @@ func TestWorkflowBuilder_Build_HasVolumeClaimTemplates(t *testing.T) {
 		t.Fatal("spec missing volumeClaimTemplates")
 	}
 
-	// C-02 fix: manifests volume removed — only workspace remains
-	if len(vcts) != 1 {
-		t.Fatalf("want 1 volume claim template, got %d", len(vcts))
+	// workspace + manifests volumes
+	if len(vcts) != 2 {
+		t.Fatalf("want 2 volume claim templates, got %d", len(vcts))
 	}
 
 	vct0 := vcts[0].(map[string]interface{})
 	vct0meta := vct0["metadata"].(map[string]interface{})
 	if vct0meta["name"] != "workspace" {
 		t.Errorf("first VCT name = %v, want workspace", vct0meta["name"])
+	}
+
+	vct1 := vcts[1].(map[string]interface{})
+	vct1meta := vct1["metadata"].(map[string]interface{})
+	if vct1meta["name"] != "manifests" {
+		t.Errorf("second VCT name = %v, want manifests", vct1meta["name"])
 	}
 }
 
@@ -253,6 +262,46 @@ func TestWorkflowBuilder_Build_KanikoTask_UsesCWTRef(t *testing.T) {
 	for _, expected := range []string{"registry-url", "tenant-id", "project-id", "commit-sha"} {
 		if !paramNames[expected] {
 			t.Errorf("build-image missing parameter: %s", expected)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// MinIO parameters on cache CWT tasks
+// ---------------------------------------------------------------------------
+
+func TestWorkflowBuilder_Build_RestoreCache_HasMinIOParams(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	wf := builder.Build(testSpec())
+
+	task := findDAGTask(t, wf, "build-pipeline", "restore-cache")
+	args := task["arguments"].(map[string]interface{})
+	params := args["parameters"].([]interface{})
+	paramNames := paramNameSet(params)
+
+	for _, expected := range []string{"minio-endpoint", "minio-access-key", "minio-secret-key"} {
+		if !paramNames[expected] {
+			t.Errorf("restore-cache missing parameter: %s", expected)
+		}
+	}
+}
+
+func TestWorkflowBuilder_Build_SaveCache_HasMinIOParams(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	wf := builder.Build(testSpec())
+
+	task := findDAGTask(t, wf, "finalize", "save-cache")
+	if task == nil {
+		t.Fatal("save-cache task not found in finalize DAG")
+	}
+
+	args := task["arguments"].(map[string]interface{})
+	params := args["parameters"].([]interface{})
+	paramNames := paramNameSet(params)
+
+	for _, expected := range []string{"minio-endpoint", "minio-access-key", "minio-secret-key"} {
+		if !paramNames[expected] {
+			t.Errorf("save-cache missing parameter: %s", expected)
 		}
 	}
 }

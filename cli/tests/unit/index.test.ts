@@ -139,6 +139,40 @@ describe('loopzero --json with no command', () => {
     expect(parsed).toHaveProperty('exit_code', 1);
   });
 
+  it('should return exit code 1 and error message for unknown command', () => {
+    let output: string;
+    let exitCode: number;
+    try {
+      output = execSync(`node ${binPath} nonexistent-command`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      exitCode = 0;
+    } catch (err: any) {
+      output = (err.stderr || '') + (err.stdout || '');
+      exitCode = err.status;
+    }
+
+    expect(exitCode).toBe(1);
+    expect(output).toContain('Unknown command: nonexistent-command');
+    expect(output).toContain('loopzero --help');
+  });
+
+  it('should return exit code 1 and structured JSON for unknown command with --json', () => {
+    let output: string;
+    let exitCode: number;
+    try {
+      output = execSync(`node ${binPath} --json nonexistent-command`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      exitCode = 0;
+    } catch (err: any) {
+      output = err.stdout || '';
+      exitCode = err.status;
+    }
+
+    expect(exitCode).toBe(1);
+    const parsed = JSON.parse(output.trim());
+    expect(parsed).toHaveProperty('error');
+    expect(parsed.error).toContain('Unknown command: nonexistent-command');
+    expect(parsed).toHaveProperty('exit_code', 1);
+  });
+
   it('should still show text help when --json is NOT passed and no command is given', () => {
     let stdout = '';
     let stderr = '';

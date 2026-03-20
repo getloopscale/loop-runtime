@@ -173,8 +173,10 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	}
 
 	for _, app := range apps {
-		imageRef := fmt.Sprintf("%s/%s/%s/%s:%s",
-			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
+		// Image path matches Kaniko destination: {registry}/{tenant}/{project}:{sha}
+		// Single image per build — multi-app builds share the same image.
+		imageRef := fmt.Sprintf("%s/%s/%s:%s",
+			r.cfg.RegistryURL, build.TenantID, build.ProjectID, build.CommitSHA)
 
 		url := ""
 		if app.Type == "server" || app.Type == "frontend" {

@@ -392,18 +392,36 @@ export function createProgram(): Command {
     });
 
   // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)
-  program.action(() => {
+  // Also handles unknown commands since Commander passes them as arguments to the default action.
+  program.argument('[args...]');
+  program.action((args: string[]) => {
     const globalOpts = program.opts();
-    if (globalOpts.json) {
-      const commandNames = program.commands.map((cmd) => cmd.name());
-      writeTo(JSON.stringify({
-        error: 'No command specified. Run: loopzero --help',
-        commands: commandNames,
-        exit_code: 1,
-      }));
+    const unknownCommand = args.length > 0 ? args[0] : null;
+
+    if (unknownCommand) {
+      // Unknown command provided
+      if (globalOpts.json) {
+        writeTo(JSON.stringify({
+          error: `Unknown command: ${unknownCommand}. Run: loopzero --help`,
+          exit_code: 1,
+        }));
+      } else {
+        writeError(`Unknown command: ${unknownCommand}. Run: loopzero --help`);
+      }
       process.exitCode = 1;
     } else {
-      program.help();
+      // No command provided at all
+      if (globalOpts.json) {
+        const commandNames = program.commands.map((cmd) => cmd.name());
+        writeTo(JSON.stringify({
+          error: 'No command specified. Run: loopzero --help',
+          commands: commandNames,
+          exit_code: 1,
+        }));
+        process.exitCode = 1;
+      } else {
+        program.help();
+      }
     }
   });
 

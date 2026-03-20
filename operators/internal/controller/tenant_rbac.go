@@ -76,12 +76,20 @@ func (r *TenantReconciler) reconcileRBAC(ctx context.Context, tenant *loopzerov1
 }
 
 // rbacRulesForPlan returns the RBAC rules for a given plan tier.
+// Rules are split by API group to avoid RBAC escalation issues:
+// Kubernetes expands combined APIGroups × Resources as a cartesian product,
+// requiring the controller to hold ALL expanded combinations.
 func rbacRulesForPlan(plan loopzerov1.PlanTier) []rbacv1.PolicyRule {
-	// Starter: basic deploy permissions
+	// Starter: basic deploy permissions (split by API group)
 	rules := []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{"", "apps"},
-			Resources: []string{"deployments", "services", "configmaps"},
+			APIGroups: []string{""},
+			Resources: []string{"services", "configmaps"},
+			Verbs:     []string{"get", "list", "create", "update", "patch"},
+		},
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
 			Verbs:     []string{"get", "list", "create", "update", "patch"},
 		},
 	}

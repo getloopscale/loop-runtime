@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"regexp"
 
@@ -102,7 +103,12 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Create/update Tenant CR in Kubernetes — this triggers the TenantController.
 	// Best-effort: project is already persisted, Tenant CR can be reconciled later.
-	_ = h.crMgr.EnsureTenant(r.Context(), uc.TenantID, TenantCRSpec{Plan: "starter"})
+	if err := h.crMgr.EnsureTenant(r.Context(), uc.TenantID, TenantCRSpec{Plan: "starter"}); err != nil {
+		slog.Error("failed to ensure tenant CR — deploy will fail until resolved",
+			"tenant_id", uc.TenantID,
+			"error", err.Error(),
+		)
+	}
 
 	writeJSON(w, http.StatusCreated, result)
 }

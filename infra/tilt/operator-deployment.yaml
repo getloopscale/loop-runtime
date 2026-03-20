@@ -51,7 +51,7 @@ rules:
 
   # --- NetworkPolicies: tenant network isolation ---
   - apiGroups: ["networking.k8s.io"]
-    resources: ["networkpolicies"]
+    resources: ["networkpolicies", "ingresses"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]
 
   # --- Secrets: kubeconfig secrets for ClusterCredentialController ---
@@ -66,6 +66,33 @@ rules:
   - apiGroups: ["scheduling.k8s.io"]
     resources: ["priorityclasses"]
     verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- Workload resources: required for RBAC escalation prevention ---
+  # Kubernetes prevents a controller from creating Roles that grant permissions
+  # the controller itself does not hold. rbacRulesForPlan() grants permissions
+  # split by API group; the controller must hold all of them at cluster scope.
+  # See: operators/internal/controller/tenant_rbac.go rbacRulesForPlan()
+  - apiGroups: [""]
+    resources: ["configmaps", "services"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch"]
+
+  # --- Backward compat: old rbacRulesForPlan used combined APIGroups ["", "apps"] ---
+  # Kubernetes expands this as cartesian product, requiring ALL combinations.
+  # These cover the extra combinations until all operator images use split rules.
+  - apiGroups: [""]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["configmaps", "services"]
+    verbs: ["get", "list", "create", "update", "patch"]
+
+  # --- ArgoCD: create/manage Applications and AppProjects in argocd namespace ---
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "appprojects"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
   # --- Events: emit Kubernetes events for observability ---
   - apiGroups: [""]

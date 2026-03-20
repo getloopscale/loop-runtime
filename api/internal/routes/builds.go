@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -265,6 +266,13 @@ func mapBuildError(w http.ResponseWriter, err error) {
 		writeLoopZeroError(w, loopzeroErr)
 		return
 	}
+
+	// F-03: Log unexpected errors for debugging — the audit middleware only logs
+	// status=500 at INFO level, which is useless for diagnosing root causes.
+	slog.Error("unexpected error in build handler",
+		"error", err.Error(),
+		"type", fmt.Sprintf("%T", err),
+	)
 
 	// Fallback for unexpected errors
 	writeLoopZeroError(w, loopzeroerrors.ErrInternalError)

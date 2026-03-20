@@ -17,15 +17,20 @@ import (
 // C-02 fix: ManifestGeneration removed from workflow. The API generates manifests
 // after detecting workflow completion. The workflow only builds images.
 //
-// Note: MinIO credentials are NOT passed as workflow parameters (security risk —
-// they would be visible in plaintext in Workflow CR objects). Instead, CWTs read
-// credentials from K8s Secret loopzero-minio-credentials via envFrom.secretRef.
+// Note: MinIO credentials are passed as workflow parameters because the CWT
+// templates (loopzero-cache-restore, loopzero-cache-save) require them as inputs.
+// The CWTs run in the build cluster and need MinIO connectivity to store/restore
+// build caches. The credentials are visible in the Workflow CR but are
+// service-account-scoped (not user credentials).
 type InfraParams struct {
 	GiteaURL         string
 	GiteaToken       string
 	RegistryURL      string
 	RegistryInsecure bool   // true for local dev registries without TLS
 	BaseDomain       string // Base domain for app hostnames (e.g., "loopzero.local")
+	MinIOEndpoint    string // e.g., "minio.loopzero-system.svc.cluster.local:9000"
+	MinIOAccessKey   string
+	MinIOSecretKey   string
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs
@@ -95,6 +100,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) map[string]interface
 			"templates": templates,
 			"volumeClaimTemplates": []interface{}{
 				volumeClaim("workspace", "2Gi"),
+				volumeClaim("manifests", "256Mi"),
 			},
 		},
 	}
@@ -116,11 +122,13 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy Lang
 		}),
 
 		// Step 1: restore-cache (CWT ref) — depends on clone
-		// MinIO credentials come from K8s Secret (envFrom), not workflow parameters.
 		cwtTask("restore-cache", "loopzero-cache-restore", "restore-cache", []string{"clone-repo"}, map[string]string{
-			"tenant-id":  spec.TenantID,
-			"project-id": spec.ProjectID,
-			"cache-key":  strategy.CacheKey(),
+			"tenant-id":        spec.TenantID,
+			"project-id":       spec.ProjectID,
+			"cache-key":        strategy.CacheKey(),
+			"minio-endpoint":   b.infraParams.MinIOEndpoint,
+			"minio-access-key": b.infraParams.MinIOAccessKey,
+			"minio-secret-key": b.infraParams.MinIOSecretKey,
 		}),
 
 		// Step 1.5: validate workspace (inline) — depends on clone
@@ -165,13 +173,15 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, strategy La
 	tasks := []interface{}{}
 
 	// save-cache (CWT ref) — only if language has cache dirs
-	// MinIO credentials come from K8s Secret (envFrom), not workflow parameters.
 	if strategy.CacheKey() != "" {
 		tasks = append(tasks, cwtTask("save-cache", "loopzero-cache-save", "save-cache", nil, map[string]string{
-			"tenant-id":  spec.TenantID,
-			"project-id": spec.ProjectID,
-			"cache-key":  strategy.CacheKey(),
-			"cache-dirs": strings.Join(strategy.CacheDirs(), ","),
+			"tenant-id":        spec.TenantID,
+			"project-id":       spec.ProjectID,
+			"cache-key":        strategy.CacheKey(),
+			"cache-dirs":       strings.Join(strategy.CacheDirs(), ","),
+			"minio-endpoint":   b.infraParams.MinIOEndpoint,
+			"minio-access-key": b.infraParams.MinIOAccessKey,
+			"minio-secret-key": b.infraParams.MinIOSecretKey,
 		}))
 	}
 

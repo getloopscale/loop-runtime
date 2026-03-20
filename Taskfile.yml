@@ -1004,6 +1004,18 @@ tasks:
       - task: setup
       - echo "Clusters and dependencies are ready. Run 'tilt up' to start the dev loop."
 
+  cli:link:
+    desc: Symlink 'loopzero' CLI to PATH (makes `loopzero` available globally)
+    cmds:
+      - cd cli && npm link
+    status:
+      - which loopzero
+
+  cli:build:
+    desc: Build CLI from TypeScript source
+    cmds:
+      - cd cli && npm run build
+
   test:
     desc: Run all tests (unit + lint + manifest validation)
     cmds:

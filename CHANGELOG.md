@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- TenantController RBAC insufficient — ClusterRole missing permissions for `deployments`, `services`, `configmaps` that `rbacRulesForPlan` grants; Kubernetes RBAC escalation prevention blocked Role creation (#dogfood2-F02)
+- TenantController RBAC rules split by API group — `rbacRulesForPlan` used combined `APIGroups: ["", "apps"]` causing cartesian product expansion; split into separate rules per API group (#dogfood2-F02)
+- Tenant CR never created — `EnsureTenant` error silently discarded with `_ =`; now logged at ERROR level for observability (#dogfood2-F01)
+- API ServiceAccount missing — API pod ran as `default` SA without Tenant CR permissions; added dedicated `loopzero-api` SA with `loopzero.io/tenants` RBAC (#dogfood2-F09)
+- API returns generic 500 without logging cause — `mapBuildError` fallback now logs actual error at ERROR level with type info (#dogfood2-F03)
+- CLI exit code 0 for unknown commands — now returns exit code 1 with helpful error message (#dogfood2-F04)
+- Argo Workflow missing MinIO parameters — `minio-endpoint`, `minio-access-key`, `minio-secret-key` not passed to cache CWT templates (#dogfood2-WF01)
+- Argo Workflow missing `manifests` volume — inline templates reference `/manifests` mount but volume not declared in workflow spec (#dogfood2-WF02)
+- Cross-cluster IPs stale after cluster recreate — updated mgmt LB and workload LB IPs in api-deployment.yaml (#dogfood2-INFRA01)
+- Image path mismatch between Kaniko and manifest generator — reconcile loop used `{registry}/{tenant}/{project}/{app}:{sha}` but Kaniko pushes to `{registry}/{tenant}/{project}:{sha}`; aligned to match (#dogfood2-WF03)
+- Source upload intermittent 422 — `openAsBlob()` streaming Blob had unstable file handle during fetch; replaced with synchronous `readFileSync` (#dogfood2-F07)
+- ArgoCD repo credential missing Gitea auth — added username/password to repo-creds Secret (#dogfood2-INFRA02)
+- ArgoCD Application pointing to mgmt cluster instead of workload — registered workload cluster and fixed destination server (#dogfood2-INFRA03)
+
+### Added
+- `task cli:link` — symlinks `loopzero` to PATH for global access (#dogfood2-F08)
+- `task cli:build` — builds CLI from TypeScript source (#dogfood2-F08)
+
+### Changed
+- Error message for internal server errors changed from generic "internal server error" to actionable guidance with next steps (#dogfood2-F05)
+- TenantController ClusterRole expanded with ArgoCD Application/AppProject permissions (#dogfood2-F02)
+
+### Fixed
 - Source upload rejected `loopzero.yaml` sent as file upload (how CLI sends it via FormData) — API now accepts both text field (`FormValue`) and file upload (`FormFile`) (#dogfood-full-F01)
 - `loopzero init` without `--name` generated ugly project names from temp directories (e.g., `tmp.DbFESo52xo`) — auto-detected names now sanitized to lowercase with hyphens (#dogfood-full-F02)
 - `Idempotency-Key` header was optional on build mutation routes — now required, returns 400 `MISSING_IDEMPOTENCY_KEY` when absent; source upload and project creation correctly excluded (#dogfood-full-F03)
