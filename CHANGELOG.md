@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `loopzero --json` without a command showed plain-text help — now returns structured JSON with error message and available commands list (#dogfood-full-F04)
 - Login `--json` error responses missing `code` field — all 7 error paths now include typed error codes (`AUTH_FAILED`, `MISSING_TOKEN`, `SERVICE_UNAVAILABLE`, etc.) (#dogfood-full-F05)
 - Server-side errors in deploy shown without context — upload errors now prefixed with "Upload rejected:" and build errors with "Deploy rejected:" to distinguish from local errors (#dogfood-full-F06)
+- Flaky `TestEvictCache_ConcurrentAccess_NoDataRace` — concurrent `evictCache` goroutines double-decremented `cacheSize` when deleting the same key; `cache.Delete` replaced with `cache.LoadAndDelete` to only decrement when the entry was actually removed (#dogfood-full-F07)
 
 ### Changed
 - Source upload and project creation routes no longer share idempotency middleware with build routes — middleware chain split into `rateLimitMiddlewares` (upload, projects) and `idempotentMiddlewares` (builds) (#dogfood-full-F03)

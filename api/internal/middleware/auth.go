@@ -197,11 +197,14 @@ func evictCache(cache *sync.Map, cacheSize *atomic.Int64, now time.Time) {
 	target := int64(float64(maxTokenCacheSize) * 0.8)
 
 	// First pass: delete expired entries.
+	// Use LoadAndDelete to avoid double-decrement when concurrent evictions
+	// race on the same key — Delete is idempotent but cacheSize.Add(-1) is not.
 	cache.Range(func(key, value any) bool {
 		cv := value.(*cachedValidation)
 		if now.After(cv.expiresAt) {
-			cache.Delete(key)
-			cacheSize.Add(-1)
+			if _, loaded := cache.LoadAndDelete(key); loaded {
+				cacheSize.Add(-1)
+			}
 		}
 		return true
 	})
@@ -233,12 +236,14 @@ func evictCache(cache *sync.Map, cacheSize *atomic.Int64, now time.Time) {
 	}
 
 	// Delete oldest until under target.
+	// Use LoadAndDelete to prevent double-decrement from concurrent evictions.
 	for _, e := range entries {
 		if cacheSize.Load() <= target {
 			break
 		}
-		cache.Delete(e.key)
-		cacheSize.Add(-1)
+		if _, loaded := cache.LoadAndDelete(e.key); loaded {
+			cacheSize.Add(-1)
+		}
 	}
 }
 
