@@ -83,21 +83,21 @@ func TestLockReleasedOnConnectionCrash(t *testing.T) {
 	var crasherPID int
 	err = crasherConn.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&crasherPID)
 	if err != nil {
-		crasherConn.Close(ctx)
+		_ = crasherConn.Close(ctx)
 		t.Fatalf("failed to get crasher PID: %v", err)
 	}
 
 	// Start a transaction and acquire the advisory lock on the crasher connection.
 	crasherTx, err := crasherConn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
-		crasherConn.Close(ctx)
+		_ = crasherConn.Close(ctx)
 		t.Fatalf("failed to begin crasher transaction: %v", err)
 	}
 
 	_, err = crasherTx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", lockKey)
 	if err != nil {
 		_ = crasherTx.Rollback(ctx)
-		crasherConn.Close(ctx)
+		_ = crasherConn.Close(ctx)
 		t.Fatalf("failed to acquire advisory lock on crasher: %v", err)
 	}
 

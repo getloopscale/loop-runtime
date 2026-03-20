@@ -113,7 +113,7 @@ func TestGiteaGitOpsPusher_PushCreatesCorrectPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(cloneDir)
+	defer func() { _ = os.RemoveAll(cloneDir) }()
 
 	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopzero/loopzero-tenant-acme.git"
 	gitRun(t, cloneDir, "git", "clone", cloneURL, filepath.Join(cloneDir, "repo"))
@@ -150,7 +150,7 @@ func TestGiteaGitOpsPusher_PushHasGitTrailers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(cloneDir)
+	defer func() { _ = os.RemoveAll(cloneDir) }()
 
 	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopzero/loopzero-tenant-acme.git"
 	gitRun(t, cloneDir, "git", "clone", cloneURL, filepath.Join(cloneDir, "repo"))

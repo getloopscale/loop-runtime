@@ -26,7 +26,7 @@ func TestGenerateProjectID(t *testing.T) {
 			t.Errorf("expected 8 hex chars after prefix, got %d chars: %q", len(hexPart), hexPart)
 		}
 		for _, c := range hexPart {
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 				t.Errorf("expected hex char, got %c in %q", c, id)
 			}
 		}

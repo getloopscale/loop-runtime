@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
@@ -79,7 +78,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if loopzeroYAMLContent == "" {
 		// Fallback: try reading as file upload (how the CLI sends it)
 		if yamlFile, _, err := r.FormFile("loopzero_yaml"); err == nil {
-			defer yamlFile.Close()
+			defer func() { _ = yamlFile.Close() }()
 			yamlBytes, readErr := io.ReadAll(yamlFile)
 			if readErr == nil {
 				loopzeroYAMLContent = string(yamlBytes)
@@ -120,7 +119,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		))
 		return
 	}
-	defer bundleFile.Close()
+	defer func() { _ = bundleFile.Close() }()
 
 	// Extract project name from loopzero.yaml (supports both 'project' and 'name' fields)
 	projectName := cfg.Project
@@ -149,36 +148,3 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// uploadErrorResponse is used to render validation errors with field context.
-type uploadErrorResponse struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Field   string `json:"field,omitempty"`
-}
-
-// writeUploadError writes an upload-specific error response.
-func writeUploadError(w http.ResponseWriter, status int, code, message, field string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	resp := uploadErrorResponse{
-		Code:    code,
-		Message: message,
-	}
-	if field != "" {
-		resp.Field = field
-	}
-	_ = json.NewEncoder(w).Encode(resp)
-}
-
-// parseContentLength extracts the Content-Length header as int64. Returns -1 if missing/invalid.
-func parseContentLength(r *http.Request) int64 {
-	cl := r.Header.Get("Content-Length")
-	if cl == "" {
-		return -1
-	}
-	n, err := strconv.ParseInt(cl, 10, 64)
-	if err != nil {
-		return -1
-	}
-	return n
-}

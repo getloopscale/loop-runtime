@@ -249,7 +249,7 @@ func TestConfig_Validate_DefaultSecret_NoError(t *testing.T) {
 	cfg := config.Load()
 
 	// Act: should log warning but not panic
-	cfg.Validate()
+	_ = cfg.Validate()
 }
 
 func TestConfig_Validate_ProductionSecret(t *testing.T) {
@@ -259,7 +259,7 @@ func TestConfig_Validate_ProductionSecret(t *testing.T) {
 	cfg := config.Load()
 
 	// Act: should not warn
-	cfg.Validate()
+	_ = cfg.Validate()
 
 	// Assert: callback secret is set
 	if cfg.ArgoCallbackSecret != "super-secret-production-key" {

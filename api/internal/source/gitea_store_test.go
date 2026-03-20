@@ -49,7 +49,7 @@ func createTestBundle(t *testing.T, files map[string]string) []byte {
 	if err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Init git repo
 	run(t, tmpDir, "git", "init")
@@ -59,7 +59,9 @@ func createTestBundle(t *testing.T, files map[string]string) []byte {
 	// Write files
 	for name, content := range files {
 		path := filepath.Join(tmpDir, name)
-		os.MkdirAll(filepath.Dir(path), 0755)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+		}
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 			t.Fatalf("write file %s: %v", name, err)
 		}
@@ -169,7 +171,7 @@ func TestGiteaSourceStore_ClonableAfterPush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(cloneDir)
+	defer func() { _ = os.RemoveAll(cloneDir) }()
 
 	_, token := skipIfNoGitea(t)
 	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopzero/loopzero-source-acme-clone-test.git"

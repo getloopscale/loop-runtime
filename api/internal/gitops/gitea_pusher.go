@@ -69,7 +69,7 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	if err != nil {
 		return "", fmt.Errorf("gitops push: create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	repoDir := filepath.Join(tmpDir, "repo")
 
@@ -172,7 +172,7 @@ func (p *GiteaGitOpsPusher) ensureRepo(ctx context.Context, repoName string) err
 	if err != nil {
 		return fmt.Errorf("check repo: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode == 200 {
 		return nil
@@ -201,7 +201,7 @@ func (p *GiteaGitOpsPusher) ensureRepo(ctx context.Context, repoName string) err
 	if err != nil {
 		return fmt.Errorf("create repo: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode != 201 && resp.StatusCode != 409 {
 		return fmt.Errorf("create repo: status %d", resp.StatusCode)

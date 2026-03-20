@@ -217,9 +217,9 @@ func TestStreamHappyPath(t *testing.T) {
 
 	// Pre-populate events
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"build_id":"build-1","status":"running","apps":["api"]}`))
-	eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"build_id":"build-1","status":"succeeded"}`))
-	eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-1234","status":"success"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"build_id":"build-1","status":"running","apps":["api"]}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"build_id":"build-1","status":"succeeded"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-1234","status":"success"}`))
 
 	// Mark build as terminal so the stream closes immediately after replaying
 	buildReader.SetBuild("build-1", testTenantID, "SUCCEEDED")
@@ -233,7 +233,7 @@ func TestStreamHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Assert headers
 	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
@@ -301,7 +301,7 @@ func TestStreamLastEventIDReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -326,7 +326,7 @@ func TestStreamJournalExpired(t *testing.T) {
 
 	// Add an event with low ID (will be below Last-Event-ID: 999)
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
 
 	handler := sse.NewStreamHandler(eventStore, buildReader)
 	srv := serveWithChi(handler.ServeHTTP)
@@ -340,7 +340,7 @@ func TestStreamJournalExpired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -381,7 +381,7 @@ func TestStreamJournalExpiredFalsePositiveFixed(t *testing.T) {
 	// Inject a deploy.completed event after a delay
 	go func() {
 		time.Sleep(80 * time.Millisecond)
-		eventStore.Append(context.Background(), "build-1", "deploy.completed", json.RawMessage(`{"status":"success"}`))
+		_, _ = eventStore.Append(context.Background(), "build-1", "deploy.completed", json.RawMessage(`{"status":"success"}`))
 	}()
 
 	// Act - reconnect with Last-Event-ID but no events exist
@@ -392,7 +392,7 @@ func TestStreamJournalExpiredFalsePositiveFixed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -440,7 +440,7 @@ func TestStreamHeartbeat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 
@@ -458,9 +458,9 @@ func TestStreamConnectionAfterTerminalState(t *testing.T) {
 	buildReader.SetBuild("build-1", testTenantID, "SUCCEEDED")
 
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running","apps":["api"]}`))
-	eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
-	eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-abcd","status":"success"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running","apps":["api"]}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-abcd","status":"success"}`))
 
 	handler := sse.NewStreamHandler(eventStore, buildReader)
 	srv := serveWithChi(handler.ServeHTTP)
@@ -471,7 +471,7 @@ func TestStreamConnectionAfterTerminalState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -512,11 +512,11 @@ func TestStreamClientDisconnectNoLeak(t *testing.T) {
 
 	// Read a bit to ensure connection is established
 	buf := make([]byte, 1024)
-	resp.Body.Read(buf)
+	_, _ = resp.Body.Read(buf)
 
 	// Cancel the context to simulate client disconnect
 	cancel()
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// Give the handler time to clean up
 	time.Sleep(100 * time.Millisecond)
@@ -541,7 +541,7 @@ func TestStreamBuildNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Assert - should return 404
 	if resp.StatusCode != http.StatusNotFound {
@@ -572,8 +572,8 @@ func TestStreamDeployCompletedEventFormat(t *testing.T) {
 	deployData, _ := json.Marshal(deployPayload)
 
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"apps":["api"]}`))
-	eventStore.Append(ctx, "build-1", "deploy.completed", deployData)
+	_, _ = eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"apps":["api"]}`))
+	_, _ = eventStore.Append(ctx, "build-1", "deploy.completed", deployData)
 
 	handler := sse.NewStreamHandler(eventStore, buildReader)
 	srv := serveWithChi(handler.ServeHTTP)
@@ -584,7 +584,7 @@ func TestStreamDeployCompletedEventFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -630,8 +630,8 @@ func TestStreamStaysOpenAfterBuildSucceededUntilDeployEvent(t *testing.T) {
 	buildReader.SetBuild("build-1", testTenantID, "SUCCEEDED")
 
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
-	eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
 
 	handler := sse.NewStreamHandler(eventStore, buildReader,
 		sse.WithPollInterval(20*time.Millisecond),
@@ -644,7 +644,7 @@ func TestStreamStaysOpenAfterBuildSucceededUntilDeployEvent(t *testing.T) {
 	// Simulate Phase 2 writing deploy.completed after a short delay
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-5678","status":"success"}`))
+		_, _ = eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-5678","status":"success"}`))
 	}()
 
 	// Act
@@ -652,7 +652,7 @@ func TestStreamStaysOpenAfterBuildSucceededUntilDeployEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -689,8 +689,8 @@ func TestStreamClosesOnBuildFailedWithoutWaitingForDeploy(t *testing.T) {
 	buildReader.SetBuild("build-1", testTenantID, "FAILED")
 
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
-	eventStore.Append(ctx, "build-1", "build.failed", json.RawMessage(`{"status":"failed","reason":"compilation error"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.failed", json.RawMessage(`{"status":"failed","reason":"compilation error"}`))
 
 	handler := sse.NewStreamHandler(eventStore, buildReader)
 	srv := serveWithChi(handler.ServeHTTP)
@@ -701,7 +701,7 @@ func TestStreamClosesOnBuildFailedWithoutWaitingForDeploy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -723,8 +723,8 @@ func TestStreamClosesOnBuildCancelledWithoutWaitingForDeploy(t *testing.T) {
 	buildReader.SetBuild("build-1", testTenantID, "CANCELLED")
 
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
-	eventStore.Append(ctx, "build-1", "build.cancelled", json.RawMessage(`{"status":"cancelled"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.cancelled", json.RawMessage(`{"status":"cancelled"}`))
 
 	handler := sse.NewStreamHandler(eventStore, buildReader)
 	srv := serveWithChi(handler.ServeHTTP)
@@ -735,7 +735,7 @@ func TestStreamClosesOnBuildCancelledWithoutWaitingForDeploy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -756,9 +756,9 @@ func TestStreamClosesOnDeploySyncFailed(t *testing.T) {
 	buildReader.SetBuild("build-1", testTenantID, "SUCCEEDED")
 
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
-	eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
-	eventStore.Append(ctx, "build-1", "deploy.sync_failed", json.RawMessage(`{"reason":"ArgoCD sync timeout"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "deploy.sync_failed", json.RawMessage(`{"reason":"ArgoCD sync timeout"}`))
 
 	handler := sse.NewStreamHandler(eventStore, buildReader)
 	srv := serveWithChi(handler.ServeHTTP)
@@ -769,7 +769,7 @@ func TestStreamClosesOnDeploySyncFailed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -790,8 +790,8 @@ func TestStreamSafetyTimeoutWhenNoDeployEventsArrive(t *testing.T) {
 	buildReader.SetBuild("build-1", testTenantID, "SUCCEEDED")
 
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
-	eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
 	// No deploy events — Phase 2 never starts
 
 	handler := sse.NewStreamHandler(eventStore, buildReader,
@@ -807,7 +807,7 @@ func TestStreamSafetyTimeoutWhenNoDeployEventsArrive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -847,8 +847,8 @@ func TestStreamDoesNotCloseOnBuildSucceededAlone(t *testing.T) {
 	buildReader.SetBuild("build-1", testTenantID, "SUCCEEDED")
 
 	ctx := context.Background()
-	eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
-	eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
 
 	handler := sse.NewStreamHandler(eventStore, buildReader,
 		sse.WithPollInterval(10*time.Millisecond),
@@ -867,7 +867,7 @@ func TestStreamDoesNotCloseOnBuildSucceededAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -892,7 +892,7 @@ func TestStreamLastEventIDReplayWithBuildSucceededButNoDeployEvent(t *testing.T)
 
 	ctx := context.Background()
 	id1, _ := eventStore.Append(ctx, "build-1", "build.started", json.RawMessage(`{"status":"running"}`))
-	eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
+	_, _ = eventStore.Append(ctx, "build-1", "build.succeeded", json.RawMessage(`{"status":"succeeded"}`))
 
 	handler := sse.NewStreamHandler(eventStore, buildReader,
 		sse.WithPollInterval(10*time.Millisecond),
@@ -905,7 +905,7 @@ func TestStreamLastEventIDReplayWithBuildSucceededButNoDeployEvent(t *testing.T)
 	// Simulate Phase 2 writing deploy.completed after a delay
 	go func() {
 		time.Sleep(80 * time.Millisecond)
-		eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-9999","status":"success"}`))
+		_, _ = eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-9999","status":"success"}`))
 	}()
 
 	// Act - reconnect with Last-Event-ID = build.started
@@ -916,7 +916,7 @@ func TestStreamLastEventIDReplayWithBuildSucceededButNoDeployEvent(t *testing.T)
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)
@@ -957,7 +957,7 @@ func TestStreamGetByIDInternalErrorReturns500AndLogs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 
@@ -999,7 +999,7 @@ func TestStreamReturns401WhenNotAuthenticated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Assert
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -1026,7 +1026,7 @@ func TestStreamReturns404ForCrossTenantAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Assert - 404 (not 403)
 	if resp.StatusCode != http.StatusNotFound {
@@ -1072,7 +1072,7 @@ func TestStreamRejectsWhenMaxConcurrentStreamsReached(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second stream request failed: %v", err)
 	}
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 
 	// Assert - second stream rejected with 503
 	if resp2.StatusCode != http.StatusServiceUnavailable {
@@ -1086,7 +1086,7 @@ func TestStreamRejectsWhenMaxConcurrentStreamsReached(t *testing.T) {
 
 	// Cleanup first stream
 	cancel1()
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 	time.Sleep(50 * time.Millisecond)
 
 	// After cleanup, a new stream should succeed
@@ -1094,7 +1094,7 @@ func TestStreamRejectsWhenMaxConcurrentStreamsReached(t *testing.T) {
 	if err != nil {
 		t.Fatalf("third stream request failed: %v", err)
 	}
-	defer resp3.Body.Close()
+	defer func() { _ = resp3.Body.Close() }()
 
 	if resp3.StatusCode == http.StatusServiceUnavailable {
 		t.Error("expected stream to succeed after previous one closed, but still got 503")
@@ -1138,7 +1138,7 @@ func TestStreamActiveStreamCountTracking(t *testing.T) {
 
 	// Disconnect
 	cancel()
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	time.Sleep(100 * time.Millisecond)
 
 	if handler.ActiveStreams() != 0 {

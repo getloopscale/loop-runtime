@@ -52,9 +52,11 @@ func NewPostgresEnvironmentTargetStore(exec ExecQueryExecutor, query QueryExecut
 // On subsequent calls, it updates desired_release_id, updated_by, and correlation_id.
 // This method runs inside an existing transaction (from withEnvironmentLock).
 func (s *PostgresEnvironmentTargetStore) SetDesired(ctx context.Context, tx DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error {
-	var executor ExecQueryExecutor = s.Exec
+	var executor ExecQueryExecutor
 	if tx != nil {
 		executor = tx
+	} else {
+		executor = s.Exec
 	}
 
 	const query = `INSERT INTO environment_targets (tenant_id, project_id, environment, desired_release_id, updated_by, correlation_id)
@@ -73,9 +75,11 @@ DO UPDATE SET desired_release_id = $7, updated_by = $8, correlation_id = $9, upd
 // This is called after ArgoCD confirms sync — never before.
 // This method runs inside an existing transaction (from withEnvironmentLock).
 func (s *PostgresEnvironmentTargetStore) SetActive(ctx context.Context, tx DBTX, tenantID, projectID, env, releaseID string) error {
-	var executor ExecQueryExecutor = s.Exec
+	var executor ExecQueryExecutor
 	if tx != nil {
 		executor = tx
+	} else {
+		executor = s.Exec
 	}
 
 	const query = `UPDATE environment_targets SET active_release_id = $1, updated_at = now()

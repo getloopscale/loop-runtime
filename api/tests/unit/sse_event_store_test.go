@@ -125,10 +125,7 @@ type fakeSSERows struct {
 }
 
 func (r *fakeSSERows) Next() bool {
-	if r.cursor < len(r.rows) {
-		return true
-	}
-	return false
+	return r.cursor < len(r.rows)
 }
 
 func (r *fakeSSERows) Scan(dest ...any) error {

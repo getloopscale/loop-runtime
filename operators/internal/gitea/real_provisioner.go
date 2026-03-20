@@ -41,7 +41,7 @@ func (p *RealProvisioner) EnsureRepo(ctx context.Context, name string, branch st
 	if err != nil {
 		return "", fmt.Errorf("gitea: check repo %s: %w", name, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusOK {
 		var repo struct {
@@ -76,7 +76,7 @@ func (p *RealProvisioner) EnsureRepo(ctx context.Context, name string, branch st
 	if err != nil {
 		return "", fmt.Errorf("gitea: create repo %s: %w", name, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusConflict {
 		// Repo already exists (race condition) — get it
@@ -111,7 +111,7 @@ func (p *RealProvisioner) RepoExists(ctx context.Context, name string) (bool, er
 	if err != nil {
 		return false, fmt.Errorf("gitea: check repo %s: %w", name, err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	return resp.StatusCode == http.StatusOK, nil
 }
@@ -134,7 +134,7 @@ func (p *RealProvisioner) ArchiveRepo(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("gitea: archive repo %s: %w", name, err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
 		return fmt.Errorf("gitea: archive repo %s: status %d", name, resp.StatusCode)

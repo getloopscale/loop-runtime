@@ -14,9 +14,8 @@ import (
 // concurrentTokenValidator is a thread-safe token validator for concurrency tests.
 // It implements the real TokenValidator interface — no mocking framework used.
 type concurrentTokenValidator struct {
-	mu     sync.Mutex
-	calls  int
-	result *TokenValidationResult
+	mu    sync.Mutex
+	calls int
 }
 
 func (v *concurrentTokenValidator) ValidateToken(_ context.Context, token string) (*TokenValidationResult, error) {

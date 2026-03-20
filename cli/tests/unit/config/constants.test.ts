@@ -12,7 +12,7 @@ describe('CLI config/constants', () => {
 
   function loadConstants() {
     // Re-import to pick up changed env vars
-    return require('../../../src/config/constants');
+    return jest.requireActual('../../../src/config/constants');
   }
 
   describe('envInt (via API_REQUEST_TIMEOUT_MS)', () => {

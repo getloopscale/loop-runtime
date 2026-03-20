@@ -434,13 +434,3 @@ func (o *BuildOrchestrator) RetryRelease(ctx context.Context, releaseID string) 
 	})
 }
 
-// appTypeFromName determines the app type from the callback app.
-func appTypeFromName(app AppRelease) string {
-	if app.Type != "" {
-		return app.Type
-	}
-	if app.URL == "" {
-		return "worker"
-	}
-	return "server"
-}

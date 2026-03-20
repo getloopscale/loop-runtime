@@ -1,7 +1,6 @@
 package metrics_test
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -51,7 +50,7 @@ func TestHTTPMetricsMiddleware_RecordsRequestDurationAndCount(t *testing.T) {
 	}
 
 	// Check that the correct labels are present
-	expectedLabel := fmt.Sprintf(`method="GET"`)
+	expectedLabel := `method="GET"`
 	if !strings.Contains(output, expectedLabel) {
 		t.Errorf("expected label %q in output", expectedLabel)
 	}

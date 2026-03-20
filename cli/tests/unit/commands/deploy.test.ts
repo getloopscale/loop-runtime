@@ -1981,7 +1981,7 @@ describe('DeployCommand', () => {
       });
       const cmd = new DeployCommand(deps);
 
-      const exitCode = await cmd.execute({});
+      await cmd.execute({});
 
       // Should still deploy (warning, not blocking), but emit a warning
       expect(deps.writeTo).toHaveBeenCalledWith(
@@ -2008,7 +2008,7 @@ describe('DeployCommand', () => {
       });
       const cmd = new DeployCommand(deps);
 
-      const exitCode = await cmd.execute({ json: true });
+      await cmd.execute({ json: true });
 
       // In JSON mode, only emit JSON objects — no warning text
       const allOutput = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');

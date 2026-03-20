@@ -64,7 +64,7 @@ func (p *HTTPProber) Probe(ctx context.Context, appURL string, path string) erro
 			lastErr = fmt.Errorf("health probe attempt %d: %w", attempt+1, err)
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 			return nil

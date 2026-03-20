@@ -405,7 +405,7 @@ func doPost(serverURL, path string, body interface{}, headers map[string]string)
 // readBody reads and closes the response body.
 func readBody(t *testing.T, resp *http.Response) []byte {
 	t.Helper()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("failed to read response body: %v", err)

@@ -62,7 +62,7 @@ func (s *GiteaSourceStore) PushBundle(ctx context.Context, tenantID, projectID s
 	if err != nil {
 		return "", fmt.Errorf("gitea source: create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Write bundle to temp file
 	bundlePath := filepath.Join(tmpDir, "source.bundle")
@@ -157,7 +157,7 @@ func (s *GiteaSourceStore) ensureRepo(ctx context.Context, repoName string) erro
 	if err != nil {
 		return fmt.Errorf("check repo: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode == 200 {
 		return nil // repo exists
@@ -186,7 +186,7 @@ func (s *GiteaSourceStore) ensureRepo(ctx context.Context, repoName string) erro
 	if err != nil {
 		return fmt.Errorf("create repo: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode != 201 && resp.StatusCode != 409 {
 		return fmt.Errorf("create repo: status %d", resp.StatusCode)

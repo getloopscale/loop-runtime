@@ -66,7 +66,7 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	if err != nil {
 		return fmt.Errorf("argocd sync: request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 404 {
 		return fmt.Errorf("argocd sync: application %q not found", appName)
@@ -122,7 +122,7 @@ func (c *SyncClient) getAppStatus(ctx context.Context, appName string) (synced b
 	if err != nil {
 		return false, false, fmt.Errorf("get app status: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 404 {
 		return false, false, fmt.Errorf("application %q not found", appName)

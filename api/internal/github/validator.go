@@ -58,7 +58,7 @@ func (v *TokenValidator) ValidateToken(ctx context.Context, token string) (*midd
 	if err != nil {
 		return nil, fmt.Errorf("github: request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, middleware.ErrInvalidToken

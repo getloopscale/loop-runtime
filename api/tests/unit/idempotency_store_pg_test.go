@@ -298,10 +298,7 @@ type fakeIdempotencyRows struct {
 }
 
 func (r *fakeIdempotencyRows) Next() bool {
-	if r.pos < len(r.records) {
-		return true
-	}
-	return false
+	return r.pos < len(r.records)
 }
 
 func (r *fakeIdempotencyRows) Scan(dest ...any) error {

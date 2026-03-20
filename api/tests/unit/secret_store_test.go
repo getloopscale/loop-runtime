@@ -164,10 +164,7 @@ type fakeRowsImpl struct {
 }
 
 func (f *fakeRowsImpl) Next() bool {
-	if f.idx >= len(f.rows) {
-		return false
-	}
-	return true
+	return f.idx < len(f.rows)
 }
 
 func (f *fakeRowsImpl) Scan(dest ...any) error {

@@ -46,11 +46,11 @@ func buildEnvtestKubeconfigBytes() []byte {
 	kubeconfig := clientcmdapi.NewConfig()
 	kubeconfig.Clusters["envtest"] = &clientcmdapi.Cluster{
 		Server:                   cfg.Host,
-		CertificateAuthorityData: cfg.TLSClientConfig.CAData,
+		CertificateAuthorityData: cfg.CAData,
 	}
 	kubeconfig.AuthInfos["envtest-user"] = &clientcmdapi.AuthInfo{
-		ClientCertificateData: cfg.TLSClientConfig.CertData,
-		ClientKeyData:         cfg.TLSClientConfig.KeyData,
+		ClientCertificateData: cfg.CertData,
+		ClientKeyData:         cfg.KeyData,
 	}
 	kubeconfig.Contexts["envtest-context"] = &clientcmdapi.Context{
 		Cluster:  "envtest",

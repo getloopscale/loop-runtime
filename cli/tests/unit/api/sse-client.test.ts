@@ -586,15 +586,15 @@ describe('SSEClient', () => {
   });
 
   describe('no internal terms', () => {
-    it('should not contain forbidden internal terms in source', () => {
+    it('should not contain forbidden internal terms in source', async () => {
       const forbidden = [
         'ArgoCD', 'argocd', 'GitOps', 'gitops-push', 'CRD',
         'tenant_id', 'advisory lock', 'pg_advisory', 'Gitea',
         'MinIO', 'kubebuilder', 'envtest', 'Kaniko',
       ];
 
-      const fs = require('fs');
-      const path = require('path');
+      const fs = await import('fs');
+      const path = await import('path');
       const moduleSource = fs.readFileSync(
         path.resolve(__dirname, '../../../src/api/sse-client.ts'),
         'utf-8'

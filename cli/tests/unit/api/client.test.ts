@@ -186,7 +186,7 @@ describe('ApiClient', () => {
     });
 
     it('409 without parseable body → falls back to default message', async () => {
-      const fn = async (url: string, init?: RequestInit) => {
+      const fn = async (_url: string, _init?: RequestInit) => {
         return {
           ok: false,
           status: 409,
