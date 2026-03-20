@@ -125,7 +125,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 
 		It("should provision K8s resources but report GitRepoReady=False", func() {
 			// Inject Gitea failure
-			fakeGitProvider.Err = fmt.Errorf("gitea unavailable: connection refused")
+			fakeGitProvider.SetErr(fmt.Errorf("gitea unavailable: connection refused"))
 
 			tenant := newTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
@@ -141,7 +141,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 
 			// Remove error — controller should recover
-			fakeGitProvider.Err = nil
+			fakeGitProvider.SetErr(nil)
 
 			Eventually(func(g Gomega) {
 				var t loopzerov1.Tenant
@@ -154,7 +154,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			fakeGitProvider.Err = nil
+			fakeGitProvider.SetErr(nil)
 			for _, nsName := range []string{tenantName + "-production", "build-" + tenantName} {
 				ns := &corev1.Namespace{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {

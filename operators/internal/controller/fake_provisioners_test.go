@@ -10,11 +10,13 @@ import (
 
 // fakeGiteaProvisioner is a test double for gitea.GitRepoProvisioner.
 // Lives in _test.go only — never in production packages.
+// All field access must go through thread-safe methods because the
+// reconciler goroutine calls EnsureRepo/RepoExists/ArchiveRepo concurrently.
 type fakeGiteaProvisioner struct {
 	mu    sync.Mutex
 	repos map[string]string // name → URL
-	Err   error             // if set, all calls return this error
-	Calls int               // number of EnsureRepo calls
+	err   error             // if set, all calls return this error
+	calls int               // number of EnsureRepo calls
 }
 
 func newFakeGiteaProvisioner() *fakeGiteaProvisioner {
@@ -23,14 +25,26 @@ func newFakeGiteaProvisioner() *fakeGiteaProvisioner {
 	}
 }
 
+func (f *fakeGiteaProvisioner) SetErr(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.err = err
+}
+
+func (f *fakeGiteaProvisioner) GetCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
 func (f *fakeGiteaProvisioner) EnsureRepo(_ context.Context, name string, _ string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.Calls++
+	f.calls++
 
-	if f.Err != nil {
-		return "", f.Err
+	if f.err != nil {
+		return "", f.err
 	}
 
 	if url, ok := f.repos[name]; ok {
@@ -46,8 +60,8 @@ func (f *fakeGiteaProvisioner) RepoExists(_ context.Context, name string) (bool,
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if f.Err != nil {
-		return false, f.Err
+	if f.err != nil {
+		return false, f.err
 	}
 
 	_, ok := f.repos[name]
@@ -58,8 +72,8 @@ func (f *fakeGiteaProvisioner) ArchiveRepo(_ context.Context, name string) error
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if f.Err != nil {
-		return f.Err
+	if f.err != nil {
+		return f.err
 	}
 
 	delete(f.repos, name)

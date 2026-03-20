@@ -1015,7 +1015,7 @@ var _ = Describe("TenantController — Gitea Repo Provisioning", Ordered, func()
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
-			initialCalls := fakeGitProvider.Calls
+			initialCalls := fakeGitProvider.GetCalls()
 			t.Spec.DisplayName = "Gitea idempotency"
 			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
 
@@ -1027,7 +1027,7 @@ var _ = Describe("TenantController — Gitea Repo Provisioning", Ordered, func()
 				}, &updated)).To(Succeed())
 				g.Expect(updated.Spec.DisplayName).To(Equal("Gitea idempotency"))
 				// EnsureRepo called again but fake is idempotent (returns same URL)
-				g.Expect(fakeGitProvider.Calls).To(BeNumerically(">", initialCalls))
+				g.Expect(fakeGitProvider.GetCalls()).To(BeNumerically(">", initialCalls))
 			}, timeout, interval).Should(Succeed())
 
 			// GitRepoReady still True
@@ -1085,7 +1085,7 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 			}, &t)).To(Succeed())
 
 			// Record the git provider call count before triggering re-reconcile
-			callsBefore := fakeGitProvider.Calls
+			callsBefore := fakeGitProvider.GetCalls()
 
 			// Add a custom annotation to the namespace to detect if it gets re-reconciled
 			// (CreateOrUpdate would preserve it, but the point is the call should not happen at all)
@@ -1113,7 +1113,7 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 
 			// Verify: GitProvisioner should NOT have been called again
 			// (condition GitRepoReady is already True at current generation)
-			Expect(fakeGitProvider.Calls).To(Equal(callsBefore),
+			Expect(fakeGitProvider.GetCalls()).To(Equal(callsBefore),
 				"EnsureRepo should not be called when GitRepoReady is already True at current generation")
 
 			// Verify: canary annotation on namespace should still be present
@@ -1160,7 +1160,7 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
 
-			callsBefore := fakeGitProvider.Calls
+			callsBefore := fakeGitProvider.GetCalls()
 
 			// Change spec to bump generation
 			t.Spec.DisplayName = "Crash Recovery Updated"
@@ -1176,7 +1176,7 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 			}, timeout, interval).Should(Succeed())
 
 			// EnsureRepo SHOULD have been called (generation changed)
-			Expect(fakeGitProvider.Calls).To(BeNumerically(">", callsBefore),
+			Expect(fakeGitProvider.GetCalls()).To(BeNumerically(">", callsBefore),
 				"EnsureRepo should be called when generation changes")
 		})
 	})
