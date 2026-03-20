@@ -1,0 +1,11 @@
+# Trivy IaC checks to ignore — intentional by design, not security gaps.
+#
+# The tenant-controller operator MUST manage secrets, services, endpoints,
+# networkpolicies, and ingresses to provision and manage tenant namespaces.
+# These permissions are required by the system design (spec §7).
+
+# ClusterRole 'tenant-controller' needs access to secrets for tenant provisioning
+KSV-0041
+
+# ClusterRole 'tenant-controller' needs broad resource access for namespace management
+KSV-0056
