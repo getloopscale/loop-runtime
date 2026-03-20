@@ -39,6 +39,7 @@ pnpm-debug.log*
 # --------------------------------------------
 # Binaries
 bin/
+!cli/bin/
 *.exe
 *.exe~
 *.dll

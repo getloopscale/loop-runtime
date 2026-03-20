@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+const { program } = require('../dist/index.js');
+
+let settled = false;
+const keepAlive = setInterval(() => {}, 1000);
+const watchdogMs = 15 * 60 * 1000;
+const watchdog = setTimeout(() => {
+  if (settled) return;
+  process.stderr.write(
+    'Error: command did not finish within 15 minutes; aborting.\n'
+  );
+  process.exitCode = 3;
+  clearInterval(keepAlive);
+}, watchdogMs);
+
+program
+  .parseAsync(process.argv)
+  .catch((err) => {
+    process.stderr.write(`Error: ${err.message}\n`);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    settled = true;
+    clearTimeout(watchdog);
+    clearInterval(keepAlive);
+  });
