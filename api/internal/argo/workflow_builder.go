@@ -28,9 +28,8 @@ type InfraParams struct {
 	RegistryURL      string
 	RegistryInsecure bool   // true for local dev registries without TLS
 	BaseDomain       string // Base domain for app hostnames (e.g., "loopzero.local")
-	MinIOEndpoint    string // e.g., "minio.loopzero-system.svc.cluster.local:9000"
-	MinIOAccessKey   string
-	MinIOSecretKey   string
+	// MinIO credentials are injected via K8s Secret (envFrom) in the CWT,
+	// not as workflow parameters. See loopzero-minio-credentials secret in build cluster.
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs
@@ -122,13 +121,11 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy Lang
 		}),
 
 		// Step 1: restore-cache (CWT ref) — depends on clone
+		// MinIO credentials injected via envFrom (K8s Secret loopzero-minio-credentials)
 		cwtTask("restore-cache", "loopzero-cache-restore", "restore-cache", []string{"clone-repo"}, map[string]string{
-			"tenant-id":        spec.TenantID,
-			"project-id":       spec.ProjectID,
-			"cache-key":        strategy.CacheKey(),
-			"minio-endpoint":   b.infraParams.MinIOEndpoint,
-			"minio-access-key": b.infraParams.MinIOAccessKey,
-			"minio-secret-key": b.infraParams.MinIOSecretKey,
+			"tenant-id":  spec.TenantID,
+			"project-id": spec.ProjectID,
+			"cache-key":  strategy.CacheKey(),
 		}),
 
 		// Step 1.5: validate workspace (inline) — depends on clone
@@ -173,15 +170,13 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, strategy La
 	tasks := []interface{}{}
 
 	// save-cache (CWT ref) — only if language has cache dirs
+	// MinIO credentials injected via envFrom (K8s Secret loopzero-minio-credentials)
 	if strategy.CacheKey() != "" {
 		tasks = append(tasks, cwtTask("save-cache", "loopzero-cache-save", "save-cache", nil, map[string]string{
-			"tenant-id":        spec.TenantID,
-			"project-id":       spec.ProjectID,
-			"cache-key":        strategy.CacheKey(),
-			"cache-dirs":       strings.Join(strategy.CacheDirs(), ","),
-			"minio-endpoint":   b.infraParams.MinIOEndpoint,
-			"minio-access-key": b.infraParams.MinIOAccessKey,
-			"minio-secret-key": b.infraParams.MinIOSecretKey,
+			"tenant-id":  spec.TenantID,
+			"project-id": spec.ProjectID,
+			"cache-key":  strategy.CacheKey(),
+			"cache-dirs": strings.Join(strategy.CacheDirs(), ","),
 		}))
 	}
 

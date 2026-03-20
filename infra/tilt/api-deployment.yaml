@@ -64,6 +64,11 @@ spec:
             # W1: MinIO (real source store)
             - name: MINIO_ENDPOINT
               value: "minio.loopzero-system.svc.cluster.local:9000"
+            # Cross-cluster MinIO endpoint (for Argo Workflow cache pods in build cluster)
+            # Uses mgmt LB NodePort. Update after cluster recreate:
+            #   docker inspect k3d-loopzero-mgmt-serverlb --format '{{json .NetworkSettings.Networks}}'
+            - name: MINIO_CROSS_CLUSTER_ENDPOINT
+              value: "http://10.0.2.10:32000"
             - name: MINIO_ACCESS_KEY
               value: "loopzero-admin"
             - name: MINIO_SECRET_KEY

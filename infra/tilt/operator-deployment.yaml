@@ -157,6 +157,11 @@ spec:
                   optional: true
             - name: ARGOCD_NAMESPACE
               value: "argocd"
+            # Workload cluster API server URL for ArgoCD Application destination.
+            # This is the workload cluster's k3d LB IP on the mgmt network.
+            # Update after cluster recreate: docker inspect k3d-loopzero-workload-server-0
+            - name: WORKLOAD_CLUSTER_URL
+              value: "https://10.0.3.6:6443"
           ports:
             - containerPort: 8081
               name: health

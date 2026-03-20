@@ -8,13 +8,10 @@ import (
 
 func testInfraParams() InfraParams {
 	return InfraParams{
-		GiteaURL:       "http://gitea:3000",
-		GiteaToken:     "test-gitea-token",
-		RegistryURL:    "k3d-loopzero-registry:5000",
-		BaseDomain:     "loopzero.local",
-		MinIOEndpoint:  "minio.loopzero-system.svc.cluster.local:9000",
-		MinIOAccessKey: "test-minio-access",
-		MinIOSecretKey: "test-minio-secret",
+		GiteaURL:    "http://gitea:3000",
+		GiteaToken:  "test-gitea-token",
+		RegistryURL: "k3d-loopzero-registry:5000",
+		BaseDomain:  "loopzero.local",
 	}
 }
 
@@ -267,10 +264,10 @@ func TestWorkflowBuilder_Build_KanikoTask_UsesCWTRef(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// MinIO parameters on cache CWT tasks
+// Cache CWT tasks do NOT pass MinIO params (credentials via K8s Secret envFrom)
 // ---------------------------------------------------------------------------
 
-func TestWorkflowBuilder_Build_RestoreCache_HasMinIOParams(t *testing.T) {
+func TestWorkflowBuilder_Build_RestoreCache_NoMinIOParams(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf := builder.Build(testSpec())
 
@@ -279,14 +276,21 @@ func TestWorkflowBuilder_Build_RestoreCache_HasMinIOParams(t *testing.T) {
 	params := args["parameters"].([]interface{})
 	paramNames := paramNameSet(params)
 
-	for _, expected := range []string{"minio-endpoint", "minio-access-key", "minio-secret-key"} {
-		if !paramNames[expected] {
-			t.Errorf("restore-cache missing parameter: %s", expected)
+	// MinIO credentials come from K8s Secret (envFrom), not workflow params
+	for _, forbidden := range []string{"minio-endpoint", "minio-access-key", "minio-secret-key"} {
+		if paramNames[forbidden] {
+			t.Errorf("restore-cache should NOT have parameter: %s (use K8s Secret instead)", forbidden)
+		}
+	}
+	// But must have tenant-id, project-id, cache-key
+	for _, required := range []string{"tenant-id", "project-id", "cache-key"} {
+		if !paramNames[required] {
+			t.Errorf("restore-cache missing required parameter: %s", required)
 		}
 	}
 }
 
-func TestWorkflowBuilder_Build_SaveCache_HasMinIOParams(t *testing.T) {
+func TestWorkflowBuilder_Build_SaveCache_NoMinIOParams(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf := builder.Build(testSpec())
 
@@ -299,9 +303,14 @@ func TestWorkflowBuilder_Build_SaveCache_HasMinIOParams(t *testing.T) {
 	params := args["parameters"].([]interface{})
 	paramNames := paramNameSet(params)
 
-	for _, expected := range []string{"minio-endpoint", "minio-access-key", "minio-secret-key"} {
-		if !paramNames[expected] {
-			t.Errorf("save-cache missing parameter: %s", expected)
+	for _, forbidden := range []string{"minio-endpoint", "minio-access-key", "minio-secret-key"} {
+		if paramNames[forbidden] {
+			t.Errorf("save-cache should NOT have parameter: %s (use K8s Secret instead)", forbidden)
+		}
+	}
+	for _, required := range []string{"tenant-id", "project-id", "cache-key", "cache-dirs"} {
+		if !paramNames[required] {
+			t.Errorf("save-cache missing required parameter: %s", required)
 		}
 	}
 }

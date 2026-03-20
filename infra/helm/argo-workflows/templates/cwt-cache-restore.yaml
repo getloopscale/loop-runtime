@@ -64,13 +64,14 @@ spec:
               --endpoint-url "$MINIO_ENDPOINT" \
               --cli-connect-timeout 10 \
               --cli-read-timeout 30 \
-              --no-sign-request=false 2>&1 || {
+              --no-verify-ssl 2>&1 || {
               echo "Cache miss — no cached dependencies found for ${CACHE_KEY}"
               exit 0
             }
 
             cd /workspace
-            tar xzf /tmp/cache.tar.gz 2>&1 || echo "Cache extraction failed — treating as miss"
+            # amazon/aws-cli image lacks tar; use Python's tarfile module instead
+            python2.7 -c "import tarfile; tarfile.open('/tmp/cache.tar.gz','r:gz').extractall('.')" 2>&1 || echo "Cache extraction failed — treating as miss"
             echo "Cache restored from ${CACHE_KEY}"
         volumeMounts:
           - name: workspace

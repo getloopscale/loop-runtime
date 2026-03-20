@@ -145,16 +145,13 @@ func main() {
 		// The workflow no longer calls the API. Build completion is detected
 		// by the BuildReconcileLoop polling Argo Workflow CRDs.
 		workflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-			Kubeconfig:     cfg.BuildKubeconfig,
-			Context:        cfg.BuildKubeContext,
-			Namespace:      cfg.ArgoNamespace,
-			GiteaURL:       cfg.GiteaCrossCluster(),
-			GiteaToken:     cfg.GiteaToken,
-			RegistryURL:    cfg.RegistryURL,
-			BaseDomain:     cfg.BaseDomain,
-			MinIOEndpoint:  cfg.MinIOEndpoint,
-			MinIOAccessKey: cfg.MinIOAccessKey,
-			MinIOSecretKey: cfg.MinIOSecretKey,
+			Kubeconfig:  cfg.BuildKubeconfig,
+			Context:     cfg.BuildKubeContext,
+			Namespace:   cfg.ArgoNamespace,
+			GiteaURL:    cfg.GiteaCrossCluster(),
+			GiteaToken:  cfg.GiteaToken,
+			RegistryURL: cfg.RegistryURL,
+			BaseDomain:  cfg.BaseDomain,
 		})
 		if err != nil {
 			logger.Error("failed to create workflow submitter", "error", err)

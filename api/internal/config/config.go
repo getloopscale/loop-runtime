@@ -48,7 +48,8 @@ type Config struct {
 	GiteaCrossClusterURL string
 	APICrossClusterURL   string
 	ArgocdURL            string
-	MinIOEndpoint        string
+	MinIOEndpoint             string
+	MinIOCrossClusterEndpoint string // Used by build cluster workflows to reach MinIO
 	RegistryURL          string
 	WorkloadIngressURL   string
 	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
@@ -138,7 +139,8 @@ func Load() Config {
 		GiteaCrossClusterURL: envOr("GITEA_CROSS_CLUSTER_URL", ""),
 		APICrossClusterURL:   envOr("API_CROSS_CLUSTER_URL", "http://loopzero-api.loopzero-system.svc.cluster.local:3001"),
 		ArgocdURL:            envOr("ARGOCD_URL", "http://argocd-server.argocd.svc.cluster.local:80"),
-		MinIOEndpoint:        envOr("MINIO_ENDPOINT", "minio.loopzero-system.svc.cluster.local:9000"),
+		MinIOEndpoint:             envOr("MINIO_ENDPOINT", "minio.loopzero-system.svc.cluster.local:9000"),
+		MinIOCrossClusterEndpoint: envOr("MINIO_CROSS_CLUSTER_ENDPOINT", ""),
 		RegistryURL:          envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
 		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
@@ -216,6 +218,15 @@ func (c Config) GiteaCrossCluster() string {
 		return c.GiteaCrossClusterURL
 	}
 	return c.GiteaURL
+}
+
+// MinIOCrossCluster returns the MinIO endpoint accessible from the build cluster.
+// Falls back to the internal MinIOEndpoint if not explicitly set.
+func (c Config) MinIOCrossCluster() string {
+	if c.MinIOCrossClusterEndpoint != "" {
+		return c.MinIOCrossClusterEndpoint
+	}
+	return c.MinIOEndpoint
 }
 
 // IsProduction returns true when running in production mode.

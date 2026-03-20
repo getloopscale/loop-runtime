@@ -39,11 +39,7 @@ type WorkflowSubmitterConfig struct {
 	GiteaToken  string // Admin token for Gitea access
 	RegistryURL string // e.g., "k3d-loopzero-registry:5000"
 	BaseDomain  string // e.g., "loopzero.local" — base domain for app hostnames
-
-	// MinIO credentials passed to CWT cache templates (loopzero-cache-restore, loopzero-cache-save)
-	MinIOEndpoint  string // e.g., "minio.loopzero-system.svc.cluster.local:9000"
-	MinIOAccessKey string
-	MinIOSecretKey string
+	// MinIO credentials are injected via K8s Secret (envFrom) in CWTs, not via workflow params.
 }
 
 // WorkflowSubmitter implements services.WorkflowSubmitter using real Argo Workflows.
@@ -75,13 +71,10 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 	}
 
 	builder := NewWorkflowBuilder(InfraParams{
-		GiteaURL:       cfg.GiteaURL,
-		GiteaToken:     cfg.GiteaToken,
-		RegistryURL:    cfg.RegistryURL,
-		BaseDomain:     cfg.BaseDomain,
-		MinIOEndpoint:  cfg.MinIOEndpoint,
-		MinIOAccessKey: cfg.MinIOAccessKey,
-		MinIOSecretKey: cfg.MinIOSecretKey,
+		GiteaURL:    cfg.GiteaURL,
+		GiteaToken:  cfg.GiteaToken,
+		RegistryURL: cfg.RegistryURL,
+		BaseDomain:  cfg.BaseDomain,
 	})
 
 	return &WorkflowSubmitter{
