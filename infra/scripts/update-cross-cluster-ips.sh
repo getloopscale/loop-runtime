@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
-# update-cross-cluster-ips.sh — Updates cross-cluster IPs in api-deployment.yaml.
+# update-cross-cluster-ips.sh — Updates cross-cluster IPs across all deployment manifests.
 #
 # k3d assigns dynamic Docker IPs to cluster loadbalancers. These IPs change
 # every time clusters are recreated. This script detects the current IPs and
-# patches the deployment YAML automatically.
+# patches all deployment YAMLs and ArgoCD cluster secrets automatically.
+#
+# Components patched:
+#   - infra/tilt/api-deployment.yaml       (GITEA/API cross-cluster URLs, workload ingress)
+#   - infra/tilt/operator-deployment.yaml   (WORKLOAD_CLUSTER_URL for ArgoCD Applications)
+#   - ArgoCD cluster-workload secret        (workload cluster API server endpoint)
+#   - infra/helm/monitoring/values.yaml     (scrape targets)
 #
 # Run after: task setup OR task clusters:create
 # Usage: bash infra/scripts/update-cross-cluster-ips.sh
 set -euo pipefail
 
 DEPLOYMENT="infra/tilt/api-deployment.yaml"
+OPERATOR_DEPLOYMENT="infra/tilt/operator-deployment.yaml"
 
 if [ ! -f "$DEPLOYMENT" ]; then
   echo "ERROR: $DEPLOYMENT not found. Run from repo root."
@@ -38,6 +45,11 @@ if [ -z "$WORKLOAD_LB" ]; then
   exit 1
 fi
 echo "  Workload LB on workload network: $WORKLOAD_LB"
+
+# Workload K8s API server — the LB IP that serves port 6443.
+# This is the endpoint ArgoCD and the operator use to deploy to the workload cluster.
+WORKLOAD_K8S_API="${WORKLOAD_LB}:6443"
+echo "  Workload K8s API server: https://$WORKLOAD_K8S_API"
 
 echo ""
 echo "=== Patching $DEPLOYMENT ==="
@@ -75,6 +87,79 @@ if [ -n "$OLD_WORKLOAD" ] && [ "$OLD_WORKLOAD" != "$NEW_WORKLOAD" ]; then
   echo "  WORKLOAD_INGRESS_URL: $OLD_WORKLOAD → $NEW_WORKLOAD"
 else
   echo "  WORKLOAD_INGRESS_URL: already correct ($NEW_WORKLOAD)"
+fi
+
+# ---------------------------------------------------------------------------
+# Operator deployment — WORKLOAD_CLUSTER_URL
+# ---------------------------------------------------------------------------
+if [ -f "$OPERATOR_DEPLOYMENT" ]; then
+  echo ""
+  echo "=== Patching $OPERATOR_DEPLOYMENT ==="
+
+  OLD_WORKLOAD_K8S=$(grep 'WORKLOAD_CLUSTER_URL' -A1 "$OPERATOR_DEPLOYMENT" | grep 'value:' | head -1 | sed 's/.*value: "\([^"]*\)".*/\1/')
+  NEW_WORKLOAD_K8S="https://${WORKLOAD_K8S_API}"
+  if [ -n "$OLD_WORKLOAD_K8S" ] && [ "$OLD_WORKLOAD_K8S" != "$NEW_WORKLOAD_K8S" ]; then
+    sed -i "s|${OLD_WORKLOAD_K8S}|${NEW_WORKLOAD_K8S}|" "$OPERATOR_DEPLOYMENT"
+    echo "  WORKLOAD_CLUSTER_URL: $OLD_WORKLOAD_K8S → $NEW_WORKLOAD_K8S"
+  else
+    echo "  WORKLOAD_CLUSTER_URL: already correct ($NEW_WORKLOAD_K8S)"
+  fi
+else
+  echo "WARNING: $OPERATOR_DEPLOYMENT not found — skipping operator patch"
+fi
+
+# ---------------------------------------------------------------------------
+# ArgoCD cluster secret — workload cluster endpoint
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Patching ArgoCD cluster-workload secret ==="
+
+# The cluster-workload secret tells ArgoCD where the workload K8s API server lives.
+# It must match WORKLOAD_CLUSTER_URL so that ArgoCD Applications can sync.
+# For local k3d clusters, we use insecure TLS because the API server certificate
+# contains SANs for the original Docker IPs, which change on cluster recreate.
+ARGOCD_KUBECONFIG=$(k3d kubeconfig write loopzero-mgmt 2>/dev/null)
+if [ -n "$ARGOCD_KUBECONFIG" ]; then
+  CURRENT_SERVER=$(kubectl --kubeconfig="$ARGOCD_KUBECONFIG" get secret cluster-workload -n argocd \
+    -o jsonpath='{.data.server}' 2>/dev/null | base64 -d 2>/dev/null)
+  NEW_SERVER="https://${WORKLOAD_K8S_API}"
+
+  if [ "$CURRENT_SERVER" != "$NEW_SERVER" ]; then
+    # Update server URL
+    ENCODED_SERVER=$(echo -n "$NEW_SERVER" | base64 -w0)
+    kubectl --kubeconfig="$ARGOCD_KUBECONFIG" patch secret cluster-workload -n argocd \
+      --type='json' -p="[{\"op\":\"replace\",\"path\":\"/data/server\",\"value\":\"${ENCODED_SERVER}\"}]" 2>&1
+    echo "  ArgoCD cluster-workload server: $CURRENT_SERVER → $NEW_SERVER"
+  else
+    echo "  ArgoCD cluster-workload server: already correct ($NEW_SERVER)"
+  fi
+
+  # Always ensure TLS config uses insecure mode for local k3d clusters.
+  # k3d API server certs have SANs for specific Docker IPs that change on recreate.
+  BEARER_TOKEN=$(kubectl --kubeconfig="$ARGOCD_KUBECONFIG" get secret cluster-workload -n argocd \
+    -o jsonpath='{.data.config}' 2>/dev/null | base64 -d 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('bearerToken',''))" 2>/dev/null)
+  if [ -n "$BEARER_TOKEN" ]; then
+    NEW_CONFIG=$(printf '{"bearerToken":"%s","tlsClientConfig":{"insecure":true}}' "$BEARER_TOKEN")
+    ENCODED_CONFIG=$(echo -n "$NEW_CONFIG" | base64 -w0)
+    kubectl --kubeconfig="$ARGOCD_KUBECONFIG" patch secret cluster-workload -n argocd \
+      --type='json' -p="[{\"op\":\"replace\",\"path\":\"/data/config\",\"value\":\"${ENCODED_CONFIG}\"}]" 2>&1
+    echo "  ArgoCD cluster-workload TLS: insecure=true (k3d local dev)"
+  fi
+
+  # Update all ArgoCD Applications that reference the old server URL
+  APPS_WITH_OLD_SERVER=$(kubectl --kubeconfig="$ARGOCD_KUBECONFIG" get applications -n argocd \
+    -o jsonpath='{range .items[*]}{.metadata.name}={.spec.destination.server}{"\n"}{end}' 2>/dev/null \
+    | grep -v "$NEW_SERVER" | grep -v "^=" | cut -d= -f1)
+  for app_name in $APPS_WITH_OLD_SERVER; do
+    if [ -n "$app_name" ]; then
+      kubectl --kubeconfig="$ARGOCD_KUBECONFIG" patch application "$app_name" -n argocd \
+        --type='json' -p="[{\"op\":\"replace\",\"path\":\"/spec/destination/server\",\"value\":\"${NEW_SERVER}\"}]" 2>&1
+      echo "  ArgoCD Application $app_name: destination updated to $NEW_SERVER"
+    fi
+  done
+else
+  echo "WARNING: Cannot get kubeconfig for loopzero-mgmt — skipping ArgoCD secret patch"
 fi
 
 # ---------------------------------------------------------------------------

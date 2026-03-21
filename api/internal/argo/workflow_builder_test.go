@@ -3,6 +3,8 @@ package argo
 import (
 	"testing"
 
+	forge "github.com/getloopscale/loopzero-forge"
+
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
@@ -35,70 +37,69 @@ func testSpec() services.WorkflowSpec {
 
 func TestWorkflowBuilder_Build_ReturnsValidWorkflow(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
-
-	// Top-level fields
-	assertMapField(t, wf, "apiVersion", "argoproj.io/v1alpha1")
-	assertMapField(t, wf, "kind", "Workflow")
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
 	// Metadata
-	meta := assertMapNested(t, wf, "metadata")
-	assertMapField(t, meta, "generateName", "loopzero-build-build-001-")
+	if wf.GenerateName != "loopzero-build-build-001-" {
+		t.Errorf("GenerateName = %q, want %q", wf.GenerateName, "loopzero-build-build-001-")
+	}
 
-	labels := assertMapNested(t, meta, "labels")
-	assertMapField(t, labels, "loopzero.io/tenant", "acme")
-	assertMapField(t, labels, "loopzero.io/project", "my-app")
-	assertMapField(t, labels, "loopzero.io/environment", "production")
-	assertMapField(t, labels, "loopzero.io/build-id", "build-001")
-	assertMapField(t, labels, "loopzero.io/language", "node")
+	// Labels
+	assertLabel(t, wf, "loopzero.io/tenant", "acme")
+	assertLabel(t, wf, "loopzero.io/project", "my-app")
+	assertLabel(t, wf, "loopzero.io/environment", "production")
+	assertLabel(t, wf, "loopzero.io/build-id", "build-001")
+	assertLabel(t, wf, "loopzero.io/language", "node")
 }
 
 func TestWorkflowBuilder_Build_SpecFields(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	spec := assertMapNested(t, wf, "spec")
-	assertMapField(t, spec, "entrypoint", "build-pipeline")
-	assertMapField(t, spec, "onExit", "finalize")
-	assertMapField(t, spec, "serviceAccountName", "loopzero-build-sa")
-
-	parallelism, ok := spec["parallelism"].(int64)
-	if !ok || parallelism != 4 {
-		t.Errorf("parallelism = %v, want 4", spec["parallelism"])
+	if wf.Entrypoint != "build-pipeline" {
+		t.Errorf("Entrypoint = %q, want %q", wf.Entrypoint, "build-pipeline")
+	}
+	if wf.OnExit != "finalize" {
+		t.Errorf("OnExit = %q, want %q", wf.OnExit, "finalize")
+	}
+	if wf.ServiceAccountName != "loopzero-build-sa" {
+		t.Errorf("ServiceAccountName = %q, want %q", wf.ServiceAccountName, "loopzero-build-sa")
+	}
+	if wf.Parallelism == nil || *wf.Parallelism != 4 {
+		t.Errorf("Parallelism = %v, want 4", wf.Parallelism)
 	}
 
 	// TTL strategy
-	ttl := assertMapNested(t, spec, "ttlStrategy")
-	if ttl["secondsAfterCompletion"] != int64(3600) {
-		t.Errorf("secondsAfterCompletion = %v, want 3600", ttl["secondsAfterCompletion"])
+	if wf.TTLStrategy == nil {
+		t.Fatal("TTLStrategy is nil")
+	}
+	if wf.TTLStrategy.SecondsAfterCompletion == nil || *wf.TTLStrategy.SecondsAfterCompletion != 3600 {
+		t.Errorf("SecondsAfterCompletion = %v, want 3600", wf.TTLStrategy.SecondsAfterCompletion)
 	}
 }
 
 func TestWorkflowBuilder_Build_HasVolumeClaimTemplates(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
-
-	spec := assertMapNested(t, wf, "spec")
-	vcts, ok := spec["volumeClaimTemplates"].([]interface{})
-	if !ok {
-		t.Fatal("spec missing volumeClaimTemplates")
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
 	}
 
-	// workspace + manifests volumes
-	if len(vcts) != 2 {
-		t.Fatalf("want 2 volume claim templates, got %d", len(vcts))
+	if len(wf.VolumeClaimTemplates) != 2 {
+		t.Fatalf("want 2 VolumeClaimTemplates, got %d", len(wf.VolumeClaimTemplates))
 	}
 
-	vct0 := vcts[0].(map[string]interface{})
-	vct0meta := vct0["metadata"].(map[string]interface{})
-	if vct0meta["name"] != "workspace" {
-		t.Errorf("first VCT name = %v, want workspace", vct0meta["name"])
+	if wf.VolumeClaimTemplates[0].Name != "workspace" {
+		t.Errorf("first VCT name = %q, want workspace", wf.VolumeClaimTemplates[0].Name)
 	}
-
-	vct1 := vcts[1].(map[string]interface{})
-	vct1meta := vct1["metadata"].(map[string]interface{})
-	if vct1meta["name"] != "manifests" {
-		t.Errorf("second VCT name = %v, want manifests", vct1meta["name"])
+	if wf.VolumeClaimTemplates[1].Name != "manifests" {
+		t.Errorf("second VCT name = %q, want manifests", wf.VolumeClaimTemplates[1].Name)
 	}
 }
 
@@ -108,11 +109,12 @@ func TestWorkflowBuilder_Build_HasVolumeClaimTemplates(t *testing.T) {
 
 func TestWorkflowBuilder_Build_MainDAGHasAllTasks(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	dagTemplate := findTemplate(t, wf, "build-pipeline")
-	dag := assertMapNested(t, dagTemplate, "dag")
-	tasks := dag["tasks"].([]interface{})
+	dag := findDAG(t, wf, "build-pipeline")
 
 	// C-02 fix: generate-manifests and validate-manifests removed.
 	// Workflow ends at build-image. Manifests are generated by the API.
@@ -128,9 +130,8 @@ func TestWorkflowBuilder_Build_MainDAGHasAllTasks(t *testing.T) {
 	}
 
 	taskNames := make(map[string]bool)
-	for _, t := range tasks {
-		task := t.(map[string]interface{})
-		taskNames[task["name"].(string)] = true
+	for _, task := range dag.Tasks {
+		taskNames[task.Name] = true
 	}
 
 	for _, expected := range expectedTasks {
@@ -142,16 +143,16 @@ func TestWorkflowBuilder_Build_MainDAGHasAllTasks(t *testing.T) {
 
 func TestWorkflowBuilder_Build_OnExitDAGHasTasks(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	finalizeTemplate := findTemplate(t, wf, "finalize")
-	dag := assertMapNested(t, finalizeTemplate, "dag")
-	tasks := dag["tasks"].([]interface{})
+	dag := findDAG(t, wf, "finalize")
 
 	taskNames := make(map[string]bool)
-	for _, t := range tasks {
-		task := t.(map[string]interface{})
-		taskNames[task["name"].(string)] = true
+	for _, task := range dag.Tasks {
+		taskNames[task.Name] = true
 	}
 
 	if !taskNames["emit-summary"] {
@@ -166,20 +167,14 @@ func TestWorkflowBuilder_Build_OnExitDAGHasTasks(t *testing.T) {
 
 func TestWorkflowBuilder_Build_NodeStrategy_HasSaveCache(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
-
-	finalizeTemplate := findTemplate(t, wf, "finalize")
-	dag := assertMapNested(t, finalizeTemplate, "dag")
-	tasks := dag["tasks"].([]interface{})
-
-	found := false
-	for _, t := range tasks {
-		task := t.(map[string]interface{})
-		if task["name"].(string) == "save-cache" {
-			found = true
-		}
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
 	}
-	if !found {
+
+	dag := findDAG(t, wf, "finalize")
+	task := findTask(dag, "save-cache")
+	if task == nil {
 		t.Error("Node strategy should include save-cache in finalize DAG")
 	}
 }
@@ -188,18 +183,15 @@ func TestWorkflowBuilder_Build_CustomStrategy_NoSaveCache(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 3000, Framework: "custom"}}
-	wf := builder.Build(spec)
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	finalizeTemplate := findTemplate(t, wf, "finalize")
-	dag := assertMapNested(t, finalizeTemplate, "dag")
-	tasks := dag["tasks"].([]interface{})
-
-	for _, taskIface := range tasks {
-		task := taskIface.(map[string]interface{})
-		if task["name"].(string) == "save-cache" {
-			// Custom strategy has no cache key/dirs, so save-cache should be skipped
-			t.Error("Custom strategy should NOT include save-cache")
-		}
+	dag := findDAG(t, wf, "finalize")
+	if task := findTask(dag, "save-cache"); task != nil {
+		// Custom strategy has no cache key/dirs, so save-cache should be skipped
+		t.Error("Custom strategy should NOT include save-cache")
 	}
 }
 
@@ -209,27 +201,29 @@ func TestWorkflowBuilder_Build_CustomStrategy_NoSaveCache(t *testing.T) {
 
 func TestWorkflowBuilder_Build_CloneTask_UsesCWTRef(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	task := findDAGTask(t, wf, "build-pipeline", "clone-repo")
+	dag := findDAG(t, wf, "build-pipeline")
+	task := findTask(dag, "clone-repo")
+	if task == nil {
+		t.Fatal("clone-repo task not found")
+	}
 
-	ref, ok := task["templateRef"].(map[string]interface{})
-	if !ok {
+	if task.TemplateRef == nil {
 		t.Fatal("clone-repo missing templateRef")
 	}
-
-	if ref["name"] != "loopzero-clone" {
-		t.Errorf("templateRef.name = %v, want loopzero-clone", ref["name"])
+	if task.TemplateRef.Name != "loopzero-clone" {
+		t.Errorf("templateRef.Name = %q, want loopzero-clone", task.TemplateRef.Name)
 	}
-	if ref["clusterScope"] != true {
-		t.Error("templateRef.clusterScope should be true")
+	if !task.TemplateRef.ClusterScope {
+		t.Error("templateRef.ClusterScope should be true")
 	}
 
 	// Check params are passed
-	args := task["arguments"].(map[string]interface{})
-	params := args["parameters"].([]interface{})
-	paramNames := paramNameSet(params)
-
+	paramNames := taskParamNames(task)
 	for _, expected := range []string{"gitea-url", "gitea-token", "tenant-id", "project-id"} {
 		if !paramNames[expected] {
 			t.Errorf("clone-repo missing parameter: %s", expected)
@@ -239,23 +233,25 @@ func TestWorkflowBuilder_Build_CloneTask_UsesCWTRef(t *testing.T) {
 
 func TestWorkflowBuilder_Build_KanikoTask_UsesCWTRef(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	task := findDAGTask(t, wf, "build-pipeline", "build-image")
+	dag := findDAG(t, wf, "build-pipeline")
+	task := findTask(dag, "build-image")
+	if task == nil {
+		t.Fatal("build-image task not found")
+	}
 
-	ref, ok := task["templateRef"].(map[string]interface{})
-	if !ok {
+	if task.TemplateRef == nil {
 		t.Fatal("build-image missing templateRef")
 	}
-
-	if ref["name"] != "loopzero-kaniko" {
-		t.Errorf("templateRef.name = %v, want loopzero-kaniko", ref["name"])
+	if task.TemplateRef.Name != "loopzero-kaniko" {
+		t.Errorf("templateRef.Name = %q, want loopzero-kaniko", task.TemplateRef.Name)
 	}
 
-	args := task["arguments"].(map[string]interface{})
-	params := args["parameters"].([]interface{})
-	paramNames := paramNameSet(params)
-
+	paramNames := taskParamNames(task)
 	for _, expected := range []string{"registry-url", "tenant-id", "project-id", "commit-sha"} {
 		if !paramNames[expected] {
 			t.Errorf("build-image missing parameter: %s", expected)
@@ -269,12 +265,18 @@ func TestWorkflowBuilder_Build_KanikoTask_UsesCWTRef(t *testing.T) {
 
 func TestWorkflowBuilder_Build_RestoreCache_NoMinIOParams(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	task := findDAGTask(t, wf, "build-pipeline", "restore-cache")
-	args := task["arguments"].(map[string]interface{})
-	params := args["parameters"].([]interface{})
-	paramNames := paramNameSet(params)
+	dag := findDAG(t, wf, "build-pipeline")
+	task := findTask(dag, "restore-cache")
+	if task == nil {
+		t.Fatal("restore-cache task not found")
+	}
+
+	paramNames := taskParamNames(task)
 
 	// MinIO credentials come from K8s Secret (envFrom), not workflow params
 	for _, forbidden := range []string{"minio-endpoint", "minio-access-key", "minio-secret-key"} {
@@ -292,16 +294,18 @@ func TestWorkflowBuilder_Build_RestoreCache_NoMinIOParams(t *testing.T) {
 
 func TestWorkflowBuilder_Build_SaveCache_NoMinIOParams(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	task := findDAGTask(t, wf, "finalize", "save-cache")
+	dag := findDAG(t, wf, "finalize")
+	task := findTask(dag, "save-cache")
 	if task == nil {
 		t.Fatal("save-cache task not found in finalize DAG")
 	}
 
-	args := task["arguments"].(map[string]interface{})
-	params := args["parameters"].([]interface{})
-	paramNames := paramNameSet(params)
+	paramNames := taskParamNames(task)
 
 	for _, forbidden := range []string{"minio-endpoint", "minio-access-key", "minio-secret-key"} {
 		if paramNames[forbidden] {
@@ -321,7 +325,10 @@ func TestWorkflowBuilder_Build_SaveCache_NoMinIOParams(t *testing.T) {
 
 func TestWorkflowBuilder_Build_HasInlineTemplates(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
 	inlineNames := []string{
 		"validate-workspace",
@@ -332,13 +339,9 @@ func TestWorkflowBuilder_Build_HasInlineTemplates(t *testing.T) {
 	}
 
 	for _, name := range inlineNames {
-		tmpl := findTemplate(t, wf, name)
-		if tmpl == nil {
-			t.Errorf("missing inline template: %s", name)
-			continue
-		}
-		if _, ok := tmpl["container"]; !ok {
-			t.Errorf("inline template %s missing container", name)
+		c := findContainer(t, wf, name)
+		if c == nil {
+			t.Errorf("missing inline container template: %s", name)
 		}
 	}
 }
@@ -349,23 +352,28 @@ func TestWorkflowBuilder_Build_HasInlineTemplates(t *testing.T) {
 
 func TestWorkflowBuilder_Build_DAGDependencies(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	wf := builder.Build(testSpec())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	dag := findDAG(t, wf, "build-pipeline")
 
 	// install-deps depends on restore-cache and validate-workspace
-	installTask := findDAGTask(t, wf, "build-pipeline", "install-deps")
+	installTask := findTask(dag, "install-deps")
 	assertDependencies(t, installTask, []string{"restore-cache", "validate-workspace"})
 
 	// build-apps depends on install-deps
-	buildTask := findDAGTask(t, wf, "build-pipeline", "build-apps")
+	buildTask := findTask(dag, "build-apps")
 	assertDependencies(t, buildTask, []string{"install-deps"})
 
 	// build-image depends on generate-dockerfile
-	imageTask := findDAGTask(t, wf, "build-pipeline", "build-image")
+	imageTask := findTask(dag, "build-image")
 	assertDependencies(t, imageTask, []string{"generate-dockerfile"})
 
 	// clone-repo has no dependencies
-	cloneTask := findDAGTask(t, wf, "build-pipeline", "clone-repo")
-	if _, ok := cloneTask["dependencies"]; ok {
+	cloneTask := findTask(dag, "clone-repo")
+	if len(cloneTask.Dependencies) > 0 {
 		t.Error("clone-repo should have no dependencies")
 	}
 }
@@ -378,22 +386,24 @@ func TestWorkflowBuilder_Build_GoStrategy_LanguageLabel(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Framework: "go"}}
-	wf := builder.Build(spec)
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	meta := assertMapNested(t, wf, "metadata")
-	labels := assertMapNested(t, meta, "labels")
-	assertMapField(t, labels, "loopzero.io/language", "go")
+	assertLabel(t, wf, "loopzero.io/language", "go")
 }
 
 func TestWorkflowBuilder_Build_PythonStrategy_LanguageLabel(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Framework: "fastapi"}}
-	wf := builder.Build(spec)
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	meta := assertMapNested(t, wf, "metadata")
-	labels := assertMapNested(t, meta, "labels")
-	assertMapField(t, labels, "loopzero.io/language", "python")
+	assertLabel(t, wf, "loopzero.io/language", "python")
 }
 
 func TestWorkflowBuilder_Build_StrategyUsesFirstNonEmptyFramework(t *testing.T) {
@@ -403,11 +413,12 @@ func TestWorkflowBuilder_Build_StrategyUsesFirstNonEmptyFramework(t *testing.T) 
 		{Name: "api", Type: "server", Port: 3000, Framework: ""},
 		{Name: "worker", Type: "worker", Port: 0, Framework: "go"},
 	}
-	wf := builder.Build(spec)
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	meta := assertMapNested(t, wf, "metadata")
-	labels := assertMapNested(t, meta, "labels")
-	assertMapField(t, labels, "loopzero.io/language", "go")
+	assertLabel(t, wf, "loopzero.io/language", "go")
 }
 
 // ---------------------------------------------------------------------------
@@ -425,40 +436,67 @@ func TestWorkflowBuilder_Build_MultiApp_EndAtBuildImage(t *testing.T) {
 		{Name: "web", Type: "frontend", Port: 0, Path: "apps/web", Framework: "nextjs"},
 		{Name: "worker", Type: "worker", Port: 0, Path: "services/worker", Framework: "node"},
 	}
-	wf := builder.Build(spec)
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
 
-	// Verify build-image is the last CWT step (no generate-manifests or validate-manifests)
-	task := findDAGTask(t, wf, "build-pipeline", "build-image")
-	if task == nil {
+	// Verify build-image exists
+	dag := findDAG(t, wf, "build-pipeline")
+	if task := findTask(dag, "build-image"); task == nil {
 		t.Fatal("build-image task not found in DAG")
 	}
 
 	// Verify generate-manifests does NOT exist
-	wfSpec := wf["spec"].(map[string]interface{})
-	templates := wfSpec["templates"].([]interface{})
-	for _, tmpl := range templates {
-		tmplMap := tmpl.(map[string]interface{})
-		if tmplMap["name"] == "build-pipeline" {
-			dag := tmplMap["dag"].(map[string]interface{})
-			dagTasks := dag["tasks"].([]interface{})
-			for _, dt := range dagTasks {
-				dtMap := dt.(map[string]interface{})
-				if dtMap["name"] == "generate-manifests" {
-					t.Errorf("generate-manifests should not exist in workflow DAG — manifests are generated by API")
-				}
-			}
-		}
+	if task := findTask(dag, "generate-manifests"); task != nil {
+		t.Errorf("generate-manifests should not exist in workflow DAG — manifests are generated by API")
 	}
 }
 
 // ---------------------------------------------------------------------------
-// base-domain parameter
+// ToDict round-trip — ensures K8s compatibility
 // ---------------------------------------------------------------------------
 
-// C-02 fix: generate-manifests removed from workflow.
-// Base domain tests are now covered by the manifests.Render() package.
-// These tests verified parameters passed to the generate-manifests CWT step
-// which no longer exists in the workflow.
+func TestWorkflowBuilder_Build_ToDictRoundTrip(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	wf.Namespace = "argo"
+
+	dict, err := wf.ToDict()
+	if err != nil {
+		t.Fatalf("ToDict() error: %v", err)
+	}
+
+	// Verify top-level K8s fields
+	if dict["apiVersion"] != "argoproj.io/v1alpha1" {
+		t.Errorf("apiVersion = %v, want argoproj.io/v1alpha1", dict["apiVersion"])
+	}
+	if dict["kind"] != "Workflow" {
+		t.Errorf("kind = %v, want Workflow", dict["kind"])
+	}
+
+	// Verify metadata.namespace was set
+	meta, ok := dict["metadata"].(map[string]interface{})
+	if !ok {
+		t.Fatal("dict missing metadata")
+	}
+	if meta["namespace"] != "argo" {
+		t.Errorf("namespace = %v, want argo", meta["namespace"])
+	}
+
+	// Verify spec.entrypoint exists
+	spec, ok := dict["spec"].(map[string]interface{})
+	if !ok {
+		t.Fatal("dict missing spec")
+	}
+	if spec["entrypoint"] != "build-pipeline" {
+		t.Errorf("entrypoint = %v, want build-pipeline", spec["entrypoint"])
+	}
+}
 
 // ---------------------------------------------------------------------------
 // appsJSON helper
@@ -494,80 +532,61 @@ func TestAppsJSON_WithSecrets(t *testing.T) {
 // Test helpers
 // ---------------------------------------------------------------------------
 
-func findTemplate(t *testing.T, wf map[string]interface{}, name string) map[string]interface{} {
+func findDAG(t *testing.T, wf *forge.Workflow, name string) *forge.DAG {
 	t.Helper()
-	spec := wf["spec"].(map[string]interface{})
-	templates := spec["templates"].([]interface{})
-	for _, tmpl := range templates {
-		m := tmpl.(map[string]interface{})
-		if m["name"].(string) == name {
-			return m
+	for _, tmpl := range wf.Templates {
+		if dag, ok := tmpl.(*forge.DAG); ok && dag.Name == name {
+			return dag
 		}
 	}
-	t.Errorf("template %q not found", name)
+	t.Fatalf("DAG template %q not found", name)
 	return nil
 }
 
-func findDAGTask(t *testing.T, wf map[string]interface{}, dagName, taskName string) map[string]interface{} {
-	t.Helper()
-	dagTemplate := findTemplate(t, wf, dagName)
-	if dagTemplate == nil {
-		return nil
-	}
-	dag := dagTemplate["dag"].(map[string]interface{})
-	tasks := dag["tasks"].([]interface{})
-	for _, task := range tasks {
-		m := task.(map[string]interface{})
-		if m["name"].(string) == taskName {
-			return m
+func findTask(dag *forge.DAG, name string) *forge.Task {
+	for _, task := range dag.Tasks {
+		if task.Name == name {
+			return task
 		}
 	}
-	t.Errorf("DAG task %q not found in %q", taskName, dagName)
 	return nil
 }
 
-func assertMapField(t *testing.T, m map[string]interface{}, key, expected string) {
+func findContainer(t *testing.T, wf *forge.Workflow, name string) *forge.Container {
 	t.Helper()
-	val, ok := m[key].(string)
-	if !ok || val != expected {
-		t.Errorf("%s = %v, want %q", key, m[key], expected)
+	for _, tmpl := range wf.Templates {
+		if c, ok := tmpl.(*forge.Container); ok && c.Name == name {
+			return c
+		}
 	}
+	return nil
 }
 
-func assertMapNested(t *testing.T, m map[string]interface{}, key string) map[string]interface{} {
-	t.Helper()
-	nested, ok := m[key].(map[string]interface{})
-	if !ok {
-		t.Fatalf("missing or invalid nested map: %s", key)
-	}
-	return nested
-}
-
-func paramNameSet(params []interface{}) map[string]bool {
+func taskParamNames(task *forge.Task) map[string]bool {
 	names := make(map[string]bool)
-	for _, p := range params {
-		param := p.(map[string]interface{})
-		names[param["name"].(string)] = true
+	for _, p := range task.Arguments {
+		names[p.Name] = true
 	}
 	return names
 }
 
-func assertDependencies(t *testing.T, task map[string]interface{}, expected []string) {
+func assertLabel(t *testing.T, wf *forge.Workflow, key, expected string) {
 	t.Helper()
-	deps, ok := task["dependencies"].([]interface{})
-	if !ok {
-		t.Errorf("task %v missing dependencies", task["name"])
-		return
+	val, ok := wf.Labels[key]
+	if !ok || val != expected {
+		t.Errorf("label %s = %q, want %q", key, val, expected)
 	}
+}
 
+func assertDependencies(t *testing.T, task *forge.Task, expected []string) {
+	t.Helper()
 	depSet := make(map[string]bool)
-	for _, d := range deps {
-		depSet[d.(string)] = true
+	for _, d := range task.Dependencies {
+		depSet[d] = true
 	}
-
 	for _, exp := range expected {
 		if !depSet[exp] {
-			t.Errorf("task %v missing dependency: %s", task["name"], exp)
+			t.Errorf("task %s missing dependency: %s", task.Name, exp)
 		}
 	}
 }

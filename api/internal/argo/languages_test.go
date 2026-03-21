@@ -3,6 +3,8 @@ package argo
 import (
 	"testing"
 
+	forge "github.com/getloopscale/loopzero-forge"
+
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
@@ -76,47 +78,47 @@ func TestNodeStrategy_CacheDirs(t *testing.T) {
 func TestNodeStrategy_ValidateStep_ReturnsContainerTemplate(t *testing.T) {
 	s := &NodeStrategy{}
 	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 3000}}
-	tmpl := s.ValidateStep(apps)
+	c := s.ValidateStep(apps)
 
-	assertTemplateShape(t, tmpl, "validate-workspace", "node:20.11.1-alpine")
+	assertContainerShape(t, c, "validate-workspace", "node:20.11.1-alpine")
 }
 
 func TestNodeStrategy_InstallStep_HasRetryStrategy(t *testing.T) {
 	s := &NodeStrategy{}
 	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 3000}}
-	tmpl := s.InstallStep(apps)
+	c := s.InstallStep(apps)
 
-	assertTemplateShape(t, tmpl, "install-deps", "node:20.11.1-alpine")
+	assertContainerShape(t, c, "install-deps", "node:20.11.1-alpine")
 
-	if _, ok := tmpl["retryStrategy"]; !ok {
-		t.Error("InstallStep must have retryStrategy")
+	if c.RetryStrategy == nil {
+		t.Error("InstallStep must have RetryStrategy")
 	}
 }
 
 func TestNodeStrategy_BuildStep_ReturnsContainerTemplate(t *testing.T) {
 	s := &NodeStrategy{}
 	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 3000}}
-	tmpl := s.BuildStep(apps)
+	c := s.BuildStep(apps)
 
-	assertTemplateShape(t, tmpl, "build-apps", "node:20.11.1-alpine")
+	assertContainerShape(t, c, "build-apps", "node:20.11.1-alpine")
 }
 
 func TestNodeStrategy_ScanStep_ReturnsContainerTemplate(t *testing.T) {
 	s := &NodeStrategy{}
-	tmpl := s.ScanStep()
+	c := s.ScanStep()
 
-	assertTemplateShape(t, tmpl, "security-scan", "node:20.11.1-alpine")
+	assertContainerShape(t, c, "security-scan", "node:20.11.1-alpine")
 }
 
 func TestNodeStrategy_DockerfileStep_ReturnsContainerTemplate(t *testing.T) {
 	s := &NodeStrategy{}
 	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080}}
-	tmpl := s.DockerfileStep(apps)
+	c := s.DockerfileStep(apps)
 
-	assertTemplateShape(t, tmpl, "generate-dockerfile", "node:20.11.1-alpine")
+	assertContainerShape(t, c, "generate-dockerfile", "node:20.11.1-alpine")
 
 	// Verify the script contains the correct port
-	script := extractScript(t, tmpl)
+	script := extractContainerScript(t, c)
 	if script == "" {
 		t.Fatal("expected non-empty script")
 	}
@@ -145,29 +147,29 @@ func TestGoStrategy_CacheDirs(t *testing.T) {
 func TestGoStrategy_ValidateStep_UsesGoImage(t *testing.T) {
 	s := &GoStrategy{}
 	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Framework: "go"}}
-	tmpl := s.ValidateStep(apps)
+	c := s.ValidateStep(apps)
 
-	assertTemplateShape(t, tmpl, "validate-workspace", "golang:1.22-alpine")
+	assertContainerShape(t, c, "validate-workspace", "golang:1.22-alpine")
 
-	script := extractScript(t, tmpl)
+	script := extractContainerScript(t, c)
 	assertContains(t, script, "go.mod")
 }
 
 func TestGoStrategy_BuildStep_UsesCGODisabled(t *testing.T) {
 	s := &GoStrategy{}
 	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Path: "cmd/api"}}
-	tmpl := s.BuildStep(apps)
+	c := s.BuildStep(apps)
 
-	script := extractScript(t, tmpl)
+	script := extractContainerScript(t, c)
 	assertContains(t, script, "CGO_ENABLED=0")
 }
 
 func TestGoStrategy_DockerfileStep_MultiStage(t *testing.T) {
 	s := &GoStrategy{}
 	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080}}
-	tmpl := s.DockerfileStep(apps)
+	c := s.DockerfileStep(apps)
 
-	script := extractScript(t, tmpl)
+	script := extractContainerScript(t, c)
 	assertContains(t, script, "FROM golang:1.22-alpine AS builder")
 	assertContains(t, script, "EXPOSE 8080")
 }
@@ -186,11 +188,11 @@ func TestPythonStrategy_CacheKey(t *testing.T) {
 func TestPythonStrategy_ValidateStep_ChecksPythonDeps(t *testing.T) {
 	s := &PythonStrategy{}
 	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Framework: "fastapi"}}
-	tmpl := s.ValidateStep(apps)
+	c := s.ValidateStep(apps)
 
-	assertTemplateShape(t, tmpl, "validate-workspace", "python:3.12-alpine")
+	assertContainerShape(t, c, "validate-workspace", "python:3.12-alpine")
 
-	script := extractScript(t, tmpl)
+	script := extractContainerScript(t, c)
 	assertContains(t, script, "requirements.txt")
 	assertContains(t, script, "pyproject.toml")
 }
@@ -198,9 +200,9 @@ func TestPythonStrategy_ValidateStep_ChecksPythonDeps(t *testing.T) {
 func TestPythonStrategy_DockerfileStep_UsesUvicorn(t *testing.T) {
 	s := &PythonStrategy{}
 	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8000}}
-	tmpl := s.DockerfileStep(apps)
+	c := s.DockerfileStep(apps)
 
-	script := extractScript(t, tmpl)
+	script := extractContainerScript(t, c)
 	assertContains(t, script, "uvicorn")
 	assertContains(t, script, "EXPOSE 8000")
 }
@@ -226,17 +228,17 @@ func TestCustomStrategy_CacheDirs_Nil(t *testing.T) {
 func TestCustomStrategy_ValidateStep_RequiresDockerfile(t *testing.T) {
 	s := &CustomStrategy{}
 	apps := []services.AppSpec{{Name: "api", Type: "server"}}
-	tmpl := s.ValidateStep(apps)
+	c := s.ValidateStep(apps)
 
-	script := extractScript(t, tmpl)
+	script := extractContainerScript(t, c)
 	assertContains(t, script, "Dockerfile")
 }
 
 func TestCustomStrategy_InstallStep_IsNoop(t *testing.T) {
 	s := &CustomStrategy{}
-	tmpl := s.InstallStep(nil)
+	c := s.InstallStep(nil)
 
-	script := extractScript(t, tmpl)
+	script := extractContainerScript(t, c)
 	assertContains(t, script, "echo")
 }
 
@@ -305,55 +307,32 @@ func TestSanitizeBinName(t *testing.T) {
 // Test helpers
 // ---------------------------------------------------------------------------
 
-func assertTemplateShape(t *testing.T, tmpl map[string]interface{}, expectedName, expectedImage string) {
+func assertContainerShape(t *testing.T, c *forge.Container, expectedName, expectedImage string) {
 	t.Helper()
 
-	name, ok := tmpl["name"].(string)
-	if !ok || name != expectedName {
-		t.Errorf("template name = %v, want %q", tmpl["name"], expectedName)
+	if c.Name != expectedName {
+		t.Errorf("container name = %q, want %q", c.Name, expectedName)
 	}
-
-	container, ok := tmpl["container"].(map[string]interface{})
-	if !ok {
-		t.Fatal("template missing container field")
+	if c.Image != expectedImage {
+		t.Errorf("container image = %q, want %q", c.Image, expectedImage)
 	}
-
-	image, ok := container["image"].(string)
-	if !ok || image != expectedImage {
-		t.Errorf("container image = %v, want %q", container["image"], expectedImage)
+	if len(c.VolumeMounts) == 0 {
+		t.Error("container missing VolumeMounts")
 	}
-
-	// Must have volumeMounts
-	if _, ok := container["volumeMounts"]; !ok {
-		t.Error("container missing volumeMounts")
+	if c.Resources == nil {
+		t.Error("container missing Resources")
 	}
-
-	// Must have resources
-	if _, ok := container["resources"]; !ok {
-		t.Error("container missing resources")
-	}
-
-	// Must have securityContext
-	if _, ok := container["securityContext"]; !ok {
-		t.Error("container missing securityContext")
+	if c.SecurityContext == nil {
+		t.Error("container missing SecurityContext")
 	}
 }
 
-func extractScript(t *testing.T, tmpl map[string]interface{}) string {
+func extractContainerScript(t *testing.T, c *forge.Container) string {
 	t.Helper()
-	container, ok := tmpl["container"].(map[string]interface{})
-	if !ok {
-		t.Fatal("no container in template")
+	if len(c.Args) == 0 {
+		t.Fatal("no Args in container")
 	}
-	args, ok := container["args"].([]interface{})
-	if !ok || len(args) == 0 {
-		t.Fatal("no args in container")
-	}
-	script, ok := args[0].(string)
-	if !ok {
-		t.Fatal("args[0] is not a string")
-	}
-	return script
+	return c.Args[0]
 }
 
 func assertContains(t *testing.T, s, substr string) {

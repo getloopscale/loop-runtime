@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- ArgoCD cluster secret stale IP after k3d recreate — `update-cross-cluster-ips.sh` now patches operator WORKLOAD_CLUSTER_URL, ArgoCD cluster-workload secret, ArgoCD Application destinations, and configures insecure TLS for local dev (#dogfood3-F01)
+- ArgoCD cannot clone Gitea repos — NetworkPolicy `allow-gitea` was missing ArgoCD repo-server as allowed ingress source; added cross-namespace selector for `argocd` namespace (#dogfood3-F01b)
+- API ERROR logs emitted as plain text instead of structured JSON — `slog.SetDefault()` now sets the JSON handler as global default so all `slog.Error()`/`slog.Warn()` calls produce JSON output (#dogfood3-F04)
+- klog (k8s.io/client-go) emitting plain text logs — silenced via `klog.InitFlags()` with `stderrthreshold=FATAL` in API main.go (#dogfood3-F04b)
 - TenantController RBAC insufficient — ClusterRole missing permissions for `deployments`, `services`, `configmaps` that `rbacRulesForPlan` grants; Kubernetes RBAC escalation prevention blocked Role creation (#dogfood2-F02)
 - TenantController RBAC rules split by API group — `rbacRulesForPlan` used combined `APIGroups: ["", "apps"]` causing cartesian product expansion; split into separate rules per API group (#dogfood2-F02)
 - Tenant CR never created — `EnsureTenant` error silently discarded with `_ =`; now logged at ERROR level for observability (#dogfood2-F01)
@@ -27,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `task cli:build` — builds CLI from TypeScript source (#dogfood2-F08)
 
 ### Changed
+- WorkflowBuilder migrated from raw `map[string]interface{}` to loopzero-forge SDK typed structs — eliminates ~200 lines of type assertions and gains compile-time safety (#forge-migration)
+- LanguageStrategy interface methods now return `*forge.Container` instead of `map[string]interface{}`
 - Error message for internal server errors changed from generic "internal server error" to actionable guidance with next steps (#dogfood2-F05)
 - TenantController ClusterRole expanded with ArgoCD Application/AppProject permissions (#dogfood2-F02)
 

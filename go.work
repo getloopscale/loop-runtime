@@ -6,4 +6,5 @@ use (
 	./infra/tests
 	./operators
 	./pkg
+	./loopzero-forge
 )

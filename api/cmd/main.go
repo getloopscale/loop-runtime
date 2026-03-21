@@ -4,6 +4,8 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"flag"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -24,10 +26,26 @@ import (
 	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/sse"
+
+	"k8s.io/klog/v2"
 )
 
 func main() {
+	// Silence klog (k8s.io/client-go) so it doesn't emit plain text logs
+	// that break our structured JSON output. Kubernetes client libraries
+	// use klog internally; without this, their logs bypass slog and appear
+	// as unstructured plain text on stderr.
+	klogFlags := flag.NewFlagSet("klog", flag.ContinueOnError)
+	klog.InitFlags(klogFlags)
+	_ = klogFlags.Set("logtostderr", "false")
+	_ = klogFlags.Set("stderrthreshold", "FATAL")
+
 	logger := logging.NewLogger("api")
+	// Set the default slog logger so that all slog.Error/Warn/Info calls
+	// (used in services, middleware, etc.) produce structured JSON output
+	// matching our configured handler instead of plain text.
+	slog.SetDefault(logger)
+
 	cfg := config.Load()
 	// SEC-2: Validate() now returns error for fatal security violations (e.g., ARGOCD_INSECURE=true in production).
 	if err := cfg.Validate(); err != nil {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	forge "github.com/getloopscale/loopzero-forge"
+
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
@@ -49,13 +51,13 @@ func NewWorkflowBuilder(params InfraParams) *WorkflowBuilder {
 	return &WorkflowBuilder{infraParams: params}
 }
 
-// Build generates a complete Workflow CR (as unstructured map) for the given spec.
-// The returned map can be passed directly to the K8s dynamic client for creation.
-func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) map[string]interface{} {
+// Build generates a complete Workflow CR using forge types for the given spec.
+// The returned *forge.Workflow can be serialized via ToDict() for the K8s dynamic client.
+func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, error) {
 	strategy := resolveStrategyFromApps(spec.Apps)
 
 	// Collect inline templates from the language strategy
-	inlineTemplates := []interface{}{
+	inlineTemplates := []forge.Templatable{
 		strategy.ValidateStep(spec.Apps),
 		strategy.InstallStep(spec.Apps),
 		strategy.BuildStep(spec.Apps),
@@ -64,60 +66,62 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) map[string]interface
 	}
 
 	// Build the main DAG
-	dagTemplate := b.buildMainDAG(spec, strategy)
+	mainDAG, err := b.buildMainDAG(spec, strategy)
+	if err != nil {
+		return nil, fmt.Errorf("build main DAG: %w", err)
+	}
 
 	// Build the onExit DAG
-	onExitTemplate := b.buildOnExitDAG(spec, strategy)
+	onExitDAG, err := b.buildOnExitDAG(spec, strategy)
+	if err != nil {
+		return nil, fmt.Errorf("build onExit DAG: %w", err)
+	}
 
 	// All templates: main DAG + onExit + inline language templates
-	templates := []interface{}{dagTemplate, onExitTemplate}
+	templates := []forge.Templatable{mainDAG, onExitDAG}
 	templates = append(templates, inlineTemplates...)
 
-	workflow := map[string]interface{}{
-		"apiVersion": "argoproj.io/v1alpha1",
-		"kind":       "Workflow",
-		"metadata": map[string]interface{}{
-			"generateName": fmt.Sprintf("loopzero-build-%s-", spec.BuildID),
-			"labels": map[string]interface{}{
-				"loopzero.io/tenant":      spec.TenantID,
-				"loopzero.io/project":     spec.ProjectID,
-				"loopzero.io/environment": spec.Environment,
-				"loopzero.io/build-id":    spec.BuildID,
-				"loopzero.io/language":    strategy.Name(),
-			},
+	wf := &forge.Workflow{
+		GenerateName:       fmt.Sprintf("loopzero-build-%s-", spec.BuildID),
+		Entrypoint:         "build-pipeline",
+		OnExit:             "finalize",
+		ServiceAccountName: "loopzero-build-sa",
+		Parallelism:        ptr(4),
+		TTLStrategy: &forge.TTLStrategy{
+			SecondsAfterCompletion: ptr(3600),
+			SecondsAfterSuccess:    ptr(3600),
+			SecondsAfterFailure:    ptr(21600),
 		},
-		"spec": map[string]interface{}{
-			"entrypoint":         "build-pipeline",
-			"onExit":             "finalize",
-			"serviceAccountName": "loopzero-build-sa",
-			"parallelism":        int64(4),
-			"ttlStrategy": map[string]interface{}{
-				"secondsAfterCompletion": int64(3600),
-				"secondsAfterSuccess":    int64(3600),
-				"secondsAfterFailure":    int64(21600),
-			},
-			"templates": templates,
-			"volumeClaimTemplates": []interface{}{
-				volumeClaim("workspace", "2Gi"),
-				volumeClaim("manifests", "256Mi"),
-			},
+		Labels: map[string]string{
+			"loopzero.io/tenant":      spec.TenantID,
+			"loopzero.io/project":     spec.ProjectID,
+			"loopzero.io/environment": spec.Environment,
+			"loopzero.io/build-id":    spec.BuildID,
+			"loopzero.io/language":    strategy.Name(),
+		},
+		Templates: templates,
+		VolumeClaimTemplates: []forge.PVCVolume{
+			{BaseVolume: forge.BaseVolume{Name: "workspace"}, Size: "2Gi"},
+			{BaseVolume: forge.BaseVolume{Name: "manifests"}, Size: "256Mi"},
 		},
 	}
 
-	return workflow
+	return wf, nil
 }
 
 // buildMainDAG constructs the entrypoint DAG template.
-// It mixes CWT refs (clone, cache-restore, kaniko, manifests) with inline templates
+// It mixes CWT refs (clone, cache-restore, kaniko) with inline templates
 // (validate, install, build, scan, dockerfile).
-func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy LanguageStrategy) map[string]interface{} {
-	tasks := []interface{}{
+func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy LanguageStrategy) (*forge.DAG, error) {
+	dag := &forge.DAG{Name: "build-pipeline"}
+
+	tasks := []*forge.Task{
 		// Step 1: clone (CWT ref)
 		cwtTask("clone-repo", "loopzero-clone", "clone-repo", nil, map[string]string{
-			"gitea-url":  b.infraParams.GiteaURL,
+			"gitea-url":   b.infraParams.GiteaURL,
 			"gitea-token": b.infraParams.GiteaToken,
-			"tenant-id":  spec.TenantID,
-			"project-id": spec.ProjectID,
+			"tenant-id":   spec.TenantID,
+			"project-id":  spec.ProjectID,
 		}),
 
 		// Step 1: restore-cache (CWT ref) — depends on clone
@@ -157,17 +161,17 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy Lang
 		}),
 	}
 
-	return map[string]interface{}{
-		"name": "build-pipeline",
-		"dag": map[string]interface{}{
-			"tasks": tasks,
-		},
+	if err := dag.AddTasks(tasks...); err != nil {
+		return nil, err
 	}
+	return dag, nil
 }
 
 // buildOnExitDAG constructs the finalize DAG (always runs, even on failure).
-func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, strategy LanguageStrategy) map[string]interface{} {
-	tasks := []interface{}{}
+func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, strategy LanguageStrategy) (*forge.DAG, error) {
+	dag := &forge.DAG{Name: "finalize"}
+
+	var tasks []*forge.Task
 
 	// save-cache (CWT ref) — only if language has cache dirs
 	// MinIO credentials injected via envFrom (K8s Secret loopzero-minio-credentials)
@@ -192,12 +196,10 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, strategy La
 		"workflow-status":  "{{workflow.status}}",
 	}))
 
-	return map[string]interface{}{
-		"name": "finalize",
-		"dag": map[string]interface{}{
-			"tasks": tasks,
-		},
+	if err := dag.AddTasks(tasks...); err != nil {
+		return nil, err
 	}
+	return dag, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -205,75 +207,44 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, strategy La
 // ---------------------------------------------------------------------------
 
 // cwtTask creates a DAG task that references a ClusterWorkflowTemplate.
-func cwtTask(taskName, cwtName, templateName string, deps []string, params map[string]string) map[string]interface{} {
-	arguments := make([]interface{}, 0, len(params))
-	for k, v := range params {
-		arguments = append(arguments, map[string]interface{}{
-			"name":  k,
-			"value": v,
-		})
-	}
-
-	task := map[string]interface{}{
-		"name": taskName,
-		"templateRef": map[string]interface{}{
-			"name":        cwtName,
-			"template":    templateName,
-			"clusterScope": true,
+func cwtTask(taskName, cwtName, templateName string, deps []string, params map[string]string) *forge.Task {
+	return &forge.Task{
+		Name: taskName,
+		TemplateRef: &forge.TemplateRef{
+			Name:         cwtName,
+			Template:     templateName,
+			ClusterScope: true,
 		},
-		"arguments": map[string]interface{}{
-			"parameters": arguments,
-		},
+		Dependencies: deps,
+		Arguments:    paramsToForge(params),
 	}
-
-	if len(deps) > 0 {
-		task["dependencies"] = toInterfaceSlice(deps)
-	}
-
-	return task
 }
 
 // inlineTask creates a DAG task that references an inline template by name.
-func inlineTask(taskName, templateName string, deps []string) map[string]interface{} {
-	task := map[string]interface{}{
-		"name":     taskName,
-		"template": templateName,
+func inlineTask(taskName, templateName string, deps []string) *forge.Task {
+	return &forge.Task{
+		Name:         taskName,
+		Template:     templateName,
+		Dependencies: deps,
 	}
+}
 
-	if len(deps) > 0 {
-		task["dependencies"] = toInterfaceSlice(deps)
+// paramsToForge converts a string map to forge Parameters for task arguments.
+func paramsToForge(params map[string]string) []forge.Parameter {
+	if len(params) == 0 {
+		return nil
 	}
-
-	return task
+	result := make([]forge.Parameter, 0, len(params))
+	for k, v := range params {
+		val := v
+		result = append(result, forge.Parameter{Name: k, Value: &val})
+	}
+	return result
 }
 
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
-
-func volumeClaim(name, size string) map[string]interface{} {
-	return map[string]interface{}{
-		"metadata": map[string]interface{}{
-			"name": name,
-		},
-		"spec": map[string]interface{}{
-			"accessModes": []interface{}{"ReadWriteOnce"},
-			"resources": map[string]interface{}{
-				"requests": map[string]interface{}{
-					"storage": size,
-				},
-			},
-		},
-	}
-}
-
-func toInterfaceSlice(ss []string) []interface{} {
-	result := make([]interface{}, len(ss))
-	for i, s := range ss {
-		result[i] = s
-	}
-	return result
-}
 
 // resolveStrategyFromApps picks a strategy from the first non-empty framework.
 // If no app framework is populated, we default to Node for backwards compatibility.

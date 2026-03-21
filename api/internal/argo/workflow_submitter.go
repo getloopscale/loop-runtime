@@ -87,11 +87,16 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 // Submit generates a self-contained Workflow CR via the WorkflowBuilder and creates it
 // in the build cluster with retry for transient errors.
 func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSpec) (string, error) {
-	wfObject := s.builder.Build(spec)
+	wf, err := s.builder.Build(spec)
+	if err != nil {
+		return "", fmt.Errorf("argo: build workflow: %w", err)
+	}
 
-	meta, ok := wfObject["metadata"].(map[string]interface{})
-	if ok {
-		meta["namespace"] = s.namespace
+	wf.Namespace = s.namespace
+
+	wfObject, err := wf.ToDict()
+	if err != nil {
+		return "", fmt.Errorf("argo: serialize workflow: %w", err)
 	}
 
 	workflow := &unstructured.Unstructured{Object: wfObject}

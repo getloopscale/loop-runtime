@@ -185,7 +185,7 @@ spec:
     - Ingress
     - Egress
 ---
-# Gitea: ingress from loopzero-api and tenant-controller + egress for DB and external
+# Gitea: ingress from loopzero-api, tenant-controller, and ArgoCD repo-server + egress for DB and external
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -203,6 +203,14 @@ spec:
         - podSelector:
             matchLabels:
               app: tenant-controller
+        # ArgoCD repo-server needs to clone tenant repos from Gitea to generate manifests.
+        # It runs in the argocd namespace, so we need a cross-namespace selector.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argocd-repo-server
       ports:
         - port: 3000
           protocol: TCP

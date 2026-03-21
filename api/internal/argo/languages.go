@@ -8,23 +8,26 @@ package argo
 import (
 	"fmt"
 
+	forge "github.com/getloopscale/loopzero-forge"
+	"github.com/getloopscale/loopzero-forge/model"
+
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
 // LanguageStrategy defines language-specific build steps.
-// Each method returns an Argo Workflows inline template as unstructured map.
-// The WorkflowBuilder calls these to compose the full DAG.
+// Each method returns a forge.Container template that the WorkflowBuilder
+// adds to the Workflow's template list.
 type LanguageStrategy interface {
 	// ValidateStep returns a template that validates the workspace (e.g., package.json exists).
-	ValidateStep(apps []services.AppSpec) map[string]interface{}
+	ValidateStep(apps []services.AppSpec) *forge.Container
 	// InstallStep returns a template that installs dependencies.
-	InstallStep(apps []services.AppSpec) map[string]interface{}
+	InstallStep(apps []services.AppSpec) *forge.Container
 	// BuildStep returns a template that builds the application.
-	BuildStep(apps []services.AppSpec) map[string]interface{}
+	BuildStep(apps []services.AppSpec) *forge.Container
 	// ScanStep returns a template that runs security scanning.
-	ScanStep() map[string]interface{}
+	ScanStep() *forge.Container
 	// DockerfileStep returns a template that generates a Dockerfile if missing.
-	DockerfileStep(apps []services.AppSpec) map[string]interface{}
+	DockerfileStep(apps []services.AppSpec) *forge.Container
 	// CacheKey returns the cache key suffix for this language (e.g., "node-modules").
 	CacheKey() string
 	// CacheDirs returns directories to cache (e.g., ["node_modules"]).
@@ -68,26 +71,26 @@ func (s *NodeStrategy) CacheKey() string { return "node-modules" }
 
 func (s *NodeStrategy) CacheDirs() []string { return []string{"node_modules"} }
 
-func (s *NodeStrategy) ValidateStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("validate-workspace", "node:20.11.1-alpine", resourcesTiny(), scriptValidateNode(apps))
+func (s *NodeStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", "node:20.11.1-alpine", resourcesTiny(), scriptValidateNode(apps))
 }
 
-func (s *NodeStrategy) InstallStep(apps []services.AppSpec) map[string]interface{} {
-	tmpl := inlineContainer("install-deps", "node:20.11.1-alpine", resourcesMedium(), scriptInstallNode(apps))
-	tmpl["retryStrategy"] = retryStrategy(3, "5s", "2", "60s")
-	return tmpl
+func (s *NodeStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
+	c := buildContainer("install-deps", "node:20.11.1-alpine", resourcesMedium(), scriptInstallNode(apps))
+	c.RetryStrategy = retryStrategy(3, "5s", "2", "60s")
+	return c
 }
 
-func (s *NodeStrategy) BuildStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("build-apps", "node:20.11.1-alpine", resourcesMedium(), scriptBuildNode(apps))
+func (s *NodeStrategy) BuildStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", "node:20.11.1-alpine", resourcesMedium(), scriptBuildNode(apps))
 }
 
-func (s *NodeStrategy) ScanStep() map[string]interface{} {
-	return inlineContainer("security-scan", "node:20.11.1-alpine", resourcesSmall(), scriptScanNode())
+func (s *NodeStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", "node:20.11.1-alpine", resourcesSmall(), scriptScanNode())
 }
 
-func (s *NodeStrategy) DockerfileStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("generate-dockerfile", "node:20.11.1-alpine", resourcesSmall(), scriptDockerfileNode(apps))
+func (s *NodeStrategy) DockerfileStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("generate-dockerfile", "node:20.11.1-alpine", resourcesSmall(), scriptDockerfileNode(apps))
 }
 
 // ---------------------------------------------------------------------------
@@ -103,26 +106,26 @@ func (s *GoStrategy) CacheKey() string { return "go-modules" }
 
 func (s *GoStrategy) CacheDirs() []string { return []string{"/go/pkg/mod", "/root/.cache/go-build"} }
 
-func (s *GoStrategy) ValidateStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("validate-workspace", "golang:1.22-alpine", resourcesTiny(), scriptValidateGo(apps))
+func (s *GoStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", "golang:1.22-alpine", resourcesTiny(), scriptValidateGo(apps))
 }
 
-func (s *GoStrategy) InstallStep(apps []services.AppSpec) map[string]interface{} {
-	tmpl := inlineContainer("install-deps", "golang:1.22-alpine", resourcesMedium(), scriptInstallGo(apps))
-	tmpl["retryStrategy"] = retryStrategy(3, "5s", "2", "60s")
-	return tmpl
+func (s *GoStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
+	c := buildContainer("install-deps", "golang:1.22-alpine", resourcesMedium(), scriptInstallGo(apps))
+	c.RetryStrategy = retryStrategy(3, "5s", "2", "60s")
+	return c
 }
 
-func (s *GoStrategy) BuildStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("build-apps", "golang:1.22-alpine", resourcesMedium(), scriptBuildGo(apps))
+func (s *GoStrategy) BuildStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", "golang:1.22-alpine", resourcesMedium(), scriptBuildGo(apps))
 }
 
-func (s *GoStrategy) ScanStep() map[string]interface{} {
-	return inlineContainer("security-scan", "golang:1.22-alpine", resourcesSmall(), scriptScanGo())
+func (s *GoStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", "golang:1.22-alpine", resourcesSmall(), scriptScanGo())
 }
 
-func (s *GoStrategy) DockerfileStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("generate-dockerfile", "golang:1.22-alpine", resourcesSmall(), scriptDockerfileGo(apps))
+func (s *GoStrategy) DockerfileStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("generate-dockerfile", "golang:1.22-alpine", resourcesSmall(), scriptDockerfileGo(apps))
 }
 
 // ---------------------------------------------------------------------------
@@ -138,26 +141,26 @@ func (s *PythonStrategy) CacheKey() string { return "pip-cache" }
 
 func (s *PythonStrategy) CacheDirs() []string { return []string{"/root/.cache/pip"} }
 
-func (s *PythonStrategy) ValidateStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("validate-workspace", "python:3.12-alpine", resourcesTiny(), scriptValidatePython(apps))
+func (s *PythonStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", "python:3.12-alpine", resourcesTiny(), scriptValidatePython(apps))
 }
 
-func (s *PythonStrategy) InstallStep(apps []services.AppSpec) map[string]interface{} {
-	tmpl := inlineContainer("install-deps", "python:3.12-alpine", resourcesMedium(), scriptInstallPython(apps))
-	tmpl["retryStrategy"] = retryStrategy(3, "5s", "2", "60s")
-	return tmpl
+func (s *PythonStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
+	c := buildContainer("install-deps", "python:3.12-alpine", resourcesMedium(), scriptInstallPython(apps))
+	c.RetryStrategy = retryStrategy(3, "5s", "2", "60s")
+	return c
 }
 
-func (s *PythonStrategy) BuildStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("build-apps", "python:3.12-alpine", resourcesSmall(), scriptBuildPython(apps))
+func (s *PythonStrategy) BuildStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", "python:3.12-alpine", resourcesSmall(), scriptBuildPython(apps))
 }
 
-func (s *PythonStrategy) ScanStep() map[string]interface{} {
-	return inlineContainer("security-scan", "python:3.12-alpine", resourcesSmall(), scriptScanPython())
+func (s *PythonStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", "python:3.12-alpine", resourcesSmall(), scriptScanPython())
 }
 
-func (s *PythonStrategy) DockerfileStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("generate-dockerfile", "python:3.12-alpine", resourcesSmall(), scriptDockerfilePython(apps))
+func (s *PythonStrategy) DockerfileStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("generate-dockerfile", "python:3.12-alpine", resourcesSmall(), scriptDockerfilePython(apps))
 }
 
 // ---------------------------------------------------------------------------
@@ -173,84 +176,80 @@ func (s *CustomStrategy) CacheKey() string { return "" }
 
 func (s *CustomStrategy) CacheDirs() []string { return nil }
 
-func (s *CustomStrategy) ValidateStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("validate-workspace", "alpine:3.19.1", resourcesTiny(), scriptValidateCustom())
+func (s *CustomStrategy) ValidateStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", "alpine:3.19.1", resourcesTiny(), scriptValidateCustom())
 }
 
-func (s *CustomStrategy) InstallStep(_ []services.AppSpec) map[string]interface{} {
-	return inlineContainer("install-deps", "alpine:3.19.1", resourcesTiny(), noopScript("No install step for custom framework — user manages dependencies in Dockerfile"))
+func (s *CustomStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("install-deps", "alpine:3.19.1", resourcesTiny(), noopScript("No install step for custom framework — user manages dependencies in Dockerfile"))
 }
 
-func (s *CustomStrategy) BuildStep(_ []services.AppSpec) map[string]interface{} {
-	return inlineContainer("build-apps", "alpine:3.19.1", resourcesTiny(), noopScript("No build step for custom framework — build happens in Dockerfile"))
+func (s *CustomStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", "alpine:3.19.1", resourcesTiny(), noopScript("No build step for custom framework — build happens in Dockerfile"))
 }
 
-func (s *CustomStrategy) ScanStep() map[string]interface{} {
-	return inlineContainer("security-scan", "alpine:3.19.1", resourcesTiny(), noopScript("No security scan for custom framework"))
+func (s *CustomStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", "alpine:3.19.1", resourcesTiny(), noopScript("No security scan for custom framework"))
 }
 
-func (s *CustomStrategy) DockerfileStep(_ []services.AppSpec) map[string]interface{} {
-	return inlineContainer("generate-dockerfile", "alpine:3.19.1", resourcesTiny(), scriptValidateCustom())
+func (s *CustomStrategy) DockerfileStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("generate-dockerfile", "alpine:3.19.1", resourcesTiny(), scriptValidateCustom())
 }
 
 // ---------------------------------------------------------------------------
-// Helper: inline container template builder
+// Helper: forge container builder
 // ---------------------------------------------------------------------------
 
-func inlineContainer(name, image string, resources map[string]interface{}, script string) map[string]interface{} {
-	return map[string]interface{}{
-		"name": name,
-		"container": map[string]interface{}{
-			"image":   image,
-			"command": []interface{}{"sh", "-c"},
-			"args":    []interface{}{script},
-			"volumeMounts": []interface{}{
-				map[string]interface{}{"name": "workspace", "mountPath": "/workspace"},
-				map[string]interface{}{"name": "manifests", "mountPath": "/manifests"},
-			},
-			"resources":       resources,
-			"securityContext": nonRootSecurity(),
+func ptr[T any](v T) *T { return &v }
+
+func buildContainer(name, image string, resources *forge.ResourceRequirements, script string) *forge.Container {
+	return &forge.Container{
+		Name:    name,
+		Image:   image,
+		Command: []string{"sh", "-c"},
+		Args:    []string{script},
+		VolumeMounts: []forge.VolumeBuilder{
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "manifests", MountPath: "/manifests"}},
+		},
+		Resources: resources,
+		SecurityContext: &model.SecurityContext{
+			RunAsNonRoot: ptr(true),
+			RunAsUser:    ptr(int64(1000)),
 		},
 	}
 }
 
-func nonRootSecurity() map[string]interface{} {
-	return map[string]interface{}{
-		"runAsNonRoot": true,
-		"runAsUser":    int64(1000),
-	}
-}
-
-func retryStrategy(limit int, duration, factor, maxDuration string) map[string]interface{} {
-	return map[string]interface{}{
-		"limit":       fmt.Sprintf("%d", limit),
-		"retryPolicy": "OnFailure",
-		"backoff": map[string]interface{}{
-			"duration":    duration,
-			"factor":      factor,
-			"maxDuration": maxDuration,
+func retryStrategy(limit int, duration, factor, maxDuration string) *forge.RetryStrategy {
+	return &forge.RetryStrategy{
+		Limit:       ptr(limit),
+		RetryPolicy: forge.RetryPolicy("OnFailure"),
+		Backoff: &forge.Backoff{
+			Duration:    duration,
+			Factor:      factor,
+			MaxDuration: maxDuration,
 		},
 	}
 }
 
-func resourcesTiny() map[string]interface{} {
-	return map[string]interface{}{
-		"requests": map[string]interface{}{"cpu": "50m", "memory": "32Mi"},
-		"limits":   map[string]interface{}{"cpu": "100m", "memory": "64Mi"},
+func resourcesTiny() *forge.ResourceRequirements {
+	return &forge.ResourceRequirements{
+		Requests: forge.ResourceList{CPU: "50m", Memory: "32Mi"},
+		Limits:   forge.ResourceList{CPU: "100m", Memory: "64Mi"},
 	}
 }
 
-func resourcesSmall() map[string]interface{} {
-	return map[string]interface{}{
-		"requests": map[string]interface{}{"cpu": "100m", "memory": "128Mi"},
-		"limits":   map[string]interface{}{"cpu": "500m", "memory": "256Mi"},
+func resourcesSmall() *forge.ResourceRequirements {
+	return &forge.ResourceRequirements{
+		Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
+		Limits:   forge.ResourceList{CPU: "500m", Memory: "256Mi"},
 	}
 }
 
-func resourcesMedium() map[string]interface{} {
-	return map[string]interface{}{
-		"requests": map[string]interface{}{"cpu": "500m", "memory": "512Mi"},
-		"limits":   map[string]interface{}{"cpu": "2000m", "memory": "2Gi"},
+func resourcesMedium() *forge.ResourceRequirements {
+	return &forge.ResourceRequirements{
+		Requests: forge.ResourceList{CPU: "500m", Memory: "512Mi"},
+		Limits:   forge.ResourceList{CPU: "2000m", Memory: "2Gi"},
 	}
 }
 
