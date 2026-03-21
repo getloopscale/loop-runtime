@@ -117,7 +117,7 @@ O state do Pulumi é armazenado no **DigitalOcean Spaces** (S3-compatible). Sem 
 ```
 ┌──────────────────────────────────┐
 │  DigitalOcean Spaces             │
-│  s3://loopzero-pulumi-state          │
+│  s3://loopzero-infra-pulumi-state          │
 │  ├── .pulumi/stacks/dev.json     │  ← state do ambiente dev
 │  ├── .pulumi/stacks/staging.json │  ← state do ambiente staging
 │  └── .pulumi/stacks/prod.json    │  ← state do ambiente prod
@@ -134,12 +134,12 @@ O bucket de state é "infra de dia zero" — precisa existir antes do Pulumi rod
 
 # 2. Criar o bucket de state
 doctl serverless functions init  # (ou via painel DO)
-doctl compute cdn create --origin loopzero-pulumi-state.nyc3.digitaloceanspaces.com 2>/dev/null || true
+doctl compute cdn create --origin loopzero-infra-pulumi-state.nyc3.digitaloceanspaces.com 2>/dev/null || true
 
 # Ou via s3cmd:
 export AWS_ACCESS_KEY_ID="<spaces-key>"
 export AWS_SECRET_ACCESS_KEY="<spaces-secret>"
-aws s3 mb s3://loopzero-pulumi-state --endpoint-url https://nyc3.digitaloceanspaces.com
+aws s3 mb s3://loopzero-infra-pulumi-state --endpoint-url https://nyc3.digitaloceanspaces.com
 
 # 3. Configurar variáveis locais
 export AWS_ACCESS_KEY_ID="<spaces-key>"
@@ -147,7 +147,7 @@ export AWS_SECRET_ACCESS_KEY="<spaces-secret>"
 export PULUMI_CONFIG_PASSPHRASE="<strong-passphrase>"
 
 # 4. Login no backend S3
-pulumi login 's3://loopzero-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1'
+pulumi login 's3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1'
 ```
 
 ## Uso
@@ -161,7 +161,7 @@ npm test
 export AWS_ACCESS_KEY_ID="<spaces-key>"
 export AWS_SECRET_ACCESS_KEY="<spaces-secret>"
 export PULUMI_CONFIG_PASSPHRASE="<passphrase>"
-pulumi login 's3://loopzero-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1'
+pulumi login 's3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1'
 
 # Deploy
 pulumi up -s dev

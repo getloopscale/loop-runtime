@@ -56,7 +56,7 @@ permissions:
 env:
   NODE_VERSION: "20"
   PULUMI_WORKING_DIR: infra/pulumi
-  PULUMI_BACKEND_URL: s3://loopzero-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1
+  PULUMI_BACKEND_URL: s3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1
 
 jobs:
   # ─────────────────────────────────────────────
