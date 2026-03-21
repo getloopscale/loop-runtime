@@ -3,6 +3,8 @@ import { DigitalOceanNetworkProvider } from "./network";
 import { DigitalOceanKubernetesProvider } from "./kubernetes";
 import { DigitalOceanStorageProvider } from "./storage";
 import { DigitalOceanDnsProvider } from "./dns";
+import { DigitalOceanComputeProvider } from "./compute";
+import { DigitalOceanDatabaseProvider } from "./database";
 
 /**
  * DigitalOcean provider factory — fully functional.
@@ -15,9 +17,13 @@ export class DigitalOceanProviderFactory implements CloudProviderFactory {
   private readonly kubernetes = new DigitalOceanKubernetesProvider();
   private readonly storage = new DigitalOceanStorageProvider();
   private readonly dns = new DigitalOceanDnsProvider();
+  private readonly compute = new DigitalOceanComputeProvider();
+  private readonly database = new DigitalOceanDatabaseProvider();
 
   createNetwork = this.network.createNetwork.bind(this.network);
   createKubernetesCluster = this.kubernetes.createKubernetesCluster.bind(this.kubernetes);
   createObjectStorage = this.storage.createObjectStorage.bind(this.storage);
   createDnsRecord = this.dns.createDnsRecord.bind(this.dns);
+  createComputeInstance = this.compute.createComputeInstance.bind(this.compute);
+  createDatabaseCluster = this.database.createDatabaseCluster.bind(this.database);
 }

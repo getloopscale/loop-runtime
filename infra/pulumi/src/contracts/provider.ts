@@ -2,6 +2,8 @@ import { NetworkSpec, NetworkOutput } from "./network";
 import { KubernetesClusterSpec, KubernetesClusterOutput } from "./kubernetes";
 import { ObjectStorageSpec, ObjectStorageOutput } from "./storage";
 import { DnsRecordSpec, DnsRecordOutput } from "./dns";
+import { ComputeInstanceSpec, ComputeInstanceOutput } from "./compute";
+import { DatabaseClusterSpec, DatabaseClusterOutput } from "./database";
 
 /**
  * Each provider capability is its own interface (ISP).
@@ -30,8 +32,18 @@ export interface IProviderDns {
   createDnsRecord(spec: DnsRecordSpec): DnsRecordOutput;
 }
 
+export interface IProviderCompute {
+  createComputeInstance(spec: ComputeInstanceSpec): ComputeInstanceOutput;
+}
+
+export interface IProviderDatabase {
+  createDatabaseCluster(spec: DatabaseClusterSpec): DatabaseClusterOutput;
+}
+
 export interface CloudProviderFactory
   extends IProviderNetwork,
     IProviderKubernetes,
     IProviderStorage,
-    IProviderDns {}
+    IProviderDns,
+    IProviderCompute,
+    IProviderDatabase {}

@@ -8,21 +8,26 @@ import { CloudProviderFactory } from "../contracts/provider";
  * Phase 3 outputs — external access configured.
  */
 export interface ExposeOutputs {
-  readonly dnsConfigured: pulumi.Output<boolean>;
+  /** DNS records point to management cluster ingress */
+  readonly mgmtDnsConfigured: pulumi.Output<boolean>;
+  /** DNS records point to runtime cluster ingress */
+  readonly runtimeDnsConfigured: pulumi.Output<boolean>;
 }
 
 /**
  * Phase 3 — Expose Platform
  *
- * Creates DNS records pointing to the ingress load balancer.
- * Only runs AFTER Phase 2 confirms ingress is ready.
+ * Creates DNS records pointing to the ingress load balancers
+ * of both clusters.
  *
- * NOT IMPLEMENTED YET — depends on Phase 2 being validated in a real cluster.
+ * NOT IMPLEMENTED YET — depends on Phase 2 being validated in real clusters.
+ *
  * When implementing:
- * 1. Use bootstrap.ingressEndpoint as the DNS target
- * 2. Create DNS records via the provider factory (A record for IP, CNAME for hostname)
- * 3. Use config.domain for the target domain
- * 4. Optionally wait for DNS propagation
+ * 1. Use bootstrap.mgmt.ingressEndpoint for management DNS (e.g., argocd.loopzero.example)
+ * 2. Use bootstrap.runtime.ingressEndpoint for app DNS (e.g., *.loopzero.example)
+ * 3. Handle A records (for IPs) vs CNAME records (for hostnames)
+ * 4. Use config.domain for the base domain
+ * 5. Use factory.createDnsRecord() for provider-agnostic DNS creation
  */
 export function exposePlatform(
   _bootstrap: BootstrapOutputs,
@@ -31,6 +36,7 @@ export function exposePlatform(
   _factory: CloudProviderFactory,
 ): ExposeOutputs {
   return {
-    dnsConfigured: pulumi.output(false),
+    mgmtDnsConfigured: pulumi.output(false),
+    runtimeDnsConfigured: pulumi.output(false),
   };
 }

@@ -16,58 +16,135 @@ const PLATFORM_NAMESPACE = "platform-system";
 const HELM_VERSIONS = {
   certManager: "v1.14.5",
   traefik: "28.3.0",
+  argocd: "7.3.11",
 } as const;
 
-/**
- * Phase 2 outputs — platform services installed on the cluster.
- *
- * This is the contract between bootstrap and expose phases.
- * Phase 3 consumes ingressEndpoint to create DNS records.
- */
-export interface BootstrapOutputs {
-  /** True when Traefik Helm release status is "deployed" */
+// ---------------------------------------------------------------------------
+// Output types
+// ---------------------------------------------------------------------------
+
+export interface ClusterBootstrapOutputs {
   readonly ingressReady: pulumi.Output<boolean>;
-  /** LoadBalancer IP or hostname assigned by the cloud provider */
   readonly ingressEndpoint: pulumi.Output<string>;
-  /** True when cert-manager Helm release status is "deployed" */
-  readonly certManagerReady: pulumi.Output<boolean>;
-  /** The namespace where platform services are installed */
   readonly platformNamespace: pulumi.Output<string>;
 }
 
+export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
+  readonly certManagerReady: pulumi.Output<boolean>;
+  readonly argoCdReady: pulumi.Output<boolean>;
+}
+
+export interface BootstrapOutputs {
+  readonly mgmt: MgmtBootstrapOutputs;
+  readonly runtime: ClusterBootstrapOutputs;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Bootstrap both clusters
+// ---------------------------------------------------------------------------
+
 /**
- * Phase 2 — Bootstrap Cluster
+ * Bootstraps both clusters with role-appropriate services.
  *
- * Uses the kubeconfig from Phase 1 to install base platform services.
- * Order matters: namespace → cert-manager → Traefik.
+ * Management cluster gets:
+ *   namespace → cert-manager → ArgoCD → Traefik
  *
- * Dependencies in the Pulumi graph:
- *   InfraOutputs.kubeconfig → k8sProvider → namespace → cert-manager → Traefik → LB lookup
+ * Runtime cluster gets:
+ *   namespace → Traefik (minimal ingress for user apps)
  *
- * Idempotent: `pulumi up` with no changes = no-op. Helm Release tracks
- * release state server-side; Pulumi diffs against it.
- *
- * Health signals:
- * - Helm "deployed" status means Kubernetes resources are ready (Deployments
- *   have available replicas, Services exist). Pulumi's K8s provider enforces this.
- * - LB endpoint is populated only after the cloud provider assigns an IP/hostname.
- *   On DigitalOcean this is an IP; on AWS it's a hostname (ELB).
+ * ArgoCD runs only on management — it syncs to runtime cluster via
+ * kubeconfig. This means management cluster outage doesn't affect
+ * running applications, only new deploys.
  */
 export function bootstrapCluster(
   infra: InfraOutputs,
   config: PlatformStackConfig,
 ): BootstrapOutputs {
-  // --- Kubernetes provider from Phase 1 kubeconfig ---
-  // This creates an explicit graph dependency: cluster must exist before
-  // any K8s resource is created. Pulumi resolves this via Output<string>.
-  const k8sProvider = new k8s.Provider("platform-k8s", {
-    kubeconfig: infra.kubeconfig,
+  const mgmt = bootstrapMgmtCluster(infra, config);
+  const runtime = bootstrapRuntimeCluster(infra, config);
+
+  return { mgmt, runtime };
+}
+
+// ---------------------------------------------------------------------------
+// Management cluster bootstrap
+// ---------------------------------------------------------------------------
+
+function bootstrapMgmtCluster(
+  infra: InfraOutputs,
+  config: PlatformStackConfig,
+): MgmtBootstrapOutputs {
+  const provider = new k8s.Provider("mgmt-k8s", {
+    kubeconfig: infra.mgmtCluster.kubeconfig,
   });
 
-  // --- Platform namespace ---
-  // All platform services live here. Workload namespaces are separate.
-  const ns = new k8s.core.v1.Namespace(
-    PLATFORM_NAMESPACE,
+  const ns = createPlatformNamespace("mgmt", config, provider);
+
+  // cert-manager first — ArgoCD and Traefik may need TLS CRDs
+  const certManager = installCertManager("mgmt", provider, ns);
+
+  // ArgoCD — GitOps engine, manages runtime cluster
+  const argocd = installArgoCD(provider, ns, certManager);
+
+  // Traefik — ingress for platform services (ArgoCD UI, API, etc.)
+  const traefik = installTraefik("mgmt", provider, ns, certManager);
+
+  const ingressEndpoint = lookupLoadBalancerEndpoint(
+    "mgmt",
+    provider,
+    traefik,
+  );
+
+  return {
+    certManagerReady: certManager.status.apply((s) => s.status === "deployed"),
+    argoCdReady: argocd.status.apply((s) => s.status === "deployed"),
+    ingressReady: traefik.status.apply((s) => s.status === "deployed"),
+    ingressEndpoint,
+    platformNamespace: ns.metadata.name,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Runtime cluster bootstrap
+// ---------------------------------------------------------------------------
+
+function bootstrapRuntimeCluster(
+  infra: InfraOutputs,
+  config: PlatformStackConfig,
+): ClusterBootstrapOutputs {
+  const provider = new k8s.Provider("runtime-k8s", {
+    kubeconfig: infra.runtimeCluster.kubeconfig,
+  });
+
+  const ns = createPlatformNamespace("runtime", config, provider);
+
+  // Runtime gets Traefik only — user apps ingress
+  const traefik = installTraefik("runtime", provider, ns);
+
+  const ingressEndpoint = lookupLoadBalancerEndpoint(
+    "runtime",
+    provider,
+    traefik,
+  );
+
+  return {
+    ingressReady: traefik.status.apply((s) => s.status === "deployed"),
+    ingressEndpoint,
+    platformNamespace: ns.metadata.name,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Shared installation functions
+// ---------------------------------------------------------------------------
+
+function createPlatformNamespace(
+  role: string,
+  config: PlatformStackConfig,
+  provider: k8s.Provider,
+): k8s.core.v1.Namespace {
+  return new k8s.core.v1.Namespace(
+    `${role}-${PLATFORM_NAMESPACE}`,
     {
       metadata: {
         name: PLATFORM_NAMESPACE,
@@ -76,18 +153,21 @@ export function bootstrapCluster(
           "app.kubernetes.io/part-of": "loopzero-platform",
           "loopzero.io/environment": config.environment,
           "loopzero.io/project": config.project,
+          "loopzero.io/cluster-role": role,
         },
       },
     },
-    { provider: k8sProvider },
+    { provider },
   );
+}
 
-  // --- cert-manager ---
-  // Installed before Traefik because Traefik's TLS support (IngressRoute
-  // with cert-manager annotations) requires cert-manager CRDs to exist.
-  // installCRDs: true is the simplest path for cert-manager < 1.15.
-  const certManager = new k8s.helm.v3.Release(
-    "cert-manager",
+function installCertManager(
+  role: string,
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+): k8s.helm.v3.Release {
+  return new k8s.helm.v3.Release(
+    `${role}-cert-manager`,
     {
       chart: "cert-manager",
       version: HELM_VERSIONS.certManager,
@@ -103,22 +183,84 @@ export function bootstrapCluster(
             namespace: PLATFORM_NAMESPACE,
           },
         },
-        // Resource limits for predictable scheduling
         resources: {
           requests: { cpu: "50m", memory: "64Mi" },
           limits: { cpu: "200m", memory: "256Mi" },
         },
       },
     },
-    { provider: k8sProvider, dependsOn: [ns] },
+    { provider, dependsOn: [ns] },
   );
+}
 
-  // --- Traefik ingress controller ---
-  // Creates a LoadBalancer Service that the cloud provider backs with a
-  // real LB (DO Load Balancer, AWS ELB/NLB). The LB IP/hostname is what
-  // Phase 3 uses for DNS records.
-  const traefik = new k8s.helm.v3.Release(
-    "traefik",
+function installArgoCD(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  certManager: k8s.helm.v3.Release,
+): k8s.helm.v3.Release {
+  return new k8s.helm.v3.Release(
+    "argocd",
+    {
+      chart: "argo-cd",
+      version: HELM_VERSIONS.argocd,
+      repositoryOpts: {
+        repo: "https://argoproj.github.io/argo-helm",
+      },
+      namespace: PLATFORM_NAMESPACE,
+      createNamespace: false,
+      values: {
+        // Server accessed via Traefik — TLS terminated at ingress
+        server: {
+          service: {
+            type: "ClusterIP",
+          },
+        },
+        configs: {
+          params: {
+            // TLS terminated at Traefik, ArgoCD serves plain HTTP
+            "server.insecure": true,
+          },
+        },
+        // Controller manages syncs to runtime cluster
+        controller: {
+          resources: {
+            requests: { cpu: "100m", memory: "256Mi" },
+            limits: { cpu: "500m", memory: "512Mi" },
+          },
+        },
+        // Repo server clones from Gitea
+        repoServer: {
+          resources: {
+            requests: { cpu: "100m", memory: "128Mi" },
+            limits: { cpu: "500m", memory: "512Mi" },
+          },
+        },
+        // Redis for caching
+        redis: {
+          resources: {
+            requests: { cpu: "50m", memory: "64Mi" },
+            limits: { cpu: "200m", memory: "256Mi" },
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [ns, certManager] },
+  );
+}
+
+function installTraefik(
+  role: string,
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  certManager?: k8s.helm.v3.Release,
+): k8s.helm.v3.Release {
+  const dependsOn: pulumi.Resource[] = [ns];
+  if (certManager) {
+    dependsOn.push(certManager);
+  }
+
+  return new k8s.helm.v3.Release(
+    `${role}-traefik`,
     {
       chart: "traefik",
       version: HELM_VERSIONS.traefik,
@@ -147,53 +289,44 @@ export function bootstrapCluster(
           kubernetesCRD: { enabled: true },
           kubernetesIngress: { enabled: true },
         },
-        // Resource limits
         resources: {
           requests: { cpu: "100m", memory: "128Mi" },
           limits: { cpu: "500m", memory: "512Mi" },
         },
       },
     },
-    // Traefik depends on cert-manager so that CRDs are available
-    // when Traefik tries to create IngressRoute resources with TLS.
-    { provider: k8sProvider, dependsOn: [ns, certManager] },
+    { provider, dependsOn },
+  );
+}
+
+/**
+ * Reads the Traefik LoadBalancer Service to get the external endpoint.
+ *
+ * Pulumi's K8s provider waits for the LB to be assigned before
+ * marking the Service as ready, so this output resolves only
+ * after the cloud provider has allocated an IP/hostname.
+ *
+ * DigitalOcean returns an IP; AWS returns a hostname (ELB).
+ */
+function lookupLoadBalancerEndpoint(
+  role: string,
+  provider: k8s.Provider,
+  traefik: k8s.helm.v3.Release,
+): pulumi.Output<string> {
+  // Traefik Helm chart creates a Service named after the release.
+  // Our release is "{role}-traefik", but the K8s Service name follows
+  // the Helm chart template, which is just "traefik" (release name
+  // without the Pulumi resource prefix).
+  // The actual K8s service name depends on the chart's fullnameOverride.
+  // By default, Traefik chart uses the release name as the service name.
+  const svc = k8s.core.v1.Service.get(
+    `${role}-traefik-lb-lookup`,
+    pulumi.interpolate`${PLATFORM_NAMESPACE}/${role}-traefik`,
+    { provider, dependsOn: [traefik] },
   );
 
-  // --- Readiness signals ---
-  // Helm Release status "deployed" means:
-  // 1. Helm install/upgrade succeeded
-  // 2. Pulumi's K8s provider confirmed resources are ready
-  //    (Deployments have available replicas, Services exist)
-  const certManagerReady = certManager.status.apply(
-    (s) => s.status === "deployed",
-  );
-  const ingressReady = traefik.status.apply((s) => s.status === "deployed");
-
-  // --- LoadBalancer endpoint extraction ---
-  // Reads the Traefik Service to get the cloud-assigned external endpoint.
-  // Pulumi's K8s provider waits for LoadBalancer ingress to be assigned
-  // before marking the Service as ready, so this output is populated
-  // by the time the stack finishes.
-  //
-  // Service name: the Traefik Helm chart creates a Service named after
-  // the release name ("traefik") in the release namespace.
-  const traefikSvc = k8s.core.v1.Service.get(
-    "traefik-lb-lookup",
-    pulumi.interpolate`${PLATFORM_NAMESPACE}/traefik`,
-    { provider: k8sProvider, dependsOn: [traefik] },
-  );
-
-  // DigitalOcean returns an IP; AWS returns a hostname (ELB).
-  // Both are valid DNS targets — Phase 3 handles the difference.
-  const ingressEndpoint = traefikSvc.status.apply((status) => {
+  return svc.status.apply((status) => {
     const ingress = status?.loadBalancer?.ingress?.[0];
     return ingress?.ip ?? ingress?.hostname ?? "";
   });
-
-  return {
-    ingressReady,
-    ingressEndpoint,
-    certManagerReady,
-    platformNamespace: ns.metadata.name,
-  };
 }

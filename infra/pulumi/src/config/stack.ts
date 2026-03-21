@@ -7,11 +7,36 @@ export interface PlatformStackConfig {
   readonly provider: CloudProvider;
   readonly region: string;
   readonly domain: string;
-  readonly k8sVersion?: string;
-  readonly nodeClass: NodeClass;
-  readonly minNodes: number;
-  readonly maxNodes?: number;
   readonly infraVersion: string;
+
+  // Management cluster — runs the platform (ArgoCD, API, Traefik, cert-manager)
+  readonly mgmtK8sVersion?: string;
+  readonly mgmtNodeClass: NodeClass;
+  readonly mgmtMinNodes: number;
+  readonly mgmtMaxNodes?: number;
+
+  // Runtime cluster — runs user applications only
+  readonly runtimeK8sVersion?: string;
+  readonly runtimeNodeClass: NodeClass;
+  readonly runtimeMinNodes: number;
+  readonly runtimeMaxNodes?: number;
+
+  // Gitea — dedicated VM for git state (stateful, critical path)
+  readonly giteaNodeClass: NodeClass;
+  readonly giteaImage: string;
+
+  // Runners — CI/CD build VMs (isolated from clusters)
+  readonly runnerNodeClass: NodeClass;
+  readonly runnerImage: string;
+  readonly runnerCount: number;
+
+  // Database — managed PostgreSQL for platform state
+  readonly dbNodeClass: NodeClass;
+  readonly dbVersion: string;
+  readonly dbNodeCount: number;
+
+  // SSH keys for VM access (optional — omit for dev if keys not set up yet)
+  readonly sshKeyIds?: string[];
 }
 
 /**
@@ -27,10 +52,35 @@ export function loadStackConfig(): PlatformStackConfig {
     provider: config.require("provider") as CloudProvider,
     region: config.require("region"),
     domain: config.require("domain"),
-    k8sVersion: config.get("k8sVersion") ?? undefined,
-    nodeClass: config.require("nodeClass") as NodeClass,
-    minNodes: config.requireNumber("minNodes"),
-    maxNodes: config.getNumber("maxNodes") ?? undefined,
     infraVersion: config.get("infraVersion") ?? "v1",
+
+    // Management cluster
+    mgmtK8sVersion: config.get("mgmtK8sVersion") ?? undefined,
+    mgmtNodeClass: config.require("mgmtNodeClass") as NodeClass,
+    mgmtMinNodes: config.requireNumber("mgmtMinNodes"),
+    mgmtMaxNodes: config.getNumber("mgmtMaxNodes") ?? undefined,
+
+    // Runtime cluster
+    runtimeK8sVersion: config.get("runtimeK8sVersion") ?? undefined,
+    runtimeNodeClass: config.require("runtimeNodeClass") as NodeClass,
+    runtimeMinNodes: config.requireNumber("runtimeMinNodes"),
+    runtimeMaxNodes: config.getNumber("runtimeMaxNodes") ?? undefined,
+
+    // Gitea VM
+    giteaNodeClass: (config.get("giteaNodeClass") ?? "small") as NodeClass,
+    giteaImage: config.get("giteaImage") ?? "ubuntu-24-04-x64",
+
+    // Runners
+    runnerNodeClass: (config.get("runnerNodeClass") ?? "small") as NodeClass,
+    runnerImage: config.get("runnerImage") ?? "ubuntu-24-04-x64",
+    runnerCount: config.getNumber("runnerCount") ?? 1,
+
+    // Database
+    dbNodeClass: (config.get("dbNodeClass") ?? "small") as NodeClass,
+    dbVersion: config.get("dbVersion") ?? "16",
+    dbNodeCount: config.getNumber("dbNodeCount") ?? 1,
+
+    // SSH keys
+    sshKeyIds: config.getObject<string[]>("sshKeyIds") ?? undefined,
   };
 }
