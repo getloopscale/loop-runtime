@@ -8,6 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Kaniko CWT had `--insecure` and `--skip-tls-verify` hardcoded — flags are now conditionally added by WorkflowBuilder only when `RegistryInsecure=true`; CWT is secure by default (#BUILD-BLOCKER-1)
+- Gitea token visible in plaintext in Workflow CR parameters — moved to K8s Secret `loopzero-gitea-credentials` via `envFrom`; token no longer appears in `kubectl get wf -o yaml` (#BUILD-BLOCKER-2)
+- BuildReconcileLoop processed builds serially — one slow ArgoCD sync (120s) blocked all other builds; now processes up to 10 builds concurrently via semaphore pattern (#BUILD-BLOCKER-3)
+- Manifest renderer used `fmt.Sprintf` string concatenation — special chars in values corrupted YAML; rewritten with typed Go structs + `sigs.k8s.io/yaml` serialization (#BUILD-MOD-1)
+- Manifest renderer produced non-deterministic YAML from `map[string]string` iteration — `sigs.k8s.io/yaml.Marshal` sorts map keys, eliminating unnecessary GitOps diffs (#BUILD-MOD-5)
+- Cache CWTs used `python2.7` (EOL since 2020) for tar operations — replaced with standard `tar` command (#BUILD-MOD-2)
+- BuildReaper and ReconcileLoop competed on the same builds — reaper now checks `IsProcessing()` to skip builds under active reconciliation (#BUILD-MOD-6)
+- Go Dockerfile generator used generic `go build ./...` — now targets `./cmd/...` or app-specific path (#BUILD-LEVE-1)
+- Node.js Dockerfile had insecure fallback `npm install --production` when `npm ci` failed — removed fallback to enforce lockfile integrity (#BUILD-SEC-4)
+- IngressRoute used `certResolver: letsencrypt` but infra uses self-signed CA — changed to `tls: {}` to reference default TLSStore (#BUILD-LEVE-2)
+- Security scans (npm audit, govulncheck, pip-audit) were warning-only — now exit non-zero on vulnerabilities (#BUILD-LEVE-3)
+- Workspace PVC was 2Gi — increased to 5Gi to accommodate large monorepos with node_modules (#BUILD-LEVE-4)
+- Clone CWT had no retry strategy — added retry (2 attempts, exponential backoff) for transient network failures (#BUILD-CLONE-RETRY)
+
+### Added
+- `loopzero-gitea-credentials` Secret template in Argo Workflows Helm chart — Gitea credentials injected via `envFrom` instead of workflow parameters (#BUILD-BLOCKER-2)
+- `gitea.url` and `gitea.token` values in Argo Workflows Helm chart (#BUILD-BLOCKER-2)
+- `MaxConcurrent` config for BuildReconcileLoop — bounds concurrent Kubernetes API calls (default 10) (#BUILD-BLOCKER-3)
+- `BuildReconcileChecker` interface — allows BuildReaper to coordinate with ReconcileLoop (#BUILD-MOD-6)
+- `IsProcessing()` method on BuildReconcileLoop — exposes active build tracking for coordination (#BUILD-MOD-6)
+- `RegistryInsecure` field on `WorkflowSubmitterConfig` — controls whether Kaniko uses insecure flags (#BUILD-BLOCKER-1)
+- Renderer tests: MOD-1 special chars, MOD-5 determinism, LEVE-2 TLS, sorted env vars, multi-app (#BUILD-MOD-1)
+- WorkflowBuilder tests: Kaniko inline verification, insecure flag conditional tests, gitea-token prohibition (#BUILD-BLOCKER-1)
+
+### Changed
+- **BREAKING**: Kaniko build step changed from CWT ref (`loopzero-kaniko`) to inline template — WorkflowBuilder now generates container spec with conditional insecure flags (#BUILD-BLOCKER-1)
+- **BREAKING**: Clone CWT no longer accepts `gitea-url` and `gitea-token` parameters — credentials come from K8s Secret `loopzero-gitea-credentials` (#BUILD-BLOCKER-2)
+- `InfraParams` struct: removed `GiteaURL` and `GiteaToken` fields (#BUILD-BLOCKER-2)
+- `WorkflowSubmitterConfig` struct: removed `GiteaURL` and `GiteaToken`, added `RegistryInsecure` (#BUILD-BLOCKER-1, #BUILD-BLOCKER-2)
+
+### Security
+- Gitea admin token no longer exposed in Workflow CR objects — moved to K8s Secret with `envFrom` (#BUILD-SEC-1)
+- Kaniko insecure registry flags no longer hardcoded — conditional based on `RegistryInsecure` config; `Config.Validate()` enforces `RegistryInsecure=false` in production (#BUILD-SEC-KANIKO)
+- Node.js Dockerfile enforces `npm ci` without insecure fallback — prevents dependency confusion via `npm install` (#BUILD-SEC-4)
+- Security vulnerability scans now fail the build on detection — prevents deploying known-vulnerable code (#BUILD-SEC-SCAN)
+
+### Fixed
 - `loopzero init` did not detect apps in conventional monorepo directories (`apps/`, `services/`, `microservices/`) without workspace config — now scans nested subdirs for project markers (#dogfood-full2-F01)
 - `loopzero init` generated `framework: custom` with no port for projects without a recognized framework — now defaults to port 3000 for server-type apps (#dogfood-full2-F06)
 - `loopzero deploy --no-wait` suggested re-deploying as tracking command — message now states deploy is running in background (#dogfood-full2-F03)

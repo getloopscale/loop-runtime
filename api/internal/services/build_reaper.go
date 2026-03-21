@@ -46,6 +46,12 @@ type BuildStaleChecker interface {
 	FindStaleBuilds(ctx context.Context, queueTimeout, runningTimeout, cancelTimeout time.Duration) ([]StaleBuild, error)
 }
 
+// BuildReconcileChecker allows the reaper to check if a build is being reconciled.
+// MOD-6: Coordinates BuildReaper with BuildReconcileLoop to avoid competing on the same build.
+type BuildReconcileChecker interface {
+	IsProcessing(buildID string) bool
+}
+
 // BuildReaper periodically checks for stale builds and transitions them to FAILED/CANCELLED.
 // This implements the timeout enforcement from spec §5.1.
 //
@@ -61,14 +67,15 @@ type BuildReaper struct {
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	logger *slog.Logger
-	cfg    BuildReaperConfig
+	logger     *slog.Logger
+	cfg        BuildReaperConfig
+	reconciler BuildReconcileChecker // MOD-6: coordinate with reconcile loop
 }
 
 // NewBuildReaper creates a new BuildReaper.
 func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker EnvironmentLocker, workflow WorkflowSubmitter, eventStore interface {
 	Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
-}, logger *slog.Logger, cfg BuildReaperConfig) *BuildReaper {
+}, logger *slog.Logger, cfg BuildReaperConfig, reconciler BuildReconcileChecker) *BuildReaper {
 	return &BuildReaper{
 		buildStore: buildStore,
 		checker:    checker,
@@ -77,6 +84,7 @@ func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker 
 		eventStore: eventStore,
 		logger:     logger,
 		cfg:        cfg,
+		reconciler: reconciler,
 	}
 }
 
@@ -131,6 +139,12 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 
 	reaped := 0
 	for _, s := range stale {
+		// MOD-6: Skip builds currently being processed by reconcile loop
+		if r.reconciler != nil && r.reconciler.IsProcessing(s.ID) {
+			r.logger.Debug("build reaper: skipping build being reconciled", "build_id", s.ID)
+			continue
+		}
+
 		build, err := r.buildStore.GetByID(ctx, s.ID)
 		if err != nil {
 			r.logger.Error("build reaper: failed to get build", "build_id", s.ID, "error", err)

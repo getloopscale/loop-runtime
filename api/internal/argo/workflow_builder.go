@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	forge "github.com/getloopscale/loopzero-forge"
+	"github.com/getloopscale/loopzero-forge/model"
 
 	"github.com/loopzero/loopzero/api/internal/services"
 )
@@ -19,19 +20,20 @@ import (
 // C-02 fix: ManifestGeneration removed from workflow. The API generates manifests
 // after detecting workflow completion. The workflow only builds images.
 //
-// Note: MinIO credentials are passed as workflow parameters because the CWT
-// templates (loopzero-cache-restore, loopzero-cache-save) require them as inputs.
-// The CWTs run in the build cluster and need MinIO connectivity to store/restore
-// build caches. The credentials are visible in the Workflow CR but are
-// service-account-scoped (not user credentials).
+// BLOCKER-2 fix: GiteaURL and GiteaToken removed. The clone CWT now reads
+// credentials from K8s Secret (loopzero-gitea-credentials) via envFrom. No more
+// plaintext tokens in Workflow CRs.
+//
+// BLOCKER-1 fix: Kaniko is now an inline template (not a CWT ref) so that
+// --insecure and --skip-tls-verify flags are conditionally added based on
+// RegistryInsecure. In production, Config.Validate() ensures RegistryInsecure is false.
+//
+// Note: MinIO credentials are injected via K8s Secret (envFrom) in the CWT,
+// not as workflow parameters. See loopzero-minio-credentials secret in build cluster.
 type InfraParams struct {
-	GiteaURL         string
-	GiteaToken       string
 	RegistryURL      string
 	RegistryInsecure bool   // true for local dev registries without TLS
 	BaseDomain       string // Base domain for app hostnames (e.g., "loopzero.local")
-	// MinIO credentials are injected via K8s Secret (envFrom) in the CWT,
-	// not as workflow parameters. See loopzero-minio-credentials secret in build cluster.
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs
@@ -56,13 +58,14 @@ func NewWorkflowBuilder(params InfraParams) *WorkflowBuilder {
 func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, error) {
 	strategy := resolveStrategyFromApps(spec.Apps)
 
-	// Collect inline templates from the language strategy
+	// Collect inline templates from the language strategy + inline Kaniko (BLOCKER-1 fix)
 	inlineTemplates := []forge.Templatable{
 		strategy.ValidateStep(spec.Apps),
 		strategy.InstallStep(spec.Apps),
 		strategy.BuildStep(spec.Apps),
 		strategy.ScanStep(),
 		strategy.DockerfileStep(spec.Apps),
+		b.kanikoTemplate(spec),
 	}
 
 	// Build the main DAG
@@ -101,7 +104,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		},
 		Templates: templates,
 		VolumeClaimTemplates: []forge.PVCVolume{
-			{BaseVolume: forge.BaseVolume{Name: "workspace"}, Size: "2Gi"},
+			{BaseVolume: forge.BaseVolume{Name: "workspace"}, Size: "5Gi"},
 			{BaseVolume: forge.BaseVolume{Name: "manifests"}, Size: "256Mi"},
 		},
 	}
@@ -117,11 +120,10 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy Lang
 
 	tasks := []*forge.Task{
 		// Step 1: clone (CWT ref)
+		// Gitea credentials injected via envFrom (K8s Secret loopzero-gitea-credentials)
 		cwtTask("clone-repo", "loopzero-clone", "clone-repo", nil, map[string]string{
-			"gitea-url":   b.infraParams.GiteaURL,
-			"gitea-token": b.infraParams.GiteaToken,
-			"tenant-id":   spec.TenantID,
-			"project-id":  spec.ProjectID,
+			"tenant-id":  spec.TenantID,
+			"project-id": spec.ProjectID,
 		}),
 
 		// Step 1: restore-cache (CWT ref) — depends on clone
@@ -147,18 +149,12 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy Lang
 		// Step 3.5: generate dockerfile (inline) — depends on build
 		inlineTask("generate-dockerfile", "generate-dockerfile", []string{"build-apps"}),
 
-		// Step 4: kaniko (CWT ref) — depends on dockerfile
-		// C-02 fix: This is now the LAST step. Manifest generation and gitops-push
+		// Step 4: kaniko (inline template) — depends on dockerfile
+		// BLOCKER-1 fix: Kaniko is now an inline template so that --insecure and
+		// --skip-tls-verify flags are conditionally added based on RegistryInsecure.
+		// C-02 fix: This is the LAST step. Manifest generation and gitops-push
 		// have been moved to the API (control plane). The workflow only builds images.
-		cwtTask("build-image", "loopzero-kaniko", "build-image", []string{"generate-dockerfile"}, map[string]string{
-			"registry-url":      b.infraParams.RegistryURL,
-			"tenant-id":         spec.TenantID,
-			"project-id":        spec.ProjectID,
-			"commit-sha":        spec.CommitSHA,
-			"dockerfile-path":   "/workspace/Dockerfile",
-			"context-path":      "/workspace",
-			"registry-insecure": fmt.Sprintf("%v", b.infraParams.RegistryInsecure),
-		}),
+		inlineTask("build-image", "build-image", []string{"generate-dockerfile"}),
 	}
 
 	if err := dag.AddTasks(tasks...); err != nil {
@@ -200,6 +196,51 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, strategy La
 		return nil, err
 	}
 	return dag, nil
+}
+
+// kanikoTemplate generates the Kaniko container template as an inline template.
+// This allows conditional inclusion of --insecure and --skip-tls-verify flags
+// based on InfraParams.RegistryInsecure (BLOCKER-1 fix: no hardcoded insecure flags).
+func (b *WorkflowBuilder) kanikoTemplate(spec services.WorkflowSpec) *forge.Container {
+	destination := fmt.Sprintf("%s/%s/%s:%s",
+		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, spec.CommitSHA)
+	cacheRepo := fmt.Sprintf("%s/%s/cache", b.infraParams.RegistryURL, spec.TenantID)
+
+	args := []string{
+		fmt.Sprintf("--dockerfile=%s", "/workspace/Dockerfile"),
+		fmt.Sprintf("--context=%s", "/workspace"),
+		fmt.Sprintf("--destination=%s", destination),
+		"--cache=true",
+		fmt.Sprintf("--cache-repo=%s", cacheRepo),
+		"--snapshot-mode=redo",
+		"--compressed-caching=false",
+		"--digest-file=/workspace/image-digest.txt",
+	}
+
+	// Insecure flags only in dev mode (RegistryInsecure=true).
+	// In production, Config.Validate() ensures RegistryInsecure is false.
+	if b.infraParams.RegistryInsecure {
+		args = append(args, "--insecure", "--skip-tls-verify")
+	}
+
+	return &forge.Container{
+		Name:    "build-image",
+		Image:   "gcr.io/kaniko-project/executor:v1.23.2",
+		Command: []string{"/kaniko/executor"},
+		Args:    args,
+		VolumeMounts: []forge.VolumeBuilder{
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
+		},
+		Resources: &forge.ResourceRequirements{
+			Requests: forge.ResourceList{CPU: "500m", Memory: "1Gi"},
+			Limits:   forge.ResourceList{CPU: "2000m", Memory: "4Gi"},
+		},
+		SecurityContext: &model.SecurityContext{
+			RunAsNonRoot: ptr(false),
+			RunAsUser:    ptr(int64(0)), // Kaniko requires root to build images
+		},
+		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
+	}
 }
 
 // ---------------------------------------------------------------------------

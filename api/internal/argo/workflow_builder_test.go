@@ -10,10 +10,9 @@ import (
 
 func testInfraParams() InfraParams {
 	return InfraParams{
-		GiteaURL:    "http://gitea:3000",
-		GiteaToken:  "test-gitea-token",
-		RegistryURL: "k3d-loopzero-registry:5000",
-		BaseDomain:  "loopzero.local",
+		RegistryURL:      "k3d-loopzero-registry:5000",
+		RegistryInsecure: true,
+		BaseDomain:       "loopzero.local",
 	}
 }
 
@@ -222,39 +221,107 @@ func TestWorkflowBuilder_Build_CloneTask_UsesCWTRef(t *testing.T) {
 		t.Error("templateRef.ClusterScope should be true")
 	}
 
-	// Check params are passed
+	// Check params are passed — only tenant-id and project-id.
+	// Gitea credentials come from K8s Secret (envFrom), not workflow params.
 	paramNames := taskParamNames(task)
-	for _, expected := range []string{"gitea-url", "gitea-token", "tenant-id", "project-id"} {
+	for _, expected := range []string{"tenant-id", "project-id"} {
 		if !paramNames[expected] {
 			t.Errorf("clone-repo missing parameter: %s", expected)
 		}
 	}
+	// Gitea credentials must NOT be workflow parameters (security: visible in Workflow CR)
+	for _, forbidden := range []string{"gitea-url", "gitea-token"} {
+		if paramNames[forbidden] {
+			t.Errorf("clone-repo should NOT have parameter: %s (use K8s Secret instead)", forbidden)
+		}
+	}
 }
 
-func TestWorkflowBuilder_Build_KanikoTask_UsesCWTRef(t *testing.T) {
+// BLOCKER-1 fix: Kaniko is now an inline template, not a CWT ref.
+// This allows conditional --insecure flags based on RegistryInsecure.
+func TestWorkflowBuilder_Build_KanikoTask_IsInlineTemplate(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
 
+	// build-image should be in the DAG as an inline task (no templateRef)
 	dag := findDAG(t, wf, "build-pipeline")
 	task := findTask(dag, "build-image")
 	if task == nil {
 		t.Fatal("build-image task not found")
 	}
 
-	if task.TemplateRef == nil {
-		t.Fatal("build-image missing templateRef")
+	if task.TemplateRef != nil {
+		t.Error("build-image should NOT use templateRef — it is now an inline template (BLOCKER-1 fix)")
 	}
-	if task.TemplateRef.Name != "loopzero-kaniko" {
-		t.Errorf("templateRef.Name = %q, want loopzero-kaniko", task.TemplateRef.Name)
+	if task.Template != "build-image" {
+		t.Errorf("build-image task.Template = %q, want %q", task.Template, "build-image")
 	}
 
-	paramNames := taskParamNames(task)
-	for _, expected := range []string{"registry-url", "tenant-id", "project-id", "commit-sha"} {
-		if !paramNames[expected] {
-			t.Errorf("build-image missing parameter: %s", expected)
+	// Verify inline container template exists
+	c := findContainer(t, wf, "build-image")
+	if c == nil {
+		t.Fatal("build-image inline container template not found")
+	}
+	if c.Image != "gcr.io/kaniko-project/executor:v1.23.2" {
+		t.Errorf("kaniko image = %q, want gcr.io/kaniko-project/executor:v1.23.2", c.Image)
+	}
+}
+
+func TestWorkflowBuilder_Build_KanikoInsecureFlags_WhenRegistryInsecure(t *testing.T) {
+	params := testInfraParams()
+	params.RegistryInsecure = true
+	builder := NewWorkflowBuilder(params)
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image")
+	if c == nil {
+		t.Fatal("build-image inline container template not found")
+	}
+
+	hasInsecure := false
+	hasSkipTLS := false
+	for _, arg := range c.Args {
+		if arg == "--insecure" {
+			hasInsecure = true
+		}
+		if arg == "--skip-tls-verify" {
+			hasSkipTLS = true
+		}
+	}
+	if !hasInsecure {
+		t.Error("expected --insecure flag when RegistryInsecure=true")
+	}
+	if !hasSkipTLS {
+		t.Error("expected --skip-tls-verify flag when RegistryInsecure=true")
+	}
+}
+
+func TestWorkflowBuilder_Build_KanikoNoInsecureFlags_WhenRegistrySecure(t *testing.T) {
+	params := testInfraParams()
+	params.RegistryInsecure = false
+	builder := NewWorkflowBuilder(params)
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image")
+	if c == nil {
+		t.Fatal("build-image inline container template not found")
+	}
+
+	for _, arg := range c.Args {
+		if arg == "--insecure" {
+			t.Error("--insecure flag should NOT be present when RegistryInsecure=false")
+		}
+		if arg == "--skip-tls-verify" {
+			t.Error("--skip-tls-verify flag should NOT be present when RegistryInsecure=false")
 		}
 	}
 }
@@ -336,6 +403,7 @@ func TestWorkflowBuilder_Build_HasInlineTemplates(t *testing.T) {
 		"build-apps",
 		"security-scan",
 		"generate-dockerfile",
+		"build-image", // BLOCKER-1 fix: Kaniko is now an inline template
 	}
 
 	for _, name := range inlineNames {

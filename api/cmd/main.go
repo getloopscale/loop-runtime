@@ -163,13 +163,12 @@ func main() {
 		// The workflow no longer calls the API. Build completion is detected
 		// by the BuildReconcileLoop polling Argo Workflow CRDs.
 		workflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-			Kubeconfig:  cfg.BuildKubeconfig,
-			Context:     cfg.BuildKubeContext,
-			Namespace:   cfg.ArgoNamespace,
-			GiteaURL:    cfg.GiteaCrossCluster(),
-			GiteaToken:  cfg.GiteaToken,
-			RegistryURL: cfg.RegistryURL,
-			BaseDomain:  cfg.BaseDomain,
+			Kubeconfig:       cfg.BuildKubeconfig,
+			Context:          cfg.BuildKubeContext,
+			Namespace:        cfg.ArgoNamespace,
+			RegistryURL:      cfg.RegistryURL,
+			RegistryInsecure: cfg.RegistryInsecure,
+			BaseDomain:       cfg.BaseDomain,
 		})
 		if err != nil {
 			logger.Error("failed to create workflow submitter", "error", err)
@@ -251,6 +250,7 @@ func main() {
 		go reconcileLoop.Start(shutdownCtx)
 
 		// Build reaper — enforces spec §5.1 timeouts
+		// MOD-6: reconcileLoop is passed so reaper skips builds being reconciled.
 		reaper := services.NewBuildReaper(
 			buildStore,
 			&services.PostgresStaleBuildChecker{DB: dbAdapter},
@@ -264,6 +264,7 @@ func main() {
 				CancelTimeout:  cfg.BuildCancelTimeout,
 				Interval:       cfg.BuildReaperInterval,
 			},
+			reconcileLoop,
 		)
 		go reaper.Start(shutdownCtx)
 

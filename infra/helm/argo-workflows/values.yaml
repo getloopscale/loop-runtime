@@ -51,6 +51,13 @@ kaniko:
   insecure: true       # DEV ONLY — allows HTTP registry (no TLS)
   skipTlsVerify: true  # DEV ONLY — skips TLS certificate validation
 
+# Gitea credentials for clone step.
+# Token is injected into the build cluster as a K8s Secret (loopzero-gitea-credentials).
+# MUST be set in production — empty token will fail clone.
+gitea:
+  url: "http://gitea-http.gitea.svc:3000"
+  token: ""
+
 server:
   securityContext:
     runAsNonRoot: true

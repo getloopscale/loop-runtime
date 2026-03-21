@@ -330,9 +330,9 @@ func scriptScanNode() string {
 	return `set -uo pipefail
 cd /workspace
 if [ -f package-lock.json ]; then
-  npm audit --audit-level=high 2>&1 || {
-    echo "WARNING: npm audit found high-severity vulnerabilities"
-    echo "This is a warning only for v1 — build continues"
+  npm audit --audit-level=critical 2>&1 || {
+    echo "ERROR: npm audit found critical vulnerabilities"
+    exit 1
   }
 else
   echo "No package-lock.json found — skipping npm audit"
@@ -368,7 +368,7 @@ FROM node:20-alpine
 WORKDIR /app
 COPY . .
 WORKDIR %s
-RUN npm ci --omit=dev 2>/dev/null || npm install --production
+RUN npm ci --omit=dev
 EXPOSE %d
 CMD ["npm", "start"]
 DEOF
@@ -431,8 +431,8 @@ func scriptScanGo() string {
 cd /workspace
 if command -v govulncheck >/dev/null 2>&1; then
   govulncheck ./... 2>&1 || {
-    echo "WARNING: govulncheck found vulnerabilities"
-    echo "This is a warning only for v1 — build continues"
+    echo "ERROR: govulncheck found vulnerabilities"
+    exit 1
   }
 else
   echo "govulncheck not available — skipping vulnerability scan"
@@ -442,6 +442,10 @@ fi
 
 func scriptDockerfileGo(apps []services.AppSpec) string {
 	port := defaultPort(apps, 8080)
+	buildTarget := "./cmd/..."
+	if len(apps) > 0 && apps[0].Path != "" && apps[0].Path != "." {
+		buildTarget = fmt.Sprintf("./%s/...", apps[0].Path)
+	}
 	return fmt.Sprintf(`set -euo pipefail
 cd /workspace
 if [ -f Dockerfile ]; then
@@ -454,7 +458,7 @@ cat > Dockerfile << 'DEOF'
 FROM golang:1.22-alpine AS builder
 WORKDIR /src
 COPY . .
-RUN CGO_ENABLED=0 go build -o /app ./...
+RUN CGO_ENABLED=0 go build -o /app %s
 
 FROM alpine:3.19
 RUN apk --no-cache add ca-certificates
@@ -464,7 +468,7 @@ ENTRYPOINT ["/app"]
 DEOF
 echo "Generated Dockerfile:"
 cat Dockerfile
-`, port)
+`, buildTarget, port)
 }
 
 // ---------------------------------------------------------------------------
@@ -529,8 +533,8 @@ func scriptScanPython() string {
 cd /workspace
 if command -v pip-audit >/dev/null 2>&1; then
   pip-audit 2>&1 || {
-    echo "WARNING: pip-audit found vulnerabilities"
-    echo "This is a warning only for v1 — build continues"
+    echo "ERROR: pip-audit found vulnerabilities"
+    exit 1
   }
 else
   pip install pip-audit 2>/dev/null && pip-audit 2>&1 || {

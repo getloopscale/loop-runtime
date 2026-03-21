@@ -35,10 +35,11 @@ type WorkflowSubmitterConfig struct {
 
 	// Infrastructure parameters passed to every workflow via the WorkflowBuilder.
 	// C-01 fix: CallbackURL/CallbackSecret removed. No more HTTP callback.
-	GiteaURL    string // e.g., "http://10.0.1.3:30000" (cross-cluster for workflow)
-	GiteaToken  string // Admin token for Gitea access
-	RegistryURL string // e.g., "k3d-loopzero-registry:5000"
-	BaseDomain  string // e.g., "loopzero.local" — base domain for app hostnames
+	// BLOCKER-2 fix: GiteaURL/GiteaToken removed. Clone CWT gets credentials
+	// from K8s Secret (loopzero-gitea-credentials) via envFrom.
+	RegistryURL      string // e.g., "k3d-loopzero-registry:5000"
+	RegistryInsecure bool   // true for local dev registries without TLS
+	BaseDomain       string // e.g., "loopzero.local" — base domain for app hostnames
 	// MinIO credentials are injected via K8s Secret (envFrom) in CWTs, not via workflow params.
 }
 
@@ -71,10 +72,9 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 	}
 
 	builder := NewWorkflowBuilder(InfraParams{
-		GiteaURL:    cfg.GiteaURL,
-		GiteaToken:  cfg.GiteaToken,
-		RegistryURL: cfg.RegistryURL,
-		BaseDomain:  cfg.BaseDomain,
+		RegistryURL:      cfg.RegistryURL,
+		RegistryInsecure: cfg.RegistryInsecure,
+		BaseDomain:       cfg.BaseDomain,
 	})
 
 	return &WorkflowSubmitter{

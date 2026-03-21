@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -22,6 +23,10 @@ type BuildReconcileLoopConfig struct {
 	RegistryURL string
 	// BaseDomain is the base domain for app hostnames (e.g., "loopzero.local").
 	BaseDomain string
+	// MaxConcurrent is the maximum number of builds reconciled concurrently.
+	// Bounds pressure on the Kubernetes API and Argo Workflow queries.
+	// Default: 10.
+	MaxConcurrent int
 }
 
 // BuildReconcileLoop continuously reconciles non-terminal builds against
@@ -50,6 +55,10 @@ type BuildReconcileLoop struct {
 	}
 	logger *slog.Logger
 	cfg    BuildReconcileLoopConfig
+
+	// active tracks build IDs currently being processed to avoid
+	// duplicate processing and coordinate with BuildReaper (MOD-6 fix).
+	active sync.Map
 }
 
 // NewBuildReconcileLoop creates a new BuildReconcileLoop.
@@ -64,6 +73,9 @@ func NewBuildReconcileLoop(
 	logger *slog.Logger,
 	cfg BuildReconcileLoopConfig,
 ) *BuildReconcileLoop {
+	if cfg.MaxConcurrent <= 0 {
+		cfg.MaxConcurrent = 10
+	}
 	return &BuildReconcileLoop{
 		buildStore: buildStore,
 		workflow:   workflow,
@@ -103,6 +115,13 @@ func (r *BuildReconcileLoop) Start(ctx context.Context) {
 
 // reconcile checks all non-terminal builds and reconciles their state
 // against the Argo Workflow CRDs in the build cluster.
+//
+// BLOCKER-3 fix: Builds are processed concurrently using a semaphore pattern
+// (bounded to MaxConcurrent). Previously, serial iteration meant build #20
+// could wait ~40 minutes while earlier builds blocked on ArgoCD WaitForSync.
+//
+// MOD-6 fix: Each build is tracked in r.active while being processed.
+// BuildReaper checks this to avoid competing on the same build.
 func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 	builds, err := r.buildStore.FindActiveBuilds(ctx)
 	if err != nil {
@@ -114,9 +133,34 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 		return
 	}
 
+	sem := make(chan struct{}, r.cfg.MaxConcurrent)
+	var wg sync.WaitGroup
+
 	for _, build := range builds {
-		r.reconcileBuild(ctx, &build)
+		// Skip builds already being processed (MOD-6: avoid reaper competition)
+		if _, loaded := r.active.LoadOrStore(build.ID, struct{}{}); loaded {
+			continue
+		}
+
+		b := build // capture loop variable
+		sem <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			defer r.active.Delete(b.ID)
+			r.reconcileBuild(ctx, &b)
+		}()
 	}
+
+	wg.Wait()
+}
+
+// IsProcessing returns true if the reconcile loop is currently processing a build.
+// Used by BuildReaper to avoid competing on the same build (MOD-6).
+func (r *BuildReconcileLoop) IsProcessing(buildID string) bool {
+	_, ok := r.active.Load(buildID)
+	return ok
 }
 
 // reconcileBuild reconciles a single build against its Argo Workflow state.

@@ -51,8 +51,9 @@ spec:
           - "--snapshot-mode=redo"
           - "--compressed-caching=false"
           - "--digest-file=/workspace/image-digest.txt"
-          - "--insecure"
-          - "--skip-tls-verify"
+          # NOTE: Insecure registry flags are NOT included here. For dev registries
+          # without TLS, the WorkflowBuilder generates an inline template with
+          # --insecure and --skip-tls-verify. This CWT is the secure baseline.
         volumeMounts:
           - name: workspace
             mountPath: /workspace

@@ -49,7 +49,7 @@ func TestBuildReaper_ReapsStaleBuild(t *testing.T) {
 		RunningTimeout: 30 * time.Minute,
 		CancelTimeout:  60 * time.Second,
 		Interval:       1 * time.Second,
-	})
+	}, nil)
 
 	// Act
 	reaped := reaper.ReapOnce(context.Background())
@@ -87,7 +87,7 @@ func TestBuildReaper_SkipsTerminalBuilds(t *testing.T) {
 	locker := &fakeEnvironmentLocker{}
 	logger := logging.NewLogger("test")
 
-	reaper := services.NewBuildReaper(buildStore, checker, locker, nil, nil, logger, services.DefaultBuildReaperConfig())
+	reaper := services.NewBuildReaper(buildStore, checker, locker, nil, nil, logger, services.DefaultBuildReaperConfig(), nil)
 
 	// Act
 	reaped := reaper.ReapOnce(context.Background())
@@ -119,7 +119,7 @@ func TestBuildReaper_ReapsQueuedBuild(t *testing.T) {
 	locker := &fakeEnvironmentLocker{}
 	logger := logging.NewLogger("test")
 
-	reaper := services.NewBuildReaper(buildStore, checker, locker, nil, nil, logger, services.DefaultBuildReaperConfig())
+	reaper := services.NewBuildReaper(buildStore, checker, locker, nil, nil, logger, services.DefaultBuildReaperConfig(), nil)
 
 	reaped := reaper.ReapOnce(context.Background())
 

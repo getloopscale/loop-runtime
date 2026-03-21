@@ -11,26 +11,34 @@ spec:
     - name: clone-repo
       inputs:
         parameters:
-          - name: gitea-url
-            description: "Gitea server URL for source repos"
-          - name: gitea-token
-            description: "Ephemeral Gitea token scoped to tenant repos"
           - name: tenant-id
             description: "Tenant identifier for isolation"
           - name: project-id
             description: "Project identifier"
+      retryStrategy:
+        limit: "2"
+        retryPolicy: "OnFailure"
+        backoff:
+          duration: "5s"
+          factor: "2"
+          maxDuration: "30s"
       container:
         image: alpine/git:2.43.0
+        # Credentials injected from K8s Secret via envFrom — never as workflow parameters.
+        # Secret loopzero-gitea-credentials provides: GITEA_URL, GITEA_TOKEN
+        envFrom:
+          - secretRef:
+              name: loopzero-gitea-credentials
         command:
           - sh
           - -c
           - |
             set -euo pipefail
-            REPO_URL="{{inputs.parameters.gitea-url}}/loopzero/loopzero-source-{{inputs.parameters.tenant-id}}-{{inputs.parameters.project-id}}.git"
-            CLONE_URL=$(echo "$REPO_URL" | sed "s|://|://oauth2:{{inputs.parameters.gitea-token}}@|")
+            REPO_URL="${GITEA_URL}/loopzero/loopzero-source-{{inputs.parameters.tenant-id}}-{{inputs.parameters.project-id}}.git"
+            CLONE_URL=$(echo "$REPO_URL" | sed "s|://|://oauth2:${GITEA_TOKEN}@|")
             git clone --depth 1 "$CLONE_URL" /workspace
             cd /workspace
-            echo "Cloned from Gitea source repo"
+            echo "Cloned from source repo"
             ls -la
         volumeMounts:
           - name: workspace

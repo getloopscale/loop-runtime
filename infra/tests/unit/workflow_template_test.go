@@ -267,8 +267,10 @@ func TestCWTs_NoHardcodedValues(t *testing.T) {
 
 func TestCWT_Clone_HasRequiredParams(t *testing.T) {
 	tmpl := loadCWT(t, "cwt-clone.yaml")
+	// Gitea credentials are now injected via K8s Secret (envFrom), not as parameters.
+	// Only tenant-id and project-id remain as CWT parameters.
 	assertCWTHasParams(t, tmpl, "cwt-clone.yaml", []string{
-		"gitea-url", "gitea-token", "tenant-id", "project-id",
+		"tenant-id", "project-id",
 	})
 }
 

@@ -72,13 +72,7 @@ spec:
             done
 
             if [ -n "$EXISTING_DIRS" ]; then
-              # amazon/aws-cli image lacks tar; use Python's tarfile module instead
-              python2.7 -c "
-            import tarfile, sys
-            with tarfile.open('/tmp/cache.tar.gz', 'w:gz') as tar:
-                for d in sys.argv[1:]:
-                    tar.add(d.strip('/'), arcname=d.strip('/'))
-            " $EXISTING_DIRS
+              tar czf /tmp/cache.tar.gz $EXISTING_DIRS
               aws s3 cp /tmp/cache.tar.gz "$CACHE_PATH" \
                 --endpoint-url "$MINIO_ENDPOINT" \
                 --cli-connect-timeout 10 \
