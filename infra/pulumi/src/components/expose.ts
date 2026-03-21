@@ -21,20 +21,35 @@ export interface ExposeOutputs {
 const MGMT_SUBDOMAINS = ["api", "argocd", "grafana"] as const;
 
 /**
+ * Computes the DNS record name prefix based on domain and zone.
+ *
+ * Examples:
+ *   domain="loopzero.example",     zone="loopzero.example"     → prefix=""      (prod)
+ *   domain="dev.loopzero.example", zone="loopzero.example"     → prefix="dev"   (dev)
+ *   domain="staging.loopzero.example", zone="loopzero.example" → prefix="staging"
+ *
+ * For a subdomain "api" with prefix "dev":
+ *   recordName = "api.dev" → creates api.dev.loopzero.example
+ */
+function dnsPrefix(domain: string, zone: string): string {
+  if (domain === zone) return "";
+  return domain.replace(`.${zone}`, "");
+}
+
+/**
  * Phase 3 — Expose Platform
  *
  * Creates DNS records pointing to the ingress load balancers
- * of both clusters:
+ * of both clusters. Uses dnsZone as the authoritative zone
+ * (registered in the DNS provider) and domain to compute
+ * the record name prefix.
  *
  *   Management: api.{domain}, argocd.{domain}, grafana.{domain}
  *     → all point to mgmt cluster LB
  *
  *   Runtime: *.{domain} (wildcard)
  *     → points to runtime cluster LB, so any deployed app
- *       gets a URL automatically (e.g., myapp.loopzero.example)
- *
- * Record type (A vs CNAME) is auto-detected by the provider
- * based on whether the endpoint is an IP or hostname.
+ *       gets a URL automatically
  */
 export function exposePlatform(
   bootstrap: BootstrapOutputs,
@@ -42,24 +57,30 @@ export function exposePlatform(
   config: PlatformStackConfig,
   factory: CloudProviderFactory,
 ): ExposeOutputs {
-  const domain = config.domain;
+  const zone = config.dnsZone;
+  const prefix = dnsPrefix(config.domain, zone);
+
+  // Build record name: "api" + prefix "dev" → "api.dev"
+  // For prod (no prefix): "api" → "api"
+  const recordName = (sub: string): string =>
+    prefix ? `${sub}.${prefix}` : sub;
 
   // --- Management cluster DNS ---
-  // One record per platform subdomain, all pointing to mgmt ingress LB.
   const mgmtRecords = MGMT_SUBDOMAINS.map((sub) =>
     factory.createDnsRecord({
-      zone: domain,
-      recordName: sub,
+      zone,
+      recordName: recordName(sub),
       target: bootstrap.mgmt.ingressEndpoint,
       ttl: 300,
     }),
   );
 
   // --- Runtime cluster DNS ---
-  // Wildcard record: any app deployed gets *.{domain} automatically.
+  // Wildcard: *.dev.loopzero.example or *.loopzero.example (prod)
+  const wildcardName = prefix ? `*.${prefix}` : "*";
   const runtimeWildcard = factory.createDnsRecord({
-    zone: domain,
-    recordName: "*",
+    zone,
+    recordName: wildcardName,
     target: bootstrap.runtime.ingressEndpoint,
     ttl: 300,
   });

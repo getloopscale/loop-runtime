@@ -7,6 +7,8 @@ export interface PlatformStackConfig {
   readonly provider: CloudProvider;
   readonly region: string;
   readonly domain: string;
+  /** Root DNS zone managed by the provider (e.g. loopzero.example). Defaults to domain. */
+  readonly dnsZone: string;
   readonly infraVersion: string;
 
   // Management cluster — runs the platform (ArgoCD, API, Traefik, cert-manager)
@@ -52,6 +54,7 @@ export function loadStackConfig(): PlatformStackConfig {
     provider: config.require("provider") as CloudProvider,
     region: config.require("region"),
     domain: config.require("domain"),
+    dnsZone: config.get("dnsZone") ?? config.require("domain"),
     infraVersion: config.get("infraVersion") ?? "v1",
 
     // Management cluster

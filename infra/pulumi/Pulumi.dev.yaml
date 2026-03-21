@@ -3,6 +3,7 @@ config:
   loopzero-infra:provider: digitalocean
   loopzero-infra:region: nyc3
   loopzero-infra:domain: dev.loopzero.example
+  loopzero-infra:dnsZone: loopzero.example
   loopzero-infra:infraVersion: v1
 
   # Management cluster
