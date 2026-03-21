@@ -1,0 +1,10 @@
+config:
+  loopzero-infra:environment: staging
+  loopzero-infra:provider: digitalocean
+  loopzero-infra:region: nyc3
+  loopzero-infra:domain: staging.loopzero.example
+  loopzero-infra:k8sVersion: "1.30.2-do.0"
+  loopzero-infra:nodeClass: small
+  loopzero-infra:minNodes: "2"
+  loopzero-infra:maxNodes: "4"
+  loopzero-infra:infraVersion: v1
