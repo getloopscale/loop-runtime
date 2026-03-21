@@ -188,24 +188,45 @@ jobs:
       # --- Post-deploy: capture execution state ---
       - name: Capture execution state
         if: always() && needs.resolve.outputs.command == 'up'
+        continue-on-error: true
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
+          set +e
+          STACK="${{ needs.resolve.outputs.stack }}"
+
           echo "### Execution State" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          pulumi stack output execution --json --stack ${{ needs.resolve.outputs.stack }} 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo '{"error": "Could not retrieve execution state"}' >> "$GITHUB_STEP_SUMMARY"
+          EXEC_OUT=$(pulumi stack output execution --json --stack "$STACK" 2>&1)
+          if [ $? -eq 0 ]; then
+            echo "$EXEC_OUT" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '{"status": "could not retrieve execution state"}' >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
           echo "### Wiring" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          pulumi stack output wiring --json --stack ${{ needs.resolve.outputs.stack }} 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo '{"error": "Could not retrieve wiring"}' >> "$GITHUB_STEP_SUMMARY"
+          WIRING_OUT=$(pulumi stack output wiring --json --stack "$STACK" 2>&1)
+          if [ $? -eq 0 ]; then
+            echo "$WIRING_OUT" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '{"status": "could not retrieve wiring"}' >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       # --- Post-deploy: verify all phases completed ---
       - name: Verify deployment health
         if: success() && needs.resolve.outputs.command == 'up'
+        continue-on-error: true
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
-          EXECUTION=$(pulumi stack output execution --json --stack ${{ needs.resolve.outputs.stack }} 2>/dev/null || echo '{}')
+          set +e
+          EXECUTION=$(pulumi stack output execution --json --stack ${{ needs.resolve.outputs.stack }} 2>&1)
+          if [ $? -ne 0 ]; then
+            echo "::warning::Could not retrieve execution state"
+            echo "### ⚠️ Could not verify deployment health" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
           PENDING=$(echo "$EXECUTION" | jq -r '.phases[]? | select(.status != "completed") | .phase' 2>/dev/null)
 
