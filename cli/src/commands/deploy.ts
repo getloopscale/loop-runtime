@@ -6,6 +6,7 @@ import {
   MAX_BUNDLE_SIZE_BYTES,
 } from '../config/constants';
 import * as fs from 'fs';
+import * as path from 'path';
 
 interface LoopZeroYamlApp {
   path: string;
@@ -203,7 +204,14 @@ export class DeployCommand {
 
     // 8b. Warn about missing lockfile (F-03: fail-fast before upload)
     if (!this.deps.hasLockfile()) {
-      if (!opts.json) {
+      // F-04: Also check inside app paths before warning (lockfile may be in app directory, not root)
+      const appPaths = Object.values(config.apps).map(a => a.path).filter(p => p && p !== '.');
+      const hasAppLockfile = appPaths.some(appPath => {
+        return ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'].some(
+          f => fs.existsSync(path.join(appPath, f))
+        );
+      });
+      if (!hasAppLockfile && !opts.json) {
         this.deps.writeTo('Warning: No lockfile found (package-lock.json, yarn.lock, or pnpm-lock.yaml). Build may fail. Run: npm install');
       }
     }
@@ -295,7 +303,7 @@ export class DeployCommand {
           status: 'submitted',
         }));
       } else {
-        this.deps.writeTo(`Deploy submitted (${buildResult.build_id}). Track status: loopzero deploy --env ${environment} --wait`);
+        this.deps.writeTo(`Deploy submitted (${buildResult.build_id}). The deploy is running in the background.`);
       }
       return 0;
     }
@@ -420,7 +428,8 @@ export class DeployCommand {
 
         if (event.type === 'build.failed') {
           const data = event.data as Record<string, unknown>;
-          const reason = String(data.error ?? data.status ?? 'unknown error');
+          const rawReason = String(data.error ?? data.status ?? 'unknown error');
+          const reason = this.sanitizeBuildError(rawReason);
           if (opts.json) {
             this.deps.writeTo(JSON.stringify({ code: 'BUILD_FAILED', error: `Build failed: ${reason}`, exit_code: 2 }));
           } else {
@@ -576,6 +585,21 @@ export class DeployCommand {
       ?? `Deploy failed: ${reason.toLowerCase().replace(/_/g, ' ')}. Check service logs for details.`;
 
     return `${message} Run: loopzero logs --build ${buildId}`;
+  }
+
+  private sanitizeBuildError(raw: string): string {
+    // Map internal infrastructure terms to user-facing language (Rule 3)
+    let msg = raw;
+    msg = msg.replace(/Workflow\s+(Failed|Error|Timed\s*Out)/gi, 'Build $1');
+    msg = msg.replace(/\bin\s+build\s+cluster\b/gi, '');
+    msg = msg.replace(/\bworkflow\b/gi, 'build');
+    msg = msg.replace(/\bArgo\s*CD\b/gi, 'deployment sync');
+    msg = msg.replace(/\bGitea\b/gi, 'repository');
+    msg = msg.replace(/\bMinIO\b/gi, 'storage');
+    msg = msg.replace(/\bKaniko\b/gi, 'image builder');
+    // Clean up extra whitespace
+    msg = msg.replace(/\s{2,}/g, ' ').trim();
+    return msg || 'unknown error';
   }
 
   private exitWithError(opts: DeployOptions, message: string, exitCode: number, code?: string): number {

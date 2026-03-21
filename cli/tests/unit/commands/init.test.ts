@@ -297,6 +297,64 @@ describe('InitCommand', () => {
     });
   });
 
+  describe('conventional monorepo directory detection (non-monorepo fallback)', () => {
+    it('should detect apps inside apps/ directory when root has no framework', async () => {
+      // Create apps/hello-api/package.json — no workspace config
+      fs.mkdirSync(path.join(tmpDir, 'apps', 'hello-api'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpDir, 'apps', 'hello-api', 'package.json'),
+        '{"name":"hello-api","dependencies":{"express":"^4.0.0"}}',
+      );
+
+      const detectFramework = jest.fn().mockImplementation((dir: string) => {
+        if (dir.endsWith('/hello-api')) {
+          return { framework: 'express', port: 3000 };
+        }
+        return { framework: 'custom', port: null };
+      });
+
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework,
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true });
+
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('hello-api:');
+      expect(content).toContain('framework: express');
+      expect(content).toContain('port: 3000');
+    });
+
+    it('should detect apps inside services/ directory when root has no framework', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'services', 'auth-svc'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpDir, 'services', 'auth-svc', 'go.mod'),
+        'module auth-svc',
+      );
+
+      const detectFramework = jest.fn().mockImplementation((dir: string) => {
+        if (dir.endsWith('/auth-svc')) {
+          return { framework: 'go', port: 8080 };
+        }
+        return { framework: 'custom', port: null };
+      });
+
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework,
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true });
+
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('auth-svc:');
+      expect(content).toContain('framework: go');
+    });
+  });
+
   describe('interactive wizard (no --yes)', () => {
     it('should show detection summary when confirm dep is provided', async () => {
       const deps = createMockDeps(tmpDir, {
@@ -681,6 +739,36 @@ describe('InitCommand', () => {
       // The app key should use sanitized name, not the raw directory name
       expect(content).toContain('tmp-dbfeso52xo:');
       expect(content).not.toContain('tmp.DbFESo52xo');
+    });
+  });
+
+  describe('custom framework default port (F-06)', () => {
+    it('should default to port 3000 when root app has custom framework and no port', async () => {
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'custom', port: null }),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('port: 3000');
+    });
+
+    it('should use detected port when framework provides one', async () => {
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 8080 }),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('port: 8080');
     });
   });
 

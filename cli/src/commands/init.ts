@@ -201,7 +201,7 @@ export class InitCommand {
           apps.push({
             name: projectName,
             framework: fw.framework,
-            port: fw.port,
+            port: fw.port ?? 3000,
             path: '.',
           });
         }
@@ -315,6 +315,7 @@ export class InitCommand {
    */
   private scanSubdirectories(rootDir: string): Array<{ name: string; dir: string }> {
     const SKIP = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.cache', 'tmp']);
+    const CONVENTIONAL_APP_DIRS = ['apps', 'services', 'microservices'];
     const results: Array<{ name: string; dir: string }> = [];
     try {
       const entries = fs.readdirSync(rootDir, { withFileTypes: true });
@@ -322,7 +323,27 @@ export class InitCommand {
         if (!entry.isDirectory()) continue;
         if (entry.name.startsWith('.')) continue;
         if (SKIP.has(entry.name)) continue;
-        results.push({ name: entry.name, dir: path.join(rootDir, entry.name) });
+
+        // Check if this is a conventional container directory — scan its children instead
+        if (CONVENTIONAL_APP_DIRS.includes(entry.name)) {
+          const containerDir = path.join(rootDir, entry.name);
+          try {
+            const subEntries = fs.readdirSync(containerDir, { withFileTypes: true });
+            for (const subEntry of subEntries) {
+              if (!subEntry.isDirectory()) continue;
+              if (subEntry.name.startsWith('.')) continue;
+              if (SKIP.has(subEntry.name)) continue;
+              results.push({
+                name: subEntry.name,
+                dir: path.join(containerDir, subEntry.name),
+              });
+            }
+          } catch {
+            // Ignore read errors on container dir
+          }
+        } else {
+          results.push({ name: entry.name, dir: path.join(rootDir, entry.name) });
+        }
       }
     } catch {
       // Ignore read errors

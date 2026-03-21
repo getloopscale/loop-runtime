@@ -435,7 +435,8 @@ describe('DeployCommand', () => {
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
       expect(output).toContain('Deploy submitted');
       expect(output).toContain('build-deadbeef');
-      expect(output).toContain('Track status');
+      expect(output).toContain('running in the background');
+      expect(output).not.toContain('loopzero deploy');
     });
   });
 
@@ -2016,6 +2017,103 @@ describe('DeployCommand', () => {
         // If mentioned, it must be inside JSON
         expect(() => JSON.parse(allOutput)).not.toThrow();
       }
+    });
+
+    it('should suppress lockfile warning when lockfile exists in app path (F-04)', async () => {
+      // Mock: root has no lockfile, but app path has one
+      const fs = require('fs');
+      const originalExistsSync = fs.existsSync;
+      const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockImplementation((...args: unknown[]) => {
+        const filePath = String(args[0]);
+        // Simulate lockfile in app path
+        if (filePath.includes('apps/api') && filePath.endsWith('package-lock.json')) {
+          return true;
+        }
+        return originalExistsSync(filePath);
+      });
+
+      const deps = createMockDeps({
+        hasLockfile: jest.fn().mockReturnValue(false),
+      });
+      const cmd = new DeployCommand(deps);
+
+      await cmd.execute({});
+
+      const allOutput = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(allOutput).not.toContain('No lockfile found');
+
+      existsSyncSpy.mockRestore();
+    });
+  });
+
+  describe('build error sanitization (F-02)', () => {
+    it('should sanitize "Workflow Failed" to "Build Failed" in human mode', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'build.failed',
+              data: { error: 'Workflow Failed in build cluster' },
+            });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(2);
+      const errorOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(errorOutput).toContain('Build Failed');
+      expect(errorOutput).not.toContain('Workflow');
+      expect(errorOutput).not.toContain('build cluster');
+    });
+
+    it('should sanitize internal terms in build error JSON output', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'build.failed',
+              data: { error: 'Kaniko build failed: ArgoCD sync timeout' },
+            });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(2);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.error).not.toContain('Kaniko');
+      expect(parsed.error).not.toContain('ArgoCD');
+      expect(parsed.error).toContain('image builder');
+      expect(parsed.error).toContain('deployment sync');
+    });
+
+    it('should pass through clean error messages unchanged', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'build.failed',
+              data: { error: 'compilation error in main.go' },
+            });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(2);
+      const errorOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(errorOutput).toContain('compilation error in main.go');
     });
   });
 });

@@ -124,6 +124,68 @@ describe('detectMonorepoTool', () => {
     });
   });
 
+  describe('conventional monorepo directories', () => {
+    it('should detect apps inside apps/ directory without workspace config', () => {
+      writeFile('apps/hello-api/package.json', '{}');
+      writeFile('apps/web/package.json', '{}');
+
+      const result = detectMonorepoTool(tmpDir);
+      expect(result).not.toBeNull();
+      expect(result!.tool).toBe('flat');
+      expect(result!.workspaces).toContain('apps/hello-api');
+      expect(result!.workspaces).toContain('apps/web');
+    });
+
+    it('should detect apps inside services/ directory', () => {
+      writeFile('services/auth/go.mod', 'module auth');
+      writeFile('services/billing/go.mod', 'module billing');
+
+      const result = detectMonorepoTool(tmpDir);
+      expect(result).not.toBeNull();
+      expect(result!.tool).toBe('flat');
+      expect(result!.workspaces).toContain('services/auth');
+      expect(result!.workspaces).toContain('services/billing');
+    });
+
+    it('should detect a single app inside apps/ directory', () => {
+      writeFile('apps/hello-api/package.json', '{}');
+
+      const result = detectMonorepoTool(tmpDir);
+      expect(result).not.toBeNull();
+      expect(result!.tool).toBe('flat');
+      expect(result!.workspaces).toContain('apps/hello-api');
+    });
+
+    it('should combine root-level and conventional directory apps', () => {
+      writeFile('api/package.json', '{}');
+      writeFile('apps/web/package.json', '{}');
+
+      const result = detectMonorepoTool(tmpDir);
+      expect(result).not.toBeNull();
+      expect(result!.tool).toBe('flat');
+      expect(result!.workspaces).toContain('api');
+      expect(result!.workspaces).toContain('apps/web');
+    });
+
+    it('should skip hidden dirs and node_modules inside conventional dirs', () => {
+      writeFile('apps/.hidden/package.json', '{}');
+      writeFile('apps/node_modules/something/package.json', '{}');
+      writeFile('apps/real-app/package.json', '{}');
+
+      const result = detectMonorepoTool(tmpDir);
+      expect(result).not.toBeNull();
+      expect(result!.workspaces).toEqual(['apps/real-app']);
+    });
+
+    it('should ignore conventional dirs that do not contain apps with project markers', () => {
+      // apps/ exists but has no subdirs with project markers
+      writeFile('apps/readme.txt', 'just a file');
+
+      const result = detectMonorepoTool(tmpDir);
+      expect(result).toBeNull();
+    });
+  });
+
   describe('priority', () => {
     it('should prefer Turborepo over npm workspaces', () => {
       writeFile('turbo.json', '{}');

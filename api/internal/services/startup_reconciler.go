@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/pkg/statemachine"
@@ -97,7 +98,7 @@ func (r *StartupReconciler) reconcileBuild(ctx context.Context, build *db.Build)
 
 	if status == nil {
 		// Workflow not found — cleaned up by TTL or never existed
-		return r.failBuild(ctx, build, "Workflow not found in build cluster (cleaned up or never created)")
+		return r.failBuild(ctx, build, "Build not found (expired or never started). Redeploy to retry.")
 	}
 
 	switch status.Phase {
@@ -105,9 +106,9 @@ func (r *StartupReconciler) reconcileBuild(ctx context.Context, build *db.Build)
 		// Workflow completed successfully but callback was lost.
 		// We can't complete the full activation here (no callback payload),
 		// so mark as FAILED with a clear message.
-		return r.failBuild(ctx, build, "Workflow succeeded but callback was lost during API restart. Redeploy to retry.")
+		return r.failBuild(ctx, build, "Build completed but result was lost during service restart. Redeploy to retry.")
 	case "Failed", "Error":
-		return r.failBuild(ctx, build, fmt.Sprintf("Workflow %s in build cluster", status.Phase))
+		return r.failBuild(ctx, build, fmt.Sprintf("Build %s", strings.ToLower(status.Phase)))
 	case "Running", "Pending":
 		// Workflow is still active — the callback will arrive when it finishes.
 		// No action needed — just log the reattach.

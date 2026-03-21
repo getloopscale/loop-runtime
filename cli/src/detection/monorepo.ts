@@ -7,6 +7,7 @@ export interface MonorepoDetection {
 }
 
 const PROJECT_MARKERS = ['package.json', 'go.mod', 'requirements.txt', 'Cargo.toml', 'pyproject.toml'];
+const CONVENTIONAL_APP_DIRS = ['apps', 'services', 'microservices'];
 
 export function detectMonorepoTool(rootDir: string): MonorepoDetection | null {
   // Priority order: Turborepo > Nx > Lerna > pnpm > yarn > npm > flat
@@ -49,8 +50,9 @@ export function detectMonorepoTool(rootDir: string): MonorepoDetection | null {
   }
 
   // Flat detection: look for multiple subdirectories with project markers
+  // Also scans inside conventional monorepo directories (apps/, services/, microservices/)
   const flatWorkspaces = detectFlatWorkspaces(rootDir);
-  if (flatWorkspaces.length >= 2) {
+  if (flatWorkspaces.length >= 1) {
     return { tool: 'flat', workspaces: flatWorkspaces };
   }
 
@@ -121,6 +123,23 @@ function detectFlatWorkspaces(rootDir: string): string[] {
       if (fs.existsSync(path.join(subDir, marker))) {
         workspaces.push(entry.name);
         break;
+      }
+    }
+  }
+
+  // Also check inside conventional monorepo directories (apps/, services/, microservices/)
+  for (const dirName of CONVENTIONAL_APP_DIRS) {
+    const conventionalDir = path.join(rootDir, dirName);
+    if (!fs.existsSync(conventionalDir) || !fs.statSync(conventionalDir).isDirectory()) continue;
+    const subEntries = fs.readdirSync(conventionalDir, { withFileTypes: true });
+    for (const entry of subEntries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+      const subDir = path.join(conventionalDir, entry.name);
+      for (const marker of PROJECT_MARKERS) {
+        if (fs.existsSync(path.join(subDir, marker))) {
+          workspaces.push(path.join(dirName, entry.name));
+          break;
+        }
       }
     }
   }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -136,7 +137,7 @@ func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build
 
 	if status == nil {
 		// Workflow not found — cleaned up by TTL or never existed
-		r.failBuild(ctx, build, "Workflow not found in build cluster (cleaned up or never created)")
+		r.failBuild(ctx, build, "Build not found (expired or never started). Redeploy to retry.")
 		return
 	}
 
@@ -144,7 +145,7 @@ func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build
 	case "Succeeded":
 		r.onWorkflowSucceeded(ctx, build)
 	case "Failed", "Error":
-		r.failBuild(ctx, build, fmt.Sprintf("Workflow %s in build cluster", status.Phase))
+		r.failBuild(ctx, build, fmt.Sprintf("Build %s", strings.ToLower(status.Phase)))
 	case "Running", "Pending":
 		// Workflow is still active — nothing to do
 	default:

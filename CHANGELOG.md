@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- `loopzero init` did not detect apps in conventional monorepo directories (`apps/`, `services/`, `microservices/`) without workspace config — now scans nested subdirs for project markers (#dogfood-full2-F01)
+- `loopzero init` generated `framework: custom` with no port for projects without a recognized framework — now defaults to port 3000 for server-type apps (#dogfood-full2-F06)
+- `loopzero deploy --no-wait` suggested re-deploying as tracking command — message now states deploy is running in background (#dogfood-full2-F03)
+- Lockfile warning shown even when lockfile exists in app subdirectory — now checks app paths from loopzero.yaml in addition to project root (#dogfood-full2-F04)
+- Build failure error message exposed internal term "Workflow Failed in build cluster" — replaced with product language "Build failed" (#dogfood-full2-F02)
+- Startup reconciler exposed internal terms "Workflow" and "build cluster" in error messages — all user-facing messages now use product language (#dogfood-full2-F02b)
+
+### Changed
+- CLI `scanSubdirectories` now recurses into conventional app directories (`apps/`, `services/`, `microservices/`) to discover nested apps (#dogfood-full2-F01)
+- Monorepo flat detection threshold lowered from 2 to 1 workspace — a single app inside `apps/` is correctly identified (#dogfood-full2-F01)
+- Build error sanitization added to CLI deploy command — strips internal infrastructure terms from API error messages (#dogfood-full2-F02)
 - ArgoCD cluster secret stale IP after k3d recreate — `update-cross-cluster-ips.sh` now patches operator WORKLOAD_CLUSTER_URL, ArgoCD cluster-workload secret, ArgoCD Application destinations, and configures insecure TLS for local dev (#dogfood3-F01)
 - ArgoCD cannot clone Gitea repos — NetworkPolicy `allow-gitea` was missing ArgoCD repo-server as allowed ingress source; added cross-namespace selector for `argocd` namespace (#dogfood3-F01b)
 - API ERROR logs emitted as plain text instead of structured JSON — `slog.SetDefault()` now sets the JSON handler as global default so all `slog.Error()`/`slog.Warn()` calls produce JSON output (#dogfood3-F04)
