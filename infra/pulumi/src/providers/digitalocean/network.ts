@@ -8,7 +8,7 @@ export class DigitalOceanNetworkProvider implements IProviderNetwork {
     const vpc = new digitalocean.Vpc(spec.name, {
       name: spec.name,
       region: spec.region,
-      ipRange: spec.cidr ?? "10.10.0.0/16",
+      ipRange: spec.cidr ?? "10.20.0.0/16",
     });
 
     // DO VPCs don't support tags directly, but we tag dependent resources.
