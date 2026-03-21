@@ -28,7 +28,7 @@ func (f *fakeInnerSync) TriggerSync(_ context.Context, _ string) error {
 	return f.triggerErr
 }
 
-func (f *fakeInnerSync) WaitForSync(_ context.Context, _ string, _ time.Duration) error {
+func (f *fakeInnerSync) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
 	f.waitCalls++
 	return f.waitErr
 }
@@ -68,7 +68,7 @@ func TestCircuitBreaker_ClosedState_WaitForSyncPassesThrough(t *testing.T) {
 	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Act
-	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second)
+	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second, nil)
 
 	// Assert
 	if err != nil {
@@ -117,7 +117,7 @@ func TestCircuitBreaker_OpenState_RejectsWaitForSync(t *testing.T) {
 	inner.waitCalls = 0
 
 	// Act
-	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second)
+	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second, nil)
 
 	// Assert
 	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {

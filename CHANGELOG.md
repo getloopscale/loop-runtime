@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Lockfile warning shown even when lockfile exists in app subdirectory — now checks app paths from loopzero.yaml in addition to project root (#dogfood-full2-F04)
 - Build failure error message exposed internal term "Workflow Failed in build cluster" — replaced with product language "Build failed" (#dogfood-full2-F02)
 - Startup reconciler exposed internal terms "Workflow" and "build cluster" in error messages — all user-facing messages now use product language (#dogfood-full2-F02b)
+- ArgoCD health check was per-Application (shared across all apps in tenant/environment) — one degraded app blocked all deploys. Now checks per-Deployment health for only the apps being deployed (#dogfood-full2-retest-F01)
 
 ### Changed
 - CLI `scanSubdirectories` now recurses into conventional app directories (`apps/`, `services/`, `microservices/`) to discover nested apps (#dogfood-full2-F01)

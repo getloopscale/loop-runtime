@@ -78,7 +78,9 @@ type AppRelease struct {
 // SyncClient abstracts ArgoCD sync operations (DIP).
 type SyncClient interface {
 	TriggerSync(ctx context.Context, appName string) error
-	WaitForSync(ctx context.Context, appName string, timeout time.Duration) error
+	// WaitForSync polls until the ArgoCD Application is synced and the specified
+	// deployedApps are healthy. If deployedApps is empty, checks global Application health.
+	WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error
 }
 
 // EnvironmentLocker abstracts the advisory lock acquisition (DIP for testability).

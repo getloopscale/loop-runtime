@@ -361,7 +361,7 @@ func (f *fakeSyncClient) TriggerSync(ctx context.Context, appName string) error 
 	return nil
 }
 
-func (f *fakeSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration) error {
+func (f *fakeSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error {
 	if f.waitErr != nil {
 		return f.waitErr
 	}

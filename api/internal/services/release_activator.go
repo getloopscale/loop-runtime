@@ -208,12 +208,15 @@ func (o *BuildOrchestrator) phase2dSyncAndProbe(ctx context.Context, build *db.B
 		slog.Error("failed to emit deploy.syncing event", "build_id", build.ID, "error", err)
 	}
 
-	// Wait for ArgoCD to confirm sync + healthy.
-	// ArgoCD checks: manifests applied (Synced) + resources healthy (Healthy).
-	// "Healthy" means: Deployments have ready replicas, Services have endpoints,
-	// Pods are Running, etc. This is more reliable than HTTP probes because it
-	// checks Kubernetes resource status directly in the workload cluster.
-	if err := o.sync.WaitForSync(ctx, argoAppName, o.argocdSyncTimeout); err != nil {
+	// Wait for ArgoCD to confirm sync + healthy for the specific apps being deployed.
+	// Uses per-resource health checking: only the Deployments matching the deployed
+	// app names need to be healthy — other degraded apps in the same ArgoCD Application
+	// won't block this deploy.
+	deployedAppNames := make([]string, 0, len(result.Apps))
+	for _, app := range result.Apps {
+		deployedAppNames = append(deployedAppNames, app.Name)
+	}
+	if err := o.sync.WaitForSync(ctx, argoAppName, o.argocdSyncTimeout, deployedAppNames); err != nil {
 		slog.Error("argocd sync or health check failed",
 			"build_id", build.ID, "app", argoAppName, "error", err)
 

@@ -78,12 +78,12 @@ func (cb *CircuitBreakerSyncClient) TriggerSync(ctx context.Context, appName str
 }
 
 // WaitForSync delegates to the inner SyncClient with circuit breaker protection.
-func (cb *CircuitBreakerSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration) error {
+func (cb *CircuitBreakerSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error {
 	if err := cb.preCheck(); err != nil {
 		return err
 	}
 
-	err := cb.inner.WaitForSync(ctx, appName, timeout)
+	err := cb.inner.WaitForSync(ctx, appName, timeout, deployedApps)
 	cb.recordResult(err)
 	return err
 }
