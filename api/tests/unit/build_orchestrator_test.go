@@ -326,9 +326,13 @@ type fakeWorkflowSubmitter struct {
 	submitted  []services.WorkflowSpec
 	workflowID string
 	err        error
+	onSubmit   func() // optional callback for ordering tests (REVIEW-BLOCKER-1)
 }
 
 func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSpec) (string, error) {
+	if f.onSubmit != nil {
+		f.onSubmit()
+	}
 	if f.err != nil {
 		return "", f.err
 	}
@@ -1679,3 +1683,154 @@ func TestStep6_RetryRelease_GitPushFailsAgain(t *testing.T) {
 		t.Errorf("expected release to stay GIT_MIRROR_FAILED, got %q", release.Status)
 	}
 }
+
+// --- REVIEW-BLOCKER-1: Workflow submit outside lock tests ---
+
+func TestBuildOrchestrator_SubmitBuild_WorkflowSubmitFails_BuildMarkedFailed(t *testing.T) {
+	// REVIEW-BLOCKER-1: When workflow submission fails OUTSIDE the lock,
+	// the build should be transitioned to FAILED so the environment is unblocked.
+	// The build reaper also handles this (5min QUEUED timeout), but immediate
+	// failure is better UX.
+
+	// Arrange
+	fakes := newOrchestratorFakes()
+	fakes.workflow.err = fmt.Errorf("argo: connection refused")
+	orch := fakes.buildOrchestrator()
+	req := defaultSubmitReq()
+
+	// Act
+	_, err := orch.SubmitBuild(context.Background(), req)
+
+	// Assert — should return error (workflow submit failed)
+	if err == nil {
+		t.Fatal("expected error when workflow submit fails, got nil")
+	}
+
+	// Build should exist and be in FAILED status (not stuck in QUEUED)
+	var build *db.Build
+	for _, b := range fakes.buildStore.builds {
+		if b.TenantID == req.TenantID && b.ProjectID == req.ProjectID {
+			build = b
+			break
+		}
+	}
+	if build == nil {
+		t.Fatal("expected build to be created in store")
+	}
+	if build.Status != string(statemachine.BuildFailed) {
+		t.Errorf("expected build status FAILED after submit error, got %q", build.Status)
+	}
+}
+
+func TestBuildOrchestrator_SubmitBuild_WorkflowSubmitFails_EnvironmentUnblocked(t *testing.T) {
+	// REVIEW-BLOCKER-1: After workflow submit fails, a SECOND deploy to the
+	// same environment should succeed (environment is NOT locked).
+
+	// Arrange
+	fakes := newOrchestratorFakes()
+	fakes.workflow.err = fmt.Errorf("argo: connection refused")
+	orch := fakes.buildOrchestrator()
+	req := defaultSubmitReq()
+
+	// Act — first deploy fails at workflow submit
+	_, err := orch.SubmitBuild(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected first submit to fail")
+	}
+
+	// Now fix workflow and retry
+	fakes.workflow.err = nil
+	resp, err := orch.SubmitBuild(context.Background(), req)
+
+	// Assert — second deploy should succeed
+	if err != nil {
+		t.Fatalf("expected second submit to succeed after first failure, got %v", err)
+	}
+	if resp.BuildID == "" {
+		t.Error("expected build_id on second submit")
+	}
+}
+
+func TestBuildOrchestrator_SubmitBuild_LockReleasedBeforeWorkflowSubmit(t *testing.T) {
+	// REVIEW-BLOCKER-1: The advisory lock MUST be released before workflow
+	// submission to avoid holding the lock during slow Argo API calls.
+
+	// Arrange — track lock acquisition and workflow submission order
+	var callOrder []string
+
+	trackLocker := &trackingLocker{
+		onLockAcquired: func() { callOrder = append(callOrder, "lock_fn_start") },
+		onLockReleased: func() { callOrder = append(callOrder, "lock_fn_end") },
+	}
+	trackWorkflow := &fakeWorkflowSubmitter{
+		onSubmit: func() { callOrder = append(callOrder, "workflow_submit") },
+	}
+
+	fakes := newOrchestratorFakes()
+	// Build orchestrator directly with tracking deps
+	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+		BuildStore:     fakes.buildStore,
+		ReleaseStore:   fakes.releaseStore,
+		EnvTargetStore: fakes.envTargetStore,
+		EventStore:     fakes.eventStore,
+		Workflow:       trackWorkflow,
+		Sync:           fakes.sync,
+		Locker:         trackLocker,
+		GitOps:         fakes.gitops,
+	})
+	req := defaultSubmitReq()
+
+	// Act
+	_, err := orch.SubmitBuild(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Assert — workflow_submit must come AFTER lock_fn_end
+	if len(callOrder) < 3 {
+		t.Fatalf("expected at least 3 call order entries, got %v", callOrder)
+	}
+
+	lockEndIdx := -1
+	submitIdx := -1
+	for i, c := range callOrder {
+		if c == "lock_fn_end" && lockEndIdx == -1 {
+			lockEndIdx = i
+		}
+		if c == "workflow_submit" && submitIdx == -1 {
+			submitIdx = i
+		}
+	}
+
+	if lockEndIdx == -1 {
+		t.Fatal("lock_fn_end not found in call order")
+	}
+	if submitIdx == -1 {
+		t.Fatal("workflow_submit not found in call order")
+	}
+	if submitIdx < lockEndIdx {
+		t.Errorf("workflow_submit (idx=%d) happened BEFORE lock_fn_end (idx=%d) — lock held during submit", submitIdx, lockEndIdx)
+	}
+}
+
+// trackingLocker implements services.EnvironmentLocker with call-order tracking.
+type trackingLocker struct {
+	onLockAcquired func()
+	onLockReleased func()
+	lockErr        error
+}
+
+func (tl *trackingLocker) WithLock(ctx context.Context, tenant, project, env string, fn func(tx db.DBTX) error) error {
+	if tl.lockErr != nil {
+		return tl.lockErr
+	}
+	if tl.onLockAcquired != nil {
+		tl.onLockAcquired()
+	}
+	err := fn(nil)
+	if tl.onLockReleased != nil {
+		tl.onLockReleased()
+	}
+	return err
+}
+

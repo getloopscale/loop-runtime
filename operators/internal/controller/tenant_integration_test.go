@@ -85,6 +85,19 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			}, &buildNs)).To(Succeed())
 			Expect(buildNs.Labels).To(HaveKeyWithValue("loopzero.io/component", "build"))
 
+			// REVIEW-BLOCKER: Build namespace must have egress-restricting NetworkPolicy
+			var buildPolicies networkingv1.NetworkPolicyList
+			Expect(k8sClient.List(ctx, &buildPolicies, client.InNamespace("build-"+tenantName))).To(Succeed())
+			Expect(len(buildPolicies.Items)).To(BeNumerically(">=", 1), "build namespace must have at least 1 NetworkPolicy")
+			var foundEgressPolicy bool
+			for _, p := range buildPolicies.Items {
+				if p.Name == "build-egress-restrict" {
+					foundEgressPolicy = true
+					Expect(p.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeEgress))
+				}
+			}
+			Expect(foundEgressPolicy).To(BeTrue(), "build-egress-restrict NetworkPolicy must exist")
+
 			// All 6 conditions True
 			Expect(conditionStatus(tenant, loopzerov1.ConditionGitRepoReady)).To(Equal(metav1.ConditionTrue))
 			Expect(conditionStatus(tenant, loopzerov1.ConditionNamespacesReady)).To(Equal(metav1.ConditionTrue))

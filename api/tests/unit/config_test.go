@@ -252,6 +252,73 @@ func TestConfig_Validate_DefaultSecret_NoError(t *testing.T) {
 	_ = cfg.Validate()
 }
 
+func TestConfig_Validate_RegistryInsecure_BlockedInProduction(t *testing.T) {
+	// Arrange: production + REGISTRY_INSECURE=true → must return error
+	t.Setenv("LOOPZERO_ENV", "production")
+	t.Setenv("REGISTRY_INSECURE", "true")
+
+	cfg := config.Load()
+
+	// Act
+	err := cfg.Validate()
+
+	// Assert
+	if err == nil {
+		t.Fatal("expected error for REGISTRY_INSECURE=true in production, got nil")
+	}
+	if !contains(err.Error(), "REGISTRY_INSECURE") {
+		t.Errorf("expected error mentioning REGISTRY_INSECURE, got %q", err.Error())
+	}
+}
+
+func TestConfig_Validate_RegistryInsecure_AllowedInDevelopment(t *testing.T) {
+	// Arrange: development + REGISTRY_INSECURE=true → no error
+	t.Setenv("LOOPZERO_ENV", "development")
+	t.Setenv("REGISTRY_INSECURE", "true")
+
+	cfg := config.Load()
+
+	// Act
+	err := cfg.Validate()
+
+	// Assert
+	if err != nil {
+		t.Errorf("expected no error for REGISTRY_INSECURE=true in development, got %v", err)
+	}
+}
+
+func TestConfig_Validate_RegistryInsecure_FalseInProduction_OK(t *testing.T) {
+	// Arrange: production + REGISTRY_INSECURE=false → no error (from this check)
+	t.Setenv("LOOPZERO_ENV", "production")
+	t.Setenv("REGISTRY_INSECURE", "false")
+	// Also fix ArgoCD insecure to avoid that check failing
+	t.Setenv("ARGOCD_INSECURE", "false")
+
+	cfg := config.Load()
+
+	// Act
+	err := cfg.Validate()
+
+	// Assert: should pass (no registry insecure error)
+	if err != nil && contains(err.Error(), "REGISTRY_INSECURE") {
+		t.Errorf("unexpected REGISTRY_INSECURE error when flag is false: %v", err)
+	}
+}
+
+// contains checks if s contains substr (helper to avoid strings import in test).
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchSubstring(s, substr)
+}
+
+func searchSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 func TestConfig_Validate_ProductionSecret(t *testing.T) {
 	// Arrange: non-default secret
 	t.Setenv("LOOPZERO_ARGO_CALLBACK_SECRET", "super-secret-production-key")

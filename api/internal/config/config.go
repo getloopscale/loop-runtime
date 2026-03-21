@@ -214,6 +214,12 @@ func (c Config) Validate() error {
 	if c.ArgocdInsecure && c.IsProduction() {
 		return fmt.Errorf("ARGOCD_INSECURE=true is forbidden in production — TLS verification must be enabled")
 	}
+	// REVIEW-BLOCKER-2: REGISTRY_INSECURE=true in production is a fatal error.
+	// Without TLS, Kaniko pushes images over HTTP — MITM can replace images,
+	// rendering all supply chain security (cosign, SBOM) useless.
+	if c.RegistryInsecure && c.IsProduction() {
+		return fmt.Errorf("REGISTRY_INSECURE=true is forbidden in production — registry TLS verification must be enabled")
+	}
 	if c.MinIOAccessKey == "loopzero-admin" && c.IsProduction() {
 		slog.Error("MINIO_ACCESS_KEY using default dev credentials in production — override via MINIO_ACCESS_KEY env var")
 	}

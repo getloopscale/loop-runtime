@@ -19,13 +19,16 @@ controller:
       port: 6060
     initialDelaySeconds: 10
     periodSeconds: 15
+  # REVIEW-MOD-1: Increased from 500m/256Mi to 2/1Gi. With 32 workflowWorkers
+  # and 50+ concurrent builds (each generating ~8 pods), the controller needs
+  # headroom for workflow reconciliation, pod scheduling, and CRD watch events.
   resources:
     limits:
-      cpu: "500m"
-      memory: "256Mi"
+      cpu: "2"
+      memory: "1Gi"
     requests:
-      cpu: "100m"
-      memory: "128Mi"
+      cpu: "500m"
+      memory: "512Mi"
   metricsConfig:
     enabled: true
     port: 9090
@@ -85,6 +88,8 @@ server:
     requests:
       cpu: "50m"
       memory: "64Mi"
+  # REVIEW-SEC: Changed from NodePort to ClusterIP. The Argo Server UI gives
+  # full admin access to all workflows. Use `kubectl port-forward` when needed.
+  # Previously exposed on NodePort 30081 which was accessible to any host process.
   service:
-    type: NodePort
-    nodePort: 30081
+    type: ClusterIP

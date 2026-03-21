@@ -56,6 +56,11 @@ type BuildReconcileLoop struct {
 	logger *slog.Logger
 	cfg    BuildReconcileLoopConfig
 
+	// sem bounds concurrent build reconciliations. Initialized once in constructor.
+	// REVIEW-MOD-2: moved from per-reconcile allocation to struct field so
+	// goroutines from previous ticks continue to hold semaphore slots.
+	sem chan struct{}
+
 	// active tracks build IDs currently being processed to avoid
 	// duplicate processing and coordinate with BuildReaper (MOD-6 fix).
 	active sync.Map
@@ -84,6 +89,7 @@ func NewBuildReconcileLoop(
 		eventStore: eventStore,
 		logger:     logger,
 		cfg:        cfg,
+		sem:        make(chan struct{}, cfg.MaxConcurrent),
 	}
 }
 
@@ -120,6 +126,12 @@ func (r *BuildReconcileLoop) Start(ctx context.Context) {
 // (bounded to MaxConcurrent). Previously, serial iteration meant build #20
 // could wait ~40 minutes while earlier builds blocked on ArgoCD WaitForSync.
 //
+// REVIEW-MOD-2: Fire-and-forget — reconcile dispatches goroutines and returns
+// immediately. The next ticker tick can dispatch new builds even if previous
+// ones are still waiting for ArgoCD sync. The semaphore (r.sem) bounds total
+// concurrent processing across ticks. The r.active map prevents duplicate
+// processing of the same build across ticks.
+//
 // MOD-6 fix: Each build is tracked in r.active while being processed.
 // BuildReaper checks this to avoid competing on the same build.
 func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
@@ -133,9 +145,6 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 		return
 	}
 
-	sem := make(chan struct{}, r.cfg.MaxConcurrent)
-	var wg sync.WaitGroup
-
 	for _, build := range builds {
 		// Skip builds already being processed (MOD-6: avoid reaper competition)
 		if _, loaded := r.active.LoadOrStore(build.ID, struct{}{}); loaded {
@@ -143,17 +152,24 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 		}
 
 		b := build // capture loop variable
-		sem <- struct{}{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }()
-			defer r.active.Delete(b.ID)
-			r.reconcileBuild(ctx, &b)
-		}()
-	}
 
-	wg.Wait()
+		// Try to acquire semaphore slot without blocking the dispatch loop.
+		// If all slots are full, skip this build — it will be retried next tick.
+		select {
+		case r.sem <- struct{}{}:
+			go func() {
+				defer func() { <-r.sem }()
+				defer r.active.Delete(b.ID)
+				r.reconcileBuild(ctx, &b)
+			}()
+		default:
+			// All semaphore slots occupied — release active tracking so the
+			// build can be retried on the next tick.
+			r.active.Delete(b.ID)
+			r.logger.Debug("reconcile loop: all slots busy, deferring build",
+				"build_id", b.ID, "max_concurrent", r.cfg.MaxConcurrent)
+		}
+	}
 }
 
 // IsProcessing returns true if the reconcile loop is currently processing a build.
@@ -218,10 +234,10 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	}
 
 	for _, app := range apps {
-		// Image path matches Kaniko destination: {registry}/{tenant}/{project}:{sha}
-		// Single image per build — multi-app builds share the same image.
-		imageRef := fmt.Sprintf("%s/%s/%s:%s",
-			r.cfg.RegistryURL, build.TenantID, build.ProjectID, build.CommitSHA)
+		// REVIEW-MOD-4: Per-app image tag: {registry}/{tenant}/{project}/{app}:{sha}
+		// Each app gets its own Kaniko build and independent image.
+		imageRef := fmt.Sprintf("%s/%s/%s/%s:%s",
+			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
 
 		url := ""
 		if app.Type == "server" || app.Type == "frontend" {

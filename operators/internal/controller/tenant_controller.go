@@ -15,6 +15,7 @@ import (
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/argocd"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
+	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -29,14 +30,17 @@ type TenantReconciler struct {
 	client.Client
 	GitProvisioner     gitea.GitRepoProvisioner
 	ArgoCDProvisioner  argocd.Provisioner
+	MinIOProvisioner   miniop.CredentialProvisioner // REVIEW-BLOCKER-3: per-tenant MinIO credentials
 	GiteaURL           string
 	WorkloadClusterURL string // URL of the workload cluster API server
+	MinIOEndpoint      string // REVIEW-BLOCKER-3: MinIO endpoint for build Secret
 }
 
 // TenantControllerConfig holds configuration for the TenantController.
 type TenantControllerConfig struct {
 	GiteaURL           string
 	WorkloadClusterURL string
+	MinIOEndpoint      string // REVIEW-BLOCKER-3: MinIO endpoint injected into per-tenant build Secrets
 }
 
 // Reconcile handles the reconciliation loop for Tenant resources.

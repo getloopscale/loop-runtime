@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **BREAKING**: `SubmitBuild` workflow submission moved OUTSIDE the advisory lock — lock now only covers build record creation (QUEUED). Workflow submit, status transition to RUNNING, and SSE emission happen after lock release. Reduces lock hold time from ~7s (Argo retry) to <100ms (#REVIEW-BLOCKER-1)
+- Build state machine: added `QUEUED + BuildFailed → FAILED` transition — allows immediate failure on workflow submit error instead of waiting 5min queue timeout (#REVIEW-BLOCKER-1)
+- `BuildReconcileLoop.reconcile()` changed from blocking `wg.Wait()` to fire-and-forget with non-blocking semaphore — next ticker tick can dispatch new builds even while previous ones wait on ArgoCD sync. Reduces P99 activation latency from 125s to ~5s (#REVIEW-MOD-2)
+- **BREAKING**: CWT `loopzero-clone` image changed from `alpine/git:2.43.0` to `minio/mc:RELEASE.2024-01-16T16-06-34Z` — source bundle download now uses authenticated S3 protocol (`mc cp`) instead of unauthenticated HTTP (`wget`). MinIO bucket no longer needs to be public-read. Git installed via apk for bundle unpack (#REVIEW-SEC-MINIO, #REVIEW-MOD-3)
+- Python `BuildStep` resources increased from `resourcesSmall` (256Mi limit) to `resourcesMedium` (2Gi limit) — prevents OOMKill when compiling C extensions (numpy, pandas, tensorflow) (#REVIEW-LEVE-1)
+- Removed unused `manifests` emptyDir volume (256Mi) from workflow spec and `buildContainer()` mount list — vestige of C-02 migration where manifest generation moved to API (#REVIEW-LEVE-3)
+- Argo Workflows controller resources increased from 500m/256Mi to 2CPU/1Gi — sized for 32 workflowWorkers with 50+ concurrent builds generating ~400 pods (#REVIEW-MOD-1)
+- Argo Server service changed from NodePort (30081) to ClusterIP — UI gives full admin access, no longer externally reachable; use `kubectl port-forward` (#REVIEW-SEC-ARGO)
+- Workflow TTL after success increased from 1h to 4h — enables post-deploy debugging without losing the Workflow CR. Failure TTL unchanged at 24h (#REVIEW-LEVE-2)
+- **BREAKING**: Kaniko image destination changed from `{registry}/{tenant}/{project}:{sha}` to `{registry}/{tenant}/{project}/{app}:{sha}` — each app in a monorepo gets its own independent image build via per-app Kaniko DAG tasks. Multi-app Dockerfiles use `Dockerfile.{app}` naming (#REVIEW-MOD-4)
+- Per-tenant MinIO credential provisioning via `AdminProvisioner` — TenantController creates MinIO users with S3 policies scoped to `loopzero-builds/{tenantID}/*` only. Eliminates shared credentials between tenants (spec §17.2, §17.4) (#REVIEW-BLOCKER-3)
+- **BREAKING**: Mixed-language monorepos now supported — apps are grouped by framework, each language group gets independent validate/install/build/scan/dockerfile DAG steps with language suffix (e.g., `install-deps-node`, `install-deps-go`). Replaces single-strategy `resolveStrategyFromApps` (#REVIEW-AP-3)
+
 ### Added
+- `operators/internal/minio/provisioner.go` — `CredentialProvisioner` interface + `AdminProvisioner` implementation using MinIO Admin API. Creates per-tenant users with scoped bucket policies. Credentials stored as K8s Secrets in `build-{tenant}` namespace (#REVIEW-BLOCKER-3)
+- `CircuitBreakerWorkflowSubmitter` — wraps `WorkflowSubmitter` with circuit breaker for `Submit` operations. Opens after 3 consecutive Argo API failures, closes after 2 recovery probes. `Cancel` and `GetStatus` bypass the breaker (best-effort/read-only). Prevents 70s of wasted retries when build cluster is down (#REVIEW-MOD-5)
+- `failQueuedBuild()` method on `BuildOrchestrator` — immediately transitions QUEUED builds to FAILED when workflow submission fails outside the lock, emits SSE `build.failed` event (#REVIEW-BLOCKER-1)
+- `build-egress-restrict` NetworkPolicy on per-tenant build namespaces — restricts egress to DNS (53), MinIO (9000), container registry (5000/443), and K8s API (6443). Prevents source code exfiltration via malicious Dockerfiles (spec §17.1 threat model) (#REVIEW-BLOCKER-NETPOL)
 - `ReleaseReaper` background goroutine — finds releases stuck in READY (>5min) or PENDING (>ArgoCD timeout) and transitions them to GIT_MIRROR_FAILED or SYNC_FAILED with SSE notification (#PIPELINE-RELEASE-REAPER)
 - `ValidateAppPath` function in `api/internal/validation/` — rejects path traversal, absolute paths, and shell metacharacters in app.path from build requests (#PIPELINE-SEC-3)
 - `minio.insecure` value in Argo Workflows Helm chart — parametrizes TLS verification for MinIO connections in cache and clone CWTs (#PIPELINE-MOD-6)
@@ -70,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `WorkflowSubmitterConfig` struct: removed `GiteaURL`, `GiteaToken`, and `Namespace`; added `RegistryInsecure` (#BUILD-BLOCKER-1, #BUILD-BLOCKER-2, #PIPELINE-MOD-2)
 
 ### Removed
+- `cwt-summary.yaml` — `emit-summary` step removed from onExit DAG. The CWT only echoed build metadata to step logs with no consumer. BuildReconcileLoop reads status from Workflow CRD labels, not step outputs (#REVIEW-LEVE-4)
 - `secret-gitea-credentials.yaml` — Gitea credentials no longer needed in build cluster; source comes from MinIO (#PIPELINE-BLOCKER-1)
 - `cwt-notify.yaml` — HTTP callback replaced by BuildReconcileLoop polling (#PIPELINE-BLOCKER-3)
 - `cwt-kaniko.yaml` — replaced by inline Kaniko template in WorkflowBuilder (#PIPELINE-BLOCKER-3)
@@ -77,6 +96,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `gitea.url` and `gitea.token` from Argo Workflows Helm values — no longer used (#PIPELINE-BLOCKER-1)
 
 ### Security
+- `Config.Validate()` now rejects `REGISTRY_INSECURE=true` in production — prevents MITM attacks on container registry where Kaniko pushes images over HTTP, rendering supply chain security (cosign, SBOM) useless (#REVIEW-BLOCKER-2)
+- Build namespace egress restricted via NetworkPolicy — prevents source code exfiltration, malware download, and internal network scanning from build pods (including Kaniko running as root) (#REVIEW-BLOCKER-NETPOL)
+- CWT `loopzero-clone` source bundle download now uses authenticated S3 protocol (`mc cp`) instead of unauthenticated HTTP — MinIO bucket no longer needs to be public-read; any pod without credentials cannot read tenant source code (#REVIEW-SEC-MINIO)
+- Per-tenant MinIO credentials with scoped S3 policies — each tenant's build user can only access `loopzero-builds/{tenantID}/*`, preventing cross-tenant source code access and cache poisoning (spec §17.2, §17.4) (#REVIEW-BLOCKER-3)
 - App path injection vector closed — `ValidateAppPath` rejects `..`, absolute paths, shell metacharacters at API boundary before they reach workflow shell scripts (#PIPELINE-SEC-3)
 - Build cluster no longer needs Gitea credentials — source comes from MinIO, reducing blast radius of credential compromise (#PIPELINE-BLOCKER-1)
 - Per-tenant build namespaces enforce ResourceQuota isolation — one tenant cannot exhaust build resources of another (#PIPELINE-MOD-2)

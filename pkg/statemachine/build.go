@@ -55,6 +55,7 @@ func NewBuildMachine() *Machine {
 			{From: BuildQueued, Event: BuildStarted, To: BuildRunning},
 			{From: BuildQueued, Event: BuildCancelRequested, To: BuildCancelled},
 			{From: BuildQueued, Event: BuildQueueTimeout, To: BuildFailed},
+			{From: BuildQueued, Event: BuildFailedEvent, To: BuildFailed}, // REVIEW-BLOCKER-1: immediate failure on submit error
 			{From: BuildRunning, Event: BuildSucceededEvent, To: BuildSucceeded},
 			{From: BuildRunning, Event: BuildFailedEvent, To: BuildFailed},
 			{From: BuildRunning, Event: BuildCancelRequested, To: BuildCancelling},

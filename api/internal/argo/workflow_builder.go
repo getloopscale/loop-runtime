@@ -53,29 +53,74 @@ func NewWorkflowBuilder(params InfraParams) *WorkflowBuilder {
 	return &WorkflowBuilder{infraParams: params}
 }
 
+// languageGroup represents apps grouped by their resolved language strategy.
+// REVIEW-AP-3: Mixed-language monorepos are now supported. Apps are grouped
+// by framework, and each group gets independent validate/install/build/scan/
+// dockerfile steps with a language suffix (e.g., install-deps-node, install-deps-go).
+type languageGroup struct {
+	Strategy LanguageStrategy
+	Apps     []services.AppSpec
+	Suffix   string // e.g., "-node", "-go", "-python", "" for single-language
+}
+
+// groupAppsByLanguage groups apps by their resolved language strategy.
+// Single-language projects get no suffix for backwards compatibility.
+func groupAppsByLanguage(apps []services.AppSpec) []languageGroup {
+	groups := make(map[string]*languageGroup)
+	var order []string // preserve insertion order
+
+	for _, app := range apps {
+		strategy := ResolveStrategy(app.Framework)
+		name := strategy.Name()
+		if _, exists := groups[name]; !exists {
+			groups[name] = &languageGroup{Strategy: strategy}
+			order = append(order, name)
+		}
+		groups[name].Apps = append(groups[name].Apps, app)
+	}
+
+	result := make([]languageGroup, 0, len(order))
+	needsSuffix := len(order) > 1
+	for _, name := range order {
+		g := groups[name]
+		if needsSuffix {
+			g.Suffix = "-" + name
+		}
+		result = append(result, *g)
+	}
+	return result
+}
+
 // Build generates a complete Workflow CR using forge types for the given spec.
 // The returned *forge.Workflow can be serialized via ToDict() for the K8s dynamic client.
 func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, error) {
-	strategy := resolveStrategyFromApps(spec.Apps)
+	groups := groupAppsByLanguage(spec.Apps)
 
-	// Collect inline templates from the language strategy + inline Kaniko (BLOCKER-1 fix)
-	inlineTemplates := []forge.Templatable{
-		strategy.ValidateStep(spec.Apps),
-		strategy.InstallStep(spec.Apps),
-		strategy.BuildStep(spec.Apps),
-		strategy.ScanStep(),
-		strategy.DockerfileStep(spec.Apps),
-		b.kanikoTemplate(spec),
+	// REVIEW-AP-3: Generate per-language inline templates for mixed-language support.
+	// Each language group gets its own validate/install/build/scan/dockerfile steps.
+	var inlineTemplates []forge.Templatable
+	for _, g := range groups {
+		inlineTemplates = append(inlineTemplates,
+			withSuffix(g.Strategy.ValidateStep(g.Apps), g.Suffix),
+			withSuffix(g.Strategy.InstallStep(g.Apps), g.Suffix),
+			withSuffix(g.Strategy.BuildStep(g.Apps), g.Suffix),
+			withSuffix(g.Strategy.ScanStep(), g.Suffix),
+			withSuffix(g.Strategy.DockerfileStep(g.Apps), g.Suffix),
+		)
+	}
+	// REVIEW-MOD-4: Per-app Kaniko templates (independent of language grouping)
+	for _, app := range spec.Apps {
+		inlineTemplates = append(inlineTemplates, b.kanikoTemplateForApp(spec, app))
 	}
 
 	// Build the main DAG
-	mainDAG, err := b.buildMainDAG(spec, strategy)
+	mainDAG, err := b.buildMainDAG(spec, groups)
 	if err != nil {
 		return nil, fmt.Errorf("build main DAG: %w", err)
 	}
 
-	// Build the onExit DAG
-	onExitDAG, err := b.buildOnExitDAG(spec, strategy)
+	// Build the onExit DAG (cache save per-language)
+	onExitDAG, err := b.buildOnExitDAG(spec, groups)
 	if err != nil {
 		return nil, fmt.Errorf("build onExit DAG: %w", err)
 	}
@@ -84,15 +129,23 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 	templates := []forge.Templatable{mainDAG, onExitDAG}
 	templates = append(templates, inlineTemplates...)
 
+	// Primary language for label (first group)
+	primaryLanguage := "custom"
+	if len(groups) > 0 {
+		primaryLanguage = groups[0].Strategy.Name()
+	}
+
 	wf := &forge.Workflow{
 		GenerateName:       fmt.Sprintf("loopzero-build-%s-", spec.BuildID),
 		Entrypoint:         "build-pipeline",
 		OnExit:             "finalize",
 		ServiceAccountName: "loopzero-build-sa",
 		Parallelism:        ptr(4),
+		// REVIEW-LEVE-2: Succeeded TTL increased from 1h to 4h for post-deploy debugging.
+		// Failed TTL stays at 24h for incident investigation.
 		TTLStrategy: &forge.TTLStrategy{
-			SecondsAfterCompletion: ptr(3600),
-			SecondsAfterSuccess:    ptr(3600),
+			SecondsAfterCompletion: ptr(14400),
+			SecondsAfterSuccess:    ptr(14400),
 			SecondsAfterFailure:    ptr(86400),
 		},
 		Labels: map[string]string{
@@ -100,12 +153,13 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			"loopzero.io/project":     spec.ProjectID,
 			"loopzero.io/environment": spec.Environment,
 			"loopzero.io/build-id":    spec.BuildID,
-			"loopzero.io/language":    strategy.Name(),
+			"loopzero.io/language":    primaryLanguage,
 		},
 		Templates: templates,
+		// REVIEW-LEVE-3: `manifests` volume removed — manifest generation moved
+		// to API control plane (C-02 fix). Only workspace volume needed.
 		Volumes: []forge.VolumeBuilder{
 			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace"}, SizeLimit: "5Gi"},
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "manifests"}, SizeLimit: "256Mi"},
 		},
 	}
 
@@ -113,50 +167,72 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 }
 
 // buildMainDAG constructs the entrypoint DAG template.
-// It mixes CWT refs (clone, cache-restore, kaniko) with inline templates
-// (validate, install, build, scan, dockerfile).
-func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy LanguageStrategy) (*forge.DAG, error) {
+//
+// REVIEW-AP-3: The DAG now supports mixed-language monorepos. For each language
+// group, a set of per-language steps is created (with suffix like -node, -go).
+// The dependency chain within each group is: clone → restore-cache-{lang} →
+// validate-{lang} → install-{lang} → build-{lang} → dockerfile-{lang} →
+// [per-app kaniko tasks].
+func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []languageGroup) (*forge.DAG, error) {
 	dag := &forge.DAG{Name: "build-pipeline"}
 
+	// Step 1: clone (shared across all languages — one source bundle)
 	tasks := []*forge.Task{
-		// Step 1: clone (CWT ref)
-		// Source bundle downloaded from MinIO (uploaded by CLI during deploy).
-		// MinIO credentials injected via envFrom (K8s Secret loopzero-minio-credentials).
-		// BLOCKER-1 fix: replaced Gitea cross-cluster clone with MinIO bundle download.
 		cwtTask("clone-repo", "loopzero-clone", "clone-repo", nil, map[string]string{
 			"tenant-id": spec.TenantID,
 			"build-id":  spec.BuildID,
 		}),
+	}
 
-		// Step 1: restore-cache (CWT ref) — depends on clone
-		// MinIO credentials injected via envFrom (K8s Secret loopzero-minio-credentials)
-		cwtTask("restore-cache", "loopzero-cache-restore", "restore-cache", []string{"clone-repo"}, map[string]string{
-			"tenant-id":  spec.TenantID,
-			"project-id": spec.ProjectID,
-			"cache-key":  strategy.CacheKey(),
-		}),
+	// Per-language build pipeline steps
+	var allDockerfileTasks []string
+	for _, g := range groups {
+		suffix := g.Suffix
 
-		// Step 1.5: validate workspace (inline) — depends on clone
-		inlineTask("validate-workspace", "validate-workspace", []string{"clone-repo"}),
+		// restore-cache per language (different cache keys: node-modules vs go-modules)
+		restoreName := "restore-cache" + suffix
+		if g.Strategy.CacheKey() != "" {
+			tasks = append(tasks, cwtTask(restoreName, "loopzero-cache-restore", "restore-cache",
+				[]string{"clone-repo"}, map[string]string{
+					"tenant-id":  spec.TenantID,
+					"project-id": spec.ProjectID,
+					"cache-key":  g.Strategy.CacheKey(),
+				}))
+		} else {
+			// No cache for this language — create a no-op dependency anchor
+			restoreName = "clone-repo"
+		}
 
-		// Step 2: security scan (inline) — depends on cache restore
-		inlineTask("security-scan", "security-scan", []string{"restore-cache"}),
+		validateName := "validate-workspace" + suffix
+		tasks = append(tasks, inlineTask(validateName, validateName, []string{"clone-repo"}))
 
-		// Step 2: install deps (inline) — depends on cache restore + validate
-		inlineTask("install-deps", "install-deps", []string{"restore-cache", "validate-workspace"}),
+		scanName := "security-scan" + suffix
+		tasks = append(tasks, inlineTask(scanName, scanName, []string{restoreName}))
 
-		// Step 3: build apps (inline) — depends on install
-		inlineTask("build-apps", "build-apps", []string{"install-deps"}),
+		installName := "install-deps" + suffix
+		tasks = append(tasks, inlineTask(installName, installName, []string{restoreName, validateName}))
 
-		// Step 3.5: generate dockerfile (inline) — depends on build
-		inlineTask("generate-dockerfile", "generate-dockerfile", []string{"build-apps"}),
+		buildName := "build-apps" + suffix
+		tasks = append(tasks, inlineTask(buildName, buildName, []string{installName}))
 
-		// Step 4: kaniko (inline template) — depends on dockerfile
-		// BLOCKER-1 fix: Kaniko is now an inline template so that --insecure and
-		// --skip-tls-verify flags are conditionally added based on RegistryInsecure.
-		// C-02 fix: This is the LAST step. Manifest generation and gitops-push
-		// have been moved to the API (control plane). The workflow only builds images.
-		inlineTask("build-image", "build-image", []string{"generate-dockerfile"}),
+		dockerfileName := "generate-dockerfile" + suffix
+		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName}))
+		allDockerfileTasks = append(allDockerfileTasks, dockerfileName)
+	}
+
+	// Per-app Kaniko — depends on its language group's dockerfile step
+	for _, app := range spec.Apps {
+		appStrategy := ResolveStrategy(app.Framework)
+		// Find the suffix for this app's language
+		dockerfileDep := "generate-dockerfile"
+		for _, g := range groups {
+			if g.Strategy.Name() == appStrategy.Name() {
+				dockerfileDep = "generate-dockerfile" + g.Suffix
+				break
+			}
+		}
+		taskName := fmt.Sprintf("build-image-%s", app.Name)
+		tasks = append(tasks, inlineTask(taskName, taskName, []string{dockerfileDep}))
 	}
 
 	if err := dag.AddTasks(tasks...); err != nil {
@@ -166,33 +242,23 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy Lang
 }
 
 // buildOnExitDAG constructs the finalize DAG (always runs, even on failure).
-func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, strategy LanguageStrategy) (*forge.DAG, error) {
+// REVIEW-AP-3: saves cache per-language (each language has different cache dirs).
+func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, groups []languageGroup) (*forge.DAG, error) {
 	dag := &forge.DAG{Name: "finalize"}
 
 	var tasks []*forge.Task
 
-	// save-cache (CWT ref) — only if language has cache dirs
-	// MinIO credentials injected via envFrom (K8s Secret loopzero-minio-credentials)
-	if strategy.CacheKey() != "" {
-		tasks = append(tasks, cwtTask("save-cache", "loopzero-cache-save", "save-cache", nil, map[string]string{
-			"tenant-id":  spec.TenantID,
-			"project-id": spec.ProjectID,
-			"cache-key":  strategy.CacheKey(),
-			"cache-dirs": strings.Join(strategy.CacheDirs(), ","),
-		}))
+	for _, g := range groups {
+		if g.Strategy.CacheKey() != "" {
+			taskName := "save-cache" + g.Suffix
+			tasks = append(tasks, cwtTask(taskName, "loopzero-cache-save", "save-cache", nil, map[string]string{
+				"tenant-id":  spec.TenantID,
+				"project-id": spec.ProjectID,
+				"cache-key":  g.Strategy.CacheKey(),
+				"cache-dirs": strings.Join(g.Strategy.CacheDirs(), ","),
+			}))
+		}
 	}
-
-	// summary (CWT ref)
-	// C-01 fix: notify-api step removed. The API's BuildReconcileLoop polls
-	// Workflow CRDs to detect completion. No HTTP callback from build to API.
-	tasks = append(tasks, cwtTask("emit-summary", "loopzero-summary", "emit-summary", nil, map[string]string{
-		"tenant-id":       spec.TenantID,
-		"project-id":      spec.ProjectID,
-		"environment":     spec.Environment,
-		"commit-sha":      spec.CommitSHA,
-		"build-id":        spec.BuildID,
-		"workflow-status":  "{{workflow.status}}",
-	}))
 
 	if err := dag.AddTasks(tasks...); err != nil {
 		return nil, err
@@ -200,33 +266,44 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, strategy La
 	return dag, nil
 }
 
-// kanikoTemplate generates the Kaniko container template as an inline template.
-// This allows conditional inclusion of --insecure and --skip-tls-verify flags
-// based on InfraParams.RegistryInsecure (BLOCKER-1 fix: no hardcoded insecure flags).
-func (b *WorkflowBuilder) kanikoTemplate(spec services.WorkflowSpec) *forge.Container {
-	destination := fmt.Sprintf("%s/%s/%s:%s",
-		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, spec.CommitSHA)
+// kanikoTemplateForApp generates a Kaniko container template for a single app.
+//
+// REVIEW-MOD-4: Each app gets its own Kaniko build with independent image tag:
+//   - Image: {registry}/{tenant}/{project}/{app}:{sha}
+//   - Dockerfile: /workspace/Dockerfile.{app} (with fallback to /workspace/Dockerfile for single-app)
+//   - Context: /workspace (shared — Kaniko reads only the Dockerfile)
+//
+// This replaces the single kanikoTemplate that produced one image for all apps.
+func (b *WorkflowBuilder) kanikoTemplateForApp(spec services.WorkflowSpec, app services.AppSpec) *forge.Container {
+	// Per-app image destination: {registry}/{tenant}/{project}/{app}:{sha}
+	destination := fmt.Sprintf("%s/%s/%s/%s:%s",
+		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
 	cacheRepo := fmt.Sprintf("%s/%s/cache", b.infraParams.RegistryURL, spec.TenantID)
 
+	// Per-app Dockerfile: Dockerfile.{app} with fallback to Dockerfile for single-app projects.
+	// The generate-dockerfile step creates Dockerfile.{app} for each app.
+	dockerfile := "/workspace/Dockerfile"
+	if len(spec.Apps) > 1 {
+		dockerfile = fmt.Sprintf("/workspace/Dockerfile.%s", app.Name)
+	}
+
 	args := []string{
-		fmt.Sprintf("--dockerfile=%s", "/workspace/Dockerfile"),
+		fmt.Sprintf("--dockerfile=%s", dockerfile),
 		fmt.Sprintf("--context=%s", "/workspace"),
 		fmt.Sprintf("--destination=%s", destination),
 		"--cache=true",
 		fmt.Sprintf("--cache-repo=%s", cacheRepo),
 		"--snapshot-mode=redo",
 		"--compressed-caching=false",
-		"--digest-file=/workspace/image-digest.txt",
+		fmt.Sprintf("--digest-file=/workspace/image-digest-%s.txt", app.Name),
 	}
 
-	// Insecure flags only in dev mode (RegistryInsecure=true).
-	// In production, Config.Validate() ensures RegistryInsecure is false.
 	if b.infraParams.RegistryInsecure {
 		args = append(args, "--insecure", "--skip-tls-verify")
 	}
 
 	return &forge.Container{
-		Name:    "build-image",
+		Name:    fmt.Sprintf("build-image-%s", app.Name),
 		Image:   "gcr.io/kaniko-project/executor:v1.23.2",
 		Command: []string{"/kaniko/executor"},
 		Args:    args,
@@ -289,19 +366,14 @@ func paramsToForge(params map[string]string) []forge.Parameter {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-// resolveStrategyFromApps picks a strategy from the first non-empty framework.
-// If no app framework is populated, we default to Node for backwards compatibility.
-// Mixed-language monorepos are still a documented limitation.
-func resolveStrategyFromApps(apps []services.AppSpec) LanguageStrategy {
-	if len(apps) == 0 {
-		return ResolveStrategy("")
+// withSuffix appends a language suffix to a container template name.
+// For single-language projects (suffix=""), the name is unchanged.
+// For mixed-language (suffix="-node"), name becomes e.g. "install-deps-node".
+func withSuffix(c *forge.Container, suffix string) *forge.Container {
+	if suffix != "" {
+		c.Name = c.Name + suffix
 	}
-	for _, app := range apps {
-		if app.Framework != "" {
-			return ResolveStrategy(app.Framework)
-		}
-	}
-	return ResolveStrategy("")
+	return c
 }
 
 // appsJSON serializes apps to JSON for passing as a workflow parameter.

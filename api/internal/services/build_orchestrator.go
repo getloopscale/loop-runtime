@@ -185,21 +185,27 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 	}
 }
 
-// SubmitBuild acquires the environment lock (Lock 1) and submits a new build.
+// SubmitBuild acquires the environment lock to reserve a build slot, then
+// submits the workflow OUTSIDE the lock to avoid holding it during slow
+// Argo API calls (REVIEW-BLOCKER-1 fix).
 //
 // Steps (spec §10.1, steps 4-11):
 //  1. Acquire environment lock
 //  2. Check concurrent build (HasActiveBuild) — INSIDE the lock
-//  3. Create Build record (QUEUED)
-//  4. Submit Argo Workflow (via WorkflowSubmitter)
-//  5. Transition Build to RUNNING
-//  6. Emit SSE event (build.started)
-//  7. Release lock (transaction commits)
+//  3. Create Build record (QUEUED) + persist apps spec — INSIDE the lock
+//  4. Release lock (transaction commits) — build exists as QUEUED
+//  5. Submit Argo Workflow (OUTSIDE the lock)
+//  6. Persist workflow ID, transition QUEUED → RUNNING, emit SSE
+//
+// If workflow submission fails (step 5), the build is immediately transitioned
+// to FAILED so the environment is unblocked. The build reaper also covers this
+// case (5min QUEUED timeout) as a safety net.
 //
 // Returns ErrDeployInProgress if another build is active.
 // Returns ErrLockTimeout if the lock cannot be acquired within 5s.
 func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequest) (*SubmitBuildResponse, error) {
-	var resp *SubmitBuildResponse
+	// Phase 1 (INSIDE lock): reserve build slot as QUEUED
+	var buildID string
 
 	err := o.locker.WithLock(ctx, req.TenantID, req.ProjectID, req.Environment, func(tx db.DBTX) error {
 		// Step 2: concurrent build check INSIDE the lock (Rule 6)
@@ -223,27 +229,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		if err := o.buildStore.Create(ctx, tx, build); err != nil {
 			return fmt.Errorf("submit build: create build: %w", err)
 		}
-
-		// Step 4: submit workflow
-		wfSpec := WorkflowSpec{
-			BuildID:       build.ID,
-			TenantID:      req.TenantID,
-			ProjectID:     req.ProjectID,
-			Environment:   req.Environment,
-			CommitSHA:     req.CommitSHA,
-			Apps:          req.Apps,
-			CorrelationID: req.CorrelationID,
-			Namespace:     "build-" + req.TenantID,
-		}
-		workflowID, err := o.workflow.Submit(ctx, wfSpec)
-		if err != nil {
-			return fmt.Errorf("submit build: submit workflow: %w", err)
-		}
-
-		// Persist workflow ID for reconcile loop and cancel (BLOCKER-1 fix)
-		if err := o.buildStore.SetWorkflowID(ctx, tx, build.ID, workflowID); err != nil {
-			return fmt.Errorf("submit build: set workflow id: %w", err)
-		}
+		buildID = build.ID
 
 		// C-01 fix: Persist app specs so the reconcile loop can generate
 		// manifests and compute image references when the workflow completes.
@@ -260,32 +246,6 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			return fmt.Errorf("submit build: set apps spec: %w", err)
 		}
 
-		// Step 5: transition QUEUED → RUNNING
-		if _, err := o.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildStarted)); err != nil {
-			return fmt.Errorf("submit build: transition to RUNNING: %w", err)
-		}
-
-		// Step 6: emit SSE build.started — include app names for CLI per-app rendering (F-01)
-		appNames := make([]string, len(req.Apps))
-		for i, a := range req.Apps {
-			appNames[i] = a.Name
-		}
-		eventData, _ := json.Marshal(map[string]interface{}{
-			"build_id": build.ID,
-			"status":   "running",
-			"apps":     appNames,
-		})
-		if _, err := o.eventStore.Append(ctx, build.ID, "build.started", eventData); err != nil {
-			return fmt.Errorf("submit build: emit SSE event: %w", err)
-		}
-
-		// Build response
-		streamURL := fmt.Sprintf("/api/v1/builds/%s/stream", build.ID)
-		resp = &SubmitBuildResponse{
-			BuildID:   build.ID,
-			StreamURL: streamURL,
-		}
-
 		return nil
 	})
 
@@ -293,7 +253,91 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		return nil, err
 	}
 
-	return resp, nil
+	// Phase 2 (OUTSIDE lock): submit workflow and activate build.
+	// Lock is released — Argo API latency no longer blocks other deploys.
+	// If anything below fails, the build stays QUEUED briefly, then we
+	// immediately transition it to FAILED so the env is unblocked.
+
+	wfSpec := WorkflowSpec{
+		BuildID:       buildID,
+		TenantID:      req.TenantID,
+		ProjectID:     req.ProjectID,
+		Environment:   req.Environment,
+		CommitSHA:     req.CommitSHA,
+		Apps:          req.Apps,
+		CorrelationID: req.CorrelationID,
+		Namespace:     "build-" + req.TenantID,
+	}
+	workflowID, submitErr := o.workflow.Submit(ctx, wfSpec)
+	if submitErr != nil {
+		// Workflow submit failed — immediately fail the build so the environment
+		// is unblocked. The build reaper is a safety net (5min QUEUED timeout)
+		// but immediate failure gives better UX.
+		o.failQueuedBuild(ctx, buildID, fmt.Sprintf("Workflow submission failed: %v", submitErr))
+		return nil, fmt.Errorf("submit build: submit workflow: %w", submitErr)
+	}
+
+	// Persist workflow ID (outside lock, tx=nil → uses pool directly)
+	if err := o.buildStore.SetWorkflowID(ctx, nil, buildID, workflowID); err != nil {
+		slog.Error("submit build: failed to set workflow ID after submit",
+			"build_id", buildID, "workflow_id", workflowID, "error", err)
+		// Non-fatal: reconcile loop will find the workflow by label matching.
+		// The build will still work, just cancel won't correlate by workflow ID.
+	}
+
+	// Transition QUEUED → RUNNING
+	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildStarted)); err != nil {
+		slog.Error("submit build: failed to transition to RUNNING",
+			"build_id", buildID, "error", err)
+		// Non-fatal: reconcile loop handles EC-N (QUEUED build with completed workflow).
+	}
+
+	// Emit SSE build.started — include app names for CLI per-app rendering (F-01)
+	appNames := make([]string, len(req.Apps))
+	for i, a := range req.Apps {
+		appNames[i] = a.Name
+	}
+	eventData, _ := json.Marshal(map[string]interface{}{
+		"build_id": buildID,
+		"status":   "running",
+		"apps":     appNames,
+	})
+	if _, err := o.eventStore.Append(ctx, buildID, "build.started", eventData); err != nil {
+		slog.Error("submit build: failed to emit SSE event",
+			"build_id", buildID, "error", err)
+	}
+
+	streamURL := fmt.Sprintf("/api/v1/builds/%s/stream", buildID)
+	return &SubmitBuildResponse{
+		BuildID:   buildID,
+		StreamURL: streamURL,
+	}, nil
+}
+
+// failQueuedBuild transitions a QUEUED build to FAILED when workflow submission
+// fails. This runs OUTSIDE the advisory lock using the connection pool directly.
+// REVIEW-BLOCKER-1: ensures the environment is immediately unblocked on submit failure.
+func (o *BuildOrchestrator) failQueuedBuild(ctx context.Context, buildID string, reason string) {
+	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildFailedEvent)); err != nil {
+		slog.Error("submit build: failed to mark QUEUED build as FAILED",
+			"build_id", buildID, "error", err)
+		return
+	}
+	if err := o.buildStore.SetErrorMessage(ctx, nil, buildID, reason); err != nil {
+		slog.Error("submit build: failed to set error message on failed build",
+			"build_id", buildID, "error", err)
+	}
+
+	// Emit SSE build.failed so CLI gets notified
+	eventData, _ := json.Marshal(map[string]string{
+		"build_id": buildID,
+		"status":   "failed",
+		"error":    reason,
+	})
+	if _, err := o.eventStore.Append(ctx, buildID, "build.failed", eventData); err != nil {
+		slog.Error("submit build: failed to emit build.failed SSE event",
+			"build_id", buildID, "error", err)
+	}
 }
 
 // CancelBuild cancels a running or queued build.

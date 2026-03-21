@@ -152,7 +152,10 @@ func (s *PythonStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
 }
 
 func (s *PythonStrategy) BuildStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", "python:3.12-alpine", resourcesSmall(), scriptBuildPython(apps))
+	// REVIEW-LEVE-1: Python build step needs resourcesMedium (2Gi) like Node/Go.
+	// Python projects with C extensions (numpy, pandas, tensorflow) compile from
+	// source on Alpine and OOMKill at 256Mi.
+	return buildContainer("build-apps", "python:3.12-alpine", resourcesMedium(), scriptBuildPython(apps))
 }
 
 func (s *PythonStrategy) ScanStep() *forge.Container {
@@ -208,9 +211,9 @@ func buildContainer(name, image string, resources *forge.ResourceRequirements, s
 		Image:   image,
 		Command: []string{"sh", "-c"},
 		Args:    []string{script},
+		// REVIEW-LEVE-3: manifests mount removed — manifest generation moved to API (C-02).
 		VolumeMounts: []forge.VolumeBuilder{
 			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "manifests", MountPath: "/manifests"}},
 		},
 		Resources: resources,
 		SecurityContext: &model.SecurityContext{

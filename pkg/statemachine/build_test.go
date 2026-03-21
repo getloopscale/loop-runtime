@@ -26,6 +26,16 @@ func TestBuildMachine_BuildFails(t *testing.T) {
 	assertState(t, state, BuildFailed)
 }
 
+func TestBuildMachine_QueuedBuildFails_SubmitError(t *testing.T) {
+	// REVIEW-BLOCKER-1: A QUEUED build can fail immediately if workflow
+	// submission fails. This transition allows the orchestrator to mark
+	// the build as FAILED without waiting for the 5min queue timeout.
+	m := NewBuildMachine()
+
+	state := m.Transition(BuildQueued, BuildFailedEvent)
+	assertState(t, state, BuildFailed)
+}
+
 func TestBuildMachine_CancelWhileQueued(t *testing.T) {
 	m := NewBuildMachine()
 

@@ -23,13 +23,15 @@ spec:
           factor: "2"
           maxDuration: "30s"
       container:
-        # BLOCKER-1 fix: Source bundle is downloaded from MinIO instead of cloning from Gitea.
-        # The CLI uploads a git bundle to MinIO during `loopzero deploy`. The build pipeline
-        # downloads it here, eliminating the cross-cluster Gitea dependency.
+        # BLOCKER-1 fix: Source bundle downloaded from MinIO (not cloned from Gitea).
+        # REVIEW-SEC-MINIO: Changed from alpine/git + unauthenticated wget to
+        # minio/mc for authenticated S3 download. git installed via apk for unpack.
         #
-        # Previous approach: git clone from Gitea (cross-cluster) — required Gitea to be up
-        # for ALL builds. Now Gitea is only used for GitOps manifests (ArgoCD).
-        image: alpine/git:2.43.0
+        # minio/mc is Alpine-based (~30MB) and handles S3 authentication natively
+        # using AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from the injected Secret.
+        # Without authentication, the MinIO bucket would need to be public-read,
+        # allowing any pod in the cluster to read any tenant's source code.
+        image: minio/mc:RELEASE.2024-01-16T16-06-34Z
         # MinIO credentials injected from K8s Secret via envFrom — never as workflow parameters.
         # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
         envFrom:
@@ -42,32 +44,32 @@ spec:
             set -euo pipefail
 
             BUNDLE_PATH="{{inputs.parameters.tenant-id}}/source/{{inputs.parameters.build-id}}.bundle"
-            BUNDLE_URL="${MINIO_ENDPOINT}/loopzero-builds/${BUNDLE_PATH}"
 
             echo "Downloading source bundle from MinIO: ${BUNDLE_PATH}"
 
-            # Download bundle using curl with MinIO credentials (S3 presigned-style via basic auth)
-            # For MinIO with access key auth, we use wget with the S3 API path.
-            # The minio-credentials secret provides standard AWS env vars.
-            apk add --no-cache curl >/dev/null 2>&1 || true
-
-            HTTP_CODE=$(curl -sS -w "%{http_code}" -o /tmp/source.bundle \
+            # Configure mc alias with credentials from K8s Secret
+            mc alias set loopzero "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
               {{- if .Values.minio.insecure }}
               --insecure \
               {{- end }}
-              "${BUNDLE_URL}" 2>/dev/null) || {
-              echo "ERROR: Failed to download source bundle (curl error)"
+              --api S3v4 >/dev/null 2>&1
+
+            # Authenticated download via mc (S3 protocol with SigV4)
+            mc cp \
+              {{- if .Values.minio.insecure }}
+              --insecure \
+              {{- end }}
+              "loopzero/loopzero-builds/${BUNDLE_PATH}" /tmp/source.bundle 2>&1 || {
+              echo "ERROR: Failed to download source bundle"
+              echo "The source may not have been uploaded. Run 'loopzero deploy' again."
               exit 1
             }
 
-            if [ "$HTTP_CODE" != "200" ]; then
-              echo "ERROR: Source bundle not found (HTTP ${HTTP_CODE}). Bundle: ${BUNDLE_PATH}"
-              echo "The source may not have been uploaded. Run 'loopzero deploy' again."
-              exit 1
-            fi
-
             BUNDLE_SIZE=$(stat -c%s /tmp/source.bundle 2>/dev/null || echo "unknown")
             echo "Bundle downloaded: ${BUNDLE_SIZE} bytes"
+
+            # Install git for bundle unpack (minio/mc is Alpine-based, git is ~15MB)
+            apk add --no-cache git >/dev/null 2>&1
 
             # Unpack the git bundle into the workspace
             cd /workspace
