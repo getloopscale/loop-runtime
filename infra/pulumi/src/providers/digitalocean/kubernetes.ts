@@ -14,7 +14,7 @@ export class DigitalOceanKubernetesProvider implements IProviderKubernetes {
     const cluster = new digitalocean.KubernetesCluster(spec.name, {
       name: spec.name,
       region: spec.region,
-      version: spec.version ?? "1.30.2-do.0",
+      version: spec.version ?? "1.32.13-do.0",
       autoUpgrade: true,
       surgeUpgrade: true,
       vpcUuid: spec.network.vpcId,
