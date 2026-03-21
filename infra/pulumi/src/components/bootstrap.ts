@@ -270,6 +270,9 @@ function installTraefik(
       namespace: PLATFORM_NAMESPACE,
       createNamespace: false,
       values: {
+        // Deterministic Service name so lookupLoadBalancerEndpoint can find it.
+        // Without this, the chart template may produce an unexpected name.
+        fullnameOverride: `${role}-traefik`,
         ports: {
           web: {
             port: 8000,
@@ -313,12 +316,8 @@ function lookupLoadBalancerEndpoint(
   provider: k8s.Provider,
   traefik: k8s.helm.v3.Release,
 ): pulumi.Output<string> {
-  // Traefik Helm chart creates a Service named after the release.
-  // Our release is "{role}-traefik", but the K8s Service name follows
-  // the Helm chart template, which is just "traefik" (release name
-  // without the Pulumi resource prefix).
-  // The actual K8s service name depends on the chart's fullnameOverride.
-  // By default, Traefik chart uses the release name as the service name.
+  // Service name is deterministic: fullnameOverride="{role}-traefik"
+  // is set in installTraefik, so the K8s Service name matches exactly.
   const svc = k8s.core.v1.Service.get(
     `${role}-traefik-lb-lookup`,
     pulumi.interpolate`${PLATFORM_NAMESPACE}/${role}-traefik`,

@@ -1,0 +1,217 @@
+# Infrastructure Deploy — provisions cloud resources via Pulumi
+#
+# Trigger map:
+#   push to develop  → deploy to dev   (automatic)
+#   push to main     → deploy to prod  (requires approval)
+#   workflow_dispatch → manual operations (any stack, any command)
+#
+# State backend: DigitalOcean Spaces (S3-compatible) — no Pulumi Cloud dependency.
+#
+# Required secrets (set per GitHub Environment):
+#   DIGITALOCEAN_TOKEN         — DO API token (full access for provisioning)
+#   SPACES_ACCESS_KEY_ID       — DO Spaces access key (for state backend)
+#   SPACES_SECRET_ACCESS_KEY   — DO Spaces secret key (for state backend)
+#   PULUMI_CONFIG_PASSPHRASE   — Passphrase for secrets encryption in state
+#
+# Required GitHub Environments:
+#   infra-dev   — no protection rules (auto-deploy)
+#   infra-prod  — required reviewers + deployment branch = main
+
+name: "Infra: Deploy"
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - "infra/pulumi/**"
+      - ".github/workflows/infra-deploy.yml"
+
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: "Target stack"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      command:
+        description: "Pulumi command"
+        required: true
+        type: choice
+        options:
+          - up
+          - preview
+          - refresh
+          - destroy
+      message:
+        description: "Reason for this operation"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+  PULUMI_WORKING_DIR: infra/pulumi
+  PULUMI_BACKEND_URL: s3://loopzero-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1
+
+jobs:
+  # ─────────────────────────────────────────────
+  # RESOLVE — determine stack and environment
+  # ─────────────────────────────────────────────
+  resolve:
+    name: Resolve deployment target
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      stack: ${{ steps.resolve.outputs.stack }}
+      environment: ${{ steps.resolve.outputs.environment }}
+      command: ${{ steps.resolve.outputs.command }}
+    steps:
+      - name: Resolve from trigger
+        id: resolve
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            STACK="${{ inputs.stack }}"
+            COMMAND="${{ inputs.command }}"
+          else
+            case "${{ github.ref_name }}" in
+              develop) STACK="dev" ;;
+              main)    STACK="prod" ;;
+              *)       echo "::error::Unexpected branch: ${{ github.ref_name }}" && exit 1 ;;
+            esac
+            COMMAND="up"
+          fi
+
+          case "$STACK" in
+            dev)     ENV="infra-dev" ;;
+            staging) ENV="infra-staging" ;;
+            prod)    ENV="infra-prod" ;;
+          esac
+
+          echo "stack=$STACK" >> "$GITHUB_OUTPUT"
+          echo "environment=$ENV" >> "$GITHUB_OUTPUT"
+          echo "command=$COMMAND" >> "$GITHUB_OUTPUT"
+
+          echo "### Deployment Target" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Stack | \`$STACK\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Command | \`$COMMAND\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | \`$ENV\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Trigger | \`${{ github.event_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| State backend | S3 (DigitalOcean Spaces) |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # VALIDATE — typecheck + tests (gate before deploy)
+  # ─────────────────────────────────────────────
+  validate:
+    name: Validate Pulumi code
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.PULUMI_WORKING_DIR }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: npm ci
+
+      - name: Type check
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: npm test
+
+  # ─────────────────────────────────────────────
+  # DEPLOY — execute Pulumi command
+  # ─────────────────────────────────────────────
+  deploy:
+    name: "${{ needs.resolve.outputs.command }} → ${{ needs.resolve.outputs.stack }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [resolve, validate]
+    environment: ${{ needs.resolve.outputs.environment }}
+
+    # CRITICAL: never cancel a running deploy — creates orphaned resources
+    concurrency:
+      group: infra-deploy-${{ needs.resolve.outputs.stack }}
+      cancel-in-progress: false
+
+    env:
+      # S3 backend auth (Spaces uses AWS S3 protocol)
+      AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.PULUMI_WORKING_DIR }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: npm ci
+
+      - name: Login to S3 state backend
+        run: pulumi login "$PULUMI_BACKEND_URL"
+
+      # --- Pulumi operation ---
+      - name: "Run: pulumi ${{ needs.resolve.outputs.command }}"
+        id: pulumi
+        uses: pulumi/actions@v6
+        with:
+          command: ${{ needs.resolve.outputs.command }}
+          stack-name: ${{ needs.resolve.outputs.stack }}
+          work-dir: ${{ env.PULUMI_WORKING_DIR }}
+          upsert: true
+
+      # --- Post-deploy: capture execution state ---
+      - name: Capture execution state
+        if: always() && needs.resolve.outputs.command == 'up'
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          echo "### Execution State" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          pulumi stack output execution --json --stack ${{ needs.resolve.outputs.stack }} 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo '{"error": "Could not retrieve execution state"}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          echo "### Wiring" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          pulumi stack output wiring --json --stack ${{ needs.resolve.outputs.stack }} 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo '{"error": "Could not retrieve wiring"}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # --- Post-deploy: verify all phases completed ---
+      - name: Verify deployment health
+        if: success() && needs.resolve.outputs.command == 'up'
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          EXECUTION=$(pulumi stack output execution --json --stack ${{ needs.resolve.outputs.stack }} 2>/dev/null || echo '{}')
+
+          PENDING=$(echo "$EXECUTION" | jq -r '.phases[]? | select(.status != "completed") | .phase' 2>/dev/null)
+
+          if [ -n "$PENDING" ]; then
+            echo "::warning::The following phases are not completed: $PENDING"
+            echo "### ⚠️ Incomplete Phases" >> "$GITHUB_STEP_SUMMARY"
+            echo "$PENDING" | while read -r phase; do
+              echo "- \`$phase\`" >> "$GITHUB_STEP_SUMMARY"
+            done
+          else
+            echo "### ✅ All phases completed" >> "$GITHUB_STEP_SUMMARY"
+          fi

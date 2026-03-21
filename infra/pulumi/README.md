@@ -45,14 +45,14 @@ Infrastructure-as-Code para a plataforma LoopZero. Provisiona uma topologia de p
 
 ```
 Phase 1: createInfra()        Phase 2: bootstrapCluster()     Phase 3: exposePlatform()
-┌────────────────────┐        ┌───────────────────────┐       ┌──────────────────┐
-│ VPC                │        │ Mgmt: cert-manager    │       │ DNS records      │
-│ Mgmt DOKS          │        │ Mgmt: ArgoCD          │       │ (stub)           │
-│ Runtime DOKS       │──────> │ Mgmt: Traefik         │─────> │                  │
-│ Gitea VM           │        │ Runtime: Traefik      │       │                  │
-│ Runner VMs         │        └───────────────────────┘       └──────────────────┘
-│ PostgreSQL         │
-│ Spaces             │
+┌────────────────────┐        ┌───────────────────────┐       ┌──────────────────────┐
+│ VPC                │        │ Mgmt: cert-manager    │       │ Mgmt DNS:            │
+│ Mgmt DOKS          │        │ Mgmt: ArgoCD          │       │   api.{domain}       │
+│ Runtime DOKS       │──────> │ Mgmt: Traefik         │─────> │   argocd.{domain}    │
+│ Gitea VM           │        │ Runtime: Traefik      │       │   grafana.{domain}   │
+│ Runner VMs         │        └───────────────────────┘       │ Runtime DNS:         │
+│ PostgreSQL         │                                        │   *.{domain}         │
+│ Spaces             │                                        └──────────────────────┘
 └────────────────────┘
      InfraOutputs      ──>      BootstrapOutputs       ──>     ExposeOutputs
 ```
@@ -81,7 +81,13 @@ src/
 ├── components/
 │   ├── infra.ts                Phase 1: topologia completa
 │   ├── bootstrap.ts            Phase 2: dual-cluster (mgmt + runtime)
-│   └── expose.ts               Phase 3: DNS (stub)
+│   └── expose.ts               Phase 3: DNS (mgmt + runtime wildcard)
+├── __tests__/
+│   ├── naming.test.ts          resourceName, bucketName
+│   ├── tags.test.ts            standardTags, tagsToStringArray
+│   ├── errors.test.ts          InfraError formatting + structured log
+│   ├── nodes.test.ts           resolveNodeSize, resolveDbSize
+│   └── dns-detection.test.ts   A vs CNAME vs AAAA auto-detection
 └── providers/
     ├── digitalocean/            Implementação completa (8 arquivos)
     │   ├── index.ts             Factory
@@ -89,7 +95,7 @@ src/
     │   ├── network.ts           VPC
     │   ├── kubernetes.ts        DOKS cluster
     │   ├── storage.ts           Spaces bucket
-    │   ├── dns.ts               DNS records
+    │   ├── dns.ts               DNS records (A/CNAME/AAAA auto-detect)
     │   ├── compute.ts           Droplets (VMs)
     │   └── database.ts          Managed PostgreSQL
     └── aws/
@@ -104,11 +110,58 @@ src/
 | `staging` | staging.loopzero.example | small 2–3 | small 2–4 | 2× small | small ×1 |
 | `prod` | loopzero.example | medium 3–5 | medium 3–6 | 2× medium | medium ×2 |
 
+## State Backend
+
+O state do Pulumi é armazenado no **DigitalOcean Spaces** (S3-compatible). Sem dependência do Pulumi Cloud.
+
+```
+┌──────────────────────────────────┐
+│  DigitalOcean Spaces             │
+│  s3://loopzero-pulumi-state          │
+│  ├── .pulumi/stacks/dev.json     │  ← state do ambiente dev
+│  ├── .pulumi/stacks/staging.json │  ← state do ambiente staging
+│  └── .pulumi/stacks/prod.json    │  ← state do ambiente prod
+└──────────────────────────────────┘
+```
+
+### Bootstrap (uma vez, antes do primeiro deploy)
+
+O bucket de state é "infra de dia zero" — precisa existir antes do Pulumi rodar.
+
+```bash
+# 1. Criar Spaces access keys no painel DO:
+#    https://cloud.digitalocean.com/account/api/spaces
+
+# 2. Criar o bucket de state
+doctl serverless functions init  # (ou via painel DO)
+doctl compute cdn create --origin loopzero-pulumi-state.nyc3.digitaloceanspaces.com 2>/dev/null || true
+
+# Ou via s3cmd:
+export AWS_ACCESS_KEY_ID="<spaces-key>"
+export AWS_SECRET_ACCESS_KEY="<spaces-secret>"
+aws s3 mb s3://loopzero-pulumi-state --endpoint-url https://nyc3.digitaloceanspaces.com
+
+# 3. Configurar variáveis locais
+export AWS_ACCESS_KEY_ID="<spaces-key>"
+export AWS_SECRET_ACCESS_KEY="<spaces-secret>"
+export PULUMI_CONFIG_PASSPHRASE="<strong-passphrase>"
+
+# 4. Login no backend S3
+pulumi login 's3://loopzero-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1'
+```
+
 ## Uso
 
 ```bash
 npm install
 npm run typecheck
+npm test
+
+# Login no state backend (S3/Spaces)
+export AWS_ACCESS_KEY_ID="<spaces-key>"
+export AWS_SECRET_ACCESS_KEY="<spaces-secret>"
+export PULUMI_CONFIG_PASSPHRASE="<passphrase>"
+pulumi login 's3://loopzero-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1'
 
 # Deploy
 pulumi up -s dev
@@ -295,3 +348,66 @@ CloudProviderFactory
 | `@pulumi/pulumi` | ^3.153.1 | Core SDK |
 | `@pulumi/digitalocean` | ^4.40.0 | Provider DigitalOcean |
 | `@pulumi/kubernetes` | ^4.18.0 | Provider Kubernetes (Phase 2) |
+| `vitest` | ^3.2.4 | Test runner (dev) |
+
+## CI/CD Pipeline
+
+### Workflows
+
+| Workflow | Trigger | Ação |
+|----------|---------|------|
+| `ci.yml` (test-pulumi) | Push em qualquer branch | Typecheck + testes unitários |
+| `infra-preview.yml` | PR para develop/main | `pulumi preview` → comentário no PR |
+| `infra-deploy.yml` | Push em develop | `pulumi up` → stack dev (automático) |
+| `infra-deploy.yml` | Push em main | `pulumi up` → stack prod (requer aprovação) |
+| `infra-deploy.yml` | Manual (workflow_dispatch) | Qualquer comando em qualquer stack |
+
+### Fluxo
+
+```
+PR → develop                    Push → develop              Push → main
+┌─────────────────┐            ┌─────────────────┐         ┌─────────────────┐
+│ typecheck        │            │ typecheck        │         │ typecheck        │
+│ vitest           │            │ vitest           │         │ vitest           │
+│ pulumi preview   │            │ pulumi up (dev)  │         │ approval gate    │
+│ → PR comment     │            │ → execution state│         │ pulumi up (prod) │
+└─────────────────┘            └─────────────────┘         └─────────────────┘
+```
+
+### Secrets necessários
+
+Configure nos GitHub Environments (`infra-dev`, `infra-prod`):
+
+| Secret | Descrição |
+|--------|-----------|
+| `DIGITALOCEAN_TOKEN` | Token da API DigitalOcean (full access para deploy) |
+| `SPACES_ACCESS_KEY_ID` | Spaces access key (state backend S3) |
+| `SPACES_SECRET_ACCESS_KEY` | Spaces secret key (state backend S3) |
+| `PULUMI_CONFIG_PASSPHRASE` | Passphrase para encriptação de secrets no state |
+
+### GitHub Environments
+
+| Environment | Protection |
+|-------------|-----------|
+| `infra-dev` | Nenhuma — deploy automático |
+| `infra-staging` | Opcional — deploy manual via workflow_dispatch |
+| `infra-prod` | Required reviewers + deployment branch = main |
+
+### Operações manuais
+
+```bash
+# Via GitHub Actions UI → workflow_dispatch:
+#   Stack: dev | staging | prod
+#   Command: up | preview | refresh | destroy
+#   Message: razão da operação
+
+# Exemplos:
+# - refresh: sincroniza state com recursos reais (drift detection)
+# - destroy: teardown completo do ambiente (requer aprovação para prod)
+# - preview: dry-run antes de deploy manual
+```
+
+### Concurrency
+
+- **Preview (PRs):** cancel-in-progress: true — safe, é read-only
+- **Deploy:** cancel-in-progress: false — NUNCA cancelar um `pulumi up` em andamento

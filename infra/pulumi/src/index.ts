@@ -15,7 +15,7 @@ const infra = createInfra(config);
 // --- Phase 2: Bootstrap Clusters ---
 const bootstrap = bootstrapCluster(infra, config);
 
-// --- Phase 3: Expose Platform (stub) ---
+// --- Phase 3: Expose Platform ---
 const expose = exposePlatform(bootstrap, infra, config, factory);
 
 // --- Execution state (operational tracking) ---

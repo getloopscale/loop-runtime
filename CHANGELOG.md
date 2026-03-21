@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Phase 3 (exposePlatform) — creates DNS records for management subdomains (api, argocd, grafana) and runtime wildcard (*.{domain}) (#PULUMI-PHASE3)
+- DNS record type auto-detection (A for IPv4, AAAA for IPv6, CNAME for hostnames) in DigitalOcean provider (#PULUMI-DNS-FIX)
+- Unit test suite for infra/pulumi — 32 tests covering naming, tags, errors, node resolution, and DNS detection (#PULUMI-TESTS)
+- GitHub Actions pipeline for Pulumi infrastructure: `infra-preview.yml` (PR preview with comment), `infra-deploy.yml` (develop→dev auto, main→prod with approval gate), workflow_dispatch for manual operations (#PULUMI-PIPELINE)
+- `test-pulumi` job in CI gate — typecheck + vitest on every push (#PULUMI-PIPELINE)
+
+### Changed
+- Pulumi state backend changed from Pulumi Cloud to DigitalOcean Spaces (S3-compatible) — eliminates vendor lock-in, keeps state under our control, uses infrastructure we already pay for (#PULUMI-S3-BACKEND)
+
+### Fixed
+- DigitalOcean DNS provider hardcoded CNAME type — fails when LB returns IP (common on DO). Now auto-detects A vs CNAME (#PULUMI-DNS-FIX)
+- Traefik Service lookup may fail due to Helm chart naming template — added fullnameOverride for deterministic K8s Service names (#PULUMI-TRAEFIK-FIX)
+
 ### Changed
 - **BREAKING**: `SubmitBuild` workflow submission moved OUTSIDE the advisory lock — lock now only covers build record creation (QUEUED). Workflow submit, status transition to RUNNING, and SSE emission happen after lock release. Reduces lock hold time from ~7s (Argo retry) to <100ms (#REVIEW-BLOCKER-1)
 - Build state machine: added `QUEUED + BuildFailed → FAILED` transition — allows immediate failure on workflow submit error instead of waiting 5min queue timeout (#REVIEW-BLOCKER-1)

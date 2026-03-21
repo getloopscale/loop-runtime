@@ -177,6 +177,27 @@ jobs:
           path: cli/coverage/
           retention-days: 7
 
+  test-pulumi:
+    name: Test Pulumi (TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: infra/pulumi/package-lock.json
+      - name: Install dependencies
+        working-directory: infra/pulumi
+        run: npm ci
+      - name: Type check
+        working-directory: infra/pulumi
+        run: npx tsc --noEmit
+      - name: Run tests
+        working-directory: infra/pulumi
+        run: npm test
+
   # ─────────────────────────────────────────────
   # VALIDATE MANIFESTS
   # ─────────────────────────────────────────────
@@ -376,6 +397,7 @@ jobs:
       - test-go
       - test-infra
       - test-cli
+      - test-pulumi
       - validate-manifests
       - security-go
       - security-cli
@@ -395,6 +417,7 @@ jobs:
           echo "  test-go:              ${{ needs.test-go.result }}"
           echo "  test-infra:           ${{ needs.test-infra.result }}"
           echo "  test-cli:             ${{ needs.test-cli.result }}"
+          echo "  test-pulumi:          ${{ needs.test-pulumi.result }}"
           echo "  validate-manifests:   ${{ needs.validate-manifests.result }}"
           echo "  security-go:          ${{ needs.security-go.result }}"
           echo "  security-cli:         ${{ needs.security-cli.result }}"
