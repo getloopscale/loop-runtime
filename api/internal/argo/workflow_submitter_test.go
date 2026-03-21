@@ -6,6 +6,12 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
@@ -17,29 +23,78 @@ func skipIfNoBuildCluster(t *testing.T) string {
 	t.Helper()
 	kubeconfig := os.Getenv("BUILD_KUBECONFIG")
 	if kubeconfig == "" {
-		// Try default kubeconfig with build context
 		home, _ := os.UserHomeDir()
 		defaultPath := home + "/.kube/config"
 		if _, err := os.Stat(defaultPath); err != nil {
 			t.Skip("BUILD_KUBECONFIG not set and ~/.kube/config not found")
 		}
-		return defaultPath
+		kubeconfig = defaultPath
 	}
+
+	// Verify the build cluster is actually reachable before running integration tests.
+	kubeContext := os.Getenv("BUILD_KUBE_CONTEXT")
+	if kubeContext == "" {
+		kubeContext = "k3d-loopzero-build"
+	}
+	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig}
+	overrides := &clientcmd.ConfigOverrides{CurrentContext: kubeContext}
+	cfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
+	if err != nil {
+		t.Skipf("build cluster not configured: %v", err)
+	}
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		t.Skipf("build cluster client failed: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if _, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
+		t.Skipf("build cluster not reachable: %v", err)
+	}
+
 	return kubeconfig
 }
 
-func newTestSubmitter(t *testing.T) *WorkflowSubmitter {
+// ensureNamespace creates the namespace if it doesn't exist, for integration tests.
+func ensureNamespace(t *testing.T, kubeconfig, kubeContext, namespace string) {
+	t.Helper()
+	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig}
+	overrides := &clientcmd.ConfigOverrides{CurrentContext: kubeContext}
+	cfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
+	if err != nil {
+		t.Fatalf("failed to load kubeconfig for namespace creation: %v", err)
+	}
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		t.Fatalf("failed to create clientset for namespace creation: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = clientset.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: namespace},
+	}, metav1.CreateOptions{})
+	if err != nil && !k8serrors.IsAlreadyExists(err) {
+		t.Fatalf("failed to create namespace %s: %v", namespace, err)
+	}
+}
+
+func newTestSubmitter(t *testing.T, namespaces ...string) *WorkflowSubmitter {
 	t.Helper()
 	kubeconfig := skipIfNoBuildCluster(t)
 
-	context := os.Getenv("BUILD_KUBE_CONTEXT")
-	if context == "" {
-		context = "k3d-loopzero-build"
+	kubeContext := os.Getenv("BUILD_KUBE_CONTEXT")
+	if kubeContext == "" {
+		kubeContext = "k3d-loopzero-build"
+	}
+
+	// Ensure per-tenant build namespaces exist before submitting workflows.
+	for _, ns := range namespaces {
+		ensureNamespace(t, kubeconfig, kubeContext, ns)
 	}
 
 	submitter, err := NewWorkflowSubmitter(WorkflowSubmitterConfig{
 		Kubeconfig:       kubeconfig,
-		Context:          context,
+		Context:          kubeContext,
 		RegistryURL:      "k3d-loopzero-registry:5000",
 		RegistryInsecure: true,
 		BaseDomain:       "loopzero.local",
@@ -51,7 +106,7 @@ func newTestSubmitter(t *testing.T) *WorkflowSubmitter {
 }
 
 func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
-	submitter := newTestSubmitter(t)
+	submitter := newTestSubmitter(t, "build-acme")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -83,7 +138,7 @@ func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
 }
 
 func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
-	submitter := newTestSubmitter(t)
+	submitter := newTestSubmitter(t, "build-acme")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -111,7 +166,7 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 }
 
 func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
-	submitter := newTestSubmitter(t)
+	submitter := newTestSubmitter(t, "build-acme")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

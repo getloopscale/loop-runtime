@@ -267,6 +267,23 @@ func main() {
 		)
 		go reaper.Start(shutdownCtx)
 
+		// Release reaper — enforces spec §5.2 timeouts
+		// Releases stuck in READY past 5min → GIT_MIRROR_FAILED
+		// Releases stuck in PENDING past 2min → SYNC_FAILED
+		releaseReaper := services.NewReleaseReaper(
+			releaseStore,
+			&services.PostgresStaleReleaseChecker{DB: dbAdapter},
+			locker,
+			pgEventStore,
+			logger,
+			services.ReleaseReaperConfig{
+				ReadyTimeout:   cfg.ReleaseReadyTimeout,
+				PendingTimeout: cfg.ReleasePendingTimeout,
+				Interval:       cfg.ReleaseReaperInterval,
+			},
+		)
+		go releaseReaper.Start(shutdownCtx)
+
 		// Idempotency cleaner — prunes expired keys every hour (A-08)
 		idempotencyCleaner := services.NewIdempotencyCleaner(
 			&db.PostgresIdempotencyStore{DB: dbAdapter},

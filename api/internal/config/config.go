@@ -95,6 +95,11 @@ type Config struct {
 	BuildCancelTimeout  time.Duration
 	BuildReaperInterval time.Duration
 
+	// Release Reaper (spec §5.2)
+	ReleaseReadyTimeout   time.Duration
+	ReleasePendingTimeout time.Duration
+	ReleaseReaperInterval time.Duration
+
 	// Build Reconcile Loop (C-01 fix)
 	ReconcileInterval time.Duration
 }
@@ -186,6 +191,11 @@ func Load() Config {
 		BuildRunningTimeout: envDuration("BUILD_RUNNING_TIMEOUT", 30*time.Minute),
 		BuildCancelTimeout:  envDuration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
 		BuildReaperInterval: envDuration("BUILD_REAPER_INTERVAL", 30*time.Second),
+
+		// Release Reaper (spec §5.2)
+		ReleaseReadyTimeout:   envDuration("RELEASE_READY_TIMEOUT", 5*time.Minute),
+		ReleasePendingTimeout: envDuration("RELEASE_PENDING_TIMEOUT", 2*time.Minute),
+		ReleaseReaperInterval: envDuration("RELEASE_REAPER_INTERVAL", 30*time.Second),
 
 		// Build Reconcile Loop (C-01 fix): polls Argo Workflow CRDs every 5s
 		ReconcileInterval: envDuration("BUILD_RECONCILE_INTERVAL", 5*time.Second),

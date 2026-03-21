@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `EnvironmentTargetStore.ListByProject` and `DeleteTarget` for environment lifecycle management (#PROJECT-DELETE)
 
 ### Fixed
+- `ReleaseReaper` implemented but not wired in `main.go` — releases stuck in READY/PENDING past timeout accumulated indefinitely; now started as background goroutine with configurable timeouts via `RELEASE_READY_TIMEOUT`, `RELEASE_PENDING_TIMEOUT`, `RELEASE_REAPER_INTERVAL` env vars (#WIRING-RELEASE-REAPER)
+- WorkflowSubmitter integration tests failed when build cluster namespace `build-acme` didn't exist — `skipIfNoBuildCluster` now verifies cluster connectivity with 3s timeout and `ensureNamespace` helper creates per-tenant namespaces before test runs (#TEST-WORKFLOW-NS)
 - Build pipeline clone step depended on Gitea (cross-cluster) — replaced with MinIO source bundle download, eliminating Gitea as SPOF for builds (#PIPELINE-BLOCKER-1)
 - Workflow `VolumeClaimTemplates` created PVCs that leaked storage under load — replaced with `emptyDir` volumes with `sizeLimit`, auto-cleaned on pod termination (#PIPELINE-BLOCKER-2)
 - Dead CWTs (`loopzero-notify`, `loopzero-kaniko`, `loopzero-manifests-generate`, `loopzero-manifests-validate`) still deployed in build cluster — removed (#PIPELINE-BLOCKER-3)
