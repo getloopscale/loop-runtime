@@ -25,7 +25,7 @@ export function hasUncommittedChanges(): boolean {
 }
 
 export function getHeadCommit(): string {
-  return execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
+  return execSync('git rev-parse HEAD', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
 }
 
 export function getGitRoot(): string | null {

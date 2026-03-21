@@ -17,3 +17,6 @@ workspace-package = { workspace = true }
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = ["main.py"]

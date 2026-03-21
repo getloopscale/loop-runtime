@@ -342,6 +342,19 @@ fi
 
 func scriptDockerfileNode(apps []services.AppSpec) string {
 	port := defaultPort(apps, 3000)
+	appPath := "."
+	if len(apps) > 0 && apps[0].Path != "" && apps[0].Path != "." {
+		appPath = apps[0].Path
+	}
+
+	// For monorepo apps (path != "."), the Dockerfile sets WORKDIR to the app subdir
+	// so that npm ci finds package.json in the right place. COPY . . still copies the
+	// entire workspace (which Kaniko uses as context), then WORKDIR navigates to the app.
+	workdir := "/app"
+	if appPath != "." {
+		workdir = fmt.Sprintf("/app/%s", appPath)
+	}
+
 	return fmt.Sprintf(`set -euo pipefail
 cd /workspace
 if [ -f Dockerfile ]; then
@@ -354,13 +367,14 @@ cat > Dockerfile << 'DEOF'
 FROM node:20-alpine
 WORKDIR /app
 COPY . .
+WORKDIR %s
 RUN npm ci --omit=dev 2>/dev/null || npm install --production
 EXPOSE %d
 CMD ["npm", "start"]
 DEOF
 echo "Generated Dockerfile:"
 cat Dockerfile
-`, port)
+`, workdir, port)
 }
 
 // ---------------------------------------------------------------------------

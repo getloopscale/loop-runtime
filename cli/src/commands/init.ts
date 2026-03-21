@@ -254,8 +254,14 @@ export class InitCommand {
       if (err instanceof ApiError && err.statusCode === 409) {
         // 409 = project already exists, this is normal for re-init
         warning = 'Project already registered.';
+      } else if (err instanceof ApiError && err.statusCode >= 400 && err.statusCode < 500) {
+        // Client errors (400 invalid name, 422 validation, etc.) — show the actual message
+        warning = err.message;
+        if (!opts.json) {
+          this.deps.writeError(warning);
+        }
       } else {
-        // Real errors (connection refused, 500, etc.)
+        // Network errors (connection refused, 500, etc.)
         warning = 'Could not reach server. Run "loopzero deploy" to retry.';
         if (!opts.json) {
           this.deps.writeError(warning);

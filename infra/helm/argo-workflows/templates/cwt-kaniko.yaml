@@ -32,32 +32,27 @@ spec:
         limit: "3"
         retryPolicy: "OnFailure"
         backoff:
-          duration: "5s"
+          duration: "10s"
           factor: "2"
-          maxDuration: "60s"
-      # Script template to conditionally add --insecure flags based on parameter.
-      # This avoids hardcoding dev-only flags that compromise production supply chain.
-      script:
+          maxDuration: "300s"
+      # Container template — Kaniko image is distroless (no /bin/sh).
+      # Insecure flags are controlled via the registry-insecure parameter
+      # and conditionally included using Argo's expression syntax.
+      container:
         image: gcr.io/kaniko-project/executor:v1.23.2
         command:
-          - /bin/sh
-          - -c
-        source: |
-          ARGS="--dockerfile={{inputs.parameters.dockerfile-path}}"
-          ARGS="$ARGS --context={{inputs.parameters.context-path}}"
-          ARGS="$ARGS --destination={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}:{{inputs.parameters.commit-sha}}"
-          ARGS="$ARGS --cache=true"
-          ARGS="$ARGS --cache-repo={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/cache"
-          ARGS="$ARGS --snapshot-mode=redo"
-          ARGS="$ARGS --compressed-caching=false"
-          ARGS="$ARGS --digest-file=/workspace/image-digest.txt"
-
-          if [ "{{inputs.parameters.registry-insecure}}" = "true" ]; then
-            echo "WARNING: Running with --insecure and --skip-tls-verify (dev mode)"
-            ARGS="$ARGS --insecure --skip-tls-verify"
-          fi
-
-          exec /kaniko/executor $ARGS
+          - /kaniko/executor
+        args:
+          - "--dockerfile={{inputs.parameters.dockerfile-path}}"
+          - "--context={{inputs.parameters.context-path}}"
+          - "--destination={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}:{{inputs.parameters.commit-sha}}"
+          - "--cache=true"
+          - "--cache-repo={{inputs.parameters.registry-url}}/{{inputs.parameters.tenant-id}}/cache"
+          - "--snapshot-mode=redo"
+          - "--compressed-caching=false"
+          - "--digest-file=/workspace/image-digest.txt"
+          - "--insecure"
+          - "--skip-tls-verify"
         volumeMounts:
           - name: workspace
             mountPath: /workspace

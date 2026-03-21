@@ -17,6 +17,7 @@ Thumbs.db
 .idea/
 prompts
 continue.txt
+.yarn
 
 # --------------------------------------------
 # Node.js / TypeScript (cli/)

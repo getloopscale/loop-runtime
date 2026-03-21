@@ -171,8 +171,19 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
 
       const whoamiCmd = new WhoamiCommand({
+        getToken: () => configStore.getToken(),
         getEmail: () => configStore.getEmail(),
         getTeam: () => configStore.getTeam(),
+        verifyToken: async (token: string) => {
+          try {
+            const client = new ApiClient({ baseURL: getDefaultApiUrl(), token });
+            const result = await client.get<{ email: string; team: string }>('/api/v1/auth/whoami');
+            return { email: result.email, team: result.team };
+          } catch {
+            // API unreachable or token invalid — return null
+            return null;
+          }
+        },
         writeTo,
         writeError,
       });

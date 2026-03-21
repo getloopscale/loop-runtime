@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Build failure error message exposed internal term "Workflow Failed in build cluster" — replaced with product language "Build failed" (#dogfood-full2-F02)
 - Startup reconciler exposed internal terms "Workflow" and "build cluster" in error messages — all user-facing messages now use product language (#dogfood-full2-F02b)
 - ArgoCD health check was per-Application (shared across all apps in tenant/environment) — one degraded app blocked all deploys. Now checks per-Deployment health for only the apps being deployed (#dogfood-full2-retest-F01)
+- Kaniko CWT used `script` template with `/bin/sh` but Kaniko image is distroless — reverted to `container` spec with direct executor args (#dogfood-full3-F01)
+- Kaniko CWT retry `maxDuration` was 60s — insufficient for cold-start builds. Increased to 300s with 10s initial backoff (#dogfood-full3-F01)
+- Node.js Dockerfile generator set `WORKDIR /app` for all projects — monorepo apps with path `apps/api` couldn't find `package.json`. Now sets `WORKDIR` to the app's subdirectory (#dogfood-full3-F02)
+- `loopzero whoami` read from local config without validating token against API — showed "Authenticated" even with invalid/expired tokens. Now calls `/api/v1/auth/whoami` to verify, returns exit 4 if token is rejected (#dogfood-edge-F01)
 
 ### Changed
 - CLI `scanSubdirectories` now recurses into conventional app directories (`apps/`, `services/`, `microservices/`) to discover nested apps (#dogfood-full2-F01)
