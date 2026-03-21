@@ -1,0 +1,30 @@
+config:
+  loopzero-infra:environment: dev
+  loopzero-infra:provider: digitalocean
+  loopzero-infra:region: nyc3
+  loopzero-infra:domain: dev.loopzero.example
+  loopzero-infra:infraVersion: v1
+
+  # Management cluster
+  loopzero-infra:mgmtK8sVersion: "1.30.2-do.0"
+  loopzero-infra:mgmtNodeClass: small
+  loopzero-infra:mgmtMinNodes: "2"
+  loopzero-infra:mgmtMaxNodes: "3"
+
+  # Runtime cluster
+  loopzero-infra:runtimeK8sVersion: "1.30.2-do.0"
+  loopzero-infra:runtimeNodeClass: small
+  loopzero-infra:runtimeMinNodes: "2"
+  loopzero-infra:runtimeMaxNodes: "3"
+
+  # Gitea VM
+  loopzero-infra:giteaNodeClass: small
+
+  # Runners
+  loopzero-infra:runnerNodeClass: small
+  loopzero-infra:runnerCount: "1"
+
+  # Database
+  loopzero-infra:dbNodeClass: small
+  loopzero-infra:dbVersion: "16"
+  loopzero-infra:dbNodeCount: "1"

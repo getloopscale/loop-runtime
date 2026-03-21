@@ -1,0 +1,29 @@
+import * as pulumi from "@pulumi/pulumi";
+import { BaseLabels, NodeClass } from "../core/types";
+
+/**
+ * Network dependency is REQUIRED — a cluster must always live inside a VPC.
+ * Each provider maps this to its own construct (DO: vpcUuid, AWS: subnetIds).
+ */
+export interface ClusterNetworkRef {
+  readonly vpcId: pulumi.Input<string>;
+}
+
+export interface KubernetesClusterSpec {
+  readonly name: string;
+  readonly region: pulumi.Input<string>;
+  readonly version?: string;
+  readonly nodeClass: NodeClass;
+  readonly minNodes: number;
+  readonly maxNodes?: number;
+  readonly autoScale?: boolean;
+  readonly network: ClusterNetworkRef;
+  readonly tags: BaseLabels;
+}
+
+export interface KubernetesClusterOutput {
+  readonly clusterName: pulumi.Output<string>;
+  readonly kubeconfig: pulumi.Output<string>;
+  readonly endpoint: pulumi.Output<string>;
+  readonly nodePoolName: pulumi.Output<string>;
+}

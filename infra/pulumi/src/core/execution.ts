@@ -1,0 +1,123 @@
+import * as pulumi from "@pulumi/pulumi";
+
+/**
+ * Execution state tracking for the production topology.
+ *
+ * Tracks per-phase and per-component readiness derived from actual
+ * Pulumi Outputs — not from program control flow.
+ *
+ * Query: `pulumi stack output execution --json`
+ */
+
+export type PhaseName = "infra" | "bootstrap" | "expose";
+export type ComponentName =
+  | "network"
+  | "mgmtCluster"
+  | "runtimeCluster"
+  | "gitea"
+  | "runners"
+  | "database"
+  | "storage"
+  | "mgmtIngress"
+  | "mgmtCertManager"
+  | "mgmtArgocd"
+  | "runtimeIngress"
+  | "mgmtDns"
+  | "runtimeDns";
+export type PhaseStatus = "completed" | "pending";
+
+export interface ComponentRecord {
+  readonly component: ComponentName;
+  readonly status: PhaseStatus;
+}
+
+export interface PhaseRecord {
+  readonly phase: PhaseName;
+  readonly status: PhaseStatus;
+  readonly components: ComponentRecord[];
+}
+
+export interface ExecutionState {
+  readonly installationId: string;
+  readonly stack: string;
+  readonly environment: string;
+  readonly provider: string;
+  readonly declaredAt: string;
+  readonly phases: PhaseRecord[];
+}
+
+/**
+ * Builds execution state from component readiness signals.
+ *
+ * A phase is "completed" when ALL its components are "completed".
+ * Each component's status is derived from a real Pulumi Output<boolean>.
+ */
+export function buildExecutionState(args: {
+  environment: string;
+  provider: string;
+  components: Record<ComponentName, pulumi.Output<boolean>>;
+}): pulumi.Output<ExecutionState> {
+  const declaredAt = new Date().toISOString();
+  const stack = pulumi.getStack();
+  const installationId = `${stack}-${declaredAt.replace(/[:.]/g, "-")}`;
+
+  const componentNames = Object.keys(args.components) as ComponentName[];
+  const componentOutputs = componentNames.map((name) => args.components[name]);
+
+  return pulumi.all(componentOutputs).apply((values) => {
+    const componentMap: Record<string, boolean> = {};
+    componentNames.forEach((name, i) => {
+      componentMap[name] = values[i];
+    });
+
+    const infraComponents: ComponentName[] = [
+      "network",
+      "mgmtCluster",
+      "runtimeCluster",
+      "gitea",
+      "runners",
+      "database",
+      "storage",
+    ];
+    const bootstrapComponents: ComponentName[] = [
+      "mgmtIngress",
+      "mgmtCertManager",
+      "mgmtArgocd",
+      "runtimeIngress",
+    ];
+    const exposeComponents: ComponentName[] = ["mgmtDns", "runtimeDns"];
+
+    function buildPhase(
+      phase: PhaseName,
+      names: ComponentName[],
+    ): PhaseRecord {
+      const components = names.map((name) => ({
+        component: name,
+        status: toStatus(componentMap[name] ?? false),
+      }));
+      const allCompleted = components.every((c) => c.status === "completed");
+      return {
+        phase,
+        status: toStatus(allCompleted),
+        components,
+      };
+    }
+
+    return {
+      installationId,
+      stack,
+      environment: args.environment,
+      provider: args.provider,
+      declaredAt,
+      phases: [
+        buildPhase("infra", infraComponents),
+        buildPhase("bootstrap", bootstrapComponents),
+        buildPhase("expose", exposeComponents),
+      ],
+    };
+  });
+}
+
+function toStatus(ready: boolean): PhaseStatus {
+  return ready ? "completed" : "pending";
+}
