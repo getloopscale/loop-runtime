@@ -21,6 +21,7 @@ export type ComponentName =
   | "mgmtIngress"
   | "mgmtCertManager"
   | "mgmtArgocd"
+  | "mgmtTls"
   | "runtimeIngress"
   | "mgmtDns"
   | "runtimeDns";
@@ -83,6 +84,7 @@ export function buildExecutionState(args: {
       "mgmtIngress",
       "mgmtCertManager",
       "mgmtArgocd",
+      "mgmtTls",
       "runtimeIngress",
     ];
     const exposeComponents: ComponentName[] = ["mgmtDns", "runtimeDns"];

@@ -38,6 +38,7 @@ export const execution = buildExecutionState({
     mgmtIngress: bootstrap.mgmt.ingressReady,
     mgmtCertManager: bootstrap.mgmt.certManagerReady,
     mgmtArgocd: bootstrap.mgmt.argoCdReady,
+    mgmtTls: bootstrap.mgmt.tlsConfigured,
     runtimeIngress: bootstrap.runtime.ingressReady,
 
     // Phase 3

@@ -32,6 +32,7 @@ export interface ClusterBootstrapOutputs {
 export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
   readonly certManagerReady: pulumi.Output<boolean>;
   readonly argoCdReady: pulumi.Output<boolean>;
+  readonly tlsConfigured: pulumi.Output<boolean>;
 }
 
 export interface BootstrapOutputs {
@@ -95,10 +96,22 @@ function bootstrapMgmtCluster(
     traefik,
   );
 
+  // ClusterIssuer — Let's Encrypt production certificates via HTTP-01
+  const clusterIssuer = createClusterIssuer(provider, certManager, config);
+
+  // TLS IngressRoutes for platform services
+  const tlsRoutes = createPlatformIngressRoutes(
+    provider,
+    config,
+    traefik,
+    clusterIssuer,
+  );
+
   return {
     certManagerReady: certManager.status.apply((s) => s.status === "deployed"),
     argoCdReady: argocd.status.apply((s) => s.status === "deployed"),
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
+    tlsConfigured: tlsRoutes.apply((routes) => routes.length > 0),
     ingressEndpoint,
     platformNamespace: ns.metadata.name,
   };
@@ -328,4 +341,154 @@ function lookupLoadBalancerEndpoint(
     const ingress = status?.loadBalancer?.ingress?.[0];
     return ingress?.ip ?? ingress?.hostname ?? "";
   });
+}
+
+// ---------------------------------------------------------------------------
+// TLS — Let's Encrypt via cert-manager + Traefik IngressRoute
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates a ClusterIssuer for Let's Encrypt production certificates.
+ * Uses HTTP-01 challenge solved by Traefik's ingress class.
+ */
+function createClusterIssuer(
+  provider: k8s.Provider,
+  certManager: k8s.helm.v3.Release,
+  config: PlatformStackConfig,
+): k8s.apiextensions.CustomResource {
+  return new k8s.apiextensions.CustomResource(
+    "letsencrypt-prod",
+    {
+      apiVersion: "cert-manager.io/v1",
+      kind: "ClusterIssuer",
+      metadata: {
+        name: "letsencrypt-prod",
+        labels: {
+          "app.kubernetes.io/managed-by": "pulumi",
+          "app.kubernetes.io/part-of": "loopzero-platform",
+          "loopzero.io/environment": config.environment,
+        },
+      },
+      spec: {
+        acme: {
+          email: `admin@${config.dnsZone}`,
+          server: "https://acme-v02.api.letsencrypt.org/directory",
+          privateKeySecretRef: {
+            name: "letsencrypt-prod-account-key",
+          },
+          solvers: [
+            {
+              http01: {
+                ingress: {
+                  class: "traefik",
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    { provider, dependsOn: [certManager] },
+  );
+}
+
+/**
+ * Platform subdomains that need TLS IngressRoutes on the management cluster.
+ *
+ * ArgoCD server runs on port 80 (insecure mode, TLS terminated at Traefik).
+ * Other services will be added as they are deployed.
+ */
+const PLATFORM_INGRESS_ROUTES = [
+  { subdomain: "argocd", serviceName: "argocd-server", servicePort: 80 },
+] as const;
+
+/**
+ * Creates TLS-terminated IngressRoutes for platform services.
+ *
+ * Each route:
+ * 1. Requests a Certificate from Let's Encrypt via the ClusterIssuer
+ * 2. Creates an IngressRoute with TLS passthrough to the service
+ *
+ * Services that don't exist yet (grafana, api) are skipped —
+ * they'll get routes when deployed in later sprints.
+ */
+function createPlatformIngressRoutes(
+  provider: k8s.Provider,
+  config: PlatformStackConfig,
+  traefik: k8s.helm.v3.Release,
+  clusterIssuer: k8s.apiextensions.CustomResource,
+): pulumi.Output<string[]> {
+  const createdRoutes: pulumi.Output<string>[] = [];
+
+  for (const route of PLATFORM_INGRESS_ROUTES) {
+    const fqdn =
+      config.domain === config.dnsZone
+        ? `${route.subdomain}.${config.domain}`
+        : `${route.subdomain}.${config.domain}`;
+
+    const certName = `tls-${route.subdomain}`;
+
+    // Certificate resource — cert-manager watches this and issues a cert
+    const cert = new k8s.apiextensions.CustomResource(
+      `cert-${route.subdomain}`,
+      {
+        apiVersion: "cert-manager.io/v1",
+        kind: "Certificate",
+        metadata: {
+          name: certName,
+          namespace: PLATFORM_NAMESPACE,
+        },
+        spec: {
+          secretName: `${certName}-secret`,
+          issuerRef: {
+            name: "letsencrypt-prod",
+            kind: "ClusterIssuer",
+          },
+          dnsNames: [fqdn],
+        },
+      },
+      { provider, dependsOn: [clusterIssuer] },
+    );
+
+    // IngressRoute — Traefik CRD for routing with TLS
+    const ingressRoute = new k8s.apiextensions.CustomResource(
+      `ingress-${route.subdomain}`,
+      {
+        apiVersion: "traefik.io/v1alpha1",
+        kind: "IngressRoute",
+        metadata: {
+          name: `${route.subdomain}-ingress`,
+          namespace: PLATFORM_NAMESPACE,
+          labels: {
+            "app.kubernetes.io/managed-by": "pulumi",
+            "app.kubernetes.io/part-of": "loopzero-platform",
+          },
+        },
+        spec: {
+          entryPoints: ["websecure"],
+          routes: [
+            {
+              match: `Host(\`${fqdn}\`)`,
+              kind: "Rule",
+              services: [
+                {
+                  name: route.serviceName,
+                  port: route.servicePort,
+                  namespace: PLATFORM_NAMESPACE,
+                },
+              ],
+            },
+          ],
+          tls: {
+            secretName: `${certName}-secret`,
+          },
+        },
+      },
+      { provider, dependsOn: [cert, traefik] },
+    );
+
+    createdRoutes.push(ingressRoute.metadata.name);
+  }
+
+  return pulumi.all(createdRoutes);
 }
