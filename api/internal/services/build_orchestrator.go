@@ -21,8 +21,8 @@ type WorkflowStatus struct {
 // WorkflowSubmitter abstracts Argo Workflows submission (DIP — no direct coupling).
 type WorkflowSubmitter interface {
 	Submit(ctx context.Context, spec WorkflowSpec) (workflowID string, err error)
-	Cancel(ctx context.Context, workflowID string) error
-	GetStatus(ctx context.Context, workflowID string) (*WorkflowStatus, error)
+	Cancel(ctx context.Context, namespace, workflowID string) error
+	GetStatus(ctx context.Context, namespace, workflowID string) (*WorkflowStatus, error)
 }
 
 // WorkflowSpec contains everything needed to submit a build workflow.
@@ -34,6 +34,7 @@ type WorkflowSpec struct {
 	CommitSHA     string
 	Apps          []AppSpec
 	CorrelationID string
+	Namespace     string // Target namespace for the workflow (e.g., "build-acme")
 }
 
 // AppSpec describes a single app from loopzero.yaml.
@@ -232,6 +233,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			CommitSHA:     req.CommitSHA,
 			Apps:          req.Apps,
 			CorrelationID: req.CorrelationID,
+			Namespace:     "build-" + req.TenantID,
 		}
 		workflowID, err := o.workflow.Submit(ctx, wfSpec)
 		if err != nil {
@@ -341,7 +343,7 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 
 		// Step 6: cancel the workflow (best-effort — workflow may already be done)
 		if build.WorkflowID != "" {
-			if cancelErr := o.workflow.Cancel(ctx, build.WorkflowID); cancelErr != nil {
+			if cancelErr := o.workflow.Cancel(ctx, "build-"+build.TenantID, build.WorkflowID); cancelErr != nil {
 				slog.Warn("workflow cancel failed (best-effort)", "workflow_id", build.WorkflowID, "error", cancelErr)
 			}
 		}

@@ -165,7 +165,6 @@ func main() {
 		workflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
 			Kubeconfig:       cfg.BuildKubeconfig,
 			Context:          cfg.BuildKubeContext,
-			Namespace:        cfg.ArgoNamespace,
 			RegistryURL:      cfg.RegistryURL,
 			RegistryInsecure: cfg.RegistryInsecure,
 			BaseDomain:       cfg.BaseDomain,

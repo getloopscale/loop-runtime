@@ -131,11 +131,11 @@ func (f *fakeReconcilerWorkflow) Submit(_ context.Context, _ services.WorkflowSp
 	return "wf-unused", nil
 }
 
-func (f *fakeReconcilerWorkflow) Cancel(_ context.Context, _ string) error {
+func (f *fakeReconcilerWorkflow) Cancel(_ context.Context, _, _ string) error {
 	return nil
 }
 
-func (f *fakeReconcilerWorkflow) GetStatus(_ context.Context, workflowID string) (*services.WorkflowStatus, error) {
+func (f *fakeReconcilerWorkflow) GetStatus(_ context.Context, _, workflowID string) (*services.WorkflowStatus, error) {
 	if f.getErr != nil {
 		return nil, f.getErr
 	}

@@ -40,7 +40,6 @@ func newTestSubmitter(t *testing.T) *WorkflowSubmitter {
 	submitter, err := NewWorkflowSubmitter(WorkflowSubmitterConfig{
 		Kubeconfig:       kubeconfig,
 		Context:          context,
-		Namespace:        "argo",
 		RegistryURL:      "k3d-loopzero-registry:5000",
 		RegistryInsecure: true,
 		BaseDomain:       "loopzero.local",
@@ -62,6 +61,7 @@ func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
 		ProjectID:   "my-app",
 		Environment: "production",
 		CommitSHA:   "abc123def456",
+		Namespace:   "build-acme",
 		Apps: []services.AppSpec{
 			{Name: "api", Type: "server", Port: 3000},
 		},
@@ -77,7 +77,7 @@ func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
 	t.Logf("created workflow: %s", workflowID)
 
 	// Cleanup: cancel the workflow so it doesn't run indefinitely
-	if err := submitter.Cancel(ctx, workflowID); err != nil {
+	if err := submitter.Cancel(ctx, "build-acme", workflowID); err != nil {
 		t.Logf("warning: cleanup cancel failed: %v", err)
 	}
 }
@@ -94,6 +94,7 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 		ProjectID:   "my-app",
 		Environment: "staging",
 		CommitSHA:   "def456",
+		Namespace:   "build-acme",
 		Apps: []services.AppSpec{
 			{Name: "web", Type: "frontend", Port: 0},
 		},
@@ -103,7 +104,7 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 	}
 
 	// Cancel it
-	err = submitter.Cancel(ctx, workflowID)
+	err = submitter.Cancel(ctx, "build-acme", workflowID)
 	if err != nil {
 		t.Fatalf("Cancel failed: %v", err)
 	}
@@ -120,6 +121,7 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 		ProjectID:   "monorepo",
 		Environment: "production",
 		CommitSHA:   "789abc",
+		Namespace:   "build-acme",
 		Apps: []services.AppSpec{
 			{Name: "api", Type: "server", Port: 3000},
 			{Name: "web", Type: "frontend", Port: 0},
@@ -135,5 +137,5 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 	}
 
 	// Cleanup
-	_ = submitter.Cancel(ctx, workflowID)
+	_ = submitter.Cancel(ctx, "build-acme", workflowID)
 }

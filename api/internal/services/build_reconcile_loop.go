@@ -172,7 +172,7 @@ func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build
 	}
 
 	// Check external workflow state in the build cluster
-	status, err := r.workflow.GetStatus(ctx, build.WorkflowID)
+	status, err := r.workflow.GetStatus(ctx, "build-"+build.TenantID, build.WorkflowID)
 	if err != nil {
 		r.logger.Error("reconcile loop: failed to check workflow status",
 			"build_id", build.ID, "workflow_id", build.WorkflowID, "error", err)

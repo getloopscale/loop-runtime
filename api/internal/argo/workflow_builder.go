@@ -93,7 +93,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		TTLStrategy: &forge.TTLStrategy{
 			SecondsAfterCompletion: ptr(3600),
 			SecondsAfterSuccess:    ptr(3600),
-			SecondsAfterFailure:    ptr(21600),
+			SecondsAfterFailure:    ptr(86400),
 		},
 		Labels: map[string]string{
 			"loopzero.io/tenant":      spec.TenantID,
@@ -103,9 +103,9 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			"loopzero.io/language":    strategy.Name(),
 		},
 		Templates: templates,
-		VolumeClaimTemplates: []forge.PVCVolume{
-			{BaseVolume: forge.BaseVolume{Name: "workspace"}, Size: "5Gi"},
-			{BaseVolume: forge.BaseVolume{Name: "manifests"}, Size: "256Mi"},
+		Volumes: []forge.VolumeBuilder{
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace"}, SizeLimit: "5Gi"},
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "manifests"}, SizeLimit: "256Mi"},
 		},
 	}
 
@@ -120,10 +120,12 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, strategy Lang
 
 	tasks := []*forge.Task{
 		// Step 1: clone (CWT ref)
-		// Gitea credentials injected via envFrom (K8s Secret loopzero-gitea-credentials)
+		// Source bundle downloaded from MinIO (uploaded by CLI during deploy).
+		// MinIO credentials injected via envFrom (K8s Secret loopzero-minio-credentials).
+		// BLOCKER-1 fix: replaced Gitea cross-cluster clone with MinIO bundle download.
 		cwtTask("clone-repo", "loopzero-clone", "clone-repo", nil, map[string]string{
-			"tenant-id":  spec.TenantID,
-			"project-id": spec.ProjectID,
+			"tenant-id": spec.TenantID,
+			"build-id":  spec.BuildID,
 		}),
 
 		// Step 1: restore-cache (CWT ref) — depends on clone

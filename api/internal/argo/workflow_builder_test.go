@@ -81,24 +81,41 @@ func TestWorkflowBuilder_Build_SpecFields(t *testing.T) {
 	if wf.TTLStrategy.SecondsAfterCompletion == nil || *wf.TTLStrategy.SecondsAfterCompletion != 3600 {
 		t.Errorf("SecondsAfterCompletion = %v, want 3600", wf.TTLStrategy.SecondsAfterCompletion)
 	}
+	// LEVE-3 fix: Failed workflows retained 24h (was 6h) for debugging
+	if wf.TTLStrategy.SecondsAfterFailure == nil || *wf.TTLStrategy.SecondsAfterFailure != 86400 {
+		t.Errorf("SecondsAfterFailure = %v, want 86400 (24h)", wf.TTLStrategy.SecondsAfterFailure)
+	}
 }
 
-func TestWorkflowBuilder_Build_HasVolumeClaimTemplates(t *testing.T) {
+// BLOCKER-2 fix: Workspace and manifests volumes are now emptyDir (not PVCs).
+// emptyDir is automatically cleaned up when the pod terminates, preventing PVC storage leak.
+func TestWorkflowBuilder_Build_HasEmptyDirVolumes(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
 
-	if len(wf.VolumeClaimTemplates) != 2 {
-		t.Fatalf("want 2 VolumeClaimTemplates, got %d", len(wf.VolumeClaimTemplates))
+	// Must NOT have VolumeClaimTemplates (PVCs leak storage)
+	if len(wf.VolumeClaimTemplates) != 0 {
+		t.Errorf("want 0 VolumeClaimTemplates (BLOCKER-2: PVCs replaced by emptyDir), got %d", len(wf.VolumeClaimTemplates))
 	}
 
-	if wf.VolumeClaimTemplates[0].Name != "workspace" {
-		t.Errorf("first VCT name = %q, want workspace", wf.VolumeClaimTemplates[0].Name)
+	// Must have 2 emptyDir Volumes
+	if len(wf.Volumes) != 2 {
+		t.Fatalf("want 2 Volumes (emptyDir), got %d", len(wf.Volumes))
 	}
-	if wf.VolumeClaimTemplates[1].Name != "manifests" {
-		t.Errorf("second VCT name = %q, want manifests", wf.VolumeClaimTemplates[1].Name)
+
+	vol0, ok0 := wf.Volumes[0].(*forge.EmptyDirVolume)
+	vol1, ok1 := wf.Volumes[1].(*forge.EmptyDirVolume)
+	if !ok0 || !ok1 {
+		t.Fatal("expected both volumes to be EmptyDirVolume")
+	}
+	if vol0.Name != "workspace" {
+		t.Errorf("first volume name = %q, want workspace", vol0.Name)
+	}
+	if vol1.Name != "manifests" {
+		t.Errorf("second volume name = %q, want manifests", vol1.Name)
 	}
 }
 
@@ -221,16 +238,21 @@ func TestWorkflowBuilder_Build_CloneTask_UsesCWTRef(t *testing.T) {
 		t.Error("templateRef.ClusterScope should be true")
 	}
 
-	// Check params are passed — only tenant-id and project-id.
-	// Gitea credentials come from K8s Secret (envFrom), not workflow params.
+	// BLOCKER-1 fix: Clone now uses MinIO (source bundle), not Gitea.
+	// Parameters: tenant-id + build-id (for MinIO path).
+	// MinIO credentials come from K8s Secret (envFrom), not workflow params.
 	paramNames := taskParamNames(task)
-	for _, expected := range []string{"tenant-id", "project-id"} {
+	for _, expected := range []string{"tenant-id", "build-id"} {
 		if !paramNames[expected] {
 			t.Errorf("clone-repo missing parameter: %s", expected)
 		}
 	}
-	// Gitea credentials must NOT be workflow parameters (security: visible in Workflow CR)
-	for _, forbidden := range []string{"gitea-url", "gitea-token"} {
+	// project-id is no longer needed (MinIO path uses build-id)
+	if paramNames["project-id"] {
+		t.Error("clone-repo should NOT have parameter: project-id (BLOCKER-1: use build-id for MinIO path)")
+	}
+	// Credential parameters must NOT be in workflow params (security: visible in Workflow CR)
+	for _, forbidden := range []string{"gitea-url", "gitea-token", "minio-endpoint", "minio-access-key"} {
 		if paramNames[forbidden] {
 			t.Errorf("clone-repo should NOT have parameter: %s (use K8s Secret instead)", forbidden)
 		}

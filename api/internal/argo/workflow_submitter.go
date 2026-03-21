@@ -31,7 +31,6 @@ var workflowGVR = schema.GroupVersionResource{
 type WorkflowSubmitterConfig struct {
 	Kubeconfig string // Path to kubeconfig file
 	Context    string // Kube context (e.g., "k3d-loopzero-build")
-	Namespace  string // Namespace for workflows (e.g., "argo")
 
 	// Infrastructure parameters passed to every workflow via the WorkflowBuilder.
 	// C-01 fix: CallbackURL/CallbackSecret removed. No more HTTP callback.
@@ -47,10 +46,12 @@ type WorkflowSubmitterConfig struct {
 // It uses the WorkflowBuilder to generate self-contained Workflow CRs with
 // ClusterWorkflowTemplate refs for reusable steps and inline templates for
 // language-specific steps.
+//
+// MOD-2: The submitter is namespace-agnostic. Each workflow runs in the tenant's
+// own build namespace (e.g., "build-acme"), passed via WorkflowSpec.Namespace.
 type WorkflowSubmitter struct {
-	client    dynamic.Interface
-	namespace string
-	builder   *WorkflowBuilder
+	client  dynamic.Interface
+	builder *WorkflowBuilder
 }
 
 // NewWorkflowSubmitter creates a WorkflowSubmitter connected to the build cluster.
@@ -78,9 +79,8 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 	})
 
 	return &WorkflowSubmitter{
-		client:    client,
-		namespace: cfg.Namespace,
-		builder:   builder,
+		client:  client,
+		builder: builder,
 	}, nil
 }
 
@@ -92,7 +92,7 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 		return "", fmt.Errorf("argo: build workflow: %w", err)
 	}
 
-	wf.Namespace = s.namespace
+	wf.Namespace = spec.Namespace
 
 	wfObject, err := wf.ToDict()
 	if err != nil {
@@ -112,7 +112,7 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 			}
 		}
 
-		created, err := s.client.Resource(workflowGVR).Namespace(s.namespace).Create(ctx, workflow, metav1.CreateOptions{})
+		created, err := s.client.Resource(workflowGVR).Namespace(spec.Namespace).Create(ctx, workflow, metav1.CreateOptions{})
 		if err == nil {
 			return created.GetName(), nil
 		}
@@ -133,9 +133,9 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 }
 
 // Cancel stops a running workflow by setting its shutdown strategy.
-func (s *WorkflowSubmitter) Cancel(ctx context.Context, workflowID string) error {
+func (s *WorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID string) error {
 	patch := []byte(`{"spec":{"shutdown":"Stop"}}`)
-	_, err := s.client.Resource(workflowGVR).Namespace(s.namespace).Patch(
+	_, err := s.client.Resource(workflowGVR).Namespace(namespace).Patch(
 		ctx, workflowID, "application/merge-patch+json", patch, metav1.PatchOptions{},
 	)
 	if err != nil {
@@ -146,8 +146,8 @@ func (s *WorkflowSubmitter) Cancel(ctx context.Context, workflowID string) error
 
 // GetStatus checks the external state of a workflow in the build cluster.
 // Returns (status, nil) if the workflow exists, or (nil, nil) if not found.
-func (s *WorkflowSubmitter) GetStatus(ctx context.Context, workflowID string) (*services.WorkflowStatus, error) {
-	wf, err := s.client.Resource(workflowGVR).Namespace(s.namespace).Get(ctx, workflowID, metav1.GetOptions{})
+func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*services.WorkflowStatus, error) {
+	wf, err := s.client.Resource(workflowGVR).Namespace(namespace).Get(ctx, workflowID, metav1.GetOptions{})
 	if err != nil {
 		// Not found — workflow was cleaned up or never existed
 		return nil, nil

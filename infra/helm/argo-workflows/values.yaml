@@ -51,16 +51,17 @@ kaniko:
   insecure: true       # DEV ONLY — allows HTTP registry (no TLS)
   skipTlsVerify: true  # DEV ONLY — skips TLS certificate validation
 
-# Gitea credentials for clone step (build cluster → mgmt cluster).
-# IMPORTANT: This URL must be reachable FROM the build cluster. Since workflows run
-# in the build cluster (different K8s cluster), using cluster-internal DNS like
-# "gitea-http.loopzero-system.svc:3000" will fail with "Could not resolve host".
-# Use the cross-cluster IP or external address (e.g., mgmt LoadBalancer NodePort).
-# Token is injected into the build cluster as a K8s Secret (loopzero-gitea-credentials).
-# MUST be set — empty token will fail clone.
-gitea:
-  url: ""     # REQUIRED — cross-cluster URL to Gitea (e.g., "http://10.0.2.8:30000")
-  token: ""   # REQUIRED — Gitea access token
+# MinIO object storage configuration.
+# Used by clone step (source bundles) and cache steps (dependency cache).
+# IMPORTANT: Set insecure=false in production overlays. This flag disables
+# TLS verification for the MinIO endpoint and is only appropriate for local
+# development with k3d (MinIO without TLS).
+#
+# BLOCKER-1 fix: Gitea section removed. Source code is now fetched from MinIO
+# (where the CLI uploads it) instead of cloning from Gitea cross-cluster.
+# Gitea is only used for GitOps manifests (ArgoCD watches it).
+minio:
+  insecure: true   # DEV ONLY — allows HTTP MinIO (no TLS)
 
 server:
   securityContext:

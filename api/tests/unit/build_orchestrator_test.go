@@ -339,11 +339,11 @@ func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec services.Workfl
 	return f.workflowID, nil
 }
 
-func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, workflowID string) error {
+func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID string) error {
 	return nil
 }
 
-func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, workflowID string) (*services.WorkflowStatus, error) {
+func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*services.WorkflowStatus, error) {
 	return &services.WorkflowStatus{Phase: "Succeeded"}, nil
 }
 

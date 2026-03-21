@@ -13,8 +13,8 @@ spec:
         parameters:
           - name: tenant-id
             description: "Tenant identifier for isolation"
-          - name: project-id
-            description: "Project identifier"
+          - name: build-id
+            description: "Build identifier — maps to the source bundle path in MinIO"
       retryStrategy:
         limit: "2"
         retryPolicy: "OnFailure"
@@ -23,22 +23,60 @@ spec:
           factor: "2"
           maxDuration: "30s"
       container:
+        # BLOCKER-1 fix: Source bundle is downloaded from MinIO instead of cloning from Gitea.
+        # The CLI uploads a git bundle to MinIO during `loopzero deploy`. The build pipeline
+        # downloads it here, eliminating the cross-cluster Gitea dependency.
+        #
+        # Previous approach: git clone from Gitea (cross-cluster) — required Gitea to be up
+        # for ALL builds. Now Gitea is only used for GitOps manifests (ArgoCD).
         image: alpine/git:2.43.0
-        # Credentials injected from K8s Secret via envFrom — never as workflow parameters.
-        # Secret loopzero-gitea-credentials provides: GITEA_URL, GITEA_TOKEN
+        # MinIO credentials injected from K8s Secret via envFrom — never as workflow parameters.
+        # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
         envFrom:
           - secretRef:
-              name: loopzero-gitea-credentials
+              name: loopzero-minio-credentials
         command:
           - sh
           - -c
           - |
             set -euo pipefail
-            REPO_URL="${GITEA_URL}/loopzero/loopzero-source-{{inputs.parameters.tenant-id}}-{{inputs.parameters.project-id}}.git"
-            CLONE_URL=$(echo "$REPO_URL" | sed "s|://|://oauth2:${GITEA_TOKEN}@|")
-            git clone --depth 1 "$CLONE_URL" /workspace
+
+            BUNDLE_PATH="{{inputs.parameters.tenant-id}}/source/{{inputs.parameters.build-id}}.bundle"
+            BUNDLE_URL="${MINIO_ENDPOINT}/loopzero-builds/${BUNDLE_PATH}"
+
+            echo "Downloading source bundle from MinIO: ${BUNDLE_PATH}"
+
+            # Download bundle using curl with MinIO credentials (S3 presigned-style via basic auth)
+            # For MinIO with access key auth, we use wget with the S3 API path.
+            # The minio-credentials secret provides standard AWS env vars.
+            apk add --no-cache curl >/dev/null 2>&1 || true
+
+            HTTP_CODE=$(curl -sS -w "%{http_code}" -o /tmp/source.bundle \
+              {{- if .Values.minio.insecure }}
+              --insecure \
+              {{- end }}
+              "${BUNDLE_URL}" 2>/dev/null) || {
+              echo "ERROR: Failed to download source bundle (curl error)"
+              exit 1
+            }
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "ERROR: Source bundle not found (HTTP ${HTTP_CODE}). Bundle: ${BUNDLE_PATH}"
+              echo "The source may not have been uploaded. Run 'loopzero deploy' again."
+              exit 1
+            fi
+
+            BUNDLE_SIZE=$(stat -c%s /tmp/source.bundle 2>/dev/null || echo "unknown")
+            echo "Bundle downloaded: ${BUNDLE_SIZE} bytes"
+
+            # Unpack the git bundle into the workspace
             cd /workspace
-            echo "Cloned from source repo"
+            git init
+            git fetch /tmp/source.bundle "refs/heads/*:refs/heads/*"
+            git checkout HEAD 2>/dev/null || git checkout $(git branch -a | head -1 | tr -d '* ')
+            rm -f /tmp/source.bundle
+
+            echo "Source unpacked into /workspace"
             ls -la
         volumeMounts:
           - name: workspace

@@ -44,6 +44,29 @@ const (
 	ReleaseManualResolve      Event = "ManualResolve"
 )
 
+// IsReleaseTerminal returns true if the given state is a terminal release state
+// (SUPERSEDED, ROLLED_BACK, or CANCELLED). This is a standalone helper that avoids
+// requiring a Machine instance, useful in places like the ReleaseReaper and
+// orchestrators that only need a quick terminal-state check.
+func IsReleaseTerminal(state State) bool {
+	switch state {
+	case ReleaseSuperseded, ReleaseRolledBack, ReleaseCancelled:
+		return true
+	}
+	return false
+}
+
+// IsReleaseReapable returns true if the state is one the ReleaseReaper should skip
+// because the release has already left the reapable states (READY or PENDING).
+// This includes terminal states AND failure/active states that represent forward progress.
+func IsReleaseReapable(state State) bool {
+	switch state {
+	case ReleaseReady, ReleasePending:
+		return true
+	}
+	return false
+}
+
 // NewReleaseMachine returns the release state machine per spec section 5.2.
 //
 // States: READY -> PENDING -> ACTIVE -> SUPERSEDED|ROLLING_BACK

@@ -21,7 +21,9 @@ spec:
             description: "Optional suffix appended to cache key (e.g., lockfile hash for precise invalidation)"
             default: ""
       container:
-        image: amazon/aws-cli:2.15.17
+        # MOD-4 fix: Replaced amazon/aws-cli (~200MB) with minio/mc (~30MB).
+        # Faster image pull on the hot path (cache hit).
+        image: minio/mc:RELEASE.2024-01-16T16-06-34Z
         # Credentials injected from K8s Secret via envFrom — never as workflow parameters.
         # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
         envFrom:
@@ -32,6 +34,14 @@ spec:
           - -c
           - |
             set -euo pipefail
+
+            # Configure mc alias for MinIO
+            # MOD-6 fix: --insecure flag parametrized via Helm values (not hardcoded).
+            mc alias set loopzero "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
+              {{- if .Values.minio.insecure }}
+              --insecure \
+              {{- end }}
+              --api S3v4 >/dev/null 2>&1
 
             # Compute lockfile hash for cache key precision.
             # If an explicit suffix is provided, use it. Otherwise, auto-detect
@@ -58,19 +68,20 @@ spec:
             else
               CACHE_KEY="{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.cache-key}}"
             fi
-            CACHE_PATH="s3://loopzero-builds/{{inputs.parameters.tenant-id}}/cache/deps/${CACHE_KEY}.tar.gz"
+            CACHE_PATH="loopzero/loopzero-builds/{{inputs.parameters.tenant-id}}/cache/deps/${CACHE_KEY}.tar.gz"
 
-            aws s3 cp "$CACHE_PATH" /tmp/cache.tar.gz \
-              --endpoint-url "$MINIO_ENDPOINT" \
-              --cli-connect-timeout 10 \
-              --cli-read-timeout 30 \
-              --no-verify-ssl 2>&1 || {
+            mc cp "${CACHE_PATH}" /tmp/cache.tar.gz \
+              {{- if .Values.minio.insecure }}
+              --insecure \
+              {{- end }}
+              2>&1 || {
               echo "Cache miss — no cached dependencies found for ${CACHE_KEY}"
               exit 0
             }
 
             cd /workspace
             tar xzf /tmp/cache.tar.gz 2>&1 || echo "Cache extraction failed — treating as miss"
+            rm -f /tmp/cache.tar.gz
             echo "Cache restored from ${CACHE_KEY}"
         volumeMounts:
           - name: workspace

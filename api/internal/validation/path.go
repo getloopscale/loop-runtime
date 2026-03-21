@@ -1,0 +1,60 @@
+// Package validation provides input validation for API request fields.
+package validation
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+// appPathRegex allows only alphanumeric characters, dots, underscores, hyphens, and slashes.
+// No shell metacharacters, no null bytes, no spaces.
+var appPathRegex = regexp.MustCompile(`^[a-zA-Z0-9._/-]+$`)
+
+const maxAppPathLength = 255
+
+// ValidateAppPath checks that an app path is safe for use in shell scripts and filesystem operations.
+//
+// SEC-3 fix: app.Path flows into Argo Workflow shell scripts (e.g., `cd "/workspace/{path}"`).
+// Without validation, a malicious path could cause path traversal or command injection.
+//
+// Rules:
+//   - Empty string is valid (normalized to "." by the consumer)
+//   - Must not be absolute (no leading /)
+//   - Must not contain ".." components (path traversal)
+//   - Must match [a-zA-Z0-9._/-]+ (no shell metacharacters)
+//   - Max 255 characters
+func ValidateAppPath(path string) error {
+	// Empty path is valid — the consumer defaults it to "."
+	if path == "" || path == "." {
+		return nil
+	}
+
+	if len(path) > maxAppPathLength {
+		return fmt.Errorf("app path too long (%d chars, max %d)", len(path), maxAppPathLength)
+	}
+
+	// Reject absolute paths
+	if strings.HasPrefix(path, "/") {
+		return fmt.Errorf("app path must be relative, got absolute path: %q", path)
+	}
+
+	// Reject path traversal
+	for _, component := range strings.Split(path, "/") {
+		if component == ".." {
+			return fmt.Errorf("app path must not contain '..': %q", path)
+		}
+	}
+
+	// Reject shell metacharacters and unsafe characters
+	if !appPathRegex.MatchString(path) {
+		return fmt.Errorf("app path contains invalid characters (allowed: alphanumeric, dots, underscores, hyphens, slashes): %q", path)
+	}
+
+	// Reject trailing slash (likely a mistake)
+	if strings.HasSuffix(path, "/") {
+		return fmt.Errorf("app path must not end with '/': %q", path)
+	}
+
+	return nil
+}

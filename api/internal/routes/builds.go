@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/loopzero/loopzero/api/internal/validation"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
@@ -157,6 +158,19 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 			400,
 		))
 		return
+	}
+
+	// SEC-3 fix: Validate app paths before they reach shell scripts in the build pipeline.
+	// Prevents path traversal and command injection via crafted app.path values.
+	for _, app := range req.Apps {
+		if err := validation.ValidateAppPath(app.Path); err != nil {
+			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				"INVALID_APP_PATH",
+				fmt.Sprintf("Invalid path for app %q: %s", app.Name, err.Error()),
+				400,
+			))
+			return
+		}
 	}
 
 	resp, err := h.orch.SubmitBuild(ctx, SubmitBuildInput{

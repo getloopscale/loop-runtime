@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `ReleaseReaper` background goroutine — finds releases stuck in READY (>5min) or PENDING (>ArgoCD timeout) and transitions them to GIT_MIRROR_FAILED or SYNC_FAILED with SSE notification (#PIPELINE-RELEASE-REAPER)
+- `ValidateAppPath` function in `api/internal/validation/` — rejects path traversal, absolute paths, and shell metacharacters in app.path from build requests (#PIPELINE-SEC-3)
+- `minio.insecure` value in Argo Workflows Helm chart — parametrizes TLS verification for MinIO connections in cache and clone CWTs (#PIPELINE-MOD-6)
 - `loopzero project delete <name>` CLI command with `--env`, `--yes`, `--json` flags — removes project resources from K8s via ArgoCD pruning (#PROJECT-DELETE)
 - `DELETE /api/v1/projects/{name}` and `DELETE /api/v1/projects/{name}/environments/{env}` API endpoints (#PROJECT-DELETE)
 - `ProjectDeleter` service orchestrating project deletion: lock-scoped build cancellation + target deletion, then GitOps removal outside lock (BLOCKER-2 pattern) (#PROJECT-DELETE)
@@ -18,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `EnvironmentTargetStore.ListByProject` and `DeleteTarget` for environment lifecycle management (#PROJECT-DELETE)
 
 ### Fixed
+- Build pipeline clone step depended on Gitea (cross-cluster) — replaced with MinIO source bundle download, eliminating Gitea as SPOF for builds (#PIPELINE-BLOCKER-1)
+- Workflow `VolumeClaimTemplates` created PVCs that leaked storage under load — replaced with `emptyDir` volumes with `sizeLimit`, auto-cleaned on pod termination (#PIPELINE-BLOCKER-2)
+- Dead CWTs (`loopzero-notify`, `loopzero-kaniko`, `loopzero-manifests-generate`, `loopzero-manifests-validate`) still deployed in build cluster — removed (#PIPELINE-BLOCKER-3)
+- All tenants shared the `argo` namespace for builds — `WorkflowSubmitter` now uses `build-{tenantID}` namespace, making per-tenant ResourceQuotas effective (#PIPELINE-MOD-2)
+- Cache CWTs used `amazon/aws-cli` (~200MB) for MinIO operations — replaced with `minio/mc` (~30MB) for faster image pull on cache hit path (#PIPELINE-MOD-4)
+- Cache CWTs had `--no-verify-ssl` hardcoded — now parametrized via `minio.insecure` Helm value (#PIPELINE-MOD-6)
+- Failed workflow TTL was 6h — increased to 24h for production debugging (#PIPELINE-LEVE-3)
+- `app.Path` from build requests was not validated — path traversal and shell injection now rejected at API boundary (#PIPELINE-SEC-3)
 - `loopzero init --name "My Project!@#"` accepted names with special chars that break K8s namespace (RFC 1123) — now ALWAYS sanitizes project name to lowercase/hyphens/max 63 chars, with `sanitized_from` in JSON output (#DOGFOOD-F01)
 - `loopzero login` auth failure message gave no guidance on how to get a new token — now includes actionable next step ("Generate a new token at your account settings") (#DOGFOOD-F02)
 - CWTs corrected in repo but not applied to running build cluster — applied via `kubectl apply` (#DOGFOOD-F04)
@@ -47,12 +58,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - WorkflowBuilder tests: Kaniko inline verification, insecure flag conditional tests, gitea-token prohibition (#BUILD-BLOCKER-1)
 
 ### Changed
+- **BREAKING**: Clone CWT now downloads source bundle from MinIO instead of cloning from Gitea — parameters changed from `tenant-id`+`project-id` to `tenant-id`+`build-id` (#PIPELINE-BLOCKER-1)
+- **BREAKING**: `WorkflowSubmitter.Cancel()` and `GetStatus()` now accept a `namespace` parameter for per-tenant isolation (#PIPELINE-MOD-2)
 - **BREAKING**: Kaniko build step changed from CWT ref (`loopzero-kaniko`) to inline template — WorkflowBuilder now generates container spec with conditional insecure flags (#BUILD-BLOCKER-1)
 - **BREAKING**: Clone CWT no longer accepts `gitea-url` and `gitea-token` parameters — credentials come from K8s Secret `loopzero-gitea-credentials` (#BUILD-BLOCKER-2)
+- Workflow volumes changed from `VolumeClaimTemplates` (PVC) to `emptyDir` with `sizeLimit` — eliminates storage provisioner dependency and PVC leak (#PIPELINE-BLOCKER-2)
+- Cache CWT image changed from `amazon/aws-cli:2.15.17` to `minio/mc:RELEASE.2024-01-16T16-06-34Z` (#PIPELINE-MOD-4)
 - `InfraParams` struct: removed `GiteaURL` and `GiteaToken` fields (#BUILD-BLOCKER-2)
-- `WorkflowSubmitterConfig` struct: removed `GiteaURL` and `GiteaToken`, added `RegistryInsecure` (#BUILD-BLOCKER-1, #BUILD-BLOCKER-2)
+- `WorkflowSubmitterConfig` struct: removed `GiteaURL`, `GiteaToken`, and `Namespace`; added `RegistryInsecure` (#BUILD-BLOCKER-1, #BUILD-BLOCKER-2, #PIPELINE-MOD-2)
+
+### Removed
+- `secret-gitea-credentials.yaml` — Gitea credentials no longer needed in build cluster; source comes from MinIO (#PIPELINE-BLOCKER-1)
+- `cwt-notify.yaml` — HTTP callback replaced by BuildReconcileLoop polling (#PIPELINE-BLOCKER-3)
+- `cwt-kaniko.yaml` — replaced by inline Kaniko template in WorkflowBuilder (#PIPELINE-BLOCKER-3)
+- `cwt-manifests-generate.yaml` and `cwt-manifests-validate.yaml` — manifest generation moved to API control plane (#PIPELINE-BLOCKER-3)
+- `gitea.url` and `gitea.token` from Argo Workflows Helm values — no longer used (#PIPELINE-BLOCKER-1)
 
 ### Security
+- App path injection vector closed — `ValidateAppPath` rejects `..`, absolute paths, shell metacharacters at API boundary before they reach workflow shell scripts (#PIPELINE-SEC-3)
+- Build cluster no longer needs Gitea credentials — source comes from MinIO, reducing blast radius of credential compromise (#PIPELINE-BLOCKER-1)
+- Per-tenant build namespaces enforce ResourceQuota isolation — one tenant cannot exhaust build resources of another (#PIPELINE-MOD-2)
 - Gitea admin token no longer exposed in Workflow CR objects — moved to K8s Secret with `envFrom` (#BUILD-SEC-1)
 - Kaniko insecure registry flags no longer hardcoded — conditional based on `RegistryInsecure` config; `Config.Validate()` enforces `RegistryInsecure=false` in production (#BUILD-SEC-KANIKO)
 - Node.js Dockerfile enforces `npm ci` without insecure fallback — prevents dependency confusion via `npm install` (#BUILD-SEC-4)
