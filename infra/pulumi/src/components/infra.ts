@@ -30,7 +30,6 @@ export interface InfraOutputs {
   readonly runtimeCluster: ClusterOutputs;
 
   // VMs
-  readonly gitea: ComputeInstanceOutput;
   readonly runners: ComputeInstanceOutput[];
 
   // Data
@@ -72,12 +71,13 @@ export function resolveProvider(provider: CloudProvider): CloudProviderFactory {
  * Creates the complete infrastructure topology:
  *
  *   VPC (shared network)
- *   ├── Management Cluster (ArgoCD, API, Traefik, cert-manager)
+ *   ├── Management Cluster (ArgoCD, Gitea, API, Traefik, cert-manager)
  *   ├── Runtime Cluster (user applications only)
- *   ├── Gitea VM (git state — stateful, critical path)
  *   ├── Runner VMs (CI/CD builds — isolated resource consumption)
  *   ├── Managed PostgreSQL (platform state)
  *   └── Object Storage (artifacts, builds, backups)
+ *
+ * Gitea runs inside the mgmt cluster as a StatefulSet (Phase 2).
  *
  * Dependency chain:
  *   Network → everything else (all resources inside VPC)
@@ -123,17 +123,6 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     maxNodes: config.runtimeMaxNodes,
     autoScale: config.runtimeMaxNodes !== undefined,
     network: { vpcId: network.vpcId },
-    tags,
-  });
-
-  // --- Gitea VM ---
-  const gitea = factory.createComputeInstance({
-    name: `${baseName}-gitea`,
-    region: config.region,
-    size: config.giteaNodeClass,
-    image: config.giteaImage,
-    network: { vpcId: network.vpcId },
-    sshKeyIds: config.sshKeyIds,
     tags,
   });
 
@@ -190,7 +179,6 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
       kubeconfig: runtimeCluster.kubeconfig,
       endpoint: runtimeCluster.endpoint,
     },
-    gitea,
     runners,
     database,
     bucketName: storage.bucketName,

@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - Phase 3 (exposePlatform) — creates DNS records for management subdomains (api, argocd, grafana) and runtime wildcard (*.{domain}) (#PULUMI-PHASE3)
 - DNS record type auto-detection (A for IPv4, AAAA for IPv6, CNAME for hostnames) in DigitalOcean provider (#PULUMI-DNS-FIX)
-- TLS via Let's Encrypt — ClusterIssuer (ACME HTTP-01) + Certificate + IngressRoute for ArgoCD on mgmt cluster. Auto-provisioned in Phase 2 bootstrap (#PULUMI-TLS)
+- TLS via Let's Encrypt — ClusterIssuer (ACME HTTP-01) + Certificate + IngressRoute for ArgoCD, Gitea, Grafana, API on mgmt cluster. Auto-provisioned in Phase 2 bootstrap (#PULUMI-TLS)
+- Gitea moved from dedicated VM to mgmt cluster — StatefulSet + PVC (10Gi) + managed PostgreSQL backend. Removes Droplet, adds Helm chart in Phase 2. Accessible at git.{domain} (#PULUMI-GITEA-K8S)
 - Unit test suite for infra/pulumi — 32 tests covering naming, tags, errors, node resolution, and DNS detection (#PULUMI-TESTS)
 - GitHub Actions pipeline for Pulumi infrastructure: `infra-preview.yml` (PR preview with comment), `infra-deploy.yml` (develop→dev auto, main→prod with approval gate), workflow_dispatch for manual operations (#PULUMI-PIPELINE)
 - `test-pulumi` job in CI gate — typecheck + vitest on every push (#PULUMI-PIPELINE)

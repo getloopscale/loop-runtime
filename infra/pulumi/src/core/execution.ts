@@ -14,13 +14,13 @@ export type ComponentName =
   | "network"
   | "mgmtCluster"
   | "runtimeCluster"
-  | "gitea"
   | "runners"
   | "database"
   | "storage"
   | "mgmtIngress"
   | "mgmtCertManager"
   | "mgmtArgocd"
+  | "mgmtGitea"
   | "mgmtTls"
   | "runtimeIngress"
   | "mgmtDns"
@@ -75,7 +75,6 @@ export function buildExecutionState(args: {
       "network",
       "mgmtCluster",
       "runtimeCluster",
-      "gitea",
       "runners",
       "database",
       "storage",
@@ -84,6 +83,7 @@ export function buildExecutionState(args: {
       "mgmtIngress",
       "mgmtCertManager",
       "mgmtArgocd",
+      "mgmtGitea",
       "mgmtTls",
       "runtimeIngress",
     ];

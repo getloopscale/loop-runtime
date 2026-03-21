@@ -23,10 +23,6 @@ export interface PlatformStackConfig {
   readonly runtimeMinNodes: number;
   readonly runtimeMaxNodes?: number;
 
-  // Gitea — dedicated VM for git state (stateful, critical path)
-  readonly giteaNodeClass: NodeClass;
-  readonly giteaImage: string;
-
   // Runners — CI/CD build VMs (isolated from clusters)
   readonly runnerNodeClass: NodeClass;
   readonly runnerImage: string;
@@ -68,10 +64,6 @@ export function loadStackConfig(): PlatformStackConfig {
     runtimeNodeClass: config.require("runtimeNodeClass") as NodeClass,
     runtimeMinNodes: config.requireNumber("runtimeMinNodes"),
     runtimeMaxNodes: config.getNumber("runtimeMaxNodes") ?? undefined,
-
-    // Gitea VM
-    giteaNodeClass: (config.get("giteaNodeClass") ?? "small") as NodeClass,
-    giteaImage: config.get("giteaImage") ?? "ubuntu-24-04-x64",
 
     // Runners
     runnerNodeClass: (config.get("runnerNodeClass") ?? "small") as NodeClass,

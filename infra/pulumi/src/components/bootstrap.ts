@@ -17,6 +17,7 @@ const HELM_VERSIONS = {
   certManager: "v1.14.5",
   traefik: "28.3.0",
   argocd: "7.3.11",
+  gitea: "10.6.0",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -32,6 +33,7 @@ export interface ClusterBootstrapOutputs {
 export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
   readonly certManagerReady: pulumi.Output<boolean>;
   readonly argoCdReady: pulumi.Output<boolean>;
+  readonly giteaReady: pulumi.Output<boolean>;
   readonly tlsConfigured: pulumi.Output<boolean>;
 }
 
@@ -87,6 +89,9 @@ function bootstrapMgmtCluster(
   // ArgoCD — GitOps engine, manages runtime cluster
   const argocd = installArgoCD(provider, ns, certManager);
 
+  // Gitea — internal git server for desired state (ArgoCD reads from here)
+  const gitea = installGitea(provider, ns, infra, config);
+
   // Traefik — ingress for platform services (ArgoCD UI, API, etc.)
   const traefik = installTraefik("mgmt", provider, ns, certManager);
 
@@ -110,6 +115,7 @@ function bootstrapMgmtCluster(
   return {
     certManagerReady: certManager.status.apply((s) => s.status === "deployed"),
     argoCdReady: argocd.status.apply((s) => s.status === "deployed"),
+    giteaReady: gitea.status.apply((s) => s.status === "deployed"),
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
     tlsConfigured: tlsRoutes.apply((routes) => routes.length > 0),
     ingressEndpoint,
@@ -316,6 +322,86 @@ function installTraefik(
 }
 
 /**
+ * Gitea — lightweight git server for desired state storage.
+ *
+ * Runs as a StatefulSet with a PVC for repository data.
+ * Uses the managed PostgreSQL as database backend.
+ * ArgoCD reads from Gitea to reconcile cluster state.
+ *
+ * The Helm chart creates:
+ *   - StatefulSet with 1 replica
+ *   - PVC (10Gi default) for /data
+ *   - Service "gitea-http" on port 3000
+ *   - Service "gitea-ssh" on port 22 (for git push via SSH)
+ */
+function installGitea(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  infra: InfraOutputs,
+  config: PlatformStackConfig,
+): k8s.helm.v3.Release {
+  return new k8s.helm.v3.Release(
+    "gitea",
+    {
+      chart: "gitea",
+      version: HELM_VERSIONS.gitea,
+      repositoryOpts: {
+        repo: "https://dl.gitea.com/charts/",
+      },
+      namespace: PLATFORM_NAMESPACE,
+      createNamespace: false,
+      values: {
+        // Use managed PostgreSQL — no embedded database
+        postgresql: { enabled: false },
+        "postgresql-ha": { enabled: false },
+        redis: { enabled: false },
+        "redis-cluster": { enabled: false },
+        gitea: {
+          config: {
+            database: {
+              DB_TYPE: "postgres",
+              HOST: pulumi.interpolate`${infra.database.privateHost}:${infra.database.port}`,
+              NAME: "gitea",
+              USER: infra.database.user,
+              PASSWD: infra.database.password,
+              SSL_MODE: "require",
+            },
+            server: {
+              DOMAIN: `git.${config.domain}`,
+              ROOT_URL: `https://git.${config.domain}/`,
+              HTTP_PORT: "3000",
+            },
+            service: {
+              DISABLE_REGISTRATION: true,
+            },
+            // In-memory cache instead of Redis — sufficient for internal use
+            cache: {
+              ADAPTER: "memory",
+            },
+            session: {
+              PROVIDER: "memory",
+            },
+            queue: {
+              TYPE: "level",
+            },
+          },
+        },
+        persistence: {
+          enabled: true,
+          size: "10Gi",
+          accessModes: ["ReadWriteOnce"],
+        },
+        resources: {
+          requests: { cpu: "100m", memory: "256Mi" },
+          limits: { cpu: "500m", memory: "512Mi" },
+        },
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+}
+
+/**
  * Reads the Traefik LoadBalancer Service to get the external endpoint.
  *
  * Pulumi's K8s provider waits for the LB to be assigned before
@@ -400,6 +486,7 @@ function createClusterIssuer(
  */
 const PLATFORM_INGRESS_ROUTES = [
   { subdomain: "argocd", serviceName: "argocd-server", servicePort: 80 },
+  { subdomain: "git", serviceName: "gitea-http", servicePort: 3000 },
   { subdomain: "grafana", serviceName: "grafana", servicePort: 3000 },
   { subdomain: "api", serviceName: "loopzero-api", servicePort: 8080 },
 ] as const;

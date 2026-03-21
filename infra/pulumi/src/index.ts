@@ -27,7 +27,6 @@ export const execution = buildExecutionState({
     network: infra.vpcId.apply((id) => !!id),
     mgmtCluster: infra.mgmtCluster.kubeconfig.apply((k) => !!k),
     runtimeCluster: infra.runtimeCluster.kubeconfig.apply((k) => !!k),
-    gitea: infra.gitea.ipv4Address.apply((ip) => !!ip),
     runners: infra.runners.length > 0
       ? infra.runners[0].ipv4Address.apply((ip) => !!ip)
       : pulumi.output(true),
@@ -38,6 +37,7 @@ export const execution = buildExecutionState({
     mgmtIngress: bootstrap.mgmt.ingressReady,
     mgmtCertManager: bootstrap.mgmt.certManagerReady,
     mgmtArgocd: bootstrap.mgmt.argoCdReady,
+    mgmtGitea: bootstrap.mgmt.giteaReady,
     mgmtTls: bootstrap.mgmt.tlsConfigured,
     runtimeIngress: bootstrap.runtime.ingressReady,
 
@@ -66,9 +66,8 @@ export const runtimeClusterName = infra.runtimeCluster.clusterName;
 export const runtimeClusterEndpoint = infra.runtimeCluster.endpoint;
 export const runtimeKubeconfig = pulumi.secret(infra.runtimeCluster.kubeconfig);
 
-// Phase 1 — Gitea
-export const giteaIp = infra.gitea.ipv4Address;
-export const giteaPrivateIp = infra.gitea.privateIpv4Address;
+// Phase 2 — Gitea (runs inside mgmt cluster)
+export const giteaReady = bootstrap.mgmt.giteaReady;
 
 // Phase 1 — Runners
 export const runnerIps = infra.runners.map((r) => r.ipv4Address);
@@ -100,8 +99,8 @@ export const runtimeDnsConfigured = expose.runtimeDnsConfigured;
 // --- Wiring outputs (connection details for operators) ---
 export const wiring = pulumi.output({
   gitea: {
-    publicUrl: pulumi.interpolate`http://${infra.gitea.ipv4Address}:3000`,
-    privateUrl: pulumi.interpolate`http://${infra.gitea.privateIpv4Address}:3000`,
+    internalUrl: "http://gitea-http.platform-system.svc.cluster.local:3000",
+    publicUrl: `https://git.${config.domain}`,
   },
   database: {
     privateHost: infra.database.privateHost,

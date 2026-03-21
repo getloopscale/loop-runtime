@@ -18,9 +18,6 @@ config:
   loopzero-infra:runtimeMinNodes: "2"
   loopzero-infra:runtimeMaxNodes: "3"
 
-  # Gitea VM
-  loopzero-infra:giteaNodeClass: small
-
   # Runners
   loopzero-infra:runnerNodeClass: small
   loopzero-infra:runnerCount: "1"
