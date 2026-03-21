@@ -103,6 +103,10 @@ func (f *fakeReconcilerBuildStore) GetBuildApps(_ context.Context, _ string) ([]
 	return nil, nil
 }
 
+func (f *fakeReconcilerBuildStore) CancelActiveBuilds(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
+
 // addBuild inserts a build into the store and optionally the active list.
 func (f *fakeReconcilerBuildStore) addBuild(b *db.Build) {
 	f.builds[b.ID] = b

@@ -57,6 +57,7 @@ type BuildStore interface {
 	GetBuildApps(ctx context.Context, buildID string) ([]BuildAppSpec, error)
 	ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error)
 	FindActiveBuilds(ctx context.Context) ([]Build, error)
+	CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, error)
 }
 
 // PostgresBuildStore implements BuildStore using PostgreSQL.
@@ -326,6 +327,26 @@ func (s *PostgresBuildStore) FindActiveBuilds(ctx context.Context) ([]Build, err
 		builds = []Build{}
 	}
 	return builds, nil
+}
+
+// CancelActiveBuilds cancels all QUEUED or RUNNING builds for a (tenant, project, env).
+// Returns the number of builds cancelled. Used during project deletion.
+// This method runs inside an advisory lock transaction.
+func (s *PostgresBuildStore) CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, error) {
+	executor := tx
+	if executor == nil {
+		executor = s.db
+	}
+	result, err := executor.Exec(ctx,
+		`UPDATE builds SET status = 'CANCELLED', finished_at = NOW()
+		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
+		 AND status IN ('QUEUED', 'RUNNING')`,
+		tenantID, projectID, env,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("build store: cancel active builds: %w", err)
+	}
+	return int(result.RowsAffected), nil
 }
 
 // scanBuild scans a single build row.

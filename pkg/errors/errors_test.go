@@ -95,6 +95,7 @@ func TestPredefinedErrors(t *testing.T) {
 		{"ErrDeployInProgress", ErrDeployInProgress, "DEPLOY_IN_PROGRESS", 409},
 		{"ErrInvalidName", ErrInvalidName, "INVALID_NAME", 400},
 		{"ErrIdempotencyConflict", ErrIdempotencyConflict, "IDEMPOTENCY_CONFLICT", 422},
+		{"ErrProjectNotFound", ErrProjectNotFound, "PROJECT_NOT_FOUND", 404},
 	}
 
 	for _, tt := range tests {
@@ -202,6 +203,20 @@ func TestErrorFactories(t *testing.T) {
 		}
 		if err.HTTPStatus != 422 {
 			t.Errorf("expected status 422, got %d", err.HTTPStatus)
+		}
+	})
+
+	t.Run("NewProjectNotFound includes project name", func(t *testing.T) {
+		err := NewProjectNotFound("my-app")
+		if err.Code != "PROJECT_NOT_FOUND" {
+			t.Errorf("expected code PROJECT_NOT_FOUND, got %s", err.Code)
+		}
+		if err.HTTPStatus != 404 {
+			t.Errorf("expected status 404, got %d", err.HTTPStatus)
+		}
+		expected := "project 'my-app' not found"
+		if err.Message != expected {
+			t.Errorf("expected message %q, got %q", expected, err.Message)
 		}
 	})
 }

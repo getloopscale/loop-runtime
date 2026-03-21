@@ -34,6 +34,18 @@ func (f *fakeProjectStore) CreateProject(ctx context.Context, p routes.CreatePro
 	}, nil
 }
 
+func (f *fakeProjectStore) GetByName(_ context.Context, tenantID, name string) (*routes.ProjectResult, error) {
+	key := tenantID + "/" + name
+	if f.projects[key] {
+		return &routes.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
+	}
+	return nil, nil
+}
+
+func (f *fakeProjectStore) DeleteProject(_ context.Context, _, _ string) error {
+	return nil
+}
+
 type fakeTenantCRManager struct {
 	calls    int
 	lastSpec routes.TenantCRSpec
@@ -220,4 +232,18 @@ func (f *threadSafeProjectStore) CreateProject(ctx context.Context, p routes.Cre
 		Name:   p.Name,
 		TeamID: p.TenantID,
 	}, nil
+}
+
+func (f *threadSafeProjectStore) GetByName(_ context.Context, tenantID, name string) (*routes.ProjectResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := tenantID + "/" + name
+	if f.projects[key] {
+		return &routes.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
+	}
+	return nil, nil
+}
+
+func (f *threadSafeProjectStore) DeleteProject(_ context.Context, _, _ string) error {
+	return nil
 }

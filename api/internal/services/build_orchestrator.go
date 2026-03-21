@@ -53,6 +53,11 @@ type GitOpsPusher interface {
 	// Push commits manifests to the tenant GitOps repo and returns the git commit SHA.
 	// Path inside repo: {projectID}/{environment}/manifests.yaml
 	Push(ctx context.Context, opts GitOpsPushOpts) (commitSHA string, err error)
+
+	// Remove deletes a project's manifests from the tenant GitOps repo.
+	// The operation is idempotent: if the directory doesn't exist, returns success.
+	// ArgoCD with prune: true will automatically remove the K8s resources.
+	Remove(ctx context.Context, opts GitOpsRemoveOpts) (commitSHA string, err error)
 }
 
 // GitOpsPushOpts contains everything needed to push manifests to the GitOps repo.
@@ -63,6 +68,14 @@ type GitOpsPushOpts struct {
 	Manifests     string // raw YAML content
 	BuildID       string
 	ReleaseID     string
+	CorrelationID string
+}
+
+// GitOpsRemoveOpts contains everything needed to remove a project from the GitOps repo.
+type GitOpsRemoveOpts struct {
+	TenantID      string
+	ProjectID     string
+	Environment   string
 	CorrelationID string
 }
 

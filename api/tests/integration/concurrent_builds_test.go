@@ -160,6 +160,10 @@ func (f *fakeGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpt
 	return "fake-commit-sha", nil
 }
 
+func (f *fakeGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemoveOpts) (string, error) {
+	return "fake-commit-sha", nil
+}
+
 type fakeSyncClient struct{}
 
 func (f *fakeSyncClient) TriggerSync(ctx context.Context, appName string) error {

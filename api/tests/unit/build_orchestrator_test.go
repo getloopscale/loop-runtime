@@ -121,6 +121,19 @@ func (f *fakeBuildStoreOrch) GetBuildApps(ctx context.Context, buildID string) (
 	return nil, nil
 }
 
+func (f *fakeBuildStoreOrch) CancelActiveBuilds(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, error) {
+	count := 0
+	for _, b := range f.builds {
+		if b.TenantID == tenantID && b.ProjectID == projectID && b.Environment == env {
+			if b.Status == string(statemachine.BuildQueued) || b.Status == string(statemachine.BuildRunning) {
+				b.Status = string(statemachine.BuildCancelled)
+				count++
+			}
+		}
+	}
+	return count, nil
+}
+
 // safeFakeTransition catches panics from the state machine.
 func safeFakeTransition(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (newState statemachine.State, err error) {
 	defer func() {
@@ -254,6 +267,14 @@ func (f *fakeEnvTargetStoreOrch) Get(ctx context.Context, tenantID, projectID, e
 	return nil, nil
 }
 
+func (f *fakeEnvTargetStoreOrch) ListByProject(ctx context.Context, tenantID, projectID string) ([]db.EnvironmentTarget, error) {
+	return []db.EnvironmentTarget{}, nil
+}
+
+func (f *fakeEnvTargetStoreOrch) DeleteTarget(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) error {
+	return nil
+}
+
 // fakeEventStoreOrch implements sse.EventStore.
 type fakeEventStoreOrch struct {
 	events   []sse.SSEEvent
@@ -340,6 +361,13 @@ func (f *fakeGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpt
 	if f.pushErr != nil {
 		return "", f.pushErr
 	}
+	if f.commitSHA != "" {
+		return f.commitSHA, nil
+	}
+	return "abc123def456abc123def456abc123def456abcd", nil
+}
+
+func (f *fakeGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemoveOpts) (string, error) {
 	if f.commitSHA != "" {
 		return f.commitSHA, nil
 	}

@@ -96,6 +96,13 @@ var (
 		HTTPStatus: 404,
 	}
 
+	// ErrProjectNotFound is returned when a referenced project does not exist.
+	ErrProjectNotFound = &LoopZeroError{
+		Code:       "PROJECT_NOT_FOUND",
+		Message:    "project not found",
+		HTTPStatus: 404,
+	}
+
 	// ErrBuildNotFound is returned when a referenced build does not exist.
 	ErrBuildNotFound = &LoopZeroError{
 		Code:       "BUILD_NOT_FOUND",
@@ -248,6 +255,15 @@ func NewReleaseNotFound(releaseID string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:       "RELEASE_NOT_FOUND",
 		Message:    fmt.Sprintf("release '%s' not found", releaseID),
+		HTTPStatus: 404,
+	}
+}
+
+// NewProjectNotFound creates a PROJECT_NOT_FOUND error with project name context.
+func NewProjectNotFound(name string) *LoopZeroError {
+	return &LoopZeroError{
+		Code:       "PROJECT_NOT_FOUND",
+		Message:    fmt.Sprintf("project '%s' not found", name),
 		HTTPStatus: 404,
 	}
 }

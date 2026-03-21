@@ -30,6 +30,7 @@ type Config struct {
 	MemberStore        middleware.MembershipStore
 	ProjectStore       routes.ProjectStore
 	TenantCRMgr        routes.TenantCRManager
+	ProjectDeleter     routes.ProjectDeleter
 	IdempotencyStore   middleware.IdempotencyStore
 	SourceStore        source.SourceStore
 	// ArgoCallbackSecret is deprecated — callback route removed (C-01 fix).
@@ -121,11 +122,16 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.With(rateLimitMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)
 			}
 
-			// Project creation — auth + rate limiting, no idempotency.
+			// Project routes — auth + rate limiting, no idempotency.
 			// Project names are unique per tenant; the DB constraint handles duplicates.
 			if cfg.ProjectStore != nil && cfg.TenantCRMgr != nil {
 				projects := routes.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
+				if cfg.ProjectDeleter != nil {
+					projects.SetDeleter(cfg.ProjectDeleter)
+				}
 				r.With(rateLimitMiddlewares...).Post("/api/v1/projects", projects.Create)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}", projects.Delete)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}/environments/{env}", projects.DeleteEnvironment)
 			}
 
 			// SSE stream route (no idempotency needed — read-only)

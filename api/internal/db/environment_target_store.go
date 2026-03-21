@@ -21,12 +21,14 @@ type EnvironmentTarget struct {
 }
 
 // EnvironmentTargetStore defines the interface for environment target operations.
-// All tx-accepting methods (SetDesired, SetActive) run inside an existing
+// All tx-accepting methods (SetDesired, SetActive, DeleteTarget) run inside an existing
 // transaction from withEnvironmentLock — they NEVER start their own.
 type EnvironmentTargetStore interface {
 	SetDesired(ctx context.Context, tx DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error
 	SetActive(ctx context.Context, tx DBTX, tenantID, projectID, env, releaseID string) error
 	Get(ctx context.Context, tenantID, projectID, env string) (*EnvironmentTarget, error)
+	ListByProject(ctx context.Context, tenantID, projectID string) ([]EnvironmentTarget, error)
+	DeleteTarget(ctx context.Context, tx DBTX, tenantID, projectID, env string) error
 }
 
 // PostgresEnvironmentTargetStore implements EnvironmentTargetStore using PostgreSQL.
@@ -127,4 +129,57 @@ WHERE tenant_id = $1 AND project_id = $2 AND environment = $3`
 	}
 
 	return &target, nil
+}
+
+// ListByProject returns all environment targets for a (tenant, project).
+func (s *PostgresEnvironmentTargetStore) ListByProject(ctx context.Context, tenantID, projectID string) ([]EnvironmentTarget, error) {
+	rows, err := s.Query.Query(ctx,
+		`SELECT tenant_id, project_id, environment, desired_release_id, active_release_id, updated_by, correlation_id, updated_at
+FROM environment_targets
+WHERE tenant_id = $1 AND project_id = $2`,
+		tenantID, projectID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("environment target store: list by project: %w", err)
+	}
+	defer rows.Close()
+
+	var targets []EnvironmentTarget
+	for rows.Next() {
+		var t EnvironmentTarget
+		if err := rows.Scan(
+			&t.TenantID, &t.ProjectID, &t.Environment,
+			&t.DesiredReleaseID, &t.ActiveReleaseID,
+			&t.UpdatedBy, &t.CorrelationID, &t.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("environment target store: list by project scan: %w", err)
+		}
+		targets = append(targets, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("environment target store: list by project rows error: %w", err)
+	}
+	if targets == nil {
+		targets = []EnvironmentTarget{}
+	}
+	return targets, nil
+}
+
+// DeleteTarget removes an environment target within a transaction.
+func (s *PostgresEnvironmentTargetStore) DeleteTarget(ctx context.Context, tx DBTX, tenantID, projectID, env string) error {
+	var executor ExecQueryExecutor
+	if tx != nil {
+		executor = tx
+	} else {
+		executor = s.Exec
+	}
+
+	_, err := executor.Exec(ctx,
+		"DELETE FROM environment_targets WHERE tenant_id = $1 AND project_id = $2 AND environment = $3",
+		tenantID, projectID, env,
+	)
+	if err != nil {
+		return fmt.Errorf("environment target store: delete target: %w", err)
+	}
+	return nil
 }

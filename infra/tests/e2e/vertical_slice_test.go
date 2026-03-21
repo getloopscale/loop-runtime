@@ -98,6 +98,18 @@ func (f *fakeProjectStore) CreateProject(_ context.Context, input apitest.Create
 	return result, nil
 }
 
+func (f *fakeProjectStore) GetByName(_ context.Context, tenantID, name string) (*apitest.ProjectResult, error) {
+	key := tenantID + "/" + name
+	if result, exists := f.projects[key]; exists {
+		return &result, nil
+	}
+	return nil, nil
+}
+
+func (f *fakeProjectStore) DeleteProject(_ context.Context, _, _ string) error {
+	return nil
+}
+
 // k8sTenantCRManager implements TenantCRManager using a real K8s client.
 // This is the critical bridge between API and operator — it creates the Tenant CR
 // that the TenantController will reconcile.

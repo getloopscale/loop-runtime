@@ -58,6 +58,17 @@ describe('CLI entrypoint', () => {
     it('should register init command', () => {
       expect(commandNames).toContain('init');
     });
+
+    it('should register project command', () => {
+      expect(commandNames).toContain('project');
+    });
+
+    it('should register project delete subcommand', () => {
+      const projectCmd = program.commands.find((cmd) => cmd.name() === 'project');
+      expect(projectCmd).toBeDefined();
+      const subcommandNames = projectCmd!.commands.map((cmd) => cmd.name());
+      expect(subcommandNames).toContain('delete');
+    });
   });
 
   describe('login command options', () => {

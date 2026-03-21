@@ -149,6 +149,94 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	return sha, nil
 }
 
+// Remove deletes a project's manifests from the tenant GitOps repo.
+// The operation is idempotent: if the directory doesn't exist, returns success.
+// ArgoCD with prune: true will automatically remove the K8s resources.
+func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemoveOpts) (string, error) {
+	repoName := fmt.Sprintf("loopzero-tenant-%s", opts.TenantID)
+	remoteURL := p.repoURL(repoName)
+
+	// Ensure repo exists (it should, but be safe)
+	if err := p.ensureRepo(ctx, repoName); err != nil {
+		return "", fmt.Errorf("gitops remove: ensure repo: %w", err)
+	}
+
+	// Create temp directory for git operations
+	tmpDir, err := os.MkdirTemp("", "loopzero-gitops-remove-*")
+	if err != nil {
+		return "", fmt.Errorf("gitops remove: create temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	repoDir := filepath.Join(tmpDir, "repo")
+
+	// Clone repo
+	// SEC-1: Auth via http.extraHeader, not embedded in URL.
+	if err := p.gitCmdWithAuth(ctx, tmpDir, "clone", "--depth", "5", remoteURL, repoDir); err != nil {
+		// If repo is empty/doesn't exist, nothing to remove
+		return "", nil
+	}
+
+	// Set git identity
+	_ = p.gitCmd(ctx, repoDir, "git", "config", "user.email", "loopzero-api@loopzero.io")
+	_ = p.gitCmd(ctx, repoDir, "git", "config", "user.name", "LoopZero API")
+
+	// Check if the directory exists in the repo
+	targetDir := filepath.Join(repoDir, opts.Environment, opts.ProjectID)
+	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
+		// Directory doesn't exist — idempotent success
+		sha, err := p.gitOutput(ctx, repoDir, "git", "rev-parse", "HEAD")
+		if err != nil {
+			return "", nil
+		}
+		return sha, nil
+	}
+
+	// git rm -r {env}/{projectID}/
+	relPath := filepath.Join(opts.Environment, opts.ProjectID)
+	if err := p.gitCmd(ctx, repoDir, "git", "rm", "-r", relPath); err != nil {
+		return "", fmt.Errorf("gitops remove: git rm: %w", err)
+	}
+
+	// Commit
+	commitMsg := fmt.Sprintf("Remove %s from %s\n\nCorrelation-ID: %s",
+		opts.ProjectID, opts.Environment, opts.CorrelationID,
+	)
+	commitErr := p.gitCmd(ctx, repoDir, "git", "commit", "-m", commitMsg)
+	if commitErr != nil {
+		if strings.Contains(commitErr.Error(), "nothing to commit") {
+			sha, err := p.gitOutput(ctx, repoDir, "git", "rev-parse", "HEAD")
+			if err != nil {
+				return "", fmt.Errorf("gitops remove: get HEAD after no-op: %w", err)
+			}
+			return sha, nil
+		}
+		return "", fmt.Errorf("gitops remove: git commit: %w", commitErr)
+	}
+
+	// Push with retry (3 attempts with fetch-rebase-push on conflict)
+	// SEC-1: Network git commands use gitCmdWithAuth (http.extraHeader).
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := p.gitCmdWithAuth(ctx, repoDir, "push", "origin", "HEAD:refs/heads/main"); err == nil {
+			break
+		}
+		if attempt == 2 {
+			return "", fmt.Errorf("gitops remove: failed after 3 push attempts")
+		}
+		_ = p.gitCmdWithAuth(ctx, repoDir, "fetch", "origin")
+		if err := p.gitCmd(ctx, repoDir, "git", "rebase", "origin/main"); err != nil {
+			return "", fmt.Errorf("gitops remove: rebase failed: %w", err)
+		}
+	}
+
+	sha, err := p.gitOutput(ctx, repoDir, "git", "rev-parse", "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("gitops remove: get commit SHA: %w", err)
+	}
+
+	return sha, nil
+}
+
 // createRepoRequest is the JSON body for Gitea's create-repo API.
 // SEC-4: Using json.Marshal prevents JSON injection via repo names.
 type createRepoRequest struct {

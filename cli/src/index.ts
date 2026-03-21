@@ -20,6 +20,7 @@ import { LogoutCommand } from './commands/logout';
 import { WhoamiCommand } from './commands/whoami';
 import { InitCommand } from './commands/init';
 import { DeployCommand } from './commands/deploy';
+import { ProjectDeleteCommand } from './commands/project-delete';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
@@ -399,6 +400,60 @@ export function createProgram(): Command {
         process.exitCode = 3;
         return;
       }
+      process.exitCode = exitCode;
+    });
+
+  // --- project ---
+  const projectCmd = program
+    .command('project')
+    .description('Manage projects');
+
+  projectCmd
+    .command('delete <name>')
+    .description('Delete a project and its deployed resources')
+    .option('--env <name>', 'Delete from specific environment only')
+    .option('--yes', 'Skip confirmation prompt (required in CI)')
+    .action(async (name: string, cmdOpts: { env?: string; yes?: boolean }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const deleteCmd = new ProjectDeleteCommand({
+        getToken: () => configStore.getToken(),
+        deleteProject: async (projectName: string, env?: string) => {
+          const path = env
+            ? `/api/v1/projects/${encodeURIComponent(projectName)}/environments/${encodeURIComponent(env)}`
+            : `/api/v1/projects/${encodeURIComponent(projectName)}`;
+          return apiClient.del<{
+            project: string;
+            deleted_environments: string[];
+            cancelled_builds: number;
+          }>(path);
+        },
+        confirm: async (message: string) => {
+          const readline = await import('readline');
+          const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+          });
+          return new Promise<boolean>((resolve) => {
+            rl.question(message + ' ', (answer) => {
+              rl.close();
+              resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+            });
+          });
+        },
+        writeTo,
+        writeError,
+        isCI,
+      });
+
+      const exitCode = await deleteCmd.execute(name, {
+        env: cmdOpts.env,
+        yes: cmdOpts.yes,
+        json: globalOpts.json,
+      });
       process.exitCode = exitCode;
     });
 

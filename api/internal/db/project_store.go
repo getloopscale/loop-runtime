@@ -13,7 +13,7 @@ import (
 // PostgresProjectStore creates projects in PostgreSQL.
 // It implements routes.ProjectStore (DIP).
 type PostgresProjectStore struct {
-	DB ExecQueryExecutor
+	DB DBTX
 }
 
 // GenerateProjectID generates a project ID in the format "proj-{8 hex chars}".
@@ -45,4 +45,45 @@ func (s *PostgresProjectStore) CreateProject(ctx context.Context, input routes.C
 		Name:   input.Name,
 		TeamID: input.TenantID,
 	}, nil
+}
+
+// GetByName retrieves a project by tenant and name.
+// Returns nil when not found (not an error — caller decides).
+func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name string) (*routes.ProjectResult, error) {
+	rows, err := s.DB.Query(ctx,
+		"SELECT id, name, tenant_id FROM projects WHERE tenant_id = $1 AND name = $2",
+		tenantID, name,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("project store: get by name: %w", err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("project store: get by name rows error: %w", err)
+		}
+		return nil, nil
+	}
+
+	var result routes.ProjectResult
+	if err := rows.Scan(&result.ID, &result.Name, &result.TeamID); err != nil {
+		return nil, fmt.Errorf("project store: get by name scan: %w", err)
+	}
+	return &result, nil
+}
+
+// DeleteProject removes a project from the database.
+func (s *PostgresProjectStore) DeleteProject(ctx context.Context, tenantID, projectID string) error {
+	result, err := s.DB.Exec(ctx,
+		"DELETE FROM projects WHERE tenant_id = $1 AND id = $2",
+		tenantID, projectID,
+	)
+	if err != nil {
+		return fmt.Errorf("project store: delete failed: %w", err)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("project store: project not found")
+	}
+	return nil
 }

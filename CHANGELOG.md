@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `loopzero project delete <name>` CLI command with `--env`, `--yes`, `--json` flags — removes project resources from K8s via ArgoCD pruning (#PROJECT-DELETE)
+- `DELETE /api/v1/projects/{name}` and `DELETE /api/v1/projects/{name}/environments/{env}` API endpoints (#PROJECT-DELETE)
+- `ProjectDeleter` service orchestrating project deletion: lock-scoped build cancellation + target deletion, then GitOps removal outside lock (BLOCKER-2 pattern) (#PROJECT-DELETE)
+- `GitOpsPusher.Remove` method for idempotent removal of project manifests from tenant GitOps repo (#PROJECT-DELETE)
+- `ErrProjectNotFound` typed error with `PROJECT_NOT_FOUND` code (HTTP 404) (#PROJECT-DELETE)
+- `ProjectStore.GetByName` and `ProjectStore.DeleteProject` for project lookup and removal (#PROJECT-DELETE)
+- `BuildStore.CancelActiveBuilds` for bulk-cancelling QUEUED/RUNNING builds during project deletion (#PROJECT-DELETE)
+- `EnvironmentTargetStore.ListByProject` and `DeleteTarget` for environment lifecycle management (#PROJECT-DELETE)
+
 ### Fixed
 - `loopzero init --name "My Project!@#"` accepted names with special chars that break K8s namespace (RFC 1123) — now ALWAYS sanitizes project name to lowercase/hyphens/max 63 chars, with `sanitized_from` in JSON output (#DOGFOOD-F01)
 - `loopzero login` auth failure message gave no guidance on how to get a new token — now includes actionable next step ("Generate a new token at your account settings") (#DOGFOOD-F02)
