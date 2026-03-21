@@ -400,6 +400,8 @@ function createClusterIssuer(
  */
 const PLATFORM_INGRESS_ROUTES = [
   { subdomain: "argocd", serviceName: "argocd-server", servicePort: 80 },
+  { subdomain: "grafana", serviceName: "grafana", servicePort: 3000 },
+  { subdomain: "api", serviceName: "loopzero-api", servicePort: 8080 },
 ] as const;
 
 /**
