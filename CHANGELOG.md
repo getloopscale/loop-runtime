@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- `loopzero init --name "My Project!@#"` accepted names with special chars that break K8s namespace (RFC 1123) — now ALWAYS sanitizes project name to lowercase/hyphens/max 63 chars, with `sanitized_from` in JSON output (#DOGFOOD-F01)
+- `loopzero login` auth failure message gave no guidance on how to get a new token — now includes actionable next step ("Generate a new token at your account settings") (#DOGFOOD-F02)
+- CWTs corrected in repo but not applied to running build cluster — applied via `kubectl apply` (#DOGFOOD-F04)
+- Old deployments from previous dogfood projects remain in CrashLoopBackOff — confirmed per-Deployment health check correctly ignores degraded apps from other projects; ArgoCD "Degraded" is cosmetic, not blocking. Cleanup requires future `loopzero project delete` feature (#DOGFOOD-F03)
 - Kaniko CWT had `--insecure` and `--skip-tls-verify` hardcoded — flags are now conditionally added by WorkflowBuilder only when `RegistryInsecure=true`; CWT is secure by default (#BUILD-BLOCKER-1)
 - Gitea token visible in plaintext in Workflow CR parameters — moved to K8s Secret `loopzero-gitea-credentials` via `envFrom`; token no longer appears in `kubectl get wf -o yaml` (#BUILD-BLOCKER-2)
 - BuildReconcileLoop processed builds serially — one slow ArgoCD sync (120s) blocked all other builds; now processes up to 10 builds concurrently via semaphore pattern (#BUILD-BLOCKER-3)

@@ -103,9 +103,18 @@ export class InitCommand {
     const monorepo = this.deps.detectMonorepo(this.deps.cwd);
     let projectName = opts.name || path.basename(this.deps.cwd);
 
-    // Sanitize auto-detected name early so it's clean before use in app specs
-    if (!opts.name && (!this.deps.promptText || opts.yes)) {
-      projectName = this.sanitizeProjectName(projectName);
+    // F-01 fix: ALWAYS sanitize project name — whether auto-detected or user-provided.
+    // RFC 1123 compliance is mandatory for K8s namespaces. Unsanitized names cause
+    // downstream deploy failures with cryptic namespace errors.
+    const originalName = projectName;
+    projectName = this.sanitizeProjectName(projectName);
+
+    // Warn user if name was changed by sanitization
+    if (opts.name && projectName !== originalName) {
+      const warning = `Project name sanitized: "${originalName}" → "${projectName}" (RFC 1123: lowercase, letters/numbers/hyphens, max 63 chars)`;
+      if (!opts.json) {
+        this.deps.writeTo(warning);
+      }
     }
 
     const apps: AppSpec[] = [];
@@ -224,18 +233,6 @@ export class InitCommand {
       );
     }
 
-    // Validate explicitly provided project name
-    if (opts.name) {
-      // Explicitly provided via --name: warn if not RFC 1123 compliant
-      // (downstream API will enforce; CLI allows through for flexibility)
-      if (!PROJECT_NAME_REGEX.test(projectName) && !opts.json) {
-        this.deps.writeTo(
-          `Warning: project name "${projectName}" may not be valid. ` +
-          'Recommended: lowercase, start with a letter, letters/numbers/hyphens only (max 63 chars).',
-        );
-      }
-    }
-
     // Generate loopzero.yaml
     const yamlContent = this.generateYaml(projectName, apps);
     fs.writeFileSync(yamlPath, yamlContent);
@@ -280,6 +277,9 @@ export class InitCommand {
       }
       if (detected) {
         jsonOutput.detected = detected;
+      }
+      if (projectName !== originalName) {
+        jsonOutput.sanitized_from = originalName;
       }
       if (warning) {
         jsonOutput.warning = warning;

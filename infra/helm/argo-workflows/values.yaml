@@ -51,12 +51,16 @@ kaniko:
   insecure: true       # DEV ONLY — allows HTTP registry (no TLS)
   skipTlsVerify: true  # DEV ONLY — skips TLS certificate validation
 
-# Gitea credentials for clone step.
+# Gitea credentials for clone step (build cluster → mgmt cluster).
+# IMPORTANT: This URL must be reachable FROM the build cluster. Since workflows run
+# in the build cluster (different K8s cluster), using cluster-internal DNS like
+# "gitea-http.loopzero-system.svc:3000" will fail with "Could not resolve host".
+# Use the cross-cluster IP or external address (e.g., mgmt LoadBalancer NodePort).
 # Token is injected into the build cluster as a K8s Secret (loopzero-gitea-credentials).
-# MUST be set in production — empty token will fail clone.
+# MUST be set — empty token will fail clone.
 gitea:
-  url: "http://gitea-http.gitea.svc:3000"
-  token: ""
+  url: ""     # REQUIRED — cross-cluster URL to Gitea (e.g., "http://10.0.2.8:30000")
+  token: ""   # REQUIRED — Gitea access token
 
 server:
   securityContext:

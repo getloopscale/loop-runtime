@@ -32,7 +32,13 @@ export class LoginCommand {
         return this.exitWithError(opts, 'In CI mode, use: loopzero login --token <token>', 1, 'MISSING_TOKEN');
       }
 
-      return this.exitWithError(opts, 'Token is required. Use: loopzero login --token <token>', 1, 'MISSING_TOKEN');
+      return this.exitWithError(
+        opts,
+        'Token is required. Use: loopzero login --token <token>\n' +
+        'Generate a token at your account settings or ask your team admin.',
+        1,
+        'MISSING_TOKEN'
+      );
     }
 
     const result = await this.deps.validateToken(opts.token);
@@ -41,7 +47,13 @@ export class LoginCommand {
       if (result.serverError) {
         return this.exitWithError(opts, 'Service temporarily unavailable. Try again in a moment.', 4, 'SERVICE_UNAVAILABLE');
       } else {
-        return this.exitWithError(opts, 'Authentication failed. Check your token and try again.', 4, 'AUTH_FAILED');
+        return this.exitWithError(
+          opts,
+          'Authentication failed. Your token may be expired or revoked.\n' +
+          'Generate a new token at your account settings and run: loopzero login --token <new-token>',
+          4,
+          'AUTH_FAILED'
+        );
       }
     }
 

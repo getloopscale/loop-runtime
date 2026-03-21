@@ -181,7 +181,8 @@ describe('InitCommand', () => {
       await cmd.execute({ yes: true, name: 'my:project' });
 
       const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
-      expect(content).toContain('"my:project"');
+      // F-01 fix: names are now sanitized (RFC 1123). "my:project" becomes "my-project"
+      expect(content).toContain('my-project');
     });
 
     it('should quote app path containing spaces', async () => {
