@@ -159,6 +159,11 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		// Workspace shared across all DAG steps via PVC (VolumeClaimTemplate).
 		// EmptyDir doesn't persist between pods — each DAG task is a separate pod.
 		// Argo dynamically provisions this PVC per-workflow and cleans it on completion.
+		// Docker registry credentials for Kaniko image push.
+		// Secret "docker-config" must exist in each build namespace with key "config.json".
+		Volumes: []forge.VolumeBuilder{
+			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "docker-config"}, SecretName: "docker-config"},
+		},
 		VolumeClaimTemplates: []forge.PVCVolume{
 			{
 				BaseVolume:  forge.BaseVolume{Name: "workspace"},
