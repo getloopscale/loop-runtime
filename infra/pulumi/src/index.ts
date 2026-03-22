@@ -26,10 +26,8 @@ export const execution = buildExecutionState({
     // Phase 1
     network: infra.vpcId.apply((id) => !!id),
     mgmtCluster: infra.mgmtCluster.kubeconfig.apply((k) => !!k),
+    buildCluster: infra.buildCluster.kubeconfig.apply((k) => !!k),
     runtimeCluster: infra.runtimeCluster.kubeconfig.apply((k) => !!k),
-    runners: infra.runners.length > 0
-      ? infra.runners[0].ipv4Address.apply((ip) => !!ip)
-      : pulumi.output(true),
     database: infra.database.host.apply((h) => !!h),
     storage: infra.bucketName.apply((n) => !!n),
     registry: infra.registryEndpoint.apply((e) => !!e),
@@ -41,9 +39,11 @@ export const execution = buildExecutionState({
     mgmtGitea: bootstrap.mgmt.giteaReady,
     mgmtPrometheus: bootstrap.mgmt.prometheusReady,
     mgmtGrafana: bootstrap.mgmt.grafanaReady,
+    mgmtMinio: bootstrap.mgmt.minioReady,
     mgmtLoopZeroApi: bootstrap.mgmt.loopzeroApiReady,
     mgmtTenantController: bootstrap.mgmt.tenantControllerReady,
     mgmtTls: bootstrap.mgmt.tlsConfigured,
+    buildArgoWorkflows: bootstrap.build.argoWorkflowsReady,
     runtimeIngress: bootstrap.runtime.ingressReady,
 
     // Phase 3
@@ -66,6 +66,11 @@ export const mgmtClusterName = infra.mgmtCluster.clusterName;
 export const mgmtClusterEndpoint = infra.mgmtCluster.endpoint;
 export const mgmtKubeconfig = pulumi.secret(infra.mgmtCluster.kubeconfig);
 
+// Phase 1 — Build cluster
+export const buildClusterName = infra.buildCluster.clusterName;
+export const buildClusterEndpoint = infra.buildCluster.endpoint;
+export const buildKubeconfig = pulumi.secret(infra.buildCluster.kubeconfig);
+
 // Phase 1 — Runtime cluster
 export const runtimeClusterName = infra.runtimeCluster.clusterName;
 export const runtimeClusterEndpoint = infra.runtimeCluster.endpoint;
@@ -73,9 +78,6 @@ export const runtimeKubeconfig = pulumi.secret(infra.runtimeCluster.kubeconfig);
 
 // Phase 2 — Gitea (runs inside mgmt cluster)
 export const giteaReady = bootstrap.mgmt.giteaReady;
-
-// Phase 1 — Runners
-export const runnerIps = infra.runners.map((r) => r.ipv4Address);
 
 // Phase 1 — Database
 export const dbHost = infra.database.privateHost;
@@ -98,8 +100,10 @@ export const certManagerReady = bootstrap.mgmt.certManagerReady;
 export const argoCdReady = bootstrap.mgmt.argoCdReady;
 export const prometheusReady = bootstrap.mgmt.prometheusReady;
 export const grafanaReady = bootstrap.mgmt.grafanaReady;
+export const minioReady = bootstrap.mgmt.minioReady;
 export const loopzeroApiReady = bootstrap.mgmt.loopzeroApiReady;
 export const tenantControllerReady = bootstrap.mgmt.tenantControllerReady;
+export const argoWorkflowsReady = bootstrap.build.argoWorkflowsReady;
 
 // Phase 2 — Runtime cluster services
 export const runtimeIngressReady = bootstrap.runtime.ingressReady;
@@ -122,6 +126,9 @@ export const wiring = pulumi.output({
   prometheus: {
     internalUrl: "http://prometheus-server.platform-system.svc.cluster.local:80",
   },
+  minio: {
+    internalUrl: "http://minio.platform-system.svc.cluster.local:9000",
+  },
   registry: {
     endpoint: infra.registryEndpoint,
     name: infra.registryName,
@@ -139,6 +146,9 @@ export const wiring = pulumi.output({
   mgmt: {
     ingressEndpoint: bootstrap.mgmt.ingressEndpoint,
     clusterEndpoint: infra.mgmtCluster.endpoint,
+  },
+  build: {
+    clusterEndpoint: infra.buildCluster.endpoint,
   },
   runtime: {
     ingressEndpoint: bootstrap.runtime.ingressEndpoint,

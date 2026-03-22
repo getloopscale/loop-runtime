@@ -192,6 +192,7 @@ jobs:
           # This is idempotent — safe to run on every build.
           # It configures the clusters to pull from the registry without imagePullSecrets.
           doctl kubernetes cluster registry add loopzero-infra-dev-nyc3-mgmt 2>/dev/null || true
+          doctl kubernetes cluster registry add loopzero-infra-dev-nyc3-build 2>/dev/null || true
           doctl kubernetes cluster registry add loopzero-infra-dev-nyc3-runtime 2>/dev/null || true
 
           echo "### Registry Integration" >> "$GITHUB_STEP_SUMMARY"

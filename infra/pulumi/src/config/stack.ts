@@ -23,10 +23,11 @@ export interface PlatformStackConfig {
   readonly runtimeMinNodes: number;
   readonly runtimeMaxNodes?: number;
 
-  // Runners — CI/CD build VMs (isolated from clusters)
-  readonly runnerNodeClass: NodeClass;
-  readonly runnerImage: string;
-  readonly runnerCount: number;
+  // Build cluster — runs Argo Workflows + Kaniko (isolated compute for builds)
+  readonly buildK8sVersion?: string;
+  readonly buildNodeClass: NodeClass;
+  readonly buildMinNodes: number;
+  readonly buildMaxNodes?: number;
 
   // Database — managed PostgreSQL for platform state
   readonly dbNodeClass: NodeClass;
@@ -65,10 +66,11 @@ export function loadStackConfig(): PlatformStackConfig {
     runtimeMinNodes: config.requireNumber("runtimeMinNodes"),
     runtimeMaxNodes: config.getNumber("runtimeMaxNodes") ?? undefined,
 
-    // Runners
-    runnerNodeClass: (config.get("runnerNodeClass") ?? "small") as NodeClass,
-    runnerImage: config.get("runnerImage") ?? "ubuntu-24-04-x64",
-    runnerCount: config.getNumber("runnerCount") ?? 1,
+    // Build cluster
+    buildK8sVersion: config.get("buildK8sVersion") ?? undefined,
+    buildNodeClass: (config.get("buildNodeClass") ?? "small") as NodeClass,
+    buildMinNodes: config.getNumber("buildMinNodes") ?? 2,
+    buildMaxNodes: config.getNumber("buildMaxNodes") ?? undefined,
 
     // Database
     dbNodeClass: (config.get("dbNodeClass") ?? "small") as NodeClass,

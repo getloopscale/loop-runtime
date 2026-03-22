@@ -13,8 +13,8 @@ export type PhaseName = "infra" | "bootstrap" | "expose";
 export type ComponentName =
   | "network"
   | "mgmtCluster"
+  | "buildCluster"
   | "runtimeCluster"
-  | "runners"
   | "database"
   | "storage"
   | "registry"
@@ -25,8 +25,10 @@ export type ComponentName =
   | "mgmtPrometheus"
   | "mgmtGrafana"
   | "mgmtLoopZeroApi"
+  | "mgmtMinio"
   | "mgmtTenantController"
   | "mgmtTls"
+  | "buildArgoWorkflows"
   | "runtimeIngress"
   | "mgmtDns"
   | "runtimeDns";
@@ -79,8 +81,8 @@ export function buildExecutionState(args: {
     const infraComponents: ComponentName[] = [
       "network",
       "mgmtCluster",
+      "buildCluster",
       "runtimeCluster",
-      "runners",
       "database",
       "storage",
       "registry",
@@ -93,8 +95,10 @@ export function buildExecutionState(args: {
       "mgmtPrometheus",
       "mgmtGrafana",
       "mgmtLoopZeroApi",
+      "mgmtMinio",
       "mgmtTenantController",
       "mgmtTls",
+      "buildArgoWorkflows",
       "runtimeIngress",
     ];
     const exposeComponents: ComponentName[] = ["mgmtDns", "runtimeDns"];

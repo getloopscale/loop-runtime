@@ -5,7 +5,6 @@ import { standardTags } from "../core/tags";
 import { InfraError } from "../core/errors";
 import { CloudProvider } from "../core/types";
 import { CloudProviderFactory } from "../contracts/provider";
-import { ComputeInstanceOutput } from "../contracts/compute";
 import { DatabaseClusterOutput } from "../contracts/database";
 import { DigitalOceanProviderFactory } from "../providers/digitalocean";
 import { AwsProviderFactory } from "../providers/aws";
@@ -29,10 +28,8 @@ export interface InfraOutputs {
 
   // Clusters
   readonly mgmtCluster: ClusterOutputs;
+  readonly buildCluster: ClusterOutputs;
   readonly runtimeCluster: ClusterOutputs;
-
-  // VMs
-  readonly runners: ComputeInstanceOutput[];
 
   // Data
   readonly database: DatabaseClusterOutput;
@@ -77,17 +74,15 @@ export function resolveProvider(provider: CloudProvider): CloudProviderFactory {
  * Creates the complete infrastructure topology:
  *
  *   VPC (shared network)
- *   ├── Management Cluster (ArgoCD, Gitea, API, Traefik, cert-manager)
- *   ├── Runtime Cluster (user applications only)
- *   ├── Runner VMs (CI/CD builds — isolated resource consumption)
+ *   ├── Management Cluster (ArgoCD, Gitea, API, Traefik, cert-manager, Prometheus, Grafana, MinIO)
+ *   ├── Build Cluster (Argo Workflows + Kaniko — isolated resource consumption for builds)
+ *   ├── Runtime Cluster (user applications only, managed by ArgoCD)
  *   ├── Managed PostgreSQL (platform state)
  *   └── Object Storage (artifacts, builds, backups)
  *
- * Gitea runs inside the mgmt cluster as a StatefulSet (Phase 2).
- *
  * Dependency chain:
  *   Network → everything else (all resources inside VPC)
- *   Clusters, VMs, DB, Storage are independent of each other
+ *   Clusters, DB, Storage are independent of each other
  */
 export function createInfra(config: PlatformStackConfig): InfraOutputs {
   const factory = resolveProvider(config.provider);
@@ -132,20 +127,20 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     tags,
   });
 
-  // --- Runner VMs ---
-  const runners: ComputeInstanceOutput[] = [];
-  for (let i = 0; i < config.runnerCount; i++) {
-    const runner = factory.createComputeInstance({
-      name: `${baseName}-runner-${i}`,
-      region: config.region,
-      size: config.runnerNodeClass,
-      image: config.runnerImage,
-      network: { vpcId: network.vpcId },
-      sshKeyIds: config.sshKeyIds,
-      tags,
-    });
-    runners.push(runner);
-  }
+  // --- Build cluster ---
+  // Isolated compute for Argo Workflows + Kaniko builds.
+  // Separate from mgmt to prevent build resource spikes from affecting platform services.
+  const buildCluster = factory.createKubernetesCluster({
+    name: `${baseName}-build`,
+    region: config.region,
+    version: config.buildK8sVersion,
+    nodeClass: config.buildNodeClass,
+    minNodes: config.buildMinNodes,
+    maxNodes: config.buildMaxNodes,
+    autoScale: config.buildMaxNodes !== undefined,
+    network: { vpcId: network.vpcId },
+    tags,
+  });
 
   // --- Managed PostgreSQL ---
   const database = factory.createDatabaseCluster({
@@ -192,13 +187,18 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
       kubeconfig: mgmtCluster.kubeconfig,
       endpoint: mgmtCluster.endpoint,
     },
+    buildCluster: {
+      clusterId: buildCluster.clusterId,
+      clusterName: buildCluster.clusterName,
+      kubeconfig: buildCluster.kubeconfig,
+      endpoint: buildCluster.endpoint,
+    },
     runtimeCluster: {
       clusterId: runtimeCluster.clusterId,
       clusterName: runtimeCluster.clusterName,
       kubeconfig: runtimeCluster.kubeconfig,
       endpoint: runtimeCluster.endpoint,
     },
-    runners,
     database,
     bucketName: storage.bucketName,
     bucketEndpoint: storage.endpoint,

@@ -17,9 +17,11 @@ config:
   loopzero-infra:runtimeMinNodes: "3"
   loopzero-infra:runtimeMaxNodes: "6"
 
-  # Runners
-  loopzero-infra:runnerNodeClass: medium
-  loopzero-infra:runnerCount: "2"
+  # Build cluster
+  loopzero-infra:buildK8sVersion: "1.32.13-do.0"
+  loopzero-infra:buildNodeClass: medium
+  loopzero-infra:buildMinNodes: "2"
+  loopzero-infra:buildMaxNodes: "4"
 
   # Database
   loopzero-infra:dbNodeClass: medium

@@ -18,6 +18,8 @@ const HELM_VERSIONS = {
   traefik: "28.3.0",
   argocd: "7.3.11",
   gitea: "10.6.0",
+  minio: "5.4.0",
+  argoWorkflows: "1.0.5",
   prometheus: "25.27.0",
   grafana: "8.5.2",
 } as const;
@@ -38,13 +40,19 @@ export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
   readonly giteaReady: pulumi.Output<boolean>;
   readonly prometheusReady: pulumi.Output<boolean>;
   readonly grafanaReady: pulumi.Output<boolean>;
+  readonly minioReady: pulumi.Output<boolean>;
   readonly loopzeroApiReady: pulumi.Output<boolean>;
   readonly tenantControllerReady: pulumi.Output<boolean>;
   readonly tlsConfigured: pulumi.Output<boolean>;
 }
 
+export interface BuildBootstrapOutputs {
+  readonly argoWorkflowsReady: pulumi.Output<boolean>;
+}
+
 export interface BootstrapOutputs {
   readonly mgmt: MgmtBootstrapOutputs;
+  readonly build: BuildBootstrapOutputs;
   readonly runtime: ClusterBootstrapOutputs;
 }
 
@@ -70,9 +78,10 @@ export function bootstrapCluster(
   config: PlatformStackConfig,
 ): BootstrapOutputs {
   const mgmt = bootstrapMgmtCluster(infra, config);
+  const build = bootstrapBuildCluster(infra, config);
   const runtime = bootstrapRuntimeCluster(infra, config);
 
-  return { mgmt, runtime };
+  return { mgmt, build, runtime };
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +112,9 @@ function bootstrapMgmtCluster(
 
   // Grafana — dashboards and visualization, pre-configured with Prometheus data source
   const grafana = installGrafana(provider, ns, config);
+
+  // MinIO — S3-compatible artifact storage (source bundles, build cache, images)
+  const minio = installMinIO(provider, ns);
 
   // LoopZero API — platform HTTP server (connects to DB, Gitea, ArgoCD, Argo Workflows)
   const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config);
@@ -139,6 +151,7 @@ function bootstrapMgmtCluster(
     giteaReady: gitea.status.apply((s) => s.status === "deployed"),
     prometheusReady: prometheus.status.apply((s) => s.status === "deployed"),
     grafanaReady: grafana.status.apply((s) => s.status === "deployed"),
+    minioReady: minio.status.apply((s) => s.status === "deployed"),
     loopzeroApiReady: loopzeroApi.metadata.name.apply((n) => !!n),
     tenantControllerReady: tenantController.metadata.name.apply((n) => !!n),
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
@@ -433,6 +446,134 @@ function installGitea(
 }
 
 // ---------------------------------------------------------------------------
+// Build cluster bootstrap
+// ---------------------------------------------------------------------------
+
+function bootstrapBuildCluster(
+  infra: InfraOutputs,
+  config: PlatformStackConfig,
+): BuildBootstrapOutputs {
+  const provider = new k8s.Provider("build-k8s", {
+    kubeconfig: infra.buildCluster.kubeconfig,
+  });
+
+  const ns = new k8s.core.v1.Namespace(
+    "build-argo",
+    {
+      metadata: {
+        name: "argo",
+        labels: {
+          "app.kubernetes.io/managed-by": "pulumi",
+          "app.kubernetes.io/part-of": "loopzero-platform",
+          "loopzero.io/cluster-role": "build",
+        },
+      },
+    },
+    { provider },
+  );
+
+  const argoWorkflows = new k8s.helm.v3.Release(
+    "argo-workflows",
+    {
+      chart: "argo-workflows",
+      version: HELM_VERSIONS.argoWorkflows,
+      repositoryOpts: {
+        repo: "https://argoproj.github.io/argo-helm",
+      },
+      namespace: "argo",
+      createNamespace: false,
+      values: {
+        fullnameOverride: "argo-workflows",
+        controller: {
+          workflowWorkers: 32,
+          podWorkers: 32,
+          resources: {
+            requests: { cpu: "500m", memory: "512Mi" },
+            limits: { cpu: "2", memory: "1Gi" },
+          },
+          metricsConfig: {
+            enabled: true,
+            port: 9090,
+            path: "/metrics",
+          },
+        },
+        server: {
+          enabled: true,
+          service: { type: "ClusterIP" },
+          resources: {
+            requests: { cpu: "50m", memory: "64Mi" },
+            limits: { cpu: "200m", memory: "128Mi" },
+          },
+        },
+        workflow: {
+          serviceAccount: {
+            create: true,
+            name: "loopzero-build-sa",
+          },
+          rbac: { create: true },
+        },
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  return {
+    argoWorkflowsReady: argoWorkflows.status.apply(
+      (s) => s.status === "deployed",
+    ),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// MinIO — S3-compatible artifact storage on mgmt cluster
+// ---------------------------------------------------------------------------
+
+function installMinIO(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+): k8s.helm.v3.Release {
+  return new k8s.helm.v3.Release(
+    "minio",
+    {
+      chart: "minio",
+      version: HELM_VERSIONS.minio,
+      repositoryOpts: {
+        repo: "https://charts.min.io/",
+      },
+      namespace: PLATFORM_NAMESPACE,
+      createNamespace: false,
+      values: {
+        fullnameOverride: "minio",
+        mode: "standalone",
+        rootUser: "loopzero-admin",
+        // Generate a random password — retrievable via pulumi stack output or kubectl get secret
+        rootPassword: `loopzero-${Date.now().toString(36)}`,
+        persistence: {
+          enabled: true,
+          size: "10Gi",
+        },
+        service: {
+          type: "ClusterIP",
+        },
+        consoleService: {
+          type: "ClusterIP",
+        },
+        resources: {
+          requests: { cpu: "100m", memory: "128Mi" },
+          limits: { cpu: "500m", memory: "512Mi" },
+        },
+        // Auto-create buckets for platform use
+        buckets: [
+          { name: "loopzero-artifacts", policy: "none" },
+          { name: "loopzero-builds", policy: "none" },
+        ],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Platform application services
 // ---------------------------------------------------------------------------
 
@@ -465,15 +606,14 @@ function installLoopZeroAPI(
     { provider, dependsOn: [ns] },
   );
 
-  // Kubeconfig for the mgmt cluster — needed by the Argo workflow submitter.
-  // The API runs inside mgmt but uses clientcmd (not in-cluster config)
-  // to connect to the build cluster. For dev, build = mgmt.
+  // Kubeconfigs — the API runs in mgmt but submits workflows to the build cluster.
   const kubeconfigSecret = new k8s.core.v1.Secret(
     "loopzero-api-kubeconfig",
     {
       metadata: { name: "loopzero-api-kubeconfig", namespace: PLATFORM_NAMESPACE },
       stringData: {
-        kubeconfig: infra.mgmtCluster.kubeconfig,
+        "mgmt-kubeconfig": infra.mgmtCluster.kubeconfig,
+        "build-kubeconfig": infra.buildCluster.kubeconfig,
       },
     },
     { provider, dependsOn: [ns] },
@@ -493,10 +633,11 @@ function installLoopZeroAPI(
         ARGOCD_URL: `http://argocd-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
         ARGOCD_INSECURE: "true",
         ARGO_NAMESPACE: "argo",
-        MGMT_KUBECONFIG: "/etc/loopzero/kubeconfig",
+        MGMT_KUBECONFIG: "/etc/loopzero/mgmt-kubeconfig",
         MGMT_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.mgmtCluster.clusterName}`,
-        BUILD_KUBECONFIG: "/etc/loopzero/kubeconfig",
-        BUILD_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.mgmtCluster.clusterName}`,
+        BUILD_KUBECONFIG: "/etc/loopzero/build-kubeconfig",
+        BUILD_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.buildCluster.clusterName}`,
+        MINIO_ENDPOINT: `minio.${PLATFORM_NAMESPACE}.svc.cluster.local:9000`,
       },
     },
     { provider, dependsOn: [ns] },
