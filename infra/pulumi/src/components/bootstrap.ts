@@ -1034,6 +1034,11 @@ function installTenantController(
                     name: "SPACES_SECRET_ACCESS_KEY",
                     value: "REDACTED_SECRET_022",
                   },
+                  // DO Container Registry auth — Kaniko needs this for image push.
+                  {
+                    name: "DIGITALOCEAN_TOKEN",
+                    value: "***REMOVED-DIGITALOCEAN-TOKEN-SEE-ISSUE-323***",
+                  },
                 ],
                 resources: {
                   requests: { cpu: "100m", memory: "128Mi" },

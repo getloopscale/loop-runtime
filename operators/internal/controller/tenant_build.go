@@ -170,10 +170,10 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 
 	// Docker registry credentials for Kaniko image push.
 	// Kaniko mounts this at /kaniko/.docker/config.json.
-	registryAccessKey := os.Getenv("SPACES_ACCESS_KEY_ID")
-	registrySecretKey := os.Getenv("SPACES_SECRET_ACCESS_KEY")
-	if registryAccessKey != "" && registrySecretKey != "" {
-		dockerAuth := fmt.Sprintf("%s:%s", registryAccessKey, registrySecretKey)
+	// DO Container Registry uses the DO API token for auth (not Spaces keys).
+	doAPIToken := os.Getenv("DIGITALOCEAN_TOKEN")
+	if doAPIToken != "" {
+		dockerAuth := fmt.Sprintf("%s:%s", doAPIToken, doAPIToken)
 		encodedAuth := base64Encode(dockerAuth)
 		dockerConfig := fmt.Sprintf(`{"auths":{"registry.digitalocean.com":{"auth":"%s"}}}`, encodedAuth)
 
