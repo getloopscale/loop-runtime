@@ -69,11 +69,10 @@ spec:
 
             echo "Bundle downloaded: $(stat -c%s /tmp/source.bundle) bytes"
 
-            cd /workspace
-            git init
-            git fetch /tmp/source.bundle "refs/heads/*:refs/heads/*"
-            git checkout HEAD 2>/dev/null || git checkout $(git branch -a | head -1 | tr -d '* ')
-            rm -f /tmp/source.bundle
+            # Clone from bundle into temp dir, then move contents to workspace
+            git clone /tmp/source.bundle /tmp/repo
+            cp -a /tmp/repo/. /workspace/
+            rm -rf /tmp/repo /tmp/source.bundle
 
             # Make workspace writable by all users — subsequent DAG steps
             # run as non-root (user 1000) and need write access to create
