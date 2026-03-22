@@ -188,9 +188,11 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 
 	// Step 1: clone (shared across all languages — one source bundle)
 	tasks := []*forge.Task{
+		// The CWT downloads source from: {tenant-id}/source/{build-id}.bundle
+		// We pass CommitSHA as "build-id" because the source upload stores by commit SHA.
 		cwtTask("clone-repo", "loopzero-clone", "clone-repo", nil, map[string]string{
 			"tenant-id": spec.TenantID,
-			"build-id":  spec.BuildID,
+			"build-id":  spec.CommitSHA,
 		}),
 	}
 

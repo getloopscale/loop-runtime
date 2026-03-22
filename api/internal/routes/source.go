@@ -1,8 +1,10 @@
 package routes
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -23,14 +25,32 @@ type SourceUploadResponse struct {
 	Apps      []string `json:"apps"`
 }
 
+// ObjectUploader uploads objects to S3-compatible storage (Spaces/MinIO).
+type ObjectUploader interface {
+	Upload(ctx context.Context, bucket, key string, data io.Reader) error
+}
+
 // SourceHandler provides HTTP handlers for source upload operations.
 type SourceHandler struct {
-	store source.SourceStore
+	store    source.SourceStore
+	objStore ObjectUploader // optional: upload bundle to object storage for build cluster access
 }
 
 // NewSourceHandler creates a new SourceHandler.
-func NewSourceHandler(store source.SourceStore) *SourceHandler {
-	return &SourceHandler{store: store}
+func NewSourceHandler(store source.SourceStore, opts ...func(*SourceHandler)) *SourceHandler {
+	h := &SourceHandler{store: store}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
+
+// WithObjectUploader sets an optional object store for uploading bundles
+// to S3-compatible storage (Spaces/MinIO) for build cluster access.
+func WithObjectUploader(u ObjectUploader) func(*SourceHandler) {
+	return func(h *SourceHandler) {
+		h.objStore = u
+	}
 }
 
 // Upload handles POST /api/v1/source/upload.
@@ -109,7 +129,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract bundle file
+	// Extract bundle file and buffer it (needed for dual-write to Gitea + Spaces)
 	bundleFile, _, err := r.FormFile("bundle")
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
@@ -121,18 +141,34 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = bundleFile.Close() }()
 
+	bundleData, err := io.ReadAll(bundleFile)
+	if err != nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
 	// Extract project name from loopzero.yaml (supports both 'project' and 'name' fields)
 	projectName := cfg.Project
 	if projectName == "" {
 		projectName = cfg.Name
 	}
 
-	// Push bundle to source store — repo: loopzero-source-{tenant}-{project}
-	commitSHA, err := h.store.PushBundle(ctx, uc.TenantID, projectName, bundleFile)
+	// Push bundle to source store (Gitea) — repo: loopzero-source-{tenant}-{project}
+	commitSHA, err := h.store.PushBundle(ctx, uc.TenantID, projectName, bytes.NewReader(bundleData))
 	if err != nil {
 		slog.Error("source upload failed", "error", err, "team_id", uc.TenantID)
 		writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
 		return
+	}
+
+	// Upload bundle to object storage (Spaces/MinIO) for build cluster access.
+	// The CWT clone step downloads from: loopzero-builds/{tenant}/source/{build_id}.bundle
+	// We use commit_sha as a temporary key; the build submission will copy/rename it.
+	if h.objStore != nil {
+		objKey := fmt.Sprintf("%s/source/%s.bundle", uc.TenantID, commitSHA)
+		if uploadErr := h.objStore.Upload(ctx, "loopzero-builds", objKey, bytes.NewReader(bundleData)); uploadErr != nil {
+			slog.Warn("object store upload failed (non-fatal)", "error", uploadErr, "key", objKey)
+		}
 	}
 
 	// Sort app names for deterministic output

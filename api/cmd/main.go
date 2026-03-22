@@ -24,6 +24,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/argocd"
 	"github.com/loopzero/loopzero/api/internal/gitops"
 	"github.com/loopzero/loopzero/api/internal/services"
+	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/sse"
 
@@ -105,6 +106,7 @@ func main() {
 
 	// Sprint 2 dependencies (nil when DATABASE_URL is not set)
 	var sourceStore source.SourceStore
+	var objUploader routes.ObjectUploader
 	var buildOrchestrator routes.BuildOrchestratorService
 	var eventStore sse.EventStore
 	var buildStoreReader sse.BuildStoreReader
@@ -154,6 +156,13 @@ func main() {
 			os.Exit(1)
 		}
 		sourceStore = giteaSourceStore
+
+		// S3 uploader for source bundles — build cluster reads from Spaces.
+		// Source is dual-written: Gitea (git history) + Spaces (build access).
+		if cfg.MinIOEndpoint != "" && cfg.MinIOAccessKey != "" && cfg.MinIOSecretKey != "" {
+			objUploader = s3uploader.New(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey)
+			logger.Info("s3 uploader enabled", "endpoint", cfg.MinIOEndpoint)
+		}
 
 		// Environment locker using real pgxpool.Pool
 		locker := &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool}
@@ -333,6 +342,7 @@ func main() {
 			return nil
 		}(),
 		SourceStore:        sourceStore,
+		ObjectUploader:     objUploader,
 		ArgoCallbackSecret: "", // C-01 fix: callback route removed
 		EventStore:         eventStore,
 		BuildStoreReader:   buildStoreReader,

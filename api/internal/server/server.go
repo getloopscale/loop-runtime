@@ -33,6 +33,7 @@ type Config struct {
 	ProjectDeleter     routes.ProjectDeleter
 	IdempotencyStore   middleware.IdempotencyStore
 	SourceStore        source.SourceStore
+	ObjectUploader     routes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
 	// ArgoCallbackSecret is deprecated — callback route removed (C-01 fix).
 	// Kept in Config struct for backwards compatibility of env var parsing.
 	ArgoCallbackSecret string
@@ -118,7 +119,11 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Source upload — auth + rate limiting, no idempotency.
 			// Upload is a pre-build step; idempotency belongs on build submission.
 			if cfg.SourceStore != nil {
-				sourceHandler := routes.NewSourceHandler(cfg.SourceStore)
+				var sourceOpts []func(*routes.SourceHandler)
+				if cfg.ObjectUploader != nil {
+					sourceOpts = append(sourceOpts, routes.WithObjectUploader(cfg.ObjectUploader))
+				}
+				sourceHandler := routes.NewSourceHandler(cfg.SourceStore, sourceOpts...)
 				r.With(rateLimitMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)
 			}
 
