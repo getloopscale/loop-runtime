@@ -619,9 +619,17 @@ function installLoopZeroAPI(
       metadata: { name: "loopzero-api-secrets", namespace: PLATFORM_NAMESPACE },
       stringData: {
         DATABASE_URL: databaseUrl,
-        LOOPZERO_ARGO_CALLBACK_SECRET: pulumi.output(
-          `cb-${Date.now().toString(36)}`,
-        ),
+        LOOPZERO_ARGO_CALLBACK_SECRET: "cb-loopzero-dev-2026",
+        // Gitea admin token — created via `gitea admin user generate-access-token`
+        GITEA_TOKEN: "REDACTED_SECRET_026",
+        // ArgoCD admin password — from argocd-initial-admin-secret
+        ARGOCD_TOKEN: infra.mgmtCluster.kubeconfig.apply(() => {
+          // Read at deploy time; for now use the known password
+          return "REDACTED_SECRET_059";
+        }),
+        // MinIO credentials
+        MINIO_ACCESS_KEY: "loopzero-admin",
+        MINIO_SECRET_KEY: "loopzero-minio-dev-2026",
       },
     },
     { provider, dependsOn: [ns] },
@@ -677,6 +685,9 @@ function installLoopZeroAPI(
         BUILD_KUBECONFIG: "/etc/loopzero/build-kubeconfig",
         BUILD_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.buildCluster.clusterName}`,
         MINIO_ENDPOINT: `minio.${PLATFORM_NAMESPACE}.svc.cluster.local:9000`,
+        REGISTRY_URL: "registry.digitalocean.com/loopzero-infra-registry",
+        REGISTRY_INSECURE: "false",
+        ARGOCD_NAMESPACE: PLATFORM_NAMESPACE,
       },
     },
     { provider, dependsOn: [ns] },
