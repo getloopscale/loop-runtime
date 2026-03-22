@@ -1020,11 +1020,15 @@ function installTenantController(
                     name: "ARGOCD_NAMESPACE",
                     value: PLATFORM_NAMESPACE,
                   },
-                  // MinIO per-tenant credential provisioner disabled for now.
-                  // The Admin API returns HTTP 400 (auth format mismatch with SigV4).
-                  // Builds work with global MinIO credentials via CWT envFrom.
-                  // Without these 3 env vars, main.go leaves MinIOProvisioner=nil (graceful).
-                  // TODO: fix MinIO Admin client auth — likely needs secure endpoint config.
+                  // MinIO endpoint — used by controller to create global credentials
+                  // Secret in build namespaces (when per-tenant provisioner is disabled).
+                  {
+                    name: "MINIO_ENDPOINT",
+                    value: `http://minio.${PLATFORM_NAMESPACE}.svc.cluster.local:9000`,
+                  },
+                  // NOTE: MINIO_ACCESS_KEY and MINIO_SECRET_KEY are intentionally omitted.
+                  // Without them, main.go leaves MinIOProvisioner=nil. The controller
+                  // creates global credentials in build namespaces via reconcileBuildNamespace.
                 ],
                 resources: {
                   requests: { cpu: "100m", memory: "128Mi" },

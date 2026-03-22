@@ -74,6 +74,84 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		return fmt.Errorf("build network policy %s: %w", buildNs, err)
 	}
 
+	// LimitRange — default resource requests/limits for build pods.
+	// Without this, pods without explicit resources are rejected by the ResourceQuota.
+	lr := &corev1.LimitRange{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "build-limits",
+			Namespace: buildNs,
+		},
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, lr, func() error {
+		lr.Spec.Limits = []corev1.LimitRangeItem{
+			{
+				Type: corev1.LimitTypeContainer,
+				Default: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("500m"),
+					corev1.ResourceMemory: resource.MustParse("512Mi"),
+				},
+				DefaultRequest: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("128Mi"),
+				},
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("build limitrange %s: %w", buildNs, err)
+	}
+
+	// ServiceAccount for Argo Workflow pods — must exist in each build namespace.
+	// The workflow spec references serviceAccountName: loopzero-build-sa.
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "loopzero-build-sa",
+			Namespace: buildNs,
+		},
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, sa, func() error {
+		if sa.Labels == nil {
+			sa.Labels = make(map[string]string)
+		}
+		sa.Labels["loopzero.io/tenant"] = tenant.Name
+		sa.Labels["loopzero.io/managed-by"] = "tenant-controller"
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("build serviceaccount %s: %w", buildNs, err)
+	}
+
+	// Global MinIO credentials for CWTs (when per-tenant provisioner is disabled).
+	// CWTs reference Secret "loopzero-minio-credentials" via envFrom.
+	if r.MinIOProvisioner == nil && r.MinIOEndpoint != "" {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "loopzero-minio-credentials",
+				Namespace: buildNs,
+			},
+		}
+		_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
+			secret.Labels = map[string]string{
+				"loopzero.io/tenant":     tenant.Name,
+				"loopzero.io/component":  "build",
+				"loopzero.io/managed-by": "tenant-controller",
+			}
+			secret.Type = corev1.SecretTypeOpaque
+			// Use global MinIO credentials (same as controller's own)
+			// Per-tenant isolation is handled when MinIOProvisioner is enabled.
+			secret.StringData = map[string]string{
+				"AWS_ACCESS_KEY_ID":     "loopzero-admin",
+				"AWS_SECRET_ACCESS_KEY": "loopzero-minio-dev-2026",
+				"MINIO_ENDPOINT":        r.MinIOEndpoint,
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("build minio credentials (global) %s: %w", buildNs, err)
+		}
+	}
+
 	// Provision per-tenant MinIO credentials scoped to tenant prefix.
 	// Each tenant gets its own MinIO user + policy that restricts access to
 	// loopzero-builds/{tenantID}/* only. This prevents cross-tenant source code access
