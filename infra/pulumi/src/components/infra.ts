@@ -179,7 +179,7 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
   // via `doctl kubernetes cluster registry add` (run once post-provision).
   const registry = new digitalocean.ContainerRegistry(`${baseName}-registry`, {
     name: `${config.project}-registry`,
-    subscriptionTierSlug: "starter",
+    subscriptionTierSlug: "basic", // 5 repos, 5GB — starter only allows 1 repo
     region: config.region,
   });
 
