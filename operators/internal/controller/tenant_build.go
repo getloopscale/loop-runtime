@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -138,11 +139,20 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 				"loopzero.io/managed-by": "tenant-controller",
 			}
 			secret.Type = corev1.SecretTypeOpaque
-			// Use global MinIO credentials (same as controller's own)
+			// Use global object storage credentials.
+			// In production, these point to DigitalOcean Spaces (S3-compatible).
 			// Per-tenant isolation is handled when MinIOProvisioner is enabled.
+			accessKey := os.Getenv("SPACES_ACCESS_KEY_ID")
+			secretKey := os.Getenv("SPACES_SECRET_ACCESS_KEY")
+			if accessKey == "" {
+				accessKey = "loopzero-admin" // fallback for local dev
+			}
+			if secretKey == "" {
+				secretKey = "loopzero-minio-dev-2026" // fallback for local dev
+			}
 			secret.StringData = map[string]string{
-				"AWS_ACCESS_KEY_ID":     "loopzero-admin",
-				"AWS_SECRET_ACCESS_KEY": "loopzero-minio-dev-2026",
+				"AWS_ACCESS_KEY_ID":     accessKey,
+				"AWS_SECRET_ACCESS_KEY": secretKey,
 				"MINIO_ENDPOINT":        r.MinIOEndpoint,
 			}
 			return nil

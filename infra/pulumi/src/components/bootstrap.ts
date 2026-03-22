@@ -1020,15 +1020,20 @@ function installTenantController(
                     name: "ARGOCD_NAMESPACE",
                     value: PLATFORM_NAMESPACE,
                   },
-                  // MinIO endpoint — used by controller to create global credentials
-                  // Secret in build namespaces (when per-tenant provisioner is disabled).
+                  // Object storage endpoint — DigitalOcean Spaces (S3-compatible).
+                  // Used by controller to create credentials Secret in build namespaces.
                   {
                     name: "MINIO_ENDPOINT",
-                    value: `http://minio.${PLATFORM_NAMESPACE}.svc.cluster.local:9000`,
+                    value: "https://nyc3.digitaloceanspaces.com",
                   },
-                  // NOTE: MINIO_ACCESS_KEY and MINIO_SECRET_KEY are intentionally omitted.
-                  // Without them, main.go leaves MinIOProvisioner=nil. The controller
-                  // creates global credentials in build namespaces via reconcileBuildNamespace.
+                  {
+                    name: "SPACES_ACCESS_KEY_ID",
+                    value: "REDACTED_SECRET_049",
+                  },
+                  {
+                    name: "SPACES_SECRET_ACCESS_KEY",
+                    value: "REDACTED_SECRET_022",
+                  },
                 ],
                 resources: {
                   requests: { cpu: "100m", memory: "128Mi" },
