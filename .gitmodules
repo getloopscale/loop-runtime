@@ -1,0 +1,3 @@
+[submodule "loopzero-forge"]
+	path = loopzero-forge
+	url = git@github-loopzero:getloopscale/loopzero-forge.git
