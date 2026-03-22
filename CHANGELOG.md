@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - DNS record for `git` subdomain pointing to runtime cluster instead of management cluster — added `git` to `MGMT_SUBDOMAINS` so it resolves to mgmt ingress where Gitea runs (#PULUMI-GIT-DNS)
 - Gitea CrashLoopBackOff caused by missing `gitea` database — managed PostgreSQL only creates `defaultdb`, now explicitly provisions `gitea` via `digitalocean.DatabaseDb` (#PULUMI-GITEA-DB)
+- ArgoCD and Gitea services unreachable via IngressRoute (HTTP 404) — Pulumi Helm provider adds hash suffix to release names, causing Service name mismatch. Added `fullnameOverride` for deterministic names matching IngressRoute references (#PULUMI-HELM-NAMES)
 - DigitalOcean DNS provider hardcoded CNAME type — fails when LB returns IP (common on DO). Now auto-detects A vs CNAME (#PULUMI-DNS-FIX)
 - Traefik Service lookup may fail due to Helm chart naming template — added fullnameOverride for deterministic K8s Service names (#PULUMI-TRAEFIK-FIX)
 

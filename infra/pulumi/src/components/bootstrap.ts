@@ -228,6 +228,9 @@ function installArgoCD(
       namespace: PLATFORM_NAMESPACE,
       createNamespace: false,
       values: {
+        // Deterministic Service names so IngressRoutes can reference them.
+        // Without this, Pulumi's Helm provider adds a hash suffix to the release name.
+        fullnameOverride: "argocd",
         // Server accessed via Traefik — TLS terminated at ingress
         server: {
           service: {
@@ -351,6 +354,9 @@ function installGitea(
       namespace: PLATFORM_NAMESPACE,
       createNamespace: false,
       values: {
+        // Deterministic Service names so IngressRoutes can reference them.
+        // Without this, Pulumi's Helm provider adds a hash suffix to the release name.
+        fullnameOverride: "gitea",
         // Use managed PostgreSQL — no embedded database
         postgresql: { enabled: false },
         "postgresql-ha": { enabled: false },
