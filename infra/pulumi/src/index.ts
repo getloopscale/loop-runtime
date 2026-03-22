@@ -38,6 +38,8 @@ export const execution = buildExecutionState({
     mgmtCertManager: bootstrap.mgmt.certManagerReady,
     mgmtArgocd: bootstrap.mgmt.argoCdReady,
     mgmtGitea: bootstrap.mgmt.giteaReady,
+    mgmtPrometheus: bootstrap.mgmt.prometheusReady,
+    mgmtGrafana: bootstrap.mgmt.grafanaReady,
     mgmtTls: bootstrap.mgmt.tlsConfigured,
     runtimeIngress: bootstrap.runtime.ingressReady,
 
@@ -87,6 +89,8 @@ export const mgmtIngressReady = bootstrap.mgmt.ingressReady;
 export const mgmtIngressEndpoint = bootstrap.mgmt.ingressEndpoint;
 export const certManagerReady = bootstrap.mgmt.certManagerReady;
 export const argoCdReady = bootstrap.mgmt.argoCdReady;
+export const prometheusReady = bootstrap.mgmt.prometheusReady;
+export const grafanaReady = bootstrap.mgmt.grafanaReady;
 
 // Phase 2 — Runtime cluster services
 export const runtimeIngressReady = bootstrap.runtime.ingressReady;
@@ -101,6 +105,13 @@ export const wiring = pulumi.output({
   gitea: {
     internalUrl: "http://gitea-http.platform-system.svc.cluster.local:3000",
     publicUrl: `https://git.${config.domain}`,
+  },
+  grafana: {
+    internalUrl: "http://grafana.platform-system.svc.cluster.local:3000",
+    publicUrl: `https://grafana.${config.domain}`,
+  },
+  prometheus: {
+    internalUrl: "http://prometheus-server.platform-system.svc.cluster.local:80",
   },
   database: {
     privateHost: infra.database.privateHost,

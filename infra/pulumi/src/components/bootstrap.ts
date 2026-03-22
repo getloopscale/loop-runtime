@@ -18,6 +18,8 @@ const HELM_VERSIONS = {
   traefik: "28.3.0",
   argocd: "7.3.11",
   gitea: "10.6.0",
+  prometheus: "25.27.0",
+  grafana: "8.5.2",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -34,6 +36,8 @@ export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
   readonly certManagerReady: pulumi.Output<boolean>;
   readonly argoCdReady: pulumi.Output<boolean>;
   readonly giteaReady: pulumi.Output<boolean>;
+  readonly prometheusReady: pulumi.Output<boolean>;
+  readonly grafanaReady: pulumi.Output<boolean>;
   readonly tlsConfigured: pulumi.Output<boolean>;
 }
 
@@ -92,6 +96,12 @@ function bootstrapMgmtCluster(
   // Gitea — internal git server for desired state (ArgoCD reads from here)
   const gitea = installGitea(provider, ns, infra, config);
 
+  // Prometheus — metrics collection (kube-state-metrics, node-exporter, cAdvisor)
+  const prometheus = installPrometheus(provider, ns);
+
+  // Grafana — dashboards and visualization, pre-configured with Prometheus data source
+  const grafana = installGrafana(provider, ns, config);
+
   // Traefik — ingress for platform services (ArgoCD UI, API, etc.)
   const traefik = installTraefik("mgmt", provider, ns, certManager);
 
@@ -116,6 +126,8 @@ function bootstrapMgmtCluster(
     certManagerReady: certManager.status.apply((s) => s.status === "deployed"),
     argoCdReady: argocd.status.apply((s) => s.status === "deployed"),
     giteaReady: gitea.status.apply((s) => s.status === "deployed"),
+    prometheusReady: prometheus.status.apply((s) => s.status === "deployed"),
+    grafanaReady: grafana.status.apply((s) => s.status === "deployed"),
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
     tlsConfigured: tlsRoutes.apply((routes) => routes.length > 0),
     ingressEndpoint,
@@ -400,6 +412,156 @@ function installGitea(
         resources: {
           requests: { cpu: "100m", memory: "256Mi" },
           limits: { cpu: "500m", memory: "512Mi" },
+        },
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+}
+
+function installPrometheus(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+): k8s.helm.v3.Release {
+  return new k8s.helm.v3.Release(
+    "prometheus",
+    {
+      chart: "prometheus",
+      version: HELM_VERSIONS.prometheus,
+      repositoryOpts: {
+        repo: "https://prometheus-community.github.io/helm-charts",
+      },
+      namespace: PLATFORM_NAMESPACE,
+      createNamespace: false,
+      values: {
+        fullnameOverride: "prometheus",
+        // Disable components not needed for platform monitoring
+        alertmanager: { enabled: false },
+        "prometheus-pushgateway": { enabled: false },
+        // Server — central metrics store
+        server: {
+          retention: "15d",
+          persistentVolume: {
+            enabled: true,
+            size: "10Gi",
+          },
+          resources: {
+            requests: { cpu: "200m", memory: "512Mi" },
+            limits: { cpu: "500m", memory: "1Gi" },
+          },
+        },
+        // kube-state-metrics — K8s object metrics (pods, deployments, etc.)
+        "kube-state-metrics": {
+          fullnameOverride: "kube-state-metrics",
+        },
+        // node-exporter — host-level metrics (CPU, memory, disk)
+        "prometheus-node-exporter": {
+          fullnameOverride: "node-exporter",
+        },
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+}
+
+function installGrafana(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  config: PlatformStackConfig,
+): k8s.helm.v3.Release {
+  return new k8s.helm.v3.Release(
+    "grafana",
+    {
+      chart: "grafana",
+      version: HELM_VERSIONS.grafana,
+      repositoryOpts: {
+        repo: "https://grafana.github.io/helm-charts",
+      },
+      namespace: PLATFORM_NAMESPACE,
+      createNamespace: false,
+      values: {
+        // Deterministic Service name — IngressRoute references "grafana" on port 3000.
+        fullnameOverride: "grafana",
+        service: {
+          type: "ClusterIP",
+          port: 3000,
+        },
+        // Prometheus data source pre-configured — no manual setup needed.
+        datasources: {
+          "datasources.yaml": {
+            apiVersion: 1,
+            datasources: [
+              {
+                name: "Prometheus",
+                type: "prometheus",
+                url: `http://prometheus-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
+                access: "proxy",
+                isDefault: true,
+              },
+            ],
+          },
+        },
+        // Default dashboards for Kubernetes monitoring
+        dashboardProviders: {
+          "dashboardproviders.yaml": {
+            apiVersion: 1,
+            providers: [
+              {
+                name: "default",
+                orgId: 1,
+                folder: "",
+                type: "file",
+                disableDeletion: false,
+                editable: true,
+                options: {
+                  path: "/var/lib/grafana/dashboards/default",
+                },
+              },
+            ],
+          },
+        },
+        dashboards: {
+          default: {
+            // Kubernetes cluster overview
+            "k8s-cluster": {
+              gnetId: 7249,
+              revision: 1,
+              datasource: "Prometheus",
+            },
+            // Node exporter dashboard
+            "node-exporter": {
+              gnetId: 1860,
+              revision: 37,
+              datasource: "Prometheus",
+            },
+            // Kubernetes pods dashboard
+            "k8s-pods": {
+              gnetId: 6417,
+              revision: 1,
+              datasource: "Prometheus",
+            },
+          },
+        },
+        persistence: {
+          enabled: true,
+          size: "5Gi",
+        },
+        adminUser: "admin",
+        "grafana.ini": {
+          server: {
+            domain: `grafana.${config.domain}`,
+            root_url: `https://grafana.${config.domain}/`,
+            serve_from_sub_path: false,
+          },
+          // Anonymous read access for dashboards — simplifies team onboarding
+          "auth.anonymous": {
+            enabled: true,
+            org_role: "Viewer",
+          },
+        },
+        resources: {
+          requests: { cpu: "100m", memory: "128Mi" },
+          limits: { cpu: "300m", memory: "256Mi" },
         },
       },
     },

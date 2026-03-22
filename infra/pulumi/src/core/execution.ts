@@ -21,6 +21,8 @@ export type ComponentName =
   | "mgmtCertManager"
   | "mgmtArgocd"
   | "mgmtGitea"
+  | "mgmtPrometheus"
+  | "mgmtGrafana"
   | "mgmtTls"
   | "runtimeIngress"
   | "mgmtDns"
@@ -84,6 +86,8 @@ export function buildExecutionState(args: {
       "mgmtCertManager",
       "mgmtArgocd",
       "mgmtGitea",
+      "mgmtPrometheus",
+      "mgmtGrafana",
       "mgmtTls",
       "runtimeIngress",
     ];
