@@ -472,7 +472,7 @@ function installLoopZeroAPI(
       data: {
         PORT: "8080",
         METRICS_PORT: "9090",
-        LOOPZERO_ENV: "production",
+        LOOPZERO_ENV: config.environment === "prod" ? "production" : "development",
         BASE_DOMAIN: config.domain,
         WORKLOAD_INGRESS_URL: `https://${config.domain}`,
         GITEA_URL: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
@@ -582,6 +582,7 @@ function installTenantController(
         name: "tenant-controller",
         namespace: PLATFORM_NAMESPACE,
       },
+      imagePullSecrets: [{ name: "loopzero-infra-registry" }],
     },
     { provider, dependsOn: [ns] },
   );
@@ -680,6 +681,7 @@ function installTenantController(
           },
           spec: {
             serviceAccountName: "tenant-controller",
+            imagePullSecrets: [{ name: "loopzero-infra-registry" }],
             containers: [
               {
                 name: "controller",
