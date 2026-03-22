@@ -24,6 +24,8 @@ export type ComponentName =
   | "mgmtGitea"
   | "mgmtPrometheus"
   | "mgmtGrafana"
+  | "mgmtLoopZeroApi"
+  | "mgmtTenantController"
   | "mgmtTls"
   | "runtimeIngress"
   | "mgmtDns"
@@ -90,6 +92,8 @@ export function buildExecutionState(args: {
       "mgmtGitea",
       "mgmtPrometheus",
       "mgmtGrafana",
+      "mgmtLoopZeroApi",
+      "mgmtTenantController",
       "mgmtTls",
       "runtimeIngress",
     ];

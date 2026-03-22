@@ -38,6 +38,8 @@ export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
   readonly giteaReady: pulumi.Output<boolean>;
   readonly prometheusReady: pulumi.Output<boolean>;
   readonly grafanaReady: pulumi.Output<boolean>;
+  readonly loopzeroApiReady: pulumi.Output<boolean>;
+  readonly tenantControllerReady: pulumi.Output<boolean>;
   readonly tlsConfigured: pulumi.Output<boolean>;
 }
 
@@ -102,6 +104,15 @@ function bootstrapMgmtCluster(
   // Grafana — dashboards and visualization, pre-configured with Prometheus data source
   const grafana = installGrafana(provider, ns, config);
 
+  // LoopZero API — platform HTTP server (connects to DB, Gitea, ArgoCD, Argo Workflows)
+  const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config);
+
+  // TenantController — K8s operator for tenant lifecycle (namespaces, RBAC, quotas)
+  const tenantController = installTenantController(provider, ns, infra, config);
+
+  // ArgoCD cluster secret — registers runtime cluster as deploy target
+  registerRuntimeCluster(provider, ns, infra, argocd);
+
   // Traefik — ingress for platform services (ArgoCD UI, API, etc.)
   const traefik = installTraefik("mgmt", provider, ns, certManager);
 
@@ -128,6 +139,8 @@ function bootstrapMgmtCluster(
     giteaReady: gitea.status.apply((s) => s.status === "deployed"),
     prometheusReady: prometheus.status.apply((s) => s.status === "deployed"),
     grafanaReady: grafana.status.apply((s) => s.status === "deployed"),
+    loopzeroApiReady: loopzeroApi.metadata.name.apply((n) => !!n),
+    tenantControllerReady: tenantController.metadata.name.apply((n) => !!n),
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
     tlsConfigured: tlsRoutes.apply((routes) => routes.length > 0),
     ingressEndpoint,
@@ -418,6 +431,334 @@ function installGitea(
     { provider, dependsOn: [ns] },
   );
 }
+
+// ---------------------------------------------------------------------------
+// Platform application services
+// ---------------------------------------------------------------------------
+
+/**
+ * Container image registry endpoint. Must match the registry provisioned in Phase 1.
+ * DOKS clusters are integrated via `doctl kubernetes cluster registry add`.
+ */
+const REGISTRY = "registry.digitalocean.com/loopzero-infra-registry";
+
+function installLoopZeroAPI(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  infra: InfraOutputs,
+  config: PlatformStackConfig,
+): k8s.apps.v1.Deployment {
+  // Database connection string for the `loopzero` database (created in Phase 1).
+  const databaseUrl = pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`;
+
+  const secret = new k8s.core.v1.Secret(
+    "loopzero-api-secrets",
+    {
+      metadata: { name: "loopzero-api-secrets", namespace: PLATFORM_NAMESPACE },
+      stringData: {
+        DATABASE_URL: databaseUrl,
+        LOOPZERO_ARGO_CALLBACK_SECRET: pulumi.output(
+          `cb-${Date.now().toString(36)}`,
+        ),
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  const configMap = new k8s.core.v1.ConfigMap(
+    "loopzero-api-config",
+    {
+      metadata: { name: "loopzero-api-config", namespace: PLATFORM_NAMESPACE },
+      data: {
+        PORT: "8080",
+        METRICS_PORT: "9090",
+        LOOPZERO_ENV: "production",
+        BASE_DOMAIN: config.domain,
+        WORKLOAD_INGRESS_URL: `https://${config.domain}`,
+        GITEA_URL: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
+        ARGOCD_URL: `http://argocd-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
+        ARGOCD_INSECURE: "true",
+        ARGO_NAMESPACE: "argo",
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  const svc = new k8s.core.v1.Service(
+    "loopzero-api-svc",
+    {
+      metadata: {
+        name: "loopzero-api",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { app: "loopzero-api" },
+      },
+      spec: {
+        selector: { app: "loopzero-api" },
+        ports: [{ port: 8080, targetPort: 8080, name: "http" }],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  return new k8s.apps.v1.Deployment(
+    "loopzero-api",
+    {
+      metadata: {
+        name: "loopzero-api",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { app: "loopzero-api" },
+      },
+      spec: {
+        replicas: 2,
+        selector: { matchLabels: { app: "loopzero-api" } },
+        template: {
+          metadata: {
+            labels: { app: "loopzero-api" },
+            annotations: {
+              "prometheus.io/scrape": "true",
+              "prometheus.io/port": "9090",
+            },
+          },
+          spec: {
+            // Migrations are applied via a separate Job or manually for now.
+            // TODO: add init container with golang-migrate when API binary supports --migrate flag.
+            containers: [
+              {
+                name: "api",
+                image: `${REGISTRY}/loopzero-api:dev`,
+                ports: [
+                  { name: "http", containerPort: 8080 },
+                  { name: "metrics", containerPort: 9090 },
+                ],
+                envFrom: [
+                  { configMapRef: { name: "loopzero-api-config" } },
+                  { secretRef: { name: "loopzero-api-secrets" } },
+                ],
+                resources: {
+                  requests: { cpu: "200m", memory: "256Mi" },
+                  limits: { cpu: "1", memory: "512Mi" },
+                },
+                livenessProbe: {
+                  httpGet: { path: "/api/v1/health", port: 8080 },
+                  initialDelaySeconds: 15,
+                  periodSeconds: 10,
+                },
+                readinessProbe: {
+                  httpGet: { path: "/api/v1/health", port: 8080 },
+                  initialDelaySeconds: 5,
+                  periodSeconds: 5,
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [ns, secret, configMap, svc] },
+  );
+}
+
+function installTenantController(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  infra: InfraOutputs,
+  config: PlatformStackConfig,
+): k8s.apps.v1.Deployment {
+  // CRDs — LoopZero custom resource definitions.
+  // Path is relative to infra/pulumi/ (the Pulumi working directory).
+  const crds = new k8s.yaml.ConfigGroup(
+    "loopzero-crds",
+    {
+      files: ["../../operators/config/crd/bases/*.yaml"],
+    },
+    { provider },
+  );
+
+  // ServiceAccount for the controller
+  const sa = new k8s.core.v1.ServiceAccount(
+    "tenant-controller-sa",
+    {
+      metadata: {
+        name: "tenant-controller",
+        namespace: PLATFORM_NAMESPACE,
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // ClusterRole — permissions for tenant lifecycle management
+  const role = new k8s.rbac.v1.ClusterRole(
+    "tenant-controller-role",
+    {
+      metadata: { name: "tenant-controller" },
+      rules: [
+        // LoopZero CRDs
+        {
+          apiGroups: ["loopzero.io"],
+          resources: ["tenants", "tenants/status", "tenants/finalizers"],
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"],
+        },
+        // Namespace lifecycle
+        {
+          apiGroups: [""],
+          resources: ["namespaces"],
+          verbs: ["get", "list", "watch", "create", "update", "patch"],
+        },
+        // Resource management per tenant namespace
+        {
+          apiGroups: [""],
+          resources: ["resourcequotas", "limitranges", "secrets", "serviceaccounts"],
+          verbs: ["get", "list", "watch", "create", "update", "patch"],
+        },
+        // Network isolation
+        {
+          apiGroups: ["networking.k8s.io"],
+          resources: ["networkpolicies"],
+          verbs: ["get", "list", "watch", "create", "update", "patch"],
+        },
+        // RBAC per tenant
+        {
+          apiGroups: ["rbac.authorization.k8s.io"],
+          resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"],
+          verbs: ["get", "list", "watch", "create", "update", "patch", "bind", "escalate"],
+        },
+        // Leader election
+        {
+          apiGroups: ["coordination.k8s.io"],
+          resources: ["leases"],
+          verbs: ["get", "list", "watch", "create", "update", "patch"],
+        },
+        // Events
+        {
+          apiGroups: [""],
+          resources: ["events"],
+          verbs: ["create", "patch"],
+        },
+      ],
+    },
+    { provider },
+  );
+
+  const binding = new k8s.rbac.v1.ClusterRoleBinding(
+    "tenant-controller-binding",
+    {
+      metadata: { name: "tenant-controller" },
+      subjects: [
+        {
+          kind: "ServiceAccount",
+          name: "tenant-controller",
+          namespace: PLATFORM_NAMESPACE,
+        },
+      ],
+      roleRef: {
+        kind: "ClusterRole",
+        name: "tenant-controller",
+        apiGroup: "rbac.authorization.k8s.io",
+      },
+    },
+    { provider, dependsOn: [role, sa] },
+  );
+
+  return new k8s.apps.v1.Deployment(
+    "tenant-controller",
+    {
+      metadata: {
+        name: "tenant-controller",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { app: "tenant-controller" },
+      },
+      spec: {
+        replicas: 1,
+        selector: { matchLabels: { app: "tenant-controller" } },
+        template: {
+          metadata: {
+            labels: { app: "tenant-controller" },
+            annotations: {
+              "prometheus.io/scrape": "true",
+              "prometheus.io/port": "8080",
+            },
+          },
+          spec: {
+            serviceAccountName: "tenant-controller",
+            containers: [
+              {
+                name: "controller",
+                image: `${REGISTRY}/tenant-controller:dev`,
+                args: ["--leader-elect=true"],
+                ports: [
+                  { name: "metrics", containerPort: 8080 },
+                  { name: "health", containerPort: 8081 },
+                ],
+                env: [
+                  {
+                    name: "GITEA_URL",
+                    value: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
+                  },
+                ],
+                resources: {
+                  requests: { cpu: "100m", memory: "128Mi" },
+                  limits: { cpu: "500m", memory: "256Mi" },
+                },
+                livenessProbe: {
+                  httpGet: { path: "/healthz", port: 8081 },
+                  initialDelaySeconds: 15,
+                },
+                readinessProbe: {
+                  httpGet: { path: "/readyz", port: 8081 },
+                  initialDelaySeconds: 5,
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [ns, crds, binding] },
+  );
+}
+
+/**
+ * Registers the runtime cluster in ArgoCD as a deploy target.
+ * ArgoCD discovers clusters via labeled Secrets in its namespace.
+ */
+function registerRuntimeCluster(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  infra: InfraOutputs,
+  argocd: k8s.helm.v3.Release,
+): void {
+  new k8s.core.v1.Secret(
+    "argocd-runtime-cluster",
+    {
+      metadata: {
+        name: "runtime-cluster",
+        namespace: PLATFORM_NAMESPACE,
+        labels: {
+          "argocd.argoproj.io/secret-type": "cluster",
+        },
+      },
+      stringData: {
+        name: "runtime",
+        server: infra.runtimeCluster.endpoint,
+        config: pulumi.interpolate`{
+          "execProviderConfig": {
+            "command": "argocd-k8s-auth",
+            "args": ["aws"],
+            "apiVersion": "client.authentication.k8s.io/v1beta1"
+          },
+          "tlsClientConfig": {
+            "insecure": true
+          }
+        }`,
+      },
+    },
+    { provider, dependsOn: [ns, argocd] },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Observability
+// ---------------------------------------------------------------------------
 
 function installPrometheus(
   provider: k8s.Provider,

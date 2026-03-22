@@ -41,6 +41,8 @@ export const execution = buildExecutionState({
     mgmtGitea: bootstrap.mgmt.giteaReady,
     mgmtPrometheus: bootstrap.mgmt.prometheusReady,
     mgmtGrafana: bootstrap.mgmt.grafanaReady,
+    mgmtLoopZeroApi: bootstrap.mgmt.loopzeroApiReady,
+    mgmtTenantController: bootstrap.mgmt.tenantControllerReady,
     mgmtTls: bootstrap.mgmt.tlsConfigured,
     runtimeIngress: bootstrap.runtime.ingressReady,
 
@@ -96,6 +98,8 @@ export const certManagerReady = bootstrap.mgmt.certManagerReady;
 export const argoCdReady = bootstrap.mgmt.argoCdReady;
 export const prometheusReady = bootstrap.mgmt.prometheusReady;
 export const grafanaReady = bootstrap.mgmt.grafanaReady;
+export const loopzeroApiReady = bootstrap.mgmt.loopzeroApiReady;
+export const tenantControllerReady = bootstrap.mgmt.tenantControllerReady;
 
 // Phase 2 — Runtime cluster services
 export const runtimeIngressReady = bootstrap.runtime.ingressReady;

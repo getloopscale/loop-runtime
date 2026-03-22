@@ -29,11 +29,15 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
       tags: tagsToStringArray(spec.tags),
     });
 
-    // Gitea requires its own database — managed PostgreSQL only creates "defaultdb".
-    // This must exist before Gitea's init container runs `gitea migrate`.
+    // Managed PostgreSQL only creates "defaultdb". Platform services need their own databases.
     new digitalocean.DatabaseDb(`${spec.name}-gitea`, {
       clusterId: cluster.id,
       name: "gitea",
+    });
+
+    new digitalocean.DatabaseDb(`${spec.name}-loopzero`, {
+      clusterId: cluster.id,
+      name: "loopzero",
     });
 
     return {
