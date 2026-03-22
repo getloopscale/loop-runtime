@@ -890,6 +890,12 @@ function installTenantController(
           resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"],
           verbs: ["get", "list", "watch", "create", "update", "patch", "bind", "escalate"],
         },
+        // ArgoCD resources (AppProjects + Applications per tenant)
+        {
+          apiGroups: ["argoproj.io"],
+          resources: ["appprojects", "applications"],
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"],
+        },
         // Leader election
         {
           apiGroups: ["coordination.k8s.io"],
