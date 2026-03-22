@@ -627,9 +627,9 @@ function installLoopZeroAPI(
           // Read at deploy time; for now use the known password
           return "REDACTED_SECRET_059";
         }),
-        // MinIO credentials
-        MINIO_ACCESS_KEY: "loopzero-admin",
-        MINIO_SECRET_KEY: "loopzero-minio-dev-2026",
+        // Spaces credentials (S3-compatible) — used by S3 uploader for source bundles
+        MINIO_ACCESS_KEY: "REDACTED_SECRET_049",
+        MINIO_SECRET_KEY: "REDACTED_SECRET_022",
       },
     },
     { provider, dependsOn: [ns] },
@@ -684,7 +684,7 @@ function installLoopZeroAPI(
         MGMT_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.mgmtCluster.clusterName}`,
         BUILD_KUBECONFIG: "/etc/loopzero/build-kubeconfig",
         BUILD_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.buildCluster.clusterName}`,
-        MINIO_ENDPOINT: `minio.${PLATFORM_NAMESPACE}.svc.cluster.local:9000`,
+        MINIO_ENDPOINT: "https://nyc3.digitaloceanspaces.com",
         REGISTRY_URL: "registry.digitalocean.com/loopzero-infra-registry",
         REGISTRY_INSECURE: "false",
         ARGOCD_NAMESPACE: PLATFORM_NAMESPACE,
