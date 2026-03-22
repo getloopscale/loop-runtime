@@ -624,10 +624,16 @@ function installTenantController(
     {
       metadata: { name: "tenant-controller" },
       rules: [
-        // LoopZero CRDs
+        // LoopZero CRDs — all custom resources managed by the operator
         {
           apiGroups: ["loopzero.io"],
-          resources: ["tenants", "tenants/status", "tenants/finalizers"],
+          resources: [
+            "tenants", "tenants/status", "tenants/finalizers",
+            "clustercredentials", "clustercredentials/status", "clustercredentials/finalizers",
+            "appsecrets", "appsecrets/status", "appsecrets/finalizers",
+            "previewenvironments", "previewenvironments/status", "previewenvironments/finalizers",
+            "reconciliationreports", "reconciliationreports/status", "reconciliationreports/finalizers",
+          ],
           verbs: ["get", "list", "watch", "create", "update", "patch", "delete"],
         },
         // Namespace lifecycle
