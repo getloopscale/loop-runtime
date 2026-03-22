@@ -202,7 +202,16 @@ func TestVerticalSlice_APIToControllerConvergence(t *testing.T) {
 
 	fakeGit := operatortest.NewFakeGitProvisioner()
 	fakeArgoCD := operatortest.NewFakeArgoCDProvisioner()
-	if err := operatortest.SetupTenantController(mgr, fakeGit, fakeArgoCD); err != nil {
+	// Multi-cluster: in envtest both clients point to the same API server.
+	buildClient, err := client.New(cfg, client.Options{Scheme: scheme})
+	if err != nil {
+		t.Fatalf("failed to create build client: %v", err)
+	}
+	runtimeClient, err := client.New(cfg, client.Options{Scheme: scheme})
+	if err != nil {
+		t.Fatalf("failed to create runtime client: %v", err)
+	}
+	if err := operatortest.SetupTenantController(mgr, fakeGit, fakeArgoCD, buildClient, runtimeClient); err != nil {
 		t.Fatalf("failed to setup controller: %v", err)
 	}
 

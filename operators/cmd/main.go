@@ -17,6 +17,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/argocd"
 	"github.com/loopzero/loopzero/operators/internal/controller"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
+	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 )
 
 var scheme = runtime.NewScheme()
@@ -115,9 +116,29 @@ func main() {
 	}
 	setupLog.Info("runtime cluster client created", "kubeconfig", runtimeKubeconfig)
 
+	// MinIO per-tenant credential provisioner (optional — nil disables per-tenant isolation).
+	// When enabled, each tenant gets its own MinIO user with a policy scoped to
+	// loopzero-builds/{tenantID}/* only, preventing cross-tenant source/cache access (spec §17.2).
+	var minIOProvisioner miniop.CredentialProvisioner
+	minIOEndpoint := os.Getenv("MINIO_ENDPOINT")
+	minIOAccessKey := os.Getenv("MINIO_ACCESS_KEY")
+	minIOSecretKey := os.Getenv("MINIO_SECRET_KEY")
+	if minIOEndpoint != "" && minIOAccessKey != "" && minIOSecretKey != "" {
+		minIOProvisioner = miniop.NewAdminProvisioner(miniop.AdminConfig{
+			Endpoint:  minIOEndpoint,
+			AccessKey: minIOAccessKey,
+			SecretKey: minIOSecretKey,
+		})
+		setupLog.Info("minio per-tenant provisioner enabled", "endpoint", minIOEndpoint)
+	} else {
+		setupLog.Info("minio per-tenant provisioner disabled (MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY not set)")
+	}
+
 	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, controller.TenantControllerConfig{
 		GiteaURL:           giteaURL,
 		WorkloadClusterURL: workloadClusterURL,
+		MinIOEndpoint:      minIOEndpoint,
+		MinIOProvisioner:   minIOProvisioner,
 	}); err != nil {
 		setupLog.Error(err, "unable to setup TenantController")
 		os.Exit(1)

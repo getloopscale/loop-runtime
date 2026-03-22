@@ -920,6 +920,23 @@ function installTenantController(
                     name: "ARGOCD_NAMESPACE",
                     value: PLATFORM_NAMESPACE,
                   },
+                  // MinIO per-tenant credential provisioner (spec §17.2)
+                  {
+                    name: "MINIO_ENDPOINT",
+                    value: `http://minio.${PLATFORM_NAMESPACE}.svc.cluster.local:9000`,
+                  },
+                  {
+                    name: "MINIO_ACCESS_KEY",
+                    valueFrom: {
+                      secretKeyRef: { name: "minio", key: "rootUser" },
+                    },
+                  },
+                  {
+                    name: "MINIO_SECRET_KEY",
+                    valueFrom: {
+                      secretKeyRef: { name: "minio", key: "rootPassword" },
+                    },
+                  },
                 ],
                 resources: {
                   requests: { cpu: "100m", memory: "128Mi" },

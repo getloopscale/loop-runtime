@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Per-tenant MinIO credential isolation — TenantController now provisions scoped MinIO users with bucket policies restricting access to `loopzero-builds/{tenantID}/*` only (#MULTI-CLUSTER-MINIO)
 - Phase 3 (exposePlatform) — creates DNS records for management subdomains (api, argocd, grafana) and runtime wildcard (*.{domain}) (#PULUMI-PHASE3)
 - DNS record type auto-detection (A for IPv4, AAAA for IPv6, CNAME for hostnames) in DigitalOcean provider (#PULUMI-DNS-FIX)
 - TLS via Let's Encrypt — ClusterIssuer (ACME HTTP-01) + Certificate + IngressRoute for ArgoCD, Gitea, Grafana, API on mgmt cluster. Auto-provisioned in Phase 2 bootstrap (#PULUMI-TLS)
@@ -23,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Pulumi state backend changed from Pulumi Cloud to DigitalOcean Spaces (S3-compatible) — eliminates vendor lock-in, keeps state under our control, uses infrastructure we already pay for (#PULUMI-S3-BACKEND)
 
 ### Fixed
+- TenantController multi-cluster test compilation — suite_test.go and operatortest/setup.go updated to pass buildClient and runtimeClient to SetupTenantController after signature expansion (#MULTI-CLUSTER-TEST-FIX)
+- MinIOProvisioner and MinIOEndpoint not propagated in SetupTenantController — fields were declared on TenantReconciler but never wired from config (#MULTI-CLUSTER-MINIO)
 - DNS record for `git` subdomain pointing to runtime cluster instead of management cluster — added `git` to `MGMT_SUBDOMAINS` so it resolves to mgmt ingress where Gitea runs (#PULUMI-GIT-DNS)
 - Gitea CrashLoopBackOff caused by missing `gitea` database — managed PostgreSQL only creates `defaultdb`, now explicitly provisions `gitea` via `digitalocean.DatabaseDb` (#PULUMI-GITEA-DB)
 - ArgoCD and Gitea services unreachable via IngressRoute (HTTP 404) — Pulumi Helm provider adds hash suffix to release names, causing Service name mismatch. Added `fullnameOverride` for deterministic names matching IngressRoute references (#PULUMI-HELM-NAMES)

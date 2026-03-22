@@ -93,7 +93,15 @@ var _ = BeforeSuite(func() {
 
 	fakeGitProvider = newFakeGiteaProvisioner()
 	fakeArgoCDProvider = newFakeArgoCDProvisioner()
-	err = controller.SetupTenantController(mgr, fakeGitProvider, fakeArgoCDProvider, controller.TenantControllerConfig{})
+
+	// Multi-cluster: in envtest all three "clusters" share the same API server.
+	// This validates client routing logic; physical separation is tested in E2E (Sprint 8).
+	buildClient, err := client.New(cfg, client.Options{Scheme: scheme})
+	Expect(err).NotTo(HaveOccurred())
+	runtimeClient, err := client.New(cfg, client.Options{Scheme: scheme})
+	Expect(err).NotTo(HaveOccurred())
+
+	err = controller.SetupTenantController(mgr, fakeGitProvider, fakeArgoCDProvider, buildClient, runtimeClient, controller.TenantControllerConfig{})
 	Expect(err).NotTo(HaveOccurred())
 
 	err = controller.SetupClusterCredentialController(mgr)

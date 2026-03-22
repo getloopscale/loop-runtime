@@ -38,17 +38,18 @@ type TenantReconciler struct {
 	RuntimeClient      client.Client               // targets the runtime cluster
 	GitProvisioner     gitea.GitRepoProvisioner
 	ArgoCDProvisioner  argocd.Provisioner
-	MinIOProvisioner   miniop.CredentialProvisioner // REVIEW-BLOCKER-3: per-tenant MinIO credentials
+	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
 	GiteaURL           string
 	WorkloadClusterURL string // URL of the workload cluster API server
-	MinIOEndpoint      string // REVIEW-BLOCKER-3: MinIO endpoint for build Secret
+	MinIOEndpoint      string // MinIO endpoint injected into per-tenant build Secrets
 }
 
 // TenantControllerConfig holds configuration for the TenantController.
 type TenantControllerConfig struct {
 	GiteaURL           string
 	WorkloadClusterURL string
-	MinIOEndpoint      string // REVIEW-BLOCKER-3: MinIO endpoint injected into per-tenant build Secrets
+	MinIOEndpoint      string                      // MinIO endpoint injected into per-tenant build Secrets
+	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
 }
 
 // Reconcile handles the reconciliation loop for Tenant resources.
@@ -360,7 +361,9 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 			RuntimeClient:      runtimeClient,
 			GitProvisioner:     gitProvisioner,
 			ArgoCDProvisioner:  argoCDProvisioner,
+			MinIOProvisioner:   cfg.MinIOProvisioner,
 			GiteaURL:           giteaURL,
 			WorkloadClusterURL: workloadClusterURL,
+			MinIOEndpoint:      cfg.MinIOEndpoint,
 		})
 }

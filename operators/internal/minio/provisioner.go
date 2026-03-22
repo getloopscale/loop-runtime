@@ -1,8 +1,8 @@
 // Package minio provides MinIO credential provisioning for tenant isolation.
 //
-// REVIEW-BLOCKER-3: Each tenant must have isolated MinIO credentials scoped
-// to its own prefix (loopzero-builds/{tenant}/). Without this, a compromised build
-// can read source bundles and poison caches of other tenants.
+// Each tenant must have isolated MinIO credentials scoped to its own prefix
+// (loopzero-builds/{tenant}/). Without this, a compromised build can read source
+// bundles and poison caches of other tenants (spec §17.2, §17.4).
 //
 // The provisioner creates per-tenant MinIO users with policies that restrict
 // access to the tenant's prefix only. Credentials are stored as K8s Secrets

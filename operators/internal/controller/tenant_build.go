@@ -74,10 +74,11 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		return fmt.Errorf("build network policy %s: %w", buildNs, err)
 	}
 
-	// REVIEW-BLOCKER-3: Provision per-tenant MinIO credentials scoped to tenant prefix.
+	// Provision per-tenant MinIO credentials scoped to tenant prefix.
 	// Each tenant gets its own MinIO user + policy that restricts access to
 	// loopzero-builds/{tenantID}/* only. This prevents cross-tenant source code access
 	// and cache poisoning (spec §17.2, §17.4).
+	// When MinIOProvisioner is nil, per-tenant isolation is disabled (graceful degradation).
 	if r.MinIOProvisioner != nil {
 		if err := r.reconcileBuildMinIOCredentials(ctx, buildNs, tenant.Name); err != nil {
 			return fmt.Errorf("build minio credentials %s: %w", buildNs, err)
@@ -98,9 +99,8 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 // them as a K8s Secret in the build namespace. The CWTs reference this Secret by
 // the fixed name "loopzero-minio-credentials" via envFrom.
 //
-// REVIEW-BLOCKER-3: Previously all tenants shared the same MinIO credentials,
-// allowing cross-tenant source code access and cache poisoning. Now each tenant
-// gets its own MinIO user with a policy scoped to loopzero-builds/{tenantID}/*.
+// Each tenant gets its own MinIO user with a policy scoped to loopzero-builds/{tenantID}/*,
+// preventing cross-tenant source code access and cache poisoning.
 func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, namespace, tenantID string) error {
 	accessKey, secretKey, err := r.MinIOProvisioner.EnsureTenantCredentials(ctx, tenantID)
 	if err != nil {

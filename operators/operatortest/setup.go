@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/loopzero/loopzero/operators/internal/argocd"
 	"github.com/loopzero/loopzero/operators/internal/controller"
@@ -146,8 +147,10 @@ func (f *FakeArgoCDProvisioner) DeleteAppProject(_ context.Context, tenantID str
 
 // SetupTenantController registers the TenantController with the given manager.
 // Use this in E2E tests to start the operator in-process against envtest.
-func SetupTenantController(mgr ctrl.Manager, gitProvisioner GitRepoProvisioner, argoCDProvisioner ArgoCDProvisioner) error {
-	return controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, controller.TenantControllerConfig{})
+// buildClient and runtimeClient target the build and runtime clusters respectively.
+// In envtest, pass mgr.GetClient() for both (single API server).
+func SetupTenantController(mgr ctrl.Manager, gitProvisioner GitRepoProvisioner, argoCDProvisioner ArgoCDProvisioner, buildClient client.Client, runtimeClient client.Client) error {
+	return controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, controller.TenantControllerConfig{})
 }
 
 // SetupClusterCredentialController registers the ClusterCredentialController with the given manager.
