@@ -6,10 +6,9 @@ WORKDIR /workspace
 ENV GOWORK=off
 
 # Copy module definitions for dependency resolution.
-# api/go.mod has `replace` directives for ../pkg and ../loopzero-forge,
-# so both must be present for `go mod download` to resolve.
+# api/go.mod has `replace ../pkg` (monorepo sibling).
+# loopzero-forge is now a published Go module (no local replace).
 COPY pkg/go.mod ./pkg/go.mod
-COPY loopzero-forge/go.mod loopzero-forge/go.sum ./loopzero-forge/
 COPY api/go.mod api/go.sum ./api/
 
 # Download dependencies (cached unless go.mod/go.sum change)
@@ -17,7 +16,6 @@ RUN cd api && go mod download
 
 # Copy source code
 COPY pkg/ ./pkg/
-COPY loopzero-forge/ ./loopzero-forge/
 COPY api/ ./api/
 
 # Build the binary
