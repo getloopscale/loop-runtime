@@ -31,9 +31,7 @@ spec:
         # using AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from the injected Secret.
         # Without authentication, the MinIO bucket would need to be public-read,
         # allowing any pod in the cluster to read any tenant's source code.
-        image: minio/mc:RELEASE.2024-01-16T16-06-34Z
-        # MinIO credentials injected from K8s Secret via envFrom — never as workflow parameters.
-        # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
+        image: alpine:3.21
         env:
           - name: HOME
             value: /tmp
@@ -46,35 +44,31 @@ spec:
           - |
             set -euo pipefail
 
+            # Install mc + git (Alpine, ~20MB total)
+            apk add --no-cache git curl >/dev/null 2>&1
+            curl -sL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
+            chmod +x /usr/local/bin/mc
+
             BUNDLE_PATH="{{ "{{inputs.parameters.tenant-id}}" }}/source/{{ "{{inputs.parameters.build-id}}" }}.bundle"
+            echo "Downloading source bundle: ${BUNDLE_PATH}"
 
-            echo "Downloading source bundle from MinIO: ${BUNDLE_PATH}"
-
-            # Configure mc alias with credentials from K8s Secret
             mc alias set loopzero "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
               {{- if .Values.minio.insecure }}
               --insecure \
               {{- end }}
               --api S3v4 >/dev/null 2>&1
 
-            # Authenticated download via mc (S3 protocol with SigV4)
             mc cp \
               {{- if .Values.minio.insecure }}
               --insecure \
               {{- end }}
               "loopzero/loopzero-builds/${BUNDLE_PATH}" /tmp/source.bundle 2>&1 || {
               echo "ERROR: Failed to download source bundle"
-              echo "The source may not have been uploaded. Run 'loopzero deploy' again."
               exit 1
             }
 
-            BUNDLE_SIZE=$(stat -c%s /tmp/source.bundle 2>/dev/null || echo "unknown")
-            echo "Bundle downloaded: ${BUNDLE_SIZE} bytes"
+            echo "Bundle downloaded: $(stat -c%s /tmp/source.bundle) bytes"
 
-            # Install git for bundle unpack (minio/mc is Alpine-based, git is ~15MB)
-            apk add --no-cache git >/dev/null 2>&1
-
-            # Unpack the git bundle into the workspace
             cd /workspace
             git init
             git fetch /tmp/source.bundle "refs/heads/*:refs/heads/*"
@@ -94,5 +88,5 @@ spec:
             cpu: "500m"
             memory: "256Mi"
         securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
+          runAsNonRoot: false
+          runAsUser: 0

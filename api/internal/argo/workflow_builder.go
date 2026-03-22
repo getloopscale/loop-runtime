@@ -156,10 +156,15 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			"loopzero.io/language":    primaryLanguage,
 		},
 		Templates: templates,
-		// REVIEW-LEVE-3: `manifests` volume removed — manifest generation moved
-		// to API control plane (C-02 fix). Only workspace volume needed.
-		Volumes: []forge.VolumeBuilder{
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace"}, SizeLimit: "5Gi"},
+		// Workspace shared across all DAG steps via PVC (VolumeClaimTemplate).
+		// EmptyDir doesn't persist between pods — each DAG task is a separate pod.
+		// Argo dynamically provisions this PVC per-workflow and cleans it on completion.
+		VolumeClaimTemplates: []forge.PVCVolume{
+			{
+				BaseVolume:  forge.BaseVolume{Name: "workspace"},
+				Size:        "5Gi",
+				AccessModes: []forge.AccessMode{forge.ReadWriteOnce},
+			},
 		},
 	}
 
