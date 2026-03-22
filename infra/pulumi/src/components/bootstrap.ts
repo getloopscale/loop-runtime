@@ -546,8 +546,9 @@ function installMinIO(
         fullnameOverride: "minio",
         mode: "standalone",
         rootUser: "loopzero-admin",
-        // Generate a random password — retrievable via pulumi stack output or kubectl get secret
-        rootPassword: `loopzero-${Date.now().toString(36)}`,
+        // Stable password — Date.now() caused rolling updates on every pulumi up.
+        // For production, use pulumi.secret() or external secret manager.
+        rootPassword: "loopzero-minio-dev-2026",
         persistence: {
           enabled: true,
           size: "10Gi",
