@@ -779,6 +779,7 @@ function installLoopZeroAPI(
               {
                 name: "api",
                 image: `${REGISTRY}/loopzero-api:dev`,
+                imagePullPolicy: "Always",
                 ports: [
                   { name: "http", containerPort: 8080 },
                   { name: "metrics", containerPort: 9090 },
@@ -975,6 +976,7 @@ function installTenantController(
               {
                 name: "controller",
                 image: `${REGISTRY}/tenant-controller:dev`,
+                imagePullPolicy: "Always",
                 args: ["--leader-elect=true"],
                 ports: [
                   { name: "metrics", containerPort: 8080 },
@@ -991,6 +993,10 @@ function installTenantController(
                   {
                     name: "GITEA_URL",
                     value: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
+                  },
+                  {
+                    name: "GITEA_TOKEN",
+                    value: "REDACTED_SECRET_026",
                   },
                   {
                     name: "BUILD_KUBECONFIG",
