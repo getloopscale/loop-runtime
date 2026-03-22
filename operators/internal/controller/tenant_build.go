@@ -2,11 +2,13 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,6 +17,10 @@ import (
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/naming"
 )
+
+func base64Encode(s string) string {
+	return base64.StdEncoding.EncodeToString([]byte(s))
+}
 
 // reconcileBuildNamespace ensures the build-{tenantID} namespace exists with ResourceQuota.
 func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *loopzerov1.Tenant) error {
@@ -160,6 +166,88 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		if err != nil {
 			return fmt.Errorf("build minio credentials (global) %s: %w", buildNs, err)
 		}
+	}
+
+	// Docker registry credentials for Kaniko image push.
+	// Kaniko mounts this at /kaniko/.docker/config.json.
+	registryAccessKey := os.Getenv("SPACES_ACCESS_KEY_ID")
+	registrySecretKey := os.Getenv("SPACES_SECRET_ACCESS_KEY")
+	if registryAccessKey != "" && registrySecretKey != "" {
+		dockerAuth := fmt.Sprintf("%s:%s", registryAccessKey, registrySecretKey)
+		encodedAuth := base64Encode(dockerAuth)
+		dockerConfig := fmt.Sprintf(`{"auths":{"registry.digitalocean.com":{"auth":"%s"}}}`, encodedAuth)
+
+		dockerSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "docker-config",
+				Namespace: buildNs,
+			},
+		}
+		_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, dockerSecret, func() error {
+			dockerSecret.Labels = map[string]string{
+				"loopzero.io/tenant":     tenant.Name,
+				"loopzero.io/managed-by": "tenant-controller",
+			}
+			dockerSecret.Type = corev1.SecretTypeOpaque
+			dockerSecret.StringData = map[string]string{
+				"config.json": dockerConfig,
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("build docker-config %s: %w", buildNs, err)
+		}
+	}
+
+	// Argo Workflow executor RBAC — workflow pods need to report task results.
+	executorRole := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "argo-workflow-executor",
+			Namespace: buildNs,
+		},
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, executorRole, func() error {
+		executorRole.Rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"argoproj.io"},
+				Resources: []string{"workflowtaskresults"},
+				Verbs:     []string{"create", "patch", "get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods", "pods/log"},
+				Verbs:     []string{"get", "watch", "patch", "list"},
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("build executor role %s: %w", buildNs, err)
+	}
+
+	executorBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "argo-workflow-executor",
+			Namespace: buildNs,
+		},
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, executorBinding, func() error {
+		executorBinding.RoleRef = rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     "argo-workflow-executor",
+		}
+		executorBinding.Subjects = []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "loopzero-build-sa",
+				Namespace: buildNs,
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("build executor rolebinding %s: %w", buildNs, err)
 	}
 
 	// Provision per-tenant MinIO credentials scoped to tenant prefix.
