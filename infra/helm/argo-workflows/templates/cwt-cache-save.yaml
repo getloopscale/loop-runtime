@@ -46,7 +46,7 @@ spec:
               --api S3v4 >/dev/null 2>&1
 
             # Compute lockfile hash for cache key precision (mirrors cache-restore logic).
-            SUFFIX="{{inputs.parameters.cache-key-suffix}}"
+            SUFFIX="{{ "{{inputs.parameters.cache-key-suffix}}" }}"
             if [ -z "$SUFFIX" ]; then
               LOCKFILE=""
               for f in /workspace/package-lock.json /workspace/yarn.lock /workspace/pnpm-lock.yaml \
@@ -63,14 +63,14 @@ spec:
             fi
 
             if [ -n "$SUFFIX" ]; then
-              CACHE_KEY="{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.cache-key}}-${SUFFIX}"
+              CACHE_KEY="{{ "{{inputs.parameters.tenant-id}}" }}/{{ "{{inputs.parameters.project-id}}" }}/{{ "{{inputs.parameters.cache-key}}" }}-${SUFFIX}"
             else
-              CACHE_KEY="{{inputs.parameters.tenant-id}}/{{inputs.parameters.project-id}}/{{inputs.parameters.cache-key}}"
+              CACHE_KEY="{{ "{{inputs.parameters.tenant-id}}" }}/{{ "{{inputs.parameters.project-id}}" }}/{{ "{{inputs.parameters.cache-key}}" }}"
             fi
-            CACHE_PATH="loopzero/loopzero-builds/{{inputs.parameters.tenant-id}}/cache/deps/${CACHE_KEY}.tar.gz"
+            CACHE_PATH="loopzero/loopzero-builds/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
 
             # Build list of dirs to cache from comma-separated input
-            DIRS="{{inputs.parameters.cache-dirs}}"
+            DIRS="{{ "{{inputs.parameters.cache-dirs}}" }}"
             EXISTING_DIRS=""
             IFS=',' read -ra DIR_ARRAY <<< "$DIRS"
             for d in "${DIR_ARRAY[@]}"; do

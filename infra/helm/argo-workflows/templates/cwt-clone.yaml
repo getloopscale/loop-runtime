@@ -43,7 +43,7 @@ spec:
           - |
             set -euo pipefail
 
-            BUNDLE_PATH="{{inputs.parameters.tenant-id}}/source/{{inputs.parameters.build-id}}.bundle"
+            BUNDLE_PATH="{{ "{{inputs.parameters.tenant-id}}" }}/source/{{ "{{inputs.parameters.build-id}}" }}.bundle"
 
             echo "Downloading source bundle from MinIO: ${BUNDLE_PATH}"
 
