@@ -37,7 +37,7 @@ permissions:
   contents: read
 
 env:
-  REGISTRY: registry.digitalocean.com/loopzero-registry
+  REGISTRY: registry.digitalocean.com/loopzero-infra-registry
 
 concurrency:
   group: build-images-${{ github.ref }}
