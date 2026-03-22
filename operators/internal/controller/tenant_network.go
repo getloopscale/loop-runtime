@@ -42,7 +42,7 @@ func (r *TenantReconciler) reconcileDenyAllPolicy(ctx context.Context, nsName st
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, np, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, np, func() error {
 		np.Spec = networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{}, // selects all pods
 			PolicyTypes: []networkingv1.PolicyType{
@@ -67,7 +67,7 @@ func (r *TenantReconciler) reconcileAllowIngressPolicy(ctx context.Context, nsNa
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, np, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, np, func() error {
 		np.Spec = networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{}, // applies to all pods
 			PolicyTypes: []networkingv1.PolicyType{
@@ -108,7 +108,7 @@ func (r *TenantReconciler) reconcileAllowEgressPolicy(ctx context.Context, nsNam
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, np, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, np, func() error {
 		np.Spec = networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{},
 			PolicyTypes: []networkingv1.PolicyType{

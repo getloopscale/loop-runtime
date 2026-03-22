@@ -6,7 +6,9 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -77,7 +79,43 @@ func main() {
 		workloadClusterURL = "https://kubernetes.default.svc"
 	}
 
-	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, controller.TenantControllerConfig{
+	// Multi-cluster clients: the controller runs in mgmt but creates
+	// resources on the build and runtime clusters.
+	buildKubeconfig := os.Getenv("BUILD_KUBECONFIG")
+	if buildKubeconfig == "" {
+		setupLog.Error(nil, "BUILD_KUBECONFIG is required")
+		os.Exit(1)
+	}
+	buildConfig, err := clientcmd.BuildConfigFromFlags("", buildKubeconfig)
+	if err != nil {
+		setupLog.Error(err, "unable to create build cluster config", "kubeconfig", buildKubeconfig)
+		os.Exit(1)
+	}
+	buildClient, err := client.New(buildConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		setupLog.Error(err, "unable to create build cluster client")
+		os.Exit(1)
+	}
+	setupLog.Info("build cluster client created", "kubeconfig", buildKubeconfig)
+
+	runtimeKubeconfig := os.Getenv("RUNTIME_KUBECONFIG")
+	if runtimeKubeconfig == "" {
+		setupLog.Error(nil, "RUNTIME_KUBECONFIG is required")
+		os.Exit(1)
+	}
+	runtimeConfig, err := clientcmd.BuildConfigFromFlags("", runtimeKubeconfig)
+	if err != nil {
+		setupLog.Error(err, "unable to create runtime cluster config", "kubeconfig", runtimeKubeconfig)
+		os.Exit(1)
+	}
+	runtimeClient, err := client.New(runtimeConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		setupLog.Error(err, "unable to create runtime cluster client")
+		os.Exit(1)
+	}
+	setupLog.Info("runtime cluster client created", "kubeconfig", runtimeKubeconfig)
+
+	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, controller.TenantControllerConfig{
 		GiteaURL:           giteaURL,
 		WorkloadClusterURL: workloadClusterURL,
 	}); err != nil {

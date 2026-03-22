@@ -36,7 +36,7 @@ func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *l
 			Name: pcName,
 		},
 	}
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, pc, func() error {
+	result, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, pc, func() error {
 		pc.Value = pcValue
 		pc.PreemptionPolicy = &preemptionPolicy
 		pc.GlobalDefault = false

@@ -29,7 +29,7 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		},
 	}
 	var createErr error
-	_, createErr = controllerutil.CreateOrUpdate(ctx, r.Client, ns, func() error {
+	_, createErr = controllerutil.CreateOrUpdate(ctx, r.BuildClient, ns, func() error {
 		if ns.Labels == nil {
 			ns.Labels = make(map[string]string)
 		}
@@ -49,7 +49,7 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 			Namespace: buildNs,
 		},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, quota, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, quota, func() error {
 		quota.Spec.Hard = corev1.ResourceList{
 			corev1.ResourceRequestsCPU:    resource.MustParse("4"),
 			corev1.ResourceRequestsMemory: resource.MustParse("8Gi"),
@@ -115,7 +115,7 @@ func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, n
 			Namespace: namespace,
 		},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
 		secret.Labels = map[string]string{
 			"loopzero.io/tenant":     tenantID,
 			"loopzero.io/component":  "build",
@@ -161,7 +161,7 @@ func (r *TenantReconciler) reconcileBuildNetworkPolicy(ctx context.Context, name
 		},
 	}
 
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, np, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, np, func() error {
 		np.Labels = map[string]string{
 			"loopzero.io/component":  "build",
 			"loopzero.io/managed-by": "tenant-controller",

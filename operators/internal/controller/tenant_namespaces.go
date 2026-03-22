@@ -28,7 +28,7 @@ func (r *TenantReconciler) reconcileNamespaces(ctx context.Context, tenant *loop
 				Name: nsName,
 			},
 		}
-		result, err := controllerutil.CreateOrUpdate(ctx, r.Client, ns, func() error {
+		result, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, ns, func() error {
 			if ns.Labels == nil {
 				ns.Labels = make(map[string]string)
 			}
@@ -66,7 +66,7 @@ func (r *TenantReconciler) reconcileResourceQuota(ctx context.Context, nsName st
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, quota, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, quota, func() error {
 		quota.Spec.Hard = corev1.ResourceList{
 			corev1.ResourceRequestsCPU:    tenant.Spec.Limits.MaxCPU,
 			corev1.ResourceRequestsMemory: tenant.Spec.Limits.MaxMemory,
@@ -89,7 +89,7 @@ func (r *TenantReconciler) reconcileLimitRange(ctx context.Context, nsName strin
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, lr, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, lr, func() error {
 		lr.Spec.Limits = []corev1.LimitRangeItem{
 			{
 				Type: corev1.LimitTypeContainer,

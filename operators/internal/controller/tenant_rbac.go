@@ -24,7 +24,7 @@ func (r *TenantReconciler) reconcileRBAC(ctx context.Context, tenant *loopzerov1
 				Namespace: nsName,
 			},
 		}
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, sa, func() error {
+		if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, sa, func() error {
 			return nil
 		}); err != nil {
 			return fmt.Errorf("serviceaccount %s/%s: %w", nsName, "loopzero-deployer", err)
@@ -37,7 +37,7 @@ func (r *TenantReconciler) reconcileRBAC(ctx context.Context, tenant *loopzerov1
 				Namespace: nsName,
 			},
 		}
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, role, func() error {
+		if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, role, func() error {
 			role.Rules = rbacRulesForPlan(tenant.Spec.Plan)
 			return nil
 		}); err != nil {
@@ -51,7 +51,7 @@ func (r *TenantReconciler) reconcileRBAC(ctx context.Context, tenant *loopzerov1
 				Namespace: nsName,
 			},
 		}
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, rb, func() error {
+		if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, rb, func() error {
 			rb.RoleRef = rbacv1.RoleRef{
 				APIGroup: rbacv1.GroupName,
 				Kind:     "Role",

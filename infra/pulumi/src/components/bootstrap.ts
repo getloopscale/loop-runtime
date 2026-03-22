@@ -838,6 +838,23 @@ function installTenantController(
     { provider, dependsOn: [role, sa] },
   );
 
+  // Secret with kubeconfigs for build + runtime clusters.
+  // The controller uses these to create namespaces on the correct clusters.
+  const controllerKubeconfig = new k8s.core.v1.Secret(
+    "tenant-controller-kubeconfig",
+    {
+      metadata: {
+        name: "tenant-controller-kubeconfig",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      stringData: {
+        "build-kubeconfig": infra.buildCluster.kubeconfig,
+        "runtime-kubeconfig": infra.runtimeCluster.kubeconfig,
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
   return new k8s.apps.v1.Deployment(
     "tenant-controller",
     {
@@ -860,6 +877,12 @@ function installTenantController(
           spec: {
             serviceAccountName: "tenant-controller",
             imagePullSecrets: [{ name: "loopzero-infra-registry" }],
+            volumes: [
+              {
+                name: "kubeconfigs",
+                secret: { secretName: "tenant-controller-kubeconfig" },
+              },
+            ],
             containers: [
               {
                 name: "controller",
@@ -869,10 +892,33 @@ function installTenantController(
                   { name: "metrics", containerPort: 8080 },
                   { name: "health", containerPort: 8081 },
                 ],
+                volumeMounts: [
+                  {
+                    name: "kubeconfigs",
+                    mountPath: "/etc/loopzero",
+                    readOnly: true,
+                  },
+                ],
                 env: [
                   {
                     name: "GITEA_URL",
                     value: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
+                  },
+                  {
+                    name: "BUILD_KUBECONFIG",
+                    value: "/etc/loopzero/build-kubeconfig",
+                  },
+                  {
+                    name: "RUNTIME_KUBECONFIG",
+                    value: "/etc/loopzero/runtime-kubeconfig",
+                  },
+                  {
+                    name: "WORKLOAD_CLUSTER_URL",
+                    value: pulumi.interpolate`${infra.runtimeCluster.endpoint}`,
+                  },
+                  {
+                    name: "ARGOCD_NAMESPACE",
+                    value: PLATFORM_NAMESPACE,
                   },
                 ],
                 resources: {
@@ -893,7 +939,7 @@ function installTenantController(
         },
       },
     },
-    { provider, dependsOn: [ns, crds, binding] },
+    { provider, dependsOn: [ns, crds, binding, controllerKubeconfig] },
   );
 }
 

@@ -26,8 +26,16 @@ const tenantFinalizer = "loopzero.io/tenant-cleanup"
 var tenantSM = statemachine.NewTenantMachine()
 
 // TenantReconciler reconciles a Tenant object.
+//
+// Multi-cluster design: the controller runs in the mgmt cluster but creates
+// resources on the build and runtime clusters using separate clients.
+//   - r.Client        → mgmt cluster (Tenant CRDs, status, Gitea, ArgoCD)
+//   - r.BuildClient   → build cluster (build-{tenant} namespaces, quotas, secrets)
+//   - r.RuntimeClient → runtime cluster ({tenant}-{env} namespaces, RBAC, network policies)
 type TenantReconciler struct {
 	client.Client
+	BuildClient        client.Client               // targets the build cluster
+	RuntimeClient      client.Client               // targets the runtime cluster
 	GitProvisioner     gitea.GitRepoProvisioner
 	ArgoCDProvisioner  argocd.Provisioner
 	MinIOProvisioner   miniop.CredentialProvisioner // REVIEW-BLOCKER-3: per-tenant MinIO credentials
@@ -275,15 +283,30 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		logger.Info("non-fatal cleanup failure, continuing", "step", "argocd-appproject-cleanup", "error", err, "tenant", tenant.Name)
 	}
 
-	// Delete all namespaces with tenant label
-	var nsList corev1.NamespaceList
-	if err := r.List(ctx, &nsList, client.MatchingLabels{"loopzero.io/tenant": tenant.Name}); err != nil {
-		return ctrl.Result{}, err
+	// Delete namespaces on build cluster (build-{tenant})
+	var buildNsList corev1.NamespaceList
+	if err := r.BuildClient.List(ctx, &buildNsList, client.MatchingLabels{"loopzero.io/tenant": tenant.Name}); err != nil {
+		logger.Info("non-fatal cleanup failure on build cluster", "step", "list-build-ns", "error", err)
+	} else {
+		for i := range buildNsList.Items {
+			if buildNsList.Items[i].DeletionTimestamp.IsZero() {
+				if err := r.BuildClient.Delete(ctx, &buildNsList.Items[i]); err != nil && !errors.IsNotFound(err) {
+					return ctrl.Result{}, err
+				}
+			}
+		}
 	}
-	for i := range nsList.Items {
-		if nsList.Items[i].DeletionTimestamp.IsZero() {
-			if err := r.Delete(ctx, &nsList.Items[i]); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, err
+
+	// Delete namespaces on runtime cluster ({tenant}-{env})
+	var runtimeNsList corev1.NamespaceList
+	if err := r.RuntimeClient.List(ctx, &runtimeNsList, client.MatchingLabels{"loopzero.io/tenant": tenant.Name}); err != nil {
+		logger.Info("non-fatal cleanup failure on runtime cluster", "step", "list-runtime-ns", "error", err)
+	} else {
+		for i := range runtimeNsList.Items {
+			if runtimeNsList.Items[i].DeletionTimestamp.IsZero() {
+				if err := r.RuntimeClient.Delete(ctx, &runtimeNsList.Items[i]); err != nil && !errors.IsNotFound(err) {
+					return ctrl.Result{}, err
+				}
 			}
 		}
 	}
@@ -293,13 +316,14 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		logger.Info("non-fatal cleanup failure, continuing", "step", "gitea-archive", "error", err, "repo", tenant.Spec.GitOps.RepoName)
 	}
 
-	// Phase 2: Verify all namespaces are gone
-	var remaining corev1.NamespaceList
-	if err := r.List(ctx, &remaining, client.MatchingLabels{"loopzero.io/tenant": tenant.Name}); err != nil {
-		return ctrl.Result{}, err
-	}
-	if len(remaining.Items) > 0 {
-		logger.Info("namespaces still exist, requeuing", "count", len(remaining.Items))
+	// Phase 2: Verify all namespaces are gone on both clusters
+	var remainingBuild corev1.NamespaceList
+	_ = r.BuildClient.List(ctx, &remainingBuild, client.MatchingLabels{"loopzero.io/tenant": tenant.Name})
+	var remainingRuntime corev1.NamespaceList
+	_ = r.RuntimeClient.List(ctx, &remainingRuntime, client.MatchingLabels{"loopzero.io/tenant": tenant.Name})
+	remaining := len(remainingBuild.Items) + len(remainingRuntime.Items)
+	if remaining > 0 {
+		logger.Info("namespaces still exist, requeuing", "count", remaining)
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
@@ -318,7 +342,7 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 // If empty, it defaults to the in-cluster Gitea service URL.
 // cfg.WorkloadClusterURL configures the workload cluster API server URL for ArgoCD Applications.
 // If empty, it defaults to "https://kubernetes.default.svc" (backward compatible for single-cluster setups).
-func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner, cfg TenantControllerConfig) error {
+func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner, buildClient client.Client, runtimeClient client.Client, cfg TenantControllerConfig) error {
 	giteaURL := cfg.GiteaURL
 	if giteaURL == "" {
 		giteaURL = "http://gitea-http.loopzero-system.svc.cluster.local:3000"
@@ -332,6 +356,8 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 		Named("tenant").
 		Complete(&TenantReconciler{
 			Client:             mgr.GetClient(),
+			BuildClient:        buildClient,
+			RuntimeClient:      runtimeClient,
 			GitProvisioner:     gitProvisioner,
 			ArgoCDProvisioner:  argoCDProvisioner,
 			GiteaURL:           giteaURL,
