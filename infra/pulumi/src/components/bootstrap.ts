@@ -1,5 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
+import * as fs from "fs";
+import * as path from "path";
 import { InfraOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
 
@@ -517,6 +519,24 @@ function bootstrapBuildCluster(
     { provider, dependsOn: [ns] },
   );
 
+  // ClusterWorkflowTemplates — reusable build steps (clone, cache-restore, cache-save).
+  // Uses the local Helm chart at infra/helm/argo-workflows/ which contains the CWT templates.
+  const cwts = new k8s.helm.v3.Release(
+    "loopzero-build-cwts",
+    {
+      chart: path.resolve(__dirname, "../../../../infra/helm/argo-workflows"),
+      namespace: "argo",
+      createNamespace: false,
+      values: {
+        minio: {
+          // In dev, MinIO runs without TLS inside the VPC
+          insecure: config.environment !== "prod",
+        },
+      },
+    },
+    { provider, dependsOn: [ns, argoWorkflows] },
+  );
+
   return {
     argoWorkflowsReady: argoWorkflows.status.apply(
       (s) => s.status === "deployed",
@@ -607,6 +627,24 @@ function installLoopZeroAPI(
     { provider, dependsOn: [ns] },
   );
 
+  // Database migrations — read SQL files and embed in a ConfigMap.
+  // The init container (migrate/migrate) mounts this and applies them.
+  const migrationsDir = path.resolve(__dirname, "../../../../api/internal/db/migrations");
+  const migrationFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith(".up.sql")).sort();
+  const migrationData: Record<string, string> = {};
+  for (const f of migrationFiles) {
+    migrationData[f] = fs.readFileSync(path.join(migrationsDir, f), "utf-8");
+  }
+
+  const migrationsConfigMap = new k8s.core.v1.ConfigMap(
+    "loopzero-api-migrations",
+    {
+      metadata: { name: "loopzero-api-migrations", namespace: PLATFORM_NAMESPACE },
+      data: migrationData,
+    },
+    { provider, dependsOn: [ns] },
+  );
+
   // Kubeconfigs — the API runs in mgmt but submits workflows to the build cluster.
   const kubeconfigSecret = new k8s.core.v1.Secret(
     "loopzero-api-kubeconfig",
@@ -680,12 +718,50 @@ function installLoopZeroAPI(
             },
           },
           spec: {
-            // Migrations are applied via a separate Job or manually for now.
-            // TODO: add init container with golang-migrate when API binary supports --migrate flag.
+            // Database migrations run before API starts via init container.
+            // The API image includes migration SQL files at /migrations/.
+            initContainers: [
+              {
+                name: "db-migrate",
+                image: "migrate/migrate:v4.18.1",
+                args: [
+                  "-path=/migrations",
+                  "-database",
+                  "$(DATABASE_URL)",
+                  "up",
+                ],
+                env: [
+                  {
+                    name: "DATABASE_URL",
+                    valueFrom: {
+                      secretKeyRef: {
+                        name: "loopzero-api-secrets",
+                        key: "DATABASE_URL",
+                      },
+                    },
+                  },
+                ],
+                volumeMounts: [
+                  {
+                    name: "api-migrations",
+                    mountPath: "/migrations",
+                    readOnly: true,
+                  },
+                ],
+                resources: {
+                  requests: { cpu: "50m", memory: "64Mi" },
+                  limits: { cpu: "100m", memory: "128Mi" },
+                },
+              },
+            ],
             volumes: [
               {
                 name: "kubeconfig",
                 secret: { secretName: "loopzero-api-kubeconfig" },
+              },
+              {
+                name: "api-migrations",
+                configMap: { name: "loopzero-api-migrations" },
               },
             ],
             containers: [
@@ -727,7 +803,7 @@ function installLoopZeroAPI(
         },
       },
     },
-    { provider, dependsOn: [ns, secret, kubeconfigSecret, configMap, svc] },
+    { provider, dependsOn: [ns, secret, kubeconfigSecret, migrationsConfigMap, configMap, svc] },
   );
 }
 
@@ -964,6 +1040,9 @@ function installTenantController(
 /**
  * Registers the runtime cluster in ArgoCD as a deploy target.
  * ArgoCD discovers clusters via labeled Secrets in its namespace.
+ *
+ * DOKS kubeconfigs use bearer tokens (not client certs or AWS auth).
+ * We parse the kubeconfig YAML to extract the token and CA certificate.
  */
 function registerRuntimeCluster(
   provider: k8s.Provider,
@@ -971,6 +1050,24 @@ function registerRuntimeCluster(
   infra: InfraOutputs,
   argocd: k8s.helm.v3.Release,
 ): void {
+  // Extract bearerToken and caData from the DOKS kubeconfig.
+  // DOKS kubeconfigs embed: clusters[0].cluster.certificate-authority-data + users[0].user.token
+  const argocdConfig = infra.runtimeCluster.kubeconfig.apply((kc) => {
+    // Parse YAML kubeconfig (simple regex extraction — avoids yaml dependency)
+    const tokenMatch = kc.match(/token:\s*(.+)/);
+    const caMatch = kc.match(/certificate-authority-data:\s*(.+)/);
+
+    const token = tokenMatch?.[1]?.trim() ?? "";
+    const caData = caMatch?.[1]?.trim() ?? "";
+
+    return JSON.stringify({
+      bearerToken: token,
+      tlsClientConfig: {
+        caData,
+      },
+    });
+  });
+
   new k8s.core.v1.Secret(
     "argocd-runtime-cluster",
     {
@@ -984,16 +1081,7 @@ function registerRuntimeCluster(
       stringData: {
         name: "runtime",
         server: infra.runtimeCluster.endpoint,
-        config: pulumi.interpolate`{
-          "execProviderConfig": {
-            "command": "argocd-k8s-auth",
-            "args": ["aws"],
-            "apiVersion": "client.authentication.k8s.io/v1beta1"
-          },
-          "tlsClientConfig": {
-            "insecure": true
-          }
-        }`,
+        config: argocdConfig,
       },
     },
     { provider, dependsOn: [ns, argocd] },
