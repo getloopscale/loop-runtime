@@ -24,6 +24,8 @@ on:
     branches: [develop, main]
     paths:
       - "infra/pulumi/**"
+      - "infra/helm/**"
+      - "api/internal/db/migrations/**"
       - ".github/workflows/infra-deploy.yml"
 
   workflow_dispatch:
