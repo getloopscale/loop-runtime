@@ -465,6 +465,20 @@ function installLoopZeroAPI(
     { provider, dependsOn: [ns] },
   );
 
+  // Kubeconfig for the mgmt cluster — needed by the Argo workflow submitter.
+  // The API runs inside mgmt but uses clientcmd (not in-cluster config)
+  // to connect to the build cluster. For dev, build = mgmt.
+  const kubeconfigSecret = new k8s.core.v1.Secret(
+    "loopzero-api-kubeconfig",
+    {
+      metadata: { name: "loopzero-api-kubeconfig", namespace: PLATFORM_NAMESPACE },
+      stringData: {
+        kubeconfig: infra.mgmtCluster.kubeconfig,
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
   const configMap = new k8s.core.v1.ConfigMap(
     "loopzero-api-config",
     {
@@ -479,6 +493,10 @@ function installLoopZeroAPI(
         ARGOCD_URL: `http://argocd-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
         ARGOCD_INSECURE: "true",
         ARGO_NAMESPACE: "argo",
+        MGMT_KUBECONFIG: "/etc/loopzero/kubeconfig",
+        MGMT_KUBE_CONTEXT: "",
+        BUILD_KUBECONFIG: "/etc/loopzero/kubeconfig",
+        BUILD_KUBE_CONTEXT: "",
       },
     },
     { provider, dependsOn: [ns] },
@@ -522,6 +540,12 @@ function installLoopZeroAPI(
           spec: {
             // Migrations are applied via a separate Job or manually for now.
             // TODO: add init container with golang-migrate when API binary supports --migrate flag.
+            volumes: [
+              {
+                name: "kubeconfig",
+                secret: { secretName: "loopzero-api-kubeconfig" },
+              },
+            ],
             containers: [
               {
                 name: "api",
@@ -533,6 +557,13 @@ function installLoopZeroAPI(
                 envFrom: [
                   { configMapRef: { name: "loopzero-api-config" } },
                   { secretRef: { name: "loopzero-api-secrets" } },
+                ],
+                volumeMounts: [
+                  {
+                    name: "kubeconfig",
+                    mountPath: "/etc/loopzero",
+                    readOnly: true,
+                  },
                 ],
                 resources: {
                   requests: { cpu: "200m", memory: "256Mi" },
@@ -554,7 +585,7 @@ function installLoopZeroAPI(
         },
       },
     },
-    { provider, dependsOn: [ns, secret, configMap, svc] },
+    { provider, dependsOn: [ns, secret, kubeconfigSecret, configMap, svc] },
   );
 }
 
