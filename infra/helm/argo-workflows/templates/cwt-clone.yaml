@@ -75,6 +75,11 @@ spec:
             git checkout HEAD 2>/dev/null || git checkout $(git branch -a | head -1 | tr -d '* ')
             rm -f /tmp/source.bundle
 
+            # Make workspace writable by all users — subsequent DAG steps
+            # run as non-root (user 1000) and need write access to create
+            # Dockerfile, build artifacts, etc.
+            chmod -R 777 /workspace
+
             echo "Source unpacked into /workspace"
             ls -la
         volumeMounts:

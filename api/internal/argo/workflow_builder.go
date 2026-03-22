@@ -314,6 +314,10 @@ func (b *WorkflowBuilder) kanikoTemplateForApp(spec services.WorkflowSpec, app s
 		Args:    args,
 		VolumeMounts: []forge.VolumeBuilder{
 			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
+			// Docker registry credentials for Kaniko push.
+			// Secret "docker-config" must contain key "config.json" with Docker auth config.
+			// Created by TenantController in each build namespace.
+			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "docker-config", MountPath: "/kaniko/.docker"}, SecretName: "docker-config"},
 		},
 		Resources: &forge.ResourceRequirements{
 			Requests: forge.ResourceList{CPU: "500m", Memory: "1Gi"},
