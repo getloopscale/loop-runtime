@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - GitHub Actions pipeline for Pulumi infrastructure: `infra-preview.yml` (PR preview with comment), `infra-deploy.yml` (develop→dev auto, main→prod with approval gate), workflow_dispatch for manual operations (#PULUMI-PIPELINE)
 - `test-pulumi` job in CI gate — typecheck + vitest on every push (#PULUMI-PIPELINE)
 - Prometheus + Grafana on mgmt cluster — Prometheus (server + kube-state-metrics + node-exporter, 15d retention), Grafana with pre-configured Prometheus datasource, K8s cluster/node/pod dashboards, anonymous viewer access, and execution state tracking (#PULUMI-OBSERVABILITY)
+- DigitalOcean Container Registry provisioned via Pulumi (starter tier, 500MB) with execution state tracking and wiring output (#DEPLOY-REGISTRY)
+- GitHub Actions workflow `build-images.yml` — builds and pushes loopzero-api and tenant-controller images to DO registry on develop/main push, with automatic DOKS-registry integration (#DEPLOY-IMAGES-CI)
 
 ### Changed
 - Pulumi state backend changed from Pulumi Cloud to DigitalOcean Spaces (S3-compatible) — eliminates vendor lock-in, keeps state under our control, uses infrastructure we already pay for (#PULUMI-S3-BACKEND)

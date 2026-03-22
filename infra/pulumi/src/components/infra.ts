@@ -1,4 +1,5 @@
 import * as pulumi from "@pulumi/pulumi";
+import * as digitalocean from "@pulumi/digitalocean";
 import { resourceName, bucketName } from "../core/naming";
 import { standardTags } from "../core/tags";
 import { InfraError } from "../core/errors";
@@ -15,6 +16,7 @@ import { PlatformStackConfig } from "../config/stack";
 // ---------------------------------------------------------------------------
 
 export interface ClusterOutputs {
+  readonly clusterId: pulumi.Output<string>;
   readonly clusterName: pulumi.Output<string>;
   readonly kubeconfig: pulumi.Output<string>;
   readonly endpoint: pulumi.Output<string>;
@@ -38,6 +40,10 @@ export interface InfraOutputs {
   // Storage
   readonly bucketName: pulumi.Output<string>;
   readonly bucketEndpoint: pulumi.Output<string>;
+
+  // Container Registry
+  readonly registryEndpoint: pulumi.Output<string>;
+  readonly registryName: pulumi.Output<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,15 +172,28 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     tags,
   });
 
+  // --- Container registry ---
+  // DigitalOcean has one registry per account (global, not per-region).
+  // Starter tier is free (500MB) and sufficient for dev.
+  // DOKS clusters in the same account can pull images automatically
+  // via `doctl kubernetes cluster registry add` (run once post-provision).
+  const registry = new digitalocean.ContainerRegistry(`${baseName}-registry`, {
+    name: `${config.project}-registry`,
+    subscriptionTierSlug: "starter",
+    region: config.region,
+  });
+
   return {
     networkId: network.networkId,
     vpcId: network.vpcId,
     mgmtCluster: {
+      clusterId: mgmtCluster.clusterId,
       clusterName: mgmtCluster.clusterName,
       kubeconfig: mgmtCluster.kubeconfig,
       endpoint: mgmtCluster.endpoint,
     },
     runtimeCluster: {
+      clusterId: runtimeCluster.clusterId,
       clusterName: runtimeCluster.clusterName,
       kubeconfig: runtimeCluster.kubeconfig,
       endpoint: runtimeCluster.endpoint,
@@ -183,5 +202,7 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     database,
     bucketName: storage.bucketName,
     bucketEndpoint: storage.endpoint,
+    registryEndpoint: registry.endpoint,
+    registryName: registry.name,
   };
 }

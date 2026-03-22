@@ -31,6 +31,7 @@ export class DigitalOceanKubernetesProvider implements IProviderKubernetes {
     });
 
     return {
+      clusterId: cluster.id,
       clusterName: cluster.name,
       kubeconfig: cluster.kubeConfigs.apply(
         (configs) => configs[0]?.rawConfig ?? "",

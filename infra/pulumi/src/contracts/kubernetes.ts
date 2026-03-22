@@ -22,6 +22,7 @@ export interface KubernetesClusterSpec {
 }
 
 export interface KubernetesClusterOutput {
+  readonly clusterId: pulumi.Output<string>;
   readonly clusterName: pulumi.Output<string>;
   readonly kubeconfig: pulumi.Output<string>;
   readonly endpoint: pulumi.Output<string>;

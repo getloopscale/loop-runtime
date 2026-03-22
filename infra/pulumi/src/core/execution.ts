@@ -17,6 +17,7 @@ export type ComponentName =
   | "runners"
   | "database"
   | "storage"
+  | "registry"
   | "mgmtIngress"
   | "mgmtCertManager"
   | "mgmtArgocd"
@@ -80,6 +81,7 @@ export function buildExecutionState(args: {
       "runners",
       "database",
       "storage",
+      "registry",
     ];
     const bootstrapComponents: ComponentName[] = [
       "mgmtIngress",

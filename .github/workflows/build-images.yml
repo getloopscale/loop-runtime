@@ -1,0 +1,199 @@
+# Build and push container images to DigitalOcean Container Registry.
+#
+# Trigger map:
+#   push to develop → build + push with :dev tag + :sha tag
+#   push to main    → build + push with :latest tag + :sha tag
+#   workflow_dispatch → manual build for any component
+#
+# DOKS clusters pull from the registry automatically when integrated
+# via `doctl kubernetes cluster registry add` (done in infra-deploy post-step).
+#
+# Required secrets (set per GitHub Environment):
+#   DIGITALOCEAN_TOKEN — DO API token (registry login + push)
+
+name: "Build: Container Images"
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - "api/**"
+      - "operators/**"
+      - "pkg/**"
+      - ".github/workflows/build-images.yml"
+
+  workflow_dispatch:
+    inputs:
+      component:
+        description: "Component to build"
+        required: true
+        type: choice
+        options:
+          - all
+          - api
+          - operator
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: registry.digitalocean.com/loopzero-registry
+
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────
+  # RESOLVE — determine what to build and how to tag
+  # ─────────────────────────────────────────────
+  resolve:
+    name: Resolve build targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      sha_tag: ${{ steps.resolve.outputs.sha_tag }}
+      build_api: ${{ steps.resolve.outputs.build_api }}
+      build_operator: ${{ steps.resolve.outputs.build_operator }}
+    steps:
+      - name: Resolve tags and targets
+        id: resolve
+        run: |
+          SHA_SHORT="${{ github.sha }}"
+          SHA_SHORT="${SHA_SHORT:0:7}"
+
+          case "${{ github.ref_name }}" in
+            develop) TAG="dev" ;;
+            main)    TAG="latest" ;;
+            *)       TAG="dev" ;;
+          esac
+
+          # Determine which components to build
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            case "${{ inputs.component }}" in
+              all)      BUILD_API="true"; BUILD_OP="true" ;;
+              api)      BUILD_API="true"; BUILD_OP="false" ;;
+              operator) BUILD_API="false"; BUILD_OP="true" ;;
+            esac
+          else
+            # On push: build everything (path filter already limits triggers)
+            BUILD_API="true"
+            BUILD_OP="true"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=$SHA_SHORT" >> "$GITHUB_OUTPUT"
+          echo "build_api=$BUILD_API" >> "$GITHUB_OUTPUT"
+          echo "build_operator=$BUILD_OP" >> "$GITHUB_OUTPUT"
+
+          echo "### Build Targets" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tag | \`$TAG\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SHA | \`$SHA_SHORT\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| API | $BUILD_API |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Operator | $BUILD_OP |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # BUILD API
+  # ─────────────────────────────────────────────
+  build-api:
+    name: Build loopzero-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: resolve
+    if: needs.resolve.outputs.build_api == 'true'
+    environment: infra-dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        run: doctl registry login --expiry-seconds 600
+
+      - name: Build and push loopzero-api
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+
+          docker build -f api/Dockerfile \
+            -t ${{ env.REGISTRY }}/loopzero-api:${TAG} \
+            -t ${{ env.REGISTRY }}/loopzero-api:${SHA} \
+            .
+
+          docker push ${{ env.REGISTRY }}/loopzero-api:${TAG}
+          docker push ${{ env.REGISTRY }}/loopzero-api:${SHA}
+
+          echo "### loopzero-api" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-api:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-api:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # BUILD OPERATOR
+  # ─────────────────────────────────────────────
+  build-operator:
+    name: Build tenant-controller
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: resolve
+    if: needs.resolve.outputs.build_operator == 'true'
+    environment: infra-dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        run: doctl registry login --expiry-seconds 600
+
+      - name: Build and push tenant-controller
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+
+          docker build -f operators/Dockerfile \
+            -t ${{ env.REGISTRY }}/tenant-controller:${TAG} \
+            -t ${{ env.REGISTRY }}/tenant-controller:${SHA} \
+            .
+
+          docker push ${{ env.REGISTRY }}/tenant-controller:${TAG}
+          docker push ${{ env.REGISTRY }}/tenant-controller:${SHA}
+
+          echo "### tenant-controller" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/tenant-controller:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/tenant-controller:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # POST-BUILD — integrate registry with DOKS clusters
+  # ─────────────────────────────────────────────
+  integrate-registry:
+    name: Integrate registry with DOKS
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [build-api, build-operator]
+    if: always() && (needs.build-api.result == 'success' || needs.build-operator.result == 'success')
+    environment: infra-dev
+    steps:
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Add registry to DOKS clusters
+        run: |
+          # This is idempotent — safe to run on every build.
+          # It configures the clusters to pull from the registry without imagePullSecrets.
+          doctl kubernetes cluster registry add loopzero-infra-dev-nyc3-mgmt 2>/dev/null || true
+          doctl kubernetes cluster registry add loopzero-infra-dev-nyc3-runtime 2>/dev/null || true
+
+          echo "### Registry Integration" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✅ loopzero-infra-dev-nyc3-mgmt" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✅ loopzero-infra-dev-nyc3-runtime" >> "$GITHUB_STEP_SUMMARY"

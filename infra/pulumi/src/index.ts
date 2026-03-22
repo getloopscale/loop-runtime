@@ -32,6 +32,7 @@ export const execution = buildExecutionState({
       : pulumi.output(true),
     database: infra.database.host.apply((h) => !!h),
     storage: infra.bucketName.apply((n) => !!n),
+    registry: infra.registryEndpoint.apply((e) => !!e),
 
     // Phase 2
     mgmtIngress: bootstrap.mgmt.ingressReady,
@@ -84,6 +85,10 @@ export const dbPassword = pulumi.secret(infra.database.password);
 export const bucketName = infra.bucketName;
 export const bucketEndpoint = infra.bucketEndpoint;
 
+// Phase 1 — Container Registry
+export const registryEndpoint = infra.registryEndpoint;
+export const registryName = infra.registryName;
+
 // Phase 2 — Management cluster services
 export const mgmtIngressReady = bootstrap.mgmt.ingressReady;
 export const mgmtIngressEndpoint = bootstrap.mgmt.ingressEndpoint;
@@ -112,6 +117,10 @@ export const wiring = pulumi.output({
   },
   prometheus: {
     internalUrl: "http://prometheus-server.platform-system.svc.cluster.local:80",
+  },
+  registry: {
+    endpoint: infra.registryEndpoint,
+    name: infra.registryName,
   },
   database: {
     privateHost: infra.database.privateHost,
