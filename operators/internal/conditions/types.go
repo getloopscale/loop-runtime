@@ -1,0 +1,68 @@
+// Package conditions provides condition helpers for all LoopZero controllers.
+// Conditions follow the Kubernetes API conventions for status conditions
+// (metav1.Condition) with typed constants for condition types and reasons.
+//
+// This package lives in operators/internal/ because it depends on K8s types
+// (metav1.Condition) and should not be exposed via pkg/.
+package conditions
+
+// --- Tenant conditions ---
+const (
+	TypeGitRepoReady        = "GitRepoReady"
+	TypeNamespacesReady     = "NamespacesReady"
+	TypeRBACReady           = "RBACReady"
+	TypeQuotaEnforced       = "QuotaEnforced"
+	TypeNetworkPolicyReady  = "NetworkPolicyReady"
+	TypeBuildNamespaceReady = "BuildNamespaceReady"
+	TypePriorityClassReady  = "PriorityClassReady"
+	TypeArgoCDAppReady      = "ArgoCDAppReady"
+)
+
+// --- PlatformBootstrap conditions ---
+const (
+	TypeGiteaReady           = "GiteaReady"
+	TypeArgoCDReady          = "ArgoCDReady"
+	TypePlatformSecretsReady = "PlatformSecretsReady"
+	TypeDatabaseSeeded       = "DatabaseSeeded"
+	TypeBootstrapComplete    = "BootstrapComplete"
+)
+
+// --- GitRepositoryBinding conditions ---
+const (
+	TypeCredentialsResolved  = "CredentialsResolved"
+	TypeRepositoryRegistered = "RepositoryRegistered"
+	TypeRepositoryReachable  = "RepositoryReachable"
+	TypeConsumerHealthy      = "ConsumerHealthy"
+)
+
+// --- Application conditions ---
+const (
+	TypeServiceResolved    = "ServiceResolved"
+	TypeIngressReady       = "IngressReady"
+	TypeCertificateIssued  = "CertificateIssued"
+	TypeRouteReachable     = "RouteReachable"
+	TypeApplicationHealthy = "ApplicationHealthy"
+)
+
+// --- Build conditions ---
+const (
+	TypeWorkflowSubmitted  = "WorkflowSubmitted"
+	TypeSourcesResolved    = "SourcesResolved"
+	TypeBuildSucceeded     = "BuildSucceeded"
+	TypeArtifactsPublished = "ArtifactsPublished"
+)
+
+// Reason constants are enumerated, not freeform. All condition reasons
+// must use one of these constants to ensure consistency across controllers.
+const (
+	ReasonReconciling = "Reconciling"
+	ReasonReady       = "Ready"
+	ReasonFailed      = "Failed"
+	ReasonNotFound    = "NotFound"
+	ReasonTimeout     = "Timeout"
+	ReasonUnreachable = "Unreachable"
+	ReasonInProgress  = "InProgress"
+	ReasonWaiting     = "Waiting"
+	ReasonCreated     = "Created"
+	ReasonDeleting    = "Deleting"
+)
