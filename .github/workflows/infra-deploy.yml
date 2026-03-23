@@ -243,10 +243,13 @@ jobs:
         if: needs.resolve.outputs.command == 'up'
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
           # Cancel stale locks from previous failed runs
-          pulumi cancel -s ${{ needs.resolve.outputs.stack }} 2>/dev/null || true
-          # Run pulumi up — partial failures on deployments are OK (|| true)
-          pulumi up --yes --skip-preview --stack ${{ needs.resolve.outputs.stack }} --non-interactive || true
+          pulumi cancel -s "$STACK" 2>/dev/null || true
+          # Refresh state to match reality (handles manual deletes, drift)
+          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
+          # Create all resources — skipAwait on Deployments prevents blocking
+          pulumi up --yes --skip-preview --stack "$STACK" --non-interactive || true
 
       # Step 2: Build and push container images.
       # Runs ALWAYS (even if Step 1 failed) because Step 1 creates the
