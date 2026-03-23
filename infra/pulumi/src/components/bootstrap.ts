@@ -884,6 +884,7 @@ function installLoopZeroAPI(
         name: "loopzero-api",
         namespace: PLATFORM_NAMESPACE,
         labels: { app: "loopzero-api" },
+        annotations: { "pulumi.com/skipAwait": "true" },
       },
       spec: {
         selector: { app: "loopzero-api" },
