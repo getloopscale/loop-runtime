@@ -1,66 +1,47 @@
-// Package naming provides deterministic naming functions for Kubernetes
-// resources created by LoopZero operators. All names conform to RFC 1123:
-// lowercase, alphanumeric + hyphens, max 63 characters.
+// Package naming re-exports naming functions from pkg/naming for use
+// within operators. All naming logic is centralized in pkg/naming;
+// this package exists only for backward compatibility with existing imports.
 package naming
 
 import (
-	"fmt"
-	"regexp"
-	"strings"
+	pkgnaming "github.com/loopzero/loopzero/pkg/naming"
 )
 
-// MaxKubernetesNameLength is the maximum length for a Kubernetes resource name
-// per RFC 1123 (DNS label standard).
-const MaxKubernetesNameLength = 63
+// MaxKubernetesNameLength re-exports the constant from pkg/naming.
+const MaxKubernetesNameLength = pkgnaming.MaxKubernetesNameLength
 
-// validNameRegexp matches a valid RFC 1123 DNS label:
-// lowercase alphanumeric, hyphens allowed (not at start or end), max 63 chars.
-var validNameRegexp = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+// ValidateKubernetesName delegates to pkg/naming.
+var ValidateKubernetesName = pkgnaming.ValidateKubernetesName
 
-// NamespaceName returns the namespace name for a tenant's project environment.
-// Format: "{tenant}-{project}-{env}"
-func NamespaceName(tenant, project, env string) (string, error) {
-	name := fmt.Sprintf("%s-%s-%s", tenant, project, env)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("namespace name %q: %w", name, err)
-	}
-	return name, nil
-}
+// TenantNamespace delegates to pkg/naming.
+var TenantNamespace = pkgnaming.TenantNamespace
 
-// BuildNamespaceName returns the build namespace name for a tenant.
-// Format: "build-{tenant}"
-func BuildNamespaceName(tenant string) (string, error) {
-	name := fmt.Sprintf("build-%s", tenant)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("build namespace name %q: %w", name, err)
-	}
-	return name, nil
-}
+// EnvironmentNamespace delegates to pkg/naming.
+var EnvironmentNamespace = pkgnaming.EnvironmentNamespace
 
-// PreviewNamespaceName returns the namespace name for a preview environment.
-// Format: "{tenant}-{project}-pr-{prNumber}"
-func PreviewNamespaceName(tenant, project string, prNumber int) (string, error) {
-	name := fmt.Sprintf("%s-%s-pr-%d", tenant, project, prNumber)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("preview namespace name %q: %w", name, err)
-	}
-	return name, nil
-}
+// BuildNamespace delegates to pkg/naming.
+var BuildNamespace = pkgnaming.BuildNamespace
 
-// ValidateKubernetesName checks whether a name conforms to RFC 1123 DNS label rules.
-// It returns an error describing the violation, or nil if the name is valid.
-func ValidateKubernetesName(name string) error {
-	if name == "" {
-		return fmt.Errorf("name must not be empty")
-	}
-	if len(name) > MaxKubernetesNameLength {
-		return fmt.Errorf("name must be at most %d characters, got %d", MaxKubernetesNameLength, len(name))
-	}
-	if name != strings.ToLower(name) {
-		return fmt.Errorf("name must be lowercase")
-	}
-	if !validNameRegexp.MatchString(name) {
-		return fmt.Errorf("name must match RFC 1123: lowercase alphanumeric and hyphens, cannot start or end with hyphen")
-	}
-	return nil
-}
+// PreviewNamespace delegates to pkg/naming.
+var PreviewNamespace = pkgnaming.PreviewNamespace
+
+// RepoName delegates to pkg/naming.
+var RepoName = pkgnaming.RepoName
+
+// GitOpsRepoName delegates to pkg/naming.
+var GitOpsRepoName = pkgnaming.GitOpsRepoName
+
+// ArgoAppName delegates to pkg/naming.
+var ArgoAppName = pkgnaming.ArgoAppName
+
+// Hostname delegates to pkg/naming.
+var Hostname = pkgnaming.Hostname
+
+// CertSecretName delegates to pkg/naming.
+var CertSecretName = pkgnaming.CertSecretName
+
+// Labels delegates to pkg/naming.
+var Labels = pkgnaming.Labels
+
+// Sanitize delegates to pkg/naming.
+var Sanitize = pkgnaming.Sanitize

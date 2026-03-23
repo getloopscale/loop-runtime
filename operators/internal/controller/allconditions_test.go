@@ -5,19 +5,19 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 // allSevenConditions returns conditions for the original 7 required types, all True.
 func allSevenConditions() []metav1.Condition {
 	types := []string{
-		loopzerov1.ConditionGitRepoReady,
-		loopzerov1.ConditionNamespacesReady,
-		loopzerov1.ConditionRBACReady,
-		loopzerov1.ConditionNetworkPolicyReady,
-		loopzerov1.ConditionArgoCDAppReady,
-		loopzerov1.ConditionBuildNamespaceReady,
-		loopzerov1.ConditionQuotaEnforced,
+		conditions.TypeGitRepoReady,
+		conditions.TypeNamespacesReady,
+		conditions.TypeRBACReady,
+		conditions.TypeNetworkPolicyReady,
+		conditions.TypeArgoCDAppReady,
+		conditions.TypeBuildNamespaceReady,
+		conditions.TypeQuotaEnforced,
 	}
 	conds := make([]metav1.Condition, 0, len(types))
 	for _, t := range types {
@@ -33,7 +33,7 @@ func allSevenConditions() []metav1.Condition {
 func allEightConditions() []metav1.Condition {
 	conds := allSevenConditions()
 	conds = append(conds, metav1.Condition{
-		Type:   loopzerov1.ConditionPriorityClassReady,
+		Type:   conditions.TypePriorityClassReady,
 		Status: metav1.ConditionTrue,
 	})
 	return conds
@@ -57,7 +57,7 @@ func TestAllConditionsTrue_RequiresPriorityClassReady(t *testing.T) {
 		// Arrange: all 7 True + PriorityClassReady False
 		conds := allSevenConditions()
 		conds = append(conds, metav1.Condition{
-			Type:   loopzerov1.ConditionPriorityClassReady,
+			Type:   conditions.TypePriorityClassReady,
 			Status: metav1.ConditionFalse,
 		})
 

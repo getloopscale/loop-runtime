@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 // priorityClassForPlan returns the PriorityClass name, value, and preemption policy for a given plan.
@@ -52,7 +53,7 @@ func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *l
 	}
 
 	log.FromContext(ctx).Info("priorityclass reconciled", "name", pcName, "result", result)
-	loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionPriorityClassReady,
+	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypePriorityClassReady,
 		metav1.ConditionTrue, "PriorityClassReady", "priority class provisioned", tenant.Generation)
 	return nil
 }

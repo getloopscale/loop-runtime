@@ -10,12 +10,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // reconcileRBAC ensures RBAC resources (ServiceAccount, Role, RoleBinding) exist per namespace.
 func (r *TenantReconciler) reconcileRBAC(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	for _, env := range tenant.Spec.Environments {
-		nsName := fmt.Sprintf("loopzero-%s-%s", tenant.Name, env.Name)
+		nsName, err := naming.EnvironmentNamespace(tenant.Name, env.Name)
+		if err != nil {
+			return fmt.Errorf("invalid namespace name for env %s: %w", env.Name, err)
+		}
 
 		// ServiceAccount
 		sa := &corev1.ServiceAccount{
@@ -70,7 +75,7 @@ func (r *TenantReconciler) reconcileRBAC(ctx context.Context, tenant *loopzerov1
 		}
 	}
 
-	loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionRBACReady,
+	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeRBACReady,
 		metav1.ConditionTrue, "RBACConfigured", "RBAC resources provisioned", tenant.Generation)
 	return nil
 }

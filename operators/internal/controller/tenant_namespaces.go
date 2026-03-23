@@ -11,14 +11,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/naming"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // reconcileNamespaces ensures each environment has a namespace with ResourceQuota and LimitRange.
 func (r *TenantReconciler) reconcileNamespaces(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	for _, env := range tenant.Spec.Environments {
-		nsName := fmt.Sprintf("loopzero-%s-%s", tenant.Name, env.Name)
-		if err := naming.ValidateKubernetesName(nsName); err != nil {
+		nsName, err := naming.EnvironmentNamespace(tenant.Name, env.Name)
+		if err != nil {
 			return fmt.Errorf("invalid namespace name for env %s: %w", env.Name, err)
 		}
 
@@ -53,7 +54,7 @@ func (r *TenantReconciler) reconcileNamespaces(ctx context.Context, tenant *loop
 		}
 	}
 
-	loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionNamespacesReady,
+	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeNamespacesReady,
 		metav1.ConditionTrue, "AllNamespacesReady", "all environment namespaces provisioned", tenant.Generation)
 	return nil
 }

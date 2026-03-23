@@ -12,6 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 // GroupVersion is the API group and version for LoopZero CRDs.
@@ -46,54 +48,18 @@ func Resource(resource string) schema.GroupResource {
 }
 
 // ConditionType constants for Tenant status conditions.
+// Re-exported from internal/conditions for backward compatibility.
 const (
-	ConditionGitRepoReady       string = "GitRepoReady"
-	ConditionNamespacesReady    string = "NamespacesReady"
-	ConditionRBACReady          string = "RBACReady"
-	ConditionQuotaEnforced      string = "QuotaEnforced"
-	ConditionNetworkPolicyReady string = "NetworkPolicyReady"
-	ConditionBuildNamespaceReady string = "BuildNamespaceReady"
-	ConditionPriorityClassReady  string = "PriorityClassReady"
-	ConditionArgoCDAppReady      string = "ArgoCDAppReady"
+	ConditionGitRepoReady        = conditions.TypeGitRepoReady
+	ConditionNamespacesReady     = conditions.TypeNamespacesReady
+	ConditionRBACReady           = conditions.TypeRBACReady
+	ConditionQuotaEnforced       = conditions.TypeQuotaEnforced
+	ConditionNetworkPolicyReady  = conditions.TypeNetworkPolicyReady
+	ConditionBuildNamespaceReady = conditions.TypeBuildNamespaceReady
+	ConditionPriorityClassReady  = conditions.TypePriorityClassReady
+	ConditionArgoCDAppReady      = conditions.TypeArgoCDAppReady
 )
 
-// SetCondition sets or updates a condition on a slice of conditions.
-// If the condition already exists with the same status, it is not updated
-// (preserving LastTransitionTime). If the status changes, LastTransitionTime
-// is updated to now. The observedGeneration parameter tracks which generation
-// of the resource the condition relates to.
-func SetCondition(conditions *[]metav1.Condition, conditionType string, status metav1.ConditionStatus, reason, message string, observedGeneration int64) {
-	now := metav1.Now()
-
-	for i, c := range *conditions {
-		if c.Type == conditionType {
-			if c.Status == status {
-				// Status unchanged, update reason/message but keep transition time.
-				(*conditions)[i].Reason = reason
-				(*conditions)[i].Message = message
-				(*conditions)[i].ObservedGeneration = observedGeneration
-				return
-			}
-			// Status changed, update everything.
-			(*conditions)[i] = metav1.Condition{
-				Type:               conditionType,
-				Status:             status,
-				LastTransitionTime: now,
-				Reason:             reason,
-				Message:            message,
-				ObservedGeneration: observedGeneration,
-			}
-			return
-		}
-	}
-
-	// Condition not found, append it.
-	*conditions = append(*conditions, metav1.Condition{
-		Type:               conditionType,
-		Status:             status,
-		LastTransitionTime: now,
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: observedGeneration,
-	})
-}
+// SetCondition delegates to the conditions package.
+// Kept for backward compatibility with test code and external consumers.
+var SetCondition = conditions.SetCondition

@@ -5,27 +5,31 @@ import (
 	"testing"
 )
 
-func TestNamespaceName_ValidInput(t *testing.T) {
-	name, err := NamespaceName("acme", "my-saas", "production")
+// These tests verify that the naming package correctly delegates to pkg/naming.
+// The full naming logic is tested in pkg/naming/naming_test.go; these tests
+// confirm the delegation wiring is correct.
+
+func TestEnvironmentNamespace_ValidInput(t *testing.T) {
+	name, err := EnvironmentNamespace("acme", "production")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if name != "acme-my-saas-production" {
-		t.Errorf("expected %q, got %q", "acme-my-saas-production", name)
+	if name != "tn-acme-production" {
+		t.Errorf("expected %q, got %q", "tn-acme-production", name)
 	}
 }
 
-func TestNamespaceName_TooLong(t *testing.T) {
-	// Create a name that exceeds 63 characters.
+func TestEnvironmentNamespace_TooLong(t *testing.T) {
+	// "tn-" prefix (3) + slug (30) + "-" (1) + env (30) = 64 chars — exceeds 63
 	long := strings.Repeat("a", 30)
-	_, err := NamespaceName(long, long, "production")
+	_, err := EnvironmentNamespace(long, long)
 	if err == nil {
 		t.Error("expected error for name exceeding 63 characters")
 	}
 }
 
-func TestBuildNamespaceName_ValidInput(t *testing.T) {
-	name, err := BuildNamespaceName("acme")
+func TestBuildNamespace_ValidInput(t *testing.T) {
+	name, err := BuildNamespace("acme")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -34,13 +38,23 @@ func TestBuildNamespaceName_ValidInput(t *testing.T) {
 	}
 }
 
-func TestPreviewNamespaceName_ValidInput(t *testing.T) {
-	name, err := PreviewNamespaceName("acme", "my-saas", 142)
+func TestPreviewNamespace_ValidInput(t *testing.T) {
+	name, err := PreviewNamespace("acme", "my-saas", 142)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if name != "acme-my-saas-pr-142" {
 		t.Errorf("expected %q, got %q", "acme-my-saas-pr-142", name)
+	}
+}
+
+func TestTenantNamespace_ValidInput(t *testing.T) {
+	name, err := TenantNamespace("acme")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if name != "tn-acme" {
+		t.Errorf("expected %q, got %q", "tn-acme", name)
 	}
 }
 
@@ -86,11 +100,16 @@ func TestValidateKubernetesName_Invalid(t *testing.T) {
 }
 
 func TestValidateKubernetesName_SingleCharIsValid(t *testing.T) {
-	// Edge case: single alphanumeric character is valid.
 	if err := ValidateKubernetesName("a"); err != nil {
 		t.Errorf("single character should be valid: %v", err)
 	}
 	if err := ValidateKubernetesName("0"); err != nil {
 		t.Errorf("single digit should be valid: %v", err)
+	}
+}
+
+func TestMaxKubernetesNameLength_Matches(t *testing.T) {
+	if MaxKubernetesNameLength != 63 {
+		t.Errorf("expected MaxKubernetesNameLength to be 63, got %d", MaxKubernetesNameLength)
 	}
 }

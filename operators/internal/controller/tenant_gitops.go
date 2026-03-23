@@ -9,7 +9,8 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/argocd"
-	"github.com/loopzero/loopzero/operators/internal/naming"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // reconcileGitRepo ensures the GitOps repository exists via the GitRepoProvisioner.
@@ -20,7 +21,7 @@ func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopzer
 	}
 
 	tenant.Status.GitOpsRepo = repoURL
-	loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionGitRepoReady,
+	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeGitRepoReady,
 		metav1.ConditionTrue, "RepoReady", "git repository provisioned", tenant.Generation)
 	return nil
 }
@@ -44,8 +45,8 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 
 	for _, env := range tenant.Spec.Environments {
 		appName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
-		destNS := fmt.Sprintf("loopzero-%s-%s", tenant.Name, env.Name)
-		if err := naming.ValidateKubernetesName(destNS); err != nil {
+		destNS, err := naming.EnvironmentNamespace(tenant.Name, env.Name)
+		if err != nil {
 			return fmt.Errorf("invalid namespace name for env %s: %w", env.Name, err)
 		}
 		// BLOCKER-3: Path scoped to environment directory.
@@ -71,7 +72,7 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 		log.FromContext(ctx).Info("argocd application reconciled", "application", appName)
 	}
 
-	loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionArgoCDAppReady,
+	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeArgoCDAppReady,
 		metav1.ConditionTrue, "ApplicationsReady", "ArgoCD applications provisioned", tenant.Generation)
 	return nil
 }

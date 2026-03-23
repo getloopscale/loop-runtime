@@ -15,7 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/naming"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 func base64Encode(s string) string {
@@ -24,7 +25,7 @@ func base64Encode(s string) string {
 
 // reconcileBuildNamespace ensures the build-{tenantID} namespace exists with ResourceQuota.
 func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *loopzerov1.Tenant) error {
-	buildNs, err := naming.BuildNamespaceName(tenant.Name)
+	buildNs, err := naming.BuildNamespace(tenant.Name)
 	if err != nil {
 		return fmt.Errorf("invalid build namespace name for tenant %s: %w", tenant.Name, err)
 	}
@@ -261,11 +262,11 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		}
 	}
 
-	loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionBuildNamespaceReady,
+	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeBuildNamespaceReady,
 		metav1.ConditionTrue, "BuildNamespaceReady", "build namespace provisioned", tenant.Generation)
 
 	// QuotaEnforced = True when ALL quotas (workload + build) are applied
-	loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionQuotaEnforced,
+	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeQuotaEnforced,
 		metav1.ConditionTrue, "AllQuotasEnforced", "all resource quotas applied", tenant.Generation)
 
 	return nil

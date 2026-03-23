@@ -14,6 +14,7 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/argocd"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/pkg/statemachine"
@@ -98,9 +99,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// S1.2: Reconcile namespaces + ResourceQuota + LimitRange
 	// Skip if NamespacesReady is already True at current generation (crash recovery optimization)
-	if !conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionNamespacesReady, tenant.Generation) {
+	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeNamespacesReady, tenant.Generation) {
 		if err := r.reconcileNamespaces(ctx, &tenant); err != nil {
-			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionNamespacesReady,
+			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeNamespacesReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
 			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
 				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
@@ -111,9 +112,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// S1.3: Reconcile RBAC (ServiceAccount + Role + RoleBinding)
 	// Skip if RBACReady is already True at current generation
-	if !conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionRBACReady, tenant.Generation) {
+	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeRBACReady, tenant.Generation) {
 		if err := r.reconcileRBAC(ctx, &tenant); err != nil {
-			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionRBACReady,
+			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeRBACReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
 			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
 				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
@@ -124,9 +125,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// S1.4: Reconcile NetworkPolicies (deny-all + allow-ingress + allow-egress)
 	// Skip if NetworkPolicyReady is already True at current generation
-	if !conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionNetworkPolicyReady, tenant.Generation) {
+	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeNetworkPolicyReady, tenant.Generation) {
 		if err := r.reconcileNetworkPolicies(ctx, &tenant); err != nil {
-			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionNetworkPolicyReady,
+			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeNetworkPolicyReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
 			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
 				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
@@ -137,9 +138,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// S1.6: Reconcile Gitea repo
 	// Skip if GitRepoReady is already True at current generation
-	if !conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionGitRepoReady, tenant.Generation) {
+	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeGitRepoReady, tenant.Generation) {
 		if err := r.reconcileGitRepo(ctx, &tenant); err != nil {
-			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionGitRepoReady,
+			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeGitRepoReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
 			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
 				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
@@ -150,9 +151,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// S1.6b: Reconcile ArgoCD Application per environment
 	// Skip if ArgoCDAppReady is already True at current generation
-	if !conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionArgoCDAppReady, tenant.Generation) {
+	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeArgoCDAppReady, tenant.Generation) {
 		if err := r.reconcileArgoCDApp(ctx, &tenant); err != nil {
-			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionArgoCDAppReady,
+			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeArgoCDAppReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
 			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
 				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
@@ -164,10 +165,10 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// S1.5: Reconcile build namespace + QuotaEnforced
 	// Skip if BOTH BuildNamespaceReady AND QuotaEnforced are True at current generation
 	// (both conditions are set inside reconcileBuildNamespace)
-	if !conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionBuildNamespaceReady, tenant.Generation) ||
-		!conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionQuotaEnforced, tenant.Generation) {
+	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeBuildNamespaceReady, tenant.Generation) ||
+		!conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeQuotaEnforced, tenant.Generation) {
 		if err := r.reconcileBuildNamespace(ctx, &tenant); err != nil {
-			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionBuildNamespaceReady,
+			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeBuildNamespaceReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
 			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
 				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
@@ -178,9 +179,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// S14.3: Reconcile PriorityClass based on tenant plan
 	// Skip if PriorityClassReady is already True at current generation
-	if !conditionIsTrue(tenant.Status.Conditions, loopzerov1.ConditionPriorityClassReady, tenant.Generation) {
+	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypePriorityClassReady, tenant.Generation) {
 		if err := r.reconcilePriorityClass(ctx, &tenant); err != nil {
-			loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionPriorityClassReady,
+			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypePriorityClassReady,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
 			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
 				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
@@ -206,31 +207,18 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return ctrl.Result{}, nil
 }
 
-// conditionIsTrue checks if a specific condition is True AND its ObservedGeneration
-// matches the current resource generation. This enables condition-gated reconciliation:
-// if a step already succeeded at the current generation, we skip re-executing it.
-// When the spec changes (generation bumps), all steps are re-executed.
-func conditionIsTrue(conditions []metav1.Condition, conditionType string, generation int64) bool {
-	for _, c := range conditions {
-		if c.Type == conditionType {
-			return c.Status == metav1.ConditionTrue && c.ObservedGeneration == generation
-		}
-	}
-	return false
-}
-
 // requiredProvisioningConditions lists all conditions that must be True
 // for a tenant to transition from PROVISIONING to ACTIVE.
 // Add new conditions here when adding new reconciliation steps.
 var requiredProvisioningConditions = []string{
-	loopzerov1.ConditionGitRepoReady,
-	loopzerov1.ConditionNamespacesReady,
-	loopzerov1.ConditionRBACReady,
-	loopzerov1.ConditionNetworkPolicyReady,
-	loopzerov1.ConditionArgoCDAppReady,
-	loopzerov1.ConditionBuildNamespaceReady,
-	loopzerov1.ConditionQuotaEnforced,
-	loopzerov1.ConditionPriorityClassReady,
+	conditions.TypeGitRepoReady,
+	conditions.TypeNamespacesReady,
+	conditions.TypeRBACReady,
+	conditions.TypeNetworkPolicyReady,
+	conditions.TypeArgoCDAppReady,
+	conditions.TypeBuildNamespaceReady,
+	conditions.TypeQuotaEnforced,
+	conditions.TypePriorityClassReady,
 }
 
 // allConditionsTrue checks if all required conditions are True.

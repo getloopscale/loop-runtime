@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 const (
@@ -79,7 +80,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if errors.IsNotFound(err) {
 			logger.Info("referenced secret not found", "secret", secretKey)
 			cr.Status.Connected = false
-			loopzerov1.SetCondition(&cr.Status.Conditions, conditionSecretNotFound,
+			conditions.SetCondition(&cr.Status.Conditions, conditionSecretNotFound,
 				metav1.ConditionTrue, "SecretMissing",
 				fmt.Sprintf("Secret %s/%s not found", secretKey.Namespace, secretKey.Name),
 				cr.Generation)
@@ -92,7 +93,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// Secret found — clear SecretNotFound condition.
-	loopzerov1.SetCondition(&cr.Status.Conditions, conditionSecretNotFound,
+	conditions.SetCondition(&cr.Status.Conditions, conditionSecretNotFound,
 		metav1.ConditionFalse, "SecretFound",
 		fmt.Sprintf("Secret %s/%s exists", secretKey.Namespace, secretKey.Name),
 		cr.Generation)
@@ -101,7 +102,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	kubeconfigData, ok := secret.Data["kubeconfig"]
 	if !ok {
 		cr.Status.Connected = false
-		loopzerov1.SetCondition(&cr.Status.Conditions, conditionConnected,
+		conditions.SetCondition(&cr.Status.Conditions, conditionConnected,
 			metav1.ConditionFalse, "KubeconfigKeyMissing",
 			"Secret does not contain 'kubeconfig' key",
 			cr.Generation)
@@ -114,7 +115,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	restConfig, err := clientcmd.RESTConfigFromKubeConfig(kubeconfigData)
 	if err != nil {
 		cr.Status.Connected = false
-		loopzerov1.SetCondition(&cr.Status.Conditions, conditionConnected,
+		conditions.SetCondition(&cr.Status.Conditions, conditionConnected,
 			metav1.ConditionFalse, "InvalidKubeconfig",
 			fmt.Sprintf("Failed to parse kubeconfig: %v", err),
 			cr.Generation)
@@ -129,7 +130,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		cr.Status.Connected = false
-		loopzerov1.SetCondition(&cr.Status.Conditions, conditionConnected,
+		conditions.SetCondition(&cr.Status.Conditions, conditionConnected,
 			metav1.ConditionFalse, "ClientCreationFailed",
 			fmt.Sprintf("Failed to create Kubernetes client: %v", err),
 			cr.Generation)
@@ -152,7 +153,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if err != nil {
 			msg = fmt.Sprintf("Cluster %s connectivity failed: %v", cr.Spec.ClusterName, err)
 		}
-		loopzerov1.SetCondition(&cr.Status.Conditions, conditionConnected,
+		conditions.SetCondition(&cr.Status.Conditions, conditionConnected,
 			metav1.ConditionFalse, reason, msg, cr.Generation)
 		now := metav1.Now()
 		cr.Status.LastCheckedAt = &now
@@ -167,7 +168,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	cr.Status.Connected = true
 	now := metav1.Now()
 	cr.Status.LastCheckedAt = &now
-	loopzerov1.SetCondition(&cr.Status.Conditions, conditionConnected,
+	conditions.SetCondition(&cr.Status.Conditions, conditionConnected,
 		metav1.ConditionTrue, "Reachable",
 		fmt.Sprintf("Cluster %s is reachable", cr.Spec.ClusterName),
 		cr.Generation)
