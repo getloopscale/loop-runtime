@@ -211,9 +211,31 @@ type traefikRouteService struct {
 	Port int    `json:"port"`
 }
 
-// traefikTLS as an empty struct serializes to `tls: {}` which tells Traefik
-// to use the default TLSStore (LEVE-2 fix: no more certResolver: letsencrypt).
-type traefikTLS struct{}
+// traefikTLS configures TLS on IngressRoute. When SecretName is set, Traefik
+// reads the cert from that K8s Secret (issued by cert-manager).
+type traefikTLS struct {
+	SecretName string `json:"secretName,omitempty"`
+}
+
+// certManagerCertificate generates a cert-manager Certificate CR that
+// requests a Let's Encrypt cert for the given hostname.
+type certManagerCertificate struct {
+	APIVersion string      `json:"apiVersion"`
+	Kind       string      `json:"kind"`
+	Metadata   k8sMetadata `json:"metadata"`
+	Spec       certSpec    `json:"spec"`
+}
+
+type certSpec struct {
+	SecretName string    `json:"secretName"`
+	IssuerRef  issuerRef `json:"issuerRef"`
+	DNSNames   []string  `json:"dnsNames"`
+}
+
+type issuerRef struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+}
 
 // --- Internal render functions ---
 
@@ -226,13 +248,14 @@ func renderServerApp(ri RenderInput, app AppManifestInput) []string {
 
 	deployment := buildDeployment(ri, app, port)
 	service := buildService(ri, app, port)
-	ingress := buildIngressRoute(ri, app, port)
+	ingressResources := buildIngressResources(ri, app, port)
 
-	return []string{
+	docs := []string{
 		marshalResource(deployment),
 		marshalResource(service),
-		marshalResource(ingress),
 	}
+	docs = append(docs, ingressResources...)
+	return docs
 }
 
 // renderWorkerApp generates Deployment only (no Service/Ingress — workers don't receive traffic).
@@ -251,13 +274,14 @@ func renderFrontendApp(ri RenderInput, app AppManifestInput) []string {
 
 	deployment := buildDeployment(ri, app, port)
 	service := buildService(ri, app, port)
-	ingress := buildIngressRoute(ri, app, port)
+	ingressResources := buildIngressResources(ri, app, port)
 
-	return []string{
+	docs := []string{
 		marshalResource(deployment),
 		marshalResource(service),
-		marshalResource(ingress),
 	}
+	docs = append(docs, ingressResources...)
+	return docs
 }
 
 // --- Struct builders ---
@@ -361,7 +385,9 @@ func buildService(ri RenderInput, app AppManifestInput, port int) k8sService {
 	}
 }
 
-func buildIngressRoute(ri RenderInput, app AppManifestInput, port int) traefikIngressRoute {
+// buildIngressResources generates a Certificate CR + IngressRoute for TLS.
+// Returns both resources as marshaled YAML strings.
+func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []string {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
 	// Hostname: {app}-{env}--{tenant}.{baseDomain}
@@ -369,8 +395,28 @@ func buildIngressRoute(ri RenderInput, app AppManifestInput, port int) traefikIn
 	// Double-dash separates tenant from app-env for unambiguous parsing.
 	hostname := fmt.Sprintf("%s-%s--%s.%s",
 		app.Name, ri.Environment, ri.TenantID, ri.BaseDomain)
+	secretName := fmt.Sprintf("tls-%s", app.Name)
 
-	return traefikIngressRoute{
+	// Certificate CR — cert-manager issues a Let's Encrypt cert
+	cert := certManagerCertificate{
+		APIVersion: "cert-manager.io/v1",
+		Kind:       "Certificate",
+		Metadata: k8sMetadata{
+			Name:      fmt.Sprintf("tls-%s", app.Name),
+			Namespace: ns,
+			Labels:    labels,
+		},
+		Spec: certSpec{
+			SecretName: secretName,
+			IssuerRef: issuerRef{
+				Name: "letsencrypt-prod",
+				Kind: "ClusterIssuer",
+			},
+			DNSNames: []string{hostname},
+		},
+	}
+
+	ingress := traefikIngressRoute{
 		APIVersion: "traefik.io/v1alpha1",
 		Kind:       "IngressRoute",
 		Metadata: k8sMetadata{
@@ -387,9 +433,11 @@ func buildIngressRoute(ri RenderInput, app AppManifestInput, port int) traefikIn
 					Services: []traefikRouteService{{Name: app.Name, Port: port}},
 				},
 			},
-			TLS: &traefikTLS{}, // LEVE-2 fix: empty tls → use default TLSStore
+			TLS: &traefikTLS{SecretName: secretName},
 		},
 	}
+
+	return []string{marshalResource(cert), marshalResource(ingress)}
 }
 
 // --- Helpers ---

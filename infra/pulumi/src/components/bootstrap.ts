@@ -179,8 +179,14 @@ function bootstrapRuntimeCluster(
 
   const ns = createPlatformNamespace("runtime", config, provider);
 
-  // Runtime gets Traefik only — user apps ingress
-  const traefik = installTraefik("runtime", provider, ns);
+  // cert-manager — needed for Let's Encrypt TLS on tenant app IngressRoutes
+  const certManager = installCertManager("runtime", provider, ns);
+
+  // ClusterIssuer — Let's Encrypt production certs for tenant apps
+  const runtimeClusterIssuer = createClusterIssuer(provider, certManager, config);
+
+  // Traefik — ingress for user apps, depends on cert-manager for TLS
+  const traefik = installTraefik("runtime", provider, ns, certManager);
 
   const ingressEndpoint = lookupLoadBalancerEndpoint(
     "runtime",
@@ -230,7 +236,7 @@ function installCertManager(
   return new k8s.helm.v3.Release(
     `${role}-cert-manager`,
     {
-      name: "mgmt-cert-manager",
+      name: `${role}-cert-manager`,
       chart: "cert-manager",
       version: HELM_VERSIONS.certManager,
       repositoryOpts: {
@@ -328,7 +334,7 @@ function installTraefik(
   return new k8s.helm.v3.Release(
     `${role}-traefik`,
     {
-      name: "mgmt-traefik",
+      name: `${role}-traefik`,
       chart: "traefik",
       version: HELM_VERSIONS.traefik,
       repositoryOpts: {
