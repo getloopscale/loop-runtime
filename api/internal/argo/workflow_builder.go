@@ -119,14 +119,19 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		return nil, fmt.Errorf("build main DAG: %w", err)
 	}
 
-	// Build the onExit DAG (cache save per-language)
+	// Build the onExit DAG (cache save per-language).
+	// Only add onExit if there are cache tasks — Argo requires ≥1 task per DAG.
 	onExitDAG, err := b.buildOnExitDAG(spec, groups)
 	if err != nil {
 		return nil, fmt.Errorf("build onExit DAG: %w", err)
 	}
 
-	// All templates: main DAG + onExit + inline language templates
-	templates := []forge.Templatable{mainDAG, onExitDAG}
+	templates := []forge.Templatable{mainDAG}
+	onExitName := ""
+	if onExitDAG != nil {
+		templates = append(templates, onExitDAG)
+		onExitName = "finalize"
+	}
 	templates = append(templates, inlineTemplates...)
 
 	// Primary language for label (first group)
@@ -138,7 +143,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 	wf := &forge.Workflow{
 		GenerateName:       fmt.Sprintf("loopzero-build-%s-", spec.BuildID),
 		Entrypoint:         "build-pipeline",
-		OnExit:             "finalize",
+		OnExit:             onExitName,
 		ServiceAccountName: "loopzero-build-sa",
 		Parallelism:        ptr(4),
 		// REVIEW-LEVE-2: Succeeded TTL increased from 1h to 4h for post-deploy debugging.
@@ -272,6 +277,9 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, groups []la
 		}
 	}
 
+	if len(tasks) == 0 {
+		return nil, nil // No cache to save — skip onExit DAG entirely
+	}
 	if err := dag.AddTasks(tasks...); err != nil {
 		return nil, err
 	}
