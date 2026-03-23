@@ -303,9 +303,8 @@ jobs:
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           STACK="${{ needs.resolve.outputs.stack }}"
-          # Refresh: sync state with reality (handles TTL-deleted Jobs, pending ops)
+          # Cancel stale locks only (no refresh — Step 1 state is correct)
           pulumi cancel -s "$STACK" 2>/dev/null || true
-          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
           # Convergence: deployments now have images available
           pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
 
