@@ -25,7 +25,6 @@ export type ComponentName =
   | "mgmtPrometheus"
   | "mgmtGrafana"
   | "mgmtLoopZeroApi"
-  | "mgmtMinio"
   | "mgmtTenantController"
   | "mgmtTls"
   | "buildArgoWorkflows"
@@ -95,7 +94,6 @@ export function buildExecutionState(args: {
       "mgmtPrometheus",
       "mgmtGrafana",
       "mgmtLoopZeroApi",
-      "mgmtMinio",
       "mgmtTenantController",
       "mgmtTls",
       "buildArgoWorkflows",

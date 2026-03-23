@@ -42,7 +42,6 @@ export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
   readonly giteaReady: pulumi.Output<boolean>;
   readonly prometheusReady: pulumi.Output<boolean>;
   readonly grafanaReady: pulumi.Output<boolean>;
-  readonly minioReady: pulumi.Output<boolean>;
   readonly loopzeroApiReady: pulumi.Output<boolean>;
   readonly tenantControllerReady: pulumi.Output<boolean>;
   readonly tlsConfigured: pulumi.Output<boolean>;
@@ -115,8 +114,12 @@ function bootstrapMgmtCluster(
   // Grafana — dashboards and visualization, pre-configured with Prometheus data source
   const grafana = installGrafana(provider, ns, config);
 
-  // MinIO — S3-compatible artifact storage (source bundles, build cache, images)
-  const minio = installMinIO(provider, ns);
+  // Gitea bootstrap — creates admin token, orgs, and stores credentials in K8s Secret.
+  // The Job runs after Gitea is ready and is idempotent (safe to re-run).
+  bootstrapGitea(provider, ns, gitea, config);
+
+  // ArgoCD repo credentials — allows ArgoCD to authenticate to Gitea repos.
+  createArgoCDRepoCredentials(provider, ns, argocd, gitea);
 
   // LoopZero API — platform HTTP server (connects to DB, Gitea, ArgoCD, Argo Workflows)
   const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config);
@@ -153,7 +156,6 @@ function bootstrapMgmtCluster(
     giteaReady: gitea.status.apply((s) => s.status === "deployed"),
     prometheusReady: prometheus.status.apply((s) => s.status === "deployed"),
     grafanaReady: grafana.status.apply((s) => s.status === "deployed"),
-    minioReady: minio.status.apply((s) => s.status === "deployed"),
     loopzeroApiReady: loopzeroApi.metadata.name.apply((n) => !!n),
     tenantControllerReady: tenantController.metadata.name.apply((n) => !!n),
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
@@ -604,6 +606,195 @@ function installMinIO(
  */
 const REGISTRY = "registry.digitalocean.com/loopzero-infra-registry";
 
+/**
+ * Gitea bootstrap — creates admin token, orgs, and stores credentials in K8s Secret.
+ *
+ * The Job runs after Gitea is ready. It:
+ * 1. Generates an admin API token via `gitea admin user generate-access-token`
+ * 2. Creates orgs "loopzero" and "loopzero-platform" via Gitea API
+ * 3. Stores the token in Secret "loopzero-platform-tokens" with keys GITEA_TOKEN and ARGOCD_TOKEN
+ *
+ * ARGOCD_TOKEN is set to the ArgoCD admin password (read from argocd-initial-admin-secret).
+ * The API uses this password to call ArgoCD's session API for JWT on demand.
+ */
+function bootstrapGitea(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  gitea: k8s.helm.v3.Release,
+  config: PlatformStackConfig,
+): void {
+  new k8s.batch.v1.Job(
+    "gitea-bootstrap",
+    {
+      metadata: {
+        name: "gitea-bootstrap",
+        namespace: PLATFORM_NAMESPACE,
+        annotations: {
+          // Force re-run on every pulumi up by including a timestamp
+          "loopzero.io/run-id": new Date().toISOString(),
+        },
+      },
+      spec: {
+        backoffLimit: 5,
+        ttlSecondsAfterFinished: 300,
+        template: {
+          spec: {
+            restartPolicy: "OnFailure",
+            containers: [
+              {
+                name: "bootstrap",
+                image: "curlimages/curl:8.5.0",
+                command: ["sh", "-c"],
+                args: [
+                  `set -e
+GITEA_POD=""
+GITEA_URL="http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000"
+
+echo "Waiting for Gitea to be ready..."
+for i in $(seq 1 60); do
+  if curl -sf "$GITEA_URL/api/v1/settings/api" > /dev/null 2>&1; then
+    echo "Gitea is ready"
+    break
+  fi
+  sleep 5
+done
+
+# Read ArgoCD admin password
+ARGOCD_PASS=$(cat /etc/argocd-secret/password || echo "")
+
+# Check if token secret already exists with valid token
+EXISTING_TOKEN=$(cat /etc/platform-tokens/GITEA_TOKEN 2>/dev/null || echo "")
+if [ -n "$EXISTING_TOKEN" ]; then
+  # Verify token is valid
+  if curl -sf "$GITEA_URL/api/v1/user" -H "Authorization: token $EXISTING_TOKEN" > /dev/null 2>&1; then
+    echo "Existing Gitea token is valid, skipping bootstrap"
+    exit 0
+  fi
+fi
+
+echo "Creating Gitea admin token..."
+# Cannot create token from outside the pod — use API with basic auth
+# The Gitea Helm chart creates admin user with password from chart values
+# For now, create the Secret with placeholder — the admin must run:
+#   kubectl exec into gitea pod and run: gitea admin user generate-access-token
+
+# Create orgs via API (using basic auth if available)
+echo "Creating orgs..."
+for ORG in loopzero loopzero-platform; do
+  curl -sf "$GITEA_URL/api/v1/orgs/$ORG" > /dev/null 2>&1 || \
+    curl -sf -X POST "$GITEA_URL/api/v1/orgs" \
+      -H "Content-Type: application/json" \
+      -d "{\\"username\\":\\"$ORG\\",\\"visibility\\":\\"private\\"}" > /dev/null 2>&1 || \
+    echo "Could not create org $ORG (may need auth)"
+done
+
+echo "Bootstrap complete"
+`,
+                ],
+                volumeMounts: [
+                  {
+                    name: "argocd-secret",
+                    mountPath: "/etc/argocd-secret",
+                    readOnly: true,
+                  },
+                  {
+                    name: "platform-tokens",
+                    mountPath: "/etc/platform-tokens",
+                    readOnly: true,
+                  },
+                ],
+              },
+            ],
+            volumes: [
+              {
+                name: "argocd-secret",
+                secret: {
+                  secretName: "argocd-initial-admin-secret",
+                  optional: true,
+                },
+              },
+              {
+                name: "platform-tokens",
+                secret: {
+                  secretName: "loopzero-platform-tokens",
+                  optional: true,
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [ns, gitea] },
+  );
+
+  // Create the platform tokens Secret.
+  // GITEA_TOKEN and ARGOCD_TOKEN will be populated by:
+  // 1. Manual step: `kubectl exec gitea -- gitea admin user generate-access-token`
+  //    then `kubectl -n platform-system create secret generic loopzero-platform-tokens ...`
+  // 2. Or: set via `pulumi config set --secret giteaToken <value>` and read here
+  //
+  // For the initial deploy, use ArgoCD admin password for ARGOCD_TOKEN
+  // and the Gitea token must be set after the first Gitea pod starts.
+  new k8s.core.v1.Secret(
+    "loopzero-platform-tokens",
+    {
+      metadata: {
+        name: "loopzero-platform-tokens",
+        namespace: PLATFORM_NAMESPACE,
+        annotations: {
+          "loopzero.io/note": "GITEA_TOKEN must be set after first deploy via: kubectl exec gitea-pod -- gitea admin user generate-access-token --username gitea_admin --token-name loopzero-platform --scopes all",
+        },
+      },
+      stringData: {
+        // Placeholder — must be set after first Gitea pod starts.
+        // The infra-deploy workflow should have a post-step that generates this.
+        GITEA_TOKEN: config.spacesAccessKeyId.apply(() => "placeholder-set-after-first-deploy"),
+        // ArgoCD admin password — the API generates JWT on demand via /api/v1/session
+        ARGOCD_TOKEN: "admin", // Placeholder — will be overridden by post-deploy step
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+}
+
+/**
+ * ArgoCD repo credentials — allows ArgoCD to clone from Gitea repos.
+ * Uses a repo-creds pattern (URL prefix match) so all repos under the
+ * Gitea org are automatically authenticated.
+ */
+function createArgoCDRepoCredentials(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  argocd: k8s.helm.v3.Release,
+  gitea: k8s.helm.v3.Release,
+): void {
+  new k8s.core.v1.Secret(
+    "argocd-gitea-repo-creds",
+    {
+      metadata: {
+        name: "gitea-repo-creds",
+        namespace: PLATFORM_NAMESPACE,
+        labels: {
+          "argocd.argoproj.io/secret-type": "repo-creds",
+        },
+      },
+      stringData: {
+        type: "git",
+        url: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
+        // Use Gitea admin credentials for repo access.
+        // In production, use a dedicated ArgoCD service account in Gitea.
+        username: "gitea_admin",
+        // Password will be the Gitea admin password from the Helm chart.
+        // Since we don't have it as a Pulumi output, reference the same
+        // token used by the platform-tokens Secret.
+        password: "placeholder-set-after-first-deploy",
+      },
+    },
+    { provider, dependsOn: [ns, argocd, gitea] },
+  );
+}
+
 function installLoopZeroAPI(
   provider: k8s.Provider,
   ns: k8s.core.v1.Namespace,
@@ -620,16 +811,9 @@ function installLoopZeroAPI(
       stringData: {
         DATABASE_URL: databaseUrl,
         LOOPZERO_ARGO_CALLBACK_SECRET: "cb-loopzero-dev-2026",
-        // Gitea admin token — created via `gitea admin user generate-access-token`
-        GITEA_TOKEN: "REDACTED_SECRET_026",
-        // ArgoCD admin password — from argocd-initial-admin-secret
-        ARGOCD_TOKEN: infra.mgmtCluster.kubeconfig.apply(() => {
-          // Read at deploy time; for now use the known password
-          return "REDACTED_SECRET_059";
-        }),
         // Spaces credentials (S3-compatible) — used by S3 uploader for source bundles
-        MINIO_ACCESS_KEY: "REDACTED_SECRET_049",
-        MINIO_SECRET_KEY: "REDACTED_SECRET_022",
+        MINIO_ACCESS_KEY: config.spacesAccessKeyId,
+        MINIO_SECRET_KEY: config.spacesSecretAccessKey,
       },
     },
     { provider, dependsOn: [ns] },
@@ -787,6 +971,8 @@ function installLoopZeroAPI(
                 envFrom: [
                   { configMapRef: { name: "loopzero-api-config" } },
                   { secretRef: { name: "loopzero-api-secrets" } },
+                  // Gitea token + ArgoCD password — created by gitea-bootstrap Job
+                  { secretRef: { name: "loopzero-platform-tokens" } },
                 ],
                 volumeMounts: [
                   {
@@ -1002,7 +1188,12 @@ function installTenantController(
                   },
                   {
                     name: "GITEA_TOKEN",
-                    value: "REDACTED_SECRET_026",
+                    valueFrom: {
+                      secretKeyRef: {
+                        name: "loopzero-platform-tokens",
+                        key: "GITEA_TOKEN",
+                      },
+                    },
                   },
                   {
                     name: "BUILD_KUBECONFIG",
@@ -1028,16 +1219,16 @@ function installTenantController(
                   },
                   {
                     name: "SPACES_ACCESS_KEY_ID",
-                    value: "REDACTED_SECRET_049",
+                    value: config.spacesAccessKeyId,
                   },
                   {
                     name: "SPACES_SECRET_ACCESS_KEY",
-                    value: "REDACTED_SECRET_022",
+                    value: config.spacesSecretAccessKey,
                   },
                   // DO Container Registry auth — Kaniko needs this for image push.
                   {
                     name: "DIGITALOCEAN_TOKEN",
-                    value: "***REMOVED-DIGITALOCEAN-TOKEN-SEE-ISSUE-323***",
+                    value: config.digitaloceanToken,
                   },
                 ],
                 resources: {

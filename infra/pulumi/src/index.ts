@@ -39,7 +39,6 @@ export const execution = buildExecutionState({
     mgmtGitea: bootstrap.mgmt.giteaReady,
     mgmtPrometheus: bootstrap.mgmt.prometheusReady,
     mgmtGrafana: bootstrap.mgmt.grafanaReady,
-    mgmtMinio: bootstrap.mgmt.minioReady,
     mgmtLoopZeroApi: bootstrap.mgmt.loopzeroApiReady,
     mgmtTenantController: bootstrap.mgmt.tenantControllerReady,
     mgmtTls: bootstrap.mgmt.tlsConfigured,
@@ -100,7 +99,6 @@ export const certManagerReady = bootstrap.mgmt.certManagerReady;
 export const argoCdReady = bootstrap.mgmt.argoCdReady;
 export const prometheusReady = bootstrap.mgmt.prometheusReady;
 export const grafanaReady = bootstrap.mgmt.grafanaReady;
-export const minioReady = bootstrap.mgmt.minioReady;
 export const loopzeroApiReady = bootstrap.mgmt.loopzeroApiReady;
 export const tenantControllerReady = bootstrap.mgmt.tenantControllerReady;
 export const argoWorkflowsReady = bootstrap.build.argoWorkflowsReady;
@@ -125,9 +123,6 @@ export const wiring = pulumi.output({
   },
   prometheus: {
     internalUrl: "http://prometheus-server.platform-system.svc.cluster.local:80",
-  },
-  minio: {
-    internalUrl: "http://minio.platform-system.svc.cluster.local:9000",
   },
   registry: {
     endpoint: infra.registryEndpoint,

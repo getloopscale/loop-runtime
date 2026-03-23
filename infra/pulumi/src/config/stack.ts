@@ -36,6 +36,11 @@ export interface PlatformStackConfig {
 
   // SSH keys for VM access (optional — omit for dev if keys not set up yet)
   readonly sshKeyIds?: string[];
+
+  // Secrets — stored encrypted in Pulumi state via `pulumi config set --secret`
+  readonly spacesAccessKeyId: pulumi.Output<string>;
+  readonly spacesSecretAccessKey: pulumi.Output<string>;
+  readonly digitaloceanToken: pulumi.Output<string>;
 }
 
 /**
@@ -79,5 +84,10 @@ export function loadStackConfig(): PlatformStackConfig {
 
     // SSH keys
     sshKeyIds: config.getObject<string[]>("sshKeyIds") ?? undefined,
+
+    // Secrets — must be set via: pulumi config set --secret <key> <value>
+    spacesAccessKeyId: config.requireSecret("spacesAccessKeyId"),
+    spacesSecretAccessKey: config.requireSecret("spacesSecretAccessKey"),
+    digitaloceanToken: config.requireSecret("digitaloceanToken"),
   };
 }

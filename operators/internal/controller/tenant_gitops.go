@@ -44,7 +44,7 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 
 	for _, env := range tenant.Spec.Environments {
 		appName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
-		destNS := appName
+		destNS := fmt.Sprintf("loopzero-%s-%s", tenant.Name, env.Name)
 		if err := naming.ValidateKubernetesName(destNS); err != nil {
 			return fmt.Errorf("invalid namespace name for env %s: %w", env.Name, err)
 		}
