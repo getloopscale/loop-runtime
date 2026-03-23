@@ -66,11 +66,16 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 				"sourceRepos": toInterfaceSlice(spec.SourceRepos),
 				"destinations": []interface{}{
 					map[string]interface{}{
-						"namespace": spec.TenantID + "-*",
+						"namespace": "*",
 						"server":    "*",
 					},
 				},
-				"clusterResourceWhitelist": []interface{}{},
+				"clusterResourceWhitelist": []interface{}{
+					map[string]interface{}{
+						"group": "",
+						"kind":  "Namespace",
+					},
+				},
 			},
 		},
 	}
