@@ -364,8 +364,11 @@ func buildService(ri RenderInput, app AppManifestInput, port int) k8sService {
 func buildIngressRoute(ri RenderInput, app AppManifestInput, port int) traefikIngressRoute {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
-	hostname := fmt.Sprintf("%s-%s.%s.%s.%s",
-		app.Name, ri.Environment, ri.ProjectID, ri.TenantID, ri.BaseDomain)
+	// Hostname: {app}-{env}--{tenant}.{baseDomain}
+	// Single subdomain level under baseDomain so *.dev.loopzero.example wildcard works.
+	// Double-dash separates tenant from app-env for unambiguous parsing.
+	hostname := fmt.Sprintf("%s-%s--%s.%s",
+		app.Name, ri.Environment, ri.TenantID, ri.BaseDomain)
 
 	return traefikIngressRoute{
 		APIVersion: "traefik.io/v1alpha1",
