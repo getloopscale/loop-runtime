@@ -222,69 +222,71 @@ jobs:
 
           echo "Finalizer cleanup complete"
 
-      # --- Pulumi operation ---
-      # For `up`: runs in 3 phases to handle from-scratch provisioning:
-      #   Phase 1: Create cloud resources (clusters, DB, registry) — deployments may fail (no images yet)
-      #   Phase 2: Build and push container images to the new registry
-      #   Phase 3: Convergence pass — deployments pull images and start
+      # --- Step 1: Pulumi (non-up commands run directly) ---
       - name: "Run: pulumi ${{ needs.resolve.outputs.command }}"
         id: pulumi
+        if: needs.resolve.outputs.command != 'up'
+        uses: pulumi/actions@v6
+        with:
+          command: ${{ needs.resolve.outputs.command }}
+          stack-name: ${{ needs.resolve.outputs.stack }}
+          work-dir: ${{ env.PULUMI_WORKING_DIR }}
+          upsert: true
+
+      # --- Step 1 (up): Infrastructure provisioning ---
+      # Creates clusters, DB, registry, Helm charts. Deployments will fail
+      # (no images yet) — that's OK, Step 3 handles convergence.
+      - name: "Step 1: Provision infrastructure"
+        id: infra
+        if: needs.resolve.outputs.command == 'up'
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        continue-on-error: true
+        run: pulumi up --yes --skip-preview --stack ${{ needs.resolve.outputs.stack }} --non-interactive
+
+      # --- Step 2: Build and push container images ---
+      - name: "Step 2: Build container images"
+        if: needs.resolve.outputs.command == 'up'
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
-          COMMAND="${{ needs.resolve.outputs.command }}"
           STACK="${{ needs.resolve.outputs.stack }}"
-
-          if [ "$COMMAND" != "up" ]; then
-            pulumi $COMMAND --yes --skip-preview --stack "$STACK" --non-interactive 2>&1
-            exit $?
-          fi
-
-          # Phase 1: Create infrastructure (may partially fail if images don't exist yet)
-          echo "::group::Phase 1: Infrastructure provisioning"
-          pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1 || true
-          echo "::endgroup::"
-
-          # Phase 2: Build and push images (registry was created in Phase 1)
-          echo "::group::Phase 2: Build container images"
           REGISTRY_NAME=$(pulumi stack output registryName --stack "$STACK" 2>/dev/null || echo "")
-          if [ -n "$REGISTRY_NAME" ]; then
-            # Install doctl for registry login
-            curl -sL https://github.com/digitalocean/doctl/releases/download/v1.104.0/doctl-1.104.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin 2>/dev/null
 
-            doctl registry login --expiry-seconds 600 2>/dev/null || true
-
-            # Build and push API image
-            cd "$GITHUB_WORKSPACE"
-            REGISTRY="registry.digitalocean.com/$REGISTRY_NAME"
-            docker build -f api/Dockerfile -t "$REGISTRY/loopzero-api:dev" . 2>&1 && \
-              docker push "$REGISTRY/loopzero-api:dev" 2>&1 || echo "::warning::API image build/push failed"
-
-            # Build and push operator image
-            docker build -f operators/Dockerfile -t "$REGISTRY/tenant-controller:dev" . 2>&1 && \
-              docker push "$REGISTRY/tenant-controller:dev" 2>&1 || echo "::warning::Operator image build/push failed"
-
-            # Integrate registry with DOKS clusters
-            MGMT_CLUSTER=$(pulumi stack output mgmtClusterName --stack "$STACK" 2>/dev/null || echo "")
-            BUILD_CLUSTER=$(pulumi stack output buildClusterName --stack "$STACK" 2>/dev/null || echo "")
-            RUNTIME_CLUSTER=$(pulumi stack output runtimeClusterName --stack "$STACK" 2>/dev/null || echo "")
-            for CLUSTER in $MGMT_CLUSTER $BUILD_CLUSTER $RUNTIME_CLUSTER; do
-              [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
-            done
-
-            # Create Spaces bucket for build artifacts (CWTs download source from here)
-            pip install awscli --quiet 2>/dev/null || true
-            aws s3 mb "s3://loopzero-builds" --endpoint-url "https://nyc3.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
-
-            cd "$GITHUB_WORKSPACE/$PULUMI_WORKING_DIR"
-          else
-            echo "::warning::Registry not found, skipping image build"
+          if [ -z "$REGISTRY_NAME" ]; then
+            echo "::error::Registry not created. Step 1 may have failed completely."
+            exit 1
           fi
-          echo "::endgroup::"
 
-          # Phase 3: Convergence pass (deployments now have images)
-          echo "::group::Phase 3: Convergence"
-          pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1
-          echo "::endgroup::"
+          REGISTRY="registry.digitalocean.com/$REGISTRY_NAME"
+
+          # Install doctl
+          curl -sL https://github.com/digitalocean/doctl/releases/download/v1.104.0/doctl-1.104.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin
+          doctl registry login --expiry-seconds 600
+
+          # Build images
+          cd "$GITHUB_WORKSPACE"
+          echo "Building loopzero-api..."
+          docker build -f api/Dockerfile -t "$REGISTRY/loopzero-api:dev" .
+          docker push "$REGISTRY/loopzero-api:dev"
+
+          echo "Building tenant-controller..."
+          docker build -f operators/Dockerfile -t "$REGISTRY/tenant-controller:dev" .
+          docker push "$REGISTRY/tenant-controller:dev"
+
+          # Integrate registry with DOKS clusters
+          cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}"
+          for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
+            CLUSTER=$(pulumi stack output "$KEY" --stack "$STACK" 2>/dev/null || echo "")
+            [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
+          done
+
+          # Create Spaces bucket for build artifacts
+          aws s3 mb "s3://loopzero-builds" --endpoint-url "https://nyc3.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
+
+      # --- Step 3: Convergence — deployments pull images and start ---
+      - name: "Step 3: Deploy applications (convergence)"
+        if: needs.resolve.outputs.command == 'up'
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: pulumi up --yes --skip-preview --stack ${{ needs.resolve.outputs.stack }} --non-interactive
 
       # --- Post-deploy: capture execution state ---
       - name: Capture execution state

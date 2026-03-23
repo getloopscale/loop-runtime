@@ -41,6 +41,7 @@ export interface PlatformStackConfig {
   readonly spacesAccessKeyId: pulumi.Output<string>;
   readonly spacesSecretAccessKey: pulumi.Output<string>;
   readonly digitaloceanToken: pulumi.Output<string>;
+
 }
 
 /**
