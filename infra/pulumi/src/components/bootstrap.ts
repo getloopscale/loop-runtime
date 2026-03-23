@@ -630,7 +630,7 @@ function bootstrapGitea(
         name: "gitea-bootstrap",
         namespace: PLATFORM_NAMESPACE,
         annotations: {
-          // Force re-run on every pulumi up by including a timestamp
+          "pulumi.com/skipAwait": "true",
           "loopzero.io/run-id": new Date().toISOString(),
         },
       },
@@ -900,6 +900,9 @@ function installLoopZeroAPI(
         name: "loopzero-api",
         namespace: PLATFORM_NAMESPACE,
         labels: { app: "loopzero-api" },
+        annotations: {
+          "pulumi.com/skipAwait": "true",
+        },
       },
       spec: {
         replicas: 2,
@@ -1143,6 +1146,9 @@ function installTenantController(
         name: "tenant-controller",
         namespace: PLATFORM_NAMESPACE,
         labels: { app: "tenant-controller" },
+        annotations: {
+          "pulumi.com/skipAwait": "true",
+        },
       },
       spec: {
         replicas: 1,
