@@ -540,17 +540,17 @@ jobs:
             echo "Seeding database..."
             LOOPZERO_DB_URI=$(echo "$DB_URI" | sed 's|/defaultdb?|/loopzero?|; s|/defaultdb$|/loopzero|')
 
-            # Resolve GitHub org owner to seed as platform admin.
-            # The GitHub Actions token (GITHUB_TOKEN) identifies the actor.
-            GH_LOGIN="${{ github.actor }}"
+            # Seed uses a well-known admin user. Real users are added via
+            # auto-registration when they `loopzero login` with a GitHub token.
+            # The triggering_actor is the human who ran the workflow.
+            GH_LOGIN="${{ github.triggering_actor }}"
             GH_USER_ID="github-${GH_LOGIN}"
-            GH_EMAIL="${GH_LOGIN}@users.noreply.github.com"
 
             psql "$LOOPZERO_DB_URI" -v ON_ERROR_STOP=0 <<SEED_SQL
-          -- Bootstrap admin user: ${GH_LOGIN} (idempotent via ON CONFLICT)
+          -- Bootstrap admin user (idempotent via ON CONFLICT)
           INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
-          VALUES ('${GH_USER_ID}', '${GH_EMAIL}', 0, '${GH_LOGIN}', NOW(), NOW())
-          ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, updated_at = NOW();
+          VALUES ('${GH_USER_ID}', '${GH_LOGIN}@users.noreply.github.com', 0, '${GH_LOGIN}', NOW(), NOW())
+          ON CONFLICT (id) DO UPDATE SET updated_at = NOW();
 
           -- Bootstrap tenant (idempotent)
           INSERT INTO tenants (id, display_name, plan, owner_id, created_at, updated_at)
