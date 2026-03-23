@@ -183,7 +183,7 @@ function bootstrapRuntimeCluster(
   const certManager = installCertManager("runtime", provider, ns);
 
   // ClusterIssuer — Let's Encrypt production certs for tenant apps
-  const runtimeClusterIssuer = createClusterIssuer(provider, certManager, config);
+  const runtimeClusterIssuer = createClusterIssuer(provider, certManager, config, "runtime");
 
   // Traefik — ingress for user apps, depends on cert-manager for TLS
   const traefik = installTraefik("runtime", provider, ns, certManager);
@@ -1520,9 +1520,10 @@ function createClusterIssuer(
   provider: k8s.Provider,
   certManager: k8s.helm.v3.Release,
   config: PlatformStackConfig,
+  role: string = "mgmt",
 ): k8s.apiextensions.CustomResource {
   return new k8s.apiextensions.CustomResource(
-    "letsencrypt-prod",
+    `${role}-letsencrypt-prod`,
     {
       apiVersion: "cert-manager.io/v1",
       kind: "ClusterIssuer",
