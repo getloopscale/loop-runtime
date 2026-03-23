@@ -244,6 +244,24 @@ Reviews Argo Workflows and CI/CD pipelines. Helena Duarte is a Principal CI/CD P
 
 **Activates when:** reviewing or designing Argo Workflow definitions, build pipeline changes, or workflow-API callback integration.
 
+### Meeting Review Board
+
+A separate team of 9 Staff/Principal-level review agents + 1 orchestrator for critical technical decisions. These agents **never write code** — they analyze, decide, and produce execution contracts.
+
+**Full documentation:** `docs/meetings/README.md`
+
+**Meeting Orchestrator** coordinates meetings: classifies decisions, convenes specialists, controls protocol, forces productive conflict, synthesizes decisions.
+
+**9 Specialist Agents:** Principal Architect, K8s Controller Engineer, Distributed Systems Engineer, Platform Security Engineer, SRE/Production Engineer, GitOps/Delivery Engineer, API/Domain Architect, DX/Tooling Engineer, Verification Architect.
+
+**Governance:**
+- Security/SRE have absolute veto power
+- Minimum 3 agents per meeting
+- Every decision needs sponsor + challenger + owner
+- Meeting records saved to `docs/meetings/records/`
+
+**Activates when:** `/meeting <topic>` — for critical architecture, security, operability, GitOps, controller, or API boundary decisions.
+
 ---
 
 ## Slash Commands
@@ -262,6 +280,7 @@ Use these in Claude Code to trigger structured workflows:
 | `/state-machine <name>` | Inspect implementation vs spec §5 |
 | `/dogfood <scope>` | Dogfooding audit: test product as real user, generate actionable report |
 | `/pipeline-review <scope>` | Helena Duarte reviews pipelines: determinism, build/release separation, scale, observability, recovery |
+| `/meeting <topic>` | Conduct FAANG-level technical meeting with specialist agents for critical decisions |
 | `/start-loop <prompt>` | Start an iterative self-referential loop (Ralph Wiggum technique) |
 | `/cancel-loop` | Cancel the active loop |
 
