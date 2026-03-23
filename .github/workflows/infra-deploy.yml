@@ -177,10 +177,11 @@ jobs:
       - name: Login to S3 state backend
         run: pulumi login "$PULUMI_BACKEND_URL"
 
-      # --- Pulumi operation (with convergence retry) ---
-      # From clean state, the first `pulumi up` may partially fail if K8s
-      # namespaces from a previous destroy are still terminating. The retry
-      # handles convergence — Pulumi is idempotent, so re-running is safe.
+      # --- Pulumi operation ---
+      # For `up`: runs in 3 phases to handle from-scratch provisioning:
+      #   Phase 1: Create cloud resources (clusters, DB, registry) — deployments may fail (no images yet)
+      #   Phase 2: Build and push container images to the new registry
+      #   Phase 3: Convergence pass — deployments pull images and start
       - name: "Run: pulumi ${{ needs.resolve.outputs.command }}"
         id: pulumi
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
@@ -188,16 +189,53 @@ jobs:
           COMMAND="${{ needs.resolve.outputs.command }}"
           STACK="${{ needs.resolve.outputs.stack }}"
 
-          pulumi $COMMAND --yes --skip-preview --stack "$STACK" --non-interactive 2>&1 || {
-            EXIT=$?
-            if [ "$COMMAND" = "up" ]; then
-              echo "::warning::First pulumi up failed (exit $EXIT). Waiting 60s and retrying for convergence..."
-              sleep 60
-              pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1
-            else
-              exit $EXIT
-            fi
-          }
+          if [ "$COMMAND" != "up" ]; then
+            pulumi $COMMAND --yes --skip-preview --stack "$STACK" --non-interactive 2>&1
+            exit $?
+          fi
+
+          # Phase 1: Create infrastructure (may partially fail if images don't exist yet)
+          echo "::group::Phase 1: Infrastructure provisioning"
+          pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1 || true
+          echo "::endgroup::"
+
+          # Phase 2: Build and push images (registry was created in Phase 1)
+          echo "::group::Phase 2: Build container images"
+          REGISTRY_NAME=$(pulumi stack output registryName --stack "$STACK" 2>/dev/null || echo "")
+          if [ -n "$REGISTRY_NAME" ]; then
+            # Install doctl for registry login
+            curl -sL https://github.com/digitalocean/doctl/releases/download/v1.104.0/doctl-1.104.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin 2>/dev/null
+
+            doctl registry login --expiry-seconds 600 2>/dev/null || true
+
+            # Build and push API image
+            cd "$GITHUB_WORKSPACE"
+            REGISTRY="registry.digitalocean.com/$REGISTRY_NAME"
+            docker build -f api/Dockerfile -t "$REGISTRY/loopzero-api:dev" . 2>&1 && \
+              docker push "$REGISTRY/loopzero-api:dev" 2>&1 || echo "::warning::API image build/push failed"
+
+            # Build and push operator image
+            docker build -f operators/Dockerfile -t "$REGISTRY/tenant-controller:dev" . 2>&1 && \
+              docker push "$REGISTRY/tenant-controller:dev" 2>&1 || echo "::warning::Operator image build/push failed"
+
+            # Integrate registry with DOKS clusters
+            MGMT_CLUSTER=$(pulumi stack output mgmtClusterName --stack "$STACK" 2>/dev/null || echo "")
+            BUILD_CLUSTER=$(pulumi stack output buildClusterName --stack "$STACK" 2>/dev/null || echo "")
+            RUNTIME_CLUSTER=$(pulumi stack output runtimeClusterName --stack "$STACK" 2>/dev/null || echo "")
+            for CLUSTER in $MGMT_CLUSTER $BUILD_CLUSTER $RUNTIME_CLUSTER; do
+              [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
+            done
+
+            cd "$GITHUB_WORKSPACE/$PULUMI_WORKING_DIR"
+          else
+            echo "::warning::Registry not found, skipping image build"
+          fi
+          echo "::endgroup::"
+
+          # Phase 3: Convergence pass (deployments now have images)
+          echo "::group::Phase 3: Convergence"
+          pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1
+          echo "::endgroup::"
 
       # --- Post-deploy: capture execution state ---
       - name: Capture execution state
