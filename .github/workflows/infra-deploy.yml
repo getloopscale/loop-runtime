@@ -177,25 +177,12 @@ jobs:
       - name: Login to S3 state backend
         run: pulumi login "$PULUMI_BACKEND_URL"
 
-      # --- Pulumi operation (with retry for post-destroy convergence) ---
-      # After a destroy+recreate, K8s namespaces may still be terminating.
-      # Running `pulumi up` twice ensures the second pass creates resources
-      # that failed due to namespace termination on the first pass.
+      # --- Pulumi operation ---
       - name: "Run: pulumi ${{ needs.resolve.outputs.command }}"
         id: pulumi
         uses: pulumi/actions@v6
         with:
           command: ${{ needs.resolve.outputs.command }}
-          stack-name: ${{ needs.resolve.outputs.stack }}
-          work-dir: ${{ env.PULUMI_WORKING_DIR }}
-          upsert: true
-        continue-on-error: ${{ needs.resolve.outputs.command == 'up' }}
-
-      - name: "Retry: pulumi up (convergence pass)"
-        if: needs.resolve.outputs.command == 'up' && steps.pulumi.outcome == 'failure'
-        uses: pulumi/actions@v6
-        with:
-          command: up
           stack-name: ${{ needs.resolve.outputs.stack }}
           work-dir: ${{ env.PULUMI_WORKING_DIR }}
           upsert: true
