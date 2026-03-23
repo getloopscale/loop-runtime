@@ -242,7 +242,13 @@ jobs:
           curl -sL https://github.com/digitalocean/doctl/releases/download/v1.104.0/doctl-1.104.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin 2>/dev/null
           doctl auth init --access-token "$DIGITALOCEAN_TOKEN" 2>/dev/null
 
-          # Delete clusters (dangerous=true skips load balancer cleanup)
+          # Delete load balancers (created by Traefik — block VPC deletion)
+          for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/load_balancers" | python3 -c "import sys,json; [print(lb['id']) for lb in json.load(sys.stdin).get('load_balancers',[])]" 2>/dev/null); do
+            curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/load_balancers/$ID" 2>/dev/null
+            echo "  LB $ID deleting"
+          done
+
+          # Delete clusters (dangerous=true skips internal LB cleanup)
           for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/kubernetes/clusters" | python3 -c "import sys,json; [print(c['id']) for c in json.load(sys.stdin)['kubernetes_clusters'] if 'loopzero' in c['name']]" 2>/dev/null); do
             curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/kubernetes/clusters/$ID?dangerous=true" 2>/dev/null
             echo "  Cluster $ID deleting"
@@ -262,12 +268,23 @@ jobs:
           aws s3 rb "s3://loopzero-infra-dev-nyc3-artifacts" --endpoint-url "https://nyc3.digitaloceanspaces.com" --force --region us-east-1 2>/dev/null || true
           aws s3 rb "s3://loopzero-builds" --endpoint-url "https://nyc3.digitaloceanspaces.com" --force --region us-east-1 2>/dev/null || true
 
-          echo "Cloud resources deletion initiated. Waiting 2 min..."
+          echo "Cloud resources deletion initiated. Waiting 2 min for clusters/LBs..."
           sleep 120
 
-          # Delete VPC (after clusters gone)
+          # Delete VPC (after clusters + LBs gone). Retry with wait if members remain.
           for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs" | python3 -c "import sys,json; [print(v['id']) for v in json.load(sys.stdin)['vpcs'] if 'loopzero-infra' in v['name']]" 2>/dev/null); do
-            curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs/$ID" 2>/dev/null
+            RESP=$(curl -s -w "\n%{http_code}" -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs/$ID" 2>/dev/null)
+            HTTP_CODE=$(echo "$RESP" | tail -1)
+            if [ "$HTTP_CODE" = "409" ]; then
+              echo "  VPC $ID has members, waiting 60s and retrying..."
+              sleep 60
+              # Delete any remaining LBs
+              for LBID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/load_balancers" | python3 -c "import sys,json; [print(lb['id']) for lb in json.load(sys.stdin).get('load_balancers',[])]" 2>/dev/null); do
+                curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/load_balancers/$LBID" 2>/dev/null
+              done
+              sleep 30
+              curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs/$ID" 2>/dev/null
+            fi
             echo "  VPC $ID deleting"
           done
 
@@ -323,10 +340,10 @@ jobs:
       # UP COMMAND: 3 steps — infra → images → deploy
       # ═══════════════════════════════════════════════
 
-      # Step 1: Create cloud resources + K8s services.
-      # Deployments of loopzero-api and tenant-controller WILL FAIL if this is
-      # a from-scratch deploy (registry is empty). That's expected — Step 2
-      # builds images, Step 3 converges.
+      # Step 1: Provision ALL cloud resources + K8s services.
+      # All Deployments/Services have pulumi.com/skipAwait annotation,
+      # so Pulumi won't block waiting for pods (images don't exist yet).
+      # This step MUST succeed fully — no || true masking failures.
       - name: "Step 1/3: Provision infrastructure"
         if: needs.resolve.outputs.command == 'up'
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
@@ -336,14 +353,13 @@ jobs:
           pulumi cancel -s "$STACK" 2>/dev/null || true
           # Refresh state to match reality (handles manual deletes, drift)
           pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
-          # Create all resources — skipAwait on Deployments prevents blocking
-          pulumi up --yes --skip-preview --stack "$STACK" --non-interactive || true
+          # Create all resources — skipAwait prevents blocking on ImagePullBackOff
+          pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
 
       # Step 2: Build and push container images.
-      # Runs ALWAYS (even if Step 1 failed) because Step 1 creates the
-      # registry before attempting deployments.
+      # Only runs if Step 1 succeeded (all infra provisioned, registry exists).
       - name: "Step 2/3: Build container images"
-        if: always() && needs.resolve.outputs.command == 'up'
+        if: success() && needs.resolve.outputs.command == 'up'
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           STACK="${{ needs.resolve.outputs.stack }}"
@@ -368,13 +384,15 @@ jobs:
             [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
           done
 
-          # Create Spaces bucket for build artifacts
+          # Create loopzero-builds Spaces bucket (for CWT source bundles — not managed by Pulumi)
           aws s3 mb "s3://loopzero-builds" --endpoint-url "https://nyc3.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
+          # NOTE: loopzero-infra-dev-nyc3-artifacts is created by Pulumi in Step 1. Don't create it here.
 
       # Step 3: Convergence — deployments now have images available.
-      # Runs ALWAYS because Step 2 may have built images that fix Step 1 failures.
+      # Only runs if Steps 1+2 succeeded. Re-runs pulumi up to update
+      # Deployments that were skipAwaited in Step 1 (now images exist).
       - name: "Step 3/3: Deploy applications"
-        if: always() && needs.resolve.outputs.command == 'up'
+        if: success() && needs.resolve.outputs.command == 'up'
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           STACK="${{ needs.resolve.outputs.stack }}"
