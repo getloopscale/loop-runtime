@@ -211,31 +211,11 @@ type traefikRouteService struct {
 	Port int    `json:"port"`
 }
 
-// traefikTLS configures TLS on IngressRoute. When SecretName is set, Traefik
-// reads the cert from that K8s Secret (issued by cert-manager).
-type traefikTLS struct {
-	SecretName string `json:"secretName,omitempty"`
-}
-
-// certManagerCertificate generates a cert-manager Certificate CR that
-// requests a Let's Encrypt cert for the given hostname.
-type certManagerCertificate struct {
-	APIVersion string      `json:"apiVersion"`
-	Kind       string      `json:"kind"`
-	Metadata   k8sMetadata `json:"metadata"`
-	Spec       certSpec    `json:"spec"`
-}
-
-type certSpec struct {
-	SecretName string    `json:"secretName"`
-	IssuerRef  issuerRef `json:"issuerRef"`
-	DNSNames   []string  `json:"dnsNames"`
-}
-
-type issuerRef struct {
-	Name string `json:"name"`
-	Kind string `json:"kind"`
-}
+// traefikTLS configures TLS on IngressRoute.
+// LEVE-2 fix: Uses empty struct (tls: {}) to reference the default TLSStore.
+// cert-manager + ClusterIssuer handle certificate issuance automatically via
+// the default TLSStore — no per-IngressRoute certResolver or secretName needed.
+type traefikTLS struct{}
 
 // --- Internal render functions ---
 
@@ -385,36 +365,15 @@ func buildService(ri RenderInput, app AppManifestInput, port int) k8sService {
 	}
 }
 
-// buildIngressResources generates a Certificate CR + IngressRoute for TLS.
-// Returns both resources as marshaled YAML strings.
+// buildIngressResources generates an IngressRoute for TLS.
+// LEVE-2 fix: Uses tls: {} (default TLSStore) — no Certificate CR needed.
+// cert-manager handles certificate issuance via the default TLSStore and ClusterIssuer.
+// Hostname format: {app}-{env}.{project}.{tenant}.{baseDomain}
 func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []string {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
-	// Hostname: {app}-{env}--{tenant}.{baseDomain}
-	// Single subdomain level under baseDomain so *.dev.loopzero.example wildcard works.
-	// Double-dash separates tenant from app-env for unambiguous parsing.
-	hostname := fmt.Sprintf("%s-%s--%s.%s",
-		app.Name, ri.Environment, ri.TenantID, ri.BaseDomain)
-	secretName := fmt.Sprintf("tls-%s", app.Name)
-
-	// Certificate CR — cert-manager issues a Let's Encrypt cert
-	cert := certManagerCertificate{
-		APIVersion: "cert-manager.io/v1",
-		Kind:       "Certificate",
-		Metadata: k8sMetadata{
-			Name:      fmt.Sprintf("tls-%s", app.Name),
-			Namespace: ns,
-			Labels:    labels,
-		},
-		Spec: certSpec{
-			SecretName: secretName,
-			IssuerRef: issuerRef{
-				Name: "letsencrypt-prod",
-				Kind: "ClusterIssuer",
-			},
-			DNSNames: []string{hostname},
-		},
-	}
+	hostname := fmt.Sprintf("%s-%s.%s.%s.%s",
+		app.Name, ri.Environment, ri.ProjectID, ri.TenantID, ri.BaseDomain)
 
 	ingress := traefikIngressRoute{
 		APIVersion: "traefik.io/v1alpha1",
@@ -433,11 +392,11 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 					Services: []traefikRouteService{{Name: app.Name, Port: port}},
 				},
 			},
-			TLS: &traefikTLS{SecretName: secretName},
+			TLS: &traefikTLS{},
 		},
 	}
 
-	return []string{marshalResource(cert), marshalResource(ingress)}
+	return []string{marshalResource(ingress)}
 }
 
 // --- Helpers ---

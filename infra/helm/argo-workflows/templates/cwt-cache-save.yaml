@@ -106,7 +106,7 @@ spec:
             cpu: "500m"
             memory: "256Mi"
         securityContext:
-          runAsNonRoot: false
-          runAsUser: 0
+          runAsNonRoot: true
+          runAsUser: 1000
       # Cache save is best-effort — prevent indefinite hangs if MinIO is slow
       activeDeadlineSeconds: 120

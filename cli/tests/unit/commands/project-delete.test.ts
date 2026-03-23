@@ -1,4 +1,4 @@
-import { ProjectDeleteCommand, ProjectDeleteDeps, ProjectDeleteOptions } from '../../../src/commands/project-delete';
+import { ProjectDeleteCommand, ProjectDeleteDeps } from '../../../src/commands/project-delete';
 
 describe('ProjectDeleteCommand', () => {
   let output: string[];

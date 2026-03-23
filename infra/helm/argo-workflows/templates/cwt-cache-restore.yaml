@@ -97,7 +97,7 @@ spec:
             cpu: "500m"
             memory: "256Mi"
         securityContext:
-          runAsNonRoot: false
-          runAsUser: 0
+          runAsNonRoot: true
+          runAsUser: 1000
       # Cache restore is best-effort — failure should not block the build
       activeDeadlineSeconds: 120

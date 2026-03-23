@@ -281,7 +281,7 @@ func TestRender_EnvVarsSortedByKey(t *testing.T) {
 	if alphaIdx == -1 || middleIdx == -1 || zebraIdx == -1 {
 		t.Fatal("expected all env vars to be present in output")
 	}
-	if !(alphaIdx < middleIdx && middleIdx < zebraIdx) {
+	if alphaIdx >= middleIdx || middleIdx >= zebraIdx {
 		t.Error("env vars should be sorted alphabetically by key")
 	}
 }

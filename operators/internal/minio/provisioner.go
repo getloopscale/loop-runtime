@@ -123,7 +123,7 @@ func (p *AdminProvisioner) ensureUser(ctx context.Context, accessKey, secretKey 
 	if err != nil {
 		return fmt.Errorf("add-user request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -180,7 +180,7 @@ func (p *AdminProvisioner) ensurePolicy(ctx context.Context, policyName, tenantI
 	if err != nil {
 		return fmt.Errorf("add-policy request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -204,7 +204,7 @@ func (p *AdminProvisioner) attachPolicy(ctx context.Context, policyName, accessK
 	if err != nil {
 		return fmt.Errorf("set-policy request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)

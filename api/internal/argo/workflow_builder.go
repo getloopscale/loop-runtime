@@ -161,20 +161,12 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			"loopzero.io/language":    primaryLanguage,
 		},
 		Templates: templates,
-		// Workspace shared across all DAG steps via PVC (VolumeClaimTemplate).
-		// EmptyDir doesn't persist between pods — each DAG task is a separate pod.
-		// Argo dynamically provisions this PVC per-workflow and cleans it on completion.
-		// Docker registry credentials for Kaniko image push.
-		// Secret "docker-config" must exist in each build namespace with key "config.json".
+		// BLOCKER-2 fix: Workspace volume uses emptyDir instead of PVC.
+		// PVCs leak storage if not properly cleaned up. emptyDir is automatically
+		// cleaned when the pod terminates. Argo Workflows mounts emptyDir volumes
+		// across all containers in the same pod.
 		Volumes: []forge.VolumeBuilder{
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "docker-config"}, SecretName: "docker-config"},
-		},
-		VolumeClaimTemplates: []forge.PVCVolume{
-			{
-				BaseVolume:  forge.BaseVolume{Name: "workspace"},
-				Size:        "5Gi",
-				AccessModes: []forge.AccessMode{forge.ReadWriteOnce},
-			},
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace"}},
 		},
 	}
 
@@ -202,7 +194,6 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 	}
 
 	// Per-language build pipeline steps
-	var allDockerfileTasks []string
 	for _, g := range groups {
 		suffix := g.Suffix
 
@@ -234,7 +225,6 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 
 		dockerfileName := "generate-dockerfile" + suffix
 		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName}))
-		allDockerfileTasks = append(allDockerfileTasks, dockerfileName)
 	}
 
 	// Per-app Kaniko — depends on its language group's dockerfile step

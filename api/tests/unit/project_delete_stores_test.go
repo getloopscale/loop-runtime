@@ -342,10 +342,7 @@ type fakeMultiTargetRows struct {
 }
 
 func (r *fakeMultiTargetRows) Next() bool {
-	if r.index < len(r.targets) {
-		return true
-	}
-	return false
+	return r.index < len(r.targets)
 }
 
 func (r *fakeMultiTargetRows) Scan(dest ...any) error {

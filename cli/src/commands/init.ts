@@ -54,9 +54,6 @@ interface DetectedInfo {
   apps: DetectedAppInfo[];
 }
 
-// RFC 1123 label: lowercase, starts with letter, letters/digits/hyphens, max 63 chars
-const PROJECT_NAME_REGEX = /^[a-z][a-z0-9-]{0,62}$/;
-
 // Frameworks that are frontends — they serve static assets, not APIs
 const FRONTEND_FRAMEWORKS = ['nextjs', 'vite', 'remix'];
 

@@ -278,7 +278,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -287,7 +287,7 @@ jobs:
           format: table
           skip-dirs: infra/tests/e2e/fixtures,examples
       - name: Run Trivy IaC scanner
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: config
           scan-ref: .
@@ -306,7 +306,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Scan Dockerfile for misconfigurations
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: config
           scan-ref: ${{ matrix.component }}

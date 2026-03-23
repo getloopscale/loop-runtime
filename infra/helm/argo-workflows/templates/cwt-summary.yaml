@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: loopzero-summary
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: loopzero
+spec:
+  templates:
+    - name: emit-summary
+      inputs:
+        parameters:
+          - name: tenant-id
+            description: "Tenant identifier"
+          - name: project-id
+            description: "Project identifier"
+          - name: build-id
+            description: "Build identifier"
+          - name: commit-sha
+            description: "Source commit SHA"
+          - name: image-digest
+            description: "Built image digest (sha256:...)"
+            default: ""
+          - name: correlation-id
+            description: "Correlation ID for distributed tracing"
+            default: ""
+      container:
+        image: alpine:3.21
+        env:
+          - name: HOME
+            value: /tmp
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+
+            # Emit build summary as structured JSON to stdout.
+            # This is captured by Argo Workflows as the step output
+            # and used by the API callback for artifact lineage.
+            cat <<SUMMARY
+            {
+              "tenant_id": "{{ "{{inputs.parameters.tenant-id}}" }}",
+              "project_id": "{{ "{{inputs.parameters.project-id}}" }}",
+              "build_id": "{{ "{{inputs.parameters.build-id}}" }}",
+              "commit_sha": "{{ "{{inputs.parameters.commit-sha}}" }}",
+              "image_digest": "{{ "{{inputs.parameters.image-digest}}" }}",
+              "correlation_id": "{{ "{{inputs.parameters.correlation-id}}" }}",
+              "completed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            }
+            SUMMARY
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+      activeDeadlineSeconds: 30

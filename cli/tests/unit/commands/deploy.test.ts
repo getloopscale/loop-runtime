@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import { DeployCommand, DeployDeps } from '../../../src/commands/deploy';
 import { ApiError } from '../../../src/api/client';
 
@@ -2021,7 +2022,6 @@ describe('DeployCommand', () => {
 
     it('should suppress lockfile warning when lockfile exists in app path (F-04)', async () => {
       // Mock: root has no lockfile, but app path has one
-      const fs = require('fs');
       const originalExistsSync = fs.existsSync;
       const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockImplementation((...args: unknown[]) => {
         const filePath = String(args[0]);

@@ -201,10 +201,15 @@ func TestWorkflowBuilder_Build_CustomStrategy_NoSaveCache(t *testing.T) {
 		t.Fatalf("Build() error: %v", err)
 	}
 
-	dag := findDAG(t, wf, "finalize")
-	if task := findTask(dag, "save-cache"); task != nil {
-		// Custom strategy has no cache key/dirs, so save-cache should be skipped
-		t.Error("Custom strategy should NOT include save-cache")
+	// Custom strategy has no cache key/dirs, so finalize DAG should not exist at all.
+	// When there are no cache tasks, buildOnExitDAG returns nil and no finalize DAG is added.
+	for _, tmpl := range wf.Templates {
+		if dag, ok := tmpl.(*forge.DAG); ok && dag.Name == "finalize" {
+			t.Error("Custom strategy should NOT have a finalize DAG — no cache to save")
+		}
+	}
+	if wf.OnExit != "" {
+		t.Errorf("OnExit = %q, want empty string for custom strategy (no cache)", wf.OnExit)
 	}
 }
 
