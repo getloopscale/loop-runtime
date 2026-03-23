@@ -15,7 +15,7 @@ import (
 // reconcileRBAC ensures RBAC resources (ServiceAccount, Role, RoleBinding) exist per namespace.
 func (r *TenantReconciler) reconcileRBAC(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	for _, env := range tenant.Spec.Environments {
-		nsName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
+		nsName := fmt.Sprintf("loopzero-%s-%s", tenant.Name, env.Name)
 
 		// ServiceAccount
 		sa := &corev1.ServiceAccount{
