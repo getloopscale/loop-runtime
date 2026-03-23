@@ -16,7 +16,7 @@ import (
 // reconcileNetworkPolicies ensures deny-all + allow-ingress + allow-egress policies exist per namespace.
 func (r *TenantReconciler) reconcileNetworkPolicies(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	for _, env := range tenant.Spec.Environments {
-		nsName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
+		nsName := fmt.Sprintf("loopzero-%s-%s", tenant.Name, env.Name)
 
 		if err := r.reconcileDenyAllPolicy(ctx, nsName); err != nil {
 			return err
