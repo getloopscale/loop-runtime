@@ -230,6 +230,7 @@ function installCertManager(
   return new k8s.helm.v3.Release(
     `${role}-cert-manager`,
     {
+      name: "mgmt-cert-manager",
       chart: "cert-manager",
       version: HELM_VERSIONS.certManager,
       repositoryOpts: {
@@ -262,6 +263,7 @@ function installArgoCD(
   return new k8s.helm.v3.Release(
     "argocd",
     {
+      name: "argocd",
       chart: "argo-cd",
       version: HELM_VERSIONS.argocd,
       repositoryOpts: {
@@ -326,6 +328,7 @@ function installTraefik(
   return new k8s.helm.v3.Release(
     `${role}-traefik`,
     {
+      name: "mgmt-traefik",
       chart: "traefik",
       version: HELM_VERSIONS.traefik,
       repositoryOpts: {
@@ -388,6 +391,7 @@ function installGitea(
   return new k8s.helm.v3.Release(
     "gitea",
     {
+      name: "gitea",
       chart: "gitea",
       version: HELM_VERSIONS.gitea,
       repositoryOpts: {
@@ -479,6 +483,7 @@ function bootstrapBuildCluster(
   const argoWorkflows = new k8s.helm.v3.Release(
     "argo-workflows",
     {
+      name: "argo-workflows",
       chart: "argo-workflows",
       version: HELM_VERSIONS.argoWorkflows,
       repositoryOpts: {
@@ -526,6 +531,7 @@ function bootstrapBuildCluster(
   const cwts = new k8s.helm.v3.Release(
     "loopzero-build-cwts",
     {
+      name: "loopzero-build-cwts",
       chart: path.resolve(__dirname, "../../../../infra/helm/argo-workflows"),
       namespace: "argo",
       createNamespace: false,
@@ -557,6 +563,7 @@ function installMinIO(
   return new k8s.helm.v3.Release(
     "minio",
     {
+      name: "minio",
       chart: "minio",
       version: HELM_VERSIONS.minio,
       repositoryOpts: {
@@ -1322,6 +1329,7 @@ function installPrometheus(
   return new k8s.helm.v3.Release(
     "prometheus",
     {
+      name: "prometheus",
       chart: "prometheus",
       version: HELM_VERSIONS.prometheus,
       repositoryOpts: {
@@ -1368,6 +1376,7 @@ function installGrafana(
   return new k8s.helm.v3.Release(
     "grafana",
     {
+      name: "grafana",
       chart: "grafana",
       version: HELM_VERSIONS.grafana,
       repositoryOpts: {
