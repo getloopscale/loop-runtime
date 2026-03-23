@@ -541,13 +541,35 @@ jobs:
             --from-literal=ARGOCD_TOKEN="$ARGOCD_JWT" \
             --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
 
+          # ArgoCD repo credentials: use type=repository (not repo-creds).
+          # repo-creds are credential TEMPLATES that ArgoCD doesn't reliably
+          # reload on secret change (known issue #7673). Type=repository is
+          # an explicit repo registration that ArgoCD watches properly.
+          GITEA_BASE="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000"
+
+          # Credential template (fallback for any loopzero/* repo)
           kubectl -n $NAMESPACE create secret generic gitea-repo-creds \
             --from-literal=type=git \
-            --from-literal=url="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000" \
+            --from-literal=url="$GITEA_BASE" \
             --from-literal=username=gitea_admin \
             --from-literal=password="$GITEA_TOKEN" \
             --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
           kubectl -n $NAMESPACE label secret gitea-repo-creds argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
+
+          # Explicit repo registration for the bootstrap tenant gitops repo.
+          # ArgoCD reliably detects type=repository secrets (unlike repo-creds).
+          kubectl -n $NAMESPACE create secret generic argocd-repo-tn-loopzero-gitops \
+            --from-literal=type=git \
+            --from-literal=url="${GITEA_BASE}/loopzero/tn-loopzero-gitops.git" \
+            --from-literal=username=gitea_admin \
+            --from-literal=password="$GITEA_TOKEN" \
+            --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
+          kubectl -n $NAMESPACE label secret argocd-repo-tn-loopzero-gitops argocd.argoproj.io/secret-type=repository --overwrite 2>/dev/null
+
+          # Restart ArgoCD repo-server to pick up credential changes immediately.
+          # Without this, ArgoCD caches old credentials and returns "authentication required".
+          kubectl -n $NAMESPACE rollout restart deployment argocd-repo-server 2>/dev/null || true
+          kubectl -n $NAMESPACE rollout restart statefulset argocd-application-controller 2>/dev/null || true
 
           # ═══════════════════════════════════════
           # 4. SEED DATABASE (idempotent)
