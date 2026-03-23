@@ -142,7 +142,7 @@ jobs:
   deploy:
     name: "${{ needs.resolve.outputs.command }} → ${{ needs.resolve.outputs.stack }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     needs: [resolve, validate]
     environment: ${{ needs.resolve.outputs.environment }}
 
@@ -176,6 +176,51 @@ jobs:
 
       - name: Login to S3 state backend
         run: pulumi login "$PULUMI_BACKEND_URL"
+
+      # --- Pre-destroy: remove K8s finalizers that block deletion ---
+      # CRD finalizers, ArgoCD app finalizers, and Helm release finalizers
+      # cause deadlocks during destroy (controllers being deleted can't process
+      # their own finalizers). Removing them first allows clean deletion.
+      - name: Pre-destroy cleanup (remove finalizers)
+        if: needs.resolve.outputs.command == 'destroy'
+        continue-on-error: true
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          set +e
+          STACK="${{ needs.resolve.outputs.stack }}"
+          KUBECONFIG_DATA=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
+          if [ -z "$KUBECONFIG_DATA" ]; then
+            echo "No kubeconfig found — skipping finalizer cleanup"
+            exit 0
+          fi
+
+          echo "$KUBECONFIG_DATA" > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+
+          echo "Removing ArgoCD application finalizers..."
+          kubectl -n platform-system get applications -o name 2>/dev/null | xargs -I{} kubectl -n platform-system patch {} --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+
+          echo "Removing CRD finalizers..."
+          kubectl get crd -o name 2>/dev/null | grep loopzero.io | xargs -I{} kubectl patch {} --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+
+          echo "Removing tenant finalizers..."
+          kubectl -n platform-system get tenants -o name 2>/dev/null | xargs -I{} kubectl -n platform-system patch {} --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+
+          echo "Force-deleting stuck namespaces..."
+          for NS in platform-system argo; do
+            kubectl delete ns "$NS" --force --grace-period=0 2>/dev/null || true
+          done
+
+          # Also clean build and runtime clusters
+          for CLUSTER_KEY in buildKubeconfig runtimeKubeconfig; do
+            KC=$(pulumi stack output "$CLUSTER_KEY" --show-secrets --stack "$STACK" 2>/dev/null)
+            if [ -n "$KC" ]; then
+              echo "$KC" > /tmp/kc-remote
+              kubectl --kubeconfig=/tmp/kc-remote get ns -o name 2>/dev/null | grep -E "loopzero-|build-|argo" | xargs -I{} kubectl --kubeconfig=/tmp/kc-remote delete {} --force --grace-period=0 2>/dev/null || true
+            fi
+          done
+
+          echo "Finalizer cleanup complete"
 
       # --- Pulumi operation ---
       # For `up`: runs in 3 phases to handle from-scratch provisioning:
@@ -225,6 +270,10 @@ jobs:
             for CLUSTER in $MGMT_CLUSTER $BUILD_CLUSTER $RUNTIME_CLUSTER; do
               [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
             done
+
+            # Create Spaces bucket for build artifacts (CWTs download source from here)
+            pip install awscli --quiet 2>/dev/null || true
+            aws s3 mb "s3://loopzero-builds" --endpoint-url "https://nyc3.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
 
             cd "$GITHUB_WORKSPACE/$PULUMI_WORKING_DIR"
           else
