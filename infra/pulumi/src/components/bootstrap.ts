@@ -236,7 +236,7 @@ function installCertManager(
   return new k8s.helm.v3.Release(
     `${role}-cert-manager`,
     {
-      name: `${role}-cert-manager`,
+      name: "mgmt-cert-manager",
       chart: "cert-manager",
       version: HELM_VERSIONS.certManager,
       repositoryOpts: {
@@ -334,7 +334,7 @@ function installTraefik(
   return new k8s.helm.v3.Release(
     `${role}-traefik`,
     {
-      name: `${role}-traefik`,
+      name: "mgmt-traefik",
       chart: "traefik",
       version: HELM_VERSIONS.traefik,
       repositoryOpts: {
