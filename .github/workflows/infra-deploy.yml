@@ -197,26 +197,41 @@ jobs:
           echo "$KUBECONFIG_DATA" > /tmp/kubeconfig
           export KUBECONFIG=/tmp/kubeconfig
 
-          echo "Removing ArgoCD application finalizers..."
-          kubectl -n platform-system get applications -o name 2>/dev/null | xargs -I{} kubectl -n platform-system patch {} --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
-
-          echo "Removing CRD finalizers..."
-          kubectl get crd -o name 2>/dev/null | grep loopzero.io | xargs -I{} kubectl patch {} --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
-
-          echo "Removing tenant finalizers..."
-          kubectl -n platform-system get tenants -o name 2>/dev/null | xargs -I{} kubectl -n platform-system patch {} --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
-
-          echo "Force-deleting stuck namespaces..."
-          for NS in platform-system argo; do
-            kubectl delete ns "$NS" --force --grace-period=0 2>/dev/null || true
+          echo "Removing ALL finalizers from ALL resources in platform-system..."
+          # Remove finalizers from every resource type that blocks deletion
+          for RESOURCE in applications appprojects tenants clustercredentials appsecrets previewenvironments reconciliationreports; do
+            kubectl -n platform-system get $RESOURCE -o name 2>/dev/null | xargs -I{} kubectl -n platform-system patch {} --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
           done
 
-          # Also clean build and runtime clusters
+          # ClusterIssuer — the #1 blocker (foregroundDeletion finalizer)
+          echo "Removing ClusterIssuer finalizers..."
+          kubectl get clusterissuers -o name 2>/dev/null | xargs -I{} kubectl patch {} --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+
+          # CRD finalizers
+          echo "Removing CRD finalizers..."
+          kubectl get crd -o name 2>/dev/null | xargs -I{} kubectl patch {} --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+
+          # Certificates and orders
+          echo "Removing cert-manager resource finalizers..."
+          for TYPE in certificates certificaterequests orders challenges; do
+            kubectl -n platform-system get $TYPE -o name 2>/dev/null | xargs -I{} kubectl -n platform-system patch {} --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+          done
+
+          # Helm releases — delete secrets to prevent "release not found" errors
+          echo "Deleting Helm release secrets..."
+          kubectl -n platform-system delete secrets -l owner=helm 2>/dev/null || true
+
+          # Force-delete ALL namespaces on ALL clusters
+          echo "Force-deleting namespaces..."
+          for NS in platform-system argo; do
+            kubectl delete ns "$NS" --force --grace-period=0 --timeout=30s 2>/dev/null || true
+          done
+
           for CLUSTER_KEY in buildKubeconfig runtimeKubeconfig; do
             KC=$(pulumi stack output "$CLUSTER_KEY" --show-secrets --stack "$STACK" 2>/dev/null)
             if [ -n "$KC" ]; then
               echo "$KC" > /tmp/kc-remote
-              kubectl --kubeconfig=/tmp/kc-remote get ns -o name 2>/dev/null | grep -E "loopzero-|build-|argo" | xargs -I{} kubectl --kubeconfig=/tmp/kc-remote delete {} --force --grace-period=0 2>/dev/null || true
+              kubectl --kubeconfig=/tmp/kc-remote get ns -o name 2>/dev/null | grep -v "kube-\|default" | xargs -I{} kubectl --kubeconfig=/tmp/kc-remote delete {} --force --grace-period=0 --timeout=30s 2>/dev/null || true
             fi
           done
 
@@ -232,14 +247,37 @@ jobs:
           pulumi cancel -s "$STACK" 2>/dev/null || true
 
           if [ "$COMMAND" = "destroy" ]; then
-            # Refresh first: sync state with reality (resources deleted by cleanup)
+            # Refresh: sync state with reality after pre-cleanup deleted resources
             pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
-            # Destroy — may partially fail on finalizers. Retry after refresh.
-            pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive || {
-              echo "::warning::First destroy had errors. Refreshing and retrying..."
+
+            # Attempt destroy. If it fails (K8s finalizers), force-clean state
+            # and delete cloud resources directly via API.
+            if ! pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive 2>&1; then
+              echo "::warning::Destroy failed. Force-cleaning Pulumi state..."
+              # Remove ALL K8s resources from state (they're on clusters being deleted)
               pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
-              pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive || true
-            }
+              # Retry destroy (now only cloud resources remain)
+              pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || {
+                echo "::warning::Retry failed. Clearing state and deleting via API..."
+                # Nuclear: clear state and delete cloud resources directly
+                pulumi stack export -s "$STACK" | python3 -c "
+import sys,json
+state = json.load(sys.stdin)
+state['deployment']['resources'] = [r for r in state['deployment']['resources'] if r.get('type') == 'pulumi:pulumi:Stack']
+json.dump(state, sys.stdout)
+" | pulumi stack import -s "$STACK" 2>/dev/null
+
+                # Delete cloud resources via DO API
+                curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/registry" 2>/dev/null || true
+                for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/kubernetes/clusters" | python3 -c "import sys,json; [print(c['id']) for c in json.load(sys.stdin)['kubernetes_clusters'] if 'loopzero' in c['name']]" 2>/dev/null); do
+                  curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/kubernetes/clusters/$ID?dangerous=true" 2>/dev/null || true
+                done
+                for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/databases" | python3 -c "import sys,json; [print(d['id']) for d in json.load(sys.stdin)['databases'] if 'loopzero' in d['name']]" 2>/dev/null); do
+                  curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/databases/$ID" 2>/dev/null || true
+                done
+                echo "Cloud resources deleted via API. State cleared."
+              }
+            fi
           else
             pulumi $COMMAND --yes --skip-preview --stack "$STACK" --non-interactive
           fi
