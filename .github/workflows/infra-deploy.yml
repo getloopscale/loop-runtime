@@ -227,9 +227,22 @@ jobs:
         if: needs.resolve.outputs.command != 'up'
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
-          # Cancel stale locks from previous failed runs
-          pulumi cancel -s ${{ needs.resolve.outputs.stack }} 2>/dev/null || true
-          pulumi ${{ needs.resolve.outputs.command }} --yes --skip-preview --stack ${{ needs.resolve.outputs.stack }} --non-interactive
+          STACK="${{ needs.resolve.outputs.stack }}"
+          COMMAND="${{ needs.resolve.outputs.command }}"
+          pulumi cancel -s "$STACK" 2>/dev/null || true
+
+          if [ "$COMMAND" = "destroy" ]; then
+            # Refresh first: sync state with reality (resources deleted by cleanup)
+            pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
+            # Destroy — may partially fail on finalizers. Retry after refresh.
+            pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive || {
+              echo "::warning::First destroy had errors. Refreshing and retrying..."
+              pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
+              pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive || true
+            }
+          else
+            pulumi $COMMAND --yes --skip-preview --stack "$STACK" --non-interactive
+          fi
 
       # ═══════════════════════════════════════════════
       # UP COMMAND: 3 steps — infra → images → deploy
