@@ -138,8 +138,12 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 					"namespace": spec.DestinationNS,
 				},
 				"syncPolicy": map[string]interface{}{
+					"automated": map[string]interface{}{
+						"selfHeal": true,
+						"prune":    true,
+					},
 					"syncOptions": []interface{}{
-						"CreateNamespace=false",
+						"CreateNamespace=true",
 					},
 				},
 			},
