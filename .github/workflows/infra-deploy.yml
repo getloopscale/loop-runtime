@@ -396,8 +396,10 @@ jobs:
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           STACK="${{ needs.resolve.outputs.stack }}"
-          # NO cancel/refresh here — Step 1 state must be preserved.
-          # Just re-run up to converge resources that failed in Step 1.
+          # Refresh: sync state with reality. Completed Jobs may have been
+          # garbage-collected by K8s between Step 1 and now.
+          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
+          # Converge: update Deployments (now images exist), recreate GC'd Jobs
           pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
 
       # --- Post-deploy: capture execution state ---
