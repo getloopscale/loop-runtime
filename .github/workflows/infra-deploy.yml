@@ -264,9 +264,13 @@ jobs:
           curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/registry" 2>/dev/null
           echo "  Registry deleting"
 
-          # Delete Spaces bucket
-          aws s3 rb "s3://loopzero-infra-dev-nyc3-artifacts" --endpoint-url "https://nyc3.digitaloceanspaces.com" --force --region us-east-1 2>/dev/null || true
-          aws s3 rb "s3://loopzero-builds" --endpoint-url "https://nyc3.digitaloceanspaces.com" --force --region us-east-1 2>/dev/null || true
+          # Delete ALL loopzero Spaces buckets (any region)
+          for REGION in nyc3 sfo3 ams3 fra1 sgp1 lon1 sfo2 syd1; do
+            for BUCKET in $(AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" aws s3 ls --endpoint-url "https://${REGION}.digitaloceanspaces.com" --region us-east-1 2>/dev/null | awk '{print $3}' | grep -E "^loopzero-" | grep -v pulumi-state); do
+              AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" aws s3 rb "s3://${BUCKET}" --endpoint-url "https://${REGION}.digitaloceanspaces.com" --force --region us-east-1 2>/dev/null || true
+              echo "  Bucket ${BUCKET} deleted from ${REGION}"
+            done
+          done
 
           echo "Cloud resources deletion initiated. Waiting 2 min for clusters/LBs..."
           sleep 120
@@ -385,8 +389,8 @@ jobs:
           done
 
           # Create loopzero-builds Spaces bucket (for CWT source bundles — not managed by Pulumi)
-          aws s3 mb "s3://loopzero-builds" --endpoint-url "https://nyc3.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
-          # NOTE: loopzero-infra-dev-nyc3-artifacts is created by Pulumi in Step 1. Don't create it here.
+          INFRA_REGION=$(pulumi stack output region --stack "$STACK" 2>/dev/null || echo "sfo3")
+          aws s3 mb "s3://loopzero-builds" --endpoint-url "https://${INFRA_REGION}.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
 
       # Step 3: Convergence — deployments now have images available.
       # Only runs if Steps 1+2 succeeded. Re-runs pulumi up to update

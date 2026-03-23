@@ -1,7 +1,7 @@
 config:
   loopzero-infra:environment: dev
   loopzero-infra:provider: digitalocean
-  loopzero-infra:region: nyc3
+  loopzero-infra:region: sfo3
   loopzero-infra:domain: dev.loopzero.example
   loopzero-infra:dnsZone: loopzero.example
   loopzero-infra:infraVersion: v1

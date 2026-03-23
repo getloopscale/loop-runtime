@@ -875,7 +875,7 @@ function installLoopZeroAPI(
         MGMT_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.mgmtCluster.clusterName}`,
         BUILD_KUBECONFIG: "/etc/loopzero/build-kubeconfig",
         BUILD_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.buildCluster.clusterName}`,
-        MINIO_ENDPOINT: "https://nyc3.digitaloceanspaces.com",
+        MINIO_ENDPOINT: `https://${config.region}.digitaloceanspaces.com`,
         REGISTRY_URL: "registry.digitalocean.com/loopzero-infra-registry",
         REGISTRY_INSECURE: "false",
         ARGOCD_NAMESPACE: PLATFORM_NAMESPACE,
@@ -1229,7 +1229,7 @@ function installTenantController(
                   // Used by controller to create credentials Secret in build namespaces.
                   {
                     name: "MINIO_ENDPOINT",
-                    value: "https://nyc3.digitaloceanspaces.com",
+                    value: `https://${config.region}.digitaloceanspaces.com`,
                   },
                   {
                     name: "SPACES_ACCESS_KEY_ID",
