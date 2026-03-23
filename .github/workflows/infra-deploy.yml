@@ -470,14 +470,30 @@ jobs:
             exit 0
           fi
 
+          # Validate existing token against Gitea. If invalid (e.g., fresh deploy),
+          # generate a new one. This handles destroy+recreate where the old token
+          # is in K8s Secret but doesn't exist in the new Gitea instance.
           EXISTING_TOKEN=$(kubectl -n $NAMESPACE get secret loopzero-platform-tokens -o jsonpath='{.data.GITEA_TOKEN}' 2>/dev/null | base64 -d)
-          if [ "$EXISTING_TOKEN" != "placeholder-set-after-first-deploy" ] && [ -n "$EXISTING_TOKEN" ]; then
-            GITEA_TOKEN="$EXISTING_TOKEN"
-            echo "Gitea token: reusing existing"
-          else
+          TOKEN_VALID="false"
+          if [ -n "$EXISTING_TOKEN" ] && [ "$EXISTING_TOKEN" != "placeholder-set-after-first-deploy" ]; then
+            kubectl -n $NAMESPACE port-forward svc/gitea-http 13099:3000 &
+            VALIDATE_PID=$!
+            sleep 3
+            VALIDATE_RESP=$(curl -sf "http://localhost:13099/api/v1/user" -H "Authorization: token $EXISTING_TOKEN" 2>/dev/null)
+            kill $VALIDATE_PID 2>/dev/null
+            wait $VALIDATE_PID 2>/dev/null
+            if echo "$VALIDATE_RESP" | grep -q "login"; then
+              TOKEN_VALID="true"
+              GITEA_TOKEN="$EXISTING_TOKEN"
+              echo "Gitea token: validated existing"
+            fi
+          fi
+
+          if [ "$TOKEN_VALID" = "false" ]; then
+            echo "Generating fresh Gitea admin token..."
             GITEA_TOKEN=$(kubectl -n $NAMESPACE exec "$GITEA_POD" -- gitea admin user generate-access-token --username gitea_admin --token-name "loopzero-platform-$(date +%s)" --scopes all 2>/dev/null | grep -oP 'Access token was successfully created: \K.*')
             [ -z "$GITEA_TOKEN" ] && echo "::warning::Failed to generate Gitea token" && exit 0
-            echo "Gitea token: generated"
+            echo "Gitea token: generated fresh"
           fi
 
           # Create Gitea orgs (idempotent)
