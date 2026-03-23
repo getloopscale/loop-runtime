@@ -222,68 +222,68 @@ jobs:
 
           echo "Finalizer cleanup complete"
 
-      # --- Step 1: Pulumi (non-up commands run directly) ---
+      # --- Non-up commands (destroy, refresh, preview) ---
       - name: "Run: pulumi ${{ needs.resolve.outputs.command }}"
-        id: pulumi
         if: needs.resolve.outputs.command != 'up'
-        uses: pulumi/actions@v6
-        with:
-          command: ${{ needs.resolve.outputs.command }}
-          stack-name: ${{ needs.resolve.outputs.stack }}
-          work-dir: ${{ env.PULUMI_WORKING_DIR }}
-          upsert: true
-
-      # --- Step 1 (up): Infrastructure provisioning ---
-      # Creates clusters, DB, registry, Helm charts. Deployments will fail
-      # (no images yet) — that's OK, Step 3 handles convergence.
-      - name: "Step 1: Provision infrastructure"
-        id: infra
-        if: needs.resolve.outputs.command == 'up'
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        continue-on-error: true
-        run: pulumi up --yes --skip-preview --stack ${{ needs.resolve.outputs.stack }} --non-interactive
-
-      # --- Step 2: Build and push container images ---
-      - name: "Step 2: Build container images"
-        if: needs.resolve.outputs.command == 'up'
-        working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        env:
-          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
         run: |
-          set -euo pipefail
-          STACK="${{ needs.resolve.outputs.stack }}"
+          # Cancel stale locks from previous failed runs
+          pulumi cancel -s ${{ needs.resolve.outputs.stack }} 2>/dev/null || true
+          pulumi ${{ needs.resolve.outputs.command }} --yes --skip-preview --stack ${{ needs.resolve.outputs.stack }} --non-interactive
 
-          # The registry name is deterministic: {project}-registry
+      # ═══════════════════════════════════════════════
+      # UP COMMAND: 3 steps — infra → images → deploy
+      # ═══════════════════════════════════════════════
+
+      # Step 1: Create cloud resources + K8s services.
+      # Deployments of loopzero-api and tenant-controller WILL FAIL if this is
+      # a from-scratch deploy (registry is empty). That's expected — Step 2
+      # builds images, Step 3 converges.
+      - name: "Step 1/3: Provision infrastructure"
+        if: needs.resolve.outputs.command == 'up'
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          # Cancel stale locks from previous failed runs
+          pulumi cancel -s ${{ needs.resolve.outputs.stack }} 2>/dev/null || true
+          # Run pulumi up — partial failures on deployments are OK (|| true)
+          pulumi up --yes --skip-preview --stack ${{ needs.resolve.outputs.stack }} --non-interactive || true
+
+      # Step 2: Build and push container images.
+      # Runs ALWAYS (even if Step 1 failed) because Step 1 creates the
+      # registry before attempting deployments.
+      - name: "Step 2/3: Build container images"
+        if: always() && needs.resolve.outputs.command == 'up'
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
           REGISTRY="registry.digitalocean.com/loopzero-infra-registry"
 
-          # Install doctl
+          # Install doctl + auth
           curl -sL https://github.com/digitalocean/doctl/releases/download/v1.104.0/doctl-1.104.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin
-          doctl auth init --access-token "$DIGITALOCEAN_ACCESS_TOKEN"
+          doctl auth init --access-token "$DIGITALOCEAN_TOKEN"
           doctl registry login --expiry-seconds 600
 
-          # Build images
+          # Build + push
           cd "$GITHUB_WORKSPACE"
-          echo "Building loopzero-api..."
           docker build -f api/Dockerfile -t "$REGISTRY/loopzero-api:dev" .
           docker push "$REGISTRY/loopzero-api:dev"
-
-          echo "Building tenant-controller..."
           docker build -f operators/Dockerfile -t "$REGISTRY/tenant-controller:dev" .
           docker push "$REGISTRY/tenant-controller:dev"
 
-          # Integrate registry with DOKS clusters
+          # Integrate registry with all DOKS clusters
           cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}"
           for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
-            CLUSTER=$(pulumi stack output "$KEY" --stack "$STACK" 2>/dev/null || echo "")
+            CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || echo "")
             [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
           done
 
           # Create Spaces bucket for build artifacts
           aws s3 mb "s3://loopzero-builds" --endpoint-url "https://nyc3.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
 
-      # --- Step 3: Convergence — deployments pull images and start ---
-      - name: "Step 3: Deploy applications (convergence)"
-        if: needs.resolve.outputs.command == 'up'
+      # Step 3: Convergence — deployments now have images available.
+      # Runs ALWAYS because Step 2 may have built images that fix Step 1 failures.
+      - name: "Step 3/3: Deploy applications"
+        if: always() && needs.resolve.outputs.command == 'up'
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: pulumi up --yes --skip-preview --stack ${{ needs.resolve.outputs.stack }} --non-interactive
 
