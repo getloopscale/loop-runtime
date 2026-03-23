@@ -435,31 +435,35 @@ jobs:
           fi
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-      # --- Post-deploy: bootstrap Gitea + ArgoCD credentials ---
-      - name: Bootstrap platform credentials
+      # --- Post-deploy: bootstrap platform (credentials + seed data) ---
+      # This step makes the system fully functional after a from-scratch deploy.
+      # All operations are idempotent — safe to re-run on existing infrastructure.
+      - name: Bootstrap platform
         if: success() && needs.resolve.outputs.command == 'up'
         continue-on-error: true
         run: |
           set +e
           STACK="${{ needs.resolve.outputs.stack }}"
 
-          # Install doctl and kubectl
+          # Install tools
           curl -sL https://github.com/digitalocean/doctl/releases/download/v1.104.0/doctl-1.104.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin
           curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
           chmod +x kubectl && mv kubectl /usr/local/bin/
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client > /dev/null 2>&1
 
-          # Get mgmt kubeconfig from Pulumi
+          # Get kubeconfigs + DB URI from Pulumi
           cd ${{ env.PULUMI_WORKING_DIR }}
           pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" > /tmp/kubeconfig 2>/dev/null
           export KUBECONFIG=/tmp/kubeconfig
-
+          DB_URI=$(pulumi stack output dbUri --show-secrets --stack "$STACK" 2>/dev/null)
           NAMESPACE="platform-system"
 
-          # 1. Wait for Gitea pod to be ready
+          # ═══════════════════════════════════════
+          # 1. GITEA: generate admin token + orgs
+          # ═══════════════════════════════════════
           echo "Waiting for Gitea pod..."
-          kubectl -n $NAMESPACE wait --for=condition=ready pod -l app.kubernetes.io/name=gitea --timeout=120s 2>/dev/null || true
+          kubectl -n $NAMESPACE wait --for=condition=ready pod -l app.kubernetes.io/name=gitea --timeout=180s 2>/dev/null || true
 
-          # 2. Generate Gitea admin token (idempotent — check if exists first)
           GITEA_POD=$(kubectl -n $NAMESPACE get pod -l app.kubernetes.io/name=gitea -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
           if [ -z "$GITEA_POD" ]; then
             echo "::warning::Gitea pod not found, skipping bootstrap"
@@ -467,40 +471,16 @@ jobs:
           fi
 
           EXISTING_TOKEN=$(kubectl -n $NAMESPACE get secret loopzero-platform-tokens -o jsonpath='{.data.GITEA_TOKEN}' 2>/dev/null | base64 -d)
-          GITEA_URL="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000"
-
           if [ "$EXISTING_TOKEN" != "placeholder-set-after-first-deploy" ] && [ -n "$EXISTING_TOKEN" ]; then
-            echo "Gitea token already set, skipping token generation"
             GITEA_TOKEN="$EXISTING_TOKEN"
+            echo "Gitea token: reusing existing"
           else
-            echo "Generating Gitea admin token..."
             GITEA_TOKEN=$(kubectl -n $NAMESPACE exec "$GITEA_POD" -- gitea admin user generate-access-token --username gitea_admin --token-name "loopzero-platform-$(date +%s)" --scopes all 2>/dev/null | grep -oP 'Access token was successfully created: \K.*')
-            if [ -z "$GITEA_TOKEN" ]; then
-              echo "::warning::Failed to generate Gitea token"
-              exit 0
-            fi
-            echo "Gitea token generated successfully"
+            [ -z "$GITEA_TOKEN" ] && echo "::warning::Failed to generate Gitea token" && exit 0
+            echo "Gitea token: generated"
           fi
 
-          # 3. Get ArgoCD admin password
-          ARGOCD_PASS=$(kubectl -n $NAMESPACE get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
-
-          # 4. Update loopzero-platform-tokens Secret
-          kubectl -n $NAMESPACE create secret generic loopzero-platform-tokens \
-            --from-literal=GITEA_TOKEN="$GITEA_TOKEN" \
-            --from-literal=ARGOCD_TOKEN="$ARGOCD_PASS" \
-            --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
-
-          # 5. Update gitea-repo-creds Secret for ArgoCD
-          kubectl -n $NAMESPACE create secret generic gitea-repo-creds \
-            --from-literal=type=git \
-            --from-literal=url="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000" \
-            --from-literal=username=gitea_admin \
-            --from-literal=password="$GITEA_TOKEN" \
-            --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
-          kubectl -n $NAMESPACE label secret gitea-repo-creds argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
-
-          # 6. Create Gitea orgs (idempotent)
+          # Create Gitea orgs (idempotent)
           kubectl -n $NAMESPACE port-forward svc/gitea-http 13000:3000 &
           PF_PID=$!
           sleep 3
@@ -513,15 +493,130 @@ jobs:
           done
           kill $PF_PID 2>/dev/null
 
-          # 7. Restart API to pick up new tokens
+          # ═══════════════════════════════════════
+          # 2. ARGOCD: generate JWT (not password)
+          # ═══════════════════════════════════════
+          echo "Waiting for ArgoCD..."
+          kubectl -n $NAMESPACE wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=120s 2>/dev/null || true
+
+          ARGOCD_PASS=$(kubectl -n $NAMESPACE get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
+
+          kubectl -n $NAMESPACE port-forward svc/argocd-server 13001:80 &
+          PF_PID=$!
+          sleep 3
+          ARGOCD_JWT=$(curl -sf "http://localhost:13001/api/v1/session" \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"admin\",\"password\":\"$ARGOCD_PASS\"}" 2>/dev/null \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+          kill $PF_PID 2>/dev/null
+
+          if [ -z "$ARGOCD_JWT" ]; then
+            echo "::warning::Failed to generate ArgoCD JWT, falling back to password"
+            ARGOCD_JWT="$ARGOCD_PASS"
+          else
+            echo "ArgoCD JWT: generated (${#ARGOCD_JWT} chars)"
+          fi
+
+          # ═══════════════════════════════════════
+          # 3. UPDATE K8s SECRETS
+          # ═══════════════════════════════════════
+          kubectl -n $NAMESPACE create secret generic loopzero-platform-tokens \
+            --from-literal=GITEA_TOKEN="$GITEA_TOKEN" \
+            --from-literal=ARGOCD_TOKEN="$ARGOCD_JWT" \
+            --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
+
+          kubectl -n $NAMESPACE create secret generic gitea-repo-creds \
+            --from-literal=type=git \
+            --from-literal=url="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000" \
+            --from-literal=username=gitea_admin \
+            --from-literal=password="$GITEA_TOKEN" \
+            --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
+          kubectl -n $NAMESPACE label secret gitea-repo-creds argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
+
+          # ═══════════════════════════════════════
+          # 4. SEED DATABASE (idempotent)
+          # ═══════════════════════════════════════
+          if [ -n "$DB_URI" ]; then
+            echo "Seeding database..."
+            LOOPZERO_DB_URI=$(echo "$DB_URI" | sed 's|/defaultdb?|/loopzero?|; s|/defaultdb$|/loopzero|')
+
+            # Resolve GitHub org owner to seed as platform admin.
+            # The GitHub Actions token (GITHUB_TOKEN) identifies the actor.
+            GH_LOGIN="${{ github.actor }}"
+            GH_USER_ID="github-${GH_LOGIN}"
+            GH_EMAIL="${GH_LOGIN}@users.noreply.github.com"
+
+            psql "$LOOPZERO_DB_URI" -v ON_ERROR_STOP=0 <<SEED_SQL
+          -- Bootstrap admin user: ${GH_LOGIN} (idempotent via ON CONFLICT)
+          INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
+          VALUES ('${GH_USER_ID}', '${GH_EMAIL}', 0, '${GH_LOGIN}', NOW(), NOW())
+          ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, updated_at = NOW();
+
+          -- Bootstrap tenant (idempotent)
+          INSERT INTO tenants (id, display_name, plan, owner_id, created_at, updated_at)
+          VALUES ('tn-loopzero', 'loopzero', 'starter', '${GH_USER_ID}', NOW(), NOW())
+          ON CONFLICT (id) DO NOTHING;
+
+          -- Bootstrap membership (idempotent)
+          INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)
+          VALUES ('tn-loopzero', '${GH_USER_ID}', 'owner', NOW(), NOW())
+          ON CONFLICT DO NOTHING;
+          SEED_SQL
+            echo "Database seeded: user=${GH_USER_ID} tenant=tn-loopzero"
+          else
+            echo "::warning::DB_URI not available, skipping seed"
+          fi
+
+          # ═══════════════════════════════════════
+          # 5. CREATE TENANT CR (idempotent)
+          # ═══════════════════════════════════════
+          kubectl apply -f - <<'TENANT_CR'
+          apiVersion: loopzero.io/v1
+          kind: Tenant
+          metadata:
+            name: tn-loopzero
+            namespace: platform-system
+          spec:
+            displayName: loopzero
+            plan: starter
+            environments:
+              - name: production
+                cluster: runtime
+            gitops:
+              repoName: tn-loopzero-gitops
+              branch: main
+            limits:
+              maxBuildConcurrency: 2
+              maxCPU: "4"
+              maxMemory: "8Gi"
+              maxStorage: "20Gi"
+            preview:
+              maxEnvironments: 3
+              ttlHours: 24
+          TENANT_CR
+          echo "Tenant CR applied"
+
+          # Wait for controller to reconcile
+          echo "Waiting for tenant reconciliation..."
+          for i in $(seq 1 30); do
+            PHASE=$(kubectl -n $NAMESPACE get tenant tn-loopzero -o jsonpath='{.status.phase}' 2>/dev/null)
+            [ "$PHASE" = "Active" ] && echo "Tenant Active" && break
+            sleep 5
+          done
+
+          # ═══════════════════════════════════════
+          # 6. RESTART SERVICES (pick up new tokens)
+          # ═══════════════════════════════════════
           kubectl -n $NAMESPACE rollout restart deployment loopzero-api 2>/dev/null || true
           kubectl -n $NAMESPACE delete pod -l app=tenant-controller 2>/dev/null || true
+          kubectl -n $NAMESPACE rollout status deployment loopzero-api --timeout=60s 2>/dev/null || true
 
-          echo "### ✅ Platform credentials bootstrapped" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Gitea token: generated" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ArgoCD password: configured" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Platform Bootstrap Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Gitea token: configured" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ArgoCD JWT: generated" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Database: seeded (admin user + tenant)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tenant CR: applied (tn-loopzero)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Gitea orgs: loopzero, loopzero-platform" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ArgoCD repo credentials: configured" >> "$GITHUB_STEP_SUMMARY"
 
       # --- Post-deploy: verify all phases completed ---
       - name: Verify deployment health
