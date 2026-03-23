@@ -259,13 +259,8 @@ jobs:
               # Retry destroy (now only cloud resources remain)
               pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || {
                 echo "::warning::Retry failed. Clearing state and deleting via API..."
-                # Nuclear: clear state and delete cloud resources directly
-                pulumi stack export -s "$STACK" | python3 -c "
-import sys,json
-state = json.load(sys.stdin)
-state['deployment']['resources'] = [r for r in state['deployment']['resources'] if r.get('type') == 'pulumi:pulumi:Stack']
-json.dump(state, sys.stdout)
-" | pulumi stack import -s "$STACK" 2>/dev/null
+                # Nuclear: clear state — keep only the Stack resource
+                pulumi stack export -s "$STACK" | python3 -c "import sys,json; s=json.load(sys.stdin); s['deployment']['resources']=[r for r in s['deployment']['resources'] if r.get('type')=='pulumi:pulumi:Stack']; json.dump(s,sys.stdout)" | pulumi stack import -s "$STACK" 2>/dev/null
 
                 # Delete cloud resources via DO API
                 curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/registry" 2>/dev/null || true
