@@ -79,7 +79,7 @@ func (r *TenantReconciler) reconcileAllowIngressPolicy(ctx context.Context, nsNa
 						{
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"kubernetes.io/metadata.name": "traefik",
+									"kubernetes.io/metadata.name": "platform-system",
 								},
 							},
 						},
