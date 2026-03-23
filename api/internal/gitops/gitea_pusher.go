@@ -28,7 +28,7 @@ type GiteaGitOpsPusherConfig struct {
 // GiteaGitOpsPusher implements services.GitOpsPusher by committing manifests
 // to the tenant GitOps repo in Gitea.
 //
-// Repo naming: loopzero-tenant-{tenantID}
+// Repo naming: {tenantID}-gitops (matches TenantController convention)
 // File path: {environment}/{projectID}/manifests.yaml
 // Git trailers: Release-ID, Correlation-ID, Build-ID (spec §17.5)
 type GiteaGitOpsPusher struct {
@@ -56,7 +56,7 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 		return "", fmt.Errorf("gitops push: manifests cannot be empty")
 	}
 
-	repoName := fmt.Sprintf("loopzero-tenant-%s", opts.TenantID)
+	repoName := fmt.Sprintf("%s-gitops", opts.TenantID)
 	remoteURL := p.repoURL(repoName)
 
 	// Ensure repo exists in Gitea
@@ -153,7 +153,7 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 // The operation is idempotent: if the directory doesn't exist, returns success.
 // ArgoCD with prune: true will automatically remove the K8s resources.
 func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemoveOpts) (string, error) {
-	repoName := fmt.Sprintf("loopzero-tenant-%s", opts.TenantID)
+	repoName := fmt.Sprintf("%s-gitops", opts.TenantID)
 	remoteURL := p.repoURL(repoName)
 
 	// Ensure repo exists (it should, but be safe)

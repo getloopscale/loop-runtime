@@ -125,7 +125,7 @@ func buildTenantCR(tenantID string, spec routes.TenantCRSpec) *unstructured.Unst
 					},
 				},
 				"gitops": map[string]interface{}{
-					"repoName": fmt.Sprintf("loopzero-tenant-%s", tenantID),
+					"repoName": fmt.Sprintf("%s-gitops", tenantID),
 					"branch":   "main",
 				},
 				"preview": map[string]interface{}{
