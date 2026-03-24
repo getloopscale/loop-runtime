@@ -417,6 +417,71 @@ func TestLabels_empty_values_are_allowed(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// GitRepoBindingName
+// ---------------------------------------------------------------------------
+
+func TestGitRepoBindingName_format(t *testing.T) {
+	got, err := GitRepoBindingName("tn-acme", "production")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "tn-acme-production" {
+		t.Errorf("got %q, want %q", got, "tn-acme-production")
+	}
+}
+
+func TestGitRepoBindingName_empty_tenant(t *testing.T) {
+	_, err := GitRepoBindingName("", "production")
+	if err == nil {
+		t.Error("should return error for empty tenant")
+	}
+}
+
+func TestGitRepoBindingName_empty_env(t *testing.T) {
+	_, err := GitRepoBindingName("tn-acme", "")
+	if err == nil {
+		t.Error("should return error for empty env")
+	}
+}
+
+func TestGitRepoBindingName_too_long(t *testing.T) {
+	// tenantName(30) + "-" + envName(33) = 64 chars, exceeds 63
+	_, err := GitRepoBindingName(strings.Repeat("a", 30), strings.Repeat("b", 33))
+	if err == nil {
+		t.Error("should return error when combined name exceeds 63 chars")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ArgoRepoSecretName
+// ---------------------------------------------------------------------------
+
+func TestArgoRepoSecretName_format(t *testing.T) {
+	got, err := ArgoRepoSecretName("tn-acme")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "repo-tn-acme-gitops" {
+		t.Errorf("got %q, want %q", got, "repo-tn-acme-gitops")
+	}
+}
+
+func TestArgoRepoSecretName_empty(t *testing.T) {
+	_, err := ArgoRepoSecretName("")
+	if err == nil {
+		t.Error("should return error for empty tenant")
+	}
+}
+
+func TestArgoRepoSecretName_too_long(t *testing.T) {
+	// "repo-" (5) + tenantName(53) + "-gitops" (7) = 65, exceeds 63
+	_, err := ArgoRepoSecretName(strings.Repeat("a", 53))
+	if err == nil {
+		t.Error("should return error when combined name exceeds 63 chars")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Determinism: same input -> same output
 // ---------------------------------------------------------------------------
 
@@ -470,6 +535,16 @@ func TestDeterminism_all_functions(t *testing.T) {
 		cn := CertSecretName("api-prod.example.com")
 		if cn != "api-prod-example-com-tls" {
 			t.Fatalf("CertSecretName not deterministic on iteration %d", i)
+		}
+
+		grb, _ := GitRepoBindingName("tn-acme", "prod")
+		if grb != "tn-acme-prod" {
+			t.Fatalf("GitRepoBindingName not deterministic on iteration %d", i)
+		}
+
+		ars, _ := ArgoRepoSecretName("tn-acme")
+		if ars != "repo-tn-acme-gitops" {
+			t.Fatalf("ArgoRepoSecretName not deterministic on iteration %d", i)
 		}
 	}
 }

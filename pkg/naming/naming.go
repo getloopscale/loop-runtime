@@ -197,6 +197,35 @@ func CertSecretName(hostname string) string {
 	return sanitized + suffix
 }
 
+// GitRepoBindingName returns the GitRepositoryBinding CR name for a tenant's environment.
+// Format: "{tenantName}-{envName}"
+func GitRepoBindingName(tenantName, envName string) (string, error) {
+	if tenantName == "" {
+		return "", fmt.Errorf("tenant name must not be empty")
+	}
+	if envName == "" {
+		return "", fmt.Errorf("environment name must not be empty")
+	}
+	name := fmt.Sprintf("%s-%s", tenantName, envName)
+	if err := ValidateKubernetesName(name); err != nil {
+		return "", fmt.Errorf("git repo binding name %q: %w", name, err)
+	}
+	return name, nil
+}
+
+// ArgoRepoSecretName returns the ArgoCD repository Secret name for a tenant.
+// Format: "repo-{tenantName}-gitops"
+func ArgoRepoSecretName(tenantName string) (string, error) {
+	if tenantName == "" {
+		return "", fmt.Errorf("tenant name must not be empty")
+	}
+	name := fmt.Sprintf("repo-%s-gitops", tenantName)
+	if err := ValidateKubernetesName(name); err != nil {
+		return "", fmt.Errorf("argo repo secret name %q: %w", name, err)
+	}
+	return name, nil
+}
+
 // Labels returns the standard LoopZero labels for a Kubernetes resource.
 // All labels use the "loopzero.io/" prefix.
 func Labels(tenant, project, env string) map[string]string {

@@ -39,6 +39,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ReconciliationReportList{},
 		&PlatformBootstrap{},
 		&PlatformBootstrapList{},
+		&GitRepositoryBinding{},
+		&GitRepositoryBindingList{},
 	)
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil
