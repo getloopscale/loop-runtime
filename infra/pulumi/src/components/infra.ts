@@ -37,6 +37,7 @@ export interface InfraOutputs {
   // Storage
   readonly bucketName: pulumi.Output<string>;
   readonly bucketEndpoint: pulumi.Output<string>;
+  readonly buildsBucketName: pulumi.Output<string>;
 
   // Container Registry
   readonly registryEndpoint: pulumi.Output<string>;
@@ -167,6 +168,15 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     tags,
   });
 
+  // Builds bucket — API uploads source bundles here (S3-compatible).
+  // CWTs on the build cluster download from this bucket during clone step.
+  const buildsBucket = factory.createObjectStorage({
+    name: "loopzero-builds",
+    region: config.region,
+    versioning: false,
+    tags,
+  });
+
   // --- Container registry ---
   // DigitalOcean has one registry per account (global, not per-region).
   // Starter tier is free (500MB) and sufficient for dev.
@@ -202,6 +212,7 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     database,
     bucketName: storage.bucketName,
     bucketEndpoint: storage.endpoint,
+    buildsBucketName: buildsBucket.bucketName,
     registryEndpoint: registry.endpoint,
     registryName: registry.name,
   };

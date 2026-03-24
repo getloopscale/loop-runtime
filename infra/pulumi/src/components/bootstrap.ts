@@ -762,7 +762,7 @@ function bootstrapGitea(
             containers: [
               {
                 name: "bootstrap",
-                image: "bitnami/kubectl:1.31.4",
+                image: "bitnami/kubectl:1.31",
                 command: ["bash", "-c"],
                 args: [
                   `set -e
