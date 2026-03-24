@@ -18,7 +18,7 @@ func baseInput() RenderInput {
 	}
 }
 
-func TestRender_ServerApp_ProducesThreeDocuments(t *testing.T) {
+func TestRender_ServerApp_ProducesFourDocuments(t *testing.T) {
 	input := baseInput()
 	input.Apps = []AppManifestInput{
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
@@ -27,8 +27,8 @@ func TestRender_ServerApp_ProducesThreeDocuments(t *testing.T) {
 	result := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
-	if len(docs) != 3 {
-		t.Fatalf("expected 3 YAML documents (Deployment, Service, IngressRoute), got %d", len(docs))
+	if len(docs) != 4 {
+		t.Fatalf("expected 4 YAML documents (Deployment, Service, Certificate, IngressRoute), got %d", len(docs))
 	}
 }
 
@@ -46,7 +46,7 @@ func TestRender_WorkerApp_ProducesOneDocument(t *testing.T) {
 	}
 }
 
-func TestRender_FrontendApp_ProducesThreeDocuments(t *testing.T) {
+func TestRender_FrontendApp_ProducesFourDocuments(t *testing.T) {
 	input := baseInput()
 	input.Apps = []AppManifestInput{
 		{Name: "dashboard", Type: "frontend", Port: 80, ImageRef: "reg:5000/acme/webapp:abc123"},
@@ -55,8 +55,8 @@ func TestRender_FrontendApp_ProducesThreeDocuments(t *testing.T) {
 	result := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
-	if len(docs) != 3 {
-		t.Fatalf("expected 3 YAML documents, got %d", len(docs))
+	if len(docs) != 4 {
+		t.Fatalf("expected 4 YAML documents (Deployment, Service, Certificate, IngressRoute), got %d", len(docs))
 	}
 }
 
@@ -118,8 +118,8 @@ func TestRender_MOD5_DeterministicOutput(t *testing.T) {
 	}
 }
 
-// LEVE-2: IngressRoute must use tls: {} (default TLSStore), not certResolver.
-func TestRender_LEVE2_IngressRouteTLS_UsesDefaultTLSStore(t *testing.T) {
+// IngressRoute must use tls.secretName referencing the cert-manager Certificate, not certResolver.
+func TestRender_IngressRouteTLS_UsesSecretName(t *testing.T) {
 	input := baseInput()
 	input.Apps = []AppManifestInput{
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
@@ -128,15 +128,20 @@ func TestRender_LEVE2_IngressRouteTLS_UsesDefaultTLSStore(t *testing.T) {
 	result := Render(input)
 
 	if strings.Contains(result, "certResolver") {
-		t.Error("IngressRoute must not contain certResolver — should use tls: {} for default TLSStore")
-	}
-	if strings.Contains(result, "letsencrypt") {
-		t.Error("IngressRoute must not reference letsencrypt")
+		t.Error("IngressRoute must not contain certResolver — should use tls.secretName")
 	}
 
-	// Verify tls: {} is present
-	if !strings.Contains(result, "tls: {}") {
-		t.Error("IngressRoute must contain 'tls: {}' to use the default TLSStore")
+	// Verify tls.secretName references the Certificate secret
+	if !strings.Contains(result, "secretName: tls-api") {
+		t.Error("IngressRoute must contain 'secretName: tls-api' referencing the Certificate secret")
+	}
+
+	// Verify a Certificate CR is generated
+	if !strings.Contains(result, "kind: Certificate") {
+		t.Error("output must contain a cert-manager Certificate CR")
+	}
+	if !strings.Contains(result, "name: letsencrypt-prod") {
+		t.Error("Certificate must reference letsencrypt-prod ClusterIssuer")
 	}
 }
 
@@ -243,9 +248,9 @@ func TestRender_MultipleApps(t *testing.T) {
 	result := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
-	// server=3 + worker=1 + frontend=3 = 7
-	if len(docs) != 7 {
-		t.Fatalf("expected 7 YAML documents, got %d", len(docs))
+	// server=4 + worker=1 + frontend=4 = 9
+	if len(docs) != 9 {
+		t.Fatalf("expected 9 YAML documents, got %d", len(docs))
 	}
 
 	// All documents must be valid YAML

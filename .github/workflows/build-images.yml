@@ -198,3 +198,41 @@ jobs:
           echo "### Registry Integration" >> "$GITHUB_STEP_SUMMARY"
           echo "- ✅ loopzero-infra-dev-nyc3-mgmt" >> "$GITHUB_STEP_SUMMARY"
           echo "- ✅ loopzero-infra-dev-nyc3-runtime" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # POST-BUILD — update CWTs on build cluster
+  # ─────────────────────────────────────────────
+  update-cwts:
+    name: Update CWTs on build cluster
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [build-api, build-operator]
+    if: always() && (needs.build-api.result == 'success' || needs.build-operator.result == 'success')
+    environment: infra-dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Update CWTs on build cluster
+        run: |
+          # Get kubeconfig for the build cluster
+          doctl kubernetes cluster kubeconfig save loopzero-infra-dev-nyc3-build
+
+          # Render and apply CWT templates from the local Helm chart.
+          # This ensures CWTs always match the latest code, even if the
+          # Pulumi Helm release version hasn't changed.
+          helm template loopzero-build-cwts infra/helm/argo-workflows \
+            --set minio.insecure=true | \
+            kubectl apply --context do-nyc3-loopzero-infra-dev-nyc3-build -f -
+
+          echo "### CWT Update" >> "$GITHUB_STEP_SUMMARY"
+          echo "- CWTs updated on build cluster" >> "$GITHUB_STEP_SUMMARY"

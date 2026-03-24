@@ -212,10 +212,30 @@ type traefikRouteService struct {
 }
 
 // traefikTLS configures TLS on IngressRoute.
-// LEVE-2 fix: Uses empty struct (tls: {}) to reference the default TLSStore.
-// cert-manager + ClusterIssuer handle certificate issuance automatically via
-// the default TLSStore — no per-IngressRoute certResolver or secretName needed.
-type traefikTLS struct{}
+// Uses secretName to reference the cert-manager issued certificate.
+type traefikTLS struct {
+	SecretName string `json:"secretName"`
+}
+
+// certManagerCertificate represents a cert-manager Certificate CR.
+type certManagerCertificate struct {
+	APIVersion string                     `json:"apiVersion"`
+	Kind       string                     `json:"kind"`
+	Metadata   k8sMetadata                `json:"metadata"`
+	Spec       certManagerCertificateSpec `json:"spec"`
+}
+
+type certManagerCertificateSpec struct {
+	SecretName string           `json:"secretName"`
+	IssuerRef  certIssuerRef    `json:"issuerRef"`
+	DNSNames   []string         `json:"dnsNames"`
+}
+
+type certIssuerRef struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+}
+
 
 // --- Internal render functions ---
 
@@ -365,15 +385,34 @@ func buildService(ri RenderInput, app AppManifestInput, port int) k8sService {
 	}
 }
 
-// buildIngressResources generates an IngressRoute for TLS.
-// LEVE-2 fix: Uses tls: {} (default TLSStore) — no Certificate CR needed.
-// cert-manager handles certificate issuance via the default TLSStore and ClusterIssuer.
+// buildIngressResources generates a Certificate CR and IngressRoute for TLS.
+// cert-manager issues a Let's Encrypt certificate via the ClusterIssuer.
+// The IngressRoute references the certificate secret for TLS termination.
 // Hostname format: {app}-{env}.{project}.{tenant}.{baseDomain}
 func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []string {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
 	hostname := fmt.Sprintf("%s-%s.%s.%s.%s",
 		app.Name, ri.Environment, ri.ProjectID, ri.TenantID, ri.BaseDomain)
+	tlsSecretName := fmt.Sprintf("tls-%s", app.Name)
+
+	cert := certManagerCertificate{
+		APIVersion: "cert-manager.io/v1",
+		Kind:       "Certificate",
+		Metadata: k8sMetadata{
+			Name:      tlsSecretName,
+			Namespace: ns,
+			Labels:    labels,
+		},
+		Spec: certManagerCertificateSpec{
+			SecretName: tlsSecretName,
+			IssuerRef: certIssuerRef{
+				Name: "letsencrypt-prod",
+				Kind: "ClusterIssuer",
+			},
+			DNSNames: []string{hostname},
+		},
+	}
 
 	ingress := traefikIngressRoute{
 		APIVersion: "traefik.io/v1alpha1",
@@ -392,11 +431,11 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 					Services: []traefikRouteService{{Name: app.Name, Port: port}},
 				},
 			},
-			TLS: &traefikTLS{},
+			TLS: &traefikTLS{SecretName: tlsSecretName},
 		},
 	}
 
-	return []string{marshalResource(ingress)}
+	return []string{marshalResource(cert), marshalResource(ingress)}
 }
 
 // --- Helpers ---
