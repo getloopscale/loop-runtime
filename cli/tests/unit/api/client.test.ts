@@ -95,7 +95,7 @@ describe('ApiClient', () => {
       process.env.LOOPZERO_API_URL = 'http://custom-api:8080';
 
       const client = new ApiClient({ fetchFn: fakeFetch(200) });
-      expect((client as any).baseURL).toBe('http://custom-api:8080');
+      expect((client as unknown as { baseURL: string }).baseURL).toBe('http://custom-api:8080');
 
       if (original !== undefined) {
         process.env.LOOPZERO_API_URL = original;
@@ -109,7 +109,7 @@ describe('ApiClient', () => {
       delete process.env.LOOPZERO_API_URL;
 
       const client = new ApiClient({ fetchFn: fakeFetch(200) });
-      expect((client as any).baseURL).toBe('http://localhost:13001');
+      expect((client as unknown as { baseURL: string }).baseURL).toBe('http://localhost:13001');
 
       if (original !== undefined) {
         process.env.LOOPZERO_API_URL = original;

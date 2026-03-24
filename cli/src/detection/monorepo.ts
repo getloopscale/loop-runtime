@@ -63,7 +63,7 @@ function fileExists(rootDir: string, fileName: string): boolean {
   return fs.existsSync(path.join(rootDir, fileName));
 }
 
-function readJSON(rootDir: string, fileName: string): Record<string, any> | null {
+function readJSON(rootDir: string, fileName: string): Record<string, unknown> | null {
   const filePath = path.join(rootDir, fileName);
   if (!fs.existsSync(filePath)) return null;
   try {

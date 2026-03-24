@@ -134,9 +134,10 @@ describe('loopzero --json with no command', () => {
     try {
       output = execSync(`node ${binPath} --json`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
       exitCode = 0;
-    } catch (err: any) {
-      output = err.stdout || '';
-      exitCode = err.status;
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; status: number };
+      output = e.stdout || '';
+      exitCode = e.status;
     }
 
     expect(exitCode).toBe(1);
@@ -156,9 +157,10 @@ describe('loopzero --json with no command', () => {
     try {
       output = execSync(`node ${binPath} nonexistent-command`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
       exitCode = 0;
-    } catch (err: any) {
-      output = (err.stderr || '') + (err.stdout || '');
-      exitCode = err.status;
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; status: number };
+      output = (e.stderr || '') + (e.stdout || '');
+      exitCode = e.status;
     }
 
     expect(exitCode).toBe(1);
@@ -172,9 +174,10 @@ describe('loopzero --json with no command', () => {
     try {
       output = execSync(`node ${binPath} --json nonexistent-command`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
       exitCode = 0;
-    } catch (err: any) {
-      output = err.stdout || '';
-      exitCode = err.status;
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; status: number };
+      output = e.stdout || '';
+      exitCode = e.status;
     }
 
     expect(exitCode).toBe(1);
@@ -189,9 +192,10 @@ describe('loopzero --json with no command', () => {
     let stderr = '';
     try {
       stdout = execSync(`node ${binPath}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
-    } catch (err: any) {
-      stdout = err.stdout || '';
-      stderr = err.stderr || '';
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string };
+      stdout = e.stdout || '';
+      stderr = e.stderr || '';
     }
     const combined = stdout + stderr;
 
