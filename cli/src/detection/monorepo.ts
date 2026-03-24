@@ -24,7 +24,8 @@ export function detectMonorepoTool(rootDir: string): MonorepoDetection | null {
 
   if (fileExists(rootDir, 'lerna.json')) {
     const lernaConfig = readJSON(rootDir, 'lerna.json');
-    const patterns = lernaConfig?.packages ?? ['packages/*'];
+    const packages = lernaConfig?.packages;
+    const patterns: string[] = Array.isArray(packages) ? packages : ['packages/*'];
     const workspaces = resolveGlobPatterns(rootDir, patterns);
     return { tool: 'lerna', workspaces };
   }
@@ -38,9 +39,7 @@ export function detectMonorepoTool(rootDir: string): MonorepoDetection | null {
 
   const pkgJson = readJSON(rootDir, 'package.json');
   if (pkgJson?.workspaces) {
-    const patterns: string[] = Array.isArray(pkgJson.workspaces)
-      ? pkgJson.workspaces
-      : pkgJson.workspaces.packages ?? [];
+    const patterns: string[] = extractWorkspacePatterns(pkgJson.workspaces);
     const workspaces = resolveGlobPatterns(rootDir, patterns);
 
     if (fileExists(rootDir, 'yarn.lock')) {
@@ -76,10 +75,17 @@ function readJSON(rootDir: string, fileName: string): Record<string, unknown> | 
 function resolveWorkspaces(rootDir: string): string[] {
   const pkgJson = readJSON(rootDir, 'package.json');
   if (!pkgJson?.workspaces) return [];
-  const patterns: string[] = Array.isArray(pkgJson.workspaces)
-    ? pkgJson.workspaces
-    : pkgJson.workspaces.packages ?? [];
+  const patterns: string[] = extractWorkspacePatterns(pkgJson.workspaces);
   return resolveGlobPatterns(rootDir, patterns);
+}
+
+function extractWorkspacePatterns(workspaces: unknown): string[] {
+  if (Array.isArray(workspaces)) return workspaces;
+  if (typeof workspaces === 'object' && workspaces !== null) {
+    const packages = (workspaces as Record<string, unknown>).packages;
+    if (Array.isArray(packages)) return packages;
+  }
+  return [];
 }
 
 function resolveGlobPatterns(rootDir: string, patterns: string[]): string[] {

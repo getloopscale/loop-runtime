@@ -35,6 +35,14 @@ const (
 	TypeConsumerHealthy      = "ConsumerHealthy"
 )
 
+// --- Environment conditions ---
+const (
+	TypeEnvNamespaceReady     = "NamespaceReady"
+	TypeEnvRBACReady          = "RBACReady"
+	TypeEnvNetworkPolicyReady = "NetworkPolicyReady"
+	TypeEnvQuotaReady         = "QuotaReady"
+)
+
 // --- Application conditions ---
 const (
 	TypeServiceResolved    = "ServiceResolved"
