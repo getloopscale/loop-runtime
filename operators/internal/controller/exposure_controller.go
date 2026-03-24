@@ -223,7 +223,7 @@ func (r *ExposureReconciler) performProbe(ctx context.Context, url string) (int3
 	if err != nil {
 		return 0, fmt.Errorf("probing %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return int32(resp.StatusCode), nil
 }

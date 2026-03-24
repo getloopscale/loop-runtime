@@ -95,7 +95,7 @@ func (r *PlatformBootstrapReconciler) checkGiteaReachable(ctx context.Context, b
 	if err != nil {
 		return fmt.Errorf("connecting to Gitea: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status %d from Gitea version endpoint", resp.StatusCode)
 	}
@@ -113,7 +113,7 @@ func (r *PlatformBootstrapReconciler) validateGiteaToken(ctx context.Context, ba
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("token validation failed with status %d", resp.StatusCode)
 	}
@@ -134,7 +134,7 @@ func (r *PlatformBootstrapReconciler) createGiteaToken(ctx context.Context, base
 	if err != nil {
 		return "", fmt.Errorf("listing tokens: %w", err)
 	}
-	defer listResp.Body.Close()
+	defer func() { _ = listResp.Body.Close() }()
 
 	if listResp.StatusCode == http.StatusOK {
 		var tokens []struct {
@@ -173,7 +173,7 @@ func (r *PlatformBootstrapReconciler) createGiteaToken(ctx context.Context, base
 	if err != nil {
 		return "", fmt.Errorf("creating token: %w", err)
 	}
-	defer createResp.Body.Close()
+	defer func() { _ = createResp.Body.Close() }()
 
 	if createResp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(createResp.Body)

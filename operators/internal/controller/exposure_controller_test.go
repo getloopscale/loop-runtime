@@ -290,7 +290,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 			BeforeAll(func() {
 				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
-					fmt.Fprintln(w, "healthy")
+					_, _ = fmt.Fprintln(w, "healthy")
 				}))
 
 				route := newExposedRouteCR(routeName, appRef, server.URL, serviceName, 80, false)

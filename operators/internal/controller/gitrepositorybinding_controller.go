@@ -264,7 +264,7 @@ func (r *GitRepositoryBindingReconciler) checkReachability(ctx context.Context, 
 			gen)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		conditions.SetCondition(&binding.Status.Conditions, conditions.TypeRepositoryReachable,

@@ -101,7 +101,7 @@ func (r *PlatformBootstrapReconciler) checkArgoCDReachable(ctx context.Context, 
 	if err != nil {
 		return fmt.Errorf("connecting to ArgoCD: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status %d from ArgoCD version endpoint", resp.StatusCode)
@@ -122,7 +122,7 @@ func (r *PlatformBootstrapReconciler) createArgoCDSession(ctx context.Context, b
 	if err != nil {
 		return "", fmt.Errorf("creating ArgoCD session: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("ArgoCD session creation failed with status %d", resp.StatusCode)

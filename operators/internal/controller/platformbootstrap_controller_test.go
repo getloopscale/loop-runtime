@@ -71,14 +71,14 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 				switch {
 				case r.URL.Path == "/api/v1/version" && r.Method == http.MethodGet:
 					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprint(w, `{"version":"1.21.0"}`)
+					_, _ = fmt.Fprint(w, `{"version":"1.21.0"}`)
 
 				case r.URL.Path == "/api/v1/user" && r.Method == http.MethodGet:
 					// Token validation: if we have a token, return user
 					authHeader := r.Header.Get("Authorization")
 					if authHeader != "" {
 						w.Header().Set("Content-Type", "application/json")
-						fmt.Fprint(w, `{"id":1,"login":"gitea_admin"}`)
+						_, _ = fmt.Fprint(w, `{"id":1,"login":"gitea_admin"}`)
 						return
 					}
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -92,9 +92,9 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 					}
 					w.Header().Set("Content-Type", "application/json")
 					if giteaTokenCreated.Load() {
-						fmt.Fprint(w, `[{"id":1,"name":"platform-bootstrap-token"}]`)
+						_, _ = fmt.Fprint(w, `[{"id":1,"name":"platform-bootstrap-token"}]`)
 					} else {
-						fmt.Fprint(w, `[]`)
+						_, _ = fmt.Fprint(w, `[]`)
 					}
 
 				case r.URL.Path == "/api/v1/users/gitea_admin/tokens" && r.Method == http.MethodPost:
@@ -102,16 +102,16 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 					giteaTokenCreated.Store(true)
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusCreated)
-					fmt.Fprint(w, `{"id":1,"name":"platform-bootstrap-token","sha1":"test-token-value-12345"}`)
+					_, _ = fmt.Fprint(w, `{"id":1,"name":"platform-bootstrap-token","sha1":"test-token-value-12345"}`)
 
 				case r.URL.Path == "/api/v1/orgs/loopzero" && r.Method == http.MethodGet:
 					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprint(w, `{"id":1,"name":"loopzero"}`)
+					_, _ = fmt.Fprint(w, `{"id":1,"name":"loopzero"}`)
 
 				case r.URL.Path == "/api/v1/orgs" && r.Method == http.MethodPost:
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusCreated)
-					fmt.Fprint(w, `{"id":1,"name":"loopzero"}`)
+					_, _ = fmt.Fprint(w, `{"id":1,"name":"loopzero"}`)
 
 				default:
 					http.Error(w, fmt.Sprintf("unexpected gitea request: %s %s", r.Method, r.URL.Path), http.StatusNotFound)
@@ -123,11 +123,11 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 				switch {
 				case r.URL.Path == "/api/v1/session" && r.Method == http.MethodPost:
 					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprint(w, `{"token":"argocd-jwt-token-12345"}`)
+					_, _ = fmt.Fprint(w, `{"token":"argocd-jwt-token-12345"}`)
 
 				case r.URL.Path == "/api/version" && r.Method == http.MethodGet:
 					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprint(w, `{"Version":"v2.10.0"}`)
+					_, _ = fmt.Fprint(w, `{"Version":"v2.10.0"}`)
 
 				default:
 					http.Error(w, fmt.Sprintf("unexpected argocd request: %s %s", r.Method, r.URL.Path), http.StatusNotFound)
@@ -139,11 +139,11 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 				switch {
 				case r.URL.Path == "/api/v1/health" && r.Method == http.MethodGet:
 					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprint(w, `{"status":"ok"}`)
+					_, _ = fmt.Fprint(w, `{"status":"ok"}`)
 
 				case r.URL.Path == "/internal/bootstrap" && r.Method == http.MethodPost:
 					w.WriteHeader(http.StatusOK)
-					fmt.Fprint(w, `{"seeded":true}`)
+					_, _ = fmt.Fprint(w, `{"seeded":true}`)
 
 				default:
 					http.Error(w, fmt.Sprintf("unexpected api request: %s %s", r.Method, r.URL.Path), http.StatusNotFound)
@@ -333,25 +333,25 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 				apiCalls.Add(1)
 				switch r.URL.Path {
 				case "/api/v1/health":
-					fmt.Fprint(w, `{"status":"ok"}`)
+					_, _ = fmt.Fprint(w, `{"status":"ok"}`)
 				case "/internal/bootstrap":
-					fmt.Fprint(w, `{"seeded":true}`)
+					_, _ = fmt.Fprint(w, `{"seeded":true}`)
 				}
 			}))
 			giteaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch {
 				case r.URL.Path == "/api/v1/version":
 					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprint(w, `{"version":"1.21.0"}`)
+					_, _ = fmt.Fprint(w, `{"version":"1.21.0"}`)
 				case r.URL.Path == "/api/v1/user":
 					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprint(w, `{"id":1,"login":"gitea_admin"}`)
+					_, _ = fmt.Fprint(w, `{"id":1,"login":"gitea_admin"}`)
 				case r.URL.Path == "/api/v1/users/gitea_admin/tokens" && r.Method == http.MethodGet:
 					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprint(w, `[{"id":1,"name":"platform-bootstrap-token"}]`)
+					_, _ = fmt.Fprint(w, `[{"id":1,"name":"platform-bootstrap-token"}]`)
 				case r.URL.Path == "/api/v1/orgs/loopzero":
 					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprint(w, `{"id":1,"name":"loopzero"}`)
+					_, _ = fmt.Fprint(w, `{"id":1,"name":"loopzero"}`)
 				default:
 					w.WriteHeader(http.StatusOK)
 				}
@@ -360,10 +360,10 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 				switch r.URL.Path {
 				case "/api/v1/session":
 					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprint(w, `{"token":"argocd-jwt-token"}`)
+					_, _ = fmt.Fprint(w, `{"token":"argocd-jwt-token"}`)
 				case "/api/version":
 					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprint(w, `{"Version":"v2.10.0"}`)
+					_, _ = fmt.Fprint(w, `{"Version":"v2.10.0"}`)
 				default:
 					w.WriteHeader(http.StatusOK)
 				}
