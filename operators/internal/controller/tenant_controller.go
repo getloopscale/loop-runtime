@@ -209,6 +209,10 @@ func allConditionsTrue(conditions []metav1.Condition) bool {
 }
 
 // reconcileDelete handles the verify-then-remove finalizer pattern for Tenant deletion.
+//
+// Deprovisioning strategy: each CRD owns its own cleanup. The TenantController
+// waits for child Environment CRs to disappear (they handle namespace deletion),
+// then cleans up tenant-level resources (ArgoCD, Gitea, build namespaces).
 func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzerov1.Tenant) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -231,7 +235,28 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		return ctrl.Result{}, err
 	}
 
-	// Phase 1: Issue deletes (idempotent)
+	// Phase 1: Wait for child Environment CRs to be deleted.
+	// Environment CRs are owned by the Tenant (ownerRef cascade), so K8s marks them
+	// for deletion automatically. Each EnvironmentController handles its own namespace cleanup.
+	var envList loopzerov1.EnvironmentList
+	if err := r.Client.List(ctx, &envList, client.InNamespace(tenant.Namespace)); err != nil {
+		return ctrl.Result{}, fmt.Errorf("listing child Environment CRs: %w", err)
+	}
+	childEnvCount := 0
+	for _, env := range envList.Items {
+		for _, ref := range env.OwnerReferences {
+			if ref.UID == tenant.UID {
+				childEnvCount++
+				break
+			}
+		}
+	}
+	if childEnvCount > 0 {
+		logger.Info("waiting for child Environment CRs to be deleted", "remaining", childEnvCount)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	// Phase 2: All child Environments are gone. Clean up tenant-level resources.
 	// Delete ArgoCD Applications for this tenant
 	if err := r.ArgoCDProvisioner.DeleteApplications(ctx, tenant.Name); err != nil {
 		logger.Info("non-fatal cleanup failure, continuing", "step", "argocd-cleanup", "error", err, "tenant", tenant.Name)
@@ -256,33 +281,16 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		}
 	}
 
-	// Delete namespaces on runtime cluster ({tenant}-{env})
-	var runtimeNsList corev1.NamespaceList
-	if err := r.RuntimeClient.List(ctx, &runtimeNsList, client.MatchingLabels{"loopzero.io/tenant": tenant.Name}); err != nil {
-		logger.Info("non-fatal cleanup failure on runtime cluster", "step", "list-runtime-ns", "error", err)
-	} else {
-		for i := range runtimeNsList.Items {
-			if runtimeNsList.Items[i].DeletionTimestamp.IsZero() {
-				if err := r.RuntimeClient.Delete(ctx, &runtimeNsList.Items[i]); err != nil && !errors.IsNotFound(err) {
-					return ctrl.Result{}, err
-				}
-			}
-		}
-	}
-
 	// Archive Gitea repo (soft delete, idempotent)
 	if err := r.GitProvisioner.ArchiveRepo(ctx, tenant.Spec.GitOps.RepoName); err != nil {
 		logger.Info("non-fatal cleanup failure, continuing", "step", "gitea-archive", "error", err, "repo", tenant.Spec.GitOps.RepoName)
 	}
 
-	// Phase 2: Verify all namespaces are gone on both clusters
+	// Phase 3: Verify build namespaces are gone
 	var remainingBuild corev1.NamespaceList
 	_ = r.BuildClient.List(ctx, &remainingBuild, client.MatchingLabels{"loopzero.io/tenant": tenant.Name})
-	var remainingRuntime corev1.NamespaceList
-	_ = r.RuntimeClient.List(ctx, &remainingRuntime, client.MatchingLabels{"loopzero.io/tenant": tenant.Name})
-	remaining := len(remainingBuild.Items) + len(remainingRuntime.Items)
-	if remaining > 0 {
-		logger.Info("namespaces still exist, requeuing", "count", remaining)
+	if len(remainingBuild.Items) > 0 {
+		logger.Info("build namespaces still exist, requeuing", "count", len(remainingBuild.Items))
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 

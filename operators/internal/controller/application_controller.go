@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +17,8 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
+
+const applicationFinalizer = "loopzero.io/app-cleanup"
 
 // ApplicationReconciler reconciles a LoopZeroApplication object.
 // It manages hostname assignment, ExposedRoute creation, and phase tracking.
@@ -35,6 +38,22 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion with verify-then-remove finalizer pattern
+	if !app.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, &app)
+	}
+
+	// Add finalizer if not present
+	if !controllerutil.ContainsFinalizer(&app, applicationFinalizer) {
+		controllerutil.AddFinalizer(&app, applicationFinalizer)
+		if err := r.Update(ctx, &app); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Step 1: Compute hostname if empty
@@ -145,6 +164,46 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		"hostname", app.Spec.Hostname,
 		"url", app.Status.URL)
 
+	return ctrl.Result{}, nil
+}
+
+// reconcileDelete handles the verify-then-remove finalizer pattern for Application deletion.
+// It waits for all owned ExposedRoute CRs to be deleted before removing the finalizer.
+func (r *ApplicationReconciler) reconcileDelete(ctx context.Context, app *loopzerov1.LoopZeroApplication) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	if !controllerutil.ContainsFinalizer(app, applicationFinalizer) {
+		return ctrl.Result{}, nil
+	}
+
+	logger.Info("application is being deleted", "application", app.Name)
+
+	// Check if any owned ExposedRoute CRs still exist
+	var routeList loopzerov1.ExposedRouteList
+	if err := r.Client.List(ctx, &routeList, client.InNamespace(app.Namespace)); err != nil {
+		return ctrl.Result{}, fmt.Errorf("listing child ExposedRoute CRs: %w", err)
+	}
+	childRouteCount := 0
+	for _, route := range routeList.Items {
+		for _, ref := range route.OwnerReferences {
+			if ref.UID == app.UID {
+				childRouteCount++
+				break
+			}
+		}
+	}
+	if childRouteCount > 0 {
+		logger.Info("waiting for child ExposedRoute CRs to be deleted", "remaining", childRouteCount)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	// All ExposedRoutes gone — remove finalizer
+	controllerutil.RemoveFinalizer(app, applicationFinalizer)
+	if err := r.Update(ctx, app); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("application deletion complete", "application", app.Name)
 	return ctrl.Result{}, nil
 }
 

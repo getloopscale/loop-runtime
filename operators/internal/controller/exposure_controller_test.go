@@ -38,6 +38,82 @@ func newExposedRouteCR(name, appRef, hostname, serviceName string, servicePort i
 
 var _ = Describe("ExposureController", Ordered, func() {
 
+	Context("finalizer management", func() {
+		const (
+			routeName   = "route-fin-test"
+			appRef      = "app-fin-route"
+			hostname    = "fin-test.dev.loopzero.example"
+			serviceName = "fin-svc"
+		)
+
+		BeforeAll(func() {
+			route := newExposedRouteCR(routeName, appRef, hostname, serviceName, 80, false)
+			Expect(k8sClient.Create(ctx, route)).To(Succeed())
+		})
+
+		It("should add the route-cleanup finalizer on creation", func() {
+			Eventually(func(g Gomega) {
+				var route loopzerov1.ExposedRoute
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: routeName, Namespace: "default",
+				}, &route)).To(Succeed())
+				g.Expect(route.Finalizers).To(ContainElement("loopzero.io/route-cleanup"))
+			}, timeout, interval).Should(Succeed())
+		})
+
+		AfterAll(func() {
+			route := &loopzerov1.ExposedRoute{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
+				route.Finalizers = nil
+				_ = k8sClient.Update(ctx, route)
+				_ = k8sClient.Delete(ctx, route)
+			}
+		})
+	})
+
+	Context("deletion via finalizer — removes finalizer immediately", func() {
+		const (
+			routeName   = "route-del-test"
+			appRef      = "app-del-route"
+			hostname    = "del-test.dev.loopzero.example"
+			serviceName = "del-svc"
+		)
+
+		It("should remove finalizer immediately on delete (no external cleanup in v1)", func() {
+			route := newExposedRouteCR(routeName, appRef, hostname, serviceName, 80, false)
+			Expect(k8sClient.Create(ctx, route)).To(Succeed())
+
+			// Wait for finalizer to be added
+			Eventually(func(g Gomega) {
+				var r loopzerov1.ExposedRoute
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: routeName, Namespace: "default",
+				}, &r)).To(Succeed())
+				g.Expect(r.Finalizers).To(ContainElement("loopzero.io/route-cleanup"))
+			}, timeout, interval).Should(Succeed())
+
+			// Delete the route
+			var toDelete loopzerov1.ExposedRoute
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: routeName, Namespace: "default",
+			}, &toDelete)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &toDelete)).To(Succeed())
+
+			// Route should be fully deleted (finalizer removed immediately by controller)
+			Eventually(func(g Gomega) {
+				var deleted loopzerov1.ExposedRoute
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: routeName, Namespace: "default",
+				}, &deleted)
+				if err == nil {
+					// Still exists — check finalizer is gone
+					g.Expect(deleted.Finalizers).ToNot(ContainElement("loopzero.io/route-cleanup"))
+				}
+				// Either NotFound or finalizer removed is success
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
 	Context("when an ExposedRoute has TLS enabled and cert secret exists", func() {
 		const (
 			routeName   = "route-cert-ready"
@@ -96,6 +172,8 @@ var _ = Describe("ExposureController", Ordered, func() {
 		AfterAll(func() {
 			route := &loopzerov1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
+				route.Finalizers = nil
+				_ = k8sClient.Update(ctx, route)
 				_ = k8sClient.Delete(ctx, route)
 			}
 			secret := &corev1.Secret{}
@@ -159,6 +237,8 @@ var _ = Describe("ExposureController", Ordered, func() {
 		AfterAll(func() {
 			route := &loopzerov1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
+				route.Finalizers = nil
+				_ = k8sClient.Update(ctx, route)
 				_ = k8sClient.Delete(ctx, route)
 			}
 		})
@@ -190,6 +270,8 @@ var _ = Describe("ExposureController", Ordered, func() {
 		AfterAll(func() {
 			route := &loopzerov1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
+				route.Finalizers = nil
+				_ = k8sClient.Update(ctx, route)
 				_ = k8sClient.Delete(ctx, route)
 			}
 		})
@@ -251,6 +333,8 @@ var _ = Describe("ExposureController", Ordered, func() {
 				server.Close()
 				route := &loopzerov1.ExposedRoute{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
+					route.Finalizers = nil
+					_ = k8sClient.Update(ctx, route)
 					_ = k8sClient.Delete(ctx, route)
 				}
 			})
@@ -299,6 +383,8 @@ var _ = Describe("ExposureController", Ordered, func() {
 				server.Close()
 				route := &loopzerov1.ExposedRoute{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
+					route.Finalizers = nil
+					_ = k8sClient.Update(ctx, route)
 					_ = k8sClient.Delete(ctx, route)
 				}
 			})

@@ -186,6 +186,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 
 		AfterAll(func() {
 			fakeGitProvider.SetErr(nil)
+			cleanupTenantEnvCRs(tenantName)
 			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
 				ns := &corev1.Namespace{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
@@ -265,6 +266,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 		})
 
 		AfterAll(func() {
+			cleanupTenantEnvCRs(tenantName)
 			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
 				ns := &corev1.Namespace{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
@@ -324,6 +326,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 		})
 
 		AfterAll(func() {
+			cleanupTenantEnvCRs(tenantName)
 			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
 				ns := &corev1.Namespace{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
@@ -339,10 +342,10 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 		})
 	})
 
-	Context("deletion via finalizer (verify-then-remove)", func() {
+	Context("deletion via finalizer (waits for child Environment CRs)", func() {
 		const tenantName = "integ-delete"
 
-		It("should delete namespaces by label, verify, then remove finalizer", func() {
+		It("should wait for child Environment CRs, then remove finalizer", func() {
 			tenant := newTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
@@ -374,27 +377,59 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 				g.Expect(d.Status.Phase).To(Equal(loopzerov1.TenantPhaseDeleting))
 			}, timeout, interval).Should(Succeed())
 
-			// Namespaces should have DeletionTimestamp
+			// Tenant should still have finalizer (waiting for child Environment CRs)
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: tenantName, Namespace: "default",
+			}, &t)).To(Succeed())
+			Expect(t.Finalizers).To(ContainElement("loopzero.io/tenant-cleanup"))
+
+			// Simulate child Environment CR cascade deletion + cleanup
+			// (envtest doesn't run GC, so we must manually delete and remove finalizers)
+			var envList loopzerov1.EnvironmentList
+			Expect(k8sClient.List(ctx, &envList, client.InNamespace("default"))).To(Succeed())
+			for i := range envList.Items {
+				env := &envList.Items[i]
+				for _, ref := range env.OwnerReferences {
+					if ref.Name == tenantName {
+						if env.DeletionTimestamp.IsZero() {
+							Expect(k8sClient.Delete(ctx, env)).To(Succeed())
+						}
+						break
+					}
+				}
+			}
+
+			// Remove environment-cleanup finalizers and namespace labels
 			Eventually(func(g Gomega) {
-				var nsList corev1.NamespaceList
-				g.Expect(k8sClient.List(ctx, &nsList, client.MatchingLabels{
-					"loopzero.io/tenant": tenantName,
-				})).To(Succeed())
-				for _, ns := range nsList.Items {
-					g.Expect(ns.DeletionTimestamp.IsZero()).To(BeFalse())
+				var envs loopzerov1.EnvironmentList
+				g.Expect(k8sClient.List(ctx, &envs, client.InNamespace("default"))).To(Succeed())
+				for i := range envs.Items {
+					env := &envs.Items[i]
+					for _, ref := range env.OwnerReferences {
+						if ref.Name == tenantName {
+							nsName := env.Spec.Namespace.Name
+							var ns corev1.Namespace
+							if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns); err == nil {
+								ns.Finalizers = nil
+								delete(ns.Labels, "loopzero.io/tenant")
+								g.Expect(k8sClient.Update(ctx, &ns)).To(Succeed())
+							}
+							env.Finalizers = nil
+							g.Expect(k8sClient.Update(ctx, env)).To(Succeed())
+							break
+						}
+					}
 				}
 			}, timeout, interval).Should(Succeed())
 
-			// Simulate namespace cleanup (envtest limitation)
-			var nsList corev1.NamespaceList
-			Expect(k8sClient.List(ctx, &nsList, client.MatchingLabels{
-				"loopzero.io/tenant": tenantName,
-			})).To(Succeed())
-			for i := range nsList.Items {
-				ns := &nsList.Items[i]
+			// Clean up build namespaces
+			var buildNsList corev1.NamespaceList
+			_ = k8sClient.List(ctx, &buildNsList, client.MatchingLabels{"loopzero.io/tenant": tenantName})
+			for i := range buildNsList.Items {
+				ns := &buildNsList.Items[i]
 				ns.Finalizers = nil
 				delete(ns.Labels, "loopzero.io/tenant")
-				Expect(k8sClient.Update(ctx, ns)).To(Succeed())
+				_ = k8sClient.Update(ctx, ns)
 			}
 
 			// Tenant should be fully deleted

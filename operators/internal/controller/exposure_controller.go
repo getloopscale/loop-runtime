@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
@@ -22,6 +23,9 @@ import (
 )
 
 const (
+	// exposureFinalizer is the finalizer name for ExposedRoute cleanup.
+	exposureFinalizer = "loopzero.io/route-cleanup"
+
 	// probeRequeueInterval is the interval between reachability probes.
 	probeRequeueInterval = 30 * time.Second
 
@@ -53,6 +57,29 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion — remove finalizer immediately (v1: no external resources to clean up,
+	// namespace deletion handles IngressRoute/Certificate cleanup).
+	if !route.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(&route, exposureFinalizer) {
+			controllerutil.RemoveFinalizer(&route, exposureFinalizer)
+			if err := r.Update(ctx, &route); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer if not present
+	if !controllerutil.ContainsFinalizer(&route, exposureFinalizer) {
+		controllerutil.AddFinalizer(&route, exposureFinalizer)
+		if err := r.Update(ctx, &route); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := r.Get(ctx, req.NamespacedName, &route); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Initialize phase if empty
