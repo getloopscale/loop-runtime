@@ -189,15 +189,19 @@ jobs:
 
       - name: Add registry to DOKS clusters
         run: |
-          # This is idempotent — safe to run on every build.
-          # It configures the clusters to pull from the registry without imagePullSecrets.
-          doctl kubernetes cluster registry add loopzero-infra-dev-nyc3-mgmt 2>/dev/null || true
-          doctl kubernetes cluster registry add loopzero-infra-dev-nyc3-build 2>/dev/null || true
-          doctl kubernetes cluster registry add loopzero-infra-dev-nyc3-runtime 2>/dev/null || true
+          # Discover cluster names dynamically — avoids hardcoding region.
+          # doctl returns all DOKS clusters; we filter for loopzero-infra ones.
+          CLUSTERS=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra" || true)
+          if [ -z "$CLUSTERS" ]; then
+            echo "::warning::No loopzero-infra DOKS clusters found"
+            exit 0
+          fi
 
           echo "### Registry Integration" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ✅ loopzero-infra-dev-nyc3-mgmt" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ✅ loopzero-infra-dev-nyc3-runtime" >> "$GITHUB_STEP_SUMMARY"
+          for CLUSTER in $CLUSTERS; do
+            doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
+            echo "- ✅ $CLUSTER" >> "$GITHUB_STEP_SUMMARY"
+          done
 
   # ─────────────────────────────────────────────
   # POST-BUILD — update CWTs on build cluster
@@ -224,15 +228,25 @@ jobs:
 
       - name: Update CWTs on build cluster
         run: |
+          # Discover build cluster name dynamically — avoids hardcoding region.
+          BUILD_CLUSTER=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra.*-build$" | head -1)
+          if [ -z "$BUILD_CLUSTER" ]; then
+            echo "::warning::Build cluster not found"
+            exit 0
+          fi
+
           # Get kubeconfig for the build cluster
-          doctl kubernetes cluster kubeconfig save loopzero-infra-dev-nyc3-build
+          doctl kubernetes cluster kubeconfig save "$BUILD_CLUSTER"
+
+          # Extract the kubectl context name from the saved kubeconfig
+          BUILD_CONTEXT=$(kubectl config get-contexts -o name 2>/dev/null | grep "$BUILD_CLUSTER" | head -1)
 
           # Render and apply CWT templates from the local Helm chart.
           # This ensures CWTs always match the latest code, even if the
           # Pulumi Helm release version hasn't changed.
           helm template loopzero-build-cwts infra/helm/argo-workflows \
             --set minio.insecure=true | \
-            kubectl apply --context do-nyc3-loopzero-infra-dev-nyc3-build -f -
+            kubectl apply --context "$BUILD_CONTEXT" -f -
 
           echo "### CWT Update" >> "$GITHUB_STEP_SUMMARY"
-          echo "- CWTs updated on build cluster" >> "$GITHUB_STEP_SUMMARY"
+          echo "- CWTs updated on $BUILD_CLUSTER" >> "$GITHUB_STEP_SUMMARY"

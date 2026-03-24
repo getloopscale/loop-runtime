@@ -348,7 +348,7 @@ export function createProgram(): Command {
         },
         cleanupFile,
         getBuildStatus: async (buildId: string) => {
-          const result = await apiClient.get<{ state: string; error_message?: string }>(
+          const result = await apiClient.get<{ status: string; error_message?: string }>(
             `/api/v1/builds/${encodeURIComponent(buildId)}`
           );
           return result;

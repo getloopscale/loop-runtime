@@ -1296,6 +1296,25 @@ function installTenantController(
     { provider, dependsOn: [ns] },
   );
 
+  // Secret with cloud provider credentials for the tenant controller.
+  // These are used to create registry credentials and Spaces access in build namespaces.
+  // Stored as Secret (not plain env vars) to prevent exposure via K8s API.
+  const controllerCredentials = new k8s.core.v1.Secret(
+    "tenant-controller-credentials",
+    {
+      metadata: {
+        name: "tenant-controller-credentials",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      stringData: {
+        SPACES_ACCESS_KEY_ID: config.spacesAccessKeyId,
+        SPACES_SECRET_ACCESS_KEY: config.spacesSecretAccessKey,
+        DIGITALOCEAN_TOKEN: config.digitaloceanToken,
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
   return new k8s.apps.v1.Deployment(
     "tenant-controller",
     {
@@ -1382,16 +1401,31 @@ function installTenantController(
                   },
                   {
                     name: "SPACES_ACCESS_KEY_ID",
-                    value: config.spacesAccessKeyId,
+                    valueFrom: {
+                      secretKeyRef: {
+                        name: "tenant-controller-credentials",
+                        key: "SPACES_ACCESS_KEY_ID",
+                      },
+                    },
                   },
                   {
                     name: "SPACES_SECRET_ACCESS_KEY",
-                    value: config.spacesSecretAccessKey,
+                    valueFrom: {
+                      secretKeyRef: {
+                        name: "tenant-controller-credentials",
+                        key: "SPACES_SECRET_ACCESS_KEY",
+                      },
+                    },
                   },
                   // DO Container Registry auth — Kaniko needs this for image push.
                   {
                     name: "DIGITALOCEAN_TOKEN",
-                    value: config.digitaloceanToken,
+                    valueFrom: {
+                      secretKeyRef: {
+                        name: "tenant-controller-credentials",
+                        key: "DIGITALOCEAN_TOKEN",
+                      },
+                    },
                   },
                 ],
                 resources: {
@@ -1412,7 +1446,10 @@ function installTenantController(
         },
       },
     },
-    { provider, dependsOn: [ns, crds, binding, controllerKubeconfig] },
+    {
+      provider,
+      dependsOn: [ns, crds, binding, controllerKubeconfig, controllerCredentials],
+    },
   );
 }
 

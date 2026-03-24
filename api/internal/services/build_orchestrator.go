@@ -164,7 +164,8 @@ type BuildOrchestrator struct {
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
-const defaultArgocdSyncTimeout = 120 * time.Second
+// 300s accommodates first deploys (image pull + rollout + cert issuance).
+const defaultArgocdSyncTimeout = 300 * time.Second
 
 // NewBuildOrchestrator creates a new BuildOrchestrator with all dependencies injected.
 func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {

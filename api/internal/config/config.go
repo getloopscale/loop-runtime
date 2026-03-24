@@ -170,7 +170,7 @@ func Load() Config {
 
 		// ArgoCD Sync
 		ArgocdPollInterval: envDuration("ARGOCD_POLL_INTERVAL", 10*time.Second),
-		ArgocdSyncTimeout:  envDuration("ARGOCD_SYNC_TIMEOUT", 120*time.Second),
+		ArgocdSyncTimeout:  envDuration("ARGOCD_SYNC_TIMEOUT", 300*time.Second),
 		ArgocdInsecure:     os.Getenv("ARGOCD_INSECURE") == "true",
 
 		// SSE

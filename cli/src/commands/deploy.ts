@@ -79,7 +79,7 @@ interface DeployCompletedPayload {
 }
 
 interface BuildStatus {
-  state: string;
+  status: string;
   error_message?: string;
 }
 
@@ -345,13 +345,13 @@ export class DeployCommand {
         // even though the stream broke.
         if (exitCode === 3 && this.deps.getBuildStatus) {
           try {
-            const status = await this.deps.getBuildStatus(buildResult.build_id);
-            if (status.state === 'SUCCEEDED') {
+            const buildStatus = await this.deps.getBuildStatus(buildResult.build_id);
+            if (buildStatus.status === 'SUCCEEDED') {
               exitCode = 0;
-            } else if (status.state === 'FAILED') {
+            } else if (buildStatus.status === 'FAILED') {
               exitCode = 2;
               if (!opts.json) {
-                this.deps.writeError(`Build failed: ${status.error_message ?? 'unknown error'}`);
+                this.deps.writeError(`Build failed: ${buildStatus.error_message ?? 'unknown error'}`);
               }
             }
             // If still RUNNING/QUEUED, keep exit code 3 (unknown)
