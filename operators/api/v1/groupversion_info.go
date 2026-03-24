@@ -2,7 +2,7 @@
 //
 // These types define the Custom Resource Definitions (CRDs) used by
 // LoopZero's Kubernetes operators: Tenant, PreviewEnvironment, AppSecret,
-// ClusterCredential, and ReconciliationReport.
+// ClusterCredential, ReconciliationReport, LoopZeroApplication, and ExposedRoute.
 //
 // +kubebuilder:object:generate=true
 // +groupName=loopzero.io
@@ -43,6 +43,10 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&GitRepositoryBindingList{},
 		&Environment{},
 		&EnvironmentList{},
+		&LoopZeroApplication{},
+		&LoopZeroApplicationList{},
+		&ExposedRoute{},
+		&ExposedRouteList{},
 	)
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil

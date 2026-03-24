@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- LoopZeroApplication CRD + ApplicationController — auto-assigns hostname via `naming.Hostname()`, creates ExposedRoute CR with ownerReference, tracks phase (Progressing/Serving/Reachable/Degraded/Down), sets conditions (ServiceResolved, IngressReady, CertificateIssued, RouteReachable, ApplicationHealthy) (#MEET-2026-03-24-004)
+- ExposedRoute CRD + ExposureController — manages DNS/TLS exposure with cert-manager secret detection, HTTP reachability probes (30s cadence), consecutive failure tracking (Failed after 5), phase lifecycle (Pending/CertIssued/Reachable/Failed) (#MEET-2026-03-24-004)
 - Internal `POST /internal/bootstrap` endpoint — seeds admin user, system tenant, and membership records for platform bootstrap. Idempotent via ON CONFLICT DO NOTHING (#MEET-2026-03-24-001)
 - Per-tenant MinIO credential isolation — TenantController now provisions scoped MinIO users with bucket policies restricting access to `loopzero-builds/{tenantID}/*` only (#MULTI-CLUSTER-MINIO)
 - Phase 3 (exposePlatform) — creates DNS records for management subdomains (api, argocd, grafana) and runtime wildcard (*.{domain}) (#PULUMI-PHASE3)

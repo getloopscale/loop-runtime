@@ -116,6 +116,12 @@ var _ = BeforeSuite(func() {
 	err = controller.SetupEnvironmentController(mgr, runtimeClient)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = controller.SetupApplicationController(mgr, "dev.loopzero.example")
+	Expect(err).NotTo(HaveOccurred())
+
+	err = controller.SetupExposureController(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		if startErr := mgr.Start(ctx); startErr != nil {
