@@ -1,8 +1,8 @@
 # Recreate Gaps — O que falta sistematizar para destroy+recreate funcionar
 
 > **Data:** 2026-03-24
-> **Status:** 14 gaps identificados, 0 resolvidos
-> **Criticidade:** Se `pulumi destroy && pulumi up` rodar agora, o deploy pipeline quebra.
+> **Status:** 14 gaps identificados, 14 resolvidos (commit a47872e)
+> **Criticidade:** RESOLVIDO — `pulumi destroy && pulumi up` deve recriar o sistema completo.
 
 ---
 
