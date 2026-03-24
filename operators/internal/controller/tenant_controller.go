@@ -92,67 +92,48 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		)
 	}
 
-	// Detect spec change: if generation advanced while Phase is Active, transition back to Provisioning
-	// so all reconcile steps re-execute (condition-gated checks compare ObservedGeneration).
-	if tenant.Status.Phase == loopzerov1.TenantPhaseActive &&
-		tenant.Generation != tenant.Status.ObservedGeneration {
-		tenant.Status.Phase = loopzerov1.TenantPhase(
-			tenantSM.Transition(statemachine.TenantActive, statemachine.TenantSpecChanged),
-		)
+	// All reconcile steps run unconditionally (idempotent via EnsureX/CreateOrUpdate).
+	// No condition-gated skipping — this ensures drift is corrected even when conditions
+	// were set True by a previous controller version that no longer applies.
+
+	// S1.6: Reconcile Gitea repo (always — idempotent via EnsureRepo)
+	if err := r.reconcileGitRepo(ctx, &tenant); err != nil {
+		conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeGitRepoReady,
+			metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
+		if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+			logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
+		}
+		return ctrl.Result{}, err
 	}
 
-	// S1.6: Reconcile Gitea repo
-	// Skip if GitRepoReady is already True at current generation
-	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeGitRepoReady, tenant.Generation) {
-		if err := r.reconcileGitRepo(ctx, &tenant); err != nil {
-			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeGitRepoReady,
-				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-			}
-			return ctrl.Result{}, err
+	// S1.6b: Reconcile ArgoCD Application per environment (always — idempotent via EnsureApplication)
+	if err := r.reconcileArgoCDApp(ctx, &tenant); err != nil {
+		conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeArgoCDAppReady,
+			metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
+		if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+			logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
 		}
+		return ctrl.Result{}, err
 	}
 
-	// S1.6b: Reconcile ArgoCD Application per environment
-	// Skip if ArgoCDAppReady is already True at current generation
-	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeArgoCDAppReady, tenant.Generation) {
-		if err := r.reconcileArgoCDApp(ctx, &tenant); err != nil {
-			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeArgoCDAppReady,
-				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-			}
-			return ctrl.Result{}, err
+	// S1.5: Reconcile build namespace + QuotaEnforced (always — idempotent via CreateOrUpdate)
+	if err := r.reconcileBuildNamespace(ctx, &tenant); err != nil {
+		conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeBuildNamespaceReady,
+			metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
+		if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+			logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
 		}
+		return ctrl.Result{}, err
 	}
 
-	// S1.5: Reconcile build namespace + QuotaEnforced
-	// Skip if BOTH BuildNamespaceReady AND QuotaEnforced are True at current generation
-	// (both conditions are set inside reconcileBuildNamespace)
-	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeBuildNamespaceReady, tenant.Generation) ||
-		!conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeQuotaEnforced, tenant.Generation) {
-		if err := r.reconcileBuildNamespace(ctx, &tenant); err != nil {
-			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeBuildNamespaceReady,
-				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-			}
-			return ctrl.Result{}, err
+	// S14.3: Reconcile PriorityClass based on tenant plan (always — idempotent)
+	if err := r.reconcilePriorityClass(ctx, &tenant); err != nil {
+		conditions.SetCondition(&tenant.Status.Conditions, conditions.TypePriorityClassReady,
+			metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
+		if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+			logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
 		}
-	}
-
-	// S14.3: Reconcile PriorityClass based on tenant plan
-	// Skip if PriorityClassReady is already True at current generation
-	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypePriorityClassReady, tenant.Generation) {
-		if err := r.reconcilePriorityClass(ctx, &tenant); err != nil {
-			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypePriorityClassReady,
-				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-			}
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, err
 	}
 
 	// Create Environment CRs for each spec.environments[] (delegating namespace/RBAC/NetworkPolicy to EnvironmentController)
