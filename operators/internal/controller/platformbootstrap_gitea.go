@@ -151,7 +151,7 @@ func (r *PlatformBootstrapReconciler) createGiteaToken(ctx context.Context, base
 					delReq.SetBasicAuth(username, password)
 					delResp, delErr := r.httpClient().Do(delReq)
 					if delErr == nil {
-						delResp.Body.Close()
+						_ = delResp.Body.Close()
 					}
 					break
 				}
@@ -204,7 +204,7 @@ func (r *PlatformBootstrapReconciler) ensureGiteaOrgs(ctx context.Context, baseU
 		if err != nil {
 			return fmt.Errorf("checking org %s: %w", org, err)
 		}
-		checkResp.Body.Close()
+		_ = checkResp.Body.Close()
 
 		if checkResp.StatusCode == http.StatusOK {
 			continue // Org exists.
@@ -224,7 +224,7 @@ func (r *PlatformBootstrapReconciler) ensureGiteaOrgs(ctx context.Context, baseU
 		if err != nil {
 			return fmt.Errorf("creating org %s: %w", org, err)
 		}
-		createResp.Body.Close()
+		_ = createResp.Body.Close()
 
 		// 201 Created or 422 already exists are both acceptable.
 		if createResp.StatusCode != http.StatusCreated && createResp.StatusCode != http.StatusUnprocessableEntity {

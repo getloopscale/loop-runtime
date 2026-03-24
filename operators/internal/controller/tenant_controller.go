@@ -152,6 +152,15 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 	tenant.Status.ObservedGeneration = tenant.Generation
 
+	// Re-fetch to get latest resourceVersion before final status update.
+	// Intermediate operations (CreateOrUpdate on child resources) may have triggered
+	// concurrent reconciles that bumped the Tenant's resourceVersion.
+	savedStatus := tenant.Status
+	if err := r.Get(ctx, req.NamespacedName, &tenant); err != nil {
+		return ctrl.Result{}, err
+	}
+	tenant.Status = savedStatus
+
 	// Update status
 	if err := r.Status().Update(ctx, &tenant); err != nil {
 		return ctrl.Result{}, err
@@ -220,7 +229,7 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	// Environment CRs are owned by the Tenant (ownerRef cascade), so K8s marks them
 	// for deletion automatically. Each EnvironmentController handles its own namespace cleanup.
 	var envList loopzerov1.EnvironmentList
-	if err := r.Client.List(ctx, &envList, client.InNamespace(tenant.Namespace)); err != nil {
+	if err := r.List(ctx, &envList, client.InNamespace(tenant.Namespace)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("listing child Environment CRs: %w", err)
 	}
 	childEnvCount := 0

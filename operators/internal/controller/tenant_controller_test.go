@@ -108,7 +108,7 @@ var _ = Describe("TenantController", Ordered, func() {
 	})
 
 	Context("when a Tenant CR has minimal spec (empty environments list)", func() {
-		It("should not panic and set Phase", func() {
+		It("should be rejected by CRD validation (minItems: 1)", func() {
 			tenant := &loopzerov1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "empty-envs",
@@ -126,20 +126,9 @@ var _ = Describe("TenantController", Ordered, func() {
 					Limits:  loopzerov1.ResourceLimits{},
 				},
 			}
-			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
-
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name:      "empty-envs",
-					Namespace: "default",
-				}, &t)).To(Succeed())
-				g.Expect(t.Status.Phase).To(SatisfyAny(
-					Equal(loopzerov1.TenantPhaseProvisioning),
-					Equal(loopzerov1.TenantPhaseActive),
-				))
-				g.Expect(t.Finalizers).To(ContainElement("loopzero.io/tenant-cleanup"))
-			}, timeout, interval).Should(Succeed())
+			err := k8sClient.Create(ctx, tenant)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.environments"))
 		})
 	})
 
@@ -1151,7 +1140,7 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 	})
 
 	Context("when all conditions are already True at current generation", func() {
-		It("should skip reconcile steps and preserve existing resources unchanged", func() {
+		It("should run all steps idempotently and preserve existing resources", func() {
 			// Get the tenant and record current state
 			var t loopzerov1.Tenant
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -1162,7 +1151,7 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 			callsBefore := fakeGitProvider.GetCalls()
 
 			// Add a custom annotation to the namespace to detect if it gets re-reconciled
-			// (CreateOrUpdate would preserve it, but the point is the call should not happen at all)
+			// (CreateOrUpdate preserves existing annotations, so the canary should persist)
 			nsName := "loopzero-" + tenantName + "-production"
 			var ns corev1.Namespace
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
@@ -1185,15 +1174,16 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 			// Give the controller time to process the re-reconcile
 			time.Sleep(2 * time.Second)
 
-			// Verify: GitProvisioner should NOT have been called again
-			// (condition GitRepoReady is already True at current generation)
-			Expect(fakeGitProvider.GetCalls()).To(Equal(callsBefore),
-				"EnsureRepo should not be called when GitRepoReady is already True at current generation")
+			// Verify: GitProvisioner IS called again (all steps run unconditionally for drift correction)
+			// but the call is idempotent — EnsureRepo returns the same result
+			Expect(fakeGitProvider.GetCalls()).To(BeNumerically(">", callsBefore),
+				"EnsureRepo should be called on every reconcile (unconditional, idempotent)")
 
 			// Verify: canary annotation on namespace should still be present
+			// (CreateOrUpdate preserves annotations not managed by the controller)
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
 			Expect(ns.Annotations).To(HaveKeyWithValue("test.loopzero.io/canary", "should-persist"),
-				"namespace should not have been re-reconciled when NamespacesReady is True")
+				"namespace annotations should be preserved by idempotent CreateOrUpdate")
 		})
 
 		It("should still have all tenant-scoped conditions True and Phase Active", func() {

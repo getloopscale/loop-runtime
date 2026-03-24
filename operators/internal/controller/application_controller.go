@@ -180,7 +180,7 @@ func (r *ApplicationReconciler) reconcileDelete(ctx context.Context, app *loopze
 
 	// Check if any owned ExposedRoute CRs still exist
 	var routeList loopzerov1.ExposedRouteList
-	if err := r.Client.List(ctx, &routeList, client.InNamespace(app.Namespace)); err != nil {
+	if err := r.List(ctx, &routeList, client.InNamespace(app.Namespace)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("listing child ExposedRoute CRs: %w", err)
 	}
 	childRouteCount := 0

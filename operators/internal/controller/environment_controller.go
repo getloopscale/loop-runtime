@@ -127,6 +127,15 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	env.Status.Namespace = nsName
 	env.Status.ObservedGeneration = env.Generation
 
+	// Re-fetch to get latest resourceVersion before final status update.
+	// Concurrent reconciles (e.g., TenantController's CreateOrUpdate on this CR)
+	// may have bumped the resourceVersion since our initial Get.
+	savedStatus := env.Status
+	if err := r.Get(ctx, req.NamespacedName, &env); err != nil {
+		return ctrl.Result{}, err
+	}
+	env.Status = savedStatus
+
 	if err := r.Status().Update(ctx, &env); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -451,6 +460,46 @@ func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, env *loopzer
 	}
 
 	return nil
+}
+
+// rbacRulesForPlan returns the RBAC rules for a given plan tier.
+// Rules are split by API group to avoid RBAC escalation issues:
+// Kubernetes expands combined APIGroups × Resources as a cartesian product,
+// requiring the controller to hold ALL expanded combinations.
+func rbacRulesForPlan(plan loopzerov1.PlanTier) []rbacv1.PolicyRule {
+	// Starter: basic deploy permissions (split by API group)
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services", "configmaps"},
+			Verbs:     []string{"get", "list", "create", "update", "patch"},
+		},
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
+			Verbs:     []string{"get", "list", "create", "update", "patch"},
+		},
+	}
+
+	if plan == loopzerov1.PlanGrowth || plan == loopzerov1.PlanEnterprise {
+		// Growth: starter + secrets
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "list", "create", "update", "patch"},
+		})
+	}
+
+	if plan == loopzerov1.PlanEnterprise {
+		// Enterprise: growth + ingress/networkpolicy management
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups: []string{"networking.k8s.io"},
+			Resources: []string{"ingresses", "networkpolicies"},
+			Verbs:     []string{"get", "list", "create", "update", "patch", "delete"},
+		})
+	}
+
+	return rules
 }
 
 // SetupEnvironmentController registers the EnvironmentController with the manager.

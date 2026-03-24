@@ -331,10 +331,10 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 			// API server that counts calls
 			apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				apiCalls.Add(1)
-				switch {
-				case r.URL.Path == "/api/v1/health":
+				switch r.URL.Path {
+				case "/api/v1/health":
 					fmt.Fprint(w, `{"status":"ok"}`)
-				case r.URL.Path == "/internal/bootstrap":
+				case "/internal/bootstrap":
 					fmt.Fprint(w, `{"seeded":true}`)
 				}
 			}))
@@ -357,11 +357,11 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 				}
 			}))
 			argoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				switch {
-				case r.URL.Path == "/api/v1/session":
+				switch r.URL.Path {
+				case "/api/v1/session":
 					w.Header().Set("Content-Type", "application/json")
 					fmt.Fprint(w, `{"token":"argocd-jwt-token"}`)
-				case r.URL.Path == "/api/version":
+				case "/api/version":
 					w.Header().Set("Content-Type", "application/json")
 					fmt.Fprint(w, `{"Version":"v2.10.0"}`)
 				default:
