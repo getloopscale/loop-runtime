@@ -111,6 +111,7 @@ func main() {
 	var eventStore sse.EventStore
 	var buildStoreReader sse.BuildStoreReader
 	var secretStore routes.SecretStore
+	var bootstrapStore routes.BootstrapStore
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -144,6 +145,9 @@ func main() {
 
 		// Secret store
 		secretStore = &db.PostgresSecretStore{DB: dbAdapter}
+
+		// Bootstrap store — internal-only endpoint for platform bootstrap
+		bootstrapStore = &db.PostgresBootstrapStore{DB: dbAdapter}
 
 		// Source store — Gitea source repo
 		giteaSourceStore, err := source.NewGiteaSourceStore(source.GiteaSourceStoreConfig{
@@ -347,6 +351,7 @@ func main() {
 		EventStore:         eventStore,
 		BuildStoreReader:   buildStoreReader,
 		SecretStore:        secretStore,
+		BootstrapStore:     bootstrapStore,
 		BuildHandler:       buildHandler,
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,

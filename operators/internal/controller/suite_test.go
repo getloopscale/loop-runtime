@@ -107,6 +107,9 @@ var _ = BeforeSuite(func() {
 	err = controller.SetupClusterCredentialController(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = controller.SetupPlatformBootstrapController(mgr, nil)
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		if startErr := mgr.Start(ctx); startErr != nil {

@@ -40,6 +40,9 @@ type Config struct {
 	EventStore         sse.EventStore
 	BuildStoreReader   sse.BuildStoreReader
 	SecretStore        routes.SecretStore
+	// BootstrapStore handles platform bootstrap (internal-only endpoint).
+	// When set, POST /internal/bootstrap is available.
+	BootstrapStore     routes.BootstrapStore
 	// ShutdownCtx is cancelled when the server begins graceful shutdown.
 	// Background goroutines (reaper, cleaner, pruner, callback processing)
 	// should use this context so they stop before the connection pool closes (A-05).
@@ -91,6 +94,12 @@ func NewRouter(cfg Config) *chi.Mux {
 	health := routes.NewHealthHandler(cfg.DB)
 	r.Get("/api/v1/health", health.Health)
 	r.Get("/api/v1/health/deep", health.DeepHealth)
+
+	// Internal-only routes (no auth — called by platform controllers, not users)
+	if cfg.BootstrapStore != nil {
+		bootstrap := routes.NewBootstrapHandler(cfg.BootstrapStore)
+		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
+	}
 
 	// Protected routes (auth required)
 	if cfg.TokenValidator != nil && cfg.MemberStore != nil {

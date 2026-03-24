@@ -37,6 +37,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ClusterCredentialList{},
 		&ReconciliationReport{},
 		&ReconciliationReportList{},
+		&PlatformBootstrap{},
+		&PlatformBootstrapList{},
 	)
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Internal `POST /internal/bootstrap` endpoint — seeds admin user, system tenant, and membership records for platform bootstrap. Idempotent via ON CONFLICT DO NOTHING (#MEET-2026-03-24-001)
 - Per-tenant MinIO credential isolation — TenantController now provisions scoped MinIO users with bucket policies restricting access to `loopzero-builds/{tenantID}/*` only (#MULTI-CLUSTER-MINIO)
 - Phase 3 (exposePlatform) — creates DNS records for management subdomains (api, argocd, grafana) and runtime wildcard (*.{domain}) (#PULUMI-PHASE3)
 - DNS record type auto-detection (A for IPv4, AAAA for IPv6, CNAME for hostnames) in DigitalOcean provider (#PULUMI-DNS-FIX)
