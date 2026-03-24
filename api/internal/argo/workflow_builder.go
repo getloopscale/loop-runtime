@@ -161,12 +161,11 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			"loopzero.io/language":    primaryLanguage,
 		},
 		Templates: templates,
-		// BLOCKER-2 fix: Workspace volume uses emptyDir instead of PVC.
-		// PVCs leak storage if not properly cleaned up. emptyDir is automatically
-		// cleaned when the pod terminates. Argo Workflows mounts emptyDir volumes
-		// across all containers in the same pod.
+		// Workspace uses a dynamically provisioned PVC shared across all DAG steps.
+		// Each step in the DAG runs as a separate pod — emptyDir does NOT share across pods.
+		// The PVC is automatically cleaned up when the Workflow is garbage collected (TTL).
 		Volumes: []forge.VolumeBuilder{
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace"}},
+			&forge.PVCVolume{BaseVolume: forge.BaseVolume{Name: "workspace"}, Size: "5Gi"},
 		},
 	}
 

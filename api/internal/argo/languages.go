@@ -284,8 +284,8 @@ if [ "$HAS_LOCK" = "false" ]; then
 fi
 if [ -n "$ERRORS" ]; then
   echo "ERROR: $ERRORS"
-  mkdir -p /manifests
-  echo "validate-workspace: $ERRORS" > /manifests/build-error.txt
+  mkdir -p /tmp/manifests
+  echo "validate-workspace: $ERRORS" > /tmp/manifests/build-error.txt
   exit 1
 fi
 echo "Workspace validation passed"
@@ -395,8 +395,8 @@ ERRORS=""
 ` + validatePathsScript(paths, "go.sum") + `
 if [ -n "$ERRORS" ]; then
   echo "ERROR: $ERRORS"
-  mkdir -p /manifests
-  echo "validate-workspace: $ERRORS" > /manifests/build-error.txt
+  mkdir -p /tmp/manifests
+  echo "validate-workspace: $ERRORS" > /tmp/manifests/build-error.txt
   exit 1
 fi
 echo "Workspace validation passed"
@@ -491,8 +491,8 @@ if [ "$HAS_DEPS" = "false" ]; then
 fi
 if [ -n "$ERRORS" ]; then
   echo "ERROR: $ERRORS"
-  mkdir -p /manifests
-  echo "validate-workspace: $ERRORS" > /manifests/build-error.txt
+  mkdir -p /tmp/manifests
+  echo "validate-workspace: $ERRORS" > /tmp/manifests/build-error.txt
   exit 1
 fi
 echo "Workspace validation passed"
@@ -579,8 +579,8 @@ func scriptValidateCustom() string {
 cd /workspace
 if [ ! -f Dockerfile ]; then
   echo "ERROR: Custom framework requires a Dockerfile in the project root"
-  mkdir -p /manifests
-  echo "validate-workspace: Custom framework requires a Dockerfile" > /manifests/build-error.txt
+  mkdir -p /tmp/manifests
+  echo "validate-workspace: Custom framework requires a Dockerfile" > /tmp/manifests/build-error.txt
   exit 1
 fi
 echo "Dockerfile found — custom build validated"

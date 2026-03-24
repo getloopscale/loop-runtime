@@ -90,26 +90,22 @@ func TestWorkflowBuilder_Build_SpecFields(t *testing.T) {
 
 // BLOCKER-2 fix: Workspace and manifests volumes are now emptyDir (not PVCs).
 // emptyDir is automatically cleaned up when the pod terminates, preventing PVC storage leak.
-func TestWorkflowBuilder_Build_HasEmptyDirVolumes(t *testing.T) {
+func TestWorkflowBuilder_Build_HasSharedPVCVolume(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
 
-	// Must NOT have VolumeClaimTemplates (PVCs leak storage)
-	if len(wf.VolumeClaimTemplates) != 0 {
-		t.Errorf("want 0 VolumeClaimTemplates (BLOCKER-2: PVCs replaced by emptyDir), got %d", len(wf.VolumeClaimTemplates))
-	}
-
-	// REVIEW-LEVE-3: Only workspace volume remains (manifests volume removed — C-02 fix)
+	// Workspace uses PVC for cross-pod sharing in DAG workflows.
+	// Each DAG step runs in its own pod — emptyDir does NOT share across pods.
 	if len(wf.Volumes) != 1 {
-		t.Fatalf("want 1 Volume (workspace emptyDir), got %d", len(wf.Volumes))
+		t.Fatalf("want 1 Volume (workspace PVC), got %d", len(wf.Volumes))
 	}
 
-	vol0, ok0 := wf.Volumes[0].(*forge.EmptyDirVolume)
+	vol0, ok0 := wf.Volumes[0].(*forge.PVCVolume)
 	if !ok0 {
-		t.Fatal("expected volume to be EmptyDirVolume")
+		t.Fatal("expected volume to be PVCVolume (shared across DAG steps)")
 	}
 	if vol0.Name != "workspace" {
 		t.Errorf("volume name = %q, want workspace", vol0.Name)
