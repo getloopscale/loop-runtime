@@ -168,6 +168,13 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		VolumeClaimTemplates: []forge.PVCVolume{
 			{BaseVolume: forge.BaseVolume{Name: "workspace"}, Size: "5Gi"},
 		},
+		// FSGroup ensures the PVC volume is writable by non-root user 1000.
+		// Without this, the PVC is mounted as root-owned and cp/mkdir fail.
+		SecurityContext: &model.PodSecurityContext{
+			FSGroup:    ptr(int64(1000)),
+			RunAsUser:  ptr(int64(1000)),
+			RunAsGroup: ptr(int64(1000)),
+		},
 	}
 
 	return wf, nil
