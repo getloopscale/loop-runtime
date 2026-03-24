@@ -99,13 +99,19 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			}
 			Expect(foundEgressPolicy).To(BeTrue(), "build-egress-restrict NetworkPolicy must exist")
 
-			// All 6 conditions True
+			// Tenant-scoped conditions True (namespace/RBAC/NetworkPolicy are now on Environment CRs)
 			Expect(conditionStatus(tenant, conditions.TypeGitRepoReady)).To(Equal(metav1.ConditionTrue))
-			Expect(conditionStatus(tenant, conditions.TypeNamespacesReady)).To(Equal(metav1.ConditionTrue))
-			Expect(conditionStatus(tenant, conditions.TypeRBACReady)).To(Equal(metav1.ConditionTrue))
-			Expect(conditionStatus(tenant, conditions.TypeNetworkPolicyReady)).To(Equal(metav1.ConditionTrue))
 			Expect(conditionStatus(tenant, conditions.TypeBuildNamespaceReady)).To(Equal(metav1.ConditionTrue))
 			Expect(conditionStatus(tenant, conditions.TypeQuotaEnforced)).To(Equal(metav1.ConditionTrue))
+
+			// Verify Environment CRs exist and are Active
+			for _, env := range []string{"production", "staging"} {
+				var envCR loopzerov1.Environment
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName + "-" + env, Namespace: "default",
+				}, &envCR)).To(Succeed())
+				Expect(envCR.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
+			}
 
 			// ObservedGeneration
 			Expect(tenant.Status.ObservedGeneration).To(Equal(tenant.Generation))
@@ -115,6 +121,17 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 		})
 
 		AfterAll(func() {
+			// Clean up Environment CRs (remove finalizers)
+			for _, env := range []string{"production", "staging"} {
+				envCR := &loopzerov1.Environment{}
+				if err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName + "-" + env, Namespace: "default",
+				}, envCR); err == nil {
+					envCR.Finalizers = nil
+					_ = k8sClient.Update(ctx, envCR)
+					_ = k8sClient.Delete(ctx, envCR)
+				}
+			}
 			for _, nsName := range []string{
 				"loopzero-" + tenantName + "-production",
 				"loopzero-" + tenantName + "-staging",

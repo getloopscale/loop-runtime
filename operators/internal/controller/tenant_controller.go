@@ -2,11 +2,13 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -17,6 +19,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
+	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -35,6 +38,7 @@ var tenantSM = statemachine.NewTenantMachine()
 //   - r.RuntimeClient → runtime cluster ({tenant}-{env} namespaces, RBAC, network policies)
 type TenantReconciler struct {
 	client.Client
+	Scheme             *runtime.Scheme
 	BuildClient        client.Client               // targets the build cluster
 	RuntimeClient      client.Client               // targets the runtime cluster
 	GitProvisioner     gitea.GitRepoProvisioner
@@ -97,45 +101,6 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		)
 	}
 
-	// S1.2: Reconcile namespaces + ResourceQuota + LimitRange
-	// Skip if NamespacesReady is already True at current generation (crash recovery optimization)
-	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeNamespacesReady, tenant.Generation) {
-		if err := r.reconcileNamespaces(ctx, &tenant); err != nil {
-			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeNamespacesReady,
-				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-			}
-			return ctrl.Result{}, err
-		}
-	}
-
-	// S1.3: Reconcile RBAC (ServiceAccount + Role + RoleBinding)
-	// Skip if RBACReady is already True at current generation
-	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeRBACReady, tenant.Generation) {
-		if err := r.reconcileRBAC(ctx, &tenant); err != nil {
-			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeRBACReady,
-				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-			}
-			return ctrl.Result{}, err
-		}
-	}
-
-	// S1.4: Reconcile NetworkPolicies (deny-all + allow-ingress + allow-egress)
-	// Skip if NetworkPolicyReady is already True at current generation
-	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeNetworkPolicyReady, tenant.Generation) {
-		if err := r.reconcileNetworkPolicies(ctx, &tenant); err != nil {
-			conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeNetworkPolicyReady,
-				metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-			if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-			}
-			return ctrl.Result{}, err
-		}
-	}
-
 	// S1.6: Reconcile Gitea repo
 	// Skip if GitRepoReady is already True at current generation
 	if !conditions.IsConditionTrueForGeneration(tenant.Status.Conditions, conditions.TypeGitRepoReady, tenant.Generation) {
@@ -190,6 +155,14 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}
 
+	// Create Environment CRs for each spec.environments[] (delegating namespace/RBAC/NetworkPolicy to EnvironmentController)
+	if err := r.reconcileEnvironmentCRs(ctx, &tenant); err != nil {
+		if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
+			logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
+		}
+		return ctrl.Result{}, err
+	}
+
 	// S1.7: Phase transition — Active when all conditions are True (via state machine)
 	if allConditionsTrue(tenant.Status.Conditions) && tenant.Status.Phase == loopzerov1.TenantPhaseProvisioning {
 		tenant.Status.Phase = loopzerov1.TenantPhase(
@@ -212,9 +185,6 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 // Add new conditions here when adding new reconciliation steps.
 var requiredProvisioningConditions = []string{
 	conditions.TypeGitRepoReady,
-	conditions.TypeNamespacesReady,
-	conditions.TypeRBACReady,
-	conditions.TypeNetworkPolicyReady,
 	conditions.TypeArgoCDAppReady,
 	conditions.TypeBuildNamespaceReady,
 	conditions.TypeQuotaEnforced,
@@ -326,6 +296,45 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	return ctrl.Result{}, nil
 }
 
+// reconcileEnvironmentCRs creates/updates Environment CRs for each spec.environments[].
+// Each Environment CR is owned by the Tenant CR (cascade delete).
+// The EnvironmentController watches these CRs and manages namespaces/RBAC/NetworkPolicy.
+func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *loopzerov1.Tenant) error {
+	for _, env := range tenant.Spec.Environments {
+		envCRName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
+		nsName, err := naming.EnvironmentNamespace(tenant.Name, env.Name)
+		if err != nil {
+			return fmt.Errorf("invalid namespace name for env %s: %w", env.Name, err)
+		}
+
+		envCR := &loopzerov1.Environment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      envCRName,
+				Namespace: tenant.Namespace,
+			},
+		}
+		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, envCR, func() error {
+			envCR.Spec.TenantRef.Name = tenant.Name
+			envCR.Spec.Environment = env.Name
+			envCR.Spec.Namespace.Name = nsName
+			envCR.Spec.Plan = tenant.Spec.Plan
+			envCR.Spec.NetworkPolicy = loopzerov1.NetworkPolicyConfig{Isolate: true}
+			envCR.Spec.ResourceQuota = &loopzerov1.ResourceQuotaSpec{
+				CPU:     tenant.Spec.Limits.MaxCPU.String(),
+				Memory:  tenant.Spec.Limits.MaxMemory.String(),
+				Storage: tenant.Spec.Limits.MaxStorage.String(),
+			}
+			return controllerutil.SetControllerReference(tenant, envCR, r.Scheme)
+		})
+		if err != nil {
+			return fmt.Errorf("environment CR %s: %w", envCRName, err)
+		}
+
+		log.FromContext(ctx).Info("environment CR reconciled", "environment", envCRName)
+	}
+	return nil
+}
+
 // SetupTenantController registers the TenantController with the manager.
 // cfg.GiteaURL configures the Gitea base URL for ArgoCD Application repo references.
 // If empty, it defaults to the in-cluster Gitea service URL.
@@ -345,6 +354,7 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 		Named("tenant").
 		Complete(&TenantReconciler{
 			Client:             mgr.GetClient(),
+			Scheme:             mgr.GetScheme(),
 			BuildClient:        buildClient,
 			RuntimeClient:      runtimeClient,
 			GitProvisioner:     gitProvisioner,

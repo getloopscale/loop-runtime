@@ -193,7 +193,26 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
 					g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/tenant", tenantName))
 					g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/environment", env))
-					g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "tenant-controller"))
+					g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "environment-controller"))
+				}, timeout, interval).Should(Succeed())
+			}
+		})
+
+		It("should create Environment CRs for each environment", func() {
+			for _, env := range []string{"production", "staging"} {
+				envCRName := tenantName + "-" + env
+				Eventually(func(g Gomega) {
+					var envCR loopzerov1.Environment
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+						Name: envCRName, Namespace: "default",
+					}, &envCR)).To(Succeed())
+					g.Expect(envCR.Spec.TenantRef.Name).To(Equal(tenantName))
+					g.Expect(envCR.Spec.Environment).To(Equal(env))
+					g.Expect(envCR.Spec.Namespace.Name).To(Equal("loopzero-" + tenantName + "-" + env))
+					// Verify ownerReference to Tenant
+					g.Expect(envCR.OwnerReferences).To(HaveLen(1))
+					g.Expect(envCR.OwnerReferences[0].Kind).To(Equal("Tenant"))
+					g.Expect(envCR.OwnerReferences[0].Name).To(Equal(tenantName))
 				}, timeout, interval).Should(Succeed())
 			}
 		})
@@ -243,22 +262,19 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 		})
 	})
 
-	Context("NamespacesReady condition", func() {
-		It("should set NamespacesReady condition to True", func() {
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				found := false
-				for _, c := range t.Status.Conditions {
-					if c.Type == conditions.TypeNamespacesReady {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "NamespacesReady condition should exist")
-			}, timeout, interval).Should(Succeed())
+	Context("Environment CR conditions (delegated to EnvironmentController)", func() {
+		It("should set NamespaceReady on Environment CRs (not on Tenant)", func() {
+			// NamespacesReady is no longer on Tenant — it is now on Environment CRs
+			for _, env := range []string{"production", "staging"} {
+				envCRName := tenantName + "-" + env
+				Eventually(func(g Gomega) {
+					var envCR loopzerov1.Environment
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+						Name: envCRName, Namespace: "default",
+					}, &envCR)).To(Succeed())
+					g.Expect(envCR.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
+				}, timeout, interval).Should(Succeed())
+			}
 		})
 	})
 
@@ -374,21 +390,22 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 		})
 	})
 
-	Context("RBACReady condition", func() {
-		It("should set RBACReady to True", func() {
+	Context("RBACReady condition (on Environment CR)", func() {
+		It("should set RBACReady on Environment CR (not on Tenant)", func() {
+			envCRName := tenantName + "-production"
 			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
+				var envCR loopzerov1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
+					Name: envCRName, Namespace: "default",
+				}, &envCR)).To(Succeed())
 				found := false
-				for _, c := range t.Status.Conditions {
-					if c.Type == conditions.TypeRBACReady {
+				for _, c := range envCR.Status.Conditions {
+					if c.Type == conditions.TypeEnvRBACReady {
 						found = true
 						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
 					}
 				}
-				g.Expect(found).To(BeTrue(), "RBACReady condition should exist")
+				g.Expect(found).To(BeTrue(), "RBACReady condition should exist on Environment CR")
 			}, timeout, interval).Should(Succeed())
 		})
 	})
@@ -519,21 +536,22 @@ var _ = Describe("TenantController — NetworkPolicy", Ordered, func() {
 		})
 	})
 
-	Context("NetworkPolicyReady condition", func() {
-		It("should set NetworkPolicyReady to True", func() {
+	Context("NetworkPolicyReady condition (on Environment CR)", func() {
+		It("should set NetworkPolicyReady on Environment CR (not on Tenant)", func() {
+			envCRName := tenantName + "-production"
 			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
+				var envCR loopzerov1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
+					Name: envCRName, Namespace: "default",
+				}, &envCR)).To(Succeed())
 				found := false
-				for _, c := range t.Status.Conditions {
-					if c.Type == conditions.TypeNetworkPolicyReady {
+				for _, c := range envCR.Status.Conditions {
+					if c.Type == conditions.TypeEnvNetworkPolicyReady {
 						found = true
 						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
 					}
 				}
-				g.Expect(found).To(BeTrue())
+				g.Expect(found).To(BeTrue(), "NetworkPolicyReady condition should exist on Environment CR")
 			}, timeout, interval).Should(Succeed())
 		})
 	})
@@ -1123,17 +1141,15 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 				"namespace should not have been re-reconciled when NamespacesReady is True")
 		})
 
-		It("should still have all conditions True and Phase Active", func() {
+		It("should still have all tenant-scoped conditions True and Phase Active", func() {
 			var t loopzerov1.Tenant
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
 			Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
 
+			// After Fase 3: namespace/RBAC/NetworkPolicy conditions moved to Environment CRs
 			requiredConditions := []string{
-				conditions.TypeNamespacesReady,
-				conditions.TypeRBACReady,
-				conditions.TypeNetworkPolicyReady,
 				conditions.TypeGitRepoReady,
 				conditions.TypeArgoCDAppReady,
 				conditions.TypeBuildNamespaceReady,
@@ -1223,17 +1239,15 @@ var _ = Describe("TenantController — Phase Transition + Deletion", Ordered, fu
 			Expect(t.Status.ObservedGeneration).To(Equal(t.Generation))
 		})
 
-		It("should have all 8 conditions True", func() {
+		It("should have all 5 tenant-scoped conditions True", func() {
 			var t loopzerov1.Tenant
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
 
+			// After Fase 3: namespace/RBAC/NetworkPolicy conditions moved to Environment CRs
 			requiredConditions := []string{
 				conditions.TypeGitRepoReady,
-				conditions.TypeNamespacesReady,
-				conditions.TypeRBACReady,
-				conditions.TypeNetworkPolicyReady,
 				conditions.TypeArgoCDAppReady,
 				conditions.TypeBuildNamespaceReady,
 				conditions.TypeQuotaEnforced,
