@@ -122,6 +122,12 @@ var _ = BeforeSuite(func() {
 	err = controller.SetupExposureController(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = controller.SetupBuildController(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = controller.SetupReleaseController(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		if startErr := mgr.Start(ctx); startErr != nil {

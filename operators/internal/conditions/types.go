@@ -60,6 +60,13 @@ const (
 	TypeArtifactsPublished = "ArtifactsPublished"
 )
 
+// --- Release conditions ---
+const (
+	TypeGitMirrorCompleted = "GitMirrorCompleted"
+	TypeSyncCompleted      = "SyncCompleted"
+	TypeReleaseActive      = "ReleaseActive"
+)
+
 // Reason constants are enumerated, not freeform. All condition reasons
 // must use one of these constants to ensure consistency across controllers.
 const (

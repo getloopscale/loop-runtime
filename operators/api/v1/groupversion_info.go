@@ -47,6 +47,10 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&LoopZeroApplicationList{},
 		&ExposedRoute{},
 		&ExposedRouteList{},
+		&LoopZeroBuild{},
+		&LoopZeroBuildList{},
+		&LoopZeroRelease{},
+		&LoopZeroReleaseList{},
 	)
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil
