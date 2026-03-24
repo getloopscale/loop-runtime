@@ -2033,18 +2033,16 @@ describe('DeployCommand', () => {
         const deps = createMockDeps({
           hasLockfile: jest.fn().mockReturnValue(false),
         });
-
-        // Override config to point apps at the real temp directory
-        const originalExecute = DeployCommand.prototype.execute;
         const cmd = new DeployCommand(deps);
 
         await cmd.execute({});
 
-        const allOutput = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
-        // With no app paths matching the temp dir in the config,
-        // the warning may or may not appear — but the test verifies
-        // that the F-04 code path (existsSync check) doesn't crash
-        expect(true).toBe(true);
+        // The F-04 code path calls fs.existsSync on app paths.
+        // With default mock config the app paths won't match our temp dir,
+        // but the test verifies the code path doesn't crash when
+        // fs.existsSync is called on real paths.
+        const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+        expect(output).toBeDefined();
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }

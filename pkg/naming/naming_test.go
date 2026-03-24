@@ -128,27 +128,27 @@ func TestValidateKubernetesName_special_chars(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestTenantNamespace_format(t *testing.T) {
-	got, err := TenantNamespace("acme")
+	got, err := TenantNamespace("tn-loopzero")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != "tn-acme" {
-		t.Errorf("TenantNamespace(acme) = %q, want %q", got, "tn-acme")
+	if got != "loopzero-tn-loopzero" {
+		t.Errorf("TenantNamespace(tn-loopzero) = %q, want %q", got, "loopzero-tn-loopzero")
 	}
 }
 
-func TestTenantNamespace_empty_slug(t *testing.T) {
+func TestTenantNamespace_empty(t *testing.T) {
 	_, err := TenantNamespace("")
 	if err == nil {
 		t.Error("TenantNamespace('') should return error")
 	}
 }
 
-func TestTenantNamespace_slug_too_long(t *testing.T) {
-	// "tn-" = 3 chars, slug can be at most 60
-	_, err := TenantNamespace(strings.Repeat("a", 61))
+func TestTenantNamespace_too_long(t *testing.T) {
+	// "loopzero-" = 5 chars, name can be at most 58
+	_, err := TenantNamespace(strings.Repeat("a", 59))
 	if err == nil {
-		t.Error("TenantNamespace(61 chars) should return error")
+		t.Error("TenantNamespace(59 chars) should return error")
 	}
 }
 
@@ -157,12 +157,12 @@ func TestTenantNamespace_slug_too_long(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestEnvironmentNamespace_format(t *testing.T) {
-	got, err := EnvironmentNamespace("acme", "production")
+	got, err := EnvironmentNamespace("tn-loopzero", "production")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != "tn-acme-production" {
-		t.Errorf("got %q, want %q", got, "tn-acme-production")
+	if got != "loopzero-tn-loopzero-production" {
+		t.Errorf("got %q, want %q", got, "loopzero-tn-loopzero-production")
 	}
 }
 
@@ -174,13 +174,14 @@ func TestEnvironmentNamespace_empty_tenant(t *testing.T) {
 }
 
 func TestEnvironmentNamespace_empty_env(t *testing.T) {
-	_, err := EnvironmentNamespace("acme", "")
+	_, err := EnvironmentNamespace("tn-acme", "")
 	if err == nil {
 		t.Error("should return error for empty env")
 	}
 }
 
 func TestEnvironmentNamespace_too_long(t *testing.T) {
+	// "loopzero-" = 5 chars + name + "-" + env must be <= 63
 	_, err := EnvironmentNamespace(strings.Repeat("a", 30), strings.Repeat("b", 30))
 	if err == nil {
 		t.Error("should return error when combined name exceeds 63 chars")
@@ -426,13 +427,13 @@ func TestDeterminism_all_functions(t *testing.T) {
 			t.Fatalf("Sanitize not deterministic: got %q on iteration %d", s, i)
 		}
 
-		tn, _ := TenantNamespace("acme")
-		if tn != "tn-acme" {
+		tn, _ := TenantNamespace("tn-acme")
+		if tn != "loopzero-tn-acme" {
 			t.Fatalf("TenantNamespace not deterministic on iteration %d", i)
 		}
 
-		en, _ := EnvironmentNamespace("acme", "prod")
-		if en != "tn-acme-prod" {
+		en, _ := EnvironmentNamespace("tn-acme", "prod")
+		if en != "loopzero-tn-acme-prod" {
 			t.Fatalf("EnvironmentNamespace not deterministic on iteration %d", i)
 		}
 

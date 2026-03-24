@@ -58,12 +58,13 @@ func ValidateKubernetesName(name string) error {
 }
 
 // TenantNamespace returns the namespace name for a tenant.
-// Format: "tn-{tenantSlug}"
-func TenantNamespace(tenantSlug string) (string, error) {
-	if tenantSlug == "" {
-		return "", fmt.Errorf("tenant slug must not be empty")
+// tenantName is the K8s CRD resource name (e.g., "tn-loopzero").
+// Format: "loopzero-{tenantName}" — maintains compatibility with deployed resources.
+func TenantNamespace(tenantName string) (string, error) {
+	if tenantName == "" {
+		return "", fmt.Errorf("tenant name must not be empty")
 	}
-	name := fmt.Sprintf("tn-%s", tenantSlug)
+	name := fmt.Sprintf("loopzero-%s", tenantName)
 	if err := ValidateKubernetesName(name); err != nil {
 		return "", fmt.Errorf("tenant namespace %q: %w", name, err)
 	}
@@ -71,15 +72,16 @@ func TenantNamespace(tenantSlug string) (string, error) {
 }
 
 // EnvironmentNamespace returns the namespace name for a tenant's environment.
-// Format: "tn-{tenantSlug}-{envName}"
-func EnvironmentNamespace(tenantSlug, envName string) (string, error) {
-	if tenantSlug == "" {
-		return "", fmt.Errorf("tenant slug must not be empty")
+// tenantName is the K8s CRD resource name (e.g., "tn-loopzero").
+// Format: "loopzero-{tenantName}-{envName}" — maintains compatibility with deployed resources.
+func EnvironmentNamespace(tenantName, envName string) (string, error) {
+	if tenantName == "" {
+		return "", fmt.Errorf("tenant name must not be empty")
 	}
 	if envName == "" {
 		return "", fmt.Errorf("environment name must not be empty")
 	}
-	name := fmt.Sprintf("tn-%s-%s", tenantSlug, envName)
+	name := fmt.Sprintf("loopzero-%s-%s", tenantName, envName)
 	if err := ValidateKubernetesName(name); err != nil {
 		return "", fmt.Errorf("environment namespace %q: %w", name, err)
 	}

@@ -10,17 +10,17 @@ import (
 // confirm the delegation wiring is correct.
 
 func TestEnvironmentNamespace_ValidInput(t *testing.T) {
-	name, err := EnvironmentNamespace("acme", "production")
+	name, err := EnvironmentNamespace("tn-loopzero", "production")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if name != "tn-acme-production" {
-		t.Errorf("expected %q, got %q", "tn-acme-production", name)
+	if name != "loopzero-tn-loopzero-production" {
+		t.Errorf("expected %q, got %q", "loopzero-tn-loopzero-production", name)
 	}
 }
 
 func TestEnvironmentNamespace_TooLong(t *testing.T) {
-	// "tn-" prefix (3) + slug (30) + "-" (1) + env (30) = 64 chars — exceeds 63
+	// "loopzero-" prefix (5) + name (30) + "-" (1) + env (30) = 66 chars — exceeds 63
 	long := strings.Repeat("a", 30)
 	_, err := EnvironmentNamespace(long, long)
 	if err == nil {
@@ -49,12 +49,12 @@ func TestPreviewNamespace_ValidInput(t *testing.T) {
 }
 
 func TestTenantNamespace_ValidInput(t *testing.T) {
-	name, err := TenantNamespace("acme")
+	name, err := TenantNamespace("tn-loopzero")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if name != "tn-acme" {
-		t.Errorf("expected %q, got %q", "tn-acme", name)
+	if name != "loopzero-tn-loopzero" {
+		t.Errorf("expected %q, got %q", "loopzero-tn-loopzero", name)
 	}
 }
 

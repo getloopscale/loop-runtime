@@ -51,7 +51,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			for _, env := range []string{"production", "staging"} {
 				var ns corev1.Namespace
 				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: fmt.Sprintf("tn-%s-%s", tenantName, env),
+					Name: fmt.Sprintf("loopzero-%s-%s", tenantName, env),
 				}, &ns)).To(Succeed())
 				Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/tenant", tenantName))
 				Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/environment", env))
@@ -62,7 +62,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 				var quota corev1.ResourceQuota
 				Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name:      "tenant-quota",
-					Namespace: fmt.Sprintf("tn-%s-%s", tenantName, env),
+					Namespace: fmt.Sprintf("loopzero-%s-%s", tenantName, env),
 				}, &quota)).To(Succeed())
 				cpuVal := quota.Spec.Hard[corev1.ResourceRequestsCPU]
 				Expect(cpuVal.String()).To(Equal("8"))
@@ -71,12 +71,12 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			// RBAC
 			var sa corev1.ServiceAccount
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: "loopzero-deployer", Namespace: "tn-" + tenantName + "-production",
+				Name: "loopzero-deployer", Namespace: "loopzero-" + tenantName + "-production",
 			}, &sa)).To(Succeed())
 
 			// NetworkPolicy (>= 3 per namespace)
 			var policies networkingv1.NetworkPolicyList
-			Expect(k8sClient.List(ctx, &policies, client.InNamespace("tn-"+tenantName+"-production"))).To(Succeed())
+			Expect(k8sClient.List(ctx, &policies, client.InNamespace("loopzero-"+tenantName+"-production"))).To(Succeed())
 			Expect(len(policies.Items)).To(BeNumerically(">=", 3))
 
 			// Build namespace
@@ -116,8 +116,8 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 
 		AfterAll(func() {
 			for _, nsName := range []string{
-				"tn-" + tenantName + "-production",
-				"tn-" + tenantName + "-staging",
+				"loopzero-" + tenantName + "-production",
+				"loopzero-" + tenantName + "-staging",
 				"build-" + tenantName,
 			} {
 				ns := &corev1.Namespace{}
@@ -169,7 +169,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 
 		AfterAll(func() {
 			fakeGitProvider.SetErr(nil)
-			for _, nsName := range []string{"tn-" + tenantName + "-production", "build-" + tenantName} {
+			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
 				ns := &corev1.Namespace{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
 					_ = k8sClient.Delete(ctx, ns)
@@ -208,10 +208,10 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 				})).To(Succeed())
 
 				var policies networkingv1.NetworkPolicyList
-				Expect(k8sClient.List(ctx, &policies, client.InNamespace("tn-"+tenantName+"-production"))).To(Succeed())
+				Expect(k8sClient.List(ctx, &policies, client.InNamespace("loopzero-"+tenantName+"-production"))).To(Succeed())
 
 				var quotas corev1.ResourceQuotaList
-				Expect(k8sClient.List(ctx, &quotas, client.InNamespace("tn-"+tenantName+"-production"))).To(Succeed())
+				Expect(k8sClient.List(ctx, &quotas, client.InNamespace("loopzero-"+tenantName+"-production"))).To(Succeed())
 
 				return len(nsList.Items), len(policies.Items), len(quotas.Items)
 			}
@@ -248,7 +248,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			for _, nsName := range []string{"tn-" + tenantName + "-production", "build-" + tenantName} {
+			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
 				ns := &corev1.Namespace{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
 					_ = k8sClient.Delete(ctx, ns)
@@ -288,7 +288,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
 
 			// Verify Role now includes secrets
-			nsName := "tn-" + tenantName + "-production"
+			nsName := "loopzero-" + tenantName + "-production"
 			Eventually(func(g Gomega) {
 				var role rbacv1.Role
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -307,7 +307,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			for _, nsName := range []string{"tn-" + tenantName + "-production", "build-" + tenantName} {
+			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
 				ns := &corev1.Namespace{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
 					_ = k8sClient.Delete(ctx, ns)
