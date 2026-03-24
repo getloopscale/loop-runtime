@@ -55,6 +55,7 @@ spec:
             properties:
               displayName:
                 description: DisplayName is the human-readable name of the tenant.
+                minLength: 1
                 type: string
               environments:
                 description: Environments lists the environments available to this
@@ -74,6 +75,7 @@ spec:
                   - cluster
                   - name
                   type: object
+                minItems: 1
                 type: array
               gitops:
                 description: GitOps configures the tenant's GitOps repository.
