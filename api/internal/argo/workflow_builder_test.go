@@ -97,18 +97,13 @@ func TestWorkflowBuilder_Build_HasSharedPVCVolume(t *testing.T) {
 		t.Fatalf("Build() error: %v", err)
 	}
 
-	// Workspace uses PVC for cross-pod sharing in DAG workflows.
+	// Workspace uses VolumeClaimTemplates for cross-pod sharing in DAG workflows.
 	// Each DAG step runs in its own pod — emptyDir does NOT share across pods.
-	if len(wf.Volumes) != 1 {
-		t.Fatalf("want 1 Volume (workspace PVC), got %d", len(wf.Volumes))
+	if len(wf.VolumeClaimTemplates) != 1 {
+		t.Fatalf("want 1 VolumeClaimTemplate (workspace PVC), got %d", len(wf.VolumeClaimTemplates))
 	}
-
-	vol0, ok0 := wf.Volumes[0].(*forge.PVCVolume)
-	if !ok0 {
-		t.Fatal("expected volume to be PVCVolume (shared across DAG steps)")
-	}
-	if vol0.Name != "workspace" {
-		t.Errorf("volume name = %q, want workspace", vol0.Name)
+	if wf.VolumeClaimTemplates[0].Name != "workspace" {
+		t.Errorf("VolumeClaimTemplate name = %q, want workspace", wf.VolumeClaimTemplates[0].Name)
 	}
 }
 

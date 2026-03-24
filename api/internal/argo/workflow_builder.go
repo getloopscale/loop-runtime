@@ -163,9 +163,10 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		Templates: templates,
 		// Workspace uses a dynamically provisioned PVC shared across all DAG steps.
 		// Each step in the DAG runs as a separate pod — emptyDir does NOT share across pods.
-		// The PVC is automatically cleaned up when the Workflow is garbage collected (TTL).
-		Volumes: []forge.VolumeBuilder{
-			&forge.PVCVolume{BaseVolume: forge.BaseVolume{Name: "workspace"}, Size: "5Gi"},
+		// VolumeClaimTemplates create the PVC when the Workflow starts; it is shared
+		// across all pods and cleaned up when the Workflow is garbage collected (TTL).
+		VolumeClaimTemplates: []forge.PVCVolume{
+			{BaseVolume: forge.BaseVolume{Name: "workspace"}, Size: "5Gi"},
 		},
 	}
 
