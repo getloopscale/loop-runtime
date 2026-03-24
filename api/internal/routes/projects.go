@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -133,13 +134,19 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create/update Tenant CR in Kubernetes — this triggers the TenantController.
-	// Best-effort: project is already persisted, Tenant CR can be reconciled later.
+	// Create/update Tenant CR in Kubernetes — this triggers the TenantController
+	// which provisions Gitea repos, ArgoCD apps, namespaces, RBAC, and NetworkPolicies.
+	// ADR-0006 Invariant D: fail loud at ownership boundaries — silent failure here
+	// causes cascading deploy failures (namespace not found, ArgoCD app missing).
 	if err := h.crMgr.EnsureTenant(r.Context(), uc.TenantID, TenantCRSpec{Plan: "starter"}); err != nil {
-		slog.Error("failed to ensure tenant CR — deploy will fail until resolved",
+		slog.Error("failed to ensure tenant CR",
 			"tenant_id", uc.TenantID,
 			"error", err.Error(),
 		)
+		writeLoopZeroError(w, loopzeroerrors.ErrPlatformDegraded.Wrap(
+			fmt.Sprintf("tenant infrastructure provisioning failed for %s — retry or contact support", uc.TenantID),
+		))
+		return
 	}
 
 	writeJSON(w, http.StatusCreated, result)

@@ -166,6 +166,30 @@ func TestProjectsRoute(t *testing.T) {
 		}
 	})
 
+	t.Run("POST /api/v1/projects → 503 if EnsureTenant fails (ADR-0006 Invariant D)", func(t *testing.T) {
+		store := &fakeProjectStore{projects: make(map[string]bool)}
+		crMgr := &fakeTenantCRManager{err: context.DeadlineExceeded}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		body := `{"name":"my-saas"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body)).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		handler.Create(rec, req)
+
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503 when EnsureTenant fails, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var errResp map[string]interface{}
+		_ = json.NewDecoder(rec.Body).Decode(&errResp)
+		if errResp["code"] == nil {
+			t.Fatal("expected error response with 'code' field")
+		}
+	})
+
 	t.Run("concurrent POST same name → exactly one 201 and one 409", func(t *testing.T) {
 		store := &threadSafeProjectStore{projects: make(map[string]bool)}
 		crMgr := &fakeTenantCRManager{}

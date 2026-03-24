@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+- LoopZeroBuild CRD and BuildReconciler — build state owned exclusively by PostgreSQL (ADR-0006)
+- LoopZeroRelease CRD and ReleaseReconciler — release state owned exclusively by PostgreSQL (ADR-0006)
+
+### Fixed
+- Tenant CRD creation now fails loudly with HTTP 503 instead of silent log — prevents deploys without infrastructure (ADR-0006)
+
 ### Added
 - LoopZeroApplication CRD + ApplicationController — auto-assigns hostname via `naming.Hostname()`, creates ExposedRoute CR with ownerReference, tracks phase (Progressing/Serving/Reachable/Degraded/Down), sets conditions (ServiceResolved, IngressReady, CertificateIssued, RouteReachable, ApplicationHealthy) (#MEET-2026-03-24-004)
 - ExposedRoute CRD + ExposureController — manages DNS/TLS exposure with cert-manager secret detection, HTTP reachability probes (30s cadence), consecutive failure tracking (Failed after 5), phase lifecycle (Pending/CertIssued/Reachable/Failed) (#MEET-2026-03-24-004)

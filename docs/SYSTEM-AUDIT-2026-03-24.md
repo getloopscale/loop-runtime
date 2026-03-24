@@ -93,8 +93,8 @@ URLs verificadas funcionais via curl (seção 5.3).
 | gitrepositorybindings.loopzero.io | Repo registration (Fase 2) | Registrado, sem CR ativo |
 | loopzeroapplications.loopzero.io | App health (Fase 4) | Registrado, sem CR ativo |
 | exposedroutes.loopzero.io | Route exposure (Fase 4) | Registrado, sem CR ativo |
-| loopzerobuilds.loopzero.io | Build tracking (Fase 5) | Registrado, sem CR ativo |
-| loopzeroreleases.loopzero.io | Release tracking (Fase 5) | Registrado, sem CR ativo |
+| ~~loopzerobuilds.loopzero.io~~ | ~~Build tracking~~ | **Removido (ADR-0006)** — estado de build owned por PostgreSQL |
+| ~~loopzeroreleases.loopzero.io~~ | ~~Release tracking~~ | **Removido (ADR-0006)** — estado de release owned por PostgreSQL |
 | appsecrets.loopzero.io | Secret management | Registrado |
 | clustercredentials.loopzero.io | Cluster credentials | Registrado |
 | previewenvironments.loopzero.io | Preview envs | Registrado |

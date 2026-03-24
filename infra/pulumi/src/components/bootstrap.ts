@@ -1199,7 +1199,7 @@ function installTenantController(
       rules: [
         // LoopZero CRDs — all custom resources managed by the operator.
         // Uses wildcard to cover all current and future loopzero.io resources:
-        // tenants, environments, loopzeroapplications, loopzerobuilds, loopzeroreleases,
+        // tenants, environments, loopzeroapplications,
         // exposedroutes, platformbootstraps, gitrepositorybindings,
         // clustercredentials, appsecrets, previewenvironments, reconciliationreports
         {

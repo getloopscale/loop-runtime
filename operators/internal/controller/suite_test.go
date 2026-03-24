@@ -122,11 +122,9 @@ var _ = BeforeSuite(func() {
 	err = controller.SetupExposureController(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = controller.SetupBuildController(mgr)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = controller.SetupReleaseController(mgr)
-	Expect(err).NotTo(HaveOccurred())
+	// ADR-0006: LoopZeroBuild and LoopZeroRelease CRDs removed.
+	// Build state owned by PostgreSQL, Release state owned by PostgreSQL.
+	// Controllers were stubs — no reconciliation logic to preserve.
 
 	go func() {
 		defer GinkgoRecover()
