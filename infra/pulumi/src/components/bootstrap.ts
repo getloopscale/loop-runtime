@@ -277,24 +277,35 @@ function installESO(
     { provider, dependsOn: [esoNs] },
   );
 
-  // Kubeconfig Secret — allows ESO to read secrets from mgmt cluster.
-  // Uses the mgmt cluster kubeconfig with full credentials.
+  // Bearer token Secret — ESO authenticates to mgmt cluster API server.
+  // The token is extracted from the mgmt cluster kubeconfig.
+  // In production, use a dedicated ServiceAccount with minimal RBAC.
   new k8s.core.v1.Secret(
-    "eso-mgmt-kubeconfig",
+    "eso-mgmt-token",
     {
       metadata: {
-        name: "mgmt-cluster-kubeconfig",
+        name: "mgmt-cluster-token",
         namespace: "external-secrets",
       },
       stringData: {
-        kubeconfig: infra.mgmtCluster.kubeconfig,
+        // Extract token from kubeconfig (DOKS kubeconfigs contain bearer tokens)
+        token: infra.mgmtCluster.kubeconfig.apply((kc) => {
+          // Parse YAML kubeconfig to extract token
+          const tokenMatch = kc.match(/token:\s*(.+)/);
+          return tokenMatch ? tokenMatch[1].trim() : "";
+        }),
+        // Extract CA cert from kubeconfig
+        ca: infra.mgmtCluster.kubeconfig.apply((kc) => {
+          const caMatch = kc.match(/certificate-authority-data:\s*(.+)/);
+          return caMatch ? caMatch[1].trim() : "";
+        }),
       },
     },
     { provider, dependsOn: [esoNs] },
   );
 
   // ClusterSecretStore — tells ESO how to read secrets from mgmt cluster.
-  // Uses the Kubernetes provider with kubeconfig from the Secret above.
+  // Uses bearer token auth + mgmt cluster API server URL.
   new k8s.apiextensions.CustomResource(
     "eso-cluster-secret-store",
     {
@@ -308,19 +319,18 @@ function installESO(
           kubernetes: {
             remoteNamespace: PLATFORM_NAMESPACE,
             server: {
-              caProvider: {
-                type: "Secret",
-                name: "mgmt-cluster-kubeconfig",
-                namespace: "external-secrets",
-                key: "kubeconfig",
-              },
+              url: infra.mgmtCluster.endpoint,
+              caBundle: infra.mgmtCluster.kubeconfig.apply((kc) => {
+                const caMatch = kc.match(/certificate-authority-data:\s*(.+)/);
+                return caMatch ? caMatch[1].trim() : "";
+              }),
             },
             auth: {
-              kubeconfig: {
-                secretRef: {
-                  name: "mgmt-cluster-kubeconfig",
+              token: {
+                bearerToken: {
+                  name: "mgmt-cluster-token",
                   namespace: "external-secrets",
-                  key: "kubeconfig",
+                  key: "token",
                 },
               },
             },
