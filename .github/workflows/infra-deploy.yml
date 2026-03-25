@@ -585,15 +585,26 @@ jobs:
             GH_USER_ID="github-${GH_LOGIN}"
 
             psql "$LOOPZERO_DB_URI" -v ON_ERROR_STOP=0 <<SEED_SQL
-          -- Bootstrap admin user (idempotent via ON CONFLICT)
+          -- Bootstrap admin user (idempotent).
+          -- Uses a deterministic github_id derived from the login hash to avoid
+          -- unique constraint violations when different users trigger the workflow.
+          -- Real github_id is set when the user authenticates via 'loopzero login'.
           INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
-          VALUES ('${GH_USER_ID}', '${GH_LOGIN}@users.noreply.github.com', 0, '${GH_LOGIN}', NOW(), NOW())
-          ON CONFLICT (id) DO UPDATE SET updated_at = NOW();
+          VALUES ('${GH_USER_ID}', '${GH_LOGIN}@users.noreply.github.com',
+                  abs(hashtext('${GH_LOGIN}')), '${GH_LOGIN}', NOW(), NOW())
+          ON CONFLICT (id) DO UPDATE SET updated_at = NOW(), display_name = EXCLUDED.display_name;
+
+          -- Handle github_id conflict (same user, different id format from previous seed)
+          INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
+          VALUES ('${GH_USER_ID}', '${GH_LOGIN}@users.noreply.github.com',
+                  abs(hashtext('${GH_LOGIN}')), '${GH_LOGIN}', NOW(), NOW())
+          ON CONFLICT (github_id) DO UPDATE SET id = EXCLUDED.id, email = EXCLUDED.email,
+                  display_name = EXCLUDED.display_name, updated_at = NOW();
 
           -- Bootstrap tenant (idempotent)
           INSERT INTO tenants (id, display_name, plan, owner_id, created_at, updated_at)
           VALUES ('tn-loopzero', 'loopzero', 'starter', '${GH_USER_ID}', NOW(), NOW())
-          ON CONFLICT (id) DO NOTHING;
+          ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id, updated_at = NOW();
 
           -- Bootstrap membership (idempotent)
           INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)
