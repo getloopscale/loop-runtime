@@ -1133,24 +1133,22 @@ function createArgoCDRepoCredentials(
         labels: {
           "argocd.argoproj.io/secret-type": "repo-creds",
         },
+        annotations: {
+          // Force Pulumi to take field ownership from kubectl-client-side-apply.
+          // The Bootstrap step updates the password via kubectl after first deploy.
+          "pulumi.com/patchForce": "true",
+        },
       },
       stringData: {
         type: "git",
         url: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
-        // Use Gitea admin credentials for repo access.
-        // In production, use a dedicated ArgoCD service account in Gitea.
         username: "gitea_admin",
-        // Password will be the Gitea admin password from the Helm chart.
-        // Since we don't have it as a Pulumi output, reference the same
-        // token used by the platform-tokens Secret.
         password: "placeholder-set-after-first-deploy",
       },
     },
     {
       provider,
       dependsOn: [ns, argocd, gitea],
-      // The Bootstrap step updates this Secret via kubectl after Pulumi creates it.
-      // ignoreChanges prevents SSA field conflict on subsequent `pulumi up`.
       ignoreChanges: ["stringData"],
     },
   );
