@@ -21,6 +21,8 @@ import { WhoamiCommand } from './commands/whoami';
 import { InitCommand } from './commands/init';
 import { DeployCommand } from './commands/deploy';
 import { ProjectDeleteCommand } from './commands/project-delete';
+import { StatusCommand } from './commands/status';
+import { LogsCommand } from './commands/logs';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
@@ -400,6 +402,84 @@ export function createProgram(): Command {
         process.exitCode = 3;
         return;
       }
+      process.exitCode = exitCode;
+    });
+
+  // --- status ---
+  program
+    .command('status')
+    .description('Show environment status for the current project')
+    .option('--env <name>', 'Target environment', 'production')
+    .action(async (cmdOpts) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const statusCmd = new StatusCommand({
+        getToken: () => configStore.getToken(),
+        findLoopZeroYaml: () => {
+          const gitRoot = getGitRoot();
+          if (!gitRoot) return null;
+          return findLoopZeroYaml(process.cwd(), gitRoot);
+        },
+        getStatus: async (project: string, environment: string) => {
+          return apiClient.get(
+            `/api/v1/projects/${encodeURIComponent(project)}/status?env=${encodeURIComponent(environment)}`,
+          );
+        },
+        writeTo,
+        writeError,
+      });
+
+      const exitCode = await statusCmd.execute({
+        env: cmdOpts.env,
+        json: globalOpts.json,
+      });
+      process.exitCode = exitCode;
+    });
+
+  // --- logs ---
+  program
+    .command('logs')
+    .description('Show build output logs')
+    .requiredOption('--build <id>', 'Build ID to show logs for')
+    .option('--tail <n>', 'Show last N lines', parseInt)
+    .option('--step <name>', 'Filter by build step')
+    .option('--follow', 'Follow log output in real-time')
+    .option('--env <name>', 'Target environment', 'production')
+    .action(async (cmdOpts) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const logsCmd = new LogsCommand({
+        getToken: () => configStore.getToken(),
+        findLoopZeroYaml: () => {
+          const gitRoot = getGitRoot();
+          if (!gitRoot) return null;
+          return findLoopZeroYaml(process.cwd(), gitRoot);
+        },
+        getLogs: async (buildID: string, opts: { tail?: number; step?: string }) => {
+          const params = new URLSearchParams();
+          if (opts.tail) params.set('tail', String(opts.tail));
+          if (opts.step) params.set('step', opts.step);
+          const query = params.toString();
+          const path = `/api/v1/builds/${encodeURIComponent(buildID)}/logs${query ? `?${query}` : ''}`;
+          return apiClient.get(path);
+        },
+        writeTo,
+        writeError,
+      });
+
+      const exitCode = await logsCmd.execute({
+        build: cmdOpts.build,
+        tail: cmdOpts.tail,
+        step: cmdOpts.step,
+        follow: cmdOpts.follow,
+        json: globalOpts.json,
+      });
       process.exitCode = exitCode;
     });
 

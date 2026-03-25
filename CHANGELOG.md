@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Grafana Loki + Promtail infrastructure for build log aggregation — Loki (single binary, MinIO S3 backend) on mgmt cluster, Promtail (DaemonSet) on build cluster collecting Argo Workflows pod logs (#SPRINT-6A)
+- `GET /api/v1/builds/{id}/logs` endpoint — queries Loki via LogQL with `?tail=N` and `?step=<name>` filtering, tenant isolation enforced (#SPRINT-6A)
+- `loopzero logs --build <id>` CLI command — displays build output with step-prefixed lines, `--json` output, `--tail`, `--step`, `--follow` flags (#SPRINT-6A)
+- Pod retention policy (4h) on Argo Workflows — gives Promtail time to ship logs before pod GC (#SPRINT-6A)
+- Loki data source auto-configured in Grafana — build logs queryable via Grafana Explore (#SPRINT-6A)
+
 ### Removed
 - LoopZeroBuild CRD and BuildReconciler — build state owned exclusively by PostgreSQL (ADR-0006)
 - LoopZeroRelease CRD and ReleaseReconciler — release state owned exclusively by PostgreSQL (ADR-0006)

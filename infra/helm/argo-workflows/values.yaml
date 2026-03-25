@@ -66,6 +66,14 @@ kaniko:
 minio:
   insecure: true   # DEV ONLY — allows HTTP MinIO (no TLS)
 
+# Pod retention for log collection — Promtail needs time to ship logs to Loki
+# before pods are garbage collected. 4h is sufficient for all build durations.
+workflowDefaults:
+  spec:
+    podGC:
+      strategy: OnWorkflowCompletion
+      deleteDelayDuration: 4h
+
 server:
   securityContext:
     runAsNonRoot: true

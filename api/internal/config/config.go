@@ -102,6 +102,9 @@ type Config struct {
 
 	// Build Reconcile Loop (C-01 fix)
 	ReconcileInterval time.Duration
+
+	// Loki (build log aggregation)
+	LokiURL string
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -199,6 +202,9 @@ func Load() Config {
 
 		// Build Reconcile Loop (C-01 fix): polls Argo Workflow CRDs every 5s
 		ReconcileInterval: envDuration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
+
+		// Loki (build log aggregation)
+		LokiURL: envOr("LOKI_URL", "http://loki.monitoring:3100"),
 	}
 }
 

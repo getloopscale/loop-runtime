@@ -653,6 +653,7 @@ tasks:
       - helm repo add jetstack https://charts.jetstack.io || true
       - helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
       - helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts || true
+      - helm repo add grafana https://grafana.github.io/helm-charts || true
       - helm repo update
 
   infra:install:mgmt:
@@ -761,6 +762,24 @@ tasks:
         -f infra/helm/otel/values.yaml
         --wait --timeout 3m
       - task: dashboards:install
+      - task: infra:install:loki
+
+  infra:install:loki:
+    desc: Install Grafana Loki (log aggregation) in mgmt cluster + Promtail in build cluster
+    deps: [helm:repos]
+    cmds:
+      - >-
+        helm upgrade --install loki grafana/loki
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace monitoring --create-namespace
+        -f infra/helm/loki/values.yaml
+        --wait --timeout 5m
+      - >-
+        helm upgrade --install promtail grafana/promtail
+        --kube-context {{.BUILD_CONTEXT}}
+        --namespace monitoring --create-namespace
+        -f infra/helm/promtail/values.yaml
+        --wait --timeout 3m
 
   dashboards:install:
     desc: Install LoopZero Grafana dashboards and ServiceMonitors

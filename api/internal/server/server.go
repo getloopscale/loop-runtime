@@ -67,6 +67,8 @@ type Config struct {
 	SSEPollInterval         time.Duration
 	SSESafetyTimeout        time.Duration
 	SSEMaxConcurrentStreams int64
+	// LogsHandler handles GET /api/v1/builds/{id}/logs (build log retrieval via Loki).
+	LogsHandler *routes.LogsHandler
 }
 
 // NewRouter creates a chi router with middleware and routes.
@@ -185,6 +187,11 @@ func NewRouter(cfg Config) *chi.Mux {
 				// Mutating build routes with rate limiting + idempotency
 				r.With(idempotentMiddlewares...).Post("/api/v1/builds", cfg.BuildHandler.Create)
 				r.With(idempotentMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
+			}
+
+			// Build logs route (read-only, no idempotency needed)
+			if cfg.LogsHandler != nil {
+				r.Get("/api/v1/builds/{id}/logs", cfg.LogsHandler.Get)
 			}
 		})
 	}

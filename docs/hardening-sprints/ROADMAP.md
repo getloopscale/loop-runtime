@@ -27,7 +27,7 @@ Sprint 4: Observabilidade → Métricas + SLOs + Dashboard
     ↓ GATE: "por que demorou?" respondível em 30s
 Sprint 5: Pipeline       → Fix build failure + cache + queue depth
     ↓ GATE: 3 deploys estáveis, builds sem SIGTERM
-Sprint 6: Operação       → status → logs → rollback → secrets (1 por vez)
+Sprint 6: Operação       → status → logs (Loki) → rollback → secrets (ESO) (1 por vez)
     ↓ GATE: 3 deploys estáveis após cada feature
 ```
 
@@ -42,7 +42,7 @@ Sprint 6: Operação       → status → logs → rollback → secrets (1 por v
 | [03-banco](./03-banco/ROADMAP.md) | Eliminar PostgreSQL como single point of failure com HA real testado empiricamente durante deploy ativo. | PG com 2 nodes + failover executado durante deploy + API reconectou em <30s + zero locks orphanados + 3 deploys estáveis pós-failover. |
 | [04-observabilidade](./04-observabilidade/ROADMAP.md) | Instrumentar cada etapa do deploy com métricas, definir SLOs com alertas, e criar dashboard para que "por que esse deploy demorou?" seja respondível em 30 segundos. | 8 métricas emitindo + 5 SLOs com alertas configurados + dashboard Grafana mostrando dados reais após 3 deploys. |
 | [05-pipeline](./05-pipeline/ROADMAP.md) | Resolver a falha de build (SIGTERM), validar que cache funciona, e tornar a fila de builds visível e controlada por tenant. | Causa raiz do SIGTERM documentada e corrigida + cache reduz install-deps >50% + queue depth no dashboard + 3 builds sem falha. |
-| [06-operacao](./06-operacao/ROADMAP.md) | Implementar os 4 comandos operacionais (status, logs, rollback, secrets) para que o usuário opere falhas sem depender de kubectl ou intervenção humana. | `loopzero status` mostra estado consolidado + `loopzero logs` retorna output do build + `loopzero rollback` reverte em <30s + `loopzero secret set` sincroniza para workload em <30s. |
+| [06-operacao](./06-operacao/ROADMAP.md) | Implementar os 4 comandos operacionais (status, logs, rollback, secrets) para que o usuário opere falhas sem depender de kubectl ou intervenção humana. Logs via **Grafana Loki** (não PostgreSQL). Secrets via **External Secrets Operator** (não controller custom). Dividido em 4 sub-sprints sequenciais: [6.1-status](./06-operacao/ROADMAP.md), [6A-logs](./06-operacao/06a-logs/ROADMAP.md), [6B-rollback](./06-operacao/06b-rollback/ROADMAP.md), [6C-secrets](./06-operacao/06c-secrets/ROADMAP.md). | `loopzero status` mostra estado consolidado + `loopzero logs` retorna output do build (Loki) + `loopzero rollback` reverte em <30s + `loopzero secret set` sincroniza para workload em <30s (ESO). |
 
 ---
 
@@ -55,7 +55,7 @@ Sprint 6: Operação       → status → logs → rollback → secrets (1 por v
 | 03-banco | MÉDIA | ~4h | Sprint 2 GATE passou |
 | 04-observabilidade | ALTA | ~8h | Sprint 3 GATE passou |
 | 05-pipeline | ALTA | ~4h | Sprint 4 GATE passou |
-| 06-operacao | BAIXA-MÉDIA | ~40h+ | Sprint 5 GATE passou |
+| 06-operacao | MÉDIA | ~50h (6.1: 2h, 6A: 12h, 6B: 20h, 6C: 16h). Timeline realista: 3-4 semanas (TDD + gates). | Sprint 5 GATE passou |
 
 ---
 
@@ -69,7 +69,7 @@ Sprint 6: Operação       → status → logs → rollback → secrets (1 por v
 | PG HA upgrade | MÉDIA | Failover precisa ser testado empiricamente |
 | Métricas + Dashboard | ALTA | Instrumentação sem side effects |
 | SLO targets | MÉDIA | Estimativas — ajustar com dados reais |
-| loopzero status | MÉDIA | Design claro, implementação nova |
-| loopzero logs | BAIXA | Cross-cluster streaming difícil |
-| loopzero rollback | BAIXA | State machine + gitops reverso + lock |
-| loopzero secret | BAIXA | Controller novo + segurança |
+| 6.1 loopzero status | MÉDIA | Handler existe, falta wiring no router + adapters |
+| 6A loopzero logs (5 tasks) | MÉDIA | Grafana Loki + Promtail + MinIO (infra existente). API faz proxy de LogQL. Sem código custom de log storage. |
+| 6B loopzero rollback (6 tasks) | BAIXA | State machines existem (rollback + release). Falta orchestrator + gitops read + endpoint. |
+| 6C loopzero secret (5 tasks) | MÉDIA | External Secrets Operator (CNCF, Apache 2.0). Elimina controller custom + crypto custom. API cria K8s Secret + ExternalSecret CR. |

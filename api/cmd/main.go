@@ -24,6 +24,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/argocd"
 	"github.com/loopzero/loopzero/api/internal/gitops"
 	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/loopzero/loopzero/api/internal/loki"
 	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/sse"
@@ -112,6 +113,7 @@ func main() {
 	var buildStoreReader sse.BuildStoreReader
 	var secretStore routes.SecretStore
 	var bootstrapStore routes.BootstrapStore
+	var logsHandler *routes.LogsHandler
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -243,6 +245,11 @@ func main() {
 
 		buildStoreReader = &adapters.BuildStoreReaderAdapter{Store: buildStore}
 
+		// Build logs via Loki
+		lokiClient := loki.NewClient(cfg.LokiURL, httpClient, logger)
+		logBuildStore := &adapters.LogBuildStoreAdapter{Store: buildStore}
+		logsHandler = routes.NewLogsHandler(logBuildStore, lokiClient)
+
 		// C-01/C-03 fix: BuildReconcileLoop replaces both the HTTP callback
 		// and the StartupReconciler. The control plane POLLS the build cluster's
 		// Workflow CRDs instead of the build cluster calling the API.
@@ -353,6 +360,7 @@ func main() {
 		SecretStore:        secretStore,
 		BootstrapStore:     bootstrapStore,
 		BuildHandler:       buildHandler,
+		LogsHandler:        logsHandler,
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,

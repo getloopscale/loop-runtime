@@ -223,6 +223,27 @@ func (a *BuildStoreReaderAdapter) GetByID(ctx context.Context, id string) (*sse.
 	}, nil
 }
 
+// --- LogBuildStoreAdapter: bridges db.BuildStore to routes.LogBuildStore ---
+
+// LogBuildStoreAdapter implements routes.LogBuildStore using db.BuildStore.
+// The logs handler needs only build ID, tenant, and status for authorization
+// and response metadata.
+type LogBuildStoreAdapter struct {
+	Store db.BuildStore
+}
+
+func (a *LogBuildStoreAdapter) GetByID(ctx context.Context, id string) (*routes.LogBuild, error) {
+	build, err := a.Store.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &routes.LogBuild{
+		ID:       build.ID,
+		TenantID: build.TenantID,
+		Status:   build.Status,
+	}, nil
+}
+
 // NOTE: All Fake* types have been REMOVED from production code.
 // Real implementations are required:
 //   - WorkflowSubmitter → api/internal/argo/workflow_submitter.go
