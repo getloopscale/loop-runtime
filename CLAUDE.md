@@ -14,7 +14,7 @@ The authoritative specification is **`docs/technical.md`**. Every state machine,
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
-**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Core flow `loopzero login` → `loopzero init` → `loopzero deploy` → live URL works end-to-end. 650+ tests passing. Production infrastructure running on DigitalOcean (3 DOKS clusters). Sprints 3-9 not started.
+**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-5 complete (runtime, TLS, PG HA, observability, pipeline). Hardening sprint 6 (operation) 3/4 complete: `loopzero logs` (Loki), `loopzero rollback` (3s), `loopzero secret` (ESO sync <30s) all validated on DigitalOcean. `loopzero status` pending (handler exists, route not wired). Core flow `loopzero login` → `loopzero init` → `loopzero deploy` → live URL works end-to-end. 455+ CLI tests + 60+ API test files passing. Production infrastructure running on DigitalOcean (3 DOKS clusters + Loki + Promtail + ESO).
 
 ---
 
@@ -124,6 +124,8 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | Artifact store | MinIO (S3-compatible) / DO Spaces | Source bundles, build cache |
 | Container registry | DigitalOcean Container Registry | Container image storage |
 | Observability | Prometheus 25.27.0 + Grafana 8.5.2 + OpenTelemetry | Metrics, dashboards, tracing |
+| Log aggregation | Grafana Loki 6.24.0 + Promtail 6.16.6 | Build log storage (build cluster), queried by API via LogQL |
+| Secret sync | External Secrets Operator 0.14.3 | Cross-cluster secret sync mgmt → workload via ClusterSecretStore |
 | DNS | DigitalOcean DNS | A records, wildcard for user apps |
 
 ### Development & Operations
@@ -512,13 +514,26 @@ Run the pre-completion checklist:
 | **[0](docs/sprints/00-foundation/sprint.md)** | 1-2 | Foundation | `task setup` boots, Grafana running | — | ✅ Complete |
 | **[1](docs/sprints/01-login-init-tenant-controller/sprint.md)** | 3-5 | Login + Init + TenantController | `loopzero login` → `loopzero init` → `loopzero.yaml` | `login`, `logout`, `whoami`, `init` | ✅ Complete |
 | **[2](docs/sprints/02-deploy-happy-path/sprint.md)** | 6-9 | Deploy happy path | CLI → live URL | `deploy` | ⚠️ Feature-complete |
-| **[3](docs/sprints/03-logs-status-secrets/sprint.md)** | 10-12 | Logs + Status + Secrets | All daily workflows functional | `logs`, `status`, `inspect`, `secret` | ❌ Not started |
-| **[4](docs/sprints/04-rollback-promote-cancel/sprint.md)** | 13-15 | Rollback + Promote + Cancel | Recovery in < 30s | `rollback`, `promote`, `build`, `env`, `team`, `project` | ❌ Not started |
+| **[3](docs/sprints/03-logs-status-secrets/sprint.md)** | 10-12 | Logs + Status + Secrets | All daily workflows functional | `logs`, `status`, `inspect`, `secret` | ⚠️ Replaced by hardening sprint 6 |
+| **[4](docs/sprints/04-rollback-promote-cancel/sprint.md)** | 13-15 | Rollback + Promote + Cancel | Recovery in < 30s | `rollback`, `promote`, `build`, `env`, `team`, `project` | ⚠️ `rollback` done via hardening 6B |
 | **[5](docs/sprints/05-preview-environments/sprint.md)** | 16-18 | Preview environments | PR → preview URL → cleanup | `preview` | ❌ Not started |
 | **[6](docs/sprints/06-security-supply-chain/sprint.md)** | 19-21 | Security + Supply chain | Signed images, encrypted secrets, RBAC | — | ❌ Not started |
 | **[7](docs/sprints/07-observability/sprint.md)** | 22-23 | Observability complete | Incident resolved via dashboards in < 15 min | — | ❌ Not started |
 | **[8](docs/sprints/08-hardening-chaos/sprint.md)** | 24-25 | Hardening + Chaos | 50 concurrent deploys, all chaos passes | — | ❌ Not started |
 | **[9](docs/sprints/09-polish-launch/sprint.md)** | 26-27 | Polish + Launch | Non-team-member onboards in < 10 min | — | ❌ Not started |
+
+**Hardening sprints** (parallel track, production readiness):
+
+| Sprint | Focus | Status |
+|--------|-------|--------|
+| H1-Runtime | Wire 7 controllers | ✅ Complete |
+| H2-Estabilização | TLS fix | ✅ Complete |
+| H3-Banco | PG HA + failover | ✅ Complete |
+| H4-Observabilidade | Metrics + SLOs + Dashboards | ✅ Complete |
+| H5-Pipeline | Build fix + cache | ✅ Complete |
+| H6-Operação | logs (Loki) + rollback + secrets (ESO) + status | ⚠️ 3/4 (`status` pending) |
+
+Full hardening details: [`docs/hardening-sprints/ROADMAP.md`](docs/hardening-sprints/ROADMAP.md)
 
 Check the current sprint before starting any implementation. Only implement what belongs to the current sprint.
 
