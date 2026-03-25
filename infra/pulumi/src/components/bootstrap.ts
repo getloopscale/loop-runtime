@@ -24,6 +24,8 @@ const HELM_VERSIONS = {
   argoWorkflows: "1.0.5",
   prometheus: "25.27.0",
   grafana: "8.5.2",
+  loki: "6.24.0",
+  promtail: "6.16.6",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -131,7 +133,10 @@ function bootstrapMgmtCluster(
   // Prometheus — metrics collection (kube-state-metrics, node-exporter, cAdvisor)
   const prometheus = installPrometheus(provider, ns);
 
-  // Grafana — dashboards and visualization, pre-configured with Prometheus data source
+  // Loki — log aggregation for build logs (stored in MinIO)
+  const loki = installLoki(provider, ns);
+
+  // Grafana — dashboards and visualization, pre-configured with Prometheus + Loki data sources
   const grafana = installGrafana(provider, ns, config);
 
   // Gitea bootstrap — creates admin token, orgs, and stores credentials in K8s Secret.
@@ -593,6 +598,79 @@ function bootstrapBuildCluster(
     { provider, dependsOn: [ns, argoWorkflows] },
   );
 
+  // Promtail — ships Argo Workflows pod logs to Loki on mgmt cluster
+  const promtailNs = new k8s.core.v1.Namespace(
+    "build-monitoring",
+    {
+      metadata: {
+        name: "monitoring",
+        labels: {
+          "app.kubernetes.io/managed-by": "pulumi",
+          "app.kubernetes.io/part-of": "loopzero-platform",
+        },
+      },
+    },
+    { provider },
+  );
+
+  new k8s.helm.v3.Release(
+    "promtail",
+    {
+      name: "promtail",
+      chart: "promtail",
+      version: HELM_VERSIONS.promtail,
+      repositoryOpts: {
+        repo: "https://grafana.github.io/helm-charts",
+      },
+      namespace: "monitoring",
+      createNamespace: false,
+      values: {
+        config: {
+          clients: [
+            {
+              // Cross-cluster: Promtail (build) → Loki (mgmt) via mgmt cluster internal IP.
+              // In k3d, clusters share Docker network so DNS resolves.
+              // In DO, clusters are in the same VPC — use mgmt cluster internal LB IP.
+              url: `http://loki.${PLATFORM_NAMESPACE}.svc.cluster.local:3100/loki/api/v1/push`,
+              batchwait: "5s",
+              batchsize: 1048576,
+              backoff_config: {
+                max_retries: 20,
+                min_period: "500ms",
+                max_period: "5m",
+              },
+            },
+          ],
+          snippets: {
+            scrapeConfigs: `
+- job_name: argo-workflow-pods
+  kubernetes_sd_configs:
+    - role: pod
+  relabel_configs:
+    - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_workflow]
+      action: keep
+      regex: .+
+    - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_workflow]
+      target_label: workflow
+    - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_node_name]
+      target_label: step
+    - source_labels: [__meta_kubernetes_namespace]
+      target_label: namespace
+    - source_labels: [__meta_kubernetes_pod_name]
+      target_label: pod
+    - source_labels: [__meta_kubernetes_pod_container_name]
+      target_label: container`,
+          },
+        },
+        resources: {
+          requests: { cpu: "50m", memory: "64Mi" },
+          limits: { cpu: "200m", memory: "128Mi" },
+        },
+      },
+    },
+    { provider, dependsOn: [promtailNs] },
+  );
+
   return {
     argoWorkflowsReady: argoWorkflows.status.apply(
       (s) => s.status === "deployed",
@@ -1025,6 +1103,7 @@ function installLoopZeroAPI(
         REGISTRY_URL: "registry.digitalocean.com/loopzero-infra-registry",
         REGISTRY_INSECURE: "false",
         ARGOCD_NAMESPACE: PLATFORM_NAMESPACE,
+        LOKI_URL: `http://loki.${PLATFORM_NAMESPACE}.svc.cluster.local:3100`,
       },
     },
     { provider, dependsOn: [ns] },
@@ -1508,6 +1587,76 @@ function registerRuntimeCluster(
 // Observability
 // ---------------------------------------------------------------------------
 
+function installLoki(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+): k8s.helm.v3.Release {
+  return new k8s.helm.v3.Release(
+    "loki",
+    {
+      name: "loki",
+      chart: "loki",
+      version: HELM_VERSIONS.loki,
+      repositoryOpts: {
+        repo: "https://grafana.github.io/helm-charts",
+      },
+      namespace: PLATFORM_NAMESPACE,
+      createNamespace: false,
+      values: {
+        fullnameOverride: "loki",
+        loki: {
+          auth_enabled: false,
+          commonConfig: {
+            replication_factor: 1,
+          },
+          storage: {
+            type: "filesystem",
+          },
+          limits_config: {
+            retention_period: "168h",
+            max_query_series: 500,
+          },
+          schema_config: {
+            configs: [
+              {
+                from: "2026-01-01",
+                store: "tsdb",
+                object_store: "filesystem",
+                schema: "v13",
+                index: {
+                  prefix: "loki_index_",
+                  period: "24h",
+                },
+              },
+            ],
+          },
+        },
+        deploymentMode: "SingleBinary",
+        singleBinary: {
+          replicas: 1,
+          persistence: {
+            enabled: true,
+            size: "10Gi",
+          },
+          resources: {
+            requests: { cpu: "100m", memory: "256Mi" },
+            limits: { cpu: "500m", memory: "512Mi" },
+          },
+        },
+        gateway: { enabled: false },
+        monitoring: {
+          selfMonitoring: { enabled: false },
+          lokiCanary: { enabled: false },
+        },
+        test: { enabled: false },
+        chunksCache: { enabled: false },
+        resultsCache: { enabled: false },
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+}
+
 function installPrometheus(
   provider: k8s.Provider,
   ns: k8s.core.v1.Namespace,
@@ -1577,7 +1726,7 @@ function installGrafana(
           type: "ClusterIP",
           port: 3000,
         },
-        // Prometheus data source pre-configured — no manual setup needed.
+        // Data sources pre-configured — no manual setup needed.
         datasources: {
           "datasources.yaml": {
             apiVersion: 1,
@@ -1588,6 +1737,13 @@ function installGrafana(
                 url: `http://prometheus-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
                 access: "proxy",
                 isDefault: true,
+              },
+              {
+                name: "Loki",
+                type: "loki",
+                url: `http://loki.${PLATFORM_NAMESPACE}.svc.cluster.local:3100`,
+                access: "proxy",
+                isDefault: false,
               },
             ],
           },
