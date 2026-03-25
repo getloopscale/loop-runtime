@@ -39,9 +39,11 @@ func NewClient(baseURL string, httpClient *http.Client, logger *slog.Logger) *Cl
 // Implements routes.LogQuerier.
 func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts routes.LogQueryOpts) ([]routes.LogEntry, error) {
 	// Build LogQL query
-	query := fmt.Sprintf(`{workflow="%s"}`, buildID)
+	// Argo Workflow names contain the build ID plus a random suffix:
+	// "loopzero-build-{buildID}-{suffix}". Use regex match to find by build ID.
+	query := fmt.Sprintf(`{workflow=~".*%s.*"}`, buildID)
 	if opts.Step != "" {
-		query = fmt.Sprintf(`{workflow="%s", step="%s"}`, buildID, opts.Step)
+		query = fmt.Sprintf(`{workflow=~".*%s.*", step="%s"}`, buildID, opts.Step)
 	}
 
 	limit := 1000
