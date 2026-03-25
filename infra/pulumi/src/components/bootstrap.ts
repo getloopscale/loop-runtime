@@ -133,9 +133,6 @@ function bootstrapMgmtCluster(
   // Prometheus — metrics collection (kube-state-metrics, node-exporter, cAdvisor)
   const prometheus = installPrometheus(provider, ns);
 
-  // Loki — log aggregation for build logs (stored in MinIO)
-  const loki = installLoki(provider, ns);
-
   // Grafana — dashboards and visualization, pre-configured with Prometheus + Loki data sources
   const grafana = installGrafana(provider, ns, config);
 
@@ -598,8 +595,9 @@ function bootstrapBuildCluster(
     { provider, dependsOn: [ns, argoWorkflows] },
   );
 
-  // Promtail — ships Argo Workflows pod logs to Loki on mgmt cluster
-  const promtailNs = new k8s.core.v1.Namespace(
+  // Loki + Promtail — build log aggregation (both in build cluster, no cross-cluster for log shipping)
+  // API queries Loki cross-cluster via NodePort 30100.
+  const monitoringNs = new k8s.core.v1.Namespace(
     "build-monitoring",
     {
       metadata: {
@@ -613,6 +611,80 @@ function bootstrapBuildCluster(
     { provider },
   );
 
+  // Loki — log aggregation, filesystem storage, NodePort for cross-cluster access by API
+  const loki = new k8s.helm.v3.Release(
+    "loki",
+    {
+      name: "loki",
+      chart: "loki",
+      version: HELM_VERSIONS.loki,
+      repositoryOpts: {
+        repo: "https://grafana.github.io/helm-charts",
+      },
+      namespace: "monitoring",
+      createNamespace: false,
+      values: {
+        fullnameOverride: "loki",
+        loki: {
+          auth_enabled: false,
+          commonConfig: {
+            replication_factor: 1,
+          },
+          storage: {
+            type: "filesystem",
+          },
+          limits_config: {
+            retention_period: "168h",
+            max_query_series: 500,
+          },
+          schemaConfig: {
+            configs: [
+              {
+                from: "2026-01-01",
+                store: "tsdb",
+                object_store: "filesystem",
+                schema: "v13",
+                index: {
+                  prefix: "loki_index_",
+                  period: "24h",
+                },
+              },
+            ],
+          },
+        },
+        deploymentMode: "SingleBinary",
+        singleBinary: {
+          replicas: 1,
+          persistence: {
+            enabled: true,
+            size: "10Gi",
+          },
+          resources: {
+            requests: { cpu: "100m", memory: "256Mi" },
+            limits: { cpu: "500m", memory: "512Mi" },
+          },
+          service: {
+            type: "NodePort",
+            nodePort: 30100,
+          },
+        },
+        read: { replicas: 0 },
+        write: { replicas: 0 },
+        backend: { replicas: 0 },
+        gateway: { enabled: false },
+        monitoring: {
+          selfMonitoring: { enabled: false },
+          lokiCanary: { enabled: false },
+        },
+        test: { enabled: false },
+        chunksCache: { enabled: false },
+        resultsCache: { enabled: false },
+      },
+    },
+    { provider, dependsOn: [monitoringNs] },
+  );
+
+  // Promtail — ships Argo Workflows pod logs to Loki (same cluster, no cross-cluster needed)
   new k8s.helm.v3.Release(
     "promtail",
     {
@@ -628,10 +700,8 @@ function bootstrapBuildCluster(
         config: {
           clients: [
             {
-              // Cross-cluster: Promtail (build) → Loki (mgmt) via mgmt cluster internal IP.
-              // In k3d, clusters share Docker network so DNS resolves.
-              // In DO, clusters are in the same VPC — use mgmt cluster internal LB IP.
-              url: `http://loki.${PLATFORM_NAMESPACE}.svc.cluster.local:3100/loki/api/v1/push`,
+              // Same cluster: Promtail and Loki both run in build cluster
+              url: "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push",
               batchwait: "5s",
               batchsize: 1048576,
               backoff_config: {
@@ -668,7 +738,7 @@ function bootstrapBuildCluster(
         },
       },
     },
-    { provider, dependsOn: [promtailNs] },
+    { provider, dependsOn: [monitoringNs, loki] },
   );
 
   return {
@@ -1103,7 +1173,10 @@ function installLoopZeroAPI(
         REGISTRY_URL: "registry.digitalocean.com/loopzero-infra-registry",
         REGISTRY_INSECURE: "false",
         ARGOCD_NAMESPACE: PLATFORM_NAMESPACE,
-        LOKI_URL: `http://loki.${PLATFORM_NAMESPACE}.svc.cluster.local:3100`,
+        // Loki runs on build cluster. API accesses via cross-cluster NodePort.
+        // IP resolved from build cluster node — same pattern as Prometheus scraping.
+        // Falls back to env override LOKI_URL for manual configuration.
+        LOKI_URL: "http://10.0.2.5:30100",
       },
     },
     { provider, dependsOn: [ns] },
@@ -1587,81 +1660,6 @@ function registerRuntimeCluster(
 // Observability
 // ---------------------------------------------------------------------------
 
-function installLoki(
-  provider: k8s.Provider,
-  ns: k8s.core.v1.Namespace,
-): k8s.helm.v3.Release {
-  return new k8s.helm.v3.Release(
-    "loki",
-    {
-      name: "loki",
-      chart: "loki",
-      version: HELM_VERSIONS.loki,
-      repositoryOpts: {
-        repo: "https://grafana.github.io/helm-charts",
-      },
-      namespace: PLATFORM_NAMESPACE,
-      createNamespace: false,
-      values: {
-        fullnameOverride: "loki",
-        loki: {
-          auth_enabled: false,
-          commonConfig: {
-            replication_factor: 1,
-          },
-          storage: {
-            type: "filesystem",
-          },
-          limits_config: {
-            retention_period: "168h",
-            max_query_series: 500,
-          },
-          schema_config: {
-            configs: [
-              {
-                from: "2026-01-01",
-                store: "tsdb",
-                object_store: "filesystem",
-                schema: "v13",
-                index: {
-                  prefix: "loki_index_",
-                  period: "24h",
-                },
-              },
-            ],
-          },
-        },
-        deploymentMode: "SingleBinary",
-        singleBinary: {
-          replicas: 1,
-          persistence: {
-            enabled: true,
-            size: "10Gi",
-          },
-          resources: {
-            requests: { cpu: "100m", memory: "256Mi" },
-            limits: { cpu: "500m", memory: "512Mi" },
-          },
-        },
-        // Disable SimpleScalable targets — required by Loki chart v6.x
-        // validation when deploymentMode is SingleBinary
-        read: { replicas: 0 },
-        write: { replicas: 0 },
-        backend: { replicas: 0 },
-        gateway: { enabled: false },
-        monitoring: {
-          selfMonitoring: { enabled: false },
-          lokiCanary: { enabled: false },
-        },
-        test: { enabled: false },
-        chunksCache: { enabled: false },
-        resultsCache: { enabled: false },
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-}
-
 function installPrometheus(
   provider: k8s.Provider,
   ns: k8s.core.v1.Namespace,
@@ -1743,13 +1741,18 @@ function installGrafana(
                 access: "proxy",
                 isDefault: true,
               },
-              {
-                name: "Loki",
-                type: "loki",
-                url: `http://loki.${PLATFORM_NAMESPACE}.svc.cluster.local:3100`,
-                access: "proxy",
-                isDefault: false,
-              },
+              // Loki runs on the build cluster. Grafana accesses it cross-cluster
+              // via the build cluster node IP + NodePort 30100.
+              // The IP is updated by infra/scripts/update-cross-cluster-ips.sh
+              // (same pattern as Prometheus cross-cluster scraping).
+              // For initial setup, use placeholder — update after clusters are ready.
+              // {
+              //   name: "Loki",
+              //   type: "loki",
+              //   url: "http://<build-cluster-ip>:30100",
+              //   access: "proxy",
+              //   isDefault: false,
+              // },
             ],
           },
         },
