@@ -71,6 +71,8 @@ type Config struct {
 	LogsHandler *routes.LogsHandler
 	// RollbackHandler handles POST /api/v1/projects/{name}/rollback.
 	RollbackHandler *routes.RollbackHandler
+	// SecretK8sSync creates K8s Secrets on mgmt + ExternalSecret CRs on workload.
+	SecretK8sSync routes.SecretK8sSync
 }
 
 // NewRouter creates a chi router with middleware and routes.
@@ -176,6 +178,9 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Secret routes
 			if cfg.SecretStore != nil {
 				secrets := routes.NewSecretHandler(cfg.SecretStore)
+				if cfg.SecretK8sSync != nil {
+					secrets.SetK8sSync(cfg.SecretK8sSync)
+				}
 				r.Get("/api/v1/secrets", secrets.List)
 				r.With(rateLimitMiddlewares...).Post("/api/v1/secrets", secrets.Set)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secrets.DeleteSecret)

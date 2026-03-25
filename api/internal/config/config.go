@@ -40,8 +40,10 @@ type Config struct {
 	// Kubernetes Contexts
 	MgmtKubeconfig  string
 	MgmtKubeContext string
-	BuildKubeconfig string
-	BuildKubeContext string
+	BuildKubeconfig   string
+	BuildKubeContext  string
+	RuntimeKubeconfig string
+	RuntimeKubeContext string
 
 	// Service URLs
 	GiteaURL             string
@@ -140,8 +142,10 @@ func Load() Config {
 		// Kubernetes Contexts
 		MgmtKubeconfig:  envOr("MGMT_KUBECONFIG", defaultKubeconfig),
 		MgmtKubeContext: envOr("MGMT_KUBE_CONTEXT", "k3d-loopzero-mgmt"),
-		BuildKubeconfig: envOr("BUILD_KUBECONFIG", defaultKubeconfig),
-		BuildKubeContext: envOr("BUILD_KUBE_CONTEXT", "k3d-loopzero-build"),
+		BuildKubeconfig:   envOr("BUILD_KUBECONFIG", defaultKubeconfig),
+		BuildKubeContext:  envOr("BUILD_KUBE_CONTEXT", "k3d-loopzero-build"),
+		RuntimeKubeconfig: envOr("RUNTIME_KUBECONFIG", defaultKubeconfig),
+		RuntimeKubeContext: envOr("RUNTIME_KUBE_CONTEXT", "k3d-loopzero-workload"),
 
 		// Service URLs
 		GiteaURL:             envOr("GITEA_URL", "http://gitea-http.loopzero-system.svc.cluster.local:3000"),

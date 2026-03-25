@@ -99,6 +99,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Secret K8s manager — creates K8s Secrets on mgmt + ExternalSecret CRs on workload for ESO sync
+	secretK8sMgr, err := k8s.NewSecretK8sManager(
+		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
+		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,
+	)
+	if err != nil {
+		logger.Warn("secret K8s manager not available — ESO sync disabled", "error", err)
+	}
+
 	// Database connection (optional — graceful degradation if not configured)
 	var memberStore middleware.MembershipStore
 	var projectStore routes.ProjectStore
@@ -372,6 +381,7 @@ func main() {
 		EventStore:         eventStore,
 		BuildStoreReader:   buildStoreReader,
 		SecretStore:        secretStore,
+		SecretK8sSync:      secretK8sMgr,
 		BootstrapStore:     bootstrapStore,
 		BuildHandler:       buildHandler,
 		LogsHandler:        logsHandler,

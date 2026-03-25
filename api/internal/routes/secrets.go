@@ -3,6 +3,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"regexp"
 
@@ -27,14 +28,26 @@ type SecretStore interface {
 	Delete(ctx context.Context, tenantID, projectID, env, app, name string) (deleted bool, err error)
 }
 
+// SecretK8sSync abstracts K8s Secret + ExternalSecret CR creation (DIP).
+type SecretK8sSync interface {
+	CreateSecret(ctx context.Context, tenantID, projectID, env, app, name, value string) error
+	DeleteSecret(ctx context.Context, tenantID, env, app, name string) error
+}
+
 // SecretHandler provides HTTP handlers for secret operations.
 type SecretHandler struct {
-	store SecretStore
+	store  SecretStore
+	k8sSync SecretK8sSync // optional — nil disables K8s sync
 }
 
 // NewSecretHandler creates a new SecretHandler.
 func NewSecretHandler(store SecretStore) *SecretHandler {
 	return &SecretHandler{store: store}
+}
+
+// SetK8sSync configures the K8s sync for creating Secrets and ExternalSecret CRs.
+func (h *SecretHandler) SetK8sSync(sync SecretK8sSync) {
+	h.k8sSync = sync
 }
 
 // secretListResponse is the JSON response for GET /api/v1/secrets.
@@ -140,6 +153,14 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create K8s Secret on mgmt + ExternalSecret CR on workload for ESO sync
+	if h.k8sSync != nil {
+		if syncErr := h.k8sSync.CreateSecret(r.Context(), uc.TenantID, project, req.Environment, req.App, req.Name, req.Value); syncErr != nil {
+			// Log but don't fail — PG is source of truth, K8s sync is eventual
+			slog.Error("failed to sync secret to K8s", "name", req.Name, "error", syncErr)
+		}
+	}
+
 	writeJSON(w, http.StatusOK, secretSetResponse{
 		Name:        req.Name,
 		Environment: req.Environment,
@@ -178,6 +199,13 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 			"message": "Secret '" + name + "' not found.",
 		})
 		return
+	}
+
+	// Remove K8s Secret from mgmt + ExternalSecret CR from workload
+	if h.k8sSync != nil {
+		if syncErr := h.k8sSync.DeleteSecret(r.Context(), uc.TenantID, env, app, name); syncErr != nil {
+			slog.Error("failed to delete secret from K8s", "name", name, "error", syncErr)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, secretDeleteResponse{

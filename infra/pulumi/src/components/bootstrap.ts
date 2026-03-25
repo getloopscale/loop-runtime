@@ -1330,6 +1330,7 @@ function installLoopZeroAPI(
       stringData: {
         "mgmt-kubeconfig": infra.mgmtCluster.kubeconfig,
         "build-kubeconfig": infra.buildCluster.kubeconfig,
+        "runtime-kubeconfig": infra.runtimeCluster.kubeconfig,
       },
     },
     { provider, dependsOn: [ns] },
@@ -1353,6 +1354,8 @@ function installLoopZeroAPI(
         MGMT_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.mgmtCluster.clusterName}`,
         BUILD_KUBECONFIG: "/etc/loopzero/build-kubeconfig",
         BUILD_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.buildCluster.clusterName}`,
+        RUNTIME_KUBECONFIG: "/etc/loopzero/runtime-kubeconfig",
+        RUNTIME_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.runtimeCluster.clusterName}`,
         MINIO_ENDPOINT: `https://${config.region}.digitaloceanspaces.com`,
         REGISTRY_URL: "registry.digitalocean.com/loopzero-infra-registry",
         REGISTRY_INSECURE: "false",
