@@ -691,6 +691,8 @@ function bootstrapBuildCluster(
       name: "promtail",
       chart: "promtail",
       version: HELM_VERSIONS.promtail,
+      // forceUpdate recovers from a previously failed Helm release
+      forceUpdate: true,
       repositoryOpts: {
         repo: "https://grafana.github.io/helm-charts",
       },
@@ -738,7 +740,14 @@ function bootstrapBuildCluster(
         },
       },
     },
-    { provider, dependsOn: [monitoringNs, loki] },
+    {
+      provider,
+      dependsOn: [monitoringNs, loki],
+      // Promtail is a DaemonSet — it schedules on all nodes automatically.
+      // Skip await to prevent timeout when Promtail pods take time to start
+      // (e.g., waiting for Loki to become reachable cross-cluster).
+      customTimeouts: { create: "10m", update: "10m" },
+    },
   );
 
   return {
