@@ -756,13 +756,22 @@ function bootstrapBuildCluster(
   kubernetes_sd_configs:
     - role: pod
   relabel_configs:
+    # Only collect logs from Argo Workflow pods
     - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_workflow]
       action: keep
       regex: .+
+    # Set __path__ so Promtail knows which log files to tail
+    - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+      target_label: __path__
+      separator: /
+      replacement: /var/log/pods/*$1/$2/*.log
+    # Extract workflow ID for LogQL queries
     - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_workflow]
       target_label: workflow
+    # Extract step/node name for filtering
     - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_node_name]
       target_label: step
+    # Standard K8s metadata
     - source_labels: [__meta_kubernetes_namespace]
       target_label: namespace
     - source_labels: [__meta_kubernetes_pod_name]
