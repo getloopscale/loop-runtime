@@ -2,7 +2,8 @@
 
 **Objetivo:** Levar o LoopZero de "feature-complete" para "sobrevive à produção real".
 **Base:** execution-plan-v2-2026-03-24.md + ROADMAP.md + project-scan
-**Data:** 2026-03-24
+**Data início:** 2026-03-24
+**Última atualização:** 2026-03-25
 
 ---
 
@@ -17,17 +18,17 @@
 ## Sequência
 
 ```
-Sprint 1: Runtime        → Wire 5 controllers (serializado, 1 por vez)
+Sprint 1: Runtime        → Wire 7 controllers (serializado, 1 por vez)               ✅ DONE
     ↓ GATE: 3 deploys estáveis
-Sprint 2: Estabilização  → TLS fix + validação E2E
+Sprint 2: Estabilização  → TLS fix + validação E2E                                   ✅ DONE
     ↓ GATE: 3 deploys estáveis, TLS 4/4
-Sprint 3: Banco          → PG HA + failover testado durante deploy
+Sprint 3: Banco          → PG HA + failover testado durante deploy                   ✅ DONE
     ↓ GATE: 3 deploys estáveis pós-failover
-Sprint 4: Observabilidade → Métricas + SLOs + Dashboard
+Sprint 4: Observabilidade → Métricas + SLOs + Dashboard                              ✅ DONE
     ↓ GATE: "por que demorou?" respondível em 30s
-Sprint 5: Pipeline       → Fix build failure + cache + queue depth
+Sprint 5: Pipeline       → Fix build failure + cache + queue depth                   ✅ DONE
     ↓ GATE: 3 deploys estáveis, builds sem SIGTERM
-Sprint 6: Operação       → status → logs (Loki) → rollback → secrets (ESO) (1 por vez)
+Sprint 6: Operação       → status → logs (Loki) → rollback → secrets (ESO)          ⚠️ 3/4 DONE
     ↓ GATE: 3 deploys estáveis após cada feature
 ```
 
@@ -35,41 +36,54 @@ Sprint 6: Operação       → status → logs (Loki) → rollback → secrets (
 
 ## Tabela de Sprints
 
-| Sprint | Objetivo | Done |
-|---|---|---|
-| [01-runtime](./01-runtime/ROADMAP.md) | Ativar os 5 controllers implementados mas não registrados no main.go, para que todo estado declarado via CRD passe por reconcile loop real. | 7 controllers running + 3 deploys consecutivos estáveis com Tenant → Environment → namespace criado no runtime em <60s. |
-| [02-estabilizacao](./02-estabilizacao/ROADMAP.md) | Corrigir os 3 certificados TLS falhando para que todos os serviços da plataforma sejam acessíveis via HTTPS. | 4/4 certificados Ready + ArgoCD, Gitea e Grafana acessíveis via HTTPS sem erro de certificado. |
-| [03-banco](./03-banco/ROADMAP.md) | Eliminar PostgreSQL como single point of failure com HA real testado empiricamente durante deploy ativo. | PG com 2 nodes + failover executado durante deploy + API reconectou em <30s + zero locks orphanados + 3 deploys estáveis pós-failover. |
-| [04-observabilidade](./04-observabilidade/ROADMAP.md) | Instrumentar cada etapa do deploy com métricas, definir SLOs com alertas, e criar dashboard para que "por que esse deploy demorou?" seja respondível em 30 segundos. | 8 métricas emitindo + 5 SLOs com alertas configurados + dashboard Grafana mostrando dados reais após 3 deploys. |
-| [05-pipeline](./05-pipeline/ROADMAP.md) | Resolver a falha de build (SIGTERM), validar que cache funciona, e tornar a fila de builds visível e controlada por tenant. | Causa raiz do SIGTERM documentada e corrigida + cache reduz install-deps >50% + queue depth no dashboard + 3 builds sem falha. |
-| [06-operacao](./06-operacao/ROADMAP.md) | Implementar os 4 comandos operacionais (status, logs, rollback, secrets) para que o usuário opere falhas sem depender de kubectl ou intervenção humana. Logs via **Grafana Loki** (não PostgreSQL). Secrets via **External Secrets Operator** (não controller custom). Dividido em 4 sub-sprints sequenciais: [6.1-status](./06-operacao/ROADMAP.md), [6A-logs](./06-operacao/06a-logs/ROADMAP.md), [6B-rollback](./06-operacao/06b-rollback/ROADMAP.md), [6C-secrets](./06-operacao/06c-secrets/ROADMAP.md). | `loopzero status` mostra estado consolidado + `loopzero logs` retorna output do build (Loki) + `loopzero rollback` reverte em <30s + `loopzero secret set` sincroniza para workload em <30s (ESO). |
+| Sprint | Objetivo | Status | Done |
+|---|---|---|---|
+| [01-runtime](./01-runtime/ROADMAP.md) | Ativar controllers no main.go para reconcile loop real. | ✅ Complete | 7 controllers running + 3 deploys estáveis |
+| [02-estabilizacao](./02-estabilizacao/ROADMAP.md) | Corrigir TLS para HTTPS em todos os serviços. | ✅ Complete | 4/4 certificados Ready |
+| [03-banco](./03-banco/ROADMAP.md) | PostgreSQL HA com failover testado durante deploy. | ✅ Complete | PG 2 nodes + failover + API reconectou <30s |
+| [04-observabilidade](./04-observabilidade/ROADMAP.md) | Métricas + SLOs + Dashboards Grafana. | ✅ Complete | 8 métricas + 5 SLOs + 6 dashboards |
+| [05-pipeline](./05-pipeline/ROADMAP.md) | Fix SIGTERM + cache + queue depth. | ✅ Complete | Builds sem SIGTERM + cache funcional |
+| [06-operacao](./06-operacao/ROADMAP.md) | 4 comandos operacionais: status, logs, rollback, secrets. | ⚠️ 3/4 | Logs ✅ Rollback ✅ Secrets ✅ Status ⚠️ (falta wiring) |
+
+---
+
+## Sprint 6 — Status Detalhado (2026-03-25)
+
+| Sub-Sprint | Status | Validado no DO | Evidência |
+|---|---|---|---|
+| 6.1 status | ⚠️ Código pronto, rota não wired | ❌ Retorna 404 | Handler + CLI + testes existem, falta 1 linha no server.go |
+| 6A logs | ✅ Completo | ✅ | 142 linhas de log real via Loki, --json schema correto |
+| 6B rollback | ✅ Completo | ✅ | Reverteu release em 3s, toggle funciona |
+| 6C secrets | ✅ Completo | ✅ | ESO sync <30s, valor nunca no output, K8s Secret + ExternalSecret automáticos |
+
+### Infraestrutura deployada no DO
+
+| Componente | Cluster | Status |
+|-----------|---------|--------|
+| Grafana Loki (single binary) | Build | Running (2/2), NodePort 30100 |
+| Promtail (DaemonSet) | Build | Running, coletando logs de builds |
+| External Secrets Operator v0.14.3 | Runtime | Running (3 pods) |
+| ClusterSecretStore (loopzero-mgmt-store) | Runtime | Ready + Valid |
+| Loki cross-cluster config | Pipeline | Automático (infra-deploy step) |
+
+### Testes
+
+| Componente | Testes | Status |
+|-----------|--------|--------|
+| CLI total | 455+ | ✅ Zero regressão |
+| API total | 60+ files | ✅ Zero regressão |
+| State machine (release reactivation) | 3 novos | ✅ |
+| CI pipeline | 17+ jobs | ✅ All green |
 
 ---
 
 ## Detalhes
 
-| Sprint | Confiança | Esforço | Pré-requisito |
+| Sprint | Confiança | Esforço estimado | Esforço real |
 |---|---|---|---|
-| 01-runtime | ALTA | ~3h | Sistema base saudável |
-| 02-estabilizacao | MÉDIA | ~2h | Sprint 1 GATE passou |
-| 03-banco | MÉDIA | ~4h | Sprint 2 GATE passou |
-| 04-observabilidade | ALTA | ~8h | Sprint 3 GATE passou |
-| 05-pipeline | ALTA | ~4h | Sprint 4 GATE passou |
-| 06-operacao | MÉDIA | ~50h (6.1: 2h, 6A: 12h, 6B: 20h, 6C: 16h). Timeline realista: 3-4 semanas (TDD + gates). | Sprint 5 GATE passou |
-
----
-
-## Tabela de Confiança
-
-| Item | Confiança | Justificativa |
-|---|---|---|
-| Wire controllers (1.1-1.3, 1.4) | ALTA | Código existe, testes passam, assinaturas simples |
-| Wire PlatformBootstrap (1.5) | MÉDIA | Dependências externas (Gitea, ArgoCD, API URLs) |
-| TLS fix | MÉDIA | Causa raiz desconhecida até investigar |
-| PG HA upgrade | MÉDIA | Failover precisa ser testado empiricamente |
-| Métricas + Dashboard | ALTA | Instrumentação sem side effects |
-| SLO targets | MÉDIA | Estimativas — ajustar com dados reais |
-| 6.1 loopzero status | MÉDIA | Handler existe, falta wiring no router + adapters |
-| 6A loopzero logs (5 tasks) | MÉDIA | Grafana Loki + Promtail + MinIO (infra existente). API faz proxy de LogQL. Sem código custom de log storage. |
-| 6B loopzero rollback (6 tasks) | BAIXA | State machines existem (rollback + release). Falta orchestrator + gitops read + endpoint. |
-| 6C loopzero secret (5 tasks) | MÉDIA | External Secrets Operator (CNCF, Apache 2.0). Elimina controller custom + crypto custom. API cria K8s Secret + ExternalSecret CR. |
+| 01-runtime | ALTA | ~3h | ~3h |
+| 02-estabilizacao | MÉDIA | ~2h | ~2h |
+| 03-banco | MÉDIA | ~4h | ~4h |
+| 04-observabilidade | ALTA | ~8h | ~8h |
+| 05-pipeline | ALTA | ~4h | ~4h |
+| 06-operacao | MÉDIA | ~50h | ~40h (6A: 10h, 6B: 15h, 6C: 12h, 6.1: pendente) |
