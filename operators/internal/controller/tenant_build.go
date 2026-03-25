@@ -201,6 +201,32 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		if err != nil {
 			return fmt.Errorf("build docker-config %s: %w", buildNs, err)
 		}
+
+		// BuildKit registry credentials — same Docker config.json format mounted at
+		// /home/user/.docker/config.json inside the buildkitd rootless container.
+		// BuildKit reads this for authenticated push to container registries.
+		// This Secret coexists with docker-config during the Kaniko→BuildKit migration.
+		buildkitSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "buildkit-registry-config",
+				Namespace: buildNs,
+			},
+		}
+		_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, buildkitSecret, func() error {
+			buildkitSecret.Labels = map[string]string{
+				"loopzero.io/tenant":     tenant.Name,
+				"loopzero.io/component":  "build",
+				"loopzero.io/managed-by": "tenant-controller",
+			}
+			buildkitSecret.Type = corev1.SecretTypeOpaque
+			buildkitSecret.StringData = map[string]string{
+				"config.json": dockerConfig,
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("build buildkit-registry-config %s: %w", buildNs, err)
+		}
 	}
 
 	// Argo Workflow executor RBAC — workflow pods need to report task results.

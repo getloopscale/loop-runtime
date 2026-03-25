@@ -42,6 +42,7 @@ type WorkflowSubmitterConfig struct {
 	RegistryURL      string // e.g., "k3d-loopzero-registry:5000"
 	RegistryInsecure bool   // true for local dev registries without TLS
 	BaseDomain       string // e.g., "loopzero.local" — base domain for app hostnames
+	UseKaniko        bool   // Build engine: true=Kaniko (legacy), false=BuildKit. Migration flag.
 	// MinIO credentials are injected via K8s Secret (envFrom) in CWTs, not via workflow params.
 }
 
@@ -79,6 +80,7 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 		RegistryURL:      cfg.RegistryURL,
 		RegistryInsecure: cfg.RegistryInsecure,
 		BaseDomain:       cfg.BaseDomain,
+		UseKaniko:        cfg.UseKaniko,
 	})
 
 	return &WorkflowSubmitter{

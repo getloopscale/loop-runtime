@@ -59,6 +59,7 @@ type Config struct {
 	RegistryInsecure     bool   // true for local dev registries without TLS
 	WorkloadIngressURL   string
 	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
+	UseKaniko            bool   // Build engine: true=Kaniko (legacy), false=BuildKit. Migration flag.
 
 	// Credentials (read from env vars or K8s secrets)
 	GiteaToken         string
@@ -161,6 +162,7 @@ func Load() Config {
 		RegistryInsecure:     os.Getenv("REGISTRY_INSECURE") == "true",
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
 		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
+		UseKaniko:            os.Getenv("USE_KANIKO") != "false", // default true — set USE_KANIKO=false to enable BuildKit
 
 		// Credentials
 		GiteaToken:         os.Getenv("GITEA_TOKEN"),

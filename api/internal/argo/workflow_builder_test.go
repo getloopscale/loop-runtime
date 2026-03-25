@@ -4,6 +4,7 @@
 package argo
 
 import (
+	"strings"
 	"testing"
 
 	forge "github.com/getloopscale/loopzero-forge"
@@ -16,6 +17,16 @@ func testInfraParams() InfraParams {
 		RegistryURL:      "k3d-loopzero-registry:5000",
 		RegistryInsecure: true,
 		BaseDomain:       "loopzero.local",
+		UseKaniko:        true, // default: existing tests validate Kaniko path
+	}
+}
+
+func testInfraParamsBuildKit() InfraParams {
+	return InfraParams{
+		RegistryURL:      "k3d-loopzero-registry:5000",
+		RegistryInsecure: true,
+		BaseDomain:       "loopzero.local",
+		UseKaniko:        false, // BuildKit path
 	}
 }
 
@@ -708,4 +719,445 @@ func assertStringContains(t *testing.T, s, substr string) {
 		}
 	}
 	t.Errorf("string does not contain %q:\n%.200s", substr, s)
+}
+
+// ---------------------------------------------------------------------------
+// BuildKit tests — UseKaniko=false
+// ---------------------------------------------------------------------------
+
+func TestWorkflowBuilder_BuildKit_HasBuildkitVolumes(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	// BuildKit needs: buildkit-registry-config (Secret) + buildkit-socket (emptyDir)
+	volumeNames := make(map[string]bool)
+	for _, v := range wf.Volumes {
+		switch vol := v.(type) {
+		case *forge.SecretVolume:
+			volumeNames[vol.Name] = true
+		case *forge.EmptyDirVolume:
+			volumeNames[vol.Name] = true
+		}
+	}
+
+	if !volumeNames["buildkit-registry-config"] {
+		t.Error("BuildKit workflow missing volume: buildkit-registry-config")
+	}
+	if !volumeNames["buildkit-socket"] {
+		t.Error("BuildKit workflow missing volume: buildkit-socket")
+	}
+	// docker-config should NOT be present in BuildKit mode
+	if volumeNames["docker-config"] {
+		t.Error("BuildKit workflow should NOT have docker-config volume (Kaniko only)")
+	}
+}
+
+func TestWorkflowBuilder_BuildKit_HasSidecarPattern(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	if c == nil {
+		t.Fatal("build-image-api template not found")
+	}
+
+	// Main container is buildctl
+	if c.Image != "moby/buildkit:v0.18.2" {
+		t.Errorf("buildctl image = %q, want moby/buildkit:v0.18.2", c.Image)
+	}
+	if len(c.Command) == 0 || c.Command[0] != "buildctl" {
+		t.Errorf("buildctl command = %v, want [buildctl]", c.Command)
+	}
+
+	// Must have exactly one sidecar: buildkitd
+	if len(c.Sidecars) != 1 {
+		t.Fatalf("expected 1 sidecar, got %d", len(c.Sidecars))
+	}
+	sidecar := c.Sidecars[0]
+	if sidecar.Name != "buildkitd-api" {
+		t.Errorf("sidecar name = %q, want buildkitd-api", sidecar.Name)
+	}
+	if sidecar.Image != "moby/buildkit:v0.18.2-rootless" {
+		t.Errorf("buildkitd image = %q, want moby/buildkit:v0.18.2-rootless", sidecar.Image)
+	}
+	if sidecar.Daemon == nil || !*sidecar.Daemon {
+		t.Error("buildkitd sidecar must have Daemon=true")
+	}
+}
+
+func TestWorkflowBuilder_BuildKit_SecurityContext_Rootless(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	if c == nil {
+		t.Fatal("build-image-api template not found")
+	}
+
+	// buildctl (main container) security context
+	if c.SecurityContext == nil {
+		t.Fatal("buildctl missing SecurityContext")
+	}
+	if c.SecurityContext.RunAsUser == nil || *c.SecurityContext.RunAsUser != 1000 {
+		t.Errorf("buildctl RunAsUser = %v, want 1000", c.SecurityContext.RunAsUser)
+	}
+	if c.SecurityContext.RunAsNonRoot == nil || !*c.SecurityContext.RunAsNonRoot {
+		t.Error("buildctl RunAsNonRoot should be true")
+	}
+
+	// buildkitd (sidecar) security context
+	sidecar := c.Sidecars[0]
+	if sidecar.SecurityContext == nil {
+		t.Fatal("buildkitd missing SecurityContext")
+	}
+	if sidecar.SecurityContext.RunAsUser == nil || *sidecar.SecurityContext.RunAsUser != 1000 {
+		t.Errorf("buildkitd RunAsUser = %v, want 1000", sidecar.SecurityContext.RunAsUser)
+	}
+	if sidecar.SecurityContext.RunAsNonRoot == nil || !*sidecar.SecurityContext.RunAsNonRoot {
+		t.Error("buildkitd RunAsNonRoot should be true")
+	}
+	// Must NOT have privileged: true
+	if sidecar.SecurityContext.Privileged != nil && *sidecar.SecurityContext.Privileged {
+		t.Error("buildkitd must NOT be privileged")
+	}
+}
+
+func TestWorkflowBuilder_BuildKit_ResourceLimits(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	if c == nil {
+		t.Fatal("build-image-api template not found")
+	}
+
+	// buildctl resources (lightweight client)
+	if c.Resources == nil {
+		t.Fatal("buildctl missing Resources")
+	}
+	if c.Resources.Requests.CPU != "100m" {
+		t.Errorf("buildctl requests.cpu = %q, want 100m", c.Resources.Requests.CPU)
+	}
+	if c.Resources.Limits.Memory != "512Mi" {
+		t.Errorf("buildctl limits.memory = %q, want 512Mi", c.Resources.Limits.Memory)
+	}
+
+	// buildkitd resources (heavy worker)
+	sidecar := c.Sidecars[0]
+	if sidecar.Resources == nil {
+		t.Fatal("buildkitd missing Resources")
+	}
+	if sidecar.Resources.Requests.CPU != "500m" {
+		t.Errorf("buildkitd requests.cpu = %q, want 500m", sidecar.Resources.Requests.CPU)
+	}
+	if sidecar.Resources.Limits.CPU != "2000m" {
+		t.Errorf("buildkitd limits.cpu = %q, want 2000m", sidecar.Resources.Limits.CPU)
+	}
+	if sidecar.Resources.Limits.Memory != "4Gi" {
+		t.Errorf("buildkitd limits.memory = %q, want 4Gi", sidecar.Resources.Limits.Memory)
+	}
+}
+
+func TestWorkflowBuilder_BuildKit_BuildctlArgs_ContainsCacheFlags(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	if c == nil {
+		t.Fatal("build-image-api template not found")
+	}
+
+	argsStr := strings.Join(c.Args, " ")
+
+	// --addr points to correct Unix socket
+	assertStringContains(t, argsStr, "unix:///run/user/1000/buildkitd/buildkitd.sock")
+
+	// Frontend
+	assertStringContains(t, argsStr, "--frontend dockerfile.v0")
+
+	// Output with push
+	assertStringContains(t, argsStr, "--output type=image,name=k3d-loopzero-registry:5000/acme/my-app/api:abc123,push=true")
+
+	// Export cache with mode=max
+	assertStringContains(t, argsStr, "--export-cache type=registry,ref=k3d-loopzero-registry:5000/acme/cache/api:buildcache,mode=max")
+
+	// Import cache
+	assertStringContains(t, argsStr, "--import-cache type=registry,ref=k3d-loopzero-registry:5000/acme/cache/api:buildcache")
+
+	// Metadata file for digest extraction
+	assertStringContains(t, argsStr, "--metadata-file /workspace/metadata-api.json")
+}
+
+func TestWorkflowBuilder_BuildKit_BuildkitdArgs_RootlessFlags(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	if c == nil {
+		t.Fatal("build-image-api template not found")
+	}
+
+	sidecar := c.Sidecars[0]
+	argsStr := strings.Join(sidecar.Args, " ")
+
+	// Must have --oci-worker-no-process-sandbox for rootless
+	assertStringContains(t, argsStr, "--oci-worker-no-process-sandbox")
+
+	// Must listen on correct socket
+	assertStringContains(t, argsStr, "unix:///run/user/1000/buildkitd/buildkitd.sock")
+}
+
+func TestWorkflowBuilder_BuildKit_SharedSocketVolume(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	if c == nil {
+		t.Fatal("build-image-api template not found")
+	}
+
+	// Both buildctl and buildkitd must mount buildkit-socket at /run/user/1000/buildkitd
+	hasSocket := false
+	for _, vm := range c.VolumeMounts {
+		if ed, ok := vm.(*forge.EmptyDirVolume); ok && ed.Name == "buildkit-socket" {
+			if ed.MountPath != "/run/user/1000/buildkitd" {
+				t.Errorf("buildctl socket mount path = %q, want /run/user/1000/buildkitd", ed.MountPath)
+			}
+			hasSocket = true
+		}
+	}
+	if !hasSocket {
+		t.Error("buildctl missing buildkit-socket volume mount")
+	}
+
+	sidecar := c.Sidecars[0]
+	hasSocket = false
+	for _, vm := range sidecar.VolumeMounts {
+		if ed, ok := vm.(*forge.EmptyDirVolume); ok && ed.Name == "buildkit-socket" {
+			if ed.MountPath != "/run/user/1000/buildkitd" {
+				t.Errorf("buildkitd socket mount path = %q, want /run/user/1000/buildkitd", ed.MountPath)
+			}
+			hasSocket = true
+		}
+	}
+	if !hasSocket {
+		t.Error("buildkitd missing buildkit-socket volume mount")
+	}
+}
+
+func TestWorkflowBuilder_BuildKit_MultiApp_IndependentSidecars(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	spec := testSpec()
+	spec.Apps = []services.AppSpec{
+		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
+		{Name: "worker", Type: "worker", Port: 0, Framework: "node"},
+	}
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	// Each app gets its own buildkit template with its own sidecar
+	apiContainer := findContainer(t, wf, "build-image-api")
+	workerContainer := findContainer(t, wf, "build-image-worker")
+
+	if apiContainer == nil {
+		t.Fatal("build-image-api not found")
+	}
+	if workerContainer == nil {
+		t.Fatal("build-image-worker not found")
+	}
+
+	// Each has its own sidecar
+	if len(apiContainer.Sidecars) != 1 || apiContainer.Sidecars[0].Name != "buildkitd-api" {
+		t.Errorf("api sidecar name = %q, want buildkitd-api", apiContainer.Sidecars[0].Name)
+	}
+	if len(workerContainer.Sidecars) != 1 || workerContainer.Sidecars[0].Name != "buildkitd-worker" {
+		t.Errorf("worker sidecar name = %q, want buildkitd-worker", workerContainer.Sidecars[0].Name)
+	}
+}
+
+func TestWorkflowBuilder_BuildKit_NoKanikoReferences(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	// No template should reference kaniko image
+	for _, tmpl := range wf.Templates {
+		if c, ok := tmpl.(*forge.Container); ok {
+			if strings.Contains(c.Image, "kaniko") {
+				t.Errorf("BuildKit workflow should not reference kaniko image: %s uses %s", c.Name, c.Image)
+			}
+		}
+	}
+
+	// No volume should be docker-config
+	for _, v := range wf.Volumes {
+		if sv, ok := v.(*forge.SecretVolume); ok && sv.SecretName == "docker-config" {
+			t.Error("BuildKit workflow should not have docker-config volume")
+		}
+	}
+}
+
+func TestWorkflowBuilder_BuildKit_MetadataFilePath(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	spec := testSpec()
+	spec.Apps = []services.AppSpec{
+		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
+		{Name: "web", Type: "frontend", Port: 0, Framework: "nextjs"},
+	}
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	// Each app gets its own metadata file path
+	apiC := findContainer(t, wf, "build-image-api")
+	webC := findContainer(t, wf, "build-image-web")
+
+	apiArgs := strings.Join(apiC.Args, " ")
+	webArgs := strings.Join(webC.Args, " ")
+
+	assertStringContains(t, apiArgs, "--metadata-file /workspace/metadata-api.json")
+	assertStringContains(t, webArgs, "--metadata-file /workspace/metadata-web.json")
+}
+
+func TestWorkflowBuilder_UseKaniko_True_GeneratesKaniko(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams()) // UseKaniko=true
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	if c == nil {
+		t.Fatal("build-image-api not found")
+	}
+	if !strings.Contains(c.Image, "kaniko") {
+		t.Errorf("UseKaniko=true should generate kaniko template, got image: %s", c.Image)
+	}
+}
+
+func TestWorkflowBuilder_UseKaniko_False_GeneratesBuildKit(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParamsBuildKit()) // UseKaniko=false
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	if c == nil {
+		t.Fatal("build-image-api not found")
+	}
+	if !strings.Contains(c.Image, "buildkit") {
+		t.Errorf("UseKaniko=false should generate buildkit template, got image: %s", c.Image)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Digest parsing — BuildKit metadata file format
+// ---------------------------------------------------------------------------
+
+func TestParseBuildKitDigest_ValidJSON(t *testing.T) {
+	input := `{"containerimage.digest":"sha256:abc123def456"}`
+	digest, err := ParseBuildKitDigest([]byte(input))
+	if err != nil {
+		t.Fatalf("ParseBuildKitDigest() error: %v", err)
+	}
+	if digest != "sha256:abc123def456" {
+		t.Errorf("digest = %q, want sha256:abc123def456", digest)
+	}
+}
+
+func TestParseBuildKitDigest_MissingField(t *testing.T) {
+	input := `{"some.other.field":"value"}`
+	_, err := ParseBuildKitDigest([]byte(input))
+	if err == nil {
+		t.Error("expected error for missing containerimage.digest field")
+	}
+}
+
+func TestParseBuildKitDigest_EmptyDigest(t *testing.T) {
+	input := `{"containerimage.digest":""}`
+	_, err := ParseBuildKitDigest([]byte(input))
+	if err == nil {
+		t.Error("expected error for empty digest")
+	}
+}
+
+func TestParseBuildKitDigest_InvalidJSON(t *testing.T) {
+	input := `not json at all`
+	_, err := ParseBuildKitDigest([]byte(input))
+	if err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+}
+
+func TestParseBuildKitDigest_MustStartWithSha256(t *testing.T) {
+	input := `{"containerimage.digest":"md5:notasha"}`
+	_, err := ParseBuildKitDigest([]byte(input))
+	if err == nil {
+		t.Error("expected error for non-sha256 digest")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// dockerfileDir / dockerfileName helpers
+// ---------------------------------------------------------------------------
+
+func TestDockerfileDir(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"/workspace/Dockerfile", "/workspace"},
+		{"/workspace/Dockerfile.api", "/workspace"},
+		{"Dockerfile", "."},
+	}
+	for _, tt := range tests {
+		got := dockerfileDir(tt.input)
+		if got != tt.want {
+			t.Errorf("dockerfileDir(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestDockerfileName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"/workspace/Dockerfile", "Dockerfile"},
+		{"/workspace/Dockerfile.api", "Dockerfile.api"},
+		{"Dockerfile", "Dockerfile"},
+	}
+	for _, tt := range tests {
+		got := dockerfileName(tt.input)
+		if got != tt.want {
+			t.Errorf("dockerfileName(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
 }

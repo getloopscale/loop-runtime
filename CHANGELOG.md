@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- BuildKit build engine as alternative to Kaniko — sidecar pattern with rootless `buildkitd` + `buildctl`, OCI registry cache (`--import-cache`/`--export-cache mode=max`), digest via `--metadata-file` JSON parsing (#BUILDKIT-MIGRATION)
+- `UseKaniko` feature flag (`USE_KANIKO` env var, default `true`) — allows gradual migration and instant rollback to Kaniko during transition (#BUILDKIT-MIGRATION)
+- `buildkit-registry-config` Secret in TenantController — registry credentials for BuildKit push, coexists with Kaniko's `docker-config` during migration (#BUILDKIT-MIGRATION)
+- `ParseBuildKitDigest()` — deterministic digest extraction from BuildKit metadata JSON with strict `sha256:` prefix validation (#BUILDKIT-MIGRATION)
+- 17 new unit tests covering BuildKit template generation, sidecar pattern, security context, resource limits, cache flags, multi-app isolation, and digest parsing (#BUILDKIT-MIGRATION)
 - Apache License 2.0 — LICENSE file, SPDX headers on all 295 source files (.go + .ts), license field in package.json (#CNCF-PREP)
 - SECURITY.md — vulnerability disclosure policy with severity-based response timelines (#CNCF-PREP)
 - CONTRIBUTING.md — development setup, PR checklist, coding standards, DCO sign-off (#CNCF-PREP)

@@ -196,6 +196,7 @@ func main() {
 			RegistryURL:      cfg.RegistryURL,
 			RegistryInsecure: cfg.RegistryInsecure,
 			BaseDomain:       cfg.BaseDomain,
+			UseKaniko:        cfg.UseKaniko,
 		})
 		if err != nil {
 			logger.Error("failed to create workflow submitter", "error", err)

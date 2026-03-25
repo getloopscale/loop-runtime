@@ -37,6 +37,7 @@ type InfraParams struct {
 	RegistryURL      string
 	RegistryInsecure bool   // true for local dev registries without TLS
 	BaseDomain       string // Base domain for app hostnames (e.g., "loopzero.local")
+	UseKaniko        bool   // true = Kaniko (legacy), false = BuildKit. Migration flag, removed in Phase 6.
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs
@@ -111,9 +112,14 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			withSuffix(g.Strategy.DockerfileStep(g.Apps), g.Suffix),
 		)
 	}
-	// REVIEW-MOD-4: Per-app Kaniko templates (independent of language grouping)
+	// REVIEW-MOD-4: Per-app build templates (independent of language grouping).
+	// UseKaniko selects between Kaniko (legacy) and BuildKit (new).
 	for _, app := range spec.Apps {
-		inlineTemplates = append(inlineTemplates, b.kanikoTemplateForApp(spec, app))
+		if b.infraParams.UseKaniko {
+			inlineTemplates = append(inlineTemplates, b.kanikoTemplateForApp(spec, app))
+		} else {
+			inlineTemplates = append(inlineTemplates, b.buildkitTemplateForApp(spec, app))
+		}
 	}
 
 	// Build the main DAG
@@ -171,11 +177,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		VolumeClaimTemplates: []forge.PVCVolume{
 			{BaseVolume: forge.BaseVolume{Name: "workspace"}, Size: "5Gi"},
 		},
-		// docker-config volume provides registry credentials for Kaniko image push.
-		// The Secret must exist in the build namespace with key "config.json".
-		Volumes: []forge.VolumeBuilder{
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "docker-config"}, SecretName: "docker-config"},
-		},
+		Volumes: b.buildVolumes(),
 		// FSGroup ensures the PVC volume is writable by non-root user 1000.
 		// Without this, the PVC is mounted as root-owned and cp/mkdir fail.
 		SecurityContext: &model.PodSecurityContext{
@@ -351,6 +353,162 @@ func (b *WorkflowBuilder) kanikoTemplateForApp(spec services.WorkflowSpec, app s
 	}
 }
 
+// buildVolumes returns the workflow-level volumes based on the build engine.
+// Kaniko: needs docker-config Secret for registry auth.
+// BuildKit: needs buildkit-registry-config Secret + buildkit-socket emptyDir for daemon↔client communication.
+func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
+	if b.infraParams.UseKaniko {
+		return []forge.VolumeBuilder{
+			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "docker-config"}, SecretName: "docker-config"},
+		}
+	}
+	return []forge.VolumeBuilder{
+		// Registry credentials for BuildKit push — mounted at /home/user/.docker/ in buildkitd.
+		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-registry-config"}, SecretName: "buildkit-registry-config"},
+		// Unix socket shared between buildkitd (daemon) and buildctl (client).
+		&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-socket"}},
+	}
+}
+
+// buildkitTemplateForApp generates a BuildKit container template with sidecar pattern for a single app.
+//
+// Architecture: two containers sharing a Unix socket via emptyDir volume:
+//   - buildkitd (sidecar): rootless daemon listening on Unix socket
+//   - buildctl (main): client that submits the build and waits for completion
+//
+// The buildkitd sidecar is marked as Daemon=true so Argo keeps it alive until
+// the main container (buildctl) exits. Argo then kills the sidecar automatically.
+//
+// Image digest is extracted from --metadata-file (JSON: {"containerimage.digest":"sha256:..."}).
+//
+// Cache: --import-cache and --export-cache use registry-based OCI cache (no MinIO).
+func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app services.AppSpec) *forge.Container {
+	destination := fmt.Sprintf("%s/%s/%s/%s:%s",
+		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
+	cacheRef := fmt.Sprintf("%s/%s/cache/%s:buildcache",
+		b.infraParams.RegistryURL, spec.TenantID, app.Name)
+
+	// Per-app Dockerfile: Dockerfile.{app} for multi-app, Dockerfile for single-app.
+	dockerfile := "/workspace/Dockerfile"
+	if len(spec.Apps) > 1 {
+		dockerfile = fmt.Sprintf("/workspace/Dockerfile.%s", app.Name)
+	}
+
+	metadataFile := fmt.Sprintf("/workspace/metadata-%s.json", app.Name)
+
+	// buildctl args — the main container that drives the build
+	buildctlArgs := []string{
+		"build",
+		"--frontend", "dockerfile.v0",
+		"--local", "context=/workspace",
+		fmt.Sprintf("--local dockerfile=%s", dockerfileDir(dockerfile)),
+		fmt.Sprintf("--opt filename=%s", dockerfileName(dockerfile)),
+		fmt.Sprintf("--output type=image,name=%s,push=true", destination),
+		fmt.Sprintf("--export-cache type=registry,ref=%s,mode=max", cacheRef),
+		fmt.Sprintf("--import-cache type=registry,ref=%s", cacheRef),
+		fmt.Sprintf("--metadata-file %s", metadataFile),
+	}
+
+	// buildkitd socket path — rootless user 1000
+	socketPath := "unix:///run/user/1000/buildkitd/buildkitd.sock"
+
+	// Prepend --addr to buildctl args
+	buildctlArgs = append([]string{"--addr", socketPath}, buildctlArgs...)
+
+	// buildkitd daemon args
+	buildkitdArgs := []string{
+		"--oci-worker-no-process-sandbox",
+		"--addr", socketPath,
+	}
+
+	if b.infraParams.RegistryInsecure {
+		// Allow pushing to HTTP registries (local dev only — blocked in production by Config.Validate)
+		buildkitdArgs = append(buildkitdArgs,
+			"--oci-worker-snapshotter", "native",
+		)
+		buildctlArgs = append(buildctlArgs,
+			"--allow", "security.insecure",
+		)
+	}
+
+	// buildkitd sidecar container
+	daemonTrue := true
+	buildkitdSidecar := forge.UserContainer{
+		Name:    fmt.Sprintf("buildkitd-%s", app.Name),
+		Image:   "moby/buildkit:v0.18.2-rootless",
+		Command: []string{"buildkitd"},
+		Args:    buildkitdArgs,
+		SecurityContext: &model.SecurityContext{
+			RunAsUser:    ptr(int64(1000)),
+			RunAsGroup:   ptr(int64(1000)),
+			RunAsNonRoot: ptr(true),
+		},
+		Resources: &forge.ResourceRequirements{
+			Requests: forge.ResourceList{CPU: "500m", Memory: "512Mi"},
+			Limits:   forge.ResourceList{CPU: "2000m", Memory: "4Gi"},
+		},
+		VolumeMounts: []forge.VolumeBuilder{
+			// Socket dir shared with buildctl
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{
+				Name: "buildkit-socket", MountPath: "/run/user/1000/buildkitd",
+			}},
+			// Registry credentials for authenticated push
+			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
+				Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true,
+			}, SecretName: "buildkit-registry-config"},
+		},
+		Daemon: &daemonTrue,
+	}
+
+	return &forge.Container{
+		Name:    fmt.Sprintf("build-image-%s", app.Name),
+		Image:   "moby/buildkit:v0.18.2",
+		Command: []string{"buildctl"},
+		Args:    buildctlArgs,
+		VolumeMounts: []forge.VolumeBuilder{
+			// Workspace with source code and Dockerfiles
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
+			// Socket dir shared with buildkitd
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{
+				Name: "buildkit-socket", MountPath: "/run/user/1000/buildkitd",
+			}},
+		},
+		Resources: &forge.ResourceRequirements{
+			Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
+			Limits:   forge.ResourceList{CPU: "500m", Memory: "512Mi"},
+		},
+		SecurityContext: &model.SecurityContext{
+			RunAsUser:    ptr(int64(1000)),
+			RunAsGroup:   ptr(int64(1000)),
+			RunAsNonRoot: ptr(true),
+		},
+		Sidecars:      []forge.UserContainer{buildkitdSidecar},
+		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
+	}
+}
+
+// dockerfileDir returns the directory containing the Dockerfile.
+// For "/workspace/Dockerfile.api" → "/workspace".
+func dockerfileDir(dockerfilePath string) string {
+	for i := len(dockerfilePath) - 1; i >= 0; i-- {
+		if dockerfilePath[i] == '/' {
+			return dockerfilePath[:i]
+		}
+	}
+	return "."
+}
+
+// dockerfileName returns the filename portion of the Dockerfile path.
+// For "/workspace/Dockerfile.api" → "Dockerfile.api".
+func dockerfileName(dockerfilePath string) string {
+	for i := len(dockerfilePath) - 1; i >= 0; i-- {
+		if dockerfilePath[i] == '/' {
+			return dockerfilePath[i+1:]
+		}
+	}
+	return dockerfilePath
+}
+
 // ---------------------------------------------------------------------------
 // DAG task helpers
 // ---------------------------------------------------------------------------
@@ -403,6 +561,29 @@ func withSuffix(c *forge.Container, suffix string) *forge.Container {
 		c.Name = c.Name + suffix
 	}
 	return c
+}
+
+// ParseBuildKitDigest extracts the container image digest from BuildKit's --metadata-file output.
+// BuildKit writes JSON like: {"containerimage.digest":"sha256:abc123..."}.
+// The digest MUST start with "sha256:" — any other format is treated as a build error.
+// Parsing failure must fail the build (deterministic digest extraction is critical for GitOps).
+func ParseBuildKitDigest(data []byte) (string, error) {
+	var metadata map[string]interface{}
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return "", fmt.Errorf("parse buildkit metadata: invalid JSON: %w", err)
+	}
+	digestVal, ok := metadata["containerimage.digest"]
+	if !ok {
+		return "", fmt.Errorf("parse buildkit metadata: missing field 'containerimage.digest'")
+	}
+	digest, ok := digestVal.(string)
+	if !ok || digest == "" {
+		return "", fmt.Errorf("parse buildkit metadata: 'containerimage.digest' is empty or not a string")
+	}
+	if !strings.HasPrefix(digest, "sha256:") {
+		return "", fmt.Errorf("parse buildkit metadata: digest %q does not start with 'sha256:'", digest)
+	}
+	return digest, nil
 }
 
 // appsJSON serializes apps to JSON for passing as a workflow parameter.
