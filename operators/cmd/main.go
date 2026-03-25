@@ -2,7 +2,9 @@ package main
 
 import (
 	"flag"
+	"net/http"
 	"os" // used for Exit and Getenv
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -146,6 +148,52 @@ func main() {
 
 	if err := controller.SetupClusterCredentialController(mgr); err != nil {
 		setupLog.Error(err, "unable to setup ClusterCredentialController")
+		os.Exit(1)
+	}
+
+	// --- Sprint 1: Wire remaining controllers (order matters) ---
+	// Dependency chain: Tenant → Environment → Application → ExposedRoute (Exposure)
+	// GitRepositoryBinding and PlatformBootstrap are independent but need httpClient.
+
+	// 1. EnvironmentController: reconciles Environment CRs created by TenantController.
+	// Creates namespaces, RBAC, NetworkPolicies, and ResourceQuotas on the runtime cluster.
+	if err := controller.SetupEnvironmentController(mgr, runtimeClient); err != nil {
+		setupLog.Error(err, "unable to setup EnvironmentController")
+		os.Exit(1)
+	}
+
+	// 2. ApplicationController: reconciles LoopZeroApplication CRs.
+	// Assigns hostnames, creates ExposedRoute CRs, tracks pod health.
+	baseDomain := os.Getenv("BASE_DOMAIN")
+	if baseDomain == "" {
+		baseDomain = "dev.loopzero.example"
+	}
+	if err := controller.SetupApplicationController(mgr, baseDomain); err != nil {
+		setupLog.Error(err, "unable to setup ApplicationController")
+		os.Exit(1)
+	}
+
+	// 3. ExposureController: reconciles ExposedRoute CRs created by ApplicationController.
+	// Checks TLS certificates and performs reachability probes.
+	if err := controller.SetupExposureController(mgr); err != nil {
+		setupLog.Error(err, "unable to setup ExposureController")
+		os.Exit(1)
+	}
+
+	// Shared HTTP client for controllers that make external HTTP calls.
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+
+	// 4. GitRepositoryBindingController: syncs Git credentials to ArgoCD Secrets.
+	// Detects credential rotation via SHA256 hash comparison.
+	if err := controller.SetupGitRepositoryBindingController(mgr, httpClient); err != nil {
+		setupLog.Error(err, "unable to setup GitRepositoryBindingController")
+		os.Exit(1)
+	}
+
+	// 5. PlatformBootstrapController: declarative bootstrap (Gitea → ArgoCD → API seed).
+	// Replaces imperative shell scripts in CI. Last because most external dependencies.
+	if err := controller.SetupPlatformBootstrapController(mgr, httpClient); err != nil {
+		setupLog.Error(err, "unable to setup PlatformBootstrapController")
 		os.Exit(1)
 	}
 

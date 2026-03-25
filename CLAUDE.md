@@ -14,7 +14,7 @@ The authoritative specification is **`docs/technical.md`**. Every state machine,
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
-**Current status:** Greenfield — no application code exists yet. Only `docs/` and configuration files. Implementation starts with Sprint 0.
+**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Core flow `loopzero login` → `loopzero init` → `loopzero deploy` → live URL works end-to-end. 650+ tests passing. Production infrastructure running on DigitalOcean (3 DOKS clusters). Sprints 3-9 not started.
 
 ---
 
@@ -22,23 +22,43 @@ Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, 
 
 ```bash
 # Local environment
+task setup               # Bootstrap k3d clusters + Helm + CRDs + tokens (idempotent)
 task dev:up              # Boot k3d clusters + dependencies
-tilt up                  # Start dev loop with hot reload
+tilt up                  # Start dev loop with hot reload (API, operator, migrations, seed)
+task doctor              # Environment health check (tools, clusters, services, tokens)
 
 # Tests
 task test                # Run all tests
 task test:unit           # Run unit tests only
 task test:e2e            # Run E2E tests (Ginkgo)
-task lint                # Lint all components
+task lint                # Lint all components (golangci-lint + ESLint)
 task validate:manifests  # kubeconform --strict on all manifests
 
-# Per-component (when code exists)
-cd cli  && npm test           # CLI unit tests (Jest)
-cd api  && go test ./...      # API tests (Go testing)
+# Per-component
+cd cli  && npm test           # CLI unit tests (Jest, 405 tests)
+cd api  && go test ./...      # API tests (Go testing, 60+ files)
 cd operators && go test ./... # Operator tests (Ginkgo + envtest)
+cd pkg && go test ./...       # Shared library tests
+cd infra/pulumi && npm test   # Pulumi IaC tests (vitest)
+cd infra/tests && go test ./unit/... # Infra unit tests
+
+# Database
+task db:migrate          # Run forward-only migrations
+task db:seed             # Insert dev seed data
+task db:shell            # PostgreSQL shell (psql)
+task db:reset            # Reset database (drop + recreate + migrate + seed)
+
+# Infrastructure (DigitalOcean)
+# Managed via GitHub Actions (infra-deploy.yml) or manual:
+cd infra/pulumi && npx pulumi up --stack dev    # Deploy to DigitalOcean
+cd infra/pulumi && npx pulumi preview --stack dev  # Preview changes
+
+# CLI development
+task cli:build           # Build CLI
+task cli:link            # Link CLI for local testing
 ```
 
-**Prerequisites:** Go 1.22+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), [Task](https://taskfile.dev)
+**Prerequisites:** Go 1.25+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), [Task](https://taskfile.dev), [Helm](https://helm.sh) v3.14+, [kubectl](https://kubernetes.io/docs/tasks/tools/), [kubeconform](https://github.com/yannh/kubeconform), [golangci-lint](https://golangci-lint.run) v2.11+
 
 ---
 
@@ -81,25 +101,51 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 
 ## Stack
 
-| Component | Technology |
-|-----------|-----------|
-| CLI | TypeScript + Commander · `@loopzero/cli` |
-| API | Go + net/http (or chi) + pgx/sqlx · `loopzero/api` |
-| Operators | Go + kubebuilder |
-| Database | PostgreSQL · advisory locks for serialization |
-| Build engine | Argo Workflows + Kaniko |
-| GitOps store | Gitea (desired state mirror) |
-| GitOps sync | ArgoCD (cluster convergence) |
-| Ingress | Traefik + cert-manager |
-| Artifact store | MinIO (S3-compatible) |
-| Observability | Prometheus + OpenTelemetry + Grafana |
-| Local clusters | k3d × 3 (mgmt, build, workload) |
-| Dev loop | Tilt |
-| Task runner | Taskfile |
-| Tests (Go) | Go testing + Ginkgo + Gomega + envtest |
-| Tests (TS) | Jest (CLI only) |
-| Migrations | golang-migrate (forward-only) |
-| Image signing | cosign + syft |
+### Application
+
+| Component | Technology | Module |
+|-----------|-----------|--------|
+| CLI | TypeScript + Commander | `cli/` · `@loopzero/cli` |
+| API | Go 1.25 + chi + pgx (connection pool) | `api/` · `loopzero/api` |
+| Operators | Go 1.25 + kubebuilder + controller-runtime | `operators/` |
+| Shared libraries | Go (errors, logging, id, naming, health, statemachine) | `pkg/` |
+| Build SDK | Go — programmatic Argo Workflow builder | `loopzero-forge/` |
+| Language packs | Go — framework detection + Dockerfile generation | `loopzero-packs/` |
+
+### Infrastructure
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Database | PostgreSQL 16 (managed DO) | State, advisory locks for serialization |
+| Build engine | Argo Workflows + Kaniko | Container image builds in isolation |
+| GitOps store | Gitea 1.22.6 | Desired state mirror (source + gitops repos) |
+| GitOps sync | ArgoCD 2.13.3 | Cluster convergence (manual sync only) |
+| Ingress | Traefik 28.3.0 + cert-manager 1.14.5 | TLS termination, HTTP→HTTPS redirect |
+| Artifact store | MinIO (S3-compatible) / DO Spaces | Source bundles, build cache |
+| Container registry | DigitalOcean Container Registry | Container image storage |
+| Observability | Prometheus 25.27.0 + Grafana 8.5.2 + OpenTelemetry | Metrics, dashboards, tracing |
+| DNS | DigitalOcean DNS | A records, wildcard for user apps |
+
+### Development & Operations
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| IaC | Pulumi (TypeScript) + @pulumi/digitalocean + @pulumi/kubernetes | 3-phase infra provisioning (infra → bootstrap → expose) |
+| Cloud provider | DigitalOcean (SFO3) — AWS stub ready | 3 DOKS clusters + managed PG + Spaces + DNS |
+| Local clusters | k3d × 3 (mgmt, build, workload) | Local dev parity with production |
+| Dev loop | Tilt | Hot reload, migration, CRD deploy, seed data |
+| Task runner | Taskfile (1159 lines) | Idempotent automation (setup, test, lint, deploy) |
+| Helm charts | 13 charts (pinned versions) | cert-manager, Traefik, ArgoCD, Gitea, MinIO, PostgreSQL, Argo Workflows, monitoring, network-policies, otel |
+| CI/CD | GitHub Actions (4 workflows) | CI (lint+test+security), Build Images, Infra Deploy, Infra Preview |
+| Linting (Go) | golangci-lint v2.11.3 (errcheck, govet, staticcheck, etc.) | Code quality |
+| Linting (TS) | ESLint + TypeScript strict mode | Code quality |
+| Security scanning | govulncheck + npm audit + Trivy (fs + IaC + Dockerfile) + TruffleHog | Vulnerability + secret detection |
+| Manifest validation | kubeconform --strict | K8s YAML correctness |
+| Tests (Go) | Go testing + Ginkgo v2 + Gomega + envtest (K8s 1.31.0) | Unit, integration, operator tests |
+| Tests (TS) | Jest | CLI unit tests (405 tests) |
+| Migrations | golang-migrate (forward-only, .up.sql only) | Database schema evolution |
+| Image signing | cosign + syft (Sprint 6 — not yet implemented) | Supply chain security |
+| CLI tools | doctl, gh (GitHub CLI) | Cloud + CI interaction |
 
 ---
 
@@ -108,57 +154,127 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 ```
 loopzero/
 ├── CLAUDE.md                          ← you are here
-├── go.work                            ← Go workspace (monorepo multi-module)
+├── go.work                            ← Go workspace (modules: api, operators, pkg, infra/scripts, infra/tests)
+├── Taskfile.yml                       ← task runner (1159 lines of automation)
+├── Tiltfile                           ← dev loop orchestrator
 ├── docs/
-│   ├── technical.md               ← single source of truth
-│   └── sprints/                       ← sprint details (extracted from §23)
-│       ├── README.md                  ← sprint index + overview table
-│       ├── 00-foundation/
-│       ├── 01-login-init-tenant-controller/
-│       ├── 02-deploy-happy-path/
-│       ├── 03-logs-status-secrets/
-│       ├── 04-rollback-promote-cancel/
-│       ├── 05-preview-environments/
-│       ├── 06-security-supply-chain/
-│       ├── 07-observability/
-│       ├── 08-hardening-chaos/
-│       └── 09-polish-launch/
-├── pkg/                               ← shared Go module (errors, logging, id)
-│   ├── errors/                        ← LoopZeroError + typed error codes
+│   ├── sprints/                       ← sprint details (one folder per sprint)
+│   │   ├── README.md                  ← sprint index + overview table
+│   │   ├── 00-foundation/
+│   │   ├── 01-login-init-tenant-controller/
+│   │   ├── 02-deploy-happy-path/
+│   │   ├── 03-logs-status-secrets/
+│   │   ├── 04-rollback-promote-cancel/
+│   │   ├── 05-preview-environments/
+│   │   ├── 06-security-supply-chain/
+│   │   ├── 07-observability/
+│   │   ├── 08-hardening-chaos/
+│   │   └── 09-polish-launch/
+│   └── project-scan-2026-03-24.md     ← full project scan (domains, gaps, flows)
+├── pkg/                               ← shared Go module (zero external deps)
+│   ├── errors/                        ← LoopZeroError + 24 typed error codes
 │   ├── logging/                       ← structured JSON logging (slog)
-│   └── id/                            ← build/release ID generation
-├── cli/                               ← @loopzero/cli (TypeScript)
+│   ├── id/                            ← build/release ID generation (crypto/rand)
+│   ├── naming/                        ← RFC 1123 deterministic naming (namespace, hostname, repo)
+│   ├── health/                        ← temporal health aggregation (anti-flapping)
+│   └── statemachine/                  ← 7 state machines (build, release, tenant, preview, promotion, rollback, bootstrap)
+├── cli/                               ← @loopzero/cli (TypeScript + Commander)
 │   ├── src/
-│   │   ├── commands/                  ← one file per command
-│   │   ├── api/                       ← API client + idempotency key generation
-│   │   └── output/                    ← formatters: human() + json()
-│   └── tests/unit/
-├── api/                               ← loopzero/api (Go)
-│   ├── cmd/                           ← entrypoint (main.go)
+│   │   ├── commands/                  ← login, logout, whoami, init, deploy, project-delete
+│   │   ├── api/                       ← API client (retry, idempotency-key) + SSE client (reconnect, fallback polling)
+│   │   ├── output/                    ← formatters: human/json/CI + deploy renderer (TTY/CI modes)
+│   │   ├── detection/                 ← monorepo detection (Turbo/Nx/Lerna/pnpm) + framework detection (10 frameworks)
+│   │   ├── adapters/                  ← git operations, loopzero.yaml parsing, source upload, bundle cleanup
+│   │   └── config/                    ← credential store (~/.loopzero/config.json), constants, env overrides
+│   └── tests/unit/                    ← 405 tests, 20 suites (Jest)
+├── api/                               ← loopzero/api (Go + chi + pgx)
+│   ├── cmd/                           ← entrypoint (server bootstrap, background services)
 │   ├── internal/
-│   │   ├── routes/                    ← HTTP route handlers
-│   │   ├── services/                  ← business logic
-│   │   ├── db/                        ← pgx/sqlx queries + migrations + connection
+│   │   ├── routes/                    ← auth, health, builds, projects, source, secrets, bootstrap
+│   │   ├── services/                  ← BuildOrchestrator, BuildReconcileLoop, BuildReaper, ReleaseReaper, ProjectDeleter, CircuitBreaker
+│   │   ├── db/                        ← pgx pool + 9 stores (build, release, project, envtarget, membership, secret, idempotency, bootstrap, event)
+│   │   ├── middleware/                ← auth (GitHub token + cache), idempotency, correlation-id, rate-limit, audit, logging
+│   │   ├── lock/                      ← withEnvironmentLock (pg_advisory_xact_lock, 5s timeout)
+│   │   ├── sse/                       ← SSE streaming + event journal (NOTIFY/LISTEN)
 │   │   ├── correlation/               ← correlation ID generation (UUID v4)
-│   │   ├── lock/                      ← withEnvironmentLock
-│   │   ├── sse/                       ← SSE streaming + event journal
-│   │   └── middleware/                ← idempotency, auth, correlation-id
-│   └── tests/
-├── operators/                         ← Go operators (kubebuilder)
-│   ├── api/v1/                        ← CRD type definitions
+│   │   ├── argo/                      ← Argo Workflows client (submit, cancel, get status)
+│   │   ├── argocd/                    ← ArgoCD sync client (trigger, wait)
+│   │   ├── gitops/                    ← Gitea gitops pusher (manifest commit with trailers)
+│   │   ├── source/                    ← Gitea source store (bundle push)
+│   │   ├── s3/                        ← MinIO/Spaces uploader (source bundles)
+│   │   ├── k8s/                       ← Tenant CR manager (mgmt cluster)
+│   │   ├── github/                    ← GitHub token validator
+│   │   ├── manifests/                 ← K8s manifest generation
+│   │   ├── adapters/                  ← DIP bridges (pgx↔db, services↔routes)
+│   │   ├── validation/                ← path validation (SEC-3), environment name validation
+│   │   ├── metrics/                   ← Prometheus metrics
+│   │   ├── health/                    ← health check endpoints
+│   │   ├── config/                    ← 50+ config fields with production validation
+│   │   └── server/                    ← HTTP server setup + graceful shutdown
+│   └── tests/                         ← unit/ (60+ files) + integration/ (concurrent builds, lock crash)
+├── operators/                         ← Go operators (kubebuilder + controller-runtime)
+│   ├── api/v1/                        ← 9 CRD types (Tenant, Environment, LoopZeroApplication, ExposedRoute, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, AppSecret, PreviewEnvironment, ReconciliationReport)
 │   ├── internal/
-│   │   ├── controller/                ← reconcile loops + tests
-│   │   ├── statemachine/              ← state machines (spec §5)
-│   │   └── naming/                    ← K8s namespace naming (RFC 1123)
-│   └── config/crd/bases/
+│   │   ├── controller/                ← 7 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential)
+│   │   ├── conditions/                ← typed condition constants (no freeform strings)
+│   │   ├── naming/                    ← K8s namespace naming (delegates to pkg/naming)
+│   │   ├── argocd/                    ← ArgoCD provisioner (AppProject, Application CRs)
+│   │   ├── gitea/                     ← Gitea provisioner (repo creation, archival)
+│   │   └── minio/                     ← MinIO provisioner (per-tenant credentials + policies)
+│   ├── operatortest/                  ← shared test setup (envtest)
+│   ├── config/crd/bases/              ← CRD YAML manifests
+│   └── cmd/                           ← entrypoint (multi-cluster client setup, leader election)
+├── loopzero-forge/                        ← Go SDK for building Argo Workflows programmatically
+│   ├── client/                        ← REST client for Argo Workflows API
+│   ├── model/                         ← serializable types matching Argo schema
+│   ├── serialize/                     ← YAML/JSON serialization
+│   ├── expr/                          ← expression DSL builder
+│   ├── validate/                      ← resource unit validation
+│   └── config/                        ← global configuration
+├── loopzero-packs/                        ← language/framework detection + Dockerfile generation
+│   ├── core/                          ← pack framework (dockerfile gen, manifest gen, resolver)
+│   ├── railpack/                      ← Rails-specific pack
+│   └── internal/                      ← internal utilities
 ├── infra/
-│   ├── k3d/                           ← cluster configs (mgmt, build, workload)
-│   ├── helm/                          ← Helm charts for all components
-│   ├── tilt/                          ← Tiltfile
+│   ├── pulumi/                        ← IaC (TypeScript + Pulumi)
+│   │   ├── src/
+│   │   │   ├── index.ts               ← 3-phase orchestrator (infra → bootstrap → expose)
+│   │   │   ├── config/                ← stack config loader (dev/staging/prod)
+│   │   │   ├── core/                  ← naming, tags, errors, types, execution tracking
+│   │   │   ├── contracts/             ← 6 ISP interfaces (network, kubernetes, storage, dns, compute, database)
+│   │   │   ├── components/            ← infra.ts, bootstrap.ts, expose.ts
+│   │   │   └── providers/
+│   │   │       ├── digitalocean/      ← fully implemented (8 files)
+│   │   │       └── aws/               ← stub with implementation guide
+│   │   ├── Pulumi.dev.yaml           ← dev stack (SFO3, dev.loopzero.example)
+│   │   ├── Pulumi.staging.yaml       ← staging stack (NYC3)
+│   │   └── Pulumi.prod.yaml          ← prod stack (NYC3, loopzero.example)
+│   ├── k3d/                           ← 3 cluster configs (mgmt, build, workload)
+│   ├── helm/                          ← 13 Helm charts (all pinned versions)
+│   │   ├── argo-workflows/            ← CWTs: clone, cache-restore, cache-save, summary, resource-quota
+│   │   ├── argocd/                    ← v2.13.3, manual sync, loopzero-api RBAC
+│   │   ├── cert-manager/              ← TLS certificate management
+│   │   ├── gitea/                     ← 1.22.6, admin setup, metrics
+│   │   ├── minio/                     ← standalone, loopzero-artifacts + loopzero-builds buckets
+│   │   ├── monitoring/                ← kube-prometheus-stack (Prometheus + Grafana + cross-cluster scrape)
+│   │   ├── network-policies/          ← K8s NetworkPolicy rules
+│   │   ├── otel/                      ← OpenTelemetry collector
+│   │   ├── postgresql/                ← PostgreSQL with init scripts
+│   │   ├── postgresql-ha/             ← HA config (Patroni, for production)
+│   │   └── traefik/                   ← 2 replicas, HA, JSON logging, correlation-id tracking
+│   ├── tilt/                          ← Tilt deployment manifests (api, operator)
+│   ├── scripts/                       ← infrastructure utility scripts (Go)
 │   └── tests/
-│       ├── e2e/                       ← Ginkgo E2E tests
+│       ├── e2e/                       ← Ginkgo E2E tests + fixtures (dogfood-monorepo, hello-server, multi-app)
+│       ├── chaos/                     ← chaos engineering tests (Ginkgo, skeleton)
+│       ├── unit/                      ← infra unit tests
 │       └── load/                      ← load tests
-└── Taskfile.yml
+└── .github/
+    └── workflows/
+        ├── ci.yml                     ← lint + tests + security + manifests (22+ jobs, matrix strategy)
+        ├── build-images.yml           ← container build + push to DO Registry + CWT update
+        ├── infra-deploy.yml           ← Pulumi 3-step deploy (infra → images → converge) + bootstrap
+        └── infra-preview.yml          ← Pulumi preview on PRs with comment
 ```
 
 ---
@@ -391,20 +507,98 @@ Run the pre-completion checklist:
 
 > Full details: `docs/sprints/README.md` and each `docs/sprints/XX-name/sprint.md`
 
-| Sprint | Weeks | Focus | Exit gate | CLI Commands |
-|--------|-------|-------|-----------|--------------|
-| **[0](docs/sprints/00-foundation/sprint.md)** | 1-2 | Foundation | `task setup` boots, Grafana running | — |
-| **[1](docs/sprints/01-login-init-tenant-controller/sprint.md)** | 3-5 | Login + Init + TenantController | `loopzero login` → `loopzero init` → `loopzero.yaml` | `login`, `logout`, `whoami`, `init` |
-| **[2](docs/sprints/02-deploy-happy-path/sprint.md)** | 6-9 | Deploy happy path | CLI → live URL | `deploy` |
-| **[3](docs/sprints/03-logs-status-secrets/sprint.md)** | 10-12 | Logs + Status + Secrets | All daily workflows functional | `logs`, `status`, `inspect`, `secret` |
-| **[4](docs/sprints/04-rollback-promote-cancel/sprint.md)** | 13-15 | Rollback + Promote + Cancel | Recovery in < 30s | `rollback`, `promote`, `build`, `env`, `team`, `project` |
-| **[5](docs/sprints/05-preview-environments/sprint.md)** | 16-18 | Preview environments | PR → preview URL → cleanup | `preview` |
-| **[6](docs/sprints/06-security-supply-chain/sprint.md)** | 19-21 | Security + Supply chain | Signed images, encrypted secrets, RBAC | — |
-| **[7](docs/sprints/07-observability/sprint.md)** | 22-23 | Observability complete | Incident resolved via dashboards in < 15 min | — |
-| **[8](docs/sprints/08-hardening-chaos/sprint.md)** | 24-25 | Hardening + Chaos | 50 concurrent deploys, all chaos passes | — |
-| **[9](docs/sprints/09-polish-launch/sprint.md)** | 26-27 | Polish + Launch | Non-team-member onboards in < 10 min | — |
+| Sprint | Weeks | Focus | Exit gate | CLI Commands | Status |
+|--------|-------|-------|-----------|--------------|--------|
+| **[0](docs/sprints/00-foundation/sprint.md)** | 1-2 | Foundation | `task setup` boots, Grafana running | — | ✅ Complete |
+| **[1](docs/sprints/01-login-init-tenant-controller/sprint.md)** | 3-5 | Login + Init + TenantController | `loopzero login` → `loopzero init` → `loopzero.yaml` | `login`, `logout`, `whoami`, `init` | ✅ Complete |
+| **[2](docs/sprints/02-deploy-happy-path/sprint.md)** | 6-9 | Deploy happy path | CLI → live URL | `deploy` | ⚠️ Feature-complete |
+| **[3](docs/sprints/03-logs-status-secrets/sprint.md)** | 10-12 | Logs + Status + Secrets | All daily workflows functional | `logs`, `status`, `inspect`, `secret` | ❌ Not started |
+| **[4](docs/sprints/04-rollback-promote-cancel/sprint.md)** | 13-15 | Rollback + Promote + Cancel | Recovery in < 30s | `rollback`, `promote`, `build`, `env`, `team`, `project` | ❌ Not started |
+| **[5](docs/sprints/05-preview-environments/sprint.md)** | 16-18 | Preview environments | PR → preview URL → cleanup | `preview` | ❌ Not started |
+| **[6](docs/sprints/06-security-supply-chain/sprint.md)** | 19-21 | Security + Supply chain | Signed images, encrypted secrets, RBAC | — | ❌ Not started |
+| **[7](docs/sprints/07-observability/sprint.md)** | 22-23 | Observability complete | Incident resolved via dashboards in < 15 min | — | ❌ Not started |
+| **[8](docs/sprints/08-hardening-chaos/sprint.md)** | 24-25 | Hardening + Chaos | 50 concurrent deploys, all chaos passes | — | ❌ Not started |
+| **[9](docs/sprints/09-polish-launch/sprint.md)** | 26-27 | Polish + Launch | Non-team-member onboards in < 10 min | — | ❌ Not started |
 
 Check the current sprint before starting any implementation. Only implement what belongs to the current sprint.
+
+---
+
+## Architecture Overview
+
+### Four Planes
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  DEVELOPER PLANE                                                 │
+│  CLI (TypeScript) ←→ API (Go)                                   │
+├─────────────────────────────────────────────────────────────────┤
+│  CONTROL PLANE  (mgmt cluster)                                   │
+│  TenantController · EnvironmentController · ApplicationController│
+│  ExposureController · PlatformBootstrapController                │
+│  GitRepositoryBindingController · ClusterCredentialController    │
+│  Gitea · PostgreSQL · MinIO · ArgoCD · Traefik · cert-manager    │
+├─────────────────────────────────────────────────────────────────┤
+│  BUILD PLANE  (build cluster)                                    │
+│  Argo Workflows + Kaniko (CWTs: clone, cache, build, summary)   │
+├─────────────────────────────────────────────────────────────────┤
+│  WORKLOAD PLANE  (runtime cluster)                               │
+│  User applications managed by ArgoCD                             │
+│  Traefik ingress + cert-manager TLS                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Deploy Flow (Happy Path)
+
+```
+loopzero deploy → CLI validates → upload bundle → API locks env → submit Argo Workflow
+    → build (Kaniko) → push image → generate manifests → push to Gitea (gitops)
+    → ArgoCD sync → app running → SSE event → CLI shows URL
+```
+
+### CRDs (9 total)
+
+| CRD | Controller | Wired | Purpose |
+|-----|-----------|-------|---------|
+| Tenant | TenantController | ✅ | Gitea repo, ArgoCD app, build namespace, RBAC, quotas |
+| Environment | EnvironmentController | ⚠️ No | Namespace + RBAC + NetworkPolicy + quota on runtime |
+| LoopZeroApplication | ApplicationController | ⚠️ No | Hostname assignment, ExposedRoute, health tracking |
+| ExposedRoute | ExposureController | ⚠️ No | TLS cert check, reachability probes |
+| PlatformBootstrap | PlatformBootstrapController | ⚠️ No | Declarative setup: Gitea → ArgoCD → API seed |
+| GitRepositoryBinding | GitRepositoryBindingController | ⚠️ No | Credential sync to ArgoCD with rotation |
+| ClusterCredential | ClusterCredentialController | ✅ | Connectivity check + kubeconfig distribution |
+| AppSecret | — | ❌ | Secret sync mgmt → workload (not implemented) |
+| PreviewEnvironment | — | ❌ | Ephemeral PR environments (Sprint 5) |
+| ReconciliationReport | — | ❌ | Drift detection (not implemented) |
+
+### State Machines (7 total, defined in `pkg/statemachine/`)
+
+| Machine | States | Terminal | Timeouts |
+|---------|--------|----------|----------|
+| Build | QUEUED → RUNNING → SUCCEEDED/FAILED/CANCELLED | SUCCEEDED, FAILED, CANCELLED | QUEUED>5m, RUNNING>30m, CANCELLING>60s |
+| Release | READY → PENDING → ACTIVE → SUPERSEDED | SUPERSEDED, ROLLED_BACK, CANCELLED | READY>5m, PENDING>2m |
+| Tenant | Provisioning → Active → Suspended → Deleting | Deleting | — |
+| PlatformBootstrap | Pending → ConfiguringGitea → ConfiguringArgoCD → WaitingForAPI → Complete | Complete, Failed | — |
+| Preview | Creating → Active → Expiring/Deleting → Deleted | Deleted | TTL-based |
+| Promotion | Validating → Committing → Syncing → Completed | Completed, Failed | — |
+| Rollback | Validating → Reverting → Syncing → Completed | Completed, Failed | — |
+
+### Production Infrastructure (DigitalOcean)
+
+| Resource | Config | Domain |
+|----------|--------|--------|
+| 3 DOKS clusters | v1.32.13, 2 nodes each, SFO3 | — |
+| PostgreSQL | v16, managed, single node | — |
+| Container Registry | DO Container Registry | registry.digitalocean.com/loopzero-infra-registry |
+| DNS | A records + wildcard | *.dev.loopzero.example (runtime), api/argocd/git/grafana.dev.loopzero.example (mgmt) |
+| State backend | DO Spaces (S3-compatible) | s3://loopzero-infra-pulumi-state |
+
+### Known Systemic Patterns
+
+| Pattern | Description | Mitigation |
+|---------|-------------|------------|
+| "Implemented but not wired" | Code exists in correct location but not integrated in main.go or runtime path | Always verify call site after implementation; integration test required |
+| "Correct code in wrong place" | Duplicate implementations with different error handling | Single source of truth per behavior; grep for duplicates before merge |
 
 ---
 
