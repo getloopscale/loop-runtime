@@ -693,6 +693,10 @@ function bootstrapBuildCluster(
       version: HELM_VERSIONS.promtail,
       // forceUpdate recovers from a previously failed Helm release
       forceUpdate: true,
+      // skipAwait: Promtail is a DaemonSet that self-heals. Don't block
+      // the deploy waiting for readiness — it will become healthy once
+      // Loki is reachable.
+      skipAwait: true,
       repositoryOpts: {
         repo: "https://grafana.github.io/helm-charts",
       },
