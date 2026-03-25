@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Apache License 2.0 — LICENSE file, SPDX headers on all 295 source files (.go + .ts), license field in package.json (#CNCF-PREP)
+- SECURITY.md — vulnerability disclosure policy with severity-based response timelines (#CNCF-PREP)
+- CONTRIBUTING.md — development setup, PR checklist, coding standards, DCO sign-off (#CNCF-PREP)
+- CODE_OF_CONDUCT.md — adopted CNCF Code of Conduct v1.3 (#CNCF-PREP)
+- GOVERNANCE.md — roles (contributor/reviewer/maintainer), decision process, dispute resolution (#CNCF-PREP)
+- MAINTAINERS.md — maintainer list with organizational affiliation (#CNCF-PREP)
+- RELEASES.md — release process, versioning strategy, artifact list, support policy (#CNCF-PREP)
+- .github/CODEOWNERS — automated review assignment per component (#CNCF-PREP)
 - Grafana Loki + Promtail infrastructure for build log aggregation — Loki (single binary, MinIO S3 backend) on mgmt cluster, Promtail (DaemonSet) on build cluster collecting Argo Workflows pod logs (#SPRINT-6A)
 - `GET /api/v1/builds/{id}/logs` endpoint — queries Loki via LogQL with `?tail=N` and `?step=<name>` filtering, tenant isolation enforced (#SPRINT-6A)
 - `loopzero logs --build <id>` CLI command — displays build output with step-prefixed lines, `--json` output, `--tail`, `--step`, `--follow` flags (#SPRINT-6A)

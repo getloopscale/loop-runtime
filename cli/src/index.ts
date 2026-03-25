@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Suppress Node.js ExperimentalWarning (buffer.File in Node 20 multipart uploads).
 // In Node 22+ this warning is gone. Filter instead of monkey-patching process.emit.
 process.removeAllListeners('warning');

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package loki provides an HTTP client for querying Grafana Loki.
 // Used by the logs handler to retrieve build output from Argo Workflows pods.
 package loki

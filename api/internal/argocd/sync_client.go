@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package argocd provides real ArgoCD integration for deployment sync operations.
 package argocd
 

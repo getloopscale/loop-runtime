@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package naming provides deterministic naming functions for all LoopZero
 // platform resources. Every structural name (namespace, repo, hostname,
 // ArgoCD app, cert secret, labels) MUST be generated through this package.

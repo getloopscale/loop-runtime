@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package e2e contains end-to-end tests that prove deploy convergence.
 //
 // The deploy happy path tests validate:

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package argo provides real Argo Workflows integration for build pipeline execution.
 package argo
 

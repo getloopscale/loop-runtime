@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package gitops implements the GitOps pusher that commits manifests to Gitea
 // tenant repos. This is the Step 6 architectural fix: the API now owns the
 // entire release flow — build produces artifacts only, API commits to GitOps.

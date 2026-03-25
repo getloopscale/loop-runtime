@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package statemachine implements strict state machines for all LoopZero stateful
 // entities as defined in the system design spec section 5.
 //

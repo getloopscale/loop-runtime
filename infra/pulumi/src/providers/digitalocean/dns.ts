@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import * as digitalocean from "@pulumi/digitalocean";
 import * as pulumi from "@pulumi/pulumi";
 import { DnsRecordSpec, DnsRecordOutput, DnsRecordType } from "../../contracts/dns";

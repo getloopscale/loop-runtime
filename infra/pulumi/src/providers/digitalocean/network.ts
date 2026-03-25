@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import * as digitalocean from "@pulumi/digitalocean";
 import { NetworkSpec, NetworkOutput } from "../../contracts/network";
 import { IProviderNetwork } from "../../contracts/provider";

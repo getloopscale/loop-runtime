@@ -367,12 +367,22 @@ The CLI follows semver. Once shipped, commands do not break.
 
 ## License
 
-[MIT](LICENSE)
+[Apache License 2.0](LICENSE)
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and the PR checklist.
 
-The system design lives in [`docs/system-design.md`](docs/system-design.md) — read it before opening a PR. Every PR must start with a failing test.
+The authoritative specification lives in [`docs/technical.md`](docs/technical.md) — read the relevant section before opening a PR. Every PR must start with a failing test.
+
+---
+
+## Community
+
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Governance](GOVERNANCE.md)
+- [Maintainers](MAINTAINERS.md)
+- [Security Policy](SECURITY.md)
+- [Release Process](RELEASES.md)

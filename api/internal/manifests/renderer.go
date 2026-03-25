@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package manifests generates Kubernetes manifests for tenant applications.
 //
 // C-02 fix: Manifest generation moved from the build pipeline (Argo Workflow CWT)

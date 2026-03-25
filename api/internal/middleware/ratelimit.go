@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package middleware provides HTTP middleware for the LoopZero API.
 // This file implements a simple fixed-window rate limiter per tenant.
 package middleware

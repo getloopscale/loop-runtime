@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 /**
  * Centralized constants for the LoopZero CLI.
  * All magic numbers and configurable defaults live here.

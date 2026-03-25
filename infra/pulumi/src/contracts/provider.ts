@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import { NetworkSpec, NetworkOutput } from "./network";
 import { KubernetesClusterSpec, KubernetesClusterOutput } from "./kubernetes";
 import { ObjectStorageSpec, ObjectStorageOutput } from "./storage";

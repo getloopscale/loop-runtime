@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package operatortest exports operator setup functions for integration and E2E testing.
 //
 // This package provides a public facade over operators/internal/controller and

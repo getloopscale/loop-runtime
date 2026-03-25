@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package seed provides idempotent E2E test data seeding for LoopZero.
 //
 // It can be used from E2E BeforeEach blocks or as a standalone setup step.

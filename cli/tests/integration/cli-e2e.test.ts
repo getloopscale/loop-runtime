@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 describe('CLI Integration Tests (requires running API)', () => {
   describe('login flow', () => {
     it.skip('should authenticate with real GitHub token', () => {

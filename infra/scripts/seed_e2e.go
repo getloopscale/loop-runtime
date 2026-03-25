@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package main is a thin wrapper around the seed package for standalone use.
 //
 // It delegates all seeding logic to infra/tests/seed and adds an optional

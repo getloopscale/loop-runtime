@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package conditions provides condition helpers for all LoopZero controllers.
 // Conditions follow the Kubernetes API conventions for status conditions
 // (metav1.Condition) with typed constants for condition types and reasons.
