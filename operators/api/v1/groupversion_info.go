@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package v1 contains API types for the loopzero.io API group version v1.
 //
 // These types define the Custom Resource Definitions (CRDs) used by

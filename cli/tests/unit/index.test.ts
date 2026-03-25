@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import { execSync } from 'child_process';
 import * as path from 'path';
 import { program, createProgram } from '../../src/index';

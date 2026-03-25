@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import { execSync, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';

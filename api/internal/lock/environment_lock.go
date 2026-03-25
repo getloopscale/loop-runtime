@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package lock provides concurrency control for environment mutations.
 //
 // Every mutation on (tenant, project, environment) MUST use WithEnvironmentLock.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import { WhoamiCommand, WhoamiDeps } from '../../../src/commands/whoami';
 
 function createMockDeps(overrides: Partial<WhoamiDeps> = {}): WhoamiDeps {

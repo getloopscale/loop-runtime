@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import { LoginCommand, LoginDeps } from '../../../src/commands/login';
 
 function createMockDeps(overrides: Partial<LoginDeps> = {}): LoginDeps {

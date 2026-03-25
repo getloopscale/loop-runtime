@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package config centralizes all environment-based configuration for the LoopZero API.
 // Every value has a sensible default for local k3d development.
 // In production (LOOPZERO_ENV=production), security-sensitive values MUST be set explicitly.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package errors defines typed error types for all LoopZero components.
 // All errors carry a code, message, and HTTP status for consistent
 // error handling across the system. See CLAUDE.md Rule 8.

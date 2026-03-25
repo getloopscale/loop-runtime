@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package s3 provides an S3-compatible object uploader for DigitalOcean Spaces.
 package s3
 

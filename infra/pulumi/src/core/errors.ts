@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 /**
  * Typed infrastructure errors with structured context.
  * Every error from the infra layer MUST use these — never bare Error().

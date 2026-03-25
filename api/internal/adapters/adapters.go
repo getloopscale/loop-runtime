@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package adapters provides bridge types between infrastructure and domain interfaces.
 //
 // These adapters exist because the lock package uses pgx.Tx (infrastructure),

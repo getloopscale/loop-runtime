@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package github provides a concrete TokenValidator that validates tokens
 // against the GitHub API. It implements middleware.TokenValidator (DIP).
 package github

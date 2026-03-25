@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import { randomUUID } from 'crypto';
 import { getDefaultApiUrl, API_REQUEST_TIMEOUT_MS } from '../config/constants';
 

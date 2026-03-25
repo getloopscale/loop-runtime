@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package naming re-exports naming functions from pkg/naming for use
 // within operators. All naming logic is centralized in pkg/naming;
 // this package exists only for backward compatibility with existing imports.

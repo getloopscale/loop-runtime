@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 export interface ProjectDeleteDeps {
   getToken: () => string | null;
   deleteProject: (name: string, env?: string) => Promise<ProjectDeleteResponse>;

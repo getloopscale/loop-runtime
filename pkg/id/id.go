@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package id provides deterministic ID generation for LoopZero resources.
 // IDs use crypto/rand for cryptographic randomness.
 package id

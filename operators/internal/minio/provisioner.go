@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package minio provides MinIO credential provisioning for tenant isolation.
 //
 // Each tenant must have isolated MinIO credentials scoped to its own prefix

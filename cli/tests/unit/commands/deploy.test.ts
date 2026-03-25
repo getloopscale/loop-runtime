@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import * as fs from 'fs';
 import { DeployCommand, DeployDeps } from '../../../src/commands/deploy';
 import { ApiError } from '../../../src/api/client';

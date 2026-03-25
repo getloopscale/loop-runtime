@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package health provides pure-Go health phase definitions and aggregation
 // for the LoopZero platform. It has no Kubernetes dependencies and relies only
 // on the Go standard library.
