@@ -173,10 +173,12 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.Get("/api/v1/builds/{id}/stream", streamHandler.ServeHTTP)
 			}
 
-			// Secret routes (read-only, no idempotency needed)
+			// Secret routes
 			if cfg.SecretStore != nil {
 				secrets := routes.NewSecretHandler(cfg.SecretStore)
 				r.Get("/api/v1/secrets", secrets.List)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/secrets", secrets.Set)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secrets.DeleteSecret)
 			}
 
 			// Build routes — use the single BuildHandler from Config (C-08).

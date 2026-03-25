@@ -24,6 +24,7 @@ import { ProjectDeleteCommand } from './commands/project-delete';
 import { StatusCommand } from './commands/status';
 import { LogsCommand } from './commands/logs';
 import { RollbackCommand } from './commands/rollback';
+import { SecretSetCommand, SecretListCommand, SecretDeleteCommand } from './commands/secret';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
@@ -523,6 +524,123 @@ export function createProgram(): Command {
         yes: cmdOpts.yes,
       });
       process.exitCode = exitCode;
+    });
+
+  // --- secret ---
+  const secretCmd = program
+    .command('secret')
+    .description('Manage application secrets');
+
+  secretCmd
+    .command('set <nameValue>')
+    .description('Set a secret (format: NAME=value)')
+    .option('--env <name>', 'Target environment', 'production')
+    .option('--app <name>', 'Target app')
+    .action(async (nameValue: string, cmdOpts: { env?: string; app?: string }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const deps = {
+        getToken: () => configStore.getToken(),
+        findLoopZeroYaml: () => {
+          const gitRoot = getGitRoot();
+          if (!gitRoot) return null;
+          return findLoopZeroYaml(process.cwd(), gitRoot);
+        },
+        setSecret: async (project: string, name: string, value: string, env: string, app: string) => {
+          return apiClient.post(`/api/v1/secrets?project=${encodeURIComponent(project)}`, {
+            name, value, environment: env, app,
+          });
+        },
+        listSecrets: async () => ({ secrets: [] }),
+        deleteSecret: async () => ({ name: '', deleted: false }),
+        writeTo,
+        writeError,
+      };
+
+      const cmd = new SecretSetCommand(deps);
+      process.exitCode = await cmd.execute({
+        nameValue,
+        env: cmdOpts.env,
+        app: cmdOpts.app,
+        json: globalOpts.json,
+      });
+    });
+
+  secretCmd
+    .command('list')
+    .description('List secret names (never values)')
+    .option('--env <name>', 'Target environment', 'production')
+    .action(async (cmdOpts: { env?: string }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const deps = {
+        getToken: () => configStore.getToken(),
+        findLoopZeroYaml: () => {
+          const gitRoot = getGitRoot();
+          if (!gitRoot) return null;
+          return findLoopZeroYaml(process.cwd(), gitRoot);
+        },
+        setSecret: async () => ({ name: '', environment: '', app: '', created: false }),
+        listSecrets: async (project: string, env: string) => {
+          return apiClient.get(`/api/v1/secrets?project=${encodeURIComponent(project)}&env=${encodeURIComponent(env)}`);
+        },
+        deleteSecret: async () => ({ name: '', deleted: false }),
+        writeTo,
+        writeError,
+      };
+
+      const cmd = new SecretListCommand(deps);
+      process.exitCode = await cmd.execute({ env: cmdOpts.env, json: globalOpts.json });
+    });
+
+  secretCmd
+    .command('delete <name>')
+    .description('Delete a secret')
+    .option('--env <name>', 'Target environment', 'production')
+    .option('--app <name>', 'Target app')
+    .option('--yes', 'Skip confirmation')
+    .action(async (name: string, cmdOpts: { env?: string; app?: string; yes?: boolean }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const yamlResult = (() => {
+        const gitRoot = getGitRoot();
+        if (!gitRoot) return null;
+        return findLoopZeroYaml(process.cwd(), gitRoot);
+      })();
+
+      const project = yamlResult?.content?.project ?? '';
+
+      const deps = {
+        getToken: () => configStore.getToken(),
+        findLoopZeroYaml: () => yamlResult,
+        setSecret: async () => ({ name: '', environment: '', app: '', created: false }),
+        listSecrets: async () => ({ secrets: [] }),
+        deleteSecret: async (_proj: string, secretName: string, env: string, app: string) => {
+          return apiClient.del(
+            `/api/v1/secrets/${encodeURIComponent(secretName)}?project=${encodeURIComponent(project)}&environment=${encodeURIComponent(env)}&app=${encodeURIComponent(app)}`,
+          );
+        },
+        writeTo,
+        writeError,
+      };
+
+      const cmd = new SecretDeleteCommand(deps);
+      process.exitCode = await cmd.execute({
+        name,
+        env: cmdOpts.env,
+        app: cmdOpts.app,
+        yes: cmdOpts.yes,
+        json: globalOpts.json,
+      });
     });
 
   // --- project ---

@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Release state machine: SUPERSEDED/ROLLED_BACK → ACTIVE reactivation via `Reactivated` event (#SPRINT-6B)
 - ReleaseStore: GetPreviousRelease, GetByIDForTenant, ListByEnv methods for rollback target resolution (#SPRINT-6B)
 - GitOps reader: GetManifestsAtCommit fetches manifest YAML from Gitea git history at specific commit (#SPRINT-6B)
+- `POST /api/v1/secrets` endpoint — create/update secrets with name validation (uppercase), value never in response (#SPRINT-6C)
+- `DELETE /api/v1/secrets/{name}` endpoint — remove secrets with tenant isolation (#SPRINT-6C)
+- `loopzero secret set/list/delete` CLI commands — manage secrets via CLI, value never visible in output (#SPRINT-6C)
 
 ### Removed
 - LoopZeroBuild CRD and BuildReconciler — build state owned exclusively by PostgreSQL (ADR-0006)

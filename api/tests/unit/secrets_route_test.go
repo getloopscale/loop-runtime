@@ -23,6 +23,14 @@ func (f *fakeSecretStore) ListNames(ctx context.Context, tenantID, projectID, en
 	return f.secrets, nil
 }
 
+func (f *fakeSecretStore) Set(_ context.Context, _, _, _, _, _ string, _ []byte) (bool, error) {
+	return true, nil
+}
+
+func (f *fakeSecretStore) Delete(_ context.Context, _, _, _, _, _ string) (bool, error) {
+	return true, nil
+}
+
 func TestSecretsRoute(t *testing.T) {
 	t.Run("GET /api/v1/secrets → 200 with secrets list", func(t *testing.T) {
 		store := &fakeSecretStore{
@@ -176,4 +184,12 @@ type capturingSecretStore struct {
 
 func (c *capturingSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]routes.SecretMetadata, error) {
 	return c.onListNames(ctx, tenantID, projectID, env)
+}
+
+func (c *capturingSecretStore) Set(_ context.Context, _, _, _, _, _ string, _ []byte) (bool, error) {
+	return true, nil
+}
+
+func (c *capturingSecretStore) Delete(_ context.Context, _, _, _, _, _ string) (bool, error) {
+	return true, nil
 }
