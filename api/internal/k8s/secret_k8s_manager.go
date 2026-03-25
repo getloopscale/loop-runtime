@@ -65,14 +65,20 @@ func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, runtimeKubeconfig, runtime
 	}, nil
 }
 
+// k8sName sanitizes a name for K8s: lowercase, replace underscores with hyphens.
+func k8sName(parts ...string) string {
+	name := strings.ToLower(strings.Join(parts, "-"))
+	return strings.ReplaceAll(name, "_", "-")
+}
+
 // secretName generates a K8s-compatible name for a secret.
 func secretName(tenantID, app, name string) string {
-	return strings.ToLower(fmt.Sprintf("secret-%s-%s-%s", tenantID, app, name))
+	return k8sName("secret", tenantID, app, name)
 }
 
 // externalSecretName generates a K8s-compatible name for an ExternalSecret CR.
 func externalSecretName(app, name string) string {
-	return strings.ToLower(fmt.Sprintf("es-%s-%s", app, name))
+	return k8sName("es", app, name)
 }
 
 // CreateSecret creates a K8s Secret on the mgmt cluster and an ExternalSecret CR
