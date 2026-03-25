@@ -1,0 +1,19 @@
+# External Secrets Operator — secret sync from mgmt to workload cluster
+# Chart: external-secrets/external-secrets
+# Purpose: Reads K8s Secrets from mgmt cluster and creates matching Secrets in workload namespaces
+# Deployed on: WORKLOAD (runtime) cluster
+installCRDs: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+webhook:
+  create: true
+
+certController:
+  create: true

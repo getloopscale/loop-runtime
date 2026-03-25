@@ -219,11 +219,117 @@ function bootstrapRuntimeCluster(
     traefik,
   );
 
+  // External Secrets Operator — syncs secrets from mgmt cluster to runtime namespaces.
+  // ESO runs on runtime (workload) cluster and reads from mgmt via kubeconfig.
+  installESO(provider, infra);
+
   return {
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
     ingressEndpoint,
     platformNamespace: ns.metadata.name,
   };
+}
+
+// ---------------------------------------------------------------------------
+// External Secrets Operator (ESO)
+// ---------------------------------------------------------------------------
+
+function installESO(
+  provider: k8s.Provider,
+  infra: InfraOutputs,
+): void {
+  const esoNs = new k8s.core.v1.Namespace(
+    "runtime-external-secrets",
+    {
+      metadata: {
+        name: "external-secrets",
+        labels: {
+          "app.kubernetes.io/managed-by": "pulumi",
+          "app.kubernetes.io/part-of": "loopzero-platform",
+        },
+      },
+    },
+    { provider },
+  );
+
+  // ESO Helm chart
+  const eso = new k8s.helm.v3.Release(
+    "external-secrets",
+    {
+      name: "external-secrets",
+      chart: "external-secrets",
+      version: "0.14.3",
+      repositoryOpts: {
+        repo: "https://charts.external-secrets.io",
+      },
+      namespace: "external-secrets",
+      createNamespace: false,
+      values: {
+        installCRDs: true,
+        resources: {
+          requests: { cpu: "50m", memory: "64Mi" },
+          limits: { cpu: "200m", memory: "128Mi" },
+        },
+        webhook: { create: true },
+        certController: { create: true },
+      },
+    },
+    { provider, dependsOn: [esoNs] },
+  );
+
+  // Kubeconfig Secret — allows ESO to read secrets from mgmt cluster.
+  // Uses the mgmt cluster kubeconfig with full credentials.
+  new k8s.core.v1.Secret(
+    "eso-mgmt-kubeconfig",
+    {
+      metadata: {
+        name: "mgmt-cluster-kubeconfig",
+        namespace: "external-secrets",
+      },
+      stringData: {
+        kubeconfig: infra.mgmtCluster.kubeconfig,
+      },
+    },
+    { provider, dependsOn: [esoNs] },
+  );
+
+  // ClusterSecretStore — tells ESO how to read secrets from mgmt cluster.
+  // Uses the Kubernetes provider with kubeconfig from the Secret above.
+  new k8s.apiextensions.CustomResource(
+    "eso-cluster-secret-store",
+    {
+      apiVersion: "external-secrets.io/v1beta1",
+      kind: "ClusterSecretStore",
+      metadata: {
+        name: "loopzero-mgmt-store",
+      },
+      spec: {
+        provider: {
+          kubernetes: {
+            remoteNamespace: PLATFORM_NAMESPACE,
+            server: {
+              caProvider: {
+                type: "Secret",
+                name: "mgmt-cluster-kubeconfig",
+                namespace: "external-secrets",
+                key: "kubeconfig",
+              },
+            },
+            auth: {
+              kubeconfig: {
+                secretRef: {
+                  name: "mgmt-cluster-kubeconfig",
+                  namespace: "external-secrets",
+                  key: "kubeconfig",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [eso] },
+  );
 }
 
 // ---------------------------------------------------------------------------
