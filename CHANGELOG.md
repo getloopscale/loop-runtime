@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `loopzero logs --build <id>` CLI command — displays build output with step-prefixed lines, `--json` output, `--tail`, `--step`, `--follow` flags (#SPRINT-6A)
 - Pod retention policy (4h) on Argo Workflows — gives Promtail time to ship logs before pod GC (#SPRINT-6A)
 - Loki data source auto-configured in Grafana — build logs queryable via Grafana Explore (#SPRINT-6A)
+- `POST /api/v1/projects/{name}/rollback` endpoint — rollback orchestrator with environment lock, release state machine reactivation, gitops manifest restore from git history (#SPRINT-6B)
+- `loopzero rollback` CLI command — reverts to previous release with `--to <id>`, `--env`, `--json`, `--yes` flags, migration warning displayed (#SPRINT-6B)
+- Release state machine: SUPERSEDED/ROLLED_BACK → ACTIVE reactivation via `Reactivated` event (#SPRINT-6B)
+- ReleaseStore: GetPreviousRelease, GetByIDForTenant, ListByEnv methods for rollback target resolution (#SPRINT-6B)
+- GitOps reader: GetManifestsAtCommit fetches manifest YAML from Gitea git history at specific commit (#SPRINT-6B)
 
 ### Removed
 - LoopZeroBuild CRD and BuildReconciler — build state owned exclusively by PostgreSQL (ADR-0006)

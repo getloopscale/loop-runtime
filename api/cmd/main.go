@@ -114,6 +114,7 @@ func main() {
 	var secretStore routes.SecretStore
 	var bootstrapStore routes.BootstrapStore
 	var logsHandler *routes.LogsHandler
+	var rollbackHandler *routes.RollbackHandler
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -250,6 +251,19 @@ func main() {
 		logBuildStore := &adapters.LogBuildStoreAdapter{Store: buildStore}
 		logsHandler = routes.NewLogsHandler(logBuildStore, lokiClient)
 
+		// Rollback orchestrator — coordinates release rollback with lock + state machine
+		rollbackOrch := services.NewRollbackOrchestrator(services.RollbackOrchestratorDeps{
+			Releases:   releaseStore,
+			EnvTargets: envTargetStore,
+			GitReader:  gitopsPusher,
+			GitPusher:  gitopsPusher,
+			Sync:       syncClient,
+			Locker:     locker,
+			Logger:     logger,
+		})
+		rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
+		rollbackHandler = routes.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain)
+
 		// C-01/C-03 fix: BuildReconcileLoop replaces both the HTTP callback
 		// and the StartupReconciler. The control plane POLLS the build cluster's
 		// Workflow CRDs instead of the build cluster calling the API.
@@ -361,6 +375,7 @@ func main() {
 		BootstrapStore:     bootstrapStore,
 		BuildHandler:       buildHandler,
 		LogsHandler:        logsHandler,
+		RollbackHandler:    rollbackHandler,
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,

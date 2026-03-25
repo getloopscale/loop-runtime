@@ -43,6 +43,9 @@ type ReleaseStore interface {
 	SetGitCommit(ctx context.Context, tx DBTX, id string, commitSHA string) error
 	GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*Release, error)
 	GetActiveByEnvTx(ctx context.Context, tx DBTX, tenantID, projectID, env string) (*Release, error)
+	GetPreviousRelease(ctx context.Context, tenantID, projectID, env string) (*Release, error)
+	GetByIDForTenant(ctx context.Context, tenantID, releaseID string) (*Release, error)
+	ListByEnv(ctx context.Context, tenantID, projectID, env string, limit int) ([]Release, error)
 }
 
 // PostgresReleaseStore implements ReleaseStore using PostgreSQL.
@@ -188,6 +191,87 @@ func (s *PostgresReleaseStore) GetActiveByEnvTx(ctx context.Context, tx DBTX, te
 		return nil, err
 	}
 	return release, nil
+}
+
+// GetPreviousRelease retrieves the most recent SUPERSEDED or ROLLED_BACK release
+// for a given environment. Used by rollback to find the target release.
+// Returns nil (not error) when no previous release exists.
+func (s *PostgresReleaseStore) GetPreviousRelease(ctx context.Context, tenantID, projectID, env string) (*Release, error) {
+	release, err := s.scanRelease(s.db.QueryRow(ctx,
+		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
+		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
+		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
+		        COALESCE(side_effects, 'null'::jsonb)
+		 FROM releases
+		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
+		   AND status IN ('SUPERSEDED', 'ROLLED_BACK')
+		 ORDER BY created_at DESC
+		 LIMIT 1`,
+		tenantID, projectID, env,
+	))
+	if err != nil {
+		if errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return release, nil
+}
+
+// GetByIDForTenant retrieves a release by ID with tenant isolation.
+// Returns nil (not error) when not found or tenant doesn't match.
+func (s *PostgresReleaseStore) GetByIDForTenant(ctx context.Context, tenantID, releaseID string) (*Release, error) {
+	release, err := s.scanRelease(s.db.QueryRow(ctx,
+		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
+		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
+		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
+		        COALESCE(side_effects, 'null'::jsonb)
+		 FROM releases WHERE id = $1 AND tenant_id = $2`,
+		releaseID, tenantID,
+	))
+	if err != nil {
+		if errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return release, nil
+}
+
+// ListByEnv retrieves releases for an environment, ordered by creation date DESC.
+// Includes ACTIVE, SUPERSEDED, and ROLLED_BACK releases (available for rollback).
+func (s *PostgresReleaseStore) ListByEnv(ctx context.Context, tenantID, projectID, env string, limit int) ([]Release, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
+		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
+		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
+		        COALESCE(side_effects, 'null'::jsonb)
+		 FROM releases
+		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
+		   AND status IN ('ACTIVE', 'SUPERSEDED', 'ROLLED_BACK')
+		 ORDER BY created_at DESC
+		 LIMIT $4`,
+		tenantID, projectID, env, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("release store: list by env failed: %w", err)
+	}
+	defer rows.Close()
+
+	var releases []Release
+	for rows.Next() {
+		var r Release
+		if err := rows.Scan(
+			&r.ID, &r.BuildID, &r.TenantID, &r.ProjectID, &r.Environment,
+			&r.Status, &r.CorrelationID, &r.CreatedBy,
+			&r.CreatedAt, &r.GitCommit, &r.GitMirrorStatus,
+			&r.Apps, &r.Artifacts, &r.SideEffects,
+		); err != nil {
+			return nil, fmt.Errorf("release store: scan release in list: %w", err)
+		}
+		releases = append(releases, r)
+	}
+	return releases, nil
 }
 
 // scanRelease scans a single release row.

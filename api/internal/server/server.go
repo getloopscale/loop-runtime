@@ -69,6 +69,8 @@ type Config struct {
 	SSEMaxConcurrentStreams int64
 	// LogsHandler handles GET /api/v1/builds/{id}/logs (build log retrieval via Loki).
 	LogsHandler *routes.LogsHandler
+	// RollbackHandler handles POST /api/v1/projects/{name}/rollback.
+	RollbackHandler *routes.RollbackHandler
 }
 
 // NewRouter creates a chi router with middleware and routes.
@@ -192,6 +194,11 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Build logs route (read-only, no idempotency needed)
 			if cfg.LogsHandler != nil {
 				r.Get("/api/v1/builds/{id}/logs", cfg.LogsHandler.Get)
+			}
+
+			// Rollback route — mutation, needs rate limiting
+			if cfg.RollbackHandler != nil {
+				r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
 			}
 		})
 	}

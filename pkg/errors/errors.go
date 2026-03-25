@@ -117,6 +117,20 @@ var (
 		HTTPStatus: 404,
 	}
 
+	// ErrNoActiveRelease is returned when rollback is attempted but no release is active.
+	ErrNoActiveRelease = &LoopZeroError{
+		Code:       "NO_ACTIVE_RELEASE",
+		Message:    "No active release found. Deploy at least once before rolling back.",
+		HTTPStatus: 404,
+	}
+
+	// ErrNoPreviousRelease is returned when rollback is attempted but no previous release exists.
+	ErrNoPreviousRelease = &LoopZeroError{
+		Code:       "NO_PREVIOUS_RELEASE",
+		Message:    "No previous release found to rollback to. Deploy at least twice before rolling back.",
+		HTTPStatus: 404,
+	}
+
 	// ErrBuildAlreadyCompleted is returned when attempting to cancel a build
 	// that is already in a terminal state (SUCCEEDED, FAILED, or CANCELLED).
 	ErrBuildAlreadyCompleted = &LoopZeroError{

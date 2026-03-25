@@ -369,3 +369,40 @@ func (p *GiteaGitOpsPusher) gitOutput(ctx context.Context, dir string, args ...s
 	}
 	return strings.TrimSpace(string(output)), nil
 }
+
+// GetManifestsAtCommit retrieves the manifest content from a specific git commit.
+// Uses the Gitea raw content API: GET /api/v1/repos/{owner}/{repo}/raw/{filepath}?ref={commit}
+// The filepath follows the convention: {env}/{projectID}/manifests.yaml
+func (p *GiteaGitOpsPusher) GetManifestsAtCommit(ctx context.Context, tenantID, projectID, env, commitSHA string) ([]byte, error) {
+	repoName := fmt.Sprintf("%s-gitops", tenantID)
+	filePath := fmt.Sprintf("%s/%s/manifests.yaml", env, projectID)
+
+	url := fmt.Sprintf("%s/api/v1/repos/%s/%s/raw/%s?ref=%s",
+		p.baseURL, p.orgName, repoName, filePath, commitSHA)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("gitops reader: create request: %w", err)
+	}
+	req.Header.Set("Authorization", "token "+p.token)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gitops reader: fetch manifests: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("manifests not found at commit %s", commitSHA)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gitops reader: unexpected status %d for commit %s", resp.StatusCode, commitSHA)
+	}
+
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(resp.Body); err != nil {
+		return nil, fmt.Errorf("gitops reader: read response: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}

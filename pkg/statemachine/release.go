@@ -42,6 +42,7 @@ const (
 	ReleaseSyncTimeout        Event = "SyncTimeout"
 	ReleaseRollbackTimeout    Event = "RollbackTimeout"
 	ReleaseManualResolve      Event = "ManualResolve"
+	ReleaseReactivated        Event = "Reactivated" // Rollback reactivates a SUPERSEDED or ROLLED_BACK release
 )
 
 // IsReleaseTerminal returns true if the given state is a terminal release state
@@ -104,8 +105,14 @@ func NewReleaseMachine() *Machine {
 			// Manual intervention recovery (spec §5.2 — sink state exits)
 			{From: ReleaseDriftAlert, Event: ReleaseManualResolve, To: ReleaseActive},
 			{From: ReleaseRollbackFailed, Event: ReleaseManualResolve, To: ReleaseActive},
+
+			// Rollback reactivation — reverts a SUPERSEDED or ROLLED_BACK release back to ACTIVE
+			{From: ReleaseSuperseded, Event: ReleaseReactivated, To: ReleaseActive},
+			{From: ReleaseRolledBack, Event: ReleaseReactivated, To: ReleaseActive},
 		},
-		Terminal: []State{ReleaseSuperseded, ReleaseRolledBack, ReleaseCancelled},
+		// Only CANCELLED is truly terminal. SUPERSEDED and ROLLED_BACK can be
+		// reactivated via rollback (ReleaseReactivated event).
+		Terminal: []State{ReleaseCancelled},
 		Timeouts: []TimeoutConfig{
 			{State: ReleaseReady, Timeout: ReleaseReadyTimeout, Reason: "GIT_PUSH_TIMEOUT"},
 			{State: ReleasePending, Timeout: ReleasePendingTimeout, Reason: "SYNC_TIMEOUT"},

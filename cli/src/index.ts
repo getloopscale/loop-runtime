@@ -23,6 +23,7 @@ import { DeployCommand } from './commands/deploy';
 import { ProjectDeleteCommand } from './commands/project-delete';
 import { StatusCommand } from './commands/status';
 import { LogsCommand } from './commands/logs';
+import { RollbackCommand } from './commands/rollback';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
@@ -479,6 +480,47 @@ export function createProgram(): Command {
         step: cmdOpts.step,
         follow: cmdOpts.follow,
         json: globalOpts.json,
+      });
+      process.exitCode = exitCode;
+    });
+
+  // --- rollback ---
+  program
+    .command('rollback')
+    .description('Rollback to a previous release')
+    .option('--env <name>', 'Target environment', 'production')
+    .option('--to <release-id>', 'Rollback to a specific release')
+    .option('--yes', 'Skip confirmation prompt')
+    .action(async (cmdOpts) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const rollbackCmd = new RollbackCommand({
+        getToken: () => configStore.getToken(),
+        findLoopZeroYaml: () => {
+          const gitRoot = getGitRoot();
+          if (!gitRoot) return null;
+          return findLoopZeroYaml(process.cwd(), gitRoot);
+        },
+        rollback: async (project: string, environment: string, toReleaseId?: string) => {
+          const body: Record<string, string> = { environment };
+          if (toReleaseId) body.to_release_id = toReleaseId;
+          return apiClient.post(
+            `/api/v1/projects/${encodeURIComponent(project)}/rollback`,
+            body,
+          );
+        },
+        writeTo,
+        writeError,
+      });
+
+      const exitCode = await rollbackCmd.execute({
+        env: cmdOpts.env,
+        to: cmdOpts.to,
+        json: globalOpts.json,
+        yes: cmdOpts.yes,
       });
       process.exitCode = exitCode;
     });

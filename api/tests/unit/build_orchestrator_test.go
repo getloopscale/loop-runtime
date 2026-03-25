@@ -231,6 +231,18 @@ func (f *fakeReleaseStoreOrch) setActiveByEnv(tenantID, projectID, env string, r
 	f.releases[r.ID] = r
 }
 
+func (f *fakeReleaseStoreOrch) GetPreviousRelease(_ context.Context, _, _, _ string) (*db.Release, error) {
+	return nil, nil
+}
+
+func (f *fakeReleaseStoreOrch) GetByIDForTenant(_ context.Context, _, _ string) (*db.Release, error) {
+	return nil, nil
+}
+
+func (f *fakeReleaseStoreOrch) ListByEnv(_ context.Context, _, _, _ string, _ int) ([]db.Release, error) {
+	return nil, nil
+}
+
 // fakeEnvTargetStoreOrch implements db.EnvironmentTargetStore.
 type fakeEnvTargetStoreOrch struct {
 	desired map[string]string // key: tenant:project:env -> releaseID

@@ -1,0 +1,140 @@
+import { ApiError } from '../api/client';
+
+interface RollbackApiResponse {
+  status: string;
+  rolled_back_release: string;
+  reactivated_release: string;
+  environment: string;
+  url?: string;
+}
+
+interface LoopZeroYaml {
+  project: string;
+  apps: Record<string, unknown>;
+}
+
+interface LoopZeroYamlResult {
+  path: string;
+  content: LoopZeroYaml;
+  parseError?: string;
+}
+
+export interface RollbackDeps {
+  getToken: () => string | null;
+  findLoopZeroYaml: () => LoopZeroYamlResult | null;
+  rollback: (project: string, environment: string, toReleaseId?: string) => Promise<RollbackApiResponse>;
+  writeTo: (msg: string) => void;
+  writeError: (msg: string) => void;
+}
+
+export interface RollbackOptions {
+  env?: string;
+  to?: string;
+  json?: boolean;
+  yes?: boolean;
+}
+
+export class RollbackCommand {
+  private readonly deps: RollbackDeps;
+
+  constructor(deps: RollbackDeps) {
+    this.deps = deps;
+  }
+
+  async execute(opts: RollbackOptions = {}): Promise<number> {
+    const environment = opts.env ?? 'production';
+
+    // 1. Auth check
+    if (!this.deps.getToken()) {
+      return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
+    }
+
+    // 2. Find loopzero.yaml
+    const yamlResult = this.deps.findLoopZeroYaml();
+    if (!yamlResult) {
+      return this.exitWithError(opts, 'No loopzero.yaml found. Run: loopzero init', 1, 'MISSING_CONFIG');
+    }
+
+    if (yamlResult.parseError) {
+      return this.exitWithError(opts, `Invalid loopzero.yaml: ${yamlResult.parseError}`, 1, 'INVALID_CONFIG');
+    }
+
+    const project = yamlResult.content.project;
+
+    // 3. Display migration warning (always, even with --yes)
+    if (!opts.json) {
+      this.deps.writeTo('Warning: Rollback does not revert database migrations.');
+      this.deps.writeTo('  If the deployment you\'re reverting from included schema changes,');
+      this.deps.writeTo('  the previous version may not be compatible with the current database.');
+      this.deps.writeTo('');
+    }
+
+    // 4. Call API
+    const startTime = Date.now();
+    let response: RollbackApiResponse;
+    try {
+      response = await this.deps.rollback(project, environment, opts.to);
+    } catch (err) {
+      return this.handleError(opts, err);
+    }
+    const durationSeconds = Math.round((Date.now() - startTime) / 1000);
+
+    // 5. Display result
+    if (opts.json) {
+      this.deps.writeTo(JSON.stringify({
+        status: response.status,
+        rolled_back_release: response.rolled_back_release,
+        active_release: response.reactivated_release,
+        environment: response.environment,
+        duration_seconds: durationSeconds,
+        url: response.url,
+      }));
+      return 0;
+    }
+
+    this.deps.writeTo(`Rolling back ${environment}...`);
+    this.deps.writeTo('');
+    this.deps.writeTo(`  Rolled back: ${response.rolled_back_release}`);
+    this.deps.writeTo(`  Reactivated: ${response.reactivated_release}`);
+    this.deps.writeTo('');
+    this.deps.writeTo(`Rollback completed in ${durationSeconds}s.`);
+    this.deps.writeTo(`Active release: ${response.reactivated_release}`);
+    if (response.url) {
+      this.deps.writeTo(`URL: ${response.url}`);
+    }
+
+    return 0;
+  }
+
+  private exitWithError(opts: RollbackOptions, message: string, exitCode: number, code?: string): number {
+    if (opts.json) {
+      const payload: Record<string, unknown> = { error: message, exit_code: exitCode };
+      if (code) {
+        payload.code = code;
+      }
+      this.deps.writeTo(JSON.stringify(payload));
+    } else {
+      this.deps.writeError(message);
+    }
+    return exitCode;
+  }
+
+  private handleError(opts: RollbackOptions, err: unknown): number {
+    if (err instanceof ApiError) {
+      if (err.exitCode === 4) {
+        return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
+      }
+      if (err.statusCode === 409) {
+        return this.exitWithError(opts, 'Another operation is in progress. Try again in a moment.', 3, 'DEPLOY_IN_PROGRESS');
+      }
+      if (err.statusCode === 404) {
+        return this.exitWithError(opts, err.message, 3, err.code);
+      }
+      return this.exitWithError(opts, err.message, err.exitCode, err.code);
+    }
+    if (err instanceof Error) {
+      return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');
+    }
+    return this.exitWithError(opts, 'Unexpected error. Try again later.', 3, 'UNEXPECTED_ERROR');
+  }
+}
