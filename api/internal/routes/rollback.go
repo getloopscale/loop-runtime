@@ -116,7 +116,7 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Execute rollback
 	result, err := h.service.Rollback(r.Context(), RollbackInput{
 		TenantID:      uc.TenantID,
-		ProjectID:     project.ID,
+		ProjectID:     name, // Deploy uses project name as project_id in builds/releases
 		ProjectName:   name,
 		Environment:   env,
 		ToReleaseID:   req.ToReleaseID,
