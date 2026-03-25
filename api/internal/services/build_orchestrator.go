@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
@@ -307,6 +308,9 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		slog.Error("submit build: failed to emit SSE event",
 			"build_id", buildID, "error", err)
 	}
+
+	metrics.DeploysTotal.WithLabelValues(req.TenantID, req.Environment, "submitted").Inc()
+	metrics.BuildQueueDepth.Inc()
 
 	streamURL := fmt.Sprintf("/api/v1/builds/%s/stream", buildID)
 	return &SubmitBuildResponse{

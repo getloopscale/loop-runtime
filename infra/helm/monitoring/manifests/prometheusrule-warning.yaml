@@ -127,3 +127,59 @@ spec:
             summary: "MinIO is down"
             description: "MinIO has been unreachable for more than 2 minutes. Build cache unavailable. Source uploads will fail."
             runbook: "Check MinIO pod status. Verify PVC. Builds will run without cache (slower but not blocked)."
+
+    # ═══════════════════════════════════════
+    # SLO Alerts (Sprint 4 — Observability)
+    # ═══════════════════════════════════════
+
+    - name: loopzero.slos
+      rules:
+        - alert: LoopZeroQueueSlow
+          expr: histogram_quantile(0.95, sum(rate(loopzero_build_duration_seconds_bucket{status="succeeded"}[1h])) by (le)) > 300
+          for: 10m
+          labels:
+            severity: warning
+            slo: "true"
+          annotations:
+            summary: "Build duration p95 exceeds 5min SLO"
+            description: "Build duration (p95) has been above 300s for 10 minutes. SLO target: <300s."
+
+        - alert: LoopZeroDeployFailureRate
+          expr: (sum(rate(loopzero_builds_total{status="failed"}[24h])) / sum(rate(loopzero_builds_total[24h]))) > 0.1
+          for: 30m
+          labels:
+            severity: warning
+            slo: "true"
+          annotations:
+            summary: "Deploy failure rate exceeds 10% (24h rolling)"
+            description: "Deploy success rate dropped below 90% over the last 24 hours. SLO target: >90%."
+
+        - alert: LoopZeroLockContention
+          expr: histogram_quantile(0.95, sum(rate(loopzero_lock_hold_duration_seconds_bucket[5m])) by (le)) > 2
+          for: 5m
+          labels:
+            severity: warning
+            slo: "true"
+          annotations:
+            summary: "Lock hold duration p95 exceeds 2s SLO"
+            description: "Environment lock hold time (p95) above 2s for 5 minutes. SLO target: <2s."
+
+        - alert: LoopZeroSyncSlow
+          expr: histogram_quantile(0.95, sum(rate(loopzero_deploy_duration_seconds_bucket[1h])) by (le)) > 600
+          for: 10m
+          labels:
+            severity: warning
+            slo: "true"
+          annotations:
+            summary: "End-to-end deploy duration p95 exceeds 10min"
+            description: "Full deploy cycle (build + sync) p95 above 600s for 10 minutes. SLO target: <600s."
+
+        - alert: LoopZeroBuildQueueSlow
+          expr: loopzero_build_queue_depth > 5
+          for: 5m
+          labels:
+            severity: warning
+            slo: "true"
+          annotations:
+            summary: "Build queue depth exceeds 5"
+            description: "More than 5 builds waiting in QUEUED state for over 5 minutes."

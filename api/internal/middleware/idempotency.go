@@ -9,6 +9,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+
+	"github.com/loopzero/loopzero/api/internal/metrics"
 )
 
 // IdempotencyRecord holds a cached idempotent response.
@@ -88,12 +90,14 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 					return
 				}
 				// Same key, same payload → return cached response
+				metrics.IdempotencyHits.WithLabelValues(r.URL.Path).Inc()
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(existing.ResponseStatus)
 				_, _ = w.Write(existing.ResponseBody)
 				return
 			}
 
+				metrics.IdempotencyMisses.WithLabelValues(r.URL.Path).Inc()
 			// New key → process request and capture response
 			capture := &responseCapture{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(capture, r)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/manifests"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -220,6 +221,9 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	r.logger.Info("reconcile loop: workflow succeeded, processing build completion",
 		"build_id", build.ID, "workflow_id", build.WorkflowID)
 
+	metrics.BuildsTotal.WithLabelValues(build.TenantID, build.Environment, "succeeded").Inc()
+	metrics.BuildDuration.WithLabelValues(build.TenantID, build.Environment, "succeeded").Observe(time.Since(build.CreatedAt).Seconds())
+
 	// Compute image references from deterministic pattern
 	var buildApps []AppRelease
 	var manifestApps []manifests.AppManifestInput
@@ -287,6 +291,9 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 
 // failBuild transitions a build to FAILED inside the environment lock.
 func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, reason string) {
+	metrics.BuildsTotal.WithLabelValues(build.TenantID, build.Environment, "failed").Inc()
+	metrics.BuildDuration.WithLabelValues(build.TenantID, build.Environment, "failed").Observe(time.Since(build.CreatedAt).Seconds())
+
 	err := r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		// Re-fetch inside lock — state may have changed
 		current, err := r.buildStore.GetByID(ctx, build.ID)

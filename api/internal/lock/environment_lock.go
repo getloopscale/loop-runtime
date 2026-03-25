@@ -8,11 +8,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
@@ -61,12 +63,15 @@ func WithEnvironmentLock[T any](ctx context.Context, pool *pgxpool.Pool, tenant,
 	// Acquire the transaction-scoped advisory lock.
 	// hashtext() converts the composite key string to int4 for pg_advisory_xact_lock.
 	lockKey := fmt.Sprintf("%s:%s:%s", tenant, project, env)
+	lockStart := time.Now()
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", lockKey); err != nil {
 		if isLockTimeoutError(err) {
+			metrics.LockConflicts.WithLabelValues(tenant, env).Inc()
 			return zero, loopzeroerrors.ErrLockTimeout
 		}
 		return zero, fmt.Errorf("lock: acquire advisory lock: %w", err)
 	}
+	metrics.LockAcquired.WithLabelValues(tenant, env).Inc()
 
 	// Execute the caller's function within the locked transaction.
 	// On panic: defer above handles rollback; we recover and re-panic
@@ -100,6 +105,7 @@ func WithEnvironmentLock[T any](ctx context.Context, pool *pgxpool.Pool, tenant,
 		return zero, fmt.Errorf("lock: commit transaction: %w", err)
 	}
 
+	metrics.LockDuration.WithLabelValues(tenant, env).Observe(time.Since(lockStart).Seconds())
 	return result, nil
 }
 
