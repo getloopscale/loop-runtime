@@ -1643,6 +1643,11 @@ function installLoki(
             limits: { cpu: "500m", memory: "512Mi" },
           },
         },
+        // Disable SimpleScalable targets — required by Loki chart v6.x
+        // validation when deploymentMode is SingleBinary
+        read: { replicas: 0 },
+        write: { replicas: 0 },
+        backend: { replicas: 0 },
         gateway: { enabled: false },
         monitoring: {
           selfMonitoring: { enabled: false },
