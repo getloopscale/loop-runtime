@@ -116,7 +116,8 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID
 	}
 
 	// 2. Create/update ExternalSecret CR on runtime cluster
-	targetNamespace := fmt.Sprintf("%s-%s", tenantID, env)
+	// Namespace follows naming convention: loopzero-{tenantID}-{env}
+	targetNamespace := fmt.Sprintf("loopzero-%s-%s", tenantID, env)
 	esName := externalSecretName(app, name)
 
 	externalSecret := &unstructured.Unstructured{
@@ -182,7 +183,7 @@ func (m *SecretK8sManager) DeleteSecret(ctx context.Context, tenantID, env, app,
 	}
 
 	// 2. Delete ExternalSecret CR from runtime
-	targetNamespace := fmt.Sprintf("%s-%s", tenantID, env)
+	targetNamespace := fmt.Sprintf("loopzero-%s-%s", tenantID, env)
 	esName := externalSecretName(app, name)
 	err = m.runtimeDynamic.Resource(externalSecretGVR).Namespace(targetNamespace).Delete(ctx, esName, metav1.DeleteOptions{})
 	if err != nil && !k8serrors.IsNotFound(err) {
