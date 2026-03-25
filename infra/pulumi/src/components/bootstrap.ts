@@ -1146,7 +1146,13 @@ function createArgoCDRepoCredentials(
         password: "placeholder-set-after-first-deploy",
       },
     },
-    { provider, dependsOn: [ns, argocd, gitea] },
+    {
+      provider,
+      dependsOn: [ns, argocd, gitea],
+      // The Bootstrap step updates this Secret via kubectl after Pulumi creates it.
+      // ignoreChanges prevents SSA field conflict on subsequent `pulumi up`.
+      ignoreChanges: ["stringData"],
+    },
   );
 }
 
