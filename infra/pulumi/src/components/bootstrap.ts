@@ -51,6 +51,7 @@ export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
 
 export interface BuildBootstrapOutputs {
   readonly argoWorkflowsReady: pulumi.Output<boolean>;
+  readonly lokiEndpoint: pulumi.Output<string>;
 }
 
 export interface BootstrapOutputs {
@@ -80,8 +81,9 @@ export function bootstrapCluster(
   infra: InfraOutputs,
   config: PlatformStackConfig,
 ): BootstrapOutputs {
-  const mgmt = bootstrapMgmtCluster(infra, config);
+  // Build cluster bootstrapped first — exports lokiEndpoint for mgmt API config
   const build = bootstrapBuildCluster(infra, config);
+  const mgmt = bootstrapMgmtCluster(infra, config, build.lokiEndpoint);
   const runtime = bootstrapRuntimeCluster(infra, config);
 
   return { mgmt, build, runtime };
@@ -94,6 +96,7 @@ export function bootstrapCluster(
 function bootstrapMgmtCluster(
   infra: InfraOutputs,
   config: PlatformStackConfig,
+  lokiEndpoint: pulumi.Output<string>,
 ): MgmtBootstrapOutputs {
   const provider = new k8s.Provider("mgmt-k8s", {
     kubeconfig: infra.mgmtCluster.kubeconfig,
@@ -144,7 +147,7 @@ function bootstrapMgmtCluster(
   createArgoCDRepoCredentials(provider, ns, argocd, gitea);
 
   // LoopZero API — platform HTTP server (connects to DB, Gitea, ArgoCD, Argo Workflows)
-  const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config);
+  const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config, lokiEndpoint);
 
   // TenantController — K8s operator for tenant lifecycle (namespaces, RBAC, quotas)
   const tenantController = installTenantController(provider, ns, infra, config);
@@ -663,10 +666,6 @@ function bootstrapBuildCluster(
             requests: { cpu: "100m", memory: "256Mi" },
             limits: { cpu: "500m", memory: "512Mi" },
           },
-          service: {
-            type: "NodePort",
-            nodePort: 30100,
-          },
         },
         read: { replicas: 0 },
         write: { replicas: 0 },
@@ -682,6 +681,40 @@ function bootstrapBuildCluster(
       },
     },
     { provider, dependsOn: [monitoringNs] },
+  );
+
+  // NodePort Service for Loki — enables cross-cluster access from mgmt API.
+  // The Loki chart creates only a ClusterIP service. This additional NodePort
+  // service exposes Loki on port 30100 so the API (on mgmt cluster) can query logs.
+  const lokiNodePort = new k8s.core.v1.Service(
+    "loki-nodeport",
+    {
+      metadata: {
+        name: "loki-nodeport",
+        namespace: "monitoring",
+        labels: {
+          "app.kubernetes.io/name": "loki",
+          "app.kubernetes.io/component": "nodeport-cross-cluster",
+        },
+      },
+      spec: {
+        type: "NodePort",
+        ports: [
+          {
+            port: 3100,
+            targetPort: 3100,
+            nodePort: 30100,
+            protocol: "TCP",
+            name: "http",
+          },
+        ],
+        selector: {
+          "app.kubernetes.io/name": "loki",
+          "app.kubernetes.io/component": "single-binary",
+        },
+      },
+    },
+    { provider, dependsOn: [loki, monitoringNs] },
   );
 
   // Promtail — ships Argo Workflows pod logs to Loki (same cluster, no cross-cluster needed)
@@ -754,10 +787,18 @@ function bootstrapBuildCluster(
     },
   );
 
+  // Loki endpoint for cross-cluster access from mgmt API.
+  // Node IP is resolved post-deploy by infra-deploy.yml pipeline step
+  // "Configure cross-cluster Loki" which runs kubectl to get the build
+  // cluster node IP and patches the API configmap.
+  // Placeholder value — pipeline replaces it with actual IP.
+  const lokiEndpoint = pulumi.output("http://pending-loki-ip:30100");
+
   return {
     argoWorkflowsReady: argoWorkflows.status.apply(
       (s) => s.status === "deployed",
     ),
+    lokiEndpoint,
   };
 }
 
@@ -1114,6 +1155,7 @@ function installLoopZeroAPI(
   ns: k8s.core.v1.Namespace,
   infra: InfraOutputs,
   config: PlatformStackConfig,
+  lokiEndpoint: pulumi.Output<string>,
 ): k8s.apps.v1.Deployment {
   // Database connection string for the `loopzero` database (created in Phase 1).
   const databaseUrl = pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`;
@@ -1186,10 +1228,9 @@ function installLoopZeroAPI(
         REGISTRY_URL: "registry.digitalocean.com/loopzero-infra-registry",
         REGISTRY_INSECURE: "false",
         ARGOCD_NAMESPACE: PLATFORM_NAMESPACE,
-        // Loki runs on build cluster. API accesses via cross-cluster NodePort.
-        // IP resolved from build cluster node — same pattern as Prometheus scraping.
-        // Falls back to env override LOKI_URL for manual configuration.
-        LOKI_URL: "http://10.0.2.5:30100",
+        // Loki runs on build cluster. API accesses via cross-cluster NodePort 30100.
+        // Node IP resolved dynamically from build cluster node list.
+        LOKI_URL: pulumi.interpolate`${lokiEndpoint}`,
       },
     },
     { provider, dependsOn: [ns] },

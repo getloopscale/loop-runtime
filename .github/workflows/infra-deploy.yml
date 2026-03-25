@@ -667,6 +667,61 @@ jobs:
           echo "- Tenant CR: applied (tn-loopzero)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Gitea orgs: loopzero, loopzero-platform" >> "$GITHUB_STEP_SUMMARY"
 
+      # --- Post-deploy: configure cross-cluster Loki access ---
+      # Loki runs on the build cluster (NodePort 30100). The API on mgmt
+      # needs the build cluster node IP to query logs cross-cluster.
+      # This step resolves the IP and patches the API configmap.
+      - name: Configure cross-cluster Loki
+        if: success() && needs.resolve.outputs.command == 'up'
+        continue-on-error: true
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          set +e
+          STACK="${{ needs.resolve.outputs.stack }}"
+          cd "${{ env.PULUMI_WORKING_DIR }}"
+
+          BUILD_KUBECONFIG=$(pulumi stack output buildKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
+          MGMT_KUBECONFIG=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
+
+          if [ -z "$BUILD_KUBECONFIG" ] || [ -z "$MGMT_KUBECONFIG" ]; then
+            echo "::warning::Could not retrieve kubeconfigs for Loki configuration"
+            exit 0
+          fi
+
+          echo "$BUILD_KUBECONFIG" > /tmp/build-kubeconfig.yaml
+          echo "$MGMT_KUBECONFIG" > /tmp/mgmt-kubeconfig.yaml
+
+          # Resolve build cluster node InternalIP
+          BUILD_NODE_IP=$(kubectl --kubeconfig=/tmp/build-kubeconfig.yaml get nodes \
+            -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
+
+          if [ -z "$BUILD_NODE_IP" ]; then
+            echo "::warning::Could not resolve build cluster node IP for Loki"
+            exit 0
+          fi
+
+          LOKI_URL="http://${BUILD_NODE_IP}:30100"
+          echo "Loki cross-cluster URL: $LOKI_URL"
+
+          # Verify Loki is reachable from mgmt cluster
+          kubectl --kubeconfig=/tmp/mgmt-kubeconfig.yaml run loki-check --rm -i \
+            --image=curlimages/curl --restart=Never \
+            -- curl -sf "$LOKI_URL/ready" 2>/dev/null && echo "Loki: reachable" || echo "::warning::Loki not reachable at $LOKI_URL"
+
+          # Patch API configmap with resolved Loki URL
+          NAMESPACE="platform-system"
+          kubectl --kubeconfig=/tmp/mgmt-kubeconfig.yaml patch configmap loopzero-api-config \
+            -n "$NAMESPACE" --type merge -p "{\"data\":{\"LOKI_URL\":\"$LOKI_URL\"}}"
+
+          # Restart API to pick up new LOKI_URL
+          kubectl --kubeconfig=/tmp/mgmt-kubeconfig.yaml rollout restart deployment loopzero-api -n "$NAMESPACE"
+          kubectl --kubeconfig=/tmp/mgmt-kubeconfig.yaml rollout status deployment loopzero-api -n "$NAMESPACE" --timeout=60s
+
+          echo "- Loki URL: $LOKI_URL (cross-cluster)" >> "$GITHUB_STEP_SUMMARY"
+
+          # Cleanup
+          rm -f /tmp/build-kubeconfig.yaml /tmp/mgmt-kubeconfig.yaml
+
       # --- Post-deploy: verify all phases completed ---
       - name: Verify deployment health
         if: success() && needs.resolve.outputs.command == 'up'
