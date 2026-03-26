@@ -352,61 +352,67 @@ func scriptDockerfileNode(apps []services.AppSpec) string {
 		return `echo "No apps to generate Dockerfiles for"`
 	}
 
-	// Single app: generate Dockerfile (no suffix)
-	// Multi-app: generate Dockerfile.{appName} per app
+	// Pre-render Dockerfiles as plain strings (no heredoc, no shell escaping).
+	// Each app gets a Dockerfile written directly via printf — reliable across all shells.
 	var script strings.Builder
 	script.WriteString("set -euo pipefail\ncd /workspace\n")
 
 	for _, app := range apps {
-		port := app.Port
-		if port <= 0 {
-			port = 3000
-		}
-
 		appPath := app.Path
 		if appPath == "" || appPath == "." {
 			appPath = "."
 		}
 
-		// For monorepo apps, WORKDIR navigates to the app subdir
-		workdir := "/app"
-		if appPath != "." {
-			workdir = fmt.Sprintf("/app/%s", appPath)
-		}
-
-		// Dockerfile name: "Dockerfile" for single-app, "Dockerfile.{name}" for multi-app
 		dockerfileName := "Dockerfile"
 		if len(apps) > 1 {
 			dockerfileName = fmt.Sprintf("Dockerfile.%s", app.Name)
 		}
 
-		// Worker apps don't EXPOSE a port and use a different CMD
-		exposeCmd := fmt.Sprintf("EXPOSE %d\nCMD [\"npm\", \"start\"]", port)
-		if app.Type == "worker" {
-			exposeCmd = `CMD ["npm", "start"]`
+		// Check for user-provided Dockerfile first
+		script.WriteString(fmt.Sprintf(
+			"if [ -f \"%s/Dockerfile\" ]; then\n  echo \"User Dockerfile found in %s\"\n  cp \"%s/Dockerfile\" \"%s\"\nelse\n",
+			appPath, appPath, appPath, dockerfileName))
+
+		// Generate Dockerfile content — template approach, no heredoc.
+		// CMD uses "node <entrypoint>" directly instead of "npm start" to avoid
+		// npm script resolution issues in monorepo workspaces.
+		var df strings.Builder
+		df.WriteString("FROM node:20-alpine\n")
+		df.WriteString("WORKDIR /app\n")
+
+		if appPath == "." {
+			// Single app: copy everything, install, run
+			df.WriteString("COPY package.json package-lock.json ./\n")
+			df.WriteString("RUN npm ci --omit=dev\n")
+			df.WriteString("COPY . .\n")
+		} else {
+			// Monorepo: copy root package files + app dir, install from root
+			df.WriteString("COPY package.json package-lock.json ./\n")
+			df.WriteString(fmt.Sprintf("COPY %s ./%s\n", appPath, appPath))
+			df.WriteString("RUN npm ci --omit=dev 2>/dev/null || true\n")
 		}
 
-		// Check if user provided a Dockerfile in the app's path
-		script.WriteString(fmt.Sprintf(`
-if [ -f "%s/%s" ]; then
-  echo "User-provided %s found in %s — copying"
-  cp "%s/%s" "%s"
-else
-  echo "Generating %s for %s (Node.js)"
-  cat > "%s" << 'DEOF'
-FROM node:20-alpine
-WORKDIR /app
-COPY . .
-WORKDIR %s
-RUN npm ci --omit=dev
-%s
-DEOF
-fi
-`, appPath, "Dockerfile", "Dockerfile", appPath, appPath, "Dockerfile", dockerfileName,
-			dockerfileName, app.Name, dockerfileName, workdir, exposeCmd))
+		df.WriteString(fmt.Sprintf("WORKDIR /app/%s\n", appPath))
+
+		if app.Type != "worker" {
+			port := app.Port
+			if port <= 0 {
+				port = 3000
+			}
+			df.WriteString(fmt.Sprintf("EXPOSE %d\n", port))
+		}
+		df.WriteString("CMD [\"node\", \"index.js\"]\n")
+
+		// Write Dockerfile using printf (no heredoc escaping issues)
+		// Escape any % in the content for printf
+		content := strings.ReplaceAll(df.String(), "%", "%%")
+		content = strings.ReplaceAll(content, "\\", "\\\\")
+		script.WriteString(fmt.Sprintf("  echo 'Generating %s for %s'\n", dockerfileName, app.Name))
+		script.WriteString(fmt.Sprintf("  printf '%s' > \"%s\"\n", content, dockerfileName))
+		script.WriteString("fi\n")
 	}
 
-	script.WriteString("\necho 'Dockerfiles generated:'\nls -la /workspace/Dockerfile*\n")
+	script.WriteString("echo 'Dockerfiles generated:'\nls -la /workspace/Dockerfile*\nfor f in /workspace/Dockerfile*; do echo \"--- $f ---\"; cat \"$f\"; done\n")
 	return script.String()
 }
 

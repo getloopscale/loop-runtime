@@ -49,6 +49,8 @@ type ReleaseStore interface {
 	GetPreviousRelease(ctx context.Context, tenantID, projectID, env string) (*Release, error)
 	GetByIDForTenant(ctx context.Context, tenantID, releaseID string) (*Release, error)
 	ListByEnv(ctx context.Context, tenantID, projectID, env string, limit int) ([]Release, error)
+	// GetLatestByBuildID returns the most recent release for a build, or nil if none exists.
+	GetLatestByBuildID(ctx context.Context, buildID string) (*Release, error)
 }
 
 // PostgresReleaseStore implements ReleaseStore using PostgreSQL.
@@ -275,6 +277,27 @@ func (s *PostgresReleaseStore) ListByEnv(ctx context.Context, tenantID, projectI
 		releases = append(releases, r)
 	}
 	return releases, nil
+}
+
+// GetLatestByBuildID returns the most recent release for a given build ID.
+// Returns nil (not error) if no release exists for this build.
+func (s *PostgresReleaseStore) GetLatestByBuildID(ctx context.Context, buildID string) (*Release, error) {
+	r, err := s.scanRelease(s.db.QueryRow(ctx,
+		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
+		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
+		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
+		        COALESCE(side_effects, 'null'::jsonb)
+		 FROM releases WHERE build_id = $1
+		 ORDER BY created_at DESC LIMIT 1`,
+		buildID,
+	))
+	if err != nil {
+		if errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
+			return nil, nil // No release for this build — not an error
+		}
+		return nil, err
+	}
+	return r, nil
 }
 
 // scanRelease scans a single release row.

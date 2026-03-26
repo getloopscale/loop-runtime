@@ -196,8 +196,17 @@ func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build
 		return
 	}
 
-	// No workflow ID means the build was never submitted to Argo
+	// No workflow ID means the build was never submitted to Argo — OR the
+	// SubmitBuild is still in progress on another pod (race condition between
+	// lock release and SetWorkflowID). Grace period: skip builds created < 60s ago.
+	// After 60s, the build is legitimately orphaned and should be failed.
 	if build.WorkflowID == "" {
+		age := time.Since(build.CreatedAt)
+		if age < 60*time.Second {
+			r.logger.Debug("reconcile loop: build has no workflow ID yet, skipping (created recently)",
+				"build_id", build.ID, "age", age.String())
+			return
+		}
 		r.failBuild(ctx, build, "Build had no workflow ID (API crashed before submission)")
 		return
 	}
@@ -307,9 +316,41 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 // These are builds where Phase 1 (image build) completed but Phase 2 (release
 // activation) was interrupted. The method reconstructs the BuildCallbackRequest
 // from stored data and delegates to the orchestrator.
+//
+// Guard: if a release already exists for this build, do NOT create another one.
+// Check the existing release's state and decide whether to retry or fail.
 func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *db.Build) {
 	r.logger.Info("reconcile loop: retrying release activation for RELEASING build",
 		"build_id", build.ID, "age", time.Since(build.CreatedAt).String())
+
+	// Guard: check if a release already exists for this build.
+	// Activate() creates a new release on each call. If we call it again after a
+	// previous attempt created a release that failed (SYNC_FAILED, GIT_MIRROR_FAILED),
+	// we'd create duplicates in an infinite loop. Instead, check existing state and decide.
+	existingRelease, _ := r.orch.FindReleaseForBuild(ctx, build.ID)
+	if existingRelease != nil {
+		switch {
+		case existingRelease.Status == "ACTIVE":
+			// Release already active — just transition build to SUCCEEDED
+			r.logger.Info("reconcile loop: release already ACTIVE, completing build",
+				"build_id", build.ID, "release_id", existingRelease.ID)
+			r.completeBuild(ctx, build)
+			return
+		case existingRelease.Status == "SYNC_FAILED" || existingRelease.Status == "GIT_MIRROR_FAILED":
+			// Release permanently failed — fail the build
+			r.logger.Warn("reconcile loop: release in failed state, failing build",
+				"build_id", build.ID, "release_id", existingRelease.ID,
+				"release_status", existingRelease.Status)
+			r.failBuild(ctx, build, fmt.Sprintf("Release %s failed: %s", existingRelease.ID, existingRelease.Status))
+			return
+		default:
+			// Release in transient state (READY, PENDING) — wait for it to resolve
+			r.logger.Debug("reconcile loop: release in transient state, skipping",
+				"build_id", build.ID, "release_id", existingRelease.ID,
+				"release_status", existingRelease.Status)
+			return
+		}
+	}
 
 	// Reconstruct BuildCallbackRequest from stored app specs (same pattern as onWorkflowSucceeded)
 	apps, err := r.buildStore.GetBuildApps(ctx, build.ID)
@@ -371,6 +412,28 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 
 	if err := r.orch.RetryReleaseActivation(ctx, build, result); err != nil {
 		r.logger.Error("reconcile loop: release activation retry failed",
+			"build_id", build.ID, "error", err)
+	}
+}
+
+// completeBuild transitions a RELEASING build to SUCCEEDED (MEET-2026-03-26-008).
+// Called when the reconcile loop detects that the release is already ACTIVE.
+func (r *BuildReconcileLoop) completeBuild(ctx context.Context, build *db.Build) {
+	err := r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
+		current, err := r.buildStore.GetByID(ctx, build.ID)
+		if err != nil {
+			return err
+		}
+		if statemachine.IsBuildTerminal(statemachine.State(current.Status)) {
+			return nil // Already finalized
+		}
+		if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildReleaseCompleted)); err != nil {
+			return fmt.Errorf("complete build: transition to SUCCEEDED: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		r.logger.Error("reconcile loop: failed to complete RELEASING build",
 			"build_id", build.ID, "error", err)
 	}
 }

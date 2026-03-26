@@ -87,7 +87,7 @@ export function normalizeApp(name: string, raw: LoopZeroYamlApp): AppUnit {
     type,
     path: raw.path || '.',
     framework: raw.framework || 'custom',
-    port: type === 'server' ? (raw.port ?? 8080) : null,
+    port: (type === 'server' || type === 'frontend') ? (raw.port ?? (type === 'server' ? 8080 : 80)) : null,
     build,
     dockerfile,
     rendering,

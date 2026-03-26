@@ -27,8 +27,9 @@ type AppBuildPlan struct {
 	LanguageStrategy string            // resolved strategy name (e.g., "node", "go", "python", "custom")
 	Build            string            // "dockerfile", "buildpack", "custom"
 
-	// Original AppUnit fields needed downstream (manifests, ArgoCD)
+	// Original AppUnit fields needed downstream (manifests, ArgoCD, Dockerfile generation)
 	AppType       string // "server", "worker", "frontend"
+	AppPath       string // original app path from loopzero.yaml (e.g., "apps/api", ".")
 	Port          int
 	Secrets       []string
 	DeliveryModel string // "container" or "static" (MEET-009). Resolved from AppUnit.Rendering.
@@ -97,6 +98,7 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 			LanguageStrategy: strategy,
 			Build:            unit.Build,
 			AppType:          unit.Type,
+			AppPath:          unit.Path,
 			Port:             unit.Port,
 			Secrets:          unit.Secrets,
 			DeliveryModel:    deliveryModel,

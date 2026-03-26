@@ -180,8 +180,10 @@ type BuildOrchestrator struct {
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
-// 300s accommodates first deploys (image pull + rollout + cert issuance).
-const defaultArgocdSyncTimeout = 300 * time.Second
+// 600s accommodates monorepo deploys with multiple apps (3+ Deployments rolling
+// out simultaneously, each with image pull + rollout + cert issuance + health probes).
+// At 300s, 3-app monorepos consistently hit SYNC_FAILED during ArgoCD WaitForSync.
+const defaultArgocdSyncTimeout = 600 * time.Second
 
 // NewBuildOrchestrator creates a new BuildOrchestrator with all dependencies injected.
 func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
@@ -431,6 +433,12 @@ func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *d
 		}
 		return nil
 	})
+}
+
+// FindReleaseForBuild returns the most recent release for a build, or nil if none exists.
+// Used by the reconcile loop to determine whether Activate() has already been called.
+func (o *BuildOrchestrator) FindReleaseForBuild(ctx context.Context, buildID string) (*db.Release, error) {
+	return o.releaseStore.GetLatestByBuildID(ctx, buildID)
 }
 
 // CancelBuild cancels a running or queued build.

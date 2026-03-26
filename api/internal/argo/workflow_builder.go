@@ -117,7 +117,7 @@ func groupAppsByPlan(plans []services.AppBuildPlan) []languageGroup {
 			Name:      p.AppName,
 			Type:      p.AppType,
 			Port:      p.Port,
-			Path:      "", // Language steps use workspace-relative paths, not absolute
+			Path:      p.AppPath,
 			Framework: stratName,
 			Build:     p.Build,
 			Secrets:   p.Secrets,

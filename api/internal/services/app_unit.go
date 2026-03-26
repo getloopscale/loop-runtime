@@ -66,6 +66,9 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 	if appType == "server" && port <= 0 {
 		port = 8080
 	}
+	if appType == "frontend" && port <= 0 {
+		port = 80 // default for frontend servers (nginx, static file server)
+	}
 	if appType == "worker" {
 		port = 0
 	}

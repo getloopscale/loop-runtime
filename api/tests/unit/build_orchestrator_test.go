@@ -246,6 +246,15 @@ func (f *fakeReleaseStoreOrch) ListByEnv(_ context.Context, _, _, _ string, _ in
 	return nil, nil
 }
 
+func (f *fakeReleaseStoreOrch) GetLatestByBuildID(_ context.Context, buildID string) (*db.Release, error) {
+	for _, r := range f.releases {
+		if r.BuildID == buildID {
+			return r, nil
+		}
+	}
+	return nil, nil
+}
+
 // fakeEnvTargetStoreOrch implements db.EnvironmentTargetStore.
 type fakeEnvTargetStoreOrch struct {
 	desired map[string]string // key: tenant:project:env -> releaseID
