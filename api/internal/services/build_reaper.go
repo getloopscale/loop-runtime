@@ -21,6 +21,8 @@ type BuildReaperConfig struct {
 	QueueTimeout time.Duration
 	// RunningTimeout is how long a build can stay in RUNNING before being reaped (spec §5.1: 30min).
 	RunningTimeout time.Duration
+	// ReleasingTimeout is how long a build can stay in RELEASING before being reaped (MEET-008: 10min).
+	ReleasingTimeout time.Duration
 	// CancelTimeout is how long a build can stay in CANCELLING before being reaped (spec §5.1: 60s).
 	CancelTimeout time.Duration
 	// Interval is how often the reaper runs.
@@ -30,10 +32,11 @@ type BuildReaperConfig struct {
 // DefaultBuildReaperConfig returns the spec-defined timeouts.
 func DefaultBuildReaperConfig() BuildReaperConfig {
 	return BuildReaperConfig{
-		QueueTimeout:   5 * time.Minute,
-		RunningTimeout: 30 * time.Minute,
-		CancelTimeout:  60 * time.Second,
-		Interval:       30 * time.Second,
+		QueueTimeout:     5 * time.Minute,
+		RunningTimeout:   30 * time.Minute,
+		ReleasingTimeout: 10 * time.Minute,
+		CancelTimeout:    60 * time.Second,
+		Interval:         30 * time.Second,
 	}
 }
 
@@ -46,7 +49,7 @@ type StaleBuild struct {
 
 // BuildStaleChecker finds builds that have exceeded their state timeout.
 type BuildStaleChecker interface {
-	FindStaleBuilds(ctx context.Context, queueTimeout, runningTimeout, cancelTimeout time.Duration) ([]StaleBuild, error)
+	FindStaleBuilds(ctx context.Context, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error)
 }
 
 // BuildReconcileChecker allows the reaper to check if a build is being reconciled.
@@ -134,7 +137,7 @@ func reaperReason(event statemachine.Event) string {
 }
 
 func (r *BuildReaper) reap(ctx context.Context) int {
-	stale, err := r.checker.FindStaleBuilds(ctx, r.cfg.QueueTimeout, r.cfg.RunningTimeout, r.cfg.CancelTimeout)
+	stale, err := r.checker.FindStaleBuilds(ctx, r.cfg.QueueTimeout, r.cfg.RunningTimeout, r.cfg.ReleasingTimeout, r.cfg.CancelTimeout)
 	if err != nil {
 		r.logger.Error("build reaper: failed to find stale builds", "error", err)
 		return 0
@@ -234,12 +237,15 @@ type PostgresStaleBuildChecker struct {
 }
 
 // FindStaleBuilds queries for builds that have exceeded their state timeout.
-func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, queueTimeout, runningTimeout, cancelTimeout time.Duration) ([]StaleBuild, error) {
+func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error) {
+	// MEET-2026-03-26-008: RELEASING added — builds stuck in release activation
+	// are reaped after 10min (default) to prevent infinite retry.
 	query := `
 		SELECT id, status FROM builds
 		WHERE (status = 'QUEUED' AND created_at < $1)
 		   OR (status = 'RUNNING' AND started_at < $2)
-		   OR (status = 'CANCELLING' AND started_at < $3)
+		   OR (status = 'RELEASING' AND started_at < $3)
+		   OR (status = 'CANCELLING' AND started_at < $4)
 		ORDER BY created_at ASC
 		LIMIT 100
 	`
@@ -248,6 +254,7 @@ func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, queueTi
 	rows, err := c.DB.Query(ctx, query,
 		now.Add(-queueTimeout),
 		now.Add(-runningTimeout),
+		now.Add(-releasingTimeout),
 		now.Add(-cancelTimeout),
 	)
 	if err != nil {
@@ -268,6 +275,8 @@ func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, queueTi
 			event = statemachine.BuildQueueTimeout
 		case statemachine.BuildRunning:
 			event = statemachine.BuildTimeout
+		case statemachine.BuildReleasing:
+			event = statemachine.BuildReleaseTimeoutEvent
 		case statemachine.BuildCancelling:
 			event = statemachine.BuildCancelTimeout
 		default:

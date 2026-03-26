@@ -360,42 +360,36 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, groups []la
 }
 
 // buildVolumes returns the workflow-level volumes for the BuildKit build engine.
-// BuildKit needs: buildkit-registry-config Secret + buildkit-socket emptyDir for daemon↔client communication.
+// Single container pattern: only registry credentials are needed as a workflow-level volume.
+// The buildkitd socket is internal to each build-image container (no cross-container sharing).
 func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
 	return []forge.VolumeBuilder{
-		// Registry credentials for BuildKit push — mounted at /home/user/.docker/ in buildkitd.
+		// Registry credentials for BuildKit push — mounted at /home/user/.docker/ in each build container.
 		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-registry-config"}, SecretName: "buildkit-registry-config"},
-		// Unix socket shared between buildkitd (daemon) and buildctl (client).
-		&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-socket"}},
 	}
 }
 
-// buildkitTemplateForApp generates a BuildKit container template with sidecar pattern for a single app.
+// buildkitTemplateForApp generates a single-container BuildKit template for a single app.
 //
-// Architecture: two containers sharing a Unix socket via emptyDir volume:
-//   - buildkitd (sidecar): rootless daemon listening on Unix socket, started via RootlessKit entrypoint
-//   - buildctl (main): client that submits the build and waits for completion
+// Architecture (MEET-2026-03-26-007): Single container runs both buildkitd (background daemon)
+// and buildctl (foreground client) via rootlesskit. This eliminates the sidecar pattern and
+// its associated false-failure problem (sidecar exit code 1 on SIGTERM causing Argo to mark
+// successful builds as Failed).
 //
-// The buildkitd sidecar is marked as Daemon=true so Argo keeps it alive until
-// the main container (buildctl) exits. Argo then kills the sidecar automatically.
+// The container uses the -rootless image with rootlesskit as the entrypoint, which sets up
+// a user namespace for unprivileged builds. Inside the namespace, the entrypoint script
+// starts buildkitd in background, waits for readiness, and runs buildctl.
 //
-// Image digest is extracted from --metadata-file (JSON: {"containerimage.digest":"sha256:..."}).
+// Security: rootlesskit requires seccompProfile: Unconfined + AppArmor: unconfined for user
+// namespace creation on managed Kubernetes (DOKS, EKS, GKE). These apply to the single
+// container. buildctl args are not user-injectable (constructed programmatically from
+// AppSpec/AppBuildPlan). See MEET-2026-03-26-007 security review.
 //
-// Cache: --import-cache and --export-cache use registry-based OCI cache (no MinIO).
-//
-// Security: The -rootless image uses RootlessKit to create a user namespace. This requires:
-//   - seccompProfile: Unconfined (allows user namespace creation)
-//   - AppArmor: unconfined (allows mount operations inside user namespace)
-//   - NO privileged: true required
-//
-// These are set via PodSpecPatch (seccomp) and Annotations (AppArmor) because
-// the forge SDK SecurityContext type doesn't include seccompProfile.
+// Cache: --import-cache and --export-cache use registry-based OCI cache.
+// Image digest: extracted from --metadata-file (JSON: {"containerimage.digest":"sha256:..."}).
 func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app services.AppSpec) *forge.Container {
 	destination := fmt.Sprintf("%s/%s/%s/%s:%s",
 		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
-	// Cache ref uses the SAME repo as the image with tag :buildcache.
-	// Using a separate cache/ path (e.g., {tenant}/cache/{app}) conflicts with existing
-	// repos on DO Container Registry — subrepos under existing repos are forbidden.
 	cacheRef := fmt.Sprintf("%s/%s/%s/%s:buildcache",
 		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name)
 
@@ -406,11 +400,11 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 	}
 
 	metadataFile := fmt.Sprintf("/workspace/metadata-%s.json", app.Name)
+	socketPath := "unix:///run/user/1000/buildkitd/buildkitd.sock"
 
-	// buildctl args — the main container that drives the build.
-	// Each flag and its value MUST be separate array elements. buildctl does NOT
-	// do shell-style word splitting — "–local dockerfile=/x" is one arg, not two.
+	// buildctl args — each flag and value as separate elements (no shell word splitting).
 	buildctlArgs := []string{
+		"--addr", socketPath,
 		"build",
 		"--frontend", "dockerfile.v0",
 		"--local", "context=/workspace",
@@ -418,8 +412,6 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 		"--opt", fmt.Sprintf("filename=%s", dockerfileName(dockerfile)),
 		"--output", fmt.Sprintf("type=image,name=%s,push=true", destination),
 	}
-	// OCI registry layer cache: --import-cache pulls cached layers before build,
-	// --export-cache pushes layers after build. Omitted when NoCache is set.
 	if !spec.NoCache {
 		buildctlArgs = append(buildctlArgs,
 			"--export-cache", fmt.Sprintf("type=registry,ref=%s,mode=max,ignore-error=true", cacheRef),
@@ -428,118 +420,58 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 	}
 	buildctlArgs = append(buildctlArgs, "--metadata-file", metadataFile)
 
-	// buildkitd socket path — rootless user 1000
-	socketPath := "unix:///run/user/1000/buildkitd/buildkitd.sock"
-
-	// Prepend --addr to buildctl args
-	buildctlArgs = append([]string{"--addr", socketPath}, buildctlArgs...)
-
-	// buildkitd daemon args — passed to the default entrypoint (rootlesskit wrapper)
-	// DO NOT set Command on the sidecar — the -rootless image entrypoint runs
-	// "rootlesskit buildkitd" which sets up the user namespace before starting buildkitd.
-	buildkitdArgs := []string{
-		"--oci-worker-no-process-sandbox",
-		"--addr", socketPath,
-	}
-
 	if b.infraParams.RegistryInsecure {
-		// Allow pushing to HTTP registries (local dev only — blocked in production by Config.Validate)
-		buildkitdArgs = append(buildkitdArgs,
-			"--oci-worker-snapshotter", "native",
-		)
-		buildctlArgs = append(buildctlArgs,
-			"--allow", "security.insecure",
-		)
+		buildctlArgs = append(buildctlArgs, "--allow", "security.insecure")
 	}
 
-	sidecarName := fmt.Sprintf("buildkitd-%s", app.Name)
+	// seccomp Unconfined on the main container (Argo names it "main" in the pod).
+	// Required for rootlesskit to create user namespaces on managed Kubernetes.
+	podSpecPatch := `{"containers":[{"name":"main","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}`
 
-	// buildkitd sidecar container — uses default entrypoint (rootlesskit wrapper).
-	// Command is intentionally NOT set so the image's ENTRYPOINT runs RootlessKit.
-	daemonTrue := true
-	buildkitdSidecar := forge.UserContainer{
-		Name:  sidecarName,
+	return &forge.Container{
+		Name:  fmt.Sprintf("build-image-%s", app.Name),
 		Image: "moby/buildkit:v0.18.2-rootless",
-		Args:  buildkitdArgs,
-		SecurityContext: &model.SecurityContext{
-			RunAsUser:    ptr(int64(1000)),
-			RunAsGroup:   ptr(int64(1000)),
-			RunAsNonRoot: ptr(true),
+		// rootlesskit sets up user namespace, then runs the entrypoint script.
+		// Script starts buildkitd background, waits for socket, runs buildctl "$@".
+		// "--" is $0, "buildctl" is $1, rest of buildctlArgs become $2+.
+		Command: []string{"rootlesskit", "sh", "-c", buildkitEntrypointScript(socketPath, b.infraParams.RegistryInsecure), "--"},
+		Args:    append([]string{"buildctl"}, buildctlArgs...),
+		Env: []forge.EnvBuilder{
+			forge.Env{Name: "HOME", Value: "/home/user"},
+		},
+		VolumeMounts: []forge.VolumeBuilder{
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
+			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
+				Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true,
+			}, SecretName: "buildkit-registry-config"},
 		},
 		Resources: &forge.ResourceRequirements{
 			Requests: forge.ResourceList{CPU: "500m", Memory: "512Mi"},
 			Limits:   forge.ResourceList{CPU: "2000m", Memory: "4Gi"},
 		},
-		VolumeMounts: []forge.VolumeBuilder{
-			// Socket dir shared with buildctl
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{
-				Name: "buildkit-socket", MountPath: "/run/user/1000/buildkitd",
-			}},
-			// Registry credentials for authenticated push
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
-				Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true,
-			}, SecretName: "buildkit-registry-config"},
-		},
-		Daemon: &daemonTrue,
-	}
-
-	// PodSpecPatch adds seccompProfile: Unconfined to the buildkitd sidecar.
-	// Required for rootless BuildKit to create user namespaces on managed Kubernetes (DOKS, EKS, GKE).
-	// The forge SDK SecurityContext doesn't include seccompProfile, so we use a JSON patch.
-	podSpecPatch := fmt.Sprintf(`{"containers":[{"name":"%s","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}`, sidecarName)
-
-	return &forge.Container{
-		Name:  fmt.Sprintf("build-image-%s", app.Name),
-		Image: "moby/buildkit:v0.18.2",
-		// Wait for buildkitd sidecar to be ready, then exec buildctl.
-		// sh -c <script> -- buildctl <args>: "--" is $0, "buildctl" is $1, rest is $2+.
-		// exec "$@" hands off to buildctl with all args preserved.
-		Command: []string{"sh", "-c", buildkitWaitScript(socketPath), "--"},
-		Args:    append([]string{"buildctl"}, buildctlArgs...),
-		// HOME must be set so buildctl can find ~/.docker/config.json for registry auth.
-		// Without this, buildctl tries to create /.docker which fails as non-root.
-		Env: []forge.EnvBuilder{
-			forge.Env{Name: "HOME", Value: "/home/user"},
-		},
-		VolumeMounts: []forge.VolumeBuilder{
-			// Workspace with source code and Dockerfiles
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
-			// Socket dir shared with buildkitd
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{
-				Name: "buildkit-socket", MountPath: "/run/user/1000/buildkitd",
-			}},
-			// Registry credentials — buildctl needs these to resolve base image metadata
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
-				Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true,
-			}, SecretName: "buildkit-registry-config"},
-		},
-		Resources: &forge.ResourceRequirements{
-			Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
-			Limits:   forge.ResourceList{CPU: "500m", Memory: "512Mi"},
-		},
 		SecurityContext: &model.SecurityContext{
 			RunAsUser:    ptr(int64(1000)),
 			RunAsGroup:   ptr(int64(1000)),
 			RunAsNonRoot: ptr(true),
 		},
-		// AppArmor unconfined annotation — required for rootless BuildKit mount operations
-		// inside user namespaces on managed Kubernetes with AppArmor enabled.
+		// AppArmor unconfined on the main container — required for rootless BuildKit
+		// mount operations inside user namespaces on managed Kubernetes with AppArmor.
 		Annotations: map[string]string{
-			fmt.Sprintf("container.apparmor.security.beta.kubernetes.io/%s", sidecarName): "unconfined",
+			"container.apparmor.security.beta.kubernetes.io/main": "unconfined",
 		},
 		PodSpecPatch:  podSpecPatch,
-		Sidecars:      []forge.UserContainer{buildkitdSidecar},
 		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
 	}
 }
 
-// buildkitTemplateFromPlan generates a BuildKit template using resolved fields from AppBuildPlan.
-// Unlike buildkitTemplateForApp, this function doesn't infer anything — all paths, tags,
-// and args come from the plan (created by CreateBuildPlan).
+// buildkitTemplateFromPlan generates a single-container BuildKit template using resolved
+// fields from AppBuildPlan. Same architecture as buildkitTemplateForApp (MEET-2026-03-26-007)
+// but all paths, tags, and args come from the pre-resolved plan.
 func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec services.WorkflowSpec, plan services.AppBuildPlan) *forge.Container {
-	// buildctl args from the resolved plan.
-	// Each flag and its value MUST be separate array elements — no shell word splitting.
+	socketPath := "unix:///run/user/1000/buildkitd/buildkitd.sock"
+
 	buildctlArgs := []string{
+		"--addr", socketPath,
 		"build",
 		"--frontend", "dockerfile.v0",
 		"--local", fmt.Sprintf("context=%s", plan.ContextPath),
@@ -547,81 +479,44 @@ func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec services.WorkflowSpec, p
 		"--opt", fmt.Sprintf("filename=%s", dockerfileName(plan.DockerfilePath)),
 		"--output", fmt.Sprintf("type=image,name=%s,push=true", plan.ImageTag),
 	}
-
-	// OCI registry layer cache (omitted when NoCache)
 	if !spec.NoCache {
 		buildctlArgs = append(buildctlArgs,
 			"--export-cache", fmt.Sprintf("type=registry,ref=%s,mode=max,ignore-error=true", plan.CacheRef),
 			"--import-cache", fmt.Sprintf("type=registry,ref=%s", plan.CacheRef),
 		)
 	}
-
-	// Build args from the plan (user env + system vars)
 	for key, val := range plan.BuildArgs {
 		buildctlArgs = append(buildctlArgs, "--opt", fmt.Sprintf("build-arg:%s=%s", key, val))
 	}
+	buildctlArgs = append(buildctlArgs, "--metadata-file", fmt.Sprintf("/workspace/metadata-%s.json", plan.AppName))
 
-	metadataFile := fmt.Sprintf("/workspace/metadata-%s.json", plan.AppName)
-	buildctlArgs = append(buildctlArgs, "--metadata-file", metadataFile)
-
-	// Socket path and prepend --addr
-	socketPath := "unix:///run/user/1000/buildkitd/buildkitd.sock"
-	buildctlArgs = append([]string{"--addr", socketPath}, buildctlArgs...)
-
-	// buildkitd args
-	buildkitdArgs := []string{"--oci-worker-no-process-sandbox", "--addr", socketPath}
 	if b.infraParams.RegistryInsecure {
-		buildkitdArgs = append(buildkitdArgs, "--oci-worker-snapshotter", "native")
 		buildctlArgs = append(buildctlArgs, "--allow", "security.insecure")
 	}
 
-	sidecarName := fmt.Sprintf("buildkitd-%s", plan.AppName)
-	daemonTrue := true
+	podSpecPatch := `{"containers":[{"name":"main","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}`
 
-	buildkitdSidecar := forge.UserContainer{
-		Name:  sidecarName,
-		Image: "moby/buildkit:v0.18.2-rootless",
-		Args:  buildkitdArgs,
-		SecurityContext: &model.SecurityContext{
-			RunAsUser: ptr(int64(1000)), RunAsGroup: ptr(int64(1000)), RunAsNonRoot: ptr(true),
+	return &forge.Container{
+		Name:    fmt.Sprintf("build-image-%s", plan.AppName),
+		Image:   "moby/buildkit:v0.18.2-rootless",
+		Command: []string{"rootlesskit", "sh", "-c", buildkitEntrypointScript(socketPath, b.infraParams.RegistryInsecure), "--"},
+		Args:    append([]string{"buildctl"}, buildctlArgs...),
+		Env:     []forge.EnvBuilder{forge.Env{Name: "HOME", Value: "/home/user"}},
+		VolumeMounts: []forge.VolumeBuilder{
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
+			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true}, SecretName: "buildkit-registry-config"},
 		},
 		Resources: &forge.ResourceRequirements{
 			Requests: forge.ResourceList{CPU: "500m", Memory: "512Mi"},
 			Limits:   forge.ResourceList{CPU: "2000m", Memory: "4Gi"},
 		},
-		VolumeMounts: []forge.VolumeBuilder{
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-socket", MountPath: "/run/user/1000/buildkitd"}},
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true}, SecretName: "buildkit-registry-config"},
-		},
-		Daemon: &daemonTrue,
-	}
-
-	podSpecPatch := fmt.Sprintf(`{"containers":[{"name":"%s","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}`, sidecarName)
-
-	return &forge.Container{
-		Name:  fmt.Sprintf("build-image-%s", plan.AppName),
-		Image: "moby/buildkit:v0.18.2",
-		// Wait for buildkitd sidecar, then exec buildctl (same pattern as buildkitTemplateForApp).
-		Command: []string{"sh", "-c", buildkitWaitScript(socketPath), "--"},
-		Args:    append([]string{"buildctl"}, buildctlArgs...),
-		Env:     []forge.EnvBuilder{forge.Env{Name: "HOME", Value: "/home/user"}},
-		VolumeMounts: []forge.VolumeBuilder{
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-socket", MountPath: "/run/user/1000/buildkitd"}},
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true}, SecretName: "buildkit-registry-config"},
-		},
-		Resources: &forge.ResourceRequirements{
-			Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
-			Limits:   forge.ResourceList{CPU: "500m", Memory: "512Mi"},
-		},
 		SecurityContext: &model.SecurityContext{
 			RunAsUser: ptr(int64(1000)), RunAsGroup: ptr(int64(1000)), RunAsNonRoot: ptr(true),
 		},
 		Annotations: map[string]string{
-			fmt.Sprintf("container.apparmor.security.beta.kubernetes.io/%s", sidecarName): "unconfined",
+			"container.apparmor.security.beta.kubernetes.io/main": "unconfined",
 		},
 		PodSpecPatch:  podSpecPatch,
-		Sidecars:      []forge.UserContainer{buildkitdSidecar},
 		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
 	}
 }
@@ -652,39 +547,64 @@ func dockerfileName(dockerfilePath string) string {
 // BuildKit readiness
 // ---------------------------------------------------------------------------
 
-// buildkitWaitScript returns a shell script that polls the buildkitd daemon
-// until it accepts connections, then exec's the remaining arguments.
+// buildkitEntrypointScript returns a shell script that starts buildkitd in
+// the background, waits for it to be ready, then runs buildctl with the
+// provided arguments.
 //
-// Why: Kubernetes starts all containers in a pod simultaneously. The buildkitd
-// sidecar (rootless) needs ~15-20s to set up user namespaces via RootlessKit.
-// The main container (buildctl) must wait for the daemon to be ready before
-// running the build. This is the standard pattern for BuildKit in CI systems
-// (used by Drone, Tekton, GitHub Actions BuildKit action).
+// Single container pattern (MEET-2026-03-26-007): buildkitd and buildctl run
+// in the same container, eliminating the sidecar pattern. One container = one
+// exit code. No false failures from sidecar SIGTERM.
 //
-// The script uses `buildctl debug workers` as a health check — this verifies
-// the daemon accepts gRPC connections, not just that the socket file exists.
+// The script is executed inside rootlesskit's user namespace:
 //
-// Usage with sh -c and exec "$@":
+//	Command: ["rootlesskit", "sh", "-c", buildkitEntrypointScript(...), "--"]
+//	Args:    ["buildctl", "--addr", "unix://...", "build", ...]
 //
-//	Command: []string{"sh", "-c", buildkitWaitScript(socketPath), "--"}
-//	Args:    append([]string{"buildctl"}, buildctlArgs...)
+// rootlesskit sets up the user namespace, then runs sh. The "--" becomes $0,
+// "buildctl" becomes $1, and the rest become $2+. "$@" = the full buildctl command.
 //
-// The "--" becomes $0, "buildctl" becomes $1, and the rest become $2+.
-// exec "$@" replaces the shell with buildctl, preserving all arguments
-// without word splitting or quoting issues.
-func buildkitWaitScript(socketPath string) string {
+// Lifecycle:
+//  1. Start buildkitd in background
+//  2. Wait for socket via `buildctl debug workers` (gRPC health check)
+//  3. Run buildctl "$@" and capture exit code
+//  4. Kill buildkitd on exit (trap ensures cleanup even on failure)
+//  5. Exit with buildctl's exit code
+//
+// This is the standard pattern used by GitHub Actions docker/build-push-action,
+// Drone CI BuildKit plugin, and Tekton BuildKit tasks.
+func buildkitEntrypointScript(socketPath string, insecure bool) string {
+	buildkitdArgs := fmt.Sprintf("--oci-worker-no-process-sandbox --addr '%s'", socketPath)
+	if insecure {
+		buildkitdArgs += " --oci-worker-snapshotter native"
+	}
 	return fmt.Sprintf(`set -e
-timeout=60
-elapsed=0
+
+# Start buildkitd daemon in background (inside rootlesskit user namespace)
+buildkitd %s &
+DAEMON_PID=$!
+
+# Wait for daemon to accept gRPC connections
+timeout=60; i=0
 while ! buildctl --addr '%s' debug workers >/dev/null 2>&1; do
-  elapsed=$((elapsed + 1))
-  if [ "$elapsed" -ge "$timeout" ]; then
+  i=$((i+1))
+  if [ "$i" -ge "$timeout" ]; then
     echo "buildkitd not ready after ${timeout}s" >&2
+    kill $DAEMON_PID 2>/dev/null || true
     exit 1
   fi
   sleep 1
 done
-exec "$@"`, socketPath)
+
+# Run the build — "$@" preserves all args from Argo container spec.
+# Capture exit code BEFORE killing daemon, so the container exits
+# with buildctl's code (the real build result), not buildkitd's.
+"$@"
+BUILD_EXIT=$?
+
+# Graceful daemon shutdown — exit code is already captured
+kill $DAEMON_PID 2>/dev/null || true
+wait $DAEMON_PID 2>/dev/null || true
+exit $BUILD_EXIT`, buildkitdArgs, socketPath)
 }
 
 // ---------------------------------------------------------------------------

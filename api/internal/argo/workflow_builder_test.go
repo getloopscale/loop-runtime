@@ -278,13 +278,13 @@ func TestWorkflowBuilder_Build_BuildImageTask_IsInlineTemplate(t *testing.T) {
 		t.Errorf("build-image-api task.Template = %q, want %q", task.Template, "build-image-api")
 	}
 
-	// Verify inline container template exists and uses BuildKit
+	// Verify inline container template exists and uses BuildKit rootless image
 	c := findContainer(t, wf, "build-image-api")
 	if c == nil {
 		t.Fatal("build-image-api inline container template not found")
 	}
-	if c.Image != "moby/buildkit:v0.18.2" {
-		t.Errorf("buildctl image = %q, want moby/buildkit:v0.18.2", c.Image)
+	if c.Image != "moby/buildkit:v0.18.2-rootless" {
+		t.Errorf("build-image image = %q, want moby/buildkit:v0.18.2-rootless", c.Image)
 	}
 }
 
@@ -696,17 +696,16 @@ func assertStringContains(t *testing.T, s, substr string) {
 }
 
 // ---------------------------------------------------------------------------
-// BuildKit — sidecar pattern, volumes, security, cache
+// BuildKit — single container pattern (MEET-2026-03-26-007)
 // ---------------------------------------------------------------------------
 
-func TestWorkflowBuilder_BuildKit_HasBuildkitVolumes(t *testing.T) {
+func TestWorkflowBuilder_BuildKit_HasRegistryVolume(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
 
-	// BuildKit needs: buildkit-registry-config (Secret) + buildkit-socket (emptyDir)
 	volumeNames := make(map[string]bool)
 	for _, v := range wf.Volumes {
 		switch vol := v.(type) {
@@ -718,18 +717,15 @@ func TestWorkflowBuilder_BuildKit_HasBuildkitVolumes(t *testing.T) {
 	}
 
 	if !volumeNames["buildkit-registry-config"] {
-		t.Error("BuildKit workflow missing volume: buildkit-registry-config")
+		t.Error("workflow missing volume: buildkit-registry-config")
 	}
-	if !volumeNames["buildkit-socket"] {
-		t.Error("BuildKit workflow missing volume: buildkit-socket")
-	}
-	// docker-config should NOT be present
-	if volumeNames["docker-config"] {
-		t.Error("workflow should NOT have docker-config volume")
+	// Single container pattern: buildkit-socket volume is NOT needed
+	if volumeNames["buildkit-socket"] {
+		t.Error("workflow should NOT have buildkit-socket volume (single container pattern)")
 	}
 }
 
-func TestWorkflowBuilder_BuildKit_HasSidecarPattern(t *testing.T) {
+func TestWorkflowBuilder_BuildKit_SingleContainerNoSidecars(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
@@ -741,35 +737,20 @@ func TestWorkflowBuilder_BuildKit_HasSidecarPattern(t *testing.T) {
 		t.Fatal("build-image-api template not found")
 	}
 
-	// Main container uses sh -c to wait for buildkitd, then exec buildctl
-	if c.Image != "moby/buildkit:v0.18.2" {
-		t.Errorf("buildctl image = %q, want moby/buildkit:v0.18.2", c.Image)
+	// Single container: rootless image, no sidecars (MEET-2026-03-26-007)
+	if c.Image != "moby/buildkit:v0.18.2-rootless" {
+		t.Errorf("image = %q, want moby/buildkit:v0.18.2-rootless", c.Image)
 	}
-	if len(c.Command) < 2 || c.Command[0] != "sh" || c.Command[1] != "-c" {
-		t.Errorf("command = %v, want [sh -c <wait-script> --]", c.Command)
+	if len(c.Sidecars) != 0 {
+		t.Errorf("expected 0 sidecars (single container pattern), got %d", len(c.Sidecars))
 	}
-	// First Arg must be "buildctl" (exec'd by the wait script via "$@")
+	// Args[0] must be "buildctl" (exec'd by entrypoint script via "$@")
 	if len(c.Args) == 0 || c.Args[0] != "buildctl" {
 		t.Errorf("args[0] = %q, want buildctl", c.Args[0])
 	}
-
-	// Must have exactly one sidecar: buildkitd
-	if len(c.Sidecars) != 1 {
-		t.Fatalf("expected 1 sidecar, got %d", len(c.Sidecars))
-	}
-	sidecar := c.Sidecars[0]
-	if sidecar.Name != "buildkitd-api" {
-		t.Errorf("sidecar name = %q, want buildkitd-api", sidecar.Name)
-	}
-	if sidecar.Image != "moby/buildkit:v0.18.2-rootless" {
-		t.Errorf("buildkitd image = %q, want moby/buildkit:v0.18.2-rootless", sidecar.Image)
-	}
-	if sidecar.Daemon == nil || !*sidecar.Daemon {
-		t.Error("buildkitd sidecar must have Daemon=true")
-	}
 }
 
-func TestWorkflowBuilder_BuildKit_WaitForDaemon(t *testing.T) {
+func TestWorkflowBuilder_BuildKit_EntrypointScript(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
@@ -781,26 +762,34 @@ func TestWorkflowBuilder_BuildKit_WaitForDaemon(t *testing.T) {
 		t.Fatal("build-image-api not found")
 	}
 
-	// Command must be sh -c <script> --
-	if len(c.Command) != 4 {
-		t.Fatalf("expected 4 command elements, got %d: %v", len(c.Command), c.Command)
+	// Command: ["rootlesskit", "sh", "-c", <script>, "--"]
+	if len(c.Command) != 5 {
+		t.Fatalf("expected 5 command elements, got %d: %v", len(c.Command), c.Command)
 	}
-	if c.Command[0] != "sh" || c.Command[1] != "-c" || c.Command[3] != "--" {
-		t.Errorf("command = %v, want [sh -c <script> --]", c.Command)
+	if c.Command[0] != "rootlesskit" || c.Command[1] != "sh" || c.Command[2] != "-c" || c.Command[4] != "--" {
+		t.Errorf("command = %v, want [rootlesskit sh -c <script> --]", c.Command)
 	}
 
-	// Wait script must poll buildctl debug workers with the correct socket
-	script := c.Command[2]
+	// Entrypoint script must:
+	// 1. Start buildkitd in background
+	// 2. Wait for socket via buildctl debug workers
+	// 3. Have a timeout
+	// 4. Trap EXIT for cleanup
+	// 5. Run buildctl "$@"
+	script := c.Command[3]
+	assertStringContains(t, script, "buildkitd")
 	assertStringContains(t, script, "buildctl --addr")
 	assertStringContains(t, script, "debug workers")
 	assertStringContains(t, script, "buildkitd.sock")
-	assertStringContains(t, script, `exec "$@"`)
+	assertStringContains(t, script, "timeout=60")
+	assertStringContains(t, script, "BUILD_EXIT=$?")
+	assertStringContains(t, script, "exit $BUILD_EXIT")
+	assertStringContains(t, script, `"$@"`)
 
-	// Args[0] must be "buildctl" (the binary exec'd by the wait script)
+	// Args must start with "buildctl" followed by buildctl flags
 	if c.Args[0] != "buildctl" {
 		t.Errorf("args[0] = %q, want buildctl", c.Args[0])
 	}
-	// Args[1:] must contain the actual buildctl subcommand and flags
 	argsStr := strings.Join(c.Args[1:], " ")
 	assertStringContains(t, argsStr, "--addr")
 	assertStringContains(t, argsStr, "build")
@@ -819,31 +808,19 @@ func TestWorkflowBuilder_BuildKit_SecurityContext_Rootless(t *testing.T) {
 		t.Fatal("build-image-api template not found")
 	}
 
-	// buildctl (main container) security context
+	// Single container security context (runs both buildkitd + buildctl)
 	if c.SecurityContext == nil {
-		t.Fatal("buildctl missing SecurityContext")
+		t.Fatal("missing SecurityContext")
 	}
 	if c.SecurityContext.RunAsUser == nil || *c.SecurityContext.RunAsUser != 1000 {
-		t.Errorf("buildctl RunAsUser = %v, want 1000", c.SecurityContext.RunAsUser)
+		t.Errorf("RunAsUser = %v, want 1000", c.SecurityContext.RunAsUser)
 	}
 	if c.SecurityContext.RunAsNonRoot == nil || !*c.SecurityContext.RunAsNonRoot {
-		t.Error("buildctl RunAsNonRoot should be true")
+		t.Error("RunAsNonRoot should be true")
 	}
-
-	// buildkitd (sidecar) security context
-	sidecar := c.Sidecars[0]
-	if sidecar.SecurityContext == nil {
-		t.Fatal("buildkitd missing SecurityContext")
-	}
-	if sidecar.SecurityContext.RunAsUser == nil || *sidecar.SecurityContext.RunAsUser != 1000 {
-		t.Errorf("buildkitd RunAsUser = %v, want 1000", sidecar.SecurityContext.RunAsUser)
-	}
-	if sidecar.SecurityContext.RunAsNonRoot == nil || !*sidecar.SecurityContext.RunAsNonRoot {
-		t.Error("buildkitd RunAsNonRoot should be true")
-	}
-	// Must NOT have privileged: true
-	if sidecar.SecurityContext.Privileged != nil && *sidecar.SecurityContext.Privileged {
-		t.Error("buildkitd must NOT be privileged")
+	// Must NOT have privileged: true (rootless doesn't need it)
+	if c.SecurityContext.Privileged != nil && *c.SecurityContext.Privileged {
+		t.Error("must NOT be privileged")
 	}
 }
 
@@ -859,30 +836,18 @@ func TestWorkflowBuilder_BuildKit_ResourceLimits(t *testing.T) {
 		t.Fatal("build-image-api template not found")
 	}
 
-	// buildctl resources (lightweight client)
+	// Single container resources: must cover both buildkitd + buildctl
 	if c.Resources == nil {
-		t.Fatal("buildctl missing Resources")
+		t.Fatal("missing Resources")
 	}
-	if c.Resources.Requests.CPU != "100m" {
-		t.Errorf("buildctl requests.cpu = %q, want 100m", c.Resources.Requests.CPU)
+	if c.Resources.Requests.CPU != "500m" {
+		t.Errorf("requests.cpu = %q, want 500m", c.Resources.Requests.CPU)
 	}
-	if c.Resources.Limits.Memory != "512Mi" {
-		t.Errorf("buildctl limits.memory = %q, want 512Mi", c.Resources.Limits.Memory)
+	if c.Resources.Limits.CPU != "2000m" {
+		t.Errorf("limits.cpu = %q, want 2000m", c.Resources.Limits.CPU)
 	}
-
-	// buildkitd resources (heavy worker)
-	sidecar := c.Sidecars[0]
-	if sidecar.Resources == nil {
-		t.Fatal("buildkitd missing Resources")
-	}
-	if sidecar.Resources.Requests.CPU != "500m" {
-		t.Errorf("buildkitd requests.cpu = %q, want 500m", sidecar.Resources.Requests.CPU)
-	}
-	if sidecar.Resources.Limits.CPU != "2000m" {
-		t.Errorf("buildkitd limits.cpu = %q, want 2000m", sidecar.Resources.Limits.CPU)
-	}
-	if sidecar.Resources.Limits.Memory != "4Gi" {
-		t.Errorf("buildkitd limits.memory = %q, want 4Gi", sidecar.Resources.Limits.Memory)
+	if c.Resources.Limits.Memory != "4Gi" {
+		t.Errorf("limits.memory = %q, want 4Gi", c.Resources.Limits.Memory)
 	}
 }
 
@@ -919,7 +884,7 @@ func TestWorkflowBuilder_BuildKit_BuildctlArgs_ContainsCacheFlags(t *testing.T) 
 	assertStringContains(t, argsStr, "--metadata-file /workspace/metadata-api.json")
 }
 
-func TestWorkflowBuilder_BuildKit_BuildkitdArgs_RootlessFlags(t *testing.T) {
+func TestWorkflowBuilder_BuildKit_EntrypointHasBuildkitdFlags(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
@@ -927,21 +892,15 @@ func TestWorkflowBuilder_BuildKit_BuildkitdArgs_RootlessFlags(t *testing.T) {
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api template not found")
-	}
+	script := c.Command[3]
 
-	sidecar := c.Sidecars[0]
-	argsStr := strings.Join(sidecar.Args, " ")
-
-	// Must have --oci-worker-no-process-sandbox for rootless
-	assertStringContains(t, argsStr, "--oci-worker-no-process-sandbox")
-
+	// Script must start buildkitd with --oci-worker-no-process-sandbox for rootless
+	assertStringContains(t, script, "--oci-worker-no-process-sandbox")
 	// Must listen on correct socket
-	assertStringContains(t, argsStr, "unix:///run/user/1000/buildkitd/buildkitd.sock")
+	assertStringContains(t, script, "unix:///run/user/1000/buildkitd/buildkitd.sock")
 }
 
-func TestWorkflowBuilder_BuildKit_SharedSocketVolume(t *testing.T) {
+func TestWorkflowBuilder_BuildKit_NoSocketVolume(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
@@ -949,40 +908,15 @@ func TestWorkflowBuilder_BuildKit_SharedSocketVolume(t *testing.T) {
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api template not found")
-	}
-
-	// Both buildctl and buildkitd must mount buildkit-socket at /run/user/1000/buildkitd
-	hasSocket := false
+	// Single container: no buildkit-socket volume mount needed
 	for _, vm := range c.VolumeMounts {
 		if ed, ok := vm.(*forge.EmptyDirVolume); ok && ed.Name == "buildkit-socket" {
-			if ed.MountPath != "/run/user/1000/buildkitd" {
-				t.Errorf("buildctl socket mount path = %q, want /run/user/1000/buildkitd", ed.MountPath)
-			}
-			hasSocket = true
+			t.Error("single container should NOT have buildkit-socket volume mount")
 		}
-	}
-	if !hasSocket {
-		t.Error("buildctl missing buildkit-socket volume mount")
-	}
-
-	sidecar := c.Sidecars[0]
-	hasSocket = false
-	for _, vm := range sidecar.VolumeMounts {
-		if ed, ok := vm.(*forge.EmptyDirVolume); ok && ed.Name == "buildkit-socket" {
-			if ed.MountPath != "/run/user/1000/buildkitd" {
-				t.Errorf("buildkitd socket mount path = %q, want /run/user/1000/buildkitd", ed.MountPath)
-			}
-			hasSocket = true
-		}
-	}
-	if !hasSocket {
-		t.Error("buildkitd missing buildkit-socket volume mount")
 	}
 }
 
-func TestWorkflowBuilder_BuildKit_MultiApp_IndependentSidecars(t *testing.T) {
+func TestWorkflowBuilder_BuildKit_MultiApp_IndependentContainers(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{
@@ -994,7 +928,6 @@ func TestWorkflowBuilder_BuildKit_MultiApp_IndependentSidecars(t *testing.T) {
 		t.Fatalf("Build() error: %v", err)
 	}
 
-	// Each app gets its own buildkit template with its own sidecar
 	apiContainer := findContainer(t, wf, "build-image-api")
 	workerContainer := findContainer(t, wf, "build-image-worker")
 
@@ -1005,12 +938,18 @@ func TestWorkflowBuilder_BuildKit_MultiApp_IndependentSidecars(t *testing.T) {
 		t.Fatal("build-image-worker not found")
 	}
 
-	// Each has its own sidecar
-	if len(apiContainer.Sidecars) != 1 || apiContainer.Sidecars[0].Name != "buildkitd-api" {
-		t.Errorf("api sidecar name = %q, want buildkitd-api", apiContainer.Sidecars[0].Name)
+	// Each app: single container, no sidecars, rootless image
+	if len(apiContainer.Sidecars) != 0 {
+		t.Errorf("api should have 0 sidecars, got %d", len(apiContainer.Sidecars))
 	}
-	if len(workerContainer.Sidecars) != 1 || workerContainer.Sidecars[0].Name != "buildkitd-worker" {
-		t.Errorf("worker sidecar name = %q, want buildkitd-worker", workerContainer.Sidecars[0].Name)
+	if len(workerContainer.Sidecars) != 0 {
+		t.Errorf("worker should have 0 sidecars, got %d", len(workerContainer.Sidecars))
+	}
+	if apiContainer.Image != "moby/buildkit:v0.18.2-rootless" {
+		t.Errorf("api image = %q, want rootless", apiContainer.Image)
+	}
+	if workerContainer.Image != "moby/buildkit:v0.18.2-rootless" {
+		t.Errorf("worker image = %q, want rootless", workerContainer.Image)
 	}
 }
 
@@ -1041,7 +980,7 @@ func TestWorkflowBuilder_BuildKit_MetadataFilePath(t *testing.T) {
 // BuildKit DOKS compatibility — seccomp, apparmor, HOME, rootlesskit
 // ---------------------------------------------------------------------------
 
-func TestWorkflowBuilder_BuildKit_SidecarNoCommand_UsesDefaultEntrypoint(t *testing.T) {
+func TestWorkflowBuilder_BuildKit_RootlesskitEntrypoint(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
@@ -1049,16 +988,13 @@ func TestWorkflowBuilder_BuildKit_SidecarNoCommand_UsesDefaultEntrypoint(t *test
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	sidecar := c.Sidecars[0]
-
-	// Command MUST be nil/empty — the -rootless image entrypoint runs rootlesskit.
-	// Setting Command: [buildkitd] bypasses RootlessKit and fails on managed K8s.
-	if len(sidecar.Command) > 0 {
-		t.Errorf("buildkitd sidecar Command = %v, want empty (use default entrypoint with RootlessKit)", sidecar.Command)
+	// Single container uses rootlesskit as entrypoint (sets up user namespace)
+	if c.Command[0] != "rootlesskit" {
+		t.Errorf("command[0] = %q, want rootlesskit", c.Command[0])
 	}
-	// Args should contain --oci-worker-no-process-sandbox
-	argsStr := strings.Join(sidecar.Args, " ")
-	assertStringContains(t, argsStr, "--oci-worker-no-process-sandbox")
+	// Entrypoint script starts buildkitd with rootless flags
+	script := c.Command[3]
+	assertStringContains(t, script, "--oci-worker-no-process-sandbox")
 }
 
 func TestWorkflowBuilder_BuildKit_PodSpecPatch_SeccompUnconfined(t *testing.T) {
@@ -1073,7 +1009,8 @@ func TestWorkflowBuilder_BuildKit_PodSpecPatch_SeccompUnconfined(t *testing.T) {
 		t.Fatal("PodSpecPatch should not be empty — needs seccompProfile: Unconfined")
 	}
 	assertStringContains(t, c.PodSpecPatch, "Unconfined")
-	assertStringContains(t, c.PodSpecPatch, "buildkitd-api")
+	// Single container: seccomp targets "main" (Argo's name for the main container)
+	assertStringContains(t, c.PodSpecPatch, `"main"`)
 }
 
 func TestWorkflowBuilder_BuildKit_AppArmorAnnotation(t *testing.T) {
@@ -1084,7 +1021,8 @@ func TestWorkflowBuilder_BuildKit_AppArmorAnnotation(t *testing.T) {
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	key := "container.apparmor.security.beta.kubernetes.io/buildkitd-api"
+	// Single container: AppArmor targets "main" (Argo's container name)
+	key := "container.apparmor.security.beta.kubernetes.io/main"
 	if c.Annotations[key] != "unconfined" {
 		t.Errorf("AppArmor annotation = %q, want unconfined", c.Annotations[key])
 	}

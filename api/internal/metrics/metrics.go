@@ -55,6 +55,17 @@ var (
 	})
 )
 
+// Release activation metrics (MEET-2026-03-26-008).
+var (
+	// ReleasingBuilds tracks builds in RELEASING state (image built, release pending).
+	// Non-zero for extended periods indicates activation failures that the reconcile
+	// loop is retrying. Alert: LoopZeroOrphanBuild fires when > 0 for 5 minutes.
+	ReleasingBuilds = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_releasing_builds",
+		Help: "Number of builds in RELEASING state (image built, awaiting release activation).",
+	})
+)
+
 // Deploy/release metrics — emitted when releases transition states.
 var (
 	DeploysTotal = promauto.NewCounterVec(prometheus.CounterOpts{

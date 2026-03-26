@@ -7,6 +7,7 @@ package argo
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -167,9 +168,13 @@ func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID
 
 	phase, _, _ := unstructured.NestedString(wf.Object, "status", "phase")
 
-	// Check for sidecar-induced false failures: if all pod nodes exited with 0,
-	// the workflow succeeded despite Argo reporting "Failed" from daemon sidecar SIGTERM.
+	// Defensive check: if Argo reports "Failed" but all pod main containers exited with 0,
+	// override to "Succeeded". Originally needed for sidecar false-failures (MEET-2026-03-26-007).
+	// Retained as defense-in-depth against Argo phase-reporting edge cases (node eviction,
+	// CRI timeout, etc.). Should fire zero times with single-container BuildKit pattern.
 	if phase == "Failed" && allMainContainersSucceeded(wf.Object) {
+		slog.Warn("workflow phase overridden: all main containers exited 0 but Argo reported Failed",
+			"workflow_id", workflowID, "namespace", namespace)
 		phase = "Succeeded"
 	}
 

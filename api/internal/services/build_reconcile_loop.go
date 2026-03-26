@@ -184,7 +184,18 @@ func (r *BuildReconcileLoop) IsProcessing(buildID string) bool {
 }
 
 // reconcileBuild reconciles a single build against its Argo Workflow state.
+//
+// MEET-2026-03-26-008: Also handles builds in RELEASING state. These are builds
+// where Phase 1 (image build) completed but Phase 2 (release activation) was
+// interrupted (pod crash, rollout, Gitea/ArgoCD failure). The reconcile loop
+// retries Phase 2 automatically.
 func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build) {
+	// RELEASING builds: Phase 1 done, Phase 2 needs retry (MEET-2026-03-26-008)
+	if build.Status == string(statemachine.BuildReleasing) {
+		r.retryReleaseActivation(ctx, build)
+		return
+	}
+
 	// No workflow ID means the build was never submitted to Argo
 	if build.WorkflowID == "" {
 		r.failBuild(ctx, build, "Build had no workflow ID (API crashed before submission)")
@@ -292,6 +303,78 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	}
 }
 
+// retryReleaseActivation handles builds in RELEASING state (MEET-2026-03-26-008).
+// These are builds where Phase 1 (image build) completed but Phase 2 (release
+// activation) was interrupted. The method reconstructs the BuildCallbackRequest
+// from stored data and delegates to the orchestrator.
+func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *db.Build) {
+	r.logger.Info("reconcile loop: retrying release activation for RELEASING build",
+		"build_id", build.ID, "age", time.Since(build.CreatedAt).String())
+
+	// Reconstruct BuildCallbackRequest from stored app specs (same pattern as onWorkflowSucceeded)
+	apps, err := r.buildStore.GetBuildApps(ctx, build.ID)
+	if err != nil {
+		r.logger.Error("reconcile loop: failed to get build apps for RELEASING build",
+			"build_id", build.ID, "error", err)
+		return
+	}
+	if len(apps) == 0 {
+		r.logger.Error("reconcile loop: RELEASING build has no stored apps, failing",
+			"build_id", build.ID)
+		r.failBuild(ctx, build, "Release activation failed: no apps spec stored")
+		return
+	}
+
+	var buildApps []AppRelease
+	var manifestApps []manifests.AppManifestInput
+
+	for _, app := range apps {
+		imageRef := fmt.Sprintf("%s/%s/%s/%s:%s",
+			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
+
+		url := ""
+		if app.Type == "server" || app.Type == "frontend" {
+			url = fmt.Sprintf("https://%s-%s.%s.%s.%s",
+				app.Name, build.Environment, build.ProjectID, build.TenantID, r.cfg.BaseDomain)
+		}
+
+		buildApps = append(buildApps, AppRelease{
+			Name:        app.Name,
+			ImageDigest: imageRef,
+			URL:         url,
+			Type:        app.Type,
+		})
+		manifestApps = append(manifestApps, manifests.AppManifestInput{
+			Name:     app.Name,
+			Type:     app.Type,
+			Port:     app.Port,
+			ImageRef: imageRef,
+			Secrets:  app.Secrets,
+		})
+	}
+
+	renderedManifests := manifests.Render(manifests.RenderInput{
+		TenantID:    build.TenantID,
+		ProjectID:   build.ProjectID,
+		Environment: build.Environment,
+		BuildID:     build.ID,
+		ReleaseID:   "",
+		BaseDomain:  r.cfg.BaseDomain,
+		Apps:        manifestApps,
+	})
+
+	result := BuildCallbackRequest{
+		Status:    "succeeded",
+		Apps:      buildApps,
+		Manifests: renderedManifests,
+	}
+
+	if err := r.orch.RetryReleaseActivation(ctx, build, result); err != nil {
+		r.logger.Error("reconcile loop: release activation retry failed",
+			"build_id", build.ID, "error", err)
+	}
+}
+
 // failBuild transitions a build to FAILED inside the environment lock.
 func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, reason string) {
 	metrics.BuildsTotal.WithLabelValues(build.TenantID, build.Environment, "failed").Inc()
@@ -307,16 +390,27 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 			return nil // Already finalized
 		}
 
-		// Transition QUEUED → RUNNING first if needed (state machine requires it)
-		if current.Status == string(statemachine.BuildQueued) {
+		// Route to the correct failure event based on current state
+		switch statemachine.State(current.Status) {
+		case statemachine.BuildQueued:
+			// QUEUED → RUNNING first (state machine requires it), then RUNNING → FAILED
 			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildStarted)); err != nil {
 				return fmt.Errorf("transition to RUNNING: %w", err)
 			}
-		}
-
-		// Transition RUNNING → FAILED
-		if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildFailedEvent)); err != nil {
-			return fmt.Errorf("transition to FAILED: %w", err)
+			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildFailedEvent)); err != nil {
+				return fmt.Errorf("transition to FAILED: %w", err)
+			}
+		case statemachine.BuildRunning:
+			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildFailedEvent)); err != nil {
+				return fmt.Errorf("transition to FAILED: %w", err)
+			}
+		case statemachine.BuildReleasing:
+			// MEET-008: RELEASING → FAILED via release-specific event
+			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildReleaseFailedEvent)); err != nil {
+				return fmt.Errorf("transition RELEASING to FAILED: %w", err)
+			}
+		default:
+			return fmt.Errorf("unexpected build state %q for failBuild", current.Status)
 		}
 
 		// Set error message

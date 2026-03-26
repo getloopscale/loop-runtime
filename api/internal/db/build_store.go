@@ -296,11 +296,13 @@ func (s *PostgresBuildStore) ListByProject(ctx context.Context, tenantID, projec
 // Used by the startup reconciler to find orphaned builds on boot.
 func (s *PostgresBuildStore) FindActiveBuilds(ctx context.Context) ([]Build, error) {
 	rows, err := s.db.Query(ctx,
+		// RELEASING included per MEET-2026-03-26-008: builds with completed images
+		// that need release activation (Phase 2) to be retried after crash/failure.
 		`SELECT id, tenant_id, project_id, environment, status, COALESCE(commit_sha, ''),
 		        correlation_id, created_by, created_at, started_at, finished_at,
 		        COALESCE(error_message, ''), duration_seconds, COALESCE(workflow_id, '')
 		 FROM builds
-		 WHERE status IN ('QUEUED', 'RUNNING')
+		 WHERE status IN ('QUEUED', 'RUNNING', 'RELEASING')
 		 ORDER BY created_at ASC
 		 LIMIT 100`,
 	)

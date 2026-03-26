@@ -377,6 +377,43 @@ func (o *BuildOrchestrator) failQueuedBuild(ctx context.Context, buildID string,
 	}
 }
 
+// RetryReleaseActivation retries Phase 2 (release activation) for a build stuck
+// in RELEASING state. Called by the reconcile loop when it detects a RELEASING
+// build whose Phase 2 was interrupted (pod crash, rollout, Gitea/ArgoCD failure).
+//
+// MEET-2026-03-26-008: This method does NOT check IsBuildTerminal because
+// RELEASING is explicitly non-terminal. It directly runs activateRelease and
+// transitions to SUCCEEDED on success or leaves in RELEASING for retry.
+func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *db.Build, result BuildCallbackRequest) error {
+	if build.Status != string(statemachine.BuildReleasing) {
+		return fmt.Errorf("retry release activation: build %s is in %s state, expected RELEASING", build.ID, build.Status)
+	}
+
+	activationErr := o.activateRelease(ctx, build, result)
+	if activationErr != nil {
+		slog.Warn("retry release activation: Phase 2 failed, will retry on next tick",
+			"build_id", build.ID, "error", activationErr)
+		o.emitActivationFailure(ctx, build.ID, activationErr)
+		return activationErr
+	}
+
+	// Phase 2 succeeded — transition RELEASING → SUCCEEDED (inside lock to handle races)
+	return o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
+		// Re-fetch inside lock — another pod may have already completed this
+		current, err := o.buildStore.GetByID(ctx, build.ID)
+		if err != nil {
+			return fmt.Errorf("retry release activation: re-fetch build: %w", err)
+		}
+		if statemachine.IsBuildTerminal(statemachine.State(current.Status)) {
+			return nil // Already finalized by another pod — safe to skip
+		}
+		if _, err := o.buildStore.UpdateStatus(ctx, tx, current.ID, string(statemachine.BuildReleaseCompleted)); err != nil {
+			return fmt.Errorf("retry release activation: transition to SUCCEEDED: %w", err)
+		}
+		return nil
+	})
+}
+
 // CancelBuild cancels a running or queued build.
 //
 // All state mutations happen INSIDE the environment lock (Rule 6).
@@ -568,10 +605,11 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	}
 
 	// If build was cancelled concurrently during Phase 1, skip activation
-	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) && build.Status != string(statemachine.BuildSucceeded) {
+	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
 		return nil
 	}
 
+	// Build should be in RELEASING state after Phase 1 (MEET-2026-03-26-008).
 	// Phase 2: Release activation (create release, gitops push, sync, health probe).
 	// BLOCKER-2 fix: each sub-phase acquires/releases its own lock. External I/O
 	// (gitops push, ArgoCD sync, health probes) runs OUTSIDE locks.
@@ -579,9 +617,28 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 
 	if activationErr != nil {
 		// Activation failed — emit deploy failure event so the CLI knows.
-		// The build stays SUCCEEDED (Phase 1 already committed), which is correct:
-		// the code was built successfully, the deployment just didn't complete.
+		// Build stays in RELEASING so the reconcile loop retries (MEET-2026-03-26-008).
 		o.emitActivationFailure(ctx, buildID, activationErr)
+		return nil
+	}
+
+	// Phase 2 succeeded — transition RELEASING → SUCCEEDED (deploy complete).
+	if err := o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
+		// Re-fetch inside lock — another pod's reconcile loop may have already transitioned
+		current, err := o.buildStore.GetByID(ctx, buildID)
+		if err != nil {
+			return fmt.Errorf("on build completed: re-fetch for SUCCEEDED transition: %w", err)
+		}
+		if statemachine.IsBuildTerminal(statemachine.State(current.Status)) {
+			return nil // Already finalized (race with reconcile loop) — safe
+		}
+		if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildReleaseCompleted)); err != nil {
+			return fmt.Errorf("on build completed: transition to SUCCEEDED: %w", err)
+		}
+		return nil
+	}); err != nil {
+		slog.Error("on build completed: failed to transition RELEASING → SUCCEEDED",
+			"build_id", buildID, "error", err)
 	}
 
 	return nil
