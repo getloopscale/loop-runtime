@@ -79,7 +79,7 @@ export function resolveProvider(provider: CloudProvider): CloudProviderFactory {
  *
  *   VPC (shared network)
  *   ├── Management Cluster (ArgoCD, Gitea, API, Traefik, cert-manager, Prometheus, Grafana, MinIO)
- *   ├── Build Cluster (Argo Workflows + Kaniko — isolated resource consumption for builds)
+ *   ├── Build Cluster (Argo Workflows + BuildKit — isolated resource consumption for builds)
  *   ├── Runtime Cluster (user applications only, managed by ArgoCD)
  *   ├── Managed PostgreSQL (platform state)
  *   └── Object Storage (artifacts, builds, backups)
@@ -132,7 +132,7 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
   });
 
   // --- Build cluster ---
-  // Isolated compute for Argo Workflows + Kaniko builds.
+  // Isolated compute for Argo Workflows + BuildKit builds.
   // Separate from mgmt to prevent build resource spikes from affecting platform services.
   const buildCluster = factory.createKubernetesCluster({
     name: `${baseName}-build`,

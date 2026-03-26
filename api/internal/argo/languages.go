@@ -355,7 +355,7 @@ func scriptDockerfileNode(apps []services.AppSpec) string {
 
 	// For monorepo apps (path != "."), the Dockerfile sets WORKDIR to the app subdir
 	// so that npm ci finds package.json in the right place. COPY . . still copies the
-	// entire workspace (which Kaniko uses as context), then WORKDIR navigates to the app.
+	// entire workspace (which BuildKit uses as context), then WORKDIR navigates to the app.
 	workdir := "/app"
 	if appPath != "." {
 		workdir = fmt.Sprintf("/app/%s", appPath)

@@ -12,7 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `UseKaniko` feature flag (`USE_KANIKO` env var, default `true`) — allows gradual migration and instant rollback to Kaniko during transition (#BUILDKIT-MIGRATION)
 - `buildkit-registry-config` Secret in TenantController — registry credentials for BuildKit push, coexists with Kaniko's `docker-config` during migration (#BUILDKIT-MIGRATION)
 - `ParseBuildKitDigest()` — deterministic digest extraction from BuildKit metadata JSON with strict `sha256:` prefix validation (#BUILDKIT-MIGRATION)
-- 17 new unit tests covering BuildKit template generation, sidecar pattern, security context, resource limits, cache flags, multi-app isolation, and digest parsing (#BUILDKIT-MIGRATION)
+- 22 unit tests covering BuildKit template generation, sidecar pattern, security context, resource limits, cache flags, multi-app isolation, digest parsing, DOKS compatibility (seccomp, apparmor, rootlesskit) (#BUILDKIT-MIGRATION)
+
+### Removed
+- Kaniko build engine — completely replaced by BuildKit with rootless sidecar pattern (#BUILDKIT-MIGRATION)
+- `kanikoTemplateForApp()` function and all Kaniko container template generation code (#BUILDKIT-MIGRATION)
+- `UseKaniko` feature flag from `InfraParams`, `Config`, `WorkflowSubmitterConfig`, and `USE_KANIKO` env var (#BUILDKIT-MIGRATION)
+- `docker-config` Secret from TenantController — replaced by `buildkit-registry-config` (#BUILDKIT-MIGRATION)
+- `docker-config` volume from Workflow CR — replaced by `buildkit-registry-config` + `buildkit-socket` volumes (#BUILDKIT-MIGRATION)
+- `kaniko:` configuration section from Helm values.yaml (#BUILDKIT-MIGRATION)
 - Apache License 2.0 — LICENSE file, SPDX headers on all 295 source files (.go + .ts), license field in package.json (#CNCF-PREP)
 - SECURITY.md — vulnerability disclosure policy with severity-based response timelines (#CNCF-PREP)
 - CONTRIBUTING.md — development setup, PR checklist, coding standards, DCO sign-off (#CNCF-PREP)

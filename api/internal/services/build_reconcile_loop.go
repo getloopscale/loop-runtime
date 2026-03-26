@@ -242,7 +242,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 
 	for _, app := range apps {
 		// REVIEW-MOD-4: Per-app image tag: {registry}/{tenant}/{project}/{app}:{sha}
-		// Each app gets its own Kaniko build and independent image.
+		// Each app gets its own BuildKit build and independent image.
 		imageRef := fmt.Sprintf("%s/%s/%s/%s:%s",
 			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
 

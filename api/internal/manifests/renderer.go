@@ -5,7 +5,7 @@
 //
 // C-02 fix: Manifest generation moved from the build pipeline (Argo Workflow CWT)
 // to the API (control plane). This is the correct separation of concerns for a PaaS:
-//   - Build plane: produces container images (Kaniko)
+//   - Build plane: produces container images (BuildKit)
 //   - Control plane: decides what to deploy (manifest generation + gitops-push)
 //
 // The build pipeline no longer generates manifests or pushes to GitOps. It only

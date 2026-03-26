@@ -106,7 +106,7 @@ spec:
               value: "build"
             - name: REGISTRY_URL
               value: "k3d-loopzero-registry:5000"
-            # BLOCKER-1 fix: Kaniko insecure flags are conditional on this.
+            # BuildKit insecure flags are conditional on this.
             # Set to "true" for dev (k3d registry has no TLS).
             # Config.Validate() enforces "false" in production.
             - name: REGISTRY_INSECURE

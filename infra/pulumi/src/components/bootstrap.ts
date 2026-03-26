@@ -1758,7 +1758,7 @@ function installTenantController(
                       },
                     },
                   },
-                  // DO Container Registry auth — Kaniko needs this for image push.
+                  // DO Container Registry auth — BuildKit needs this for image push.
                   {
                     name: "DIGITALOCEAN_TOKEN",
                     valueFrom: {

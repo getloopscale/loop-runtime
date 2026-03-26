@@ -26,7 +26,7 @@ export interface PlatformStackConfig {
   readonly runtimeMinNodes: number;
   readonly runtimeMaxNodes?: number;
 
-  // Build cluster — runs Argo Workflows + Kaniko (isolated compute for builds)
+  // Build cluster — runs Argo Workflows + BuildKit (isolated compute for builds)
   readonly buildK8sVersion?: string;
   readonly buildNodeClass: NodeClass;
   readonly buildMinNodes: number;

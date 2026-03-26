@@ -27,9 +27,9 @@ import (
 // credentials from K8s Secret (loopzero-gitea-credentials) via envFrom. No more
 // plaintext tokens in Workflow CRs.
 //
-// BLOCKER-1 fix: Kaniko is now an inline template (not a CWT ref) so that
-// --insecure and --skip-tls-verify flags are conditionally added based on
-// RegistryInsecure. In production, Config.Validate() ensures RegistryInsecure is false.
+// Build engine: BuildKit with sidecar pattern (buildkitd + buildctl).
+// Registry credentials mounted from buildkit-registry-config Secret.
+// RegistryInsecure is conditionally applied; Config.Validate() ensures false in production.
 //
 // Note: MinIO credentials are injected via K8s Secret (envFrom) in the CWT,
 // not as workflow parameters. See loopzero-minio-credentials secret in build cluster.
@@ -37,16 +37,15 @@ type InfraParams struct {
 	RegistryURL      string
 	RegistryInsecure bool   // true for local dev registries without TLS
 	BaseDomain       string // Base domain for app hostnames (e.g., "loopzero.local")
-	UseKaniko        bool   // true = Kaniko (legacy), false = BuildKit. Migration flag, removed in Phase 6.
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs
-// and inline language-specific templates. It replaces the monolithic WorkflowTemplate
-// approach where a single 954-line YAML handled everything.
+// and inline language-specific templates.
 //
 // Architecture:
-//   - Reusable steps (clone, cache, kaniko, manifests, notify) → CWT refs
+//   - Reusable steps (clone, cache) → CWT refs
 //   - Language-specific steps (validate, install, build, scan, dockerfile) → inline templates
+//   - Per-app BuildKit templates (buildkitd sidecar + buildctl) → inline templates
 //   - The builder glues them together in a DAG with correct dependencies
 type WorkflowBuilder struct {
 	infraParams InfraParams
@@ -112,14 +111,10 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			withSuffix(g.Strategy.DockerfileStep(g.Apps), g.Suffix),
 		)
 	}
-	// REVIEW-MOD-4: Per-app build templates (independent of language grouping).
-	// UseKaniko selects between Kaniko (legacy) and BuildKit (new).
+	// Per-app BuildKit templates (independent of language grouping).
+	// Each app gets its own buildkitd sidecar + buildctl pair for isolated builds.
 	for _, app := range spec.Apps {
-		if b.infraParams.UseKaniko {
-			inlineTemplates = append(inlineTemplates, b.kanikoTemplateForApp(spec, app))
-		} else {
-			inlineTemplates = append(inlineTemplates, b.buildkitTemplateForApp(spec, app))
-		}
+		inlineTemplates = append(inlineTemplates, b.buildkitTemplateForApp(spec, app))
 	}
 
 	// Build the main DAG
@@ -196,7 +191,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 // group, a set of per-language steps is created (with suffix like -node, -go).
 // The dependency chain within each group is: clone → restore-cache-{lang} →
 // validate-{lang} → install-{lang} → build-{lang} → dockerfile-{lang} →
-// [per-app kaniko tasks].
+// [per-app BuildKit tasks].
 func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []languageGroup) (*forge.DAG, error) {
 	dag := &forge.DAG{Name: "build-pipeline"}
 
@@ -244,7 +239,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName}))
 	}
 
-	// Per-app Kaniko — depends on its language group's dockerfile step
+	// Per-app BuildKit — depends on its language group's dockerfile step
 	for _, app := range spec.Apps {
 		appStrategy := ResolveStrategy(app.Framework)
 		// Find the suffix for this app's language
@@ -293,75 +288,9 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, groups []la
 	return dag, nil
 }
 
-// kanikoTemplateForApp generates a Kaniko container template for a single app.
-//
-// REVIEW-MOD-4: Each app gets its own Kaniko build with independent image tag:
-//   - Image: {registry}/{tenant}/{project}/{app}:{sha}
-//   - Dockerfile: /workspace/Dockerfile.{app} (with fallback to /workspace/Dockerfile for single-app)
-//   - Context: /workspace (shared — Kaniko reads only the Dockerfile)
-//
-// This replaces the single kanikoTemplate that produced one image for all apps.
-func (b *WorkflowBuilder) kanikoTemplateForApp(spec services.WorkflowSpec, app services.AppSpec) *forge.Container {
-	// Per-app image destination: {registry}/{tenant}/{project}/{app}:{sha}
-	destination := fmt.Sprintf("%s/%s/%s/%s:%s",
-		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
-	cacheRepo := fmt.Sprintf("%s/%s/cache", b.infraParams.RegistryURL, spec.TenantID)
-
-	// Per-app Dockerfile: Dockerfile.{app} with fallback to Dockerfile for single-app projects.
-	// The generate-dockerfile step creates Dockerfile.{app} for each app.
-	dockerfile := "/workspace/Dockerfile"
-	if len(spec.Apps) > 1 {
-		dockerfile = fmt.Sprintf("/workspace/Dockerfile.%s", app.Name)
-	}
-
-	args := []string{
-		fmt.Sprintf("--dockerfile=%s", dockerfile),
-		fmt.Sprintf("--context=%s", "/workspace"),
-		fmt.Sprintf("--destination=%s", destination),
-		"--cache=true",
-		fmt.Sprintf("--cache-repo=%s", cacheRepo),
-		"--snapshot-mode=redo",
-		"--compressed-caching=false",
-		fmt.Sprintf("--digest-file=/workspace/image-digest-%s.txt", app.Name),
-	}
-
-	if b.infraParams.RegistryInsecure {
-		args = append(args, "--insecure", "--skip-tls-verify")
-	}
-
-	return &forge.Container{
-		Name:    fmt.Sprintf("build-image-%s", app.Name),
-		Image:   "gcr.io/kaniko-project/executor:v1.23.2",
-		Command: []string{"/kaniko/executor"},
-		Args:    args,
-		VolumeMounts: []forge.VolumeBuilder{
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
-			// Docker registry credentials for Kaniko push.
-			// Secret "docker-config" must contain key "config.json" with Docker auth config.
-			// Created by TenantController in each build namespace.
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "docker-config", MountPath: "/kaniko/.docker"}, SecretName: "docker-config"},
-		},
-		Resources: &forge.ResourceRequirements{
-			Requests: forge.ResourceList{CPU: "500m", Memory: "1Gi"},
-			Limits:   forge.ResourceList{CPU: "2000m", Memory: "4Gi"},
-		},
-		SecurityContext: &model.SecurityContext{
-			RunAsNonRoot: ptr(false),
-			RunAsUser:    ptr(int64(0)), // Kaniko requires root to build images
-		},
-		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
-	}
-}
-
-// buildVolumes returns the workflow-level volumes based on the build engine.
-// Kaniko: needs docker-config Secret for registry auth.
-// BuildKit: needs buildkit-registry-config Secret + buildkit-socket emptyDir for daemon↔client communication.
+// buildVolumes returns the workflow-level volumes for the BuildKit build engine.
+// BuildKit needs: buildkit-registry-config Secret + buildkit-socket emptyDir for daemon↔client communication.
 func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
-	if b.infraParams.UseKaniko {
-		return []forge.VolumeBuilder{
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "docker-config"}, SecretName: "docker-config"},
-		}
-	}
 	return []forge.VolumeBuilder{
 		// Registry credentials for BuildKit push — mounted at /home/user/.docker/ in buildkitd.
 		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-registry-config"}, SecretName: "buildkit-registry-config"},
@@ -373,7 +302,7 @@ func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
 // buildkitTemplateForApp generates a BuildKit container template with sidecar pattern for a single app.
 //
 // Architecture: two containers sharing a Unix socket via emptyDir volume:
-//   - buildkitd (sidecar): rootless daemon listening on Unix socket
+//   - buildkitd (sidecar): rootless daemon listening on Unix socket, started via RootlessKit entrypoint
 //   - buildctl (main): client that submits the build and waits for completion
 //
 // The buildkitd sidecar is marked as Daemon=true so Argo keeps it alive until
@@ -382,6 +311,14 @@ func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
 // Image digest is extracted from --metadata-file (JSON: {"containerimage.digest":"sha256:..."}).
 //
 // Cache: --import-cache and --export-cache use registry-based OCI cache (no MinIO).
+//
+// Security: The -rootless image uses RootlessKit to create a user namespace. This requires:
+//   - seccompProfile: Unconfined (allows user namespace creation)
+//   - AppArmor: unconfined (allows mount operations inside user namespace)
+//   - NO privileged: true required
+//
+// These are set via PodSpecPatch (seccomp) and Annotations (AppArmor) because
+// the forge SDK SecurityContext type doesn't include seccompProfile.
 func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app services.AppSpec) *forge.Container {
 	destination := fmt.Sprintf("%s/%s/%s/%s:%s",
 		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
@@ -415,7 +352,9 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 	// Prepend --addr to buildctl args
 	buildctlArgs = append([]string{"--addr", socketPath}, buildctlArgs...)
 
-	// buildkitd daemon args
+	// buildkitd daemon args — passed to the default entrypoint (rootlesskit wrapper)
+	// DO NOT set Command on the sidecar — the -rootless image entrypoint runs
+	// "rootlesskit buildkitd" which sets up the user namespace before starting buildkitd.
 	buildkitdArgs := []string{
 		"--oci-worker-no-process-sandbox",
 		"--addr", socketPath,
@@ -431,13 +370,15 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 		)
 	}
 
-	// buildkitd sidecar container
+	sidecarName := fmt.Sprintf("buildkitd-%s", app.Name)
+
+	// buildkitd sidecar container — uses default entrypoint (rootlesskit wrapper).
+	// Command is intentionally NOT set so the image's ENTRYPOINT runs RootlessKit.
 	daemonTrue := true
 	buildkitdSidecar := forge.UserContainer{
-		Name:    fmt.Sprintf("buildkitd-%s", app.Name),
-		Image:   "moby/buildkit:v0.18.2-rootless",
-		Command: []string{"buildkitd"},
-		Args:    buildkitdArgs,
+		Name:  sidecarName,
+		Image: "moby/buildkit:v0.18.2-rootless",
+		Args:  buildkitdArgs,
 		SecurityContext: &model.SecurityContext{
 			RunAsUser:    ptr(int64(1000)),
 			RunAsGroup:   ptr(int64(1000)),
@@ -460,11 +401,21 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 		Daemon: &daemonTrue,
 	}
 
+	// PodSpecPatch adds seccompProfile: Unconfined to the buildkitd sidecar.
+	// Required for rootless BuildKit to create user namespaces on managed Kubernetes (DOKS, EKS, GKE).
+	// The forge SDK SecurityContext doesn't include seccompProfile, so we use a JSON patch.
+	podSpecPatch := fmt.Sprintf(`{"containers":[{"name":"%s","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}`, sidecarName)
+
 	return &forge.Container{
 		Name:    fmt.Sprintf("build-image-%s", app.Name),
 		Image:   "moby/buildkit:v0.18.2",
 		Command: []string{"buildctl"},
 		Args:    buildctlArgs,
+		// HOME must be set so buildctl can find ~/.docker/config.json for registry auth.
+		// Without this, buildctl tries to create /.docker which fails as non-root.
+		Env: []forge.EnvBuilder{
+			forge.Env{Name: "HOME", Value: "/home/user"},
+		},
 		VolumeMounts: []forge.VolumeBuilder{
 			// Workspace with source code and Dockerfiles
 			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
@@ -472,6 +423,10 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{
 				Name: "buildkit-socket", MountPath: "/run/user/1000/buildkitd",
 			}},
+			// Registry credentials — buildctl needs these to resolve base image metadata
+			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
+				Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true,
+			}, SecretName: "buildkit-registry-config"},
 		},
 		Resources: &forge.ResourceRequirements{
 			Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
@@ -482,6 +437,12 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 			RunAsGroup:   ptr(int64(1000)),
 			RunAsNonRoot: ptr(true),
 		},
+		// AppArmor unconfined annotation — required for rootless BuildKit mount operations
+		// inside user namespaces on managed Kubernetes with AppArmor enabled.
+		Annotations: map[string]string{
+			fmt.Sprintf("container.apparmor.security.beta.kubernetes.io/%s", sidecarName): "unconfined",
+		},
+		PodSpecPatch:  podSpecPatch,
 		Sidecars:      []forge.UserContainer{buildkitdSidecar},
 		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
 	}

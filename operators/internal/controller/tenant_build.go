@@ -172,8 +172,9 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		}
 	}
 
-	// Docker registry credentials for Kaniko image push.
-	// Kaniko mounts this at /kaniko/.docker/config.json.
+	// BuildKit registry credentials — Docker config.json format mounted at
+	// /home/user/.docker/config.json inside the buildkitd rootless container.
+	// BuildKit reads this for authenticated push to container registries.
 	// DO Container Registry uses the DO API token for auth (not Spaces keys).
 	doAPIToken := os.Getenv("DIGITALOCEAN_TOKEN")
 	if doAPIToken != "" {
@@ -181,31 +182,6 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		encodedAuth := base64Encode(dockerAuth)
 		dockerConfig := fmt.Sprintf(`{"auths":{"registry.digitalocean.com":{"auth":"%s"}}}`, encodedAuth)
 
-		dockerSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "docker-config",
-				Namespace: buildNs,
-			},
-		}
-		_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, dockerSecret, func() error {
-			dockerSecret.Labels = map[string]string{
-				"loopzero.io/tenant":     tenant.Name,
-				"loopzero.io/managed-by": "tenant-controller",
-			}
-			dockerSecret.Type = corev1.SecretTypeOpaque
-			dockerSecret.StringData = map[string]string{
-				"config.json": dockerConfig,
-			}
-			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("build docker-config %s: %w", buildNs, err)
-		}
-
-		// BuildKit registry credentials — same Docker config.json format mounted at
-		// /home/user/.docker/config.json inside the buildkitd rootless container.
-		// BuildKit reads this for authenticated push to container registries.
-		// This Secret coexists with docker-config during the Kaniko→BuildKit migration.
 		buildkitSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "buildkit-registry-config",
@@ -340,14 +316,13 @@ func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, n
 
 // reconcileBuildNetworkPolicy creates restrictive egress policies in build namespaces.
 //
-// REVIEW-BLOCKER: Without this, build pods (especially Kaniko running as root)
-// have unrestricted network egress. A malicious Dockerfile can exfiltrate source
-// code to any external endpoint (spec §17.1: "Exfiltrate source code via network egress").
+// Without this, build pods have unrestricted network egress. A malicious Dockerfile
+// can exfiltrate source code to any external endpoint (spec §17.1).
 //
 // Allowed egress:
 //   - DNS (port 53 UDP/TCP) — required for any network operation
-//   - MinIO (port 9000 TCP) — source bundles and cache
-//   - Container registry (port 5000 TCP for k3d, 443 for production registries)
+//   - MinIO (port 9000 TCP) — source bundles and dependency cache
+//   - Container registry (port 5000 TCP for k3d, 443 for production registries) — BuildKit image push + OCI layer cache
 //   - K8s API (port 6443 TCP) — Argo Workflow task result reporting
 //
 // All other egress is denied.
@@ -392,7 +367,7 @@ func (r *TenantReconciler) reconcileBuildNetworkPolicy(ctx context.Context, name
 						{Protocol: &protoTCP, Port: &minioPort},
 					},
 				},
-				// Container registry — Kaniko image push (dev: 5000, prod: 443)
+				// Container registry — BuildKit image push + OCI layer cache (dev: 5000, prod: 443)
 				{
 					Ports: []networkingv1.NetworkPolicyPort{
 						{Protocol: &protoTCP, Port: &registryPort},

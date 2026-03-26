@@ -59,7 +59,6 @@ type Config struct {
 	RegistryInsecure     bool   // true for local dev registries without TLS
 	WorkloadIngressURL   string
 	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
-	UseKaniko            bool   // Build engine: true=Kaniko (legacy), false=BuildKit. Migration flag.
 
 	// Credentials (read from env vars or K8s secrets)
 	GiteaToken         string
@@ -162,7 +161,6 @@ func Load() Config {
 		RegistryInsecure:     os.Getenv("REGISTRY_INSECURE") == "true",
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
 		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
-		UseKaniko:            os.Getenv("USE_KANIKO") != "false", // default true — set USE_KANIKO=false to enable BuildKit
 
 		// Credentials
 		GiteaToken:         os.Getenv("GITEA_TOKEN"),
@@ -230,7 +228,7 @@ func (c Config) Validate() error {
 		return fmt.Errorf("ARGOCD_INSECURE=true is forbidden in production — TLS verification must be enabled")
 	}
 	// REVIEW-BLOCKER-2: REGISTRY_INSECURE=true in production is a fatal error.
-	// Without TLS, Kaniko pushes images over HTTP — MITM can replace images,
+	// Without TLS, BuildKit pushes images over HTTP — MITM can replace images,
 	// rendering all supply chain security (cosign, SBOM) useless.
 	if c.RegistryInsecure && c.IsProduction() {
 		return fmt.Errorf("REGISTRY_INSECURE=true is forbidden in production — registry TLS verification must be enabled")

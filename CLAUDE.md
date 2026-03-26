@@ -117,7 +117,7 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
 | Database | PostgreSQL 16 (managed DO) | State, advisory locks for serialization |
-| Build engine | Argo Workflows + Kaniko | Container image builds in isolation |
+| Build engine | Argo Workflows + BuildKit | Container image builds in isolation (rootless, sidecar pattern) |
 | GitOps store | Gitea 1.22.6 | Desired state mirror (source + gitops repos) |
 | GitOps sync | ArgoCD 2.13.3 | Cluster convergence (manual sync only) |
 | Ingress | Traefik 28.3.0 + cert-manager 1.14.5 | TLS termination, HTTP→HTTPS redirect |
@@ -555,7 +555,7 @@ Check the current sprint before starting any implementation. Only implement what
 │  Gitea · PostgreSQL · MinIO · ArgoCD · Traefik · cert-manager    │
 ├─────────────────────────────────────────────────────────────────┤
 │  BUILD PLANE  (build cluster)                                    │
-│  Argo Workflows + Kaniko (CWTs: clone, cache, build, summary)   │
+│  Argo Workflows + BuildKit (CWTs: clone, cache + inline build)  │
 ├─────────────────────────────────────────────────────────────────┤
 │  WORKLOAD PLANE  (runtime cluster)                               │
 │  User applications managed by ArgoCD                             │
@@ -567,7 +567,7 @@ Check the current sprint before starting any implementation. Only implement what
 
 ```
 loopzero deploy → CLI validates → upload bundle → API locks env → submit Argo Workflow
-    → build (Kaniko) → push image → generate manifests → push to Gitea (gitops)
+    → build (BuildKit) → push image → generate manifests → push to Gitea (gitops)
     → ArgoCD sync → app running → SSE event → CLI shows URL
 ```
 

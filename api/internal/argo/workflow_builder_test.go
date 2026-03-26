@@ -17,16 +17,6 @@ func testInfraParams() InfraParams {
 		RegistryURL:      "k3d-loopzero-registry:5000",
 		RegistryInsecure: true,
 		BaseDomain:       "loopzero.local",
-		UseKaniko:        true, // default: existing tests validate Kaniko path
-	}
-}
-
-func testInfraParamsBuildKit() InfraParams {
-	return InfraParams{
-		RegistryURL:      "k3d-loopzero-registry:5000",
-		RegistryInsecure: true,
-		BaseDomain:       "loopzero.local",
-		UseKaniko:        false, // BuildKit path
 	}
 }
 
@@ -144,7 +134,7 @@ func TestWorkflowBuilder_Build_MainDAGHasAllTasks(t *testing.T) {
 		"install-deps",
 		"build-apps",
 		"generate-dockerfile",
-		"build-image-api", // per-app kaniko task (testSpec has 1 app: "api")
+		"build-image-api", // per-app BuildKit task (testSpec has 1 app: "api")
 	}
 
 	taskNames := make(map[string]bool)
@@ -266,16 +256,15 @@ func TestWorkflowBuilder_Build_CloneTask_UsesCWTRef(t *testing.T) {
 	}
 }
 
-// BLOCKER-1 fix: Kaniko is now an inline template, not a CWT ref.
-// This allows conditional --insecure flags based on RegistryInsecure.
-func TestWorkflowBuilder_Build_KanikoTask_IsInlineTemplate(t *testing.T) {
+// BuildKit build-image task is an inline template, not a CWT ref.
+func TestWorkflowBuilder_Build_BuildImageTask_IsInlineTemplate(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
 
-	// REVIEW-MOD-4: per-app kaniko task: build-image-{app}
+	// Per-app BuildKit task: build-image-{app}
 	dag := findDAG(t, wf, "build-pipeline")
 	task := findTask(dag, "build-image-api")
 	if task == nil {
@@ -283,23 +272,23 @@ func TestWorkflowBuilder_Build_KanikoTask_IsInlineTemplate(t *testing.T) {
 	}
 
 	if task.TemplateRef != nil {
-		t.Error("build-image-api should NOT use templateRef — inline template (BLOCKER-1 fix)")
+		t.Error("build-image-api should NOT use templateRef — inline template")
 	}
 	if task.Template != "build-image-api" {
 		t.Errorf("build-image-api task.Template = %q, want %q", task.Template, "build-image-api")
 	}
 
-	// Verify inline container template exists
+	// Verify inline container template exists and uses BuildKit
 	c := findContainer(t, wf, "build-image-api")
 	if c == nil {
 		t.Fatal("build-image-api inline container template not found")
 	}
-	if c.Image != "gcr.io/kaniko-project/executor:v1.23.2" {
-		t.Errorf("kaniko image = %q, want gcr.io/kaniko-project/executor:v1.23.2", c.Image)
+	if c.Image != "moby/buildkit:v0.18.2" {
+		t.Errorf("buildctl image = %q, want moby/buildkit:v0.18.2", c.Image)
 	}
 }
 
-func TestWorkflowBuilder_Build_KanikoInsecureFlags_WhenRegistryInsecure(t *testing.T) {
+func TestWorkflowBuilder_Build_InsecureFlags_WhenRegistryInsecure(t *testing.T) {
 	params := testInfraParams()
 	params.RegistryInsecure = true
 	builder := NewWorkflowBuilder(params)
@@ -313,25 +302,14 @@ func TestWorkflowBuilder_Build_KanikoInsecureFlags_WhenRegistryInsecure(t *testi
 		t.Fatal("build-image-api inline container template not found")
 	}
 
-	hasInsecure := false
-	hasSkipTLS := false
-	for _, arg := range c.Args {
-		if arg == "--insecure" {
-			hasInsecure = true
-		}
-		if arg == "--skip-tls-verify" {
-			hasSkipTLS = true
-		}
-	}
-	if !hasInsecure {
-		t.Error("expected --insecure flag when RegistryInsecure=true")
-	}
-	if !hasSkipTLS {
-		t.Error("expected --skip-tls-verify flag when RegistryInsecure=true")
+	// BuildKit uses --allow security.insecure for insecure registries
+	argsStr := strings.Join(c.Args, " ")
+	if !strings.Contains(argsStr, "--allow") {
+		t.Error("expected --allow flag when RegistryInsecure=true")
 	}
 }
 
-func TestWorkflowBuilder_Build_KanikoNoInsecureFlags_WhenRegistrySecure(t *testing.T) {
+func TestWorkflowBuilder_Build_NoInsecureFlags_WhenRegistrySecure(t *testing.T) {
 	params := testInfraParams()
 	params.RegistryInsecure = false
 	builder := NewWorkflowBuilder(params)
@@ -345,13 +323,9 @@ func TestWorkflowBuilder_Build_KanikoNoInsecureFlags_WhenRegistrySecure(t *testi
 		t.Fatal("build-image-api inline container template not found")
 	}
 
-	for _, arg := range c.Args {
-		if arg == "--insecure" {
-			t.Error("--insecure flag should NOT be present when RegistryInsecure=false")
-		}
-		if arg == "--skip-tls-verify" {
-			t.Error("--skip-tls-verify flag should NOT be present when RegistryInsecure=false")
-		}
+	argsStr := strings.Join(c.Args, " ")
+	if strings.Contains(argsStr, "--allow") {
+		t.Error("--allow flag should NOT be present when RegistryInsecure=false")
 	}
 }
 
@@ -432,7 +406,7 @@ func TestWorkflowBuilder_Build_HasInlineTemplates(t *testing.T) {
 		"build-apps",
 		"security-scan",
 		"generate-dockerfile",
-		"build-image-api", // REVIEW-MOD-4: per-app kaniko template
+		"build-image-api", // per-app BuildKit template
 	}
 
 	for _, name := range inlineNames {
@@ -722,11 +696,11 @@ func assertStringContains(t *testing.T, s, substr string) {
 }
 
 // ---------------------------------------------------------------------------
-// BuildKit tests — UseKaniko=false
+// BuildKit — sidecar pattern, volumes, security, cache
 // ---------------------------------------------------------------------------
 
 func TestWorkflowBuilder_BuildKit_HasBuildkitVolumes(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -749,14 +723,14 @@ func TestWorkflowBuilder_BuildKit_HasBuildkitVolumes(t *testing.T) {
 	if !volumeNames["buildkit-socket"] {
 		t.Error("BuildKit workflow missing volume: buildkit-socket")
 	}
-	// docker-config should NOT be present in BuildKit mode
+	// docker-config should NOT be present
 	if volumeNames["docker-config"] {
-		t.Error("BuildKit workflow should NOT have docker-config volume (Kaniko only)")
+		t.Error("workflow should NOT have docker-config volume")
 	}
 }
 
 func TestWorkflowBuilder_BuildKit_HasSidecarPattern(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -792,7 +766,7 @@ func TestWorkflowBuilder_BuildKit_HasSidecarPattern(t *testing.T) {
 }
 
 func TestWorkflowBuilder_BuildKit_SecurityContext_Rootless(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -832,7 +806,7 @@ func TestWorkflowBuilder_BuildKit_SecurityContext_Rootless(t *testing.T) {
 }
 
 func TestWorkflowBuilder_BuildKit_ResourceLimits(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -871,7 +845,7 @@ func TestWorkflowBuilder_BuildKit_ResourceLimits(t *testing.T) {
 }
 
 func TestWorkflowBuilder_BuildKit_BuildctlArgs_ContainsCacheFlags(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -904,7 +878,7 @@ func TestWorkflowBuilder_BuildKit_BuildctlArgs_ContainsCacheFlags(t *testing.T) 
 }
 
 func TestWorkflowBuilder_BuildKit_BuildkitdArgs_RootlessFlags(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -926,7 +900,7 @@ func TestWorkflowBuilder_BuildKit_BuildkitdArgs_RootlessFlags(t *testing.T) {
 }
 
 func TestWorkflowBuilder_BuildKit_SharedSocketVolume(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -967,7 +941,7 @@ func TestWorkflowBuilder_BuildKit_SharedSocketVolume(t *testing.T) {
 }
 
 func TestWorkflowBuilder_BuildKit_MultiApp_IndependentSidecars(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
@@ -998,32 +972,8 @@ func TestWorkflowBuilder_BuildKit_MultiApp_IndependentSidecars(t *testing.T) {
 	}
 }
 
-func TestWorkflowBuilder_BuildKit_NoKanikoReferences(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
-	wf, err := builder.Build(testSpec())
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-
-	// No template should reference kaniko image
-	for _, tmpl := range wf.Templates {
-		if c, ok := tmpl.(*forge.Container); ok {
-			if strings.Contains(c.Image, "kaniko") {
-				t.Errorf("BuildKit workflow should not reference kaniko image: %s uses %s", c.Name, c.Image)
-			}
-		}
-	}
-
-	// No volume should be docker-config
-	for _, v := range wf.Volumes {
-		if sv, ok := v.(*forge.SecretVolume); ok && sv.SecretName == "docker-config" {
-			t.Error("BuildKit workflow should not have docker-config volume")
-		}
-	}
-}
-
 func TestWorkflowBuilder_BuildKit_MetadataFilePath(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParamsBuildKit())
+	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
@@ -1045,35 +995,97 @@ func TestWorkflowBuilder_BuildKit_MetadataFilePath(t *testing.T) {
 	assertStringContains(t, webArgs, "--metadata-file /workspace/metadata-web.json")
 }
 
-func TestWorkflowBuilder_UseKaniko_True_GeneratesKaniko(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParams()) // UseKaniko=true
+// ---------------------------------------------------------------------------
+// BuildKit DOKS compatibility — seccomp, apparmor, HOME, rootlesskit
+// ---------------------------------------------------------------------------
+
+func TestWorkflowBuilder_BuildKit_SidecarNoCommand_UsesDefaultEntrypoint(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api not found")
+	sidecar := c.Sidecars[0]
+
+	// Command MUST be nil/empty — the -rootless image entrypoint runs rootlesskit.
+	// Setting Command: [buildkitd] bypasses RootlessKit and fails on managed K8s.
+	if len(sidecar.Command) > 0 {
+		t.Errorf("buildkitd sidecar Command = %v, want empty (use default entrypoint with RootlessKit)", sidecar.Command)
 	}
-	if !strings.Contains(c.Image, "kaniko") {
-		t.Errorf("UseKaniko=true should generate kaniko template, got image: %s", c.Image)
+	// Args should contain --oci-worker-no-process-sandbox
+	argsStr := strings.Join(sidecar.Args, " ")
+	assertStringContains(t, argsStr, "--oci-worker-no-process-sandbox")
+}
+
+func TestWorkflowBuilder_BuildKit_PodSpecPatch_SeccompUnconfined(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	if c.PodSpecPatch == "" {
+		t.Fatal("PodSpecPatch should not be empty — needs seccompProfile: Unconfined")
+	}
+	assertStringContains(t, c.PodSpecPatch, "Unconfined")
+	assertStringContains(t, c.PodSpecPatch, "buildkitd-api")
+}
+
+func TestWorkflowBuilder_BuildKit_AppArmorAnnotation(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	key := "container.apparmor.security.beta.kubernetes.io/buildkitd-api"
+	if c.Annotations[key] != "unconfined" {
+		t.Errorf("AppArmor annotation = %q, want unconfined", c.Annotations[key])
 	}
 }
 
-func TestWorkflowBuilder_UseKaniko_False_GeneratesBuildKit(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParamsBuildKit()) // UseKaniko=false
+func TestWorkflowBuilder_BuildKit_HomeEnvVar(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api not found")
+	hasHome := false
+	for _, env := range c.Env {
+		if e, ok := env.(forge.Env); ok && e.Name == "HOME" && e.Value == "/home/user" {
+			hasHome = true
+		}
 	}
-	if !strings.Contains(c.Image, "buildkit") {
-		t.Errorf("UseKaniko=false should generate buildkit template, got image: %s", c.Image)
+	if !hasHome {
+		t.Error("buildctl missing HOME=/home/user env var")
+	}
+}
+
+func TestWorkflowBuilder_BuildKit_MainContainerHasRegistryCredentials(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	hasRegistryMount := false
+	for _, vm := range c.VolumeMounts {
+		if sv, ok := vm.(*forge.SecretVolume); ok && sv.Name == "buildkit-registry-config" {
+			if sv.MountPath != "/home/user/.docker" {
+				t.Errorf("registry mount path = %q, want /home/user/.docker", sv.MountPath)
+			}
+			hasRegistryMount = true
+		}
+	}
+	if !hasRegistryMount {
+		t.Error("buildctl main container missing buildkit-registry-config volume mount")
 	}
 }
 

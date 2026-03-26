@@ -46,14 +46,6 @@ workflow:
   rbac:
     create: true
 
-# Kaniko image builder configuration.
-# IMPORTANT: Set insecure=false and skipTlsVerify=false in production overlays.
-# These flags disable TLS verification for the container registry and are
-# only appropriate for local development with k3d registries.
-kaniko:
-  insecure: true       # DEV ONLY — allows HTTP registry (no TLS)
-  skipTlsVerify: true  # DEV ONLY — skips TLS certificate validation
-
 # MinIO object storage configuration.
 # Used by clone step (source bundles) and cache steps (dependency cache).
 # IMPORTANT: Set insecure=false in production overlays. This flag disables
