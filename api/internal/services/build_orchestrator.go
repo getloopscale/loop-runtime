@@ -38,18 +38,23 @@ type WorkflowSpec struct {
 	CommitSHA     string
 	NoCache       bool // Skip BuildKit layer cache (full rebuild via --no-cache)
 	Apps          []AppSpec
+	Plan          *BuildPlan // v2: resolved build plan (when present, WorkflowBuilder uses this instead of Apps)
 	CorrelationID string
 	Namespace     string // Target namespace for the workflow (e.g., "build-acme")
 }
 
-// AppSpec describes a single app from loopzero.yaml.
+// AppSpec describes a single app from loopzero.yaml as received from the CLI.
+// This is the raw input — use NormalizeApp() to resolve into a fully populated AppUnit.
 type AppSpec struct {
-	Name      string   `json:"name"`
-	Type      string   `json:"type"`                        // "server", "worker", "frontend"
-	Port      int      `json:"port"`
-	Path      string   `json:"path,omitempty"`
-	Framework string   `json:"framework,omitempty"`          // "nextjs", "express", "gin", "fastapi", "custom", etc.
-	Secrets   []string `json:"secrets,omitempty"`            // declared secret names from loopzero.yaml
+	Name       string            `json:"name"`
+	Type       string            `json:"type"`                        // "server", "worker", "frontend"
+	Port       int               `json:"port"`
+	Path       string            `json:"path,omitempty"`
+	Framework  string            `json:"framework,omitempty"`          // "nextjs", "express", "gin", "fastapi", "custom", etc.
+	Build      string            `json:"build,omitempty"`              // v2: "dockerfile", "buildpack", "custom"
+	Dockerfile string            `json:"dockerfile,omitempty"`         // v2: Dockerfile path relative to app path
+	Env        map[string]string `json:"env,omitempty"`                // v2: build-time environment variables
+	Secrets    []string          `json:"secrets,omitempty"`            // declared secret names from loopzero.yaml
 }
 
 // GitOpsPusher abstracts the commit-and-push of manifests to the tenant GitOps
@@ -147,6 +152,7 @@ type BuildOrchestratorDeps struct {
 	Sync               SyncClient
 	Locker             EnvironmentLocker
 	GitOps             GitOpsPusher
+	RegistryURL        string        // Container registry URL for BuildPlan image tag resolution
 	ArgocdSyncTimeout  time.Duration // 0 = default 120s
 }
 
@@ -166,6 +172,7 @@ type BuildOrchestrator struct {
 	sync              SyncClient
 	locker            EnvironmentLocker
 	gitops            GitOpsPusher
+	registryURL       string // Container registry URL for BuildPlan image tag resolution
 	argocdSyncTimeout time.Duration
 }
 
@@ -179,6 +186,10 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 	if syncTimeout == 0 {
 		syncTimeout = defaultArgocdSyncTimeout
 	}
+	registryURL := deps.RegistryURL
+	if registryURL == "" {
+		registryURL = "k3d-loopzero-registry:5000" // local dev default
+	}
 	return &BuildOrchestrator{
 		buildStore:        deps.BuildStore,
 		releaseStore:      deps.ReleaseStore,
@@ -188,6 +199,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		sync:              deps.Sync,
 		locker:            deps.Locker,
 		gitops:            deps.GitOps,
+		registryURL:       registryURL,
 		argocdSyncTimeout: syncTimeout,
 	}
 }
@@ -265,6 +277,19 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 	// If anything below fails, the build stays QUEUED briefly, then we
 	// immediately transition it to FAILED so the env is unblocked.
 
+	// Normalize AppSpecs into AppUnits and create a BuildPlan.
+	// The BuildPlan resolves all paths, image tags, and strategies before
+	// reaching the WorkflowBuilder — no inference happens in the pipeline.
+	var units []AppUnit
+	for _, a := range req.Apps {
+		unit, normErr := NormalizeApp(a.Name, a)
+		if normErr != nil {
+			return nil, fmt.Errorf("normalize app %q: %w", a.Name, normErr)
+		}
+		units = append(units, unit)
+	}
+	plan := CreateBuildPlan(units, req.TenantID, req.ProjectID, req.CommitSHA, o.registryURL)
+
 	wfSpec := WorkflowSpec{
 		BuildID:       buildID,
 		TenantID:      req.TenantID,
@@ -273,6 +298,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		CommitSHA:     req.CommitSHA,
 		NoCache:       req.NoCache,
 		Apps:          req.Apps,
+		Plan:          &plan,
 		CorrelationID: req.CorrelationID,
 		Namespace:     "build-" + req.TenantID,
 	}

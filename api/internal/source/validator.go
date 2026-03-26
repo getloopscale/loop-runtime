@@ -5,23 +5,32 @@ package source
 
 import (
 	"fmt"
+	"regexp"
 
 	"gopkg.in/yaml.v3"
 )
 
+var envKeyRegex = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+
 // LoopZeroYAML represents the parsed loopzero.yaml configuration.
 type LoopZeroYAML struct {
+	Version int                   `yaml:"version,omitempty"` // v2: schema version (current: 1)
 	Name    string                `yaml:"name"`
 	Project string                `yaml:"project"`
 	Apps    map[string]AppConfig  `yaml:"apps"`
+	Ignore  []string              `yaml:"ignore,omitempty"` // v2: glob patterns of non-deployable dirs
 }
 
 // AppConfig represents a single app definition in loopzero.yaml.
 type AppConfig struct {
-	Type      string `yaml:"type"`
-	Port      int    `yaml:"port"`
-	Path      string `yaml:"path"`
-	Framework string `yaml:"framework"`
+	Type       string            `yaml:"type"`
+	Port       int               `yaml:"port"`
+	Path       string            `yaml:"path"`
+	Framework  string            `yaml:"framework"`
+	Build      string            `yaml:"build,omitempty"`      // v2: "dockerfile", "buildpack", or "custom"
+	Dockerfile string            `yaml:"dockerfile,omitempty"` // v2: Dockerfile path relative to app path
+	Env        map[string]string `yaml:"env,omitempty"`        // v2: build-time environment variables
+	Secrets    []string          `yaml:"secrets,omitempty"`    // secret names declared for this app
 }
 
 // ValidationError holds field-specific validation errors for loopzero.yaml.
@@ -70,6 +79,14 @@ func ValidateLoopZeroYAML(content string) (*LoopZeroYAML, []string, error) {
 		}
 	}
 
+	// Validate version if present (v2 schema)
+	if cfg.Version != 0 && cfg.Version != 1 {
+		return nil, nil, &ValidationError{
+			Field:   "version",
+			Message: fmt.Sprintf("unsupported version %d (current: 1)", cfg.Version),
+		}
+	}
+
 	// Validate each app
 	for appName, app := range cfg.Apps {
 		appType := app.Type
@@ -95,6 +112,29 @@ func ValidateLoopZeroYAML(content string) (*LoopZeroYAML, []string, error) {
 			return nil, nil, &ValidationError{
 				Field:   fmt.Sprintf("apps.%s.type", appName),
 				Message: fmt.Sprintf("app '%s' has invalid type '%s'; must be 'server', 'worker', or 'frontend'", appName, appType),
+			}
+		}
+
+		// v2: Validate build strategy
+		if app.Build != "" {
+			switch app.Build {
+			case "dockerfile", "buildpack", "custom":
+				// valid
+			default:
+				return nil, nil, &ValidationError{
+					Field:   fmt.Sprintf("apps.%s.build", appName),
+					Message: fmt.Sprintf("app '%s' has invalid build strategy '%s'; must be 'dockerfile', 'buildpack', or 'custom'", appName, app.Build),
+				}
+			}
+		}
+
+		// v2: Validate env keys match ^[A-Z_][A-Z0-9_]*$
+		for key := range app.Env {
+			if !envKeyRegex.MatchString(key) {
+				return nil, nil, &ValidationError{
+					Field:   fmt.Sprintf("apps.%s.env.%s", appName, key),
+					Message: fmt.Sprintf("env key '%s' must match ^[A-Z_][A-Z0-9_]*$ (uppercase with underscores)", key),
+				}
 			}
 		}
 	}

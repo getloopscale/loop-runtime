@@ -113,8 +113,16 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 	}
 	// Per-app BuildKit templates (independent of language grouping).
 	// Each app gets its own buildkitd sidecar + buildctl pair for isolated builds.
-	for _, app := range spec.Apps {
-		inlineTemplates = append(inlineTemplates, b.buildkitTemplateForApp(spec, app))
+	if spec.Plan != nil {
+		// v2: BuildPlan provides resolved paths, image tags, and build args.
+		for _, appPlan := range spec.Plan.Apps {
+			inlineTemplates = append(inlineTemplates, b.buildkitTemplateFromPlan(spec, appPlan))
+		}
+	} else {
+		// Legacy: infer from AppSpec (backward compat with existing tests)
+		for _, app := range spec.Apps {
+			inlineTemplates = append(inlineTemplates, b.buildkitTemplateForApp(spec, app))
+		}
 	}
 
 	// Build the main DAG
@@ -448,6 +456,97 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 		},
 		// AppArmor unconfined annotation — required for rootless BuildKit mount operations
 		// inside user namespaces on managed Kubernetes with AppArmor enabled.
+		Annotations: map[string]string{
+			fmt.Sprintf("container.apparmor.security.beta.kubernetes.io/%s", sidecarName): "unconfined",
+		},
+		PodSpecPatch:  podSpecPatch,
+		Sidecars:      []forge.UserContainer{buildkitdSidecar},
+		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
+	}
+}
+
+// buildkitTemplateFromPlan generates a BuildKit template using resolved fields from AppBuildPlan.
+// Unlike buildkitTemplateForApp, this function doesn't infer anything — all paths, tags,
+// and args come from the plan (created by CreateBuildPlan).
+func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec services.WorkflowSpec, plan services.AppBuildPlan) *forge.Container {
+	// buildctl args from the resolved plan
+	buildctlArgs := []string{
+		"build",
+		"--frontend", "dockerfile.v0",
+		fmt.Sprintf("--local context=%s", plan.ContextPath),
+		fmt.Sprintf("--local dockerfile=%s", dockerfileDir(plan.DockerfilePath)),
+		fmt.Sprintf("--opt filename=%s", dockerfileName(plan.DockerfilePath)),
+		fmt.Sprintf("--output type=image,name=%s,push=true", plan.ImageTag),
+	}
+
+	// OCI registry layer cache (omitted when NoCache)
+	if !spec.NoCache {
+		buildctlArgs = append(buildctlArgs,
+			fmt.Sprintf("--export-cache type=registry,ref=%s,mode=max,ignore-error=true", plan.CacheRef),
+			fmt.Sprintf("--import-cache type=registry,ref=%s", plan.CacheRef),
+		)
+	}
+
+	// Build args from the plan (user env + system vars)
+	for key, val := range plan.BuildArgs {
+		buildctlArgs = append(buildctlArgs, fmt.Sprintf("--opt build-arg:%s=%s", key, val))
+	}
+
+	metadataFile := fmt.Sprintf("/workspace/metadata-%s.json", plan.AppName)
+	buildctlArgs = append(buildctlArgs, fmt.Sprintf("--metadata-file %s", metadataFile))
+
+	// Socket path and prepend --addr
+	socketPath := "unix:///run/user/1000/buildkitd/buildkitd.sock"
+	buildctlArgs = append([]string{"--addr", socketPath}, buildctlArgs...)
+
+	// buildkitd args
+	buildkitdArgs := []string{"--oci-worker-no-process-sandbox", "--addr", socketPath}
+	if b.infraParams.RegistryInsecure {
+		buildkitdArgs = append(buildkitdArgs, "--oci-worker-snapshotter", "native")
+		buildctlArgs = append(buildctlArgs, "--allow", "security.insecure")
+	}
+
+	sidecarName := fmt.Sprintf("buildkitd-%s", plan.AppName)
+	daemonTrue := true
+
+	buildkitdSidecar := forge.UserContainer{
+		Name:  sidecarName,
+		Image: "moby/buildkit:v0.18.2-rootless",
+		Args:  buildkitdArgs,
+		SecurityContext: &model.SecurityContext{
+			RunAsUser: ptr(int64(1000)), RunAsGroup: ptr(int64(1000)), RunAsNonRoot: ptr(true),
+		},
+		Resources: &forge.ResourceRequirements{
+			Requests: forge.ResourceList{CPU: "500m", Memory: "512Mi"},
+			Limits:   forge.ResourceList{CPU: "2000m", Memory: "4Gi"},
+		},
+		VolumeMounts: []forge.VolumeBuilder{
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-socket", MountPath: "/run/user/1000/buildkitd"}},
+			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true}, SecretName: "buildkit-registry-config"},
+		},
+		Daemon: &daemonTrue,
+	}
+
+	podSpecPatch := fmt.Sprintf(`{"containers":[{"name":"%s","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}`, sidecarName)
+
+	return &forge.Container{
+		Name:    fmt.Sprintf("build-image-%s", plan.AppName),
+		Image:   "moby/buildkit:v0.18.2",
+		Command: []string{"buildctl"},
+		Args:    buildctlArgs,
+		Env:     []forge.EnvBuilder{forge.Env{Name: "HOME", Value: "/home/user"}},
+		VolumeMounts: []forge.VolumeBuilder{
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-socket", MountPath: "/run/user/1000/buildkitd"}},
+			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true}, SecretName: "buildkit-registry-config"},
+		},
+		Resources: &forge.ResourceRequirements{
+			Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
+			Limits:   forge.ResourceList{CPU: "500m", Memory: "512Mi"},
+		},
+		SecurityContext: &model.SecurityContext{
+			RunAsUser: ptr(int64(1000)), RunAsGroup: ptr(int64(1000)), RunAsNonRoot: ptr(true),
+		},
 		Annotations: map[string]string{
 			fmt.Sprintf("container.apparmor.security.beta.kubernetes.io/%s", sidecarName): "unconfined",
 		},

@@ -1090,6 +1090,86 @@ func TestWorkflowBuilder_BuildKit_MainContainerHasRegistryCredentials(t *testing
 }
 
 // ---------------------------------------------------------------------------
+// BuildPlan integration — buildkitTemplateFromPlan
+// ---------------------------------------------------------------------------
+
+func testBuildPlan() *services.BuildPlan {
+	return &services.BuildPlan{
+		Apps: []services.AppBuildPlan{
+			{
+				AppName:          "api",
+				ImageTag:         "reg.io/acme/my-app/api:abc123",
+				DockerfilePath:   "/workspace/apps/api/Dockerfile",
+				ContextPath:      "/workspace/apps/api",
+				BuildArgs:        map[string]string{"NODE_ENV": "production", "COMMIT_SHA": "abc123", "APP_NAME": "api"},
+				CacheRef:         "reg.io/acme/my-app/api:buildcache",
+				LanguageStrategy: "node",
+				Build:            "buildpack",
+				AppType:          "server",
+				Port:             3000,
+			},
+		},
+	}
+}
+
+func TestWorkflowBuilder_BuildPlan_UsesResolvedPaths(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	spec := testSpec()
+	spec.Plan = testBuildPlan()
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	if c == nil {
+		t.Fatal("build-image-api not found")
+	}
+
+	argsStr := strings.Join(c.Args, " ")
+
+	// DockerfilePath from plan (not inferred)
+	assertStringContains(t, argsStr, "--local dockerfile=/workspace/apps/api")
+	assertStringContains(t, argsStr, "--opt filename=Dockerfile")
+
+	// ContextPath from plan
+	assertStringContains(t, argsStr, "--local context=/workspace/apps/api")
+
+	// ImageTag from plan
+	assertStringContains(t, argsStr, "--output type=image,name=reg.io/acme/my-app/api:abc123,push=true")
+
+	// CacheRef from plan
+	assertStringContains(t, argsStr, "--export-cache type=registry,ref=reg.io/acme/my-app/api:buildcache")
+
+	// BuildArgs from plan
+	assertStringContains(t, argsStr, "--opt build-arg:NODE_ENV=production")
+	assertStringContains(t, argsStr, "--opt build-arg:COMMIT_SHA=abc123")
+}
+
+func TestWorkflowBuilder_BuildPlan_NoCache(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	spec := testSpec()
+	spec.Plan = testBuildPlan()
+	spec.NoCache = true
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	argsStr := strings.Join(c.Args, " ")
+
+	if strings.Contains(argsStr, "--export-cache") {
+		t.Error("BuildPlan with NoCache should NOT have --export-cache")
+	}
+	if strings.Contains(argsStr, "--import-cache") {
+		t.Error("BuildPlan with NoCache should NOT have --import-cache")
+	}
+	// BuildArgs should still be present
+	assertStringContains(t, argsStr, "--opt build-arg:NODE_ENV=production")
+}
+
+// ---------------------------------------------------------------------------
 // --no-cache flag
 // ---------------------------------------------------------------------------
 

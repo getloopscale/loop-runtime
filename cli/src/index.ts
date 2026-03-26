@@ -28,6 +28,7 @@ import { StatusCommand } from './commands/status';
 import { LogsCommand } from './commands/logs';
 import { RollbackCommand } from './commands/rollback';
 import { SecretSetCommand, SecretListCommand, SecretDeleteCommand } from './commands/secret';
+import { ValidateCommand } from './commands/validate';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
@@ -411,6 +412,30 @@ export function createProgram(): Command {
         return;
       }
       process.exitCode = exitCode;
+    });
+
+  // --- validate ---
+  program
+    .command('validate')
+    .description('Validate loopzero.yaml configuration')
+    .option('--json', 'Output in JSON format')
+    .action(async (cmdOpts) => {
+      const globalOpts = program.opts();
+      const jsonMode = Boolean(cmdOpts.json || globalOpts.json);
+
+      const validateCmd = new ValidateCommand({
+        getToken: () => configStore.getToken(),
+        findLoopZeroYaml: () => {
+          const gitRoot = getGitRoot();
+          if (!gitRoot) return null;
+          return findLoopZeroYaml(process.cwd(), gitRoot);
+        },
+        writeTo,
+        writeError,
+      });
+
+      const exitCode = await validateCmd.execute({ json: jsonMode });
+      process.exit(exitCode);
     });
 
   // --- status ---

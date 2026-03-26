@@ -248,6 +248,7 @@ func main() {
 			Sync:              syncClient,
 			Locker:            locker,
 			GitOps:            gitopsPusher,
+			RegistryURL:       cfg.RegistryURL,
 			ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
 		})
 
