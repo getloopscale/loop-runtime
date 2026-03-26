@@ -1,7 +1,7 @@
 # Roadmap: loopzero.yml como Contrato Declarativo
 
-> Data: 2026-03-25
-> Status: Planejado
+> Data: 2026-03-25 (atualizado 2026-03-26)
+> Status: Milestones 1-5 completos, M6-M7 implementados (pendente validacao DigitalOcean)
 > Escopo: Evolucao de deteccao heuristica para contrato estrutural via loopzero.yml
 
 ---

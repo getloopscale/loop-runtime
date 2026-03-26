@@ -8,27 +8,10 @@ import {
   MAX_ENVIRONMENT_NAME_LENGTH,
   MAX_BUNDLE_SIZE_BYTES,
 } from '../config/constants';
+import { LoopZeroYaml, LoopZeroYamlResult } from '../adapters/loopzero-yaml';
+import { normalizeApps } from '../adapters/app-unit';
 import * as fs from 'fs';
 import * as path from 'path';
-
-interface LoopZeroYamlApp {
-  path: string;
-  framework: string;
-  type?: string;  // "server" | "worker" | "frontend"
-  port: number | null;
-  secrets?: string[];
-}
-
-interface LoopZeroYaml {
-  project: string;
-  apps: Record<string, LoopZeroYamlApp>;
-}
-
-interface LoopZeroYamlResult {
-  path: string;
-  content: LoopZeroYaml;
-  parseError?: string;
-}
 
 interface UploadResult {
   commit_sha: string;
@@ -37,11 +20,14 @@ interface UploadResult {
 
 interface AppInput {
   name: string;
-  type?: string;  // "server" | "worker" | "frontend"
-  port?: number;
-  path?: string;
-  framework?: string;
-  secrets?: string[];  // declared secret names from loopzero.yaml
+  type: string;                        // "server" | "worker" | "frontend" (always resolved)
+  port: number | null;
+  path: string;
+  framework: string;
+  build: string;                       // v2: "dockerfile" | "buildpack" | "custom"
+  dockerfile: string | null;           // v2: Dockerfile path relative to app path
+  env: Record<string, string>;         // v2: build-time environment variables
+  secrets: string[];
 }
 
 interface SubmitBuildInput {
@@ -164,6 +150,11 @@ export class DeployCommand {
       return this.exitWithError(opts, envError, 1, 'INVALID_ENVIRONMENT');
     }
 
+    // 5b. Legacy format warning (M7: backward compat)
+    if (config.version === undefined && !opts.json) {
+      this.deps.writeTo('Warning: loopzero.yaml uses legacy format. Run: loopzero init --force to upgrade');
+    }
+
     // 6. Validate --app flag (DA-19) — fail fast before any upload
     const selectedApps = opts.app ?? appNames;
     for (const app of selectedApps) {
@@ -172,8 +163,12 @@ export class DeployCommand {
       }
     }
 
+    // 6b. Normalize apps into AppUnits (M6: declarative contract)
+    // After this point, all apps have resolved type, build, port, env.
+    const appUnits = normalizeApps(config.apps, selectedApps);
+
     // 7. Validate secrets (pre-deploy check) — scoped to selected apps only (F-02)
-    const declaredSecrets = this.collectDeclaredSecrets(config, selectedApps);
+    const declaredSecrets = [...new Set(appUnits.flatMap(u => u.secrets))];
     if (declaredSecrets.length > 0) {
       let configuredSecrets: string[];
       try {
@@ -278,13 +273,17 @@ export class DeployCommand {
       environment,
       selectedApps,
     );
-    const appInputs: AppInput[] = selectedApps.map((name) => ({
-      name,
-      type: this.resolveAppType(config.apps[name]),
-      port: config.apps[name]?.port ?? undefined,
-      path: config.apps[name]?.path ?? undefined,
-      framework: config.apps[name]?.framework ?? undefined,
-      secrets: config.apps[name]?.secrets ?? undefined,
+    // M6: Build app inputs from normalized AppUnits (no inference at deploy time)
+    const appInputs: AppInput[] = appUnits.map((unit) => ({
+      name: unit.name,
+      type: unit.type,
+      port: unit.port,
+      path: unit.path,
+      framework: unit.framework,
+      build: unit.build,
+      dockerfile: unit.dockerfile,
+      env: unit.env,
+      secrets: unit.secrets,
     }));
     let buildResult: SubmitBuildResult;
     try {
@@ -529,34 +528,6 @@ export class DeployCommand {
     }
 
     return 2;
-  }
-
-  private collectDeclaredSecrets(config: LoopZeroYaml, selectedApps: string[]): string[] {
-    const secretsSet = new Set<string>();
-    for (const appName of selectedApps) {
-      const app = config.apps[appName];
-      if (app?.secrets) {
-        for (const secret of app.secrets) {
-          secretsSet.add(secret);
-        }
-      }
-    }
-    return Array.from(secretsSet);
-  }
-
-  private resolveAppType(app: LoopZeroYamlApp | undefined): string {
-    if (!app) return 'server';
-    // Use explicit type if set
-    if (app.type) return app.type;
-    // Infer type from framework/port as fallback
-    const framework = (app.framework || '').toLowerCase();
-    if (framework === 'next' || framework === 'react' || framework === 'vue' || framework === 'svelte') {
-      return 'frontend';
-    }
-    if (app.port === null || app.port === undefined) {
-      return 'worker';
-    }
-    return 'server';
   }
 
   private validateEnvironment(env: string): string | null {

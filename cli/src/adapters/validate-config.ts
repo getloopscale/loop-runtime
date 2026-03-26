@@ -10,20 +10,28 @@ export interface ValidationError {
   message: string;
 }
 
+export interface ValidateConfigOptions {
+  /** Skip filesystem checks (path existence, Dockerfile existence). Useful when
+   *  the source will be validated server-side after upload (e.g., during deploy). */
+  skipFilesystemChecks?: boolean;
+}
+
 /**
  * Validate a parsed LoopZeroYaml config strictly.
  * Returns an array of errors. Empty array = valid.
  *
  * Checks:
- *   - Path existence (relative to projectRoot)
+ *   - Path existence (relative to projectRoot) — skipped with skipFilesystemChecks
  *   - Type + port compatibility (server needs port, worker rejects port)
- *   - Build + dockerfile consistency
+ *   - Build + dockerfile consistency — filesystem check skipped with skipFilesystemChecks
  *   - Unknown fields (warning-level, returned in warnings)
  */
 export function validateConfig(
   config: LoopZeroYaml,
   projectRoot: string,
+  opts?: ValidateConfigOptions,
 ): { errors: ValidationError[]; warnings: string[] } {
+  const skipFs = opts?.skipFilesystemChecks ?? false;
   const errors: ValidationError[] = [];
   const warnings: string[] = [];
 
@@ -36,9 +44,9 @@ export function validateConfig(
   }
 
   for (const [name, app] of Object.entries(config.apps)) {
-    // Path existence
+    // Path existence (only when filesystem checks enabled)
     const appPath = path.resolve(projectRoot, app.path);
-    if (!fs.existsSync(appPath)) {
+    if (!skipFs && !fs.existsSync(appPath)) {
       errors.push({
         field: `apps.${name}.path`,
         message: `App '${name}': path '${app.path}' does not exist`,
@@ -60,8 +68,8 @@ export function validateConfig(
       });
     }
 
-    // Build + dockerfile consistency
-    if (app.build === 'dockerfile') {
+    // Build + dockerfile consistency (filesystem check)
+    if (!skipFs && app.build === 'dockerfile') {
       const dockerfileName = app.dockerfile ?? 'Dockerfile';
       const dockerfilePath = path.resolve(projectRoot, app.path, dockerfileName);
       if (fs.existsSync(path.resolve(projectRoot, app.path)) && !fs.existsSync(dockerfilePath)) {

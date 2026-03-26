@@ -94,10 +94,59 @@ func groupAppsByLanguage(apps []services.AppSpec) []languageGroup {
 	return result
 }
 
+// groupAppsByPlan groups AppBuildPlan entries by their pre-resolved LanguageStrategy.
+// Unlike groupAppsByLanguage, this does NOT call ResolveStrategy — the strategy was
+// already resolved during CreateBuildPlan. This is the BuildPlan-native grouping.
+func groupAppsByPlan(plans []services.AppBuildPlan) []languageGroup {
+	groups := make(map[string]*languageGroup)
+	var order []string
+
+	for _, p := range plans {
+		stratName := p.LanguageStrategy
+		if _, exists := groups[stratName]; !exists {
+			// Resolve the strategy object from the pre-resolved name.
+			// This is safe because LanguageStrategy was set by resolveLanguageStrategy
+			// in CreateBuildPlan — the mapping is consistent.
+			strategy := ResolveStrategy(stratName)
+			groups[stratName] = &languageGroup{Strategy: strategy}
+			order = append(order, stratName)
+		}
+		// Convert AppBuildPlan back to AppSpec for language step generation.
+		// Language steps (validate, install, build, dockerfile) need app paths and frameworks.
+		groups[stratName].Apps = append(groups[stratName].Apps, services.AppSpec{
+			Name:      p.AppName,
+			Type:      p.AppType,
+			Port:      p.Port,
+			Path:      "", // Language steps use workspace-relative paths, not absolute
+			Framework: stratName,
+			Build:     p.Build,
+			Secrets:   p.Secrets,
+		})
+	}
+
+	result := make([]languageGroup, 0, len(order))
+	needsSuffix := len(order) > 1
+	for _, name := range order {
+		g := groups[name]
+		if needsSuffix {
+			g.Suffix = "-" + name
+		}
+		result = append(result, *g)
+	}
+	return result
+}
+
 // Build generates a complete Workflow CR using forge types for the given spec.
 // The returned *forge.Workflow can be serialized via ToDict() for the K8s dynamic client.
 func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, error) {
-	groups := groupAppsByLanguage(spec.Apps)
+	// v2: When a BuildPlan is present, group by pre-resolved strategy (no inline inference).
+	// Legacy: group by framework using ResolveStrategy.
+	var groups []languageGroup
+	if spec.Plan != nil && len(spec.Plan.Apps) > 0 {
+		groups = groupAppsByPlan(spec.Plan.Apps)
+	} else {
+		groups = groupAppsByLanguage(spec.Apps)
+	}
 
 	// REVIEW-AP-3: Generate per-language inline templates for mixed-language support.
 	// Each language group gets its own validate/install/build/scan/dockerfile steps.
@@ -247,19 +296,33 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName}))
 	}
 
-	// Per-app BuildKit — depends on its language group's dockerfile step
-	for _, app := range spec.Apps {
-		appStrategy := ResolveStrategy(app.Framework)
-		// Find the suffix for this app's language
-		dockerfileDep := "generate-dockerfile"
-		for _, g := range groups {
-			if g.Strategy.Name() == appStrategy.Name() {
-				dockerfileDep = "generate-dockerfile" + g.Suffix
-				break
+	// Per-app BuildKit — depends on its language group's dockerfile step.
+	// v2: When BuildPlan is present, use pre-resolved LanguageStrategy for dependency lookup.
+	if spec.Plan != nil && len(spec.Plan.Apps) > 0 {
+		for _, appPlan := range spec.Plan.Apps {
+			dockerfileDep := "generate-dockerfile"
+			for _, g := range groups {
+				if g.Strategy.Name() == appPlan.LanguageStrategy {
+					dockerfileDep = "generate-dockerfile" + g.Suffix
+					break
+				}
 			}
+			taskName := fmt.Sprintf("build-image-%s", appPlan.AppName)
+			tasks = append(tasks, inlineTask(taskName, taskName, []string{dockerfileDep}))
 		}
-		taskName := fmt.Sprintf("build-image-%s", app.Name)
-		tasks = append(tasks, inlineTask(taskName, taskName, []string{dockerfileDep}))
+	} else {
+		for _, app := range spec.Apps {
+			appStrategy := ResolveStrategy(app.Framework)
+			dockerfileDep := "generate-dockerfile"
+			for _, g := range groups {
+				if g.Strategy.Name() == appStrategy.Name() {
+					dockerfileDep = "generate-dockerfile" + g.Suffix
+					break
+				}
+			}
+			taskName := fmt.Sprintf("build-image-%s", app.Name)
+			tasks = append(tasks, inlineTask(taskName, taskName, []string{dockerfileDep}))
+		}
 	}
 
 	if err := dag.AddTasks(tasks...); err != nil {

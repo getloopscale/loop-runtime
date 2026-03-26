@@ -1170,6 +1170,145 @@ func TestWorkflowBuilder_BuildPlan_NoCache(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// BuildPlan — multi-language monorepo (M5 Tarefa 5.5)
+// ---------------------------------------------------------------------------
+
+func TestWorkflowBuilder_BuildPlan_MultiLanguageMonorepo(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	spec := testSpec()
+	spec.Plan = &services.BuildPlan{
+		Apps: []services.AppBuildPlan{
+			{
+				AppName:          "api",
+				ImageTag:         "reg.io/acme/my-app/api:abc123",
+				DockerfilePath:   "/workspace/apps/api/Dockerfile",
+				ContextPath:      "/workspace/apps/api",
+				BuildArgs:        map[string]string{"COMMIT_SHA": "abc123", "APP_NAME": "api"},
+				CacheRef:         "reg.io/acme/my-app/api:buildcache",
+				LanguageStrategy: "node",
+				Build:            "buildpack",
+				AppType:          "server",
+				Port:             3000,
+			},
+			{
+				AppName:          "gateway",
+				ImageTag:         "reg.io/acme/my-app/gateway:abc123",
+				DockerfilePath:   "/workspace/apps/gateway/Dockerfile",
+				ContextPath:      "/workspace/apps/gateway",
+				BuildArgs:        map[string]string{"COMMIT_SHA": "abc123", "APP_NAME": "gateway"},
+				CacheRef:         "reg.io/acme/my-app/gateway:buildcache",
+				LanguageStrategy: "go",
+				Build:            "buildpack",
+				AppType:          "server",
+				Port:             8080,
+			},
+			{
+				AppName:          "ml-worker",
+				ImageTag:         "reg.io/acme/my-app/ml-worker:abc123",
+				DockerfilePath:   "/workspace/apps/ml-worker/Dockerfile",
+				ContextPath:      "/workspace/apps/ml-worker",
+				BuildArgs:        map[string]string{"COMMIT_SHA": "abc123", "APP_NAME": "ml-worker"},
+				CacheRef:         "reg.io/acme/my-app/ml-worker:buildcache",
+				LanguageStrategy: "python",
+				Build:            "buildpack",
+				AppType:          "worker",
+				Port:             0,
+			},
+		},
+	}
+	// Also set spec.Apps for backward compat fields (not used by plan path)
+	spec.Apps = []services.AppSpec{
+		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
+		{Name: "gateway", Type: "server", Port: 8080, Framework: "go"},
+		{Name: "ml-worker", Type: "worker", Port: 0, Framework: "python"},
+	}
+
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	// Find the main DAG
+	var mainDAG *forge.DAG
+	for _, tmpl := range wf.Templates {
+		if dag, ok := tmpl.(*forge.DAG); ok && dag.Name == "build-pipeline" {
+			mainDAG = dag
+			break
+		}
+	}
+	if mainDAG == nil {
+		t.Fatal("build-pipeline DAG not found")
+	}
+
+	// Helper to find a task in the DAG
+	findTask := func(name string) *forge.Task {
+		for _, task := range mainDAG.Tasks {
+			if task.Name == name {
+				return task
+			}
+		}
+		return nil
+	}
+
+	// Should have per-language steps with suffixes (multi-language → suffixed)
+	for _, suffix := range []string{"-node", "-go", "-python"} {
+		for _, step := range []string{"validate-workspace", "install-deps", "build-apps", "generate-dockerfile", "security-scan"} {
+			taskName := step + suffix
+			if findTask(taskName) == nil {
+				t.Errorf("missing per-language DAG task: %s", taskName)
+			}
+		}
+	}
+
+	// Should have per-app build-image tasks
+	for _, appName := range []string{"build-image-api", "build-image-gateway", "build-image-ml-worker"} {
+		if findTask(appName) == nil {
+			t.Errorf("missing per-app DAG task: %s", appName)
+		}
+	}
+
+	// build-image-api should depend on generate-dockerfile-node
+	apiTask := findTask("build-image-api")
+	if apiTask != nil {
+		assertDependencies(t, apiTask, []string{"generate-dockerfile-node"})
+	}
+
+	// build-image-gateway should depend on generate-dockerfile-go
+	gwTask := findTask("build-image-gateway")
+	if gwTask != nil {
+		assertDependencies(t, gwTask, []string{"generate-dockerfile-go"})
+	}
+
+	// build-image-ml-worker should depend on generate-dockerfile-python
+	mlTask := findTask("build-image-ml-worker")
+	if mlTask != nil {
+		assertDependencies(t, mlTask, []string{"generate-dockerfile-python"})
+	}
+
+	// Each build-image should use its plan's resolved paths
+	apiContainer := findContainer(t, wf, "build-image-api")
+	if apiContainer != nil {
+		argsStr := strings.Join(apiContainer.Args, " ")
+		assertStringContains(t, argsStr, "--local context=/workspace/apps/api")
+		assertStringContains(t, argsStr, "--output type=image,name=reg.io/acme/my-app/api:abc123")
+	}
+
+	gwContainer := findContainer(t, wf, "build-image-gateway")
+	if gwContainer != nil {
+		argsStr := strings.Join(gwContainer.Args, " ")
+		assertStringContains(t, argsStr, "--local context=/workspace/apps/gateway")
+		assertStringContains(t, argsStr, "--output type=image,name=reg.io/acme/my-app/gateway:abc123")
+	}
+
+	mlContainer := findContainer(t, wf, "build-image-ml-worker")
+	if mlContainer != nil {
+		argsStr := strings.Join(mlContainer.Args, " ")
+		assertStringContains(t, argsStr, "--local context=/workspace/apps/ml-worker")
+		assertStringContains(t, argsStr, "--output type=image,name=reg.io/acme/my-app/ml-worker:abc123")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // --no-cache flag
 // ---------------------------------------------------------------------------
 

@@ -20,7 +20,7 @@ export interface AppUnit {
   secrets: string[];
 }
 
-const FRONTEND_FRAMEWORKS = ['nextjs', 'vite', 'remix', 'react', 'vue', 'svelte', 'astro'];
+const FRONTEND_FRAMEWORKS = ['nextjs', 'next', 'vite', 'remix', 'react', 'vue', 'svelte', 'astro'];
 
 /**
  * normalizeApp resolves a raw LoopZeroYamlApp into a fully populated AppUnit.

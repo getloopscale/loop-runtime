@@ -581,11 +581,11 @@ export function createProgram(): Command {
           return findLoopZeroYaml(process.cwd(), gitRoot);
         },
         setSecret: async (project: string, name: string, value: string, env: string, app: string) => {
-          return apiClient.post(`/api/v1/secrets?project=${encodeURIComponent(project)}`, {
+          return apiClient.post<{ name: string; environment: string; app: string; created: boolean }>(`/api/v1/secrets?project=${encodeURIComponent(project)}`, {
             name, value, environment: env, app,
           });
         },
-        listSecrets: async () => ({ secrets: [] }),
+        listSecrets: async () => ({ secrets: [] as Array<{ name: string; environment: string; app: string }> }),
         deleteSecret: async () => ({ name: '', deleted: false }),
         writeTo,
         writeError,
@@ -619,7 +619,7 @@ export function createProgram(): Command {
         },
         setSecret: async () => ({ name: '', environment: '', app: '', created: false }),
         listSecrets: async (project: string, env: string) => {
-          return apiClient.get(`/api/v1/secrets?project=${encodeURIComponent(project)}&env=${encodeURIComponent(env)}`);
+          return apiClient.get<{ secrets: Array<{ name: string; environment: string; app: string }> }>(`/api/v1/secrets?project=${encodeURIComponent(project)}&env=${encodeURIComponent(env)}`);
         },
         deleteSecret: async () => ({ name: '', deleted: false }),
         writeTo,
@@ -654,9 +654,9 @@ export function createProgram(): Command {
         getToken: () => configStore.getToken(),
         findLoopZeroYaml: () => yamlResult,
         setSecret: async () => ({ name: '', environment: '', app: '', created: false }),
-        listSecrets: async () => ({ secrets: [] }),
+        listSecrets: async () => ({ secrets: [] as Array<{ name: string; environment: string; app: string }> }),
         deleteSecret: async (_proj: string, secretName: string, env: string, app: string) => {
-          return apiClient.del(
+          return apiClient.del<{ name: string; deleted: boolean }>(
             `/api/v1/secrets/${encodeURIComponent(secretName)}?project=${encodeURIComponent(project)}&environment=${encodeURIComponent(env)}&app=${encodeURIComponent(app)}`,
           );
         },

@@ -380,6 +380,8 @@ export class InitCommand {
 
   private generateYaml(projectName: string, apps: AppSpec[]): string {
     const lines: string[] = [];
+    // v2: Always include version for schema evolution
+    lines.push('version: 1');
     lines.push(`project: ${this.quoteYaml(projectName)}`);
     lines.push('');
     lines.push('apps:');
@@ -387,11 +389,13 @@ export class InitCommand {
       lines.push(`  ${this.quoteYaml(app.name)}:`);
       lines.push(`    path: ${this.quoteYaml(app.path)}`);
       lines.push(`    framework: ${this.quoteYaml(app.framework)}`);
-      if (app.type === 'worker') {
-        lines.push('    type: worker');
-      } else if (app.type === 'frontend') {
-        lines.push('    type: frontend');
-      } else if (app.port !== null) {
+      // v2: Always include explicit type (no inference at deploy time)
+      const appType = app.type ?? 'server';
+      lines.push(`    type: ${appType}`);
+      // v2: Always include build strategy
+      const build = (app.framework === 'custom' || app.framework === 'unknown') ? 'dockerfile' : 'buildpack';
+      lines.push(`    build: ${build}`);
+      if (appType === 'server' && app.port !== null) {
         lines.push(`    port: ${app.port}`);
       }
       lines.push('');
