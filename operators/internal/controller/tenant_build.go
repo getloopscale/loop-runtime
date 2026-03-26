@@ -6,8 +6,12 @@ package controller
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -175,12 +179,19 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 	// BuildKit registry credentials — Docker config.json format mounted at
 	// /home/user/.docker/config.json inside the buildkitd rootless container.
 	// BuildKit reads this for authenticated push to container registries.
-	// DO Container Registry uses the DO API token for auth (not Spaces keys).
+	//
+	// DO Container Registry requires credentials generated via the DO API
+	// (POST /v2/registry/docker-credentials?read_write=true) — the raw API
+	// token does NOT work for docker/buildkit auth. The API endpoint returns
+	// a proper Docker config.json with a registry-scoped token.
+	//
+	// For local k3d development, use REGISTRY_DOCKER_CONFIG env var directly.
 	doAPIToken := os.Getenv("DIGITALOCEAN_TOKEN")
 	if doAPIToken != "" {
-		dockerAuth := fmt.Sprintf("%s:%s", doAPIToken, doAPIToken)
-		encodedAuth := base64Encode(dockerAuth)
-		dockerConfig := fmt.Sprintf(`{"auths":{"registry.digitalocean.com":{"auth":"%s"}}}`, encodedAuth)
+		dockerConfig, fetchErr := fetchDORegistryCredentials(doAPIToken)
+		if fetchErr != nil {
+			return fmt.Errorf("build buildkit-registry-config: fetch DO registry credentials: %w", fetchErr)
+		}
 
 		buildkitSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -202,6 +213,29 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		})
 		if err != nil {
 			return fmt.Errorf("build buildkit-registry-config %s: %w", buildNs, err)
+		}
+	} else if localConfig := os.Getenv("REGISTRY_DOCKER_CONFIG"); localConfig != "" {
+		// Local dev: use docker config from env var (k3d registry doesn't need DO API)
+		buildkitSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "buildkit-registry-config",
+				Namespace: buildNs,
+			},
+		}
+		_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, buildkitSecret, func() error {
+			buildkitSecret.Labels = map[string]string{
+				"loopzero.io/tenant":     tenant.Name,
+				"loopzero.io/component":  "build",
+				"loopzero.io/managed-by": "tenant-controller",
+			}
+			buildkitSecret.Type = corev1.SecretTypeOpaque
+			buildkitSecret.StringData = map[string]string{
+				"config.json": localConfig,
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("build buildkit-registry-config (local) %s: %w", buildNs, err)
 		}
 	}
 
@@ -326,6 +360,54 @@ func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, n
 //   - K8s API (port 6443 TCP) — Argo Workflow task result reporting
 //
 // All other egress is denied.
+// fetchDORegistryCredentials calls the DigitalOcean API to generate read-write
+// registry credentials in Docker config.json format. The DO Container Registry
+// requires credentials generated via this API endpoint — the raw API token
+// does NOT work for docker/buildkit push authentication.
+//
+// Returns the Docker config.json string: {"auths":{"registry.digitalocean.com":{"auth":"base64(email:token)"}}}
+//
+// Token expiry is set to 7 days (604800s). The TenantController re-creates the Secret
+// on every reconcile, so the token is refreshed regularly.
+func fetchDORegistryCredentials(apiToken string) (string, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("GET",
+		"https://api.digitalocean.com/v2/registry/docker-credentials?read_write=true&expiry_seconds=604800",
+		nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("call DO API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("DO API returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	// The API returns {"auths":{"registry.digitalocean.com":{"auth":"..."}}}
+	// Validate it's valid JSON with the expected structure.
+	var config map[string]interface{}
+	if err := json.Unmarshal(body, &config); err != nil {
+		return "", fmt.Errorf("invalid JSON from DO API: %w", err)
+	}
+	if _, ok := config["auths"]; !ok {
+		return "", fmt.Errorf("DO API response missing 'auths' field")
+	}
+
+	return string(body), nil
+}
+
 func (r *TenantReconciler) reconcileBuildNetworkPolicy(ctx context.Context, namespace string) error {
 	dnsPort := intstr.FromInt32(53)
 	minioPort := intstr.FromInt32(9000)

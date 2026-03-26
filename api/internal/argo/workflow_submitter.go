@@ -149,6 +149,15 @@ func (s *WorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID st
 
 // GetStatus checks the external state of a workflow in the build cluster.
 // Returns (status, nil) if the workflow exists, or (nil, nil) if not found.
+//
+// BuildKit sidecar fix: When Argo kills the buildkitd daemon sidecar (SIGTERM after
+// main container exits), the sidecar exits non-zero and Argo marks the workflow as
+// "Failed" even though the build succeeded (main container exit code 0). This is a
+// known Argo Workflows behavior with daemon sidecars.
+//
+// To handle this, when the phase is "Failed", we check if all Pod-type nodes have
+// exitCode "0" on their outputs. If so, the build actually succeeded — the failure
+// is only from daemon sidecar termination.
 func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*services.WorkflowStatus, error) {
 	wf, err := s.client.Resource(workflowGVR).Namespace(namespace).Get(ctx, workflowID, metav1.GetOptions{})
 	if err != nil {
@@ -157,5 +166,40 @@ func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID
 	}
 
 	phase, _, _ := unstructured.NestedString(wf.Object, "status", "phase")
+
+	// Check for sidecar-induced false failures: if all pod nodes exited with 0,
+	// the workflow succeeded despite Argo reporting "Failed" from daemon sidecar SIGTERM.
+	if phase == "Failed" && allMainContainersSucceeded(wf.Object) {
+		phase = "Succeeded"
+	}
+
 	return &services.WorkflowStatus{Phase: phase}, nil
+}
+
+// allMainContainersSucceeded checks if every Pod-type node in the workflow has
+// exitCode "0" in its outputs. This detects false failures caused by daemon
+// sidecar termination (BuildKit sidecar pattern).
+func allMainContainersSucceeded(obj map[string]interface{}) bool {
+	nodes, found, err := unstructured.NestedMap(obj, "status", "nodes")
+	if err != nil || !found || len(nodes) == 0 {
+		return false
+	}
+
+	podCount := 0
+	for _, nodeVal := range nodes {
+		node, ok := nodeVal.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		nodeType, _, _ := unstructured.NestedString(node, "type")
+		if nodeType != "Pod" {
+			continue
+		}
+		podCount++
+		exitCode, _, _ := unstructured.NestedString(node, "outputs", "exitCode")
+		if exitCode != "0" {
+			return false
+		}
+	}
+	return podCount > 0
 }

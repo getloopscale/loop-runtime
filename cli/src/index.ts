@@ -264,6 +264,7 @@ export function createProgram(): Command {
     .option('--app <name...>', 'Deploy specific app(s)')
     .option('--wait', 'Wait for deploy to complete', true)
     .option('--no-wait', 'Return immediately after submit')
+    .option('--no-cache', 'Build without layer cache (full rebuild)')
     .option('--json', 'Output in JSON format')
     .action(async (cmdOpts) => {
       const globalOpts = program.opts();
@@ -306,6 +307,7 @@ export function createProgram(): Command {
               project_id: input.project,
               environment: input.environment,
               commit_sha: input.commitSha,
+              ...(input.noCache ? { no_cache: true } : {}),
               apps: input.apps.map((a) => ({
                 name: a.name,
                 ...(a.type ? { type: a.type } : {}),
@@ -379,6 +381,7 @@ export function createProgram(): Command {
           app: cmdOpts.app,
           wait: cmdOpts.wait,
           json: jsonMode,
+          noCache: cmdOpts.noCache ?? false,
         }),
         DEPLOY_TIMEOUT_MS + 30_000,
         'Deploy command timed out waiting for completion.',

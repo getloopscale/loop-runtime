@@ -322,8 +322,11 @@ func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
 func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app services.AppSpec) *forge.Container {
 	destination := fmt.Sprintf("%s/%s/%s/%s:%s",
 		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
-	cacheRef := fmt.Sprintf("%s/%s/cache/%s:buildcache",
-		b.infraParams.RegistryURL, spec.TenantID, app.Name)
+	// Cache ref uses the SAME repo as the image with tag :buildcache.
+	// Using a separate cache/ path (e.g., {tenant}/cache/{app}) conflicts with existing
+	// repos on DO Container Registry — subrepos under existing repos are forbidden.
+	cacheRef := fmt.Sprintf("%s/%s/%s/%s:buildcache",
+		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name)
 
 	// Per-app Dockerfile: Dockerfile.{app} for multi-app, Dockerfile for single-app.
 	dockerfile := "/workspace/Dockerfile"
@@ -341,10 +344,16 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 		fmt.Sprintf("--local dockerfile=%s", dockerfileDir(dockerfile)),
 		fmt.Sprintf("--opt filename=%s", dockerfileName(dockerfile)),
 		fmt.Sprintf("--output type=image,name=%s,push=true", destination),
-		fmt.Sprintf("--export-cache type=registry,ref=%s,mode=max", cacheRef),
-		fmt.Sprintf("--import-cache type=registry,ref=%s", cacheRef),
-		fmt.Sprintf("--metadata-file %s", metadataFile),
 	}
+	// OCI registry layer cache: --import-cache pulls cached layers before build,
+	// --export-cache pushes layers after build. Omitted when NoCache is set.
+	if !spec.NoCache {
+		buildctlArgs = append(buildctlArgs,
+			fmt.Sprintf("--export-cache type=registry,ref=%s,mode=max,ignore-error=true", cacheRef),
+			fmt.Sprintf("--import-cache type=registry,ref=%s", cacheRef),
+		)
+	}
+	buildctlArgs = append(buildctlArgs, fmt.Sprintf("--metadata-file %s", metadataFile))
 
 	// buildkitd socket path — rootless user 1000
 	socketPath := "unix:///run/user/1000/buildkitd/buildkitd.sock"

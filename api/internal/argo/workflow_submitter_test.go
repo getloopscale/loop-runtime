@@ -197,3 +197,74 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 	// Cleanup
 	_ = submitter.Cancel(ctx, "build-acme", workflowID)
 }
+
+// ---------------------------------------------------------------------------
+// allMainContainersSucceeded — sidecar false-failure detection
+// ---------------------------------------------------------------------------
+
+func TestAllMainContainersSucceeded_AllExitZero(t *testing.T) {
+	obj := map[string]interface{}{
+		"status": map[string]interface{}{
+			"nodes": map[string]interface{}{
+				"dag-node": map[string]interface{}{
+					"type": "DAG",
+				},
+				"pod-1": map[string]interface{}{
+					"type":    "Pod",
+					"outputs": map[string]interface{}{"exitCode": "0"},
+				},
+				"pod-2": map[string]interface{}{
+					"type":    "Pod",
+					"outputs": map[string]interface{}{"exitCode": "0"},
+				},
+			},
+		},
+	}
+	if !allMainContainersSucceeded(obj) {
+		t.Error("expected true when all pods have exitCode 0")
+	}
+}
+
+func TestAllMainContainersSucceeded_OnePodFailed(t *testing.T) {
+	obj := map[string]interface{}{
+		"status": map[string]interface{}{
+			"nodes": map[string]interface{}{
+				"pod-1": map[string]interface{}{
+					"type":    "Pod",
+					"outputs": map[string]interface{}{"exitCode": "0"},
+				},
+				"pod-2": map[string]interface{}{
+					"type":    "Pod",
+					"outputs": map[string]interface{}{"exitCode": "1"},
+				},
+			},
+		},
+	}
+	if allMainContainersSucceeded(obj) {
+		t.Error("expected false when a pod has exitCode 1")
+	}
+}
+
+func TestAllMainContainersSucceeded_NoNodes(t *testing.T) {
+	obj := map[string]interface{}{
+		"status": map[string]interface{}{},
+	}
+	if allMainContainersSucceeded(obj) {
+		t.Error("expected false when no nodes exist")
+	}
+}
+
+func TestAllMainContainersSucceeded_NoPods(t *testing.T) {
+	obj := map[string]interface{}{
+		"status": map[string]interface{}{
+			"nodes": map[string]interface{}{
+				"dag-node": map[string]interface{}{
+					"type": "DAG",
+				},
+			},
+		},
+	}
+	if allMainContainersSucceeded(obj) {
+		t.Error("expected false when no Pod-type nodes exist")
+	}
+}

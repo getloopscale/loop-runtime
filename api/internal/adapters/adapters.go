@@ -136,6 +136,7 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		ProjectID:     req.ProjectID,
 		Environment:   req.Environment,
 		CommitSHA:     req.CommitSHA,
+		NoCache:       req.NoCache,
 		Apps:          apps,
 		CreatedBy:     req.CreatedBy,
 		CorrelationID: req.CorrelationID,

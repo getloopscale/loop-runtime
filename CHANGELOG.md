@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `UseKaniko` feature flag (`USE_KANIKO` env var, default `true`) — allows gradual migration and instant rollback to Kaniko during transition (#BUILDKIT-MIGRATION)
 - `buildkit-registry-config` Secret in TenantController — registry credentials for BuildKit push, coexists with Kaniko's `docker-config` during migration (#BUILDKIT-MIGRATION)
 - `ParseBuildKitDigest()` — deterministic digest extraction from BuildKit metadata JSON with strict `sha256:` prefix validation (#BUILDKIT-MIGRATION)
-- 22 unit tests covering BuildKit template generation, sidecar pattern, security context, resource limits, cache flags, multi-app isolation, digest parsing, DOKS compatibility (seccomp, apparmor, rootlesskit) (#BUILDKIT-MIGRATION)
+- `loopzero deploy --no-cache` flag — forces full rebuild without BuildKit layer cache, useful for debugging stale cache issues (#BUILDKIT-MIGRATION)
+- 24 unit tests covering BuildKit template generation, sidecar pattern, security context, resource limits, cache flags, no-cache, multi-app isolation, digest parsing, DOKS compatibility (seccomp, apparmor, rootlesskit) (#BUILDKIT-MIGRATION)
 
 ### Removed
 - Kaniko build engine — completely replaced by BuildKit with rootless sidecar pattern (#BUILDKIT-MIGRATION)

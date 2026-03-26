@@ -867,11 +867,11 @@ func TestWorkflowBuilder_BuildKit_BuildctlArgs_ContainsCacheFlags(t *testing.T) 
 	// Output with push
 	assertStringContains(t, argsStr, "--output type=image,name=k3d-loopzero-registry:5000/acme/my-app/api:abc123,push=true")
 
-	// Export cache with mode=max
-	assertStringContains(t, argsStr, "--export-cache type=registry,ref=k3d-loopzero-registry:5000/acme/cache/api:buildcache,mode=max")
+	// Export cache — same repo as image, tag :buildcache. ignore-error=true makes cache failures non-fatal.
+	assertStringContains(t, argsStr, "--export-cache type=registry,ref=k3d-loopzero-registry:5000/acme/my-app/api:buildcache,mode=max,ignore-error=true")
 
-	// Import cache
-	assertStringContains(t, argsStr, "--import-cache type=registry,ref=k3d-loopzero-registry:5000/acme/cache/api:buildcache")
+	// Import cache — same ref
+	assertStringContains(t, argsStr, "--import-cache type=registry,ref=k3d-loopzero-registry:5000/acme/my-app/api:buildcache")
 
 	// Metadata file for digest extraction
 	assertStringContains(t, argsStr, "--metadata-file /workspace/metadata-api.json")
@@ -1087,6 +1087,49 @@ func TestWorkflowBuilder_BuildKit_MainContainerHasRegistryCredentials(t *testing
 	if !hasRegistryMount {
 		t.Error("buildctl main container missing buildkit-registry-config volume mount")
 	}
+}
+
+// ---------------------------------------------------------------------------
+// --no-cache flag
+// ---------------------------------------------------------------------------
+
+func TestWorkflowBuilder_BuildKit_NoCache_OmitsCacheArgs(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	spec := testSpec()
+	spec.NoCache = true
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	argsStr := strings.Join(c.Args, " ")
+
+	if strings.Contains(argsStr, "--export-cache") {
+		t.Error("--export-cache should NOT be present when NoCache=true")
+	}
+	if strings.Contains(argsStr, "--import-cache") {
+		t.Error("--import-cache should NOT be present when NoCache=true")
+	}
+	// But --output and --metadata-file must still be present
+	assertStringContains(t, argsStr, "--output type=image")
+	assertStringContains(t, argsStr, "--metadata-file")
+}
+
+func TestWorkflowBuilder_BuildKit_WithCache_HasCacheArgs(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	spec := testSpec()
+	spec.NoCache = false // explicit default
+	wf, err := builder.Build(spec)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	argsStr := strings.Join(c.Args, " ")
+
+	assertStringContains(t, argsStr, "--export-cache")
+	assertStringContains(t, argsStr, "--import-cache")
 }
 
 // ---------------------------------------------------------------------------

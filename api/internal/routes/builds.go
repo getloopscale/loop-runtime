@@ -39,6 +39,7 @@ type SubmitBuildInput struct {
 	ProjectID     string
 	Environment   string
 	CommitSHA     string
+	NoCache       bool // Skip BuildKit layer cache (full rebuild)
 	Apps          []AppInput
 	CreatedBy     string
 	CorrelationID string
@@ -113,6 +114,7 @@ type createBuildRequest struct {
 	ProjectID   string     `json:"project_id"`
 	Environment string     `json:"environment"`
 	CommitSHA   string     `json:"commit_sha,omitempty"`
+	NoCache     bool       `json:"no_cache,omitempty"` // Skip BuildKit layer cache (full rebuild)
 	Apps        []AppInput `json:"apps,omitempty"`
 }
 
@@ -181,6 +183,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ProjectID:     req.ProjectID,
 		Environment:   req.Environment,
 		CommitSHA:     req.CommitSHA,
+		NoCache:       req.NoCache,
 		Apps:          req.Apps,
 		CreatedBy:     uc.UserID,
 		CorrelationID: r.Header.Get("Correlation-ID"), //nolint:contextcheck // header from original request

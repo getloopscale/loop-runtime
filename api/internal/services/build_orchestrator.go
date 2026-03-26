@@ -36,6 +36,7 @@ type WorkflowSpec struct {
 	ProjectID     string
 	Environment   string
 	CommitSHA     string
+	NoCache       bool // Skip BuildKit layer cache (full rebuild via --no-cache)
 	Apps          []AppSpec
 	CorrelationID string
 	Namespace     string // Target namespace for the workflow (e.g., "build-acme")
@@ -114,6 +115,7 @@ type SubmitBuildRequest struct {
 	ProjectID     string
 	Environment   string
 	CommitSHA     string
+	NoCache       bool
 	Apps          []AppSpec
 	CreatedBy     string
 	CorrelationID string
@@ -269,6 +271,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		ProjectID:     req.ProjectID,
 		Environment:   req.Environment,
 		CommitSHA:     req.CommitSHA,
+		NoCache:       req.NoCache,
 		Apps:          req.Apps,
 		CorrelationID: req.CorrelationID,
 		Namespace:     "build-" + req.TenantID,
