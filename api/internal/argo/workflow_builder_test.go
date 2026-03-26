@@ -741,12 +741,16 @@ func TestWorkflowBuilder_BuildKit_HasSidecarPattern(t *testing.T) {
 		t.Fatal("build-image-api template not found")
 	}
 
-	// Main container is buildctl
+	// Main container uses sh -c to wait for buildkitd, then exec buildctl
 	if c.Image != "moby/buildkit:v0.18.2" {
 		t.Errorf("buildctl image = %q, want moby/buildkit:v0.18.2", c.Image)
 	}
-	if len(c.Command) == 0 || c.Command[0] != "buildctl" {
-		t.Errorf("buildctl command = %v, want [buildctl]", c.Command)
+	if len(c.Command) < 2 || c.Command[0] != "sh" || c.Command[1] != "-c" {
+		t.Errorf("command = %v, want [sh -c <wait-script> --]", c.Command)
+	}
+	// First Arg must be "buildctl" (exec'd by the wait script via "$@")
+	if len(c.Args) == 0 || c.Args[0] != "buildctl" {
+		t.Errorf("args[0] = %q, want buildctl", c.Args[0])
 	}
 
 	// Must have exactly one sidecar: buildkitd
@@ -763,6 +767,44 @@ func TestWorkflowBuilder_BuildKit_HasSidecarPattern(t *testing.T) {
 	if sidecar.Daemon == nil || !*sidecar.Daemon {
 		t.Error("buildkitd sidecar must have Daemon=true")
 	}
+}
+
+func TestWorkflowBuilder_BuildKit_WaitForDaemon(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	c := findContainer(t, wf, "build-image-api")
+	if c == nil {
+		t.Fatal("build-image-api not found")
+	}
+
+	// Command must be sh -c <script> --
+	if len(c.Command) != 4 {
+		t.Fatalf("expected 4 command elements, got %d: %v", len(c.Command), c.Command)
+	}
+	if c.Command[0] != "sh" || c.Command[1] != "-c" || c.Command[3] != "--" {
+		t.Errorf("command = %v, want [sh -c <script> --]", c.Command)
+	}
+
+	// Wait script must poll buildctl debug workers with the correct socket
+	script := c.Command[2]
+	assertStringContains(t, script, "buildctl --addr")
+	assertStringContains(t, script, "debug workers")
+	assertStringContains(t, script, "buildkitd.sock")
+	assertStringContains(t, script, `exec "$@"`)
+
+	// Args[0] must be "buildctl" (the binary exec'd by the wait script)
+	if c.Args[0] != "buildctl" {
+		t.Errorf("args[0] = %q, want buildctl", c.Args[0])
+	}
+	// Args[1:] must contain the actual buildctl subcommand and flags
+	argsStr := strings.Join(c.Args[1:], " ")
+	assertStringContains(t, argsStr, "--addr")
+	assertStringContains(t, argsStr, "build")
+	assertStringContains(t, argsStr, "--frontend")
 }
 
 func TestWorkflowBuilder_BuildKit_SecurityContext_Rootless(t *testing.T) {

@@ -489,10 +489,13 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 	podSpecPatch := fmt.Sprintf(`{"containers":[{"name":"%s","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}`, sidecarName)
 
 	return &forge.Container{
-		Name:    fmt.Sprintf("build-image-%s", app.Name),
-		Image:   "moby/buildkit:v0.18.2",
-		Command: []string{"buildctl"},
-		Args:    buildctlArgs,
+		Name:  fmt.Sprintf("build-image-%s", app.Name),
+		Image: "moby/buildkit:v0.18.2",
+		// Wait for buildkitd sidecar to be ready, then exec buildctl.
+		// sh -c <script> -- buildctl <args>: "--" is $0, "buildctl" is $1, rest is $2+.
+		// exec "$@" hands off to buildctl with all args preserved.
+		Command: []string{"sh", "-c", buildkitWaitScript(socketPath), "--"},
+		Args:    append([]string{"buildctl"}, buildctlArgs...),
 		// HOME must be set so buildctl can find ~/.docker/config.json for registry auth.
 		// Without this, buildctl tries to create /.docker which fails as non-root.
 		Env: []forge.EnvBuilder{
@@ -596,10 +599,11 @@ func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec services.WorkflowSpec, p
 	podSpecPatch := fmt.Sprintf(`{"containers":[{"name":"%s","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}`, sidecarName)
 
 	return &forge.Container{
-		Name:    fmt.Sprintf("build-image-%s", plan.AppName),
-		Image:   "moby/buildkit:v0.18.2",
-		Command: []string{"buildctl"},
-		Args:    buildctlArgs,
+		Name:  fmt.Sprintf("build-image-%s", plan.AppName),
+		Image: "moby/buildkit:v0.18.2",
+		// Wait for buildkitd sidecar, then exec buildctl (same pattern as buildkitTemplateForApp).
+		Command: []string{"sh", "-c", buildkitWaitScript(socketPath), "--"},
+		Args:    append([]string{"buildctl"}, buildctlArgs...),
 		Env:     []forge.EnvBuilder{forge.Env{Name: "HOME", Value: "/home/user"}},
 		VolumeMounts: []forge.VolumeBuilder{
 			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
@@ -642,6 +646,45 @@ func dockerfileName(dockerfilePath string) string {
 		}
 	}
 	return dockerfilePath
+}
+
+// ---------------------------------------------------------------------------
+// BuildKit readiness
+// ---------------------------------------------------------------------------
+
+// buildkitWaitScript returns a shell script that polls the buildkitd daemon
+// until it accepts connections, then exec's the remaining arguments.
+//
+// Why: Kubernetes starts all containers in a pod simultaneously. The buildkitd
+// sidecar (rootless) needs ~15-20s to set up user namespaces via RootlessKit.
+// The main container (buildctl) must wait for the daemon to be ready before
+// running the build. This is the standard pattern for BuildKit in CI systems
+// (used by Drone, Tekton, GitHub Actions BuildKit action).
+//
+// The script uses `buildctl debug workers` as a health check — this verifies
+// the daemon accepts gRPC connections, not just that the socket file exists.
+//
+// Usage with sh -c and exec "$@":
+//
+//	Command: []string{"sh", "-c", buildkitWaitScript(socketPath), "--"}
+//	Args:    append([]string{"buildctl"}, buildctlArgs...)
+//
+// The "--" becomes $0, "buildctl" becomes $1, and the rest become $2+.
+// exec "$@" replaces the shell with buildctl, preserving all arguments
+// without word splitting or quoting issues.
+func buildkitWaitScript(socketPath string) string {
+	return fmt.Sprintf(`set -e
+timeout=60
+elapsed=0
+while ! buildctl --addr '%s' debug workers >/dev/null 2>&1; do
+  elapsed=$((elapsed + 1))
+  if [ "$elapsed" -ge "$timeout" ]; then
+    echo "buildkitd not ready after ${timeout}s" >&2
+    exit 1
+  fi
+  sleep 1
+done
+exec "$@"`, socketPath)
 }
 
 // ---------------------------------------------------------------------------
