@@ -407,24 +407,26 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 
 	metadataFile := fmt.Sprintf("/workspace/metadata-%s.json", app.Name)
 
-	// buildctl args — the main container that drives the build
+	// buildctl args — the main container that drives the build.
+	// Each flag and its value MUST be separate array elements. buildctl does NOT
+	// do shell-style word splitting — "–local dockerfile=/x" is one arg, not two.
 	buildctlArgs := []string{
 		"build",
 		"--frontend", "dockerfile.v0",
 		"--local", "context=/workspace",
-		fmt.Sprintf("--local dockerfile=%s", dockerfileDir(dockerfile)),
-		fmt.Sprintf("--opt filename=%s", dockerfileName(dockerfile)),
-		fmt.Sprintf("--output type=image,name=%s,push=true", destination),
+		"--local", fmt.Sprintf("dockerfile=%s", dockerfileDir(dockerfile)),
+		"--opt", fmt.Sprintf("filename=%s", dockerfileName(dockerfile)),
+		"--output", fmt.Sprintf("type=image,name=%s,push=true", destination),
 	}
 	// OCI registry layer cache: --import-cache pulls cached layers before build,
 	// --export-cache pushes layers after build. Omitted when NoCache is set.
 	if !spec.NoCache {
 		buildctlArgs = append(buildctlArgs,
-			fmt.Sprintf("--export-cache type=registry,ref=%s,mode=max,ignore-error=true", cacheRef),
-			fmt.Sprintf("--import-cache type=registry,ref=%s", cacheRef),
+			"--export-cache", fmt.Sprintf("type=registry,ref=%s,mode=max,ignore-error=true", cacheRef),
+			"--import-cache", fmt.Sprintf("type=registry,ref=%s", cacheRef),
 		)
 	}
-	buildctlArgs = append(buildctlArgs, fmt.Sprintf("--metadata-file %s", metadataFile))
+	buildctlArgs = append(buildctlArgs, "--metadata-file", metadataFile)
 
 	// buildkitd socket path — rootless user 1000
 	socketPath := "unix:///run/user/1000/buildkitd/buildkitd.sock"
@@ -532,31 +534,32 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 // Unlike buildkitTemplateForApp, this function doesn't infer anything — all paths, tags,
 // and args come from the plan (created by CreateBuildPlan).
 func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec services.WorkflowSpec, plan services.AppBuildPlan) *forge.Container {
-	// buildctl args from the resolved plan
+	// buildctl args from the resolved plan.
+	// Each flag and its value MUST be separate array elements — no shell word splitting.
 	buildctlArgs := []string{
 		"build",
 		"--frontend", "dockerfile.v0",
-		fmt.Sprintf("--local context=%s", plan.ContextPath),
-		fmt.Sprintf("--local dockerfile=%s", dockerfileDir(plan.DockerfilePath)),
-		fmt.Sprintf("--opt filename=%s", dockerfileName(plan.DockerfilePath)),
-		fmt.Sprintf("--output type=image,name=%s,push=true", plan.ImageTag),
+		"--local", fmt.Sprintf("context=%s", plan.ContextPath),
+		"--local", fmt.Sprintf("dockerfile=%s", dockerfileDir(plan.DockerfilePath)),
+		"--opt", fmt.Sprintf("filename=%s", dockerfileName(plan.DockerfilePath)),
+		"--output", fmt.Sprintf("type=image,name=%s,push=true", plan.ImageTag),
 	}
 
 	// OCI registry layer cache (omitted when NoCache)
 	if !spec.NoCache {
 		buildctlArgs = append(buildctlArgs,
-			fmt.Sprintf("--export-cache type=registry,ref=%s,mode=max,ignore-error=true", plan.CacheRef),
-			fmt.Sprintf("--import-cache type=registry,ref=%s", plan.CacheRef),
+			"--export-cache", fmt.Sprintf("type=registry,ref=%s,mode=max,ignore-error=true", plan.CacheRef),
+			"--import-cache", fmt.Sprintf("type=registry,ref=%s", plan.CacheRef),
 		)
 	}
 
 	// Build args from the plan (user env + system vars)
 	for key, val := range plan.BuildArgs {
-		buildctlArgs = append(buildctlArgs, fmt.Sprintf("--opt build-arg:%s=%s", key, val))
+		buildctlArgs = append(buildctlArgs, "--opt", fmt.Sprintf("build-arg:%s=%s", key, val))
 	}
 
 	metadataFile := fmt.Sprintf("/workspace/metadata-%s.json", plan.AppName)
-	buildctlArgs = append(buildctlArgs, fmt.Sprintf("--metadata-file %s", metadataFile))
+	buildctlArgs = append(buildctlArgs, "--metadata-file", metadataFile)
 
 	// Socket path and prepend --addr
 	socketPath := "unix:///run/user/1000/buildkitd/buildkitd.sock"
