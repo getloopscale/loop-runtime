@@ -56,7 +56,7 @@ type ContainerDeliveryDeps struct {
 func NewContainerDeliveryActivator(deps ContainerDeliveryDeps) *ContainerDeliveryActivator {
 	syncTimeout := deps.ArgocdSyncTimeout
 	if syncTimeout == 0 {
-		syncTimeout = 300 * time.Second
+		syncTimeout = 600 * time.Second
 	}
 	return &ContainerDeliveryActivator{
 		releaseStore:      deps.ReleaseStore,
