@@ -61,9 +61,9 @@ func TestCreateBuildPlan_MultiApp_Monorepo(t *testing.T) {
 		t.Errorf("worker DockerfilePath = %q, want /workspace/Dockerfile.worker", worker.DockerfilePath)
 	}
 
-	// Context should include app path
-	if api.ContextPath != "/workspace/apps/api" {
-		t.Errorf("api ContextPath = %q, want /workspace/apps/api", api.ContextPath)
+	// Context for buildpack apps is always /workspace (Dockerfile does COPY . . + WORKDIR)
+	if api.ContextPath != "/workspace" {
+		t.Errorf("api ContextPath = %q, want /workspace (buildpack uses full workspace as context)", api.ContextPath)
 	}
 }
 

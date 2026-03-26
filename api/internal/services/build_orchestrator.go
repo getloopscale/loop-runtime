@@ -53,6 +53,7 @@ type AppSpec struct {
 	Framework  string            `json:"framework,omitempty"`          // "nextjs", "express", "gin", "fastapi", "custom", etc.
 	Build      string            `json:"build,omitempty"`              // v2: "dockerfile", "buildpack", "custom"
 	Dockerfile string            `json:"dockerfile,omitempty"`         // v2: Dockerfile path relative to app path
+	Rendering  string            `json:"rendering,omitempty"`          // v2: "static" or "server" (MEET-009)
 	Env        map[string]string `json:"env,omitempty"`                // v2: build-time environment variables
 	Secrets    []string          `json:"secrets,omitempty"`            // declared secret names from loopzero.yaml
 }
@@ -152,6 +153,7 @@ type BuildOrchestratorDeps struct {
 	Sync               SyncClient
 	Locker             EnvironmentLocker
 	GitOps             GitOpsPusher
+	Delivery           DeliveryActivator // MEET-009: polymorphic release activation
 	RegistryURL        string        // Container registry URL for BuildPlan image tag resolution
 	ArgocdSyncTimeout  time.Duration // 0 = default 120s
 }
@@ -172,6 +174,7 @@ type BuildOrchestrator struct {
 	sync              SyncClient
 	locker            EnvironmentLocker
 	gitops            GitOpsPusher
+	delivery          DeliveryActivator // MEET-009: polymorphic release activation
 	registryURL       string // Container registry URL for BuildPlan image tag resolution
 	argocdSyncTimeout time.Duration
 }
@@ -190,6 +193,21 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 	if registryURL == "" {
 		registryURL = "k3d-loopzero-registry:5000" // local dev default
 	}
+	// MEET-009: If no DeliveryActivator provided, create default ContainerDeliveryActivator.
+	// This ensures backward compatibility — existing call sites don't need to change.
+	delivery := deps.Delivery
+	if delivery == nil {
+		delivery = NewContainerDeliveryActivator(ContainerDeliveryDeps{
+			ReleaseStore:      deps.ReleaseStore,
+			EnvTargetStore:    deps.EnvTargetStore,
+			EventStore:        deps.EventStore,
+			Sync:              deps.Sync,
+			Locker:            deps.Locker,
+			GitOps:            deps.GitOps,
+			ArgocdSyncTimeout: syncTimeout,
+		})
+	}
+
 	return &BuildOrchestrator{
 		buildStore:        deps.BuildStore,
 		releaseStore:      deps.ReleaseStore,
@@ -199,6 +217,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		sync:              deps.Sync,
 		locker:            deps.Locker,
 		gitops:            deps.GitOps,
+		delivery:          delivery,
 		registryURL:       registryURL,
 		argocdSyncTimeout: syncTimeout,
 	}
@@ -389,7 +408,7 @@ func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *d
 		return fmt.Errorf("retry release activation: build %s is in %s state, expected RELEASING", build.ID, build.Status)
 	}
 
-	activationErr := o.activateRelease(ctx, build, result)
+	activationErr := o.delivery.Activate(ctx, build, result)
 	if activationErr != nil {
 		slog.Warn("retry release activation: Phase 2 failed, will retry on next tick",
 			"build_id", build.ID, "error", activationErr)
@@ -610,10 +629,10 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	}
 
 	// Build should be in RELEASING state after Phase 1 (MEET-2026-03-26-008).
-	// Phase 2: Release activation (create release, gitops push, sync, health probe).
-	// BLOCKER-2 fix: each sub-phase acquires/releases its own lock. External I/O
-	// (gitops push, ArgoCD sync, health probes) runs OUTSIDE locks.
-	activationErr := o.activateRelease(ctx, build, result)
+	// Phase 2: Release activation via DeliveryActivator (MEET-2026-03-26-009).
+	// Dispatches to ContainerDeliveryActivator or StaticDeliveryActivator
+	// based on build plan. Each sub-phase acquires/releases its own lock.
+	activationErr := o.delivery.Activate(ctx, build, result)
 
 	if activationErr != nil {
 		// Activation failed — emit deploy failure event so the CLI knows.

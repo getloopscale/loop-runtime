@@ -10,6 +10,7 @@ package argo
 
 import (
 	"fmt"
+	"strings"
 
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
@@ -347,40 +348,66 @@ fi
 }
 
 func scriptDockerfileNode(apps []services.AppSpec) string {
-	port := defaultPort(apps, 3000)
-	appPath := "."
-	if len(apps) > 0 && apps[0].Path != "" && apps[0].Path != "." {
-		appPath = apps[0].Path
+	if len(apps) == 0 {
+		return `echo "No apps to generate Dockerfiles for"`
 	}
 
-	// For monorepo apps (path != "."), the Dockerfile sets WORKDIR to the app subdir
-	// so that npm ci finds package.json in the right place. COPY . . still copies the
-	// entire workspace (which BuildKit uses as context), then WORKDIR navigates to the app.
-	workdir := "/app"
-	if appPath != "." {
-		workdir = fmt.Sprintf("/app/%s", appPath)
-	}
+	// Single app: generate Dockerfile (no suffix)
+	// Multi-app: generate Dockerfile.{appName} per app
+	var script strings.Builder
+	script.WriteString("set -euo pipefail\ncd /workspace\n")
 
-	return fmt.Sprintf(`set -euo pipefail
-cd /workspace
-if [ -f Dockerfile ]; then
-  echo "User-provided Dockerfile found — skipping generation"
-  cat Dockerfile
-  exit 0
-fi
-echo "No Dockerfile found — generating for Node.js"
-cat > Dockerfile << 'DEOF'
+	for _, app := range apps {
+		port := app.Port
+		if port <= 0 {
+			port = 3000
+		}
+
+		appPath := app.Path
+		if appPath == "" || appPath == "." {
+			appPath = "."
+		}
+
+		// For monorepo apps, WORKDIR navigates to the app subdir
+		workdir := "/app"
+		if appPath != "." {
+			workdir = fmt.Sprintf("/app/%s", appPath)
+		}
+
+		// Dockerfile name: "Dockerfile" for single-app, "Dockerfile.{name}" for multi-app
+		dockerfileName := "Dockerfile"
+		if len(apps) > 1 {
+			dockerfileName = fmt.Sprintf("Dockerfile.%s", app.Name)
+		}
+
+		// Worker apps don't EXPOSE a port and use a different CMD
+		exposeCmd := fmt.Sprintf("EXPOSE %d\nCMD [\"npm\", \"start\"]", port)
+		if app.Type == "worker" {
+			exposeCmd = `CMD ["npm", "start"]`
+		}
+
+		// Check if user provided a Dockerfile in the app's path
+		script.WriteString(fmt.Sprintf(`
+if [ -f "%s/%s" ]; then
+  echo "User-provided %s found in %s — copying"
+  cp "%s/%s" "%s"
+else
+  echo "Generating %s for %s (Node.js)"
+  cat > "%s" << 'DEOF'
 FROM node:20-alpine
 WORKDIR /app
 COPY . .
 WORKDIR %s
 RUN npm ci --omit=dev
-EXPOSE %d
-CMD ["npm", "start"]
+%s
 DEOF
-echo "Generated Dockerfile:"
-cat Dockerfile
-`, workdir, port)
+fi
+`, appPath, "Dockerfile", "Dockerfile", appPath, appPath, "Dockerfile", dockerfileName,
+			dockerfileName, app.Name, dockerfileName, workdir, exposeCmd))
+	}
+
+	script.WriteString("\necho 'Dockerfiles generated:'\nls -la /workspace/Dockerfile*\n")
+	return script.String()
 }
 
 // ---------------------------------------------------------------------------

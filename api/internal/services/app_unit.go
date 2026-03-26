@@ -16,6 +16,7 @@ type AppUnit struct {
 	Port       int               `json:"port"`
 	Build      string            `json:"build"`                       // "dockerfile", "buildpack", "custom"
 	Dockerfile string            `json:"dockerfile,omitempty"`        // resolved Dockerfile path (relative to app path)
+	Rendering  string            `json:"rendering,omitempty"`         // "static" or "server" (MEET-009)
 	Env        map[string]string `json:"env,omitempty"`               // build-time environment variables
 	Secrets    []string          `json:"secrets,omitempty"`
 }
@@ -91,6 +92,17 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		secrets = []string{}
 	}
 
+	// Resolve rendering mode (MEET-2026-03-26-009)
+	// Explicit value from AppSpec takes precedence. Default: "server" (backward compat).
+	rendering := raw.Rendering
+	if rendering != "static" && rendering != "server" {
+		rendering = "server"
+	}
+	// Non-frontend types are always "server"
+	if appType != "frontend" {
+		rendering = "server"
+	}
+
 	return AppUnit{
 		Name:       name,
 		Type:       appType,
@@ -99,6 +111,7 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		Port:       port,
 		Build:      build,
 		Dockerfile: dockerfile,
+		Rendering:  rendering,
 		Env:        env,
 		Secrets:    secrets,
 	}, nil

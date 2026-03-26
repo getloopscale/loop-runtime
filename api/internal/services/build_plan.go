@@ -28,9 +28,10 @@ type AppBuildPlan struct {
 	Build            string            // "dockerfile", "buildpack", "custom"
 
 	// Original AppUnit fields needed downstream (manifests, ArgoCD)
-	AppType string // "server", "worker", "frontend"
-	Port    int
-	Secrets []string
+	AppType       string // "server", "worker", "frontend"
+	Port          int
+	Secrets       []string
+	DeliveryModel string // "container" or "static" (MEET-009). Resolved from AppUnit.Rendering.
 }
 
 // CreateBuildPlan resolves AppUnit[] into concrete build instructions.
@@ -60,9 +61,12 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 			}
 		}
 
-		// Resolve context path
+		// Resolve context path.
+		// For buildpack-generated Dockerfiles: context is always /workspace (entire workspace)
+		// because the Dockerfile does COPY . . then WORKDIR /app/{appPath}.
+		// For user-provided Dockerfiles: context is the app's subdir.
 		contextPath := "/workspace"
-		if unit.Path != "." && unit.Path != "" {
+		if unit.Build == "dockerfile" && unit.Path != "." && unit.Path != "" {
 			contextPath = path.Join("/workspace", unit.Path)
 		}
 
@@ -77,6 +81,12 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		// Resolve language strategy from framework
 		strategy := resolveLanguageStrategy(unit.Framework)
 
+		// Resolve delivery model from rendering (MEET-009)
+		deliveryModel := "container"
+		if unit.Rendering == "static" {
+			deliveryModel = "static"
+		}
+
 		plans = append(plans, AppBuildPlan{
 			AppName:          unit.Name,
 			ImageTag:         imageTag,
@@ -89,6 +99,7 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 			AppType:          unit.Type,
 			Port:             unit.Port,
 			Secrets:          unit.Secrets,
+			DeliveryModel:    deliveryModel,
 		})
 	}
 

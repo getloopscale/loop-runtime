@@ -658,20 +658,21 @@ func TestBuildOrchestrator_OnBuildCompleted_Success_FullFlow(t *testing.T) {
 		t.Errorf("expected active release %q, got %q", activeRelease.ID, fakes.envTargetStore.active[envKey])
 	}
 
-	// SSE events: build.succeeded, deploy.pending, deploy.health_check (checking), deploy.health_check (ok), deploy.active, deploy.completed
+	// SSE events: build.succeeded, deploy.delivering, deploy.verifying, deploy.live, deploy.completed
+	// (MEET-009: delivery-agnostic event names)
 	succeededEvents := fakes.eventStore.eventsByType("build.succeeded")
 	if len(succeededEvents) != 1 {
 		t.Errorf("expected 1 build.succeeded event, got %d", len(succeededEvents))
 	}
 
-	pendingEvents := fakes.eventStore.eventsByType("deploy.pending")
-	if len(pendingEvents) != 1 {
-		t.Errorf("expected 1 deploy.pending event, got %d", len(pendingEvents))
+	deliveringEvents := fakes.eventStore.eventsByType("deploy.delivering")
+	if len(deliveringEvents) != 1 {
+		t.Errorf("expected 1 deploy.delivering event, got %d", len(deliveringEvents))
 	}
 
-	activeEvents := fakes.eventStore.eventsByType("deploy.active")
-	if len(activeEvents) != 1 {
-		t.Errorf("expected 1 deploy.active event, got %d", len(activeEvents))
+	liveEvents := fakes.eventStore.eventsByType("deploy.live")
+	if len(liveEvents) != 1 {
+		t.Errorf("expected 1 deploy.live event, got %d", len(liveEvents))
 	}
 
 	deployEvents := fakes.eventStore.eventsByType("deploy.completed")
@@ -1145,10 +1146,10 @@ func TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded(t *test
 		t.Fatalf("expected OnBuildCompleted to handle sync failure gracefully, got error: %v", err)
 	}
 
-	// Build MUST be in SUCCEEDED (not RUNNING — the critical invariant)
+	// Build MUST be in RELEASING (not RUNNING — MEET-008: stays non-terminal for reconcile retry)
 	build := fakes.buildStore.builds[resp.BuildID]
-	if build.Status != string(statemachine.BuildSucceeded) {
-		t.Errorf("expected build status SUCCEEDED, got %q — build is stuck!", build.Status)
+	if build.Status != string(statemachine.BuildReleasing) {
+		t.Errorf("expected build status RELEASING, got %q", build.Status)
 	}
 
 	// A deploy failure event MUST be emitted so the CLI knows what happened
@@ -1199,10 +1200,10 @@ func TestBuildOrchestrator_OnBuildCompleted_WaitForSyncFails(t *testing.T) {
 		t.Fatalf("expected OnBuildCompleted to handle WaitForSync failure gracefully, got error: %v", err)
 	}
 
-	// Build MUST be SUCCEEDED (build phase completed independently)
+	// Build MUST be RELEASING (MEET-008: stays non-terminal for reconcile retry)
 	build := fakes.buildStore.builds[resp.BuildID]
-	if build.Status != string(statemachine.BuildSucceeded) {
-		t.Errorf("expected build status SUCCEEDED, got %q", build.Status)
+	if build.Status != string(statemachine.BuildReleasing) {
+		t.Errorf("expected build status RELEASING, got %q", build.Status)
 	}
 
 	// TriggerSync should have been called (it succeeds)
@@ -1383,10 +1384,11 @@ func TestStep6_GitOpsPushFailure_ReleaseGitMirrorFailed(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Build MUST be SUCCEEDED (Phase 1 committed independently)
+	// Build MUST be RELEASING (Phase 1 transitions to RELEASING, Phase 2 failed but
+	// build stays non-terminal for reconcile loop retry — MEET-2026-03-26-008)
 	build := fakes.buildStore.builds[resp.BuildID]
-	if build.Status != string(statemachine.BuildSucceeded) {
-		t.Errorf("expected build SUCCEEDED, got %q", build.Status)
+	if build.Status != string(statemachine.BuildReleasing) {
+		t.Errorf("expected build RELEASING, got %q", build.Status)
 	}
 
 	// Release should exist in GIT_MIRROR_FAILED state
@@ -1414,10 +1416,10 @@ func TestStep6_GitOpsPushFailure_ReleaseGitMirrorFailed(t *testing.T) {
 		t.Errorf("expected 0 ArgoCD syncs (git push failed), got %d", len(fakes.sync.synced))
 	}
 
-	// A deploy failure event should be emitted
-	failEvents := fakes.eventStore.eventsByType("deploy.git_push_failed")
+	// A deploy failure event should be emitted (delivery-agnostic name — MEET-009)
+	failEvents := fakes.eventStore.eventsByType("deploy.delivery_failed")
 	if len(failEvents) == 0 {
-		t.Error("expected deploy.git_push_failed SSE event")
+		t.Error("expected deploy.delivery_failed SSE event")
 	}
 }
 

@@ -48,6 +48,7 @@ type RollbackOrchestratorDeps struct {
 	GitPusher  RollbackGitOpsPusher
 	Sync       RollbackSyncClient
 	Locker     EnvironmentLocker
+	Delivery   DeliveryActivator // MEET-009: polymorphic rollback delivery
 	Logger     *slog.Logger
 }
 
@@ -148,33 +149,41 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		"target_release", targetRelease.ID,
 	)
 
-	// Phase 2 (OUTSIDE lock): fetch old manifests from git
-	if targetRelease.GitCommit == "" {
-		return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("target release has no git commit"))
-	}
-
-	manifests, err := o.deps.GitReader.GetManifestsAtCommit(ctx, req.TenantID, req.ProjectID, req.Environment, targetRelease.GitCommit)
-	if err != nil {
-		return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("rollback: fetch manifests: %w", err))
-	}
-
-	// Phase 3 (OUTSIDE lock): push old manifests to gitops repo
-	_, err = o.deps.GitPusher.Push(ctx, GitOpsPushOpts{
-		TenantID:      req.TenantID,
-		ProjectID:     req.ProjectID,
-		Environment:   req.Environment,
-		Manifests:     string(manifests),
-		ReleaseID:     targetRelease.ID,
-		CorrelationID: req.CorrelationID,
-	})
-	if err != nil {
-		return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("rollback: push manifests: %w", err))
-	}
-
-	// Phase 4 (OUTSIDE lock): trigger ArgoCD sync
-	appName := fmt.Sprintf("%s-%s", req.ProjectName, req.Environment)
-	if syncErr := o.deps.Sync.TriggerSync(ctx, appName); syncErr != nil {
-		logger.Warn("argocd sync trigger failed, continuing", "error", syncErr)
+	// Phases 2-4 (OUTSIDE lock): delivery-specific rollback via DeliveryActivator.
+	// For containers: fetch old manifests from git, push to gitea, trigger ArgoCD sync.
+	// For static (future): push IngressRoute with old release-id path.
+	// MEET-2026-03-26-009: polymorphic rollback via interface.
+	if o.deps.Delivery != nil {
+		if err := o.deps.Delivery.Rollback(ctx, RollbackDeliveryRequest{
+			TenantID:      req.TenantID,
+			ProjectID:     req.ProjectID,
+			ProjectName:   req.ProjectName,
+			Environment:   req.Environment,
+			TargetRelease: targetRelease,
+			CorrelationID: req.CorrelationID,
+		}); err != nil {
+			return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("rollback: delivery failed: %w", err))
+		}
+	} else {
+		// Legacy fallback: inline git fetch + push + sync (for backward compat in tests)
+		if targetRelease.GitCommit == "" {
+			return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("target release has no git commit"))
+		}
+		manifests, err := o.deps.GitReader.GetManifestsAtCommit(ctx, req.TenantID, req.ProjectID, req.Environment, targetRelease.GitCommit)
+		if err != nil {
+			return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("rollback: fetch manifests: %w", err))
+		}
+		_, err = o.deps.GitPusher.Push(ctx, GitOpsPushOpts{
+			TenantID: req.TenantID, ProjectID: req.ProjectID, Environment: req.Environment,
+			Manifests: string(manifests), ReleaseID: targetRelease.ID, CorrelationID: req.CorrelationID,
+		})
+		if err != nil {
+			return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("rollback: push manifests: %w", err))
+		}
+		appName := fmt.Sprintf("%s-%s", req.ProjectName, req.Environment)
+		if syncErr := o.deps.Sync.TriggerSync(ctx, appName); syncErr != nil {
+			logger.Warn("argocd sync trigger failed, continuing", "error", syncErr)
+		}
 	}
 
 	// Phase 5 (INSIDE lock): finalize — mark current as ROLLED_BACK, reactivate target

@@ -29,6 +29,7 @@ type AppConfig struct {
 	Framework  string            `yaml:"framework"`
 	Build      string            `yaml:"build,omitempty"`      // v2: "dockerfile", "buildpack", or "custom"
 	Dockerfile string            `yaml:"dockerfile,omitempty"` // v2: Dockerfile path relative to app path
+	Render     string            `yaml:"render,omitempty"`     // v2: "static" or "server" (MEET-009)
 	Env        map[string]string `yaml:"env,omitempty"`        // v2: build-time environment variables
 	Secrets    []string          `yaml:"secrets,omitempty"`    // secret names declared for this app
 }

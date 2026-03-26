@@ -18,6 +18,7 @@ export interface LoopZeroYamlApp {
   port: number | null;
   build?: BuildStrategy;             // v2: how to build this app (default: "buildpack" if framework known)
   dockerfile?: string;               // v2: Dockerfile path relative to app path (default: "Dockerfile")
+  render?: 'static' | 'server';     // v2: delivery mode (MEET-009). "static" = S3/CDN, "server" = container.
   env?: Record<string, string>;      // v2: build-time environment variables (not runtime)
   secrets?: string[];
 }
@@ -85,6 +86,11 @@ export function parseLoopZeroYaml(raw: string): LoopZeroYaml {
           )
         : undefined;
 
+      // v2: render mode (MEET-009)
+      const render = typeof cfg.render === 'string' && ['static', 'server'].includes(cfg.render)
+        ? (cfg.render as 'static' | 'server')
+        : undefined;
+
       apps[appName] = {
         path: String(cfg.path ?? '.'),
         framework: String(cfg.framework ?? 'unknown'),
@@ -92,6 +98,7 @@ export function parseLoopZeroYaml(raw: string): LoopZeroYaml {
         port: port !== null && !isNaN(port) ? port : null,
         ...(build ? { build } : {}),
         ...(dockerfile ? { dockerfile } : {}),
+        ...(render ? { render } : {}),
         ...(env ? { env } : {}),
         ...(secrets ? { secrets } : {}),
       };

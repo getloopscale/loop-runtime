@@ -105,7 +105,7 @@ export function validateConfig(
 
     // Detect unknown fields
     const knownFields = new Set([
-      'path', 'framework', 'type', 'port', 'build', 'dockerfile', 'env', 'secrets',
+      'path', 'framework', 'type', 'port', 'build', 'dockerfile', 'render', 'env', 'secrets',
     ]);
     if (typeof app === 'object' && app !== null) {
       for (const key of Object.keys(app)) {
