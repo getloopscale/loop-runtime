@@ -2071,7 +2071,11 @@ function lookupLoadBalancerEndpoint(
 
 /**
  * Creates a ClusterIssuer for Let's Encrypt production certificates.
- * Uses HTTP-01 challenge solved by Traefik's ingress class.
+ * Uses DNS-01 challenge via Cloudflare DNS API when cfApiToken is available,
+ * falling back to HTTP-01 via Traefik when not.
+ *
+ * DNS-01 is required when ingress is behind Cloudflare Tunnel (no public IP
+ * for HTTP-01 validation). The Cloudflare API token needs Zone:DNS:Edit permission.
  */
 function createClusterIssuer(
   provider: k8s.Provider,
@@ -2079,6 +2083,49 @@ function createClusterIssuer(
   config: PlatformStackConfig,
   role: string = "mgmt",
 ): k8s.apiextensions.CustomResource {
+  // Cloudflare API token secret for DNS-01 challenge (shared across issuers).
+  // Only created once on the mgmt cluster; runtime reuses the same secret name.
+  if (role === "mgmt" && config.cfApiToken) {
+    new k8s.core.v1.Secret(
+      "cloudflare-api-token-secret",
+      {
+        metadata: {
+          name: "cloudflare-api-token-secret",
+          namespace: "cert-manager",
+        },
+        stringData: {
+          "api-token": config.cfApiToken,
+        },
+      },
+      { provider, dependsOn: [certManager] },
+    );
+  }
+
+  // DNS-01 solver when Cloudflare token is available (required behind CF Tunnel).
+  // Falls back to HTTP-01 for environments without Cloudflare.
+  const solvers = config.cfApiToken
+    ? [
+        {
+          dns01: {
+            cloudflare: {
+              apiTokenSecretRef: {
+                name: "cloudflare-api-token-secret",
+                key: "api-token",
+              },
+            },
+          },
+        },
+      ]
+    : [
+        {
+          http01: {
+            ingress: {
+              class: "traefik",
+            },
+          },
+        },
+      ];
+
   return new k8s.apiextensions.CustomResource(
     `${role}-letsencrypt-prod`,
     {
@@ -2099,15 +2146,7 @@ function createClusterIssuer(
           privateKeySecretRef: {
             name: "letsencrypt-prod-account-key",
           },
-          solvers: [
-            {
-              http01: {
-                ingress: {
-                  class: "traefik",
-                },
-              },
-            },
-          ],
+          solvers,
         },
       },
     },
