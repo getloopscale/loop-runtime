@@ -48,13 +48,6 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     name: "loopzero-dev",
     tunnelSecret: tunnelSecret,
     configSrc: "cloudflare",
-  }, {
-    // Import existing tunnel created before Pulumi management.
-    // Safe to remove after first successful `pulumi up`.
-    import: "362767409c4de7fda7990c10103efdd9/c35b9d63-20b0-4cb1-aa39-873f3d8ade58",
-    // tunnelSecret mismatch triggers replacement, but the tunnel has active
-    // connections. Ignore the secret to prevent replacement attempts.
-    ignoreChanges: ["tunnelSecret"],
   });
 
   // 2. Tunnel ingress config — route wildcard to Traefik HTTPS
@@ -82,8 +75,6 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     },
     {
       dependsOn: [tunnel],
-      // Import existing tunnel config.
-      import: `362767409c4de7fda7990c10103efdd9/c35b9d63-20b0-4cb1-aa39-873f3d8ade58`,
     },
   );
 
@@ -95,9 +86,6 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     ttl: 1, // Auto (required when proxied=true)
     content: pulumi.interpolate`${tunnel.id}.cfargotunnel.com`,
     proxied: true,
-  }, {
-    // Import existing CNAME record.
-    import: "9f9a41bef0bcb7adf15969c81c303bef/9d2b17c70738d4a99ad143f82e9f9fa2",
   });
 
   // 4. Build the tunnel token (base64 JSON with account_id, tunnel_id, tunnel_secret).

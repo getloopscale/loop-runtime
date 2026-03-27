@@ -43,10 +43,6 @@ export function createStaticDelivery(
   const kvNamespace = new cloudflare.WorkersKvNamespace("loopzero-routing", {
     accountId: config.accountId,
     title: "loopzero-routing",
-  }, {
-    // Import existing KV namespace created before Pulumi management.
-    // Safe to remove after first successful `pulumi up`.
-    import: "362767409c4de7fda7990c10103efdd9/28992ed1178f4cbea95c2550784c69b8",
   });
 
   // 2. Worker script — read template and inject config values
@@ -85,9 +81,6 @@ export function createStaticDelivery(
       },
     ],
   }, {
-    // Import existing Worker script created before Pulumi management.
-    // Safe to remove after first successful `pulumi up`.
-    import: `362767409c4de7fda7990c10103efdd9/loopzero-static-delivery`,
     // The CF API rejects WorkerScript updates via Pulumi when using
     // service worker syntax + KV bindings. The Worker is managed via
     // the worker.mjs file and deployed via CF API in the bootstrap step.
@@ -105,8 +98,6 @@ export function createStaticDelivery(
     },
     {
       dependsOn: [workerScript],
-      // Import existing route created before Pulumi management.
-      import: "9f9a41bef0bcb7adf15969c81c303bef/f5456560bf4d4e65ac5899f608b8b180",
     },
   );
 
