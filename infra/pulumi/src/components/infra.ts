@@ -184,12 +184,21 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
 
   // Static assets bucket — stores built frontend assets uploaded by Argo Workflows.
   // CF Worker (or nginx-s3-gateway fallback) serves these to browsers.
-  const staticBucket = factory.createObjectStorage({
+  // Created directly (not via factory) to support import of existing bucket.
+  const staticBucketResource = new digitalocean.SpacesBucket("loopzero-static-assets", {
     name: "loopzero-static-assets",
-    region: config.region,
-    versioning: false, // Assets are immutable per build-id — no versioning needed
-    tags,
+    region: digitalocean.Region.SFO3,
+    versioning: { enabled: false },
+  }, {
+    // Import existing bucket created before Pulumi management.
+    // Safe to remove after first successful `pulumi up`.
+    import: "loopzero-static-assets",
   });
+  const staticBucket = {
+    bucketName: staticBucketResource.name,
+    endpoint: staticBucketResource.bucketDomainName,
+    region: pulumi.output(config.region),
+  };
 
   // Enable CDN on static assets bucket for edge caching.
   // The CDN endpoint (*.cdn.digitaloceanspaces.com) provides DO-managed caching.
