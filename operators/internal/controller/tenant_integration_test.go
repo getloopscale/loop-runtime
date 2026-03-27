@@ -49,38 +49,35 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 				g.Expect(tenant.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
 			}, timeout, interval).Should(Succeed())
 
-			// Verify ALL expected objects exist
-			// Namespaces
-			for _, env := range []string{"production", "staging"} {
-				var ns corev1.Namespace
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: fmt.Sprintf("loopzero-%s-%s", tenantName, env),
-				}, &ns)).To(Succeed())
-				Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/tenant", tenantName))
-				Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/environment", env))
-			}
+			// Verify ALL expected objects exist (async — EnvironmentController creates these)
+			// Namespaces + ResourceQuotas + RBAC + NetworkPolicy
+			Eventually(func(g Gomega) {
+				for _, env := range []string{"production", "staging"} {
+					var ns corev1.Namespace
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+						Name: fmt.Sprintf("loopzero-%s-%s", tenantName, env),
+					}, &ns)).To(Succeed())
+					g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/tenant", tenantName))
+					g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/environment", env))
 
-			// ResourceQuotas
-			for _, env := range []string{"production", "staging"} {
-				var quota corev1.ResourceQuota
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name:      "tenant-quota",
-					Namespace: fmt.Sprintf("loopzero-%s-%s", tenantName, env),
-				}, &quota)).To(Succeed())
-				cpuVal := quota.Spec.Hard[corev1.ResourceRequestsCPU]
-				Expect(cpuVal.String()).To(Equal("8"))
-			}
+					var quota corev1.ResourceQuota
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+						Name:      "tenant-quota",
+						Namespace: fmt.Sprintf("loopzero-%s-%s", tenantName, env),
+					}, &quota)).To(Succeed())
+					cpuVal := quota.Spec.Hard[corev1.ResourceRequestsCPU]
+					g.Expect(cpuVal.String()).To(Equal("8"))
+				}
 
-			// RBAC
-			var sa corev1.ServiceAccount
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: "loopzero-deployer", Namespace: "loopzero-" + tenantName + "-production",
-			}, &sa)).To(Succeed())
+				var sa corev1.ServiceAccount
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "loopzero-deployer", Namespace: "loopzero-" + tenantName + "-production",
+				}, &sa)).To(Succeed())
 
-			// NetworkPolicy (>= 3 per namespace)
-			var policies networkingv1.NetworkPolicyList
-			Expect(k8sClient.List(ctx, &policies, client.InNamespace("loopzero-"+tenantName+"-production"))).To(Succeed())
-			Expect(len(policies.Items)).To(BeNumerically(">=", 3))
+				var policies networkingv1.NetworkPolicyList
+				g.Expect(k8sClient.List(ctx, &policies, client.InNamespace("loopzero-"+tenantName+"-production"))).To(Succeed())
+				g.Expect(len(policies.Items)).To(BeNumerically(">=", 3))
+			}, timeout, interval).Should(Succeed())
 
 			// Build namespace
 			var buildNs corev1.Namespace
@@ -107,14 +104,16 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			Expect(conditionStatus(tenant, conditions.TypeBuildNamespaceReady)).To(Equal(metav1.ConditionTrue))
 			Expect(conditionStatus(tenant, conditions.TypeQuotaEnforced)).To(Equal(metav1.ConditionTrue))
 
-			// Verify Environment CRs exist and are Active
-			for _, env := range []string{"production", "staging"} {
-				var envCR loopzerov1.Environment
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-" + env, Namespace: "default",
-				}, &envCR)).To(Succeed())
-				Expect(envCR.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
-			}
+			// Verify Environment CRs exist and are Active (async — EnvironmentController reconciles)
+			Eventually(func(g Gomega) {
+				for _, env := range []string{"production", "staging"} {
+					var envCR loopzerov1.Environment
+					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+						Name: tenantName + "-" + env, Namespace: "default",
+					}, &envCR)).To(Succeed())
+					g.Expect(envCR.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
+				}
+			}, timeout, interval).Should(Succeed())
 
 			// ObservedGeneration
 			Expect(tenant.Status.ObservedGeneration).To(Equal(tenant.Generation))
