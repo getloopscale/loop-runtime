@@ -289,8 +289,8 @@ jobs:
           echo "Cloud resources deletion initiated. Waiting 2 min for clusters/LBs..."
           sleep 120
 
-          # Delete VPC (after clusters + LBs gone). Retry with wait if members remain.
-          for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs" | python3 -c "import sys,json; [print(v['id']) for v in json.load(sys.stdin)['vpcs'] if 'loopzero-infra' in v['name']]" 2>/dev/null); do
+          # Delete VPC (after clusters + LBs gone). Skip default VPCs (cannot be deleted).
+          for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs" | python3 -c "import sys,json; [print(v['id']) for v in json.load(sys.stdin)['vpcs'] if 'loopzero-infra' in v['name'] and not v.get('default',False)]" 2>/dev/null); do
             RESP=$(curl -s -w "\n%{http_code}" -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs/$ID" 2>/dev/null)
             HTTP_CODE=$(echo "$RESP" | tail -1)
             if [ "$HTTP_CODE" = "409" ]; then
@@ -305,6 +305,7 @@ jobs:
             fi
             echo "  VPC $ID deleting"
           done
+          echo "  Note: Default VPCs are retained (cannot be deleted by DO API)"
 
           # Delete DNS records
           for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/domains/loopzero.example/records" | python3 -c "import sys,json; [print(r['id']) for r in json.load(sys.stdin)['domain_records'] if 'dev' in r.get('name','') and r['type'] in ['A','CNAME']]" 2>/dev/null); do
@@ -369,6 +370,21 @@ jobs:
           STACK="${{ needs.resolve.outputs.stack }}"
           # Cancel stale locks from previous failed runs
           pulumi cancel -s "$STACK" 2>/dev/null || true
+
+          # Import pre-existing VPC if it exists but is not in Pulumi state.
+          # DO VPCs cannot be deleted when default — they persist across destroy cycles.
+          VPC_NAME="loopzero-infra-${STACK}-sfo3-net"
+          VPC_ID=$(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs" | \
+            python3 -c "import sys,json; vpcs=[v for v in json.load(sys.stdin)['vpcs'] if v['name']=='$VPC_NAME']; print(vpcs[0]['id'] if vpcs else '')" 2>/dev/null)
+          if [ -n "$VPC_ID" ]; then
+            # Check if already in state
+            IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "digitalocean:index/vpc:Vpc") | .id' 2>/dev/null)
+            if [ -z "$IN_STATE" ]; then
+              echo "Importing existing VPC $VPC_NAME ($VPC_ID) into Pulumi state..."
+              pulumi import digitalocean:index/vpc:Vpc "$VPC_NAME" "$VPC_ID" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
+            fi
+          fi
+
           # Clean up corrupted state from failed import/replacement cycles.
           # Resources pending replacement that can't be deleted (non-empty buckets,
           # active tunnels) must be removed from state so Pulumi can re-import cleanly.
