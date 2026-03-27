@@ -80,11 +80,11 @@ func ValidateLoopZeroYAML(content string) (*LoopZeroYAML, []string, error) {
 		}
 	}
 
-	// Validate version if present (v2 schema)
-	if cfg.Version != 0 && cfg.Version != 1 {
+	// Validate version if present (v2 schema — Sprint 10)
+	if cfg.Version != 0 && cfg.Version != 1 && cfg.Version != 2 {
 		return nil, nil, &ValidationError{
 			Field:   "version",
-			Message: fmt.Sprintf("unsupported version %d (current: 1)", cfg.Version),
+			Message: fmt.Sprintf("unsupported version %d (current: 2)", cfg.Version),
 		}
 	}
 
