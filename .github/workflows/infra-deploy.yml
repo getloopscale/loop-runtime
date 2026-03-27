@@ -461,8 +461,19 @@ jobs:
             echo "Removing pending-replacement resource: $URN"
             pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
           done
-          # Refresh state to match reality (handles manual deletes, drift)
-          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
+          # Refresh state to match reality (handles manual deletes, drift).
+          # K8s Jobs with ttlSecondsAfterFinished are auto-deleted by the cluster
+          # controller after completion — refresh detects these as "deleted" and
+          # removes them from state so `up` can recreate them.
+          echo "Refreshing state..."
+          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
+
+          # Remove any Jobs that refresh couldn't reconcile (belt + suspenders).
+          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:batch/v1:Job" and .outputs == null) | .urn' 2>/dev/null); do
+            echo "Removing stale Job from state: $URN"
+            pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
+          done
+
           # Create all resources — skipAwait prevents blocking on ImagePullBackOff
           pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
 
@@ -510,6 +521,11 @@ jobs:
           # Refresh: sync state with reality. Completed Jobs may have been
           # garbage-collected by K8s between Step 1 and now.
           pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
+          # Remove stale Jobs from state (TTL-deleted by K8s)
+          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:batch/v1:Job" and .outputs == null) | .urn' 2>/dev/null); do
+            echo "Removing stale Job from state: $URN"
+            pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
+          done
           # Converge: update Deployments (now images exist), recreate GC'd Jobs
           pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
 

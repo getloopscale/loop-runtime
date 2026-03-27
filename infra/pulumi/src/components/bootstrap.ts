@@ -1217,7 +1217,13 @@ echo "=== Bootstrap complete ==="
         },
       },
     },
-    { provider, dependsOn: [ns, gitea, bootstrapSa] },
+    {
+      provider,
+      dependsOn: [ns, gitea, bootstrapSa],
+      // The Job has ttlSecondsAfterFinished: 300 — Kubernetes auto-deletes it
+      // after completion. Pulumi must not fail when the Job no longer exists.
+      retainOnDelete: true,
+    },
   );
 
   // Create the platform tokens Secret with initial placeholders.
