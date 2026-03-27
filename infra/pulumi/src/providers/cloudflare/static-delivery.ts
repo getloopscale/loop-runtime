@@ -76,7 +76,6 @@ export function createStaticDelivery(
     accountId: config.accountId,
     scriptName: scriptName,
     content: workerContent,
-    mainModule: "worker.mjs",
     compatibilityDate: "2025-01-17",
     bindings: [
       {

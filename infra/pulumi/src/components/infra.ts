@@ -206,6 +206,10 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
   const staticCdn = new digitalocean.Cdn(`${baseName}-static-cdn`, {
     origin: pulumi.interpolate`${staticBucket.bucketName}.${config.region}.digitaloceanspaces.com`,
     ttl: 3600, // 1 hour edge cache
+  }, {
+    // Import existing CDN endpoint created before Pulumi management.
+    // Safe to remove after first successful `pulumi up`.
+    import: "f5eacc3b-dc16-402f-a0b1-84606bea82a7",
   });
 
   // --- Container registry ---
