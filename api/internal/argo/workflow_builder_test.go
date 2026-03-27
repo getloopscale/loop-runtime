@@ -304,6 +304,36 @@ func TestWorkflowBuilder_Build_InsecureFlags_WhenRegistryInsecure(t *testing.T) 
 	}
 }
 
+func TestBuildkitEntrypointScript_InsecureIncludesEntitlement(t *testing.T) {
+	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopzero-registry:5000")
+	if !strings.Contains(script, "--allow-insecure-entitlement security.insecure") {
+		t.Error("buildkitd must include --allow-insecure-entitlement security.insecure when insecure=true")
+	}
+}
+
+func TestBuildkitEntrypointScript_InsecureIncludesRegistryConfig(t *testing.T) {
+	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopzero-registry:5000")
+	if !strings.Contains(script, "k3d-loopzero-registry:5000") {
+		t.Error("buildkitd entrypoint must reference the registry URL for insecure config")
+	}
+	if !strings.Contains(script, "http = true") {
+		t.Error("buildkitd config must set http = true for insecure registry")
+	}
+	if !strings.Contains(script, "--config") {
+		t.Error("buildkitd must use --config flag for insecure registry TOML")
+	}
+}
+
+func TestBuildkitEntrypointScript_SecureExcludesEntitlement(t *testing.T) {
+	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", false, "registry.example.com")
+	if strings.Contains(script, "--allow-insecure-entitlement") {
+		t.Error("buildkitd must NOT include --allow-insecure-entitlement when insecure=false")
+	}
+	if strings.Contains(script, "http = true") {
+		t.Error("buildkitd must NOT include insecure registry config when insecure=false")
+	}
+}
+
 func TestWorkflowBuilder_Build_NoInsecureFlags_WhenRegistrySecure(t *testing.T) {
 	params := testInfraParams()
 	params.RegistryInsecure = false

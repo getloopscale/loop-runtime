@@ -108,6 +108,17 @@ export class DeployRenderer {
         return `\x1b[31m✗\x1b[0m Building ${app} [${error}]`;
       }
 
+      case 'deploy.delivering':
+        return `\x1b[36m⠋\x1b[0m Deploying to environment...`;
+
+      case 'deploy.verifying':
+        return `\x1b[36m⠋\x1b[0m Verifying service health${app ? ` (${app})` : ''}...`;
+
+      case 'deploy.live': {
+        const url = String(event.data.url ?? '');
+        return `\x1b[32m✓\x1b[0m ${app} live${url ? ` ${url}` : ''}`;
+      }
+
       case 'deploy.app_live': {
         const url = String(event.data.url ?? '');
         return `\x1b[32m✓\x1b[0m ${app} deployed ${url}`;
@@ -147,6 +158,17 @@ export class DeployRenderer {
       case 'build.failed': {
         const error = String(event.data.error ?? 'unknown error');
         return `[build] ${app}: failed [${error}]`;
+      }
+
+      case 'deploy.delivering':
+        return `[deploy] delivering to environment...`;
+
+      case 'deploy.verifying':
+        return `[deploy] verifying service health${app ? ` (${app})` : ''}...`;
+
+      case 'deploy.live': {
+        const url = String(event.data.url ?? '');
+        return `[deploy] ${app}: live${url ? ` ${url}` : ''}`;
       }
 
       case 'deploy.app_live': {

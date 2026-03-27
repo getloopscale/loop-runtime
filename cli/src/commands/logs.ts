@@ -57,15 +57,15 @@ export class LogsCommand {
       return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
 
-    // 2. Find loopzero.yaml
-    const yamlResult = this.deps.findLoopZeroYaml();
-    if (!yamlResult) {
-      return this.exitWithError(opts, 'No loopzero.yaml found. Run: loopzero init', 1, 'MISSING_CONFIG');
-    }
-
-    // 3. Validate build ID
+    // 2. Validate build ID — when --build is provided, loopzero.yaml is not required
+    // (the build ID is globally unique and sufficient for the API query)
     if (!opts.build) {
-      return this.exitWithError(opts, 'Build ID is required. Usage: loopzero logs --build <id>', 1, 'MISSING_BUILD_ID');
+      return this.exitWithError(
+        opts,
+        'Build ID is required. Find it in the output of \'loopzero deploy\' or \'loopzero deploy --no-wait\'.\nUsage: loopzero logs --build <id>',
+        1,
+        'MISSING_BUILD_ID',
+      );
     }
 
     // 4. Call API

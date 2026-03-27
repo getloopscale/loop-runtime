@@ -114,6 +114,43 @@ describe('DeployRenderer', () => {
       expect(output).toContain('Building worker');
     });
 
+    it('should render deploy.delivering event (MEET-012)', () => {
+      const renderer = createRenderer({ isTTY: true, isCI: false, isJSON: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.delivering',
+        data: { deploy_id: 'd-abc1', status: 'delivering' },
+      });
+
+      expect(output).toBeDefined();
+      expect(output).toContain('Deploying');
+    });
+
+    it('should render deploy.verifying event (MEET-012)', () => {
+      const renderer = createRenderer({ isTTY: true, isCI: false, isJSON: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.verifying',
+        data: { deploy_id: 'd-abc1', status: 'verifying', app: 'api' },
+      });
+
+      expect(output).toBeDefined();
+      expect(output).toContain('Verifying');
+    });
+
+    it('should render deploy.live event (MEET-012)', () => {
+      const renderer = createRenderer({ isTTY: true, isCI: false, isJSON: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.live',
+        data: { app: 'api', url: 'https://api.example.com' },
+      });
+
+      expect(output).toBeDefined();
+      expect(output).toContain('live');
+      expect(output).toContain('api');
+    });
+
     it('should render health check event', () => {
       const renderer = createRenderer({ isTTY: true, isCI: false, isJSON: false });
 
@@ -174,6 +211,42 @@ describe('DeployRenderer', () => {
       });
 
       expect(output).toBe('[build] api: complete [45s]');
+    });
+
+    it('should render deploy.delivering event in CI mode (MEET-012)', () => {
+      const renderer = createRenderer({ isCI: true, isJSON: false, isTTY: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.delivering',
+        data: { deploy_id: 'd-abc1', status: 'delivering' },
+      });
+
+      expect(output).toContain('[deploy]');
+      expect(output).toContain('delivering');
+    });
+
+    it('should render deploy.verifying event in CI mode (MEET-012)', () => {
+      const renderer = createRenderer({ isCI: true, isJSON: false, isTTY: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.verifying',
+        data: { deploy_id: 'd-abc1', status: 'verifying', app: 'api' },
+      });
+
+      expect(output).toContain('[deploy]');
+      expect(output).toContain('verifying');
+    });
+
+    it('should render deploy.live event in CI mode (MEET-012)', () => {
+      const renderer = createRenderer({ isCI: true, isJSON: false, isTTY: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.live',
+        data: { app: 'api', url: 'https://api.example.com' },
+      });
+
+      expect(output).toContain('[deploy]');
+      expect(output).toContain('live');
     });
 
     it('should render deployed event with URL and [deploy] prefix', () => {

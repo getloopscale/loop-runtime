@@ -132,8 +132,11 @@ func (c *ContainerDeliveryActivator) Rollback(ctx context.Context, req RollbackD
 		return fmt.Errorf("container rollback: push manifests: %w", err)
 	}
 
-	// Trigger ArgoCD sync (best-effort)
-	argoAppName := fmt.Sprintf("%s-%s", req.ProjectName, req.Environment)
+	// Trigger ArgoCD sync (best-effort).
+	// ArgoCD Application name is {tenantID}-{environment}, matching what the
+	// TenantController creates via EnsureApplication. NOT ProjectName.
+	// See MEET-2026-03-27-012 for the bug report.
+	argoAppName := fmt.Sprintf("%s-%s", req.TenantID, req.Environment)
 	if syncErr := c.sync.TriggerSync(ctx, argoAppName); syncErr != nil {
 		slog.Warn("container rollback: argocd sync trigger failed, continuing", "error", syncErr)
 	}

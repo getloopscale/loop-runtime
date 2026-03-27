@@ -130,15 +130,21 @@ func toInterfaceSlice(ss []string) []interface{} {
 	return result
 }
 
-// EnsureApplication creates or updates an ArgoCD Application CR.
-func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec ApplicationSpec) error {
-	app := &unstructured.Unstructured{
+// buildApplicationObject constructs the ArgoCD Application unstructured object.
+// Pure function (no side effects) — testable without a K8s client.
+//
+// Sync policy: manual sync only (automated: nil). The API controls sync timing
+// via POST /api/v1/applications/{name}/sync. Auto-sync (selfHeal/prune) creates
+// race conditions with the API's manual trigger. See MEET-2026-03-27-012.
+//
+// CreateNamespace: false — the TenantController creates namespaces, not ArgoCD.
+func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "argoproj.io/v1alpha1",
 			"kind":       "Application",
 			"metadata": map[string]interface{}{
-				"name":      spec.Name,
-				"namespace": p.namespace,
+				"name": spec.Name,
 				"labels": map[string]interface{}{
 					constants.LabelTenant:    spec.TenantID,
 					constants.LabelManagedBy: constants.ManagedByTenantController,
@@ -162,17 +168,22 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 					"namespace": spec.DestinationNS,
 				},
 				"syncPolicy": map[string]interface{}{
-					"automated": map[string]interface{}{
-						"selfHeal": true,
-						"prune":    true,
-					},
+					"automated": nil,
 					"syncOptions": []interface{}{
-						"CreateNamespace=true",
+						"CreateNamespace=false",
+						"PrunePropagationPolicy=foreground",
+						"PruneLast=true",
 					},
 				},
 			},
 		},
 	}
+}
+
+// EnsureApplication creates or updates an ArgoCD Application CR.
+func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec ApplicationSpec) error {
+	app := buildApplicationObject(spec)
+	app.Object["metadata"].(map[string]interface{})["namespace"] = p.namespace
 
 	// Try to get existing application
 	existing, err := p.client.Resource(applicationGVR).Namespace(p.namespace).Get(ctx, spec.Name, metav1.GetOptions{})

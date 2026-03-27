@@ -13,13 +13,20 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
+// WorkflowCanceller cancels Argo Workflows by ID.
+// Used by ProjectDeleter to stop running builds during project deletion.
+type WorkflowCanceller interface {
+	Cancel(ctx context.Context, namespace, workflowID string) error
+}
+
 // ProjectDeleterDeps holds all dependencies for ProjectDeleter.
 type ProjectDeleterDeps struct {
-	BuildStore     db.BuildStore
-	EnvTargetStore db.EnvironmentTargetStore
-	ProjectStore   ProjectDeleteProjectStore
-	Locker         EnvironmentLocker
-	GitOps         GitOpsPusher
+	BuildStore        db.BuildStore
+	EnvTargetStore    db.EnvironmentTargetStore
+	ProjectStore      ProjectDeleteProjectStore
+	Locker            EnvironmentLocker
+	GitOps            GitOpsPusher
+	WorkflowCanceller WorkflowCanceller // nil-safe: skips workflow cancel if not set
 }
 
 // ProjectDeleteProjectStore defines the project store operations needed by ProjectDeleter.
@@ -30,21 +37,23 @@ type ProjectDeleteProjectStore interface {
 
 // ProjectDeleter orchestrates project deletion across all layers.
 type ProjectDeleter struct {
-	buildStore     db.BuildStore
-	envTargetStore db.EnvironmentTargetStore
-	projectStore   ProjectDeleteProjectStore
-	locker         EnvironmentLocker
-	gitops         GitOpsPusher
+	buildStore        db.BuildStore
+	envTargetStore    db.EnvironmentTargetStore
+	projectStore      ProjectDeleteProjectStore
+	locker            EnvironmentLocker
+	gitops            GitOpsPusher
+	workflowCanceller WorkflowCanceller
 }
 
 // NewProjectDeleter creates a new ProjectDeleter with all dependencies injected.
 func NewProjectDeleter(deps ProjectDeleterDeps) *ProjectDeleter {
 	return &ProjectDeleter{
-		buildStore:     deps.BuildStore,
-		envTargetStore: deps.EnvTargetStore,
-		projectStore:   deps.ProjectStore,
-		locker:         deps.Locker,
-		gitops:         deps.GitOps,
+		buildStore:        deps.BuildStore,
+		envTargetStore:    deps.EnvTargetStore,
+		projectStore:      deps.ProjectStore,
+		locker:            deps.Locker,
+		gitops:            deps.GitOps,
+		workflowCanceller: deps.WorkflowCanceller,
 	}
 }
 
@@ -105,15 +114,17 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInp
 // Returns the number of cancelled builds.
 func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.ProjectDeleteInput, env string) (int, error) {
 	var cancelledBuilds int
+	var workflowIDs []string
 
 	// Phase 1 (Lock): Cancel active builds + delete environment target
 	err := d.locker.WithLock(ctx, req.TenantID, req.ProjectID, env, func(tx db.DBTX) error {
 		// Cancel active builds inside the lock (Rule 6)
-		cancelled, err := d.buildStore.CancelActiveBuilds(ctx, tx, req.TenantID, req.ProjectID, env)
+		cancelled, wfIDs, err := d.buildStore.CancelActiveBuilds(ctx, tx, req.TenantID, req.ProjectID, env)
 		if err != nil {
 			return fmt.Errorf("cancel active builds: %w", err)
 		}
 		cancelledBuilds = cancelled
+		workflowIDs = wfIDs
 
 		// Delete environment target
 		if err := d.envTargetStore.DeleteTarget(ctx, tx, req.TenantID, req.ProjectID, env); err != nil {
@@ -126,7 +137,9 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.Proje
 		return 0, fmt.Errorf("project delete: lock phase: %w", err)
 	}
 
-	// Phase 2 (no lock): Remove from GitOps repo — I/O outside the lock (BLOCKER-2 pattern)
+	// Phase 2 (no lock): Cancel Argo Workflows + remove from GitOps — I/O outside the lock
+	d.cancelWorkflows(ctx, workflowIDs, req.ProjectID, env)
+
 	removeCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
@@ -139,9 +152,28 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.Proje
 	if gitErr != nil {
 		slog.Error("gitops remove failed (DB already cleaned, manual cleanup may be needed)",
 			"project_id", req.ProjectID, "environment", env, "error", gitErr)
-		// Don't fail the whole operation — DB state is already clean
-		// ArgoCD will eventually prune when the directory is cleaned up
 	}
 
 	return cancelledBuilds, nil
+}
+
+// cancelWorkflows cancels Argo Workflows for cancelled builds (best-effort).
+// Workflow cancel is I/O to the build cluster, so it runs outside the advisory lock.
+// Failures are logged but do not block the delete operation.
+func (d *ProjectDeleter) cancelWorkflows(ctx context.Context, workflowIDs []string, projectID, env string) {
+	if d.workflowCanceller == nil || len(workflowIDs) == 0 {
+		return
+	}
+	cancelCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	for _, wfID := range workflowIDs {
+		if err := d.workflowCanceller.Cancel(cancelCtx, "argo", wfID); err != nil {
+			slog.Warn("workflow cancel failed (best-effort)",
+				"workflow_id", wfID, "project_id", projectID, "environment", env, "error", err)
+		} else {
+			slog.Info("cancelled workflow during project delete",
+				"workflow_id", wfID, "project_id", projectID, "environment", env)
+		}
+	}
 }

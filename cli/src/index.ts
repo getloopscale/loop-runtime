@@ -770,8 +770,25 @@ export function createProgram(): Command {
 export const program = createProgram();
 
 if (require.main === module) {
-  program.parseAsync(process.argv).catch((err: Error) => {
-    process.stderr.write(`Error: ${err.message}\n`);
-    process.exitCode = 1;
+  // exitOverride makes Commander throw instead of calling process.exit(),
+  // letting us format errors as JSON when --json is active.
+  program.exitOverride();
+
+  program.parseAsync(process.argv).catch((err: unknown) => {
+    const isJSON = process.argv.includes('--json');
+    const message = err instanceof Error ? err.message : String(err);
+    // Commander errors have exitCode property
+    const exitCode = (err as { exitCode?: number }).exitCode || 1;
+
+    if (isJSON) {
+      process.stdout.write(JSON.stringify({
+        error: message,
+        exit_code: exitCode,
+        code: 'COMMAND_VALIDATION_ERROR',
+      }) + '\n');
+    } else {
+      process.stderr.write(`Error: ${message}\n`);
+    }
+    process.exitCode = exitCode;
   });
 }

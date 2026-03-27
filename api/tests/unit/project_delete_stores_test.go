@@ -245,12 +245,12 @@ func TestEnvironmentTargetStoreDeleteTargetDBError(t *testing.T) {
 // --- BuildStore.CancelActiveBuilds tests ---
 
 func TestBuildStoreCancelActiveBuildsSuccess(t *testing.T) {
-	// Arrange
-	fake := newFakeBuildDBForCancel(3)
+	// Arrange: 3 builds cancelled, 2 with workflow IDs
+	fake := newFakeBuildDBForCancel([]string{"wf-1", "wf-2", ""})
 	store := db.NewPostgresBuildStore(fake)
 
 	// Act
-	count, err := store.CancelActiveBuilds(context.Background(), nil, "tenant-1", "proj-abc", "production")
+	count, wfIDs, err := store.CancelActiveBuilds(context.Background(), nil, "tenant-1", "proj-abc", "production")
 
 	// Assert
 	if err != nil {
@@ -259,15 +259,18 @@ func TestBuildStoreCancelActiveBuildsSuccess(t *testing.T) {
 	if count != 3 {
 		t.Errorf("expected 3 cancelled builds, got %d", count)
 	}
+	if len(wfIDs) != 2 {
+		t.Errorf("expected 2 workflow IDs (empty ones filtered), got %d: %v", len(wfIDs), wfIDs)
+	}
 }
 
 func TestBuildStoreCancelActiveBuildsNone(t *testing.T) {
 	// Arrange
-	fake := newFakeBuildDBForCancel(0)
+	fake := newFakeBuildDBForCancel(nil)
 	store := db.NewPostgresBuildStore(fake)
 
 	// Act
-	count, err := store.CancelActiveBuilds(context.Background(), nil, "tenant-1", "proj-abc", "production")
+	count, wfIDs, err := store.CancelActiveBuilds(context.Background(), nil, "tenant-1", "proj-abc", "production")
 
 	// Assert
 	if err != nil {
@@ -276,15 +279,18 @@ func TestBuildStoreCancelActiveBuildsNone(t *testing.T) {
 	if count != 0 {
 		t.Errorf("expected 0 cancelled builds, got %d", count)
 	}
+	if len(wfIDs) != 0 {
+		t.Errorf("expected 0 workflow IDs, got %v", wfIDs)
+	}
 }
 
 func TestBuildStoreCancelActiveBuildsDBError(t *testing.T) {
 	// Arrange
-	fake := &fakeBuildDBForCancel{execErr: fmt.Errorf("connection refused")}
+	fake := &fakeBuildDBForCancel{queryErr: fmt.Errorf("connection refused")}
 	store := db.NewPostgresBuildStore(fake)
 
 	// Act
-	_, err := store.CancelActiveBuilds(context.Background(), nil, "tenant-1", "proj-abc", "production")
+	_, _, err := store.CancelActiveBuilds(context.Background(), nil, "tenant-1", "proj-abc", "production")
 
 	// Assert
 	if err == nil {
@@ -366,26 +372,51 @@ func (r *fakeMultiTargetRows) Err() error { return nil }
 func (r *fakeMultiTargetRows) Close()     {}
 
 // fakeBuildDBForCancel implements db.DBTX for testing CancelActiveBuilds.
+// CancelActiveBuilds uses Query with RETURNING to get workflow IDs.
 type fakeBuildDBForCancel struct {
-	rowsAffected int64
-	execErr      error
+	workflowIDs []string // workflow IDs to return from RETURNING clause
+	queryErr    error
 }
 
-func newFakeBuildDBForCancel(affected int64) *fakeBuildDBForCancel {
-	return &fakeBuildDBForCancel{rowsAffected: affected}
+func newFakeBuildDBForCancel(workflowIDs []string) *fakeBuildDBForCancel {
+	return &fakeBuildDBForCancel{workflowIDs: workflowIDs}
 }
 
-func (f *fakeBuildDBForCancel) Exec(ctx context.Context, sql string, args ...any) (db.ExecResult, error) {
-	if f.execErr != nil {
-		return db.ExecResult{}, f.execErr
+func (f *fakeBuildDBForCancel) Exec(_ context.Context, _ string, _ ...any) (db.ExecResult, error) {
+	return db.ExecResult{}, nil
+}
+
+func (f *fakeBuildDBForCancel) Query(_ context.Context, _ string, _ ...any) (db.Rows, error) {
+	if f.queryErr != nil {
+		return nil, f.queryErr
 	}
-	return db.ExecResult{RowsAffected: f.rowsAffected}, nil
+	return &fakeCancelRows{workflowIDs: f.workflowIDs, pos: -1}, nil
 }
 
-func (f *fakeBuildDBForCancel) Query(ctx context.Context, sql string, args ...any) (db.Rows, error) {
-	return &emptyRows{}, nil
-}
-
-func (f *fakeBuildDBForCancel) QueryRow(ctx context.Context, sql string, args ...any) db.Row {
+func (f *fakeBuildDBForCancel) QueryRow(_ context.Context, _ string, _ ...any) db.Row {
 	return &fakeRow{}
 }
+
+// fakeCancelRows implements db.Rows for CancelActiveBuilds RETURNING workflow_id.
+type fakeCancelRows struct {
+	workflowIDs []string
+	pos         int
+}
+
+func (r *fakeCancelRows) Next() bool {
+	r.pos++
+	return r.pos < len(r.workflowIDs)
+}
+
+func (r *fakeCancelRows) Scan(dest ...any) error {
+	if r.pos >= len(r.workflowIDs) {
+		return fmt.Errorf("no more rows")
+	}
+	if p, ok := dest[0].(*string); ok {
+		*p = r.workflowIDs[r.pos]
+	}
+	return nil
+}
+
+func (r *fakeCancelRows) Err() error { return nil }
+func (r *fakeCancelRows) Close()     {}

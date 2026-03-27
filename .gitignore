@@ -19,6 +19,8 @@ prompts
 continue.txt
 .yarn
 MELHORIAS.txt
+ralph-loop.local.md
+.claude/ralph-loop.local.md
 # --------------------------------------------
 # Node.js / TypeScript (cli/)
 # --------------------------------------------
@@ -106,3 +108,4 @@ tmp/
 *.bak
 *.orig
 .env.local
+.claude/ralph-loop.local.md

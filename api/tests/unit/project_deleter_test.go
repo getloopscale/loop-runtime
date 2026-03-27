@@ -17,23 +17,26 @@ import (
 
 // fakeDeleteBuildStore implements db.BuildStore (only CancelActiveBuilds is used by ProjectDeleter).
 type fakeDeleteBuildStore struct {
-	cancelledByEnv map[string]int // key: "tenant:project:env" -> count
-	cancelErr      error
+	cancelledByEnv    map[string]int      // key: "tenant:project:env" -> count
+	workflowsByEnv    map[string][]string // key: "tenant:project:env" -> workflow IDs
+	cancelErr         error
 }
 
 func newFakeDeleteBuildStore() *fakeDeleteBuildStore {
 	return &fakeDeleteBuildStore{
 		cancelledByEnv: make(map[string]int),
+		workflowsByEnv: make(map[string][]string),
 	}
 }
 
-func (f *fakeDeleteBuildStore) CancelActiveBuilds(_ context.Context, _ db.DBTX, tenantID, projectID, env string) (int, error) {
+func (f *fakeDeleteBuildStore) CancelActiveBuilds(_ context.Context, _ db.DBTX, tenantID, projectID, env string) (int, []string, error) {
 	if f.cancelErr != nil {
-		return 0, f.cancelErr
+		return 0, nil, f.cancelErr
 	}
 	key := fmt.Sprintf("%s:%s:%s", tenantID, projectID, env)
 	count := f.cancelledByEnv[key]
-	return count, nil
+	wfIDs := f.workflowsByEnv[key]
+	return count, wfIDs, nil
 }
 
 // Unused methods — satisfy the interface.
@@ -144,6 +147,20 @@ func (f *fakeDeleteGitOps) Remove(_ context.Context, opts services.GitOpsRemoveO
 		return "", f.removeErr
 	}
 	return "fake-remove-sha", nil
+}
+
+// fakeWorkflowCanceller implements services.WorkflowCanceller for delete tests.
+type fakeWorkflowCanceller struct {
+	cancelledIDs []string
+	cancelErr    error
+}
+
+func (f *fakeWorkflowCanceller) Cancel(_ context.Context, _, workflowID string) error {
+	f.cancelledIDs = append(f.cancelledIDs, workflowID)
+	if f.cancelErr != nil {
+		return f.cancelErr
+	}
+	return nil
 }
 
 // --- Tests ---
@@ -574,5 +591,141 @@ func TestProjectDeleterDeleteAllEnvsNoEnvironments(t *testing.T) {
 	// No gitops calls
 	if len(gitops.removeCalled) != 0 {
 		t.Errorf("expected 0 gitops remove calls, got %d", len(gitops.removeCalled))
+	}
+}
+
+func TestProjectDeleterCancelsActiveWorkflows(t *testing.T) {
+	// Arrange: 2 builds RUNNING with workflow IDs
+	buildStore := newFakeDeleteBuildStore()
+	buildStore.cancelledByEnv["tenant-1:proj-abc:production"] = 2
+	buildStore.workflowsByEnv["tenant-1:proj-abc:production"] = []string{"wf-aaa", "wf-bbb"}
+
+	envTargetStore := newFakeDeleteEnvTargetStore()
+	projectStore := &fakeDeleteProjectStore{}
+	locker := &fakeDeleteLocker{}
+	gitops := &fakeDeleteGitOps{}
+	wfCanceller := &fakeWorkflowCanceller{}
+
+	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+		BuildStore:        buildStore,
+		EnvTargetStore:    envTargetStore,
+		ProjectStore:      projectStore,
+		Locker:            locker,
+		GitOps:            gitops,
+		WorkflowCanceller: wfCanceller,
+	})
+
+	req := routes.ProjectDeleteInput{
+		TenantID:      "tenant-1",
+		ProjectID:     "proj-abc",
+		ProjectName:   "my-saas",
+		Environment:   "production",
+		DeletedBy:     "user-1",
+		CorrelationID: "corr-wf-1",
+	}
+
+	// Act
+	result, err := deleter.Delete(context.Background(), req)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.CancelledBuilds != 2 {
+		t.Errorf("expected 2 cancelled builds, got %d", result.CancelledBuilds)
+	}
+	if len(wfCanceller.cancelledIDs) != 2 {
+		t.Fatalf("expected 2 workflow cancellations, got %d", len(wfCanceller.cancelledIDs))
+	}
+	if wfCanceller.cancelledIDs[0] != "wf-aaa" || wfCanceller.cancelledIDs[1] != "wf-bbb" {
+		t.Errorf("expected workflows [wf-aaa, wf-bbb], got %v", wfCanceller.cancelledIDs)
+	}
+}
+
+func TestProjectDeleterSkipsBuildWithoutWorkflowID(t *testing.T) {
+	// Arrange: 1 build QUEUED without workflow_id (empty string filtered out by store)
+	buildStore := newFakeDeleteBuildStore()
+	buildStore.cancelledByEnv["tenant-1:proj-abc:production"] = 1
+	// No workflow IDs — build was QUEUED, never got a workflow assigned
+
+	envTargetStore := newFakeDeleteEnvTargetStore()
+	projectStore := &fakeDeleteProjectStore{}
+	locker := &fakeDeleteLocker{}
+	gitops := &fakeDeleteGitOps{}
+	wfCanceller := &fakeWorkflowCanceller{}
+
+	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+		BuildStore:        buildStore,
+		EnvTargetStore:    envTargetStore,
+		ProjectStore:      projectStore,
+		Locker:            locker,
+		GitOps:            gitops,
+		WorkflowCanceller: wfCanceller,
+	})
+
+	req := routes.ProjectDeleteInput{
+		TenantID:      "tenant-1",
+		ProjectID:     "proj-abc",
+		ProjectName:   "my-saas",
+		Environment:   "production",
+		DeletedBy:     "user-1",
+		CorrelationID: "corr-wf-2",
+	}
+
+	// Act
+	_, err := deleter.Delete(context.Background(), req)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(wfCanceller.cancelledIDs) != 0 {
+		t.Errorf("expected 0 workflow cancellations (no workflow IDs), got %d", len(wfCanceller.cancelledIDs))
+	}
+}
+
+func TestProjectDeleterContinuesOnWorkflowCancelFailure(t *testing.T) {
+	// Arrange: workflow cancel fails but delete should still succeed
+	buildStore := newFakeDeleteBuildStore()
+	buildStore.cancelledByEnv["tenant-1:proj-abc:production"] = 1
+	buildStore.workflowsByEnv["tenant-1:proj-abc:production"] = []string{"wf-failing"}
+
+	envTargetStore := newFakeDeleteEnvTargetStore()
+	projectStore := &fakeDeleteProjectStore{}
+	locker := &fakeDeleteLocker{}
+	gitops := &fakeDeleteGitOps{}
+	wfCanceller := &fakeWorkflowCanceller{cancelErr: fmt.Errorf("argo: connection refused")}
+
+	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+		BuildStore:        buildStore,
+		EnvTargetStore:    envTargetStore,
+		ProjectStore:      projectStore,
+		Locker:            locker,
+		GitOps:            gitops,
+		WorkflowCanceller: wfCanceller,
+	})
+
+	req := routes.ProjectDeleteInput{
+		TenantID:      "tenant-1",
+		ProjectID:     "proj-abc",
+		ProjectName:   "my-saas",
+		Environment:   "production",
+		DeletedBy:     "user-1",
+		CorrelationID: "corr-wf-3",
+	}
+
+	// Act
+	result, err := deleter.Delete(context.Background(), req)
+
+	// Assert — delete succeeds even though workflow cancel failed (best-effort)
+	if err != nil {
+		t.Fatalf("expected no error (best-effort cancel), got %v", err)
+	}
+	if result.CancelledBuilds != 1 {
+		t.Errorf("expected 1 cancelled build, got %d", result.CancelledBuilds)
+	}
+	// Workflow cancel was attempted
+	if len(wfCanceller.cancelledIDs) != 1 {
+		t.Errorf("expected 1 cancel attempt, got %d", len(wfCanceller.cancelledIDs))
 	}
 }

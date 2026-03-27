@@ -294,13 +294,15 @@ func main() {
 		statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: releaseStore}
 		statusHandler = routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain)
 
-		// Project deleter — orchestrates project removal across DB, GitOps, and builds
+		// Project deleter — orchestrates project removal across DB, GitOps, and builds.
+		// WorkflowCanceller stops running Argo Workflows during deletion (DF-2.1).
 		projectDeleter = services.NewProjectDeleter(services.ProjectDeleterDeps{
-			BuildStore:     buildStore,
-			EnvTargetStore: envTargetStore,
-			ProjectStore:   &db.PostgresProjectStore{DB: dbAdapter},
-			Locker:         locker,
-			GitOps:         gitopsPusher,
+			BuildStore:        buildStore,
+			EnvTargetStore:    envTargetStore,
+			ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
+			Locker:            locker,
+			GitOps:            gitopsPusher,
+			WorkflowCanceller: workflowSubmitter,
 		})
 
 		// C-01/C-03 fix: BuildReconcileLoop replaces both the HTTP callback

@@ -128,7 +128,7 @@ describe('LogsCommand', () => {
   });
 
   describe('missing config', () => {
-    it('should return exit code 1 when loopzero.yaml is missing', async () => {
+    it('should succeed with --build even without loopzero.yaml', async () => {
       const deps = createMockDeps({
         findLoopZeroYaml: jest.fn().mockReturnValue(null),
       });
@@ -136,9 +136,21 @@ describe('LogsCommand', () => {
 
       const exitCode = await cmd.execute({ build: 'build-abc123' });
 
+      expect(exitCode).toBe(0);
+      expect(deps.getLogs).toHaveBeenCalledWith('build-abc123', expect.anything());
+    });
+
+    it('should fail without --build and without loopzero.yaml', async () => {
+      const deps = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue(null),
+      });
+      const cmd = new LogsCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
       expect(exitCode).toBe(1);
       const errorOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
-      expect(errorOutput).toContain('loopzero init');
+      expect(errorOutput).toContain('Build ID is required');
     });
   });
 

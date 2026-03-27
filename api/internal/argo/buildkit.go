@@ -128,7 +128,7 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 		// rootlesskit sets up user namespace, then runs the entrypoint script.
 		// Script starts buildkitd background, waits for socket, runs buildctl "$@".
 		// "--" is $0, "buildctl" is $1, rest of buildctlArgs become $2+.
-		Command: []string{"rootlesskit", "sh", "-c", buildkitEntrypointScript(socketPath, b.infraParams.RegistryInsecure), "--"},
+		Command: []string{"rootlesskit", "sh", "-c", buildkitEntrypointScript(socketPath, b.infraParams.RegistryInsecure, b.infraParams.RegistryURL), "--"},
 		Args:    append([]string{"buildctl"}, buildctlArgs...),
 		Env: []forge.EnvBuilder{
 			forge.Env{Name: "HOME", Value: "/home/user"},
@@ -190,16 +190,31 @@ func dockerfileName(dockerfilePath string) string {
 //  3. Run buildctl "$@" and capture exit code
 //  4. Kill buildkitd on exit (trap ensures cleanup even on failure)
 //  5. Exit with buildctl's exit code
-func buildkitEntrypointScript(socketPath string, insecure bool) string {
+func buildkitEntrypointScript(socketPath string, insecure bool, registryURL string) string {
 	buildkitdArgs := fmt.Sprintf("--oci-worker-no-process-sandbox --addr '%s'", socketPath)
+	configSetup := ""
 	if insecure {
 		buildkitdArgs += " --oci-worker-snapshotter native"
+		buildkitdArgs += " --allow-insecure-entitlement security.insecure"
+		// Configure buildkitd to use HTTP for the insecure registry.
+		// Without this, buildkitd attempts HTTPS and fails with
+		// "http: server gave HTTP response to HTTPS client".
+		configSetup = fmt.Sprintf(`
+# Configure insecure registry (HTTP) for local dev
+mkdir -p /tmp/buildkit
+cat > /tmp/buildkit/buildkitd.toml <<TOML
+[registry."%s"]
+  http = true
+  insecure = true
+TOML
+`, registryURL)
+		buildkitdArgs += " --config /tmp/buildkit/buildkitd.toml"
 	}
 	return fmt.Sprintf(`set -e
-
+%s
 # Start buildkitd daemon in background (inside rootlesskit user namespace)
 buildkitd %s &
-DAEMON_PID=$!
+DAEMON_PID=$!`, configSetup, buildkitdArgs) + fmt.Sprintf(`
 
 # Wait for daemon to accept gRPC connections
 timeout=%d; i=0
@@ -222,7 +237,7 @@ BUILD_EXIT=$?
 # Graceful daemon shutdown — exit code is already captured
 kill $DAEMON_PID 2>/dev/null || true
 wait $DAEMON_PID 2>/dev/null || true
-exit $BUILD_EXIT`, buildkitdArgs, buildkitDaemonTimeout, socketPath)
+exit $BUILD_EXIT`, buildkitDaemonTimeout, socketPath)
 }
 
 // ---------------------------------------------------------------------------

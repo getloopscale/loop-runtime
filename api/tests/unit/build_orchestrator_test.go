@@ -124,17 +124,21 @@ func (f *fakeBuildStoreOrch) GetBuildApps(ctx context.Context, buildID string) (
 	return nil, nil
 }
 
-func (f *fakeBuildStoreOrch) CancelActiveBuilds(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, error) {
+func (f *fakeBuildStoreOrch) CancelActiveBuilds(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, []string, error) {
 	count := 0
+	var wfIDs []string
 	for _, b := range f.builds {
 		if b.TenantID == tenantID && b.ProjectID == projectID && b.Environment == env {
 			if b.Status == string(statemachine.BuildQueued) || b.Status == string(statemachine.BuildRunning) {
 				b.Status = string(statemachine.BuildCancelled)
 				count++
+				if b.WorkflowID != "" {
+					wfIDs = append(wfIDs, b.WorkflowID)
+				}
 			}
 		}
 	}
-	return count, nil
+	return count, wfIDs, nil
 }
 
 // safeFakeTransition catches panics from the state machine.

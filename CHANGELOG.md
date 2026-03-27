@@ -8,12 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Meeting record MEET-2026-03-27-012: ArgoCD deploy reliability architecture decision (#MEET-012)
+- Dogfood fix roadmap: 12 tasks across 4 sprints to resolve all findings from 2026-03-27 audit (#DF-ROADMAP)
+- `ProjectDeleter` now cancels running Argo Workflows during project deletion via `WorkflowCanceller` (#DF-2.1)
+- `CancelActiveBuilds` returns workflow IDs via `RETURNING` clause for Argo cancellation (#DF-2.1)
+- CLI deploy renderer handles `deploy.delivering`, `deploy.verifying`, `deploy.live` SSE events — eliminates 5-10 min feedback black hole (#MEET-012-1.5)
 - Wire `StatusHandler` into API server — `GET /api/v1/projects/{name}/status` now available (#DOGFOOD-F05)
 - `StatusBuildStoreAdapter` and `StatusReleaseStoreAdapter` in adapters to bridge DB stores to status handler (#DOGFOOD-F05)
 - Build cluster secrets patching in `update-cross-cluster-ips.sh` — `loopzero-gitea-credentials` and `loopzero-minio-credentials` now auto-updated (#DOGFOOD-F01)
 - Wire `ProjectDeleter` into API server — `DELETE /api/v1/projects/{name}` now functional with full orchestration (#DOGFOOD-F03)
 
 ### Fixed
+- ArgoCD sync policy contradiction: operator provisioner changed from `selfHeal: true` (auto-sync) to `automated: null` (manual sync), matching spec, Helm template, and tests (#MEET-012-0.1)
+- Rollback ArgoCD app name: changed from `ProjectName` to `TenantID`, fixing silent rollback failure on every call (#MEET-012-0.2)
+- BuildKit insecure registry: generate `buildkitd.toml` with `http = true` for local dev registry, fixing HTTPS→HTTP push error (#DF-1.1b)
+- BuildKit entitlement: add `--allow-insecure-entitlement security.insecure` to buildkitd daemon when `RegistryInsecure=true` — unblocks all local builds (#DF-1.1)
+- `loopzero logs --build <id>` no longer requires loopzero.yaml — build ID is globally unique and sufficient (#DF-3.1)
+- `loopzero logs` error message now suggests where to find the build ID (#DF-3.3)
+- Commander.js validation errors (missing args/options) now respect `--json` flag via `exitOverride()` (#DF-3.2)
 - Operator crash on DO: graceful fallback when MinIO admin credentials absent — DO Spaces uses SPACES_ACCESS_KEY_ID (#DOGFOOD-DO-01)
 - Missing `BASE_DOMAIN` env var in Pulumi tenant-controller deployment (#DOGFOOD-DO-02)
 - Build logs endpoint returns 200 with empty entries when Loki is unavailable instead of 500 (#DOGFOOD-F04)

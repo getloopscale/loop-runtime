@@ -61,7 +61,7 @@ type BuildStore interface {
 	GetBuildApps(ctx context.Context, buildID string) ([]BuildAppSpec, error)
 	ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error)
 	FindActiveBuilds(ctx context.Context) ([]Build, error)
-	CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, error)
+	CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, []string, error)
 }
 
 // PostgresBuildStore implements BuildStore using PostgreSQL.
@@ -336,23 +336,41 @@ func (s *PostgresBuildStore) FindActiveBuilds(ctx context.Context) ([]Build, err
 }
 
 // CancelActiveBuilds cancels all QUEUED or RUNNING builds for a (tenant, project, env).
-// Returns the number of builds cancelled. Used during project deletion.
+// Returns the number of builds cancelled and their workflow IDs (for Argo cancellation).
 // This method runs inside an advisory lock transaction.
-func (s *PostgresBuildStore) CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, error) {
+func (s *PostgresBuildStore) CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, []string, error) {
 	executor := tx
 	if executor == nil {
 		executor = s.db
 	}
-	result, err := executor.Exec(ctx,
+	rows, err := executor.Query(ctx,
 		`UPDATE builds SET status = 'CANCELLED', finished_at = NOW()
 		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
-		 AND status IN ('QUEUED', 'RUNNING')`,
+		 AND status IN ('QUEUED', 'RUNNING')
+		 RETURNING COALESCE(workflow_id, '')`,
 		tenantID, projectID, env,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("build store: cancel active builds: %w", err)
+		return 0, nil, fmt.Errorf("build store: cancel active builds: %w", err)
 	}
-	return int(result.RowsAffected), nil
+	defer rows.Close()
+
+	var workflowIDs []string
+	count := 0
+	for rows.Next() {
+		var wfID string
+		if err := rows.Scan(&wfID); err != nil {
+			return 0, nil, fmt.Errorf("build store: scan workflow_id: %w", err)
+		}
+		count++
+		if wfID != "" {
+			workflowIDs = append(workflowIDs, wfID)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, nil, fmt.Errorf("build store: cancel active builds rows: %w", err)
+	}
+	return count, workflowIDs, nil
 }
 
 // scanBuild scans a single build row.
