@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import { LoopZeroYamlApp, BuildStrategy } from './loopzero-yaml';
+import type { LoopZeroYamlApp, BuildStrategy } from './loopzero-yaml';
 
 /**
  * AppUnit is a fully resolved app — all fields required, ready for build plan generation.
@@ -25,13 +25,11 @@ export interface AppUnit {
 
 const FRONTEND_FRAMEWORKS = ['nextjs', 'next', 'vite', 'remix', 'react', 'vue', 'svelte', 'astro'];
 
-// Frameworks that produce purely static output by default (SPAs, static site generators).
-// These default to render: "static" when type is "frontend".
-const STATIC_DEFAULT_FRAMEWORKS = ['vite', 'react', 'vue', 'svelte'];
-
-// Frameworks that need a runtime server by default (SSR, API routes, loaders).
-// These default to render: "server" when type is "frontend".
-// const SSR_DEFAULT_FRAMEWORKS = ['nextjs', 'next', 'remix', 'astro'];
+// NOTE: Framework lists for auto-detection of rendering mode (MEET-009):
+// Static-default: vite, react, vue, svelte
+// SSR-default: nextjs, next, remix, astro
+// Currently, rendering mode is explicit in loopzero.yaml (render: "static" | "server").
+// Auto-detection from framework will be added when needed.
 
 /**
  * normalizeApp resolves a raw LoopZeroYamlApp into a fully populated AppUnit.

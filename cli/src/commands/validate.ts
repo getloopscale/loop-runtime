@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
-import { validateConfig, ValidationError } from '../adapters/validate-config';
+import { validateConfig } from '../adapters/validate-config';
 import * as path from 'path';
 
 export interface ValidateDeps {

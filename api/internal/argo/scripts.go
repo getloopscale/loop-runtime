@@ -113,9 +113,9 @@ func scriptDockerfileNode(apps []services.AppSpec) string {
 			dockerfileName = fmt.Sprintf("Dockerfile.%s", app.Name)
 		}
 
-		script.WriteString(fmt.Sprintf(
+		fmt.Fprintf(&script,
 			"if [ -f \"%s/Dockerfile\" ]; then\n  echo \"User Dockerfile found in %s\"\n  cp \"%s/Dockerfile\" \"%s\"\nelse\n",
-			appPath, appPath, appPath, dockerfileName))
+			appPath, appPath, appPath, dockerfileName)
 
 		var df strings.Builder
 		df.WriteString("FROM node:20-alpine\n")
@@ -127,25 +127,25 @@ func scriptDockerfileNode(apps []services.AppSpec) string {
 			df.WriteString("COPY . .\n")
 		} else {
 			df.WriteString("COPY package.json package-lock.json ./\n")
-			df.WriteString(fmt.Sprintf("COPY %s ./%s\n", appPath, appPath))
+			fmt.Fprintf(&df, "COPY %s ./%s\n", appPath, appPath)
 			df.WriteString("RUN npm ci --omit=dev 2>/dev/null || true\n")
 		}
 
-		df.WriteString(fmt.Sprintf("WORKDIR /app/%s\n", appPath))
+		fmt.Fprintf(&df, "WORKDIR /app/%s\n", appPath)
 
 		if app.Type != "worker" {
 			port := app.Port
 			if port <= 0 {
 				port = 3000
 			}
-			df.WriteString(fmt.Sprintf("EXPOSE %d\n", port))
+			fmt.Fprintf(&df, "EXPOSE %d\n", port)
 		}
 		df.WriteString("CMD [\"node\", \"index.js\"]\n")
 
 		content := strings.ReplaceAll(df.String(), "%", "%%")
 		content = strings.ReplaceAll(content, "\\", "\\\\")
-		script.WriteString(fmt.Sprintf("  echo 'Generating %s for %s'\n", dockerfileName, app.Name))
-		script.WriteString(fmt.Sprintf("  printf '%s' > \"%s\"\n", content, dockerfileName))
+		fmt.Fprintf(&script, "  echo 'Generating %s for %s'\n", dockerfileName, app.Name)
+		fmt.Fprintf(&script, "  printf '%s' > \"%s\"\n", content, dockerfileName)
 		script.WriteString("fi\n")
 	}
 

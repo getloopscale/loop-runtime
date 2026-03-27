@@ -331,14 +331,14 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 	// we'd create duplicates in an infinite loop. Instead, check existing state and decide.
 	existingRelease, _ := r.orch.FindReleaseForBuild(ctx, build.ID)
 	if existingRelease != nil {
-		switch {
-		case existingRelease.Status == "ACTIVE":
+		switch existingRelease.Status {
+		case "ACTIVE":
 			// Release already active — just transition build to SUCCEEDED
 			r.logger.Info("reconcile loop: release already ACTIVE, completing build",
 				"build_id", build.ID, "release_id", existingRelease.ID)
 			r.completeBuild(ctx, build)
 			return
-		case existingRelease.Status == "SYNC_FAILED" || existingRelease.Status == "GIT_MIRROR_FAILED":
+		case "SYNC_FAILED", "GIT_MIRROR_FAILED":
 			// Release permanently failed — fail the build
 			r.logger.Warn("reconcile loop: release in failed state, failing build",
 				"build_id", build.ID, "release_id", existingRelease.ID,

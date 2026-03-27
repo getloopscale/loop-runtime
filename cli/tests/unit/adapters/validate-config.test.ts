@@ -131,7 +131,7 @@ describe('validateConfig', () => {
         api: {
           path: 'api', framework: 'express', type: 'server', port: 3000,
           replicas: 3,  // unknown field
-        } as any,
+        } as unknown as LoopZeroYaml['apps'][string],
       },
     };
     const { warnings } = validateConfig(config, dir);

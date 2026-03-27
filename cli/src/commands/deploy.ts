@@ -8,7 +8,7 @@ import {
   MAX_ENVIRONMENT_NAME_LENGTH,
   MAX_BUNDLE_SIZE_BYTES,
 } from '../config/constants';
-import { LoopZeroYaml, LoopZeroYamlResult } from '../adapters/loopzero-yaml';
+import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
 import { normalizeApps } from '../adapters/app-unit';
 import * as fs from 'fs';
 import * as path from 'path';

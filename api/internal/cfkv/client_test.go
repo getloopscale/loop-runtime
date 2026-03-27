@@ -137,7 +137,7 @@ func TestClient_Put_Integration(t *testing.T) {
 		receivedMethod = r.Method
 		receivedPath = r.URL.Path
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &receivedBody)
+		_ = json.Unmarshal(body, &receivedBody)
 
 		if r.Header.Get("Authorization") != "Bearer test-token" {
 			w.WriteHeader(http.StatusUnauthorized)

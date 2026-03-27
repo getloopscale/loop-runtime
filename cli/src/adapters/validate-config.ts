@@ -3,7 +3,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { LoopZeroYaml, LoopZeroYamlApp, BuildStrategy } from './loopzero-yaml';
+import type { LoopZeroYaml } from './loopzero-yaml';
 
 export interface ValidationError {
   field: string;
