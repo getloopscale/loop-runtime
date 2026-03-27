@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Wire `ProjectDeleter` into API server — `DELETE /api/v1/projects/{name}` now functional with full orchestration (#DOGFOOD-F03)
 
 ### Fixed
+- Operator crash on DO: graceful fallback when MinIO admin credentials absent — DO Spaces uses SPACES_ACCESS_KEY_ID (#DOGFOOD-DO-01)
+- Missing `BASE_DOMAIN` env var in Pulumi tenant-controller deployment (#DOGFOOD-DO-02)
 - Build logs endpoint returns 200 with empty entries when Loki is unavailable instead of 500 (#DOGFOOD-F04)
 - CLI deploy build failure now includes `build_id` and `suggestion` in JSON error response (#DOGFOOD-F02)
 - CLI deploy `--no-wait` human mode now shows `Track with: loopzero logs --build <id>` (#DOGFOOD-F10)
