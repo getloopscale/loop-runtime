@@ -52,6 +52,9 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     // Import existing tunnel created before Pulumi management.
     // Safe to remove after first successful `pulumi up`.
     import: "362767409c4de7fda7990c10103efdd9/c35b9d63-20b0-4cb1-aa39-873f3d8ade58",
+    // tunnelSecret mismatch triggers replacement, but the tunnel has active
+    // connections. Ignore the secret to prevent replacement attempts.
+    ignoreChanges: ["tunnelSecret"],
   });
 
   // 2. Tunnel ingress config — route wildcard to Traefik HTTPS
