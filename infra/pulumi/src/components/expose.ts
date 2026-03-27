@@ -79,23 +79,32 @@ export function exposePlatform(
   );
 
   // --- Runtime cluster DNS ---
-  // Wildcard: *.dev.loopzero.example or *.loopzero.example (prod)
-  const wildcardName = prefix ? `*.${prefix}` : "*";
-  const runtimeWildcard = factory.createDnsRecord({
-    zone,
-    recordName: wildcardName,
-    target: bootstrap.runtime.ingressEndpoint,
-    ttl: 300,
-  });
+  // When Cloudflare Tunnel is active (cfZoneId set), the wildcard CNAME is
+  // managed by the tunnel module (*.{domain} → tunnel.cfargotunnel.com).
+  // Creating a second record here would conflict. Skip the wildcard.
+  let runtimeDnsConfigured: pulumi.Output<boolean>;
 
-  // Readiness: all management records created + wildcard created.
+  if (config.cfZoneId) {
+    // Tunnel owns the wildcard — runtime DNS is already configured.
+    runtimeDnsConfigured = pulumi.output(true);
+  } else {
+    // No tunnel — create A record wildcard pointing to runtime LB.
+    const wildcardName = prefix ? `*.${prefix}` : "*";
+    const runtimeWildcard = factory.createDnsRecord({
+      zone,
+      recordName: wildcardName,
+      target: bootstrap.runtime.ingressEndpoint,
+      ttl: 300,
+    });
+    runtimeDnsConfigured = runtimeWildcard.fqdn.apply(
+      (fqdn) => fqdn.length > 0,
+    );
+  }
+
+  // Readiness: all management records created + runtime configured.
   const mgmtDnsConfigured = pulumi
     .all(mgmtRecords.map((r) => r.fqdn))
     .apply((fqdns) => fqdns.every((fqdn) => fqdn.length > 0));
-
-  const runtimeDnsConfigured = runtimeWildcard.fqdn.apply(
-    (fqdn) => fqdn.length > 0,
-  );
 
   return {
     mgmtDnsConfigured,
