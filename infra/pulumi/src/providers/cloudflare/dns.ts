@@ -34,7 +34,7 @@ export class CloudflareDnsProvider implements IProviderDns {
       : pulumi.output(spec.target).apply(detectRecordType);
 
     const record = new cloudflare.DnsRecord(
-      `cf-dns-${spec.recordName}.${spec.zone}`,
+      `cf-${spec.recordName}.${spec.zone}`,
       {
         zoneId: this.zoneId,
         type: resolvedType,

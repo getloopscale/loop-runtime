@@ -13,7 +13,7 @@ import { createTunnel, TunnelOutput } from "./providers/cloudflare/tunnel";
 
 // --- Configuration ---
 const config = loadStackConfig();
-const factory = resolveProvider(config.provider);
+const factory = resolveProvider(config.provider, config);
 
 // --- Phase 1: Base Infrastructure ---
 const infra = createInfra(config);
