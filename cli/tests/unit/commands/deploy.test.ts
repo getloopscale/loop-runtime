@@ -2095,6 +2095,7 @@ describe('DeployCommand', () => {
       expect(errorOutput).toContain('Build Failed');
       expect(errorOutput).not.toContain('Workflow');
       expect(errorOutput).not.toContain('build cluster');
+      expect(errorOutput).toContain('loopzero logs --build');
     });
 
     it('should sanitize internal terms in build error JSON output', async () => {
@@ -2120,6 +2121,8 @@ describe('DeployCommand', () => {
       expect(parsed.error).not.toContain('ArgoCD');
       expect(parsed.error).toContain('image builder');
       expect(parsed.error).toContain('deployment sync');
+      expect(parsed.build_id).toBe('build-deadbeef');
+      expect(parsed.suggestion).toContain('loopzero logs --build');
     });
 
     it('should pass through clean error messages unchanged', async () => {

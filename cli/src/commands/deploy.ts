@@ -307,7 +307,7 @@ export class DeployCommand {
           status: 'submitted',
         }));
       } else {
-        this.deps.writeTo(`Deploy submitted (${buildResult.build_id}). The deploy is running in the background.`);
+        this.deps.writeTo(`Deploy submitted (${buildResult.build_id}). The deploy is running in the background.\nTrack with: loopzero logs --build ${buildResult.build_id}`);
       }
       return 0;
     }
@@ -434,10 +434,19 @@ export class DeployCommand {
           const data = event.data as Record<string, unknown>;
           const rawReason = String(data.error ?? data.status ?? 'unknown error');
           const reason = this.sanitizeBuildError(rawReason);
+          const suggestion = `Run: loopzero logs --build ${buildResult.build_id}`;
+          // Avoid "Build failed: Build Failed" duplication when reason already has the prefix
+          const errorMsg = /^Build\s+(failed|error)/i.test(reason) ? reason : `Build failed: ${reason}`;
           if (opts.json) {
-            this.deps.writeTo(JSON.stringify({ code: 'BUILD_FAILED', error: `Build failed: ${reason}`, exit_code: 2 }));
+            this.deps.writeTo(JSON.stringify({
+              code: 'BUILD_FAILED',
+              error: errorMsg,
+              exit_code: 2,
+              build_id: buildResult.build_id,
+              suggestion,
+            }));
           } else {
-            this.deps.writeError(`Build failed: ${reason}`);
+            this.deps.writeError(`${errorMsg}. ${suggestion}`);
           }
           finish(2);
           return;

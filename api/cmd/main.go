@@ -128,6 +128,7 @@ func main() {
 	var bootstrapStore routes.BootstrapStore
 	var logsHandler *routes.LogsHandler
 	var rollbackHandler *routes.RollbackHandler
+	var statusHandler *routes.StatusHandler
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -287,6 +288,11 @@ func main() {
 		rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 		rollbackHandler = routes.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain)
 
+		// Status handler — wires project, build, and release stores (H6 status endpoint)
+		statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: buildStore}
+		statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: releaseStore}
+		statusHandler = routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain)
+
 		// C-01/C-03 fix: BuildReconcileLoop replaces both the HTTP callback
 		// and the StartupReconciler. The control plane POLLS the build cluster's
 		// Workflow CRDs instead of the build cluster calling the API.
@@ -400,6 +406,7 @@ func main() {
 		BuildHandler:       buildHandler,
 		LogsHandler:        logsHandler,
 		RollbackHandler:    rollbackHandler,
+		StatusHandler:      statusHandler,
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,

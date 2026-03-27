@@ -80,23 +80,23 @@ export class InitCommand {
   async execute(opts: InitOptions): Promise<number> {
     // Auth check
     if (!this.deps.getToken()) {
-      return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4);
+      return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
 
     // Git repo check — loopzero requires a git repository
     if (this.deps.hasGitRepo && !this.deps.hasGitRepo()) {
-      return this.exitWithError(opts, 'Not a git repository. Run: git init', 1);
+      return this.exitWithError(opts, 'Not a git repository. Run: git init', 1, 'NOT_GIT_REPO');
     }
 
     // CI mode requires --yes
     if (this.deps.isCI && !opts.yes) {
-      return this.exitWithError(opts, 'CI mode requires --yes flag. Run: loopzero init --yes', 1);
+      return this.exitWithError(opts, 'CI mode requires --yes flag. Run: loopzero init --yes', 1, 'CI_REQUIRES_YES');
     }
 
     // Check if loopzero.yaml already exists
     const yamlPath = path.join(this.deps.cwd, 'loopzero.yaml');
     if (fs.existsSync(yamlPath) && !opts.force) {
-      return this.exitWithError(opts, 'loopzero.yaml already exists. Use --force to overwrite.', 1);
+      return this.exitWithError(opts, 'loopzero.yaml already exists. Use --force to overwrite.', 1, 'FILE_EXISTS');
     }
 
     // Detect monorepo and frameworks
@@ -411,9 +411,13 @@ export class InitCommand {
     return value;
   }
 
-  private exitWithError(opts: InitOptions, message: string, exitCode: number): number {
+  private exitWithError(opts: InitOptions, message: string, exitCode: number, code?: string): number {
     if (opts.json) {
-      this.deps.writeTo(JSON.stringify({ error: message, exit_code: exitCode }));
+      const payload: Record<string, unknown> = { error: message, exit_code: exitCode };
+      if (code) {
+        payload.code = code;
+      }
+      this.deps.writeTo(JSON.stringify(payload));
     } else {
       this.deps.writeError(message);
     }

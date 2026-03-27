@@ -74,6 +74,8 @@ type Config struct {
 	LogsHandler *routes.LogsHandler
 	// RollbackHandler handles POST /api/v1/projects/{name}/rollback.
 	RollbackHandler *routes.RollbackHandler
+	// StatusHandler handles GET /api/v1/projects/{name}/status.
+	StatusHandler *routes.StatusHandler
 	// SecretK8sSync creates K8s Secrets on mgmt + ExternalSecret CRs on workload.
 	SecretK8sSync routes.SecretK8sSync
 }
@@ -204,6 +206,11 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Build logs route (read-only, no idempotency needed)
 			if cfg.LogsHandler != nil {
 				r.Get("/api/v1/builds/{id}/logs", cfg.LogsHandler.Get)
+			}
+
+			// Status route (read-only, no idempotency needed)
+			if cfg.StatusHandler != nil {
+				r.Get("/api/v1/projects/{name}/status", cfg.StatusHandler.Get)
 			}
 
 			// Rollback route — mutation, needs rate limiting

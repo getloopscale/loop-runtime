@@ -251,6 +251,58 @@ func (a *LogBuildStoreAdapter) GetByID(ctx context.Context, id string) (*routes.
 	}, nil
 }
 
+// --- StatusBuildStoreAdapter: bridges db.BuildStore to routes.StatusBuildStore ---
+
+// StatusBuildStoreAdapter implements routes.StatusBuildStore using db.BuildStore.
+// The status handler needs only a subset of build fields for the project status response.
+type StatusBuildStoreAdapter struct {
+	Store db.BuildStore
+}
+
+func (a *StatusBuildStoreAdapter) ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]routes.StatusBuild, error) {
+	builds, err := a.Store.ListByProject(ctx, tenantID, projectID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]routes.StatusBuild, len(builds))
+	for i, b := range builds {
+		result[i] = routes.StatusBuild{
+			ID:              b.ID,
+			Environment:     b.Environment,
+			Status:          b.Status,
+			CommitSHA:       b.CommitSHA,
+			CreatedAt:       b.CreatedAt,
+			FinishedAt:      b.FinishedAt,
+			DurationSeconds: b.DurationSeconds,
+			ErrorMessage:    b.ErrorMessage,
+		}
+	}
+	return result, nil
+}
+
+// --- StatusReleaseStoreAdapter: bridges db.ReleaseStore to routes.StatusReleaseStore ---
+
+// StatusReleaseStoreAdapter implements routes.StatusReleaseStore using db.ReleaseStore.
+type StatusReleaseStoreAdapter struct {
+	Store db.ReleaseStore
+}
+
+func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*routes.StatusRelease, error) {
+	release, err := a.Store.GetActiveByEnv(ctx, tenantID, projectID, env)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, nil
+	}
+	return &routes.StatusRelease{
+		ID:        release.ID,
+		Status:    release.Status,
+		GitCommit: release.GitCommit,
+		CreatedAt: release.CreatedAt,
+	}, nil
+}
+
 // NOTE: All Fake* types have been REMOVED from production code.
 // Real implementations are required:
 //   - WorkflowSubmitter → api/internal/argo/workflow_submitter.go
