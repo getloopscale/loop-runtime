@@ -441,6 +441,19 @@ jobs:
             fi
           fi
 
+          # Import pre-existing Spaces buckets (survive destroy due to DO Spaces delete marker bug).
+          for BUCKET_NAME in loopzero-static-assets loopzero-builds; do
+            BUCKET_EXISTS=$(AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" \
+              aws s3api head-bucket --bucket "$BUCKET_NAME" --endpoint-url "https://sfo3.digitaloceanspaces.com" 2>/dev/null && echo "yes" || echo "no")
+            if [ "$BUCKET_EXISTS" = "yes" ]; then
+              IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r ".deployment.resources[]? | select(.type == \"digitalocean:index/spacesBucket:SpacesBucket\" and .inputs.name == \"$BUCKET_NAME\") | .id" 2>/dev/null)
+              if [ -z "$IN_STATE" ]; then
+                echo "Importing existing bucket $BUCKET_NAME into Pulumi state..."
+                pulumi import "digitalocean:index/spacesBucket:SpacesBucket" "$BUCKET_NAME" "sfo3,$BUCKET_NAME" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
+              fi
+            fi
+          done
+
           # Clean up corrupted state from failed import/replacement cycles.
           # Resources pending replacement that can't be deleted (non-empty buckets,
           # active tunnels) must be removed from state so Pulumi can re-import cleanly.
@@ -481,9 +494,8 @@ jobs:
             [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
           done
 
-          # Create loopzero-builds Spaces bucket (for CWT source bundles — not managed by Pulumi)
-          INFRA_REGION=$(pulumi stack output region --stack "$STACK" 2>/dev/null || echo "sfo3")
-          aws s3 mb "s3://loopzero-builds" --endpoint-url "https://${INFRA_REGION}.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
+          # loopzero-builds bucket is now managed by Pulumi (created in Step 1).
+          # No manual aws s3 mb needed.
 
       # Step 3: Convergence — deployments now have images available.
       # Only runs if Steps 1+2 succeeded. Re-runs pulumi up to update
