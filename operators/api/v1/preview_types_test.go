@@ -8,6 +8,8 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 func TestPreviewPhase_Values(t *testing.T) {
@@ -119,8 +121,8 @@ func TestPreviewEnvironment_StatusFields(t *testing.T) {
 func TestPreviewEnvironment_StatusConditions(t *testing.T) {
 	pe := PreviewEnvironment{}
 
-	SetCondition(&pe.Status.Conditions, "Ready", metav1.ConditionTrue, "Deployed", "preview is live", 1)
-	SetCondition(&pe.Status.Conditions, "ResourcesReady", metav1.ConditionFalse, "Pending", "waiting for pods", 1)
+	conditions.SetCondition(&pe.Status.Conditions, "Ready", metav1.ConditionTrue, "Deployed", "preview is live", 1)
+	conditions.SetCondition(&pe.Status.Conditions, "ResourcesReady", metav1.ConditionFalse, "Pending", "waiting for pods", 1)
 
 	if len(pe.Status.Conditions) != 2 {
 		t.Fatalf("expected 2 conditions, got %d", len(pe.Status.Conditions))

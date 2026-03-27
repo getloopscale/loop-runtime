@@ -23,10 +23,6 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
-// giteaBootstrapClient is a local alias for the Gitea bootstrap interface.
-// Used by reconcileGiteaPhase and helpers to avoid inline HTTP calls.
-type giteaBootstrapClient = gitea.BootstrapClient
-
 // platformBootstrapRequeueDelay uses the centralized constant.
 const platformBootstrapRequeueDelay = constants.RequeuePlatformBootstrapDelay
 
@@ -40,7 +36,7 @@ var platformBootstrapSM = statemachine.NewPlatformBootstrapMachine()
 type PlatformBootstrapReconciler struct {
 	client.Client
 	HTTPClient      *http.Client
-	GiteaClientFunc func(baseURL string) giteaBootstrapClient // factory, set at init; nil uses default
+	GiteaClientFunc func(baseURL string) gitea.BootstrapClient // factory, set at init; nil uses default
 }
 
 // Reconcile handles the reconciliation loop for PlatformBootstrap resources.
@@ -175,7 +171,7 @@ func (r *PlatformBootstrapReconciler) httpClient() *http.Client {
 
 // giteaClient returns a BootstrapClient for the given Gitea base URL.
 // Uses the injected factory if set, otherwise creates a real APIClient.
-func (r *PlatformBootstrapReconciler) giteaClient(baseURL string) giteaBootstrapClient {
+func (r *PlatformBootstrapReconciler) giteaClient(baseURL string) gitea.BootstrapClient {
 	if r.GiteaClientFunc != nil {
 		return r.GiteaClientFunc(baseURL)
 	}

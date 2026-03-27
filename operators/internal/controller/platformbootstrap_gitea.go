@@ -14,6 +14,7 @@ import (
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/operators/internal/gitea"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -94,7 +95,7 @@ func (r *PlatformBootstrapReconciler) reconcileGiteaPhase(ctx context.Context, p
 
 // createGiteaToken creates a new admin API token. It first checks if a token
 // with the given name already exists and deletes it (idempotent).
-func (r *PlatformBootstrapReconciler) createGiteaToken(ctx context.Context, giteaClient giteaBootstrapClient, username, password, tokenName string) (string, error) {
+func (r *PlatformBootstrapReconciler) createGiteaToken(ctx context.Context, giteaClient gitea.BootstrapClient, username, password, tokenName string) (string, error) {
 	// Check if token already exists by listing tokens.
 	tokens, err := giteaClient.ListTokens(ctx, username, password)
 	if err == nil {
@@ -119,7 +120,7 @@ func (r *PlatformBootstrapReconciler) createGiteaToken(ctx context.Context, gite
 }
 
 // ensureGiteaOrgs creates Gitea organizations if they don't exist.
-func (r *PlatformBootstrapReconciler) ensureGiteaOrgs(ctx context.Context, giteaClient giteaBootstrapClient, token string, orgs []string) error {
+func (r *PlatformBootstrapReconciler) ensureGiteaOrgs(ctx context.Context, giteaClient gitea.BootstrapClient, token string, orgs []string) error {
 	for _, org := range orgs {
 		if err := giteaClient.EnsureOrg(ctx, token, org); err != nil {
 			return fmt.Errorf("ensuring org %s: %w", org, err)

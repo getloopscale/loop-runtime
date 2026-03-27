@@ -125,7 +125,7 @@ func TestGetCondition_ReturnsNilForMissingType(t *testing.T) {
 		{Type: TypeGitRepoReady, Status: metav1.ConditionTrue},
 	}
 
-	result := GetCondition(conditions, TypeNamespacesReady)
+	result := GetCondition(conditions, TypeBuildNamespaceReady)
 
 	if result != nil {
 		t.Errorf("expected nil for missing condition type, got %+v", result)
@@ -135,17 +135,17 @@ func TestGetCondition_ReturnsNilForMissingType(t *testing.T) {
 func TestGetCondition_ReturnsCorrectCondition(t *testing.T) {
 	conditions := []metav1.Condition{
 		{Type: TypeGitRepoReady, Status: metav1.ConditionTrue, Reason: ReasonReady},
-		{Type: TypeNamespacesReady, Status: metav1.ConditionFalse, Reason: ReasonReconciling},
-		{Type: TypeRBACReady, Status: metav1.ConditionTrue, Reason: ReasonReady},
+		{Type: TypeBuildNamespaceReady, Status: metav1.ConditionFalse, Reason: ReasonReconciling},
+		{Type: TypeQuotaEnforced, Status: metav1.ConditionTrue, Reason: ReasonReady},
 	}
 
-	result := GetCondition(conditions, TypeNamespacesReady)
+	result := GetCondition(conditions, TypeBuildNamespaceReady)
 
 	if result == nil {
 		t.Fatal("expected non-nil condition, got nil")
 	}
-	if result.Type != TypeNamespacesReady {
-		t.Errorf("expected type %q, got %q", TypeNamespacesReady, result.Type)
+	if result.Type != TypeBuildNamespaceReady {
+		t.Errorf("expected type %q, got %q", TypeBuildNamespaceReady, result.Type)
 	}
 	if result.Status != metav1.ConditionFalse {
 		t.Errorf("expected status False, got %s", result.Status)
@@ -225,11 +225,11 @@ func TestIsConditionTrueForGeneration_ReturnsFalseWhenConditionFalse(t *testing.
 func TestAllConditionsTrue_ReturnsTrueWhenAllPresentAndTrue(t *testing.T) {
 	conditions := []metav1.Condition{
 		{Type: TypeGitRepoReady, Status: metav1.ConditionTrue},
-		{Type: TypeNamespacesReady, Status: metav1.ConditionTrue},
-		{Type: TypeRBACReady, Status: metav1.ConditionTrue},
+		{Type: TypeBuildNamespaceReady, Status: metav1.ConditionTrue},
+		{Type: TypeQuotaEnforced, Status: metav1.ConditionTrue},
 	}
 
-	if !AllConditionsTrue(conditions, TypeGitRepoReady, TypeNamespacesReady, TypeRBACReady) {
+	if !AllConditionsTrue(conditions, TypeGitRepoReady, TypeBuildNamespaceReady, TypeQuotaEnforced) {
 		t.Error("expected true when all conditions are True, got false")
 	}
 }
@@ -237,10 +237,10 @@ func TestAllConditionsTrue_ReturnsTrueWhenAllPresentAndTrue(t *testing.T) {
 func TestAllConditionsTrue_ReturnsFalseWhenOneMissing(t *testing.T) {
 	conditions := []metav1.Condition{
 		{Type: TypeGitRepoReady, Status: metav1.ConditionTrue},
-		{Type: TypeNamespacesReady, Status: metav1.ConditionTrue},
+		{Type: TypeBuildNamespaceReady, Status: metav1.ConditionTrue},
 	}
 
-	if AllConditionsTrue(conditions, TypeGitRepoReady, TypeNamespacesReady, TypeRBACReady) {
+	if AllConditionsTrue(conditions, TypeGitRepoReady, TypeBuildNamespaceReady, TypeQuotaEnforced) {
 		t.Error("expected false when one condition is missing, got true")
 	}
 }
@@ -248,11 +248,11 @@ func TestAllConditionsTrue_ReturnsFalseWhenOneMissing(t *testing.T) {
 func TestAllConditionsTrue_ReturnsFalseWhenOneFalse(t *testing.T) {
 	conditions := []metav1.Condition{
 		{Type: TypeGitRepoReady, Status: metav1.ConditionTrue},
-		{Type: TypeNamespacesReady, Status: metav1.ConditionFalse},
-		{Type: TypeRBACReady, Status: metav1.ConditionTrue},
+		{Type: TypeBuildNamespaceReady, Status: metav1.ConditionFalse},
+		{Type: TypeQuotaEnforced, Status: metav1.ConditionTrue},
 	}
 
-	if AllConditionsTrue(conditions, TypeGitRepoReady, TypeNamespacesReady, TypeRBACReady) {
+	if AllConditionsTrue(conditions, TypeGitRepoReady, TypeBuildNamespaceReady, TypeQuotaEnforced) {
 		t.Error("expected false when one condition is False, got true")
 	}
 }

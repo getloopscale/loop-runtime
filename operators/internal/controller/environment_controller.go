@@ -103,6 +103,13 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := step.fn(); err != nil {
 			conditions.SetCondition(&env.Status.Conditions, step.condType,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), env.Generation)
+			// Re-fetch to avoid stale resourceVersion before status update.
+			savedStatus := env.Status
+			if refetchErr := r.Get(ctx, req.NamespacedName, &env); refetchErr != nil {
+				logger.Error(refetchErr, "failed to re-fetch environment for status update")
+				return ctrl.Result{}, err
+			}
+			env.Status = savedStatus
 			if statusErr := r.Status().Update(ctx, &env); statusErr != nil {
 				logger.Error(statusErr, "failed to update environment status")
 			}

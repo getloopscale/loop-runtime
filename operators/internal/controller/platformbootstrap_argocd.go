@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
@@ -148,41 +149,31 @@ func (r *PlatformBootstrapReconciler) createArgoCDSession(ctx context.Context, b
 	return result.Token, nil
 }
 
-// ensureRepoCredentialSecret creates a repo credential Secret in the ArgoCD namespace
-// if it does not already exist (idempotent).
+// ensureRepoCredentialSecret creates or updates a repo credential Secret in the ArgoCD namespace.
+// Uses CreateOrUpdate so credential rotation (e.g., Gitea token refresh) is reflected.
 func (r *PlatformBootstrapReconciler) ensureRepoCredentialSecret(ctx context.Context, argoNS string, cred loopzerov1.ArgoCDRepoCredential, giteaToken string) error {
-	var existing corev1.Secret
-	err := r.Get(ctx, client.ObjectKey{Name: cred.Name, Namespace: argoNS}, &existing)
-	if err == nil {
-		// Secret already exists, skip.
-		return nil
-	}
-	if !errors.IsNotFound(err) {
-		return fmt.Errorf("checking repo credential secret: %w", err)
-	}
-
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cred.Name,
 			Namespace: argoNS,
-			Labels: map[string]string{
-				constants.ArgoCDSecretTypeLabel: constants.ArgoCDSecretTypeRepoCreds,
-				constants.LabelManagedBy:       constants.ManagedByPlatformBootstrapController,
-			},
 		},
-		StringData: map[string]string{
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+		if secret.Labels == nil {
+			secret.Labels = make(map[string]string)
+		}
+		secret.Labels[constants.ArgoCDSecretTypeLabel] = constants.ArgoCDSecretTypeRepoCreds
+		secret.Labels[constants.LabelManagedBy] = constants.ManagedByPlatformBootstrapController
+		secret.StringData = map[string]string{
 			"type":     "git",
 			"url":      cred.URL,
 			"username": constants.DefaultArgoCDRepoUsername,
 			"password": giteaToken,
-		},
-	}
-
-	if err := r.Create(ctx, secret); err != nil {
-		if errors.IsAlreadyExists(err) {
-			return nil // Idempotent.
 		}
-		return fmt.Errorf("creating repo credential secret: %w", err)
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("repo credential secret %s/%s: %w", argoNS, cred.Name, err)
 	}
 	return nil
 }

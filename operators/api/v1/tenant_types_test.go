@@ -7,57 +7,59 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 func TestSetCondition_AddsNewCondition(t *testing.T) {
-	var conditions []metav1.Condition
+	var conds []metav1.Condition
 
-	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "Git repository created", 1)
+	conditions.SetCondition(&conds, conditions.TypeGitRepoReady, metav1.ConditionTrue, "Created", "Git repository created", 1)
 
-	if len(conditions) != 1 {
-		t.Fatalf("expected 1 condition, got %d", len(conditions))
+	if len(conds) != 1 {
+		t.Fatalf("expected 1 condition, got %d", len(conds))
 	}
-	if conditions[0].Type != ConditionGitRepoReady {
-		t.Errorf("expected type %q, got %q", ConditionGitRepoReady, conditions[0].Type)
+	if conds[0].Type != conditions.TypeGitRepoReady {
+		t.Errorf("expected type %q, got %q", conditions.TypeGitRepoReady, conds[0].Type)
 	}
-	if conditions[0].Status != metav1.ConditionTrue {
-		t.Errorf("expected status True, got %v", conditions[0].Status)
+	if conds[0].Status != metav1.ConditionTrue {
+		t.Errorf("expected status True, got %v", conds[0].Status)
 	}
-	if conditions[0].Reason != "Created" {
-		t.Errorf("expected reason %q, got %q", "Created", conditions[0].Reason)
+	if conds[0].Reason != "Created" {
+		t.Errorf("expected reason %q, got %q", "Created", conds[0].Reason)
 	}
 }
 
 func TestSetCondition_UpdatesExistingConditionSameStatus(t *testing.T) {
-	conditions := []metav1.Condition{
+	conds := []metav1.Condition{
 		{
-			Type:               ConditionGitRepoReady,
+			Type:               conditions.TypeGitRepoReady,
 			Status:             metav1.ConditionTrue,
 			LastTransitionTime: metav1.Now(),
 			Reason:             "Created",
 			Message:            "old message",
 		},
 	}
-	originalTime := conditions[0].LastTransitionTime
+	originalTime := conds[0].LastTransitionTime
 
-	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "new message", 1)
+	conditions.SetCondition(&conds, conditions.TypeGitRepoReady, metav1.ConditionTrue, "Created", "new message", 1)
 
-	if len(conditions) != 1 {
-		t.Fatalf("expected 1 condition, got %d", len(conditions))
+	if len(conds) != 1 {
+		t.Fatalf("expected 1 condition, got %d", len(conds))
 	}
 	// LastTransitionTime should NOT change when status is the same.
-	if !conditions[0].LastTransitionTime.Equal(&originalTime) {
+	if !conds[0].LastTransitionTime.Equal(&originalTime) {
 		t.Error("LastTransitionTime should not change when status stays the same")
 	}
-	if conditions[0].Message != "new message" {
-		t.Errorf("expected message %q, got %q", "new message", conditions[0].Message)
+	if conds[0].Message != "new message" {
+		t.Errorf("expected message %q, got %q", "new message", conds[0].Message)
 	}
 }
 
 func TestSetCondition_UpdatesExistingConditionDifferentStatus(t *testing.T) {
-	conditions := []metav1.Condition{
+	conds := []metav1.Condition{
 		{
-			Type:               ConditionGitRepoReady,
+			Type:               conditions.TypeGitRepoReady,
 			Status:             metav1.ConditionFalse,
 			LastTransitionTime: metav1.Now(),
 			Reason:             "Pending",
@@ -65,28 +67,28 @@ func TestSetCondition_UpdatesExistingConditionDifferentStatus(t *testing.T) {
 		},
 	}
 
-	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "done", 1)
+	conditions.SetCondition(&conds, conditions.TypeGitRepoReady, metav1.ConditionTrue, "Created", "done", 1)
 
-	if len(conditions) != 1 {
-		t.Fatalf("expected 1 condition, got %d", len(conditions))
+	if len(conds) != 1 {
+		t.Fatalf("expected 1 condition, got %d", len(conds))
 	}
-	if conditions[0].Status != metav1.ConditionTrue {
-		t.Errorf("expected status True, got %v", conditions[0].Status)
+	if conds[0].Status != metav1.ConditionTrue {
+		t.Errorf("expected status True, got %v", conds[0].Status)
 	}
-	if conditions[0].Reason != "Created" {
-		t.Errorf("expected reason %q, got %q", "Created", conditions[0].Reason)
+	if conds[0].Reason != "Created" {
+		t.Errorf("expected reason %q, got %q", "Created", conds[0].Reason)
 	}
 }
 
 func TestSetCondition_MultipleConditions(t *testing.T) {
-	var conditions []metav1.Condition
+	var conds []metav1.Condition
 
-	SetCondition(&conditions, ConditionGitRepoReady, metav1.ConditionTrue, "Created", "done", 1)
-	SetCondition(&conditions, ConditionNamespacesReady, metav1.ConditionFalse, "Pending", "creating", 1)
-	SetCondition(&conditions, ConditionRBACReady, metav1.ConditionTrue, "Applied", "done", 1)
+	conditions.SetCondition(&conds, conditions.TypeGitRepoReady, metav1.ConditionTrue, "Created", "done", 1)
+	conditions.SetCondition(&conds, conditions.TypeBuildNamespaceReady, metav1.ConditionFalse, "Pending", "creating", 1)
+	conditions.SetCondition(&conds, conditions.TypeQuotaEnforced, metav1.ConditionTrue, "Applied", "done", 1)
 
-	if len(conditions) != 3 {
-		t.Fatalf("expected 3 conditions, got %d", len(conditions))
+	if len(conds) != 3 {
+		t.Fatalf("expected 3 conditions, got %d", len(conds))
 	}
 }
 
@@ -138,14 +140,11 @@ func TestResource(t *testing.T) {
 
 func TestConditionTypes_AreDistinct(t *testing.T) {
 	types := []string{
-		ConditionGitRepoReady,
-		ConditionNamespacesReady,
-		ConditionRBACReady,
-		ConditionQuotaEnforced,
-		ConditionNetworkPolicyReady,
-		ConditionBuildNamespaceReady,
-		ConditionPriorityClassReady,
-		ConditionArgoCDAppReady,
+		conditions.TypeGitRepoReady,
+		conditions.TypeQuotaEnforced,
+		conditions.TypeBuildNamespaceReady,
+		conditions.TypePriorityClassReady,
+		conditions.TypeArgoCDAppReady,
 	}
 	seen := make(map[string]bool)
 	for _, ct := range types {

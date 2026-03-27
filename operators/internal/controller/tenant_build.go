@@ -5,10 +5,7 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -140,10 +137,11 @@ func (r *TenantReconciler) ensureBuildServiceAccount(ctx context.Context, buildN
 // ensureBuildStorageCredentials creates global MinIO/Spaces credentials when per-tenant
 // provisioner is disabled. CWTs reference Secret "loopzero-minio-credentials" via envFrom.
 func (r *TenantReconciler) ensureBuildStorageCredentials(ctx context.Context, buildNs, tenantName string) error {
-	if r.MinIOProvisioner != nil || r.MinIOEndpoint == "" {
+	if r.MinIOProvisioner != nil || r.Credentials.MinIOEndpoint == "" {
 		return nil
 	}
-	if r.SpacesAccessKeyID == "" || r.SpacesSecretAccessKey == "" {
+	storageData := r.Credentials.StorageSecretData()
+	if storageData == nil {
 		return fmt.Errorf("SPACES_ACCESS_KEY_ID and SPACES_SECRET_ACCESS_KEY are required when MinIOProvisioner is disabled")
 	}
 
@@ -157,11 +155,7 @@ func (r *TenantReconciler) ensureBuildStorageCredentials(ctx context.Context, bu
 			k.LabelManagedBy: k.ManagedByTenantController,
 		}
 		secret.Type = corev1.SecretTypeOpaque
-		secret.StringData = map[string]string{
-			k.KeyAWSAccessKeyID:     r.SpacesAccessKeyID,
-			k.KeyAWSSecretAccessKey: r.SpacesSecretAccessKey,
-			k.KeyMinIOEndpoint:      r.MinIOEndpoint,
-		}
+		secret.StringData = storageData
 		return nil
 	})
 	return err
@@ -171,17 +165,14 @@ func (r *TenantReconciler) ensureBuildStorageCredentials(ctx context.Context, bu
 // DO Container Registry requires credentials generated via the DO API.
 // For local k3d development, RegistryDockerConfig is set at init time.
 func (r *TenantReconciler) ensureBuildRegistryCredentials(ctx context.Context, buildNs, tenantName string) error {
-	if r.DOToken != "" {
-		dockerConfig, err := fetchDORegistryCredentials(ctx, r.DOToken)
-		if err != nil {
-			return fmt.Errorf("fetch DO registry credentials: %w", err)
-		}
-		return r.ensureBuildkitRegistrySecret(ctx, buildNs, tenantName, dockerConfig)
+	dockerConfig, err := r.Credentials.FetchRegistryDockerConfig(ctx)
+	if err != nil {
+		return fmt.Errorf("fetch registry credentials: %w", err)
 	}
-	if r.RegistryDockerConfig != "" {
-		return r.ensureBuildkitRegistrySecret(ctx, buildNs, tenantName, r.RegistryDockerConfig)
+	if dockerConfig == "" {
+		return nil
 	}
-	return nil
+	return r.ensureBuildkitRegistrySecret(ctx, buildNs, tenantName, dockerConfig)
 }
 
 // ensureBuildExecutorRBAC creates the Role and RoleBinding for Argo Workflow executor pods.
@@ -266,7 +257,7 @@ func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, n
 			secret.StringData = map[string]string{
 				k.KeyAWSAccessKeyID:     accessKey,
 				k.KeyAWSSecretAccessKey: secretKey,
-				k.KeyMinIOEndpoint:      r.MinIOEndpoint,
+				k.KeyMinIOEndpoint:      r.Credentials.MinIOEndpoint,
 			}
 		} else if secret.CreationTimestamp.IsZero() {
 			// Secret doesn't exist yet but user already has credentials — this shouldn't
@@ -297,48 +288,6 @@ func (r *TenantReconciler) ensureBuildkitRegistrySecret(ctx context.Context, nam
 		return nil
 	})
 	return err
-}
-
-// doHTTPClient is reused across reconcile cycles for DO API calls.
-// Safe for concurrent use (http.Client is goroutine-safe).
-var doHTTPClient = &http.Client{Timeout: k.HTTPTimeoutExternal}
-
-// fetchDORegistryCredentials calls the DigitalOcean API to generate read-write
-// registry credentials in Docker config.json format.
-func fetchDORegistryCredentials(ctx context.Context, apiToken string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		fmt.Sprintf("%s?read_write=true&expiry_seconds=%d", k.DORegistryCredentialsURL, k.DORegistryTokenExpirySeconds),
-		nil)
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+apiToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := doHTTPClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("call DO API: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("DO API returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	var config map[string]interface{}
-	if err := json.Unmarshal(body, &config); err != nil {
-		return "", fmt.Errorf("invalid JSON from DO API: %w", err)
-	}
-	if _, ok := config["auths"]; !ok {
-		return "", fmt.Errorf("DO API response missing 'auths' field")
-	}
-
-	return string(body), nil
 }
 
 // reconcileBuildNetworkPolicy creates restrictive egress policies in build namespaces.

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- ArgoCD `RealProvisioner.EnsureAppProject` and `EnsureApplication` now distinguish NotFound from transient errors (#OPERATORS-REVIEW)
+- `TenantReconciler.runSteps` re-fetches resource before status update to avoid stale resourceVersion conflicts (#OPERATORS-REVIEW)
+- `EnvironmentReconciler` step runner applies same re-fetch pattern on error path (#OPERATORS-REVIEW)
+- MinIO `EnsureTenantCredentials` checks if user exists before generating new secret key, preventing credential rotation on every reconcile (#OPERATORS-REVIEW)
+- `ExposureController` uses 5-minute probe interval when route is Reachable (was 30s always), reducing reconcile load by ~10x (#OPERATORS-REVIEW)
+- Internal HTTP clients (ArgoCD, Gitea, API) now include `InsecureSkipVerify` for in-cluster self-signed TLS (#OPERATORS-REVIEW)
+- `ensureRepoCredentialSecret` uses `CreateOrUpdate` instead of Get+Create, enabling credential rotation (#OPERATORS-REVIEW)
+- Extracted `BuildCredentials` struct from `TenantReconciler` — credential management separated from reconciliation logic (#OPERATORS-REVIEW)
+- Docker config.json from DO API now validated for `auths` + `auth` field structure (#OPERATORS-REVIEW)
+
+### Removed
+- Dead condition types: `TypeNamespacesReady`, `TypeRBACReady`, `TypeNetworkPolicyReady`, `TypePlatformSecretsReady` (#OPERATORS-REVIEW)
+- Dead reason constants: `ReasonTimeout`, `ReasonInProgress`, `ReasonCreated`, `ReasonDeleting` (#OPERATORS-REVIEW)
+- `internal/naming/` proxy package — controllers import `pkg/naming` directly (#OPERATORS-REVIEW)
+- Condition re-exports from `api/v1/groupversion_info.go` (`ConditionX` constants and `SetCondition` var) (#OPERATORS-REVIEW)
+- `giteaBootstrapClient` type alias — replaced with direct `gitea.BootstrapClient` usage (#OPERATORS-REVIEW)
+- Package-level `doHTTPClient` global — replaced by `BuildCredentials.HTTPClient` field (#OPERATORS-REVIEW)
+
 ### Added
 - Cloudflare Worker for static frontend delivery — serves assets from DO Spaces via CF edge, zero pods for static apps (#SPRINT-10)
 - `cfkv` package — Cloudflare Workers KV client for routing table writes (#SPRINT-10)

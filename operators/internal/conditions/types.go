@@ -12,10 +12,7 @@ package conditions
 // --- Tenant conditions ---
 const (
 	TypeGitRepoReady        = "GitRepoReady"
-	TypeNamespacesReady     = "NamespacesReady"
-	TypeRBACReady           = "RBACReady"
 	TypeQuotaEnforced       = "QuotaEnforced"
-	TypeNetworkPolicyReady  = "NetworkPolicyReady"
 	TypeBuildNamespaceReady = "BuildNamespaceReady"
 	TypePriorityClassReady  = "PriorityClassReady"
 	TypeArgoCDAppReady      = "ArgoCDAppReady"
@@ -23,11 +20,10 @@ const (
 
 // --- PlatformBootstrap conditions ---
 const (
-	TypeGiteaReady           = "GiteaReady"
-	TypeArgoCDReady          = "ArgoCDReady"
-	TypePlatformSecretsReady = "PlatformSecretsReady"
-	TypeDatabaseSeeded       = "DatabaseSeeded"
-	TypeBootstrapComplete    = "BootstrapComplete"
+	TypeGiteaReady        = "GiteaReady"
+	TypeArgoCDReady       = "ArgoCDReady"
+	TypeDatabaseSeeded    = "DatabaseSeeded"
+	TypeBootstrapComplete = "BootstrapComplete"
 )
 
 // --- GitRepositoryBinding conditions ---
@@ -68,10 +64,6 @@ const (
 	ReasonReady       = "Ready"
 	ReasonFailed      = "Failed"
 	ReasonNotFound    = "NotFound"
-	ReasonTimeout     = "Timeout"
 	ReasonUnreachable = "Unreachable"
-	ReasonInProgress  = "InProgress"
 	ReasonWaiting     = "Waiting"
-	ReasonCreated     = "Created"
-	ReasonDeleting    = "Deleting"
 )

@@ -49,35 +49,16 @@ type TenantReconciler struct {
 	ArgoCDProvisioner  argocd.Provisioner
 	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
 	GiteaURL           string
-	WorkloadClusterURL string // URL of the workload cluster API server
-	MinIOEndpoint      string // MinIO endpoint injected into per-tenant build Secrets
-
-	// Object storage credentials — set at init, never read from env during reconcile.
-	SpacesAccessKeyID     string
-	SpacesSecretAccessKey string
-
-	// Container registry credentials — set at init, never read from env during reconcile.
-	DOToken              string // DigitalOcean API token for registry credential generation
-	RegistryDockerConfig string // Raw Docker config.json for local dev
+	WorkloadClusterURL string           // URL of the workload cluster API server
+	Credentials        BuildCredentials // storage + registry credentials for build namespace secrets
 }
 
 // TenantControllerConfig holds configuration for the TenantController.
 type TenantControllerConfig struct {
 	GiteaURL           string
 	WorkloadClusterURL string
-	MinIOEndpoint      string                      // MinIO endpoint injected into per-tenant build Secrets
 	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
-
-	// Object storage credentials (required when MinIOProvisioner is nil and MinIOEndpoint is set).
-	// These are injected into per-tenant build Secrets for CWT access to source bundles and cache.
-	SpacesAccessKeyID     string
-	SpacesSecretAccessKey string
-
-	// Container registry credentials — exactly one of DOToken or RegistryDockerConfig must be set.
-	// DOToken: DigitalOcean API token for fetching registry credentials via DO API.
-	// RegistryDockerConfig: raw Docker config.json for local k3d development.
-	DOToken              string
-	RegistryDockerConfig string
+	Credentials        BuildCredentials             // storage + registry credentials
 }
 
 // Reconcile handles the reconciliation loop for Tenant resources.
@@ -374,19 +355,15 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 		Owns(&loopzerov1.Environment{}).
 		Named("tenant").
 		Complete(&TenantReconciler{
-			Client:                mgr.GetClient(),
-			Scheme:                mgr.GetScheme(),
-			BuildClient:           buildClient,
-			RuntimeClient:         runtimeClient,
-			GitProvisioner:        gitProvisioner,
-			ArgoCDProvisioner:     argoCDProvisioner,
-			MinIOProvisioner:      cfg.MinIOProvisioner,
-			GiteaURL:              giteaURL,
-			WorkloadClusterURL:    workloadClusterURL,
-			MinIOEndpoint:         cfg.MinIOEndpoint,
-			SpacesAccessKeyID:     cfg.SpacesAccessKeyID,
-			SpacesSecretAccessKey: cfg.SpacesSecretAccessKey,
-			DOToken:               cfg.DOToken,
-			RegistryDockerConfig:  cfg.RegistryDockerConfig,
+			Client:             mgr.GetClient(),
+			Scheme:             mgr.GetScheme(),
+			BuildClient:        buildClient,
+			RuntimeClient:      runtimeClient,
+			GitProvisioner:     gitProvisioner,
+			ArgoCDProvisioner:  argoCDProvisioner,
+			MinIOProvisioner:   cfg.MinIOProvisioner,
+			GiteaURL:           giteaURL,
+			WorkloadClusterURL: workloadClusterURL,
+			Credentials:        cfg.Credentials,
 		})
 }

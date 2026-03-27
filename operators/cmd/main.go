@@ -163,14 +163,16 @@ func main() {
 	}
 
 	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, controller.TenantControllerConfig{
-		GiteaURL:              giteaURL,
-		WorkloadClusterURL:    workloadClusterURL,
-		MinIOEndpoint:         minIOEndpoint,
-		MinIOProvisioner:      minIOProvisioner,
-		SpacesAccessKeyID:     os.Getenv("SPACES_ACCESS_KEY_ID"),
-		SpacesSecretAccessKey: os.Getenv("SPACES_SECRET_ACCESS_KEY"),
-		DOToken:               os.Getenv("DIGITALOCEAN_TOKEN"),
-		RegistryDockerConfig:  os.Getenv("REGISTRY_DOCKER_CONFIG"),
+		GiteaURL:           giteaURL,
+		WorkloadClusterURL: workloadClusterURL,
+		MinIOProvisioner:   minIOProvisioner,
+		Credentials: controller.BuildCredentials{
+			MinIOEndpoint:        minIOEndpoint,
+			SpacesAccessKeyID:    os.Getenv("SPACES_ACCESS_KEY_ID"),
+			SpacesSecretAccessKey: os.Getenv("SPACES_SECRET_ACCESS_KEY"),
+			DOToken:              os.Getenv("DIGITALOCEAN_TOKEN"),
+			RegistryDockerConfig: os.Getenv("REGISTRY_DOCKER_CONFIG"),
+		},
 	}); err != nil {
 		setupLog.Error(err, "unable to setup TenantController")
 		os.Exit(1)
