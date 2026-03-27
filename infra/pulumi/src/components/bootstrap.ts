@@ -1754,6 +1754,10 @@ function installTenantController(
                     name: "ARGOCD_NAMESPACE",
                     value: PLATFORM_NAMESPACE,
                   },
+                  {
+                    name: "BASE_DOMAIN",
+                    value: config.domain,
+                  },
                   // Object storage endpoint — DigitalOcean Spaces (S3-compatible).
                   // Used by controller to create credentials Secret in build namespaces.
                   {
