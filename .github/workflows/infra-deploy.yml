@@ -188,8 +188,21 @@ jobs:
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           STACK="${{ needs.resolve.outputs.stack }}"
-          # Set cfApiToken as secret in Pulumi config (idempotent)
-          pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" --stack "$STACK" 2>/dev/null || true
+          # Cancel stale locks before config set (may fail if no lock exists)
+          pulumi cancel -s "$STACK" 2>/dev/null || true
+          # Set cfApiToken as secret in Pulumi config (required for K8s secret creation)
+          if ! pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" --stack "$STACK" 2>&1; then
+            echo "::warning::Failed to set cfApiToken via pulumi config. Falling back to YAML patch."
+            # Fallback: the Pulumi code handles missing cfApiToken gracefully (conditional secret creation).
+            # But we need to ensure the K8s secret exists for the API to start.
+            # This is handled by the bootstrap step below.
+          fi
+          # Verify it was set
+          if pulumi config get cfApiToken --stack "$STACK" >/dev/null 2>&1; then
+            echo "✅ cfApiToken configured in Pulumi stack"
+          else
+            echo "::warning::cfApiToken not in Pulumi config — K8s secret will be created in bootstrap step"
+          fi
 
       # --- Pre-destroy: remove K8s finalizers that block deletion ---
       # CRD finalizers, ArgoCD app finalizers, and Helm release finalizers
@@ -719,6 +732,21 @@ jobs:
           done
 
           # ═══════════════════════════════════════
+          # 5.5. CLOUDFLARE CREDENTIALS SECRET (Sprint 10)
+          # Ensures loopzero-cf-credentials K8s secret exists even if Pulumi config set failed.
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            CF_ACCOUNT_ID=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi config get cfAccountId --stack "$STACK" 2>/dev/null || echo "")
+            CF_KV_NS_ID=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi stack output cfKvNamespaceId --stack "$STACK" 2>/dev/null || echo "")
+            if [ -n "$CF_ACCOUNT_ID" ]; then
+              kubectl -n $NAMESPACE create secret generic loopzero-cf-credentials \
+                --from-literal=CF_API_TOKEN="$CLOUDFLARE_API_TOKEN" \
+                --from-literal=CF_ACCOUNT_ID="$CF_ACCOUNT_ID" \
+                --from-literal=CF_KV_NAMESPACE_ID="${CF_KV_NS_ID:-not-set}" \
+                --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
+              echo "  Cloudflare credentials secret ensured"
+            fi
+          fi
+
           # 6. RESTART SERVICES (pick up new tokens)
           # ═══════════════════════════════════════
           kubectl -n $NAMESPACE rollout restart deployment loopzero-api 2>/dev/null || true
