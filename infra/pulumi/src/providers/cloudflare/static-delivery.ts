@@ -84,6 +84,10 @@ export function createStaticDelivery(
         namespaceId: kvNamespace.id,
       },
     ],
+  }, {
+    // Import existing Worker script created before Pulumi management.
+    // Safe to remove after first successful `pulumi up`.
+    import: `362767409c4de7fda7990c10103efdd9/loopzero-static-delivery`,
   });
 
   // 3. Worker route — intercept all requests on *.{baseDomain}/*
@@ -94,7 +98,11 @@ export function createStaticDelivery(
       pattern: `*.${config.baseDomain}/*`,
       script: scriptName,
     },
-    { dependsOn: [workerScript] },
+    {
+      dependsOn: [workerScript],
+      // Import existing route created before Pulumi management.
+      import: "f5456560bf4d4e65ac5899f608b8b180",
+    },
   );
 
   return {
