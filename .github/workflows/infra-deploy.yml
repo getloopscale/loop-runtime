@@ -369,6 +369,13 @@ jobs:
           STACK="${{ needs.resolve.outputs.stack }}"
           # Cancel stale locks from previous failed runs
           pulumi cancel -s "$STACK" 2>/dev/null || true
+          # Clean up corrupted state from failed import/replacement cycles.
+          # Resources pending replacement that can't be deleted (non-empty buckets,
+          # active tunnels) must be removed from state so Pulumi can re-import cleanly.
+          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.pendingReplacement == true) | .urn' 2>/dev/null); do
+            echo "Removing pending-replacement resource: $URN"
+            pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
+          done
           # Refresh state to match reality (handles manual deletes, drift)
           pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
           # Create all resources — skipAwait prevents blocking on ImagePullBackOff
