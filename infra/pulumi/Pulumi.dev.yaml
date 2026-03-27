@@ -6,17 +6,17 @@ config:
   loopzero-infra:dnsZone: loopzero.example
   loopzero-infra:infraVersion: v1
   # Management cluster
-  loopzero-infra:mgmtK8sVersion: "1.32.13-do.0"
+  loopzero-infra:mgmtK8sVersion: "1.32.13-do.1"
   loopzero-infra:mgmtNodeClass: small
   loopzero-infra:mgmtMinNodes: "2"
   loopzero-infra:mgmtMaxNodes: "3"
   # Runtime cluster
-  loopzero-infra:runtimeK8sVersion: "1.32.13-do.0"
+  loopzero-infra:runtimeK8sVersion: "1.32.13-do.1"
   loopzero-infra:runtimeNodeClass: small
   loopzero-infra:runtimeMinNodes: "2"
   loopzero-infra:runtimeMaxNodes: "3"
   # Build cluster
-  loopzero-infra:buildK8sVersion: "1.32.13-do.0"
+  loopzero-infra:buildK8sVersion: "1.32.13-do.1"
   loopzero-infra:buildNodeClass: small
   loopzero-infra:buildMinNodes: "2"
   loopzero-infra:buildMaxNodes: "3"
@@ -35,4 +35,3 @@ config:
   loopzero-infra:cfAccountId: "362767409c4de7fda7990c10103efdd9"
   loopzero-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
 encryptionsalt: v1:j93WRa9itPU=:v1:5tiFr51FInRCcoEU:p2jAoOqdhiX9DXQ9eY5Zj5OFmC4RtA==
-# Trigger 1774605922
