@@ -25,6 +25,7 @@ on:
     paths:
       - "infra/pulumi/**"
       - "infra/helm/**"
+      - "infra/cloudflare/**"
       - "api/internal/db/migrations/**"
       - ".github/workflows/infra-deploy.yml"
 
@@ -187,8 +188,21 @@ jobs:
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           STACK="${{ needs.resolve.outputs.stack }}"
-          # Set cfApiToken as secret in Pulumi config (idempotent)
-          pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" --stack "$STACK" 2>/dev/null || true
+          # Cancel stale locks before config set (may fail if no lock exists)
+          pulumi cancel -s "$STACK" 2>/dev/null || true
+          # Set cfApiToken as secret in Pulumi config (required for K8s secret creation)
+          if ! pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" --stack "$STACK" 2>&1; then
+            echo "::warning::Failed to set cfApiToken via pulumi config. Falling back to YAML patch."
+            # Fallback: the Pulumi code handles missing cfApiToken gracefully (conditional secret creation).
+            # But we need to ensure the K8s secret exists for the API to start.
+            # This is handled by the bootstrap step below.
+          fi
+          # Verify it was set
+          if pulumi config get cfApiToken --stack "$STACK" >/dev/null 2>&1; then
+            echo "✅ cfApiToken configured in Pulumi stack"
+          else
+            echo "::warning::cfApiToken not in Pulumi config — K8s secret will be created in bootstrap step"
+          fi
 
       # --- Pre-destroy: remove K8s finalizers that block deletion ---
       # CRD finalizers, ArgoCD app finalizers, and Helm release finalizers
@@ -280,7 +294,9 @@ jobs:
           # Delete ALL loopzero Spaces buckets (any region)
           for REGION in nyc3 sfo3 ams3 fra1 sgp1 lon1 sfo2 syd1; do
             for BUCKET in $(AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" aws s3 ls --endpoint-url "https://${REGION}.digitaloceanspaces.com" --region us-east-1 2>/dev/null | awk '{print $3}' | grep -E "^loopzero-" | grep -v pulumi-state); do
-              AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" aws s3 rb "s3://${BUCKET}" --endpoint-url "https://${REGION}.digitaloceanspaces.com" --force --region us-east-1 2>/dev/null || true
+              # Empty bucket first (rb --force can fail on non-empty DO Spaces)
+              AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" aws s3 rm "s3://${BUCKET}" --recursive --endpoint-url "https://${REGION}.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
+              AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" aws s3 rb "s3://${BUCKET}" --endpoint-url "https://${REGION}.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
               echo "  Bucket ${BUCKET} deleted from ${REGION}"
             done
           done
@@ -288,8 +304,8 @@ jobs:
           echo "Cloud resources deletion initiated. Waiting 2 min for clusters/LBs..."
           sleep 120
 
-          # Delete VPC (after clusters + LBs gone). Retry with wait if members remain.
-          for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs" | python3 -c "import sys,json; [print(v['id']) for v in json.load(sys.stdin)['vpcs'] if 'loopzero-infra' in v['name']]" 2>/dev/null); do
+          # Delete VPC (after clusters + LBs gone). Skip default VPCs (cannot be deleted).
+          for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs" | python3 -c "import sys,json; [print(v['id']) for v in json.load(sys.stdin)['vpcs'] if 'loopzero-infra' in v['name'] and not v.get('default',False)]" 2>/dev/null); do
             RESP=$(curl -s -w "\n%{http_code}" -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs/$ID" 2>/dev/null)
             HTTP_CODE=$(echo "$RESP" | tail -1)
             if [ "$HTTP_CODE" = "409" ]; then
@@ -304,12 +320,54 @@ jobs:
             fi
             echo "  VPC $ID deleting"
           done
+          echo "  Note: Default VPCs are retained (cannot be deleted by DO API)"
 
           # Delete DNS records
           for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/domains/loopzero.example/records" | python3 -c "import sys,json; [print(r['id']) for r in json.load(sys.stdin)['domain_records'] if 'dev' in r.get('name','') and r['type'] in ['A','CNAME']]" 2>/dev/null); do
             curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/domains/loopzero.example/records/$ID" 2>/dev/null
           done
           echo "  DNS records deleted"
+
+          # Delete Cloudflare resources (Sprint 10 — not managed by DO API)
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            CF_ACCOUNT_ID=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi config get cfAccountId --stack "$STACK" 2>/dev/null || echo "")
+            CF_ZONE_ID=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi config get cfZoneId --stack "$STACK" 2>/dev/null || echo "")
+            if [ -n "$CF_ACCOUNT_ID" ] && [ -n "$CF_ZONE_ID" ]; then
+              echo "Cleaning Cloudflare resources..."
+              # Delete worker routes
+              for ROUTE_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/workers/routes" | python3 -c "import sys,json; [print(r['id']) for r in json.load(sys.stdin).get('result',[])]" 2>/dev/null); do
+                curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/workers/routes/$ROUTE_ID" 2>/dev/null
+              done
+              # Delete worker scripts
+              curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/loopzero-static-delivery" 2>/dev/null
+              # Delete KV namespaces with "loopzero" prefix
+              for NS_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces" | python3 -c "import sys,json; [print(ns['id']) for ns in json.load(sys.stdin).get('result',[]) if ns['title'].startswith('loopzero')]" 2>/dev/null); do
+                curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$NS_ID" 2>/dev/null
+              done
+              # Delete CF DNS CNAME records for *.dev subdomain
+              for REC_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=CNAME" | python3 -c "import sys,json; [print(r['id']) for r in json.load(sys.stdin).get('result',[]) if '.dev.' in r.get('name','')]" 2>/dev/null); do
+                curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$REC_ID" 2>/dev/null
+              done
+              # Delete tunnels — must stop cloudflared first (active connections block deletion)
+              # First: scale down cloudflared deployment on runtime cluster to close connections
+              RUNTIME_KUBECONFIG=$(pulumi stack output runtimeKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
+              if [ -n "$RUNTIME_KUBECONFIG" ]; then
+                echo "$RUNTIME_KUBECONFIG" > /tmp/runtime-kc.yaml
+                kubectl --kubeconfig=/tmp/runtime-kc.yaml -n platform-system scale deployment cloudflared --replicas=0 2>/dev/null || true
+                echo "  Scaled cloudflared to 0 — waiting 30s for connections to close..."
+                sleep 30
+                rm -f /tmp/runtime-kc.yaml
+              fi
+              # Now delete tunnels (connections should be closed)
+              for TUN_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel?name=loopzero" | python3 -c "import sys,json; [print(t['id']) for t in json.load(sys.stdin).get('result',[])]" 2>/dev/null); do
+                # Clean connections first
+                curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUN_ID/connections" 2>/dev/null
+                sleep 5
+                curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUN_ID" 2>/dev/null
+              done
+              echo "  Cloudflare resources deleted"
+            fi
+          fi
 
           echo "Pre-destroy cleanup complete — cloud resources deleted via API"
 
@@ -368,6 +426,41 @@ jobs:
           STACK="${{ needs.resolve.outputs.stack }}"
           # Cancel stale locks from previous failed runs
           pulumi cancel -s "$STACK" 2>/dev/null || true
+
+          # Import pre-existing VPC if it exists but is not in Pulumi state.
+          # DO VPCs cannot be deleted when default — they persist across destroy cycles.
+          VPC_NAME="loopzero-infra-${STACK}-sfo3-net"
+          VPC_ID=$(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs" | \
+            python3 -c "import sys,json; vpcs=[v for v in json.load(sys.stdin)['vpcs'] if v['name']=='$VPC_NAME']; print(vpcs[0]['id'] if vpcs else '')" 2>/dev/null)
+          if [ -n "$VPC_ID" ]; then
+            # Check if already in state
+            IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "digitalocean:index/vpc:Vpc") | .id' 2>/dev/null)
+            if [ -z "$IN_STATE" ]; then
+              echo "Importing existing VPC $VPC_NAME ($VPC_ID) into Pulumi state..."
+              pulumi import digitalocean:index/vpc:Vpc "$VPC_NAME" "$VPC_ID" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
+            fi
+          fi
+
+          # Import pre-existing Spaces buckets (survive destroy due to DO Spaces delete marker bug).
+          for BUCKET_NAME in loopzero-static-assets loopzero-builds; do
+            BUCKET_EXISTS=$(AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" \
+              aws s3api head-bucket --bucket "$BUCKET_NAME" --endpoint-url "https://sfo3.digitaloceanspaces.com" 2>/dev/null && echo "yes" || echo "no")
+            if [ "$BUCKET_EXISTS" = "yes" ]; then
+              IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r ".deployment.resources[]? | select(.type == \"digitalocean:index/spacesBucket:SpacesBucket\" and .inputs.name == \"$BUCKET_NAME\") | .id" 2>/dev/null)
+              if [ -z "$IN_STATE" ]; then
+                echo "Importing existing bucket $BUCKET_NAME into Pulumi state..."
+                pulumi import "digitalocean:index/spacesBucket:SpacesBucket" "$BUCKET_NAME" "sfo3,$BUCKET_NAME" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
+              fi
+            fi
+          done
+
+          # Clean up corrupted state from failed import/replacement cycles.
+          # Resources pending replacement that can't be deleted (non-empty buckets,
+          # active tunnels) must be removed from state so Pulumi can re-import cleanly.
+          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.pendingReplacement == true) | .urn' 2>/dev/null); do
+            echo "Removing pending-replacement resource: $URN"
+            pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
+          done
           # Refresh state to match reality (handles manual deletes, drift)
           pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
           # Create all resources — skipAwait prevents blocking on ImagePullBackOff
@@ -401,9 +494,8 @@ jobs:
             [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
           done
 
-          # Create loopzero-builds Spaces bucket (for CWT source bundles — not managed by Pulumi)
-          INFRA_REGION=$(pulumi stack output region --stack "$STACK" 2>/dev/null || echo "sfo3")
-          aws s3 mb "s3://loopzero-builds" --endpoint-url "https://${INFRA_REGION}.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
+          # loopzero-builds bucket is now managed by Pulumi (created in Step 1).
+          # No manual aws s3 mb needed.
 
       # Step 3: Convergence — deployments now have images available.
       # Only runs if Steps 1+2 succeeded. Re-runs pulumi up to update
@@ -413,9 +505,11 @@ jobs:
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           STACK="${{ needs.resolve.outputs.stack }}"
+          # Cancel stale lock from Step 1/2
+          pulumi cancel -s "$STACK" 2>/dev/null || true
           # Refresh: sync state with reality. Completed Jobs may have been
           # garbage-collected by K8s between Step 1 and now.
-          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
+          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
           # Converge: update Deployments (now images exist), recreate GC'd Jobs
           pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
 
@@ -623,8 +717,19 @@ jobs:
           INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)
           VALUES ('tn-loopzero', '${GH_USER_ID}', 'owner', NOW(), NOW())
           ON CONFLICT DO NOTHING;
+
+          -- Seed additional admin user (paulohenriquevn — primary developer).
+          -- The triggering_actor is often a CI bot; the real user needs access too.
+          INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
+          VALUES ('github-paulohenriquevn', 'paulohenriquevn@gmail.com',
+                  6766298, 'paulohenriquevn', NOW(), NOW())
+          ON CONFLICT (id) DO UPDATE SET updated_at = NOW();
+
+          INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)
+          VALUES ('tn-loopzero', 'github-paulohenriquevn', 'owner', NOW(), NOW())
+          ON CONFLICT DO NOTHING;
           SEED_SQL
-            echo "Database seeded: user=${GH_USER_ID} tenant=tn-loopzero"
+            echo "Database seeded: user=${GH_USER_ID} + paulohenriquevn tenant=tn-loopzero"
           else
             echo "::warning::DB_URI not available, skipping seed"
           fi
@@ -667,6 +772,21 @@ jobs:
           done
 
           # ═══════════════════════════════════════
+          # 5.5. CLOUDFLARE CREDENTIALS SECRET (Sprint 10)
+          # Ensures loopzero-cf-credentials K8s secret exists even if Pulumi config set failed.
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            CF_ACCOUNT_ID=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi config get cfAccountId --stack "$STACK" 2>/dev/null || echo "")
+            CF_KV_NS_ID=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi stack output cfKvNamespaceId --stack "$STACK" 2>/dev/null || echo "")
+            if [ -n "$CF_ACCOUNT_ID" ]; then
+              kubectl -n $NAMESPACE create secret generic loopzero-cf-credentials \
+                --from-literal=CF_API_TOKEN="$CLOUDFLARE_API_TOKEN" \
+                --from-literal=CF_ACCOUNT_ID="$CF_ACCOUNT_ID" \
+                --from-literal=CF_KV_NAMESPACE_ID="${CF_KV_NS_ID:-not-set}" \
+                --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
+              echo "  Cloudflare credentials secret ensured"
+            fi
+          fi
+
           # 6. RESTART SERVICES (pick up new tokens)
           # ═══════════════════════════════════════
           kubectl -n $NAMESPACE rollout restart deployment loopzero-api 2>/dev/null || true
@@ -679,6 +799,44 @@ jobs:
           echo "- Database: seeded (admin user + tenant)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tenant CR: applied (tn-loopzero)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Gitea orgs: loopzero, loopzero-platform" >> "$GITHUB_STEP_SUMMARY"
+
+      # --- Post-deploy: deploy Cloudflare Worker (Sprint 10) ---
+      # The Pulumi WorkerScript resource tracks state but can't update the
+      # Worker content reliably (CF API multipart format issue). This step
+      # deploys the Worker script via CF API with correct KV binding.
+      - name: Deploy Cloudflare Worker
+        if: success() && needs.resolve.outputs.command == 'up' && env.CLOUDFLARE_API_TOKEN != ''
+        continue-on-error: true
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          CF_ACCOUNT_ID=$(pulumi config get cfAccountId --stack "$STACK" 2>/dev/null || echo "")
+          CF_KV_NS_ID=$(pulumi stack output cfKvNamespaceId --stack "$STACK" 2>/dev/null || echo "")
+
+          if [ -z "$CF_ACCOUNT_ID" ] || [ -z "$CF_KV_NS_ID" ]; then
+            echo "Cloudflare not configured for this stack — skipping Worker deploy"
+            exit 0
+          fi
+
+          WORKER_FILE="$GITHUB_WORKSPACE/infra/cloudflare/worker.mjs"
+          if [ ! -f "$WORKER_FILE" ]; then
+            echo "Worker source not found at $WORKER_FILE — skipping"
+            exit 0
+          fi
+
+          echo "Deploying CF Worker loopzero-static-delivery with KV binding..."
+          RESULT=$(curl -s -w "%{http_code}" -o /tmp/cf-worker-response.json \
+            -X PUT "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/loopzero-static-delivery" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -F "metadata={\"body_part\":\"script\",\"bindings\":[{\"type\":\"kv_namespace\",\"name\":\"LOOPZERO_ROUTING\",\"namespace_id\":\"$CF_KV_NS_ID\"}]};type=application/json" \
+            -F "script=@$WORKER_FILE;type=application/javascript")
+
+          if [ "$RESULT" = "200" ]; then
+            echo "✅ CF Worker deployed successfully"
+          else
+            echo "⚠️ CF Worker deploy returned HTTP $RESULT"
+            cat /tmp/cf-worker-response.json
+          fi
 
       # --- Post-deploy: configure cross-cluster Loki access ---
       # Loki runs on the build cluster (NodePort 30100). The API on mgmt

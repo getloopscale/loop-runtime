@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ensureRepoCredentialSecret` uses `CreateOrUpdate` instead of Get+Create, enabling credential rotation (#OPERATORS-REVIEW)
 - Extracted `BuildCredentials` struct from `TenantReconciler` — credential management separated from reconciliation logic (#OPERATORS-REVIEW)
 - Docker config.json from DO API now validated for `auths` + `auth` field structure (#OPERATORS-REVIEW)
+- Extract image version constants (`imageNode`, `imageGolang`, `imagePython`, `imageAlpine`, `imageBuildKit`) — single source of truth for build images (#FORGE-REVIEW)
+- Replace manual `dockerfileDir`/`dockerfileName` with `filepath.Dir`/`filepath.Base` from stdlib (#FORGE-REVIEW)
+- Eliminate 90% code duplication between `buildkitTemplateForApp` and `buildkitTemplateFromPlan` via shared `buildkitContainer` function (#FORGE-REVIEW)
+- Sort map iteration in `paramsToForge` and BuildKit `buildArgs` for deterministic workflow YAML (#FORGE-REVIEW)
+- Add `slog.Warn` when `ResolveStrategy` falls back to custom strategy for unrecognized frameworks (#FORGE-REVIEW)
 
 ### Removed
 - Dead condition types: `TypeNamespacesReady`, `TypeRBACReady`, `TypeNetworkPolicyReady`, `TypePlatformSecretsReady` (#OPERATORS-REVIEW)

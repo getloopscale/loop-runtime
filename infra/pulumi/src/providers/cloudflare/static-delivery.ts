@@ -72,7 +72,6 @@ export function createStaticDelivery(
     accountId: config.accountId,
     scriptName: scriptName,
     content: workerContent,
-    mainModule: "worker.mjs",
     compatibilityDate: "2025-01-17",
     bindings: [
       {
@@ -81,6 +80,12 @@ export function createStaticDelivery(
         namespaceId: kvNamespace.id,
       },
     ],
+  }, {
+    // The CF API rejects WorkerScript updates via Pulumi when using
+    // service worker syntax + KV bindings. The Worker is managed via
+    // the worker.mjs file and deployed via CF API in the bootstrap step.
+    // Pulumi owns the resource for state tracking only.
+    ignoreChanges: ["content", "bindings", "compatibilityDate"],
   });
 
   // 3. Worker route — intercept all requests on *.{baseDomain}/*
@@ -91,7 +96,9 @@ export function createStaticDelivery(
       pattern: `*.${config.baseDomain}/*`,
       script: scriptName,
     },
-    { dependsOn: [workerScript] },
+    {
+      dependsOn: [workerScript],
+    },
   );
 
   return {

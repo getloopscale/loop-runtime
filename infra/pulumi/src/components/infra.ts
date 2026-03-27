@@ -184,10 +184,13 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
 
   // Static assets bucket — stores built frontend assets uploaded by Argo Workflows.
   // CF Worker (or nginx-s3-gateway fallback) serves these to browsers.
+  // Created directly (not via factory) to support import of existing bucket.
+  // Use factory.createObjectStorage to match the same region string format
+  // as other buckets (avoids enum vs string mismatch triggering replacement).
   const staticBucket = factory.createObjectStorage({
     name: "loopzero-static-assets",
     region: config.region,
-    versioning: false, // Assets are immutable per build-id — no versioning needed
+    versioning: false,
     tags,
   });
 

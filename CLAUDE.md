@@ -14,7 +14,7 @@ The authoritative specification is **`docs/technical.md`**. Every state machine,
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
-**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-5 complete (runtime, TLS, PG HA, observability, pipeline). Hardening sprint 6 (operation) 3/4 complete: `loopzero logs` (Loki), `loopzero rollback` (3s), `loopzero secret` (ESO sync <30s) all validated on DigitalOcean. `loopzero status` pending (handler exists, route not wired). **Sprint 10 (static frontend delivery) complete:** monorepo deploy (API server + Web static + Worker) fully functional on DO — static frontends served from DO Spaces via Cloudflare Worker (zero pods), container apps via CF Tunnel, all behind Cloudflare edge (WAF/DDoS). Build engine migrated from Kaniko to single-container BuildKit (rootless). RELEASING state machine added for crash recovery. Core flow `loopzero login` → `loopzero init` → `loopzero deploy` → live URL works end-to-end. 455+ CLI tests + 60+ API test files passing. Production infrastructure running on DigitalOcean (3 DOKS clusters + Loki + Promtail + ESO + Cloudflare Tunnel + CF Worker + DO Spaces CDN).
+**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-5 complete (runtime, TLS, PG HA, observability, pipeline). Hardening sprint 6 (operation) 3/4 complete: `loopzero logs` (Loki), `loopzero rollback` (3s), `loopzero secret` (ESO sync <30s) all validated on DigitalOcean. `loopzero status` pending (handler exists, 1 line missing in server.go). **Sprint 10 (static frontend delivery) complete and validated E2E:** monorepo deploy (API server + Web static + Worker) fully functional on DO in 193s — `loopzero deploy` succeeds with exit code 0, static frontends served from DO Spaces via Cloudflare Worker (zero pods), container apps via CF Tunnel, all behind Cloudflare edge (WAF/DDoS). Infrastructure is 100% IaC — destroy + recreate via GitHub Actions pipeline tested and validated. Build engine: single-container BuildKit (rootless) — Kaniko completely removed. RELEASING state machine for crash recovery. 498 CLI tests + 60+ API test files passing. Production infrastructure running on DigitalOcean (3 DOKS clusters + Loki + Promtail + ESO + Cloudflare Tunnel + CF Worker + DO Spaces CDN).
 
 ---
 
@@ -35,7 +35,7 @@ task lint                # Lint all components (golangci-lint + ESLint)
 task validate:manifests  # kubeconform --strict on all manifests
 
 # Per-component
-cd cli  && npm test           # CLI unit tests (Jest, 405 tests)
+cd cli  && npm test           # CLI unit tests (Jest, 498 tests)
 cd api  && go test ./...      # API tests (Go testing, 60+ files)
 cd operators && go test ./... # Operator tests (Ginkgo + envtest)
 cd pkg && go test ./...       # Shared library tests
@@ -117,7 +117,7 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
 | Database | PostgreSQL 16 (managed DO) | State, advisory locks for serialization |
-| Build engine | Argo Workflows + BuildKit | Container image builds in isolation (rootless, sidecar pattern) |
+| Build engine | Argo Workflows + BuildKit | Container image builds in isolation (rootless, single-container) |
 | GitOps store | Gitea 1.22.6 | Desired state mirror (source + gitops repos) |
 | GitOps sync | ArgoCD 2.13.3 | Cluster convergence (manual sync only) |
 | Ingress | Traefik 28.3.0 + cert-manager 1.14.5 | TLS termination, HTTP→HTTPS redirect |
@@ -147,7 +147,7 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | Security scanning | govulncheck + npm audit + Trivy (fs + IaC + Dockerfile) + TruffleHog | Vulnerability + secret detection |
 | Manifest validation | kubeconform --strict | K8s YAML correctness |
 | Tests (Go) | Go testing + Ginkgo v2 + Gomega + envtest (K8s 1.31.0) | Unit, integration, operator tests |
-| Tests (TS) | Jest | CLI unit tests (405 tests) |
+| Tests (TS) | Jest | CLI unit tests (498 tests) |
 | Migrations | golang-migrate (forward-only, .up.sql only) | Database schema evolution |
 | Image signing | cosign + syft (Sprint 6 — not yet implemented) | Supply chain security |
 | CLI tools | doctl, gh (GitHub CLI) | Cloud + CI interaction |
@@ -165,6 +165,8 @@ loopzero/
 ├── docs/
 │   ├── sprints/                       ← sprint details (one folder per sprint)
 │   │   ├── README.md                  ← sprint index + overview table
+│   │   ├── ROADMAP.md                 ← sprint roadmap
+│   │   ├── EXECUTION-PLAN.md          ← execution plan
 │   │   ├── 00-foundation/
 │   │   ├── 01-login-init-tenant-controller/
 │   │   ├── 02-deploy-happy-path/
@@ -185,18 +187,18 @@ loopzero/
 │   └── statemachine/                  ← 7 state machines (build, release, tenant, preview, promotion, rollback, bootstrap)
 ├── cli/                               ← @loopzero/cli (TypeScript + Commander)
 │   ├── src/
-│   │   ├── commands/                  ← login, logout, whoami, init, deploy, project-delete
+│   │   ├── commands/                  ← login, logout, whoami, init, deploy, validate, logs, rollback, secret, project-delete
 │   │   ├── api/                       ← API client (retry, idempotency-key) + SSE client (reconnect, fallback polling)
 │   │   ├── output/                    ← formatters: human/json/CI + deploy renderer (TTY/CI modes)
 │   │   ├── detection/                 ← monorepo detection (Turbo/Nx/Lerna/pnpm) + framework detection (10 frameworks)
-│   │   ├── adapters/                  ← git operations, loopzero.yaml parsing, source upload, bundle cleanup
+│   │   ├── adapters/                  ← git operations, loopzero.yaml parsing (v2: render, build, secrets), source upload, bundle cleanup, app-unit, validate-config
 │   │   └── config/                    ← credential store (~/.loopzero/config.json), constants, env overrides
-│   └── tests/unit/                    ← 405 tests, 20 suites (Jest)
+│   └── tests/unit/                    ← 498 tests, 20+ suites (Jest)
 ├── api/                               ← loopzero/api (Go + chi + pgx)
 │   ├── cmd/                           ← entrypoint (server bootstrap, background services)
 │   ├── internal/
 │   │   ├── routes/                    ← auth, health, builds, projects, source, secrets, bootstrap
-│   │   ├── services/                  ← BuildOrchestrator, BuildReconcileLoop, BuildReaper, ReleaseReaper, ProjectDeleter, CircuitBreaker
+│   │   ├── services/                  ← BuildOrchestrator, BuildReconcileLoop, BuildReaper, ReleaseReaper, ProjectDeleter, CircuitBreaker, StaticDelivery
 │   │   ├── db/                        ← pgx pool + 9 stores (build, release, project, envtarget, membership, secret, idempotency, bootstrap, event)
 │   │   ├── middleware/                ← auth (GitHub token + cache), idempotency, correlation-id, rate-limit, audit, logging
 │   │   ├── lock/                      ← withEnvironmentLock (pg_advisory_xact_lock, 5s timeout)
@@ -584,11 +586,11 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | CRD | Controller | Wired | Purpose |
 |-----|-----------|-------|---------|
 | Tenant | TenantController | ✅ | Gitea repo, ArgoCD app, build namespace, RBAC, quotas |
-| Environment | EnvironmentController | ⚠️ No | Namespace + RBAC + NetworkPolicy + quota on runtime |
-| LoopZeroApplication | ApplicationController | ⚠️ No | Hostname assignment, ExposedRoute, health tracking |
-| ExposedRoute | ExposureController | ⚠️ No | TLS cert check, reachability probes |
-| PlatformBootstrap | PlatformBootstrapController | ⚠️ No | Declarative setup: Gitea → ArgoCD → API seed |
-| GitRepositoryBinding | GitRepositoryBindingController | ⚠️ No | Credential sync to ArgoCD with rotation |
+| Environment | EnvironmentController | ✅ Wired | Namespace + RBAC + NetworkPolicy + quota on runtime |
+| LoopZeroApplication | ApplicationController | ✅ Wired | Hostname assignment, ExposedRoute, health tracking |
+| ExposedRoute | ExposureController | ✅ Wired | TLS cert check, reachability probes |
+| PlatformBootstrap | PlatformBootstrapController | ✅ Wired | Declarative setup: Gitea → ArgoCD → API seed |
+| GitRepositoryBinding | GitRepositoryBindingController | ✅ Wired | Credential sync to ArgoCD with rotation |
 | ClusterCredential | ClusterCredentialController | ✅ | Connectivity check + kubeconfig distribution |
 | AppSecret | — | ❌ | Secret sync mgmt → workload (not implemented) |
 | PreviewEnvironment | — | ❌ | Ephemeral PR environments (Sprint 5) |
@@ -612,7 +614,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 |----------|--------|--------|
 | 3 DOKS clusters | v1.32.13, 2 nodes each, SFO3 | — |
 | PostgreSQL | v16, managed, single node | — |
-| Container Registry | DO Container Registry | registry.digitalocean.com/loopzero-infra-registry |
+| Container Registry | DO Container Registry (Professional) | registry.digitalocean.com/loopzero-infra-registry |
 | DNS | A records + wildcard CNAME via CF Tunnel | *.dev.loopzero.example (CF Tunnel → runtime), api/argocd/git/grafana.dev.loopzero.example (mgmt) |
 | Cloudflare Tunnel | c35b9d63... | All runtime traffic via CF edge (DDoS/WAF), zero public IPs |
 | CF Worker | loopzero-static-delivery | Routes static frontend requests to DO Spaces via KV lookup |

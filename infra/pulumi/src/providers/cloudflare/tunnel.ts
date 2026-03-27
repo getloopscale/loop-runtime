@@ -73,7 +73,9 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
         ],
       },
     },
-    { dependsOn: [tunnel] },
+    {
+      dependsOn: [tunnel],
+    },
   );
 
   // 3. DNS CNAME record — *.{baseDomain} → tunnel.cfargotunnel.com

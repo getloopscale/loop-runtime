@@ -656,6 +656,12 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	// Phase 2: Release activation via DeliveryActivator (MEET-2026-03-26-009).
 	// Dispatches to ContainerDeliveryActivator or StaticDeliveryActivator
 	// based on build plan. Each sub-phase acquires/releases its own lock.
+	// Write CF KV routing entries for static apps BEFORE activation (Sprint 10).
+	// The assets are already in S3 at this point (uploaded by Argo Workflow).
+	// Writing KV early ensures the CF Worker serves the new version immediately,
+	// even if the ArgoCD sync (container delivery) takes longer or fails.
+	o.writeStaticRoutingEntries(ctx, build, result)
+
 	activationErr := o.delivery.Activate(ctx, build, result)
 
 	if activationErr != nil {
@@ -664,12 +670,6 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		o.emitActivationFailure(ctx, buildID, activationErr)
 		return nil
 	}
-
-	// Write CF KV routing entries for static apps (Sprint 10).
-	// This happens after delivery activation so the release is already ACTIVE.
-	// KV write failure is non-fatal — the nginx-s3-gateway fallback in the cluster
-	// still serves assets via IngressRoute. The KV write is an optimization.
-	o.writeStaticRoutingEntries(ctx, build, result)
 
 	// Phase 2 succeeded — transition RELEASING → SUCCEEDED (deploy complete).
 	if err := o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {

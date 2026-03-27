@@ -151,10 +151,7 @@ export class DeployCommand {
       return this.exitWithError(opts, envError, 1, 'INVALID_ENVIRONMENT');
     }
 
-    // 5b. Legacy format warning (M7: backward compat)
-    if (config.version === undefined && !opts.json) {
-      this.deps.writeTo('Warning: loopzero.yaml uses legacy format. Run: loopzero init --force to upgrade');
-    }
+
 
     // 6. Validate --app flag (DA-19) — fail fast before any upload
     const selectedApps = opts.app ?? appNames;
