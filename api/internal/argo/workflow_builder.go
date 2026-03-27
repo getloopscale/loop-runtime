@@ -4,7 +4,6 @@
 package argo
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -66,62 +65,20 @@ type languageGroup struct {
 	Suffix   string // e.g., "-node", "-go", "-python", "" for single-language
 }
 
-// groupAppsByLanguage groups apps by their resolved language strategy.
-// Single-language projects get no suffix for backwards compatibility.
-func groupAppsByLanguage(apps []services.AppSpec) []languageGroup {
-	groups := make(map[string]*languageGroup)
-	var order []string // preserve insertion order
-
-	for _, app := range apps {
-		strategy := ResolveStrategy(app.Framework)
-		name := strategy.Name()
-		if _, exists := groups[name]; !exists {
-			groups[name] = &languageGroup{Strategy: strategy}
-			order = append(order, name)
-		}
-		groups[name].Apps = append(groups[name].Apps, app)
-	}
-
-	result := make([]languageGroup, 0, len(order))
-	needsSuffix := len(order) > 1
-	for _, name := range order {
-		g := groups[name]
-		if needsSuffix {
-			g.Suffix = "-" + name
-		}
-		result = append(result, *g)
-	}
-	return result
-}
-
-// groupAppsByPlan groups AppBuildPlan entries by their pre-resolved LanguageStrategy.
-// Unlike groupAppsByLanguage, this does NOT call ResolveStrategy — the strategy was
-// already resolved during CreateBuildPlan. This is the BuildPlan-native grouping.
-func groupAppsByPlan(plans []services.AppBuildPlan) []languageGroup {
+// groupApps groups items by language strategy using a generic extraction function.
+// The extractor returns (strategyName, AppSpec) for each item. Single-language
+// projects get no suffix; multi-language get "-node", "-go", etc.
+func groupApps[T any](items []T, extract func(T) (string, services.AppSpec)) []languageGroup {
 	groups := make(map[string]*languageGroup)
 	var order []string
 
-	for _, p := range plans {
-		stratName := p.LanguageStrategy
+	for _, item := range items {
+		stratName, app := extract(item)
 		if _, exists := groups[stratName]; !exists {
-			// Resolve the strategy object from the pre-resolved name.
-			// This is safe because LanguageStrategy was set by resolveLanguageStrategy
-			// in CreateBuildPlan — the mapping is consistent.
-			strategy := ResolveStrategy(stratName)
-			groups[stratName] = &languageGroup{Strategy: strategy}
+			groups[stratName] = &languageGroup{Strategy: ResolveStrategy(stratName)}
 			order = append(order, stratName)
 		}
-		// Convert AppBuildPlan back to AppSpec for language step generation.
-		// Language steps (validate, install, build, dockerfile) need app paths and frameworks.
-		groups[stratName].Apps = append(groups[stratName].Apps, services.AppSpec{
-			Name:      p.AppName,
-			Type:      p.AppType,
-			Port:      p.Port,
-			Path:      p.AppPath,
-			Framework: stratName,
-			Build:     p.Build,
-			Secrets:   p.Secrets,
-		})
+		groups[stratName].Apps = append(groups[stratName].Apps, app)
 	}
 
 	result := make([]languageGroup, 0, len(order))
@@ -139,13 +96,19 @@ func groupAppsByPlan(plans []services.AppBuildPlan) []languageGroup {
 // Build generates a complete Workflow CR using forge types for the given spec.
 // The returned *forge.Workflow can be serialized via ToDict() for the K8s dynamic client.
 func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, error) {
-	// v2: When a BuildPlan is present, group by pre-resolved strategy (no inline inference).
-	// Legacy: group by framework using ResolveStrategy.
 	var groups []languageGroup
 	if spec.Plan != nil && len(spec.Plan.Apps) > 0 {
-		groups = groupAppsByPlan(spec.Plan.Apps)
+		groups = groupApps(spec.Plan.Apps, func(p services.AppBuildPlan) (string, services.AppSpec) {
+			return p.LanguageStrategy, services.AppSpec{
+				Name: p.AppName, Type: p.AppType, Port: p.Port,
+				Path: p.AppPath, Framework: p.LanguageStrategy,
+				Build: p.Build, Secrets: p.Secrets,
+			}
+		})
 	} else {
-		groups = groupAppsByLanguage(spec.Apps)
+		groups = groupApps(spec.Apps, func(app services.AppSpec) (string, services.AppSpec) {
+			return ResolveStrategy(app.Framework).Name(), app
+		})
 	}
 
 	// REVIEW-AP-3: Generate per-language inline templates for mixed-language support.
@@ -192,7 +155,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 	onExitName := ""
 	if onExitDAG != nil {
 		templates = append(templates, onExitDAG)
-		onExitName = "finalize"
+		onExitName = onExitDAGName
 	}
 	templates = append(templates, inlineTemplates...)
 
@@ -204,23 +167,21 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 
 	wf := &forge.Workflow{
 		GenerateName:       fmt.Sprintf("loopzero-build-%s-", spec.BuildID),
-		Entrypoint:         "build-pipeline",
+		Entrypoint:         entrypointName,
 		OnExit:             onExitName,
-		ServiceAccountName: "loopzero-build-sa",
-		Parallelism:        ptr(4),
-		// REVIEW-LEVE-2: Succeeded TTL increased from 1h to 4h for post-deploy debugging.
-		// Failed TTL stays at 24h for incident investigation.
+		ServiceAccountName: serviceAccountName,
+		Parallelism:        ptr(workflowParallelism),
 		TTLStrategy: &forge.TTLStrategy{
-			SecondsAfterCompletion: ptr(14400),
-			SecondsAfterSuccess:    ptr(14400),
-			SecondsAfterFailure:    ptr(86400),
+			SecondsAfterCompletion: ptr(ttlAfterCompletion),
+			SecondsAfterSuccess:    ptr(ttlAfterSuccess),
+			SecondsAfterFailure:    ptr(ttlAfterFailure),
 		},
 		Labels: map[string]string{
-			"loopzero.io/tenant":      spec.TenantID,
-			"loopzero.io/project":     spec.ProjectID,
-			"loopzero.io/environment": spec.Environment,
-			"loopzero.io/build-id":    spec.BuildID,
-			"loopzero.io/language":    primaryLanguage,
+			labelTenant:      spec.TenantID,
+			labelProject:     spec.ProjectID,
+			labelEnvironment: spec.Environment,
+			labelBuildID:     spec.BuildID,
+			labelLanguage:    primaryLanguage,
 		},
 		Templates: templates,
 		// Workspace uses a dynamically provisioned PVC shared across all DAG steps.
@@ -228,15 +189,15 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		// VolumeClaimTemplates create the PVC when the Workflow starts; it is shared
 		// across all pods and cleaned up when the Workflow is garbage collected (TTL).
 		VolumeClaimTemplates: []forge.PVCVolume{
-			{BaseVolume: forge.BaseVolume{Name: "workspace"}, Size: "5Gi"},
+			{BaseVolume: forge.BaseVolume{Name: volumeWorkspace}, Size: workspacePVCSize},
 		},
 		Volumes: b.buildVolumes(),
 		// FSGroup ensures the PVC volume is writable by non-root user 1000.
 		// Without this, the PVC is mounted as root-owned and cp/mkdir fail.
 		SecurityContext: &model.PodSecurityContext{
-			FSGroup:    ptr(int64(1000)),
-			RunAsUser:  ptr(int64(1000)),
-			RunAsGroup: ptr(int64(1000)),
+			FSGroup:    ptr(rootlessUID),
+			RunAsUser:  ptr(rootlessUID),
+			RunAsGroup: ptr(rootlessUID),
 		},
 	}
 
@@ -251,7 +212,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 // validate-{lang} → install-{lang} → build-{lang} → dockerfile-{lang} →
 // [per-app BuildKit tasks].
 func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []languageGroup) (*forge.DAG, error) {
-	dag := &forge.DAG{Name: "build-pipeline"}
+	dag := &forge.DAG{Name: entrypointName}
 
 	// Step 1: clone (shared across all languages — one source bundle)
 	tasks := []*forge.Task{
@@ -301,42 +262,20 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 	// Depends on its language group's dockerfile step (containers) or build step (static).
 	if spec.Plan != nil && len(spec.Plan.Apps) > 0 {
 		for _, appPlan := range spec.Plan.Apps {
+			suffix := suffixForStrategy(groups, appPlan.LanguageStrategy)
 			if appPlan.DeliveryModel == "static" {
-				// Static: upload assets, depends on build-apps step (assets already built)
-				buildDep := "build-apps"
-				for _, g := range groups {
-					if g.Strategy.Name() == appPlan.LanguageStrategy {
-						buildDep = "build-apps" + g.Suffix
-						break
-					}
-				}
 				taskName := fmt.Sprintf("deliver-artifact-%s", appPlan.AppName)
-				tasks = append(tasks, inlineTask(taskName, taskName, []string{buildDep}))
+				tasks = append(tasks, inlineTask(taskName, taskName, []string{"build-apps" + suffix}))
 			} else {
-				// Container: BuildKit image build, depends on dockerfile step
-				dockerfileDep := "generate-dockerfile"
-				for _, g := range groups {
-					if g.Strategy.Name() == appPlan.LanguageStrategy {
-						dockerfileDep = "generate-dockerfile" + g.Suffix
-						break
-					}
-				}
 				taskName := fmt.Sprintf("build-image-%s", appPlan.AppName)
-				tasks = append(tasks, inlineTask(taskName, taskName, []string{dockerfileDep}))
+				tasks = append(tasks, inlineTask(taskName, taskName, []string{"generate-dockerfile" + suffix}))
 			}
 		}
 	} else {
 		for _, app := range spec.Apps {
-			appStrategy := ResolveStrategy(app.Framework)
-			dockerfileDep := "generate-dockerfile"
-			for _, g := range groups {
-				if g.Strategy.Name() == appStrategy.Name() {
-					dockerfileDep = "generate-dockerfile" + g.Suffix
-					break
-				}
-			}
+			suffix := suffixForStrategy(groups, ResolveStrategy(app.Framework).Name())
 			taskName := fmt.Sprintf("build-image-%s", app.Name)
-			tasks = append(tasks, inlineTask(taskName, taskName, []string{dockerfileDep}))
+			tasks = append(tasks, inlineTask(taskName, taskName, []string{"generate-dockerfile" + suffix}))
 		}
 	}
 
@@ -349,7 +288,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 // buildOnExitDAG constructs the finalize DAG (always runs, even on failure).
 // REVIEW-AP-3: saves cache per-language (each language has different cache dirs).
 func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, groups []languageGroup) (*forge.DAG, error) {
-	dag := &forge.DAG{Name: "finalize"}
+	dag := &forge.DAG{Name: onExitDAGName}
 
 	var tasks []*forge.Task
 
@@ -380,418 +319,8 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, groups []la
 func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
 	return []forge.VolumeBuilder{
 		// Registry credentials for BuildKit push — mounted at /home/user/.docker/ in each build container.
-		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-registry-config"}, SecretName: "buildkit-registry-config"},
+		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: secretRegistryConfig}, SecretName: secretRegistryConfig},
 	}
 }
 
-// buildkitTemplateForApp generates a single-container BuildKit template for a single app.
-//
-// Architecture (MEET-2026-03-26-007): Single container runs both buildkitd (background daemon)
-// and buildctl (foreground client) via rootlesskit. This eliminates the sidecar pattern and
-// its associated false-failure problem (sidecar exit code 1 on SIGTERM causing Argo to mark
-// successful builds as Failed).
-//
-// The container uses the -rootless image with rootlesskit as the entrypoint, which sets up
-// a user namespace for unprivileged builds. Inside the namespace, the entrypoint script
-// starts buildkitd in background, waits for readiness, and runs buildctl.
-//
-// Security: rootlesskit requires seccompProfile: Unconfined + AppArmor: unconfined for user
-// namespace creation on managed Kubernetes (DOKS, EKS, GKE). These apply to the single
-// container. buildctl args are not user-injectable (constructed programmatically from
-// AppSpec/AppBuildPlan). See MEET-2026-03-26-007 security review.
-//
-// Cache: --import-cache and --export-cache use registry-based OCI cache.
-// Image digest: extracted from --metadata-file (JSON: {"containerimage.digest":"sha256:..."}).
-func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app services.AppSpec) *forge.Container {
-	destination := fmt.Sprintf("%s/%s/%s/%s:%s",
-		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
-	cacheRef := fmt.Sprintf("%s/%s/%s/%s:buildcache",
-		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name)
 
-	// Per-app Dockerfile: Dockerfile.{app} for multi-app, Dockerfile for single-app.
-	dockerfile := "/workspace/Dockerfile"
-	if len(spec.Apps) > 1 {
-		dockerfile = fmt.Sprintf("/workspace/Dockerfile.%s", app.Name)
-	}
-
-	metadataFile := fmt.Sprintf("/workspace/metadata-%s.json", app.Name)
-	socketPath := "unix:///run/user/1000/buildkitd/buildkitd.sock"
-
-	// buildctl args — each flag and value as separate elements (no shell word splitting).
-	buildctlArgs := []string{
-		"--addr", socketPath,
-		"build",
-		"--frontend", "dockerfile.v0",
-		"--local", "context=/workspace",
-		"--local", fmt.Sprintf("dockerfile=%s", dockerfileDir(dockerfile)),
-		"--opt", fmt.Sprintf("filename=%s", dockerfileName(dockerfile)),
-		"--output", fmt.Sprintf("type=image,name=%s,push=true", destination),
-	}
-	if !spec.NoCache {
-		buildctlArgs = append(buildctlArgs,
-			"--export-cache", fmt.Sprintf("type=registry,ref=%s,mode=max,ignore-error=true", cacheRef),
-			"--import-cache", fmt.Sprintf("type=registry,ref=%s", cacheRef),
-		)
-	}
-	buildctlArgs = append(buildctlArgs, "--metadata-file", metadataFile)
-
-	if b.infraParams.RegistryInsecure {
-		buildctlArgs = append(buildctlArgs, "--allow", "security.insecure")
-	}
-
-	// seccomp Unconfined on the main container (Argo names it "main" in the pod).
-	// Required for rootlesskit to create user namespaces on managed Kubernetes.
-	podSpecPatch := `{"containers":[{"name":"main","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}`
-
-	return &forge.Container{
-		Name:  fmt.Sprintf("build-image-%s", app.Name),
-		Image: "moby/buildkit:v0.18.2-rootless",
-		// rootlesskit sets up user namespace, then runs the entrypoint script.
-		// Script starts buildkitd background, waits for socket, runs buildctl "$@".
-		// "--" is $0, "buildctl" is $1, rest of buildctlArgs become $2+.
-		Command: []string{"rootlesskit", "sh", "-c", buildkitEntrypointScript(socketPath, b.infraParams.RegistryInsecure), "--"},
-		Args:    append([]string{"buildctl"}, buildctlArgs...),
-		Env: []forge.EnvBuilder{
-			forge.Env{Name: "HOME", Value: "/home/user"},
-		},
-		VolumeMounts: []forge.VolumeBuilder{
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
-				Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true,
-			}, SecretName: "buildkit-registry-config"},
-		},
-		Resources: &forge.ResourceRequirements{
-			Requests: forge.ResourceList{CPU: "500m", Memory: "512Mi"},
-			Limits:   forge.ResourceList{CPU: "2000m", Memory: "4Gi"},
-		},
-		SecurityContext: &model.SecurityContext{
-			RunAsUser:    ptr(int64(1000)),
-			RunAsGroup:   ptr(int64(1000)),
-			RunAsNonRoot: ptr(true),
-		},
-		// AppArmor unconfined on the main container — required for rootless BuildKit
-		// mount operations inside user namespaces on managed Kubernetes with AppArmor.
-		Annotations: map[string]string{
-			"container.apparmor.security.beta.kubernetes.io/main": "unconfined",
-		},
-		PodSpecPatch:  podSpecPatch,
-		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
-	}
-}
-
-// buildkitTemplateFromPlan generates a single-container BuildKit template using resolved
-// fields from AppBuildPlan. Same architecture as buildkitTemplateForApp (MEET-2026-03-26-007)
-// but all paths, tags, and args come from the pre-resolved plan.
-func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec services.WorkflowSpec, plan services.AppBuildPlan) *forge.Container {
-	socketPath := "unix:///run/user/1000/buildkitd/buildkitd.sock"
-
-	buildctlArgs := []string{
-		"--addr", socketPath,
-		"build",
-		"--frontend", "dockerfile.v0",
-		"--local", fmt.Sprintf("context=%s", plan.ContextPath),
-		"--local", fmt.Sprintf("dockerfile=%s", dockerfileDir(plan.DockerfilePath)),
-		"--opt", fmt.Sprintf("filename=%s", dockerfileName(plan.DockerfilePath)),
-		"--output", fmt.Sprintf("type=image,name=%s,push=true", plan.ImageTag),
-	}
-	if !spec.NoCache {
-		buildctlArgs = append(buildctlArgs,
-			"--export-cache", fmt.Sprintf("type=registry,ref=%s,mode=max,ignore-error=true", plan.CacheRef),
-			"--import-cache", fmt.Sprintf("type=registry,ref=%s", plan.CacheRef),
-		)
-	}
-	for key, val := range plan.BuildArgs {
-		buildctlArgs = append(buildctlArgs, "--opt", fmt.Sprintf("build-arg:%s=%s", key, val))
-	}
-	buildctlArgs = append(buildctlArgs, "--metadata-file", fmt.Sprintf("/workspace/metadata-%s.json", plan.AppName))
-
-	if b.infraParams.RegistryInsecure {
-		buildctlArgs = append(buildctlArgs, "--allow", "security.insecure")
-	}
-
-	podSpecPatch := `{"containers":[{"name":"main","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}`
-
-	return &forge.Container{
-		Name:    fmt.Sprintf("build-image-%s", plan.AppName),
-		Image:   "moby/buildkit:v0.18.2-rootless",
-		Command: []string{"rootlesskit", "sh", "-c", buildkitEntrypointScript(socketPath, b.infraParams.RegistryInsecure), "--"},
-		Args:    append([]string{"buildctl"}, buildctlArgs...),
-		Env:     []forge.EnvBuilder{forge.Env{Name: "HOME", Value: "/home/user"}},
-		VolumeMounts: []forge.VolumeBuilder{
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: "buildkit-registry-config", MountPath: "/home/user/.docker", ReadOnly: true}, SecretName: "buildkit-registry-config"},
-		},
-		Resources: &forge.ResourceRequirements{
-			Requests: forge.ResourceList{CPU: "500m", Memory: "512Mi"},
-			Limits:   forge.ResourceList{CPU: "2000m", Memory: "4Gi"},
-		},
-		SecurityContext: &model.SecurityContext{
-			RunAsUser: ptr(int64(1000)), RunAsGroup: ptr(int64(1000)), RunAsNonRoot: ptr(true),
-		},
-		Annotations: map[string]string{
-			"container.apparmor.security.beta.kubernetes.io/main": "unconfined",
-		},
-		PodSpecPatch:  podSpecPatch,
-		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
-	}
-}
-
-// uploadAssetsTemplate generates a container template that uploads static build
-// output to S3 (DO Spaces). This replaces the BuildKit template for static apps.
-//
-// The step:
-//   1. Finds the build output dir (dist/, build/, out/, .next/standalone/)
-//   2. Generates asset-manifest.json with SHA256 checksums
-//   3. Uploads everything to S3: s3://{bucket}/{tenant}/{project}/{app}/{build-id}/
-//
-// Uses mc (MinIO client) for S3 operations. Credentials come from the existing
-// loopzero-minio-credentials Secret in the build namespace (envFrom in CWT).
-func (b *WorkflowBuilder) uploadAssetsTemplate(spec services.WorkflowSpec, plan services.AppBuildPlan) *forge.Container {
-	appPath := plan.AppPath
-	if appPath == "" || appPath == "." {
-		appPath = "."
-	}
-
-	s3Dest := fmt.Sprintf("%s/%s/%s/%s/",
-		spec.TenantID, spec.ProjectID, plan.AppName, spec.BuildID)
-
-	// Script: find output dir, generate manifest, upload via aws s3 sync
-	script := fmt.Sprintf(`set -e
-cd /workspace/%s
-
-# Find build output directory
-OUTPUT_DIR=""
-for dir in dist build out .next/standalone public; do
-  if [ -d "$dir" ]; then
-    OUTPUT_DIR="$dir"
-    break
-  fi
-done
-
-if [ -z "$OUTPUT_DIR" ]; then
-  echo "ERROR: No build output directory found (checked: dist, build, out, .next/standalone, public)"
-  exit 1
-fi
-
-echo "Upload source: $OUTPUT_DIR"
-
-# Generate asset-manifest.json with SHA256 checksums
-echo '{"files":[' > /tmp/manifest.json
-ls -1 "$OUTPUT_DIR" | head -100 | while read f; do
-  if [ -f "$OUTPUT_DIR/$f" ]; then
-    HASH=$(sha256sum "$OUTPUT_DIR/$f" | cut -d' ' -f1)
-    printf '{"path":"%%s","sha256":"%%s"},' "$f" "$HASH" >> /tmp/manifest.json
-  fi
-done
-# Remove trailing comma and close
-sed -i 's/,$//' /tmp/manifest.json
-echo ']}' >> /tmp/manifest.json
-cp /tmp/manifest.json "$OUTPUT_DIR/asset-manifest.json"
-echo "Asset manifest:"
-cat "$OUTPUT_DIR/asset-manifest.json"
-
-# Upload to S3 via aws cli (MINIO_ENDPOINT used as S3 endpoint)
-echo "Uploading to s3://loopzero-static-assets/%s"
-aws s3 sync "$OUTPUT_DIR/" "s3://loopzero-static-assets/%s" --endpoint-url "$MINIO_ENDPOINT" --acl public-read --no-progress
-echo "Upload complete"
-`, appPath, s3Dest, s3Dest)
-
-	return &forge.Container{
-		Name:    fmt.Sprintf("deliver-artifact-%s", plan.AppName),
-		Image:   "amazon/aws-cli:2.22.35",
-		Command: []string{"sh", "-c", script},
-		Env: []forge.EnvBuilder{
-			forge.Env{Name: "HOME", Value: "/tmp"},
-		},
-		// Credentials from loopzero-minio-credentials Secret:
-		// AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
-		EnvFrom: []model.EnvFromSource{
-			{SecretRef: &model.SecretEnvSource{Name: "loopzero-minio-credentials"}},
-		},
-		VolumeMounts: []forge.VolumeBuilder{
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
-		},
-		Resources: &forge.ResourceRequirements{
-			Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
-			Limits:   forge.ResourceList{CPU: "500m", Memory: "512Mi"},
-		},
-		RetryStrategy: retryStrategy(2, "10s", "2", "120s"),
-	}
-}
-
-// dockerfileDir returns the directory containing the Dockerfile.
-// For "/workspace/Dockerfile.api" → "/workspace".
-func dockerfileDir(dockerfilePath string) string {
-	for i := len(dockerfilePath) - 1; i >= 0; i-- {
-		if dockerfilePath[i] == '/' {
-			return dockerfilePath[:i]
-		}
-	}
-	return "."
-}
-
-// dockerfileName returns the filename portion of the Dockerfile path.
-// For "/workspace/Dockerfile.api" → "Dockerfile.api".
-func dockerfileName(dockerfilePath string) string {
-	for i := len(dockerfilePath) - 1; i >= 0; i-- {
-		if dockerfilePath[i] == '/' {
-			return dockerfilePath[i+1:]
-		}
-	}
-	return dockerfilePath
-}
-
-// ---------------------------------------------------------------------------
-// BuildKit readiness
-// ---------------------------------------------------------------------------
-
-// buildkitEntrypointScript returns a shell script that starts buildkitd in
-// the background, waits for it to be ready, then runs buildctl with the
-// provided arguments.
-//
-// Single container pattern (MEET-2026-03-26-007): buildkitd and buildctl run
-// in the same container, eliminating the sidecar pattern. One container = one
-// exit code. No false failures from sidecar SIGTERM.
-//
-// The script is executed inside rootlesskit's user namespace:
-//
-//	Command: ["rootlesskit", "sh", "-c", buildkitEntrypointScript(...), "--"]
-//	Args:    ["buildctl", "--addr", "unix://...", "build", ...]
-//
-// rootlesskit sets up the user namespace, then runs sh. The "--" becomes $0,
-// "buildctl" becomes $1, and the rest become $2+. "$@" = the full buildctl command.
-//
-// Lifecycle:
-//  1. Start buildkitd in background
-//  2. Wait for socket via `buildctl debug workers` (gRPC health check)
-//  3. Run buildctl "$@" and capture exit code
-//  4. Kill buildkitd on exit (trap ensures cleanup even on failure)
-//  5. Exit with buildctl's exit code
-//
-// This is the standard pattern used by GitHub Actions docker/build-push-action,
-// Drone CI BuildKit plugin, and Tekton BuildKit tasks.
-func buildkitEntrypointScript(socketPath string, insecure bool) string {
-	buildkitdArgs := fmt.Sprintf("--oci-worker-no-process-sandbox --addr '%s'", socketPath)
-	if insecure {
-		buildkitdArgs += " --oci-worker-snapshotter native"
-	}
-	return fmt.Sprintf(`set -e
-
-# Start buildkitd daemon in background (inside rootlesskit user namespace)
-buildkitd %s &
-DAEMON_PID=$!
-
-# Wait for daemon to accept gRPC connections
-timeout=60; i=0
-while ! buildctl --addr '%s' debug workers >/dev/null 2>&1; do
-  i=$((i+1))
-  if [ "$i" -ge "$timeout" ]; then
-    echo "buildkitd not ready after ${timeout}s" >&2
-    kill $DAEMON_PID 2>/dev/null || true
-    exit 1
-  fi
-  sleep 1
-done
-
-# Run the build — "$@" preserves all args from Argo container spec.
-# Capture exit code BEFORE killing daemon, so the container exits
-# with buildctl's code (the real build result), not buildkitd's.
-"$@"
-BUILD_EXIT=$?
-
-# Graceful daemon shutdown — exit code is already captured
-kill $DAEMON_PID 2>/dev/null || true
-wait $DAEMON_PID 2>/dev/null || true
-exit $BUILD_EXIT`, buildkitdArgs, socketPath)
-}
-
-// ---------------------------------------------------------------------------
-// DAG task helpers
-// ---------------------------------------------------------------------------
-
-// cwtTask creates a DAG task that references a ClusterWorkflowTemplate.
-func cwtTask(taskName, cwtName, templateName string, deps []string, params map[string]string) *forge.Task {
-	return &forge.Task{
-		Name: taskName,
-		TemplateRef: &forge.TemplateRef{
-			Name:         cwtName,
-			Template:     templateName,
-			ClusterScope: true,
-		},
-		Dependencies: deps,
-		Arguments:    paramsToForge(params),
-	}
-}
-
-// inlineTask creates a DAG task that references an inline template by name.
-func inlineTask(taskName, templateName string, deps []string) *forge.Task {
-	return &forge.Task{
-		Name:         taskName,
-		Template:     templateName,
-		Dependencies: deps,
-	}
-}
-
-// paramsToForge converts a string map to forge Parameters for task arguments.
-func paramsToForge(params map[string]string) []forge.Parameter {
-	if len(params) == 0 {
-		return nil
-	}
-	result := make([]forge.Parameter, 0, len(params))
-	for k, v := range params {
-		val := v
-		result = append(result, forge.Parameter{Name: k, Value: &val})
-	}
-	return result
-}
-
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
-
-// withSuffix appends a language suffix to a container template name.
-// For single-language projects (suffix=""), the name is unchanged.
-// For mixed-language (suffix="-node"), name becomes e.g. "install-deps-node".
-func withSuffix(c *forge.Container, suffix string) *forge.Container {
-	if suffix != "" {
-		c.Name = c.Name + suffix
-	}
-	return c
-}
-
-// ParseBuildKitDigest extracts the container image digest from BuildKit's --metadata-file output.
-// BuildKit writes JSON like: {"containerimage.digest":"sha256:abc123..."}.
-// The digest MUST start with "sha256:" — any other format is treated as a build error.
-// Parsing failure must fail the build (deterministic digest extraction is critical for GitOps).
-func ParseBuildKitDigest(data []byte) (string, error) {
-	var metadata map[string]interface{}
-	if err := json.Unmarshal(data, &metadata); err != nil {
-		return "", fmt.Errorf("parse buildkit metadata: invalid JSON: %w", err)
-	}
-	digestVal, ok := metadata["containerimage.digest"]
-	if !ok {
-		return "", fmt.Errorf("parse buildkit metadata: missing field 'containerimage.digest'")
-	}
-	digest, ok := digestVal.(string)
-	if !ok || digest == "" {
-		return "", fmt.Errorf("parse buildkit metadata: 'containerimage.digest' is empty or not a string")
-	}
-	if !strings.HasPrefix(digest, "sha256:") {
-		return "", fmt.Errorf("parse buildkit metadata: digest %q does not start with 'sha256:'", digest)
-	}
-	return digest, nil
-}
-
-// appsJSON serializes apps to JSON for passing as a workflow parameter.
-// Uses json.Marshal for correct escaping of special characters (LEVE-1 fix).
-func appsJSON(apps []services.AppSpec) string {
-	if len(apps) == 0 {
-		return "[]"
-	}
-	data, err := json.Marshal(apps)
-	if err != nil {
-		// Fallback to empty array — should never happen with AppSpec types
-		return "[]"
-	}
-	return string(data)
-}

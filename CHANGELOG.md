@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Extract image version constants (`imageNode`, `imageGolang`, `imagePython`, `imageAlpine`, `imageBuildKit`) — single source of truth for build images (#FORGE-REVIEW)
+- Replace manual `dockerfileDir`/`dockerfileName` with `filepath.Dir`/`filepath.Base` from stdlib (#FORGE-REVIEW)
+- Eliminate 90% code duplication between `buildkitTemplateForApp` and `buildkitTemplateFromPlan` via shared `buildkitContainer` function (#FORGE-REVIEW)
+- Sort map iteration in `paramsToForge` and BuildKit `buildArgs` for deterministic workflow YAML (#FORGE-REVIEW)
+- Add `slog.Warn` when `ResolveStrategy` falls back to custom strategy for unrecognized frameworks (#FORGE-REVIEW)
+
 ### Added
 - Cloudflare Worker for static frontend delivery — serves assets from DO Spaces via CF edge, zero pods for static apps (#SPRINT-10)
 - `cfkv` package — Cloudflare Workers KV client for routing table writes (#SPRINT-10)

@@ -283,7 +283,7 @@ func TestWorkflowBuilder_Build_BuildImageTask_IsInlineTemplate(t *testing.T) {
 	if c == nil {
 		t.Fatal("build-image-api inline container template not found")
 	}
-	if c.Image != "moby/buildkit:v0.18.2-rootless" {
+	if c.Image != imageBuildKit {
 		t.Errorf("build-image image = %q, want moby/buildkit:v0.18.2-rootless", c.Image)
 	}
 }
@@ -738,7 +738,7 @@ func TestWorkflowBuilder_BuildKit_SingleContainerNoSidecars(t *testing.T) {
 	}
 
 	// Single container: rootless image, no sidecars (MEET-2026-03-26-007)
-	if c.Image != "moby/buildkit:v0.18.2-rootless" {
+	if c.Image != imageBuildKit {
 		t.Errorf("image = %q, want moby/buildkit:v0.18.2-rootless", c.Image)
 	}
 	if len(c.Sidecars) != 0 {
@@ -945,10 +945,10 @@ func TestWorkflowBuilder_BuildKit_MultiApp_IndependentContainers(t *testing.T) {
 	if len(workerContainer.Sidecars) != 0 {
 		t.Errorf("worker should have 0 sidecars, got %d", len(workerContainer.Sidecars))
 	}
-	if apiContainer.Image != "moby/buildkit:v0.18.2-rootless" {
+	if apiContainer.Image != imageBuildKit {
 		t.Errorf("api image = %q, want rootless", apiContainer.Image)
 	}
-	if workerContainer.Image != "moby/buildkit:v0.18.2-rootless" {
+	if workerContainer.Image != imageBuildKit {
 		t.Errorf("worker image = %q, want rootless", workerContainer.Image)
 	}
 }
