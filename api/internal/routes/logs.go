@@ -106,7 +106,14 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// Query logs from Loki
 	entries, err := h.querier.QueryBuildLogs(r.Context(), buildID, opts)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		// Loki unavailable — return empty entries with warning instead of 500.
+		// The build may have completed but logs are not yet available.
+		writeJSON(w, http.StatusOK, logsResponse{
+			BuildID:    build.ID,
+			Status:     build.Status,
+			Entries:    []LogEntry{},
+			TotalLines: 0,
+		})
 		return
 	}
 

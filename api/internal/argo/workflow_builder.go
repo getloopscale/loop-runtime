@@ -216,11 +216,12 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 
 	// Step 1: clone (shared across all languages — one source bundle)
 	tasks := []*forge.Task{
-		// The CWT downloads source from: {tenant-id}/source/{build-id}.bundle
-		// We pass CommitSHA as "build-id" because the source upload stores by commit SHA.
+		// The CWT downloads source from MinIO (production) or clones from Gitea (local dev).
+		// We pass both build-id (commit SHA for MinIO path) and project-id (for Gitea repo name).
 		cwtTask("clone-repo", "loopzero-clone", "clone-repo", nil, map[string]string{
-			"tenant-id": spec.TenantID,
-			"build-id":  spec.CommitSHA,
+			"tenant-id":  spec.TenantID,
+			"project-id": spec.ProjectID,
+			"build-id":   spec.CommitSHA,
 		}),
 	}
 

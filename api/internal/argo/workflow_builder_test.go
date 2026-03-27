@@ -235,18 +235,13 @@ func TestWorkflowBuilder_Build_CloneTask_UsesCWTRef(t *testing.T) {
 		t.Error("templateRef.ClusterScope should be true")
 	}
 
-	// BLOCKER-1 fix: Clone now uses MinIO (source bundle), not Gitea.
-	// Parameters: tenant-id + build-id (for MinIO path).
-	// MinIO credentials come from K8s Secret (envFrom), not workflow params.
+	// Clone passes tenant-id + project-id (for Gitea repo name) + build-id (for MinIO path).
+	// Credentials come from K8s Secret (envFrom), not workflow params.
 	paramNames := taskParamNames(task)
-	for _, expected := range []string{"tenant-id", "build-id"} {
+	for _, expected := range []string{"tenant-id", "project-id", "build-id"} {
 		if !paramNames[expected] {
 			t.Errorf("clone-repo missing parameter: %s", expected)
 		}
-	}
-	// project-id is no longer needed (MinIO path uses build-id)
-	if paramNames["project-id"] {
-		t.Error("clone-repo should NOT have parameter: project-id (BLOCKER-1: use build-id for MinIO path)")
 	}
 	// Credential parameters must NOT be in workflow params (security: visible in Workflow CR)
 	for _, forbidden := range []string{"gitea-url", "gitea-token", "minio-endpoint", "minio-access-key"} {

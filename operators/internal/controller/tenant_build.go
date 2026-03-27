@@ -41,6 +41,7 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		{"storage-credentials", func() error { return r.ensureBuildStorageCredentials(ctx, buildNs, tenant.Name) }},
 		{"registry-credentials", func() error { return r.ensureBuildRegistryCredentials(ctx, buildNs, tenant.Name) }},
 		{"executor-rbac", func() error { return r.ensureBuildExecutorRBAC(ctx, buildNs) }},
+		{"submitter-rbac", func() error { return r.ensureBuildSubmitterRBAC(ctx, buildNs) }},
 		{"minio-per-tenant", func() error { return r.ensureBuildMinIOPerTenant(ctx, buildNs, tenant.Name) }},
 	}
 
@@ -212,6 +213,55 @@ func (r *TenantReconciler) ensureBuildExecutorRBAC(ctx context.Context, buildNs 
 				Kind:      "ServiceAccount",
 				Name:      k.SABuildWorkflow,
 				Namespace: buildNs,
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("rolebinding: %w", err)
+	}
+	return nil
+}
+
+// ensureBuildSubmitterRBAC creates Role and RoleBinding allowing the workflow-submitter SA
+// (which lives in the "argo" namespace) to create/manage workflows in this tenant's build namespace.
+// Without this, the API cannot submit build workflows to build-{tenant}.
+func (r *TenantReconciler) ensureBuildSubmitterRBAC(ctx context.Context, buildNs string) error {
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{Name: k.RoleWorkflowSubmitter, Namespace: buildNs},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, role, func() error {
+		role.Rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"argoproj.io"},
+				Resources: []string{"workflows"},
+				Verbs:     []string{"create", "get", "list", "watch", "patch", "delete"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods", "pods/log"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("role: %w", err)
+	}
+
+	binding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: k.RoleBindingWorkflowSubmitter, Namespace: buildNs},
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, binding, func() error {
+		binding.RoleRef = rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "Role",
+			Name:     k.RoleWorkflowSubmitter,
+		}
+		binding.Subjects = []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      k.SAWorkflowSubmitter,
+				Namespace: k.NSArgoWorkflows,
 			},
 		}
 		return nil

@@ -337,7 +337,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		Apps:          req.Apps,
 		Plan:          &plan,
 		CorrelationID: req.CorrelationID,
-		Namespace:     "build-" + req.TenantID,
+		Namespace:     "argo",
 	}
 	workflowID, submitErr := o.workflow.Submit(ctx, wfSpec)
 	if submitErr != nil {
@@ -504,7 +504,7 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 
 		// Step 6: cancel the workflow (best-effort — workflow may already be done)
 		if build.WorkflowID != "" {
-			if cancelErr := o.workflow.Cancel(ctx, "build-"+build.TenantID, build.WorkflowID); cancelErr != nil {
+			if cancelErr := o.workflow.Cancel(ctx, "argo", build.WorkflowID); cancelErr != nil {
 				slog.Warn("workflow cancel failed (best-effort)", "workflow_id", build.WorkflowID, "error", cancelErr)
 			}
 		}

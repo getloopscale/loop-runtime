@@ -57,8 +57,15 @@ const (
 
 	RoleArgoExecutor        = "argo-workflow-executor"
 	RoleBindingArgoExecutor = "argo-workflow-executor"
-	RoleDeployer            = "loopzero-deployer"
-	RoleBindingDeployer     = "loopzero-deployer"
+	// RoleWorkflowSubmitter allows the workflow-submitter SA (in argo ns) to create/manage
+	// workflows in tenant build namespaces.
+	RoleWorkflowSubmitter        = "loopzero-workflow-submitter"
+	RoleBindingWorkflowSubmitter = "loopzero-workflow-submitter"
+	// SAWorkflowSubmitter is the ServiceAccount name used by the API to submit workflows.
+	SAWorkflowSubmitter   = "loopzero-workflow-submitter"
+	NSArgoWorkflows       = "argo"
+	RoleDeployer          = "loopzero-deployer"
+	RoleBindingDeployer   = "loopzero-deployer"
 )
 
 // --- NetworkPolicy Names ---

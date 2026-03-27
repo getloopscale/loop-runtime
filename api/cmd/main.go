@@ -129,6 +129,7 @@ func main() {
 	var logsHandler *routes.LogsHandler
 	var rollbackHandler *routes.RollbackHandler
 	var statusHandler *routes.StatusHandler
+	var projectDeleter routes.ProjectDeleter
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -293,6 +294,15 @@ func main() {
 		statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: releaseStore}
 		statusHandler = routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain)
 
+		// Project deleter — orchestrates project removal across DB, GitOps, and builds
+		projectDeleter = services.NewProjectDeleter(services.ProjectDeleterDeps{
+			BuildStore:     buildStore,
+			EnvTargetStore: envTargetStore,
+			ProjectStore:   &db.PostgresProjectStore{DB: dbAdapter},
+			Locker:         locker,
+			GitOps:         gitopsPusher,
+		})
+
 		// C-01/C-03 fix: BuildReconcileLoop replaces both the HTTP callback
 		// and the StartupReconciler. The control plane POLLS the build cluster's
 		// Workflow CRDs instead of the build cluster calling the API.
@@ -389,6 +399,7 @@ func main() {
 		MemberStore:      memberStore,
 		ProjectStore:     projectStore,
 		TenantCRMgr:      tenantCRMgr,
+		ProjectDeleter:   projectDeleter,
 		IdempotencyStore: func() middleware.IdempotencyStore {
 			if dbAdapter != nil {
 				return &db.PostgresIdempotencyStore{DB: dbAdapter}

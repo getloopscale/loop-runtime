@@ -167,7 +167,7 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 		// legitimately slow, not stuck. Only reap when the workflow is gone,
 		// failed, or we can't determine its state.
 		if build.WorkflowID != "" && r.workflow != nil {
-			wfStatus, wfErr := r.workflow.GetStatus(ctx, "build-"+build.TenantID, build.WorkflowID)
+			wfStatus, wfErr := r.workflow.GetStatus(ctx, "argo", build.WorkflowID)
 			if wfErr != nil {
 				r.logger.Warn("build reaper: cannot verify workflow state, proceeding with reap",
 					"build_id", s.ID, "workflow_id", build.WorkflowID, "error", wfErr)

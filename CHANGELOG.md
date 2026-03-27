@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Wire `StatusHandler` into API server — `GET /api/v1/projects/{name}/status` now available (#DOGFOOD-F05)
+- `StatusBuildStoreAdapter` and `StatusReleaseStoreAdapter` in adapters to bridge DB stores to status handler (#DOGFOOD-F05)
+- Build cluster secrets patching in `update-cross-cluster-ips.sh` — `loopzero-gitea-credentials` and `loopzero-minio-credentials` now auto-updated (#DOGFOOD-F01)
+- Wire `ProjectDeleter` into API server — `DELETE /api/v1/projects/{name}` now functional with full orchestration (#DOGFOOD-F03)
+
+### Fixed
+- Build logs endpoint returns 200 with empty entries when Loki is unavailable instead of 500 (#DOGFOOD-F04)
+- CLI deploy build failure now includes `build_id` and `suggestion` in JSON error response (#DOGFOOD-F02)
+- CLI deploy `--no-wait` human mode now shows `Track with: loopzero logs --build <id>` (#DOGFOOD-F10)
+- CLI deploy avoids "Build failed: Build failed" message duplication when API error already contains prefix (#DOGFOOD-F02)
+- CLI init `exitWithError` now includes typed `code` field in JSON responses: `AUTH_REQUIRED`, `NOT_GIT_REPO`, `CI_REQUIRES_YES`, `FILE_EXISTS` (#DOGFOOD-F09)
+
 ### Changed
 - ArgoCD `RealProvisioner.EnsureAppProject` and `EnsureApplication` now distinguish NotFound from transient errors (#OPERATORS-REVIEW)
 - `TenantReconciler.runSteps` re-fetches resource before status update to avoid stale resourceVersion conflicts (#OPERATORS-REVIEW)

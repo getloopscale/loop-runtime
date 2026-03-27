@@ -9,6 +9,7 @@
 #   - infra/tilt/api-deployment.yaml       (GITEA/API cross-cluster URLs, workload ingress)
 #   - infra/tilt/operator-deployment.yaml   (WORKLOAD_CLUSTER_URL for ArgoCD Applications)
 #   - ArgoCD cluster-workload secret        (workload cluster API server endpoint)
+#   - Build cluster secrets                 (loopzero-gitea-credentials, loopzero-minio-credentials)
 #   - infra/helm/monitoring/values.yaml     (scrape targets)
 #
 # Run after: task setup OR task clusters:create
@@ -194,6 +195,43 @@ if [ -f "$MONITORING_VALUES" ]; then
   else
     echo "  Traefik target: already correct ($NEW_TRAEFIK)"
   fi
+fi
+
+# ---------------------------------------------------------------------------
+# Build cluster secrets — Gitea and MinIO credentials used by Argo Workflows
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Patching build cluster secrets ==="
+
+BUILD_KUBECONFIG=$(k3d kubeconfig write loopzero-build 2>/dev/null)
+if [ -n "$BUILD_KUBECONFIG" ]; then
+  # loopzero-gitea-credentials — GITEA_URL used by loopzero-clone CWT
+  CURRENT_GITEA_URL=$(kubectl --kubeconfig="$BUILD_KUBECONFIG" get secret loopzero-gitea-credentials -n argo \
+    -o jsonpath='{.data.GITEA_URL}' 2>/dev/null | base64 -d 2>/dev/null)
+  NEW_GITEA_URL="http://${MGMT_ON_BUILD}:30000"
+  if [ -n "$CURRENT_GITEA_URL" ] && [ "$CURRENT_GITEA_URL" != "$NEW_GITEA_URL" ]; then
+    ENCODED=$(echo -n "$NEW_GITEA_URL" | base64 -w0)
+    kubectl --kubeconfig="$BUILD_KUBECONFIG" patch secret loopzero-gitea-credentials -n argo \
+      -p "{\"data\":{\"GITEA_URL\":\"${ENCODED}\"}}" 2>&1
+    echo "  loopzero-gitea-credentials GITEA_URL: $CURRENT_GITEA_URL → $NEW_GITEA_URL"
+  else
+    echo "  loopzero-gitea-credentials GITEA_URL: already correct ($NEW_GITEA_URL)"
+  fi
+
+  # loopzero-minio-credentials — MINIO_ENDPOINT used by cache CWTs
+  CURRENT_MINIO=$(kubectl --kubeconfig="$BUILD_KUBECONFIG" get secret loopzero-minio-credentials -n argo \
+    -o jsonpath='{.data.MINIO_ENDPOINT}' 2>/dev/null | base64 -d 2>/dev/null)
+  NEW_MINIO="http://${MGMT_ON_BUILD}:32000"
+  if [ -n "$CURRENT_MINIO" ] && [ "$CURRENT_MINIO" != "$NEW_MINIO" ]; then
+    ENCODED=$(echo -n "$NEW_MINIO" | base64 -w0)
+    kubectl --kubeconfig="$BUILD_KUBECONFIG" patch secret loopzero-minio-credentials -n argo \
+      -p "{\"data\":{\"MINIO_ENDPOINT\":\"${ENCODED}\"}}" 2>&1
+    echo "  loopzero-minio-credentials MINIO_ENDPOINT: $CURRENT_MINIO → $NEW_MINIO"
+  else
+    echo "  loopzero-minio-credentials MINIO_ENDPOINT: already correct ($NEW_MINIO)"
+  fi
+else
+  echo "WARNING: Cannot get kubeconfig for loopzero-build — skipping build cluster secret patch"
 fi
 
 echo ""

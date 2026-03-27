@@ -92,7 +92,7 @@ func (r *StartupReconciler) reconcileBuild(ctx context.Context, build *db.Build)
 	}
 
 	// Check external workflow state
-	status, err := r.workflow.GetStatus(ctx, "build-"+build.TenantID, build.WorkflowID)
+	status, err := r.workflow.GetStatus(ctx, "argo", build.WorkflowID)
 	if err != nil {
 		r.logger.Error("startup reconciler: failed to check workflow status",
 			"build_id", build.ID, "workflow_id", build.WorkflowID, "error", err)
