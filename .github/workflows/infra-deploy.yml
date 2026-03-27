@@ -294,7 +294,9 @@ jobs:
           # Delete ALL loopzero Spaces buckets (any region)
           for REGION in nyc3 sfo3 ams3 fra1 sgp1 lon1 sfo2 syd1; do
             for BUCKET in $(AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" aws s3 ls --endpoint-url "https://${REGION}.digitaloceanspaces.com" --region us-east-1 2>/dev/null | awk '{print $3}' | grep -E "^loopzero-" | grep -v pulumi-state); do
-              AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" aws s3 rb "s3://${BUCKET}" --endpoint-url "https://${REGION}.digitaloceanspaces.com" --force --region us-east-1 2>/dev/null || true
+              # Empty bucket first (rb --force can fail on non-empty DO Spaces)
+              AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" aws s3 rm "s3://${BUCKET}" --recursive --endpoint-url "https://${REGION}.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
+              AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" aws s3 rb "s3://${BUCKET}" --endpoint-url "https://${REGION}.digitaloceanspaces.com" --region us-east-1 2>/dev/null || true
               echo "  Bucket ${BUCKET} deleted from ${REGION}"
             done
           done
@@ -346,8 +348,21 @@ jobs:
               for REC_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=CNAME" | python3 -c "import sys,json; [print(r['id']) for r in json.load(sys.stdin).get('result',[]) if '.dev.' in r.get('name','')]" 2>/dev/null); do
                 curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$REC_ID" 2>/dev/null
               done
-              # Delete tunnels with "loopzero" prefix
+              # Delete tunnels — must stop cloudflared first (active connections block deletion)
+              # First: scale down cloudflared deployment on runtime cluster to close connections
+              RUNTIME_KUBECONFIG=$(pulumi stack output runtimeKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
+              if [ -n "$RUNTIME_KUBECONFIG" ]; then
+                echo "$RUNTIME_KUBECONFIG" > /tmp/runtime-kc.yaml
+                kubectl --kubeconfig=/tmp/runtime-kc.yaml -n platform-system scale deployment cloudflared --replicas=0 2>/dev/null || true
+                echo "  Scaled cloudflared to 0 — waiting 30s for connections to close..."
+                sleep 30
+                rm -f /tmp/runtime-kc.yaml
+              fi
+              # Now delete tunnels (connections should be closed)
               for TUN_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel?name=loopzero" | python3 -c "import sys,json; [print(t['id']) for t in json.load(sys.stdin).get('result',[])]" 2>/dev/null); do
+                # Clean connections first
+                curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUN_ID/connections" 2>/dev/null
+                sleep 5
                 curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUN_ID" 2>/dev/null
               done
               echo "  Cloudflare resources deleted"
