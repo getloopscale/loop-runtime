@@ -34,23 +34,27 @@ import (
 
 // AppManifestInput contains everything needed to generate manifests for a single app.
 type AppManifestInput struct {
-	Name     string            // e.g., "api", "worker", "dashboard"
-	Type     string            // "server", "worker", "frontend"
-	Port     int               // Container port (server/frontend only)
-	ImageRef string            // Full image reference, e.g., "registry:5000/tenant/project/api:abc123"
-	Secrets  []string          // Secret names from loopzero.yaml (injected via envFrom)
-	Env      map[string]string // Environment variables
+	Name      string            // e.g., "api", "worker", "dashboard"
+	Type      string            // "server", "worker", "frontend"
+	Rendering string            // "static" or "server" (MEET-009). Static → S3 proxy, no pod.
+	Port      int               // Container port (server/frontend only)
+	ImageRef  string            // Full image reference (container apps only)
+	S3Prefix  string            // S3 path prefix for static assets (static apps only)
+	Secrets   []string          // Secret names from loopzero.yaml (injected via envFrom)
+	Env       map[string]string // Environment variables
 }
 
 // RenderInput contains everything needed to generate manifests for a full deployment.
 type RenderInput struct {
-	TenantID    string
-	ProjectID   string
-	Environment string
-	BuildID     string
-	ReleaseID   string
-	BaseDomain  string
-	Apps        []AppManifestInput
+	TenantID       string
+	ProjectID      string
+	Environment    string
+	BuildID        string
+	ReleaseID      string
+	BaseDomain     string
+	S3Endpoint     string // DO Spaces endpoint for static proxy (e.g., "sfo3.digitaloceanspaces.com")
+	S3BucketName   string // Static assets bucket (e.g., "loopzero-static-assets")
+	Apps           []AppManifestInput
 }
 
 // Render generates Kubernetes manifests (Deployment, Service, IngressRoute) for all apps.
@@ -59,6 +63,11 @@ func Render(input RenderInput) string {
 	var docs []string
 
 	for _, app := range input.Apps {
+		// Static frontends get S3 proxy instead of Deployment+Service (MEET-009)
+		if app.Type == "frontend" && app.Rendering == "static" {
+			docs = append(docs, renderStaticFrontendApp(input, app)...)
+			continue
+		}
 		switch app.Type {
 		case "server":
 			docs = append(docs, renderServerApp(input, app)...)
@@ -67,7 +76,6 @@ func Render(input RenderInput) string {
 		case "frontend":
 			docs = append(docs, renderFrontendApp(input, app)...)
 		default:
-			// Default to server behavior
 			docs = append(docs, renderServerApp(input, app)...)
 		}
 	}
@@ -204,14 +212,17 @@ type traefikIngressRouteSpec struct {
 }
 
 type traefikRoute struct {
-	Match    string                `json:"match"`
-	Kind     string                `json:"kind"`
-	Services []traefikRouteService `json:"services"`
+	Match       string                   `json:"match"`
+	Kind        string                   `json:"kind"`
+	Middlewares []traefikRouteMiddleware  `json:"middlewares,omitempty"`
+	Services    []traefikRouteService    `json:"services"`
 }
 
 type traefikRouteService struct {
-	Name string `json:"name"`
-	Port int    `json:"port"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"` // cross-namespace reference
+	Port      int    `json:"port"`
+	Scheme    string `json:"scheme,omitempty"`
 }
 
 // traefikTLS configures TLS on IngressRoute.
@@ -285,6 +296,145 @@ func renderFrontendApp(ri RenderInput, app AppManifestInput) []string {
 	}
 	docs = append(docs, ingressResources...)
 	return docs
+}
+
+// renderStaticFrontendApp generates IngressRoute + Middleware + Certificate for a
+// static frontend served from S3 via nginx-s3-gateway proxy.
+// NO Deployment, NO Service (uses shared static-assets Service in platform-system).
+//
+// Architecture (MEET-2026-03-26-011):
+//   Browser → Traefik IngressRoute → Middleware (addPrefix) → static-assets Service → nginx → DO Spaces
+//
+// Same hostname as container apps — zero URL divergence.
+// The Middleware adds the S3 path prefix so nginx proxies to the correct build's assets.
+// SPA routing handled by nginx config (404 → index.html fallback).
+func renderStaticFrontendApp(ri RenderInput, app AppManifestInput) []string {
+	ns := namespace(ri.TenantID, ri.Environment)
+	labels := commonLabels(ri, app)
+	// Same hostname format as container apps — NO static. prefix (DX VETO from MEET-011)
+	hostname := appHostname(ri.TenantID, ri.ProjectID, app.Name, ri.Environment, ri.BaseDomain)
+	tlsSecretName := fmt.Sprintf("tls-%s", app.Name)
+
+	// S3 path prefix: /{tenant}/{project}/{app}/{build-id}
+	s3PathPrefix := app.S3Prefix
+	if s3PathPrefix == "" {
+		versionID := ri.BuildID
+		if versionID == "" {
+			versionID = ri.ReleaseID
+		}
+		s3PathPrefix = fmt.Sprintf("/%s/%s/%s/%s", ri.TenantID, ri.ProjectID, app.Name, versionID)
+	}
+
+	// Certificate (same as container apps)
+	cert := certManagerCertificate{
+		APIVersion: "cert-manager.io/v1",
+		Kind:       "Certificate",
+		Metadata: k8sMetadata{
+			Name:      tlsSecretName,
+			Namespace: ns,
+			Labels:    labels,
+		},
+		Spec: certManagerCertificateSpec{
+			SecretName: tlsSecretName,
+			IssuerRef: certIssuerRef{
+				Name: "letsencrypt-prod",
+				Kind: "ClusterIssuer",
+			},
+			DNSNames: []string{hostname},
+		},
+	}
+
+	// Middleware: addPrefix to route to the correct S3 path for this build
+	// Request: /styles.css → /{tenant}/{project}/{app}/{build-id}/styles.css
+	rewriteMiddleware := traefikMiddleware{
+		APIVersion: "traefik.io/v1alpha1",
+		Kind:       "Middleware",
+		Metadata: k8sMetadata{
+			Name:      fmt.Sprintf("static-prefix-%s", app.Name),
+			Namespace: ns,
+			Labels:    labels,
+		},
+		Spec: traefikMiddlewareSpec{
+			AddPrefix: &traefikAddPrefix{
+				Prefix: s3PathPrefix,
+			},
+		},
+	}
+
+	// IngressRoute: routes to shared nginx-s3-gateway in platform-system namespace.
+	// Cross-namespace reference requires allowCrossNamespace: true in Traefik (already enabled).
+	ingress := traefikIngressRoute{
+		APIVersion: "traefik.io/v1alpha1",
+		Kind:       "IngressRoute",
+		Metadata: k8sMetadata{
+			Name:      app.Name,
+			Namespace: ns,
+			Labels:    labels,
+			Annotations: map[string]string{
+				"loopzero.io/delivery":  "static",
+				"loopzero.io/s3-prefix": s3PathPrefix,
+				"loopzero.io/build-id":  ri.BuildID,
+			},
+		},
+		Spec: traefikIngressRouteSpec{
+			EntryPoints: []string{"web", "websecure"},
+			Routes: []traefikRoute{
+				{
+					Match: fmt.Sprintf("Host(`%s`)", hostname),
+					Kind:  "Rule",
+					Middlewares: []traefikRouteMiddleware{
+						{
+							Name:      fmt.Sprintf("static-prefix-%s", app.Name),
+							Namespace: ns,
+						},
+					},
+					Services: []traefikRouteService{
+						{
+							Name:      "static-assets",
+							Namespace: "platform-system",
+							Port:      80,
+						},
+					},
+				},
+			},
+			TLS: &traefikTLS{SecretName: tlsSecretName},
+		},
+	}
+
+	return []string{
+		marshalResource(cert),
+		marshalResource(rewriteMiddleware),
+		marshalResource(ingress),
+	}
+}
+
+// --- Traefik Middleware types (for static frontend) ---
+
+type traefikMiddleware struct {
+	APIVersion string                 `json:"apiVersion"`
+	Kind       string                 `json:"kind"`
+	Metadata   k8sMetadata            `json:"metadata"`
+	Spec       traefikMiddlewareSpec   `json:"spec"`
+}
+
+type traefikMiddlewareSpec struct {
+	AddPrefix     *traefikAddPrefix     `json:"addPrefix,omitempty"`
+	RedirectRegex *traefikRedirectRegex `json:"redirectRegex,omitempty"`
+}
+
+type traefikRedirectRegex struct {
+	Regex       string `json:"regex"`
+	Replacement string `json:"replacement"`
+	Permanent   bool   `json:"permanent"`
+}
+
+type traefikAddPrefix struct {
+	Prefix string `json:"prefix"`
+}
+
+type traefikRouteMiddleware struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"` // cross-namespace reference
 }
 
 // --- Struct builders ---
@@ -395,8 +545,7 @@ func buildService(ri RenderInput, app AppManifestInput, port int) k8sService {
 func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []string {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
-	hostname := fmt.Sprintf("%s-%s.%s.%s.%s",
-		app.Name, ri.Environment, ri.ProjectID, ri.TenantID, ri.BaseDomain)
+	hostname := appHostname(ri.TenantID, ri.ProjectID, app.Name, ri.Environment, ri.BaseDomain)
 	tlsSecretName := fmt.Sprintf("tls-%s", app.Name)
 
 	cert := certManagerCertificate{
@@ -426,7 +575,7 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 			Labels:    labels,
 		},
 		Spec: traefikIngressRouteSpec{
-			EntryPoints: []string{"websecure"},
+			EntryPoints: []string{"web", "websecure"},
 			Routes: []traefikRoute{
 				{
 					Match:    fmt.Sprintf("Host(`%s`)", hostname),
@@ -442,6 +591,24 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 }
 
 // --- Helpers ---
+
+// appHostname returns the flat hostname for an app.
+// Format: {tenant}-{project}-{app}-{env}.{baseDomain}
+// This produces a single-level subdomain under baseDomain, which is compatible
+// with wildcard TLS certificates (*.dev.loopzero.example covers all apps).
+//
+// Previous format ({app}-{env}.{project}.{tenant}.{baseDomain}) created multi-level
+// subdomains that no CA can issue wildcard certificates for.
+func appHostname(tenantID, projectID, appName, environment, baseDomain string) string {
+	subdomain := fmt.Sprintf("%s-%s-%s-%s", tenantID, projectID, appName, environment)
+	// Sanitize: lowercase, max 63 chars, RFC 1123
+	if len(subdomain) > 63 {
+		subdomain = subdomain[:63]
+	}
+	// Remove trailing hyphens
+	subdomain = strings.TrimRight(subdomain, "-")
+	return fmt.Sprintf("%s.%s", subdomain, baseDomain)
+}
 
 // commonLabels returns the standard labels for all resources.
 func commonLabels(ri RenderInput, app AppManifestInput) map[string]string {

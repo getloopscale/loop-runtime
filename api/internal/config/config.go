@@ -110,6 +110,11 @@ type Config struct {
 
 	// Loki (build log aggregation)
 	LokiURL string
+
+	// Cloudflare (static frontend delivery via CF Worker + KV)
+	CFAPIToken      string // Cloudflare API token
+	CFAccountID     string // Cloudflare account ID
+	CFKVNamespaceID string // KV namespace ID for routing table
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -212,6 +217,11 @@ func Load() Config {
 
 		// Loki (build log aggregation)
 		LokiURL: envOr("LOKI_URL", "http://loki.monitoring:3100"),
+
+		// Cloudflare (static frontend delivery)
+		CFAPIToken:      os.Getenv("CF_API_TOKEN"),
+		CFAccountID:     os.Getenv("CF_ACCOUNT_ID"),
+		CFKVNamespaceID: os.Getenv("CF_KV_NAMESPACE_ID"),
 	}
 }
 

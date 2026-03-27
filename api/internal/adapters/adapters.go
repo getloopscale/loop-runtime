@@ -128,6 +128,9 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 			Port:      appPort,
 			Path:      app.Path,
 			Framework: app.Framework,
+			Build:     app.Build,
+			Rendering: app.Rendering,
+			Secrets:   app.Secrets,
 		})
 	}
 

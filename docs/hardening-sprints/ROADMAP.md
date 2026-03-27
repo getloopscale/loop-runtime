@@ -3,7 +3,7 @@
 **Objetivo:** Levar o LoopZero de "feature-complete" para "sobrevive à produção real".
 **Base:** execution-plan-v2-2026-03-24.md + ROADMAP.md + project-scan
 **Data início:** 2026-03-24
-**Última atualização:** 2026-03-25
+**Última atualização:** 2026-03-27
 
 ---
 
@@ -30,6 +30,8 @@ Sprint 5: Pipeline       → Fix build failure + cache + queue depth            
     ↓ GATE: 3 deploys estáveis, builds sem SIGTERM
 Sprint 6: Operação       → status → logs (Loki) → rollback → secrets (ESO)          ⚠️ 3/4 DONE
     ↓ GATE: 3 deploys estáveis após cada feature
+Sprint 7: Segurança      → SecurityContext + PSA + NetworkPolicy enforce             🔲 TODO
+    ↓ GATE: 3 deploys estáveis, pods non-root, PSA restricted
 ```
 
 ---
@@ -44,6 +46,40 @@ Sprint 6: Operação       → status → logs (Loki) → rollback → secrets (
 | [04-observabilidade](./04-observabilidade/ROADMAP.md) | Métricas + SLOs + Dashboards Grafana. | ✅ Complete | 8 métricas + 5 SLOs + 6 dashboards |
 | [05-pipeline](./05-pipeline/ROADMAP.md) | Fix SIGTERM + cache + queue depth. | ✅ Complete | Builds sem SIGTERM + cache funcional |
 | [06-operacao](./06-operacao/ROADMAP.md) | 4 comandos operacionais: status, logs, rollback, secrets. | ⚠️ 3/4 | Logs ✅ Rollback ✅ Secrets ✅ Status ⚠️ (falta wiring) |
+| [07-workload-security](./07-workload-security/ROADMAP.md) | Hardening de segurança do cluster workload. | 🔲 TODO | 7 tasks: SecurityContext, PSA, NetworkPolicy, SA, PG egress, MinIO, digest |
+
+**Feature sprints** (parallel track, product features):
+
+| Sprint | Objetivo | Status | Done |
+|---|---|---|---|
+| [10-static-frontend-delivery](../sprints/10-static-frontend-delivery/sprint.md) | Frontends estáticos via CF Worker + DO Spaces (zero pods). Cloudflare Tunnel para DDoS/WAF. | ✅ Complete | Monorepo (API+Web+Worker) no DO. Frontend via CF edge. BuildKit single-container. RELEASING state. CF KV routing. |
+
+---
+
+## Sprint 10 — Status Detalhado (2026-03-27)
+
+| Componente | Status | Validado no DO | Evidência |
+|---|---|---|---|
+| BuildKit single-container | ✅ Completo | ✅ | Eliminou false failure do sidecar. Rootless. |
+| RELEASING state machine | ✅ Completo | ✅ | Crash recovery: RUNNING→RELEASING→SUCCEEDED |
+| Static asset upload (S3) | ✅ Completo | ✅ | `aws s3 sync --acl public-read` no Argo Workflow |
+| CF Tunnel | ✅ Completo | ✅ | `*.dev.loopzero.example` via tunnel, zero IP público |
+| CF Worker (static routing) | ✅ Completo | ✅ | KV lookup → DO Spaces fetch, SPA fallback, security headers |
+| CF KV auto-write | ✅ Completo | ✅ | API escreve routing entry no build completion |
+| Flat hostname format | ✅ Completo | ✅ | `{tenant}-{project}-{app}-{env}.dev.loopzero.example` |
+| Pulumi IaC (CF provider) | ✅ Completo | — | `@pulumi/cloudflare`: Worker + KV + Route + CDN |
+| CI/CD (GitHub Actions) | ✅ Completo | — | `CLOUDFLARE_API_TOKEN` secret adicionado ao workflow |
+
+### Infraestrutura deployada no DO (Sprint 10)
+
+| Componente | Localização | Status |
+|-----------|-------------|--------|
+| Cloudflare Tunnel (c35b9d63) | CF edge → runtime cluster | Active, all traffic via CF |
+| CF Worker (loopzero-static-delivery) | CF edge | Deployed, route `*.dev.loopzero.example/*` |
+| CF KV (loopzero-routing) | CF edge | Active, 28992ed1... |
+| DO Spaces CDN (loopzero-static-assets) | sfo3.cdn.digitaloceanspaces.com | Enabled, TTL 3600s |
+| Advanced Certificate (*.dev.loopzero.example) | CF | Active |
+| nginx-s3-gateway | runtime cluster | Running (fallback, pode ser removido) |
 
 ---
 
@@ -87,3 +123,5 @@ Sprint 6: Operação       → status → logs (Loki) → rollback → secrets (
 | 04-observabilidade | ALTA | ~8h | ~8h |
 | 05-pipeline | ALTA | ~4h | ~4h |
 | 06-operacao | MÉDIA | ~50h | ~40h (6A: 10h, 6B: 15h, 6C: 12h, 6.1: pendente) |
+| 07-workload-security | ALTA | ~6-8h | — |
+| 10-static-frontend | ALTA | ~30h | ~25h (BuildKit: 5h, RELEASING: 3h, S3: 4h, CF Tunnel: 5h, Worker: 4h, Pulumi: 4h) |

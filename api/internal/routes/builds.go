@@ -27,10 +27,13 @@ var environmentRegex = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 // AppInput describes a single app from the CLI request.
 type AppInput struct {
 	Name      string `json:"name"`
-	Type      string `json:"type,omitempty"`      // "server", "worker", "frontend"
+	Type      string `json:"type,omitempty"`       // "server", "worker", "frontend"
 	Port      int    `json:"port,omitempty"`
 	Path      string `json:"path,omitempty"`
-	Framework string `json:"framework,omitempty"` // "express", "go", "fastapi", etc.
+	Framework string `json:"framework,omitempty"`  // "express", "go", "fastapi", etc.
+	Build     string `json:"build,omitempty"`       // "dockerfile", "buildpack", "custom"
+	Rendering string `json:"rendering,omitempty"`   // "static" or "server" (Sprint 10)
+	Secrets   []string `json:"secrets,omitempty"`
 }
 
 // SubmitBuildInput contains the inputs for submitting a new build via the route handler.

@@ -30,4 +30,8 @@ config:
     secure: v1:5Wtkn9ZWFsSBam1P:9FNihxTglE7DmIE5dRllJHIs5QF0KaLxsZWzlVgFagcD8HEIu+91yTYb/VpYQjQxsSVMiWahDfAGkCg=
   loopzero-infra:digitaloceanToken:
     secure: v1:2ocnuWKI6ijgkkdV:NleIPve1bDGSFFCTdlDfEv3rUytvF/eFO6K4Stp/wz2aq8T3Da2jjIjA7bLoVi7Cog0B5cnMuGKJ0y8j6deh8YtZIWG6bx6OcrYF2e5d2dVwJObbHjep
+  # Cloudflare — static frontend delivery (Sprint 10)
+  # cfApiToken must be set via: pulumi config set --secret cfApiToken <token>
+  loopzero-infra:cfAccountId: "362767409c4de7fda7990c10103efdd9"
+  loopzero-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
 encryptionsalt: v1:j93WRa9itPU=:v1:5tiFr51FInRCcoEU:p2jAoOqdhiX9DXQ9eY5Zj5OFmC4RtA==

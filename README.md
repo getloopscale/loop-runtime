@@ -23,8 +23,8 @@ loopzero deploy
 ✓ Deploying...       [12s]
 
 🚀 Live:
-  api    → https://api-production.my-saas.acme.loopzero.example
-  web    → https://production.my-saas.acme.loopzero.example
+  api    → https://acme-my-saas-api-production.dev.loopzero.example
+  web    → https://acme-my-saas-web-production.dev.loopzero.example (static CDN)
   worker → (no URL — background worker)
 ```
 
@@ -55,8 +55,8 @@ $ loopzero deploy
 ✓ Deploying...       [12s]
 
 🚀 Live:
-  api → https://api-production.my-saas.acme.loopzero.example
-  web → https://production.my-saas.acme.loopzero.example
+  api → https://acme-my-saas-api-production.dev.loopzero.example
+  web → https://acme-my-saas-web-production.dev.loopzero.example (static CDN)
 ```
 
 ### Implemented CLI commands
@@ -66,9 +66,13 @@ The following commands are implemented and functional:
 - `loopzero logout` — remove stored credentials
 - `loopzero whoami` — show authenticated user and team
 - `loopzero init` — detect monorepo and generate `loopzero.yaml`
-- `loopzero deploy` — build and deploy all apps
+- `loopzero deploy` — build and deploy all apps (API servers, static frontends, workers)
+- `loopzero logs` — stream build and runtime logs (backed by Loki)
+- `loopzero rollback` — revert to a previous release (~3s)
+- `loopzero secret` — manage environment secrets (synced via External Secrets Operator)
+- `loopzero validate` — validate `loopzero.yaml` configuration locally
 
-Additional commands (logs, rollback, secret management, inspect, preview) are planned and not yet available.
+Additional commands (status, inspect, preview environments) are planned and not yet available.
 
 ### Preview Environments
 
@@ -77,8 +81,8 @@ $ git push origin feat/payments
 # GitHub webhook fires automatically
 # PR comment appears:
 # 🔗 Preview ready:
-#   api → https://api-feat-payments.my-saas.acme.loopzero.example
-#   web → https://feat-payments.my-saas.acme.loopzero.example
+#   api → https://acme-my-saas-api-feat-payments.dev.loopzero.example
+#   web → https://acme-my-saas-web-feat-payments.dev.loopzero.example
 ```
 
 No CLI command needed. Previews are destroyed automatically when the PR is merged or closed.
@@ -89,7 +93,7 @@ No CLI command needed. Previews are destroyed automatically when the PR is merge
 
 | Capability | Vercel | LoopZero |
 |---|---|---|
-| Frontend (React, Next.js, Vite) | ✅ | ✅ |
+| Frontend (React, Next.js, Vite) | ✅ | ✅ (static CDN via Cloudflare) |
 | Backend / API server | ❌ Serverless only | ✅ Any framework |
 | Workers / background jobs | ❌ | ✅ |
 | Multiple services in one repo | ❌ | ✅ |
@@ -173,7 +177,7 @@ $ loopzero deploy
 ✗ Building worker... FAILED
 
 ⚠ Partial deploy:
-  api    → deployed (https://api-production.my-saas.acme.loopzero.example)
+  api    → deployed (https://acme-my-saas-api-production.dev.loopzero.example)
   worker → NOT deployed (build failed — run: loopzero logs --build b-4a2c)
 
 Exit code: 5 (partial failure)
@@ -189,6 +193,7 @@ LoopZero is a GitOps-based platform. The deploy pipeline is:
 
 ```
 CLI → API → Argo Workflows (build) → Gitea (manifests) → ArgoCD → Kubernetes
+                                                       ↘ Cloudflare Worker (static frontends)
 ```
 
 **From the developer's perspective:** none of this exists. You run `loopzero deploy` and get a URL.
@@ -196,11 +201,14 @@ CLI → API → Argo Workflows (build) → Gitea (manifests) → ArgoCD → Kube
 **Under the hood:**
 
 1. `loopzero deploy` sends the request to the LoopZero API
-2. Argo Workflows builds your Docker image via Kaniko (no Docker daemon required)
-3. The image is pushed to a managed container registry (Harbor)
-4. ArgoCD syncs the Kubernetes manifests from Gitea and deploys the new version
-5. Health checks confirm the service is live
-6. The URL is returned to the CLI
+2. Argo Workflows builds your container image via BuildKit (rootless, single-container)
+3. The image is pushed to DigitalOcean Container Registry
+4. For API/worker apps: ArgoCD syncs Kubernetes manifests from Gitea and deploys the new version
+5. For static frontends: assets are uploaded to DO Spaces and served via Cloudflare Worker + CDN (zero pods)
+6. Health checks confirm the service is live; a RELEASING state machine handles crash recovery
+7. The URL is returned to the CLI
+
+All platform traffic is protected by Cloudflare Tunnel (DDoS/WAF).
 
 **State model:** Git (Gitea) is the source of truth for desired state. Kubernetes CRDs are the source of truth for operational state. PostgreSQL handles serialization, build history, and audit logs.
 
@@ -234,7 +242,7 @@ Being explicit about the boundaries:
 
 ### Prerequisites
 
-- Go 1.22+
+- Go 1.25+
 - Node.js 20+
 - Docker
 - [k3d](https://k3d.io) (local Kubernetes)

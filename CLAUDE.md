@@ -14,7 +14,7 @@ The authoritative specification is **`docs/technical.md`**. Every state machine,
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
-**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-5 complete (runtime, TLS, PG HA, observability, pipeline). Hardening sprint 6 (operation) 3/4 complete: `loopzero logs` (Loki), `loopzero rollback` (3s), `loopzero secret` (ESO sync <30s) all validated on DigitalOcean. `loopzero status` pending (handler exists, route not wired). Core flow `loopzero login` → `loopzero init` → `loopzero deploy` → live URL works end-to-end. 455+ CLI tests + 60+ API test files passing. Production infrastructure running on DigitalOcean (3 DOKS clusters + Loki + Promtail + ESO).
+**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-5 complete (runtime, TLS, PG HA, observability, pipeline). Hardening sprint 6 (operation) 3/4 complete: `loopzero logs` (Loki), `loopzero rollback` (3s), `loopzero secret` (ESO sync <30s) all validated on DigitalOcean. `loopzero status` pending (handler exists, route not wired). **Sprint 10 (static frontend delivery) complete:** monorepo deploy (API server + Web static + Worker) fully functional on DO — static frontends served from DO Spaces via Cloudflare Worker (zero pods), container apps via CF Tunnel, all behind Cloudflare edge (WAF/DDoS). Build engine migrated from Kaniko to single-container BuildKit (rootless). RELEASING state machine added for crash recovery. Core flow `loopzero login` → `loopzero init` → `loopzero deploy` → live URL works end-to-end. 455+ CLI tests + 60+ API test files passing. Production infrastructure running on DigitalOcean (3 DOKS clusters + Loki + Promtail + ESO + Cloudflare Tunnel + CF Worker + DO Spaces CDN).
 
 ---
 
@@ -127,12 +127,15 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | Log aggregation | Grafana Loki 6.24.0 + Promtail 6.16.6 | Build log storage (build cluster), queried by API via LogQL |
 | Secret sync | External Secrets Operator 0.14.3 | Cross-cluster secret sync mgmt → workload via ClusterSecretStore |
 | DNS | DigitalOcean DNS | A records, wildcard for user apps |
+| Edge proxy | Cloudflare Tunnel + Worker | DDoS/WAF protection, static asset routing from DO Spaces |
+| Static assets | DO Spaces + CDN | Frontend build output (JS/CSS/HTML), public-read ACL |
+| Routing table | Cloudflare Workers KV | Static app routing: subdomain → build-id + S3 prefix |
 
 ### Development & Operations
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| IaC | Pulumi (TypeScript) + @pulumi/digitalocean + @pulumi/kubernetes | 3-phase infra provisioning (infra → bootstrap → expose) |
+| IaC | Pulumi (TypeScript) + @pulumi/digitalocean + @pulumi/kubernetes + @pulumi/cloudflare | 3-phase infra provisioning (infra → bootstrap → expose) + CF Worker/KV |
 | Cloud provider | DigitalOcean (SFO3) — AWS stub ready | 3 DOKS clusters + managed PG + Spaces + DNS |
 | Local clusters | k3d × 3 (mgmt, build, workload) | Local dev parity with production |
 | Dev loop | Tilt | Hot reload, migration, CRD deploy, seed data |
@@ -201,6 +204,7 @@ loopzero/
 │   │   ├── correlation/               ← correlation ID generation (UUID v4)
 │   │   ├── argo/                      ← Argo Workflows client (submit, cancel, get status)
 │   │   ├── argocd/                    ← ArgoCD sync client (trigger, wait)
+│   │   ├── cfkv/                      ← Cloudflare Workers KV client (static frontend routing)
 │   │   ├── gitops/                    ← Gitea gitops pusher (manifest commit with trailers)
 │   │   ├── source/                    ← Gitea source store (bundle push)
 │   │   ├── s3/                        ← MinIO/Spaces uploader (source bundles)
@@ -247,11 +251,13 @@ loopzero/
 │   │   │   ├── components/            ← infra.ts, bootstrap.ts, expose.ts
 │   │   │   └── providers/
 │   │   │       ├── digitalocean/      ← fully implemented (8 files)
+│   │   │       ├── cloudflare/        ← CF Worker + KV for static frontend delivery
 │   │   │       └── aws/               ← stub with implementation guide
 │   │   ├── Pulumi.dev.yaml           ← dev stack (SFO3, dev.loopzero.example)
 │   │   ├── Pulumi.staging.yaml       ← staging stack (NYC3)
 │   │   └── Pulumi.prod.yaml          ← prod stack (NYC3, loopzero.example)
 │   ├── k3d/                           ← 3 cluster configs (mgmt, build, workload)
+│   ├── cloudflare/                    ← CF Worker source (worker.mjs for static delivery)
 │   ├── helm/                          ← 13 Helm charts (all pinned versions)
 │   │   ├── argo-workflows/            ← CWTs: clone, cache-restore, cache-save, summary, resource-quota
 │   │   ├── argocd/                    ← v2.13.3, manual sync, loopzero-api RBAC
@@ -521,6 +527,7 @@ Run the pre-completion checklist:
 | **[7](docs/sprints/07-observability/sprint.md)** | 22-23 | Observability complete | Incident resolved via dashboards in < 15 min | — | ❌ Not started |
 | **[8](docs/sprints/08-hardening-chaos/sprint.md)** | 24-25 | Hardening + Chaos | 50 concurrent deploys, all chaos passes | — | ❌ Not started |
 | **[9](docs/sprints/09-polish-launch/sprint.md)** | 26-27 | Polish + Launch | Non-team-member onboards in < 10 min | — | ❌ Not started |
+| **[10](docs/sprints/10-static-frontend-delivery/sprint.md)** | — | Static Frontend + Security | Monorepo (API+Web+Worker) on DO, static via CF edge, zero pods for frontend | — | ✅ Complete |
 
 **Hardening sprints** (parallel track, production readiness):
 
@@ -569,6 +576,7 @@ Check the current sprint before starting any implementation. Only implement what
 loopzero deploy → CLI validates → upload bundle → API locks env → submit Argo Workflow
     → build (BuildKit) → push image → generate manifests → push to Gitea (gitops)
     → ArgoCD sync → app running → SSE event → CLI shows URL
+    (static apps: build → upload S3 → write CF KV → CF Worker serves from DO Spaces)
 ```
 
 ### CRDs (9 total)
@@ -590,7 +598,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 
 | Machine | States | Terminal | Timeouts |
 |---------|--------|----------|----------|
-| Build | QUEUED → RUNNING → SUCCEEDED/FAILED/CANCELLED | SUCCEEDED, FAILED, CANCELLED | QUEUED>5m, RUNNING>30m, CANCELLING>60s |
+| Build | QUEUED → RUNNING → RELEASING → SUCCEEDED/FAILED/CANCELLED | SUCCEEDED, FAILED, CANCELLED | QUEUED>5m, RUNNING>30m, RELEASING>10m, CANCELLING>60s |
 | Release | READY → PENDING → ACTIVE → SUPERSEDED | SUPERSEDED, ROLLED_BACK, CANCELLED | READY>5m, PENDING>2m |
 | Tenant | Provisioning → Active → Suspended → Deleting | Deleting | — |
 | PlatformBootstrap | Pending → ConfiguringGitea → ConfiguringArgoCD → WaitingForAPI → Complete | Complete, Failed | — |
@@ -605,7 +613,11 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | 3 DOKS clusters | v1.32.13, 2 nodes each, SFO3 | — |
 | PostgreSQL | v16, managed, single node | — |
 | Container Registry | DO Container Registry | registry.digitalocean.com/loopzero-infra-registry |
-| DNS | A records + wildcard | *.dev.loopzero.example (runtime), api/argocd/git/grafana.dev.loopzero.example (mgmt) |
+| DNS | A records + wildcard CNAME via CF Tunnel | *.dev.loopzero.example (CF Tunnel → runtime), api/argocd/git/grafana.dev.loopzero.example (mgmt) |
+| Cloudflare Tunnel | c35b9d63... | All runtime traffic via CF edge (DDoS/WAF), zero public IPs |
+| CF Worker | loopzero-static-delivery | Routes static frontend requests to DO Spaces via KV lookup |
+| CF KV | loopzero-routing (28992ed1...) | Routing table: subdomain → { buildId, s3Prefix } |
+| DO Spaces | loopzero-static-assets + CDN | Static frontend assets (public-read, immutable per build-id) |
 | State backend | DO Spaces (S3-compatible) | s3://loopzero-infra-pulumi-state |
 
 ### Known Systemic Patterns

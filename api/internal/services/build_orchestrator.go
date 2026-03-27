@@ -29,6 +29,14 @@ type WorkflowSubmitter interface {
 	GetStatus(ctx context.Context, namespace, workflowID string) (*WorkflowStatus, error)
 }
 
+// StaticRoutingClient writes routing entries for static frontends (CF Workers KV).
+// The key is the flat subdomain (e.g., "tn-loopzero-e2e-project-web-production"),
+// the value is a JSON object with buildId and s3Prefix.
+// Nil is valid — it means CF KV is not configured (local dev).
+type StaticRoutingClient interface {
+	Put(ctx context.Context, subdomain string, entry interface{}) error
+}
+
 // WorkflowSpec contains everything needed to submit a build workflow.
 type WorkflowSpec struct {
 	BuildID       string
@@ -96,7 +104,8 @@ type AppRelease struct {
 	Name        string `json:"name"`
 	ImageDigest string `json:"image_digest"`
 	URL         string `json:"url"`
-	Type        string `json:"type,omitempty"` // "server", "worker", "frontend"
+	Type        string `json:"type,omitempty"`      // "server", "worker", "frontend"
+	Rendering   string `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
 	DurationMs  int    `json:"duration_ms"`
 }
 
@@ -156,6 +165,8 @@ type BuildOrchestratorDeps struct {
 	Delivery           DeliveryActivator // MEET-009: polymorphic release activation
 	RegistryURL        string        // Container registry URL for BuildPlan image tag resolution
 	ArgocdSyncTimeout  time.Duration // 0 = default 120s
+	KVClient           StaticRoutingClient // CF KV client for static frontend routing (nil = disabled)
+	BaseDomain         string              // Base domain for app hostnames
 }
 
 // BuildOrchestrator orchestrates the entire deploy flow:
@@ -177,6 +188,8 @@ type BuildOrchestrator struct {
 	delivery          DeliveryActivator // MEET-009: polymorphic release activation
 	registryURL       string // Container registry URL for BuildPlan image tag resolution
 	argocdSyncTimeout time.Duration
+	kvClient          StaticRoutingClient // CF KV client for static frontend routing
+	baseDomain        string
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
@@ -222,6 +235,8 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		delivery:          delivery,
 		registryURL:       registryURL,
 		argocdSyncTimeout: syncTimeout,
+		kvClient:          deps.KVClient,
+		baseDomain:        deps.BaseDomain,
 	}
 }
 
@@ -276,10 +291,11 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		var appsSpec []db.BuildAppSpec
 		for _, a := range req.Apps {
 			appsSpec = append(appsSpec, db.BuildAppSpec{
-				Name:    a.Name,
-				Type:    a.Type,
-				Port:    a.Port,
-				Secrets: a.Secrets,
+				Name:      a.Name,
+				Type:      a.Type,
+				Rendering: a.Rendering,
+				Port:      a.Port,
+				Secrets:   a.Secrets,
 			})
 		}
 		if err := o.buildStore.SetAppsSpec(ctx, tx, build.ID, appsSpec); err != nil {
@@ -649,6 +665,12 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		return nil
 	}
 
+	// Write CF KV routing entries for static apps (Sprint 10).
+	// This happens after delivery activation so the release is already ACTIVE.
+	// KV write failure is non-fatal — the nginx-s3-gateway fallback in the cluster
+	// still serves assets via IngressRoute. The KV write is an optimization.
+	o.writeStaticRoutingEntries(ctx, build, result)
+
 	// Phase 2 succeeded — transition RELEASING → SUCCEEDED (deploy complete).
 	if err := o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		// Re-fetch inside lock — another pod's reconcile loop may have already transitioned
@@ -669,4 +691,46 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	}
 
 	return nil
+}
+
+// writeStaticRoutingEntries writes CF KV entries for static apps in the build.
+// This enables the Cloudflare Worker to serve static assets from DO Spaces
+// without any cluster involvement (Sprint 10).
+func (o *BuildOrchestrator) writeStaticRoutingEntries(ctx context.Context, build *db.Build, result BuildCallbackRequest) {
+	if o.kvClient == nil {
+		return // CF KV not configured (local dev or not enabled)
+	}
+
+	for _, app := range result.Apps {
+		// Only write KV for static apps
+		if app.Rendering != "static" {
+			continue
+		}
+
+		subdomain := fmt.Sprintf("%s-%s-%s-%s", build.TenantID, build.ProjectID, app.Name, build.Environment)
+		if len(subdomain) > 63 {
+			subdomain = subdomain[:63]
+		}
+
+		entry := map[string]string{
+			"buildId":  build.ID,
+			"s3Prefix": fmt.Sprintf("/%s/%s/%s/%s", build.TenantID, build.ProjectID, app.Name, build.ID),
+		}
+
+		if err := o.kvClient.Put(ctx, subdomain, entry); err != nil {
+			slog.Error("static routing: failed to write KV entry",
+				"subdomain", subdomain,
+				"build_id", build.ID,
+				"error", err,
+			)
+			// Non-fatal: assets are still accessible via nginx-s3-gateway in cluster
+			continue
+		}
+
+		slog.Info("static routing: KV entry written",
+			"subdomain", subdomain,
+			"build_id", build.ID,
+			"url", fmt.Sprintf("https://%s.%s", subdomain, o.baseDomain),
+		)
+	}
 }

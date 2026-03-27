@@ -5,6 +5,7 @@ package services
 
 import (
 	"fmt"
+	"log/slog"
 	"path"
 )
 
@@ -87,6 +88,8 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		if unit.Rendering == "static" {
 			deliveryModel = "static"
 		}
+		slog.Info("build plan: resolved delivery model",
+			"app", unit.Name, "rendering", unit.Rendering, "delivery_model", deliveryModel)
 
 		plans = append(plans, AppBuildPlan{
 			AppName:          unit.Name,

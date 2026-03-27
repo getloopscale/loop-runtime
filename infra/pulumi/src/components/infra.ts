@@ -41,6 +41,8 @@ export interface InfraOutputs {
   readonly bucketName: pulumi.Output<string>;
   readonly bucketEndpoint: pulumi.Output<string>;
   readonly buildsBucketName: pulumi.Output<string>;
+  readonly staticBucketName: pulumi.Output<string>;
+  readonly staticCdnEndpoint: pulumi.Output<string>;
 
   // Container Registry
   readonly registryEndpoint: pulumi.Output<string>;
@@ -180,6 +182,23 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     tags,
   });
 
+  // Static assets bucket — stores built frontend assets uploaded by Argo Workflows.
+  // CF Worker (or nginx-s3-gateway fallback) serves these to browsers.
+  const staticBucket = factory.createObjectStorage({
+    name: "loopzero-static-assets",
+    region: config.region,
+    versioning: false, // Assets are immutable per build-id — no versioning needed
+    tags,
+  });
+
+  // Enable CDN on static assets bucket for edge caching.
+  // The CDN endpoint (*.cdn.digitaloceanspaces.com) provides DO-managed caching.
+  // CF Worker uses the direct endpoint; CDN is an additional optimization layer.
+  const staticCdn = new digitalocean.Cdn(`${baseName}-static-cdn`, {
+    origin: pulumi.interpolate`${staticBucket.bucketName}.${config.region}.digitaloceanspaces.com`,
+    ttl: 3600, // 1 hour edge cache
+  });
+
   // --- Container registry ---
   // DigitalOcean has one registry per account (global, not per-region).
   // Starter tier is free (500MB) and sufficient for dev.
@@ -216,6 +235,8 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     bucketName: storage.bucketName,
     bucketEndpoint: storage.endpoint,
     buildsBucketName: buildsBucket.bucketName,
+    staticBucketName: staticBucket.bucketName,
+    staticCdnEndpoint: staticCdn.endpoint,
     registryEndpoint: registry.endpoint,
     registryName: registry.name,
   };

@@ -45,6 +45,13 @@ export interface PlatformStackConfig {
   readonly spacesSecretAccessKey: pulumi.Output<string>;
   readonly digitaloceanToken: pulumi.Output<string>;
 
+  // Cloudflare — static frontend delivery (Sprint 10)
+  // Optional: when set, enables CF Worker + KV routing for static frontends.
+  // When absent, static apps fall back to nginx-s3-gateway in cluster.
+  readonly cfApiToken?: pulumi.Output<string>;
+  readonly cfAccountId?: string;
+  readonly cfKvNamespaceId?: string;
+
 }
 
 /**
@@ -93,5 +100,10 @@ export function loadStackConfig(): PlatformStackConfig {
     spacesAccessKeyId: config.requireSecret("spacesAccessKeyId"),
     spacesSecretAccessKey: config.requireSecret("spacesSecretAccessKey"),
     digitaloceanToken: config.requireSecret("digitaloceanToken"),
+
+    // Cloudflare — optional, enables static frontend delivery via CF Worker
+    cfApiToken: config.getSecret("cfApiToken") ?? undefined,
+    cfAccountId: config.get("cfAccountId") ?? undefined,
+    cfKvNamespaceId: config.get("cfKvNamespaceId") ?? undefined,
   };
 }

@@ -160,15 +160,16 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			withSuffix(g.Strategy.DockerfileStep(g.Apps), g.Suffix),
 		)
 	}
-	// Per-app BuildKit templates (independent of language grouping).
-	// Each app gets its own buildkitd sidecar + buildctl pair for isolated builds.
+	// Per-app delivery templates: BuildKit for containers, S3 upload for static.
 	if spec.Plan != nil {
-		// v2: BuildPlan provides resolved paths, image tags, and build args.
 		for _, appPlan := range spec.Plan.Apps {
-			inlineTemplates = append(inlineTemplates, b.buildkitTemplateFromPlan(spec, appPlan))
+			if appPlan.DeliveryModel == "static" {
+				inlineTemplates = append(inlineTemplates, b.uploadAssetsTemplate(spec, appPlan))
+			} else {
+				inlineTemplates = append(inlineTemplates, b.buildkitTemplateFromPlan(spec, appPlan))
+			}
 		}
 	} else {
-		// Legacy: infer from AppSpec (backward compat with existing tests)
 		for _, app := range spec.Apps {
 			inlineTemplates = append(inlineTemplates, b.buildkitTemplateForApp(spec, app))
 		}
@@ -296,19 +297,33 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName}))
 	}
 
-	// Per-app BuildKit — depends on its language group's dockerfile step.
-	// v2: When BuildPlan is present, use pre-resolved LanguageStrategy for dependency lookup.
+	// Per-app delivery — BuildKit for containers, upload for static.
+	// Depends on its language group's dockerfile step (containers) or build step (static).
 	if spec.Plan != nil && len(spec.Plan.Apps) > 0 {
 		for _, appPlan := range spec.Plan.Apps {
-			dockerfileDep := "generate-dockerfile"
-			for _, g := range groups {
-				if g.Strategy.Name() == appPlan.LanguageStrategy {
-					dockerfileDep = "generate-dockerfile" + g.Suffix
-					break
+			if appPlan.DeliveryModel == "static" {
+				// Static: upload assets, depends on build-apps step (assets already built)
+				buildDep := "build-apps"
+				for _, g := range groups {
+					if g.Strategy.Name() == appPlan.LanguageStrategy {
+						buildDep = "build-apps" + g.Suffix
+						break
+					}
 				}
+				taskName := fmt.Sprintf("deliver-artifact-%s", appPlan.AppName)
+				tasks = append(tasks, inlineTask(taskName, taskName, []string{buildDep}))
+			} else {
+				// Container: BuildKit image build, depends on dockerfile step
+				dockerfileDep := "generate-dockerfile"
+				for _, g := range groups {
+					if g.Strategy.Name() == appPlan.LanguageStrategy {
+						dockerfileDep = "generate-dockerfile" + g.Suffix
+						break
+					}
+				}
+				taskName := fmt.Sprintf("build-image-%s", appPlan.AppName)
+				tasks = append(tasks, inlineTask(taskName, taskName, []string{dockerfileDep}))
 			}
-			taskName := fmt.Sprintf("build-image-%s", appPlan.AppName)
-			tasks = append(tasks, inlineTask(taskName, taskName, []string{dockerfileDep}))
 		}
 	} else {
 		for _, app := range spec.Apps {
@@ -518,6 +533,89 @@ func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec services.WorkflowSpec, p
 		},
 		PodSpecPatch:  podSpecPatch,
 		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
+	}
+}
+
+// uploadAssetsTemplate generates a container template that uploads static build
+// output to S3 (DO Spaces). This replaces the BuildKit template for static apps.
+//
+// The step:
+//   1. Finds the build output dir (dist/, build/, out/, .next/standalone/)
+//   2. Generates asset-manifest.json with SHA256 checksums
+//   3. Uploads everything to S3: s3://{bucket}/{tenant}/{project}/{app}/{build-id}/
+//
+// Uses mc (MinIO client) for S3 operations. Credentials come from the existing
+// loopzero-minio-credentials Secret in the build namespace (envFrom in CWT).
+func (b *WorkflowBuilder) uploadAssetsTemplate(spec services.WorkflowSpec, plan services.AppBuildPlan) *forge.Container {
+	appPath := plan.AppPath
+	if appPath == "" || appPath == "." {
+		appPath = "."
+	}
+
+	s3Dest := fmt.Sprintf("%s/%s/%s/%s/",
+		spec.TenantID, spec.ProjectID, plan.AppName, spec.BuildID)
+
+	// Script: find output dir, generate manifest, upload via aws s3 sync
+	script := fmt.Sprintf(`set -e
+cd /workspace/%s
+
+# Find build output directory
+OUTPUT_DIR=""
+for dir in dist build out .next/standalone public; do
+  if [ -d "$dir" ]; then
+    OUTPUT_DIR="$dir"
+    break
+  fi
+done
+
+if [ -z "$OUTPUT_DIR" ]; then
+  echo "ERROR: No build output directory found (checked: dist, build, out, .next/standalone, public)"
+  exit 1
+fi
+
+echo "Upload source: $OUTPUT_DIR"
+
+# Generate asset-manifest.json with SHA256 checksums
+echo '{"files":[' > /tmp/manifest.json
+ls -1 "$OUTPUT_DIR" | head -100 | while read f; do
+  if [ -f "$OUTPUT_DIR/$f" ]; then
+    HASH=$(sha256sum "$OUTPUT_DIR/$f" | cut -d' ' -f1)
+    printf '{"path":"%%s","sha256":"%%s"},' "$f" "$HASH" >> /tmp/manifest.json
+  fi
+done
+# Remove trailing comma and close
+sed -i 's/,$//' /tmp/manifest.json
+echo ']}' >> /tmp/manifest.json
+cp /tmp/manifest.json "$OUTPUT_DIR/asset-manifest.json"
+echo "Asset manifest:"
+cat "$OUTPUT_DIR/asset-manifest.json"
+
+# Upload to S3 via aws cli (MINIO_ENDPOINT used as S3 endpoint)
+echo "Uploading to s3://loopzero-static-assets/%s"
+aws s3 sync "$OUTPUT_DIR/" "s3://loopzero-static-assets/%s" --endpoint-url "$MINIO_ENDPOINT" --acl public-read --no-progress
+echo "Upload complete"
+`, appPath, s3Dest, s3Dest)
+
+	return &forge.Container{
+		Name:    fmt.Sprintf("deliver-artifact-%s", plan.AppName),
+		Image:   "amazon/aws-cli:2.22.35",
+		Command: []string{"sh", "-c", script},
+		Env: []forge.EnvBuilder{
+			forge.Env{Name: "HOME", Value: "/tmp"},
+		},
+		// Credentials from loopzero-minio-credentials Secret:
+		// AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
+		EnvFrom: []model.EnvFromSource{
+			{SecretRef: &model.SecretEnvSource{Name: "loopzero-minio-credentials"}},
+		},
+		VolumeMounts: []forge.VolumeBuilder{
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: "workspace", MountPath: "/workspace"}},
+		},
+		Resources: &forge.ResourceRequirements{
+			Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
+			Limits:   forge.ResourceList{CPU: "500m", Memory: "512Mi"},
+		},
+		RetryStrategy: retryStrategy(2, "10s", "2", "120s"),
 	}
 }
 

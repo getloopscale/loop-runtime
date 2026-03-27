@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Cloudflare Worker for static frontend delivery — serves assets from DO Spaces via CF edge, zero pods for static apps (#SPRINT-10)
+- `cfkv` package — Cloudflare Workers KV client for routing table writes (#SPRINT-10)
+- Automatic KV routing entry write on build completion for `render: static` apps (#SPRINT-10)
+- DO Spaces CDN endpoint + public-read ACL for static assets (#SPRINT-10)
+- Security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) in CF Worker responses (#SPRINT-10)
+- SPA fallback routing in CF Worker — deep links serve index.html (#SPRINT-10)
+- `CF_API_TOKEN`, `CF_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID` config vars for API (#SPRINT-10)
 - BuildKit build engine as alternative to Kaniko — sidecar pattern with rootless `buildkitd` + `buildctl`, OCI registry cache (`--import-cache`/`--export-cache mode=max`), digest via `--metadata-file` JSON parsing (#BUILDKIT-MIGRATION)
 - `UseKaniko` feature flag (`USE_KANIKO` env var, default `true`) — allows gradual migration and instant rollback to Kaniko during transition (#BUILDKIT-MIGRATION)
 - `buildkit-registry-config` Secret in TenantController — registry credentials for BuildKit push, coexists with Kaniko's `docker-config` during migration (#BUILDKIT-MIGRATION)

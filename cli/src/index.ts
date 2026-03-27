@@ -315,6 +315,8 @@ export function createProgram(): Command {
                 ...(a.port ? { port: a.port } : {}),
                 ...(a.path ? { path: a.path } : {}),
                 ...(a.framework ? { framework: a.framework } : {}),
+                ...(a.build ? { build: a.build } : {}),
+                ...(a.rendering ? { rendering: a.rendering } : {}),
                 ...(a.secrets && a.secrets.length > 0 ? { secrets: a.secrets } : {}),
               })),
             },

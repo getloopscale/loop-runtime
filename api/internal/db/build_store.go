@@ -42,10 +42,11 @@ type Build struct {
 // BuildAppSpec is a single app spec stored at build submission time.
 // Used by the reconcile loop to generate manifests and compute image refs.
 type BuildAppSpec struct {
-	Name    string   `json:"name"`
-	Type    string   `json:"type"`
-	Port    int      `json:"port"`
-	Secrets []string `json:"secrets,omitempty"`
+	Name      string   `json:"name"`
+	Type      string   `json:"type"`
+	Rendering string   `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
+	Port      int      `json:"port"`
+	Secrets   []string `json:"secrets,omitempty"`
 }
 
 // BuildStore defines the interface for build persistence operations.

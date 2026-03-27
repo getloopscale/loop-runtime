@@ -28,6 +28,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/gitops"
 	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/loki"
+	"github.com/loopzero/loopzero/api/internal/cfkv"
 	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/sse"
@@ -239,6 +240,13 @@ func main() {
 			OrgName: "loopzero",
 		})
 
+		// Cloudflare KV client for static frontend routing (Sprint 10).
+		// nil when CF credentials not configured (local dev).
+		kvClient := cfkv.NewClient(cfg.CFAccountID, cfg.CFKVNamespaceID, cfg.CFAPIToken)
+		if kvClient != nil {
+			slog.Info("cloudflare KV client configured for static frontend routing")
+		}
+
 		orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
 			BuildStore:        buildStore,
 			ReleaseStore:      releaseStore,
@@ -250,6 +258,8 @@ func main() {
 			GitOps:            gitopsPusher,
 			RegistryURL:       cfg.RegistryURL,
 			ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
+			KVClient:          kvClient,
+			BaseDomain:        cfg.BaseDomain,
 		})
 
 		buildOrchestrator = &adapters.BuildOrchestratorAdapter{

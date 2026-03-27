@@ -26,6 +26,7 @@ interface AppInput {
   framework: string;
   build: string;                       // v2: "dockerfile" | "buildpack" | "custom"
   dockerfile: string | null;           // v2: Dockerfile path relative to app path
+  rendering: string;                   // v2: "static" | "server" (Sprint 10)
   env: Record<string, string>;         // v2: build-time environment variables
   secrets: string[];
 }
@@ -282,6 +283,7 @@ export class DeployCommand {
       framework: unit.framework,
       build: unit.build,
       dockerfile: unit.dockerfile,
+      rendering: unit.rendering,
       env: unit.env,
       secrets: unit.secrets,
     }));

@@ -268,8 +268,8 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 
 		url := ""
 		if app.Type == "server" || app.Type == "frontend" {
-			url = fmt.Sprintf("https://%s-%s.%s.%s.%s",
-				app.Name, build.Environment, build.ProjectID, build.TenantID, r.cfg.BaseDomain)
+			url = fmt.Sprintf("https://%s-%s-%s-%s.%s",
+				build.TenantID, build.ProjectID, app.Name, build.Environment, r.cfg.BaseDomain)
 		}
 
 		buildApps = append(buildApps, AppRelease{
@@ -277,14 +277,16 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 			ImageDigest: imageRef,
 			URL:         url,
 			Type:        app.Type,
+			Rendering:   app.Rendering,
 		})
 
 		manifestApps = append(manifestApps, manifests.AppManifestInput{
-			Name:     app.Name,
-			Type:     app.Type,
-			Port:     app.Port,
-			ImageRef: imageRef,
-			Secrets:  app.Secrets,
+			Name:      app.Name,
+			Type:      app.Type,
+			Rendering: app.Rendering,
+			Port:      app.Port,
+			ImageRef:  imageRef,
+			Secrets:   app.Secrets,
 		})
 	}
 
@@ -375,8 +377,8 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 
 		url := ""
 		if app.Type == "server" || app.Type == "frontend" {
-			url = fmt.Sprintf("https://%s-%s.%s.%s.%s",
-				app.Name, build.Environment, build.ProjectID, build.TenantID, r.cfg.BaseDomain)
+			url = fmt.Sprintf("https://%s-%s-%s-%s.%s",
+				build.TenantID, build.ProjectID, app.Name, build.Environment, r.cfg.BaseDomain)
 		}
 
 		buildApps = append(buildApps, AppRelease{
@@ -384,13 +386,15 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 			ImageDigest: imageRef,
 			URL:         url,
 			Type:        app.Type,
+			Rendering:   app.Rendering,
 		})
 		manifestApps = append(manifestApps, manifests.AppManifestInput{
-			Name:     app.Name,
-			Type:     app.Type,
-			Port:     app.Port,
-			ImageRef: imageRef,
-			Secrets:  app.Secrets,
+			Name:      app.Name,
+			Type:      app.Type,
+			Rendering: app.Rendering,
+			Port:      app.Port,
+			ImageRef:  imageRef,
+			Secrets:   app.Secrets,
 		})
 	}
 

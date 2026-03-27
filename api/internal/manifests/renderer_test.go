@@ -234,7 +234,7 @@ func TestRender_Hostname(t *testing.T) {
 
 	result := Render(input)
 
-	expectedHost := "api-production.webapp.acme.loopzero.example.com"
+	expectedHost := "acme-webapp-api-production.loopzero.example.com"
 	if !strings.Contains(result, expectedHost) {
 		t.Errorf("expected hostname %q in IngressRoute", expectedHost)
 	}

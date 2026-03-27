@@ -2,11 +2,14 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import * as pulumi from "@pulumi/pulumi";
+import * as k8s from "@pulumi/kubernetes";
 import { loadStackConfig } from "./config/stack";
 import { createInfra, resolveProvider } from "./components/infra";
 import { bootstrapCluster } from "./components/bootstrap";
 import { exposePlatform } from "./components/expose";
 import { buildExecutionState } from "./core/execution";
+import { createStaticDelivery, StaticDeliveryOutput } from "./providers/cloudflare/static-delivery";
+import { createTunnel, TunnelOutput } from "./providers/cloudflare/tunnel";
 
 // --- Configuration ---
 const config = loadStackConfig();
@@ -20,6 +23,41 @@ const bootstrap = bootstrapCluster(infra, config);
 
 // --- Phase 3: Expose Platform ---
 const expose = exposePlatform(bootstrap, infra, config, factory);
+
+// --- Cloudflare (Sprint 10) ---
+// All CF resources are provisioned when cfAccountId + cfApiToken are configured.
+// When absent (local dev), CF resources are skipped — cluster operates without tunnel.
+let staticDelivery: StaticDeliveryOutput | undefined;
+let tunnelOutput: TunnelOutput | undefined;
+
+if (config.cfAccountId && config.cfApiToken) {
+  const cfConfig = new pulumi.Config();
+  const cfZoneId = cfConfig.get("cfZoneId");
+
+  if (cfZoneId) {
+    // 1. CF Tunnel — all runtime traffic via Cloudflare edge (DDoS/WAF, zero public IPs)
+    const cfRuntimeProvider = new k8s.Provider("cf-runtime-k8s", {
+      kubeconfig: infra.runtimeCluster.kubeconfig,
+    });
+
+    tunnelOutput = createTunnel({
+      accountId: config.cfAccountId,
+      zoneId: cfZoneId,
+      baseDomain: config.domain,
+      runtimeProvider: cfRuntimeProvider,
+      namespace: "platform-system",
+      traefikService: "https://runtime-traefik.platform-system.svc:443",
+    });
+
+    // 2. CF Worker + KV — static frontend routing (DO Spaces via edge)
+    staticDelivery = createStaticDelivery({
+      accountId: config.cfAccountId,
+      zoneId: cfZoneId,
+      baseDomain: config.domain,
+      s3Endpoint: pulumi.interpolate`https://${infra.staticBucketName}.${config.region}.digitaloceanspaces.com`,
+    });
+  }
+}
 
 // --- Execution state (operational tracking) ---
 export const execution = buildExecutionState({
@@ -113,6 +151,11 @@ export const runtimeIngressEndpoint = bootstrap.runtime.ingressEndpoint;
 // Phase 3 — DNS
 export const mgmtDnsConfigured = expose.mgmtDnsConfigured;
 export const runtimeDnsConfigured = expose.runtimeDnsConfigured;
+
+// Cloudflare
+export const cfTunnelId = tunnelOutput?.tunnelId;
+export const cfKvNamespaceId = staticDelivery?.kvNamespaceId;
+export const cfWorkerName = staticDelivery?.workerName;
 
 // --- Wiring outputs (connection details for operators) ---
 export const wiring = pulumi.output({

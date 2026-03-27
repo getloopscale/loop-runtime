@@ -1307,6 +1307,23 @@ function installLoopZeroAPI(
     { provider, dependsOn: [ns] },
   );
 
+  // Cloudflare credentials for static frontend delivery (Sprint 10).
+  // Only created when CF config values are provided.
+  if (config.cfApiToken && config.cfAccountId && config.cfKvNamespaceId) {
+    new k8s.core.v1.Secret(
+      "loopzero-cf-credentials",
+      {
+        metadata: { name: "loopzero-cf-credentials", namespace: PLATFORM_NAMESPACE },
+        stringData: {
+          CF_API_TOKEN: config.cfApiToken,
+          CF_ACCOUNT_ID: config.cfAccountId,
+          CF_KV_NAMESPACE_ID: config.cfKvNamespaceId,
+        },
+      },
+      { provider, dependsOn: [ns] },
+    );
+  }
+
   // Database migrations — read SQL files and embed in a ConfigMap.
   // The init container (migrate/migrate) mounts this and applies them.
   const migrationsDir = path.resolve(__dirname, "../../../../api/internal/db/migrations");
@@ -1471,6 +1488,9 @@ function installLoopZeroAPI(
                   { secretRef: { name: "loopzero-api-secrets" } },
                   // Gitea token + ArgoCD password — created by gitea-bootstrap Job
                   { secretRef: { name: "loopzero-platform-tokens" } },
+                  // Cloudflare KV credentials for static frontend routing (Sprint 10).
+                  // Optional: secret only exists when CF config is set.
+                  ...(config.cfApiToken ? [{ secretRef: { name: "loopzero-cf-credentials" } }] : []),
                 ],
                 volumeMounts: [
                   {
