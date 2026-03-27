@@ -242,6 +242,8 @@ func (r *TenantReconciler) ensureBuildMinIOPerTenant(ctx context.Context, buildN
 
 // reconcileBuildMinIOCredentials provisions per-tenant MinIO credentials and stores
 // them as a K8s Secret in the build namespace.
+// When the MinIO user already exists, secretKey is empty and the Secret is only
+// created (not overwritten), preserving existing credentials for in-flight builds.
 func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, namespace, tenantID string) error {
 	accessKey, secretKey, err := r.MinIOProvisioner.EnsureTenantCredentials(ctx, tenantID)
 	if err != nil {
@@ -258,11 +260,20 @@ func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, n
 			k.LabelManagedBy: k.ManagedByTenantController,
 		}
 		secret.Type = corev1.SecretTypeOpaque
-		secret.StringData = map[string]string{
-			k.KeyAWSAccessKeyID:     accessKey,
-			k.KeyAWSSecretAccessKey: secretKey,
-			k.KeyMinIOEndpoint:      r.MinIOEndpoint,
+		// Only overwrite credentials when we have a new secret key (first creation).
+		// When secretKey is empty, the user already existed — preserve existing credentials.
+		if secretKey != "" {
+			secret.StringData = map[string]string{
+				k.KeyAWSAccessKeyID:     accessKey,
+				k.KeyAWSSecretAccessKey: secretKey,
+				k.KeyMinIOEndpoint:      r.MinIOEndpoint,
+			}
+		} else if secret.CreationTimestamp.IsZero() {
+			// Secret doesn't exist yet but user already has credentials — this shouldn't
+			// happen normally but is handled defensively.
+			return fmt.Errorf("minio user %s exists but secret is missing — manual credential rotation required", accessKey)
 		}
+		// Existing secret with existing user — labels updated, data preserved.
 		return nil
 	})
 	return err

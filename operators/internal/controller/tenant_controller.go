@@ -125,7 +125,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		{conditions.TypePriorityClassReady, func() error { return r.reconcilePriorityClass(ctx, &tenant) }},
 		{"", func() error { return r.reconcileEnvironmentCRs(ctx, &tenant) }},
 	}
-	if err := r.runSteps(ctx, &tenant, steps); err != nil {
+	if err := r.runSteps(ctx, req, &tenant, steps); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -163,8 +163,9 @@ type reconcileStep struct {
 }
 
 // runSteps executes reconcile steps sequentially, setting conditions on failure.
-// On error it updates the status (best-effort) and returns the error.
-func (r *TenantReconciler) runSteps(ctx context.Context, tenant *loopzerov1.Tenant, steps []reconcileStep) error {
+// On error it re-fetches the resource to get the latest resourceVersion before
+// updating status (best-effort) and returns the error.
+func (r *TenantReconciler) runSteps(ctx context.Context, req ctrl.Request, tenant *loopzerov1.Tenant, steps []reconcileStep) error {
 	logger := log.FromContext(ctx)
 	for _, step := range steps {
 		if err := step.fn(); err != nil {
@@ -172,6 +173,14 @@ func (r *TenantReconciler) runSteps(ctx context.Context, tenant *loopzerov1.Tena
 				conditions.SetCondition(&tenant.Status.Conditions, step.condType,
 					metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
 			}
+			// Re-fetch to avoid stale resourceVersion from concurrent reconciles
+			// triggered by child resource CreateOrUpdate operations.
+			savedStatus := tenant.Status
+			if refetchErr := r.Get(ctx, req.NamespacedName, tenant); refetchErr != nil {
+				logger.Error(refetchErr, "failed to re-fetch tenant for status update", "tenant", tenant.Name)
+				return err
+			}
+			tenant.Status = savedStatus
 			if statusErr := r.Status().Update(ctx, tenant); statusErr != nil {
 				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
 			}

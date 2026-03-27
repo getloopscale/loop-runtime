@@ -86,28 +86,75 @@ func NewAdminProvisioner(cfg AdminConfig) *AdminProvisioner {
 //	}
 func (p *AdminProvisioner) EnsureTenantCredentials(ctx context.Context, tenantID string) (string, string, error) {
 	accessKey := fmt.Sprintf("loopzero-build-%s", tenantID)
+
+	// Check if user already exists — avoid rotating credentials on every reconcile,
+	// which would break in-flight build workflows using the previous secret key.
+	exists, existsErr := p.userExists(ctx, accessKey)
+	if existsErr != nil {
+		return "", "", fmt.Errorf("minio: check user %s: %w", accessKey, existsErr)
+	}
+	if exists {
+		// User and policy already provisioned. Return the access key with an empty
+		// secret key — the caller should only store credentials when creating the
+		// K8s Secret for the first time (CreateOrUpdate won't overwrite if unchanged).
+		policyName := fmt.Sprintf("loopzero-tenant-%s", tenantID)
+		// Ensure policy is up-to-date (idempotent).
+		if err := p.ensurePolicy(ctx, policyName, tenantID); err != nil {
+			return "", "", fmt.Errorf("minio: ensure policy %s: %w", policyName, err)
+		}
+		if err := p.attachPolicy(ctx, policyName, accessKey); err != nil {
+			return "", "", fmt.Errorf("minio: attach policy %s to %s: %w", policyName, accessKey, err)
+		}
+		return accessKey, "", nil
+	}
+
+	// New user — generate credentials.
 	secretKey, err := generateSecretKey()
 	if err != nil {
 		return "", "", fmt.Errorf("minio: generate secret key: %w", err)
 	}
 
-	// Create or update MinIO user via Admin API
 	if err := p.ensureUser(ctx, accessKey, secretKey); err != nil {
 		return "", "", fmt.Errorf("minio: ensure user %s: %w", accessKey, err)
 	}
 
-	// Create or update policy scoped to tenant prefix
 	policyName := fmt.Sprintf("loopzero-tenant-%s", tenantID)
 	if err := p.ensurePolicy(ctx, policyName, tenantID); err != nil {
 		return "", "", fmt.Errorf("minio: ensure policy %s: %w", policyName, err)
 	}
 
-	// Attach policy to user
 	if err := p.attachPolicy(ctx, policyName, accessKey); err != nil {
 		return "", "", fmt.Errorf("minio: attach policy %s to %s: %w", policyName, accessKey, err)
 	}
 
 	return accessKey, secretKey, nil
+}
+
+// userExists checks if a MinIO user already exists via the Admin API.
+func (p *AdminProvisioner) userExists(ctx context.Context, accessKey string) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		p.adminURL("user-info", "accessKey="+accessKey),
+		nil)
+	if err != nil {
+		return false, fmt.Errorf("create user-info request: %w", err)
+	}
+	p.signRequest(req)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("user-info request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.ReadAll(resp.Body)
+
+	// 200 = user exists, 404 = does not exist.
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	return false, fmt.Errorf("user-info: unexpected HTTP %d", resp.StatusCode)
 }
 
 // ensureUser creates or updates a MinIO user via the Admin API.

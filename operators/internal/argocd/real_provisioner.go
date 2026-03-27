@@ -103,6 +103,9 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 
 	existing, err := p.client.Resource(appProjectGVR).Namespace(p.namespace).Get(ctx, spec.Name, metav1.GetOptions{})
 	if err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("argocd: get appproject %s: %w", spec.Name, err)
+		}
 		_, err = p.client.Resource(appProjectGVR).Namespace(p.namespace).Create(ctx, proj, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("argocd: create appproject %s: %w", spec.Name, err)
@@ -174,7 +177,10 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 	// Try to get existing application
 	existing, err := p.client.Resource(applicationGVR).Namespace(p.namespace).Get(ctx, spec.Name, metav1.GetOptions{})
 	if err != nil {
-		// Create new
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("argocd: get application %s: %w", spec.Name, err)
+		}
+		// Resource does not exist — create it.
 		_, err = p.client.Resource(applicationGVR).Namespace(p.namespace).Create(ctx, app, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("argocd: create application %s: %w", spec.Name, err)

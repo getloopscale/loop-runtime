@@ -160,7 +160,13 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		"probeResult", probeResult,
 		"consecutiveFailures", route.Status.ConsecutiveFailures)
 
-	return ctrl.Result{RequeueAfter: constants.RequeueProbeInterval}, nil
+	// Use a longer interval when the route is stable (Reachable) to reduce
+	// reconcile load. Unstable routes get probed more frequently.
+	requeueInterval := constants.RequeueProbeInterval
+	if route.Status.Phase == loopzerov1.ExposedRoutePhaseReachable {
+		requeueInterval = constants.RequeueProbeStableInterval
+	}
+	return ctrl.Result{RequeueAfter: requeueInterval}, nil
 }
 
 // checkCertificateReady checks if the TLS certificate secret exists.

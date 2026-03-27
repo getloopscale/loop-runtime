@@ -18,8 +18,14 @@ const (
 	// for a namespace to be fully deleted on the runtime cluster.
 	RequeueNamespaceDeletionWait = 5 * time.Second
 
-	// RequeueProbeInterval is the interval between ExposedRoute reachability probes.
+	// RequeueProbeInterval is the interval between ExposedRoute reachability probes
+	// when the route is not yet stable (pending, cert-issued, or recovering from failure).
 	RequeueProbeInterval = 30 * time.Second
+
+	// RequeueProbeStableInterval is the interval between probes when the route
+	// is already Reachable and stable. Reduces reconcile load: 200 routes at 30s
+	// = 400 reconciles/min vs 200 routes at 5min = 40 reconciles/min.
+	RequeueProbeStableInterval = 5 * time.Minute
 
 	// RequeueRepoBindingInterval is the periodic recheck interval for GitRepositoryBinding.
 	RequeueRepoBindingInterval = 5 * time.Minute

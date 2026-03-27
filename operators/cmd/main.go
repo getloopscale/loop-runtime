@@ -4,6 +4,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net/http"
@@ -210,8 +211,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Shared HTTP client for controllers that make external HTTP calls.
-	httpClient := &http.Client{Timeout: constants.HTTPTimeoutDefault}
+	// Shared HTTP client for controllers that make internal HTTP calls (Gitea, ArgoCD).
+	// Internal services use self-signed TLS certificates, so InsecureSkipVerify is
+	// required for in-cluster communication.
+	httpClient := &http.Client{
+		Timeout: constants.HTTPTimeoutDefault,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, //nolint:gosec // internal cluster services use self-signed certs
+			},
+		},
+	}
 
 	// 4. GitRepositoryBindingController: syncs Git credentials to ArgoCD Secrets.
 	// Detects credential rotation via SHA256 hash comparison.
