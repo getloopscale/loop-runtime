@@ -30,7 +30,7 @@ loopzero deploy
 Total: 193s — exit code 0
 ```
 
-After this: `git push` to `main` auto-deploys. Opening a PR creates a preview environment automatically. No configuration needed.
+**Roadmap:** auto-deploy on `git push` to `main` and preview environments per PR are planned for future sprints. See [Roadmap](docs/sprints/ROADMAP.md).
 
 ---
 
@@ -78,18 +78,19 @@ The following commands are implemented and functional:
 
 Additional commands (status, inspect, preview environments) are planned for future sprints.
 
-### Preview Environments
+### Preview Environments (Planned)
+
+Preview environments per PR are planned for Sprint 5. The target experience:
 
 ```bash
 $ git push origin feat/payments
 # GitHub webhook fires automatically
 # PR comment appears:
-# 🔗 Preview ready:
 #   api → https://acme-my-saas-api-feat-payments.dev.loopzero.example
 #   web → https://acme-my-saas-web-feat-payments.dev.loopzero.example
 ```
 
-No CLI command needed. Previews are destroyed automatically when the PR is merged or closed.
+No CLI command needed. Previews will be destroyed automatically when the PR is merged or closed.
 
 ---
 
@@ -101,10 +102,10 @@ No CLI command needed. Previews are destroyed automatically when the PR is merge
 | Backend / API server | ❌ Serverless only | ✅ Any framework |
 | Workers / background jobs | ❌ | ✅ |
 | Multiple services in one repo | ❌ | ✅ |
-| Preview environments per PR | ✅ | ✅ |
+| Preview environments per PR | ✅ | 🔜 Sprint 5 |
 | Rollback with one command | ✅ | ✅ |
 | Env variables per environment | ✅ | ✅ |
-| Auto-deploy on push to main | ✅ | ✅ |
+| Auto-deploy on push to main | ✅ | 🔜 Roadmap |
 | Real-time logs | ✅ | ✅ |
 | CLI as complete interface | ✅ | ✅ |
 | Managed databases | ❌ | 🔜 Roadmap |
@@ -155,6 +156,10 @@ Node.js, NestJS, Next.js, Vite, Remix, Go, Python/FastAPI, Python/Django, Java/S
 | `loopzero deploy --env staging` | Deploy to a specific environment | `vercel --prod` |
 | `loopzero deploy --app api` | Deploy specific app(s) | N/A |
 | `loopzero deploy --no-wait` | Submit deploy and return immediately | N/A |
+| `loopzero logs` | Stream build and runtime logs | `vercel logs` |
+| `loopzero rollback` | Revert to a previous release (~3s) | `vercel rollback` |
+| `loopzero secret` | Manage environment secrets | `vercel env` |
+| `loopzero validate` | Validate `loopzero.yaml` configuration locally | N/A |
 
 Full reference: see [CLI Reference](#) in the system design docs.
 
