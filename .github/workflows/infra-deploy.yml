@@ -505,9 +505,11 @@ jobs:
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           STACK="${{ needs.resolve.outputs.stack }}"
+          # Cancel stale lock from Step 1/2
+          pulumi cancel -s "$STACK" 2>/dev/null || true
           # Refresh: sync state with reality. Completed Jobs may have been
           # garbage-collected by K8s between Step 1 and now.
-          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
+          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
           # Converge: update Deployments (now images exist), recreate GC'd Jobs
           pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
 
