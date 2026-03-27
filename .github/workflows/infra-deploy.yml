@@ -313,6 +313,34 @@ jobs:
           done
           echo "  DNS records deleted"
 
+          # Delete Cloudflare resources (Sprint 10 — not managed by DO API)
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            CF_ACCOUNT_ID=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi config get cfAccountId --stack "$STACK" 2>/dev/null || echo "")
+            CF_ZONE_ID=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi config get cfZoneId --stack "$STACK" 2>/dev/null || echo "")
+            if [ -n "$CF_ACCOUNT_ID" ] && [ -n "$CF_ZONE_ID" ]; then
+              echo "Cleaning Cloudflare resources..."
+              # Delete worker routes
+              for ROUTE_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/workers/routes" | python3 -c "import sys,json; [print(r['id']) for r in json.load(sys.stdin).get('result',[])]" 2>/dev/null); do
+                curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/workers/routes/$ROUTE_ID" 2>/dev/null
+              done
+              # Delete worker scripts
+              curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/loopzero-static-delivery" 2>/dev/null
+              # Delete KV namespaces with "loopzero" prefix
+              for NS_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces" | python3 -c "import sys,json; [print(ns['id']) for ns in json.load(sys.stdin).get('result',[]) if ns['title'].startswith('loopzero')]" 2>/dev/null); do
+                curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$NS_ID" 2>/dev/null
+              done
+              # Delete CF DNS CNAME records for *.dev subdomain
+              for REC_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=CNAME" | python3 -c "import sys,json; [print(r['id']) for r in json.load(sys.stdin).get('result',[]) if '.dev.' in r.get('name','')]" 2>/dev/null); do
+                curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$REC_ID" 2>/dev/null
+              done
+              # Delete tunnels with "loopzero" prefix
+              for TUN_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel?name=loopzero" | python3 -c "import sys,json; [print(t['id']) for t in json.load(sys.stdin).get('result',[])]" 2>/dev/null); do
+                curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUN_ID" 2>/dev/null
+              done
+              echo "  Cloudflare resources deleted"
+            fi
+          fi
+
           echo "Pre-destroy cleanup complete — cloud resources deleted via API"
 
       # --- Non-up commands (destroy, refresh, preview) ---
