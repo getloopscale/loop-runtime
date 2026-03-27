@@ -2091,7 +2091,7 @@ function createClusterIssuer(
       {
         metadata: {
           name: "cloudflare-api-token-secret",
-          namespace: "cert-manager",
+          namespace: PLATFORM_NAMESPACE,
         },
         stringData: {
           "api-token": config.cfApiToken,
