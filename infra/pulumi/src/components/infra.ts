@@ -192,7 +192,7 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
   }, {
     // Import existing bucket created before Pulumi management.
     // Safe to remove after first successful `pulumi up`.
-    import: "loopzero-static-assets",
+    import: "sfo3,loopzero-static-assets",
   });
   const staticBucket = {
     bucketName: staticBucketResource.name,

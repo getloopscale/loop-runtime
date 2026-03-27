@@ -46,7 +46,7 @@ export function createStaticDelivery(
   }, {
     // Import existing KV namespace created before Pulumi management.
     // Safe to remove after first successful `pulumi up`.
-    import: "28992ed1178f4cbea95c2550784c69b8",
+    import: "362767409c4de7fda7990c10103efdd9/28992ed1178f4cbea95c2550784c69b8",
   });
 
   // 2. Worker script — read template and inject config values
