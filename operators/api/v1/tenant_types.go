@@ -108,6 +108,7 @@ type ResourceLimits struct {
 	MaxStorage resource.Quantity `json:"maxStorage"`
 
 	// MaxBuildConcurrency is the maximum number of concurrent builds.
+	// +kubebuilder:validation:Minimum=1
 	MaxBuildConcurrency int `json:"maxBuildConcurrency"`
 }
 
@@ -126,12 +127,6 @@ type TenantStatus struct {
 
 	// ObservedGeneration is the most recent generation observed by the controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// ActiveBuilds is the current number of active builds for this tenant.
-	ActiveBuilds int `json:"activeBuilds"`
-
-	// TotalReleases is the total number of releases created for this tenant.
-	TotalReleases int `json:"totalReleases"`
 }
 
 // TenantList contains a list of Tenant resources.

@@ -73,6 +73,7 @@ spec:
                 default: 1
                 description: Replicas is the desired number of replicas.
                 format: int32
+                minimum: 0
                 type: integer
               serviceName:
                 description: ServiceName is the Kubernetes Service name backing this
@@ -83,6 +84,8 @@ spec:
                 default: 80
                 description: ServicePort is the port on the backing service.
                 format: int32
+                maximum: 65535
+                minimum: 1
                 type: integer
               tenantRef:
                 description: TenantRef is the name of the parent Tenant CR.
@@ -97,9 +100,6 @@ spec:
           status:
             description: LoopZeroApplicationStatus defines the observed state of a LoopZeroApplication.
             properties:
-              argoSyncStatus:
-                description: ArgoSyncStatus reflects the ArgoCD sync status (if available).
-                type: string
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the application's state.
@@ -176,14 +176,6 @@ spec:
                 - Degraded
                 - Down
                 type: string
-              podDesired:
-                description: PodDesired is the desired number of pods.
-                format: int32
-                type: integer
-              podReady:
-                description: PodReady is the number of ready pods.
-                format: int32
-                type: integer
               reachable:
                 description: Reachable indicates whether the route probe succeeded.
                 type: boolean

@@ -21,8 +21,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
+	"net/url"
+
+	"github.com/loopzero/loopzero/operators/internal/constants"
 )
+
+// Compile-time interface compliance check.
+var _ CredentialProvisioner = (*AdminProvisioner)(nil)
 
 // CredentialProvisioner manages per-tenant MinIO credentials.
 type CredentialProvisioner interface {
@@ -54,7 +59,7 @@ func NewAdminProvisioner(cfg AdminConfig) *AdminProvisioner {
 		endpoint:  cfg.Endpoint,
 		accessKey: cfg.AccessKey,
 		secretKey: cfg.SecretKey,
-		client:    &http.Client{Timeout: 15 * time.Second},
+		client:    &http.Client{Timeout: constants.HTTPTimeoutMinIO},
 	}
 }
 
@@ -107,17 +112,20 @@ func (p *AdminProvisioner) EnsureTenantCredentials(ctx context.Context, tenantID
 
 // ensureUser creates or updates a MinIO user via the Admin API.
 func (p *AdminProvisioner) ensureUser(ctx context.Context, accessKey, secretKey string) error {
-	body, _ := json.Marshal(map[string]string{
+	body, marshalErr := json.Marshal(map[string]string{
 		"accessKey": accessKey,
 		"secretKey": secretKey,
 		"status":    "enabled",
 	})
+	if marshalErr != nil {
+		return fmt.Errorf("minio: marshal add-user: %w", marshalErr)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut,
-		fmt.Sprintf("%s/minio/admin/v3/add-user?accessKey=%s", p.endpoint, accessKey),
+		p.adminURL("add-user", "accessKey="+accessKey),
 		bytes.NewReader(body))
 	if err != nil {
-		return err
+		return fmt.Errorf("minio: create add-user request: %w", err)
 	}
 	p.signRequest(req)
 	req.Header.Set("Content-Type", "application/json")
@@ -168,13 +176,16 @@ func (p *AdminProvisioner) ensurePolicy(ctx context.Context, policyName, tenantI
 		},
 	}
 
-	body, _ := json.Marshal(policy)
+	body, marshalErr := json.Marshal(policy)
+	if marshalErr != nil {
+		return fmt.Errorf("minio: marshal policy: %w", marshalErr)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut,
-		fmt.Sprintf("%s/minio/admin/v3/add-canned-policy?name=%s", p.endpoint, policyName),
+		p.adminURL("add-canned-policy", "name="+policyName),
 		bytes.NewReader(body))
 	if err != nil {
-		return err
+		return fmt.Errorf("minio: create add-policy request: %w", err)
 	}
 	p.signRequest(req)
 	req.Header.Set("Content-Type", "application/json")
@@ -195,11 +206,11 @@ func (p *AdminProvisioner) ensurePolicy(ctx context.Context, policyName, tenantI
 // attachPolicy attaches a named policy to a MinIO user.
 func (p *AdminProvisioner) attachPolicy(ctx context.Context, policyName, accessKey string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut,
-		fmt.Sprintf("%s/minio/admin/v3/set-user-or-group-policy?policyName=%s&userOrGroup=%s&isGroup=false",
-			p.endpoint, policyName, accessKey),
+		p.adminURL("set-user-or-group-policy",
+			fmt.Sprintf("policyName=%s&userOrGroup=%s&isGroup=false", policyName, accessKey)),
 		nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("minio: create set-policy request: %w", err)
 	}
 	p.signRequest(req)
 
@@ -214,6 +225,20 @@ func (p *AdminProvisioner) attachPolicy(ctx context.Context, policyName, accessK
 		return fmt.Errorf("set-policy: HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 	return nil
+}
+
+// adminURL builds a MinIO Admin API URL from a path and properly encoded query parameters.
+func (p *AdminProvisioner) adminURL(path string, queryParams ...string) string {
+	u, err := url.Parse(p.endpoint)
+	if err != nil {
+		// Fallback: endpoint was validated at init; this should not happen.
+		return p.endpoint + "/minio/admin/v3/" + path
+	}
+	u.Path = "/minio/admin/v3/" + path
+	if len(queryParams) > 0 {
+		u.RawQuery = queryParams[0]
+	}
+	return u.String()
 }
 
 // signRequest adds MinIO admin API authentication headers.

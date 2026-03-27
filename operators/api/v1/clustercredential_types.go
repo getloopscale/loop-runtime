@@ -31,7 +31,9 @@ type ClusterCredentialSpec struct {
 	ClusterName string `json:"clusterName"`
 
 	// APIServer is the URL of the target cluster's API server.
+	// Must be a valid HTTPS URL (e.g., "https://cluster.example.com:6443").
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^https?://`
 	APIServer string `json:"apiServer"`
 
 	// SecretRef references the Kubernetes Secret containing the kubeconfig.
@@ -39,6 +41,10 @@ type ClusterCredentialSpec struct {
 
 	// Scope defines what components are allowed to use these credentials.
 	Scope CredentialScope `json:"scope"`
+
+	// TLS configures TLS verification for the target cluster API server.
+	// +optional
+	TLS ClusterTLSConfig `json:"tls,omitempty"`
 }
 
 // CredentialScope defines which components can use a ClusterCredential.
@@ -48,6 +54,15 @@ type CredentialScope struct {
 
 	// Operators indicates whether operators should receive these credentials.
 	Operators bool `json:"operators"`
+}
+
+// ClusterTLSConfig configures TLS verification for a cluster connection.
+type ClusterTLSConfig struct {
+	// Insecure disables TLS certificate verification for the ArgoCD cluster secret.
+	// Only enable for development clusters with self-signed certificates.
+	// +kubebuilder:default=false
+	// +optional
+	Insecure bool `json:"insecure,omitempty"`
 }
 
 // ClusterCredentialStatus defines the observed state of a ClusterCredential.

@@ -50,7 +50,7 @@ type PreviewEnvironmentSpec struct {
 
 	// PRNumber is the pull request number that triggered this preview.
 	// +kubebuilder:validation:Minimum=1
-	PRNumber int `json:"prNumber,omitempty"`
+	PRNumber int `json:"prNumber"`
 
 	// Branch is the source branch for the preview.
 	// +kubebuilder:validation:MinLength=1

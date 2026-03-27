@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -22,24 +21,16 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 const (
 	// exposureFinalizer is the finalizer name for ExposedRoute cleanup.
-	exposureFinalizer = "loopzero.io/route-cleanup"
-
-	// probeRequeueInterval is the interval between reachability probes.
-	probeRequeueInterval = 30 * time.Second
-
-	// probeTimeout is the HTTP client timeout for reachability probes.
-	probeTimeout = 5 * time.Second
-
-	// maxConsecutiveFailures is the threshold after which the route is marked Failed.
-	maxConsecutiveFailures = 5
+	exposureFinalizer = constants.FinalizerExposedRoute
 
 	// probeURLOverrideAnnotation allows tests to inject a probe URL.
-	probeURLOverrideAnnotation = "loopzero.io/probe-url-override"
+	probeURLOverrideAnnotation = constants.AnnotationProbeURLOverride
 )
 
 // ExposureReconciler reconciles an ExposedRoute object.
@@ -113,7 +104,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, fmt.Errorf("updating route status: %w", err)
 		}
 		logger.Info("certificate not ready, requeuing", "route", route.Name)
-		return ctrl.Result{RequeueAfter: probeRequeueInterval}, nil
+		return ctrl.Result{RequeueAfter: constants.RequeueProbeInterval}, nil
 	}
 
 	// Cert is ready (or TLS is disabled) — update phase to CertIssued if still Pending
@@ -144,11 +135,11 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			msg = fmt.Sprintf("probe failed: %v", probeErr)
 		}
 
-		if route.Status.ConsecutiveFailures >= maxConsecutiveFailures {
+		if route.Status.ConsecutiveFailures >= constants.MaxConsecutiveProbeFailures {
 			route.Status.Phase = loopzerov1.ExposedRoutePhaseFailed
 			conditions.SetCondition(&route.Status.Conditions, conditions.TypeRouteReachable,
 				metav1.ConditionFalse, conditions.ReasonFailed,
-				fmt.Sprintf("exceeded %d consecutive failures: %s", maxConsecutiveFailures, msg),
+				fmt.Sprintf("exceeded %d consecutive failures: %s", constants.MaxConsecutiveProbeFailures, msg),
 				route.Generation)
 		} else {
 			conditions.SetCondition(&route.Status.Conditions, conditions.TypeRouteReachable,
@@ -169,7 +160,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		"probeResult", probeResult,
 		"consecutiveFailures", route.Status.ConsecutiveFailures)
 
-	return ctrl.Result{RequeueAfter: probeRequeueInterval}, nil
+	return ctrl.Result{RequeueAfter: constants.RequeueProbeInterval}, nil
 }
 
 // checkCertificateReady checks if the TLS certificate secret exists.
@@ -208,7 +199,7 @@ func (r *ExposureReconciler) performProbe(ctx context.Context, url string) (int3
 	httpClient := r.HTTPClient
 	if httpClient == nil {
 		httpClient = &http.Client{
-			Timeout: probeTimeout,
+			Timeout: constants.ProbeTimeout,
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true, //nolint:gosec // probes use self-signed certs in dev
@@ -239,5 +230,13 @@ func SetupExposureController(mgr ctrl.Manager) error {
 		Complete(&ExposureReconciler{
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			HTTPClient: &http.Client{
+				Timeout: constants.ProbeTimeout,
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{
+						InsecureSkipVerify: true, //nolint:gosec // probes use self-signed certs in dev
+					},
+				},
+			},
 		})
 }

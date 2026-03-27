@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -21,27 +20,17 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/operators/internal/constants"
 )
 
 const (
-	clusterCredentialFinalizer = "loopzero.io/clustercredential-cleanup"
-	argoCDSecretLabel          = "argocd.argoproj.io/secret-type"
-	argoCDSecretLabelValue     = "cluster"
-	argoCDNamespace            = "argocd"
-
-	conditionSecretNotFound = "SecretNotFound"
-	conditionConnected      = "Connected"
-
-	requeueSecretNotFound = 30 * time.Second
-	requeuePeriodicCheck  = 5 * time.Minute
-
-	// connectivityTimeout limits how long we wait for a healthz response.
-	connectivityTimeout = 5 * time.Second
+	clusterCredentialFinalizer = constants.FinalizerClusterCredential
 )
 
 // ClusterCredentialReconciler reconciles a ClusterCredential object.
 type ClusterCredentialReconciler struct {
 	client.Client
+	ArgoCDNamespace string
 }
 
 // Reconcile handles the reconciliation loop for ClusterCredential resources.
@@ -56,95 +45,127 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion with finalizer pattern.
 	if !cr.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &cr)
 	}
 
-	// Add finalizer if not present.
 	if !controllerutil.ContainsFinalizer(&cr, clusterCredentialFinalizer) {
 		controllerutil.AddFinalizer(&cr, clusterCredentialFinalizer)
 		if err := r.Update(ctx, &cr); err != nil {
 			return ctrl.Result{}, err
 		}
-		// Re-fetch after update to avoid stale resource version.
 		if err := r.Get(ctx, req.NamespacedName, &cr); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 
-	// Step 1: Read the referenced Secret.
-	var secret corev1.Secret
+	// Step 1: Resolve kubeconfig from the referenced Secret.
+	kubeconfigData, result, err := r.resolveKubeconfig(ctx, &cr)
+	if err != nil || kubeconfigData == nil {
+		return result, err
+	}
+
+	// Step 2: Validate cluster connectivity.
+	connected, result, err := r.checkConnectivity(ctx, &cr, kubeconfigData)
+	if err != nil || !connected {
+		return result, err
+	}
+
+	// Step 3: Create/Update ArgoCD cluster secret.
+	if cr.Spec.Scope.ArgoCD {
+		if err := r.reconcileArgoCDClusterSecret(ctx, &cr, kubeconfigData); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	if statusErr := r.Status().Update(ctx, &cr); statusErr != nil {
+		return ctrl.Result{}, statusErr
+	}
+
+	logger.Info("reconciled cluster credential", "cluster", cr.Spec.ClusterName, "connected", cr.Status.Connected)
+	return ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
+}
+
+// resolveKubeconfig reads and parses the kubeconfig from the referenced Secret.
+// Returns (nil, result, nil) if the kubeconfig is not yet available (status updated, requeue set).
+func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr *loopzerov1.ClusterCredential) ([]byte, ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
 	secretKey := client.ObjectKey{
 		Name:      cr.Spec.SecretRef.Name,
 		Namespace: cr.Spec.SecretRef.Namespace,
 	}
+	var secret corev1.Secret
 	if err := r.Get(ctx, secretKey, &secret); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("referenced secret not found", "secret", secretKey)
 			cr.Status.Connected = false
-			conditions.SetCondition(&cr.Status.Conditions, conditionSecretNotFound,
+			conditions.SetCondition(&cr.Status.Conditions, conditions.TypeSecretNotFound,
 				metav1.ConditionTrue, "SecretMissing",
 				fmt.Sprintf("Secret %s/%s not found", secretKey.Namespace, secretKey.Name),
 				cr.Generation)
-			if statusErr := r.Status().Update(ctx, &cr); statusErr != nil {
-				return ctrl.Result{}, statusErr
+			if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
+				return nil, ctrl.Result{}, statusErr
 			}
-			return ctrl.Result{RequeueAfter: requeueSecretNotFound}, nil
+			return nil, ctrl.Result{RequeueAfter: constants.RequeueSecretNotFound}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("failed to get secret %s/%s: %w", secretKey.Namespace, secretKey.Name, err)
+		return nil, ctrl.Result{}, fmt.Errorf("failed to get secret %s/%s: %w", secretKey.Namespace, secretKey.Name, err)
 	}
 
-	// Secret found — clear SecretNotFound condition.
-	conditions.SetCondition(&cr.Status.Conditions, conditionSecretNotFound,
+	conditions.SetCondition(&cr.Status.Conditions, conditions.TypeSecretNotFound,
 		metav1.ConditionFalse, "SecretFound",
 		fmt.Sprintf("Secret %s/%s exists", secretKey.Namespace, secretKey.Name),
 		cr.Generation)
 
-	// Step 2: Parse kubeconfig from the secret.
-	kubeconfigData, ok := secret.Data["kubeconfig"]
+	kubeconfigData, ok := secret.Data[constants.KeyKubeconfig]
 	if !ok {
 		cr.Status.Connected = false
-		conditions.SetCondition(&cr.Status.Conditions, conditionConnected,
+		conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
 			metav1.ConditionFalse, "KubeconfigKeyMissing",
 			"Secret does not contain 'kubeconfig' key",
 			cr.Generation)
-		if statusErr := r.Status().Update(ctx, &cr); statusErr != nil {
-			return ctrl.Result{}, statusErr
+		if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
+			return nil, ctrl.Result{}, statusErr
 		}
-		return ctrl.Result{RequeueAfter: requeuePeriodicCheck}, nil
+		return nil, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
 	}
+
+	return kubeconfigData, ctrl.Result{}, nil
+}
+
+// checkConnectivity validates that the cluster is reachable via /healthz.
+// Returns (false, result, nil) if unreachable (status updated, requeue set).
+func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr *loopzerov1.ClusterCredential, kubeconfigData []byte) (bool, ctrl.Result, error) {
+	logger := log.FromContext(ctx)
 
 	restConfig, err := clientcmd.RESTConfigFromKubeConfig(kubeconfigData)
 	if err != nil {
 		cr.Status.Connected = false
-		conditions.SetCondition(&cr.Status.Conditions, conditionConnected,
+		conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
 			metav1.ConditionFalse, "InvalidKubeconfig",
 			fmt.Sprintf("Failed to parse kubeconfig: %v", err),
 			cr.Generation)
-		if statusErr := r.Status().Update(ctx, &cr); statusErr != nil {
-			return ctrl.Result{}, statusErr
+		if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
+			return false, ctrl.Result{}, statusErr
 		}
-		return ctrl.Result{RequeueAfter: requeuePeriodicCheck}, nil
+		return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
 	}
 
-	// Step 3: Validate cluster connectivity.
-	restConfig.Timeout = connectivityTimeout
+	restConfig.Timeout = constants.ConnectivityTimeout
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		cr.Status.Connected = false
-		conditions.SetCondition(&cr.Status.Conditions, conditionConnected,
+		conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
 			metav1.ConditionFalse, "ClientCreationFailed",
 			fmt.Sprintf("Failed to create Kubernetes client: %v", err),
 			cr.Generation)
-		if statusErr := r.Status().Update(ctx, &cr); statusErr != nil {
-			return ctrl.Result{}, statusErr
+		if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
+			return false, ctrl.Result{}, statusErr
 		}
-		return ctrl.Result{RequeueAfter: requeuePeriodicCheck}, nil
+		return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
 	}
 
-	// Use /healthz endpoint for connectivity check (lightweight, does not require RBAC).
-	healthzCtx, healthzCancel := context.WithTimeout(ctx, connectivityTimeout)
+	healthzCtx, healthzCancel := context.WithTimeout(ctx, constants.ConnectivityTimeout)
 	defer healthzCancel()
 
 	body, err := clientset.Discovery().RESTClient().Get().AbsPath("/healthz").DoRaw(healthzCtx)
@@ -156,40 +177,26 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if err != nil {
 			msg = fmt.Sprintf("Cluster %s connectivity failed: %v", cr.Spec.ClusterName, err)
 		}
-		conditions.SetCondition(&cr.Status.Conditions, conditionConnected,
+		conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
 			metav1.ConditionFalse, reason, msg, cr.Generation)
 		now := metav1.Now()
 		cr.Status.LastCheckedAt = &now
-		if statusErr := r.Status().Update(ctx, &cr); statusErr != nil {
-			return ctrl.Result{}, statusErr
+		if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
+			return false, ctrl.Result{}, statusErr
 		}
-		return ctrl.Result{RequeueAfter: requeuePeriodicCheck}, nil
+		return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
 	}
 
-	// Cluster is reachable.
 	logger.Info("cluster connectivity check succeeded", "cluster", cr.Spec.ClusterName)
 	cr.Status.Connected = true
 	now := metav1.Now()
 	cr.Status.LastCheckedAt = &now
-	conditions.SetCondition(&cr.Status.Conditions, conditionConnected,
+	conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
 		metav1.ConditionTrue, "Reachable",
 		fmt.Sprintf("Cluster %s is reachable", cr.Spec.ClusterName),
 		cr.Generation)
 
-	// Step 4: Create/Update ArgoCD cluster secret.
-	if cr.Spec.Scope.ArgoCD {
-		if err := r.reconcileArgoCDClusterSecret(ctx, &cr, kubeconfigData); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
-	// Step 5: Update status.
-	if statusErr := r.Status().Update(ctx, &cr); statusErr != nil {
-		return ctrl.Result{}, statusErr
-	}
-
-	logger.Info("reconciled cluster credential", "cluster", cr.Spec.ClusterName, "connected", cr.Status.Connected)
-	return ctrl.Result{RequeueAfter: requeuePeriodicCheck}, nil
+	return true, ctrl.Result{}, nil
 }
 
 // argoCDClusterConfig is the JSON structure ArgoCD expects in the cluster secret's "config" field.
@@ -203,11 +210,11 @@ type argoCDTLSConfig struct {
 
 // reconcileArgoCDClusterSecret creates or updates the ArgoCD cluster secret.
 func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.Context, cr *loopzerov1.ClusterCredential, kubeconfigData []byte) error {
-	secretName := fmt.Sprintf("cluster-%s", cr.Spec.ClusterName)
+	secretName := constants.ArgoCDClusterSecretName(cr.Spec.ClusterName)
 
 	argoConfig := argoCDClusterConfig{
 		TLSClientConfig: argoCDTLSConfig{
-			Insecure: true, // Using kubeconfig-based auth; TLS verified by kubeconfig settings.
+			Insecure: cr.Spec.TLS.Insecure,
 		},
 	}
 	configJSON, err := json.Marshal(argoConfig)
@@ -218,7 +225,7 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 	argoSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
-			Namespace: argoCDNamespace,
+			Namespace: r.ArgoCDNamespace,
 		},
 	}
 
@@ -226,20 +233,20 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 		if argoSecret.Labels == nil {
 			argoSecret.Labels = make(map[string]string)
 		}
-		argoSecret.Labels[argoCDSecretLabel] = argoCDSecretLabelValue
-		argoSecret.Labels["loopzero.io/managed-by"] = "clustercredential-controller"
-		argoSecret.Labels["loopzero.io/cluster-credential"] = cr.Name
+		argoSecret.Labels[constants.ArgoCDSecretTypeLabel] = constants.ArgoCDSecretTypeCluster
+		argoSecret.Labels[constants.LabelManagedBy] = constants.ManagedByClusterCredentialController
+		argoSecret.Labels[constants.LabelClusterCredential] = cr.Name
 
 		argoSecret.StringData = map[string]string{
-			"name":       cr.Spec.ClusterName,
-			"server":     cr.Spec.APIServer,
-			"config":     string(configJSON),
-			"kubeconfig": string(kubeconfigData),
+			"name":                  cr.Spec.ClusterName,
+			"server":                cr.Spec.APIServer,
+			"config":                string(configJSON),
+			constants.KeyKubeconfig: string(kubeconfigData),
 		}
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("argocd cluster secret %s/%s: %w", argoCDNamespace, secretName, err)
+		return fmt.Errorf("argocd cluster secret %s/%s: %w", r.ArgoCDNamespace, secretName, err)
 	}
 
 	return nil
@@ -255,23 +262,21 @@ func (r *ClusterCredentialReconciler) reconcileDelete(ctx context.Context, cr *l
 
 	logger.Info("cleaning up cluster credential", "cluster", cr.Spec.ClusterName)
 
-	// Delete the ArgoCD cluster secret if it exists.
 	if cr.Spec.Scope.ArgoCD {
-		argoSecretName := fmt.Sprintf("cluster-%s", cr.Spec.ClusterName)
+		argoSecretName := constants.ArgoCDClusterSecretName(cr.Spec.ClusterName)
 		argoSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      argoSecretName,
-				Namespace: argoCDNamespace,
+				Namespace: r.ArgoCDNamespace,
 			},
 		}
 		if err := r.Delete(ctx, argoSecret); err != nil && !errors.IsNotFound(err) {
 			return ctrl.Result{}, fmt.Errorf("failed to delete ArgoCD cluster secret %s/%s: %w",
-				argoCDNamespace, argoSecretName, err)
+				r.ArgoCDNamespace, argoSecretName, err)
 		}
 		logger.Info("deleted ArgoCD cluster secret", "secret", argoSecretName)
 	}
 
-	// Remove finalizer.
 	controllerutil.RemoveFinalizer(cr, clusterCredentialFinalizer)
 	if err := r.Update(ctx, cr); err != nil {
 		return ctrl.Result{}, err
@@ -282,11 +287,15 @@ func (r *ClusterCredentialReconciler) reconcileDelete(ctx context.Context, cr *l
 }
 
 // SetupClusterCredentialController registers the ClusterCredentialController with the manager.
-func SetupClusterCredentialController(mgr ctrl.Manager) error {
+func SetupClusterCredentialController(mgr ctrl.Manager, argoCDNamespace string) error {
+	if argoCDNamespace == "" {
+		argoCDNamespace = constants.DefaultArgoCDNamespace
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.ClusterCredential{}).
 		Named("clustercredential").
 		Complete(&ClusterCredentialReconciler{
-			Client: mgr.GetClient(),
+			Client:          mgr.GetClient(),
+			ArgoCDNamespace: argoCDNamespace,
 		})
 }

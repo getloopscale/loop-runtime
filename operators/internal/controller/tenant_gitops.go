@@ -13,6 +13,7 @@ import (
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/argocd"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
 
@@ -36,11 +37,20 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 
 	// MOD-5: Ensure AppProject exists for tenant RBAC isolation before creating Applications.
 	// Each tenant gets its own AppProject that restricts source repos and destination namespaces.
+	// Collect destination namespaces from tenant environments for RBAC scoping.
+	destNamespaces := make([]string, 0, len(tenant.Spec.Environments))
+	for _, env := range tenant.Spec.Environments {
+		destNS, nsErr := naming.EnvironmentNamespace(tenant.Name, env.Name)
+		if nsErr == nil {
+			destNamespaces = append(destNamespaces, destNS)
+		}
+	}
 	projSpec := argocd.AppProjectSpec{
-		Name:        tenant.Name,
-		Namespace:   "argocd",
-		TenantID:    tenant.Name,
-		SourceRepos: []string{repoURL},
+		Name:                  tenant.Name,
+		Namespace:             constants.DefaultArgoCDNamespace,
+		TenantID:              tenant.Name,
+		SourceRepos:           []string{repoURL},
+		DestinationNamespaces: destNamespaces,
 	}
 	if err := r.ArgoCDProvisioner.EnsureAppProject(ctx, projSpec); err != nil {
 		return fmt.Errorf("argocd appproject %s: %w", tenant.Name, err)
@@ -60,7 +70,7 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 
 		spec := argocd.ApplicationSpec{
 			Name:           appName,
-			Namespace:      "argocd",
+			Namespace:      constants.DefaultArgoCDNamespace,
 			TenantID:       tenant.Name,
 			RepoURL:        repoURL,
 			TargetRevision: tenant.Spec.GitOps.Branch,

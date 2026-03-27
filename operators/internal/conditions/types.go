@@ -55,6 +55,12 @@ const (
 	TypeApplicationHealthy = "ApplicationHealthy"
 )
 
+// --- ClusterCredential conditions ---
+const (
+	TypeSecretNotFound = "SecretNotFound"
+	TypeConnected      = "Connected"
+)
+
 // Reason constants are enumerated, not freeform. All condition reasons
 // must use one of these constants to ensure consistency across controllers.
 const (

@@ -5,9 +5,9 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
-	"os" // used for Exit and Getenv
-	"time"
+	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -20,6 +20,7 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/argocd"
+	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/controller"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
@@ -28,8 +29,12 @@ import (
 var scheme = runtime.NewScheme()
 
 func init() {
-	_ = clientgoscheme.AddToScheme(scheme)
-	_ = loopzerov1.AddToScheme(scheme)
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		panic(fmt.Sprintf("failed to register client-go scheme: %v", err))
+	}
+	if err := loopzerov1.AddToScheme(scheme); err != nil {
+		panic(fmt.Sprintf("failed to register loopzero/v1 scheme: %v", err))
+	}
 }
 
 func main() {
@@ -65,14 +70,18 @@ func main() {
 	// Real provisioners — NO fakes.
 	giteaURL := os.Getenv("GITEA_URL")
 	if giteaURL == "" {
-		giteaURL = "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+		giteaURL = constants.DefaultGiteaURL
 	}
 	giteaToken := os.Getenv("GITEA_TOKEN")
+	if giteaToken == "" {
+		setupLog.Error(nil, "GITEA_TOKEN is required")
+		os.Exit(1)
+	}
 	gitProvisioner := gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero")
 
 	argoCDNamespace := os.Getenv("ARGOCD_NAMESPACE")
 	if argoCDNamespace == "" {
-		argoCDNamespace = "argocd"
+		argoCDNamespace = constants.DefaultArgoCDNamespace
 	}
 	argoCDProvisioner, err := argocd.NewRealProvisioner(argoCDNamespace)
 	if err != nil {
@@ -82,7 +91,7 @@ func main() {
 
 	workloadClusterURL := os.Getenv("WORKLOAD_CLUSTER_URL")
 	if workloadClusterURL == "" {
-		workloadClusterURL = "https://kubernetes.default.svc"
+		workloadClusterURL = constants.DefaultWorkloadClusterURL
 	}
 
 	// Multi-cluster clients: the controller runs in mgmt but creates
@@ -128,7 +137,20 @@ func main() {
 	minIOEndpoint := os.Getenv("MINIO_ENDPOINT")
 	minIOAccessKey := os.Getenv("MINIO_ACCESS_KEY")
 	minIOSecretKey := os.Getenv("MINIO_SECRET_KEY")
-	if minIOEndpoint != "" && minIOAccessKey != "" && minIOSecretKey != "" {
+	minIOVarsSet := 0
+	for _, v := range []string{minIOEndpoint, minIOAccessKey, minIOSecretKey} {
+		if v != "" {
+			minIOVarsSet++
+		}
+	}
+	if minIOVarsSet > 0 && minIOVarsSet < 3 {
+		setupLog.Error(nil, "MINIO_ENDPOINT, MINIO_ACCESS_KEY, and MINIO_SECRET_KEY must all be set or all be empty",
+			"MINIO_ENDPOINT_set", minIOEndpoint != "",
+			"MINIO_ACCESS_KEY_set", minIOAccessKey != "",
+			"MINIO_SECRET_KEY_set", minIOSecretKey != "")
+		os.Exit(1)
+	}
+	if minIOVarsSet == 3 {
 		minIOProvisioner = miniop.NewAdminProvisioner(miniop.AdminConfig{
 			Endpoint:  minIOEndpoint,
 			AccessKey: minIOAccessKey,
@@ -140,16 +162,20 @@ func main() {
 	}
 
 	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, controller.TenantControllerConfig{
-		GiteaURL:           giteaURL,
-		WorkloadClusterURL: workloadClusterURL,
-		MinIOEndpoint:      minIOEndpoint,
-		MinIOProvisioner:   minIOProvisioner,
+		GiteaURL:              giteaURL,
+		WorkloadClusterURL:    workloadClusterURL,
+		MinIOEndpoint:         minIOEndpoint,
+		MinIOProvisioner:      minIOProvisioner,
+		SpacesAccessKeyID:     os.Getenv("SPACES_ACCESS_KEY_ID"),
+		SpacesSecretAccessKey: os.Getenv("SPACES_SECRET_ACCESS_KEY"),
+		DOToken:               os.Getenv("DIGITALOCEAN_TOKEN"),
+		RegistryDockerConfig:  os.Getenv("REGISTRY_DOCKER_CONFIG"),
 	}); err != nil {
 		setupLog.Error(err, "unable to setup TenantController")
 		os.Exit(1)
 	}
 
-	if err := controller.SetupClusterCredentialController(mgr); err != nil {
+	if err := controller.SetupClusterCredentialController(mgr, argoCDNamespace); err != nil {
 		setupLog.Error(err, "unable to setup ClusterCredentialController")
 		os.Exit(1)
 	}
@@ -169,7 +195,8 @@ func main() {
 	// Assigns hostnames, creates ExposedRoute CRs, tracks pod health.
 	baseDomain := os.Getenv("BASE_DOMAIN")
 	if baseDomain == "" {
-		baseDomain = "dev.loopzero.example"
+		setupLog.Error(nil, "BASE_DOMAIN is required")
+		os.Exit(1)
 	}
 	if err := controller.SetupApplicationController(mgr, baseDomain); err != nil {
 		setupLog.Error(err, "unable to setup ApplicationController")
@@ -184,7 +211,7 @@ func main() {
 	}
 
 	// Shared HTTP client for controllers that make external HTTP calls.
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+	httpClient := &http.Client{Timeout: constants.HTTPTimeoutDefault}
 
 	// 4. GitRepositoryBindingController: syncs Git credentials to ArgoCD Secrets.
 	// Detects credential rotation via SHA256 hash comparison.

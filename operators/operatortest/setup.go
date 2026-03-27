@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/loopzero/loopzero/operators/internal/argocd"
+	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/controller"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 )
@@ -43,6 +44,30 @@ func NewFakeGitProvisioner() *FakeGitProvisioner {
 	return &FakeGitProvisioner{
 		repos: make(map[string]string),
 	}
+}
+
+// SetErr configures the fake to return the given error on all calls.
+func (f *FakeGitProvisioner) SetErr(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Err = err
+}
+
+// Reset clears all state in the fake provisioner, restoring it to initial state.
+// Call this between tests to ensure isolation.
+func (f *FakeGitProvisioner) Reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.repos = make(map[string]string)
+	f.Err = nil
+	f.Calls = 0
+}
+
+// GetCalls returns the number of EnsureRepo calls (thread-safe).
+func (f *FakeGitProvisioner) GetCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Calls
 }
 
 func (f *FakeGitProvisioner) EnsureRepo(_ context.Context, name string, _ string) (string, error) {
@@ -99,6 +124,20 @@ func NewFakeArgoCDProvisioner() *FakeArgoCDProvisioner {
 		Applications: make(map[string]argocd.ApplicationSpec),
 		AppProjects:  make(map[string]argocd.AppProjectSpec),
 	}
+}
+
+// Reset clears all state in the fake provisioner, restoring it to initial state.
+// Call this between tests to ensure isolation.
+func (f *FakeArgoCDProvisioner) Reset() {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	f.Applications = make(map[string]argocd.ApplicationSpec)
+	f.AppProjects = make(map[string]argocd.AppProjectSpec)
+	f.EnsureErr = nil
+	f.DeleteErr = nil
+	f.EnsureCalls = 0
+	f.DeleteCalls = 0
+	f.ProjectCalls = 0
 }
 
 func (f *FakeArgoCDProvisioner) EnsureAppProject(_ context.Context, spec argocd.AppProjectSpec) error {
@@ -159,5 +198,5 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner GitRepoProvisioner, 
 // SetupClusterCredentialController registers the ClusterCredentialController with the given manager.
 // Use this in E2E tests to start the operator in-process against envtest.
 func SetupClusterCredentialController(mgr ctrl.Manager) error {
-	return controller.SetupClusterCredentialController(mgr)
+	return controller.SetupClusterCredentialController(mgr, constants.DefaultArgoCDNamespace)
 }

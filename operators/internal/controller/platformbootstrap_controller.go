@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -18,12 +17,17 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/operators/internal/gitea"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
-const (
-	platformBootstrapRequeueDelay = 5 * time.Second
-)
+// giteaBootstrapClient is a local alias for the Gitea bootstrap interface.
+// Used by reconcileGiteaPhase and helpers to avoid inline HTTP calls.
+type giteaBootstrapClient = gitea.BootstrapClient
+
+// platformBootstrapRequeueDelay uses the centralized constant.
+const platformBootstrapRequeueDelay = constants.RequeuePlatformBootstrapDelay
 
 // platformBootstrapSM is the PlatformBootstrap lifecycle state machine (spec section 5).
 // Phase transitions go through this machine -- direct assignment is forbidden.
@@ -31,16 +35,15 @@ var platformBootstrapSM = statemachine.NewPlatformBootstrapMachine()
 
 // PlatformBootstrapReconciler reconciles a PlatformBootstrap object.
 // It configures Gitea, ArgoCD, and seeds the database via the API,
-// using HTTP calls only (no pods/exec).
+// delegating external calls to typed clients (no inline HTTP).
 type PlatformBootstrapReconciler struct {
 	client.Client
-	HTTPClient *http.Client
+	HTTPClient      *http.Client
+	GiteaClientFunc func(baseURL string) giteaBootstrapClient // factory, set at init; nil uses default
 }
 
 // Reconcile handles the reconciliation loop for PlatformBootstrap resources.
 func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	var pb loopzerov1.PlatformBootstrap
 	if err := r.Get(ctx, req.NamespacedName, &pb); err != nil {
 		if errors.IsNotFound(err) {
@@ -86,7 +89,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Resolve max retries with default.
 	maxRetries := pb.Spec.MaxRetries
 	if maxRetries <= 0 {
-		maxRetries = 10
+		maxRetries = constants.DefaultMaxRetries
 	}
 
 	// Phase dispatch.
@@ -101,8 +104,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return r.reconcileAPIPhase(ctx, &pb, maxRetries)
 
 	default:
-		logger.Info("unknown phase, ignoring", "phase", pb.Status.Phase)
-		return ctrl.Result{}, nil
+		return r.transitionToFailed(ctx, &pb, fmt.Sprintf("unknown phase %q — cannot reconcile", pb.Status.Phase))
 	}
 }
 
@@ -158,17 +160,45 @@ func (r *PlatformBootstrapReconciler) httpClient() *http.Client {
 	if r.HTTPClient != nil {
 		return r.HTTPClient
 	}
-	return &http.Client{Timeout: 10 * time.Second}
+	return &http.Client{Timeout: constants.HTTPTimeoutExternal}
+}
+
+// giteaClient returns a BootstrapClient for the given Gitea base URL.
+// Uses the injected factory if set, otherwise creates a real APIClient.
+func (r *PlatformBootstrapReconciler) giteaClient(baseURL string) giteaBootstrapClient {
+	if r.GiteaClientFunc != nil {
+		return r.GiteaClientFunc(baseURL)
+	}
+	return gitea.NewAPIClient(baseURL, r.httpClient())
 }
 
 // getSecret reads a Secret by name in the same namespace as the CR.
 func (r *PlatformBootstrapReconciler) getSecret(ctx context.Context, name, namespace string) (*corev1.Secret, error) {
+	logger := log.FromContext(ctx)
 	var secret corev1.Secret
 	err := r.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, &secret)
 	if err != nil {
+		logger.Error(err, "failed to read secret", "secret", name, "namespace", namespace)
 		return nil, err
 	}
 	return &secret, nil
+}
+
+// secretString safely extracts a string value from a Secret's Data map.
+// Returns an error if the key is missing or the value is empty.
+func secretString(secret *corev1.Secret, key string) (string, error) {
+	if secret.Data == nil {
+		return "", fmt.Errorf("secret %s/%s has nil data", secret.Namespace, secret.Name)
+	}
+	val, ok := secret.Data[key]
+	if !ok {
+		return "", fmt.Errorf("secret %s/%s missing key %q", secret.Namespace, secret.Name, key)
+	}
+	s := string(val)
+	if s == "" {
+		return "", fmt.Errorf("secret %s/%s key %q is empty", secret.Namespace, secret.Name, key)
+	}
+	return s, nil
 }
 
 // updateSecretData updates or creates a key in a Secret's data.

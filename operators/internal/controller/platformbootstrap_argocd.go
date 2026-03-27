@@ -19,6 +19,7 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -29,7 +30,7 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 	argoURL := pb.Spec.ArgoCD.InternalURL
 	argoNS := pb.Spec.ArgoCD.Namespace
 	if argoNS == "" {
-		argoNS = "argocd"
+		argoNS = constants.DefaultArgoCDNamespace
 	}
 
 	// Step 1: Check ArgoCD reachable.
@@ -39,19 +40,19 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 	}
 
 	// Step 2: Check if token already exists in platform-tokens Secret.
-	platformSecret, err := r.getSecret(ctx, "loopzero-platform-tokens", pb.Namespace)
+	platformSecret, err := r.getSecret(ctx, constants.SecretPlatformTokens, pb.Namespace)
 	if err != nil {
 		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("platform tokens secret not found: %v", err))
 	}
 
-	existingToken := string(platformSecret.Data["ARGOCD_TOKEN"])
+	existingToken, _ := secretString(platformSecret, constants.KeyArgoCDToken)
 	if existingToken != "" {
 		logger.Info("ArgoCD token already exists in platform-tokens, skipping JWT creation")
 	} else {
 		// Step 3: Read ArgoCD admin password from its initial admin secret.
 		adminSecretName := pb.Spec.ArgoCD.AdminSecretName
 		if adminSecretName == "" {
-			adminSecretName = "argocd-initial-admin-secret"
+			adminSecretName = constants.SecretArgoCDInitialAdmin
 		}
 
 		var adminSecret corev1.Secret
@@ -62,9 +63,9 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to read ArgoCD admin secret: %v", err))
 		}
 
-		adminPassword := string(adminSecret.Data["password"])
-		if adminPassword == "" {
-			return r.requeueWithRetry(ctx, pb, maxRetries, "ArgoCD admin secret has empty password")
+		adminPassword, passErr := secretString(&adminSecret, constants.KeyPassword)
+		if passErr != nil {
+			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("ArgoCD admin secret: %v", passErr))
 		}
 
 		// Step 4: Create JWT via ArgoCD session API.
@@ -74,15 +75,18 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 		}
 
 		// Step 5: Store JWT in platform-tokens Secret.
-		if err := r.updateSecretData(ctx, platformSecret, "ARGOCD_TOKEN", jwt); err != nil {
+		if err := r.updateSecretData(ctx, platformSecret, constants.KeyArgoCDToken, jwt); err != nil {
 			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to store ArgoCD token: %v", err))
 		}
 	}
 
 	// Step 6: Create repo credential Secrets in ArgoCD namespace.
-	giteaToken := string(platformSecret.Data["GITEA_TOKEN"])
+	giteaToken, giteaErr := secretString(platformSecret, constants.KeyGiteaToken)
+	if giteaErr != nil {
+		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("platform-tokens missing Gitea token: %v", giteaErr))
+	}
 	for _, repoCred := range pb.Spec.ArgoCD.RepoCredentials {
-		if err := r.ensureRepoCrendentialSecret(ctx, argoNS, repoCred, giteaToken); err != nil {
+		if err := r.ensureRepoCredentialSecret(ctx, argoNS, repoCred, giteaToken); err != nil {
 			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to create repo credential %s: %v", repoCred.Name, err))
 		}
 	}
@@ -114,8 +118,11 @@ func (r *PlatformBootstrapReconciler) checkArgoCDReachable(ctx context.Context, 
 
 // createArgoCDSession creates a session JWT by posting admin credentials to ArgoCD.
 func (r *PlatformBootstrapReconciler) createArgoCDSession(ctx context.Context, baseURL, password string) (string, error) {
-	body := fmt.Sprintf(`{"username":"admin","password":"%s"}`, password)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/session", strings.NewReader(body))
+	bodyBytes, marshalErr := json.Marshal(map[string]string{"username": constants.DefaultArgoCDUsername, "password": password})
+	if marshalErr != nil {
+		return "", fmt.Errorf("marshal ArgoCD session request: %w", marshalErr)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/session", strings.NewReader(string(bodyBytes)))
 	if err != nil {
 		return "", fmt.Errorf("creating session request: %w", err)
 	}
@@ -141,9 +148,9 @@ func (r *PlatformBootstrapReconciler) createArgoCDSession(ctx context.Context, b
 	return result.Token, nil
 }
 
-// ensureRepoCrendentialSecret creates a repo credential Secret in the ArgoCD namespace
+// ensureRepoCredentialSecret creates a repo credential Secret in the ArgoCD namespace
 // if it does not already exist (idempotent).
-func (r *PlatformBootstrapReconciler) ensureRepoCrendentialSecret(ctx context.Context, argoNS string, cred loopzerov1.ArgoCDRepoCredential, giteaToken string) error {
+func (r *PlatformBootstrapReconciler) ensureRepoCredentialSecret(ctx context.Context, argoNS string, cred loopzerov1.ArgoCDRepoCredential, giteaToken string) error {
 	var existing corev1.Secret
 	err := r.Get(ctx, client.ObjectKey{Name: cred.Name, Namespace: argoNS}, &existing)
 	if err == nil {
@@ -159,14 +166,14 @@ func (r *PlatformBootstrapReconciler) ensureRepoCrendentialSecret(ctx context.Co
 			Name:      cred.Name,
 			Namespace: argoNS,
 			Labels: map[string]string{
-				"argocd.argoproj.io/secret-type": "repo-creds",
-				"loopzero.io/managed-by":             "platformbootstrap-controller",
+				constants.ArgoCDSecretTypeLabel: constants.ArgoCDSecretTypeRepoCreds,
+				constants.LabelManagedBy:       constants.ManagedByPlatformBootstrapController,
 			},
 		},
 		StringData: map[string]string{
 			"type":     "git",
 			"url":      cred.URL,
-			"username": "loopzero-platform",
+			"username": constants.DefaultArgoCDRepoUsername,
 			"password": giteaToken,
 		},
 	}

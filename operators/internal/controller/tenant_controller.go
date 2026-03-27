@@ -6,7 +6,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -20,13 +19,15 @@ import (
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/argocd"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
-const tenantFinalizer = "loopzero.io/tenant-cleanup"
+// tenantFinalizer uses the centralized constant.
+const tenantFinalizer = constants.FinalizerTenant
 
 // tenantSM is the Tenant lifecycle state machine (spec §5).
 // Phase transitions go through this machine — direct assignment is forbidden.
@@ -50,6 +51,14 @@ type TenantReconciler struct {
 	GiteaURL           string
 	WorkloadClusterURL string // URL of the workload cluster API server
 	MinIOEndpoint      string // MinIO endpoint injected into per-tenant build Secrets
+
+	// Object storage credentials — set at init, never read from env during reconcile.
+	SpacesAccessKeyID     string
+	SpacesSecretAccessKey string
+
+	// Container registry credentials — set at init, never read from env during reconcile.
+	DOToken              string // DigitalOcean API token for registry credential generation
+	RegistryDockerConfig string // Raw Docker config.json for local dev
 }
 
 // TenantControllerConfig holds configuration for the TenantController.
@@ -58,6 +67,17 @@ type TenantControllerConfig struct {
 	WorkloadClusterURL string
 	MinIOEndpoint      string                      // MinIO endpoint injected into per-tenant build Secrets
 	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
+
+	// Object storage credentials (required when MinIOProvisioner is nil and MinIOEndpoint is set).
+	// These are injected into per-tenant build Secrets for CWT access to source bundles and cache.
+	SpacesAccessKeyID     string
+	SpacesSecretAccessKey string
+
+	// Container registry credentials — exactly one of DOToken or RegistryDockerConfig must be set.
+	// DOToken: DigitalOcean API token for fetching registry credentials via DO API.
+	// RegistryDockerConfig: raw Docker config.json for local k3d development.
+	DOToken              string
+	RegistryDockerConfig string
 }
 
 // Reconcile handles the reconciliation loop for Tenant resources.
@@ -98,57 +118,19 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// All reconcile steps run unconditionally (idempotent via EnsureX/CreateOrUpdate).
 	// No condition-gated skipping — this ensures drift is corrected even when conditions
 	// were set True by a previous controller version that no longer applies.
-
-	// S1.6: Reconcile Gitea repo (always — idempotent via EnsureRepo)
-	if err := r.reconcileGitRepo(ctx, &tenant); err != nil {
-		conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeGitRepoReady,
-			metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-		if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-			logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-		}
-		return ctrl.Result{}, err
+	steps := []reconcileStep{
+		{conditions.TypeGitRepoReady, func() error { return r.reconcileGitRepo(ctx, &tenant) }},
+		{conditions.TypeArgoCDAppReady, func() error { return r.reconcileArgoCDApp(ctx, &tenant) }},
+		{conditions.TypeBuildNamespaceReady, func() error { return r.reconcileBuildNamespace(ctx, &tenant) }},
+		{conditions.TypePriorityClassReady, func() error { return r.reconcilePriorityClass(ctx, &tenant) }},
+		{"", func() error { return r.reconcileEnvironmentCRs(ctx, &tenant) }},
 	}
-
-	// S1.6b: Reconcile ArgoCD Application per environment (always — idempotent via EnsureApplication)
-	if err := r.reconcileArgoCDApp(ctx, &tenant); err != nil {
-		conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeArgoCDAppReady,
-			metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-		if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-			logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-		}
-		return ctrl.Result{}, err
-	}
-
-	// S1.5: Reconcile build namespace + QuotaEnforced (always — idempotent via CreateOrUpdate)
-	if err := r.reconcileBuildNamespace(ctx, &tenant); err != nil {
-		conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeBuildNamespaceReady,
-			metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-		if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-			logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-		}
-		return ctrl.Result{}, err
-	}
-
-	// S14.3: Reconcile PriorityClass based on tenant plan (always — idempotent)
-	if err := r.reconcilePriorityClass(ctx, &tenant); err != nil {
-		conditions.SetCondition(&tenant.Status.Conditions, conditions.TypePriorityClassReady,
-			metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
-		if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-			logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-		}
-		return ctrl.Result{}, err
-	}
-
-	// Create Environment CRs for each spec.environments[] (delegating namespace/RBAC/NetworkPolicy to EnvironmentController)
-	if err := r.reconcileEnvironmentCRs(ctx, &tenant); err != nil {
-		if statusErr := r.Status().Update(ctx, &tenant); statusErr != nil {
-			logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
-		}
+	if err := r.runSteps(ctx, &tenant, steps); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	// S1.7: Phase transition — Active when all conditions are True (via state machine)
-	if allConditionsTrue(tenant.Status.Conditions) && tenant.Status.Phase == loopzerov1.TenantPhaseProvisioning {
+	if conditions.AllConditionsTrue(tenant.Status.Conditions, requiredProvisioningConditions...) && tenant.Status.Phase == loopzerov1.TenantPhaseProvisioning {
 		tenant.Status.Phase = loopzerov1.TenantPhase(
 			tenantSM.Transition(statemachine.TenantProvisioning, statemachine.TenantAllReady),
 		)
@@ -173,6 +155,32 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return ctrl.Result{}, nil
 }
 
+// reconcileStep pairs a condition type with its reconcile function.
+// If condType is empty, no condition is set on failure (used for steps without conditions).
+type reconcileStep struct {
+	condType string
+	fn       func() error
+}
+
+// runSteps executes reconcile steps sequentially, setting conditions on failure.
+// On error it updates the status (best-effort) and returns the error.
+func (r *TenantReconciler) runSteps(ctx context.Context, tenant *loopzerov1.Tenant, steps []reconcileStep) error {
+	logger := log.FromContext(ctx)
+	for _, step := range steps {
+		if err := step.fn(); err != nil {
+			if step.condType != "" {
+				conditions.SetCondition(&tenant.Status.Conditions, step.condType,
+					metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
+			}
+			if statusErr := r.Status().Update(ctx, tenant); statusErr != nil {
+				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 // requiredProvisioningConditions lists all conditions that must be True
 // for a tenant to transition from PROVISIONING to ACTIVE.
 // Add new conditions here when adding new reconciliation steps.
@@ -184,22 +192,6 @@ var requiredProvisioningConditions = []string{
 	conditions.TypePriorityClassReady,
 }
 
-// allConditionsTrue checks if all required conditions are True.
-func allConditionsTrue(conditions []metav1.Condition) bool {
-	for _, req := range requiredProvisioningConditions {
-		found := false
-		for _, c := range conditions {
-			if c.Type == req && c.Status == metav1.ConditionTrue {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
-}
 
 // reconcileDelete handles the verify-then-remove finalizer pattern for Tenant deletion.
 //
@@ -246,24 +238,31 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	}
 	if childEnvCount > 0 {
 		logger.Info("waiting for child Environment CRs to be deleted", "remaining", childEnvCount)
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: constants.RequeueDeletionWait}, nil
 	}
 
 	// Phase 2: All child Environments are gone. Clean up tenant-level resources.
+	// Track cleanup failures — finalizer is only removed when all steps succeed or
+	// resources are confirmed gone. This prevents orphaning ArgoCD apps and Gitea repos.
+	var cleanupErrors []string
+
 	// Delete ArgoCD Applications for this tenant
 	if err := r.ArgoCDProvisioner.DeleteApplications(ctx, tenant.Name); err != nil {
-		logger.Info("non-fatal cleanup failure, continuing", "step", "argocd-cleanup", "error", err, "tenant", tenant.Name)
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("argocd-cleanup: %v", err))
+		logger.Error(err, "cleanup failure", "step", "argocd-cleanup", "tenant", tenant.Name)
 	}
 
 	// Delete ArgoCD AppProject for this tenant (MOD-5)
 	if err := r.ArgoCDProvisioner.DeleteAppProject(ctx, tenant.Name); err != nil {
-		logger.Info("non-fatal cleanup failure, continuing", "step", "argocd-appproject-cleanup", "error", err, "tenant", tenant.Name)
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("argocd-appproject-cleanup: %v", err))
+		logger.Error(err, "cleanup failure", "step", "argocd-appproject-cleanup", "tenant", tenant.Name)
 	}
 
 	// Delete namespaces on build cluster (build-{tenant})
 	var buildNsList corev1.NamespaceList
-	if err := r.BuildClient.List(ctx, &buildNsList, client.MatchingLabels{"loopzero.io/tenant": tenant.Name}); err != nil {
-		logger.Info("non-fatal cleanup failure on build cluster", "step", "list-build-ns", "error", err)
+	if err := r.BuildClient.List(ctx, &buildNsList, client.MatchingLabels{constants.LabelTenant: tenant.Name}); err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("list-build-ns: %v", err))
+		logger.Error(err, "cleanup failure on build cluster", "step", "list-build-ns")
 	} else {
 		for i := range buildNsList.Items {
 			if buildNsList.Items[i].DeletionTimestamp.IsZero() {
@@ -276,15 +275,26 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 
 	// Archive Gitea repo (soft delete, idempotent)
 	if err := r.GitProvisioner.ArchiveRepo(ctx, tenant.Spec.GitOps.RepoName); err != nil {
-		logger.Info("non-fatal cleanup failure, continuing", "step", "gitea-archive", "error", err, "repo", tenant.Spec.GitOps.RepoName)
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("gitea-archive: %v", err))
+		logger.Error(err, "cleanup failure", "step", "gitea-archive", "repo", tenant.Spec.GitOps.RepoName)
 	}
 
-	// Phase 3: Verify build namespaces are gone
+	// If any cleanup step failed, requeue to retry instead of removing the finalizer.
+	// This prevents orphaning external resources (ArgoCD Applications, Gitea repos).
+	if len(cleanupErrors) > 0 {
+		logger.Info("cleanup incomplete, requeuing", "failures", len(cleanupErrors), "details", cleanupErrors)
+		return ctrl.Result{RequeueAfter: constants.RequeueDeletionWait}, nil
+	}
+
+	// Phase 3: Verify build namespaces are gone.
 	var remainingBuild corev1.NamespaceList
-	_ = r.BuildClient.List(ctx, &remainingBuild, client.MatchingLabels{"loopzero.io/tenant": tenant.Name})
+	if err := r.BuildClient.List(ctx, &remainingBuild, client.MatchingLabels{constants.LabelTenant: tenant.Name}); err != nil {
+		logger.Error(err, "could not verify build namespace deletion")
+		return ctrl.Result{RequeueAfter: constants.RequeueDeletionWait}, nil
+	}
 	if len(remainingBuild.Items) > 0 {
 		logger.Info("build namespaces still exist, requeuing", "count", len(remainingBuild.Items))
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: constants.RequeueDeletionWait}, nil
 	}
 
 	// All clean — remove finalizer
@@ -344,25 +354,30 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner, buildClient client.Client, runtimeClient client.Client, cfg TenantControllerConfig) error {
 	giteaURL := cfg.GiteaURL
 	if giteaURL == "" {
-		giteaURL = "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+		giteaURL = constants.DefaultGiteaURL
 	}
 	workloadClusterURL := cfg.WorkloadClusterURL
 	if workloadClusterURL == "" {
-		workloadClusterURL = "https://kubernetes.default.svc"
+		workloadClusterURL = constants.DefaultWorkloadClusterURL
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.Tenant{}).
+		Owns(&loopzerov1.Environment{}).
 		Named("tenant").
 		Complete(&TenantReconciler{
-			Client:             mgr.GetClient(),
-			Scheme:             mgr.GetScheme(),
-			BuildClient:        buildClient,
-			RuntimeClient:      runtimeClient,
-			GitProvisioner:     gitProvisioner,
-			ArgoCDProvisioner:  argoCDProvisioner,
-			MinIOProvisioner:   cfg.MinIOProvisioner,
-			GiteaURL:           giteaURL,
-			WorkloadClusterURL: workloadClusterURL,
-			MinIOEndpoint:      cfg.MinIOEndpoint,
+			Client:                mgr.GetClient(),
+			Scheme:                mgr.GetScheme(),
+			BuildClient:           buildClient,
+			RuntimeClient:         runtimeClient,
+			GitProvisioner:        gitProvisioner,
+			ArgoCDProvisioner:     argoCDProvisioner,
+			MinIOProvisioner:      cfg.MinIOProvisioner,
+			GiteaURL:              giteaURL,
+			WorkloadClusterURL:    workloadClusterURL,
+			MinIOEndpoint:         cfg.MinIOEndpoint,
+			SpacesAccessKeyID:     cfg.SpacesAccessKeyID,
+			SpacesSecretAccessKey: cfg.SpacesSecretAccessKey,
+			DOToken:               cfg.DOToken,
+			RegistryDockerConfig:  cfg.RegistryDockerConfig,
 		})
 }

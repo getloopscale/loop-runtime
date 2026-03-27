@@ -6,7 +6,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -23,9 +22,10 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/operators/internal/constants"
 )
 
-const environmentFinalizer = "loopzero.io/environment-cleanup"
+const environmentFinalizer = constants.FinalizerEnvironment
 
 // EnvironmentReconciler reconciles an Environment object.
 //
@@ -75,55 +75,42 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	nsName := env.Spec.Namespace.Name
 	tenantName := env.Spec.TenantRef.Name
 
-	// Step 1: Ensure namespace exists (CreateOrUpdate)
-	if err := r.reconcileNamespace(ctx, &env, nsName, tenantName); err != nil {
-		conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNamespaceReady,
-			metav1.ConditionFalse, "ReconcileFailed", err.Error(), env.Generation)
-		if statusErr := r.Status().Update(ctx, &env); statusErr != nil {
-			logger.Error(statusErr, "failed to update environment status")
-		}
-		return ctrl.Result{}, err
+	// envStep pairs a condition type with its reconcile function and success message.
+	type envStep struct {
+		condType       string
+		successReason  string
+		successMessage string
+		fn             func() error
 	}
-	conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNamespaceReady,
-		metav1.ConditionTrue, "NamespaceReady", "namespace provisioned", env.Generation)
 
-	// Step 2: Ensure RBAC (ServiceAccount + Role + RoleBinding via CreateOrUpdate)
-	if err := r.reconcileRBAC(ctx, &env, nsName); err != nil {
-		conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvRBACReady,
-			metav1.ConditionFalse, "ReconcileFailed", err.Error(), env.Generation)
-		if statusErr := r.Status().Update(ctx, &env); statusErr != nil {
-			logger.Error(statusErr, "failed to update environment status")
-		}
-		return ctrl.Result{}, err
+	steps := []envStep{
+		{conditions.TypeEnvNamespaceReady, "NamespaceReady", "namespace provisioned",
+			func() error { return r.reconcileNamespace(ctx, &env, nsName, tenantName) }},
+		{conditions.TypeEnvRBACReady, "RBACConfigured", "RBAC resources provisioned",
+			func() error { return r.reconcileRBAC(ctx, &env, nsName) }},
+		{conditions.TypeEnvNetworkPolicyReady, "NetworkPoliciesConfigured", "network policies provisioned",
+			func() error {
+				if env.Spec.NetworkPolicy.Isolate {
+					return r.reconcileNetworkPolicies(ctx, nsName)
+				}
+				return nil
+			}},
+		{conditions.TypeEnvQuotaReady, "QuotaReady", "resource quota applied",
+			func() error { return r.reconcileQuota(ctx, &env, nsName) }},
 	}
-	conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvRBACReady,
-		metav1.ConditionTrue, "RBACConfigured", "RBAC resources provisioned", env.Generation)
 
-	// Step 3: Ensure NetworkPolicy (CreateOrUpdate)
-	if env.Spec.NetworkPolicy.Isolate {
-		if err := r.reconcileNetworkPolicies(ctx, nsName); err != nil {
-			conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNetworkPolicyReady,
+	for _, step := range steps {
+		if err := step.fn(); err != nil {
+			conditions.SetCondition(&env.Status.Conditions, step.condType,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), env.Generation)
 			if statusErr := r.Status().Update(ctx, &env); statusErr != nil {
 				logger.Error(statusErr, "failed to update environment status")
 			}
 			return ctrl.Result{}, err
 		}
+		conditions.SetCondition(&env.Status.Conditions, step.condType,
+			metav1.ConditionTrue, step.successReason, step.successMessage, env.Generation)
 	}
-	conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNetworkPolicyReady,
-		metav1.ConditionTrue, "NetworkPoliciesConfigured", "network policies provisioned", env.Generation)
-
-	// Step 4: Ensure ResourceQuota + LimitRange (CreateOrUpdate)
-	if err := r.reconcileQuota(ctx, &env, nsName); err != nil {
-		conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvQuotaReady,
-			metav1.ConditionFalse, "ReconcileFailed", err.Error(), env.Generation)
-		if statusErr := r.Status().Update(ctx, &env); statusErr != nil {
-			logger.Error(statusErr, "failed to update environment status")
-		}
-		return ctrl.Result{}, err
-	}
-	conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvQuotaReady,
-		metav1.ConditionTrue, "QuotaReady", "resource quota applied", env.Generation)
 
 	// All conditions True -> Phase Active
 	env.Status.Phase = loopzerov1.EnvironmentPhaseActive
@@ -169,7 +156,7 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 	ns := &corev1.Namespace{}
 	if err := r.RuntimeClient.Get(ctx, client.ObjectKey{Name: nsName}, ns); err == nil {
 		// Check if namespace still belongs to us (label match)
-		if ns.Labels["loopzero.io/tenant"] == env.Spec.TenantRef.Name {
+		if ns.Labels != nil && ns.Labels[constants.LabelTenant] == env.Spec.TenantRef.Name {
 			if ns.DeletionTimestamp.IsZero() {
 				if err := r.RuntimeClient.Delete(ctx, ns); err != nil && !errors.IsNotFound(err) {
 					return ctrl.Result{}, err
@@ -177,7 +164,7 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 			}
 			// Namespace still exists and belongs to us — requeue to verify deletion
 			logger.Info("namespace still exists, requeuing", "namespace", nsName)
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: constants.RequeueNamespaceDeletionWait}, nil
 		}
 		// Namespace exists but no longer has our label — consider it cleaned up
 	}
@@ -203,9 +190,9 @@ func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, env *loo
 		if ns.Labels == nil {
 			ns.Labels = make(map[string]string)
 		}
-		ns.Labels["loopzero.io/tenant"] = tenantName
-		ns.Labels["loopzero.io/environment"] = env.Spec.Environment
-		ns.Labels["loopzero.io/managed-by"] = "environment-controller"
+		ns.Labels[constants.LabelTenant] = tenantName
+		ns.Labels[constants.LabelEnvironment] = env.Spec.Environment
+		ns.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
 		return nil
 	})
 	if err != nil {
@@ -220,20 +207,24 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	// ServiceAccount
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-deployer",
+			Name:      constants.SADeployer,
 			Namespace: nsName,
 		},
 	}
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, sa, func() error {
+		if sa.Labels == nil {
+			sa.Labels = make(map[string]string)
+		}
+		sa.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
 		return nil
 	}); err != nil {
-		return fmt.Errorf("serviceaccount %s/%s: %w", nsName, "loopzero-deployer", err)
+		return fmt.Errorf("serviceaccount %s/%s: %w", nsName, constants.SADeployer, err)
 	}
 
 	// Role (permissions vary by plan tier)
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-deployer",
+			Name:      constants.RoleDeployer,
 			Namespace: nsName,
 		},
 	}
@@ -241,13 +232,13 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		role.Rules = rbacRulesForPlan(env.Spec.Plan)
 		return nil
 	}); err != nil {
-		return fmt.Errorf("role %s/%s: %w", nsName, "loopzero-deployer", err)
+		return fmt.Errorf("role %s/%s: %w", nsName, constants.RoleDeployer, err)
 	}
 
 	// RoleBinding
 	rb := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-deployer",
+			Name:      constants.RoleBindingDeployer,
 			Namespace: nsName,
 		},
 	}
@@ -255,18 +246,18 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		rb.RoleRef = rbacv1.RoleRef{
 			APIGroup: rbacv1.GroupName,
 			Kind:     "Role",
-			Name:     "loopzero-deployer",
+			Name:     constants.RoleDeployer,
 		}
 		rb.Subjects = []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "loopzero-deployer",
+				Name:      constants.SADeployer,
 				Namespace: nsName,
 			},
 		}
 		return nil
 	}); err != nil {
-		return fmt.Errorf("rolebinding %s/%s: %w", nsName, "loopzero-deployer", err)
+		return fmt.Errorf("rolebinding %s/%s: %w", nsName, constants.RoleBindingDeployer, err)
 	}
 
 	return nil
@@ -289,7 +280,7 @@ func (r *EnvironmentReconciler) reconcileNetworkPolicies(ctx context.Context, ns
 func (r *EnvironmentReconciler) reconcileEnvDenyAllPolicy(ctx context.Context, nsName string) error {
 	np := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "deny-all",
+			Name:      constants.NetworkPolicyDenyAll,
 			Namespace: nsName,
 		},
 	}
@@ -304,7 +295,7 @@ func (r *EnvironmentReconciler) reconcileEnvDenyAllPolicy(ctx context.Context, n
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("networkpolicy %s/%s: %w", nsName, "deny-all", err)
+		return fmt.Errorf("networkpolicy %s/%s: %w", nsName, constants.NetworkPolicyDenyAll, err)
 	}
 	return nil
 }
@@ -312,7 +303,7 @@ func (r *EnvironmentReconciler) reconcileEnvDenyAllPolicy(ctx context.Context, n
 func (r *EnvironmentReconciler) reconcileEnvAllowIngressPolicy(ctx context.Context, nsName string) error {
 	np := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "allow-ingress-traefik",
+			Name:      constants.NetworkPolicyAllowIngress,
 			Namespace: nsName,
 		},
 	}
@@ -328,7 +319,7 @@ func (r *EnvironmentReconciler) reconcileEnvAllowIngressPolicy(ctx context.Conte
 						{
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"kubernetes.io/metadata.name": "platform-system",
+									constants.KubeMetadataNameLabel: constants.NamespacePlatformSystem,
 								},
 							},
 						},
@@ -339,20 +330,20 @@ func (r *EnvironmentReconciler) reconcileEnvAllowIngressPolicy(ctx context.Conte
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("networkpolicy %s/%s: %w", nsName, "allow-ingress-traefik", err)
+		return fmt.Errorf("networkpolicy %s/%s: %w", nsName, constants.NetworkPolicyAllowIngress, err)
 	}
 	return nil
 }
 
 func (r *EnvironmentReconciler) reconcileEnvAllowEgressPolicy(ctx context.Context, nsName string) error {
-	dnsPort := intstr.FromInt32(53)
-	apiPort := intstr.FromInt32(443)
+	dnsPort := intstr.FromInt32(constants.PortDNS)
+	apiPort := intstr.FromInt32(constants.PortHTTPS)
 	udp := corev1.ProtocolUDP
 	tcp := corev1.ProtocolTCP
 
 	np := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "allow-egress",
+			Name:      constants.NetworkPolicyAllowEgress,
 			Namespace: nsName,
 		},
 	}
@@ -369,7 +360,7 @@ func (r *EnvironmentReconciler) reconcileEnvAllowEgressPolicy(ctx context.Contex
 						{
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"kubernetes.io/metadata.name": "kube-system",
+									constants.KubeMetadataNameLabel: constants.NamespaceKubeSystem,
 								},
 							},
 						},
@@ -392,7 +383,7 @@ func (r *EnvironmentReconciler) reconcileEnvAllowEgressPolicy(ctx context.Contex
 						{
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"kubernetes.io/metadata.name": "default",
+									constants.KubeMetadataNameLabel: constants.NamespaceDefault,
 								},
 							},
 						},
@@ -406,7 +397,7 @@ func (r *EnvironmentReconciler) reconcileEnvAllowEgressPolicy(ctx context.Contex
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("networkpolicy %s/%s: %w", nsName, "allow-egress", err)
+		return fmt.Errorf("networkpolicy %s/%s: %w", nsName, constants.NetworkPolicyAllowEgress, err)
 	}
 	return nil
 }
@@ -415,30 +406,46 @@ func (r *EnvironmentReconciler) reconcileEnvAllowEgressPolicy(ctx context.Contex
 func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
 	// ResourceQuota (only if spec.resourceQuota is set)
 	if env.Spec.ResourceQuota != nil {
+		cpuQty, err := resource.ParseQuantity(env.Spec.ResourceQuota.CPU)
+		if err != nil {
+			return fmt.Errorf("invalid CPU quota %q: %w", env.Spec.ResourceQuota.CPU, err)
+		}
+		memQty, err := resource.ParseQuantity(env.Spec.ResourceQuota.Memory)
+		if err != nil {
+			return fmt.Errorf("invalid memory quota %q: %w", env.Spec.ResourceQuota.Memory, err)
+		}
+
 		quota := &corev1.ResourceQuota{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "tenant-quota",
+				Name:      constants.QuotaTenant,
 				Namespace: nsName,
 			},
 		}
-		_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, quota, func() error {
+		_, err = controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, quota, func() error {
 			quota.Spec.Hard = corev1.ResourceList{
-				corev1.ResourceRequestsCPU:    resource.MustParse(env.Spec.ResourceQuota.CPU),
-				corev1.ResourceRequestsMemory: resource.MustParse(env.Spec.ResourceQuota.Memory),
-				corev1.ResourcePersistentVolumeClaims: resource.MustParse("10"),
-				"services.loadbalancers":              resource.MustParse("0"),
+				corev1.ResourceRequestsCPU:            cpuQty,
+				corev1.ResourceRequestsMemory:         memQty,
+				corev1.ResourcePersistentVolumeClaims: resource.MustParse(constants.QuotaPVCLimit),
+				"services.loadbalancers":              resource.MustParse(constants.QuotaLoadBalancerLimit),
+			}
+			if env.Spec.ResourceQuota.Storage != "" {
+				storageQty, parseErr := resource.ParseQuantity(env.Spec.ResourceQuota.Storage)
+				if parseErr != nil {
+					return fmt.Errorf("invalid storage quota %q: %w", env.Spec.ResourceQuota.Storage, parseErr)
+				}
+				quota.Spec.Hard[corev1.ResourceRequestsStorage] = storageQty
 			}
 			return nil
 		})
 		if err != nil {
-			return fmt.Errorf("resourcequota %s/%s: %w", nsName, "tenant-quota", err)
+			return fmt.Errorf("resourcequota %s/%s: %w", nsName, constants.QuotaTenant, err)
 		}
 	}
 
 	// LimitRange (always created)
 	lr := &corev1.LimitRange{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tenant-limits",
+			Name:      constants.LimitRangeTenant,
 			Namespace: nsName,
 		},
 	}
@@ -447,19 +454,19 @@ func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, env *loopzer
 			{
 				Type: corev1.LimitTypeContainer,
 				Default: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("500m"),
-					corev1.ResourceMemory: resource.MustParse("512Mi"),
+					corev1.ResourceCPU:    resource.MustParse(constants.TenantLimitDefaultCPU),
+					corev1.ResourceMemory: resource.MustParse(constants.TenantLimitDefaultMemory),
 				},
 				DefaultRequest: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("100m"),
-					corev1.ResourceMemory: resource.MustParse("128Mi"),
+					corev1.ResourceCPU:    resource.MustParse(constants.TenantLimitDefaultRequestCPU),
+					corev1.ResourceMemory: resource.MustParse(constants.TenantLimitDefaultRequestMemory),
 				},
 			},
 		}
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("limitrange %s/%s: %w", nsName, "tenant-limits", err)
+		return fmt.Errorf("limitrange %s/%s: %w", nsName, constants.LimitRangeTenant, err)
 	}
 
 	return nil

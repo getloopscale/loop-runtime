@@ -5,249 +5,192 @@ package controller
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
+	k "github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
 
-func base64Encode(s string) string {
-	return base64.StdEncoding.EncodeToString([]byte(s))
-}
-
-// reconcileBuildNamespace ensures the build-{tenantID} namespace exists with ResourceQuota.
+// reconcileBuildNamespace orchestrates the build-{tenantID} namespace provisioning.
+// Each step is idempotent via CreateOrUpdate. Steps are extracted into focused functions.
 func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	buildNs, err := naming.BuildNamespace(tenant.Name)
 	if err != nil {
 		return fmt.Errorf("invalid build namespace name for tenant %s: %w", tenant.Name, err)
 	}
 
-	// Create or update build namespace (NO ownerReference — cross-namespace limitation)
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: buildNs,
-		},
+	steps := []struct {
+		name string
+		fn   func() error
+	}{
+		{"namespace", func() error { return r.ensureBuildNs(ctx, buildNs, tenant.Name) }},
+		{"resourcequota", func() error { return r.ensureBuildQuota(ctx, buildNs, tenant) }},
+		{"networkpolicy", func() error { return r.reconcileBuildNetworkPolicy(ctx, buildNs) }},
+		{"limitrange", func() error { return r.ensureBuildLimitRange(ctx, buildNs) }},
+		{"serviceaccount", func() error { return r.ensureBuildServiceAccount(ctx, buildNs, tenant.Name) }},
+		{"storage-credentials", func() error { return r.ensureBuildStorageCredentials(ctx, buildNs, tenant.Name) }},
+		{"registry-credentials", func() error { return r.ensureBuildRegistryCredentials(ctx, buildNs, tenant.Name) }},
+		{"executor-rbac", func() error { return r.ensureBuildExecutorRBAC(ctx, buildNs) }},
+		{"minio-per-tenant", func() error { return r.ensureBuildMinIOPerTenant(ctx, buildNs, tenant.Name) }},
 	}
-	var createErr error
-	_, createErr = controllerutil.CreateOrUpdate(ctx, r.BuildClient, ns, func() error {
+
+	for _, step := range steps {
+		if err := step.fn(); err != nil {
+			return fmt.Errorf("build %s %s: %w", step.name, buildNs, err)
+		}
+	}
+
+	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeBuildNamespaceReady,
+		metav1.ConditionTrue, "BuildNamespaceReady", "build namespace provisioned", tenant.Generation)
+	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeQuotaEnforced,
+		metav1.ConditionTrue, "AllQuotasEnforced", "all resource quotas applied", tenant.Generation)
+
+	return nil
+}
+
+// ensureBuildNs creates or updates the build namespace (NO ownerReference — cross-cluster limitation).
+func (r *TenantReconciler) ensureBuildNs(ctx context.Context, buildNs, tenantName string) error {
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: buildNs}}
+	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, ns, func() error {
 		if ns.Labels == nil {
 			ns.Labels = make(map[string]string)
 		}
-		ns.Labels["loopzero.io/tenant"] = tenant.Name
-		ns.Labels["loopzero.io/component"] = "build"
-		ns.Labels["loopzero.io/managed-by"] = "tenant-controller"
+		ns.Labels[k.LabelTenant] = tenantName
+		ns.Labels[k.LabelComponent] = k.ComponentBuild
+		ns.Labels[k.LabelManagedBy] = k.ManagedByTenantController
 		return nil
 	})
-	if createErr != nil {
-		return fmt.Errorf("build namespace %s: %w", buildNs, createErr)
-	}
+	return err
+}
 
-	// ResourceQuota for build namespace
+// ensureBuildQuota creates or updates the ResourceQuota for the build namespace.
+func (r *TenantReconciler) ensureBuildQuota(ctx context.Context, buildNs string, tenant *loopzerov1.Tenant) error {
 	quota := &corev1.ResourceQuota{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "build-quota",
-			Namespace: buildNs,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: k.QuotaBuild, Namespace: buildNs},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, quota, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, quota, func() error {
 		quota.Spec.Hard = corev1.ResourceList{
-			corev1.ResourceRequestsCPU:    resource.MustParse("4"),
-			corev1.ResourceRequestsMemory: resource.MustParse("8Gi"),
-			corev1.ResourceLimitsCPU:      resource.MustParse("8"),
-			corev1.ResourceLimitsMemory:   resource.MustParse("16Gi"),
+			corev1.ResourceRequestsCPU:    resource.MustParse(k.BuildQuotaRequestsCPU),
+			corev1.ResourceRequestsMemory: resource.MustParse(k.BuildQuotaRequestsMemory),
+			corev1.ResourceLimitsCPU:      resource.MustParse(k.BuildQuotaLimitsCPU),
+			corev1.ResourceLimitsMemory:   resource.MustParse(k.BuildQuotaLimitsMemory),
 		}
-		// Enforce maxBuildConcurrency via workflow count quota
 		if tenant.Spec.Limits.MaxBuildConcurrency > 0 {
 			quota.Spec.Hard[corev1.ResourceName("count/workflows.argoproj.io")] =
 				resource.MustParse(fmt.Sprintf("%d", tenant.Spec.Limits.MaxBuildConcurrency))
 		}
 		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("build resourcequota %s/%s: %w", buildNs, "build-quota", err)
-	}
+	return err
+}
 
-	// REVIEW-BLOCKER: NetworkPolicy for build namespace — restrict egress to only
-	// DNS, MinIO, and container registry. Prevents source code exfiltration via
-	// malicious Dockerfiles or postinstall scripts (spec §17.1 threat model).
-	if err := r.reconcileBuildNetworkPolicy(ctx, buildNs); err != nil {
-		return fmt.Errorf("build network policy %s: %w", buildNs, err)
-	}
-
-	// LimitRange — default resource requests/limits for build pods.
-	// Without this, pods without explicit resources are rejected by the ResourceQuota.
+// ensureBuildLimitRange creates or updates the LimitRange for default resource requests/limits.
+func (r *TenantReconciler) ensureBuildLimitRange(ctx context.Context, buildNs string) error {
 	lr := &corev1.LimitRange{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "build-limits",
-			Namespace: buildNs,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: k.LimitRangeBuild, Namespace: buildNs},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, lr, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, lr, func() error {
 		lr.Spec.Limits = []corev1.LimitRangeItem{
 			{
 				Type: corev1.LimitTypeContainer,
 				Default: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("500m"),
-					corev1.ResourceMemory: resource.MustParse("512Mi"),
+					corev1.ResourceCPU:    resource.MustParse(k.BuildLimitDefaultCPU),
+					corev1.ResourceMemory: resource.MustParse(k.BuildLimitDefaultMemory),
 				},
 				DefaultRequest: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("100m"),
-					corev1.ResourceMemory: resource.MustParse("128Mi"),
+					corev1.ResourceCPU:    resource.MustParse(k.BuildLimitDefaultRequestCPU),
+					corev1.ResourceMemory: resource.MustParse(k.BuildLimitDefaultRequestMemory),
 				},
 			},
 		}
 		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("build limitrange %s: %w", buildNs, err)
-	}
+	return err
+}
 
-	// ServiceAccount for Argo Workflow pods — must exist in each build namespace.
-	// The workflow spec references serviceAccountName: loopzero-build-sa.
+// ensureBuildServiceAccount creates or updates the ServiceAccount for Argo Workflow pods.
+func (r *TenantReconciler) ensureBuildServiceAccount(ctx context.Context, buildNs, tenantName string) error {
 	sa := &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-build-sa",
-			Namespace: buildNs,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: k.SABuildWorkflow, Namespace: buildNs},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, sa, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, sa, func() error {
 		if sa.Labels == nil {
 			sa.Labels = make(map[string]string)
 		}
-		sa.Labels["loopzero.io/tenant"] = tenant.Name
-		sa.Labels["loopzero.io/managed-by"] = "tenant-controller"
+		sa.Labels[k.LabelTenant] = tenantName
+		sa.Labels[k.LabelManagedBy] = k.ManagedByTenantController
 		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("build serviceaccount %s: %w", buildNs, err)
+	return err
+}
+
+// ensureBuildStorageCredentials creates global MinIO/Spaces credentials when per-tenant
+// provisioner is disabled. CWTs reference Secret "loopzero-minio-credentials" via envFrom.
+func (r *TenantReconciler) ensureBuildStorageCredentials(ctx context.Context, buildNs, tenantName string) error {
+	if r.MinIOProvisioner != nil || r.MinIOEndpoint == "" {
+		return nil
+	}
+	if r.SpacesAccessKeyID == "" || r.SpacesSecretAccessKey == "" {
+		return fmt.Errorf("SPACES_ACCESS_KEY_ID and SPACES_SECRET_ACCESS_KEY are required when MinIOProvisioner is disabled")
 	}
 
-	// Global MinIO credentials for CWTs (when per-tenant provisioner is disabled).
-	// CWTs reference Secret "loopzero-minio-credentials" via envFrom.
-	if r.MinIOProvisioner == nil && r.MinIOEndpoint != "" {
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "loopzero-minio-credentials",
-				Namespace: buildNs,
-			},
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: k.SecretMinIOCredentials, Namespace: buildNs},
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
+		secret.Labels = map[string]string{
+			k.LabelTenant:    tenantName,
+			k.LabelComponent: k.ComponentBuild,
+			k.LabelManagedBy: k.ManagedByTenantController,
 		}
-		_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
-			secret.Labels = map[string]string{
-				"loopzero.io/tenant":     tenant.Name,
-				"loopzero.io/component":  "build",
-				"loopzero.io/managed-by": "tenant-controller",
-			}
-			secret.Type = corev1.SecretTypeOpaque
-			// Use global object storage credentials.
-			// In production, these point to DigitalOcean Spaces (S3-compatible).
-			// Per-tenant isolation is handled when MinIOProvisioner is enabled.
-			accessKey := os.Getenv("SPACES_ACCESS_KEY_ID")
-			secretKey := os.Getenv("SPACES_SECRET_ACCESS_KEY")
-			if accessKey == "" {
-				accessKey = "loopzero-admin" // fallback for local dev
-			}
-			if secretKey == "" {
-				secretKey = "loopzero-minio-dev-2026" // fallback for local dev
-			}
-			secret.StringData = map[string]string{
-				"AWS_ACCESS_KEY_ID":     accessKey,
-				"AWS_SECRET_ACCESS_KEY": secretKey,
-				"MINIO_ENDPOINT":        r.MinIOEndpoint,
-			}
-			return nil
-		})
+		secret.Type = corev1.SecretTypeOpaque
+		secret.StringData = map[string]string{
+			k.KeyAWSAccessKeyID:     r.SpacesAccessKeyID,
+			k.KeyAWSSecretAccessKey: r.SpacesSecretAccessKey,
+			k.KeyMinIOEndpoint:      r.MinIOEndpoint,
+		}
+		return nil
+	})
+	return err
+}
+
+// ensureBuildRegistryCredentials creates BuildKit registry config Secret.
+// DO Container Registry requires credentials generated via the DO API.
+// For local k3d development, RegistryDockerConfig is set at init time.
+func (r *TenantReconciler) ensureBuildRegistryCredentials(ctx context.Context, buildNs, tenantName string) error {
+	if r.DOToken != "" {
+		dockerConfig, err := fetchDORegistryCredentials(ctx, r.DOToken)
 		if err != nil {
-			return fmt.Errorf("build minio credentials (global) %s: %w", buildNs, err)
+			return fmt.Errorf("fetch DO registry credentials: %w", err)
 		}
+		return r.ensureBuildkitRegistrySecret(ctx, buildNs, tenantName, dockerConfig)
 	}
-
-	// BuildKit registry credentials — Docker config.json format mounted at
-	// /home/user/.docker/config.json inside the buildkitd rootless container.
-	// BuildKit reads this for authenticated push to container registries.
-	//
-	// DO Container Registry requires credentials generated via the DO API
-	// (POST /v2/registry/docker-credentials?read_write=true) — the raw API
-	// token does NOT work for docker/buildkit auth. The API endpoint returns
-	// a proper Docker config.json with a registry-scoped token.
-	//
-	// For local k3d development, use REGISTRY_DOCKER_CONFIG env var directly.
-	doAPIToken := os.Getenv("DIGITALOCEAN_TOKEN")
-	if doAPIToken != "" {
-		dockerConfig, fetchErr := fetchDORegistryCredentials(doAPIToken)
-		if fetchErr != nil {
-			return fmt.Errorf("build buildkit-registry-config: fetch DO registry credentials: %w", fetchErr)
-		}
-
-		buildkitSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "buildkit-registry-config",
-				Namespace: buildNs,
-			},
-		}
-		_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, buildkitSecret, func() error {
-			buildkitSecret.Labels = map[string]string{
-				"loopzero.io/tenant":     tenant.Name,
-				"loopzero.io/component":  "build",
-				"loopzero.io/managed-by": "tenant-controller",
-			}
-			buildkitSecret.Type = corev1.SecretTypeOpaque
-			buildkitSecret.StringData = map[string]string{
-				"config.json": dockerConfig,
-			}
-			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("build buildkit-registry-config %s: %w", buildNs, err)
-		}
-	} else if localConfig := os.Getenv("REGISTRY_DOCKER_CONFIG"); localConfig != "" {
-		// Local dev: use docker config from env var (k3d registry doesn't need DO API)
-		buildkitSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "buildkit-registry-config",
-				Namespace: buildNs,
-			},
-		}
-		_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, buildkitSecret, func() error {
-			buildkitSecret.Labels = map[string]string{
-				"loopzero.io/tenant":     tenant.Name,
-				"loopzero.io/component":  "build",
-				"loopzero.io/managed-by": "tenant-controller",
-			}
-			buildkitSecret.Type = corev1.SecretTypeOpaque
-			buildkitSecret.StringData = map[string]string{
-				"config.json": localConfig,
-			}
-			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("build buildkit-registry-config (local) %s: %w", buildNs, err)
-		}
+	if r.RegistryDockerConfig != "" {
+		return r.ensureBuildkitRegistrySecret(ctx, buildNs, tenantName, r.RegistryDockerConfig)
 	}
+	return nil
+}
 
-	// Argo Workflow executor RBAC — workflow pods need to report task results.
-	executorRole := &rbacv1.Role{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "argo-workflow-executor",
-			Namespace: buildNs,
-		},
+// ensureBuildExecutorRBAC creates the Role and RoleBinding for Argo Workflow executor pods.
+func (r *TenantReconciler) ensureBuildExecutorRBAC(ctx context.Context, buildNs string) error {
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{Name: k.RoleArgoExecutor, Namespace: buildNs},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, executorRole, func() error {
-		executorRole.Rules = []rbacv1.PolicyRule{
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, role, func() error {
+		role.Rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"argoproj.io"},
 				Resources: []string{"workflowtaskresults"},
@@ -260,119 +203,100 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 			},
 		}
 		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("build executor role %s: %w", buildNs, err)
+	}); err != nil {
+		return fmt.Errorf("role: %w", err)
 	}
 
-	executorBinding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "argo-workflow-executor",
-			Namespace: buildNs,
-		},
+	binding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: k.RoleBindingArgoExecutor, Namespace: buildNs},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, executorBinding, func() error {
-		executorBinding.RoleRef = rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
+	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, binding, func() error {
+		binding.RoleRef = rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
 			Kind:     "Role",
-			Name:     "argo-workflow-executor",
+			Name:     k.RoleArgoExecutor,
 		}
-		executorBinding.Subjects = []rbacv1.Subject{
+		binding.Subjects = []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "loopzero-build-sa",
+				Name:      k.SABuildWorkflow,
 				Namespace: buildNs,
 			},
 		}
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("build executor rolebinding %s: %w", buildNs, err)
+		return fmt.Errorf("rolebinding: %w", err)
 	}
-
-	// Provision per-tenant MinIO credentials scoped to tenant prefix.
-	// Each tenant gets its own MinIO user + policy that restricts access to
-	// loopzero-builds/{tenantID}/* only. This prevents cross-tenant source code access
-	// and cache poisoning (spec §17.2, §17.4).
-	// When MinIOProvisioner is nil, per-tenant isolation is disabled (graceful degradation).
-	if r.MinIOProvisioner != nil {
-		if err := r.reconcileBuildMinIOCredentials(ctx, buildNs, tenant.Name); err != nil {
-			return fmt.Errorf("build minio credentials %s: %w", buildNs, err)
-		}
-	}
-
-	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeBuildNamespaceReady,
-		metav1.ConditionTrue, "BuildNamespaceReady", "build namespace provisioned", tenant.Generation)
-
-	// QuotaEnforced = True when ALL quotas (workload + build) are applied
-	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeQuotaEnforced,
-		metav1.ConditionTrue, "AllQuotasEnforced", "all resource quotas applied", tenant.Generation)
-
 	return nil
 }
 
+// ensureBuildMinIOPerTenant provisions per-tenant MinIO credentials scoped to tenant prefix.
+// When MinIOProvisioner is nil, this is a no-op (graceful degradation).
+func (r *TenantReconciler) ensureBuildMinIOPerTenant(ctx context.Context, buildNs, tenantName string) error {
+	if r.MinIOProvisioner == nil {
+		return nil
+	}
+	return r.reconcileBuildMinIOCredentials(ctx, buildNs, tenantName)
+}
+
 // reconcileBuildMinIOCredentials provisions per-tenant MinIO credentials and stores
-// them as a K8s Secret in the build namespace. The CWTs reference this Secret by
-// the fixed name "loopzero-minio-credentials" via envFrom.
-//
-// Each tenant gets its own MinIO user with a policy scoped to loopzero-builds/{tenantID}/*,
-// preventing cross-tenant source code access and cache poisoning.
+// them as a K8s Secret in the build namespace.
 func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, namespace, tenantID string) error {
 	accessKey, secretKey, err := r.MinIOProvisioner.EnsureTenantCredentials(ctx, tenantID)
 	if err != nil {
 		return fmt.Errorf("provision minio credentials: %w", err)
 	}
 
-	// Create or update the K8s Secret with tenant-scoped credentials.
-	// The Secret name MUST be "loopzero-minio-credentials" — all CWTs reference it.
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-minio-credentials",
-			Namespace: namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: k.SecretMinIOCredentials, Namespace: namespace},
 	}
 	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
 		secret.Labels = map[string]string{
-			"loopzero.io/tenant":     tenantID,
-			"loopzero.io/component":  "build",
-			"loopzero.io/managed-by": "tenant-controller",
+			k.LabelTenant:    tenantID,
+			k.LabelComponent: k.ComponentBuild,
+			k.LabelManagedBy: k.ManagedByTenantController,
 		}
 		secret.Type = corev1.SecretTypeOpaque
 		secret.StringData = map[string]string{
-			"AWS_ACCESS_KEY_ID":     accessKey,
-			"AWS_SECRET_ACCESS_KEY": secretKey,
-			"MINIO_ENDPOINT":       r.MinIOEndpoint,
+			k.KeyAWSAccessKeyID:     accessKey,
+			k.KeyAWSSecretAccessKey: secretKey,
+			k.KeyMinIOEndpoint:      r.MinIOEndpoint,
 		}
 		return nil
 	})
 	return err
 }
 
-// reconcileBuildNetworkPolicy creates restrictive egress policies in build namespaces.
-//
-// Without this, build pods have unrestricted network egress. A malicious Dockerfile
-// can exfiltrate source code to any external endpoint (spec §17.1).
-//
-// Allowed egress:
-//   - DNS (port 53 UDP/TCP) — required for any network operation
-//   - MinIO (port 9000 TCP) — source bundles and dependency cache
-//   - Container registry (port 5000 TCP for k3d, 443 for production registries) — BuildKit image push + OCI layer cache
-//   - K8s API (port 6443 TCP) — Argo Workflow task result reporting
-//
-// All other egress is denied.
+// ensureBuildkitRegistrySecret creates or updates the BuildKit registry config Secret.
+func (r *TenantReconciler) ensureBuildkitRegistrySecret(ctx context.Context, namespace, tenantName, dockerConfig string) error {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: k.SecretBuildKitRegistryConfig, Namespace: namespace},
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
+		secret.Labels = map[string]string{
+			k.LabelTenant:    tenantName,
+			k.LabelComponent: k.ComponentBuild,
+			k.LabelManagedBy: k.ManagedByTenantController,
+		}
+		secret.Type = corev1.SecretTypeOpaque
+		secret.StringData = map[string]string{
+			k.KeyDockerConfigJSON: dockerConfig,
+		}
+		return nil
+	})
+	return err
+}
+
+// doHTTPClient is reused across reconcile cycles for DO API calls.
+// Safe for concurrent use (http.Client is goroutine-safe).
+var doHTTPClient = &http.Client{Timeout: k.HTTPTimeoutExternal}
+
 // fetchDORegistryCredentials calls the DigitalOcean API to generate read-write
-// registry credentials in Docker config.json format. The DO Container Registry
-// requires credentials generated via this API endpoint — the raw API token
-// does NOT work for docker/buildkit push authentication.
-//
-// Returns the Docker config.json string: {"auths":{"registry.digitalocean.com":{"auth":"base64(email:token)"}}}
-//
-// Token expiry is set to 7 days (604800s). The TenantController re-creates the Secret
-// on every reconcile, so the token is refreshed regularly.
-func fetchDORegistryCredentials(apiToken string) (string, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest("GET",
-		"https://api.digitalocean.com/v2/registry/docker-credentials?read_write=true&expiry_seconds=604800",
+// registry credentials in Docker config.json format.
+func fetchDORegistryCredentials(ctx context.Context, apiToken string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		fmt.Sprintf("%s?read_write=true&expiry_seconds=%d", k.DORegistryCredentialsURL, k.DORegistryTokenExpirySeconds),
 		nil)
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
@@ -380,11 +304,11 @@ func fetchDORegistryCredentials(apiToken string) (string, error) {
 	req.Header.Set("Authorization", "Bearer "+apiToken)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := client.Do(req)
+	resp, err := doHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("call DO API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -395,8 +319,6 @@ func fetchDORegistryCredentials(apiToken string) (string, error) {
 		return "", fmt.Errorf("DO API returned %d: %s", resp.StatusCode, string(body))
 	}
 
-	// The API returns {"auths":{"registry.digitalocean.com":{"auth":"..."}}}
-	// Validate it's valid JSON with the expected structure.
 	var config map[string]interface{}
 	if err := json.Unmarshal(body, &config); err != nil {
 		return "", fmt.Errorf("invalid JSON from DO API: %w", err)
@@ -408,60 +330,43 @@ func fetchDORegistryCredentials(apiToken string) (string, error) {
 	return string(body), nil
 }
 
+// reconcileBuildNetworkPolicy creates restrictive egress policies in build namespaces.
+// Prevents source code exfiltration via malicious Dockerfiles (spec §17.1).
 func (r *TenantReconciler) reconcileBuildNetworkPolicy(ctx context.Context, namespace string) error {
-	dnsPort := intstr.FromInt32(53)
-	minioPort := intstr.FromInt32(9000)
-	registryPort := intstr.FromInt32(5000)
-	registryTLSPort := intstr.FromInt32(443)
-	k8sAPIPort := intstr.FromInt32(6443)
+	dnsPort := intstr.FromInt32(k.PortDNS)
+	minioPort := intstr.FromInt32(k.PortMinIO)
+	registryPort := intstr.FromInt32(k.PortRegistryDev)
+	registryTLSPort := intstr.FromInt32(k.PortHTTPS)
+	k8sAPIPort := intstr.FromInt32(k.PortKubeAPI)
 	protoUDP := corev1.ProtocolUDP
 	protoTCP := corev1.ProtocolTCP
 
 	np := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "build-egress-restrict",
-			Namespace: namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: k.NetworkPolicyBuildEgress, Namespace: namespace},
 	}
-
 	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, np, func() error {
 		np.Labels = map[string]string{
-			"loopzero.io/component":  "build",
-			"loopzero.io/managed-by": "tenant-controller",
+			k.LabelComponent: k.ComponentBuild,
+			k.LabelManagedBy: k.ManagedByTenantController,
 		}
 		np.Spec = networkingv1.NetworkPolicySpec{
-			// Apply to all pods in the build namespace
 			PodSelector: metav1.LabelSelector{},
-			PolicyTypes: []networkingv1.PolicyType{
-				networkingv1.PolicyTypeEgress,
-			},
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
 			Egress: []networkingv1.NetworkPolicyEgressRule{
-				// DNS — required for hostname resolution
-				{
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Protocol: &protoUDP, Port: &dnsPort},
-						{Protocol: &protoTCP, Port: &dnsPort},
-					},
-				},
-				// MinIO — source bundles and dependency cache
-				{
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Protocol: &protoTCP, Port: &minioPort},
-					},
-				},
-				// Container registry — BuildKit image push + OCI layer cache (dev: 5000, prod: 443)
-				{
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Protocol: &protoTCP, Port: &registryPort},
-						{Protocol: &protoTCP, Port: &registryTLSPort},
-					},
-				},
-				// K8s API — Argo task result reporting
-				{
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Protocol: &protoTCP, Port: &k8sAPIPort},
-					},
-				},
+				{Ports: []networkingv1.NetworkPolicyPort{
+					{Protocol: &protoUDP, Port: &dnsPort},
+					{Protocol: &protoTCP, Port: &dnsPort},
+				}},
+				{Ports: []networkingv1.NetworkPolicyPort{
+					{Protocol: &protoTCP, Port: &minioPort},
+				}},
+				{Ports: []networkingv1.NetworkPolicyPort{
+					{Protocol: &protoTCP, Port: &registryPort},
+					{Protocol: &protoTCP, Port: &registryTLSPort},
+				}},
+				{Ports: []networkingv1.NetworkPolicyPort{
+					{Protocol: &protoTCP, Port: &k8sAPIPort},
+				}},
 			},
 		}
 		return nil

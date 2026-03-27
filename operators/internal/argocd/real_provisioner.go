@@ -6,13 +6,15 @@ package argocd
 import (
 	"context"
 	"fmt"
-	"strings"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+
+	"github.com/loopzero/loopzero/operators/internal/constants"
 )
 
 var applicationGVR = schema.GroupVersionResource{
@@ -26,6 +28,9 @@ var appProjectGVR = schema.GroupVersionResource{
 	Version:  "v1alpha1",
 	Resource: "appprojects",
 }
+
+// Compile-time interface compliance check.
+var _ Provisioner = (*RealProvisioner)(nil)
 
 // RealProvisioner manages ArgoCD Application CRs using the Kubernetes API.
 type RealProvisioner struct {
@@ -53,6 +58,24 @@ func NewRealProvisioner(namespace string) (*RealProvisioner, error) {
 
 // EnsureAppProject creates or updates an ArgoCD AppProject CR for tenant RBAC isolation (MOD-5).
 func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectSpec) error {
+	// Build destination list scoped to tenant namespaces only.
+	// Each destination restricts to the tenant's environment namespaces,
+	// preventing cross-tenant deployment via ArgoCD.
+	destinations := make([]interface{}, 0, len(spec.DestinationNamespaces))
+	for _, ns := range spec.DestinationNamespaces {
+		destinations = append(destinations, map[string]interface{}{
+			"namespace": ns,
+			"server":    "*",
+		})
+	}
+	// Fallback: if no specific namespaces provided, allow tenant-prefixed namespaces.
+	if len(destinations) == 0 {
+		destinations = append(destinations, map[string]interface{}{
+			"namespace": fmt.Sprintf("loopzero-%s-*", spec.TenantID),
+			"server":    "*",
+		})
+	}
+
 	proj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "argoproj.io/v1alpha1",
@@ -61,18 +84,13 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 				"name":      spec.Name,
 				"namespace": p.namespace,
 				"labels": map[string]interface{}{
-					"loopzero.io/tenant":     spec.TenantID,
-					"loopzero.io/managed-by": "tenant-controller",
+					constants.LabelTenant:    spec.TenantID,
+					constants.LabelManagedBy: constants.ManagedByTenantController,
 				},
 			},
 			"spec": map[string]interface{}{
-				"sourceRepos": toInterfaceSlice(spec.SourceRepos),
-				"destinations": []interface{}{
-					map[string]interface{}{
-						"namespace": "*",
-						"server":    "*",
-					},
-				},
+				"sourceRepos":  toInterfaceSlice(spec.SourceRepos),
+				"destinations": destinations,
 				"clusterResourceWhitelist": []interface{}{
 					map[string]interface{}{
 						"group": "",
@@ -119,11 +137,11 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 				"name":      spec.Name,
 				"namespace": p.namespace,
 				"labels": map[string]interface{}{
-					"loopzero.io/tenant":     spec.TenantID,
-					"loopzero.io/managed-by": "tenant-controller",
+					constants.LabelTenant:    spec.TenantID,
+					constants.LabelManagedBy: constants.ManagedByTenantController,
 				},
 				"finalizers": []interface{}{
-					"resources-finalizer.argocd.argoproj.io",
+					constants.ArgoCDResourcesFinalizer,
 				},
 			},
 			"spec": map[string]interface{}{
@@ -177,7 +195,7 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 // DeleteApplications removes all ArgoCD Application CRs for a tenant.
 func (p *RealProvisioner) DeleteApplications(ctx context.Context, tenantID string) error {
 	list, err := p.client.Resource(applicationGVR).Namespace(p.namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("loopzero.io/tenant=%s", tenantID),
+		LabelSelector: fmt.Sprintf("%s=%s", constants.LabelTenant, tenantID),
 	})
 	if err != nil {
 		return fmt.Errorf("argocd: list applications for tenant %s: %w", tenantID, err)
@@ -196,8 +214,7 @@ func (p *RealProvisioner) DeleteApplications(ctx context.Context, tenantID strin
 func (p *RealProvisioner) DeleteAppProject(ctx context.Context, tenantID string) error {
 	err := p.client.Resource(appProjectGVR).Namespace(p.namespace).Delete(ctx, tenantID, metav1.DeleteOptions{})
 	if err != nil {
-		// Check if already gone (idempotent)
-		if strings.Contains(err.Error(), "not found") {
+		if errors.IsNotFound(err) {
 			return nil
 		}
 		return fmt.Errorf("argocd: delete appproject %s: %w", tenantID, err)

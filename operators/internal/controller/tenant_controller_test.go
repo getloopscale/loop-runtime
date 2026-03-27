@@ -1174,12 +1174,10 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 			t.Annotations["test.loopzero.io/trigger"] = "re-reconcile"
 			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
 
-			// Give the controller time to process the re-reconcile
-			time.Sleep(2 * time.Second)
-
-			// Verify: GitProvisioner IS called again (all steps run unconditionally for drift correction)
-			// but the call is idempotent — EnsureRepo returns the same result
-			Expect(fakeGitProvider.GetCalls()).To(BeNumerically(">", callsBefore),
+			// Wait for controller to process the re-reconcile (no hardcoded sleep)
+			Eventually(func() int {
+				return fakeGitProvider.GetCalls()
+			}, timeout, interval).Should(BeNumerically(">", callsBefore),
 				"EnsureRepo should be called on every reconcile (unconditional, idempotent)")
 
 			// Verify: canary annotation on namespace should still be present

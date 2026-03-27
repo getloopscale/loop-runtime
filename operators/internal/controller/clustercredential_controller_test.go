@@ -18,6 +18,7 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 // buildKubeconfigBytes creates a serialized kubeconfig pointing at the given server
@@ -121,7 +122,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 				}, &fetched)).To(Succeed())
 
 				g.Expect(fetched.Status.Connected).To(BeFalse())
-				cond := findCondition(fetched.Status.Conditions, "SecretNotFound")
+				cond := findCondition(fetched.Status.Conditions, conditions.TypeSecretNotFound)
 				g.Expect(cond).NotTo(BeNil(), "expected SecretNotFound condition to exist")
 				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 			}, timeout, interval).Should(Succeed())
@@ -159,7 +160,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 				}, &fetched)).To(Succeed())
 
 				g.Expect(fetched.Status.Connected).To(BeFalse())
-				cond := findCondition(fetched.Status.Conditions, "Connected")
+				cond := findCondition(fetched.Status.Conditions, conditions.TypeConnected)
 				g.Expect(cond).NotTo(BeNil(), "expected Connected condition to exist")
 				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 			}, timeout, interval).Should(Succeed())
@@ -204,7 +205,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 				g.Expect(fetched.Status.Connected).To(BeTrue())
 				g.Expect(fetched.Status.LastCheckedAt).NotTo(BeNil())
 
-				cond := findCondition(fetched.Status.Conditions, "Connected")
+				cond := findCondition(fetched.Status.Conditions, conditions.TypeConnected)
 				g.Expect(cond).NotTo(BeNil(), "expected Connected condition to exist")
 				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 			}, 30*time.Second, interval).Should(Succeed())
@@ -255,7 +256,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 				}, &fetched)).To(Succeed())
 
 				g.Expect(fetched.Status.Connected).To(BeFalse())
-				cond := findCondition(fetched.Status.Conditions, "Connected")
+				cond := findCondition(fetched.Status.Conditions, conditions.TypeConnected)
 				g.Expect(cond).NotTo(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 			}, timeout, interval).Should(Succeed())
@@ -278,7 +279,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 					Name: "cc-late-secret", Namespace: "default",
 				}, &fetched)).To(Succeed())
 
-				cond := findCondition(fetched.Status.Conditions, "SecretNotFound")
+				cond := findCondition(fetched.Status.Conditions, conditions.TypeSecretNotFound)
 				g.Expect(cond).NotTo(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 			}, timeout, interval).Should(Succeed())
@@ -305,10 +306,10 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 					Name: "cc-late-secret", Namespace: "default",
 				}, &fetched)).To(Succeed())
 
-				cond := findCondition(fetched.Status.Conditions, "Connected")
+				cond := findCondition(fetched.Status.Conditions, conditions.TypeConnected)
 				g.Expect(cond).NotTo(BeNil(), "expected Connected condition after secret was created")
 				// SecretNotFound should now be False
-				snfCond := findCondition(fetched.Status.Conditions, "SecretNotFound")
+				snfCond := findCondition(fetched.Status.Conditions, conditions.TypeSecretNotFound)
 				g.Expect(snfCond).NotTo(BeNil())
 				g.Expect(snfCond.Status).To(Equal(metav1.ConditionFalse))
 			}, 45*time.Second, interval).Should(Succeed())
@@ -478,13 +479,4 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 	})
 })
 
-// findCondition returns the condition with the given type, or nil.
-func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
-	for i, c := range conditions {
-		if c.Type == conditionType {
-			return &conditions[i]
-		}
-	}
-	return nil
-}
 

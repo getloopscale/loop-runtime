@@ -8,9 +8,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -22,13 +19,12 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/operators/internal/gitea"
 )
 
 const (
-	repoBindingFinalizer       = "platform.loopzero.io/repo-binding-cleanup"
-	repoBindingRequeueInterval = 5 * time.Minute
-	repoBindingRequeueOnError  = 30 * time.Second
-	reachabilityTimeout        = 10 * time.Second
+	repoBindingFinalizer = constants.FinalizerGitRepositoryBinding
 )
 
 // GitRepositoryBindingReconciler reconciles a GitRepositoryBinding object.
@@ -75,7 +71,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 		if statusErr := r.Status().Update(ctx, &binding); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
-		return ctrl.Result{RequeueAfter: repoBindingRequeueOnError}, nil
+		return ctrl.Result{RequeueAfter: constants.RequeueRepoBindingOnError}, nil
 	}
 
 	// Step 2: Compute credential hash.
@@ -86,13 +82,15 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 		if statusErr := r.Status().Update(ctx, &binding); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
-		return ctrl.Result{RequeueAfter: repoBindingRequeueOnError}, nil
+		return ctrl.Result{RequeueAfter: constants.RequeueRepoBindingOnError}, nil
 	}
 
 	// Step 4: Update credential hash in status.
 	binding.Status.CredentialHash = hash
 
-	// Step 5: Check repository reachability.
+	// Step 5: Check repository reachability (non-blocking — the binding is functional
+	// even if the repo is temporarily unreachable). Result is reflected in the
+	// RepositoryReachable condition for observability.
 	r.checkReachability(ctx, &binding, token, gen)
 
 	// Step 6: Set ConsumerHealthy condition (ArgoCD Secret exists and is up to date).
@@ -112,7 +110,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 		"repoURL", binding.Spec.RepoURL,
 		"credentialHash", hash)
 
-	return ctrl.Result{RequeueAfter: repoBindingRequeueInterval}, nil
+	return ctrl.Result{RequeueAfter: constants.RequeueRepoBindingInterval}, nil
 }
 
 // resolveCredential reads the token from the referenced Secret.
@@ -172,15 +170,9 @@ func computeCredentialHash(token string) string {
 	return fmt.Sprintf("%x", h)[:12]
 }
 
-// argocdSecretName returns the deterministic name for the ArgoCD repository Secret.
-// TODO: Use pkg/naming function when available. For now, inline construction.
-func argocdSecretName(bindingName string) string {
-	return fmt.Sprintf("repo-%s-gitops", bindingName)
-}
-
 // ensureArgoCDSecret creates or updates the ArgoCD repository Secret in the consumer namespace.
 func (r *GitRepositoryBindingReconciler) ensureArgoCDSecret(ctx context.Context, binding *loopzerov1.GitRepositoryBinding, token, hash string, gen int64) error {
-	secretName := argocdSecretName(binding.Name)
+	secretName := constants.ArgoCDRepoSecretName(binding.Name)
 	consumerNs := binding.Spec.Consumer.Namespace
 
 	argoSecret := &corev1.Secret{
@@ -194,18 +186,18 @@ func (r *GitRepositoryBindingReconciler) ensureArgoCDSecret(ctx context.Context,
 		if argoSecret.Labels == nil {
 			argoSecret.Labels = make(map[string]string)
 		}
-		argoSecret.Labels["argocd.argoproj.io/secret-type"] = "repository"
-		argoSecret.Labels["loopzero.io/managed-by"] = "gitrepositorybinding-controller"
+		argoSecret.Labels[constants.ArgoCDSecretTypeLabel] = constants.ArgoCDSecretTypeRepository
+		argoSecret.Labels[constants.LabelManagedBy] = constants.ManagedByGitRepoBindingController
 
 		if argoSecret.Annotations == nil {
 			argoSecret.Annotations = make(map[string]string)
 		}
-		argoSecret.Annotations["platform.loopzero.io/credential-hash"] = hash
+		argoSecret.Annotations[constants.AnnotationCredentialHash] = hash
 
 		argoSecret.StringData = map[string]string{
 			"type":     "git",
 			"url":      binding.Spec.RepoURL,
-			"username": "loopzero-platform",
+			"username": constants.DefaultArgoCDRepoUsername,
 			"password": token,
 		}
 		return nil
@@ -230,7 +222,7 @@ func (r *GitRepositoryBindingReconciler) ensureArgoCDSecret(ctx context.Context,
 func (r *GitRepositoryBindingReconciler) checkReachability(ctx context.Context, binding *loopzerov1.GitRepositoryBinding, token string, gen int64) {
 	logger := log.FromContext(ctx)
 
-	apiURL, err := repoAPIURL(binding.Spec.RepoURL)
+	apiURL, err := gitea.RepoAPIURL(binding.Spec.RepoURL)
 	if err != nil {
 		logger.Info("could not parse repo URL for reachability check", "repoURL", binding.Spec.RepoURL, "error", err)
 		conditions.SetCondition(&binding.Status.Conditions, conditions.TypeRepositoryReachable,
@@ -242,10 +234,10 @@ func (r *GitRepositoryBindingReconciler) checkReachability(ctx context.Context, 
 
 	httpClient := r.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: reachabilityTimeout}
+		httpClient = &http.Client{Timeout: constants.ReachabilityTimeout}
 	}
 
-	reqCtx, cancel := context.WithTimeout(ctx, reachabilityTimeout)
+	reqCtx, cancel := context.WithTimeout(ctx, constants.ReachabilityTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, apiURL, nil)
@@ -283,26 +275,6 @@ func (r *GitRepositoryBindingReconciler) checkReachability(ctx context.Context, 
 		gen)
 }
 
-// repoAPIURL converts a Git repo URL like http://host/owner/repo.git to
-// the Gitea API URL: http://host/api/v1/repos/owner/repo
-func repoAPIURL(repoURL string) (string, error) {
-	parsed, err := url.Parse(repoURL)
-	if err != nil {
-		return "", fmt.Errorf("invalid repo URL %q: %w", repoURL, err)
-	}
-
-	path := strings.TrimSuffix(parsed.Path, ".git")
-	path = strings.TrimPrefix(path, "/")
-
-	parts := strings.SplitN(path, "/", 2)
-	if len(parts) != 2 {
-		return "", fmt.Errorf("repo URL %q: expected path format owner/repo", repoURL)
-	}
-
-	apiURL := fmt.Sprintf("%s://%s/api/v1/repos/%s/%s", parsed.Scheme, parsed.Host, parts[0], parts[1])
-	return apiURL, nil
-}
-
 // reconcileDelete handles cleanup when a GitRepositoryBinding is being deleted.
 func (r *GitRepositoryBindingReconciler) reconcileDelete(ctx context.Context, binding *loopzerov1.GitRepositoryBinding) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -314,7 +286,7 @@ func (r *GitRepositoryBindingReconciler) reconcileDelete(ctx context.Context, bi
 	logger.Info("cleaning up git repository binding", "repoURL", binding.Spec.RepoURL)
 
 	// Delete the ArgoCD repository Secret.
-	secretName := argocdSecretName(binding.Name)
+	secretName := constants.ArgoCDRepoSecretName(binding.Name)
 	consumerNs := binding.Spec.Consumer.Namespace
 
 	argoSecret := &corev1.Secret{

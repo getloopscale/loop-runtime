@@ -65,11 +65,14 @@ type LoopZeroApplicationSpec struct {
 	// Replicas is the desired number of replicas.
 	// +optional
 	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=0
 	Replicas int32 `json:"replicas,omitempty"`
 
 	// ServicePort is the port on the backing service.
 	// +optional
 	// +kubebuilder:default=80
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	ServicePort int32 `json:"servicePort,omitempty"`
 }
 
@@ -78,20 +81,11 @@ type LoopZeroApplicationStatus struct {
 	// Phase represents the overall application lifecycle phase.
 	Phase ApplicationPhase `json:"phase,omitempty"`
 
-	// PodReady is the number of ready pods.
-	PodReady int32 `json:"podReady,omitempty"`
-
-	// PodDesired is the desired number of pods.
-	PodDesired int32 `json:"podDesired,omitempty"`
-
 	// EndpointsReady indicates whether endpoints are available.
 	EndpointsReady bool `json:"endpointsReady,omitempty"`
 
 	// Reachable indicates whether the route probe succeeded.
 	Reachable bool `json:"reachable,omitempty"`
-
-	// ArgoSyncStatus reflects the ArgoCD sync status (if available).
-	ArgoSyncStatus string `json:"argoSyncStatus,omitempty"`
 
 	// URL is the full URL where the application is accessible.
 	URL string `json:"url,omitempty"`

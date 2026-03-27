@@ -72,6 +72,8 @@ spec:
                     default: 80
                     description: Port is the Service port.
                     format: int32
+                    maximum: 65535
+                    minimum: 1
                     type: integer
                 required:
                 - name

@@ -45,6 +45,10 @@ type AppProjectSpec struct {
 
 	// SourceRepos lists allowed Git repository URLs.
 	SourceRepos []string
+
+	// DestinationNamespaces restricts which namespaces ArgoCD can deploy to.
+	// If empty, defaults to "loopzero-{tenantID}-*" wildcard pattern.
+	DestinationNamespaces []string
 }
 
 // Provisioner manages ArgoCD Application and AppProject CRs.

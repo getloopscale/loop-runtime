@@ -11,3 +11,15 @@ type GitRepoProvisioner interface {
 	RepoExists(ctx context.Context, name string) (bool, error)
 	ArchiveRepo(ctx context.Context, name string) error
 }
+
+// BootstrapClient defines the Gitea operations required by PlatformBootstrap.
+// The APIClient satisfies this interface. Controllers should depend on this
+// interface (DIP) rather than calling HTTP endpoints inline.
+type BootstrapClient interface {
+	CheckVersion(ctx context.Context) error
+	ValidateToken(ctx context.Context, token string) error
+	ListTokens(ctx context.Context, username, password string) ([]TokenInfo, error)
+	DeleteToken(ctx context.Context, username, password string, tokenID int) error
+	CreateToken(ctx context.Context, username, password, tokenName string) (string, error)
+	EnsureOrg(ctx context.Context, token, orgName string) error
+}

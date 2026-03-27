@@ -97,6 +97,7 @@ spec:
                   maxBuildConcurrency:
                     description: MaxBuildConcurrency is the maximum number of concurrent
                       builds.
+                    minimum: 1
                     type: integer
                   maxCPU:
                     anyOf:
@@ -161,10 +162,6 @@ spec:
           status:
             description: TenantStatus defines the observed state of a Tenant.
             properties:
-              activeBuilds:
-                description: ActiveBuilds is the current number of active builds for
-                  this tenant.
-                type: integer
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the tenant's state.
@@ -241,13 +238,6 @@ spec:
                 - Suspended
                 - Deleting
                 type: string
-              totalReleases:
-                description: TotalReleases is the total number of releases created
-                  for this tenant.
-                type: integer
-            required:
-            - activeBuilds
-            - totalReleases
             type: object
         type: object
     served: true

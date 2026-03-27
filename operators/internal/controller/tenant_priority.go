@@ -15,17 +15,18 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/operators/internal/constants"
 )
 
 // priorityClassForPlan returns the PriorityClass name, value, and preemption policy for a given plan.
 func priorityClassForPlan(plan loopzerov1.PlanTier) (name string, value int32, preemptionPolicy corev1.PreemptionPolicy) {
 	switch plan {
 	case loopzerov1.PlanGrowth:
-		return "loopzero-tenant-growth", 500, corev1.PreemptLowerPriority
+		return constants.PriorityClassGrowth, constants.PriorityValueGrowth, corev1.PreemptLowerPriority
 	case loopzerov1.PlanEnterprise:
-		return "loopzero-tenant-enterprise", 1000, corev1.PreemptLowerPriority
+		return constants.PriorityClassEnterprise, constants.PriorityValueEnterprise, corev1.PreemptLowerPriority
 	default:
-		return "loopzero-tenant-starter", 100, corev1.PreemptNever
+		return constants.PriorityClassStarter, constants.PriorityValueStarter, corev1.PreemptNever
 	}
 }
 
@@ -48,7 +49,7 @@ func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *l
 		if pc.Labels == nil {
 			pc.Labels = make(map[string]string)
 		}
-		pc.Labels["loopzero.io/managed-by"] = "tenant-controller"
+		pc.Labels[constants.LabelManagedBy] = constants.ManagedByTenantController
 		return nil
 	})
 	if err != nil {

@@ -81,6 +81,7 @@ spec:
             required:
             - branch
             - expiresAt
+            - prNumber
             - projectId
             - releaseId
             - tenantId

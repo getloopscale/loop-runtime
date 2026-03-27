@@ -46,7 +46,7 @@ func TestAllConditionsTrue_RequiresPriorityClassReady(t *testing.T) {
 		conds := allFourConditions()
 
 		// Act
-		result := allConditionsTrue(conds)
+		result := conditions.AllConditionsTrue(conds, requiredProvisioningConditions...)
 
 		// Assert
 		if result {
@@ -63,7 +63,7 @@ func TestAllConditionsTrue_RequiresPriorityClassReady(t *testing.T) {
 		})
 
 		// Act
-		result := allConditionsTrue(conds)
+		result := conditions.AllConditionsTrue(conds, requiredProvisioningConditions...)
 
 		// Assert
 		if result {
@@ -76,7 +76,7 @@ func TestAllConditionsTrue_RequiresPriorityClassReady(t *testing.T) {
 		conds := allFiveConditions()
 
 		// Act
-		result := allConditionsTrue(conds)
+		result := conditions.AllConditionsTrue(conds, requiredProvisioningConditions...)
 
 		// Assert
 		if !result {

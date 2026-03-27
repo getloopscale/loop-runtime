@@ -61,6 +61,8 @@ type ServiceRef struct {
 
 	// Port is the Service port.
 	// +kubebuilder:default=80
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	Port int32 `json:"port"`
 }
 
