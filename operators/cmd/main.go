@@ -138,20 +138,12 @@ func main() {
 	minIOEndpoint := os.Getenv("MINIO_ENDPOINT")
 	minIOAccessKey := os.Getenv("MINIO_ACCESS_KEY")
 	minIOSecretKey := os.Getenv("MINIO_SECRET_KEY")
-	minIOVarsSet := 0
-	for _, v := range []string{minIOEndpoint, minIOAccessKey, minIOSecretKey} {
-		if v != "" {
-			minIOVarsSet++
-		}
-	}
-	if minIOVarsSet > 0 && minIOVarsSet < 3 {
-		setupLog.Error(nil, "MINIO_ENDPOINT, MINIO_ACCESS_KEY, and MINIO_SECRET_KEY must all be set or all be empty",
-			"MINIO_ENDPOINT_set", minIOEndpoint != "",
-			"MINIO_ACCESS_KEY_set", minIOAccessKey != "",
-			"MINIO_SECRET_KEY_set", minIOSecretKey != "")
-		os.Exit(1)
-	}
-	if minIOVarsSet == 3 {
+
+	// MinIO admin provisioner: creates per-tenant users and policies.
+	// Only enabled when all 3 MinIO admin credentials are provided.
+	// Disabled for DigitalOcean Spaces — Spaces uses SPACES_ACCESS_KEY_ID/SECRET_ACCESS_KEY
+	// (no admin API). The controller falls back to global credentials from BuildCredentials.
+	if minIOEndpoint != "" && minIOAccessKey != "" && minIOSecretKey != "" {
 		minIOProvisioner = miniop.NewAdminProvisioner(miniop.AdminConfig{
 			Endpoint:  minIOEndpoint,
 			AccessKey: minIOAccessKey,
@@ -159,7 +151,9 @@ func main() {
 		})
 		setupLog.Info("minio per-tenant provisioner enabled", "endpoint", minIOEndpoint)
 	} else {
-		setupLog.Info("minio per-tenant provisioner disabled (MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY not set)")
+		setupLog.Info("minio per-tenant provisioner disabled — using global credentials from SPACES_ACCESS_KEY_ID",
+			"MINIO_ENDPOINT_set", minIOEndpoint != "",
+			"SPACES_ACCESS_KEY_ID_set", os.Getenv("SPACES_ACCESS_KEY_ID") != "")
 	}
 
 	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, controller.TenantControllerConfig{
