@@ -194,8 +194,9 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     // Safe to remove after first successful `pulumi up`.
     import: "sfo3,loopzero-static-assets",
     // Prevent replacement — bucket has existing data. Region enum mismatch
-    // may trigger replacement; retainOnDelete prevents data loss.
+    // triggers replacement; ignoreChanges prevents it.
     retainOnDelete: true,
+    ignoreChanges: ["region"],
   });
   const staticBucket = {
     bucketName: staticBucketResource.name,
