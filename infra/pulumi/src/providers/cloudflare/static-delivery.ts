@@ -106,7 +106,7 @@ export function createStaticDelivery(
     {
       dependsOn: [workerScript],
       // Import existing route created before Pulumi management.
-      import: "f5456560bf4d4e65ac5899f608b8b180",
+      import: "9f9a41bef0bcb7adf15969c81c303bef/f5456560bf4d4e65ac5899f608b8b180",
     },
   );
 
