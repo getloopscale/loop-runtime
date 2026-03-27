@@ -17,15 +17,17 @@ loopzero deploy
 ```
 
 ```
-✓ Building api...    [45s]
-✓ Building web...    [38s]
-✓ Building worker... [22s]
-✓ Deploying...       [12s]
+✓ Building api...    [62s]
+✓ Building web...    [51s]
+✓ Building worker... [34s]
+✓ Deploying...       [46s]
 
 🚀 Live:
   api    → https://acme-my-saas-api-production.dev.loopzero.example
   web    → https://acme-my-saas-web-production.dev.loopzero.example (static CDN)
   worker → (no URL — background worker)
+
+Total: 193s — exit code 0
 ```
 
 After this: `git push` to `main` auto-deploys. Opening a PR creates a preview environment automatically. No configuration needed.
@@ -50,13 +52,15 @@ The primary user is a backend engineer who prefers terminal workflows over web d
 
 ```bash
 $ loopzero deploy
-✓ Building api...    [45s]
-✓ Building web...    [38s]
-✓ Deploying...       [12s]
+✓ Building api...    [62s]
+✓ Building web...    [51s]
+✓ Deploying...       [46s]
 
 🚀 Live:
-  api → https://acme-my-saas-api-production.dev.loopzero.example
-  web → https://acme-my-saas-web-production.dev.loopzero.example (static CDN)
+  api → https://tn-loopzero-e2e-project-api-production.dev.loopzero.example
+  web → https://tn-loopzero-e2e-project-web-production.dev.loopzero.example (static CDN)
+
+Total: 193s — exit code 0
 ```
 
 ### Implemented CLI commands
@@ -72,7 +76,7 @@ The following commands are implemented and functional:
 - `loopzero secret` — manage environment secrets (synced via External Secrets Operator)
 - `loopzero validate` — validate `loopzero.yaml` configuration locally
 
-Additional commands (status, inspect, preview environments) are planned and not yet available.
+Additional commands (status, inspect, preview environments) are planned for future sprints.
 
 ### Preview Environments
 
@@ -196,7 +200,7 @@ CLI → API → Argo Workflows (build) → Gitea (manifests) → ArgoCD → Kube
                                                        ↘ Cloudflare Worker (static frontends)
 ```
 
-**From the developer's perspective:** none of this exists. You run `loopzero deploy` and get a URL.
+**From the developer's perspective:** none of this exists. You run `loopzero deploy` and get a URL. Validated end-to-end on DigitalOcean with a monorepo containing API server, static web frontend (zero pods), and worker — all deployed in 193s.
 
 **Under the hood:**
 
@@ -356,6 +360,8 @@ BDD spec → Go interface → Implementation → Integration test → E2E test
 | Release + GitOps push | < 10s | < 10s |
 | ArgoCD sync + health check | < 60s | < 60s |
 | **Total** | **< 5 min** | **< 3 min** |
+
+**Validated:** Full monorepo deploy (API server + Web static + Worker) completes in 193s with exit code 0 on DigitalOcean. Infrastructure destroy + recreate tested via GitHub Actions pipeline.
 
 Reference hardware: 4 vCPU, 8 GB RAM, 3000 IOPS, 100 Mbps network.
 
