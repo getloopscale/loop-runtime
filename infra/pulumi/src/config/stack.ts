@@ -51,6 +51,8 @@ export interface PlatformStackConfig {
   readonly cfApiToken?: pulumi.Output<string>;
   readonly cfAccountId?: string;
   readonly cfKvNamespaceId?: string;
+  /** Cloudflare Zone ID for the DNS zone (dnsZone). Required when NS is Cloudflare. */
+  readonly cfZoneId?: string;
 
 }
 
@@ -105,5 +107,6 @@ export function loadStackConfig(): PlatformStackConfig {
     cfApiToken: config.getSecret("cfApiToken") ?? undefined,
     cfAccountId: config.get("cfAccountId") ?? undefined,
     cfKvNamespaceId: config.get("cfKvNamespaceId") ?? undefined,
+    cfZoneId: config.get("cfZoneId") ?? undefined,
   };
 }

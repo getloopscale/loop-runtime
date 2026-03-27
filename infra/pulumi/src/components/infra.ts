@@ -11,6 +11,7 @@ import { CloudProviderFactory } from "../contracts/provider";
 import { DatabaseClusterOutput } from "../contracts/database";
 import { DigitalOceanProviderFactory } from "../providers/digitalocean";
 import { AwsProviderFactory } from "../providers/aws";
+import { CloudflareDnsProvider } from "../providers/cloudflare/dns";
 import { PlatformStackConfig } from "../config/stack";
 
 // ---------------------------------------------------------------------------
@@ -56,11 +57,19 @@ export interface InfraOutputs {
 /**
  * Resolves the concrete provider factory from the config string.
  * This is the ONLY place that maps provider name → implementation.
+ *
+ * When cfZoneId is set, DNS records are created in Cloudflare instead of the
+ * cloud provider's DNS. Required when the domain's authoritative nameservers
+ * are Cloudflare (common with CF Tunnel, WAF, or CDN).
  */
-export function resolveProvider(provider: CloudProvider): CloudProviderFactory {
+export function resolveProvider(provider: CloudProvider, config?: PlatformStackConfig): CloudProviderFactory {
+  const cfDns = config?.cfZoneId
+    ? new CloudflareDnsProvider(config.cfZoneId)
+    : undefined;
+
   switch (provider) {
     case "digitalocean":
-      return new DigitalOceanProviderFactory();
+      return new DigitalOceanProviderFactory({ dnsOverride: cfDns });
     case "aws":
       return new AwsProviderFactory();
     default:
@@ -91,7 +100,7 @@ export function resolveProvider(provider: CloudProvider): CloudProviderFactory {
  *   Clusters, DB, Storage are independent of each other
  */
 export function createInfra(config: PlatformStackConfig): InfraOutputs {
-  const factory = resolveProvider(config.provider);
+  const factory = resolveProvider(config.provider, config);
   const tags = standardTags(config.project, config.environment);
 
   const baseName = resourceName({

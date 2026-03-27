@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import { CloudProviderFactory } from "../../contracts/provider";
+import { CloudProviderFactory, IProviderDns } from "../../contracts/provider";
 import { DigitalOceanNetworkProvider } from "./network";
 import { DigitalOceanKubernetesProvider } from "./kubernetes";
 import { DigitalOceanStorageProvider } from "./storage";
@@ -9,24 +9,37 @@ import { DigitalOceanDnsProvider } from "./dns";
 import { DigitalOceanComputeProvider } from "./compute";
 import { DigitalOceanDatabaseProvider } from "./database";
 
+export interface DigitalOceanProviderOpts {
+  /** When provided, DNS records are created in Cloudflare instead of DO DNS.
+   *  Required when the domain's nameservers are Cloudflare (not DigitalOcean). */
+  dnsOverride?: IProviderDns;
+}
+
 /**
  * DigitalOcean provider factory — fully functional.
  *
  * Each capability is delegated to a focused provider class (SRP).
  * Only files inside providers/digitalocean/ may import @pulumi/digitalocean.
+ *
+ * DNS can be overridden with a Cloudflare provider when the domain's authoritative
+ * nameservers are Cloudflare (common when using CF Tunnel or CF WAF).
  */
 export class DigitalOceanProviderFactory implements CloudProviderFactory {
   private readonly network = new DigitalOceanNetworkProvider();
   private readonly kubernetes = new DigitalOceanKubernetesProvider();
   private readonly storage = new DigitalOceanStorageProvider();
-  private readonly dns = new DigitalOceanDnsProvider();
+  private readonly dns: IProviderDns;
   private readonly compute = new DigitalOceanComputeProvider();
   private readonly database = new DigitalOceanDatabaseProvider();
+
+  constructor(opts?: DigitalOceanProviderOpts) {
+    this.dns = opts?.dnsOverride ?? new DigitalOceanDnsProvider();
+  }
 
   createNetwork = this.network.createNetwork.bind(this.network);
   createKubernetesCluster = this.kubernetes.createKubernetesCluster.bind(this.kubernetes);
   createObjectStorage = this.storage.createObjectStorage.bind(this.storage);
-  createDnsRecord = this.dns.createDnsRecord.bind(this.dns);
+  createDnsRecord = (spec: import("../../contracts/dns").DnsRecordSpec) => this.dns.createDnsRecord(spec);
   createComputeInstance = this.compute.createComputeInstance.bind(this.compute);
   createDatabaseCluster = this.database.createDatabaseCluster.bind(this.database);
 }
