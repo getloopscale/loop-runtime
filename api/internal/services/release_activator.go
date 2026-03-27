@@ -217,6 +217,9 @@ func (o *BuildOrchestrator) phase2dSyncAndProbe(ctx context.Context, build *db.B
 	// won't block this deploy.
 	deployedAppNames := make([]string, 0, len(result.Apps))
 	for _, app := range result.Apps {
+		if app.Rendering == "static" {
+			continue // static apps don't have Deployments
+		}
 		deployedAppNames = append(deployedAppNames, app.Name)
 	}
 	if err := o.sync.WaitForSync(ctx, argoAppName, o.argocdSyncTimeout, deployedAppNames); err != nil {

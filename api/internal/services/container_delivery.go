@@ -274,8 +274,14 @@ func (c *ContainerDeliveryActivator) phaseDVerify(ctx context.Context, build *db
 		slog.Error("failed to emit deploy.verifying event", "build_id", build.ID, "error", err)
 	}
 
+	// Only include apps that have K8s Deployments in the health check.
+	// Static apps (render: static) have no Deployment — only IngressRoute + Middleware.
+	// Including them causes WaitForSync to wait forever for a non-existent Deployment.
 	deployedAppNames := make([]string, 0, len(result.Apps))
 	for _, app := range result.Apps {
+		if app.Rendering == "static" {
+			continue // static apps don't have Deployments
+		}
 		deployedAppNames = append(deployedAppNames, app.Name)
 	}
 	if err := c.sync.WaitForSync(ctx, argoAppName, c.argocdSyncTimeout, deployedAppNames); err != nil {
