@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 
@@ -156,11 +157,20 @@ func (r *PlatformBootstrapReconciler) requeueWithRetry(ctx context.Context, pb *
 }
 
 // httpClient returns the HTTP client, using a default if none was injected.
+// The default includes InsecureSkipVerify because internal services (ArgoCD, Gitea, API)
+// use self-signed TLS certificates in-cluster.
 func (r *PlatformBootstrapReconciler) httpClient() *http.Client {
 	if r.HTTPClient != nil {
 		return r.HTTPClient
 	}
-	return &http.Client{Timeout: constants.HTTPTimeoutExternal}
+	return &http.Client{
+		Timeout: constants.HTTPTimeoutExternal,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, //nolint:gosec // internal cluster services use self-signed certs
+			},
+		},
+	}
 }
 
 // giteaClient returns a BootstrapClient for the given Gitea base URL.
