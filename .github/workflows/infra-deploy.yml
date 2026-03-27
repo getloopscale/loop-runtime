@@ -25,6 +25,7 @@ on:
     paths:
       - "infra/pulumi/**"
       - "infra/helm/**"
+      - "infra/cloudflare/**"
       - "api/internal/db/migrations/**"
       - ".github/workflows/infra-deploy.yml"
 
