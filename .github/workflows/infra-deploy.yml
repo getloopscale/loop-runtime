@@ -681,6 +681,44 @@ jobs:
           echo "- Tenant CR: applied (tn-loopzero)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Gitea orgs: loopzero, loopzero-platform" >> "$GITHUB_STEP_SUMMARY"
 
+      # --- Post-deploy: deploy Cloudflare Worker (Sprint 10) ---
+      # The Pulumi WorkerScript resource tracks state but can't update the
+      # Worker content reliably (CF API multipart format issue). This step
+      # deploys the Worker script via CF API with correct KV binding.
+      - name: Deploy Cloudflare Worker
+        if: success() && needs.resolve.outputs.command == 'up' && env.CLOUDFLARE_API_TOKEN != ''
+        continue-on-error: true
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          CF_ACCOUNT_ID=$(pulumi config get cfAccountId --stack "$STACK" 2>/dev/null || echo "")
+          CF_KV_NS_ID=$(pulumi stack output cfKvNamespaceId --stack "$STACK" 2>/dev/null || echo "")
+
+          if [ -z "$CF_ACCOUNT_ID" ] || [ -z "$CF_KV_NS_ID" ]; then
+            echo "Cloudflare not configured for this stack — skipping Worker deploy"
+            exit 0
+          fi
+
+          WORKER_FILE="$GITHUB_WORKSPACE/infra/cloudflare/worker.mjs"
+          if [ ! -f "$WORKER_FILE" ]; then
+            echo "Worker source not found at $WORKER_FILE — skipping"
+            exit 0
+          fi
+
+          echo "Deploying CF Worker loopzero-static-delivery with KV binding..."
+          RESULT=$(curl -s -w "%{http_code}" -o /tmp/cf-worker-response.json \
+            -X PUT "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/loopzero-static-delivery" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -F "metadata={\"body_part\":\"script\",\"bindings\":[{\"type\":\"kv_namespace\",\"name\":\"LOOPZERO_ROUTING\",\"namespace_id\":\"$CF_KV_NS_ID\"}]};type=application/json" \
+            -F "script=@$WORKER_FILE;type=application/javascript")
+
+          if [ "$RESULT" = "200" ]; then
+            echo "✅ CF Worker deployed successfully"
+          else
+            echo "⚠️ CF Worker deploy returned HTTP $RESULT"
+            cat /tmp/cf-worker-response.json
+          fi
+
       # --- Post-deploy: configure cross-cluster Loki access ---
       # Loki runs on the build cluster (NodePort 30100). The API on mgmt
       # needs the build cluster node IP to query logs cross-cluster.

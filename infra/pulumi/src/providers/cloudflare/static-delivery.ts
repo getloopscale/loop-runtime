@@ -88,6 +88,11 @@ export function createStaticDelivery(
     // Import existing Worker script created before Pulumi management.
     // Safe to remove after first successful `pulumi up`.
     import: `362767409c4de7fda7990c10103efdd9/loopzero-static-delivery`,
+    // The CF API rejects WorkerScript updates via Pulumi when using
+    // service worker syntax + KV bindings. The Worker is managed via
+    // the worker.mjs file and deployed via CF API in the bootstrap step.
+    // Pulumi owns the resource for state tracking only.
+    ignoreChanges: ["content", "bindings", "compatibilityDate"],
   });
 
   // 3. Worker route — intercept all requests on *.{baseDomain}/*
