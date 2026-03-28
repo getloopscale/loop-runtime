@@ -114,7 +114,7 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
       - name: Login to DO Container Registry
-        run: doctl registry login --expiry-seconds 600
+        run: doctl registry login --expiry-seconds 3600
 
       - name: Build and push loopzero-api
         run: |
@@ -152,7 +152,7 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
       - name: Login to DO Container Registry
-        run: doctl registry login --expiry-seconds 600
+        run: doctl registry login --expiry-seconds 3600
 
       - name: Build and push tenant-controller
         run: |
