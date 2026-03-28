@@ -870,6 +870,12 @@ function bootstrapBuildCluster(
           // DO Spaces is S3-compatible — uses the same credentials as MinIO/Spaces.
           storage: {
             type: "s3",
+            // Required by Loki chart v6.24+ commonStorageConfig helper template
+            bucketNames: {
+              chunks: "loopzero-logs",
+              ruler: "loopzero-logs",
+              admin: "loopzero-logs",
+            },
             s3: {
               endpoint: `https://s3.${config.region}.digitaloceanspaces.com`,
               bucketnames: "loopzero-logs",

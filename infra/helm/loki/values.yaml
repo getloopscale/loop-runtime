@@ -11,6 +11,11 @@ loki:
     replication_factor: 1
   storage:
     type: s3
+    # Required by Loki chart v6.24+ commonStorageConfig helper
+    bucketNames:
+      chunks: loopzero-logs
+      ruler: loopzero-logs
+      admin: loopzero-logs
     s3:
       endpoint: minio.platform-system:9000
       bucketnames: loopzero-logs
