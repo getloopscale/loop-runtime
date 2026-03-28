@@ -302,6 +302,31 @@ func (c *ContainerDeliveryActivator) phaseDVerify(ctx context.Context, build *db
 		return true
 	}
 
+	// MEET-2026-03-27-012 Phase 1.2: Verify ArgoCD synced the correct git revision.
+	// Without this, a race between git push and ArgoCD sync can cause silent
+	// wrong-version activation (ArgoCD syncs the OLD commit).
+	if release.GitCommit != "" {
+		if checker, ok := c.sync.(interface {
+			GetSyncRevision(ctx context.Context, appName string) (string, error)
+		}); ok {
+			if rev, revErr := checker.GetSyncRevision(ctx, argoAppName); revErr == nil && rev != "" {
+				if rev != release.GitCommit {
+					slog.Error("argocd synced wrong revision",
+						"build_id", build.ID, "expected", release.GitCommit, "actual", rev)
+					failedData, _ := json.Marshal(map[string]interface{}{
+						"status": "failed",
+						"app":    argoAppName,
+						"error":  "synced revision does not match expected commit",
+					})
+					if _, emitErr := c.eventStore.Append(ctx, build.ID, "deploy.verifying", failedData); emitErr != nil {
+						slog.Error("failed to emit revision mismatch event", "build_id", build.ID, "error", emitErr)
+					}
+					return true
+				}
+			}
+		}
+	}
+
 	for _, app := range result.Apps {
 		okData, _ := json.Marshal(map[string]interface{}{
 			"status": "ok",

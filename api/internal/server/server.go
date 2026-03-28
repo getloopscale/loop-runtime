@@ -29,6 +29,7 @@ type Config struct {
 	MetricsPort        string
 	Logger             *slog.Logger
 	DB                 routes.DBHealthChecker
+	HealthServices     []routes.ServiceHealthChecker
 	TokenValidator     middleware.TokenValidator
 	MemberStore        middleware.MembershipStore
 	ProjectStore       routes.ProjectStore
@@ -102,7 +103,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	})
 
 	// Public routes (no auth required)
-	health := routes.NewHealthHandler(cfg.DB)
+	health := routes.NewHealthHandler(cfg.DB, cfg.HealthServices...)
 	r.Get("/api/v1/health", health.Health)
 	r.Get("/api/v1/health/deep", health.DeepHealth)
 

@@ -359,6 +359,24 @@ func main() {
 		)
 		go releaseReaper.Start(shutdownCtx)
 
+		// MEET-2026-03-27-012 Phase 1.1: Release Convergence Loop
+		// Asynchronously verifies PENDING releases converge (ArgoCD sync + health).
+		// Decouples Phase D from the synchronous build reconcile loop.
+		releaseConvergenceLoop := services.NewReleaseConvergenceLoop(
+			releaseStore,
+			envTargetStore,
+			syncClient,
+			locker,
+			eventStore,
+			logger,
+			services.ReleaseConvergenceLoopConfig{
+				Interval:      10 * time.Second,
+				SyncTimeout:   180 * time.Second,
+				MaxConcurrent: 10,
+			},
+		)
+		go releaseConvergenceLoop.Start(shutdownCtx)
+
 		// Idempotency cleaner — prunes expired keys every hour (A-08)
 		idempotencyCleaner := services.NewIdempotencyCleaner(
 			&db.PostgresIdempotencyStore{DB: dbAdapter},
@@ -392,11 +410,24 @@ func main() {
 		buildHandler = routes.NewBuildHandler(buildOrchestrator, logger)
 	}
 
+	// MEET-2026-03-27-012 Phase 1.3: Deep health checks for all critical dependencies.
+	// Each checker probes a service endpoint. If any is unreachable, /api/v1/health/deep returns 503.
+	var healthServices []routes.ServiceHealthChecker
+	if cfg.ArgocdURL != "" {
+		healthServices = append(healthServices, routes.NewHTTPServiceChecker(
+			"argocd", cfg.ArgocdURL+"/api/v1/applications", cfg.ArgocdToken, nil))
+	}
+	if cfg.GiteaURL != "" {
+		healthServices = append(healthServices, routes.NewHTTPServiceChecker(
+			"gitea", cfg.GiteaURL+"/api/v1/repos/search?limit=1", cfg.GiteaToken, nil))
+	}
+
 	srvCfg := server.Config{
 		Port:             cfg.Port,
 		MetricsPort:      cfg.MetricsPort,
 		Logger:           logger,
 		DB:               dbHealth,
+		HealthServices:   healthServices,
 		TokenValidator:   githubValidator,
 		MemberStore:      memberStore,
 		ProjectStore:     projectStore,

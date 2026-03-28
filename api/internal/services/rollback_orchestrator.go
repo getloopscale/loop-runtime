@@ -180,9 +180,12 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		if err != nil {
 			return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("rollback: push manifests: %w", err))
 		}
-		appName := fmt.Sprintf("%s-%s", req.ProjectName, req.Environment)
+		// MEET-2026-03-27-012 Phase 0.2 + 1.4: Fix app name (TenantID, not ProjectName)
+		// and do NOT swallow sync failure — a rollback that doesn't sync is a lie.
+		appName := fmt.Sprintf("%s-%s", req.TenantID, req.Environment)
 		if syncErr := o.deps.Sync.TriggerSync(ctx, appName); syncErr != nil {
-			logger.Warn("argocd sync trigger failed, continuing", "error", syncErr)
+			return nil, o.failRollback(ctx, currentRelease.ID,
+				fmt.Errorf("rollback: sync trigger failed for %s: %w", appName, syncErr))
 		}
 	}
 

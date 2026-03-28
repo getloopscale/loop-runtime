@@ -259,6 +259,16 @@ func (f *fakeReleaseStoreOrch) GetLatestByBuildID(_ context.Context, buildID str
 	return nil, nil
 }
 
+func (f *fakeReleaseStoreOrch) FindPendingReleases(_ context.Context) ([]db.Release, error) {
+	var pending []db.Release
+	for _, r := range f.releases {
+		if r.Status == "PENDING" {
+			pending = append(pending, *r)
+		}
+	}
+	return pending, nil
+}
+
 // fakeEnvTargetStoreOrch implements db.EnvironmentTargetStore.
 type fakeEnvTargetStoreOrch struct {
 	desired map[string]string // key: tenant:project:env -> releaseID

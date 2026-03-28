@@ -51,6 +51,9 @@ type ReleaseStore interface {
 	ListByEnv(ctx context.Context, tenantID, projectID, env string, limit int) ([]Release, error)
 	// GetLatestByBuildID returns the most recent release for a build, or nil if none exists.
 	GetLatestByBuildID(ctx context.Context, buildID string) (*Release, error)
+	// FindPendingReleases returns releases in PENDING state (awaiting ArgoCD sync verification).
+	// Used by the Release Convergence Loop (MEET-2026-03-27-012 Phase 1.1).
+	FindPendingReleases(ctx context.Context) ([]Release, error)
 }
 
 // PostgresReleaseStore implements ReleaseStore using PostgreSQL.
@@ -298,6 +301,43 @@ func (s *PostgresReleaseStore) GetLatestByBuildID(ctx context.Context, buildID s
 		return nil, err
 	}
 	return r, nil
+}
+
+// FindPendingReleases returns all releases in PENDING state.
+// These are releases where GitOps push succeeded but ArgoCD sync verification
+// has not yet completed. The Release Convergence Loop processes these.
+func (s *PostgresReleaseStore) FindPendingReleases(ctx context.Context) ([]Release, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
+		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
+		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
+		        COALESCE(side_effects, 'null'::jsonb)
+		 FROM releases
+		 WHERE status = 'PENDING'
+		 ORDER BY created_at ASC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("release store: find pending releases: %w", err)
+	}
+	defer rows.Close()
+
+	var releases []Release
+	for rows.Next() {
+		var r Release
+		if err := rows.Scan(
+			&r.ID, &r.BuildID, &r.TenantID, &r.ProjectID, &r.Environment,
+			&r.Status, &r.CorrelationID, &r.CreatedBy,
+			&r.CreatedAt, &r.GitCommit, &r.GitMirrorStatus,
+			&r.Apps, &r.Artifacts, &r.SideEffects,
+		); err != nil {
+			return nil, fmt.Errorf("release store: scan pending release: %w", err)
+		}
+		releases = append(releases, r)
+	}
+	if releases == nil {
+		releases = []Release{}
+	}
+	return releases, nil
 }
 
 // scanRelease scans a single release row.

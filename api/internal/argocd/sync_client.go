@@ -95,7 +95,7 @@ func (c *SyncClient) WaitForSync(ctx context.Context, appName string, timeout ti
 			return fmt.Errorf("argocd wait: sync timeout after %s for %q", timeout, appName)
 		}
 
-		synced, healthy, err := c.getAppStatus(ctx, appName, deployedApps)
+		synced, healthy, err := c.GetAppStatus(ctx, appName, deployedApps)
 		if err != nil {
 			return fmt.Errorf("argocd wait: %w", err)
 		}
@@ -125,7 +125,9 @@ type resourceStatus struct {
 // getAppStatus returns the sync and health status of an ArgoCD Application.
 // When deployedApps is non-empty, health is checked per-resource for only the
 // Deployments matching those app names — so one degraded app doesn't block others.
-func (c *SyncClient) getAppStatus(ctx context.Context, appName string, deployedApps []string) (synced bool, healthy bool, err error) {
+// GetAppStatus returns the sync and health status of an ArgoCD Application.
+// Exported for use by the ReleaseConvergenceLoop (MEET-2026-03-27-012).
+func (c *SyncClient) GetAppStatus(ctx context.Context, appName string, deployedApps []string) (synced bool, healthy bool, err error) {
 	url := fmt.Sprintf("%s/api/v1/applications/%s", c.baseURL, appName)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -151,7 +153,8 @@ func (c *SyncClient) getAppStatus(ctx context.Context, appName string, deployedA
 	var app struct {
 		Status struct {
 			Sync struct {
-				Status string `json:"status"`
+				Status   string `json:"status"`
+				Revision string `json:"revision"`
 			} `json:"sync"`
 			Health struct {
 				Status string `json:"status"`
@@ -195,4 +198,39 @@ func (c *SyncClient) getAppStatus(ctx context.Context, appName string, deployedA
 	// If we found all Deployments and they're all healthy, consider it healthy.
 	// If no matching Deployments found yet (still rolling out), not healthy.
 	return isSynced, matchedCount >= len(deployedApps), nil
+}
+
+// GetSyncRevision returns the git revision that ArgoCD has synced for an application.
+// Used to verify the synced revision matches the expected commit SHA.
+// MEET-2026-03-27-012 Phase 1.2: prevents silent wrong-version activation.
+func (c *SyncClient) GetSyncRevision(ctx context.Context, appName string) (string, error) {
+	url := fmt.Sprintf("%s/api/v1/applications/%s", c.baseURL, appName)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("get sync revision: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("get sync revision: status %d", resp.StatusCode)
+	}
+
+	var app struct {
+		Status struct {
+			Sync struct {
+				Revision string `json:"revision"`
+			} `json:"sync"`
+		} `json:"status"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
+		return "", fmt.Errorf("decode sync revision: %w", err)
+	}
+	return app.Status.Sync.Revision, nil
 }
