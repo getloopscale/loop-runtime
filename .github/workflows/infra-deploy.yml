@@ -466,7 +466,8 @@ jobs:
                 IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "cloudflare:index/zeroTrustTunnelCloudflared:ZeroTrustTunnelCloudflared") | .id' 2>/dev/null)
                 if [ -z "$IN_STATE" ]; then
                   echo "Importing existing CF Tunnel $TUNNEL_ID into Pulumi state..."
-                  pulumi import "cloudflare:index/zeroTrustTunnelCloudflared:ZeroTrustTunnelCloudflared" "loopzero-tunnel" "$TUNNEL_ID" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
+                  # CF provider expects import ID as <account_id>/<tunnel_id>
+                  pulumi import "cloudflare:index/zeroTrustTunnelCloudflared:ZeroTrustTunnelCloudflared" "loopzero-tunnel" "${CF_ACCOUNT_ID}/${TUNNEL_ID}" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
                 fi
               fi
             fi
