@@ -100,6 +100,10 @@ const (
 	DefaultGiteaTokenName       = "platform-bootstrap-token"
 	DefaultArgoCDUsername        = "admin"
 	DefaultArgoCDRepoUsername    = "loopzero-platform"
+	// ArgoCDAPIAccount is the dedicated ArgoCD service account for the LoopZero API.
+	// Configured in Helm values with capability: apiKey.
+	// RBAC: sync + get on applications (least privilege).
+	ArgoCDAPIAccount            = "loopzero-api"
 )
 
 // --- Probe Thresholds ---

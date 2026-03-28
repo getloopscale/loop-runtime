@@ -69,14 +69,16 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("ArgoCD admin secret: %v", passErr))
 		}
 
-		// Step 4: Create JWT via ArgoCD session API.
-		jwt, err := r.createArgoCDSession(ctx, argoURL, adminPassword)
+		// Step 4: Generate apiKey token for loopzero-api account (non-expiring).
+		// MEET-2026-03-28-013: replaced createArgoCDSession (24h session JWT) with
+		// generateArgoCDApiKey (non-expiring apiKey scoped to sync+get via RBAC).
+		apiKeyToken, err := r.generateArgoCDApiKey(ctx, argoURL, adminPassword)
 		if err != nil {
-			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to create ArgoCD session: %v", err))
+			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to generate ArgoCD apiKey: %v", err))
 		}
 
-		// Step 5: Store JWT in platform-tokens Secret.
-		if err := r.updateSecretData(ctx, platformSecret, constants.KeyArgoCDToken, jwt); err != nil {
+		// Step 5: Store apiKey JWT in platform-tokens Secret.
+		if err := r.updateSecretData(ctx, platformSecret, constants.KeyArgoCDToken, apiKeyToken); err != nil {
 			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to store ArgoCD token: %v", err))
 		}
 	}
@@ -117,36 +119,72 @@ func (r *PlatformBootstrapReconciler) checkArgoCDReachable(ctx context.Context, 
 	return nil
 }
 
-// createArgoCDSession creates a session JWT by posting admin credentials to ArgoCD.
-func (r *PlatformBootstrapReconciler) createArgoCDSession(ctx context.Context, baseURL, password string) (string, error) {
-	bodyBytes, marshalErr := json.Marshal(map[string]string{"username": constants.DefaultArgoCDUsername, "password": password})
-	if marshalErr != nil {
-		return "", fmt.Errorf("marshal ArgoCD session request: %w", marshalErr)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/session", strings.NewReader(string(bodyBytes)))
+// generateArgoCDApiKey creates a non-expiring apiKey token for the loopzero-api account.
+// MEET-2026-03-28-013: replaces createArgoCDSession which generated 24h session JWTs.
+//
+// Flow:
+//  1. Login as admin to get a temporary session token
+//  2. Use the session token to generate an apiKey for loopzero-api account
+//  3. Return the apiKey JWT (non-expiring, scoped via ArgoCD RBAC)
+func (r *PlatformBootstrapReconciler) generateArgoCDApiKey(ctx context.Context, baseURL, password string) (string, error) {
+	// Step 1: Login as admin (temporary session, only used to generate apiKey)
+	sessionBody, _ := json.Marshal(map[string]string{
+		"username": constants.DefaultArgoCDUsername,
+		"password": password,
+	})
+	sessionReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/session", strings.NewReader(string(sessionBody)))
 	if err != nil {
 		return "", fmt.Errorf("creating session request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	sessionReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := r.httpClient().Do(req)
+	sessionResp, err := r.httpClient().Do(sessionReq)
 	if err != nil {
-		return "", fmt.Errorf("creating ArgoCD session: %w", err)
+		return "", fmt.Errorf("creating ArgoCD admin session: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = sessionResp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("ArgoCD session creation failed with status %d", resp.StatusCode)
+	if sessionResp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("ArgoCD admin login failed with status %d", sessionResp.StatusCode)
 	}
 
-	var result struct {
+	var sessionResult struct {
 		Token string `json:"token"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(sessionResp.Body).Decode(&sessionResult); err != nil {
 		return "", fmt.Errorf("decoding ArgoCD session response: %w", err)
 	}
 
-	return result.Token, nil
+	// Step 2: Generate apiKey token for loopzero-api account
+	tokenBody, _ := json.Marshal(map[string]string{"name": "platform-deploy"})
+	tokenReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		baseURL+"/api/v1/account/"+constants.ArgoCDAPIAccount+"/token",
+		strings.NewReader(string(tokenBody)))
+	if err != nil {
+		return "", fmt.Errorf("creating apiKey request: %w", err)
+	}
+	tokenReq.Header.Set("Content-Type", "application/json")
+	tokenReq.Header.Set("Authorization", "Bearer "+sessionResult.Token)
+
+	tokenResp, err := r.httpClient().Do(tokenReq)
+	if err != nil {
+		return "", fmt.Errorf("generating ArgoCD apiKey: %w", err)
+	}
+	defer func() { _ = tokenResp.Body.Close() }()
+
+	if tokenResp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("ArgoCD apiKey generation failed with status %d (account %s may not exist)",
+			tokenResp.StatusCode, constants.ArgoCDAPIAccount)
+	}
+
+	var tokenResult struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(tokenResp.Body).Decode(&tokenResult); err != nil {
+		return "", fmt.Errorf("decoding ArgoCD apiKey response: %w", err)
+	}
+
+	return tokenResult.Token, nil
 }
 
 // ensureRepoCredentialSecret creates or updates a repo credential Secret in the ArgoCD namespace.
