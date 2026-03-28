@@ -238,7 +238,7 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 // failRollback transitions the current release to ROLLBACK_FAILED state.
 func (o *RollbackOrchestrator) failRollback(ctx context.Context, releaseID string, cause error) error {
 	_ = o.deps.Locker.WithLock(ctx, "", "", "", func(tx db.DBTX) error {
-		_, _ = o.deps.Releases.UpdateStatus(ctx, tx, releaseID, string(statemachine.ReleaseRollbackFailed))
+		_, _ = o.deps.Releases.UpdateStatus(ctx, tx, releaseID, string(statemachine.ReleaseRollbackFailed_))
 		return nil
 	})
 	return cause

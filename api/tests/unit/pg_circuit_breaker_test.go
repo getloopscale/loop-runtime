@@ -36,6 +36,14 @@ func (f *fakeInnerSync) WaitForSync(_ context.Context, _ string, _ time.Duration
 	return f.waitErr
 }
 
+func (f *fakeInnerSync) GetAppStatus(_ context.Context, _ string, _ []string) (bool, bool, error) {
+	return true, true, nil
+}
+
+func (f *fakeInnerSync) GetSyncRevision(_ context.Context, _ string) (string, error) {
+	return "abc123", nil
+}
+
 // --- Helper ---
 
 func defaultCBConfig() services.CircuitBreakerConfig {
@@ -237,6 +245,34 @@ func TestCircuitBreaker_InnerErrorPropagated(t *testing.T) {
 	}
 	if err.Error() != "argocd 503" {
 		t.Errorf("expected 'argocd 503', got %q", err.Error())
+	}
+}
+
+func TestCircuitBreaker_GetAppStatus_DelegatesToInner(t *testing.T) {
+	inner := &fakeInnerSync{}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	synced, healthy, err := cb.GetAppStatus(context.Background(), "my-app", nil)
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !synced || !healthy {
+		t.Error("expected synced=true, healthy=true from inner")
+	}
+}
+
+func TestCircuitBreaker_GetSyncRevision_DelegatesToInner(t *testing.T) {
+	inner := &fakeInnerSync{}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	rev, err := cb.GetSyncRevision(context.Background(), "my-app")
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if rev != "abc123" {
+		t.Errorf("expected revision 'abc123', got %q", rev)
 	}
 }
 

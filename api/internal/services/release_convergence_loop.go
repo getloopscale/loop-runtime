@@ -153,7 +153,10 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 	// Parse app specs to get deployed app names
 	var apps []db.BuildAppSpec
 	if release.Apps != nil {
-		_ = json.Unmarshal(release.Apps, &apps)
+		if err := json.Unmarshal(release.Apps, &apps); err != nil {
+			r.logger.Error("release convergence: failed to parse app specs (skipping health filter)",
+				"release_id", release.ID, "error", err)
+		}
 	}
 	var deployedAppNames []string
 	for _, app := range apps {

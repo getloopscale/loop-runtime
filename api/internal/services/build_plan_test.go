@@ -16,7 +16,7 @@ func TestCreateBuildPlan_SingleApp(t *testing.T) {
 	}
 
 	app := plan.Apps[0]
-	if app.ImageTag != "registry.do.com/acme/my-app/api:abc123" {
+	if app.ImageTag != "registry.do.com/acme/my-app-api:abc123" {
 		t.Errorf("ImageTag = %q", app.ImageTag)
 	}
 	if app.DockerfilePath != "/workspace/Dockerfile" {
@@ -28,7 +28,7 @@ func TestCreateBuildPlan_SingleApp(t *testing.T) {
 	if app.LanguageStrategy != "node" {
 		t.Errorf("LanguageStrategy = %q, want node", app.LanguageStrategy)
 	}
-	if app.CacheRef != "registry.do.com/acme/my-app/api:buildcache" {
+	if app.CacheRef != "registry.do.com/acme/my-app-api:buildcache" {
 		t.Errorf("CacheRef = %q", app.CacheRef)
 	}
 	if app.BuildArgs["COMMIT_SHA"] != "abc123" {

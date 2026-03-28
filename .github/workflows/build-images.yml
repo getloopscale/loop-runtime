@@ -248,5 +248,16 @@ jobs:
             --set minio.insecure=true | \
             kubectl apply --context "$BUILD_CONTEXT" -f -
 
+          # Ensure buildkit-registry-config secret exists for image push.
+          # BuildKit needs Docker config.json to push to DO Container Registry.
+          # Without this, build-image pods hang in PodInitializing (AUDIT-2026-03-28).
+          RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 2592000)
+          kubectl create secret generic buildkit-registry-config \
+            --context "$BUILD_CONTEXT" \
+            --namespace argo \
+            --from-literal=config.json="$RW_CONFIG" \
+            --dry-run=client -o yaml | kubectl apply --context "$BUILD_CONTEXT" -f -
+
           echo "### CWT Update" >> "$GITHUB_STEP_SUMMARY"
           echo "- CWTs updated on $BUILD_CLUSTER" >> "$GITHUB_STEP_SUMMARY"
+          echo "- buildkit-registry-config secret ensured" >> "$GITHUB_STEP_SUMMARY"

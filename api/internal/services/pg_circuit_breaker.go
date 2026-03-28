@@ -91,6 +91,34 @@ func (cb *CircuitBreakerSyncClient) WaitForSync(ctx context.Context, appName str
 	return err
 }
 
+// GetAppStatus delegates to the inner SyncClient.
+// Read-only operation — no circuit breaker needed (does not mutate state).
+// Required so that the ReleaseConvergenceLoop type assertion succeeds
+// when the SyncClient is wrapped by the circuit breaker (AUDIT-2026-03-28).
+func (cb *CircuitBreakerSyncClient) GetAppStatus(ctx context.Context, appName string, deployedApps []string) (bool, bool, error) {
+	type statusChecker interface {
+		GetAppStatus(ctx context.Context, appName string, deployedApps []string) (bool, bool, error)
+	}
+	if checker, ok := cb.inner.(statusChecker); ok {
+		return checker.GetAppStatus(ctx, appName, deployedApps)
+	}
+	return false, false, nil
+}
+
+// GetSyncRevision delegates to the inner SyncClient.
+// Read-only operation — no circuit breaker needed.
+// Required so that the commit SHA verification type assertion succeeds
+// when the SyncClient is wrapped by the circuit breaker (AUDIT-2026-03-28).
+func (cb *CircuitBreakerSyncClient) GetSyncRevision(ctx context.Context, appName string) (string, error) {
+	type revisionChecker interface {
+		GetSyncRevision(ctx context.Context, appName string) (string, error)
+	}
+	if checker, ok := cb.inner.(revisionChecker); ok {
+		return checker.GetSyncRevision(ctx, appName)
+	}
+	return "", nil
+}
+
 // preCheck evaluates the circuit state. Returns ErrPlatformDegraded if the
 // circuit is open and no recovery probe is due.
 func (cb *CircuitBreakerSyncClient) preCheck() error {

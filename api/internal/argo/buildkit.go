@@ -40,9 +40,12 @@ type buildkitParams struct {
 // namespace creation on managed Kubernetes (DOKS, EKS, GKE). buildctl args are not
 // user-injectable (constructed programmatically). See MEET-2026-03-26-007 security review.
 func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app services.AppSpec) *forge.Container {
-	destination := fmt.Sprintf("%s/%s/%s/%s:%s",
+	// Image path: {registry}/{tenant}/{project}-{app}:{sha}
+	// Flattened to 2 levels to stay within DO Container Registry nesting limit.
+	// Previously 3 levels ({tenant}/{project}/{app}) caused 403 on DO.
+	destination := fmt.Sprintf("%s/%s/%s-%s:%s",
 		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
-	cacheRef := fmt.Sprintf("%s/%s/%s/%s:buildcache",
+	cacheRef := fmt.Sprintf("%s/%s/%s-%s:buildcache",
 		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name)
 
 	// Per-app Dockerfile: Dockerfile.{app} for multi-app, Dockerfile for single-app.

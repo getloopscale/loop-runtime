@@ -10,10 +10,11 @@
 
 | Sprint | Foco | Tasks | Bloqueio | Status |
 |--------|------|-------|----------|--------|
-| **DF-1** | Build Pipeline (S0 + dependencias) | DF-1.1 a DF-1.3 | **Desbloqueia TODOS os deploys** | DF-1.1 DONE (code+test+E2E validated: build succeeds, image in registry). DF-1.2 DONE. DF-1.3 blocked by ArgoCD sync. |
-| **DF-2** | Lifecycle & Integracao (S1-S2) | DF-2.1 a DF-2.3 | Corrige delete + logs | DF-2.1 DONE (code+test, 19 tests pass). DF-2.2/2.3 pending infra (Loki not deployed). |
-| **DF-3** | CLI Polish (S2-S3) | DF-3.1 a DF-3.4 | UX e consistencia | DF-3.1 DONE, DF-3.2 DONE, DF-3.3 DONE. DF-3.4 pending. 492 CLI tests pass. |
-| **DF-4** | Observabilidade & Cleanup (S2-S3) | DF-4.1 a DF-4.2 | Ambiente saudavel | DF-4.1 PARTIAL (16 projects deleted via CLI, ArgoCD prune pending). DF-4.2 pending. |
+| **DF-1** | Build Pipeline (S0 + dependencias) | DF-1.1 a DF-1.3 | **Desbloqueia TODOS os deploys** | **ALL DONE.** DF-1.1 (entitlement+registry), DF-1.2 (build E2E), DF-1.3 (deploy E2E: exit 0, pod Running, health OK, ArgoCD Synced). First successful deploy in 219s. |
+| **DF-2** | Lifecycle & Integracao (S1-S2) | DF-2.1 a DF-2.3 | Corrige delete + logs | DF-2.1 DONE. DF-2.2/2.3 pending infra (Loki not deployed). |
+| **DF-3** | CLI Polish (S2-S3) | DF-3.1 a DF-3.4 | UX e consistencia | DF-3.1 DONE, DF-3.2 DONE, DF-3.3 DONE. DF-3.4 pending. 505 CLI tests pass. |
+| **DF-4** | Observabilidade & Cleanup (S2-S3) | DF-4.1 a DF-4.2 | Ambiente saudavel | DF-4.1 DONE (19 pods + 18 IngressRoutes cleaned). DF-4.2 pending. |
+| **MEET-012** | ArgoCD Architecture (P0+P1) | 0.1-0.3, 1.1-1.5 | Deploy reliability | Phase 0.1 DONE (sync policy fix), 0.2 DONE (rollback name fix), 0.3 DONE (orphan cleanup). Phase 1.1 DONE (Release Convergence Loop), 1.2 DONE (commit SHA verification), 1.3 DONE (deep health), 1.4 DONE (rollback verification), 1.5 DONE (SSE events). |
 
 ---
 

@@ -42,10 +42,10 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 	plans := make([]AppBuildPlan, 0, len(units))
 
 	for _, unit := range units {
-		imageTag := fmt.Sprintf("%s/%s/%s/%s:%s",
+		imageTag := fmt.Sprintf("%s/%s/%s-%s:%s",
 			registryURL, tenantID, projectID, unit.Name, commitSHA)
 
-		cacheRef := fmt.Sprintf("%s/%s/%s/%s:buildcache",
+		cacheRef := fmt.Sprintf("%s/%s/%s-%s:buildcache",
 			registryURL, tenantID, projectID, unit.Name)
 
 		// Resolve Dockerfile path in workspace

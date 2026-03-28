@@ -897,13 +897,13 @@ func TestWorkflowBuilder_BuildKit_BuildctlArgs_ContainsCacheFlags(t *testing.T) 
 	assertStringContains(t, argsStr, "--frontend dockerfile.v0")
 
 	// Output with push
-	assertStringContains(t, argsStr, "--output type=image,name=k3d-loopzero-registry:5000/acme/my-app/api:abc123,push=true")
+	assertStringContains(t, argsStr, "--output type=image,name=k3d-loopzero-registry:5000/acme/my-app-api:abc123,push=true")
 
 	// Export cache — same repo as image, tag :buildcache. ignore-error=true makes cache failures non-fatal.
-	assertStringContains(t, argsStr, "--export-cache type=registry,ref=k3d-loopzero-registry:5000/acme/my-app/api:buildcache,mode=max,ignore-error=true")
+	assertStringContains(t, argsStr, "--export-cache type=registry,ref=k3d-loopzero-registry:5000/acme/my-app-api:buildcache,mode=max,ignore-error=true")
 
 	// Import cache — same ref
-	assertStringContains(t, argsStr, "--import-cache type=registry,ref=k3d-loopzero-registry:5000/acme/my-app/api:buildcache")
+	assertStringContains(t, argsStr, "--import-cache type=registry,ref=k3d-loopzero-registry:5000/acme/my-app-api:buildcache")
 
 	// Metadata file for digest extraction
 	assertStringContains(t, argsStr, "--metadata-file /workspace/metadata-api.json")

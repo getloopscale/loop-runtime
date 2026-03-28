@@ -635,7 +635,10 @@ function bootstrapBuildCluster(
     { provider },
   );
 
-  // MinIO credentials — needed by CWTs for source download and cache
+  // Object storage credentials — needed by CWTs for source download and cache.
+  // On DigitalOcean: uses DO Spaces (S3-compatible), NOT the mgmt-cluster MinIO.
+  // The build cluster has no network access to MinIO in the mgmt cluster.
+  // MEET-2026-03-27-012: cross-cluster networking fix.
   new k8s.core.v1.Secret(
     "minio-credentials-build",
     {
@@ -644,13 +647,26 @@ function bootstrapBuildCluster(
         namespace: "argo",
       },
       stringData: {
-        AWS_ACCESS_KEY_ID: "loopzero-admin",
-        AWS_SECRET_ACCESS_KEY: "loopzero-minio-dev-2026",
-        MINIO_ENDPOINT: `http://minio.${PLATFORM_NAMESPACE}.svc.cluster.local:9000`,
+        AWS_ACCESS_KEY_ID: config.spacesAccessKeyId,
+        AWS_SECRET_ACCESS_KEY: config.spacesSecretAccessKey,
+        MINIO_ENDPOINT: `https://${config.region}.digitaloceanspaces.com`,
       },
     },
     { provider, dependsOn: [ns] },
   );
+
+  // BuildKit registry credentials — needed by build-image step to push images.
+  // This secret is mounted as /home/user/.docker/config.json inside the build container.
+  // It is populated by the CI pipeline (build-images.yml) when integrating the DO registry
+  // with the cluster via `doctl kubernetes cluster registry add`. The Pulumi code here
+  // creates an empty placeholder; the CI pipeline updates it with real credentials.
+  // If the secret already exists (from CI), this is a no-op.
+  //
+  // Manual creation (if CI hasn't run yet):
+  //   kubectl create secret generic buildkit-registry-config --namespace argo \
+  //     --from-literal=config.json='{"auths":{"registry.digitalocean.com":{"auth":"<base64>"}}}'
+  //
+  // See MEET-2026-03-27-012: without this secret, build-image pods stay in PodInitializing.
 
   const argoWorkflows = new k8s.helm.v3.Release(
     "argo-workflows",
