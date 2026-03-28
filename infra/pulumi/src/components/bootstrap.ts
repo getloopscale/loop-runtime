@@ -1402,6 +1402,11 @@ function installLoopZeroAPI(
         REGISTRY_URL: "registry.digitalocean.com/loopzero-infra-registry",
         REGISTRY_INSECURE: "false",
         ARGOCD_NAMESPACE: PLATFORM_NAMESPACE,
+        // Release reaper PENDING timeout must exceed ArgoCD sync time.
+        // On DO, sync can take 3-5 min (image pull + pod scheduling).
+        // Default 2m is too short — reaper kills releases before sync completes.
+        // AUDIT-2026-03-28: raised to 10m to match RELEASING timeout.
+        RELEASE_PENDING_TIMEOUT: "10m",
         // Loki runs on build cluster. API accesses via cross-cluster NodePort 30100.
         // Node IP resolved dynamically from build cluster node list.
         LOKI_URL: pulumi.interpolate`${lokiEndpoint}`,
