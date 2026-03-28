@@ -233,13 +233,37 @@ func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *d
 	r.logger.Info("release convergence: release activated",
 		"release_id", release.ID, "build_id", release.BuildID)
 
-	// Emit SSE events
+	// Emit SSE events — must match the schema that the CLI expects
 	liveData, _ := json.Marshal(map[string]interface{}{
 		"status":     "live",
 		"release_id": release.ID,
 	})
 	if _, err := r.eventStore.Append(ctx, release.BuildID, "deploy.live", liveData); err != nil {
 		r.logger.Error("failed to emit deploy.live event", "release_id", release.ID, "error", err)
+	}
+
+	// deploy.completed — CLI waits for this event to exit (MEET-2026-03-28-015 critical condition).
+	// Must include: deploy_id, status, duration_seconds, apps.
+	var apps []db.BuildAppSpec
+	if release.Apps != nil {
+		_ = json.Unmarshal(release.Apps, &apps)
+	}
+	duration := int(time.Since(release.CreatedAt).Seconds())
+	appResults := make([]map[string]interface{}, 0, len(apps))
+	for _, app := range apps {
+		appResults = append(appResults, map[string]interface{}{
+			"name":   app.Name,
+			"status": "deployed",
+		})
+	}
+	completedData, _ := json.Marshal(map[string]interface{}{
+		"deploy_id":        release.ID[:10],
+		"status":           "success",
+		"duration_seconds": duration,
+		"apps":             appResults,
+	})
+	if _, err := r.eventStore.Append(ctx, release.BuildID, "deploy.completed", completedData); err != nil {
+		r.logger.Error("failed to emit deploy.completed event", "release_id", release.ID, "error", err)
 	}
 }
 

@@ -19,30 +19,25 @@ import (
 
 // SyncClientConfig holds configuration for connecting to ArgoCD.
 type SyncClientConfig struct {
-	BaseURL    string       // e.g., "https://argocd-server.argocd.svc:443"
-	Token      string       // ArgoCD API token
-	Insecure   bool         // Skip TLS verification (for local dev with self-signed certs)
-	HTTPClient *http.Client // Optional: shared HTTP client with connection pooling. When nil, a default client is created.
+	BaseURL       string        // e.g., "https://argocd-server.argocd.svc:443"
+	Token         string        // ArgoCD API token (used if TokenProvider is nil)
+	TokenProvider TokenProvider // Optional: dynamic token source (overrides Token string)
+	Insecure      bool          // Skip TLS verification (for local dev with self-signed certs)
+	HTTPClient    *http.Client  // Optional: shared HTTP client with connection pooling. When nil, a default client is created.
 }
 
 // SyncClient implements services.SyncClient using the ArgoCD REST API.
+// Token is obtained from TokenProvider on each request, enabling zero-downtime rotation.
+// MEET-2026-03-28-015: replaced static token string with TokenProvider interface.
 type SyncClient struct {
-	baseURL string
-	// token is a static apiKey JWT set at construction. Currently non-expiring.
-	// MEET-2026-03-28-014: Replace with TokenProvider interface when ANY of:
-	//   1. Token rotation is automated (e.g., CronJob rotates apiKey periodically)
-	//   2. Compliance requires periodic credential rotation
-	//   3. A second credential-bearing client needs the same hot-reload pattern
-	// Design sketch preserved in docs/meetings/records/MEET-2026-03-28-014.md
-	token  string
-	client *http.Client
+	baseURL       string
+	tokenProvider TokenProvider
+	client        *http.Client
 }
 
 // NewSyncClient creates a SyncClient for real ArgoCD operations.
-// When cfg.HTTPClient is provided, it is used directly (connection pooling
-// is shared with other components). Otherwise a default client is created.
-// If cfg.Insecure is true and no custom client is provided, TLS verification
-// is disabled on the default transport.
+// When cfg.TokenProvider is set, it is used for dynamic token sourcing.
+// Otherwise, cfg.Token is wrapped in a StaticTokenProvider.
 func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 	client := cfg.HTTPClient
 	if client == nil {
@@ -54,10 +49,15 @@ func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 		}
 	}
 
+	tp := cfg.TokenProvider
+	if tp == nil {
+		tp = NewStaticTokenProvider(cfg.Token)
+	}
+
 	return &SyncClient{
-		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
-		token:   cfg.Token,
-		client:  client,
+		baseURL:       strings.TrimRight(cfg.BaseURL, "/"),
+		tokenProvider: tp,
+		client:        client,
 	}
 }
 
@@ -70,7 +70,7 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("validate token: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -93,7 +93,7 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	if err != nil {
 		return fmt.Errorf("argocd sync: create request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
@@ -168,7 +168,7 @@ func (c *SyncClient) GetAppStatus(ctx context.Context, appName string, deployedA
 	if err != nil {
 		return false, false, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -247,7 +247,7 @@ func (c *SyncClient) GetSyncRevision(ctx context.Context, appName string) (strin
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
 
 	resp, err := c.client.Do(req)
 	if err != nil {

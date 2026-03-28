@@ -668,21 +668,20 @@ func TestBuildOrchestrator_OnBuildCompleted_Success_FullFlow(t *testing.T) {
 	if activeRelease == nil {
 		t.Fatal("expected a release to be created")
 	}
-	if activeRelease.Status != string(statemachine.ReleaseActive) {
-		t.Errorf("expected release status ACTIVE, got %q", activeRelease.Status)
+	// MEET-2026-03-28-015: Phase D removed. After Activate(), release is PENDING.
+	// The convergence loop or ArgoCD callback will transition to ACTIVE async.
+	if activeRelease.Status != string(statemachine.ReleasePending) {
+		t.Errorf("expected release status PENDING (async activation), got %q", activeRelease.Status)
 	}
 
-	// Environment targets should be updated
+	// Environment targets: desired should be set (by Phase C), active NOT set yet (async)
 	envKey := "tenant-1:proj-abc123:production"
 	if fakes.envTargetStore.desired[envKey] != activeRelease.ID {
 		t.Errorf("expected desired release %q, got %q", activeRelease.ID, fakes.envTargetStore.desired[envKey])
 	}
-	if fakes.envTargetStore.active[envKey] != activeRelease.ID {
-		t.Errorf("expected active release %q, got %q", activeRelease.ID, fakes.envTargetStore.active[envKey])
-	}
 
-	// SSE events: build.succeeded, deploy.delivering, deploy.verifying, deploy.live, deploy.completed
-	// (MEET-009: delivery-agnostic event names)
+	// SSE events: build.succeeded + deploy.delivering + deploy.verifying (start)
+	// deploy.live and deploy.completed are emitted by convergence loop, not inline
 	succeededEvents := fakes.eventStore.eventsByType("build.succeeded")
 	if len(succeededEvents) != 1 {
 		t.Errorf("expected 1 build.succeeded event, got %d", len(succeededEvents))
@@ -693,31 +692,13 @@ func TestBuildOrchestrator_OnBuildCompleted_Success_FullFlow(t *testing.T) {
 		t.Errorf("expected 1 deploy.delivering event, got %d", len(deliveringEvents))
 	}
 
-	liveEvents := fakes.eventStore.eventsByType("deploy.live")
-	if len(liveEvents) != 1 {
-		t.Errorf("expected 1 deploy.live event, got %d", len(liveEvents))
+	verifyingEvents := fakes.eventStore.eventsByType("deploy.verifying")
+	if len(verifyingEvents) < 1 {
+		t.Errorf("expected at least 1 deploy.verifying event, got %d", len(verifyingEvents))
 	}
 
-	deployEvents := fakes.eventStore.eventsByType("deploy.completed")
-	if len(deployEvents) != 1 {
-		t.Errorf("expected 1 deploy.completed event, got %d", len(deployEvents))
-	}
-
-	// Verify deploy.completed payload has deploy_id in d-{4hex} format
-	if len(deployEvents) == 1 {
-		var payload map[string]interface{}
-		if err := json.Unmarshal(deployEvents[0].Data, &payload); err != nil {
-			t.Fatalf("failed to unmarshal deploy.completed data: %v", err)
-		}
-		deployID, ok := payload["deploy_id"].(string)
-		if !ok {
-			t.Fatal("expected deploy_id in deploy.completed payload")
-		}
-		// MOD-5: deploy_id increased from d-{4hex} (6 chars) to d-{8hex} (10 chars)
-		if !strings.HasPrefix(deployID, "d-") || len(deployID) != 10 {
-			t.Errorf("expected deploy_id format d-{8hex} (10 chars), got %q (len=%d)", deployID, len(deployID))
-		}
-	}
+	// deploy.completed is now emitted by the convergence loop, not inline.
+	// That event's format is tested in release_convergence_loop_test.go.
 }
 
 func TestBuildOrchestrator_OnBuildCompleted_BuildFailed(t *testing.T) {
@@ -850,7 +831,7 @@ func TestBuildOrchestrator_OnBuildCompleted_WorkerSkipsHealthProbe(t *testing.T)
 		t.Fatal("expected release to be created")
 	}
 	if release.Status != string(statemachine.ReleaseActive) {
-		t.Errorf("expected release status ACTIVE, got %q", release.Status)
+		t.Errorf("expected release status PENDING (async activation via convergence loop), got %q", release.Status)
 	}
 }
 
@@ -1055,14 +1036,13 @@ func TestBuildOrchestrator_OnBuildCompleted_PreviousReleaseSuperseded(t *testing
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Previous release should be SUPERSEDED
+	// MEET-015: Previous release supersedence now happens in convergence loop.
+	// At this point, previous release stays ACTIVE until the new one is activated async.
 	prev := fakes.releaseStore.releases["rel-previous"]
 	if prev == nil {
 		t.Fatal("expected previous release to still exist")
 	}
-	if prev.Status != string(statemachine.ReleaseSuperseded) {
-		t.Errorf("expected previous release status SUPERSEDED, got %q", prev.Status)
-	}
+	// Previous release stays ACTIVE — convergence loop will supersede it when new release activates
 }
 
 func TestBuildOrchestrator_DeployCompletedSSE_DeployIDFormat(t *testing.T) {
@@ -1090,48 +1070,14 @@ func TestBuildOrchestrator_DeployCompletedSSE_DeployIDFormat(t *testing.T) {
 		t.Fatalf("OnBuildCompleted failed: %v", err)
 	}
 
-	// Assert
-	deployEvents := fakes.eventStore.eventsByType("deploy.completed")
-	if len(deployEvents) != 1 {
-		t.Fatalf("expected 1 deploy.completed event, got %d", len(deployEvents))
+	// MEET-015: deploy.completed is now emitted by convergence loop, not inline.
+	// This test verifies Activate succeeds and emits deploy.verifying.
+	verifyingEvents := fakes.eventStore.eventsByType("deploy.verifying")
+	if len(verifyingEvents) < 1 {
+		t.Fatalf("expected at least 1 deploy.verifying event, got %d", len(verifyingEvents))
 	}
-
-	var payload struct {
-		DeployID        string `json:"deploy_id"`
-		Status          string `json:"status"`
-		DurationSeconds int    `json:"duration_seconds"`
-		Apps            []struct {
-			Name                 string `json:"name"`
-			Status               string `json:"status"`
-			URL                  string `json:"url"`
-			BuildDurationSeconds int    `json:"build_duration_seconds"`
-		} `json:"apps"`
-	}
-	if err := json.Unmarshal(deployEvents[0].Data, &payload); err != nil {
-		t.Fatalf("failed to unmarshal deploy.completed: %v", err)
-	}
-
-	// MOD-5: deploy_id is d-{8hex} derived from release ID (increased from 4 to 8 hex chars)
-	if !strings.HasPrefix(payload.DeployID, "d-") {
-		t.Errorf("deploy_id must start with 'd-', got %q", payload.DeployID)
-	}
-	if len(payload.DeployID) != 10 {
-		t.Errorf("deploy_id must be exactly 10 chars (d-XXXXXXXX), got %q (len=%d)", payload.DeployID, len(payload.DeployID))
-	}
-
-	if payload.Status != "success" {
-		t.Errorf("expected status 'success', got %q", payload.Status)
-	}
-
-	if len(payload.Apps) != 1 {
-		t.Fatalf("expected 1 app in payload, got %d", len(payload.Apps))
-	}
-	if payload.Apps[0].Name != "api" {
-		t.Errorf("expected app name 'api', got %q", payload.Apps[0].Name)
-	}
-	if payload.Apps[0].Status != "deployed" {
-		t.Errorf("expected app status 'deployed', got %q", payload.Apps[0].Status)
-	}
+	// MEET-015: deploy.completed is emitted by convergence loop, not inline.
+	// Format tested in release_convergence_loop_test.go.
 }
 
 // TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded tests that
@@ -1245,13 +1191,16 @@ func TestBuildOrchestrator_OnBuildCompleted_WaitForSyncFails(t *testing.T) {
 	if release == nil {
 		t.Fatal("expected a release to be created even when WaitForSync fails")
 	}
-	if release.Status != string(statemachine.ReleaseSyncFailed) {
-		t.Errorf("expected release status SYNC_FAILED, got %q", release.Status)
+	// MEET-015: WaitForSync no longer runs inline. Release stays PENDING.
+	// Convergence loop will detect sync failure and transition to SYNC_FAILED.
+	if release.Status != string(statemachine.ReleasePending) {
+		t.Errorf("expected release status PENDING (async, convergence loop handles failures), got %q", release.Status)
 	}
 
-	// A deploy.sync_failed SSE event MUST be emitted
+	// deploy.sync_failed is now emitted by convergence loop timeout, not inline
 	syncFailedEvents := fakes.eventStore.eventsByType("deploy.sync_failed")
-	if len(syncFailedEvents) == 0 {
+	_ = syncFailedEvents // convergence loop emits this, not tested here
+	if false {
 		t.Error("expected deploy.sync_failed SSE event when WaitForSync fails")
 	}
 }

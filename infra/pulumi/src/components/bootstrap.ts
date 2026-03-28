@@ -768,8 +768,19 @@ function bootstrapBuildCluster(
           commonConfig: {
             replication_factor: 1,
           },
+          // Storage: S3 via DO Spaces for production, filesystem for local dev.
+          // DO Spaces is S3-compatible — uses the same credentials as MinIO/Spaces.
           storage: {
-            type: "filesystem",
+            type: "s3",
+            s3: {
+              endpoint: `https://s3.${config.region}.digitaloceanspaces.com`,
+              bucketnames: "loopzero-logs",
+              access_key_id: config.spacesAccessKeyId,
+              secret_access_key: config.spacesSecretAccessKey,
+              s3ForcePathStyle: true,
+              insecure: false,
+              region: "us-east-1", // DO Spaces uses us-east-1 regardless of actual region
+            },
           },
           limits_config: {
             retention_period: "168h",
@@ -780,7 +791,7 @@ function bootstrapBuildCluster(
               {
                 from: "2026-01-01",
                 store: "tsdb",
-                object_store: "filesystem",
+                object_store: "s3",
                 schema: "v13",
                 index: {
                   prefix: "loki_index_",

@@ -92,16 +92,33 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Bui
 		return fmt.Errorf("delivery failed: gitops push error")
 	}
 
-	// Phase D (no lock): Verify — ArgoCD sync + health probes
-	verifyFailed := c.phaseDVerify(ctx, build, release, result)
+	// Phase D is now ASYNC (MEET-2026-03-28-015).
+	// Release activation is handled by:
+	//   1. ArgoCD Notification callback (fast path, seconds)
+	//   2. ReleaseConvergenceLoop (safety net, polls every 10s)
+	//   3. ReleaseReaper (ultimate timeout, 10m)
+	//
+	// We trigger ArgoCD sync once here, then return immediately.
+	// The release stays in PENDING state until async activation.
+	argoAppName := fmt.Sprintf("%s-%s", build.TenantID, build.Environment)
+	if err := c.triggerSyncWithRetry(ctx, argoAppName); err != nil {
+		slog.Error("argocd trigger sync failed after retries",
+			"build_id", build.ID, "app", argoAppName, "error", err)
+		// Sync trigger failed — fail the release immediately
+		return c.phaseEFinalize(ctx, build, release, result, true)
+	}
 
-	// Phase E (Lock): Finalize (ACTIVE or SYNC_FAILED)
-	if err := c.phaseEFinalize(ctx, build, release, result, verifyFailed); err != nil {
-		return err
+	// Emit deploy.verifying to show async verification started
+	verifyingData, _ := json.Marshal(map[string]interface{}{
+		"deploy_id": deriveDeployID(release.ID),
+		"status":    "verifying",
+		"app":       argoAppName,
+	})
+	if _, emitErr := c.eventStore.Append(ctx, build.ID, "deploy.verifying", verifyingData); emitErr != nil {
+		slog.Warn("failed to emit deploy.verifying event", "build_id", build.ID, "error", emitErr)
 	}
-	if verifyFailed {
-		return fmt.Errorf("delivery failed: verification (ArgoCD sync/health) failed")
-	}
+
+	// Release is PENDING — async paths will activate and emit deploy.completed
 	return nil
 }
 
@@ -258,87 +275,9 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 	})
 }
 
-func (c *ContainerDeliveryActivator) phaseDVerify(ctx context.Context, build *db.Build, release *db.Release, result BuildCallbackRequest) bool {
-	argoAppName := fmt.Sprintf("%s-%s", build.TenantID, build.Environment)
-
-	if err := c.triggerSyncWithRetry(ctx, argoAppName); err != nil {
-		slog.Error("argocd trigger sync failed after retries",
-			"build_id", build.ID, "app", argoAppName, "error", err)
-		return true
-	}
-
-	// SSE: deploy.verifying (delivery-agnostic name)
-	verifyingData, _ := json.Marshal(map[string]string{
-		"deploy_id": deriveDeployID(release.ID),
-		"status":    "verifying",
-		"app":       argoAppName,
-	})
-	if _, err := c.eventStore.Append(ctx, build.ID, "deploy.verifying", verifyingData); err != nil {
-		slog.Error("failed to emit deploy.verifying event", "build_id", build.ID, "error", err)
-	}
-
-	// Only include apps that have K8s Deployments in the health check.
-	// Static apps (render: static) have no Deployment — only IngressRoute + Middleware.
-	// Including them causes WaitForSync to wait forever for a non-existent Deployment.
-	deployedAppNames := make([]string, 0, len(result.Apps))
-	for _, app := range result.Apps {
-		if app.Rendering == "static" {
-			continue // static apps don't have Deployments
-		}
-		deployedAppNames = append(deployedAppNames, app.Name)
-	}
-	if err := c.sync.WaitForSync(ctx, argoAppName, c.argocdSyncTimeout, deployedAppNames); err != nil {
-		slog.Error("argocd sync or health check failed",
-			"build_id", build.ID, "app", argoAppName, "error", err)
-
-		failedData, _ := json.Marshal(map[string]interface{}{
-			"status": "failed",
-			"app":    argoAppName,
-			"error":  err.Error(),
-		})
-		if _, emitErr := c.eventStore.Append(ctx, build.ID, "deploy.verifying", failedData); emitErr != nil {
-			slog.Error("failed to emit verify failed event", "build_id", build.ID, "error", emitErr)
-		}
-		return true
-	}
-
-	// MEET-2026-03-27-012 Phase 1.2: Verify ArgoCD synced the correct git revision.
-	// Without this, a race between git push and ArgoCD sync can cause silent
-	// wrong-version activation (ArgoCD syncs the OLD commit).
-	if release.GitCommit != "" {
-		if checker, ok := c.sync.(interface {
-			GetSyncRevision(ctx context.Context, appName string) (string, error)
-		}); ok {
-			if rev, revErr := checker.GetSyncRevision(ctx, argoAppName); revErr == nil && rev != "" {
-				if rev != release.GitCommit {
-					slog.Error("argocd synced wrong revision",
-						"build_id", build.ID, "expected", release.GitCommit, "actual", rev)
-					failedData, _ := json.Marshal(map[string]interface{}{
-						"status": "failed",
-						"app":    argoAppName,
-						"error":  "synced revision does not match expected commit",
-					})
-					if _, emitErr := c.eventStore.Append(ctx, build.ID, "deploy.verifying", failedData); emitErr != nil {
-						slog.Error("failed to emit revision mismatch event", "build_id", build.ID, "error", emitErr)
-					}
-					return true
-				}
-			}
-		}
-	}
-
-	for _, app := range result.Apps {
-		okData, _ := json.Marshal(map[string]interface{}{
-			"status": "ok",
-			"app":    app.Name,
-		})
-		if _, err := c.eventStore.Append(ctx, build.ID, "deploy.verifying", okData); err != nil {
-			slog.Error("failed to emit verify ok event", "build_id", build.ID, "error", err)
-		}
-	}
-
-	return false
-}
+// phaseDVerify REMOVED (MEET-2026-03-28-015) — 81 lines of synchronous ArgoCD polling deleted.
+// Replaced by async: ReleaseConvergenceLoop + SyncCallbackActivator.
+// Historical reference: git show f1bf264:api/internal/services/container_delivery.go
 
 func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *db.Build, release *db.Release, result BuildCallbackRequest, verifyFailed bool) error {
 	return c.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {

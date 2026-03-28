@@ -122,6 +122,29 @@ func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db
 			a.logger.Error("sync callback: failed to emit deploy.live", "release_id", release.ID, "error", emitErr)
 		}
 
+		// deploy.completed — CLI waits for this to exit (MEET-2026-03-28-015).
+		var apps []db.BuildAppSpec
+		if release.Apps != nil {
+			_ = json.Unmarshal(release.Apps, &apps)
+		}
+		duration := int(time.Since(release.CreatedAt).Seconds())
+		appResults := make([]map[string]interface{}, 0, len(apps))
+		for _, app := range apps {
+			appResults = append(appResults, map[string]interface{}{
+				"name":   app.Name,
+				"status": "deployed",
+			})
+		}
+		completedData, _ := json.Marshal(map[string]interface{}{
+			"deploy_id":        release.ID[:10],
+			"status":           "success",
+			"duration_seconds": duration,
+			"apps":             appResults,
+		})
+		if _, emitErr := a.eventStore.Append(ctx, release.BuildID, "deploy.completed", completedData); emitErr != nil {
+			a.logger.Error("sync callback: failed to emit deploy.completed", "release_id", release.ID, "error", emitErr)
+		}
+
 		return nil
 	})
 }
