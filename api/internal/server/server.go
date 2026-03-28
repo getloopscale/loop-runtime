@@ -58,6 +58,8 @@ type Config struct {
 	// and callback routes. Created in main.go to avoid duplicate instances
 	// with separate callbackWg (C-08).
 	BuildHandler       *routes.BuildHandler
+	// ArgoCallbackHandler handles POST /internal/argocd-callback from ArgoCD Notifications.
+	ArgoCallbackHandler *routes.ArgoCallbackHandler
 	// RateLimiter applies per-tenant rate limiting on mutation routes (C-01).
 	// When nil, rate limiting is disabled.
 	RateLimiter        *middleware.RateLimiter
@@ -111,6 +113,9 @@ func NewRouter(cfg Config) *chi.Mux {
 	if cfg.BootstrapStore != nil {
 		bootstrap := routes.NewBootstrapHandler(cfg.BootstrapStore)
 		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
+	}
+	if cfg.ArgoCallbackHandler != nil {
+		r.Post("/internal/argocd-callback", cfg.ArgoCallbackHandler.Handle)
 	}
 
 	// Protected routes (auth required)

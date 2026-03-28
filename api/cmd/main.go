@@ -127,6 +127,7 @@ func main() {
 	var secretStore routes.SecretStore
 	var bootstrapStore routes.BootstrapStore
 	var logsHandler *routes.LogsHandler
+	var argoCallbackHandler *routes.ArgoCallbackHandler
 	var rollbackHandler *routes.RollbackHandler
 	var statusHandler *routes.StatusHandler
 	var projectDeleter routes.ProjectDeleter
@@ -394,6 +395,13 @@ func main() {
 		)
 		go eventPruner.Start(shutdownCtx)
 
+		// ArgoCD sync callback activator — processes webhook from ArgoCD Notifications.
+		// Push-based activation: ArgoCD notifies when sync completes instead of API polling.
+		syncCallbackActivator := services.NewSyncCallbackActivator(
+			releaseStore, envTargetStore, locker, eventStore, logger,
+		)
+		argoCallbackHandler = routes.NewArgoCallbackHandler(syncCallbackActivator, logger)
+
 		logger.Info("sprint 2 dependencies wired — real implementations")
 	} else {
 		logger.Warn("DATABASE_URL not set — running without database")
@@ -447,7 +455,8 @@ func main() {
 		SecretStore:        secretStore,
 		SecretK8sSync:      secretK8sMgr,
 		BootstrapStore:     bootstrapStore,
-		BuildHandler:       buildHandler,
+		BuildHandler:        buildHandler,
+		ArgoCallbackHandler: argoCallbackHandler,
 		LogsHandler:        logsHandler,
 		RollbackHandler:    rollbackHandler,
 		StatusHandler:      statusHandler,

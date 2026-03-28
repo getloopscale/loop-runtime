@@ -149,6 +149,12 @@ func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
 					constants.LabelTenant:    spec.TenantID,
 					constants.LabelManagedBy: constants.ManagedByTenantController,
 				},
+				"annotations": map[string]interface{}{
+					// ArgoCD Notifications: subscribe to sync-completed trigger.
+					// When Synced + Healthy, ArgoCD calls POST /internal/argocd-callback
+					// on the API to activate the release (push-based, replaces polling).
+					"notifications.argoproj.io/subscribe.on-sync-healthy.loopzero-api": "",
+				},
 				"finalizers": []interface{}{
 					constants.ArgoCDResourcesFinalizer,
 				},
