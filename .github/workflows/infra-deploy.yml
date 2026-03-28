@@ -522,21 +522,12 @@ jobs:
           echo "Refreshing state..."
           pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
 
-          # Remove stale Jobs from state AND cluster.
-          # Jobs with ttlSecondsAfterFinished may be GC'ed by K8s but still in Pulumi state.
-          # Jobs from previous runs may exist in the cluster with a different field manager,
-          # causing SSA conflicts on `pulumi up`. Delete from both sides.
-          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:batch/v1:Job") | .urn' 2>/dev/null); do
-            echo "Removing Job from state: $URN"
+          # Remove stale Jobs from state (GC'ed by K8s TTL but still in Pulumi state).
+          # SSA conflicts on Jobs are handled by pulumi.com/patchForce annotation.
+          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:batch/v1:Job" and .outputs == null) | .urn' 2>/dev/null); do
+            echo "Removing stale Job from state: $URN"
             pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
           done
-          # Delete the Job from the cluster if it still exists (SSA field manager conflict)
-          MGMT_KUBECONFIG=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
-          if [ -n "$MGMT_KUBECONFIG" ]; then
-            echo "$MGMT_KUBECONFIG" > /tmp/mgmt-kc-cleanup.yaml
-            kubectl --kubeconfig=/tmp/mgmt-kc-cleanup.yaml delete job gitea-bootstrap -n platform-system --ignore-not-found 2>/dev/null || true
-            rm -f /tmp/mgmt-kc-cleanup.yaml
-          fi
 
           # Create all resources — skipAwait prevents blocking on ImagePullBackOff
           pulumi up --yes --skip-preview --stack "$STACK" --non-interactive

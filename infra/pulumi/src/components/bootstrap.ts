@@ -1220,6 +1220,10 @@ function bootstrapGitea(
         namespace: PLATFORM_NAMESPACE,
         annotations: {
           "pulumi.com/skipAwait": "true",
+          // Force SSA field ownership — each Pulumi session has a different
+          // field manager ID, causing conflicts on the run-id annotation.
+          // patchForce tells the K8s provider to use --force-conflicts.
+          "pulumi.com/patchForce": "true",
           "loopzero.io/run-id": new Date().toISOString(),
         },
       },
