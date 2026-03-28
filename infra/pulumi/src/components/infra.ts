@@ -213,12 +213,13 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
 
   // --- Container registry ---
   // DigitalOcean has one registry per account (global, not per-region).
-  // Starter tier is free (500MB) and sufficient for dev.
-  // DOKS clusters in the same account can pull images automatically
-  // via `doctl kubernetes cluster registry add` (run once post-provision).
+  // Professional tier: unlimited repos, 100GB storage.
+  // Required because LoopZero creates dynamic repos per tenant/project/app.
+  // Basic (5 repos) is insufficient for even 2 tenants with 3 apps each.
+  // DOKS clusters pull automatically via `doctl kubernetes cluster registry add`.
   const registry = new digitalocean.ContainerRegistry(`${baseName}-registry`, {
     name: `${config.project}-registry`,
-    subscriptionTierSlug: "basic", // 5 repos, 5GB — starter only allows 1 repo
+    subscriptionTierSlug: "professional",
     region: config.region,
   });
 

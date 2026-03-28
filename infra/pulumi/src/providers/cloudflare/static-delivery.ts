@@ -68,7 +68,7 @@ export function createStaticDelivery(
 
   const scriptName = "loopzero-static-delivery";
 
-  const workerScript = new cloudflare.WorkerScript(scriptName, {
+  const workerScript = new cloudflare.WorkersScript(scriptName, {
     accountId: config.accountId,
     scriptName: scriptName,
     content: workerContent,
@@ -81,7 +81,7 @@ export function createStaticDelivery(
       },
     ],
   }, {
-    // The CF API rejects WorkerScript updates via Pulumi when using
+    // The CF API rejects WorkersScript updates via Pulumi when using
     // service worker syntax + KV bindings. The Worker is managed via
     // the worker.mjs file and deployed via CF API in the bootstrap step.
     // Pulumi owns the resource for state tracking only.
