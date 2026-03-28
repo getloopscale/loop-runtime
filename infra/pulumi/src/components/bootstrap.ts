@@ -1175,11 +1175,47 @@ for ORG in loopzero loopzero-platform; do
   fi
 done
 
-echo "=== Step 5: Read ArgoCD admin password ==="
+echo "=== Step 5: Generate ArgoCD apiKey token for loopzero-api account ==="
+# MEET-2026-03-28-013: generate a proper apiKey JWT, NOT store the admin password.
+# The loopzero-api account is configured in ArgoCD Helm values with capability: apiKey.
+# This token has RBAC limited to sync+get on applications (least privilege).
 ARGOCD_PASS=""
+ARGOCD_TOKEN=""
 if kubectl get secret argocd-initial-admin-secret -n "$NS" -o jsonpath='{.data.password}' 2>/dev/null | base64 -d > /tmp/argocd_pass 2>/dev/null; then
   ARGOCD_PASS=$(cat /tmp/argocd_pass)
+  rm -f /tmp/argocd_pass
   echo "ArgoCD admin password read successfully"
+
+  # Login as admin to get session token
+  ARGOCD_URL="http://argocd-server.\${NS}.svc.cluster.local:80"
+  for attempt in $(seq 1 30); do
+    ADMIN_SESSION=$(curl -sf "$ARGOCD_URL/api/v1/session" \
+      -d "{\\"username\\":\\"admin\\",\\"password\\":\\"$ARGOCD_PASS\\"}" 2>/dev/null | \
+      python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || true)
+    if [ -n "$ADMIN_SESSION" ]; then
+      echo "ArgoCD admin session obtained"
+      break
+    fi
+    echo "Waiting for ArgoCD server... (attempt $attempt/30)"
+    sleep 5
+  done
+
+  if [ -n "$ADMIN_SESSION" ]; then
+    # Generate apiKey token for loopzero-api account (non-expiring)
+    ARGOCD_TOKEN=$(curl -sf "$ARGOCD_URL/api/v1/account/loopzero-api/token" \
+      -H "Authorization: Bearer $ADMIN_SESSION" \
+      -d '{"name":"platform-deploy"}' 2>/dev/null | \
+      python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || true)
+
+    if [ -n "$ARGOCD_TOKEN" ]; then
+      echo "ArgoCD apiKey token generated for loopzero-api (JWT, non-expiring)"
+    else
+      echo "WARN: Could not generate ArgoCD apiKey token — account loopzero-api may not exist"
+      echo "WARN: Ensure Helm values have: accounts.loopzero-api: apiKey"
+    fi
+  else
+    echo "WARN: Could not login to ArgoCD — API token will be empty"
+  fi
 else
   echo "WARN: Could not read ArgoCD admin password"
 fi
@@ -1188,7 +1224,7 @@ echo "=== Step 6: Update loopzero-platform-tokens Secret ==="
 kubectl create secret generic loopzero-platform-tokens \
   --namespace="$NS" \
   --from-literal="GITEA_TOKEN=$GITEA_TOKEN" \
-  --from-literal="ARGOCD_TOKEN=\${ARGOCD_PASS:-admin}" \
+  --from-literal="ARGOCD_TOKEN=$ARGOCD_TOKEN" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo "=== Step 7: Update ArgoCD repo credentials ==="

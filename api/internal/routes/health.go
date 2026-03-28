@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -71,7 +72,11 @@ func (h *HealthHandler) DeepHealth(w http.ResponseWriter, r *http.Request) {
 	// Service dependency checks
 	for _, svc := range h.services {
 		if err := svc.Check(ctx); err != nil {
-			result[svc.Name()] = "unreachable"
+			if strings.Contains(err.Error(), "auth_failed") {
+				result[svc.Name()] = "auth_failed"
+			} else {
+				result[svc.Name()] = "unreachable"
+			}
 			degraded = true
 		} else {
 			result[svc.Name()] = "connected"
@@ -123,6 +128,9 @@ func (c *HTTPServiceChecker) Check(ctx context.Context) error {
 	}
 	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return fmt.Errorf("%s: auth_failed", c.name)
+	}
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("%s: status %d", c.name, resp.StatusCode)
 	}

@@ -6,10 +6,12 @@ package services
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
@@ -141,6 +143,7 @@ func (cb *CircuitBreakerSyncClient) preCheck() error {
 	if cb.state == circuitOpen {
 		cb.state = circuitHalfOpen
 		cb.successCount = 0
+		metrics.ArgoCDCircuitState.Set(2) // half-open
 		cb.logger.Info("circuit breaker: transitioning to half-open, allowing recovery probe")
 	}
 	cb.mu.Unlock()
@@ -149,7 +152,17 @@ func (cb *CircuitBreakerSyncClient) preCheck() error {
 }
 
 // recordResult updates the circuit breaker state based on the sync result.
+// Auth failures (401/403) are NOT counted toward the open threshold — they
+// indicate a credential problem, not a transient ArgoCD outage (MEET-013 Phase 1.3).
 func (cb *CircuitBreakerSyncClient) recordResult(err error) {
+	// Auth failures bypass the circuit breaker entirely (MEET-013 Phase 1.3)
+	if err != nil && errors.Is(err, loopzeroerrors.ErrArgoCDUnauthorized) {
+		metrics.ArgoCDAuthFailures.Inc()
+		cb.logger.Error("argocd auth failure — not counted toward circuit breaker",
+			"suggestion", "check ARGOCD_TOKEN or see docs/runbooks/argocd-token-regeneration.md")
+		return
+	}
+
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
@@ -162,6 +175,7 @@ func (cb *CircuitBreakerSyncClient) recordResult(err error) {
 			// Recovery probe failed — back to open
 			cb.state = circuitOpen
 			cb.openedAt = time.Now()
+			metrics.ArgoCDCircuitState.Set(1) // open
 			cb.logger.Warn("circuit breaker: recovery probe failed, re-opening circuit",
 				"failure_count", cb.failureCount)
 			return
@@ -170,6 +184,7 @@ func (cb *CircuitBreakerSyncClient) recordResult(err error) {
 		if cb.failureCount >= cb.openThreshold && cb.state == circuitClosed {
 			cb.state = circuitOpen
 			cb.openedAt = time.Now()
+			metrics.ArgoCDCircuitState.Set(1) // open
 			cb.logger.Error("circuit breaker: opened — too many consecutive failures",
 				"failure_count", cb.failureCount, "threshold", cb.openThreshold)
 		}
@@ -179,6 +194,7 @@ func (cb *CircuitBreakerSyncClient) recordResult(err error) {
 
 		if cb.state == circuitHalfOpen && cb.successCount >= cb.closeThreshold {
 			cb.state = circuitClosed
+			metrics.ArgoCDCircuitState.Set(0) // closed
 			cb.logger.Info("circuit breaker: closed — recovery confirmed",
 				"success_count", cb.successCount, "threshold", cb.closeThreshold)
 			cb.successCount = 0

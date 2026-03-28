@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -158,6 +159,28 @@ func TestDeepHealthHandler(t *testing.T) {
 		}
 		if body["database"] != "connected" {
 			t.Errorf("expected database=connected (DB ok), got %q", body["database"])
+		}
+	})
+
+	t.Run("returns auth_failed for 401 errors", func(t *testing.T) {
+		checker := &fakeHealthChecker{err: nil}
+		handler := routes.NewHealthHandler(checker,
+			&fakeServiceChecker{name: "argocd", err: fmt.Errorf("argocd: auth_failed")},
+		)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/deep", nil)
+		rec := httptest.NewRecorder()
+
+		handler.DeepHealth(rec, req)
+
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", rec.Code)
+		}
+		var body map[string]string
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if body["argocd"] != "auth_failed" {
+			t.Errorf("expected argocd=auth_failed, got %q", body["argocd"])
 		}
 	})
 }

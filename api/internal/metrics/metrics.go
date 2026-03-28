@@ -80,6 +80,24 @@ var (
 	}, []string{"tenant", "environment"})
 )
 
+// ArgoCD circuit breaker + auth metrics (MEET-2026-03-28-013).
+var (
+	// ArgoCDCircuitState tracks the circuit breaker state.
+	// 0=closed (normal), 1=open (rejecting), 2=half-open (probing).
+	// Fixes phantom alert: LoopZeroArgoCDCircuitOpen referenced this metric but it was never emitted.
+	ArgoCDCircuitState = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_argocd_circuit_state",
+		Help: "ArgoCD circuit breaker state (0=closed, 1=open, 2=half-open).",
+	})
+
+	// ArgoCDAuthFailures counts ArgoCD authentication failures (401/403).
+	// These are NOT counted toward the circuit breaker threshold.
+	ArgoCDAuthFailures = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_argocd_auth_failures_total",
+		Help: "Total ArgoCD authentication failures (401/403). Indicates invalid or expired token.",
+	})
+)
+
 // Lock contention metrics — emitted by withEnvironmentLock.
 var (
 	LockAcquired = promauto.NewCounterVec(prometheus.CounterOpts{

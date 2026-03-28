@@ -248,6 +248,50 @@ func TestCircuitBreaker_InnerErrorPropagated(t *testing.T) {
 	}
 }
 
+func TestCircuitBreaker_AuthFailure_DoesNotOpenCircuit(t *testing.T) {
+	// 401 errors MUST NOT count toward circuit breaker threshold (MEET-013)
+	inner := &fakeInnerSync{triggerErr: loopzeroerrors.ErrArgoCDUnauthorized}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	// Send 10 auth failures — more than the open threshold (3)
+	for i := 0; i < 10; i++ {
+		err := cb.TriggerSync(context.Background(), "my-app")
+		// Error should be propagated as-is (not ErrPlatformDegraded)
+		if !errors.Is(err, loopzeroerrors.ErrArgoCDUnauthorized) {
+			t.Fatalf("iteration %d: expected ErrArgoCDUnauthorized, got %v", i, err)
+		}
+	}
+
+	// Circuit should still be CLOSED — auth failures don't count
+	// Verify by sending a successful request (inner now succeeds)
+	inner.triggerErr = nil
+	inner.triggerCalls = 0
+	err := cb.TriggerSync(context.Background(), "my-app")
+	if err != nil {
+		t.Fatalf("expected success after auth failures (circuit should be closed), got %v", err)
+	}
+	if inner.triggerCalls != 1 {
+		t.Errorf("expected inner to be called (circuit closed), got %d calls", inner.triggerCalls)
+	}
+}
+
+func TestCircuitBreaker_ServiceFailure_StillOpensCircuit(t *testing.T) {
+	// 503 errors MUST still open the circuit (regression test)
+	inner := &fakeInnerSync{triggerErr: errors.New("argocd: connection refused")}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	// Send 3 service failures (threshold)
+	for i := 0; i < 3; i++ {
+		_ = cb.TriggerSync(context.Background(), "my-app")
+	}
+
+	// Circuit should be OPEN — next call should return ErrPlatformDegraded
+	err := cb.TriggerSync(context.Background(), "my-app")
+	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+		t.Fatalf("expected ErrPlatformDegraded (circuit open), got %v", err)
+	}
+}
+
 func TestCircuitBreaker_GetAppStatus_DelegatesToInner(t *testing.T) {
 	inner := &fakeInnerSync{}
 	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)

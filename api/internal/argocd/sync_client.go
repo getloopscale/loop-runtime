@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
 // SyncClientConfig holds configuration for connecting to ArgoCD.
@@ -53,6 +55,29 @@ func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 	}
 }
 
+// ValidateToken checks that the configured token is valid by calling
+// GET /api/v1/session/userinfo. Returns ErrArgoCDUnauthorized if invalid.
+// Called at API startup to fail fast with a clear error (MEET-013 Phase 1.7).
+func (c *SyncClient) ValidateToken(ctx context.Context) error {
+	url := fmt.Sprintf("%s/api/v1/session/userinfo", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("validate token: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("validate token: ArgoCD unreachable: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return loopzeroerrors.ErrArgoCDUnauthorized
+	}
+	return nil
+}
+
 // TriggerSync initiates a sync operation on an ArgoCD Application.
 func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	url := fmt.Sprintf("%s/api/v1/applications/%s/sync", c.baseURL, appName)
@@ -71,6 +96,9 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return loopzeroerrors.ErrArgoCDUnauthorized
+	}
 	if resp.StatusCode == 404 {
 		return fmt.Errorf("argocd sync: application %q not found", appName)
 	}
@@ -142,6 +170,9 @@ func (c *SyncClient) GetAppStatus(ctx context.Context, appName string, deployedA
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return false, false, loopzeroerrors.ErrArgoCDUnauthorized
+	}
 	if resp.StatusCode == 404 {
 		return false, false, fmt.Errorf("application %q not found", appName)
 	}
@@ -218,6 +249,9 @@ func (c *SyncClient) GetSyncRevision(ctx context.Context, appName string) (strin
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return "", loopzeroerrors.ErrArgoCDUnauthorized
+	}
 	if resp.StatusCode >= 400 {
 		return "", fmt.Errorf("get sync revision: status %d", resp.StatusCode)
 	}

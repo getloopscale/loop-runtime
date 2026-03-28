@@ -230,6 +230,15 @@ var (
 		Message:    "deploy service is temporarily unavailable",
 		HTTPStatus: 503,
 	}
+
+	// ErrArgoCDUnauthorized is returned when ArgoCD rejects the API token (401/403).
+	// This is NOT a transient failure — the token is invalid and must be renewed.
+	// The circuit breaker MUST NOT count this toward the open threshold (MEET-013).
+	ErrArgoCDUnauthorized = &LoopZeroError{
+		Code:       "ARGOCD_UNAUTHORIZED",
+		Message:    "ArgoCD rejected the API token — check ARGOCD_TOKEN configuration",
+		HTTPStatus: 401,
+	}
 )
 
 // NewLockTimeout creates a LOCK_TIMEOUT error with optional detail.
