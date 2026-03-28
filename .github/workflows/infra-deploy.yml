@@ -454,20 +454,42 @@ jobs:
             fi
           done
 
-          # Import pre-existing Cloudflare Tunnel if it exists but is not in Pulumi state.
+          # Delete stale Cloudflare Tunnel if it exists outside Pulumi state.
           # Tunnels persist if the destroy step fails to clean connections first.
+          # Pulumi needs to create a fresh tunnel with a new secret on each full deploy.
           if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
             CF_ACCOUNT_ID=$(pulumi config get cfAccountId --stack "$STACK" 2>/dev/null || echo "")
+            CF_ZONE_ID=$(pulumi config get cfZoneId --stack "$STACK" 2>/dev/null || echo "")
             if [ -n "$CF_ACCOUNT_ID" ]; then
-              TUNNEL_ID=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-                "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel?name=loopzero-${STACK}&is_deleted=false" 2>/dev/null | \
-                python3 -c "import sys,json; r=json.load(sys.stdin).get('result',[]); print(r[0]['id'] if r else '')" 2>/dev/null)
-              if [ -n "$TUNNEL_ID" ]; then
-                IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "cloudflare:index/zeroTrustTunnelCloudflared:ZeroTrustTunnelCloudflared") | .id' 2>/dev/null)
-                if [ -z "$IN_STATE" ]; then
-                  echo "Importing existing CF Tunnel $TUNNEL_ID into Pulumi state..."
-                  # CF provider expects import ID as <account_id>/<tunnel_id>
-                  pulumi import "cloudflare:index/zeroTrustTunnelCloudflared:ZeroTrustTunnelCloudflared" "loopzero-tunnel" "${CF_ACCOUNT_ID}/${TUNNEL_ID}" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
+              IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "cloudflare:index/zeroTrustTunnelCloudflared:ZeroTrustTunnelCloudflared") | .id' 2>/dev/null)
+              if [ -z "$IN_STATE" ]; then
+                # No tunnel in state — delete any orphaned tunnel with matching name
+                TUNNEL_ID=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                  "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel?name=loopzero-${STACK}&is_deleted=false" 2>/dev/null | \
+                  python3 -c "import sys,json; r=json.load(sys.stdin).get('result',[]); print(r[0]['id'] if r else '')" 2>/dev/null)
+                if [ -n "$TUNNEL_ID" ]; then
+                  echo "Deleting orphaned CF Tunnel $TUNNEL_ID (not in Pulumi state)..."
+                  # Clean connections first (required before tunnel deletion)
+                  curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                    "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUNNEL_ID/connections" 2>/dev/null || true
+                  sleep 3
+                  curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                    "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUNNEL_ID" 2>/dev/null || true
+                  echo "  Tunnel deleted"
+                fi
+                # Delete orphaned wildcard CNAME record (tunnel DNS)
+                if [ -n "$CF_ZONE_ID" ]; then
+                  DOMAIN=$(pulumi config get domain --stack "$STACK" 2>/dev/null || echo "")
+                  if [ -n "$DOMAIN" ]; then
+                    CNAME_ID=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                      "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=CNAME&name=*.${DOMAIN}" 2>/dev/null | \
+                      python3 -c "import sys,json; r=json.load(sys.stdin).get('result',[]); print(r[0]['id'] if r else '')" 2>/dev/null)
+                    if [ -n "$CNAME_ID" ]; then
+                      echo "Deleting orphaned wildcard CNAME for *.${DOMAIN}..."
+                      curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                        "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$CNAME_ID" 2>/dev/null || true
+                    fi
+                  fi
                 fi
               fi
             fi
