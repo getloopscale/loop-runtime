@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- ArgoCD notifications config moved from `configs:` to root level in Helm values — was being silently ignored by argo-cd chart (#MEET-015-IaC)
+- Pulumi `installArgoCD()` now includes full config: RBAC, accounts, notifications, metrics, security contexts — was deploying with minimal inline values (#MEET-015-IaC)
+- Gitea bootstrap Job uses `deleteBeforeReplace` + `replaceOnChanges` — fixes `pulumi up` failure when TTL garbage-collects completed Job (#MEET-015-IaC)
+- Bootstrap Job image pinned from `bitnami/kubectl:latest` to `bitnami/kubectl:1.31` — deterministic builds (#MEET-015-IaC)
+- Loki cross-cluster URL resolved by Pulumi via `@pulumi/command` — eliminates post-deploy `kubectl patch` on ConfigMap (#MEET-015-IaC)
+
 ### Added
 - Meeting record MEET-2026-03-27-012: ArgoCD deploy reliability architecture decision (#MEET-012)
 - Dogfood fix roadmap: 12 tasks across 4 sprints to resolve all findings from 2026-03-27 audit (#DF-ROADMAP)

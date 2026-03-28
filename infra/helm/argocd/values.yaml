@@ -124,30 +124,32 @@ configs:
       end
       return hs
 
-  # ArgoCD Notifications — push-based deploy activation.
-  # When an Application reaches Synced + Healthy, ArgoCD calls the API
-  # callback endpoint instead of the API polling ArgoCD every 10 seconds.
-  # MEET-2026-03-27-012: replaces Phase D synchronous polling.
-  notificationsController:
-    enabled: true
-  notifications:
-    # Webhook service: calls LoopZero API internal endpoint
-    services:
-      service.webhook.loopzero-api: |
-        url: http://loopzero-api.platform-system.svc.cluster.local:8080/internal/argocd-callback
-        headers:
-        - name: Content-Type
-          value: application/json
-    # Template: sends sync status as JSON payload
-    templates:
-      template.sync-completed: |
-        webhook:
-          loopzero-api:
-            method: POST
-            body: |
-              {"app_name": "{{.app.metadata.name}}", "sync_status": "{{.app.status.sync.status}}", "health_status": "{{.app.status.health.status}}", "revision": "{{.app.status.sync.revision}}"}
-    # Trigger: fires when Application is Synced AND Healthy
-    triggers:
-      trigger.on-sync-healthy: |
-        - when: app.status.sync.status == 'Synced' && app.status.health.status == 'Healthy'
-          send: [sync-completed]
+
+# ArgoCD Notifications — push-based deploy activation.
+# When an Application reaches Synced + Healthy, ArgoCD calls the API
+# callback endpoint instead of the API polling ArgoCD every 10 seconds.
+# MEET-2026-03-27-012: replaces Phase D synchronous polling.
+# NOTE: These keys are TOP-LEVEL in the argo-cd Helm chart, NOT under configs.
+notificationsController:
+  enabled: true
+notifications:
+  # Webhook service: calls LoopZero API internal endpoint
+  services:
+    service.webhook.loopzero-api: |
+      url: http://loopzero-api.platform-system.svc.cluster.local:8080/internal/argocd-callback
+      headers:
+      - name: Content-Type
+        value: application/json
+  # Template: sends sync status as JSON payload
+  templates:
+    template.sync-completed: |
+      webhook:
+        loopzero-api:
+          method: POST
+          body: |
+            {"app_name": "{{.app.metadata.name}}", "sync_status": "{{.app.status.sync.status}}", "health_status": "{{.app.status.health.status}}", "revision": "{{.app.status.sync.revision}}"}
+  # Trigger: fires when Application is Synced AND Healthy
+  triggers:
+    trigger.on-sync-healthy: |
+      - when: app.status.sync.status == 'Synced' && app.status.health.status == 'Healthy'
+        send: [sync-completed]

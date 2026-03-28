@@ -3,6 +3,7 @@
 
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
+import * as command from "@pulumi/command";
 import * as fs from "fs";
 import * as path from "path";
 import { InfraOutputs } from "./infra";
@@ -425,34 +426,131 @@ function installArgoCD(
         // Deterministic Service names so IngressRoutes can reference them.
         // Without this, Pulumi's Helm provider adds a hash suffix to the release name.
         fullnameOverride: "argocd",
+
+        global: {
+          image: { tag: "v2.13.3" },
+        },
+
         // Server accessed via Traefik — TLS terminated at ingress
         server: {
-          service: {
-            type: "ClusterIP",
+          service: { type: "ClusterIP" },
+          containerSecurityContext: { runAsNonRoot: true },
+          resources: {
+            requests: { cpu: "100m", memory: "128Mi" },
+            limits: { cpu: "500m", memory: "256Mi" },
+          },
+          metrics: {
+            enabled: true,
+            serviceMonitor: {
+              enabled: true,
+              additionalLabels: { release: "monitoring" },
+              namespace: "monitoring",
+            },
           },
         },
+
         configs: {
           params: {
             // TLS terminated at Traefik, ArgoCD serves plain HTTP
             "server.insecure": true,
+            // Manual sync only — API controls when to sync, not ArgoCD auto-sync
+            "controller.self.heal.enabled": "false",
+          },
+          rbac: {
+            // LoopZero API service account: sync + get on all applications (least privilege).
+            "policy.csv": `p, loopzero-api, applications, sync, */*, allow
+p, loopzero-api, applications, get, */*, allow`,
+          },
+          repositories: {
+            // Gitea repository credentials for tenant GitOps repos.
+            "gitea-internal": {
+              url: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
+              type: "git",
+            },
+          },
+          cm: {
+            // Dedicated service account for LoopZero API — apiKey only, no login.
+            // Tokens generated with `argocd account generate-token` never expire.
+            // MEET-2026-03-28-013: replaces old pattern of using admin session tokens (24h expiry).
+            "accounts.loopzero-api": "apiKey",
+            // Health assessment for Application resources
+            "resource.customizations.health.argoproj.io_Application": `hs = {}
+hs.status = "Progressing"
+hs.message = ""
+if obj.status ~= nil then
+  if obj.status.health ~= nil then
+    hs.status = obj.status.health.status
+    if obj.status.health.message ~= nil then
+      hs.message = obj.status.health.message
+    end
+  end
+end
+return hs`,
           },
         },
+
+        // ArgoCD Notifications — push-based deploy activation (MEET-2026-03-27-012).
+        // When an Application reaches Synced + Healthy, ArgoCD calls the API
+        // callback endpoint. Replaces Phase D synchronous polling.
+        // NOTE: These keys are TOP-LEVEL in the argo-cd Helm chart, NOT under configs.
+        notificationsController: { enabled: true },
+        notifications: {
+          services: {
+            "service.webhook.loopzero-api": `url: http://loopzero-api.${PLATFORM_NAMESPACE}.svc.cluster.local:8080/internal/argocd-callback
+headers:
+- name: Content-Type
+  value: application/json`,
+          },
+          templates: {
+            "template.sync-completed": `webhook:
+  loopzero-api:
+    method: POST
+    body: |
+      {"app_name": "{{.app.metadata.name}}", "sync_status": "{{.app.status.sync.status}}", "health_status": "{{.app.status.health.status}}", "revision": "{{.app.status.sync.revision}}"}`,
+          },
+          triggers: {
+            "trigger.on-sync-healthy": `- when: app.status.sync.status == 'Synced' && app.status.health.status == 'Healthy'
+  send: [sync-completed]`,
+          },
+        },
+
         // Controller manages syncs to runtime cluster
         controller: {
+          containerSecurityContext: { runAsNonRoot: true },
           resources: {
             requests: { cpu: "100m", memory: "256Mi" },
             limits: { cpu: "500m", memory: "512Mi" },
           },
+          metrics: {
+            enabled: true,
+            serviceMonitor: {
+              enabled: true,
+              additionalLabels: { release: "monitoring" },
+              namespace: "monitoring",
+            },
+          },
         },
+
         // Repo server clones from Gitea
         repoServer: {
+          containerSecurityContext: { runAsNonRoot: true },
           resources: {
             requests: { cpu: "100m", memory: "128Mi" },
             limits: { cpu: "500m", memory: "512Mi" },
           },
+          metrics: {
+            enabled: true,
+            serviceMonitor: {
+              enabled: true,
+              additionalLabels: { release: "monitoring" },
+              namespace: "monitoring",
+            },
+          },
         },
+
         // Redis for caching
         redis: {
+          containerSecurityContext: { runAsNonRoot: true },
           resources: {
             requests: { cpu: "50m", memory: "64Mi" },
             limits: { cpu: "200m", memory: "256Mi" },
@@ -943,11 +1041,21 @@ function bootstrapBuildCluster(
   );
 
   // Loki endpoint for cross-cluster access from mgmt API.
-  // Node IP is resolved post-deploy by infra-deploy.yml pipeline step
-  // "Configure cross-cluster Loki" which runs kubectl to get the build
-  // cluster node IP and patches the API configmap.
-  // Placeholder value — pipeline replaces it with actual IP.
-  const lokiEndpoint = pulumi.output("http://pending-loki-ip:30100");
+  // Resolve build cluster node InternalIP via kubectl — the NodePort 30100
+  // is accessible at any node's private IP within the VPC.
+  // Uses @pulumi/command to avoid post-deploy kubectl patch in the pipeline.
+  const buildNodeIp = new command.local.Command(
+    "resolve-build-node-ip",
+    {
+      create: pulumi.interpolate`kubectl --kubeconfig <(echo '${infra.buildCluster.kubeconfig}') get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'`,
+      interpreter: ["/bin/bash", "-c"],
+      // Re-resolve on every `pulumi up` — node IPs can change after cluster updates.
+      triggers: [Date.now()],
+    },
+  );
+  const lokiEndpoint = buildNodeIp.stdout.apply(
+    (ip) => ip.trim() ? `http://${ip.trim()}:30100` : "http://pending-loki-ip:30100",
+  );
 
   return {
     argoWorkflowsReady: argoWorkflows.status.apply(
@@ -1119,7 +1227,7 @@ function bootstrapGitea(
             containers: [
               {
                 name: "bootstrap",
-                image: "bitnami/kubectl:latest",
+                image: "bitnami/kubectl:1.31",
                 command: ["bash", "-c"],
                 args: [
                   `set -e
@@ -1284,8 +1392,12 @@ echo "=== Bootstrap complete ==="
       provider,
       dependsOn: [ns, gitea, bootstrapSa],
       // The Job has ttlSecondsAfterFinished: 300 — Kubernetes auto-deletes it
-      // after completion. Pulumi must not fail when the Job no longer exists.
+      // after completion. On next `pulumi up`, the run-id annotation forces a diff,
+      // but the old Job is gone. deleteBeforeReplace + replaceOnChanges ensures
+      // Pulumi creates a fresh Job instead of trying to update a deleted resource.
       retainOnDelete: true,
+      deleteBeforeReplace: true,
+      replaceOnChanges: ["metadata.annotations"],
     },
   );
 

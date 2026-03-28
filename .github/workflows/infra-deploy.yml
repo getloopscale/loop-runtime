@@ -633,28 +633,48 @@ jobs:
           kill $PF_PID 2>/dev/null
 
           # ═══════════════════════════════════════
-          # 2. ARGOCD: generate JWT (not password)
+          # 2. ARGOCD: generate apiKey token for loopzero-api account
+          # MEET-013: Uses non-expiring apiKey (not 24h session JWT).
+          # The loopzero-api account is configured in ArgoCD Helm values
+          # with capability: apiKey (accounts.loopzero-api: apiKey).
           # ═══════════════════════════════════════
           echo "Waiting for ArgoCD..."
           kubectl -n $NAMESPACE wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=120s 2>/dev/null || true
 
           ARGOCD_PASS=$(kubectl -n $NAMESPACE get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
+          ARGOCD_JWT=""
 
-          kubectl -n $NAMESPACE port-forward svc/argocd-server 13001:80 &
+          kubectl -n $NAMESPACE port-forward svc/argocd-server 18080:80 &
           PF_PID=$!
           sleep 3
-          ARGOCD_JWT=$(curl -sf "http://localhost:13001/api/v1/session" \
+
+          # Step 2a: Get admin session (temporary, only used to generate apiKey)
+          ADMIN_SESSION=$(curl -sf "http://localhost:18080/api/v1/session" \
             -H "Content-Type: application/json" \
             -d "{\"username\":\"admin\",\"password\":\"$ARGOCD_PASS\"}" 2>/dev/null \
             | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
-          kill $PF_PID 2>/dev/null
 
-          if [ -z "$ARGOCD_JWT" ]; then
-            echo "::warning::Failed to generate ArgoCD JWT, falling back to password"
-            ARGOCD_JWT="$ARGOCD_PASS"
+          if [ -n "$ADMIN_SESSION" ]; then
+            # Step 2b: Generate non-expiring apiKey for loopzero-api account
+            ARGOCD_JWT=$(curl -sf "http://localhost:18080/api/v1/account/loopzero-api/token" \
+              -H "Authorization: Bearer $ADMIN_SESSION" \
+              -H "Content-Type: application/json" \
+              -d "{\"expiresIn\":0,\"id\":\"loopzero-api-$(date +%s)\"}" 2>/dev/null \
+              | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+
+            if [ -n "$ARGOCD_JWT" ]; then
+              echo "ArgoCD apiKey: generated for loopzero-api account (non-expiring, ${#ARGOCD_JWT} chars)"
+            else
+              echo "::warning::Could not generate apiKey for loopzero-api — account may not exist yet (Helm values need accounts.loopzero-api: apiKey)"
+              echo "::warning::Falling back to admin session token (expires in 24h)"
+              ARGOCD_JWT="$ADMIN_SESSION"
+            fi
           else
-            echo "ArgoCD JWT: generated (${#ARGOCD_JWT} chars)"
+            echo "::warning::Failed to authenticate to ArgoCD, falling back to password"
+            ARGOCD_JWT="$ARGOCD_PASS"
           fi
+
+          kill $PF_PID 2>/dev/null
 
           # ═══════════════════════════════════════
           # 3. UPDATE K8s SECRETS
@@ -854,57 +874,46 @@ jobs:
             cat /tmp/cf-worker-response.json
           fi
 
-      # --- Post-deploy: configure cross-cluster Loki access ---
-      # Loki runs on the build cluster (NodePort 30100). The API on mgmt
-      # needs the build cluster node IP to query logs cross-cluster.
-      # This step resolves the IP and patches the API configmap.
-      - name: Configure cross-cluster Loki
+      # --- Post-deploy: verify cross-cluster Loki access ---
+      # Loki URL is now resolved by Pulumi via @pulumi/command (resolve-build-node-ip).
+      # This step only verifies reachability — no more kubectl patch needed.
+      - name: Verify cross-cluster Loki
         if: success() && needs.resolve.outputs.command == 'up'
         continue-on-error: true
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           set +e
           STACK="${{ needs.resolve.outputs.stack }}"
-          cd "${{ env.PULUMI_WORKING_DIR }}"
 
           BUILD_KUBECONFIG=$(pulumi stack output buildKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
           MGMT_KUBECONFIG=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
 
           if [ -z "$BUILD_KUBECONFIG" ] || [ -z "$MGMT_KUBECONFIG" ]; then
-            echo "::warning::Could not retrieve kubeconfigs for Loki configuration"
+            echo "::warning::Could not retrieve kubeconfigs for Loki verification"
             exit 0
           fi
 
           echo "$BUILD_KUBECONFIG" > /tmp/build-kubeconfig.yaml
           echo "$MGMT_KUBECONFIG" > /tmp/mgmt-kubeconfig.yaml
 
-          # Resolve build cluster node InternalIP
-          BUILD_NODE_IP=$(kubectl --kubeconfig=/tmp/build-kubeconfig.yaml get nodes \
-            -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
+          # Read Loki URL from API configmap (set by Pulumi)
+          NAMESPACE="platform-system"
+          LOKI_URL=$(kubectl --kubeconfig=/tmp/mgmt-kubeconfig.yaml get configmap loopzero-api-config \
+            -n "$NAMESPACE" -o jsonpath='{.data.LOKI_URL}' 2>/dev/null)
 
-          if [ -z "$BUILD_NODE_IP" ]; then
-            echo "::warning::Could not resolve build cluster node IP for Loki"
+          if [ -z "$LOKI_URL" ] || [ "$LOKI_URL" = "http://pending-loki-ip:30100" ]; then
+            echo "::warning::Loki URL not resolved by Pulumi — build cluster nodes may not be ready"
             exit 0
           fi
 
-          LOKI_URL="http://${BUILD_NODE_IP}:30100"
-          echo "Loki cross-cluster URL: $LOKI_URL"
+          echo "Loki URL (from Pulumi): $LOKI_URL"
 
           # Verify Loki is reachable from mgmt cluster
           kubectl --kubeconfig=/tmp/mgmt-kubeconfig.yaml run loki-check --rm -i \
-            --image=curlimages/curl --restart=Never \
-            -- curl -sf "$LOKI_URL/ready" 2>/dev/null && echo "Loki: reachable" || echo "::warning::Loki not reachable at $LOKI_URL"
+            --image=curlimages/curl:8.11.1 --restart=Never \
+            -- curl -sf "$LOKI_URL/ready" 2>/dev/null && echo "✅ Loki: reachable" || echo "::warning::Loki not reachable at $LOKI_URL"
 
-          # Patch API configmap with resolved Loki URL
-          NAMESPACE="platform-system"
-          kubectl --kubeconfig=/tmp/mgmt-kubeconfig.yaml patch configmap loopzero-api-config \
-            -n "$NAMESPACE" --type merge -p "{\"data\":{\"LOKI_URL\":\"$LOKI_URL\"}}"
-
-          # Restart API to pick up new LOKI_URL
-          kubectl --kubeconfig=/tmp/mgmt-kubeconfig.yaml rollout restart deployment loopzero-api -n "$NAMESPACE"
-          kubectl --kubeconfig=/tmp/mgmt-kubeconfig.yaml rollout status deployment loopzero-api -n "$NAMESPACE" --timeout=60s
-
-          echo "- Loki URL: $LOKI_URL (cross-cluster)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Loki URL: $LOKI_URL (resolved by Pulumi)" >> "$GITHUB_STEP_SUMMARY"
 
           # Cleanup
           rm -f /tmp/build-kubeconfig.yaml /tmp/mgmt-kubeconfig.yaml
