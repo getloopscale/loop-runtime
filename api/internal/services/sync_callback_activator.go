@@ -136,7 +136,7 @@ func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db
 			})
 		}
 		completedData, _ := json.Marshal(map[string]interface{}{
-			"deploy_id":        release.ID[:10],
+			"deploy_id":        deriveDeployID(release.ID),
 			"status":           "success",
 			"duration_seconds": duration,
 			"apps":             appResults,

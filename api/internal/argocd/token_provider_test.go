@@ -25,7 +25,7 @@ func TestStaticTokenProvider(t *testing.T) {
 func TestFileWatchTokenProvider_InitialRead(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "token")
-	os.WriteFile(path, []byte("eyJhbGciOiJIUzI1NiJ9.test"), 0644)
+	_ = os.WriteFile(path, []byte("eyJhbGciOiJIUzI1NiJ9.test"), 0644)
 
 	p, err := NewFileWatchTokenProvider(FileWatchConfig{
 		Path:   path,
@@ -53,7 +53,7 @@ func TestFileWatchTokenProvider_FailsOnMissingFile(t *testing.T) {
 func TestFileWatchTokenProvider_FailsOnEmptyFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "token")
-	os.WriteFile(path, []byte(""), 0644)
+	_ = os.WriteFile(path, []byte(""), 0644)
 
 	_, err := NewFileWatchTokenProvider(FileWatchConfig{
 		Path:   path,
@@ -67,7 +67,7 @@ func TestFileWatchTokenProvider_FailsOnEmptyFile(t *testing.T) {
 func TestFileWatchTokenProvider_RefreshDetectsChange(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "token")
-	os.WriteFile(path, []byte("token-v1"), 0644)
+	_ = os.WriteFile(path, []byte("token-v1"), 0644)
 
 	p, err := NewFileWatchTokenProvider(FileWatchConfig{
 		Path:   path,
@@ -82,7 +82,7 @@ func TestFileWatchTokenProvider_RefreshDetectsChange(t *testing.T) {
 	}
 
 	// Simulate Secret rotation
-	os.WriteFile(path, []byte("token-v2"), 0644)
+	_ = os.WriteFile(path, []byte("token-v2"), 0644)
 
 	if err := p.Refresh(); err != nil {
 		t.Fatalf("refresh error: %v", err)
@@ -96,7 +96,7 @@ func TestFileWatchTokenProvider_RefreshDetectsChange(t *testing.T) {
 func TestFileWatchTokenProvider_TrimsWhitespace(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "token")
-	os.WriteFile(path, []byte("  my-token\n  "), 0644)
+	_ = os.WriteFile(path, []byte("  my-token\n  "), 0644)
 
 	p, err := NewFileWatchTokenProvider(FileWatchConfig{
 		Path:   path,
@@ -114,7 +114,7 @@ func TestFileWatchTokenProvider_TrimsWhitespace(t *testing.T) {
 func TestFileWatchTokenProvider_BackgroundPoll(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "token")
-	os.WriteFile(path, []byte("initial"), 0644)
+	_ = os.WriteFile(path, []byte("initial"), 0644)
 
 	p, err := NewFileWatchTokenProvider(FileWatchConfig{
 		Path:         path,
@@ -129,7 +129,7 @@ func TestFileWatchTokenProvider_BackgroundPoll(t *testing.T) {
 	defer p.Stop()
 
 	// Change the file
-	os.WriteFile(path, []byte("rotated"), 0644)
+	_ = os.WriteFile(path, []byte("rotated"), 0644)
 
 	// Wait for poll to detect
 	time.Sleep(200 * time.Millisecond)

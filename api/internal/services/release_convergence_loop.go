@@ -257,7 +257,7 @@ func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *d
 		})
 	}
 	completedData, _ := json.Marshal(map[string]interface{}{
-		"deploy_id":        release.ID[:10],
+		"deploy_id":        deriveDeployID(release.ID),
 		"status":           "success",
 		"duration_seconds": duration,
 		"apps":             appResults,
