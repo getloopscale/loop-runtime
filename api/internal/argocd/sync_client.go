@@ -28,8 +28,14 @@ type SyncClientConfig struct {
 // SyncClient implements services.SyncClient using the ArgoCD REST API.
 type SyncClient struct {
 	baseURL string
-	token   string
-	client  *http.Client
+	// token is a static apiKey JWT set at construction. Currently non-expiring.
+	// MEET-2026-03-28-014: Replace with TokenProvider interface when ANY of:
+	//   1. Token rotation is automated (e.g., CronJob rotates apiKey periodically)
+	//   2. Compliance requires periodic credential rotation
+	//   3. A second credential-bearing client needs the same hot-reload pattern
+	// Design sketch preserved in docs/meetings/records/MEET-2026-03-28-014.md
+	token  string
+	client *http.Client
 }
 
 // NewSyncClient creates a SyncClient for real ArgoCD operations.
