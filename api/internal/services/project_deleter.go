@@ -132,6 +132,19 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInp
 					"project_id", req.ProjectID, "environment", "production", "error", gitErr)
 			} else {
 				result.DeletedEnvironments = append(result.DeletedEnvironments, "production")
+				// Trigger ArgoCD sync to prune removed resources
+				if d.sync != nil {
+					argoAppName := req.TenantID + "-production"
+					syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
+					defer syncCancel()
+					if syncErr := d.sync.TriggerSync(syncCtx, argoAppName); syncErr != nil {
+						slog.Warn("argocd sync after fallback delete failed",
+							"app", argoAppName, "error", syncErr)
+					} else {
+						slog.Info("argocd sync triggered after fallback gitops remove",
+							"app", argoAppName, "project", req.ProjectName)
+					}
+				}
 			}
 		}
 
