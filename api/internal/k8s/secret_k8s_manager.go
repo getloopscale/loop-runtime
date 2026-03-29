@@ -141,7 +141,8 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID
 					"kind": "ClusterSecretStore",
 				},
 				"target": map[string]interface{}{
-					"name":           fmt.Sprintf("%s-secrets", app),
+					// Must match envFrom secretRef in manifests/renderer.go
+						"name": fmt.Sprintf("user-secrets-%s-%s-%s-%s", tenantID, projectID, env, app),
 					"creationPolicy": "Owner",
 				},
 				"data": []interface{}{
