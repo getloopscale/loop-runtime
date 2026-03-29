@@ -28,6 +28,9 @@ export function bootstrapMgmtCluster(
   config: PlatformStackConfig,
   lokiEndpoint: pulumi.Output<string>,
 ): MgmtBootstrapOutputs {
+  // Set image tag to match environment (dev, staging, prod)
+  IMAGE_TAG = config.environment;
+
   const provider = new k8s.Provider("mgmt-k8s", {
     kubeconfig: infra.mgmtCluster.kubeconfig,
   });
@@ -439,6 +442,12 @@ function installMinIO(
  * DOKS clusters are integrated via `doctl kubernetes cluster registry add`.
  */
 const REGISTRY = "registry.digitalocean.com/loopzero-infra-registry";
+
+/**
+ * Image tag for API and operator images. Matches the stack environment name.
+ * Set by the infra-deploy.yml Step 2 when building images.
+ */
+let IMAGE_TAG = "dev"; // default, overridden per-environment below
 
 /**
  * Gitea admin password default — only for dev environments.
@@ -995,7 +1004,7 @@ function installLoopZeroAPI(
             containers: [
               {
                 name: "api",
-                image: `${REGISTRY}/loopzero-api:dev`,
+                image: `${REGISTRY}/loopzero-api:${IMAGE_TAG}`,
                 imagePullPolicy: "Always",
                 ports: [
                   { name: "http", containerPort: 8080 },
@@ -1232,7 +1241,7 @@ function installTenantController(
             containers: [
               {
                 name: "controller",
-                image: `${REGISTRY}/tenant-controller:dev`,
+                image: `${REGISTRY}/tenant-controller:${IMAGE_TAG}`,
                 imagePullPolicy: "Always",
                 args: ["--leader-elect=true"],
                 ports: [

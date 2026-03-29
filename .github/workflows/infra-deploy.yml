@@ -427,9 +427,19 @@ jobs:
           # Cancel stale locks from previous failed runs
           pulumi cancel -s "$STACK" 2>/dev/null || true
 
+          # Resolve region from Pulumi config (dynamic — supports sfo3, nyc3, etc.)
+          REGION=$(pulumi config get region --stack "$STACK" 2>/dev/null || echo "sfo3")
+          echo "Resolved region: $REGION"
+
+          # ═══ Set secrets from GitHub Environment (required for first deploy) ═══
+          # These are idempotent — safe to re-set on every run.
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" --stack "$STACK" 2>/dev/null || true
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" --stack "$STACK" 2>/dev/null || true
+          pulumi config set --secret digitaloceanToken "$DIGITALOCEAN_TOKEN" --stack "$STACK" 2>/dev/null || true
+
           # Import pre-existing VPC if it exists but is not in Pulumi state.
           # DO VPCs cannot be deleted when default — they persist across destroy cycles.
-          VPC_NAME="loopzero-infra-${STACK}-sfo3-net"
+          VPC_NAME="loopzero-infra-${STACK}-${REGION}-net"
           VPC_ID=$(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs" | \
             python3 -c "import sys,json; vpcs=[v for v in json.load(sys.stdin)['vpcs'] if v['name']=='$VPC_NAME']; print(vpcs[0]['id'] if vpcs else '')" 2>/dev/null)
           if [ -n "$VPC_ID" ]; then
@@ -444,12 +454,12 @@ jobs:
           # Import pre-existing Spaces buckets (survive destroy due to DO Spaces delete marker bug).
           for BUCKET_NAME in loopzero-static-assets loopzero-builds; do
             BUCKET_EXISTS=$(AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" \
-              aws s3api head-bucket --bucket "$BUCKET_NAME" --endpoint-url "https://sfo3.digitaloceanspaces.com" 2>/dev/null && echo "yes" || echo "no")
+              aws s3api head-bucket --bucket "$BUCKET_NAME" --endpoint-url "https://${REGION}.digitaloceanspaces.com" 2>/dev/null && echo "yes" || echo "no")
             if [ "$BUCKET_EXISTS" = "yes" ]; then
               IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r ".deployment.resources[]? | select(.type == \"digitalocean:index/spacesBucket:SpacesBucket\" and .inputs.name == \"$BUCKET_NAME\") | .id" 2>/dev/null)
               if [ -z "$IN_STATE" ]; then
                 echo "Importing existing bucket $BUCKET_NAME into Pulumi state..."
-                pulumi import "digitalocean:index/spacesBucket:SpacesBucket" "$BUCKET_NAME" "sfo3,$BUCKET_NAME" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
+                pulumi import "digitalocean:index/spacesBucket:SpacesBucket" "$BUCKET_NAME" "${REGION},$BUCKET_NAME" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
               fi
             fi
           done
@@ -504,7 +514,7 @@ jobs:
             IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "digitalocean:index/cdn:Cdn") | .id' 2>/dev/null)
             if [ -z "$IN_STATE" ]; then
               echo "Importing existing CDN $CDN_ID into Pulumi state..."
-              pulumi import "digitalocean:index/cdn:Cdn" "loopzero-infra-${STACK}-sfo3-static-cdn" "$CDN_ID" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
+              pulumi import "digitalocean:index/cdn:Cdn" "loopzero-infra-${STACK}-${REGION}-static-cdn" "$CDN_ID" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
             fi
           fi
 
@@ -556,12 +566,13 @@ jobs:
           doctl auth init --access-token "$DIGITALOCEAN_TOKEN"
           doctl registry login --expiry-seconds 600
 
-          # Build + push
+          # Build + push (tag matches stack name — dev, staging, prod)
+          TAG="$STACK"
           cd "$GITHUB_WORKSPACE"
-          docker build -f api/Dockerfile -t "$REGISTRY/loopzero-api:dev" .
-          docker push "$REGISTRY/loopzero-api:dev"
-          docker build -f operators/Dockerfile -t "$REGISTRY/tenant-controller:dev" .
-          docker push "$REGISTRY/tenant-controller:dev"
+          docker build -f api/Dockerfile -t "$REGISTRY/loopzero-api:$TAG" .
+          docker push "$REGISTRY/loopzero-api:$TAG"
+          docker build -f operators/Dockerfile -t "$REGISTRY/tenant-controller:$TAG" .
+          docker push "$REGISTRY/tenant-controller:$TAG"
 
           # Integrate registry with all DOKS clusters
           cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}"
