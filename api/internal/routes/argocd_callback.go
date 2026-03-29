@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 )
 
 // ArgoCallbackPayload is the webhook payload sent by ArgoCD Notifications.
@@ -35,16 +36,29 @@ type ReleaseActivator interface {
 type ArgoCallbackHandler struct {
 	activator ReleaseActivator
 	logger    *slog.Logger
+	secret    string // SEC-004: shared secret for webhook authentication
 }
 
 // NewArgoCallbackHandler creates a new ArgoCallbackHandler.
-func NewArgoCallbackHandler(activator ReleaseActivator, logger *slog.Logger) *ArgoCallbackHandler {
-	return &ArgoCallbackHandler{activator: activator, logger: logger}
+// When secret is non-empty, requests must include Authorization: Bearer <secret>.
+func NewArgoCallbackHandler(activator ReleaseActivator, logger *slog.Logger, secret string) *ArgoCallbackHandler {
+	return &ArgoCallbackHandler{activator: activator, logger: logger, secret: secret}
 }
 
 // Handle processes the ArgoCD webhook callback.
 // POST /internal/argocd-callback
+// SEC-004: Validates shared secret when configured.
 func (h *ArgoCallbackHandler) Handle(w http.ResponseWriter, r *http.Request) {
+	// SEC-004: Validate callback secret when configured.
+	if h.secret != "" {
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != h.secret {
+			h.logger.Warn("argocd callback: unauthorized request")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+	}
+
 	var payload ArgoCallbackPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		h.logger.Warn("argocd callback: invalid payload", "error", err)

@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"flag"
 	"log/slog"
 	"net/http"
@@ -162,8 +163,22 @@ func main() {
 		pgEventStore := sse.NewPostgresEventStore(dbAdapter, dbAdapter)
 		eventStore = pgEventStore
 
-		// Secret store
-		secretStore = &db.PostgresSecretStore{DB: dbAdapter}
+		// Secret store — SEC-001: encryption at rest when key is configured.
+		var encKey []byte
+		if cfg.SecretEncryptionKey != "" {
+			var err error
+			encKey, err = hex.DecodeString(cfg.SecretEncryptionKey)
+			if err != nil {
+				logger.Error("invalid LOOPZERO_SECRET_ENCRYPTION_KEY (must be 64 hex chars for AES-256)", "error", err)
+				os.Exit(1)
+			}
+		}
+		secretStoreImpl, err := db.NewPostgresSecretStore(dbAdapter, encKey)
+		if err != nil {
+			logger.Error("failed to create secret store", "error", err)
+			os.Exit(1)
+		}
+		secretStore = secretStoreImpl
 
 		// Bootstrap store — internal-only endpoint for platform bootstrap
 		bootstrapStore = &db.PostgresBootstrapStore{DB: dbAdapter}
@@ -194,7 +209,7 @@ func main() {
 		// C-01 fix: CallbackURL/CallbackSecret removed from workflow config.
 		// The workflow no longer calls the API. Build completion is detected
 		// by the BuildReconcileLoop polling Argo Workflow CRDs.
-		workflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
+		rawWorkflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
 			Kubeconfig:       cfg.BuildKubeconfig,
 			Context:          cfg.BuildKubeContext,
 			RegistryURL:      cfg.RegistryURL,
@@ -205,6 +220,19 @@ func main() {
 			logger.Error("failed to create workflow submitter", "error", err)
 			os.Exit(1)
 		}
+
+		// REVIEW-FIX: Wire CircuitBreakerWorkflowSubmitter to protect against
+		// Argo Workflow API outages. Without this, 10 concurrent deploys against
+		// a down Argo controller waste ~70s in retries instead of failing fast.
+		workflowSubmitter := services.NewCircuitBreakerWorkflowSubmitter(
+			rawWorkflowSubmitter,
+			services.CircuitBreakerConfig{
+				OpenThreshold:  cfg.CBOpenThreshold,
+				CloseThreshold: cfg.CBCloseThreshold,
+				RetryInterval:  cfg.CBRetryInterval,
+			},
+			logger,
+		)
 
 		// ArgoCD HTTP client — shares transport pooling but uses ArgoCD-specific timeout.
 		// When Insecure is true, we need a separate transport for TLS skip.
@@ -401,7 +429,7 @@ func main() {
 		syncCallbackActivator := services.NewSyncCallbackActivator(
 			releaseStore, envTargetStore, locker, eventStore, logger,
 		)
-		argoCallbackHandler = routes.NewArgoCallbackHandler(syncCallbackActivator, logger)
+		argoCallbackHandler = routes.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 
 		logger.Info("sprint 2 dependencies wired — real implementations")
 	} else {
@@ -456,6 +484,7 @@ func main() {
 		SecretStore:        secretStore,
 		SecretK8sSync:      secretK8sMgr,
 		BootstrapStore:     bootstrapStore,
+		BootstrapSecret:    cfg.BootstrapSecret,
 		BuildHandler:        buildHandler,
 		ArgoCallbackHandler: argoCallbackHandler,
 		LogsHandler:        logsHandler,

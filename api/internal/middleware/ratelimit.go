@@ -19,6 +19,7 @@ type RateLimiter struct {
 	buckets map[string]*bucket
 	rate    int
 	window  time.Duration
+	stop    chan struct{} // signals cleanupLoop to exit on shutdown
 }
 
 type bucket struct {
@@ -28,28 +29,45 @@ type bucket struct {
 
 // NewRateLimiter creates a rate limiter that allows `rate` requests per `window`
 // duration. A background goroutine cleans up stale entries every 5 minutes.
+// Call Stop() during graceful shutdown to release the goroutine.
 func NewRateLimiter(rate int, window time.Duration) *RateLimiter {
 	rl := &RateLimiter{
 		buckets: make(map[string]*bucket),
 		rate:    rate,
 		window:  window,
+		stop:    make(chan struct{}),
 	}
 	go rl.cleanupLoop()
 	return rl
 }
 
+// Stop signals the cleanup goroutine to exit. Safe to call multiple times.
+func (rl *RateLimiter) Stop() {
+	select {
+	case <-rl.stop:
+		// already stopped
+	default:
+		close(rl.stop)
+	}
+}
+
 func (rl *RateLimiter) cleanupLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-	for range ticker.C {
-		rl.mu.Lock()
-		now := time.Now()
-		for key, b := range rl.buckets {
-			if now.Sub(b.windowStart) > rl.window*2 {
-				delete(rl.buckets, key)
+	for {
+		select {
+		case <-rl.stop:
+			return
+		case <-ticker.C:
+			rl.mu.Lock()
+			now := time.Now()
+			for key, b := range rl.buckets {
+				if now.Sub(b.windowStart) > rl.window*2 {
+					delete(rl.buckets, key)
+				}
 			}
+			rl.mu.Unlock()
 		}
-		rl.mu.Unlock()
 	}
 }
 

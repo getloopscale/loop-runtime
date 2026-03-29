@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,6 +42,15 @@ func NewClient(baseURL string, httpClient *http.Client, logger *slog.Logger) *Cl
 // QueryBuildLogs queries Loki for logs of a specific build workflow.
 // Implements routes.LogQuerier.
 func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts routes.LogQueryOpts) ([]routes.LogEntry, error) {
+	// SEC-005 fix: Validate buildID and step to prevent LogQL injection.
+	// Only allow alphanumeric, hyphens, and underscores.
+	if !isValidLogParam(buildID) {
+		return nil, fmt.Errorf("loki: invalid build ID: %q", buildID)
+	}
+	if opts.Step != "" && !isValidLogParam(opts.Step) {
+		return nil, fmt.Errorf("loki: invalid step parameter: %q", opts.Step)
+	}
+
 	// Build LogQL query
 	// Argo Workflow names contain the build ID plus a random suffix:
 	// "loopzero-build-{buildID}-{suffix}". Use regex match to find by build ID.
@@ -142,6 +152,15 @@ func parseLokiStreams(resp lokiQueryResponse) []routes.LogEntry {
 	})
 
 	return entries
+}
+
+// logParamRegex allows only safe characters in LogQL query parameters.
+// SEC-005: prevents LogQL injection via buildID or step parameters.
+var logParamRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+// isValidLogParam checks that a parameter is safe for interpolation into LogQL queries.
+func isValidLogParam(s string) bool {
+	return len(s) <= 128 && logParamRegex.MatchString(s)
 }
 
 // parseNanosecondTimestamp converts Loki's nanosecond string timestamp to RFC3339.

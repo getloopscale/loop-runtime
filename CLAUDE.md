@@ -14,7 +14,7 @@ The authoritative specification is **`docs/technical.md`**. Every state machine,
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
-**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-5 complete (runtime, TLS, PG HA, observability, pipeline). Hardening sprint 6 (operation) 3/4 complete: `loopzero logs` (Loki), `loopzero rollback` (3s), `loopzero secret` (ESO sync <30s) all validated on DigitalOcean. `loopzero status` pending (handler exists, 1 line missing in server.go). **Sprint 10 (static frontend delivery) complete and validated E2E:** monorepo deploy (API server + Web static + Worker) fully functional on DO in 193s — `loopzero deploy` succeeds with exit code 0, static frontends served from DO Spaces via Cloudflare Worker (zero pods), container apps via CF Tunnel, all behind Cloudflare edge (WAF/DDoS). Infrastructure is 100% IaC — destroy + recreate via GitHub Actions pipeline tested and validated. Build engine: single-container BuildKit (rootless) — Kaniko completely removed. RELEASING state machine for crash recovery. 498 CLI tests + 60+ API test files passing. Production infrastructure running on DigitalOcean (3 DOKS clusters + Loki + Promtail + ESO + Cloudflare Tunnel + CF Worker + DO Spaces CDN).
+**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-5 complete (runtime, TLS, PG HA, observability, pipeline). Hardening sprint 6 (operation) 4/4 complete: `loopzero logs` (Loki), `loopzero rollback` (3s), `loopzero secret` (ESO sync <30s), `loopzero status` — all validated on DigitalOcean. **Sprint 10 (static frontend delivery) complete and validated E2E:** monorepo deploy (API server + Web static + Worker) fully functional on DO in 193s — `loopzero deploy` succeeds with exit code 0, static frontends served from DO Spaces via Cloudflare Worker (zero pods), container apps via CF Tunnel, all behind Cloudflare edge (WAF/DDoS). Infrastructure is 100% IaC — destroy + recreate via GitHub Actions pipeline tested and validated. Build engine: single-container BuildKit (rootless) — Kaniko completely removed. RELEASING state machine for crash recovery. 498 CLI tests + 60+ API test files passing. Production infrastructure running on DigitalOcean (3 DOKS clusters + Loki + Promtail + ESO + Cloudflare Tunnel + CF Worker + DO Spaces CDN).
 
 ---
 
@@ -540,7 +540,7 @@ Run the pre-completion checklist:
 | H3-Banco | PG HA + failover | ✅ Complete |
 | H4-Observabilidade | Metrics + SLOs + Dashboards | ✅ Complete |
 | H5-Pipeline | Build fix + cache | ✅ Complete |
-| H6-Operação | logs (Loki) + rollback + secrets (ESO) + status | ⚠️ 3/4 (`status` pending) |
+| H6-Operação | logs (Loki) + rollback + secrets (ESO) + status | ✅ Complete |
 
 Full hardening details: [`docs/hardening-sprints/ROADMAP.md`](docs/hardening-sprints/ROADMAP.md)
 

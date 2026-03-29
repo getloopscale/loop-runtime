@@ -65,7 +65,9 @@ type Config struct {
 	ArgocdToken        string
 	MinIOAccessKey     string
 	MinIOSecretKey     string
-	ArgoCallbackSecret string
+	ArgoCallbackSecret    string
+	BootstrapSecret       string // SEC-003: shared secret for POST /internal/bootstrap
+	SecretEncryptionKey   string // SEC-001: 32-byte hex-encoded AES-256 key for secret encryption at rest
 
 	// Argo Workflows
 	ArgoNamespace string
@@ -172,7 +174,9 @@ func Load() Config {
 		ArgocdToken:        os.Getenv("ARGOCD_TOKEN"),
 		MinIOAccessKey:     envOr("MINIO_ACCESS_KEY", "loopzero-admin"),
 		MinIOSecretKey:     envOr("MINIO_SECRET_KEY", "loopzero-dev-password"),
-		ArgoCallbackSecret: envOr("LOOPZERO_ARGO_CALLBACK_SECRET", "loopzero-dev-callback-secret"),
+		ArgoCallbackSecret:  envOr("LOOPZERO_ARGO_CALLBACK_SECRET", "loopzero-dev-callback-secret"),
+		BootstrapSecret:     envOr("LOOPZERO_BOOTSTRAP_SECRET", "loopzero-dev-bootstrap-secret"),
+		SecretEncryptionKey: os.Getenv("LOOPZERO_SECRET_ENCRYPTION_KEY"), // SEC-001: empty = no encryption (dev only)
 
 		// Argo Workflows
 		ArgoNamespace: envOr("ARGO_NAMESPACE", "argo"),
@@ -231,6 +235,10 @@ func Load() Config {
 func (c Config) Validate() error {
 	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" {
 		slog.Warn("using default callback secret — only acceptable for local development")
+	}
+	// SEC-001: Warn if secret encryption is disabled.
+	if c.SecretEncryptionKey == "" {
+		slog.Warn("LOOPZERO_SECRET_ENCRYPTION_KEY not set — secrets stored in plaintext (only acceptable for local development)")
 	}
 	// SEC-2: ARGOCD_INSECURE=true in production is a fatal error, not just a log.
 	// TLS skip allows MITM attacks on ArgoCD API calls.

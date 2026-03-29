@@ -5,21 +5,63 @@ package db
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"fmt"
+	"io"
 
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
 // PostgresSecretStore manages secrets in PostgreSQL.
-// Values are stored as BYTEA in encrypted_value column.
+// SEC-001: Values are encrypted with AES-256-GCM before storage.
+// When encryptionKey is nil, values are stored as plaintext (local dev only).
 // The ListNames method NEVER returns values — only names and context.
 type PostgresSecretStore struct {
-	DB DBTX
+	DB            DBTX
+	encryptionKey []byte // 32-byte key for AES-256-GCM; nil disables encryption
+}
+
+// NewPostgresSecretStore creates a secret store with optional encryption.
+// key must be exactly 32 bytes (AES-256) or nil to disable encryption.
+func NewPostgresSecretStore(db DBTX, key []byte) (*PostgresSecretStore, error) {
+	if key != nil && len(key) != 32 {
+		return nil, fmt.Errorf("secret_store: encryption key must be 32 bytes, got %d", len(key))
+	}
+	return &PostgresSecretStore{DB: db, encryptionKey: key}, nil
+}
+
+// encrypt encrypts plaintext using AES-256-GCM. Returns nonce || ciphertext.
+func (s *PostgresSecretStore) encrypt(plaintext []byte) ([]byte, error) {
+	if s.encryptionKey == nil {
+		return plaintext, nil // no encryption (local dev)
+	}
+	block, err := aes.NewCipher(s.encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("secret_store: create cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("secret_store: create GCM: %w", err)
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, fmt.Errorf("secret_store: generate nonce: %w", err)
+	}
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
 
 // Set creates or updates a secret. Uses upsert (ON CONFLICT DO UPDATE).
+// SEC-001: Values are encrypted with AES-256-GCM before storage.
 // Returns true if the secret was created, false if updated.
 func (s *PostgresSecretStore) Set(ctx context.Context, tenantID, projectID, env, app, name string, value []byte) (created bool, err error) {
+	// SEC-001: Encrypt the value before storing.
+	encrypted, err := s.encrypt(value)
+	if err != nil {
+		return false, fmt.Errorf("secret_store: encrypt: %w", err)
+	}
+
 	// Check if secret exists first (to determine created vs updated)
 	rows, err := s.DB.Query(ctx,
 		`SELECT 1 FROM secrets WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND app = $4 AND name = $5`,
@@ -38,7 +80,7 @@ func (s *PostgresSecretStore) Set(ctx context.Context, tenantID, projectID, env,
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (tenant_id, project_id, environment, app, name)
 		 DO UPDATE SET encrypted_value = $7, updated_at = NOW()`,
-		id, tenantID, projectID, env, app, name, value,
+		id, tenantID, projectID, env, app, name, encrypted,
 	)
 	if err != nil {
 		return false, fmt.Errorf("secret_store: set: %w", err)

@@ -298,6 +298,14 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *
 			return nil
 		}
 
+		// CODE-0001 fix: Query for previous active release BEFORE activating the new one.
+		// Previously, GetActiveByEnvTx ran after UpdateStatus, so it could return
+		// the just-activated release, preventing supersession of the old one.
+		prevRelease, err := c.releaseStore.GetActiveByEnvTx(ctx, tx, build.TenantID, build.ProjectID, build.Environment)
+		if err != nil {
+			return fmt.Errorf("activate release: get previous active: %w", err)
+		}
+
 		// Release → ACTIVE
 		if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncCompleted)); err != nil {
 			return fmt.Errorf("activate release: transition to ACTIVE: %w", err)
@@ -316,11 +324,7 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *
 			return fmt.Errorf("activate release: set active: %w", err)
 		}
 
-		// Supersede previous active release
-		prevRelease, err := c.releaseStore.GetActiveByEnvTx(ctx, tx, build.TenantID, build.ProjectID, build.Environment)
-		if err != nil {
-			return fmt.Errorf("activate release: get previous active: %w", err)
-		}
+		// Supersede previous active release (queried BEFORE activation above)
 		if prevRelease != nil && prevRelease.ID != release.ID {
 			if _, err := c.releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.ReleaseNewActivated)); err != nil {
 				return fmt.Errorf("activate release: supersede previous: %w", err)

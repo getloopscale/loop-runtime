@@ -47,6 +47,7 @@ type Config struct {
 	// BootstrapStore handles platform bootstrap (internal-only endpoint).
 	// When set, POST /internal/bootstrap is available.
 	BootstrapStore     routes.BootstrapStore
+	BootstrapSecret    string // SEC-003: shared secret for /internal/bootstrap auth
 	// ShutdownCtx is cancelled when the server begins graceful shutdown.
 	// Background goroutines (reaper, cleaner, pruner, callback processing)
 	// should use this context so they stop before the connection pool closes (A-05).
@@ -111,7 +112,7 @@ func NewRouter(cfg Config) *chi.Mux {
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
 	if cfg.BootstrapStore != nil {
-		bootstrap := routes.NewBootstrapHandler(cfg.BootstrapStore)
+		bootstrap := routes.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret)
 		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
 	}
 	if cfg.ArgoCallbackHandler != nil {

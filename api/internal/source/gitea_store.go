@@ -224,25 +224,50 @@ func (s *GiteaSourceStore) gitCmdWithAuth(ctx context.Context, dir string, gitAr
 }
 
 // gitCmd runs a git command in the specified directory.
+// SEC-002 fix: sanitize output and args to prevent token leakage in error logs.
 func (s *GiteaSourceStore) gitCmd(ctx context.Context, dir string, args ...string) error {
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s: %w (output: %s)", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
+		sanitizedOutput := s.sanitizeOutput(string(output))
+		sanitizedArgs := s.sanitizeArgs(args)
+		return fmt.Errorf("%s: %w (output: %s)", strings.Join(sanitizedArgs, " "), err, strings.TrimSpace(sanitizedOutput))
 	}
 	return nil
 }
 
 // gitOutput runs a git command and returns stdout trimmed.
+// SEC-002 fix: sanitize args in error messages to prevent token leakage.
 func (s *GiteaSourceStore) gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("%s: %w", strings.Join(args, " "), err)
+		sanitizedArgs := s.sanitizeArgs(args)
+		return "", fmt.Errorf("%s: %w", strings.Join(sanitizedArgs, " "), err)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+// sanitizeOutput removes the Gitea token from git command output to prevent leakage in logs.
+func (s *GiteaSourceStore) sanitizeOutput(output string) string {
+	if s.token == "" {
+		return output
+	}
+	return strings.ReplaceAll(output, s.token, "***")
+}
+
+// sanitizeArgs removes credentials from git command arguments for safe logging.
+func (s *GiteaSourceStore) sanitizeArgs(args []string) []string {
+	if s.token == "" {
+		return args
+	}
+	safe := make([]string, len(args))
+	for i, arg := range args {
+		safe[i] = strings.ReplaceAll(arg, s.token, "***")
+	}
+	return safe
 }
