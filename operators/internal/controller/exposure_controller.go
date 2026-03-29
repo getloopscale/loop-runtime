@@ -5,7 +5,6 @@ package controller
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 
@@ -22,6 +21,7 @@ import (
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/operators/internal/httpclient"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
 
@@ -203,16 +203,6 @@ func (r *ExposureReconciler) resolveProbeURL(route *loopzerov1.ExposedRoute) str
 // performProbe makes an HTTP GET to the given URL and returns the status code.
 func (r *ExposureReconciler) performProbe(ctx context.Context, url string) (int32, error) {
 	httpClient := r.HTTPClient
-	if httpClient == nil {
-		httpClient = &http.Client{
-			Timeout: constants.ProbeTimeout,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true, //nolint:gosec // probes use self-signed certs in dev
-				},
-			},
-		}
-	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -236,13 +226,6 @@ func SetupExposureController(mgr ctrl.Manager) error {
 		Complete(&ExposureReconciler{
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
-			HTTPClient: &http.Client{
-				Timeout: constants.ProbeTimeout,
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{
-						InsecureSkipVerify: true, //nolint:gosec // probes use self-signed certs in dev
-					},
-				},
-			},
+			HTTPClient: httpclient.NewWithTimeout(constants.ProbeTimeout),
 		})
 }

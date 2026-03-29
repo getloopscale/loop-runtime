@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/loopzero/loopzero/api/internal/cfkv"
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
@@ -688,6 +689,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	}); err != nil {
 		slog.Error("on build completed: failed to transition RELEASING → SUCCEEDED",
 			"build_id", buildID, "error", err)
+		return fmt.Errorf("on build completed: RELEASING → SUCCEEDED: %w", err)
 	}
 
 	return nil
@@ -707,10 +709,9 @@ func (o *BuildOrchestrator) writeStaticRoutingEntries(ctx context.Context, build
 			continue
 		}
 
-		subdomain := fmt.Sprintf("%s-%s-%s-%s", build.TenantID, build.ProjectID, app.Name, build.Environment)
-		if len(subdomain) > 63 {
-			subdomain = subdomain[:63]
-		}
+		// ARCH-004 fix: Use cfkv.Subdomain() instead of inline generation to avoid
+		// divergence with the canonical function (missing TrimRight for trailing hyphens).
+		subdomain := cfkv.Subdomain(build.TenantID, build.ProjectID, app.Name, build.Environment)
 
 		entry := map[string]string{
 			"buildId":  build.ID,

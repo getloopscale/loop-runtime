@@ -18,7 +18,7 @@ import (
 )
 
 // reconcileAPIPhase handles the WaitingForAPI phase.
-// Steps: check API health, call bootstrap endpoint for DB seeding.
+// Steps: check API health, resolve bootstrap secret, call bootstrap endpoint for DB seeding.
 func (r *PlatformBootstrapReconciler) reconcileAPIPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -31,8 +31,14 @@ func (r *PlatformBootstrapReconciler) reconcileAPIPhase(ctx context.Context, pb 
 		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("API not healthy: %v", err))
 	}
 
-	// Step 2: Call bootstrap endpoint for DB seeding.
-	if err := r.callBootstrapEndpoint(ctx, bootstrapURL); err != nil {
+	// Step 2: Resolve bootstrap secret for SEC-003 auth (B1 fix).
+	bootstrapSecret, err := r.resolveBootstrapSecret(ctx, pb)
+	if err != nil {
+		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("resolve bootstrap secret: %v", err))
+	}
+
+	// Step 3: Call bootstrap endpoint for DB seeding.
+	if err := r.callBootstrapEndpoint(ctx, bootstrapURL, bootstrapSecret); err != nil {
 		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("bootstrap endpoint failed: %v", err))
 	}
 
@@ -59,12 +65,37 @@ func (r *PlatformBootstrapReconciler) checkAPIHealth(ctx context.Context, health
 	return nil
 }
 
+// resolveBootstrapSecret reads the bootstrap auth token from the Secret referenced
+// in spec.api.bootstrapSecretRef. Returns empty string if no secretRef is configured
+// (for backward compatibility with environments where SEC-003 is not enforced).
+func (r *PlatformBootstrapReconciler) resolveBootstrapSecret(ctx context.Context, pb *loopzerov1.PlatformBootstrap) (string, error) {
+	if pb.Spec.API.BootstrapSecretRef == nil {
+		return "", nil
+	}
+
+	secret, err := r.getSecret(ctx, pb.Spec.API.BootstrapSecretRef.Name, pb.Namespace)
+	if err != nil {
+		return "", fmt.Errorf("reading bootstrap secret %s: %w", pb.Spec.API.BootstrapSecretRef.Name, err)
+	}
+
+	token, ok := secret.Data["bootstrap-secret"]
+	if !ok {
+		return "", fmt.Errorf("bootstrap secret %s missing key 'bootstrap-secret'", pb.Spec.API.BootstrapSecretRef.Name)
+	}
+
+	return string(token), nil
+}
+
 // callBootstrapEndpoint calls POST /internal/bootstrap for DB seeding.
 // The endpoint is idempotent -- calling it multiple times is safe.
-func (r *PlatformBootstrapReconciler) callBootstrapEndpoint(ctx context.Context, bootstrapURL string) error {
+// B1: When bootstrapSecret is non-empty, sends Authorization: Bearer header (SEC-003).
+func (r *PlatformBootstrapReconciler) callBootstrapEndpoint(ctx context.Context, bootstrapURL, bootstrapSecret string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, bootstrapURL, nil)
 	if err != nil {
 		return fmt.Errorf("creating bootstrap request: %w", err)
+	}
+	if bootstrapSecret != "" {
+		req.Header.Set("Authorization", "Bearer "+bootstrapSecret)
 	}
 	resp, err := r.httpClient().Do(req)
 	if err != nil {

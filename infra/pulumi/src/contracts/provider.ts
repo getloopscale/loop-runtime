@@ -7,6 +7,7 @@ import { ObjectStorageSpec, ObjectStorageOutput } from "./storage";
 import { DnsRecordSpec, DnsRecordOutput } from "./dns";
 import { ComputeInstanceSpec, ComputeInstanceOutput } from "./compute";
 import { DatabaseClusterSpec, DatabaseClusterOutput } from "./database";
+import { ContainerRegistrySpec, ContainerRegistryOutput } from "./registry";
 
 /**
  * Each provider capability is its own interface (ISP).
@@ -43,10 +44,18 @@ export interface IProviderDatabase {
   createDatabaseCluster(spec: DatabaseClusterSpec): DatabaseClusterOutput;
 }
 
+/**
+ * ARCH-008: Container registry provider for storing container images.
+ */
+export interface IProviderRegistry {
+  createContainerRegistry(spec: ContainerRegistrySpec): ContainerRegistryOutput;
+}
+
 export interface CloudProviderFactory
   extends IProviderNetwork,
     IProviderKubernetes,
     IProviderStorage,
     IProviderDns,
     IProviderCompute,
-    IProviderDatabase {}
+    IProviderDatabase,
+    IProviderRegistry {}

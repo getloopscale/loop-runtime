@@ -37,8 +37,9 @@ type Environment struct {
 }
 
 // EnvironmentCRSpec defines the desired state of an Environment.
-// Named EnvironmentCRSpec to avoid collision with the existing EnvironmentSpec
-// in tenant_types.go (which defines environment entries within a Tenant).
+// ARCH-004: The naming collision is resolved — EnvironmentSpec was renamed to
+// TenantEnvironmentEntry in tenant_types.go. This type can be renamed to
+// EnvironmentSpec in a future cleanup if desired.
 type EnvironmentCRSpec struct {
 	// TenantRef references the parent Tenant CR by name.
 	TenantRef TenantRef `json:"tenantRef"`

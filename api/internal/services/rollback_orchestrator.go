@@ -162,29 +162,29 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 			TargetRelease: targetRelease,
 			CorrelationID: req.CorrelationID,
 		}); err != nil {
-			return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("rollback: delivery failed: %w", err))
+			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("rollback: delivery failed: %w", err))
 		}
 	} else {
 		// Legacy fallback: inline git fetch + push + sync (for backward compat in tests)
 		if targetRelease.GitCommit == "" {
-			return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("target release has no git commit"))
+			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("target release has no git commit"))
 		}
 		manifests, err := o.deps.GitReader.GetManifestsAtCommit(ctx, req.TenantID, req.ProjectID, req.Environment, targetRelease.GitCommit)
 		if err != nil {
-			return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("rollback: fetch manifests: %w", err))
+			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("rollback: fetch manifests: %w", err))
 		}
 		_, err = o.deps.GitPusher.Push(ctx, GitOpsPushOpts{
 			TenantID: req.TenantID, ProjectID: req.ProjectID, Environment: req.Environment,
 			Manifests: string(manifests), ReleaseID: targetRelease.ID, CorrelationID: req.CorrelationID,
 		})
 		if err != nil {
-			return nil, o.failRollback(ctx, currentRelease.ID, fmt.Errorf("rollback: push manifests: %w", err))
+			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("rollback: push manifests: %w", err))
 		}
 		// MEET-2026-03-27-012 Phase 0.2 + 1.4: Fix app name (TenantID, not ProjectName)
 		// and do NOT swallow sync failure — a rollback that doesn't sync is a lie.
 		appName := fmt.Sprintf("%s-%s", req.TenantID, req.Environment)
 		if syncErr := o.deps.Sync.TriggerSync(ctx, appName); syncErr != nil {
-			return nil, o.failRollback(ctx, currentRelease.ID,
+			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID,
 				fmt.Errorf("rollback: sync trigger failed for %s: %w", appName, syncErr))
 		}
 	}
@@ -236,10 +236,17 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 }
 
 // failRollback transitions the current release to ROLLBACK_FAILED state.
-func (o *RollbackOrchestrator) failRollback(ctx context.Context, releaseID string, cause error) error {
-	_ = o.deps.Locker.WithLock(ctx, "", "", "", func(tx db.DBTX) error {
-		_, _ = o.deps.Releases.UpdateStatus(ctx, tx, releaseID, string(statemachine.ReleaseRollbackFailed_))
+// REVIEW-FIX: Pass correct lock coordinates instead of empty strings to avoid
+// global lock contention. Also log lock/transition errors instead of discarding.
+func (o *RollbackOrchestrator) failRollback(ctx context.Context, tenant, project, env, releaseID string, cause error) error {
+	if err := o.deps.Locker.WithLock(ctx, tenant, project, env, func(tx db.DBTX) error {
+		if _, err := o.deps.Releases.UpdateStatus(ctx, tx, releaseID, string(statemachine.ReleaseRollbackFailed_)); err != nil {
+			return fmt.Errorf("failRollback: update status: %w", err)
+		}
 		return nil
-	})
+	}); err != nil {
+		slog.Error("failRollback: could not transition release to ROLLBACK_FAILED",
+			"release_id", releaseID, "lock_error", err)
+	}
 	return cause
 }

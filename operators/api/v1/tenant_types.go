@@ -57,7 +57,7 @@ type TenantSpec struct {
 
 	// Environments lists the environments available to this tenant.
 	// +kubebuilder:validation:MinItems=1
-	Environments []EnvironmentSpec `json:"environments"`
+	Environments []TenantEnvironmentEntry `json:"environments"`
 
 	// GitOps configures the tenant's GitOps repository.
 	GitOps GitOpsSpec `json:"gitops"`
@@ -69,8 +69,9 @@ type TenantSpec struct {
 	Limits ResourceLimits `json:"limits"`
 }
 
-// EnvironmentSpec defines an environment configuration for a tenant.
-type EnvironmentSpec struct {
+// TenantEnvironmentEntry defines an environment reference within a Tenant spec.
+// ARCH-004: Renamed from EnvironmentSpec to resolve naming collision with EnvironmentCRSpec.
+type TenantEnvironmentEntry struct {
 	// Name is the environment name (e.g., "production", "staging").
 	Name string `json:"name"`
 
@@ -81,9 +82,11 @@ type EnvironmentSpec struct {
 // GitOpsSpec configures the tenant's GitOps repository in Gitea.
 type GitOpsSpec struct {
 	// RepoName is the name of the GitOps repository in Gitea.
+	// +kubebuilder:validation:MinLength=1
 	RepoName string `json:"repoName"`
 
 	// Branch is the branch used for GitOps (default: "main").
+	// +kubebuilder:validation:MinLength=1
 	Branch string `json:"branch"`
 }
 

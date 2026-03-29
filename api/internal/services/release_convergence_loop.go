@@ -246,7 +246,10 @@ func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *d
 	// Must include: deploy_id, status, duration_seconds, apps.
 	var apps []db.BuildAppSpec
 	if release.Apps != nil {
-		_ = json.Unmarshal(release.Apps, &apps)
+		if err := json.Unmarshal(release.Apps, &apps); err != nil {
+			slog.Warn("release convergence: failed to unmarshal release apps",
+				"release_id", release.ID, "error", err)
+		}
 	}
 	duration := int(time.Since(release.CreatedAt).Seconds())
 	appResults := make([]map[string]interface{}, 0, len(apps))

@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	"github.com/loopzero/loopzero/operators/internal/constants"
 )
@@ -39,21 +38,13 @@ type RealProvisioner struct {
 }
 
 // NewRealProvisioner creates a provisioner that manages real ArgoCD Application CRs.
-func NewRealProvisioner(namespace string) (*RealProvisioner, error) {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		return nil, fmt.Errorf("argocd provisioner: get config: %w", err)
-	}
-
-	client, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("argocd provisioner: dynamic client: %w", err)
-	}
-
+// The dynamic client is injected rather than created internally (ARCH-003: DIP compliance).
+// In cmd/main.go, create the client via dynamic.NewForConfig(mgr.GetConfig()) and pass it here.
+func NewRealProvisioner(namespace string, client dynamic.Interface) *RealProvisioner {
 	return &RealProvisioner{
 		client:    client,
 		namespace: namespace,
-	}, nil
+	}
 }
 
 // EnsureAppProject creates or updates an ArgoCD AppProject CR for tenant RBAC isolation (MOD-5).

@@ -83,12 +83,18 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 		if err := p.gitCmd(ctx, tmpDir, "git", "init", repoDir); err != nil {
 			return "", fmt.Errorf("gitops push: git init: %w", err)
 		}
-		_ = p.gitCmd(ctx, repoDir, "git", "remote", "add", "origin", remoteURL)
+		if err := p.gitCmd(ctx, repoDir, "git", "remote", "add", "origin", remoteURL); err != nil {
+			return "", fmt.Errorf("gitops push: git remote add: %w", err)
+		}
 	}
 
 	// Set git identity
-	_ = p.gitCmd(ctx, repoDir, "git", "config", "user.email", "loopzero-api@loopzero.io")
-	_ = p.gitCmd(ctx, repoDir, "git", "config", "user.name", "LoopZero API")
+	if err := p.gitCmd(ctx, repoDir, "git", "config", "user.email", "loopzero-api@loopzero.io"); err != nil {
+		return "", fmt.Errorf("gitops push: git config user.email: %w", err)
+	}
+	if err := p.gitCmd(ctx, repoDir, "git", "config", "user.name", "LoopZero API"); err != nil {
+		return "", fmt.Errorf("gitops push: git config user.name: %w", err)
+	}
 
 	// Write manifests to {environment}/{projectID}/manifests.yaml
 	// BLOCKER-3: environment-first hierarchy so ArgoCD Application path scopes to one environment
@@ -137,7 +143,9 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 			return "", fmt.Errorf("gitops push: failed after 3 push attempts")
 		}
 		// Fetch and rebase on conflict
-		_ = p.gitCmdWithAuth(ctx, repoDir, "fetch", "origin")
+		if err := p.gitCmdWithAuth(ctx, repoDir, "fetch", "origin"); err != nil {
+			return "", fmt.Errorf("gitops push: fetch failed: %w", err)
+		}
 		if err := p.gitCmd(ctx, repoDir, "git", "rebase", "origin/main"); err != nil {
 			return "", fmt.Errorf("gitops push: rebase failed: %w", err)
 		}
@@ -181,8 +189,12 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 	}
 
 	// Set git identity
-	_ = p.gitCmd(ctx, repoDir, "git", "config", "user.email", "loopzero-api@loopzero.io")
-	_ = p.gitCmd(ctx, repoDir, "git", "config", "user.name", "LoopZero API")
+	if err := p.gitCmd(ctx, repoDir, "git", "config", "user.email", "loopzero-api@loopzero.io"); err != nil {
+		return "", fmt.Errorf("gitops remove: git config user.email: %w", err)
+	}
+	if err := p.gitCmd(ctx, repoDir, "git", "config", "user.name", "LoopZero API"); err != nil {
+		return "", fmt.Errorf("gitops remove: git config user.name: %w", err)
+	}
 
 	// Check if the directory exists in the repo
 	targetDir := filepath.Join(repoDir, opts.Environment, opts.ProjectID)
@@ -226,7 +238,9 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 		if attempt == 2 {
 			return "", fmt.Errorf("gitops remove: failed after 3 push attempts")
 		}
-		_ = p.gitCmdWithAuth(ctx, repoDir, "fetch", "origin")
+		if err := p.gitCmdWithAuth(ctx, repoDir, "fetch", "origin"); err != nil {
+			return "", fmt.Errorf("gitops remove: fetch failed: %w", err)
+		}
 		if err := p.gitCmd(ctx, repoDir, "git", "rebase", "origin/main"); err != nil {
 			return "", fmt.Errorf("gitops remove: rebase failed: %w", err)
 		}

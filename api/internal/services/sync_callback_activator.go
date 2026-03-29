@@ -138,7 +138,10 @@ func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db
 		// deploy.completed — CLI waits for this to exit (MEET-2026-03-28-015).
 		var apps []db.BuildAppSpec
 		if release.Apps != nil {
-			_ = json.Unmarshal(release.Apps, &apps)
+			if err := json.Unmarshal(release.Apps, &apps); err != nil {
+				slog.Warn("sync callback: failed to unmarshal release apps",
+					"release_id", release.ID, "error", err)
+			}
 		}
 		duration := int(time.Since(release.CreatedAt).Seconds())
 		appResults := make([]map[string]interface{}, 0, len(apps))

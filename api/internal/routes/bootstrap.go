@@ -12,6 +12,7 @@ package routes
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -52,16 +53,36 @@ type BootstrapStore interface {
 
 // BootstrapHandler handles POST /internal/bootstrap.
 type BootstrapHandler struct {
-	store BootstrapStore
+	store  BootstrapStore
+	secret string // SEC-003: shared secret for authentication
 }
 
 // NewBootstrapHandler creates a new BootstrapHandler.
-func NewBootstrapHandler(store BootstrapStore) *BootstrapHandler {
-	return &BootstrapHandler{store: store}
+// The secret parameter is the shared secret for authenticating bootstrap requests.
+// When non-empty, requests must include Authorization: Bearer <secret>.
+func NewBootstrapHandler(store BootstrapStore, secret string) *BootstrapHandler {
+	return &BootstrapHandler{store: store, secret: secret}
 }
 
 // Bootstrap handles POST /internal/bootstrap.
+// SEC-003: Validates shared secret before processing. Without this, any pod in the
+// cluster could create admin tenants.
 func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
+	// SEC-003: Validate bootstrap secret when configured.
+	// B3: Use constant-time comparison to prevent timing attacks on secret values.
+	if h.secret != "" {
+		auth := r.Header.Get("Authorization")
+		expected := "Bearer " + h.secret
+		if subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
+			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+				Code:       "UNAUTHORIZED",
+				Message:    "Invalid or missing bootstrap secret",
+				HTTPStatus: http.StatusUnauthorized,
+			})
+			return
+		}
+	}
+
 	var req BootstrapRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
