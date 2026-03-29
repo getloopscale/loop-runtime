@@ -209,16 +209,20 @@ func (s *CustomStrategy) ScanStep() *forge.Container {
 //   --app-name <name> --output /workspace/Dockerfile.<name>
 //
 // If a user-provided Dockerfile exists, loopzeropacks-generate skips generation.
-func loopzeroPacksDockerfileStep(apps []services.AppSpec) *forge.Container {
+// loopzeroPacksDockerfileStep generates Dockerfiles for apps in a language group.
+// totalApps is the count across ALL groups (for consistent naming with BuildKit consumer).
+func loopzeroPacksDockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
 	script := "set -e\n"
 	for _, app := range apps {
 		appPath := app.Path
 		if appPath == "" {
 			appPath = "."
 		}
+		// Use shared naming function (MEET-2026-03-29-018).
+		output := dockerfilePathForApp(app.Name, totalApps)
 		script += fmt.Sprintf(
-			"loopzeropacks-generate --source %s --app-path %s --app-name %s --output %s/Dockerfile.%s\n",
-			workspaceMountPath, appPath, app.Name, workspaceMountPath, app.Name,
+			"loopzeropacks-generate --source %s --app-path %s --app-name %s --output %s\n",
+			workspaceMountPath, appPath, app.Name, output,
 		)
 	}
 	return buildContainer("generate-dockerfile", imageLoopZeroPacks, resourcesSmall(), script)

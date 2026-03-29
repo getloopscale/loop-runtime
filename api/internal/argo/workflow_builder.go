@@ -123,7 +123,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			// MEET-2026-03-29-017: Universal Dockerfile generation via loopzero-packs.
 			// Replaces per-language DockerfileStep() with a single container that
 			// analyzes source code and generates optimized Dockerfiles for any language.
-			withSuffix(loopzeroPacksDockerfileStep(g.Apps), g.Suffix),
+			withSuffix(loopzeroPacksDockerfileStep(g.Apps, len(spec.Apps)), g.Suffix),
 		)
 	}
 	// Per-app delivery templates: BuildKit for containers, S3 upload for static.
