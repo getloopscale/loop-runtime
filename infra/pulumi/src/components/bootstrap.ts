@@ -1220,10 +1220,11 @@ function bootstrapGitea(
         namespace: PLATFORM_NAMESPACE,
         annotations: {
           "pulumi.com/skipAwait": "true",
-          // Force SSA field ownership — each Pulumi session has a different
-          // field manager ID, causing conflicts on the run-id annotation.
-          // patchForce tells the K8s provider to use --force-conflicts.
+          // Force SSA field ownership AND force replacement.
+          // patchForce resolves field manager conflicts between Pulumi sessions.
+          // replaceUnready forces Pulumi to delete+recreate (Jobs have immutable spec.template).
           "pulumi.com/patchForce": "true",
+          "pulumi.com/replaceUnready": "true",
           "loopzero.io/run-id": new Date().toISOString(),
         },
       },
@@ -1407,7 +1408,9 @@ echo "=== Bootstrap complete ==="
       // Pulumi creates a fresh Job instead of trying to update a deleted resource.
       retainOnDelete: true,
       deleteBeforeReplace: true,
-      replaceOnChanges: ["metadata.annotations"],
+      // Jobs have immutable spec.template — any change must be delete+recreate.
+      // metadata.annotations changes (run-id) also force replacement to re-run the bootstrap.
+      replaceOnChanges: ["metadata.annotations", "spec"],
     },
   );
 
