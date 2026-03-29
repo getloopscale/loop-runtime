@@ -213,6 +213,22 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 		return "", fmt.Errorf("gitops remove: git rm: %w", err)
 	}
 
+	// Ensure the environment directory still exists with a .gitkeep so ArgoCD
+	// doesn't get ComparisonError ("app path does not exist") when the last
+	// project in the environment is deleted. Without this, ArgoCD sync goes
+	// Unknown and can't prune the remaining K8s resources (F-01/F-02/F-03).
+	envDir := filepath.Join(repoDir, opts.Environment)
+	gitkeep := filepath.Join(envDir, ".gitkeep")
+	if err := os.MkdirAll(envDir, 0755); err != nil {
+		return "", fmt.Errorf("gitops remove: ensure env dir: %w", err)
+	}
+	if err := os.WriteFile(gitkeep, []byte(""), 0644); err != nil {
+		return "", fmt.Errorf("gitops remove: write .gitkeep: %w", err)
+	}
+	if err := p.gitCmd(ctx, repoDir, "git", "add", filepath.Join(opts.Environment, ".gitkeep")); err != nil {
+		return "", fmt.Errorf("gitops remove: git add .gitkeep: %w", err)
+	}
+
 	// Commit
 	commitMsg := fmt.Sprintf("Remove %s from %s\n\nCorrelation-ID: %s",
 		opts.ProjectID, opts.Environment, opts.CorrelationID,
