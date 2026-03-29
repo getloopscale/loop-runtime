@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -150,7 +151,10 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	logger.Info("reconciled environment", "environment", env.Name, "phase", env.Status.Phase, "namespace", nsName)
-	return ctrl.Result{}, nil
+	// Requeue periodically to detect and correct drift on cross-cluster resources
+	// (NetworkPolicy, ResourceQuota, RBAC). Since these live on RuntimeClient,
+	// we cannot use Owns() to watch them — periodic reconcile is the safety net.
+	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
 // reconcileDelete handles the verify-then-remove finalizer pattern for Environment deletion.

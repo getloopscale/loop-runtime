@@ -116,3 +116,6 @@ tmp/
 .claude/ralph-loop.local.md
 .claude/governance-gate.local.md
 .claude/loop-state.local.md
+
+# Reference projects for golden-harvest testing (not part of the codebase)
+referencias/
