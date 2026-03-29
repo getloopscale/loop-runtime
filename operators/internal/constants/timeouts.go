@@ -81,6 +81,12 @@ const (
 const (
 	// DORegistryTokenExpirySeconds is the TTL for DigitalOcean registry tokens (7 days).
 	DORegistryTokenExpirySeconds = 604800
+
+	// DORegistryTokenRefreshBuffer is the minimum remaining validity before refreshing
+	// a cached DO registry token. Tokens are refreshed when less than 1 day remains
+	// out of the 7-day TTL, meaning we call the DO API ~once per 6 days per tenant
+	// instead of on every reconcile.
+	DORegistryTokenRefreshBuffer = 24 * time.Hour
 )
 
 // --- External API URLs ---

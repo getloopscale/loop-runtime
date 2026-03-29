@@ -73,4 +73,8 @@ const (
 
 	// AnnotationProbeURLOverride allows tests to inject a probe URL.
 	AnnotationProbeURLOverride = "loopzero.io/probe-url-override"
+
+	// AnnotationTokenExpiresAt stores the RFC3339 expiry timestamp for cached DO registry tokens.
+	// Used to skip the DO API call when the token has more than DORegistryTokenRefreshBuffer remaining.
+	AnnotationTokenExpiresAt = "loopzero.io/token-expires-at"
 )

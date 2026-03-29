@@ -13,6 +13,7 @@ import {
   installTraefik,
   lookupLoadBalancerEndpoint,
   createClusterIssuer,
+  parseKubeconfig,
 } from "./bootstrap-shared";
 
 // ---------------------------------------------------------------------------
@@ -113,17 +114,13 @@ function installESO(
         namespace: "external-secrets",
       },
       stringData: {
-        // Extract token from kubeconfig (DOKS kubeconfigs contain bearer tokens)
-        token: infra.mgmtCluster.kubeconfig.apply((kc) => {
-          // Parse YAML kubeconfig to extract token
-          const tokenMatch = kc.match(/token:\s*(.+)/);
-          return tokenMatch ? tokenMatch[1].trim() : "";
-        }),
-        // Extract CA cert from kubeconfig
-        ca: infra.mgmtCluster.kubeconfig.apply((kc) => {
-          const caMatch = kc.match(/certificate-authority-data:\s*(.+)/);
-          return caMatch ? caMatch[1].trim() : "";
-        }),
+        // Extract token + CA from kubeconfig (infra-arch-005: uses typed parser)
+        token: infra.mgmtCluster.kubeconfig.apply(
+          (kc) => parseKubeconfig(kc).token,
+        ),
+        ca: infra.mgmtCluster.kubeconfig.apply(
+          (kc) => parseKubeconfig(kc).certificateAuthorityData,
+        ),
       },
     },
     { provider, dependsOn: [esoNs] },
@@ -145,10 +142,9 @@ function installESO(
             remoteNamespace: PLATFORM_NAMESPACE,
             server: {
               url: infra.mgmtCluster.endpoint,
-              caBundle: infra.mgmtCluster.kubeconfig.apply((kc) => {
-                const caMatch = kc.match(/certificate-authority-data:\s*(.+)/);
-                return caMatch ? caMatch[1].trim() : "";
-              }),
+              caBundle: infra.mgmtCluster.kubeconfig.apply(
+                (kc) => parseKubeconfig(kc).certificateAuthorityData,
+              ),
             },
             auth: {
               token: {

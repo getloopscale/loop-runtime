@@ -35,6 +35,11 @@ type CredentialProvisioner interface {
 	// Returns the access key and secret key. The caller is responsible for storing
 	// them in a K8s Secret.
 	EnsureTenantCredentials(ctx context.Context, tenantID string) (accessKey, secretKey string, err error)
+
+	// DeleteTenantCredentials removes the MinIO user and policy for a tenant.
+	// Called during tenant deletion to clean up per-tenant MinIO resources.
+	// The operation is idempotent: if the user/policy does not exist, returns nil.
+	DeleteTenantCredentials(ctx context.Context, tenantID string) error
 }
 
 // AdminProvisioner implements CredentialProvisioner using MinIO Admin API.
@@ -128,6 +133,73 @@ func (p *AdminProvisioner) EnsureTenantCredentials(ctx context.Context, tenantID
 	}
 
 	return accessKey, secretKey, nil
+}
+
+// DeleteTenantCredentials removes the MinIO user and policy for a tenant.
+// Reverses EnsureTenantCredentials: deletes user "loopzero-build-{tenantID}" and
+// policy "loopzero-tenant-{tenantID}". Idempotent — returns nil if resources
+// do not exist.
+func (p *AdminProvisioner) DeleteTenantCredentials(ctx context.Context, tenantID string) error {
+	accessKey := fmt.Sprintf("loopzero-build-%s", tenantID)
+	policyName := fmt.Sprintf("loopzero-tenant-%s", tenantID)
+
+	// Delete the user first (detaches policy implicitly in MinIO).
+	if err := p.deleteUser(ctx, accessKey); err != nil {
+		return fmt.Errorf("minio: delete user %s: %w", accessKey, err)
+	}
+
+	// Delete the canned policy.
+	if err := p.deletePolicy(ctx, policyName); err != nil {
+		return fmt.Errorf("minio: delete policy %s: %w", policyName, err)
+	}
+
+	return nil
+}
+
+// deleteUser removes a MinIO user via the Admin API. Idempotent — 404 is not an error.
+func (p *AdminProvisioner) deleteUser(ctx context.Context, accessKey string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete,
+		p.adminURL("remove-user", "accessKey="+accessKey),
+		nil)
+	if err != nil {
+		return fmt.Errorf("create remove-user request: %w", err)
+	}
+	p.signRequest(req)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("remove-user request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.ReadAll(resp.Body)
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	return fmt.Errorf("remove-user: unexpected HTTP %d", resp.StatusCode)
+}
+
+// deletePolicy removes a MinIO canned policy via the Admin API. Idempotent — 404 is not an error.
+func (p *AdminProvisioner) deletePolicy(ctx context.Context, policyName string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete,
+		p.adminURL("remove-canned-policy", "name="+policyName),
+		nil)
+	if err != nil {
+		return fmt.Errorf("create remove-policy request: %w", err)
+	}
+	p.signRequest(req)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("remove-policy request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.ReadAll(resp.Body)
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	return fmt.Errorf("remove-policy: unexpected HTTP %d", resp.StatusCode)
 }
 
 // userExists checks if a MinIO user already exists via the Admin API.

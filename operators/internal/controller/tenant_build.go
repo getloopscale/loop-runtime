@@ -6,12 +6,15 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -165,7 +168,19 @@ func (r *TenantReconciler) ensureBuildStorageCredentials(ctx context.Context, bu
 // ensureBuildRegistryCredentials creates BuildKit registry config Secret.
 // DO Container Registry requires credentials generated via the DO API.
 // For local k3d development, RegistryDockerConfig is set at init time.
+//
+// Caching (ARCH_OP_005): For DO deployments, the token is cached in the Secret's
+// AnnotationTokenExpiresAt annotation. The DO API is only called when the token
+// has less than DORegistryTokenRefreshBuffer (1 day) of remaining validity,
+// reducing ~20+ API calls/min to ~1 call per 6 days per tenant.
 func (r *TenantReconciler) ensureBuildRegistryCredentials(ctx context.Context, buildNs, tenantName string) error {
+	// For DO deployments, check if the cached token is still fresh.
+	if r.Credentials.DOToken != "" {
+		if r.isRegistryTokenFresh(ctx, buildNs) {
+			return nil
+		}
+	}
+
 	dockerConfig, err := r.Credentials.FetchRegistryDockerConfig(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch registry credentials: %w", err)
@@ -174,6 +189,33 @@ func (r *TenantReconciler) ensureBuildRegistryCredentials(ctx context.Context, b
 		return nil
 	}
 	return r.ensureBuildkitRegistrySecret(ctx, buildNs, tenantName, dockerConfig)
+}
+
+// isRegistryTokenFresh checks if the existing buildkit-registry-config Secret
+// has a cached token with more than DORegistryTokenRefreshBuffer remaining validity.
+func (r *TenantReconciler) isRegistryTokenFresh(ctx context.Context, namespace string) bool {
+	var secret corev1.Secret
+	key := types.NamespacedName{Name: k.SecretBuildKitRegistryConfig, Namespace: namespace}
+	if err := r.BuildClient.Get(ctx, key, &secret); err != nil {
+		if errors.IsNotFound(err) {
+			return false
+		}
+		// On transient errors, fall through to refresh — the DO API call is the safe default.
+		return false
+	}
+
+	expiresAtStr, ok := secret.Annotations[k.AnnotationTokenExpiresAt]
+	if !ok {
+		return false
+	}
+
+	expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
+	if err != nil {
+		return false
+	}
+
+	remaining := time.Until(expiresAt)
+	return remaining > k.DORegistryTokenRefreshBuffer
 }
 
 // ensureBuildExecutorRBAC creates the Role and RoleBinding for Argo Workflow executor pods.
@@ -321,6 +363,8 @@ func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, n
 }
 
 // ensureBuildkitRegistrySecret creates or updates the BuildKit registry config Secret.
+// For DO deployments, the expiry annotation is set so subsequent reconciles can skip
+// the DO API call while the token is still fresh.
 func (r *TenantReconciler) ensureBuildkitRegistrySecret(ctx context.Context, namespace, tenantName, dockerConfig string) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: k.SecretBuildKitRegistryConfig, Namespace: namespace},
@@ -330,6 +374,14 @@ func (r *TenantReconciler) ensureBuildkitRegistrySecret(ctx context.Context, nam
 			k.LabelTenant:    tenantName,
 			k.LabelComponent: k.ComponentBuild,
 			k.LabelManagedBy: k.ManagedByTenantController,
+		}
+		// Set expiry annotation for DO registry token caching.
+		if r.Credentials.DOToken != "" {
+			if secret.Annotations == nil {
+				secret.Annotations = make(map[string]string)
+			}
+			expiresAt := time.Now().Add(time.Duration(k.DORegistryTokenExpirySeconds) * time.Second)
+			secret.Annotations[k.AnnotationTokenExpiresAt] = expiresAt.Format(time.RFC3339)
 		}
 		secret.Type = corev1.SecretTypeOpaque
 		secret.StringData = map[string]string{
@@ -342,6 +394,7 @@ func (r *TenantReconciler) ensureBuildkitRegistrySecret(ctx context.Context, nam
 
 // reconcileBuildNetworkPolicy creates restrictive egress policies in build namespaces.
 // Prevents source code exfiltration via malicious Dockerfiles (spec §17.1).
+// RISK-007: Port-443 egress is restricted to RegistryCIDRs when configured.
 func (r *TenantReconciler) reconcileBuildNetworkPolicy(ctx context.Context, namespace string) error {
 	dnsPort := intstr.FromInt32(k.PortDNS)
 	minioPort := intstr.FromInt32(k.PortMinIO)
@@ -350,6 +403,24 @@ func (r *TenantReconciler) reconcileBuildNetworkPolicy(ctx context.Context, name
 	k8sAPIPort := intstr.FromInt32(k.PortKubeAPI)
 	protoUDP := corev1.ProtocolUDP
 	protoTCP := corev1.ProtocolTCP
+
+	// RISK-007: Build registry egress rule — restrict port-443 to known CIDRs
+	// when configured, preventing exfiltration to arbitrary HTTPS endpoints.
+	registryRule := networkingv1.NetworkPolicyEgressRule{
+		Ports: []networkingv1.NetworkPolicyPort{
+			{Protocol: &protoTCP, Port: &registryPort},
+			{Protocol: &protoTCP, Port: &registryTLSPort},
+		},
+	}
+	if len(r.RegistryCIDRs) > 0 {
+		peers := make([]networkingv1.NetworkPolicyPeer, 0, len(r.RegistryCIDRs))
+		for _, cidr := range r.RegistryCIDRs {
+			peers = append(peers, networkingv1.NetworkPolicyPeer{
+				IPBlock: &networkingv1.IPBlock{CIDR: cidr},
+			})
+		}
+		registryRule.To = peers
+	}
 
 	np := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: k.NetworkPolicyBuildEgress, Namespace: namespace},
@@ -370,10 +441,7 @@ func (r *TenantReconciler) reconcileBuildNetworkPolicy(ctx context.Context, name
 				{Ports: []networkingv1.NetworkPolicyPort{
 					{Protocol: &protoTCP, Port: &minioPort},
 				}},
-				{Ports: []networkingv1.NetworkPolicyPort{
-					{Protocol: &protoTCP, Port: &registryPort},
-					{Protocol: &protoTCP, Port: &registryTLSPort},
-				}},
+				registryRule,
 				{Ports: []networkingv1.NetworkPolicyPort{
 					{Protocol: &protoTCP, Port: &k8sAPIPort},
 				}},

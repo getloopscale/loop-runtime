@@ -117,6 +117,36 @@ func (m *Machine) Transition(current State, event Event) State {
 	return next
 }
 
+// TryTransition attempts a state transition and returns an error instead of
+// panicking on invalid transitions. Use this when the current state comes from
+// an external source (e.g., CR status) that may have been manually edited.
+func (m *Machine) TryTransition(current State, event Event) (State, error) {
+	if m.terminal[current] {
+		return "", fmt.Errorf(
+			"statemachine %s: invalid transition — state %q is terminal, cannot process event %q",
+			m.name, current, event,
+		)
+	}
+
+	events, ok := m.transitions[current]
+	if !ok {
+		return "", fmt.Errorf(
+			"statemachine %s: invalid transition — no transitions defined from state %q (event: %q)",
+			m.name, current, event,
+		)
+	}
+
+	next, ok := events[event]
+	if !ok {
+		return "", fmt.Errorf(
+			"statemachine %s: invalid transition — event %q is not valid from state %q",
+			m.name, current, event,
+		)
+	}
+
+	return next, nil
+}
+
 // IsTerminal returns true if the given state is a terminal state.
 func (m *Machine) IsTerminal(state State) bool {
 	return m.terminal[state]

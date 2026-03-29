@@ -23,9 +23,14 @@ import (
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
 const environmentFinalizer = constants.FinalizerEnvironment
+
+// environmentSM is the Environment lifecycle state machine (spec §5).
+// Phase transitions go through this machine — direct assignment is forbidden (Rule 8).
+var environmentSM = statemachine.NewEnvironmentMachine()
 
 // EnvironmentReconciler reconciles an Environment object.
 //
@@ -67,9 +72,11 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
-	// Set Phase to Pending if empty
+	// Transition from empty to Pending via state machine (Rule 8).
 	if env.Status.Phase == "" {
-		env.Status.Phase = loopzerov1.EnvironmentPhasePending
+		env.Status.Phase = loopzerov1.EnvironmentPhase(
+			environmentSM.Transition(statemachine.EnvironmentEmpty, statemachine.EnvironmentCreate),
+		)
 	}
 
 	nsName := env.Spec.Namespace.Name
@@ -119,8 +126,13 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			metav1.ConditionTrue, step.successReason, step.successMessage, env.Generation)
 	}
 
-	// All conditions True -> Phase Active
-	env.Status.Phase = loopzerov1.EnvironmentPhaseActive
+	// All conditions True -> transition to Active via state machine (Rule 8).
+	// Only transition if not already Active (idempotent reconcile).
+	if env.Status.Phase != loopzerov1.EnvironmentPhaseActive {
+		env.Status.Phase = loopzerov1.EnvironmentPhase(
+			environmentSM.Transition(statemachine.State(env.Status.Phase), statemachine.EnvironmentProvisioned),
+		)
+	}
 	env.Status.Namespace = nsName
 	env.Status.ObservedGeneration = env.Generation
 
@@ -151,8 +163,11 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 
 	logger.Info("environment is being deleted", "environment", env.Name)
 
+	// Transition to Deleting via state machine (Rule 8).
 	if env.Status.Phase != loopzerov1.EnvironmentPhaseDeleting {
-		env.Status.Phase = loopzerov1.EnvironmentPhaseDeleting
+		env.Status.Phase = loopzerov1.EnvironmentPhase(
+			environmentSM.Transition(statemachine.State(env.Status.Phase), statemachine.EnvironmentDeleteRequested),
+		)
 		if err := r.Status().Update(ctx, env); err != nil {
 			return ctrl.Result{}, err
 		}

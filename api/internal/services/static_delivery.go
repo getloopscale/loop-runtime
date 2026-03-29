@@ -41,12 +41,6 @@ type StaticDeliveryActivator struct {
 	locker     EnvironmentLocker
 	kvClient   *cfkv.Client
 	baseDomain string
-
-	// Container delivery deps — still needed for gitops push of non-static
-	// resources (e.g., Deployment for mixed monorepo deploys)
-	sync              SyncClient
-	gitops            GitOpsPusher
-	argocdSyncTimeout time.Duration
 }
 
 // StaticDeliveryDeps holds dependencies for StaticDeliveryActivator.
@@ -56,30 +50,20 @@ type StaticDeliveryDeps struct {
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	Sync              SyncClient
-	Locker            EnvironmentLocker
-	GitOps            GitOpsPusher
-	ArgocdSyncTimeout time.Duration
-	KVClient          *cfkv.Client
+	Locker     EnvironmentLocker
+	KVClient   *cfkv.Client
 	BaseDomain        string
 }
 
 // NewStaticDeliveryActivator creates a new StaticDeliveryActivator.
 func NewStaticDeliveryActivator(deps StaticDeliveryDeps) *StaticDeliveryActivator {
-	syncTimeout := deps.ArgocdSyncTimeout
-	if syncTimeout == 0 {
-		syncTimeout = 600 * time.Second
-	}
 	return &StaticDeliveryActivator{
-		releaseStore:      deps.ReleaseStore,
-		envTargetStore:    deps.EnvTargetStore,
-		eventStore:        deps.EventStore,
-		sync:              deps.Sync,
-		locker:            deps.Locker,
-		gitops:            deps.GitOps,
-		argocdSyncTimeout: syncTimeout,
-		kvClient:          deps.KVClient,
-		baseDomain:        deps.BaseDomain,
+		releaseStore:   deps.ReleaseStore,
+		envTargetStore: deps.EnvTargetStore,
+		eventStore:     deps.EventStore,
+		locker:         deps.Locker,
+		kvClient:       deps.KVClient,
+		baseDomain:     deps.BaseDomain,
 	}
 }
 

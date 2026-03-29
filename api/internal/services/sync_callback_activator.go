@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
 // SyncCallbackActivator processes ArgoCD sync completion callbacks.
@@ -100,68 +99,9 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 
 func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db.Release) error {
 	return a.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
-		_, err := a.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncCompleted))
-		if err != nil {
-			return fmt.Errorf("activate release: %w", err)
-		}
-
-		prev, prevErr := a.releaseStore.GetActiveByEnvTx(ctx, tx, release.TenantID, release.ProjectID, release.Environment)
-		if prevErr != nil {
-			a.logger.Warn("sync callback: failed to get previous active release",
-				"release_id", release.ID, "project_id", release.ProjectID, "error", prevErr)
-		}
-		if prev != nil && prev.ID != release.ID {
-			if _, supersedeErr := a.releaseStore.UpdateStatus(ctx, tx, prev.ID, string(statemachine.ReleaseNewActivated)); supersedeErr != nil {
-				a.logger.Error("sync callback: failed to supersede previous release",
-					"prev_id", prev.ID, "new_id", release.ID, "error", supersedeErr)
-			} else {
-				a.logger.Info("sync callback: superseded previous release",
-					"prev_id", prev.ID, "new_id", release.ID, "project_id", release.ProjectID)
-			}
-		} else if prev == nil {
-			a.logger.Info("sync callback: no previous active release to supersede",
-				"release_id", release.ID, "project_id", release.ProjectID)
-		}
-
-		if err := a.envTargetStore.SetActive(ctx, tx, release.TenantID, release.ProjectID, release.Environment, release.ID); err != nil {
-			return fmt.Errorf("set active target: %w", err)
-		}
-
-		liveData, _ := json.Marshal(map[string]interface{}{
-			"status":     "live",
-			"release_id": release.ID,
-		})
-		if _, emitErr := a.eventStore.Append(ctx, release.BuildID, "deploy.live", liveData); emitErr != nil {
-			a.logger.Error("sync callback: failed to emit deploy.live", "release_id", release.ID, "error", emitErr)
-		}
-
-		// deploy.completed — CLI waits for this to exit (MEET-2026-03-28-015).
-		var apps []db.BuildAppSpec
-		if release.Apps != nil {
-			if err := json.Unmarshal(release.Apps, &apps); err != nil {
-				slog.Warn("sync callback: failed to unmarshal release apps",
-					"release_id", release.ID, "error", err)
-			}
-		}
+		apps := releaseAppsToActivationApps(release)
 		duration := int(time.Since(release.CreatedAt).Seconds())
-		appResults := make([]map[string]interface{}, 0, len(apps))
-		for _, app := range apps {
-			appResults = append(appResults, map[string]interface{}{
-				"name":   app.Name,
-				"status": "deployed",
-			})
-		}
-		completedData, _ := json.Marshal(map[string]interface{}{
-			"deploy_id":        deriveDeployID(release.ID),
-			"status":           "success",
-			"duration_seconds": duration,
-			"apps":             appResults,
-		})
-		if _, emitErr := a.eventStore.Append(ctx, release.BuildID, "deploy.completed", completedData); emitErr != nil {
-			a.logger.Error("sync callback: failed to emit deploy.completed", "release_id", release.ID, "error", emitErr)
-		}
-
-		return nil
+		return ActivateReleaseKernel(ctx, tx, release, a.releaseStore, a.envTargetStore, a.eventStore, apps, duration, a.logger)
 	})
 }
 

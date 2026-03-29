@@ -9,7 +9,9 @@ import "time"
 // Release state timeout defaults (spec §5.2).
 const (
 	ReleaseReadyTimeout       = 5 * time.Minute
-	ReleasePendingTimeout     = 2 * time.Minute
+	// ReleasePendingTimeout must be >= convergence loop SyncTimeout (5min)
+	// to avoid premature reaping during DNS-01 cert challenges (60-90s).
+	ReleasePendingTimeout = 5 * time.Minute
 	ReleaseRollingBackTimeout = 2 * time.Minute
 )
 

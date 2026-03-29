@@ -58,6 +58,7 @@ type TenantReconciler struct {
 	GiteaURL           string
 	WorkloadClusterURL string           // URL of the workload cluster API server
 	Credentials        BuildCredentials // storage + registry credentials for build namespace secrets
+	RegistryCIDRs      []string         // CIDR ranges for container registry egress restriction (RISK-007)
 }
 
 // TenantControllerConfig holds configuration for the TenantController.
@@ -66,6 +67,7 @@ type TenantControllerConfig struct {
 	WorkloadClusterURL string
 	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
 	Credentials        BuildCredentials             // storage + registry credentials
+	RegistryCIDRs      []string                     // CIDR ranges for container registry (RISK-007)
 }
 
 // Reconcile handles the reconciliation loop for Tenant resources.
@@ -270,6 +272,14 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		}
 	}
 
+	// Delete MinIO credentials for this tenant (arch_op_008: cleanup on deletion)
+	if r.MinIOProvisioner != nil {
+		if err := r.MinIOProvisioner.DeleteTenantCredentials(ctx, tenant.Name); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("minio-cleanup: %v", err))
+			logger.Error(err, "cleanup failure", "step", "minio-cleanup", "tenant", tenant.Name)
+		}
+	}
+
 	// Archive Gitea repo (soft delete, idempotent)
 	if err := r.GitProvisioner.ArchiveRepo(ctx, tenant.Spec.GitOps.RepoName); err != nil {
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("gitea-archive: %v", err))
@@ -372,5 +382,6 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 			GiteaURL:           giteaURL,
 			WorkloadClusterURL: workloadClusterURL,
 			Credentials:        cfg.Credentials,
+			RegistryCIDRs:      cfg.RegistryCIDRs,
 		})
 }

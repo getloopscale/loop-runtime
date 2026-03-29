@@ -7,10 +7,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,6 +32,34 @@ import (
 )
 
 var scheme = runtime.NewScheme()
+
+// newClientWithRetry wraps client.New with exponential backoff retry.
+// This handles transient connectivity issues during cluster startup ordering
+// (ARCH_OP_003). Config parsing is not retried — only the client connection.
+func newClientWithRetry(log logr.Logger, cfg *rest.Config, opts client.Options, clusterName string) (client.Client, error) {
+	const maxAttempts = 3
+	backoff := 2 * time.Second
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		c, err := client.New(cfg, opts)
+		if err == nil {
+			return c, nil
+		}
+		lastErr = err
+		if attempt < maxAttempts {
+			log.V(0).Info("retrying cluster client creation",
+				"cluster", clusterName,
+				"attempt", attempt,
+				"nextRetryIn", backoff.String(),
+				"error", err,
+			)
+			time.Sleep(backoff)
+			backoff *= 2
+		}
+	}
+	return nil, fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr)
+}
 
 func init() {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
@@ -110,9 +142,9 @@ func main() {
 		setupLog.Error(err, "unable to create build cluster config", "kubeconfig", buildKubeconfig)
 		os.Exit(1)
 	}
-	buildClient, err := client.New(buildConfig, client.Options{Scheme: scheme})
+	buildClient, err := newClientWithRetry(setupLog, buildConfig, client.Options{Scheme: scheme}, "build")
 	if err != nil {
-		setupLog.Error(err, "unable to create build cluster client")
+		setupLog.Error(err, "unable to create build cluster client after retries")
 		os.Exit(1)
 	}
 	setupLog.Info("build cluster client created", "kubeconfig", buildKubeconfig)
@@ -127,9 +159,9 @@ func main() {
 		setupLog.Error(err, "unable to create runtime cluster config", "kubeconfig", runtimeKubeconfig)
 		os.Exit(1)
 	}
-	runtimeClient, err := client.New(runtimeConfig, client.Options{Scheme: scheme})
+	runtimeClient, err := newClientWithRetry(setupLog, runtimeConfig, client.Options{Scheme: scheme}, "runtime")
 	if err != nil {
-		setupLog.Error(err, "unable to create runtime cluster client")
+		setupLog.Error(err, "unable to create runtime cluster client after retries")
 		os.Exit(1)
 	}
 	setupLog.Info("runtime cluster client created", "kubeconfig", runtimeKubeconfig)
@@ -159,10 +191,24 @@ func main() {
 			"SPACES_ACCESS_KEY_ID_set", os.Getenv("SPACES_ACCESS_KEY_ID") != "")
 	}
 
+	// RISK-007: Restrict build namespace port-443 egress to known registry CIDRs.
+	// Set REGISTRY_CIDRS to comma-separated CIDRs (e.g., "104.16.0.0/12,185.199.108.0/22").
+	// When empty, port-443 is unrestricted (local dev fallback).
+	var registryCIDRs []string
+	if cidrs := os.Getenv("REGISTRY_CIDRS"); cidrs != "" {
+		for _, c := range strings.Split(cidrs, ",") {
+			if trimmed := strings.TrimSpace(c); trimmed != "" {
+				registryCIDRs = append(registryCIDRs, trimmed)
+			}
+		}
+		setupLog.Info("registry CIDR restriction enabled", "cidrs", registryCIDRs)
+	}
+
 	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, controller.TenantControllerConfig{
 		GiteaURL:           giteaURL,
 		WorkloadClusterURL: workloadClusterURL,
 		MinIOProvisioner:   minIOProvisioner,
+		RegistryCIDRs:      registryCIDRs,
 		Credentials: controller.BuildCredentials{
 			MinIOEndpoint:        minIOEndpoint,
 			SpacesAccessKeyID:    os.Getenv("SPACES_ACCESS_KEY_ID"),
