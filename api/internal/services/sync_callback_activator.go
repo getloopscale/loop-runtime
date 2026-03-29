@@ -105,9 +105,22 @@ func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db
 			return fmt.Errorf("activate release: %w", err)
 		}
 
-		prev, _ := a.releaseStore.GetActiveByEnvTx(ctx, tx, release.TenantID, release.ProjectID, release.Environment)
+		prev, prevErr := a.releaseStore.GetActiveByEnvTx(ctx, tx, release.TenantID, release.ProjectID, release.Environment)
+		if prevErr != nil {
+			a.logger.Warn("sync callback: failed to get previous active release",
+				"release_id", release.ID, "project_id", release.ProjectID, "error", prevErr)
+		}
 		if prev != nil && prev.ID != release.ID {
-			_, _ = a.releaseStore.UpdateStatus(ctx, tx, prev.ID, string(statemachine.ReleaseNewActivated))
+			if _, supersedeErr := a.releaseStore.UpdateStatus(ctx, tx, prev.ID, string(statemachine.ReleaseNewActivated)); supersedeErr != nil {
+				a.logger.Error("sync callback: failed to supersede previous release",
+					"prev_id", prev.ID, "new_id", release.ID, "error", supersedeErr)
+			} else {
+				a.logger.Info("sync callback: superseded previous release",
+					"prev_id", prev.ID, "new_id", release.ID, "project_id", release.ProjectID)
+			}
+		} else if prev == nil {
+			a.logger.Info("sync callback: no previous active release to supersede",
+				"release_id", release.ID, "project_id", release.ProjectID)
 		}
 
 		if err := a.envTargetStore.SetActive(ctx, tx, release.TenantID, release.ProjectID, release.Environment, release.ID); err != nil {

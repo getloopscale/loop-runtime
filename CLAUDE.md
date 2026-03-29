@@ -14,7 +14,7 @@ The authoritative specification is **`docs/technical.md`**. Every state machine,
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
-**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-5 complete (runtime, TLS, PG HA, observability, pipeline). Hardening sprint 6 (operation) 4/4 complete: `loopzero logs` (Loki), `loopzero rollback` (3s), `loopzero secret` (ESO sync <30s), `loopzero status` — all validated on DigitalOcean. **Sprint 10 (static frontend delivery) complete and validated E2E:** monorepo deploy (API server + Web static + Worker) fully functional on DO in 193s — `loopzero deploy` succeeds with exit code 0, static frontends served from DO Spaces via Cloudflare Worker (zero pods), container apps via CF Tunnel, all behind Cloudflare edge (WAF/DDoS). Infrastructure is 100% IaC — destroy + recreate via GitHub Actions pipeline tested and validated. Build engine: single-container BuildKit (rootless) — Kaniko completely removed. RELEASING state machine for crash recovery. 498 CLI tests + 60+ API test files passing. Production infrastructure running on DigitalOcean (3 DOKS clusters + Loki + Promtail + ESO + Cloudflare Tunnel + CF Worker + DO Spaces CDN).
+**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-6 complete (runtime, TLS, PG HA, observability, pipeline, operation). **Sprint 10 (static frontend delivery) complete.** **Production readiness validated (2026-03-29):** full destroy + recreate via GitHub Actions pipeline (10m33s), deploy E2E (24s build, pod Running, health OK), delete with ArgoCD prune (pods removed), rollback (3s, version verified), ArgoCD notifications callback (push-based activation), Alertmanager with 4 SLO rules, Loki cross-cluster logs (resolved by Pulumi), TLS via Let's Encrypt DNS-01 Cloudflare. Passwords configurable via Pulumi secrets for production. Build engine: single-container BuildKit (rootless). 498 CLI tests + 60+ API test files passing. Production infrastructure running on DigitalOcean (3 DOKS clusters + Loki + Promtail + ESO + Cloudflare Tunnel + CF Worker + DO Spaces CDN). **Next:** ESO/Secrets E2E validation, then production deploy.
 
 ---
 
@@ -546,6 +546,17 @@ Full hardening details: [`docs/hardening-sprints/ROADMAP.md`](docs/hardening-spr
 
 Check the current sprint before starting any implementation. Only implement what belongs to the current sprint.
 
+**Production Readiness** (validated 2026-03-29, plan at `docs/sprints/production-readiness/PLAN.md`):
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Secure passwords | ✅ | Gitea + MinIO passwords configurable via `pulumi config set --secret` |
+| Pulumi.prod.yaml | ✅ | Production sizing (medium nodes, 3 HA DB, nyc3) |
+| Rollback | ✅ | `loopzero rollback` validated (3s, version verified) |
+| ESO/Secrets | ⏳ | External Secrets Operator E2E validation pending |
+| SLOs + Alerts | ✅ | Alertmanager + 4 rules (API down, deploy failing, latency, crash loop) |
+| `loopzero status` | ✅ | Wired and functional |
+
 ---
 
 ## Architecture Overview
@@ -628,6 +639,9 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 |---------|-------------|------------|
 | "Implemented but not wired" | Code exists in correct location but not integrated in main.go or runtime path | Always verify call site after implementation; integration test required |
 | "Correct code in wrong place" | Duplicate implementations with different error handling | Single source of truth per behavior; grep for duplicates before merge |
+| "Project name vs project ID" | CLI sends project name (from loopzero.yaml) as `project_id` in builds. DB `projects` table uses UUID. Status/rollback/delete must use the **name** for build/release queries, not the UUID. | All queries against builds/releases use the project name. Only the `projects` table uses UUID. |
+| "ArgoCD notifications `notifiers`" | The argo-cd Helm chart v7.x uses `notifications.notifiers` for webhook services in the ConfigMap. `notifications.services` is silently ignored. | Always use `notifiers` key in Pulumi values and helm/argocd/values.yaml |
+| "Single ArgoCD Application per tenant" | One Application manages all projects in an environment. If ANY resource is Degraded, ALL notifications are blocked. | Clean orphaned manifests immediately on delete; gitops.Remove failure is FATAL |
 
 ---
 
@@ -644,6 +658,10 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | Writing prod code before failing test | Unverifiable correctness | Test first, always |
 | Internal terms in CLI output | Developer experience failure | Use product language, see Rule 3 |
 | Forward-only migration violations (`DROP`) | Irreversible data loss | Explicit sign-off required |
+| `notifications.services` in ArgoCD Helm values | Silently ignored — webhook never fires | Use `notifications.notifiers` (chart v7.x) |
+| `project.ID` (UUID) for build/release queries | Returns 0 results — builds use project name | Use project name from `loopzero.yaml`, not internal UUID |
+| `gitops.Remove` error treated as non-fatal | Orphaned manifests → Degraded ArgoCD → blocks all deploys | `gitops.Remove` failure is FATAL — delete must fail |
+| `GetActiveByEnvTx` without ORDER BY | Arbitrary ACTIVE release returned — may skip supersede | ORDER BY created_at ASC LIMIT 1 for supersede target |
 
 ---
 

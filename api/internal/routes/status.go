@@ -134,8 +134,10 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		SyncStatus:  "unknown",
 	}
 
-	// Get last build for this project+env
-	builds, err := h.builds.ListByProject(r.Context(), uc.TenantID, project.ID, 50, 0)
+	// Get last build for this project+env.
+	// Builds use the project NAME (from CLI) as project_id, not the internal UUID.
+	// This is a known inconsistency — builds are keyed by name, projects table by UUID.
+	builds, err := h.builds.ListByProject(r.Context(), uc.TenantID, name, 50, 0)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
@@ -163,8 +165,8 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get active release for this env
-	release, err := h.releases.GetActiveByEnv(r.Context(), uc.TenantID, project.ID, env)
+	// Get active release — uses project name (consistent with build records)
+	release, err := h.releases.GetActiveByEnv(r.Context(), uc.TenantID, name, env)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
