@@ -75,8 +75,10 @@ The following commands are implemented and functional:
 - `loopzero rollback` — revert to a previous release (~3s)
 - `loopzero secret` — manage environment secrets (synced via External Secrets Operator)
 - `loopzero validate` — validate `loopzero.yaml` configuration locally
+- `loopzero status` — show project status (active release, last build, sync status)
+- `loopzero project delete` — remove project and all deployed resources
 
-Additional commands (status, inspect, preview environments) are planned for future sprints.
+Preview environments and inspect are planned for future sprints.
 
 ### Preview Environments (Planned)
 
@@ -230,8 +232,10 @@ Things LoopZero guarantees at the platform level:
 - **Serialization:** No two concurrent operations can mutate the same project/environment. Concurrent deploy attempts return `409` immediately.
 - **Idempotency:** Retrying any operation produces the same result as the first attempt.
 - **Isolation:** A single tenant cannot degrade the platform for others (compute, network, build resources).
-- **Consistency:** A release is only marked active after confirmed sync from the cluster. No silent inconsistencies.
-- **Rollback is always available:** Every successful deploy creates a rollback point. Rollback is one command, always.
+- **Consistency:** A release is only marked active after confirmed sync from the cluster via ArgoCD notification callback. No silent inconsistencies.
+- **Rollback is always available:** Every successful deploy creates a rollback point. `loopzero rollback` reverts in ~3 seconds.
+- **Delete cleans everything:** `loopzero project delete` removes manifests from GitOps, triggers ArgoCD prune, and verifies pods are removed.
+- **Observability:** Prometheus with Alertmanager (API down, deploy failing, latency, crash loop). Build logs via Loki.
 
 ---
 
