@@ -90,6 +90,14 @@ export function validateConfig(
       }
     }
 
+    // MEET-2026-03-29-016: Frontend apps MUST use render: static (zero pods, CDN delivery).
+    if (appType === 'frontend' && app.render !== 'static') {
+      errors.push({
+        field: `apps.${name}.render`,
+        message: `App '${name}': frontend apps must use static delivery. Add 'render: static' to your loopzero.yaml. LoopZero serves frontends from CDN — no server-side rendering.`,
+      });
+    }
+
     // Env key validation
     if (app.env) {
       const envKeyRegex = /^[A-Z_][A-Z0-9_]*$/;
@@ -114,6 +122,24 @@ export function validateConfig(
         }
       }
     }
+  }
+
+  // MEET-2026-03-29-016: Max 1 server + 1 worker per project.
+  // Frontends are always static (zero pods) and don't count toward the limit.
+  const serverApps = Object.entries(config.apps).filter(([, a]) => (a.type ?? 'server') === 'server');
+  const workerApps = Object.entries(config.apps).filter(([, a]) => a.type === 'worker');
+
+  if (serverApps.length > 1) {
+    errors.push({
+      field: 'apps',
+      message: `Project has ${serverApps.length} API services (${serverApps.map(([n]) => n).join(', ')}) but only 1 is allowed. Split into separate projects or consolidate into a single API.`,
+    });
+  }
+  if (workerApps.length > 1) {
+    errors.push({
+      field: 'apps',
+      message: `Project has ${workerApps.length} workers (${workerApps.map(([n]) => n).join(', ')}) but only 1 is allowed. Combine background tasks into a single worker.`,
+    });
   }
 
   return { errors, warnings };

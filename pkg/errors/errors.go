@@ -209,6 +209,22 @@ var (
 		HTTPStatus: 422,
 	}
 
+	// ErrFrontendMustBeStatic is returned when a frontend app doesn't use render: static.
+	// MEET-2026-03-29-016: All frontends are served from CDN, zero pods.
+	ErrFrontendMustBeStatic = &LoopZeroError{
+		Code:       "FRONTEND_MUST_BE_STATIC",
+		Message:    "frontend apps must use static delivery. Add 'render: static' to your loopzero.yaml",
+		HTTPStatus: 422,
+	}
+
+	// ErrPodLimitExceeded is returned when a project has more than 1 server or 1 worker.
+	// MEET-2026-03-29-016: Max 1 API service + 1 background worker per project.
+	ErrPodLimitExceeded = &LoopZeroError{
+		Code:       "POD_LIMIT_EXCEEDED",
+		Message:    "project exceeds the maximum of 1 API service and 1 background worker",
+		HTTPStatus: 422,
+	}
+
 	// ErrMissingField is returned when a required field is missing from the request.
 	ErrMissingField = &LoopZeroError{
 		Code:       "MISSING_FIELD",

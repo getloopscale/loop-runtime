@@ -26,18 +26,42 @@ func TestNormalizeApp_ServerExpress(t *testing.T) {
 	}
 }
 
-func TestNormalizeApp_FrontendNextjs(t *testing.T) {
+func TestNormalizeApp_FrontendNextjsStatic(t *testing.T) {
+	// MEET-2026-03-29-016: Frontend MUST have render: static
 	unit, err := NormalizeApp("web", AppSpec{
-		Path: "apps/web", Framework: "nextjs",
+		Path: "apps/web", Framework: "nextjs", Rendering: "static",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if unit.Type != "frontend" {
-		t.Errorf("Type = %q, want frontend (auto-detected from nextjs)", unit.Type)
+		t.Errorf("Type = %q, want frontend", unit.Type)
 	}
-	if unit.Build != "buildpack" {
-		t.Errorf("Build = %q, want buildpack", unit.Build)
+	if unit.Rendering != "static" {
+		t.Errorf("Rendering = %q, want static", unit.Rendering)
+	}
+}
+
+func TestNormalizeApp_FrontendWithoutStaticRejected(t *testing.T) {
+	// MEET-2026-03-29-016: Frontend without render: static must be rejected
+	_, err := NormalizeApp("web", AppSpec{
+		Path: "apps/web", Framework: "nextjs",
+	})
+	if err == nil {
+		t.Fatal("expected error for frontend without render: static")
+	}
+}
+
+func TestNormalizeApp_RemixIsServer(t *testing.T) {
+	// MEET-2026-03-29-016: Remix is SSR-first, classified as server
+	unit, err := NormalizeApp("web", AppSpec{
+		Path: "apps/web", Framework: "remix", Port: 3000,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if unit.Type != "server" {
+		t.Errorf("Type = %q, want server (remix is SSR-first)", unit.Type)
 	}
 }
 
