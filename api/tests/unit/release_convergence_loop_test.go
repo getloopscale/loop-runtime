@@ -107,6 +107,20 @@ func (f *fakeConvergenceEventStore) Append(_ context.Context, _ string, eventTyp
 	return 1, nil
 }
 
+// fakeTerminatingSyncClient extends fakeConvergenceSyncClient with TerminateOperation.
+// Used to verify the convergence loop calls TerminateOperation on timeout (MEET-2026-03-29-019).
+type fakeTerminatingSyncClient struct {
+	fakeConvergenceSyncClient
+	terminateCalls int
+	terminatedApp  string
+}
+
+func (f *fakeTerminatingSyncClient) TerminateOperation(_ context.Context, appName string) error {
+	f.terminateCalls++
+	f.terminatedApp = appName
+	return nil
+}
+
 type fakeConvergenceLocker struct{}
 
 func (f *fakeConvergenceLocker) WithLock(_ context.Context, _, _, _ string, fn func(tx db.DBTX) error) error {
@@ -240,6 +254,52 @@ func TestReleaseConvergenceLoop_SkipsWhenNotReady(t *testing.T) {
 	}
 	if len(eventStore.events) != 0 {
 		t.Errorf("expected no events (still waiting), got %v", eventStore.events)
+	}
+}
+
+func TestReleaseConvergenceLoop_TerminatesStuckOperationOnTimeout(t *testing.T) {
+	// MEET-2026-03-29-019: When a release times out, the convergence loop
+	// must call TerminateOperation to clear the stuck ArgoCD sync.
+	// Without this, the stuck operation persists and blocks ALL future syncs.
+	releaseStore := newFakeConvergenceReleaseStore()
+	releaseStore.pending = []db.Release{{
+		ID: "rel-stuck", BuildID: "build-stuck",
+		TenantID: "acme", ProjectID: "my-app", Environment: "production",
+		Status: "PENDING", CreatedAt: time.Now().Add(-10 * time.Minute),
+	}}
+	releaseStore.statuses["rel-stuck"] = "PENDING"
+
+	// Sync client that also implements TerminateOperation
+	terminatingSyncClient := &fakeTerminatingSyncClient{
+		fakeConvergenceSyncClient: fakeConvergenceSyncClient{synced: false, healthy: false},
+	}
+	eventStore := &fakeConvergenceEventStore{}
+	locker := &fakeConvergenceLocker{}
+	envTargetStore := &fakeConvergenceEnvTargetStore{}
+
+	loop := services.NewReleaseConvergenceLoop(
+		releaseStore, envTargetStore, terminatingSyncClient, locker, eventStore,
+		testLogger, services.ReleaseConvergenceLoopConfig{
+			Interval: 100 * time.Millisecond, SyncTimeout: 1 * time.Second, MaxConcurrent: 2,
+		},
+	)
+
+	// Act
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	go loop.Start(ctx)
+	time.Sleep(300 * time.Millisecond)
+
+	// Assert: TerminateOperation was called
+	if terminatingSyncClient.terminateCalls == 0 {
+		t.Error("expected TerminateOperation to be called on timeout")
+	}
+	if terminatingSyncClient.terminatedApp != "acme-production" {
+		t.Errorf("expected TerminateOperation for 'acme-production', got %q", terminatingSyncClient.terminatedApp)
+	}
+	// Release should be SYNC_FAILED
+	if releaseStore.statuses["rel-stuck"] != "SYNC_FAILED" {
+		t.Errorf("expected release SYNC_FAILED, got %q", releaseStore.statuses["rel-stuck"])
 	}
 }
 

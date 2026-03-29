@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Cloudflare API token secret created on ALL clusters with cert-manager, not just mgmt — fixes TLS certificate issuance on runtime cluster (#F-04)
 
 ### Added
+- Orphan resource protection Phase 1: ArgoCD `controller.operation.processing.timeout: 300`, `SyncClient.TerminateOperation()`, `ErrSyncOperationInProgress` typed error, circuit breaker 409 exclusion, `triggerSyncWithRetry` terminates stuck ops, convergence loop terminates on timeout (#MEET-019)
 - Meeting record MEET-2026-03-27-012: ArgoCD deploy reliability architecture decision (#MEET-012)
 - Dogfood fix roadmap: 12 tasks across 4 sprints to resolve all findings from 2026-03-27 audit (#DF-ROADMAP)
 - `ProjectDeleter` now cancels running Argo Workflows during project deletion via `WorkflowCanceller` (#DF-2.1)

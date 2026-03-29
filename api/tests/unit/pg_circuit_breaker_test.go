@@ -320,6 +320,32 @@ func TestCircuitBreaker_GetSyncRevision_DelegatesToInner(t *testing.T) {
 	}
 }
 
+func TestCircuitBreaker_SyncOperationInProgress_DoesNotOpenCircuit(t *testing.T) {
+	// 409 "operation in progress" MUST NOT count toward circuit breaker threshold (MEET-2026-03-29-019).
+	// A single stuck ArgoCD Application should not trip the circuit for the entire platform.
+	inner := &fakeInnerSync{triggerErr: loopzeroerrors.ErrSyncOperationInProgress}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	// Send 10 x 409 — well above the open threshold (3)
+	for i := 0; i < 10; i++ {
+		err := cb.TriggerSync(context.Background(), "my-app")
+		if !errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
+			t.Fatalf("iteration %d: expected ErrSyncOperationInProgress, got %v", i, err)
+		}
+	}
+
+	// Circuit should still be CLOSED — 409 errors are excluded
+	inner.triggerErr = nil
+	inner.triggerCalls = 0
+	err := cb.TriggerSync(context.Background(), "my-app")
+	if err != nil {
+		t.Fatalf("expected success after 409 errors (circuit should be closed), got %v", err)
+	}
+	if inner.triggerCalls != 1 {
+		t.Errorf("expected inner to be called (circuit closed), got %d calls", inner.triggerCalls)
+	}
+}
+
 func TestCircuitBreaker_ImplementsSyncClient(t *testing.T) {
 	// Compile-time check
 	var _ services.SyncClient = (*services.CircuitBreakerSyncClient)(nil)
