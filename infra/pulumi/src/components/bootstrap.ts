@@ -118,7 +118,7 @@ function bootstrapMgmtCluster(
   const gitea = installGitea(provider, ns, infra, config);
 
   // MinIO — S3-compatible artifact storage (source bundles, build cache)
-  const minio = installMinIO(provider, ns);
+  const minio = installMinIO(provider, ns, config);
 
   // MinIO credentials — needed by API for source bundle upload/download
   new k8s.core.v1.Secret(
@@ -659,7 +659,7 @@ function installGitea(
         gitea: {
           admin: {
             username: "gitea_admin",
-            password: GITEA_ADMIN_PASSWORD,
+            password: config.giteaAdminPassword ?? GITEA_ADMIN_PASSWORD_DEFAULT,
             email: "admin@loopzero.internal",
           },
           config: {
@@ -1078,6 +1078,7 @@ function bootstrapBuildCluster(
 function installMinIO(
   provider: k8s.Provider,
   ns: k8s.core.v1.Namespace,
+  config: PlatformStackConfig,
 ): k8s.helm.v3.Release {
   return new k8s.helm.v3.Release(
     "minio",
@@ -1094,9 +1095,8 @@ function installMinIO(
         fullnameOverride: "minio",
         mode: "standalone",
         rootUser: "loopzero-admin",
-        // Stable password — Date.now() caused rolling updates on every pulumi up.
-        // For production, use pulumi.secret() or external secret manager.
-        rootPassword: "loopzero-minio-dev-2026",
+        // Production overrides via: pulumi config set --secret minioRootPassword <password>
+        rootPassword: config.minioRootPassword ?? "loopzero-minio-dev-2026",
         persistence: {
           enabled: true,
           size: "10Gi",
@@ -1133,11 +1133,10 @@ function installMinIO(
 const REGISTRY = "registry.digitalocean.com/loopzero-infra-registry";
 
 /**
- * Stable Gitea admin password — used for basic auth to generate API tokens.
- * The Gitea Helm chart creates the admin user with this password.
- * For production, use pulumi.secret() or external secret manager.
+ * Gitea admin password default — only for dev environments.
+ * Production MUST override via: pulumi config set --secret giteaAdminPassword <password>
  */
-const GITEA_ADMIN_PASSWORD = "loopzero-gitea-dev-2026";
+const GITEA_ADMIN_PASSWORD_DEFAULT = "loopzero-gitea-dev-2026";
 
 /**
  * Gitea bootstrap — creates admin token, orgs, and stores credentials in K8s Secret.
@@ -1239,12 +1238,20 @@ function bootstrapGitea(
               {
                 name: "bootstrap",
                 image: "bitnami/kubectl:latest",
+                env: [
+                  {
+                    name: "GITEA_ADMIN_PASS_ENV",
+                    value: config.giteaAdminPassword
+                      ? pulumi.interpolate`${config.giteaAdminPassword}`
+                      : GITEA_ADMIN_PASSWORD_DEFAULT,
+                  },
+                ],
                 command: ["bash", "-c"],
                 args: [
                   `set -e
 GITEA_URL="http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000"
 GITEA_USER="gitea_admin"
-GITEA_PASS="${GITEA_ADMIN_PASSWORD}"
+GITEA_PASS="\${GITEA_ADMIN_PASS_ENV}"
 NS="${PLATFORM_NAMESPACE}"
 
 echo "=== Step 1: Wait for Gitea to be ready ==="
