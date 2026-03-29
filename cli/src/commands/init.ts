@@ -58,7 +58,9 @@ interface DetectedInfo {
 }
 
 // Frameworks that are frontends — they serve static assets, not APIs
-const FRONTEND_FRAMEWORKS = ['nextjs', 'vite', 'remix'];
+// MEET-2026-03-29-016: Frontends are ALWAYS static delivery (zero pods).
+// Remix is SSR-first — classified as server, not frontend.
+const FRONTEND_FRAMEWORKS = ['nextjs', 'vite', 'react', 'vue', 'svelte', 'astro', 'angular'];
 
 // Well-known directory names for shared packages (not deployable)
 const PACKAGE_DIR_PATTERNS = ['packages/', 'libs/', 'shared/', 'common/', 'config/'];
@@ -395,6 +397,10 @@ export class InitCommand {
       // v2: Always include build strategy
       const build = (app.framework === 'custom' || app.framework === 'unknown') ? 'dockerfile' : 'buildpack';
       lines.push(`    build: ${build}`);
+      // MEET-2026-03-29-016: Frontends are ALWAYS static delivery (zero pods, served from CDN).
+      if (appType === 'frontend') {
+        lines.push('    render: static');
+      }
       if (appType === 'server' && app.port !== null) {
         lines.push(`    port: ${app.port}`);
       }

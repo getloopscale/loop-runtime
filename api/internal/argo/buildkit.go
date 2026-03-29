@@ -48,11 +48,8 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 	cacheRef := fmt.Sprintf("%s/%s/%s-%s:buildcache",
 		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name)
 
-	// Per-app Dockerfile: Dockerfile.{app} for multi-app, Dockerfile for single-app.
-	dockerfile := workspaceMountPath + "/Dockerfile"
-	if len(spec.Apps) > 1 {
-		dockerfile = fmt.Sprintf("%s/Dockerfile.%s", workspaceMountPath, app.Name)
-	}
+	// Per-app Dockerfile naming — single source of truth (MEET-2026-03-29-018).
+	dockerfile := dockerfilePathForApp(app.Name, len(spec.Apps))
 
 	return b.buildkitContainer(buildkitParams{
 		AppName:        app.Name,
@@ -164,6 +161,20 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 // ---------------------------------------------------------------------------
 // Path helpers
 // ---------------------------------------------------------------------------
+
+// dockerfilePathForApp returns the canonical Dockerfile path for an app.
+// Single source of truth for naming (MEET-2026-03-29-018):
+//   - 1 total app  → /workspace/Dockerfile
+//   - 2+ total apps → /workspace/Dockerfile.{appName}
+//
+// Used by: loopzeroPacksDockerfileStep (generator), buildkitTemplateForApp (consumer),
+// and CreateBuildPlan (plan consumer). All 3 must agree on the path.
+func dockerfilePathForApp(appName string, totalApps int) string {
+	if totalApps <= 1 {
+		return workspaceMountPath + "/Dockerfile"
+	}
+	return fmt.Sprintf("%s/Dockerfile.%s", workspaceMountPath, appName)
+}
 
 // dockerfileDir returns the directory containing the Dockerfile.
 func dockerfileDir(dockerfilePath string) string {

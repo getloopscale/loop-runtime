@@ -30,8 +30,6 @@ type LanguageStrategy interface {
 	BuildStep(apps []services.AppSpec) *forge.Container
 	// ScanStep returns a template that runs security scanning.
 	ScanStep() *forge.Container
-	// DockerfileStep returns a template that generates a Dockerfile if missing.
-	DockerfileStep(apps []services.AppSpec) *forge.Container
 	// CacheKey returns the cache key suffix for this language (e.g., "node-modules").
 	CacheKey() string
 	// CacheDirs returns directories to cache (e.g., ["node_modules"]).
@@ -94,9 +92,8 @@ func (s *NodeStrategy) ScanStep() *forge.Container {
 	return buildContainer("security-scan", imageNode, resourcesSmall(), scriptScanNode())
 }
 
-func (s *NodeStrategy) DockerfileStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("generate-dockerfile", imageNode, resourcesSmall(), scriptDockerfileNode(apps))
-}
+// DockerfileStep removed (MEET-2026-03-29-017) — replaced by universal
+// loopzeroPacksDockerfileStep() using loopzero-packs-runner container image.
 
 // ---------------------------------------------------------------------------
 // GoStrategy — Go ecosystem
@@ -129,9 +126,7 @@ func (s *GoStrategy) ScanStep() *forge.Container {
 	return buildContainer("security-scan", imageGolang, resourcesSmall(), scriptScanGo())
 }
 
-func (s *GoStrategy) DockerfileStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("generate-dockerfile", imageGolang, resourcesSmall(), scriptDockerfileGo(apps))
-}
+// DockerfileStep removed — uses universal loopzeroPacksDockerfileStep().
 
 // ---------------------------------------------------------------------------
 // PythonStrategy — Python ecosystem
@@ -167,9 +162,7 @@ func (s *PythonStrategy) ScanStep() *forge.Container {
 	return buildContainer("security-scan", imagePython, resourcesSmall(), scriptScanPython())
 }
 
-func (s *PythonStrategy) DockerfileStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("generate-dockerfile", imagePython, resourcesSmall(), scriptDockerfilePython(apps))
-}
+// DockerfileStep removed — uses universal loopzeroPacksDockerfileStep().
 
 // ---------------------------------------------------------------------------
 // CustomStrategy — user provides their own Dockerfile
@@ -200,8 +193,39 @@ func (s *CustomStrategy) ScanStep() *forge.Container {
 	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("No security scan for custom framework"))
 }
 
-func (s *CustomStrategy) DockerfileStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("generate-dockerfile", imageAlpine, resourcesTiny(), scriptValidateCustom())
+// CustomStrategy still validates Dockerfile exists (no loopzero-packs needed).
+// The DockerfileStep is only called from the universal step which skips
+// generation when a user-provided Dockerfile exists.
+
+// ---------------------------------------------------------------------------
+// Universal Dockerfile generation via loopzero-packs (MEET-2026-03-29-017)
+// ---------------------------------------------------------------------------
+
+// loopzeroPacksDockerfileStep returns a container template that runs the
+// loopzero-packs-runner image to analyze source code and generate an optimized
+// Dockerfile. This replaces all per-language DockerfileStep implementations.
+//
+// For each app, it runs: loopzeropacks-generate --source /workspace --app-path <path>
+//   --app-name <name> --output /workspace/Dockerfile.<name>
+//
+// If a user-provided Dockerfile exists, loopzeropacks-generate skips generation.
+// loopzeroPacksDockerfileStep generates Dockerfiles for apps in a language group.
+// totalApps is the count across ALL groups (for consistent naming with BuildKit consumer).
+func loopzeroPacksDockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
+	script := "set -e\n"
+	for _, app := range apps {
+		appPath := app.Path
+		if appPath == "" {
+			appPath = "."
+		}
+		// Use shared naming function (MEET-2026-03-29-018).
+		output := dockerfilePathForApp(app.Name, totalApps)
+		script += fmt.Sprintf(
+			"loopzeropacks-generate --source %s --app-path %s --app-name %s --output %s\n",
+			workspaceMountPath, appPath, app.Name, output,
+		)
+	}
+	return buildContainer("generate-dockerfile", imageLoopZeroPacks, resourcesSmall(), script)
 }
 
 // ---------------------------------------------------------------------------

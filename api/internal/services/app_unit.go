@@ -21,9 +21,10 @@ type AppUnit struct {
 	Secrets    []string          `json:"secrets,omitempty"`
 }
 
+// MEET-2026-03-29-016: Remix removed — SSR-first framework, classified as server.
 var frontendFrameworks = map[string]bool{
-	"nextjs": true, "vite": true, "remix": true,
-	"react": true, "vue": true, "svelte": true, "astro": true,
+	"nextjs": true, "vite": true,
+	"react": true, "vue": true, "svelte": true, "astro": true, "angular": true,
 }
 
 // NormalizeApp resolves a raw AppSpec into a fully populated AppUnit.
@@ -95,15 +96,19 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		secrets = []string{}
 	}
 
-	// Resolve rendering mode (MEET-2026-03-26-009)
-	// Explicit value from AppSpec takes precedence. Default: "server" (backward compat).
+	// Resolve rendering mode (MEET-2026-03-26-009, MEET-2026-03-29-016).
 	rendering := raw.Rendering
 	if rendering != "static" && rendering != "server" {
 		rendering = "server"
 	}
-	// Non-frontend types are always "server"
+	// Non-frontend types are always "server" (container delivery).
 	if appType != "frontend" {
 		rendering = "server"
+	}
+	// MEET-2026-03-29-016: Frontend apps MUST use static delivery (zero pods, CDN).
+	// No server-rendered frontends allowed. This is the authoritative enforcement point.
+	if appType == "frontend" && rendering != "static" {
+		return AppUnit{}, fmt.Errorf("app '%s': frontend apps must use static delivery (render: static). LoopZero serves frontends from CDN — server-side rendering is not supported. Add 'render: static' to your loopzero.yaml", name)
 	}
 
 	return AppUnit{

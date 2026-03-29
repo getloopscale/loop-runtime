@@ -15,6 +15,11 @@ const (
 	imageAlpine   = "alpine:3.19.1"
 	imageBuildKit = "moby/buildkit:v0.18.2-rootless"
 	imageAWSCLI   = "amazon/aws-cli:2.22.35"
+
+	// loopzero-packs-runner generates optimized Dockerfiles by analyzing source code.
+	// Replaces hardcoded bash Dockerfile templates (MEET-2026-03-29-017).
+	// Built from: getloopscale/loopzero-packs Dockerfile.generate
+	imageLoopZeroPacks = "registry.digitalocean.com/loopzero-infra-registry/loopzero-packs-runner:latest"
 )
 
 // ---------------------------------------------------------------------------

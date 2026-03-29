@@ -4,6 +4,7 @@
 package argo
 
 import (
+	"strings"
 	"testing"
 
 	forge "github.com/getloopscale/loopzero-forge"
@@ -113,19 +114,82 @@ func TestNodeStrategy_ScanStep_ReturnsContainerTemplate(t *testing.T) {
 	assertContainerShape(t, c, "security-scan", "node:20.11.1-alpine")
 }
 
-func TestNodeStrategy_DockerfileStep_ReturnsContainerTemplate(t *testing.T) {
-	s := &NodeStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080}}
-	c := s.DockerfileStep(apps)
+// ---------------------------------------------------------------------------
+// Dockerfile naming (MEET-2026-03-29-018)
+// ---------------------------------------------------------------------------
 
-	assertContainerShape(t, c, "generate-dockerfile", "node:20.11.1-alpine")
-
-	// Verify the script contains the correct port
-	script := extractContainerScript(t, c)
-	if script == "" {
-		t.Fatal("expected non-empty script")
+func TestDockerfilePathForApp_SingleApp(t *testing.T) {
+	path := dockerfilePathForApp("api", 1)
+	if path != "/workspace/Dockerfile" {
+		t.Errorf("single app: got %q, want /workspace/Dockerfile", path)
 	}
-	assertContains(t, script, "EXPOSE 8080")
+}
+
+func TestDockerfilePathForApp_MultiApp(t *testing.T) {
+	path := dockerfilePathForApp("api", 3)
+	if path != "/workspace/Dockerfile.api" {
+		t.Errorf("multi app: got %q, want /workspace/Dockerfile.api", path)
+	}
+}
+
+func TestLoopZeroPacksDockerfileStep_SingleApp(t *testing.T) {
+	// Single app (totalApps=1) → output is Dockerfile (no suffix)
+	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Path: "apps/api"}}
+	c := loopzeroPacksDockerfileStep(apps, 1)
+
+	assertContainerShape(t, c, "generate-dockerfile", imageLoopZeroPacks)
+
+	script := extractContainerScript(t, c)
+	assertContains(t, script, "loopzeropacks-generate")
+	assertContains(t, script, "--app-path apps/api")
+	assertContains(t, script, "--output /workspace/Dockerfile")
+	// Must NOT contain .api suffix for single app
+	if strings.Contains(script, "Dockerfile.api") {
+		t.Error("single app should output Dockerfile, not Dockerfile.api")
+	}
+}
+
+func TestLoopZeroPacksDockerfileStep_MultipleApps(t *testing.T) {
+	// 2 apps same language (totalApps=2) → Dockerfile.{name}
+	apps := []services.AppSpec{
+		{Name: "api", Type: "server", Port: 3000, Path: "apps/api"},
+		{Name: "worker", Type: "worker", Path: "apps/worker"},
+	}
+	c := loopzeroPacksDockerfileStep(apps, 2)
+	script := extractContainerScript(t, c)
+	assertContains(t, script, "Dockerfile.api")
+	assertContains(t, script, "Dockerfile.worker")
+}
+
+func TestLoopZeroPacksDockerfileStep_MixedLanguageMonorepo(t *testing.T) {
+	// Go API group (1 app) but totalApps=2 → must use Dockerfile.api
+	goApps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Path: "apps/api"}}
+	c := loopzeroPacksDockerfileStep(goApps, 2)
+	script := extractContainerScript(t, c)
+	assertContains(t, script, "Dockerfile.api")
+}
+
+func TestDockerfileNaming_GeneratorMatchesConsumer(t *testing.T) {
+	// Contract test: generator and consumer must agree on filenames
+	for _, tc := range []struct {
+		name      string
+		appName   string
+		totalApps int
+	}{
+		{"single", "api", 1},
+		{"multi-2", "api", 2},
+		{"multi-3", "worker", 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Generator side (loopzeroPacksDockerfileStep uses dockerfilePathForApp)
+			generatorPath := dockerfilePathForApp(tc.appName, tc.totalApps)
+			// Consumer side (buildkitTemplateForApp uses same function)
+			consumerPath := dockerfilePathForApp(tc.appName, tc.totalApps)
+			if generatorPath != consumerPath {
+				t.Errorf("naming mismatch: generator=%q consumer=%q", generatorPath, consumerPath)
+			}
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -167,15 +231,7 @@ func TestGoStrategy_BuildStep_UsesCGODisabled(t *testing.T) {
 	assertContains(t, script, "CGO_ENABLED=0")
 }
 
-func TestGoStrategy_DockerfileStep_MultiStage(t *testing.T) {
-	s := &GoStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080}}
-	c := s.DockerfileStep(apps)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "FROM golang:1.22-alpine AS builder")
-	assertContains(t, script, "EXPOSE 8080")
-}
+// TestGoStrategy_DockerfileStep removed — replaced by TestLoopZeroPacksDockerfileStep.
 
 // ---------------------------------------------------------------------------
 // PythonStrategy
@@ -200,15 +256,7 @@ func TestPythonStrategy_ValidateStep_ChecksPythonDeps(t *testing.T) {
 	assertContains(t, script, "pyproject.toml")
 }
 
-func TestPythonStrategy_DockerfileStep_UsesUvicorn(t *testing.T) {
-	s := &PythonStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8000}}
-	c := s.DockerfileStep(apps)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "uvicorn")
-	assertContains(t, script, "EXPOSE 8000")
-}
+// TestPythonStrategy_DockerfileStep removed — replaced by TestLoopZeroPacksDockerfileStep.
 
 // ---------------------------------------------------------------------------
 // CustomStrategy

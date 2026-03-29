@@ -54,8 +54,8 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 			// User-provided Dockerfile: relative to app path
 			dockerfilePath = path.Join("/workspace", unit.Path, unit.Dockerfile)
 		} else {
-			// Buildpack-generated: the generate-dockerfile step creates it
-			// For multi-app, it's Dockerfile.{appName}; for single-app, Dockerfile
+			// Buildpack-generated: the generate-dockerfile step creates it.
+			// Naming convention must match argo.dockerfilePathForApp() (MEET-2026-03-29-018).
 			if len(units) > 1 {
 				dockerfilePath = fmt.Sprintf("/workspace/Dockerfile.%s", unit.Name)
 			} else {
