@@ -2096,9 +2096,67 @@ function installPrometheus(
       createNamespace: false,
       values: {
         fullnameOverride: "prometheus",
-        // Disable components not needed for platform monitoring
-        alertmanager: { enabled: false },
+        // Alertmanager — receives alerts from Prometheus, routes to webhooks.
+        alertmanager: {
+          enabled: true,
+          resources: {
+            requests: { cpu: "50m", memory: "64Mi" },
+            limits: { cpu: "100m", memory: "128Mi" },
+          },
+        },
         "prometheus-pushgateway": { enabled: false },
+        // Alerting rules — critical SLOs for production monitoring.
+        serverFiles: {
+          "alerting_rules.yml": {
+            groups: [
+              {
+                name: "loopzero-platform",
+                rules: [
+                  {
+                    alert: "LoopZeroAPIDown",
+                    expr: 'up{job="loopzero-api"} == 0',
+                    for: "1m",
+                    labels: { severity: "critical" },
+                    annotations: {
+                      summary: "LoopZero API is down",
+                      description: "LoopZero API has been unreachable for more than 1 minute.",
+                    },
+                  },
+                  {
+                    alert: "LoopZeroDeployFailing",
+                    expr: 'increase(loopzero_api_request_duration_seconds_count{path="/api/v1/builds",status=~"5.."}[10m]) > 3',
+                    for: "2m",
+                    labels: { severity: "warning" },
+                    annotations: {
+                      summary: "Multiple deploy failures",
+                      description: "More than 3 build/deploy failures in the last 10 minutes.",
+                    },
+                  },
+                  {
+                    alert: "LoopZeroHighAPILatency",
+                    expr: 'histogram_quantile(0.95, rate(loopzero_api_request_duration_seconds_bucket{path!~"/api/v1/health.*|/api/v1/builds/.*/stream"}[5m])) > 2',
+                    for: "5m",
+                    labels: { severity: "warning" },
+                    annotations: {
+                      summary: "High API latency (P95 > 2s)",
+                      description: "API P95 latency exceeds 2 seconds for 5 minutes.",
+                    },
+                  },
+                  {
+                    alert: "LoopZeroPodCrashLooping",
+                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopzero-.*|platform-system"}[15m]) > 0',
+                    for: "5m",
+                    labels: { severity: "warning" },
+                    annotations: {
+                      summary: "Pod crash-looping in LoopZero namespace",
+                      description: "{{ $labels.namespace }}/{{ $labels.pod }} is restarting frequently.",
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
         // Server — central metrics store
         server: {
           retention: "15d",
