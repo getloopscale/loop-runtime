@@ -19,6 +19,12 @@ type WorkflowCanceller interface {
 	Cancel(ctx context.Context, namespace, workflowID string) error
 }
 
+// ArgoSyncer triggers ArgoCD sync for an application.
+// Used by ProjectDeleter to trigger prune after gitops manifest removal.
+type ArgoSyncer interface {
+	TriggerSync(ctx context.Context, appName string) error
+}
+
 // ProjectDeleterDeps holds all dependencies for ProjectDeleter.
 type ProjectDeleterDeps struct {
 	BuildStore        db.BuildStore
@@ -27,6 +33,7 @@ type ProjectDeleterDeps struct {
 	Locker            EnvironmentLocker
 	GitOps            GitOpsPusher
 	WorkflowCanceller WorkflowCanceller // nil-safe: skips workflow cancel if not set
+	Sync              ArgoSyncer        // nil-safe: skips ArgoCD sync trigger if not set
 }
 
 // ProjectDeleteProjectStore defines the project store operations needed by ProjectDeleter.
@@ -43,6 +50,7 @@ type ProjectDeleter struct {
 	locker            EnvironmentLocker
 	gitops            GitOpsPusher
 	workflowCanceller WorkflowCanceller
+	sync              ArgoSyncer
 }
 
 // NewProjectDeleter creates a new ProjectDeleter with all dependencies injected.
@@ -54,6 +62,7 @@ func NewProjectDeleter(deps ProjectDeleterDeps) *ProjectDeleter {
 		locker:            deps.Locker,
 		gitops:            deps.GitOps,
 		workflowCanceller: deps.WorkflowCanceller,
+		sync:              deps.Sync,
 	}
 }
 
@@ -185,6 +194,19 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.Proje
 	if gitErr != nil {
 		slog.Error("gitops remove failed (DB already cleaned, manual cleanup may be needed)",
 			"project_id", req.ProjectID, "project_name", req.ProjectName, "environment", env, "error", gitErr)
+	} else if d.sync != nil {
+		// Trigger ArgoCD sync with prune to remove K8s resources after gitops manifests
+		// were deleted. Without this, manual-sync ArgoCD won't detect the removal.
+		argoAppName := req.TenantID + "-" + env
+		syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer syncCancel()
+		if syncErr := d.sync.TriggerSync(syncCtx, argoAppName); syncErr != nil {
+			slog.Warn("argocd sync after delete failed (resources may remain until next manual sync)",
+				"app", argoAppName, "error", syncErr)
+		} else {
+			slog.Info("argocd sync triggered after gitops remove",
+				"app", argoAppName, "project", req.ProjectName, "environment", env)
+		}
 	}
 
 	return cancelledBuilds, nil

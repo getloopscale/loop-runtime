@@ -304,6 +304,7 @@ func main() {
 			Locker:            locker,
 			GitOps:            gitopsPusher,
 			WorkflowCanceller: workflowSubmitter,
+			Sync:              syncClient,
 		})
 
 		// C-01/C-03 fix: BuildReconcileLoop replaces both the HTTP callback
