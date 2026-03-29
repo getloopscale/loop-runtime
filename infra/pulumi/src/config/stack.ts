@@ -54,6 +54,12 @@ export interface PlatformStackConfig {
   /** Cloudflare Zone ID for the DNS zone (dnsZone). Required when NS is Cloudflare. */
   readonly cfZoneId?: string;
 
+  // Service passwords — override defaults for production.
+  // When not set, falls back to dev defaults from Helm values (only acceptable in dev).
+  // Set via: pulumi config set --secret giteaAdminPassword <password>
+  readonly giteaAdminPassword?: pulumi.Output<string>;
+  readonly minioRootPassword?: pulumi.Output<string>;
+
 }
 
 /**
@@ -108,5 +114,10 @@ export function loadStackConfig(): PlatformStackConfig {
     cfAccountId: config.get("cfAccountId") ?? undefined,
     cfKvNamespaceId: config.get("cfKvNamespaceId") ?? undefined,
     cfZoneId: config.get("cfZoneId") ?? undefined,
+
+    // Service passwords — optional, override Helm defaults for production.
+    // Dev uses defaults from values.yaml; prod MUST set these via --secret.
+    giteaAdminPassword: config.getSecret("giteaAdminPassword") ?? undefined,
+    minioRootPassword: config.getSecret("minioRootPassword") ?? undefined,
   };
 }
