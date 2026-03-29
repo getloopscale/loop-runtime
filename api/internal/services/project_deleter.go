@@ -108,9 +108,13 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInp
 				"project_id", req.ProjectID, "tenant_id", req.TenantID, "correlation_id", req.CorrelationID)
 			removeCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 			defer cancel()
+			gitopsID := req.ProjectName
+			if gitopsID == "" {
+				gitopsID = req.ProjectID
+			}
 			_, gitErr := d.gitops.Remove(removeCtx, GitOpsRemoveOpts{
 				TenantID:      req.TenantID,
-				ProjectID:     req.ProjectID,
+				ProjectID:     gitopsID,
 				Environment:   "production",
 				CorrelationID: req.CorrelationID,
 			})
@@ -165,15 +169,22 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.Proje
 	removeCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
+	// Use ProjectName for gitops path — the CLI sends the project name from
+	// loopzero.yaml as project_id in the build request, so the gitops repo path is
+	// {environment}/{projectName}/manifests.yaml (not {environment}/{projectID}/).
+	gitopsProjectID := req.ProjectName
+	if gitopsProjectID == "" {
+		gitopsProjectID = req.ProjectID // fallback if name not available
+	}
 	_, gitErr := d.gitops.Remove(removeCtx, GitOpsRemoveOpts{
 		TenantID:      req.TenantID,
-		ProjectID:     req.ProjectID,
+		ProjectID:     gitopsProjectID,
 		Environment:   env,
 		CorrelationID: req.CorrelationID,
 	})
 	if gitErr != nil {
 		slog.Error("gitops remove failed (DB already cleaned, manual cleanup may be needed)",
-			"project_id", req.ProjectID, "environment", env, "error", gitErr)
+			"project_id", req.ProjectID, "project_name", req.ProjectName, "environment", env, "error", gitErr)
 	}
 
 	return cancelledBuilds, nil
