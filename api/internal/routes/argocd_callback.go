@@ -4,6 +4,7 @@
 package routes
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -50,9 +51,10 @@ func NewArgoCallbackHandler(activator ReleaseActivator, logger *slog.Logger, sec
 // SEC-004: Validates shared secret when configured.
 func (h *ArgoCallbackHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	// SEC-004: Validate callback secret when configured.
+	// B3: Use constant-time comparison to prevent timing attacks on secret values.
 	if h.secret != "" {
 		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != h.secret {
+		if !strings.HasPrefix(auth, "Bearer ") || subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(auth, "Bearer ")), []byte(h.secret)) != 1 {
 			h.logger.Warn("argocd callback: unauthorized request")
 			w.WriteHeader(http.StatusUnauthorized)
 			return

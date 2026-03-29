@@ -12,6 +12,7 @@ package routes
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -68,10 +69,11 @@ func NewBootstrapHandler(store BootstrapStore, secret string) *BootstrapHandler 
 // cluster could create admin tenants.
 func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	// SEC-003: Validate bootstrap secret when configured.
+	// B3: Use constant-time comparison to prevent timing attacks on secret values.
 	if h.secret != "" {
 		auth := r.Header.Get("Authorization")
 		expected := "Bearer " + h.secret
-		if auth != expected {
+		if subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
 			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 				Code:       "UNAUTHORIZED",
 				Message:    "Invalid or missing bootstrap secret",

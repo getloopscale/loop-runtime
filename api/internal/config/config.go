@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -27,6 +28,8 @@ type Config struct {
 	IdleTimeout          time.Duration
 	GracefulShutdownTime time.Duration
 
+	// Database
+	DatabaseURL string // DATABASE_URL — validated for sslmode in production
 	// Database Pool
 	DBMaxConns         int32
 	DBMinConns         int32
@@ -136,6 +139,8 @@ func Load() Config {
 		IdleTimeout:          envDuration("SERVER_IDLE_TIMEOUT", 120*time.Second),
 		GracefulShutdownTime: envDuration("SERVER_GRACEFUL_SHUTDOWN", 15*time.Second),
 
+		// Database
+		DatabaseURL: os.Getenv("DATABASE_URL"),
 		// Database Pool
 		DBMaxConns:         int32(envInt("DB_MAX_CONNS", 25)),
 		DBMinConns:         int32(envInt("DB_MIN_CONNS", 5)),
@@ -233,7 +238,8 @@ func Load() Config {
 // security violations in production that must not be ignored.
 // Called after Load() to surface non-production configuration (C-03).
 func (c Config) Validate() error {
-	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" {
+	// Dev credential warnings (production check is done below as fatal)
+	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" && !c.IsProduction() {
 		slog.Warn("using default callback secret — only acceptable for local development")
 	}
 	// SEC-001: Warn if secret encryption is disabled.
@@ -251,11 +257,23 @@ func (c Config) Validate() error {
 	if c.RegistryInsecure && c.IsProduction() {
 		return fmt.Errorf("REGISTRY_INSECURE=true is forbidden in production — registry TLS verification must be enabled")
 	}
+	// H4: Default dev credentials in production are a fatal error, not just a warning.
+	// Without this, production deployments silently use "loopzero-admin/loopzero-dev-password".
 	if c.MinIOAccessKey == "loopzero-admin" && c.IsProduction() {
-		slog.Error("MINIO_ACCESS_KEY using default dev credentials in production — override via MINIO_ACCESS_KEY env var")
+		return fmt.Errorf("MINIO_ACCESS_KEY using default dev credentials in production — override via MINIO_ACCESS_KEY env var")
 	}
 	if c.MinIOSecretKey == "loopzero-dev-password" && c.IsProduction() {
-		slog.Error("MINIO_SECRET_KEY using default dev credentials in production — override via MINIO_SECRET_KEY env var")
+		return fmt.Errorf("MINIO_SECRET_KEY using default dev credentials in production — override via MINIO_SECRET_KEY env var")
+	}
+	if c.BootstrapSecret == "loopzero-dev-bootstrap-secret" && c.IsProduction() {
+		return fmt.Errorf("LOOPZERO_BOOTSTRAP_SECRET using default dev value in production — override via LOOPZERO_BOOTSTRAP_SECRET env var")
+	}
+	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" && c.IsProduction() {
+		return fmt.Errorf("LOOPZERO_ARGO_CALLBACK_SECRET using default dev value in production — override via LOOPZERO_ARGO_CALLBACK_SECRET env var")
+	}
+	// H1: DATABASE_URL with sslmode=disable in production sends credentials and data in plaintext.
+	if c.DatabaseURL != "" && c.IsProduction() && strings.Contains(c.DatabaseURL, "sslmode=disable") {
+		return fmt.Errorf("DATABASE_URL contains sslmode=disable which is forbidden in production — use sslmode=require or sslmode=verify-full")
 	}
 	return nil
 }

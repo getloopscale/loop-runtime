@@ -149,6 +149,13 @@ type APIBootstrapSpec struct {
 	// +kubebuilder:default="http://loopzero-api.platform-system.svc.cluster.local:8080/api/v1/health"
 	// +optional
 	HealthEndpoint string `json:"healthEndpoint,omitempty"`
+
+	// BootstrapSecretRef references the Secret containing the bootstrap auth token.
+	// The Secret must contain a key "bootstrap-secret" with the Bearer token value
+	// matching LOOPZERO_BOOTSTRAP_SECRET on the API side (SEC-003).
+	// B1: Without this, callBootstrapEndpoint fails 401 when SEC-003 is enabled.
+	// +optional
+	BootstrapSecretRef *SecretKeyRef `json:"bootstrapSecretRef,omitempty"`
 }
 
 // BootstrapTimeouts configures per-phase timeouts.
