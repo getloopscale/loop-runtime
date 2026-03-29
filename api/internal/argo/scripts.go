@@ -94,7 +94,9 @@ fi
 `
 }
 
-func scriptDockerfileNode(apps []services.AppSpec) string {
+// Deprecated: replaced by loopzeroPacksDockerfileStep (MEET-2026-03-29-017).
+// Kept temporarily for rollback safety. Remove after loopzero-packs is validated in production.
+func scriptDockerfileNode(apps []services.AppSpec) string { //nolint:unused
 	if len(apps) == 0 {
 		return `echo "No apps to generate Dockerfiles for"`
 	}
@@ -216,7 +218,8 @@ fi
 `
 }
 
-func scriptDockerfileGo(apps []services.AppSpec) string {
+// Deprecated: replaced by loopzeroPacksDockerfileStep (MEET-2026-03-29-017).
+func scriptDockerfileGo(apps []services.AppSpec) string { //nolint:unused
 	port := defaultPort(apps, 8080)
 	buildTarget := "./cmd/..."
 	if len(apps) > 0 && apps[0].Path != "" && apps[0].Path != "." {
@@ -320,7 +323,8 @@ fi
 `
 }
 
-func scriptDockerfilePython(apps []services.AppSpec) string {
+// Deprecated: replaced by loopzeroPacksDockerfileStep (MEET-2026-03-29-017).
+func scriptDockerfilePython(apps []services.AppSpec) string { //nolint:unused
 	port := defaultPort(apps, 8000)
 	return fmt.Sprintf(`set -euo pipefail
 cd /workspace

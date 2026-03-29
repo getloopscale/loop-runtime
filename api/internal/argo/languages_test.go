@@ -113,19 +113,35 @@ func TestNodeStrategy_ScanStep_ReturnsContainerTemplate(t *testing.T) {
 	assertContainerShape(t, c, "security-scan", "node:20.11.1-alpine")
 }
 
-func TestNodeStrategy_DockerfileStep_ReturnsContainerTemplate(t *testing.T) {
-	s := &NodeStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080}}
-	c := s.DockerfileStep(apps)
+// MEET-2026-03-29-017: DockerfileStep removed from strategies.
+// Universal loopzeroPacksDockerfileStep tested below.
+func TestLoopZeroPacksDockerfileStep_ReturnsContainerTemplate(t *testing.T) {
+	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Path: "apps/api"}}
+	c := loopzeroPacksDockerfileStep(apps)
 
-	assertContainerShape(t, c, "generate-dockerfile", "node:20.11.1-alpine")
+	assertContainerShape(t, c, "generate-dockerfile", imageLoopZeroPacks)
 
-	// Verify the script contains the correct port
 	script := extractContainerScript(t, c)
 	if script == "" {
 		t.Fatal("expected non-empty script")
 	}
-	assertContains(t, script, "EXPOSE 8080")
+	assertContains(t, script, "loopzeropacks-generate")
+	assertContains(t, script, "--app-path apps/api")
+	assertContains(t, script, "--app-name api")
+	assertContains(t, script, "Dockerfile.api")
+}
+
+func TestLoopZeroPacksDockerfileStep_MultipleApps(t *testing.T) {
+	apps := []services.AppSpec{
+		{Name: "api", Type: "server", Port: 3000, Path: "apps/api"},
+		{Name: "worker", Type: "worker", Path: "apps/worker"},
+	}
+	c := loopzeroPacksDockerfileStep(apps)
+	script := extractContainerScript(t, c)
+	assertContains(t, script, "--app-name api")
+	assertContains(t, script, "--app-name worker")
+	assertContains(t, script, "Dockerfile.api")
+	assertContains(t, script, "Dockerfile.worker")
 }
 
 // ---------------------------------------------------------------------------
@@ -167,15 +183,7 @@ func TestGoStrategy_BuildStep_UsesCGODisabled(t *testing.T) {
 	assertContains(t, script, "CGO_ENABLED=0")
 }
 
-func TestGoStrategy_DockerfileStep_MultiStage(t *testing.T) {
-	s := &GoStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080}}
-	c := s.DockerfileStep(apps)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "FROM golang:1.22-alpine AS builder")
-	assertContains(t, script, "EXPOSE 8080")
-}
+// TestGoStrategy_DockerfileStep removed — replaced by TestLoopZeroPacksDockerfileStep.
 
 // ---------------------------------------------------------------------------
 // PythonStrategy
@@ -200,15 +208,7 @@ func TestPythonStrategy_ValidateStep_ChecksPythonDeps(t *testing.T) {
 	assertContains(t, script, "pyproject.toml")
 }
 
-func TestPythonStrategy_DockerfileStep_UsesUvicorn(t *testing.T) {
-	s := &PythonStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8000}}
-	c := s.DockerfileStep(apps)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "uvicorn")
-	assertContains(t, script, "EXPOSE 8000")
-}
+// TestPythonStrategy_DockerfileStep removed — replaced by TestLoopZeroPacksDockerfileStep.
 
 // ---------------------------------------------------------------------------
 // CustomStrategy
