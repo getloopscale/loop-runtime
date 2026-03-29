@@ -109,3 +109,5 @@ tmp/
 *.orig
 .env.local
 .claude/ralph-loop.local.md
+.claude/governance-gate.local.md
+.claude/loop-state.local.md
