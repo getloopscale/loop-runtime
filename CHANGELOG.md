@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Gitea bootstrap Job uses `deleteBeforeReplace` + `replaceOnChanges` — fixes `pulumi up` failure when TTL garbage-collects completed Job (#MEET-015-IaC)
 - Bootstrap Job image pinned from `bitnami/kubectl:latest` to `bitnami/kubectl:1.31` — deterministic builds (#MEET-015-IaC)
 - Loki cross-cluster URL resolved by Pulumi via `@pulumi/command` — eliminates post-deploy `kubectl patch` on ConfigMap (#MEET-015-IaC)
+- `project delete` now removes GitOps manifests even when no `environment_targets` rows exist — prevents orphaned pods after delete (#F-03)
+- Cloudflare API token secret created on ALL clusters with cert-manager, not just mgmt — fixes TLS certificate issuance on runtime cluster (#F-04)
 
 ### Added
 - Meeting record MEET-2026-03-27-012: ArgoCD deploy reliability architecture decision (#MEET-012)

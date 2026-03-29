@@ -100,6 +100,28 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInp
 			result.DeletedEnvironments = append(result.DeletedEnvironments, target.Environment)
 		}
 
+		// Fallback: if no environment_targets rows exist but the project was deployed,
+		// manifests may still be in the GitOps repo (e.g. after DB reset, or if SetDesired
+		// was never called). Remove from the default "production" environment as safety net.
+		if len(targets) == 0 {
+			slog.Warn("no environment_targets found for project — attempting gitops cleanup for production",
+				"project_id", req.ProjectID, "tenant_id", req.TenantID, "correlation_id", req.CorrelationID)
+			removeCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+			defer cancel()
+			_, gitErr := d.gitops.Remove(removeCtx, GitOpsRemoveOpts{
+				TenantID:      req.TenantID,
+				ProjectID:     req.ProjectID,
+				Environment:   "production",
+				CorrelationID: req.CorrelationID,
+			})
+			if gitErr != nil {
+				slog.Warn("gitops fallback remove failed (may not exist)",
+					"project_id", req.ProjectID, "environment", "production", "error", gitErr)
+			} else {
+				result.DeletedEnvironments = append(result.DeletedEnvironments, "production")
+			}
+		}
+
 		// All environments removed — delete the project record
 		if err := d.projectStore.DeleteProject(ctx, req.TenantID, req.ProjectID); err != nil {
 			slog.Warn("failed to delete project record (non-fatal, environments already cleaned)",

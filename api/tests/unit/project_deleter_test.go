@@ -581,16 +581,21 @@ func TestProjectDeleterDeleteAllEnvsNoEnvironments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(result.DeletedEnvironments) != 0 {
-		t.Errorf("expected 0 deleted environments, got %d", len(result.DeletedEnvironments))
+	// Fallback: even with no environment_targets, gitops.Remove is called for "production"
+	// to clean up manifests that may exist in the GitOps repo without a DB record.
+	if len(result.DeletedEnvironments) != 1 || result.DeletedEnvironments[0] != "production" {
+		t.Errorf("expected fallback delete of [production], got %v", result.DeletedEnvironments)
 	}
 	// Even with no environments, the project record should be deleted
 	if !projectStore.deleted {
 		t.Error("project record should be deleted when all (zero) envs are removed")
 	}
-	// No gitops calls
-	if len(gitops.removeCalled) != 0 {
-		t.Errorf("expected 0 gitops remove calls, got %d", len(gitops.removeCalled))
+	// Fallback gitops remove for production
+	if len(gitops.removeCalled) != 1 {
+		t.Errorf("expected 1 fallback gitops remove call, got %d", len(gitops.removeCalled))
+	}
+	if len(gitops.removeCalled) == 1 && gitops.removeCalled[0].Environment != "production" {
+		t.Errorf("expected fallback remove for production, got %s", gitops.removeCalled[0].Environment)
 	}
 }
 

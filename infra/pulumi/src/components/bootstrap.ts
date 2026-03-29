@@ -2279,11 +2279,12 @@ function createClusterIssuer(
   config: PlatformStackConfig,
   role: string = "mgmt",
 ): k8s.apiextensions.CustomResource {
-  // Cloudflare API token secret for DNS-01 challenge (shared across issuers).
-  // Only created once on the mgmt cluster; runtime reuses the same secret name.
-  if (role === "mgmt" && config.cfApiToken) {
+  // Cloudflare API token secret for DNS-01 challenge.
+  // Created on EVERY cluster with cert-manager — each cluster's ClusterIssuer
+  // references this secret by name in the same namespace.
+  if (config.cfApiToken) {
     new k8s.core.v1.Secret(
-      "cloudflare-api-token-secret",
+      `cloudflare-api-token-secret-${role}`,
       {
         metadata: {
           name: "cloudflare-api-token-secret",
