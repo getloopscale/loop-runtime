@@ -372,8 +372,11 @@ func main() {
 			eventStore,
 			logger,
 			services.ReleaseConvergenceLoopConfig{
-				Interval:      10 * time.Second,
-				SyncTimeout:   180 * time.Second,
+				Interval: 10 * time.Second,
+				// SyncTimeout must exceed: gitops push (~5s) + ArgoCD sync trigger (~2s)
+				// + cert-manager DNS-01 challenge (~90s) + ArgoCD health check (~30s).
+				// First deploy is slowest due to TLS certificate issuance.
+				SyncTimeout:   300 * time.Second,
 				MaxConcurrent: 10,
 			},
 		)

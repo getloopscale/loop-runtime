@@ -6,6 +6,7 @@ package unit
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -395,9 +396,10 @@ func TestProjectDeleterCancelBuildError(t *testing.T) {
 	}
 }
 
-func TestProjectDeleterGitOpsFailureIsNonFatal(t *testing.T) {
-	// Arrange — GitOps remove fails, but the operation should still succeed
-	// because DB state is already clean. This follows the BLOCKER-2 pattern.
+func TestProjectDeleterGitOpsFailureIsFatal(t *testing.T) {
+	// Arrange — GitOps remove fails. The delete must FAIL because leaving
+	// orphaned manifests in the gitops repo degrades ArgoCD Application health
+	// and blocks notifications for all projects in the tenant.
 	buildStore := newFakeDeleteBuildStore()
 	envTargetStore := newFakeDeleteEnvTargetStore()
 	projectStore := &fakeDeleteProjectStore{}
@@ -422,14 +424,14 @@ func TestProjectDeleterGitOpsFailureIsNonFatal(t *testing.T) {
 	}
 
 	// Act
-	result, err := deleter.Delete(context.Background(), req)
+	_, err := deleter.Delete(context.Background(), req)
 
-	// Assert — should succeed despite GitOps failure
-	if err != nil {
-		t.Fatalf("expected no error (gitops failure is non-fatal), got %v", err)
+	// Assert — must fail when gitops remove fails
+	if err == nil {
+		t.Fatal("expected error when gitops remove fails, got nil")
 	}
-	if len(result.DeletedEnvironments) != 1 {
-		t.Errorf("expected 1 deleted environment, got %d", len(result.DeletedEnvironments))
+	if !strings.Contains(err.Error(), "gitops remove failed") {
+		t.Errorf("expected gitops remove error, got: %v", err)
 	}
 }
 
