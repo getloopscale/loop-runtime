@@ -118,7 +118,7 @@ function bootstrapMgmtCluster(
   const gitea = installGitea(provider, ns, infra, config);
 
   // MinIO — S3-compatible artifact storage (source bundles, build cache)
-  const minio = installMinIO(provider, ns);
+  const minio = installMinIO(provider, ns, config);
 
   // MinIO credentials — needed by API for source bundle upload/download
   new k8s.core.v1.Secret(
@@ -495,7 +495,9 @@ return hs`,
         // NOTE: These keys are TOP-LEVEL in the argo-cd Helm chart, NOT under configs.
         notificationsController: { enabled: true },
         notifications: {
-          services: {
+          // IMPORTANT: the argo-cd Helm chart v7.x uses "notifiers" (not "services")
+          // for the notifications ConfigMap. "services" is silently ignored.
+          notifiers: {
             "service.webhook.loopzero-api": `url: http://loopzero-api.${PLATFORM_NAMESPACE}.svc.cluster.local:8080/internal/argocd-callback
 headers:
 - name: Content-Type
@@ -659,7 +661,7 @@ function installGitea(
         gitea: {
           admin: {
             username: "gitea_admin",
-            password: GITEA_ADMIN_PASSWORD,
+            password: config.giteaAdminPassword ?? GITEA_ADMIN_PASSWORD_DEFAULT,
             email: "admin@loopzero.internal",
           },
           config: {
@@ -1078,6 +1080,7 @@ function bootstrapBuildCluster(
 function installMinIO(
   provider: k8s.Provider,
   ns: k8s.core.v1.Namespace,
+  config: PlatformStackConfig,
 ): k8s.helm.v3.Release {
   return new k8s.helm.v3.Release(
     "minio",
@@ -1094,9 +1097,8 @@ function installMinIO(
         fullnameOverride: "minio",
         mode: "standalone",
         rootUser: "loopzero-admin",
-        // Stable password — Date.now() caused rolling updates on every pulumi up.
-        // For production, use pulumi.secret() or external secret manager.
-        rootPassword: "loopzero-minio-dev-2026",
+        // Production overrides via: pulumi config set --secret minioRootPassword <password>
+        rootPassword: config.minioRootPassword ?? "loopzero-minio-dev-2026",
         persistence: {
           enabled: true,
           size: "10Gi",
@@ -1133,11 +1135,10 @@ function installMinIO(
 const REGISTRY = "registry.digitalocean.com/loopzero-infra-registry";
 
 /**
- * Stable Gitea admin password — used for basic auth to generate API tokens.
- * The Gitea Helm chart creates the admin user with this password.
- * For production, use pulumi.secret() or external secret manager.
+ * Gitea admin password default — only for dev environments.
+ * Production MUST override via: pulumi config set --secret giteaAdminPassword <password>
  */
-const GITEA_ADMIN_PASSWORD = "loopzero-gitea-dev-2026";
+const GITEA_ADMIN_PASSWORD_DEFAULT = "loopzero-gitea-dev-2026";
 
 /**
  * Gitea bootstrap — creates admin token, orgs, and stores credentials in K8s Secret.
@@ -1239,12 +1240,20 @@ function bootstrapGitea(
               {
                 name: "bootstrap",
                 image: "bitnami/kubectl:latest",
+                env: [
+                  {
+                    name: "GITEA_ADMIN_PASS_ENV",
+                    value: config.giteaAdminPassword
+                      ? pulumi.interpolate`${config.giteaAdminPassword}`
+                      : GITEA_ADMIN_PASSWORD_DEFAULT,
+                  },
+                ],
                 command: ["bash", "-c"],
                 args: [
                   `set -e
 GITEA_URL="http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000"
 GITEA_USER="gitea_admin"
-GITEA_PASS="${GITEA_ADMIN_PASSWORD}"
+GITEA_PASS="\${GITEA_ADMIN_PASS_ENV}"
 NS="${PLATFORM_NAMESPACE}"
 
 echo "=== Step 1: Wait for Gitea to be ready ==="
@@ -2089,9 +2098,67 @@ function installPrometheus(
       createNamespace: false,
       values: {
         fullnameOverride: "prometheus",
-        // Disable components not needed for platform monitoring
-        alertmanager: { enabled: false },
+        // Alertmanager — receives alerts from Prometheus, routes to webhooks.
+        alertmanager: {
+          enabled: true,
+          resources: {
+            requests: { cpu: "50m", memory: "64Mi" },
+            limits: { cpu: "100m", memory: "128Mi" },
+          },
+        },
         "prometheus-pushgateway": { enabled: false },
+        // Alerting rules — critical SLOs for production monitoring.
+        serverFiles: {
+          "alerting_rules.yml": {
+            groups: [
+              {
+                name: "loopzero-platform",
+                rules: [
+                  {
+                    alert: "LoopZeroAPIDown",
+                    expr: 'up{job="loopzero-api"} == 0',
+                    for: "1m",
+                    labels: { severity: "critical" },
+                    annotations: {
+                      summary: "LoopZero API is down",
+                      description: "LoopZero API has been unreachable for more than 1 minute.",
+                    },
+                  },
+                  {
+                    alert: "LoopZeroDeployFailing",
+                    expr: 'increase(loopzero_api_request_duration_seconds_count{path="/api/v1/builds",status=~"5.."}[10m]) > 3',
+                    for: "2m",
+                    labels: { severity: "warning" },
+                    annotations: {
+                      summary: "Multiple deploy failures",
+                      description: "More than 3 build/deploy failures in the last 10 minutes.",
+                    },
+                  },
+                  {
+                    alert: "LoopZeroHighAPILatency",
+                    expr: 'histogram_quantile(0.95, rate(loopzero_api_request_duration_seconds_bucket{path!~"/api/v1/health.*|/api/v1/builds/.*/stream"}[5m])) > 2',
+                    for: "5m",
+                    labels: { severity: "warning" },
+                    annotations: {
+                      summary: "High API latency (P95 > 2s)",
+                      description: "API P95 latency exceeds 2 seconds for 5 minutes.",
+                    },
+                  },
+                  {
+                    alert: "LoopZeroPodCrashLooping",
+                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopzero-.*|platform-system"}[15m]) > 0',
+                    for: "5m",
+                    labels: { severity: "warning" },
+                    annotations: {
+                      summary: "Pod crash-looping in LoopZero namespace",
+                      description: "{{ $labels.namespace }}/{{ $labels.pod }} is restarting frequently.",
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
         // Server — central metrics store
         server: {
           retention: "15d",

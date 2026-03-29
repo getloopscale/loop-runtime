@@ -168,7 +168,9 @@ func (s *PostgresReleaseStore) GetActiveByEnv(ctx context.Context, tenantID, pro
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
 		        COALESCE(side_effects, 'null'::jsonb)
 		 FROM releases
-		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND status = 'ACTIVE'`,
+		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND status = 'ACTIVE'
+		 ORDER BY created_at DESC
+		 LIMIT 1`,
 		tenantID, projectID, env,
 	))
 	if err != nil {
@@ -189,7 +191,9 @@ func (s *PostgresReleaseStore) GetActiveByEnvTx(ctx context.Context, tx DBTX, te
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
 		        COALESCE(side_effects, 'null'::jsonb)
 		 FROM releases
-		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND status = 'ACTIVE'`,
+		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND status = 'ACTIVE'
+		 ORDER BY created_at ASC
+		 LIMIT 1`,
 		tenantID, projectID, env,
 	))
 	if err != nil {
