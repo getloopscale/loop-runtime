@@ -109,8 +109,6 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | API | Go 1.25 + chi + pgx (connection pool) | `api/` · `loopzero/api` |
 | Operators | Go 1.25 + kubebuilder + controller-runtime | `operators/` |
 | Shared libraries | Go (errors, logging, id, naming, health, statemachine) | `pkg/` |
-| Build SDK | Go — programmatic Argo Workflow builder | `loopzero-forge/` |
-| Language packs | Go — framework detection + Dockerfile generation | `loopzero-packs/` |
 
 ### Infrastructure
 
@@ -232,17 +230,6 @@ loopzero/
 │   ├── operatortest/                  ← shared test setup (envtest)
 │   ├── config/crd/bases/              ← CRD YAML manifests
 │   └── cmd/                           ← entrypoint (multi-cluster client setup, leader election)
-├── loopzero-forge/                        ← Go SDK for building Argo Workflows programmatically
-│   ├── client/                        ← REST client for Argo Workflows API
-│   ├── model/                         ← serializable types matching Argo schema
-│   ├── serialize/                     ← YAML/JSON serialization
-│   ├── expr/                          ← expression DSL builder
-│   ├── validate/                      ← resource unit validation
-│   └── config/                        ← global configuration
-├── loopzero-packs/                        ← language/framework detection + Dockerfile generation
-│   ├── core/                          ← pack framework (dockerfile gen, manifest gen, resolver)
-│   ├── railpack/                      ← Rails-specific pack
-│   └── internal/                      ← internal utilities
 ├── infra/
 │   ├── pulumi/                        ← IaC (TypeScript + Pulumi)
 │   │   ├── src/

@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/instance: postgresql
     app.kubernetes.io/part-of: loopzero
 spec:
-  maxUnavailable: 1
+  minAvailable: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: postgresql

@@ -111,3 +111,96 @@ func TestMachine_TransitionPanicsOnInvalidEvent(t *testing.T) {
 		m.Transition("A", "invalid_event")
 	}, "expected panic on invalid event")
 }
+
+func TestMachine_TryTransition_ValidTransition(t *testing.T) {
+	m := NewMachine(MachineConfig{
+		Name: "Test",
+		Transitions: []transition{
+			{From: "A", Event: "go", To: "B"},
+		},
+		Terminal: []State{"B"},
+	})
+
+	next, err := m.TryTransition("A", "go")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	assertState(t, next, "B")
+}
+
+func TestMachine_TryTransition_TerminalState(t *testing.T) {
+	m := NewMachine(MachineConfig{
+		Name: "Test",
+		Transitions: []transition{
+			{From: "A", Event: "go", To: "B"},
+		},
+		Terminal: []State{"B"},
+	})
+
+	_, err := m.TryTransition("B", "go")
+	if err == nil {
+		t.Fatal("expected error for transition from terminal state, got nil")
+	}
+}
+
+func TestMachine_TryTransition_UnknownState(t *testing.T) {
+	m := NewMachine(MachineConfig{
+		Name: "Test",
+		Transitions: []transition{
+			{From: "A", Event: "go", To: "B"},
+		},
+		Terminal: []State{"B"},
+	})
+
+	_, err := m.TryTransition("UNKNOWN", "go")
+	if err == nil {
+		t.Fatal("expected error for transition from unknown state, got nil")
+	}
+}
+
+func TestMachine_TryTransition_InvalidEvent(t *testing.T) {
+	m := NewMachine(MachineConfig{
+		Name: "Test",
+		Transitions: []transition{
+			{From: "A", Event: "go", To: "B"},
+		},
+		Terminal: []State{"B"},
+	})
+
+	_, err := m.TryTransition("A", "invalid_event")
+	if err == nil {
+		t.Fatal("expected error for invalid event, got nil")
+	}
+}
+
+func TestMachine_TryTransition_DoesNotPanic(t *testing.T) {
+	m := NewMachine(MachineConfig{
+		Name: "Test",
+		Transitions: []transition{
+			{From: "A", Event: "go", To: "B"},
+		},
+		Terminal: []State{"B"},
+	})
+
+	// Verify TryTransition never panics, even with completely bogus input.
+	// This is the key difference from Transition().
+	cases := []struct {
+		state State
+		event Event
+	}{
+		{"UNKNOWN", "go"},
+		{"B", "go"},
+		{"A", "invalid_event"},
+		{"", ""},
+	}
+	for _, tc := range cases {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("TryTransition(%q, %q) panicked: %v", tc.state, tc.event, r)
+				}
+			}()
+			_, _ = m.TryTransition(tc.state, tc.event)
+		}()
+	}
+}

@@ -280,6 +280,7 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 // Historical reference: git show f1bf264:api/internal/services/container_delivery.go
 
 func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *db.Build, release *db.Release, result BuildCallbackRequest, verifyFailed bool) error {
+	logger := slog.With("release_id", release.ID, "build_id", build.ID)
 	return c.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		if verifyFailed {
 			if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncFailed_)); err != nil {
@@ -298,67 +299,18 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *
 			return nil
 		}
 
-		// CODE-0001 fix: Query for previous active release BEFORE activating the new one.
-		// Previously, GetActiveByEnvTx ran after UpdateStatus, so it could return
-		// the just-activated release, preventing supersession of the old one.
-		prevRelease, err := c.releaseStore.GetActiveByEnvTx(ctx, tx, build.TenantID, build.ProjectID, build.Environment)
-		if err != nil {
-			return fmt.Errorf("activate release: get previous active: %w", err)
+		// Convert build callback apps to activation format (includes URLs).
+		apps := make([]ActivationAppInfo, 0, len(result.Apps))
+		for _, app := range result.Apps {
+			apps = append(apps, ActivationAppInfo{
+				Name:   app.Name,
+				Status: "deployed",
+				URL:    app.URL,
+			})
 		}
-
-		// Release → ACTIVE
-		if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncCompleted)); err != nil {
-			return fmt.Errorf("activate release: transition to ACTIVE: %w", err)
-		}
-
-		// SSE: deploy.live (delivery-agnostic name)
-		activeData, _ := json.Marshal(map[string]string{
-			"deploy_id": deriveDeployID(release.ID),
-			"status":    "live",
-		})
-		if _, err := c.eventStore.Append(ctx, build.ID, "deploy.live", activeData); err != nil {
-			return fmt.Errorf("activate release: emit deploy.live: %w", err)
-		}
-
-		if err := c.envTargetStore.SetActive(ctx, tx, build.TenantID, build.ProjectID, build.Environment, release.ID); err != nil {
-			return fmt.Errorf("activate release: set active: %w", err)
-		}
-
-		// Supersede previous active release (queried BEFORE activation above)
-		if prevRelease != nil && prevRelease.ID != release.ID {
-			if _, err := c.releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.ReleaseNewActivated)); err != nil {
-				return fmt.Errorf("activate release: supersede previous: %w", err)
-			}
-		}
-
-		// SSE: deploy.completed
-		deployID := deriveDeployID(release.ID)
 		durationSecs := int(time.Since(build.CreatedAt).Seconds())
 
-		var deployApps []map[string]interface{}
-		for _, app := range result.Apps {
-			appEntry := map[string]interface{}{
-				"name":                   app.Name,
-				"status":                 "deployed",
-				"build_duration_seconds": durationSecs,
-			}
-			if app.URL != "" {
-				appEntry["url"] = app.URL
-			}
-			deployApps = append(deployApps, appEntry)
-		}
-
-		deployData, _ := json.Marshal(map[string]interface{}{
-			"deploy_id":        deployID,
-			"status":           "success",
-			"duration_seconds": durationSecs,
-			"apps":             deployApps,
-		})
-		if _, err := c.eventStore.Append(ctx, build.ID, "deploy.completed", deployData); err != nil {
-			return fmt.Errorf("activate release: emit deploy.completed: %w", err)
-		}
-
-		return nil
+		return ActivateReleaseKernel(ctx, tx, release, c.releaseStore, c.envTargetStore, c.eventStore, apps, durationSecs, logger)
 	})
 }
 

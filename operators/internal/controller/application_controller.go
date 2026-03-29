@@ -231,9 +231,6 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 	if app.Status.Reachable {
 		return loopzerov1.ApplicationPhaseReachable
 	}
-	if app.Status.EndpointsReady {
-		return loopzerov1.ApplicationPhaseServing
-	}
 	return loopzerov1.ApplicationPhaseProgressing
 }
 

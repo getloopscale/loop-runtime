@@ -205,69 +205,17 @@ func (r *ReleaseConvergenceLoop) checkSync(ctx context.Context, appName string, 
 
 func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *db.Release) {
 	err := r.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
-		// Transition PENDING → ACTIVE
-		_, err := r.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncCompleted))
-		if err != nil {
-			return fmt.Errorf("activate release: %w", err)
-		}
-
-		// Supersede previous active release
-		prev, _ := r.releaseStore.GetActiveByEnvTx(ctx, tx, release.TenantID, release.ProjectID, release.Environment)
-		if prev != nil && prev.ID != release.ID {
-			_, _ = r.releaseStore.UpdateStatus(ctx, tx, prev.ID, string(statemachine.ReleaseNewActivated))
-		}
-
-		// Update environment target
-		if err := r.envTargetStore.SetActive(ctx, tx, release.TenantID, release.ProjectID, release.Environment, release.ID); err != nil {
-			return fmt.Errorf("set active target: %w", err)
-		}
-		return nil
+		apps := releaseAppsToActivationApps(release)
+		duration := int(time.Since(release.CreatedAt).Seconds())
+		return ActivateReleaseKernel(ctx, tx, release, r.releaseStore, r.envTargetStore, r.eventStore, apps, duration, r.logger)
 	})
-
 	if err != nil {
 		r.logger.Error("release convergence: activate failed",
 			"release_id", release.ID, "error", err)
 		return
 	}
-
 	r.logger.Info("release convergence: release activated",
 		"release_id", release.ID, "build_id", release.BuildID)
-
-	// Emit SSE events — must match the schema that the CLI expects
-	liveData, _ := json.Marshal(map[string]interface{}{
-		"status":     "live",
-		"release_id": release.ID,
-	})
-	if _, err := r.eventStore.Append(ctx, release.BuildID, "deploy.live", liveData); err != nil {
-		r.logger.Error("failed to emit deploy.live event", "release_id", release.ID, "error", err)
-	}
-
-	// deploy.completed — CLI waits for this event to exit (MEET-2026-03-28-015 critical condition).
-	// Must include: deploy_id, status, duration_seconds, apps.
-	var apps []db.BuildAppSpec
-	if release.Apps != nil {
-		if err := json.Unmarshal(release.Apps, &apps); err != nil {
-			slog.Warn("release convergence: failed to unmarshal release apps",
-				"release_id", release.ID, "error", err)
-		}
-	}
-	duration := int(time.Since(release.CreatedAt).Seconds())
-	appResults := make([]map[string]interface{}, 0, len(apps))
-	for _, app := range apps {
-		appResults = append(appResults, map[string]interface{}{
-			"name":   app.Name,
-			"status": "deployed",
-		})
-	}
-	completedData, _ := json.Marshal(map[string]interface{}{
-		"deploy_id":        deriveDeployID(release.ID),
-		"status":           "success",
-		"duration_seconds": duration,
-		"apps":             appResults,
-	})
-	if _, err := r.eventStore.Append(ctx, release.BuildID, "deploy.completed", completedData); err != nil {
-		r.logger.Error("failed to emit deploy.completed event", "release_id", release.ID, "error", err)
-	}
 }
 
 func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Release, reason string) {

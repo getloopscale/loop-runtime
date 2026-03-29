@@ -16,6 +16,7 @@ import {
   installTraefik,
   lookupLoadBalancerEndpoint,
   createClusterIssuer,
+  parseKubeconfig,
 } from "./bootstrap-shared";
 
 // ---------------------------------------------------------------------------
@@ -540,7 +541,7 @@ function bootstrapGitea(
             containers: [
               {
                 name: "bootstrap",
-                image: "bitnami/kubectl:latest",
+                image: "bitnami/kubectl:1.32.0",
                 env: [
                   {
                     name: "GITEA_ADMIN_PASS_ENV",
@@ -1355,17 +1356,12 @@ function registerRuntimeCluster(
   // Extract bearerToken and caData from the DOKS kubeconfig.
   // DOKS kubeconfigs embed: clusters[0].cluster.certificate-authority-data + users[0].user.token
   const argocdConfig = infra.runtimeCluster.kubeconfig.apply((kc) => {
-    // Parse YAML kubeconfig (simple regex extraction — avoids yaml dependency)
-    const tokenMatch = kc.match(/token:\s*(.+)/);
-    const caMatch = kc.match(/certificate-authority-data:\s*(.+)/);
-
-    const token = tokenMatch?.[1]?.trim() ?? "";
-    const caData = caMatch?.[1]?.trim() ?? "";
-
+    // infra-arch-005: use typed parser instead of fragile regex
+    const parsed = parseKubeconfig(kc);
     return JSON.stringify({
-      bearerToken: token,
+      bearerToken: parsed.token,
       tlsClientConfig: {
-        caData,
+        caData: parsed.certificateAuthorityData,
       },
     });
   });

@@ -665,6 +665,7 @@ tasks:
         helm upgrade --install postgresql bitnami/postgresql
         --kube-context {{.MGMT_CONTEXT}}
         --namespace loopzero-system --create-namespace
+        --version 16.4.1
         -f infra/helm/postgresql/values.yaml
         --wait --timeout 3m
       # Ensure gitea database exists (initdb.scripts may not re-run on PV reuse)
@@ -681,12 +682,14 @@ tasks:
         helm upgrade --install gitea gitea-charts/gitea
         --kube-context {{.MGMT_CONTEXT}}
         --namespace loopzero-system
+        --version 10.6.0
         -f infra/helm/gitea/values.yaml
         --wait --timeout 3m
       - >-
         helm upgrade --install minio minio/minio
         --kube-context {{.MGMT_CONTEXT}}
         --namespace loopzero-system
+        --version 5.4.0
         -f infra/helm/minio/values.yaml
         --wait --timeout 3m
       # MinIO lifecycle rules (cache expiration) — idempotent Job
@@ -695,6 +698,7 @@ tasks:
         helm upgrade --install argocd argo/argo-cd
         --kube-context {{.MGMT_CONTEXT}}
         --namespace argocd --create-namespace
+        --version 7.3.11
         -f infra/helm/argocd/values.yaml
         --wait --timeout 3m
       # PodDisruptionBudgets for stateful services
@@ -712,6 +716,7 @@ tasks:
         helm upgrade --install argo-workflows argo/argo-workflows
         --kube-context {{.BUILD_CONTEXT}}
         --namespace argo --create-namespace
+        --version 1.0.5
         -f infra/helm/argo-workflows/values.yaml
         --wait --timeout 3m
       # MinIO credentials Secret for cache CWTs (envFrom.secretRef)
@@ -732,6 +737,7 @@ tasks:
         helm upgrade --install cert-manager jetstack/cert-manager
         --kube-context {{.WORKLOAD_CONTEXT}}
         --namespace cert-manager --create-namespace
+        --version v1.14.5
         -f infra/helm/cert-manager/values.yaml
         --wait --timeout 3m
       # Self-signed CA chain + wildcard certificate + TLSStore for Traefik
@@ -741,6 +747,7 @@ tasks:
         helm upgrade --install traefik traefik/traefik
         --kube-context {{.WORKLOAD_CONTEXT}}
         --namespace traefik --create-namespace
+        --version 28.3.0
         -f infra/helm/traefik/values.yaml
         --wait --timeout 3m
       # Traefik middlewares: rate-limit, body-limit, security-headers
@@ -754,12 +761,14 @@ tasks:
         helm upgrade --install monitoring prometheus-community/kube-prometheus-stack
         --kube-context {{.MGMT_CONTEXT}}
         --namespace monitoring --create-namespace
+        --version 25.27.0
         -f infra/helm/monitoring/values.yaml
         --wait --timeout 5m
       - >-
         helm upgrade --install otel-collector open-telemetry/opentelemetry-collector
         --kube-context {{.MGMT_CONTEXT}}
         --namespace monitoring
+        --version 0.108.0
         -f infra/helm/otel/values.yaml
         --wait --timeout 3m
       - task: dashboards:install
@@ -773,12 +782,14 @@ tasks:
         helm upgrade --install loki grafana/loki
         --kube-context {{.MGMT_CONTEXT}}
         --namespace monitoring --create-namespace
+        --version 6.24.0
         -f infra/helm/loki/values.yaml
         --wait --timeout 5m
       - >-
         helm upgrade --install promtail grafana/promtail
         --kube-context {{.BUILD_CONTEXT}}
         --namespace monitoring --create-namespace
+        --version 6.16.6
         -f infra/helm/promtail/values.yaml
         --wait --timeout 3m
 

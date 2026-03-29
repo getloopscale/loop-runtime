@@ -30,6 +30,127 @@ func (o *BuildOrchestrator) emitActivationFailure(ctx context.Context, buildID s
 	}
 }
 
+// ReleaseActivationStore defines the minimal store interface needed by the
+// release activation kernel. Both db.ReleaseStore and ReleaseConvergenceStore
+// satisfy this interface.
+type ReleaseActivationStore interface {
+	UpdateStatus(ctx context.Context, tx db.DBTX, id string, event string) (*db.Release, error)
+	GetActiveByEnvTx(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (*db.Release, error)
+}
+
+// ReleaseActivationEventStore is the subset of EventStore used by activation.
+type ReleaseActivationEventStore interface {
+	Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
+}
+
+// ActivationAppInfo describes one app in the deploy.completed SSE event.
+type ActivationAppInfo struct {
+	Name   string
+	Status string
+	URL    string // optional; set by container delivery (has build callback URLs)
+}
+
+// ActivateReleaseKernel implements the correct release activation sequence.
+// CODE-0001: Queries the previous active release BEFORE transitioning the new
+// release to ACTIVE, preventing the race where GetActiveByEnvTx returns the
+// just-activated release instead of the previous one.
+//
+// This is the single source of truth for release activation. All three activation
+// paths (ContainerDeliveryActivator, ReleaseConvergenceLoop, SyncCallbackActivator)
+// MUST call this function inside a withEnvironmentLock transaction.
+//
+// Sequence: (1) get prev release, (2) transition ACTIVE, (3) emit deploy.live,
+// (4) SetActive, (5) supersede prev, (6) emit deploy.completed.
+func ActivateReleaseKernel(
+	ctx context.Context,
+	tx db.DBTX,
+	release *db.Release,
+	releaseStore ReleaseActivationStore,
+	envTargetStore db.EnvironmentTargetStore,
+	eventStore ReleaseActivationEventStore,
+	apps []ActivationAppInfo,
+	durationSecs int,
+	logger *slog.Logger,
+) error {
+	// Step 1: CODE-0001 — query previous ACTIVE release BEFORE activating new one.
+	prevRelease, err := releaseStore.GetActiveByEnvTx(ctx, tx, release.TenantID, release.ProjectID, release.Environment)
+	if err != nil {
+		return fmt.Errorf("activate release: get previous active: %w", err)
+	}
+
+	// Step 2: Transition PENDING → ACTIVE.
+	if _, err := releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncCompleted)); err != nil {
+		return fmt.Errorf("activate release: transition to ACTIVE: %w", err)
+	}
+
+	// Step 3: Emit deploy.live SSE event.
+	liveData, _ := json.Marshal(map[string]interface{}{
+		"deploy_id": deriveDeployID(release.ID),
+		"status":    "live",
+	})
+	if _, err := eventStore.Append(ctx, release.BuildID, "deploy.live", liveData); err != nil {
+		logger.Error("activate release: failed to emit deploy.live", "release_id", release.ID, "error", err)
+	}
+
+	// Step 4: Update environment target pointer.
+	if err := envTargetStore.SetActive(ctx, tx, release.TenantID, release.ProjectID, release.Environment, release.ID); err != nil {
+		return fmt.Errorf("activate release: set active: %w", err)
+	}
+
+	// Step 5: Supersede previous active release (queried in Step 1, before activation).
+	if prevRelease != nil && prevRelease.ID != release.ID {
+		if _, supersedeErr := releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.ReleaseNewActivated)); supersedeErr != nil {
+			logger.Error("activate release: failed to supersede previous",
+				"prev_id", prevRelease.ID, "new_id", release.ID, "error", supersedeErr)
+		} else {
+			logger.Info("activate release: superseded previous",
+				"prev_id", prevRelease.ID, "new_id", release.ID)
+		}
+	}
+
+	// Step 6: Emit deploy.completed SSE event — CLI waits for this to exit.
+	deployID := deriveDeployID(release.ID)
+	appResults := make([]map[string]interface{}, 0, len(apps))
+	for _, app := range apps {
+		entry := map[string]interface{}{
+			"name":   app.Name,
+			"status": app.Status,
+		}
+		if app.URL != "" {
+			entry["url"] = app.URL
+		}
+		appResults = append(appResults, entry)
+	}
+	completedData, _ := json.Marshal(map[string]interface{}{
+		"deploy_id":        deployID,
+		"status":           "success",
+		"duration_seconds": durationSecs,
+		"apps":             appResults,
+	})
+	if _, err := eventStore.Append(ctx, release.BuildID, "deploy.completed", completedData); err != nil {
+		logger.Error("activate release: failed to emit deploy.completed", "release_id", release.ID, "error", err)
+	}
+
+	return nil
+}
+
+// releaseAppsToActivationApps converts the JSON-encoded apps from a release
+// into ActivationAppInfo structs for the activation kernel.
+func releaseAppsToActivationApps(release *db.Release) []ActivationAppInfo {
+	var specs []db.BuildAppSpec
+	if release.Apps != nil {
+		if err := json.Unmarshal(release.Apps, &specs); err != nil {
+			slog.Warn("failed to unmarshal release apps for activation",
+				"release_id", release.ID, "error", err)
+		}
+	}
+	apps := make([]ActivationAppInfo, 0, len(specs))
+	for _, s := range specs {
+		apps = append(apps, ActivationAppInfo{Name: s.Name, Status: "deployed"})
+	}
+	return apps
+}
+
 // deriveDeployID creates a deploy_id in the format d-{8hex} from a release ID.
 // MOD-5: Increased from 4 to 8 hex chars (32 bits) to reduce collision probability.
 // With 4 hex chars (16 bits), collisions were guaranteed after ~256 deploys.

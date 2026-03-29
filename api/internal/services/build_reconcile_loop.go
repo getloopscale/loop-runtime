@@ -19,6 +19,20 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
+// BuildCompletionHandler abstracts the methods that BuildReconcileLoop calls on
+// the BuildOrchestrator. Decoupling via interface enables testing the reconcile
+// loop independently and follows ISP (arch-cp-004).
+type BuildCompletionHandler interface {
+	// OnBuildCompleted handles a successful build workflow completion.
+	OnBuildCompleted(ctx context.Context, buildID string, result BuildCallbackRequest) error
+
+	// RetryReleaseActivation retries Phase 2 (release activation) for a RELEASING build.
+	RetryReleaseActivation(ctx context.Context, build *db.Build, result BuildCallbackRequest) error
+
+	// FindReleaseForBuild returns the most recent release for a build, or nil if none exists.
+	FindReleaseForBuild(ctx context.Context, buildID string) (*db.Release, error)
+}
+
 // BuildReconcileLoopConfig configures the reconcile loop.
 type BuildReconcileLoopConfig struct {
 	// Interval is how often the loop polls for non-terminal builds.
@@ -52,7 +66,7 @@ type BuildReconcileLoopConfig struct {
 type BuildReconcileLoop struct {
 	buildStore db.BuildStore
 	workflow   WorkflowSubmitter
-	orch       *BuildOrchestrator
+	orch       BuildCompletionHandler
 	locker     EnvironmentLocker
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
@@ -74,7 +88,7 @@ type BuildReconcileLoop struct {
 func NewBuildReconcileLoop(
 	buildStore db.BuildStore,
 	workflow WorkflowSubmitter,
-	orch *BuildOrchestrator,
+	orch BuildCompletionHandler,
 	locker EnvironmentLocker,
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)

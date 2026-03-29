@@ -33,7 +33,9 @@ func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopzer
 // reconcileArgoCDApp ensures one ArgoCD Application CR exists per environment for the tenant.
 // The Application connects the tenant's Gitea repo to the workload namespace via ArgoCD.
 func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopzerov1.Tenant) error {
-	repoURL := fmt.Sprintf("%s/loopzero/%s.git", r.GiteaURL, tenant.Spec.GitOps.RepoName)
+	// arch_op_010: Use tenant.Status.GitOpsRepo (set by reconcileGitRepo, which runs first)
+	// as the canonical repo URL instead of re-deriving it with a hardcoded org name.
+	repoURL := tenant.Status.GitOpsRepo
 
 	// MOD-5: Ensure AppProject exists for tenant RBAC isolation before creating Applications.
 	// Each tenant gets its own AppProject that restricts source repos and destination namespaces.

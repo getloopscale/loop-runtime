@@ -2,6 +2,8 @@ apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
   name: loopzero-mgmt
+# Pin to match production DOKS 1.32.13 (Rule 10: local equals production)
+image: rancher/k3s:v1.32.13-k3s1
 servers: 1
 agents: 2
 kubeAPI:

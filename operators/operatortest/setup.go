@@ -13,6 +13,7 @@ package operatortest
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -199,4 +200,33 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner GitRepoProvisioner, 
 // Use this in E2E tests to start the operator in-process against envtest.
 func SetupClusterCredentialController(mgr ctrl.Manager) error {
 	return controller.SetupClusterCredentialController(mgr, constants.DefaultArgoCDNamespace)
+}
+
+// SetupEnvironmentController registers the EnvironmentController with the given manager.
+// runtimeClient targets the runtime cluster; in envtest, pass mgr.GetClient().
+func SetupEnvironmentController(mgr ctrl.Manager, runtimeClient client.Client) error {
+	return controller.SetupEnvironmentController(mgr, runtimeClient)
+}
+
+// SetupApplicationController registers the ApplicationController with the given manager.
+// baseDomain is the base domain for hostname assignment (e.g., "dev.loopzero.example").
+func SetupApplicationController(mgr ctrl.Manager, baseDomain string) error {
+	return controller.SetupApplicationController(mgr, baseDomain)
+}
+
+// SetupExposureController registers the ExposureController with the given manager.
+func SetupExposureController(mgr ctrl.Manager) error {
+	return controller.SetupExposureController(mgr)
+}
+
+// SetupGitRepositoryBindingController registers the GitRepositoryBindingController with the given manager.
+// httpClient is used for Gitea API calls; pass nil to use http.DefaultClient.
+func SetupGitRepositoryBindingController(mgr ctrl.Manager, httpClient *http.Client) error {
+	return controller.SetupGitRepositoryBindingController(mgr, httpClient)
+}
+
+// SetupPlatformBootstrapController registers the PlatformBootstrapController with the given manager.
+// httpClient is used for external API calls; pass nil to use http.DefaultClient.
+func SetupPlatformBootstrapController(mgr ctrl.Manager, httpClient *http.Client) error {
+	return controller.SetupPlatformBootstrapController(mgr, httpClient)
 }

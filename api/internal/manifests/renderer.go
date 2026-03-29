@@ -55,6 +55,32 @@ type RenderInput struct {
 	S3Endpoint     string // DO Spaces endpoint for static proxy (e.g., "sfo3.digitaloceanspaces.com")
 	S3BucketName   string // Static assets bucket (e.g., "loopzero-static-assets")
 	Apps           []AppManifestInput
+
+	// Configurable defaults (arch-cp-006). Zero values fall back to built-in defaults.
+
+	// ClusterIssuerName is the cert-manager ClusterIssuer name for TLS certificates.
+	// Default: "letsencrypt-prod".
+	ClusterIssuerName string
+
+	// GatewayNamespace is the namespace where the shared static-assets gateway service lives.
+	// Default: "platform-system".
+	GatewayNamespace string
+
+	// DefaultCPURequest is the default CPU request for containers (e.g., "100m").
+	// Default: "100m".
+	DefaultCPURequest string
+
+	// DefaultMemoryRequest is the default memory request for containers (e.g., "128Mi").
+	// Default: "128Mi".
+	DefaultMemoryRequest string
+
+	// DefaultCPULimit is the default CPU limit for containers (e.g., "500m").
+	// Default: "500m".
+	DefaultCPULimit string
+
+	// DefaultMemoryLimit is the default memory limit for containers (e.g., "512Mi").
+	// Default: "512Mi".
+	DefaultMemoryLimit string
 }
 
 // Render generates Kubernetes manifests (Deployment, Service, IngressRoute) for all apps.
@@ -251,6 +277,50 @@ type certIssuerRef struct {
 }
 
 
+// --- Default resolution helpers (arch-cp-006) ---
+
+func (ri RenderInput) clusterIssuerName() string {
+	if ri.ClusterIssuerName != "" {
+		return ri.ClusterIssuerName
+	}
+	return "letsencrypt-prod"
+}
+
+func (ri RenderInput) gatewayNamespace() string {
+	if ri.GatewayNamespace != "" {
+		return ri.GatewayNamespace
+	}
+	return "platform-system"
+}
+
+func (ri RenderInput) cpuRequest() string {
+	if ri.DefaultCPURequest != "" {
+		return ri.DefaultCPURequest
+	}
+	return "100m"
+}
+
+func (ri RenderInput) memoryRequest() string {
+	if ri.DefaultMemoryRequest != "" {
+		return ri.DefaultMemoryRequest
+	}
+	return "128Mi"
+}
+
+func (ri RenderInput) cpuLimit() string {
+	if ri.DefaultCPULimit != "" {
+		return ri.DefaultCPULimit
+	}
+	return "500m"
+}
+
+func (ri RenderInput) memoryLimit() string {
+	if ri.DefaultMemoryLimit != "" {
+		return ri.DefaultMemoryLimit
+	}
+	return "512Mi"
+}
+
 // --- Internal render functions ---
 
 // renderServerApp generates Deployment + Service + IngressRoute for a server app.
@@ -337,7 +407,7 @@ func renderStaticFrontendApp(ri RenderInput, app AppManifestInput) []string {
 		Spec: certManagerCertificateSpec{
 			SecretName: tlsSecretName,
 			IssuerRef: certIssuerRef{
-				Name: "letsencrypt-prod",
+				Name: ri.clusterIssuerName(),
 				Kind: "ClusterIssuer",
 			},
 			DNSNames: []string{hostname},
@@ -391,7 +461,7 @@ func renderStaticFrontendApp(ri RenderInput, app AppManifestInput) []string {
 					Services: []traefikRouteService{
 						{
 							Name:      "static-assets",
-							Namespace: "platform-system",
+							Namespace: ri.gatewayNamespace(),
 							Port:      80,
 						},
 					},
@@ -452,8 +522,8 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 		Name:  app.Name,
 		Image: app.ImageRef,
 		Resources: k8sResources{
-			Requests: k8sResourceList{CPU: "100m", Memory: "128Mi"},
-			Limits:   k8sResourceList{CPU: "500m", Memory: "512Mi"},
+			Requests: k8sResourceList{CPU: ri.cpuRequest(), Memory: ri.memoryRequest()},
+			Limits:   k8sResourceList{CPU: ri.cpuLimit(), Memory: ri.memoryLimit()},
 		},
 	}
 
@@ -559,7 +629,7 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 		Spec: certManagerCertificateSpec{
 			SecretName: tlsSecretName,
 			IssuerRef: certIssuerRef{
-				Name: "letsencrypt-prod",
+				Name: ri.clusterIssuerName(),
 				Kind: "ClusterIssuer",
 			},
 			DNSNames: []string{hostname},

@@ -33,6 +33,59 @@ export const HELM_VERSIONS = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Kubeconfig parser (infra-arch-005: replaces fragile regex extraction)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parsed fields from a DOKS kubeconfig YAML.
+ * Extracts bearer token and CA certificate data without a full YAML parser
+ * by walking lines and matching key-value pairs. More robust than regex
+ * because it handles variable whitespace and only matches YAML scalar values.
+ */
+export interface KubeconfigFields {
+  readonly token: string;
+  readonly certificateAuthorityData: string;
+  readonly server: string;
+}
+
+/**
+ * Parse a DOKS kubeconfig YAML string and extract key fields.
+ * Returns empty strings for missing fields instead of failing silently.
+ *
+ * This replaces the fragile `/token:\s*(.+)/` regex that could break
+ * if DigitalOcean changes kubeconfig format (e.g., exec-based auth).
+ */
+export function parseKubeconfig(raw: string): KubeconfigFields {
+  let token = "";
+  let certificateAuthorityData = "";
+  let server = "";
+
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    // Match "key: value" patterns (YAML scalar values only)
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx < 0) continue;
+    const key = trimmed.slice(0, colonIdx).trim();
+    const value = trimmed.slice(colonIdx + 1).trim();
+    if (!value) continue;
+
+    switch (key) {
+      case "token":
+        if (!token) token = value;
+        break;
+      case "certificate-authority-data":
+        if (!certificateAuthorityData) certificateAuthorityData = value;
+        break;
+      case "server":
+        if (!server) server = value;
+        break;
+    }
+  }
+
+  return { token, certificateAuthorityData, server };
+}
+
+// ---------------------------------------------------------------------------
 // Output types
 // ---------------------------------------------------------------------------
 
