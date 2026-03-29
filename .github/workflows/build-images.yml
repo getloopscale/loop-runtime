@@ -120,7 +120,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@c3b6d4e3c6ef7f5e7e2e132626dcff1779be9bf6 # v2.5.1
+        uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -160,7 +160,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@c3b6d4e3c6ef7f5e7e2e132626dcff1779be9bf6 # v2.5.1
+        uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -196,7 +196,7 @@ jobs:
     environment: infra-dev
     steps:
       - name: Install doctl
-        uses: digitalocean/action-doctl@c3b6d4e3c6ef7f5e7e2e132626dcff1779be9bf6 # v2.5.1
+        uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -232,7 +232,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@c3b6d4e3c6ef7f5e7e2e132626dcff1779be9bf6 # v2.5.1
+        uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
