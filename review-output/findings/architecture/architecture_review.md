@@ -1,101 +1,134 @@
 # Architecture Review
 
 **Date:** 2026-03-29
-**Target:** /home/paulo/loopzero
+**Target:** /home/paulo/loopzero (scoped: Cluster management, integrations, tools, and Control Plane)
 **Reviewer:** architecture-analyst
+**Scope:** operators/, infra/pulumi/src/
 
 ---
 
 ## Executive Summary
 
-- **Overall architecture health: GOOD with specific structural debts**
-- **Total findings: 10** (critical: 0, high: 1, medium: 4, low: 5)
-- **Key concern:** Subdomain generation logic is duplicated in 3 places, with one copy containing a bug (missing TrimRight step in build_orchestrator.go) that can cause silent static frontend routing failures.
+- **Overall architecture health:** GOOD
+- **Total findings:** 10 (critical: 0, high: 1, medium: 3, low: 6)
+- **Key concern:** `bootstrap.ts` is a 2,526-line god file with 22 top-level functions covering all three clusters and every platform service. All other findings are refinements to an architecturally sound foundation.
 
-The architecture is well-designed for its problem domain. The four-plane separation (developer, control, build, workload) is cleanly reflected in the code structure. Layer separation (routes/services/db) is sound, the Dependency Inversion Principle is applied consistently via local interfaces, and state machines are properly enforced through the store layer. No circular dependencies between `api/`, `operators/`, and `pkg/` exist. The identified issues are structural debts accumulated during fast feature delivery, not fundamental design failures.
+The Control Plane architecture is well-designed. The multi-cluster client pattern is clean and correctly enforced. The provisioner interface pattern (Gitea, ArgoCD, MinIO) is properly applied with compile-time checks. The constants package prevents the scattered-strings anti-pattern. State machines are used correctly. No circular dependencies exist. The main structural risk is in the Pulumi IaC layer, not the Go operator code.
 
 ---
 
 ## Codebase Structure
 
 ```
-loopzero/
-├── api/          (Go) — 258 .go files, HTTP server + business services
-├── cli/          (TypeScript) — 113 .ts files, Commander CLI
-├── operators/    (Go) — kubebuilder controllers
-├── pkg/          (Go) — shared zero-dep library (errors, naming, statemachine, id, logging, health)
-├── infra/pulumi/ (TypeScript) — Pulumi IaC
-├── loopzero-forge/   (Go) — Argo Workflows SDK
-└── loopzero-packs/   (Go) — Framework detection + Dockerfile generation
+operators/
+├── api/v1/          — 9 CRD types (Tenant, Environment, LoopZeroApplication, ExposedRoute,
+│                       PlatformBootstrap, GitRepositoryBinding, ClusterCredential,
+│                       AppSecret, PreviewEnvironment, ReconciliationReport)
+├── cmd/main.go      — 250 lines: multi-cluster setup + provisioner wiring + controller registration
+├── internal/
+│   ├── argocd/      — Provisioner interface + RealProvisioner (dynamic K8s client)
+│   ├── conditions/  — Typed condition constants for all controllers
+│   ├── constants/   — Centralized string identifiers (labels, ports, timeouts, resources)
+│   ├── controller/  — 7 controllers, file-split by responsibility
+│   ├── gitea/       — GitRepoProvisioner + BootstrapClient interfaces + RealProvisioner
+│   └── minio/       — CredentialProvisioner interface + AdminProvisioner
+
+infra/pulumi/src/
+├── index.ts         — 199 lines: 3-phase orchestrator
+├── components/
+│   ├── bootstrap.ts — 2526 lines: all cluster bootstrapping (GOD FILE)
+│   ├── infra.ts     — 256 lines: Phase 1 infrastructure
+│   └── expose.ts    — 113 lines: Phase 3 DNS
+├── contracts/       — 6 ISP interfaces (IProviderNetwork, IProviderKubernetes, etc.)
+└── providers/
+    ├── digitalocean/ — fully implemented (8 files, ~350 lines total)
+    ├── cloudflare/   — CF Tunnel + CF Worker
+    └── aws/         — stub (all methods throw)
 ```
 
-**Language breakdown:** 258 Go files, 113 TypeScript files, 68 YAML manifests.
-
-**Module boundary (go.work):** api, operators, pkg, infra/scripts, infra/tests — no cross-module imports except via pkg.
+**Language breakdown (relevant scope):** Go (operators), TypeScript (Pulumi IaC)
 
 ---
 
 ## Layer Analysis
 
-### Routes/Handlers Layer
+### Operators: Controller / Service / Repository
 
-The routes layer is architecturally clean. Every handler file defines local interfaces for its dependencies (DIP applied via local interface definitions). No route handler imports `services/` or `db/` directly — they depend on their own locally-defined interfaces. Validation belongs in the handler (request parsing, environment name regex, path safety checks). Business logic does not leak into routes.
+The operators follow the standard controller-runtime pattern correctly.
 
-Specific observations:
-- `routes/builds.go`: Clean. Delegates entirely to `BuildOrchestratorService` interface after input validation.
-- `routes/rollback.go`: Clean. Delegates to `RollbackService` interface. The project lookup in the handler (before calling the service) is appropriate — it converts a name to an ID, which is a handler responsibility.
-- No route handler contains SQL queries, ORM calls, or external API calls.
+| Layer | File | Assessment |
+|-------|------|-----------|
+| Reconcile loop | `tenant_controller.go` | Orchestration only — no business logic inline |
+| Build provisioning | `tenant_build.go` | Pure Kubernetes resource management, no external calls |
+| GitOps provisioning | `tenant_gitops.go` | Delegates all external calls to provisioner interfaces |
+| Credential management | `tenant_credentials.go` | Self-contained credential value object, HTTP call isolated |
+| Priority scheduling | `tenant_priority.go` | Clean, single-purpose |
 
-**Result: PASSES — no business logic in handlers.**
+Controllers do not contain direct database queries. No HTTP calls are made inline in reconcile logic — all external calls go through injected interfaces. This is correct.
 
-### Services Layer
+### Pulumi IaC: Phase Orchestrator / Component Installers
 
-The services layer correctly owns all business logic. Services access the DB via `db.BuildStore/ReleaseStore` interfaces (not raw SQL). Services emit SSE events, manage state transitions, and coordinate external systems (Argo Workflows, ArgoCD, Gitea, CF KV).
-
-Services do NOT import `net/http` for HTTP concerns (confirmed by grep — no `http.ResponseWriter` or `http.Request` in services). The one HTTP usage is via injected `SyncClient` and `WorkflowSubmitter` interfaces.
-
-**Result: PASSES — services do not contain HTTP concerns.**
-
-### DB/Store Layer
-
-The store layer is clean. `UpdateStatus` in both `PostgresBuildStore` and `PostgresReleaseStore` validates transitions through the state machine before executing SQL. Direct status field assignment (`build.Status = ...`) only occurs AFTER a validated state machine transition, not as a bypass.
-
-State machine validation is centralized: `buildMachine` and `releaseMachine` singletons enforce all transitions. No service bypasses this — they all call `UpdateStatus(ctx, tx, buildID, string(event))` which routes through the state machine.
-
-**Result: PASSES — state machines enforced at store boundary.**
-
-### Adapters Layer
-
-`adapters/adapters.go` (312 lines) serves as the anti-corruption layer between route-level types and service-level types. This is intentional DIP enforcement to prevent import cycles. The layer is mechanical (field-by-field copying) and does exactly one thing. The cost is verbosity; the benefit is clean layer isolation.
+| Phase | File | Lines | Assessment |
+|-------|------|-------|-----------|
+| Phase 1: Infrastructure | `infra.ts` | 256 | Clean — delegates to factory |
+| Phase 2: Bootstrap | `bootstrap.ts` | 2,526 | GOD FILE — see ARCH-001 |
+| Phase 3: Expose | `expose.ts` | 113 | Clean |
+| Orchestrator | `index.ts` | 199 | Clean — thin entry point |
 
 ---
 
 ## Dependency Analysis
 
-### Module-level dependency direction
+### Import Graph (operators)
 
 ```
-cli/ → (HTTP only, no Go imports)
-api/ → pkg/errors, pkg/id, pkg/naming, pkg/logging, pkg/statemachine
-operators/ → pkg/naming, pkg/statemachine
-pkg/ → (zero external Go module deps)
+cmd/main.go
+  → internal/controller   (SetupXxxController functions)
+  → internal/argocd       (provisioner construction)
+  → internal/gitea        (provisioner construction)
+  → internal/minio        (provisioner construction)
+  → internal/constants    (DefaultXxx values)
+
+internal/controller (all files)
+  → operators/api/v1      (CRD types — inward dependency: correct)
+  → internal/argocd       (Provisioner interface — inward)
+  → internal/gitea        (GitRepoProvisioner, BootstrapClient — inward)
+  → internal/conditions   (typed constants — inward)
+  → internal/constants    (string constants — inward)
+  → pkg/naming            (shared naming — inward)
+  → pkg/statemachine      (state machine — inward)
+
+internal/argocd
+  → internal/constants    (label keys)
+  [creates its own k8s dynamic client — see ARCH-003]
+
+internal/gitea
+  → internal/constants    (HTTPTimeoutDefault)
 ```
 
-No circular dependencies. No `api/` importing `operators/` or vice versa. The modules are fully independent except for `pkg/`.
+**No circular dependencies detected.** The dependency direction is correct throughout: cmd → controller → provisioners → constants/shared. Inner layers do not import outer layers.
 
-### Package-level dependency direction within api/
+### Import Graph (Pulumi IaC)
 
 ```
-routes/ → (local interfaces only, no services/ or db/ imports)
-services/ → db/, argo/, argocd/, gitops/, cfkv/, manifests/
-db/ → pkg/id, pkg/statemachine, pkg/errors
-adapters/ → routes/, services/, db/, lock/, sse/  ← correct: adapters bridge all
-cmd/ → all internal packages (composition root)
+index.ts
+  → components/infra      (createInfra)
+  → components/bootstrap  (bootstrapCluster)
+  → components/expose     (exposePlatform)
+  → providers/cloudflare  (createTunnel, createStaticDelivery)
+
+components/infra.ts
+  → contracts/provider    (CloudProviderFactory interface)
+  → providers/digitalocean (DigitalOceanProviderFactory)
+  → providers/aws         (AwsProviderFactory)
+  → providers/cloudflare/dns
+  [also: direct @pulumi/digitalocean import for ContainerRegistry — see ARCH-008]
+
+components/bootstrap.ts
+  → components/infra      (InfraOutputs input type)
 ```
 
-The adapters package imports both routes and services, which is the only place this cross-layer import is permitted. This is the intended DIP bridge pattern.
-
-**Result: No import direction violations found.**
+**No circular dependencies.** Phase dependency direction is correct: Phase 3 imports Phase 2 types, Phase 2 imports Phase 1 types.
 
 ---
 
@@ -103,172 +136,219 @@ The adapters package imports both routes and services, which is the only place t
 
 | File | Lines | Assessment |
 |------|-------|-----------|
-| `infra/pulumi/src/components/bootstrap.ts` | 2459 | GOD FILE — all 3 cluster bootstrapping in one file |
-| `api/internal/services/build_orchestrator.go` | 736 | BORDERLINE — 2 responsibilities |
-| `api/internal/manifests/renderer.go` | 641 | ACCEPTABLE — complex but single concern |
-| `api/internal/services/build_reconcile_loop.go` | 510 | ACCEPTABLE — single concern |
-| `operators/internal/controller/environment_controller.go` | 532 | ACCEPTABLE — controller reconcile |
+| `infra/pulumi/src/components/bootstrap.ts` | 2,526 | GOD FILE — 22 functions, 3 clusters |
+| `operators/internal/controller/tenant_controller_test.go` | 1,776 | Test file — acceptable |
+| `operators/internal/controller/environment_controller.go` | 532 | Borderline — all one controller |
+| `operators/internal/controller/tenant_build.go` | 385 | Acceptable — single concern |
 
-**bootstrap.ts at 2459 lines is the clear outlier.** It is 10x the size of the next-largest Pulumi file and covers mgmt cluster, build cluster, and workload cluster bootstrapping in a single file. This is purely a maintainability concern — there is no functional problem.
+The `environment_controller.go` at 532 lines is borderline but not a problem because all the code is within a single controller's reconcile logic. The `tenant_build.go` at 385 lines handles 10 sequential idempotent steps for build namespace provisioning — all cohesive.
 
-**build_orchestrator.go at 736 lines** contains a secondary responsibility: writing CF KV routing entries for static apps (`writeStaticRoutingEntries`, lines 696-736). This logic properly belongs in `StaticDeliveryActivator.phaseBDeliver`, which already exists.
+`bootstrap.ts` at 2,526 lines is the only genuine god file. It installs: cert-manager, ArgoCD, Gitea, MinIO, Prometheus, Grafana, Traefik, Argo Workflows, Loki, Promtail, ESO, the LoopZero API, and the TenantController — across management, build, and runtime clusters.
 
 ---
 
 ## Pattern Usage
 
-### Dependency Inversion Principle
+### Provisioner Interface Pattern (Gitea, ArgoCD, MinIO)
 
-Applied correctly throughout `api/`. Every handler defines local interfaces for its service dependencies. Example from `builds.go`:
+**Assessment: Correctly applied.**
 
-```go
-type BuildOrchestratorService interface {
-    SubmitBuild(ctx context.Context, req SubmitBuildInput) (*SubmitBuildResult, error)
-    ...
-}
-```
+- All three have interface definitions separate from implementations.
+- Compile-time checks (`var _ Provisioner = (*RealProvisioner)(nil)`) enforce compliance.
+- Fakes live in `fake_provisioners_test.go` (package-internal) and `operatortest/setup.go` (public for E2E).
+- Injection happens in `cmd/main.go` — no controller creates its own provisioner.
 
-The adapters package bridges the gap between these local interfaces and the concrete service implementations. This pattern adds translation overhead but achieves full layer isolation.
+One deviation: `argocd.NewRealProvisioner` creates its own Kubernetes client internally rather than accepting one via injection. See ARCH-003.
 
-One DIP violation: `BuildReconcileLoop.orch` is typed as `*BuildOrchestrator` (concrete) rather than an interface. Since both are in the same `services` package, this was expedient but reduces testability.
+### Multi-Cluster Client Pattern
+
+**Assessment: Correctly applied.**
+
+Three explicit clients (`r.Client`, `r.BuildClient`, `r.RuntimeClient`) are passed as constructor parameters. There is no global state. Each reconcile function uses the correct client for its target cluster. Cross-cluster resource cleanup uses label-based listing + finalizer pattern (since ownerReferences cannot cross clusters), which is the correct approach.
 
 ### State Machine Pattern
 
-Used correctly. Both `PostgresBuildStore.UpdateStatus` and `PostgresReleaseStore.UpdateStatus` validate transitions through `statemachine.NewBuildMachine()` and `statemachine.NewReleaseMachine()` before executing SQL. Invalid transitions return `ErrInvalidTransition` rather than panicking (via `safeTransition` wrapper).
+**Assessment: Correctly applied.**
 
-### Strategy Pattern (DeliveryActivator)
+`statemachine.NewTenantMachine()` and `statemachine.NewPlatformBootstrapMachine()` are used for all phase transitions. Direct assignment to `tenant.Status.Phase` only occurs in one place for the empty state initialization, and it goes through `tenantSM.Transition()`. Invalid transitions panic rather than silently succeeding, which is the correct semantics for programming errors.
 
-Well-applied. The `DeliveryActivator` interface (delivery.go) enables `BuildOrchestrator` to dispatch to either `ContainerDeliveryActivator` or `StaticDeliveryActivator` without if/else branches. Both activators follow the identical 5-phase semantic contract.
+### Reconcile Step Pipeline Pattern
 
-### Repository Pattern
+**Assessment: Good pattern, consistently applied.**
 
-Applied correctly. Store interfaces (`BuildStore`, `ReleaseStore`, etc.) in `db/` abstract all SQL. Services depend on these interfaces. No service contains raw SQL.
+Both `TenantReconciler.runSteps()` and `reconcileBuildNamespace()` use an anonymous struct slice pattern:
+```go
+steps := []reconcileStep{
+    {conditions.TypeXxx, func() error { return r.reconcileX(ctx, ...) }},
+    ...
+}
+```
+This makes it easy to add, remove, or reorder steps without touching the loop logic. The pattern is consistent across `tenant_controller.go` and `tenant_build.go`.
 
-### Circuit Breaker Pattern
+### Provider Factory Pattern (Pulumi)
 
-`services/pg_circuit_breaker.go` and `services/workflow_circuit_breaker.go` implement circuit breakers for PostgreSQL and Argo Workflows respectively. These appear to be correctly isolated single-concern files.
+**Assessment: Correctly applied with one gap.**
+
+The `CloudProviderFactory` interface correctly segregates capabilities via ISP (IProviderNetwork, IProviderKubernetes, IProviderStorage, IProviderDns, IProviderCompute, IProviderDatabase). The DigitalOcean implementation is complete. The AWS stub correctly documents implementation steps.
+
+Gap: `ContainerRegistry` and `Cdn` resources in `infra.ts` bypass the factory (see ARCH-008).
 
 ---
 
 ## Domain Model Assessment
 
-The domain models (`db.Build`, `db.Release`, etc.) are the persistence models — they are annotated with JSON tags for PostgreSQL scanning. There are no separate domain entities vs persistence entities; the same struct serves both purposes.
+The operator CRD types are well-designed and follow Kubernetes API conventions:
 
-This is a pragmatic trade-off appropriate for this codebase scale. The `db.Build` and `db.Release` structs do not contain ORM annotations, business methods are in services (not on the model), and the statemachine validation lives in the store layer rather than on the entity.
+- `+kubebuilder:subresource:status` on all top-level types.
+- `+kubebuilder:printcolumn` on all types for `kubectl get` usability.
+- `ObservedGeneration` field on all Status types.
+- `Conditions []metav1.Condition` on all Status types.
+- Enum validation on phase fields.
 
-No ORM annotations (Column, Entity, Table) appear in business logic. The domain is not anemic in the bad sense — business rules live in services, and the state machine is enforced.
+No ORM annotations leak into the domain model. The types are pure Go structs with kubebuilder markers, which is the correct pattern.
+
+**One naming design debt:** `EnvironmentSpec` and `EnvironmentCRSpec` coexist in the same package (see ARCH-004).
+
+**One validation gap:** `GitOpsSpec` fields lack validation markers (see ARCH-009).
 
 ---
 
 ## Module Cohesion
 
 | Module | Cohesion | Assessment |
-|--------|---------|-----------|
-| `pkg/naming` | HIGH | All naming functions for K8s/Gitea resources |
-| `pkg/statemachine` | HIGH | All state machine definitions |
-| `api/internal/routes` | HIGH | All HTTP handlers |
-| `api/internal/services` | MEDIUM-HIGH | Business logic, some routing concerns leaking (CF KV) |
-| `api/internal/db` | HIGH | All store interfaces + PostgreSQL implementations |
-| `api/internal/argo` | HIGH | Argo Workflows build pipeline |
-| `api/internal/adapters` | HIGH | Pure translation layer |
-| `operators/internal/controller` | MEDIUM | Platform setup + build/deploy controllers mixed |
-| `infra/pulumi/src/components` | LOW | bootstrap.ts covers 3 clusters in 1 file |
+|--------|----------|-----------|
+| `internal/controller/` | HIGH | All files reconcile CRD resources |
+| `internal/argocd/` | HIGH | All ArgoCD provisioning |
+| `internal/gitea/` | HIGH | All Gitea provisioning |
+| `internal/minio/` | HIGH | All MinIO provisioning |
+| `internal/conditions/` | HIGH | All condition type constants |
+| `internal/constants/` | HIGH | All string identifiers (5 well-separated files) |
+| `operators/api/v1/` | HIGH | All CRD type definitions |
+| `infra/pulumi/src/contracts/` | HIGH | All provider interfaces |
+| `infra/pulumi/src/components/` | LOW | `bootstrap.ts` breaks cohesion (see ARCH-001) |
 
 ---
 
 ## Findings (Detailed)
 
-### ARCH-004: Subdomain generation bug in build_orchestrator.go (HIGH)
+### ARCH-001: bootstrap.ts is a 2526-line god file with 22 installation responsibilities
 
 - **Severity:** high
-- **Location:** `api/internal/services/build_orchestrator.go:710-712`
-- **Description:** `writeStaticRoutingEntries` generates the subdomain key with inline `fmt.Sprintf` + truncation but is missing the `strings.TrimRight(subdomain, "-")` step present in `cfkv.Subdomain`. When a subdomain key truncated to 63 characters ends with a hyphen, the KV key written here differs from the key used by `StaticDeliveryActivator.phaseBDeliver` (which calls `cfkv.Subdomain` correctly). This produces a broken routing entry.
-- **Evidence:** `cfkv/client.go:114-117` has TrimRight; `build_orchestrator.go:710-712` does not.
-- **Recommendation:** Replace inline logic with `cfkv.Subdomain(build.TenantID, build.ProjectID, app.Name, build.Environment)`.
+- **Location:** `infra/pulumi/src/components/bootstrap.ts:1`
+- **Description:** bootstrap.ts contains 22 top-level functions covering all three clusters and every platform service (cert-manager, ArgoCD, Gitea, MinIO, Traefik, Prometheus, Grafana, Loki, Promtail, Argo Workflows, ESO, LoopZero API, TenantController). Any engineer changing any component must open this single file. The file has multiple reasons to change: management cluster services, build cluster services, runtime cluster services, and Helm chart version bumps.
+- **Evidence:** Functions at lines 84, 100, 201, 241, 353, 376, 409, 567, 635, 715, 1080, 1157, 1452, 1488, 1734, 2036, 2084, 2188, 2315, 2346, 2447 all in one file; `wc -l = 2526`
+- **Recommendation:** Split into per-cluster files: `mgmt-bootstrap.ts`, `build-bootstrap.ts`, `runtime-bootstrap.ts`. Each cluster file owns its installer functions. The current `bootstrapCluster()` entry point at line 84 becomes a thin orchestrator that imports from the three files. This brings each file under 600 lines and creates a clear mapping between cluster and file.
 
-### ARCH-003: ArgoCD app name duplicated in 4+ places (MEDIUM)
+---
 
-- **Severity:** medium
-- **Location:** `api/internal/services/container_delivery.go:103,156`, `release_convergence_loop.go:151`, `project_deleter.go:137,213`
-- **Description:** `fmt.Sprintf("%s-%s", tenantID, environment)` appears at least 5 times. `pkg/naming.ArgoAppName` exists but uses a different 3-parameter signature (team, project, env) that produces a different result. The API services and pkg/naming are inconsistent on what an ArgoCD app name is.
-- **Recommendation:** Align `pkg/naming.ArgoAppName` with the actual 2-component `{tenant}-{environment}` formula or add a dedicated function. Use it at all 5 call sites.
-
-### ARCH-001: build_orchestrator.go mixes orchestration with CF KV routing (MEDIUM)
+### ARCH-002: TenantReconciler struct spans 5 distinct infrastructure domains
 
 - **Severity:** medium
-- **Location:** `api/internal/services/build_orchestrator.go:696-736`
-- **Description:** `writeStaticRoutingEntries` performs CF KV writes inside `BuildOrchestrator.OnBuildCompleted`, creating a second KV write path alongside `StaticDeliveryActivator.phaseBDeliver`. The orchestrator should dispatch entirely to the `DeliveryActivator` for delivery-specific concerns.
-- **Recommendation:** Remove `writeStaticRoutingEntries` from `BuildOrchestrator` and rely exclusively on `StaticDeliveryActivator.phaseBDeliver`.
+- **Location:** `operators/internal/controller/tenant_controller.go:43`
+- **Description:** TenantReconciler has 8 fields spanning GitOps (GiteaURL, GitProvisioner), ArgoCD (ArgoCDProvisioner, WorkloadClusterURL), MinIO credential isolation (MinIOProvisioner), build cluster access (BuildClient, Credentials), and runtime cluster access (RuntimeClient). While the controller is split across 5 files, all files share the same struct, giving every method access to every field. The `tenant_build.go` methods use only BuildClient, MinIOProvisioner, and Credentials; `tenant_gitops.go` uses only GiteaURL, GitProvisioner, and ArgoCDProvisioner.
+- **Evidence:** `tenant_controller.go:43-54` struct definition; `tenant_build.go` never references GiteaURL; `tenant_gitops.go` never references BuildClient
+- **Recommendation:** The current file-split is directionally correct and the `BuildCredentials` extraction is good practice. The next step is documenting the expected field usage per file as a comment on the struct, making the implicit coupling explicit. A deeper refactor would extract a `buildNamespaceReconciler` sub-struct that accepts only `(buildClient, minIOProvisioner, credentials)` — but this should be deferred until test friction justifies it.
 
-### ARCH-005: API services bypass pkg/naming for Gitea repo names (MEDIUM)
+---
 
-- **Severity:** medium
-- **Location:** `api/internal/gitops/gitea_pusher.go:62,159,380`, `api/internal/source/gitea_store.go:79-81`
-- **Description:** `pkg/naming.GitOpsRepoName` and `pkg/naming.RepoName` are not used. Instead, inline `fmt.Sprintf` patterns are used. The operators use `pkg/naming`; the API does not. If the scheme changes in one place, the other produces a different repo name for the same tenant.
-- **Recommendation:** Migrate all repo name generation to `pkg/naming` functions.
-
-### ARCH-006: bootstrap.ts is a 2459-line monolith (MEDIUM)
+### ARCH-003: ArgoCD provisioner creates its own K8s client independently of the controller manager
 
 - **Severity:** medium
-- **Location:** `infra/pulumi/src/components/bootstrap.ts:1-2459`
-- **Description:** All three cluster bootstrapping concerns in one file. This is a pure maintainability finding with no runtime impact.
-- **Recommendation:** Split into bootstrap-mgmt.ts, bootstrap-build.ts, bootstrap-workload.ts.
+- **Location:** `operators/internal/argocd/real_provisioner.go:42`
+- **Description:** `NewRealProvisioner()` calls `config.GetConfig()` and `dynamic.NewForConfig()` internally to build its own dynamic Kubernetes client. The controller manager in `cmd/main.go` already has a `rest.Config` that was constructed with leader election, QPS/burst settings, and scheme registration. The ArgoCD provisioner bypasses this to create an independent, uncached connection to the same cluster.
+- **Evidence:** `real_provisioner.go:43-56` creates dynamic client internally; `cmd/main.go:87` calls `argocd.NewRealProvisioner(argoCDNamespace)` without passing any client or config
+- **Recommendation:** Change `NewRealProvisioner(namespace string, client dynamic.Interface)` to accept the dynamic client as a dependency. In `cmd/main.go`, create `dynamic.NewForConfig(mgr.GetConfig())` once and pass it. This is a one-line change at the call site and makes the provisioner testable without a real cluster config.
 
-### ARCH-002: Parallel DTO types in routes and services create mechanical translation overhead (LOW)
+---
 
-- **Severity:** low
-- **Location:** `api/internal/adapters/adapters.go:108-210`
-- **Description:** `AppInput/AppSpec`, `SubmitBuildInput/SubmitBuildRequest`, `SubmitBuildResult/SubmitBuildResponse`, `BuildCallbackInput/BuildCallbackRequest` are structurally identical pairs defined in two layers. The adapters file is 100 lines of field copying.
-- **Recommendation:** Introduce a shared `api/internal/domain` subpackage for DTOs shared across the boundary.
+### ARCH-004: EnvironmentSpec naming collision: two types with overlapping names in api/v1
 
-### ARCH-007: manifests/renderer.go has third subdomain copy (LOW)
+- **Severity:** medium
+- **Location:** `operators/api/v1/tenant_types.go:72`
+- **Description:** `api/v1` package contains `EnvironmentSpec` (a reference entry within a Tenant spec) and `EnvironmentCRSpec` (the full spec of a standalone Environment CR). The `EnvironmentCRSpec` name is a workaround, acknowledged by a comment. This indicates the domain model was extended incrementally without reconciling the original type name.
+- **Evidence:** `tenant_types.go:72` defines `EnvironmentSpec`; `environment_types.go:41` defines `EnvironmentCRSpec` with comment "Named EnvironmentCRSpec to avoid collision with the existing EnvironmentSpec in tenant_types.go"
+- **Recommendation:** Rename `EnvironmentSpec` in `tenant_types.go` to `TenantEnvironmentEntry` or `EnvironmentRef`. Run `make generate` and `make manifests` after the change. Update all controller usages (they all use `tenant.Spec.Environments[i]`, so the change is mechanical).
 
-- **Severity:** low
-- **Location:** `api/internal/manifests/renderer.go:603-610`
-- **Description:** A third correct implementation of subdomain generation. Moving this to `pkg/naming.StaticSubdomain` would create a single source of truth across all three locations.
-- **Recommendation:** Add `pkg/naming.StaticSubdomain` and use it in cfkv, manifests, and build_orchestrator.
+---
 
-### ARCH-008: PlatformBootstrap controller constructs internal HTTP client bypassing injection (LOW)
+### ARCH-005: InsecureSkipVerify is hardcoded in 4 separate locations
 
-- **Severity:** low
-- **Location:** `operators/internal/controller/platformbootstrap_controller.go:158-162`
-- **Description:** `httpClient()` method creates a new `http.Client` instead of using the injected `r.HTTPClient` field. Partially undermines the injection point.
-- **Recommendation:** Consolidate to always return `r.HTTPClient`, set default in Setup function if nil.
+- **Severity:** medium
+- **Location:** `operators/cmd/main.go:217`
+- **Description:** TLS verification bypass (`InsecureSkipVerify: true`) appears in 4 independent `http.Transport` constructions: the shared httpClient in `cmd/main.go`, the probe client created inline in `exposure_controller.go:SetupExposureController`, the per-probe client in `exposure_controller.go:performProbe`, and the fallback client in `platformbootstrap_controller.go:httpClient()`. No shared constructor or environment toggle exists.
+- **Evidence:** `cmd/main.go:211-219`, `exposure_controller.go:207-215`, `exposure_controller.go:239-247`, `platformbootstrap_controller.go:162-169`
+- **Recommendation:** Create `internal/httpclient/internal_client.go` with `New()` returning a pre-configured `*http.Client` with appropriate timeout and InsecureSkipVerify. All four call sites become `httpclient.New()`. When internal services get proper cert-manager issued certificates, one change hardens all clients simultaneously.
 
-### ARCH-009: BuildReconcileLoop holds concrete *BuildOrchestrator instead of interface (LOW)
+---
 
-- **Severity:** low
-- **Location:** `api/internal/services/build_reconcile_loop.go:52-56`
-- **Description:** The `orch` field is typed as `*BuildOrchestrator` (concrete) rather than a minimal interface. Unit tests require full orchestrator instantiation.
-- **Recommendation:** Define a `ReconcileOrchestrator` interface with the 3 methods actually called.
-
-### ARCH-010: CLI index.ts mixes command registration with business logic (LOW)
+### ARCH-006: DORegistryTokenExpirySeconds constant is located in ports.go instead of timeouts.go
 
 - **Severity:** low
-- **Location:** `cli/src/index.ts:1-794`
-- **Description:** 794 lines combining: command registration, cleanup registry, withTimeout utility, inline token validation in action handlers.
-- **Recommendation:** Extract cleanup.ts, move withTimeout to utils.ts, ensure each action handler is 5-10 lines max (option parse + execute call).
+- **Location:** `operators/internal/constants/ports.go:57`
+- **Description:** `DORegistryTokenExpirySeconds = 604800` is a time duration value (7-day token TTL) placed in `ports.go` alongside TCP port numbers. The constants package has a well-organized file-per-concept structure. This one constant breaks the pattern: engineers looking for time-related constants will find it in `timeouts.go`, not `ports.go`.
+- **Evidence:** `constants/ports.go:54-59` contains a section titled "DO Registry Credential Expiry" with a duration constant; `constants/timeouts.go` contains all other time-related constants
+- **Recommendation:** Move `DORegistryTokenExpirySeconds` to `timeouts.go`. Single-line change. Update the import in `tenant_credentials.go` if the package alias changes.
+
+---
+
+### ARCH-007: PlatformBootstrap status has duplicate state communication via Message string and Conditions
+
+- **Severity:** low
+- **Location:** `operators/api/v1/platformbootstrap_types.go:187`
+- **Description:** `PlatformBootstrapStatus` has both `Conditions []metav1.Condition` (typed, structured, machine-readable) and `Message string` (freeform, human-readable). The controller sets both in parallel. For example, at line 62-63: `pb.Status.Phase = Pending` AND `pb.Status.Message = "Bootstrap initialized"`. The Kubernetes API convention is to express all state via Conditions, using the Condition's Message field for human-readable text.
+- **Evidence:** `platformbootstrap_types.go:187-191` defines Message field; `platformbootstrap_controller.go:62-63, 78-79, 97` sets Message in parallel with phase transitions
+- **Recommendation:** Deprecate the `Message string` field. Move its content into the most relevant Condition's Message field. If a top-level human summary is needed for `kubectl get pbs` output, add a `+kubebuilder:printcolumn` for a condition status rather than a freeform string.
+
+---
+
+### ARCH-008: infra.ts bypasses CloudProviderFactory for ContainerRegistry and CDN resources
+
+- **Severity:** low
+- **Location:** `infra/pulumi/src/components/infra.ts:209`
+- **Description:** `infra.ts` imports and uses `@pulumi/digitalocean` directly to create `digitalocean.ContainerRegistry` (line 220) and `digitalocean.Cdn` (line 209), bypassing the `CloudProviderFactory` abstraction that handles all other resources. A comment at line 196 acknowledges this bypass. This means the AWS provider stub cannot satisfy these resource requirements without modifying `infra.ts` itself.
+- **Evidence:** `infra.ts:2,209,220` direct `@pulumi/digitalocean` imports alongside factory-mediated resources; `contracts/provider.ts` has no `createContainerRegistry` or `createCdn` methods
+- **Recommendation:** Add `createContainerRegistry(spec)` and optionally `createCdn(spec)` to `CloudProviderFactory` and the contracts. Implement in `DigitalOceanProviderFactory`. Stub in `AwsProviderFactory`. This closes the abstraction leak and makes the provider boundary complete.
+
+---
+
+### ARCH-009: GitOpsSpec fields lack kubebuilder validation markers
+
+- **Severity:** low
+- **Location:** `operators/api/v1/tenant_types.go:82`
+- **Description:** `GitOpsSpec.RepoName` and `GitOpsSpec.Branch` have no kubebuilder validation markers. An empty `RepoName` will pass admission validation and reach the reconciler, where it will attempt to call `EnsureRepo(ctx, "", ...)` on the Gitea API — an error that could be caught at admission time instead.
+- **Evidence:** `tenant_types.go:82-88` GitOpsSpec struct has no `+kubebuilder:validation:*` markers; compare with `tenant_types.go:52` DisplayName which has `MinLength=1`
+- **Recommendation:** Add `// +kubebuilder:validation:MinLength=1` to both `RepoName` and `Branch`. Optionally add a Pattern marker to `RepoName` matching valid Gitea repository names. Run `make manifests` to regenerate CRD YAML.
+
+---
+
+### ARCH-010: PriorityClass provisioning only targets runtime cluster, not build cluster
+
+- **Severity:** low
+- **Location:** `operators/internal/controller/tenant_priority.go:44`
+- **Description:** `reconcilePriorityClass` creates a PriorityClass on `r.RuntimeClient` only. Argo Workflow pods run on the build cluster and are also subject to multi-tenant resource contention. A Growth-tier tenant's build pods cannot be scheduled with higher priority than a Starter-tier tenant's build pods because no PriorityClass exists on the build cluster.
+- **Evidence:** `tenant_priority.go:44` uses `r.RuntimeClient` exclusively; `tenant_build.go` provisions build namespace with quota and network policy but no priority class
+- **Recommendation:** Evaluate whether the build cluster should also receive plan-based PriorityClasses. If yes, add `controllerutil.CreateOrUpdate(ctx, r.BuildClient, pc, ...)` alongside the existing RuntimeClient call. If build priority is intentionally flat (all builds are equal), document this decision with a comment explaining why.
 
 ---
 
 ## Recommendations (Prioritized)
 
-1. **Fix the subdomain TrimRight bug** (ARCH-004, high) — Replace inline subdomain generation in `build_orchestrator.go:710-712` with `cfkv.Subdomain(...)`. This is a one-line fix for a real correctness bug affecting static frontend routing.
+1. **Split bootstrap.ts** (ARCH-001): Highest maintenance impact. Split by cluster: `mgmt-bootstrap.ts`, `build-bootstrap.ts`, `runtime-bootstrap.ts`. This is a pure structural refactor — no behavior changes required.
 
-2. **Align ArgoCD app naming** (ARCH-003, medium) — Reconcile `pkg/naming.ArgoAppName` with actual usage. The current inconsistency between the library and the 5 call sites in services is a latent maintenance bug.
+2. **Fix ArgoCD provisioner client injection** (ARCH-003): One-line change in `NewRealProvisioner` signature, one-line change in `cmd/main.go`. Aligns the ArgoCD provisioner with the established DIP pattern used by Gitea and MinIO provisioners.
 
-3. **Remove duplicate KV write in BuildOrchestrator** (ARCH-001, medium) — `writeStaticRoutingEntries` in `OnBuildCompleted` creates a parallel KV write path that undermines the `DeliveryActivator` abstraction.
+3. **Resolve EnvironmentSpec naming collision** (ARCH-004): Rename `EnvironmentSpec` → `TenantEnvironmentEntry` in `tenant_types.go`. Mechanical rename, regenerate manifests. Eliminates a documented workaround.
 
-4. **Migrate gitops/source naming to pkg/naming** (ARCH-005, medium) — Centralize Gitea repo name generation to eliminate divergence risk between API and operators.
+4. **Centralize InsecureSkipVerify** (ARCH-005): Create `internal/httpclient/` package. Four call sites become one-liners. Enables single-point TLS hardening.
 
-5. **Split bootstrap.ts** (ARCH-006, medium) — Break the 2459-line monolith into per-cluster files. Low risk, high future maintainability gain.
+5. **Add validation markers to GitOpsSpec** (ARCH-009): Two `+kubebuilder:validation:MinLength=1` annotations. Prevents invalid Tenant CRs from reaching the reconciler.
 
-6. **Extract shared DTOs** (ARCH-002, low) — Create `api/internal/domain` package to eliminate the parallel type hierarchy between routes and services.
+6. **Move DORegistryTokenExpirySeconds to timeouts.go** (ARCH-006): Single-line move. Cosmetic but improves constants package consistency.
 
-7. **Add pkg/naming.StaticSubdomain** (ARCH-007, low) — Single source of truth for subdomain generation, used by cfkv, manifests, and build_orchestrator.
+7. **Remove or deprecate PlatformBootstrap Message field** (ARCH-007): Eliminate parallel state communication. Low risk, improves API hygiene.
 
-8. **Fix PlatformBootstrap HTTP client injection** (ARCH-008, low) — One-line fix to make the injected HTTPClient fully effective.
+8. **Add ContainerRegistry/CDN to CloudProviderFactory** (ARCH-008): Closes the provider abstraction leak. Required before AWS provider can be implemented.
 
-9. **Define ReconcileOrchestrator interface** (ARCH-009, low) — Improves unit testability of BuildReconcileLoop.
+9. **Document TenantReconciler field usage per file** (ARCH-002): Lowest effort. Add a comment to the struct documenting which fields each sub-file uses. Deferred full refactor until test friction justifies it.
 
-10. **Refactor CLI index.ts** (ARCH-010, low) — Improve separation between framework wiring and command logic.
+10. **Decide build cluster priority class policy** (ARCH-010): Either add build cluster PriorityClass provisioning or document the intentional omission.

@@ -5,7 +5,6 @@ package controller
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
+	"github.com/loopzero/loopzero/operators/internal/httpclient"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -153,20 +153,12 @@ func (r *PlatformBootstrapReconciler) requeueWithRetry(ctx context.Context, pb *
 }
 
 // httpClient returns the HTTP client, using a default if none was injected.
-// The default includes InsecureSkipVerify because internal services (ArgoCD, Gitea, API)
-// use self-signed TLS certificates in-cluster.
+// ARCH-005: Default client comes from centralized httpclient package.
 func (r *PlatformBootstrapReconciler) httpClient() *http.Client {
 	if r.HTTPClient != nil {
 		return r.HTTPClient
 	}
-	return &http.Client{
-		Timeout: constants.HTTPTimeoutExternal,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, //nolint:gosec // internal cluster services use self-signed certs
-			},
-		},
-	}
+	return httpclient.NewWithTimeout(constants.HTTPTimeoutExternal)
 }
 
 // giteaClient returns a BootstrapClient for the given Gitea base URL.

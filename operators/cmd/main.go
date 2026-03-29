@@ -4,14 +4,13 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,6 +23,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/controller"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
+	"github.com/loopzero/loopzero/operators/internal/httpclient"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 )
 
@@ -84,11 +84,14 @@ func main() {
 	if argoCDNamespace == "" {
 		argoCDNamespace = constants.DefaultArgoCDNamespace
 	}
-	argoCDProvisioner, err := argocd.NewRealProvisioner(argoCDNamespace)
+	// ARCH-003: Create dynamic client from manager config and inject into ArgoCD provisioner
+	// (rather than letting the provisioner create its own independent client).
+	dynClient, err := dynamic.NewForConfig(mgr.GetConfig())
 	if err != nil {
-		setupLog.Error(err, "unable to create ArgoCD provisioner")
+		setupLog.Error(err, "unable to create dynamic client for ArgoCD provisioner")
 		os.Exit(1)
 	}
+	argoCDProvisioner := argocd.NewRealProvisioner(argoCDNamespace, dynClient)
 
 	workloadClusterURL := os.Getenv("WORKLOAD_CLUSTER_URL")
 	if workloadClusterURL == "" {
@@ -207,17 +210,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Shared HTTP client for controllers that make internal HTTP calls (Gitea, ArgoCD).
-	// Internal services use self-signed TLS certificates, so InsecureSkipVerify is
-	// required for in-cluster communication.
-	httpClient := &http.Client{
-		Timeout: constants.HTTPTimeoutDefault,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, //nolint:gosec // internal cluster services use self-signed certs
-			},
-		},
-	}
+	// ARCH-005: Shared HTTP client for controllers that make internal HTTP calls.
+	// Centralized in internal/httpclient — single place to harden TLS when
+	// internal services get proper cert-manager issued certificates.
+	httpClient := httpclient.New()
 
 	// 4. GitRepositoryBindingController: syncs Git credentials to ArgoCD Secrets.
 	// Detects credential rotation via SHA256 hash comparison.

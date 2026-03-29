@@ -1,269 +1,220 @@
-# Meeting Minutes — Iteration 1 (Phase 1: Baseline)
-
-## Date: 2026-03-29
-## Attendees: chief-reviewer, architecture-analyst, dependency-analyzer, flow-tracer
+# Meeting Minutes — Phase 1, Iteration 1
+**Date:** 2026-03-29
+**Review scope:** Cluster Management, Integrations, Tools, and Control Plane
 
 ---
 
 ## Status
-
-- **Phase:** 1 (Baseline — Discovery and Mapping)
-- **Iteration:** 1 (global: 1)
-- **Findings registered:** 0 (first iteration, no previous work)
-- **Previous work:** None — this is the inaugural meeting
-- **Database:** Initialized, empty
-
----
-
-## Specialist Briefings
-
-### Chief Reviewer — Initial Observations
-
-A structural survey of the LoopZero repository has been completed to frame the work for the team. Key observations:
-
-**Codebase footprint:**
-- 6 primary Go modules: `api/`, `operators/`, `pkg/`, `infra/scripts/`, `infra/tests/`, and a TypeScript CLI (`cli/`)
-- 2 additional Go modules outside the workspace: `loopzero-forge/` (Argo Workflow SDK) and `loopzero-packs/` (language detection)
-- ~4,739 lines across API services alone; `build_orchestrator.go` is the heaviest file at 736 lines
-- 9 CRD types, 7 controllers, 7 state machines, 13 Helm charts
-- 498 CLI tests (Jest), 60+ API test files, Ginkgo-based operator and E2E tests
-
-**Architecture summary confirmed (4-plane design):**
-1. Developer Plane: TypeScript CLI -> Go API (chi + pgx)
-2. Control Plane: mgmt cluster (operators, Gitea, ArgoCD, PostgreSQL, MinIO, Traefik)
-3. Build Plane: build cluster (Argo Workflows + BuildKit, rootless)
-4. Workload Plane: runtime cluster (user apps, ArgoCD-managed, CF Tunnel)
-
-**Cross-plane communication model:**
-- API -> build cluster: direct Kubernetes client (polling Workflow CRDs — C-01/C-03 fix, no callback HTTP from build to API)
-- API -> mgmt cluster: Kubernetes client (Tenant CR operations)
-- API -> gitops: Gitea HTTP (push manifests)
-- API -> ArgoCD: HTTP client (sync trigger)
-- Static apps: S3 (DO Spaces) + Cloudflare Workers KV for routing
-
-**Key design decisions already in place (ADRs observed):**
-- `pg_advisory_xact_lock` for environment serialization (not session-scoped — correct)
-- 5-second lock timeout enforced at `SET LOCAL lock_timeout`
-- `hashtext()` for key derivation — collision acknowledged (~0.001% with 2000 envs)
-- RELEASING intermediate state added to build state machine (MEET-2026-03-26-008)
-- Reconcile loop (polling) replaces callback architecture (C-01/C-03)
-- Delivery abstraction: `DeliveryActivator` interface allowing both container and static delivery paths
-
-**Incomplete/placeholder items spotted:**
-- `AppSecret` CRD: no controller implemented
-- `PreviewEnvironment` CRD: no controller implemented
-- `ReconciliationReport` CRD: no controller
-- `loopzero status` endpoint handler exists but per CLAUDE.md, 1 line missing in `server.go`
-- `startup_reconciler.go` still present alongside `build_reconcile_loop.go` — potential overlap
-- Sprint 5 (preview environments) not started
+- Phase: 1/7 (Baseline — Discovery and Mapping)
+- Findings: total=7, critical=0, high=4, medium=3, low=0
+- Components registered: 18 (3 clusters, 7 controllers, 3 provisioners, 1 state machine lib, 1 entrypoint, 1 workflow, 1 helm-charts group)
+- Flows registered: 6 (all status: identified)
+- Previous iteration: none (this is iteration 1)
 
 ---
 
-## Decisions
+## Scope Boundary Confirmed
 
-1. **Decision: Prioritize the 4-plane boundary as the primary structural risk axis.**
-   Rationale: LoopZero's architecture spans 3 Kubernetes clusters. Every cross-plane call is a potential failure point. The architecture analyst must map all cross-plane API calls, authentication paths, and failure modes between planes — not just within each component.
+**IN SCOPE for this review cycle:**
+- 3-cluster topology: mgmt (control plane), build (Argo Workflows), workload (runtime)
+- 7 operator controllers: Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential
+- 3 CRDs without controllers: AppSecret, PreviewEnvironment, ReconciliationReport
+- Provisioner integrations: Gitea (RealProvisioner), ArgoCD (RealProvisioner), MinIO (AdminProvisioner)
+- Multi-cluster client pattern (operators/cmd/main.go)
+- State machines: Tenant, PlatformBootstrap (in pkg/statemachine/)
+- Cluster lifecycle: k3d configs (local), Pulumi IaC (DigitalOcean production)
+- 13 Helm charts, Taskfile automation, GitHub Actions infra-deploy.yml
 
-2. **Decision: Treat the build → release → ArgoCD sync pipeline as the highest-priority flow to trace.**
-   Rationale: This is the core user-facing value path (`loopzero deploy` → live URL). It involves the most components, the most state transitions, and has the most observed historical bugs (C-01, C-03, MEET-008 patches). Any gap here is a critical product defect.
-
-3. **Decision: All 7 state machines must be mapped against their spec definitions before Phase 3 (Architecture Review).**
-   Rationale: State machine correctness is a spec-level contract. The `pkg/statemachine/` package has both implementation and tests; the reviewer must verify no state transition gaps exist between the state machine definition and the actual event callers in services.
-
-4. **Decision: The dependency graph must include both direct and transitive relationships across all 5 Go modules and the TypeScript CLI.**
-   Rationale: The Go workspace (`go.work`) ties together 5 modules with shared types via `pkg/`. Import cycle risks and coupling between `api/` and `operators/` must be mapped before Phase 3.
-
-5. **Decision: Flag all "implemented but not wired" patterns as a first-class finding category.**
-   Rationale: CLAUDE.md documents a known systemic pattern called "Implemented but not wired" — code exists in the correct location but is not integrated in `main.go` or runtime paths. This is a completeness risk that must be detected early.
-
-6. **Decision: Record the `loopzero status` missing wire as a verified completeness gap, pending confirmation.**
-   Rationale: CLAUDE.md explicitly states "`loopzero status` pending (handler exists, 1 line missing in server.go)." The flow tracer must confirm whether this is truly unregistered in the server routing.
+**OUT OF SCOPE:**
+- CLI (TypeScript) implementation details
+- API business logic beyond control plane integration points
+- Framework detection (loopzero-packs)
+- User-facing deploy/rollback/logs flows
 
 ---
 
-## Task Assignments
+## Agent Reports
 
-### Architecture Analyst
+### Chief Reviewer — Initial Code Survey
+Completed direct reading of:
+- `operators/cmd/main.go` (250 lines) — full multi-cluster bootstrap
+- `operators/internal/controller/tenant_controller.go` (head)
+- `operators/internal/controller/tenant_build.go` (complete — 342 lines)
+- `operators/internal/controller/environment_controller.go` (head)
+- `operators/internal/controller/platformbootstrap_controller.go` (head)
+- `operators/internal/controller/application_controller.go` (head)
+- `operators/internal/controller/clustercredential_controller.go` (head)
+- `operators/internal/controller/gitrepositorybinding_controller.go` (head)
+- `operators/internal/argocd/provisioner.go` (complete)
+- `operators/internal/minio/provisioner.go` (complete — 304 lines)
+- `operators/internal/conditions/types.go` (complete)
+- `operators/internal/constants/timeouts.go` (complete)
+- `pkg/statemachine/machine.go` (complete)
+- `pkg/statemachine/tenant.go` (complete)
+- `infra/k3d/mgmt-cluster.yaml` and `build-cluster.yaml`
+- `.github/workflows/infra-deploy.yml` (head)
 
-**Goal:** Produce a component map of all significant modules, their responsibilities, their inter-dependencies, and the cross-plane API surface.
+### Architecture Analyst (pending — iteration 2 assignment)
+Not yet deployed. Task assigned: map full controller dependency chain and coupling analysis.
 
-**Specific deliverables:**
-1. List all 6+ primary Go modules and the CLI module with their public API surfaces (exported interfaces/types used across modules)
-2. Map all cross-cluster clients: which component uses which kubeconfig, for what purpose
-3. Map all external service integrations (Gitea, ArgoCD, Argo Workflows, MinIO/S3, GitHub, Cloudflare KV, Loki) and which API package owns each
-4. Identify the `startup_reconciler.go` vs `build_reconcile_loop.go` overlap — are both active, is one deprecated?
-5. Identify any structural anti-patterns: God objects, circular dependency risks, missing abstractions
+### Security Auditor (pending — iteration 2 assignment)
+Not yet deployed. Initial risk hypotheses raised by chief reviewer:
+- RISK-001: InsecureSkipVerify on shared HTTP client
+- RISK-002: MinIO Admin API uses Basic Auth
+- RISK-007: Build namespace egress policy allows port 443 to any IP
 
-**Files to examine:**
-- `/home/paulo/loopzero/api/cmd/main.go` (full file — entrypoint wiring)
-- `/home/paulo/loopzero/api/internal/server/server.go` (routing table)
-- `/home/paulo/loopzero/api/internal/adapters/` (DIP bridges)
-- `/home/paulo/loopzero/operators/cmd/` (operator entrypoint — multi-cluster client setup)
-- `/home/paulo/loopzero/infra/pulumi/src/index.ts` (3-phase infra orchestration)
+### Test Auditor (pending — iteration 2 assignment)
+Not yet deployed. Key gap identified: RISK-006 (envtest uses single API server for 3-cluster simulation).
 
----
-
-### Dependency Analyzer
-
-**Goal:** Map the dependency graph across all modules, identify coupling risks, and detect supply chain vulnerabilities.
-
-**Specific deliverables:**
-1. Go module dependency graph: which modules import which, what are the shared packages
-2. Key third-party Go dependencies per module with version pins (pgx, chi, controller-runtime, client-go, argo, etc.)
-3. TypeScript CLI dependency tree: key packages, lock file health
-4. Any dependency that is: unpinned, pulling from a non-stable source, or known-vulnerable
-5. Identify if `loopzero-forge/` and `loopzero-packs/` are in the Go workspace — they are NOT per `go.work`, which means they may have diverged dependency versions
-
-**Files to examine:**
-- `/home/paulo/loopzero/go.work` and all `go.mod` files
-- `/home/paulo/loopzero/cli/package.json` and `package-lock.json`
-- `/home/paulo/loopzero/loopzero-forge/go.mod` (if it exists)
-- `/home/paulo/loopzero/loopzero-packs/go.mod` (if it exists)
-- `/home/paulo/loopzero/.github/workflows/ci.yml` (govulncheck + npm audit jobs)
+### Infrastructure Reviewer (pending — iteration 2 assignment)
+Not yet deployed. Focus area: Helm chart version pinning, k3d vs production parity, Taskfile idempotency.
 
 ---
 
-### Flow Tracer
+## Key Architecture Facts Established
 
-**Goal:** Map all critical business flows end-to-end, identifying the sequence of components, state transitions, and failure modes at each step.
+### Multi-Cluster Operator Pattern
+The operator process runs entirely in the mgmt cluster but manages resources across 3 clusters:
+- `r.Client` (mgmt) — CRDs, status, provisioner calls
+- `r.BuildClient` (build) — build-{tenant} namespaces, RBAC, secrets
+- `r.RuntimeClient` (runtime) — {tenant}-{env} namespaces, RBAC, NetworkPolicy
 
-**Critical flows to trace (in priority order):**
+Cross-cluster ownerReference is impossible. Cleanup uses label-based listing + finalizer pattern. This is a well-known Kubernetes pattern but creates operational risk on partial failure.
 
-1. **Deploy flow** (`loopzero deploy` → live URL):
-   CLI uploads bundle → API POST /api/v1/builds → `withEnvironmentLock` → Argo Workflow submit → BuildKit → image push → manifest generation → Gitea gitops push → ArgoCD sync → SSE event → CLI renders URL
-   - Which state machine events fire at each step?
-   - Where does RELEASING state get set and cleared?
-   - What happens on ArgoCD sync failure?
+### Controller Dependency Chain
+```
+Tenant (root) --> Environment --> LoopZeroApplication --> ExposedRoute
+```
+Independent: GitRepositoryBinding, ClusterCredential, PlatformBootstrap
 
-2. **Auth flow** (`loopzero login` → authenticated requests):
-   CLI token storage → API Bearer token → GitHub validator → token cache → membership lookup → UserContext injection
-   - Is the token cache TTL correct?
-   - What happens on GitHub API rate limit?
+Wiring order in cmd/main.go follows this chain explicitly.
 
-3. **Rollback flow** (`loopzero rollback` → previous release live):
-   API POST /rollback → `withEnvironmentLock` → GetPreviousRelease → manifest retrieval from git history → Gitea push → ArgoCD sync → release state transition
-   - Does the rollback flow go through the same state machines?
-   - Is the convergence loop involved?
+### State Machine Discipline
+- `pkg/statemachine.Machine` panics on invalid transitions (programming errors, not runtime errors)
+- Tenant: "" -> Provisioning -> Active -> Deleting (terminal)
+- PlatformBootstrap: "" -> Pending -> ConfiguringGitea -> ConfiguringArgoCD -> WaitingForAPI -> Complete/Failed
+- Direct phase assignment is forbidden — only `tenantSM.Transition()` and `platformBootstrapSM.Transition()` calls allowed
 
-4. **Static delivery flow** (static frontend → CF edge):
-   Build → S3 upload → CF KV write → CF Worker → DO Spaces CDN
-   - Which service writes CF KV? (`cfkv/` package in API)
-   - Is this path covered by the reconcile loop?
+### TenantController Build Namespace Setup (10 steps, all via CreateOrUpdate)
+1. namespace (ensureBuildNs)
+2. resourcequota (ensureBuildQuota)
+3. networkpolicy (reconcileBuildNetworkPolicy)
+4. limitrange (ensureBuildLimitRange)
+5. serviceaccount (ensureBuildServiceAccount)
+6. storage-credentials (ensureBuildStorageCredentials)
+7. registry-credentials (ensureBuildRegistryCredentials)
+8. executor-rbac (ensureBuildExecutorRBAC)
+9. submitter-rbac (ensureBuildSubmitterRBAC)
+10. minio-per-tenant (ensureBuildMinIOPerTenant)
 
-5. **`loopzero status` wiring gap** (verify the known missing line):
-   Check `server.go` routing table — is `StatusHandler` registered?
-
-**Files to examine:**
-- `/home/paulo/loopzero/api/internal/services/build_orchestrator.go`
-- `/home/paulo/loopzero/api/internal/services/build_reconcile_loop.go`
-- `/home/paulo/loopzero/api/internal/services/release_convergence_loop.go`
-- `/home/paulo/loopzero/api/internal/services/rollback_orchestrator.go`
-- `/home/paulo/loopzero/api/internal/services/static_delivery.go`
-- `/home/paulo/loopzero/api/internal/server/server.go` (route registration)
-- `/home/paulo/loopzero/cli/src/commands/deploy.ts`
-- `/home/paulo/loopzero/cli/src/commands/rollback.ts`
+### MinIO Isolation Design
+Per-tenant MinIO users (`loopzero-build-{tenantID}`) with policies scoped to `arn:aws:s3:::loopzero-builds/{tenantID}/*`. This is **optional** — nil MinIOProvisioner falls back to global credentials from SPACES_ACCESS_KEY_ID. In production (DO Spaces), per-tenant provisioner is DISABLED because Spaces has no Admin API.
 
 ---
 
-## Risk Hypotheses
+## Risk Hypotheses Registered (Phase 1)
 
-These hypotheses are not confirmed findings — they are areas that require evidence from specialist agents before being elevated to findings.
-
-### RH-01: State Machine Caller Gaps
-**Hypothesis:** Some state transitions defined in `pkg/statemachine/` may not have callers in `api/internal/services/`. The RELEASING state was added recently (MEET-2026-03-26-008); there may be callers that still expect the old RUNNING→SUCCEEDED direct transition.
-**Priority:** High
-**Owner to investigate:** Flow Tracer + Code Reviewer (Phase 4)
-
-### RH-02: `loopzero-forge` and `loopzero-packs` Outside Go Workspace
-**Hypothesis:** `loopzero-forge/` and `loopzero-packs/` are not in `go.work`, meaning they operate as independent modules. If the API or build pipeline imports them, there may be version drift between what is tested locally and what runs in CI.
-**Priority:** Medium
-**Owner to investigate:** Dependency Analyzer
-
-### RH-03: `startup_reconciler.go` Dead Code Risk
-**Hypothesis:** `startup_reconciler.go` still exists in `api/internal/services/` but the reconcile loop (C-01/C-03 fix) was designed to subsume it. If `startup_reconciler.go` is still wired in `main.go`, there may be duplicate processing of builds on startup.
-**Priority:** Medium
-**Owner to investigate:** Architecture Analyst + Flow Tracer
-
-### RH-04: `loopzero status` Endpoint Not Registered
-**Hypothesis:** CLAUDE.md states "handler exists, 1 line missing in server.go." If confirmed, `loopzero status` would silently return 404 in production without any error at startup.
-**Priority:** High (user-facing gap)
-**Owner to investigate:** Flow Tracer (Phase 1), Completeness Auditor (Phase 2)
-
-### RH-05: Auth Token Cache Invalidation on GitHub Revoke
-**Hypothesis:** The auth middleware caches GitHub token validation results for 5 minutes. If a user's GitHub token is revoked, they remain authenticated for up to 5 minutes. This is expected behavior but must be confirmed as a deliberate design decision, not an oversight.
-**Priority:** Medium (security design)
-**Owner to investigate:** Security Auditor (Phase 6)
-
-### RH-06: hashtext() Lock Key Collision Under Multi-Tenant Scale
-**Hypothesis:** The lock key uses `hashtext()` (int32 hash). With many concurrent tenants/projects/environments, hash collisions would cause false serialization (one tenant's deploys waiting for an unrelated tenant's deploy). The code acknowledges ~0.001% collision rate but this may not account for adversarial naming.
-**Priority:** Low-Medium (liveness, not safety)
-**Owner to investigate:** Security Auditor + Code Reviewer
-
-### RH-07: SSE Stream Leak on Long-Running Builds
-**Hypothesis:** The SSE stream has a safety timeout (`SSESafetyTimeout`), but if builds enter RELEASING state and stall there for up to 10 minutes, CLI connections may drop before the stream delivers the final URL, leaving the user with no feedback.
-**Priority:** Medium (DX regression)
-**Owner to investigate:** Flow Tracer + Code Reviewer (Phase 4)
-
-### RH-08: AppSecret CRD Unimplemented — ESO Bridge Gap
-**Hypothesis:** `AppSecret` CRD exists with no controller. Secrets currently managed via External Secrets Operator (ESO). The gap between ESO sync and the `AppSecret` abstraction may leave secret management in an inconsistent state for new tenants.
-**Priority:** High (completeness)
-**Owner to investigate:** Completeness Auditor (Phase 2)
-
-### RH-09: Cross-Cluster Client Failure Isolation
-**Hypothesis:** The TenantController uses 3 separate Kubernetes clients (mgmt, build, runtime). If the runtime client becomes unreachable, reconcile loops may block or fail in ways that affect unrelated tenants on the same controller instance.
-**Priority:** High (operational)
-**Owner to investigate:** Architecture Analyst + Infrastructure Reviewer (Phase 5)
-
-### RH-10: Cloudflare KV Consistency with S3 Upload
-**Hypothesis:** In the static delivery flow, S3 upload and CF KV write are sequential operations. If CF KV write fails after S3 upload succeeds, the build is marked as completed but traffic is not routed to the new version. The rollback path for this failure mode is unclear.
-**Priority:** High (data consistency)
-**Owner to investigate:** Flow Tracer + Data Reviewer (Phase 5)
+| ID | Title | Severity | Category |
+|----|-------|----------|----------|
+| RISK-001 | InsecureSkipVerify on shared HTTP client | medium | security |
+| RISK-002 | MinIO Admin API uses Basic Auth, not SigV4 | medium | security |
+| RISK-003 | MinIO user exists but K8s Secret deleted — unrecoverable state | high | operational |
+| RISK-004 | No OwnerReference cross-cluster — orphaned build namespace possible | high | operational |
+| RISK-005 | PlatformBootstrap API seed may not be idempotent across restart | medium | operational |
+| RISK-006 | envtest uses single API server — multi-cluster failures untested | high | testing |
+| RISK-007 | Build egress NetworkPolicy allows port 443 to any IP | high | security |
 
 ---
 
 ## Strategic Assessment
 
-**What we know:**
-- The codebase is feature-rich and architecturally ambitious. Four separate planes with 3 Kubernetes clusters is a significant operational complexity surface.
-- Multiple recent bug fixes (C-01, C-03, MEET-008) indicate the build-to-release pipeline has been unstable and has received emergency patches. This is the area most likely to harbor residual issues.
-- The DIP (Dependency Inversion Principle) is consistently applied via interface abstractions. This is a positive signal for testability.
-- The `pg_advisory_xact_lock` implementation is correct and well-commented — it demonstrates deliberate engineering.
-- The `RELEASING` intermediate state (non-terminal, retryable) is a sound design for crash recovery.
+### What worked well
+- Direct code reading of entrypoint and key controllers provided a clear architectural picture in one pass.
+- The code is well-structured: typed conditions, centralized constants, state machine enforcement, dependency injection via interfaces. These are positive signals for the review.
+- The 10-step build namespace setup is comprehensively documented in comments and uses a clean step-slice pattern for readability.
 
-**Key structural risks:**
-- Multi-cluster complexity: failure isolation between the 3 clusters is not yet reviewed
-- Cross-cutting state: builds span 3 clusters and 2 state machines (Build + Release) — ensuring they stay consistent under crash scenarios is critical
-- "Implemented but not wired" pattern documented in CLAUDE.md — this must be systematically checked, not assumed
+### What to investigate deeper
+- The MinIO credential management path (RISK-003) requires tracing the full credential lifecycle from provisioning to K8s Secret to Argo Workflow injection.
+- Build namespace egress NetworkPolicy (RISK-007) needs comparison against the spec §17.1 threat model to determine if this is a known accepted risk or a gap.
+- The PlatformBootstrap WaitingForAPI step needs reading of `platformbootstrap_api.go` to verify idempotency.
+- The tenant deletion finalizer path needs reading of `reconcileDelete` to verify build cluster error handling.
 
-**What we do NOT yet know:**
-- Whether all 7 state machine implementations match their spec definitions precisely
-- Whether the reconcile loop correctly handles all RELEASING→SUCCEEDED edge cases
-- Whether there are any missing route registrations beyond the known `loopzero status` gap
-- Whether `loopzero-forge` and `loopzero-packs` have integration into the main build pipeline and what their dependency health looks like
+### Cross-cutting concern
+The "multi-cluster via separate K8s clients" pattern is used consistently but creates a class of failure modes that are architecturally invisible in envtest. This pattern — well-implemented in the code — requires explicit failure testing. RISK-006 is the test gap; RISK-004 is the runtime gap.
+
+---
+
+## Decisions
+
+1. **Individual controller granularity adopted.** Each of the 7 controllers is a separate component in the review database. Grouping by cluster (mgmt/build/workload) is retained for infrastructure components. Rationale: controllers have distinct failure modes, test coverage gaps, and security surfaces that require individual analysis.
+
+2. **Priority flow order for iteration 2 deep dive:** (1) Tenant Provisioning — highest complexity, most cross-cluster interactions. (2) Platform Bootstrap — single-run critical path with state machine and external dependencies. (3) Build Namespace Network Policy — direct security implication.
+
+3. **Multi-cluster failure modes are the single highest architectural risk gap.** The envtest simulation does not model cluster-level failures. E2E tests (infra/tests/e2e/) should be checked for multi-cluster failure coverage in iteration 2.
+
+4. **Build namespace egress NetworkPolicy** (RISK-007) is designated as the highest-severity security finding requiring immediate deeper investigation. The `PortHTTPS=443` rule with no IP restriction may render the exfiltration protection spec §17.1 ineffective.
+
+5. **No loop-back decision yet** — this is iteration 1 of phase 1. Advance to iteration 2 with assigned tasks below.
 
 ---
 
 ## Loop-Back Assessment
-
-- **Should we loop back?** N/A — this is Phase 1, Iteration 1
-- **Next phase criteria:** Phase 1 is complete when:
-  1. All primary components are mapped with their responsibilities and interfaces
-  2. The dependency graph across all Go modules and the CLI is documented
-  3. The 5 critical flows (deploy, auth, rollback, static delivery, status wiring) are traced end-to-end
-  4. All 10 risk hypotheses have a status (confirmed, refuted, or escalated to later phase)
+- Should we loop back? NO — this is phase 1 iteration 1. We advance to iteration 2.
+- Confidence for advancing: MEDIUM — baseline is mapped but several components (tenant_controller.go full body, reconcileDelete, platformbootstrap_api.go, exposure_controller.go full body, operatortest/setup.go) not yet read.
+- Iteration 2 focus: complete controller-by-controller deep read, architecture coupling analysis, and security investigation of RISK-001, RISK-002, RISK-007.
 
 ---
 
-## Next Steps (Before Phase 1 Complete)
+## Task Assignments for Iteration 2
 
-1. Architecture Analyst: complete component map with cross-plane dependency graph — deliver to `review-output/baseline/` within this iteration
-2. Dependency Analyzer: produce Go module and npm dependency analysis — flag any modules outside `go.work`
-3. Flow Tracer: trace deploy flow and verify `loopzero status` route registration — confirm or refute RH-04 immediately
-4. Chief Reviewer: synthesize all 3 reports into Phase 1 findings summary before advancing to Phase 2
+### Architecture Analyst
+**Task:** Produce a full dependency coupling map of the 7 controllers.
+- Read `operators/operatortest/setup.go` to understand test infrastructure
+- Read `operators/api/v1/tenant_types.go`, `environment_types.go`, `application_types.go` for CRD schema and validation markers
+- Map: which controllers can reconcile concurrently vs. must be sequential
+- Identify: is there any shared mutable state between controllers (besides the K8s API server)?
+- Deliverable: component coupling matrix, list of shared dependencies, reconcile concurrency analysis
+
+### Security Auditor
+**Task:** Deep investigation of RISK-007 (build egress) and RISK-001 (InsecureSkipVerify).
+- Read `tenant_build.go` reconcileBuildNetworkPolicy in full
+- Read `operators/internal/gitea/real_provisioner.go` to understand which endpoints the InsecureSkipVerify HTTP client reaches
+- Cross-reference against spec §17.1 (exfiltration prevention) and §17.4 (tenant isolation)
+- Deliverable: confirmed severity for RISK-007, full list of endpoints reachable via the InsecureSkipVerify client, recommendation on specificity
+
+### Test Auditor
+**Task:** Map test coverage for multi-cluster failure scenarios.
+- Read `operators/operatortest/setup.go` (full)
+- Read `operators/internal/controller/suite_test.go` (full)
+- Read `operators/internal/controller/tenant_integration_test.go` (full — continuation)
+- Inventory: what failure scenarios are tested vs. missing
+- Deliverable: test coverage gap analysis for multi-cluster failure modes (RISK-006)
+
+### Code Reviewer
+**Task:** Read tenant_controller.go reconcileDelete and minio credential lifecycle.
+- Read full `tenant_controller.go` reconcileDelete path
+- Trace MinIO credential path: EnsureTenantCredentials -> K8s Secret -> Argo Workflow env injection
+- Verify RISK-003 and RISK-004 with specific line references
+- Deliverable: confirmed or dismissed findings for RISK-003 and RISK-004 with code citations
+
+### Infrastructure Reviewer
+**Task:** Helm chart version analysis and k3d/production parity gaps.
+- Read all Helm chart `Chart.yaml` files in `infra/helm/`
+- Read `infra/pulumi/src/components/bootstrap.ts` for production deployment config
+- Compare k3d cluster configs (agents, resource limits) with production DOKS specs
+- Check: are all 13 Helm charts using pinned versions (no floating tags)?
+- Deliverable: version inventory, parity gap list, any floating dependencies
+
+### Completeness Auditor
+**Task:** Map the 3 unwired CRDs against their spec stubs.
+- Read `operators/api/v1/appsecret_types.go`, `preview_types.go`, `reconciliationreport_types.go`
+- Verify: do types exist with no controller? Are there TODO markers or partial implementations?
+- Check: is AppSecret critical path (secret sync to workload) blocking any current feature?
+- Deliverable: unwired CRD status report with spec references and impact assessment
 
 ---
 
 ## Next Meeting
-
-- **Expected at:** Iteration 2 (start of Phase 2: Completeness Audit)
-- **Focus:** Review specialist reports from Iteration 1, decide which risk hypotheses are confirmed findings, assign Phase 2 tasks to Completeness Auditor and Code Reviewer
+- Expected at: Iteration 2 start
+- Focus: Review deliverables from all 5 assigned agents above
+- Key question to answer: Is RISK-007 (build egress port 443) an accepted risk or a gap that needs remediation?

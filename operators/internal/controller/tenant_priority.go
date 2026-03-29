@@ -33,6 +33,12 @@ func priorityClassForPlan(plan loopzerov1.PlanTier) (name string, value int32, p
 // reconcilePriorityClass ensures the PriorityClass for the tenant's plan exists.
 // PriorityClasses are cluster-scoped and shared across tenants of the same plan,
 // so they must NOT be deleted when a tenant is deleted.
+//
+// ARCH-010: PriorityClasses are created on the RUNTIME cluster only, not the build cluster.
+// Build cluster priority is intentionally flat — all builds are equal regardless of plan tier.
+// Rationale: build pods are short-lived and managed by Argo Workflows with its own queue
+// and parallelism controls. Plan-based priority would create starvation for starter tenants
+// during peak build times, which is worse than FIFO ordering.
 func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	pcName, pcValue, preemptionPolicy := priorityClassForPlan(tenant.Spec.Plan)
 

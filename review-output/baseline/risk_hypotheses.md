@@ -1,156 +1,75 @@
-# Risk Hypotheses — Phase 1 Baseline
+# Risk Hypotheses — Cluster Management & Control Plane
 
-Generated: 2026-03-29
-Target: /home/paulo/loopzero
-
-These are testable hypotheses formed from the initial architecture scan. Each will be validated or invalidated in later phases.
+> Initial risk hypotheses formed during Phase 1 baseline analysis. Each will be confirmed or dismissed with evidence in subsequent phases.
 
 ---
 
-## H1: Rate Limiter Memory Leak (Medium)
+## High Severity (4)
 
-**Observation:** `api/internal/middleware/ratelimit.go` uses an in-memory `map[string]*bucket` with a cleanup goroutine that has no shutdown signal (no `context.Context`). The goroutine leaks on server shutdown.
+### RISK-007: Build Namespace Egress Policy — Unrestricted Port 443
+**Category:** Security
+**Component:** TenantController (tenant_build.go)
+**Hypothesis:** The `reconcileBuildNetworkPolicy` in tenant_build.go creates an egress rule that allows traffic on port 443 to **any IP address**. This means a malicious Dockerfile (or compromised build dependency) could exfiltrate secrets, source code, or build artifacts to any HTTPS endpoint on the internet.
+**Spec Reference:** §17.1 — Exfiltration prevention in build isolation
+**Impact:** HIGH — If build secrets (registry credentials, MinIO access keys, DO tokens) are available to the build container, they can be exfiltrated to external servers.
+**Testable Assertion:** Grep `reconcileBuildNetworkPolicy` for egress rules with port 443 and verify whether an IPBlock restriction exists.
 
-**Risk:** The cleanup goroutine runs forever via `for range ticker.C` with no exit path. Under graceful shutdown, this goroutine is leaked. Additionally, if the server is restarted frequently (e.g., in dev), goroutines accumulate.
+### RISK-003: MinIO Credential Recovery Gap
+**Category:** Operational
+**Component:** TenantController (tenant_build.go), MinIO Provisioner
+**Hypothesis:** When a MinIO user already exists but the corresponding K8s Secret is missing (deleted out-of-band), the controller enters an unrecoverable state. `EnsureTenantCredentials` returns an empty `secretKey` for existing users, and the Secret reconciliation skips the update.
+**Impact:** HIGH — Tenant builds fail until manual intervention (delete MinIO user or recreate Secret manually).
+**Testable Assertion:** Read MinIO provisioner's `EnsureTenantCredentials` return value when user exists; trace what happens when K8s Secret is absent.
 
-**Test in Phase 4:** Verify goroutine shutdown path. Check if `cleanupLoop` respects `ShutdownCtx`.
+### RISK-004: Cross-Cluster Orphaned Resources
+**Category:** Operational
+**Component:** TenantController (reconcileDelete)
+**Hypothesis:** Because `ownerReference` cannot cross cluster boundaries, build-{tenant} namespaces on the build cluster are cleaned up via the tenant's finalizer. If the build cluster is unreachable during tenant deletion, the finalizer blocks indefinitely and the build namespace persists as an orphan with allocated quota.
+**Impact:** HIGH — Resource leaks accumulate on the build cluster; no automated garbage collection exists.
+**Testable Assertion:** Read reconcileDelete path; check if build cluster unreachability has explicit error handling or timeout.
 
----
-
-## H2: Rate Limiter Keyed by TenantID After Auth — Anonymous Requests Share One Bucket (Medium)
-
-**Observation:** `ratelimit.go:82` — unauthenticated requests all share the key `"anonymous"`. If rate limiting is applied before auth middleware, all unauthenticated traffic competes against one bucket. If after auth, unauthenticated endpoints have no rate limiting.
-
-**Risk:** Either DoS on unauthenticated endpoints (no per-IP limiting) or false rate limiting when many unauthenticated clients share one bucket.
-
-**Test in Phase 6:** Verify rate limiter placement in middleware chain and key strategy.
-
----
-
-## H3: Advisory Lock Hash Collision — hashtext() Collision Risk (Low)
-
-**Observation:** `lock/environment_lock.go:68-70` — lock key is `"{tenant}:{project}:{env}"` hashed via `hashtext()` to int4. The code acknowledges ~0.001% collision risk with 2000 environments.
-
-**Risk:** False serialization (liveness impact, not safety). Acceptable per spec, but worth documenting as a known limitation.
-
-**Test in Phase 4:** Verify collision impact analysis is correct. No data corruption possible.
-
----
-
-## H4: GitHub Token as Primary Auth — No JWT, No Session Rotation (High)
-
-**Observation:** `middleware/auth.go` validates GitHub OAuth tokens directly (no session JWT). Results cached for 5 minutes. Token revocation on GitHub side is delayed by cache TTL.
-
-**Risk:** If a GitHub token is compromised, it remains valid in LoopZero for up to 5 minutes after revocation. No server-side session invalidation mechanism.
-
-**Test in Phase 6:** Map full auth flow, check for token revocation handling, cache invalidation on error.
+### RISK-006: Multi-Cluster Failure Modes Untested
+**Category:** Testing
+**Component:** operatortest/ (envtest setup)
+**Hypothesis:** The operator test suite uses a single envtest API server for all 3 cluster clients. Cross-cluster failure scenarios (build cluster down, runtime cluster partitioned, network timeout between clusters) are never exercised in tests.
+**Impact:** HIGH — Production failures in multi-cluster communication may not be caught before deployment. Controllers may corrupt state or hang on unreachable clusters.
+**Testable Assertion:** Read suite_test.go and operatortest/setup.go; search for any test that mocks a cluster failure or returns a connection error.
 
 ---
 
-## H5: Multi-Cluster Credential Management (High)
+## Medium Severity (3)
 
-**Observation:** The API server connects to 3 Kubernetes clusters (mgmt, build, workload) with kubeconfigs loaded from env vars. Credentials for Gitea, ArgoCD, MinIO, and PostgreSQL are also env-var based.
+### RISK-001: InsecureSkipVerify on Shared HTTP Client
+**Category:** Security
+**Component:** operators/cmd/main.go
+**Hypothesis:** A single `http.Client` with `InsecureSkipVerify=true` is shared by GitRepositoryBindingController and PlatformBootstrapController. While intended for self-signed internal certs, this disables all TLS certificate validation. If a provisioner is extended to call external endpoints, MITM attacks become possible.
+**Impact:** MEDIUM — Currently contained to internal cluster traffic, but the pattern creates a latent vulnerability.
+**Testable Assertion:** Audit all code paths that use this httpClient; confirm they only reach internal cluster endpoints.
 
-**Risk:** Credential rotation requires API restart. No runtime secret refresh mechanism visible. In production, a credential expiration during operation could cause cascading failures.
+### RISK-002: MinIO Admin API Authentication via Basic Auth
+**Category:** Security
+**Component:** operators/internal/minio/provisioner.go
+**Hypothesis:** The MinIO Admin provisioner uses `req.SetBasicAuth()` for authentication. If the MINIO_ENDPOINT is HTTP (not HTTPS), credentials are transmitted in cleartext. The MinIO Admin API typically uses HMAC-SHA256 signing.
+**Impact:** MEDIUM — Credentials exposed in transit if TLS not enforced. In production, MinIO is disabled (DO Spaces used instead), reducing actual risk.
+**Testable Assertion:** Read signRequest(); verify MINIO_ENDPOINT defaults; check if TLS is enforced in production.
 
-**Test in Phase 5:** Check credential refresh patterns, rotation procedures, and secret sync (ESO).
-
----
-
-## H6: Build Reconcile Loop — Potential for Stuck Builds (High)
-
-**Observation:** Build state machine has timeout states (QUEUED>5m, RUNNING>30m, RELEASING>10m). A `BuildReconcileLoop` and `BuildReaper` service exist in `api/internal/services/`.
-
-**Risk:** If the reconcile loop crashes or misses a build, it could remain in RUNNING state indefinitely. Need to verify that the reaper catches all stuck builds and that reconciliation is truly idempotent.
-
-**Test in Phase 4:** Read BuildReconcileLoop and BuildReaper. Verify timeout enforcement, crash recovery, idempotency.
-
----
-
-## H7: SSE Stream Resource Exhaustion (Medium)
-
-**Observation:** Server config has `SSEMaxConcurrentStreams int64` suggesting a limit exists, but need to verify it's enforced. SSE connections are long-lived HTTP connections.
-
-**Risk:** Without proper limits, many simultaneous `loopzero deploy` commands could exhaust server connection capacity. Need to verify connection counting and cleanup.
-
-**Test in Phase 4:** Read SSE implementation, check connection limit enforcement, timeout handling.
+### RISK-005: PlatformBootstrap API Seed Idempotency
+**Category:** Operational
+**Component:** PlatformBootstrapController (platformbootstrap_api.go)
+**Hypothesis:** The WaitingForAPI phase calls the API to seed the database. If the operator crashes after the API call succeeds but before the state machine transitions, the next reconcile will retry the seed. If the seed endpoint is not idempotent (insert vs. upsert), duplicate data may be created.
+**Impact:** MEDIUM — Duplicate seed data could cause runtime errors or data inconsistency. Platform bootstrap runs rarely (once per cluster setup).
+**Testable Assertion:** Read platformbootstrap_api.go; check if the API seed endpoint uses upsert semantics.
 
 ---
 
-## H8: GitOps Push as Single Point of Failure (High)
+## Summary Table
 
-**Observation:** The deploy flow requires a successful git push to Gitea for ArgoCD sync. If Gitea is unavailable, deploys fail completely.
-
-**Risk:** No fallback for Gitea outages. Circuit breaker exists for some services but need to verify Gitea push has retry/circuit-breaker protection.
-
-**Test in Phase 4:** Check GitOpsPusher error handling, retry logic, and circuit breaker coverage.
-
----
-
-## H9: Forward-Only Migrations — No Rollback Path (Medium)
-
-**Observation:** CLAUDE.md states "forward-only, .up.sql only" for migrations. The project explicitly has no down migrations.
-
-**Risk:** A bad migration in production requires manual intervention. Data schema rollback is impossible without manual SQL. This is a design choice, not a bug, but increases operational risk.
-
-**Test in Phase 5:** Verify migration safety, check for destructive operations in existing migrations.
-
----
-
-## H10: ArgoCD Manual Sync Only — Convergence Delay (Medium)
-
-**Observation:** ArgoCD is configured for manual sync only (not auto-sync). The API triggers sync explicitly.
-
-**Risk:** If the API's ArgoCD sync call fails after gitops push, the desired state is in Git but not applied. Need to verify retry/recovery mechanism for failed syncs.
-
-**Test in Phase 4:** Check ArgoCD sync client error handling and retry logic.
-
----
-
-## H11: Static Frontend Delivery — CF Worker KV Consistency (Medium)
-
-**Observation:** Static frontends are served via Cloudflare Worker reading routing from KV. The API writes to KV during build completion.
-
-**Risk:** KV is eventually consistent. There's a window after deploy where the old version is still served. Need to verify the write timing and any cache invalidation.
-
-**Test in Phase 4:** Read CF KV client, check write timing in deploy flow.
-
----
-
-## H12: Operator CRDs Without Webhooks — No Admission Validation (Medium)
-
-**Observation:** 9 CRDs defined but no webhook configuration visible. CRD validation relies solely on OpenAPI schema in CRD spec.
-
-**Risk:** Invalid CRs can be created that pass OpenAPI validation but violate business rules (e.g., invalid state transitions via direct kubectl). Controllers must handle all invalid states defensively.
-
-**Test in Phase 3:** Check CRD validation strategy, controller defensive handling of invalid input.
-
----
-
-## H13: "Implemented but Not Wired" Pattern (High)
-
-**Observation:** CLAUDE.md explicitly warns about this systemic pattern — "Code exists in correct location but not integrated in main.go or runtime path."
-
-**Risk:** Features that appear complete in code review but are actually unreachable at runtime. This is a known pattern in the project.
-
-**Test in Phase 2:** Comprehensive wiring audit — trace from entry point to every feature handler.
-
----
-
-## Summary Priority
-
-| Priority | Hypothesis | Risk Level |
-|----------|------------|------------|
-| P1 | H4 (GitHub token auth) | High |
-| P1 | H5 (Multi-cluster credentials) | High |
-| P1 | H6 (Stuck builds) | High |
-| P1 | H8 (GitOps SPOF) | High |
-| P1 | H13 (Not wired) | High |
-| P2 | H2 (Rate limiter keying) | Medium |
-| P2 | H7 (SSE exhaustion) | Medium |
-| P2 | H10 (ArgoCD sync failure) | Medium |
-| P2 | H11 (CF KV consistency) | Medium |
-| P2 | H12 (No admission webhooks) | Medium |
-| P3 | H1 (Rate limiter goroutine leak) | Medium |
-| P3 | H9 (Forward-only migrations) | Medium |
-| P4 | H3 (Hash collision) | Low |
+| ID | Severity | Category | Component | Status |
+|----|----------|----------|-----------|--------|
+| RISK-007 | High | Security | TenantController | Open — needs code evidence |
+| RISK-003 | High | Operational | TenantController + MinIO | Open — needs code trace |
+| RISK-004 | High | Operational | TenantController | Open — needs reconcileDelete read |
+| RISK-006 | High | Testing | operatortest | Open — needs test coverage scan |
+| RISK-001 | Medium | Security | operators/cmd/main.go | Open — needs endpoint audit |
+| RISK-002 | Medium | Security | MinIO Provisioner | Open — needs production config check |
+| RISK-005 | Medium | Operational | PlatformBootstrapController | Open — needs API endpoint check |

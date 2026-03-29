@@ -76,6 +76,13 @@ const (
 	DefaultMaxRetries = 10
 )
 
+// --- DO Registry Credential Expiry ---
+
+const (
+	// DORegistryTokenExpirySeconds is the TTL for DigitalOcean registry tokens (7 days).
+	DORegistryTokenExpirySeconds = 604800
+)
+
 // --- External API URLs ---
 // URLs for external provider APIs. These are compile-time constants because
 // the API endpoint is dictated by the provider, not by our deployment.

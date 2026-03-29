@@ -1,34 +1,88 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
-  <defs><marker id="ah" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#666"/></marker></defs>
-  <text x="200" y="25" font-family="monospace" font-size="16" font-weight="bold">Component Dependencies</text>
-  <rect x="240" y="40" width="100" height="30" fill="#dbeafe" stroke="#3b82f6" rx="6"/>
-  <text x="265" y="60" font-family="monospace" font-size="11">CLI (TS)</text>
-  <rect x="230" y="110" width="120" height="30" fill="#dbeafe" stroke="#3b82f6" rx="6"/>
-  <text x="250" y="130" font-family="monospace" font-size="11">API (Go/chi)</text>
-  <rect x="30" y="110" width="120" height="30" fill="#dbeafe" stroke="#3b82f6" rx="6"/>
-  <text x="40" y="130" font-family="monospace" font-size="11">Operators (Go)</text>
-  <rect x="30" y="200" width="90" height="30" fill="#fef3c7" stroke="#f59e0b" rx="6"/>
-  <text x="40" y="220" font-family="monospace" font-size="11">PostgreSQL</text>
-  <rect x="140" y="200" width="70" height="30" fill="#fef3c7" stroke="#f59e0b" rx="6"/>
-  <text x="155" y="220" font-family="monospace" font-size="11">Gitea</text>
-  <rect x="230" y="200" width="70" height="30" fill="#fef3c7" stroke="#f59e0b" rx="6"/>
-  <text x="240" y="220" font-family="monospace" font-size="11">ArgoCD</text>
-  <rect x="320" y="200" width="90" height="30" fill="#fef3c7" stroke="#f59e0b" rx="6"/>
-  <text x="330" y="220" font-family="monospace" font-size="11">Argo Wf</text>
-  <rect x="430" y="200" width="70" height="30" fill="#fef3c7" stroke="#f59e0b" rx="6"/>
-  <text x="445" y="220" font-family="monospace" font-size="11">MinIO</text>
-  <rect x="230" y="300" width="90" height="30" fill="#dbeafe" stroke="#3b82f6" rx="6"/>
-  <text x="245" y="320" font-family="monospace" font-size="11">pkg/ (Go)</text>
-  <rect x="430" y="300" width="90" height="30" fill="#dcfce7" stroke="#22c55e" rx="6"/>
-  <text x="440" y="320" font-family="monospace" font-size="11">CF Worker</text>
-  <line x1="290" y1="70" x2="290" y2="110" stroke="#666" stroke-width="1.5" marker-end="url(#ah)"/>
-  <line x1="250" y1="140" x2="75" y2="200" stroke="#666" stroke-width="1.5" marker-end="url(#ah)"/>
-  <line x1="270" y1="140" x2="175" y2="200" stroke="#666" stroke-width="1.5" marker-end="url(#ah)"/>
-  <line x1="290" y1="140" x2="265" y2="200" stroke="#666" stroke-width="1.5" marker-end="url(#ah)"/>
-  <line x1="320" y1="140" x2="365" y2="200" stroke="#666" stroke-width="1.5" marker-end="url(#ah)"/>
-  <line x1="340" y1="140" x2="465" y2="200" stroke="#666" stroke-width="1.5" marker-end="url(#ah)"/>
-  <line x1="90" y1="140" x2="175" y2="200" stroke="#666" stroke-width="1.5" marker-end="url(#ah)"/>
-  <line x1="90" y1="140" x2="265" y2="200" stroke="#666" stroke-width="1.5" marker-end="url(#ah)"/>
-  <line x1="250" y1="140" x2="275" y2="300" stroke="#666" stroke-width="1.5" marker-end="url(#ah)"/>
-  <line x1="90" y1="140" x2="275" y2="300" stroke="#666" stroke-width="1.5" marker-end="url(#ah)"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="500" viewBox="0 0 700 500">
+  <style>
+    text { font-family: monospace; font-size: 10px; }
+    .title { font-size: 14px; font-weight: bold; }
+    .cluster { stroke: #999; stroke-width: 2; fill: none; stroke-dasharray: 5,5; rx: 10; }
+    .component { stroke: #333; stroke-width: 1; rx: 5; }
+    .arrow { stroke: #666; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead); }
+    .label { font-size: 9px; fill: #333; }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+    </marker>
+  </defs>
+  
+  <text x="350" y="20" text-anchor="middle" class="title">Component Dependency Graph — Control Plane</text>
+  
+  <!-- Mgmt Cluster -->
+  <rect x="30" y="35" width="420" height="310" class="cluster"/>
+  <text x="40" y="55" class="label" fill="#999">mgmt cluster</text>
+  
+  <!-- Controllers -->
+  <rect x="50" y="70" width="140" height="30" class="component" fill="#E3F2FD"/>
+  <text x="120" y="90" text-anchor="middle">TenantController</text>
+  
+  <rect x="50" y="130" width="140" height="30" class="component" fill="#E3F2FD"/>
+  <text x="120" y="150" text-anchor="middle">EnvironmentCtrl</text>
+  
+  <rect x="50" y="190" width="140" height="30" class="component" fill="#E3F2FD"/>
+  <text x="120" y="210" text-anchor="middle">ApplicationCtrl</text>
+  
+  <rect x="50" y="250" width="140" height="30" class="component" fill="#E3F2FD"/>
+  <text x="120" y="270" text-anchor="middle">ExposureCtrl</text>
+  
+  <!-- Independent Controllers -->
+  <rect x="250" y="70" width="180" height="30" class="component" fill="#FFF3E0"/>
+  <text x="340" y="90" text-anchor="middle">PlatformBootstrapCtrl</text>
+  
+  <rect x="250" y="130" width="180" height="30" class="component" fill="#FFF3E0"/>
+  <text x="340" y="150" text-anchor="middle">GitRepoBindingCtrl</text>
+  
+  <rect x="250" y="190" width="180" height="30" class="component" fill="#FFF3E0"/>
+  <text x="340" y="210" text-anchor="middle">ClusterCredentialCtrl</text>
+  
+  <!-- Provisioners -->
+  <rect x="250" y="260" width="80" height="25" class="component" fill="#E8F5E9"/>
+  <text x="290" y="277" text-anchor="middle" font-size="9">Gitea</text>
+  
+  <rect x="340" y="260" width="80" height="25" class="component" fill="#E8F5E9"/>
+  <text x="380" y="277" text-anchor="middle" font-size="9">ArgoCD</text>
+  
+  <rect x="295" y="300" width="80" height="25" class="component" fill="#E8F5E9"/>
+  <text x="335" y="317" text-anchor="middle" font-size="9">MinIO</text>
+  
+  <!-- Dependency chain arrows -->
+  <path d="M 120 100 L 120 130" class="arrow"/>
+  <path d="M 120 160 L 120 190" class="arrow"/>
+  <path d="M 120 220 L 120 250" class="arrow"/>
+  
+  <!-- TenantController → Provisioners -->
+  <path d="M 190 85 L 250 272" class="arrow" stroke="#4CAF50"/>
+  <path d="M 190 85 L 340 272" class="arrow" stroke="#4CAF50"/>
+  <path d="M 190 85 L 295 312" class="arrow" stroke="#4CAF50"/>
+  
+  <!-- Build Cluster -->
+  <rect x="470" y="35" width="200" height="120" class="cluster"/>
+  <text x="480" y="55" class="label" fill="#999">build cluster</text>
+  <rect x="490" y="70" width="160" height="30" class="component" fill="#FCE4EC"/>
+  <text x="570" y="90" text-anchor="middle">Argo Workflows</text>
+  <rect x="490" y="110" width="160" height="25" class="component" fill="#FCE4EC"/>
+  <text x="570" y="127" text-anchor="middle" font-size="9">build-{tenant} ns</text>
+  
+  <!-- Workload Cluster -->
+  <rect x="470" y="180" width="200" height="120" class="cluster"/>
+  <text x="480" y="200" class="label" fill="#999">workload cluster</text>
+  <rect x="490" y="215" width="160" height="30" class="component" fill="#F3E5F5"/>
+  <text x="570" y="235" text-anchor="middle">User Apps (ArgoCD)</text>
+  <rect x="490" y="255" width="160" height="25" class="component" fill="#F3E5F5"/>
+  <text x="570" y="272" text-anchor="middle" font-size="9">{tenant}-{env} ns</text>
+  
+  <!-- Cross-cluster arrows -->
+  <path d="M 190 85 L 490 120" class="arrow" stroke="#F44336" stroke-dasharray="4,4"/>
+  <text x="340" y="95" font-size="8" fill="#F44336">BUILD_KUBECONFIG</text>
+  
+  <path d="M 190 145 L 490 240" class="arrow" stroke="#9C27B0" stroke-dasharray="4,4"/>
+  <text x="340" y="200" font-size="8" fill="#9C27B0">RUNTIME_KUBECONFIG</text>
 </svg>

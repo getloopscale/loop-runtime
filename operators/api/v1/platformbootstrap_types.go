@@ -187,6 +187,8 @@ type PlatformBootstrapStatus struct {
 	Phase PlatformBootstrapPhase `json:"phase,omitempty"`
 
 	// Message provides human-readable detail about the current phase.
+	// Deprecated: ARCH-007 — use Condition messages instead of this freeform field.
+	// Kept for backward compatibility; will be removed in a future version.
 	// +optional
 	Message string `json:"message,omitempty"`
 

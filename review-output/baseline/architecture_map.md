@@ -1,153 +1,132 @@
-# Architecture Map — Phase 1 Baseline
+# Architecture Map — Cluster Management & Control Plane
 
-Generated: 2026-03-29
-Target: /home/paulo/loopzero
+> Scoped review: Cluster management, integrations, tools, and control plane
 
-## System Overview
+## Scope Boundary
 
-LoopZero is a CLI-first Kubernetes PaaS for monorepo deployments. It provides a Vercel-like DX for backend services — deploy with a single command, get TLS, preview environments, and rollback.
+### IN SCOPE
+- 3-cluster topology (mgmt, build, workload)
+- 7 operator controllers + 3 provisioner integrations
+- 10 CRDs (7 wired, 3 unwired)
+- State machines (Tenant, PlatformBootstrap)
+- Cluster lifecycle: k3d (local), Pulumi IaC (production/DO)
+- 13 Helm charts, Taskfile automation, GitHub Actions infra-deploy.yml
+- API control plane integration points (k8s, ArgoCD, Argo Workflows, Gitea, MinIO)
+
+### OUT OF SCOPE
+- CLI TypeScript implementation
+- API business logic beyond CP integration
+- Framework detection (loopzero-packs)
+- User-facing deploy/rollback/logs features
+
+---
 
 ## Four-Plane Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  DEVELOPER PLANE                                                 │
-│  CLI (TypeScript/Commander) ←HTTP→ API (Go/chi/pgx)             │
-│  Entry: loopzero login → loopzero init → loopzero deploy                    │
-├─────────────────────────────────────────────────────────────────┤
-│  CONTROL PLANE  (mgmt cluster — DOKS)                            │
-│  7 Controllers (kubebuilder):                                    │
-│    Tenant · Environment · Application · Exposure                 │
-│    PlatformBootstrap · GitRepositoryBinding · ClusterCredential  │
-│  Services: Gitea 1.22.6 · PostgreSQL 16 · MinIO · ArgoCD 2.13.3│
-│            Traefik · cert-manager · Prometheus · Grafana · Loki  │
-│            ESO · OpenTelemetry                                   │
-├─────────────────────────────────────────────────────────────────┤
-│  BUILD PLANE  (build cluster — DOKS)                             │
-│  Argo Workflows + BuildKit (rootless, single-container)          │
-│  CWTs: clone, cache-restore, cache-save, summary, resource-quota│
-├─────────────────────────────────────────────────────────────────┤
-│  WORKLOAD PLANE  (runtime cluster — DOKS)                        │
-│  User apps managed by ArgoCD (GitOps sync from Gitea)            │
-│  Traefik ingress + cert-manager TLS                              │
-│  Cloudflare Tunnel for external traffic                          │
-│  Static assets: DO Spaces + CF Worker                            │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  DEVELOPER PLANE                                                     │
+│  CLI (TypeScript) ←→ API (Go + chi + pgx)                          │
+│  External dependency — not in scope                                  │
+├─────────────────────────────────────────────────────────────────────┤
+│  CONTROL PLANE  (mgmt cluster — k3d-loopzero-mgmt / DOKS SFO3)         │
+│                                                                      │
+│  ┌──────────────┐  ┌──────────────────┐  ┌─────────────────────┐   │
+│  │ Tenant       │→ │ Environment      │→ │ LoopZeroApplication     │   │
+│  │ Controller   │  │ Controller       │  │ Controller          │   │
+│  └──────┬───────┘  └──────────────────┘  └──────┬──────────────┘   │
+│         │                                        │                   │
+│         │  ┌──────────────────┐                  ↓                   │
+│         │  │ ClusterCredential│  ┌──────────────────────────────┐   │
+│         │  │ Controller       │  │ ExposureController           │   │
+│         │  └──────────────────┘  └──────────────────────────────┘   │
+│         │                                                            │
+│  ┌──────┴──────────────────┐  ┌───────────────────────────────┐    │
+│  │ PlatformBootstrap       │  │ GitRepositoryBinding          │    │
+│  │ Controller              │  │ Controller                    │    │
+│  └─────────────────────────┘  └───────────────────────────────┘    │
+│                                                                      │
+│  External Services (mgmt cluster):                                   │
+│  PostgreSQL 16 │ Gitea 1.22.6 │ MinIO │ ArgoCD 2.13.3              │
+│  Prometheus + Grafana │ Loki + Promtail │ OTel │ ESO 0.14.3        │
+├─────────────────────────────────────────────────────────────────────┤
+│  BUILD PLANE  (build cluster — k3d-loopzero-build / DOKS SFO3)          │
+│  Argo Workflows + BuildKit (rootless, single-container)              │
+│  build-{tenant} namespaces with NetworkPolicy + Quota + RBAC         │
+│  Provisioned by: TenantController via BUILD_KUBECONFIG               │
+├─────────────────────────────────────────────────────────────────────┤
+│  WORKLOAD PLANE  (workload cluster — k3d-loopzero-workload / DOKS SFO3) │
+│  User applications managed by ArgoCD (manual sync)                   │
+│  {tenant}-{env} namespaces with RBAC + NetworkPolicy + Quota         │
+│  Provisioned by: EnvironmentController via RUNTIME_KUBECONFIG        │
+│  Traefik 28.3.0 + cert-manager 1.14.5 │ Cloudflare Tunnel          │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Component Relationships
+## Multi-Cluster Client Pattern
+
+The operator process runs on mgmt but manages resources across all 3 clusters:
 
 ```
-                    ┌──────────┐
-                    │   CLI    │ TypeScript
-                    │ (cli/)   │ Commander
-                    └────┬─────┘
-                         │ HTTP/SSE
-                    ┌────▼─────┐
-                    │   API    │ Go 1.25
-                    │ (api/)   │ chi + pgx
-                    └──┬─┬─┬──┘
-          ┌────────────┘ │ └──────────────┐
-          │              │                │
-    ┌─────▼────┐  ┌──────▼─────┐  ┌──────▼──────┐
-    │PostgreSQL│  │Argo Wflows │  │   Gitea     │
-    │(state)   │  │(build)     │  │(gitops/src) │
-    └──────────┘  └──────┬─────┘  └──────┬──────┘
-                         │               │
-                   ┌─────▼────┐   ┌──────▼──────┐
-                   │ BuildKit │   │   ArgoCD    │
-                   │(rootless)│   │(manual sync)│
-                   └──────────┘   └──────┬──────┘
-                                         │
-                                  ┌──────▼──────┐
-                                  │  Workload   │
-                                  │  Cluster    │
-                                  └─────────────┘
-
-    ┌───────────┐     ┌──────────────┐
-    │ Operators │────→│ K8s CRDs (9) │
-    │(operators/)│    │ mgmt cluster │
-    └───────────┘     └──────────────┘
-
-    ┌───────────┐     ┌──────────────┐
-    │ CF Worker │────→│ DO Spaces    │
-    │(static)   │     │(CDN assets)  │
-    └───────────┘     └──────────────┘
+operators/cmd/main.go
+  │
+  ├── mgr.Client        → mgmt cluster (CRDs, status, ArgoCD CRs, Gitea)
+  ├── buildClient        → build cluster (build-{tenant} namespaces, secrets, quotas)
+  └── runtimeClient      → workload cluster ({tenant}-{env} namespaces, RBAC, NetworkPolicy)
 ```
 
-## Data Flow: Deploy (Happy Path)
+Cross-cluster resources cannot use `ownerReference`. Cleanup uses **label-based listing + finalizer pattern**.
+
+## Controller Dependency Chain
 
 ```
-1. loopzero deploy
-   │
-2. CLI: validate loopzero.yaml → detect framework → bundle source
-   │
-3. CLI → POST /api/v1/builds (Idempotency-Key header)
-   │
-4. API: withEnvironmentLock(tenant, project, env)
-   │   ├── Check no concurrent build (inside lock!)
-   │   ├── Create build record (QUEUED)
-   │   ├── Upload bundle to Gitea source repo
-   │   └── Submit Argo Workflow
-   │
-5. API → SSE stream to CLI (build progress)
-   │
-6. Argo Workflow (build cluster):
-   │   ├── Clone source from Gitea
-   │   ├── Restore BuildKit cache
-   │   ├── Build with BuildKit (rootless)
-   │   ├── Push image to DO Container Registry
-   │   └── Save cache
-   │
-7. API: BuildReconcileLoop detects workflow completion
-   │   ├── Transition build: RUNNING → RELEASING
-   │   ├── Generate K8s manifests
-   │   ├── Push manifests to Gitea gitops repo
-   │   ├── Create release record
-   │   ├── Trigger ArgoCD manual sync
-   │   ├── [Static apps: upload to DO Spaces, write CF KV]
-   │   └── Transition build: RELEASING → SUCCEEDED
-   │
-8. CLI receives SSE event → shows live URL
+Tenant (root)
+  ├── creates Environment CRs (one per spec.environments entry)
+  │     └── EnvironmentController creates namespace/RBAC/NetworkPolicy/Quota on workload
+  ├── creates build-{tenant} namespace on build cluster (10 idempotent steps)
+  ├── calls gitea.EnsureRepo (source + gitops repos)
+  └── calls argocd.EnsureAppProject + EnsureApplication
+
+LoopZeroApplication (created by API after deploy)
+  └── ExposureController (checks TLS, reachability)
+
+Independent:
+  ├── GitRepositoryBindingController (credential sync to ArgoCD)
+  ├── ClusterCredentialController (cluster connectivity validation)
+  └── PlatformBootstrapController (one-time platform setup)
 ```
 
-## Key Technology Decisions
+## Provisioner Integration Points
 
-| Decision | Rationale |
-|----------|-----------|
-| pg_advisory_xact_lock (not session) | Connection pool safety — session locks leak |
-| Manual ArgoCD sync (not auto) | Explicit control over deployment timing |
-| BuildKit rootless single-container | Security: no privileged containers for builds |
-| Forward-only migrations | Simplicity, but requires careful migration authoring |
-| GitHub token as auth | Leverages existing developer identity, no separate auth system |
-| 3-cluster separation | Blast radius isolation: mgmt/build/workload planes |
-| Cloudflare Tunnel | Zero public IPs on runtime cluster, DDoS/WAF protection |
-| SSE for build streaming | Simpler than WebSocket, built-in reconnection support |
+| Provisioner | Interface | Real Impl | Test Double | Used By |
+|-------------|-----------|-----------|-------------|---------|
+| Gitea | `gitea.GitRepoProvisioner` | `RealProvisioner` (HTTP API) | `FakeGitProvisioner` | TenantController |
+| ArgoCD | `argocd.Provisioner` | `RealProvisioner` (dynamic K8s client) | `FakeArgoCDProvisioner` | TenantController, PlatformBootstrap |
+| MinIO | `minio.CredentialProvisioner` | `AdminProvisioner` (Admin HTTP API) | nil (disabled in prod) | TenantController (optional) |
 
-## Cross-Cutting Concerns
+## Cluster Lifecycle
 
-| Concern | Implementation |
-|---------|----------------|
-| Concurrency control | pg_advisory_xact_lock per (tenant, project, env) |
-| Idempotency | Idempotency-Key middleware + idempotency_store |
-| Correlation | Correlation-ID header forwarded through all components |
-| Observability | Prometheus metrics + Grafana dashboards + Loki logs + OTel |
-| Secret management | ESO for cross-cluster sync, DO Spaces for state backend |
-| Error handling | LoopZeroError with 24 typed error codes (pkg/errors) |
-| State machines | 7 strict state machines in pkg/statemachine |
-| Rate limiting | In-memory fixed-window per tenant |
+### Local (k3d)
+```
+task setup
+  → registry:create (k3d registry, port 5000)
+  → clusters:create (3 × k3d cluster create --config)
+  → infra:install (monitoring-crds → mgmt → build → workload → monitoring)
+  → networking:setup
+  → crds:install (kubectl apply -f operators/config/crd/bases/)
+  → db:migrate
+  → tokens:provision
+```
 
-## Boundary Analysis
+### Production (DigitalOcean via Pulumi)
+```
+infra-deploy.yml (GitHub Actions)
+  → resolve (stack + environment)
+  → validate (tsc + tests)
+  → deploy (Pulumi up — 3-phase: infra → bootstrap → expose)
+```
 
-| Boundary | Trust Level | Validation |
-|----------|-------------|------------|
-| CLI → API | Untrusted | Auth middleware + input validation |
-| API → PostgreSQL | Trusted | Parameterized queries via pgx |
-| API → Gitea | Trusted (internal) | Token auth, cross-cluster URL |
-| API → Argo Workflows | Trusted (internal) | K8s RBAC |
-| API → ArgoCD | Trusted (internal) | Token auth |
-| API → CF KV | Semi-trusted (external) | API token, HTTPS |
-| Argo Workflow → DO Registry | Trusted | Registry credentials via K8s secret |
-| ArgoCD → Gitea | Trusted (internal) | Token via K8s secret |
-| CF Worker → DO Spaces | Trusted | S3 credentials in Worker env |
-| External → CF Tunnel | Untrusted | Cloudflare WAF/DDoS |
+Pulumi 3-phase model:
+1. **infra**: DOKS clusters, PostgreSQL, Container Registry, Spaces, VPC, DNS
+2. **bootstrap**: Helm charts (ArgoCD, Gitea, MinIO, cert-manager, Traefik, monitoring)
+3. **expose**: Cloudflare Tunnel, CF Worker, DNS records

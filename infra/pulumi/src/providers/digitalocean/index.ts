@@ -8,6 +8,7 @@ import { DigitalOceanStorageProvider } from "./storage";
 import { DigitalOceanDnsProvider } from "./dns";
 import { DigitalOceanComputeProvider } from "./compute";
 import { DigitalOceanDatabaseProvider } from "./database";
+import { DigitalOceanRegistryProvider } from "./registry";
 
 export interface DigitalOceanProviderOpts {
   /** When provided, DNS records are created in Cloudflare instead of DO DNS.
@@ -31,6 +32,7 @@ export class DigitalOceanProviderFactory implements CloudProviderFactory {
   private readonly dns: IProviderDns;
   private readonly compute = new DigitalOceanComputeProvider();
   private readonly database = new DigitalOceanDatabaseProvider();
+  private readonly registry = new DigitalOceanRegistryProvider();
 
   constructor(opts?: DigitalOceanProviderOpts) {
     this.dns = opts?.dnsOverride ?? new DigitalOceanDnsProvider();
@@ -42,4 +44,5 @@ export class DigitalOceanProviderFactory implements CloudProviderFactory {
   createDnsRecord = (spec: import("../../contracts/dns").DnsRecordSpec) => this.dns.createDnsRecord(spec);
   createComputeInstance = this.compute.createComputeInstance.bind(this.compute);
   createDatabaseCluster = this.database.createDatabaseCluster.bind(this.database);
+  createContainerRegistry = this.registry.createContainerRegistry.bind(this.registry);
 }

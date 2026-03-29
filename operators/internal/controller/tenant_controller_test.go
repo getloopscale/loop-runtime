@@ -25,9 +25,9 @@ import (
 )
 
 func newTenant(name string, plan loopzerov1.PlanTier, envs []string) *loopzerov1.Tenant {
-	environments := make([]loopzerov1.EnvironmentSpec, len(envs))
+	environments := make([]loopzerov1.TenantEnvironmentEntry, len(envs))
 	for i, e := range envs {
-		environments[i] = loopzerov1.EnvironmentSpec{Name: e, Cluster: "workload"}
+		environments[i] = loopzerov1.TenantEnvironmentEntry{Name: e, Cluster: "workload"}
 	}
 	return &loopzerov1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
@@ -120,7 +120,7 @@ var _ = Describe("TenantController", Ordered, func() {
 				Spec: loopzerov1.TenantSpec{
 					DisplayName:  "Empty Envs",
 					Plan:         loopzerov1.PlanStarter,
-					Environments: []loopzerov1.EnvironmentSpec{},
+					Environments: []loopzerov1.TenantEnvironmentEntry{},
 					GitOps: loopzerov1.GitOpsSpec{
 						RepoName: "loopzero-tenant-empty",
 						Branch:   "main",

@@ -51,9 +51,3 @@ const (
 	TenantLimitDefaultRequestMemory = "128Mi"
 )
 
-// --- DO Registry Credential Expiry ---
-
-const (
-	// DORegistryTokenExpirySeconds is the TTL for DigitalOcean registry tokens (7 days).
-	DORegistryTokenExpirySeconds = 604800
-)

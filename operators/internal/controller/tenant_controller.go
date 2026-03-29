@@ -40,6 +40,13 @@ var tenantSM = statemachine.NewTenantMachine()
 //   - r.Client        → mgmt cluster (Tenant CRDs, status, Gitea, ArgoCD)
 //   - r.BuildClient   → build cluster (build-{tenant} namespaces, quotas, secrets)
 //   - r.RuntimeClient → runtime cluster ({tenant}-{env} namespaces, RBAC, network policies)
+//
+// ARCH-002: Field usage by sub-file:
+//   - tenant_controller.go: Client, Scheme, RuntimeClient (environment CRs)
+//   - tenant_build.go:      BuildClient, MinIOProvisioner, Credentials
+//   - tenant_gitops.go:     Client, GitProvisioner, ArgoCDProvisioner, GiteaURL, WorkloadClusterURL
+//   - tenant_credentials.go: BuildClient, Credentials (DOToken, RegistryDockerConfig)
+//   - tenant_priority.go:   RuntimeClient
 type TenantReconciler struct {
 	client.Client
 	Scheme             *runtime.Scheme

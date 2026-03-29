@@ -8,6 +8,7 @@ import { ObjectStorageSpec, ObjectStorageOutput } from "../../contracts/storage"
 import { DnsRecordSpec, DnsRecordOutput } from "../../contracts/dns";
 import { ComputeInstanceSpec, ComputeInstanceOutput } from "../../contracts/compute";
 import { DatabaseClusterSpec, DatabaseClusterOutput } from "../../contracts/database";
+import { ContainerRegistrySpec, ContainerRegistryOutput } from "../../contracts/registry";
 import { InfraError } from "../../core/errors";
 
 /**
@@ -46,6 +47,10 @@ export class AwsProviderFactory implements CloudProviderFactory {
 
   createDatabaseCluster(_spec: DatabaseClusterSpec): DatabaseClusterOutput {
     throw this.notImplemented("database");
+  }
+
+  createContainerRegistry(_spec: ContainerRegistrySpec): ContainerRegistryOutput {
+    throw this.notImplemented("registry");
   }
 
   private notImplemented(resource: string): InfraError {
