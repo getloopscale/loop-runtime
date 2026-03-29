@@ -134,7 +134,8 @@ notificationsController:
   enabled: true
 notifications:
   # Webhook service: calls LoopZero API internal endpoint
-  services:
+  # IMPORTANT: argo-cd chart v7.x uses "notifiers" key (not "services")
+  notifiers:
     service.webhook.loopzero-api: |
       url: http://loopzero-api.platform-system.svc.cluster.local:8080/internal/argocd-callback
       headers:

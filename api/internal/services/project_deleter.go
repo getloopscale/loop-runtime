@@ -128,22 +128,23 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInp
 				CorrelationID: req.CorrelationID,
 			})
 			if gitErr != nil {
-				slog.Warn("gitops fallback remove failed (may not exist)",
+				slog.Warn("gitops fallback remove failed (directory may not exist in gitops repo)",
 					"project_id", req.ProjectID, "environment", "production", "error", gitErr)
 			} else {
 				result.DeletedEnvironments = append(result.DeletedEnvironments, "production")
-				// Trigger ArgoCD sync to prune removed resources
-				if d.sync != nil {
-					argoAppName := req.TenantID + "-production"
-					syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
-					defer syncCancel()
-					if syncErr := d.sync.TriggerSync(syncCtx, argoAppName); syncErr != nil {
-						slog.Warn("argocd sync after fallback delete failed",
-							"app", argoAppName, "error", syncErr)
-					} else {
-						slog.Info("argocd sync triggered after fallback gitops remove",
-							"app", argoAppName, "project", req.ProjectName)
-					}
+			}
+			// Always trigger ArgoCD sync after fallback — even if gitops.Remove
+			// returned error, there may be orphaned K8s resources to prune.
+			if d.sync != nil {
+				argoAppName := req.TenantID + "-production"
+				syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
+				defer syncCancel()
+				if syncErr := d.sync.TriggerSync(syncCtx, argoAppName); syncErr != nil {
+					slog.Warn("argocd sync after fallback delete failed",
+						"app", argoAppName, "error", syncErr)
+				} else {
+					slog.Info("argocd sync triggered after fallback gitops remove",
+						"app", argoAppName, "project", req.ProjectName)
 				}
 			}
 		}
@@ -205,9 +206,13 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.Proje
 		CorrelationID: req.CorrelationID,
 	})
 	if gitErr != nil {
-		slog.Error("gitops remove failed (DB already cleaned, manual cleanup may be needed)",
-			"project_id", req.ProjectID, "project_name", req.ProjectName, "environment", env, "error", gitErr)
-	} else if d.sync != nil {
+		// FATAL: if manifests aren't removed from gitops, resources remain on the cluster
+		// indefinitely. Failing here forces the user to retry instead of silently leaving
+		// orphaned deployments that degrade ArgoCD Application health.
+		return 0, fmt.Errorf("project delete: gitops remove failed for %s/%s (DB already cleaned, retry to remove manifests): %w",
+			env, gitopsProjectID, gitErr)
+	}
+	if d.sync != nil {
 		// Trigger ArgoCD sync with prune to remove K8s resources after gitops manifests
 		// were deleted. Without this, manual-sync ArgoCD won't detect the removal.
 		argoAppName := req.TenantID + "-" + env

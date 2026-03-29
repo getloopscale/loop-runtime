@@ -495,7 +495,9 @@ return hs`,
         // NOTE: These keys are TOP-LEVEL in the argo-cd Helm chart, NOT under configs.
         notificationsController: { enabled: true },
         notifications: {
-          services: {
+          // IMPORTANT: the argo-cd Helm chart v7.x uses "notifiers" (not "services")
+          // for the notifications ConfigMap. "services" is silently ignored.
+          notifiers: {
             "service.webhook.loopzero-api": `url: http://loopzero-api.${PLATFORM_NAMESPACE}.svc.cluster.local:8080/internal/argocd-callback
 headers:
 - name: Content-Type
