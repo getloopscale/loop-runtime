@@ -162,6 +162,13 @@ func (cb *CircuitBreakerSyncClient) recordResult(err error) {
 			"suggestion", "check ARGOCD_TOKEN or see docs/runbooks/argocd-token-regeneration.md")
 		return
 	}
+	// MEET-2026-03-29-019: 409 "operation in progress" is NOT a transient failure —
+	// it means a previous sync is stuck. Counting it toward the CB threshold would
+	// cause a single stuck Application to trip the circuit for the ENTIRE platform.
+	if err != nil && errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
+		cb.logger.Warn("argocd sync operation in progress — not counted toward circuit breaker")
+		return
+	}
 
 	cb.mu.Lock()
 	defer cb.mu.Unlock()

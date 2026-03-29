@@ -108,9 +108,48 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	if resp.StatusCode == 404 {
 		return fmt.Errorf("argocd sync: application %q not found", appName)
 	}
+	// MEET-2026-03-29-019: Return typed error for 409 so callers can
+	// distinguish "operation in progress" from other failures.
+	// This error must NOT count toward the circuit breaker threshold.
+	if resp.StatusCode == 409 {
+		return loopzeroerrors.ErrSyncOperationInProgress
+	}
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("argocd sync: status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// TerminateOperation cancels a running sync operation on an ArgoCD Application.
+// MEET-2026-03-29-019: Used when TriggerSync returns ErrSyncOperationInProgress
+// and the operation is stuck. This clears the operation lock so a new sync can start.
+func (c *SyncClient) TerminateOperation(ctx context.Context, appName string) error {
+	url := fmt.Sprintf("%s/api/v1/applications/%s/operation", c.baseURL, appName)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	if err != nil {
+		return fmt.Errorf("argocd terminate: create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("argocd terminate: request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return loopzeroerrors.ErrArgoCDUnauthorized
+	}
+	// 404 means no operation is running — idempotent success
+	if resp.StatusCode == 404 {
+		return nil
+	}
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("argocd terminate: status %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	return nil

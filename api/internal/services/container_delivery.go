@@ -6,11 +6,13 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -318,10 +320,31 @@ func (c *ContainerDeliveryActivator) triggerSyncWithRetry(ctx context.Context, a
 	const maxAttempts = 3
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		if err := c.sync.TriggerSync(ctx, appName); err == nil {
+		err := c.sync.TriggerSync(ctx, appName)
+		if err == nil {
 			return nil
+		}
+		lastErr = err
+
+		// MEET-2026-03-29-019: If ArgoCD has a stuck operation, terminate it
+		// before retrying. Without this, all 3 retries hit the same 409 wall.
+		if errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
+			slog.Warn("argocd sync operation in progress — terminating stuck operation before retry",
+				"app", appName, "attempt", attempt+1)
+			// Type-assert to access TerminateOperation (interface may not expose it)
+			type terminator interface {
+				TerminateOperation(ctx context.Context, appName string) error
+			}
+			if t, ok := c.sync.(terminator); ok {
+				if termErr := t.TerminateOperation(ctx, appName); termErr != nil {
+					slog.Error("failed to terminate stuck argocd operation",
+						"app", appName, "error", termErr)
+				} else {
+					slog.Info("terminated stuck argocd operation",
+						"app", appName)
+				}
+			}
 		} else {
-			lastErr = err
 			slog.Warn("argocd trigger sync failed, retrying",
 				"app", appName, "attempt", attempt+1, "error", err)
 		}

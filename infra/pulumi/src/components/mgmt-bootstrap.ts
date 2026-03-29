@@ -173,11 +173,15 @@ function installArgoCD(
             "server.insecure": true,
             // Manual sync only — API controls when to sync, not ArgoCD auto-sync
             "controller.self.heal.enabled": "false",
+            // MEET-2026-03-29-019: Terminate stuck sync operations after 5 minutes.
+            "controller.operation.processing.timeout": "300",
           },
           rbac: {
-            // LoopZero API service account: sync + get on all applications (least privilege).
+            // LoopZero API: sync + get + action (terminate stuck operations).
+            // MEET-2026-03-29-019: action/* needed for TerminateOperation.
             "policy.csv": `p, loopzero-api, applications, sync, */*, allow
-p, loopzero-api, applications, get, */*, allow`,
+p, loopzero-api, applications, get, */*, allow
+p, loopzero-api, applications, action/*, */*, allow`,
           },
           repositories: {
             // Gitea repository credentials for tenant GitOps repos.

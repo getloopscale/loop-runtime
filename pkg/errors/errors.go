@@ -255,6 +255,16 @@ var (
 		Message:    "ArgoCD rejected the API token — check ARGOCD_TOKEN configuration",
 		HTTPStatus: 401,
 	}
+
+	// ErrSyncOperationInProgress is returned when ArgoCD has a sync already running (409).
+	// MEET-2026-03-29-019: This is NOT a transient failure — the previous operation must
+	// be terminated before a new sync can start. The circuit breaker MUST NOT count this
+	// toward the open threshold (same exclusion pattern as ErrArgoCDUnauthorized).
+	ErrSyncOperationInProgress = &LoopZeroError{
+		Code:       "SYNC_OPERATION_IN_PROGRESS",
+		Message:    "another sync operation is already in progress",
+		HTTPStatus: 409,
+	}
 )
 
 // NewLockTimeout creates a LOCK_TIMEOUT error with optional detail.

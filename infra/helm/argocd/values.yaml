@@ -88,15 +88,20 @@ redis:
 
 configs:
   rbac:
-    # LoopZero API service account: sync + get on all applications (least privilege).
-    # The API only needs to trigger syncs and check sync status.
+    # LoopZero API service account: sync + get + action (terminate stuck operations).
+    # MEET-2026-03-29-019: action/* needed for TerminateOperation on stuck syncs.
     policy.csv: |
       p, loopzero-api, applications, sync, */*, allow
       p, loopzero-api, applications, get, */*, allow
+      p, loopzero-api, applications, action/*, */*, allow
   params:
     server.insecure: true
     # Manual sync only — API controls when to sync, not ArgoCD auto-sync
     controller.self.heal.enabled: "false"
+    # MEET-2026-03-29-019: Terminate sync operations that run longer than 5 minutes.
+    # Prevents stuck Certificate/CRD from blocking all deploys indefinitely.
+    # Without this, a single orphaned resource can lock the entire pipeline.
+    controller.operation.processing.timeout: "300"
   repositories:
     # Gitea repository credentials for tenant GitOps repos.
     # ArgoCD uses these to clone tenant repos from the internal Gitea instance.

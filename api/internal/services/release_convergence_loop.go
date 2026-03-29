@@ -143,6 +143,21 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 		r.logger.Warn("release convergence: sync timeout",
 			"release_id", release.ID, "build_id", release.BuildID,
 			"elapsed", elapsed, "timeout", r.cfg.SyncTimeout)
+		// MEET-2026-03-29-019: Terminate stuck ArgoCD operation so the next deploy
+		// can proceed. Without this, the stuck operation persists and blocks all future syncs.
+		argoApp := fmt.Sprintf("%s-%s", release.TenantID, release.Environment)
+		type terminator interface {
+			TerminateOperation(ctx context.Context, appName string) error
+		}
+		if t, ok := r.sync_.(terminator); ok {
+			if termErr := t.TerminateOperation(ctx, argoApp); termErr != nil {
+				r.logger.Error("release convergence: failed to terminate stuck operation",
+					"app", argoApp, "error", termErr)
+			} else {
+				r.logger.Info("release convergence: terminated stuck operation on timeout",
+					"app", argoApp, "release_id", release.ID)
+			}
+		}
 		r.failRelease(ctx, release, "Sync timeout: service did not become healthy within the time limit")
 		return
 	}
