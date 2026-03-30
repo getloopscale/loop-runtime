@@ -27,7 +27,7 @@ prometheus:
           - targets:
               # Build cluster LB IP on k3d-loopzero-build network.
               # Updated by: bash infra/scripts/update-cross-cluster-ips.sh
-              - "10.0.2.2:30090"
+              - "172.18.0.10:30090"
             labels:
               cluster: build
               component: argo-workflows
@@ -39,7 +39,7 @@ prometheus:
           - targets:
               # Workload cluster LB IP on k3d-loopzero-workload network.
               # Updated by: bash infra/scripts/update-cross-cluster-ips.sh
-              - "10.0.3.2:30091"
+              - "172.18.0.14:30091"
             labels:
               cluster: workload
               component: traefik
