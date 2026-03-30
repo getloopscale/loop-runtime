@@ -187,8 +187,16 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
-    # Allow all egress for metrics and replication
-    - {}
+    # REVIEW-2026-03-30: Fixes MED-09 — was "- {}" (allow all egress).
+    # Now restricted to specific ports for metrics and replication.
+    # Metrics (Prometheus scrape)
+    - ports:
+        - port: 9090
+          protocol: TCP
+    # PostgreSQL replication
+    - ports:
+        - port: 5432
+          protocol: TCP
   policyTypes:
     - Ingress
     - Egress

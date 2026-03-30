@@ -14,7 +14,13 @@ set -euo pipefail
 MGMT_CTX="k3d-loopzero-mgmt"
 BUILD_CTX="k3d-loopzero-build"
 WORKLOAD_CTX="k3d-loopzero-workload"
-NAMESPACE="loopzero-system"
+# REVIEW-2026-03-30: Fixes MED-12 — was "loopzero-system" but Pulumi uses "platform-system".
+# Local dev uses loopzero-system, production uses platform-system.
+NAMESPACE="${LOOPZERO_NAMESPACE:-loopzero-system}"
+
+# REVIEW-2026-03-30: Fixes HIGH-06 — was "loopzero-admin", now "gitea_admin" to match Pulumi Helm config.
+GITEA_USER="${GITEA_USER:-gitea_admin}"
+GITEA_PASS="${GITEA_PASS:-loopzero-gitea-dev-2026}"
 
 echo "=== Provisioning API tokens ==="
 
@@ -28,16 +34,19 @@ sleep 2
 
 # Ensure 'loopzero' org exists (idempotent — Gitea returns 422 if already exists)
 curl -s -X POST "http://localhost:13000/api/v1/orgs" \
-  -u "REDACTED_SECRET_037" \
+  -u "${GITEA_USER}:${GITEA_PASS}" \
   -H "Content-Type: application/json" \
   -d '{"username":"loopzero","full_name":"LoopZero Platform","visibility":"private"}' > /dev/null 2>&1
 echo "Gitea org 'loopzero': ensured"
 
+# Scopes: write:repository (clone + push) + write:organization (create repos in org) + read:user
+# Use fixed token name to avoid accumulating stale tokens on repeated runs (E-13).
 TOKEN_NAME="loopzero-api"
-curl -s -X DELETE "http://localhost:13000/api/v1/users/loopzero-admin/tokens/${TOKEN_NAME}" \
-  -u "REDACTED_SECRET_037" > /dev/null 2>&1 || true
-GITEA_TOKEN=$(curl -s -X POST "http://localhost:13000/api/v1/users/loopzero-admin/tokens" \
-  -u "REDACTED_SECRET_037" \
+# Delete existing token with this name (idempotent — 404 if not found)
+curl -s -X DELETE "http://localhost:13000/api/v1/users/${GITEA_USER}/tokens/${TOKEN_NAME}" \
+  -u "${GITEA_USER}:${GITEA_PASS}" > /dev/null 2>&1 || true
+GITEA_TOKEN=$(curl -s -X POST "http://localhost:13000/api/v1/users/${GITEA_USER}/tokens" \
+  -u "${GITEA_USER}:${GITEA_PASS}" \
   -H "Content-Type: application/json" \
   -d "{\"name\":\"${TOKEN_NAME}\",\"scopes\":[\"write:repository\",\"write:organization\",\"read:user\"]}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha1',''))")
 
@@ -94,16 +103,49 @@ kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create secret generic loopzero-api
   --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f -
 
 # ---------------------------------------------------------------------------
-# 4. Build cluster kubeconfig
+# 4. ArgoCD repo credentials (so ArgoCD can clone from Gitea)
 # ---------------------------------------------------------------------------
-# The API submits Argo Workflows (scoped to argo namespace).
-# The operator creates namespaces, RBAC, quotas (cluster-wide).
-# For local dev, we use admin certs with insecure TLS to handle
-# cross-network certificate SAN mismatches between k3d clusters.
-# Production uses scoped ServiceAccount tokens provisioned by Pulumi.
+if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1 && [ -n "$GITEA_TOKEN" ]; then
+  echo "Setting up ArgoCD repo credentials..."
+  kubectl --context "$MGMT_CTX" -n argocd create secret generic argocd-repo-gitea-internal \
+    --from-literal=type=git \
+    --from-literal=url="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000" \
+    --from-literal=username="${GITEA_USER}" \
+    --from-literal=password="${GITEA_TOKEN}" \
+    --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" -n argocd apply -f -
+  kubectl --context "$MGMT_CTX" -n argocd label secret argocd-repo-gitea-internal argocd.argoproj.io/secret-type=repository --overwrite 2>/dev/null
+  echo "ArgoCD repo credentials: configured"
+fi
+
+# ---------------------------------------------------------------------------
+# 5. ArgoCD workload cluster registration
+# ---------------------------------------------------------------------------
+if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1; then
+  echo "Registering workload cluster in ArgoCD..."
+  WORKLOAD_CERT=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
+  WORKLOAD_KEY=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
+  WORKLOAD_SERVER="https://k3d-loopzero-workload-server-0:6443"
+
+  CLUSTER_CONFIG=$(python3 -c "
+import json
+config = {'tlsClientConfig': {'insecure': True, 'certData': '${WORKLOAD_CERT}', 'keyData': '${WORKLOAD_KEY}'}}
+print(json.dumps(config))
+")
+
+  kubectl --context "$MGMT_CTX" -n argocd create secret generic cluster-workload \
+    --from-literal=name=workload \
+    --from-literal=server="${WORKLOAD_SERVER}" \
+    --from-literal=config="${CLUSTER_CONFIG}" \
+    --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" -n argocd apply -f -
+  kubectl --context "$MGMT_CTX" -n argocd label secret cluster-workload argocd.argoproj.io/secret-type=cluster --overwrite 2>/dev/null
+  echo "ArgoCD cluster-workload: registered (insecure TLS, Docker hostname)"
+fi
+
+# ---------------------------------------------------------------------------
+# 6. Build cluster kubeconfig
+# ---------------------------------------------------------------------------
 echo "Setting up build cluster kubeconfig..."
 
-# API also needs a scoped SA for workflow submission (created here for Argo RBAC)
 kubectl --context "$BUILD_CTX" apply -f - <<'RBAC'
 apiVersion: v1
 kind: ServiceAccount
@@ -139,14 +181,8 @@ subjects:
     namespace: argo
 RBAC
 
-# For local dev: admin certs + insecure-skip-tls-verify.
-# k3d API server certs contain SANs for Docker IPs that change on recreate.
-# The cross-cluster networking script connects clusters to each other's networks,
-# but the IPs used from mgmt → build differ from the SANs in the build cert.
 BUILD_CERT=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
 BUILD_KEY=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
-
-# Server URL: use the internal Docker hostname (resolved via Docker DNS on shared network)
 BUILD_SERVER="https://k3d-loopzero-build-server-0:6443"
 
 cat > /tmp/build-kubeconfig.yaml <<KUBECONFIG
@@ -177,15 +213,12 @@ rm -f /tmp/build-kubeconfig.yaml
 echo "Build cluster kubeconfig: created (admin certs, insecure TLS)"
 
 # ---------------------------------------------------------------------------
-# 5. Runtime (workload) cluster kubeconfig
+# 7. Runtime (workload) cluster kubeconfig
 # ---------------------------------------------------------------------------
-# The operator creates namespaces, RBAC, NetworkPolicies, and ResourceQuotas
-# on the workload cluster. It also creates PriorityClasses (cluster-scoped).
 echo "Setting up runtime cluster kubeconfig..."
 
 RUNTIME_CERT=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
 RUNTIME_KEY=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
-
 RUNTIME_SERVER="https://k3d-loopzero-workload-server-0:6443"
 
 cat > /tmp/runtime-kubeconfig.yaml <<KUBECONFIG
@@ -220,6 +253,7 @@ echo "=== Done ==="
 echo "Secret 'loopzero-api-tokens' created in $NAMESPACE"
 echo "ConfigMap 'loopzero-build-kubeconfig' created in $NAMESPACE"
 echo "ConfigMap 'loopzero-runtime-kubeconfig' created in $NAMESPACE"
+echo "ArgoCD repo + cluster secrets configured"
 echo ""
 echo "Restart pods to pick up new tokens:"
 echo "  kubectl --context $MGMT_CTX -n $NAMESPACE rollout restart deployment/loopzero-api deployment/tenant-controller"

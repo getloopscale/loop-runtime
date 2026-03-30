@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Security
+- Replace full admin kubeconfigs with scoped ServiceAccount tokens — API and controller now get minimal RBAC per cluster instead of cluster-admin (#CRIT-02)
+- Replace ESO admin token with scoped ServiceAccount — read-only access to Secrets in platform-system only (#HIGH-04)
+- Fix CF Tunnel secret non-deterministic — was using `crypto.randomBytes()` at program time, causing tunnel recreation on every `pulumi up`. Now reads from Pulumi config (#CRIT-03)
+- Fix hardcoded passwords fail-fast — production deploy now fails immediately if `giteaAdminPassword` or `minioRootPassword` not set (#CRIT-01)
+- Fix tunnel token exposed in pod args — moved to K8s Secret with env var injection (#HIGH-03)
+- Fix Gitea token scope from `all` to minimal `write:repository,write:organization,read:user` (#HIGH-05)
+- Fix ArgoCD placeholder token was literal admin password — changed to invalid placeholder (#HIGH-09)
+- Fix cloudflared Deployment missing securityContext, probes, and non-root enforcement (#MED-11)
+- Fix PostgreSQL NetworkPolicy allowing all egress — restricted to metrics and replication ports (#MED-09)
+- Disable Grafana anonymous Viewer access in production (#MED-08)
+- Fix parseKubeconfig returning empty strings silently — now throws on missing fields (#MED-04)
+- Fix ArgoCD token generation failure was WARN-only — bootstrap Job now fails on token errors (#MED-05)
 - Fix shell injection via `app.Name` in `loopzeroPacksDockerfileStep` — added `ValidateAppName` with RFC-1123 allowlist + `%q` shell quoting as defense-in-depth (#CODE-001)
 - Fix unvalidated build-arg keys flowing into `buildctl --opt` — validates env key format, skips invalid keys (#SEC-002)
 
@@ -20,7 +32,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fix asset manifest JSON corruption on filenames with special characters — proper escaping (#CODE-006)
 - Pin `imageLoopZeroPacks` from `:latest` to `v0.1.0` — deterministic builds (#COMP-004)
 
+### Removed
+- Remove dead compute provider (`IProviderCompute`, `DigitalOceanComputeProvider`, `contracts/compute.ts`) — zero call sites (#MED-02)
+
 ### Changed
+- E2E failure scenario tests and chaos tests changed from Skip() to Pending (PIt) — shows yellow instead of false green (#HIGH-07)
+- Container registry creation uses factory abstraction instead of direct DO import (#MED-01)
+- API and controller image references use `infra.registryEndpoint` instead of hardcoded constant (#HIGH-08)
+- Traefik Helm release name uses `${role}-traefik` instead of hardcoded `mgmt-traefik` (#MED-06)
+- Bootstrap Job run-id uses deterministic `env-version` instead of `Date.toISOString()` (#MED-07)
+- `provision-api-tokens.sh` Gitea username aligned to `gitea_admin` and namespace parameterized (#HIGH-06, #MED-12)
+- Centralize DO Spaces endpoint in `InfraOutputs.spacesEndpoint` — replaces 5 inline constructions (#MED-10)
+- Pipeline Step 2 reads REGISTRY from Pulumi output instead of hardcoded constant (#PIPELINE-01)
+- CF Worker deploy step now fails the pipeline on error instead of silently continuing (#PIPELINE-02)
+
+### Added
+- PodDisruptionBudget for LoopZero API (`minAvailable: 1`) — prevents both pods being evicted during drain (#HIGH-02)
+- NetworkPolicies for production (platform-system namespace) — default deny ingress + per-component rules (#HIGH-01)
+- Auto-generate `tunnelSecret` in Pulumi config on first deploy — no manual pre-setup needed (#PIPELINE-03)
+- Create `loopzero-logs` Spaces bucket via Pulumi — Loki log storage bucket was missing (#PIPELINE-04)
+- Import `loopzero-logs` bucket in pipeline pre-step (survives destroy cycles) (#PIPELINE-04)
+- Build `loopzero-packs-runner` image in infra-deploy Step 2 — was only in build-images.yml, missing from destroy+recreate (#PIPELINE-05)
+- Update CWTs + BuildKit registry credentials in infra-deploy Step 2 — fully self-contained pipeline (#PIPELINE-06)
 - Security scan is now a build gate — generate-dockerfile depends on security-scan completion (#CODE-008)
 - Python security scan now runs after install-deps, not in parallel — pip-audit scans installed packages (#CODE-002)
 - cwt-clone.yaml uses minio/mc base image instead of runtime wget — eliminates supply chain risk (#SEC-004)
