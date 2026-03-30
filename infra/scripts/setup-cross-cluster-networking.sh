@@ -1,80 +1,47 @@
 #!/usr/bin/env bash
 # setup-cross-cluster-networking.sh
 #
-# Connects k3d cluster Docker containers to each other's Docker networks
-# so that pods in one cluster can reach the API server of another cluster.
+# Ensures all k3d cluster nodes can reach each other across Docker networks.
 #
-# This is required because k3d creates isolated Docker networks per cluster.
-# Without this, ArgoCD in mgmt cannot reach the workload cluster, and
-# Prometheus cannot scrape metrics from build/workload clusters.
-#
-# Also configures CoreDNS in the mgmt cluster to resolve host.k3d.internal
-# to the workload cluster's server load balancer IP.
+# k3d cluster configs use `network: k3d-loopzero` (shared network), so all clusters
+# are already on the same Docker network. This script verifies connectivity
+# and configures CoreDNS for internal hostname resolution.
 #
 # This script is idempotent — safe to run multiple times.
-
 set -euo pipefail
 
 MGMT_CONTEXT="${MGMT_CONTEXT:-k3d-loopzero-mgmt}"
+SHARED_NETWORK="k3d-loopzero"
 
-echo "=== Cross-cluster Docker network setup ==="
+echo "=== Cross-cluster networking setup ==="
 
-# --- Step 1: Connect mgmt cluster nodes to workload and build networks ---
-# mgmt nodes need to reach:
-#   - workload cluster (ArgoCD syncs apps there)
-#   - build cluster (already connected by k3d, but verify)
-
-connect_to_network() {
-    local container="$1"
-    local network="$2"
-
-    if docker inspect "$container" --format '{{range $net, $_ := .NetworkSettings.Networks}}{{$net}} {{end}}' 2>/dev/null | grep -q "$network"; then
-        echo "  [OK] $container already on $network"
-    else
-        if docker network connect "$network" "$container" 2>/dev/null; then
-            echo "  [CONNECTED] $container -> $network"
-        else
-            echo "  [SKIP] $container -> $network (network or container not found)"
-        fi
-    fi
-}
-
-# Get all mgmt cluster containers
-MGMT_CONTAINERS=$(docker ps --filter "name=k3d-loopzero-mgmt" --format '{{.Names}}' 2>/dev/null || true)
-if [ -z "$MGMT_CONTAINERS" ]; then
-    echo "ERROR: No k3d-loopzero-mgmt containers found. Are clusters running?"
-    exit 1
-fi
-
+# --- Step 1: Verify all clusters are on the shared network ---
 echo ""
-echo "Connecting mgmt nodes to workload network..."
-for container in $MGMT_CONTAINERS; do
-    connect_to_network "$container" "k3d-loopzero-workload"
+echo "Verifying cluster connectivity on ${SHARED_NETWORK}..."
+for container in k3d-loopzero-mgmt-server-0 k3d-loopzero-build-server-0 k3d-loopzero-workload-server-0; do
+  IP=$(docker inspect "$container" --format "{{(index .NetworkSettings.Networks \"${SHARED_NETWORK}\").IPAddress}}" 2>/dev/null || true)
+  if [ -n "$IP" ]; then
+    echo "  [OK] $container: $IP"
+  else
+    echo "  [WARN] $container not on ${SHARED_NETWORK} — attempting connect"
+    docker network connect "$SHARED_NETWORK" "$container" 2>/dev/null || echo "  [FAIL] Could not connect $container"
+  fi
 done
 
-echo ""
-echo "Connecting mgmt nodes to build network..."
-for container in $MGMT_CONTAINERS; do
-    connect_to_network "$container" "k3d-loopzero-build"
-done
-
-# --- Step 2: Get workload cluster LB IP on the workload network ---
+# --- Step 2: Get workload cluster LB IP ---
 echo ""
 echo "Resolving workload cluster LB IP..."
 WORKLOAD_LB_IP=$(docker inspect k3d-loopzero-workload-serverlb \
-    --format '{{(index .NetworkSettings.Networks "k3d-loopzero-workload").IPAddress}}' 2>/dev/null || true)
+    --format "{{(index .NetworkSettings.Networks \"${SHARED_NETWORK}\").IPAddress}}" 2>/dev/null || true)
 
 if [ -z "$WORKLOAD_LB_IP" ]; then
-    echo "WARNING: Could not determine workload LB IP. Skipping CoreDNS config."
+    echo "WARNING: Could not determine workload LB IP."
     echo "  The workload cluster may not be running."
     exit 0
 fi
-
 echo "  Workload LB IP: $WORKLOAD_LB_IP"
 
 # --- Step 3: Configure CoreDNS in mgmt cluster ---
-# Add host.k3d.internal -> workload LB IP mapping to CoreDNS NodeHosts.
-# CoreDNS in k3d uses the NodeHosts file for custom entries.
 echo ""
 echo "Configuring CoreDNS in mgmt cluster..."
 
@@ -82,7 +49,6 @@ NEEDS_UPDATE=$(kubectl --context "$MGMT_CONTEXT" get configmap coredns -n kube-s
     -o jsonpath='{.data.NodeHosts}' 2>/dev/null | grep -c "host.k3d.internal" || true)
 
 if [ "$NEEDS_UPDATE" -gt 0 ]; then
-    # Check if the IP is already correct
     CURRENT_IP=$(kubectl --context "$MGMT_CONTEXT" get configmap coredns -n kube-system \
         -o jsonpath='{.data.NodeHosts}' 2>/dev/null | grep "host.k3d.internal" | awk '{print $1}')
     if [ "$CURRENT_IP" = "$WORKLOAD_LB_IP" ]; then
@@ -118,6 +84,3 @@ fi
 
 echo ""
 echo "=== Cross-cluster networking setup complete ==="
-echo ""
-echo "Verify DNS from mgmt cluster pods:"
-echo "  kubectl --context $MGMT_CONTEXT run dns-test --rm -i --restart=Never --image=alpine/curl:latest -- nslookup host.k3d.internal"
