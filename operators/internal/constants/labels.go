@@ -77,4 +77,10 @@ const (
 	// AnnotationTokenExpiresAt stores the RFC3339 expiry timestamp for cached DO registry tokens.
 	// Used to skip the DO API call when the token has more than DORegistryTokenRefreshBuffer remaining.
 	AnnotationTokenExpiresAt = "loopzero.io/token-expires-at"
+
+	// AnnotationParentGeneration propagates the parent Tenant's generation to child
+	// Environment CRs. When the Tenant reconciles, it bumps this annotation, which
+	// triggers the EnvironmentController to re-reconcile and correct drift on
+	// cross-cluster resources (NetworkPolicy, ResourceQuota, RBAC).
+	AnnotationParentGeneration = "loopzero.io/parent-generation"
 )

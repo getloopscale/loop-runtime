@@ -346,6 +346,14 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 				Memory:  tenant.Spec.Limits.MaxMemory.String(),
 				Storage: tenant.Spec.Limits.MaxStorage.String(),
 			}
+			// Propagate tenant generation to force EnvironmentController re-reconcile
+			// when Tenant spec changes. This enables drift correction: if child resources
+			// (NetworkPolicy, ResourceQuota) are manually modified/deleted, the next
+			// Tenant reconcile bumps this annotation → EnvironmentController re-runs.
+			if envCR.Annotations == nil {
+				envCR.Annotations = make(map[string]string)
+			}
+			envCR.Annotations[constants.AnnotationParentGeneration] = fmt.Sprintf("%d", tenant.Generation)
 			return controllerutil.SetControllerReference(tenant, envCR, r.Scheme)
 		})
 		if err != nil {
