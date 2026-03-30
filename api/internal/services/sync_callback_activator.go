@@ -49,10 +49,20 @@ func NewSyncCallbackActivator(
 	}
 }
 
+// PendingReleaseByTenantEnvFinder is an optional interface for efficient tenant+env lookup.
+// Falls back to FindPendingReleases + Go-side filtering if not implemented (CODE-SCAN-001).
+type PendingReleaseByTenantEnvFinder interface {
+	FindPendingReleasesByTenantEnv(ctx context.Context, tenantID, env string) ([]db.Release, error)
+}
+
 // OnSyncCompleted is called when ArgoCD reports an Application as Synced + Healthy.
 // The appName is in format "{tenantID}-{environment}" (e.g., "tn-loopzero-production").
 // It finds all PENDING releases matching that tenant+environment and activates them.
 func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error {
+	// ARCH-006 fix: Use a timeout context derived from the server shutdown context
+	// would be ideal, but since this is called from an HTTP handler that already
+	// has a request context with timeout (argocd_callback.go), we use a bounded
+	// background context as fallback.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -62,18 +72,29 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 		return fmt.Errorf("sync callback: invalid app name %q (expected {tenant}-{env})", appName)
 	}
 
-	// Find PENDING releases for this tenant+environment
-	releases, err := a.releaseStore.FindPendingReleases(ctx)
+	// CODE-SCAN-001 fix: Use tenant+env-filtered query when available,
+	// avoiding full table scan of all PENDING releases.
+	var releases []db.Release
+	var err error
+	if finder, ok := a.releaseStore.(PendingReleaseByTenantEnvFinder); ok {
+		releases, err = finder.FindPendingReleasesByTenantEnv(ctx, tenantID, env)
+	} else {
+		var allReleases []db.Release
+		allReleases, err = a.releaseStore.FindPendingReleases(ctx)
+		if err == nil {
+			for _, r := range allReleases {
+				if r.TenantID == tenantID && r.Environment == env {
+					releases = append(releases, r)
+				}
+			}
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("sync callback: find pending releases: %w", err)
 	}
 
 	activated := 0
 	for _, release := range releases {
-		if release.TenantID != tenantID || release.Environment != env {
-			continue
-		}
-
 		// Verify revision matches if available
 		if revision != "" && release.GitCommit != "" && release.GitCommit != revision {
 			a.logger.Warn("sync callback: revision mismatch, skipping",

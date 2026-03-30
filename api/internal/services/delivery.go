@@ -5,6 +5,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -66,7 +67,23 @@ func (d *DispatchingDeliveryActivator) Activate(ctx context.Context, build *db.B
 }
 
 func (d *DispatchingDeliveryActivator) Rollback(ctx context.Context, req RollbackDeliveryRequest) error {
+	if d.Static != nil && isStaticRelease(req.TargetRelease) {
+		return d.Static.Rollback(ctx, req)
+	}
 	return d.Container.Rollback(ctx, req)
+}
+
+// isStaticRelease checks whether a release was produced by the static delivery
+// pipeline by inspecting the "delivery" field in its artifacts JSON.
+func isStaticRelease(release *db.Release) bool {
+	if release == nil || release.Artifacts == nil {
+		return false
+	}
+	var artifacts map[string]string
+	if err := json.Unmarshal(release.Artifacts, &artifacts); err != nil {
+		return false
+	}
+	return artifacts["delivery"] == "static"
 }
 
 // hasStaticApps checks if any app in the result has a static delivery type.

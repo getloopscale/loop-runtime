@@ -244,6 +244,9 @@ func (c Config) Validate() error {
 	}
 	// SEC-001: Warn if secret encryption is disabled.
 	if c.SecretEncryptionKey == "" {
+		if c.IsProduction() {
+			return fmt.Errorf("LOOPZERO_SECRET_ENCRYPTION_KEY is required in production — secrets must be encrypted at rest")
+		}
 		slog.Warn("LOOPZERO_SECRET_ENCRYPTION_KEY not set — secrets stored in plaintext (only acceptable for local development)")
 	}
 	// SEC-2: ARGOCD_INSECURE=true in production is a fatal error, not just a log.

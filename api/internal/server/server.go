@@ -82,6 +82,8 @@ type Config struct {
 	StatusHandler *routes.StatusHandler
 	// SecretK8sSync creates K8s Secrets on mgmt + ExternalSecret CRs on workload.
 	SecretK8sSync routes.SecretK8sSync
+	// IsProduction indicates production mode — enables strict error handling.
+	IsProduction bool
 }
 
 // NewRouter creates a chi router with middleware and routes.
@@ -149,6 +151,9 @@ func NewRouter(cfg Config) *chi.Mux {
 				var sourceOpts []func(*routes.SourceHandler)
 				if cfg.ObjectUploader != nil {
 					sourceOpts = append(sourceOpts, routes.WithObjectUploader(cfg.ObjectUploader))
+				}
+				if cfg.IsProduction {
+					sourceOpts = append(sourceOpts, routes.WithProductionMode())
 				}
 				sourceHandler := routes.NewSourceHandler(cfg.SourceStore, sourceOpts...)
 				r.With(rateLimitMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)

@@ -80,6 +80,20 @@ var (
 	}, []string{"tenant", "environment"})
 )
 
+// Rollback metrics — emitted by the rollback orchestrator (VAL-OBS-001 fix).
+var (
+	RollbacksTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_rollbacks_total",
+		Help: "Total number of rollback attempts by final status.",
+	}, []string{"tenant", "environment", "status"})
+
+	RollbackDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_rollback_duration_seconds",
+		Help:    "Rollback duration from initiation to completion.",
+		Buckets: []float64{1, 2, 5, 10, 30, 60, 120},
+	}, []string{"tenant", "environment"})
+)
+
 // ArgoCD circuit breaker + auth metrics (MEET-2026-03-28-013).
 var (
 	// ArgoCDCircuitState tracks the circuit breaker state.

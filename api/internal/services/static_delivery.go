@@ -270,6 +270,14 @@ func (s *StaticDeliveryActivator) phaseEFinalize(ctx context.Context, build *db.
 			return nil
 		}
 
+		// CODE-0001: Query previous ACTIVE release BEFORE transitioning the new
+		// release to ACTIVE. Otherwise GetActiveByEnvTx returns the just-activated
+		// release instead of the previous one (same fix as ActivateReleaseKernel).
+		prev, err := s.releaseStore.GetActiveByEnvTx(ctx, tx, build.TenantID, build.ProjectID, build.Environment)
+		if err != nil {
+			return fmt.Errorf("static activate: get previous: %w", err)
+		}
+
 		// Release → ACTIVE
 		if _, err := s.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncCompleted)); err != nil {
 			return fmt.Errorf("static activate: transition to ACTIVE: %w", err)
@@ -288,11 +296,7 @@ func (s *StaticDeliveryActivator) phaseEFinalize(ctx context.Context, build *db.
 			return fmt.Errorf("static activate: set active: %w", err)
 		}
 
-		// Supersede previous
-		prev, err := s.releaseStore.GetActiveByEnvTx(ctx, tx, build.TenantID, build.ProjectID, build.Environment)
-		if err != nil {
-			return fmt.Errorf("static activate: get previous: %w", err)
-		}
+		// Supersede previous (queried above, before activation)
 		if prev != nil && prev.ID != release.ID {
 			if _, err := s.releaseStore.UpdateStatus(ctx, tx, prev.ID, string(statemachine.ReleaseNewActivated)); err != nil {
 				return fmt.Errorf("static activate: supersede previous: %w", err)

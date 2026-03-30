@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -104,7 +105,10 @@ type createProjectRequest struct {
 
 // Create handles POST /api/v1/projects.
 func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -123,7 +127,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create project in DB
-	result, err := h.store.CreateProject(r.Context(), CreateProjectInput{
+	result, err := h.store.CreateProject(ctx, CreateProjectInput{
 		TenantID:  uc.TenantID,
 		Name:      req.Name,
 		CreatedBy: uc.UserID,
@@ -141,7 +145,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// which provisions Gitea repos, ArgoCD apps, namespaces, RBAC, and NetworkPolicies.
 	// ADR-0006 Invariant D: fail loud at ownership boundaries — silent failure here
 	// causes cascading deploy failures (namespace not found, ArgoCD app missing).
-	if err := h.crMgr.EnsureTenant(r.Context(), uc.TenantID, TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := h.crMgr.EnsureTenant(ctx, uc.TenantID, TenantCRSpec{Plan: "starter"}); err != nil {
 		slog.Error("failed to ensure tenant CR",
 			"tenant_id", uc.TenantID,
 			"error", err.Error(),
@@ -158,7 +162,10 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 // Delete handles DELETE /api/v1/projects/{name}.
 // Deletes a project from all environments.
 func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	ctx, cancel := context.WithTimeout(r.Context(), 300*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -177,7 +184,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Look up project by name
-	project, err := h.store.GetByName(r.Context(), uc.TenantID, name)
+	project, err := h.store.GetByName(ctx, uc.TenantID, name)
 	if err != nil {
 		slog.Error("project lookup failed", "project", name, "error", err)
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
@@ -190,7 +197,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	correlationID := r.Header.Get("Correlation-ID")
 
-	result, err := h.deleter.Delete(r.Context(), ProjectDeleteInput{
+	result, err := h.deleter.Delete(ctx, ProjectDeleteInput{
 		TenantID:      uc.TenantID,
 		ProjectID:     project.ID,
 		ProjectName:   name,
@@ -210,7 +217,10 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 // DeleteEnvironment handles DELETE /api/v1/projects/{name}/environments/{env}.
 // Deletes a project from a specific environment.
 func (h *ProjectHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	ctx, cancel := context.WithTimeout(r.Context(), 300*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -230,7 +240,7 @@ func (h *ProjectHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Look up project by name
-	project, err := h.store.GetByName(r.Context(), uc.TenantID, name)
+	project, err := h.store.GetByName(ctx, uc.TenantID, name)
 	if err != nil {
 		slog.Error("project lookup failed", "project", name, "error", err)
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
@@ -243,7 +253,7 @@ func (h *ProjectHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Reques
 
 	correlationID := r.Header.Get("Correlation-ID")
 
-	result, err := h.deleter.Delete(r.Context(), ProjectDeleteInput{
+	result, err := h.deleter.Delete(ctx, ProjectDeleteInput{
 		TenantID:      uc.TenantID,
 		ProjectID:     project.ID,
 		ProjectName:   name,

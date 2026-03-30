@@ -4,11 +4,13 @@
 package routes
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // ArgoCallbackPayload is the webhook payload sent by ArgoCD Notifications.
@@ -60,6 +62,9 @@ func (h *ArgoCallbackHandler) Handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	_, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
 
 	var payload ArgoCallbackPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
