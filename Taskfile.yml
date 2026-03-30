@@ -713,7 +713,7 @@ tasks:
         --namespace argocd --create-namespace
         --version 7.3.11
         -f infra/helm/argocd/values.yaml
-        --wait --timeout 3m
+        --wait --timeout 5m
       # PodDisruptionBudgets: Helm charts create their own PDBs.
       # Manual apply removed — conflicts with chart-managed PDBs (minAvailable vs maxUnavailable).
       # NetworkPolicies for loopzero-system namespace
