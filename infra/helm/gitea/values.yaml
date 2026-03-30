@@ -19,7 +19,7 @@ gitea:
       PASSWD: loopzero-dev-password  # LOCAL DEV ONLY — override for production
       SSL_MODE: disable
     server:
-      ROOT_URL: http://localhost:3000
+      ROOT_URL: http://gitea-http.loopzero-system.svc.cluster.local:3000
       HTTP_PORT: 3000
     service:
       DISABLE_REGISTRATION: true

@@ -665,9 +665,9 @@ tasks:
         helm upgrade --install postgresql bitnami/postgresql
         --kube-context {{.MGMT_CONTEXT}}
         --namespace loopzero-system --create-namespace
-        --version 16.4.1
+        --version 18.5.14
         -f infra/helm/postgresql/values.yaml
-        --wait --timeout 3m
+        --wait --timeout 5m
       # Ensure gitea database exists (initdb.scripts may not re-run on PV reuse)
       - |
         echo "Ensuring gitea database exists..."
@@ -701,10 +701,8 @@ tasks:
         --version 7.3.11
         -f infra/helm/argocd/values.yaml
         --wait --timeout 3m
-      # PodDisruptionBudgets for stateful services
-      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/postgresql/templates/pdb.yaml
-      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/gitea/templates/pdb.yaml
-      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/argocd/templates/pdb.yaml
+      # PodDisruptionBudgets: Helm charts create their own PDBs.
+      # Manual apply removed — conflicts with chart-managed PDBs (minAvailable vs maxUnavailable).
       # NetworkPolicies for loopzero-system namespace
       - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/network-policies/loopzero-system.yaml
 
@@ -740,7 +738,7 @@ tasks:
         --version v1.14.5
         -f infra/helm/cert-manager/values.yaml
         --wait --timeout 3m
-      # Self-signed CA chain + wildcard certificate + TLSStore for Traefik
+      # Self-signed CA chain (issuers only — wildcard cert + TLSStore applied after Traefik)
       - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/cert-manager/cluster-issuer.yaml
       # Traefik ingress controller with TLS, HA (2 replicas), and PDB
       - >-
@@ -752,6 +750,8 @@ tasks:
         --wait --timeout 3m
       # Traefik middlewares: rate-limit, body-limit, security-headers
       - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/traefik/middlewares.yaml
+      # Wildcard cert + TLSStore (requires Traefik CRDs + namespace — must come after Traefik install)
+      - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/cert-manager/traefik-tls.yaml
 
   infra:install:monitoring:
     desc: Install Prometheus + Grafana + OTel in mgmt cluster
@@ -761,9 +761,9 @@ tasks:
         helm upgrade --install monitoring prometheus-community/kube-prometheus-stack
         --kube-context {{.MGMT_CONTEXT}}
         --namespace monitoring --create-namespace
-        --version 25.27.0
+        --version 82.15.1
         -f infra/helm/monitoring/values.yaml
-        --wait --timeout 5m
+        --wait --timeout 8m
       - >-
         helm upgrade --install otel-collector open-telemetry/opentelemetry-collector
         --kube-context {{.MGMT_CONTEXT}}

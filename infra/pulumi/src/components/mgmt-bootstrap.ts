@@ -554,7 +554,7 @@ function bootstrapGitea(
             containers: [
               {
                 name: "bootstrap",
-                image: "bitnami/kubectl:1.32.0",
+                image: "bitnami/kubectl:latest", // Bitnami removes versioned tags; latest is the only available tag
                 env: [
                   {
                     name: "GITEA_ADMIN_PASS_ENV",
