@@ -531,6 +531,11 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 		container.Ports = []k8sContainerPort{
 			{ContainerPort: port, Protocol: "TCP"},
 		}
+		// Inject PORT env var so the app knows which port to listen on.
+		// Many frameworks use PORT env var (Express, Fastify, Next.js, etc.).
+		container.Env = append(container.Env, k8sEnvVar{
+			Name: "PORT", Value: fmt.Sprintf("%d", port),
+		})
 		container.ReadinessProbe = &k8sProbe{
 			HTTPGet:             k8sHTTPGet{Path: "/health", Port: port},
 			InitialDelaySeconds: 5,

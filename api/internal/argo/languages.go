@@ -11,6 +11,7 @@ package argo
 import (
 	"fmt"
 	"log/slog"
+	"os"
 
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
@@ -232,7 +233,16 @@ func loopzeroPacksDockerfileStep(apps []services.AppSpec, totalApps int) *forge.
 			workspaceMountPath, appPath, app.Name, output,
 		)
 	}
-	return buildContainer("generate-dockerfile", imageLoopZeroPacks, resourcesSmall(), script)
+	return buildContainer("generate-dockerfile", loopzeroPacks(), resourcesSmall(), script)
+}
+
+// loopzeroPacks returns the loopzero-packs-runner image, allowing override via env var.
+// Local dev sets LOOPZERO_PACKS_IMAGE to use the k3d registry image.
+func loopzeroPacks() string {
+	if v := os.Getenv("LOOPZERO_PACKS_IMAGE"); v != "" {
+		return v
+	}
+	return imageLoopZeroPacks
 }
 
 // ---------------------------------------------------------------------------

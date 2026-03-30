@@ -23,12 +23,10 @@ spec:
           factor: "2"
           maxDuration: "30s"
       container:
-        # BLOCKER-1 fix: Source bundle downloaded from MinIO (not cloned from Gitea).
-        # SEC-004 fix: Replaced alpine/git + runtime wget of mc binary with
-        # minio/mc base image (same as cache-restore/cache-save CWTs). This eliminates
-        # the supply chain risk of downloading an unverified binary at runtime.
-        # git installed via apk for bundle unpacking.
-        image: minio/mc:RELEASE.2024-01-16T16-06-34Z
+        # SEC-004: Custom image with mc + git baked in (no runtime downloads).
+        # Built from: infra/images/clone-runner/Dockerfile
+        # CI builds via build-images.yml, local via task images:build.
+        image: {{ .Values.images.cloneRunner | default "registry.digitalocean.com/loopzero-infra-registry/loopzero-clone-runner:v0.1.0" }}
         env:
           - name: HOME
             value: /tmp
@@ -40,9 +38,6 @@ spec:
           - -c
           - |
             set -euo pipefail
-
-            # Install git for bundle unpacking (mc image is Alpine-based)
-            apk add --no-cache git >/dev/null 2>&1
 
             BUNDLE_PATH="{{ "{{inputs.parameters.tenant-id}}" }}/source/{{ "{{inputs.parameters.build-id}}" }}.bundle"
             echo "Downloading source bundle: ${BUNDLE_PATH}"

@@ -273,8 +273,12 @@ func main() {
 
 		// Cloudflare KV client for static frontend routing (Sprint 10).
 		// nil when CF credentials not configured (local dev).
-		kvClient := cfkv.NewClient(cfg.CFAccountID, cfg.CFKVNamespaceID, cfg.CFAPIToken)
-		if kvClient != nil {
+		// IMPORTANT: Assign to the interface type directly to avoid the Go nil interface trap.
+		// A typed nil *cfkv.Client assigned to a StaticRoutingClient interface is NOT nil,
+		// which causes panics when methods are called on it.
+		var kvClient services.StaticRoutingClient
+		if c := cfkv.NewClient(cfg.CFAccountID, cfg.CFKVNamespaceID, cfg.CFAPIToken); c != nil {
+			kvClient = c
 			slog.Info("cloudflare KV client configured for static frontend routing")
 		}
 

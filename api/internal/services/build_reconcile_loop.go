@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -191,7 +192,8 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 				defer func() {
 					if p := recover(); p != nil {
 						r.logger.Error("reconcile loop: panic in reconcileBuild — recovered",
-							"build_id", b.ID, "panic", fmt.Sprintf("%v", p))
+							"build_id", b.ID, "panic", fmt.Sprintf("%v", p),
+							"stack", string(debug.Stack()))
 					}
 				}()
 				r.reconcileBuild(ctx, &b)

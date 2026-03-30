@@ -88,6 +88,18 @@ tasks:
         check_warn "ginkgo"             "which ginkgo"                     "go install github.com/onsi/ginkgo/v2/ginkgo@latest"
 
         echo ""
+        echo "=== System Limits ==="
+        INOTIFY_INSTANCES=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)
+        if [ "$INOTIFY_INSTANCES" -ge 512 ]; then
+          echo "  [PASS] inotify max_user_instances: $INOTIFY_INSTANCES (>= 512)"
+          PASS=$((PASS+1))
+        else
+          echo "  [FAIL] inotify max_user_instances: $INOTIFY_INSTANCES (need >= 512 for 3 k3d clusters)"
+          echo "         Fix: sudo sysctl fs.inotify.max_user_instances=512"
+          FAIL=$((FAIL+1))
+        fi
+
+        echo ""
         echo "=== k3d Clusters ==="
         for CLUSTER in loopzero-mgmt loopzero-build loopzero-workload; do
           if k3d cluster list -o json 2>/dev/null | grep -q "\"name\":\"$CLUSTER\""; then
@@ -720,11 +732,22 @@ tasks:
       # MinIO credentials Secret for cache CWTs (envFrom.secretRef)
       # CWTs read credentials from this Secret instead of workflow parameters.
       - kubectl --context {{.BUILD_CONTEXT}} apply -f infra/helm/minio/minio-credentials-secret.yaml
-      # Apply all ClusterWorkflowTemplates (composable build pipeline blocks)
+      # BuildKit registry config (insecure k3d registry)
+      - |
+        kubectl --context {{.BUILD_CONTEXT}} -n argo create secret generic buildkit-registry-config \
+          --from-literal=config.json='{"auths":{}}' \
+          --from-literal=buildkitd.toml='[registry."k3d-loopzero-registry:5000"]
+          http = true
+          insecure = true' \
+          --dry-run=client -o yaml | kubectl --context {{.BUILD_CONTEXT}} apply -f -
+      # Render CWTs via Helm template (CWT files contain Helm directives like
+      # {{- if .Values.minio.insecure }} that must be rendered before applying).
+      # Local dev overrides clone-runner image to use k3d registry.
       - >-
-        for f in infra/helm/argo-workflows/templates/cwt-*.yaml; do
-          kubectl --context {{.BUILD_CONTEXT}} apply -f "$f";
-        done
+        helm template loopzero-cwts infra/helm/argo-workflows/
+        -f infra/helm/argo-workflows/values.yaml
+        --set images.cloneRunner=k3d-loopzero-registry:5000/loopzero-clone-runner:latest
+        | kubectl --context {{.BUILD_CONTEXT}} apply -f -
 
   infra:install:workload:
     desc: Install platform components in workload cluster
@@ -1016,13 +1039,31 @@ tasks:
         fi
 
   # ---------------------------------------------------------------------------
+  # S0.13: Build pipeline tooling images
+  # ---------------------------------------------------------------------------
+  images:build:
+    desc: Build and push tooling images (clone-runner, packs-runner) to local k3d registry
+    cmds:
+      - |
+        echo "=== Building loopzero-clone-runner ==="
+        docker build -t localhost:5000/loopzero-clone-runner:latest infra/images/clone-runner/
+        docker push localhost:5000/loopzero-clone-runner:latest
+        echo "  Pushed: localhost:5000/loopzero-clone-runner:latest"
+      - |
+        echo "=== Building loopzero-packs-runner ==="
+        docker build -t localhost:5000/loopzero-packs-runner:latest infra/images/packs-runner/
+        docker push localhost:5000/loopzero-packs-runner:latest
+        echo "  Pushed: localhost:5000/loopzero-packs-runner:latest"
+
+  # ---------------------------------------------------------------------------
   # S0.14: Composite tasks
   # ---------------------------------------------------------------------------
   setup:
-    desc: Full setup from scratch — clusters + infra + networking + CRDs + DB + tokens
+    desc: Full setup from scratch — clusters + infra + networking + CRDs + DB + tokens + images
     cmds:
       - task: registry:create
       - task: clusters:create
+      - task: images:build
       - task: infra:install
       - task: networking:setup
       - task: crds:install

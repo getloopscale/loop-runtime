@@ -68,7 +68,7 @@ spec:
             # Uses mgmt LB NodePort. Update after cluster recreate:
             #   docker inspect k3d-loopzero-mgmt-serverlb --format '{{json .NetworkSettings.Networks}}'
             - name: MINIO_CROSS_CLUSTER_ENDPOINT
-              value: "http://172.18.0.3:32000"
+              value: "http://172.18.0.6:32000"
             - name: MINIO_ACCESS_KEY
               value: "loopzero-admin"
             - name: MINIO_SECRET_KEY
@@ -80,10 +80,10 @@ spec:
             # IP = mgmt LB on k3d-loopzero-build network. Update after cluster recreate:
             #   docker inspect k3d-loopzero-mgmt-serverlb --format '{{json .NetworkSettings.Networks}}'
             - name: GITEA_CROSS_CLUSTER_URL
-              value: "http://172.18.0.3:30000"
+              value: "http://172.18.0.6:30000"
             # Cross-cluster API URL (for Argo Workflow callback — build cluster → mgmt API)
             - name: API_CROSS_CLUSTER_URL
-              value: "http://172.18.0.3:30001"
+              value: "http://172.18.0.6:30001"
             - name: GITEA_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -111,6 +111,10 @@ spec:
             # Config.Validate() enforces "false" in production.
             - name: REGISTRY_INSECURE
               value: "true"
+            # Override loopzero-packs-runner image for local dev (k3d registry).
+            # Production uses the pinned image from constants.go.
+            - name: LOOPZERO_PACKS_IMAGE
+              value: "k3d-loopzero-registry:5000/loopzero-packs-runner:latest"
             # Workload cluster ingress — Traefik LoadBalancer on k3d-loopzero-workload.
             # Uses the Docker IP of k3d-loopzero-workload-serverlb directly because
             # host.k3d.internal does not resolve from within mgmt cluster pods.
@@ -118,7 +122,7 @@ spec:
             # Workload LB IP on k3d-loopzero-workload network. Update after cluster recreate:
             #   docker inspect k3d-loopzero-workload-serverlb --format '{{json .NetworkSettings.Networks}}'
             - name: WORKLOAD_INGRESS_URL
-              value: "http://172.18.0.13:80"
+              value: "http://172.18.0.12:80"
             - name: BASE_DOMAIN
               value: "loopzero.local"
           ports:

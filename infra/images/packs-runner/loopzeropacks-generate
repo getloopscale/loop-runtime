@@ -1,0 +1,202 @@
+#!/bin/sh
+# loopzeropacks-generate — Analyzes source code and generates optimized Dockerfiles.
+# Part of the LoopZero build pipeline (MEET-2026-03-29-017).
+#
+# If a user-provided Dockerfile exists at the app path, it is used directly.
+# Otherwise, generates an optimized Dockerfile based on detected framework.
+set -e
+
+SOURCE=""
+APP_PATH=""
+APP_NAME=""
+OUTPUT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --source) SOURCE="$2"; shift 2 ;;
+    --app-path) APP_PATH="$2"; shift 2 ;;
+    --app-name) APP_NAME="$2"; shift 2 ;;
+    --output) OUTPUT="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+FULL_PATH="$SOURCE"
+if [ "$APP_PATH" != "." ] && [ -n "$APP_PATH" ]; then
+  FULL_PATH="$SOURCE/$APP_PATH"
+fi
+
+echo "loopzero-packs: analyzing $FULL_PATH for $APP_NAME"
+
+# --- User-provided Dockerfile ---
+USER_DOCKERFILE="$FULL_PATH/Dockerfile"
+if [ -f "$USER_DOCKERFILE" ]; then
+  REAL_SRC=$(readlink -f "$USER_DOCKERFILE" 2>/dev/null || echo "$USER_DOCKERFILE")
+  REAL_DST=$(readlink -f "$OUTPUT" 2>/dev/null || echo "$OUTPUT")
+  if [ "$REAL_SRC" = "$REAL_DST" ]; then
+    echo "loopzero-packs: user Dockerfile already at output path, skipping"
+    exit 0
+  fi
+  echo "loopzero-packs: user Dockerfile found, copying to $OUTPUT"
+  cp "$USER_DOCKERFILE" "$OUTPUT"
+  exit 0
+fi
+
+# --- Detect monorepo ---
+IS_MONOREPO="false"
+if [ -f "$SOURCE/package.json" ]; then
+  if grep -q '"workspaces"' "$SOURCE/package.json" 2>/dev/null; then
+    IS_MONOREPO="true"
+  fi
+fi
+
+# --- Detect framework ---
+if [ -f "$FULL_PATH/next.config.js" ] || [ -f "$FULL_PATH/next.config.mjs" ] || [ -f "$FULL_PATH/next.config.ts" ]; then
+  FRAMEWORK="nextjs"
+elif [ -f "$FULL_PATH/package.json" ]; then
+  if grep -q '"express"' "$FULL_PATH/package.json" 2>/dev/null; then
+    FRAMEWORK="express"
+  elif grep -q '"fastify"' "$FULL_PATH/package.json" 2>/dev/null; then
+    FRAMEWORK="fastify"
+  else
+    FRAMEWORK="node"
+  fi
+elif [ -f "$FULL_PATH/go.mod" ]; then
+  FRAMEWORK="go"
+elif [ -f "$FULL_PATH/requirements.txt" ] || [ -f "$FULL_PATH/pyproject.toml" ]; then
+  FRAMEWORK="python"
+else
+  FRAMEWORK="unknown"
+fi
+
+# --- Detect start file from package.json ---
+START_FILE="src/index.js"
+if [ -f "$FULL_PATH/package.json" ]; then
+  S=$(grep -o '"start"[[:space:]]*:[[:space:]]*"[^"]*"' "$FULL_PATH/package.json" 2>/dev/null | head -1 | sed 's/.*"start"[[:space:]]*:[[:space:]]*"//;s/".*//')
+  if [ -n "$S" ]; then
+    FILE=$(echo "$S" | grep -o '[^ ]*\.js$' 2>/dev/null | head -1)
+    if [ -n "$FILE" ]; then
+      START_FILE="$FILE"
+    fi
+  fi
+fi
+
+echo "loopzero-packs: detected $FRAMEWORK (monorepo=$IS_MONOREPO, start=$START_FILE) for $APP_NAME at $APP_PATH"
+
+# --- Generate Dockerfile ---
+if [ "$IS_MONOREPO" = "true" ]; then
+  # Monorepo: context is /workspace (root). Dockerfile copies from root.
+  case "$FRAMEWORK" in
+    nextjs)
+      cat > "$OUTPUT" <<DOCKERFILE
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY ${APP_PATH}/package.json ./${APP_PATH}/
+COPY packages/ ./packages/
+RUN npm ci
+
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app .
+COPY ${APP_PATH}/ ./${APP_PATH}/
+COPY packages/ ./packages/
+WORKDIR /app/${APP_PATH}
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npx next build
+
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=builder /app/${APP_PATH}/.next/standalone/ /app/
+COPY --from=builder /app/${APP_PATH}/.next/static /app/${APP_PATH}/.next/static
+COPY --from=builder /app/${APP_PATH}/public /app/${APP_PATH}/public 2>/dev/null || true
+EXPOSE 3000
+CMD ["node", "${APP_PATH}/server.js"]
+DOCKERFILE
+      ;;
+    express|fastify|node)
+      cat > "$OUTPUT" <<DOCKERFILE
+FROM node:20-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY ${APP_PATH}/package.json ./${APP_PATH}/
+COPY packages/ ./packages/
+RUN npm ci --omit=dev 2>/dev/null || npm ci
+COPY ${APP_PATH}/ ./${APP_PATH}/
+COPY packages/ ./packages/
+CMD ["node", "${APP_PATH}/${START_FILE}"]
+DOCKERFILE
+      ;;
+    *)
+      echo "loopzero-packs: ERROR: unsupported monorepo framework '$FRAMEWORK'"
+      exit 1
+      ;;
+  esac
+else
+  # Single app: context is /workspace, app is at root
+  case "$FRAMEWORK" in
+    nextjs)
+      cat > "$OUTPUT" <<DOCKERFILE
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npx next build
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/.next/standalone/ /app/
+COPY --from=builder /app/.next/static /app/.next/static
+COPY --from=builder /app/public /app/public 2>/dev/null || true
+EXPOSE 3000
+CMD ["node", "server.js"]
+DOCKERFILE
+      ;;
+    express|fastify|node)
+      cat > "$OUTPUT" <<DOCKERFILE
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev 2>/dev/null || npm ci
+COPY . .
+CMD ["node", "${START_FILE}"]
+DOCKERFILE
+      ;;
+    go)
+      cat > "$OUTPUT" <<DOCKERFILE
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
+COPY go.* ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /server .
+FROM alpine:3.21
+RUN adduser -D -u 1000 loopzero
+COPY --from=builder /server /server
+USER 1000
+EXPOSE 8080
+CMD ["/server"]
+DOCKERFILE
+      ;;
+    python)
+      cat > "$OUTPUT" <<DOCKERFILE
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 8000
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+DOCKERFILE
+      ;;
+    *)
+      echo "loopzero-packs: ERROR: unsupported framework '$FRAMEWORK'"
+      exit 1
+      ;;
+  esac
+fi
+
+echo "loopzero-packs: generated $OUTPUT for $APP_NAME ($FRAMEWORK)"
