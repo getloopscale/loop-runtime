@@ -67,6 +67,7 @@ spec:
               # Ensure buckets exist (idempotent)
               mc mb --ignore-existing local/loopzero-builds
               mc mb --ignore-existing local/loopzero-artifacts
+              mc mb --ignore-existing local/loopzero-static-assets
 
               # Apply lifecycle rule: expire cache entries after 30 days
               # This prevents unbounded cache growth from lockfile hash changes.

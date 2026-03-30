@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
 # update-cross-cluster-ips.sh — Updates cross-cluster IPs across all deployment manifests.
 #
-# k3d assigns dynamic Docker IPs to cluster loadbalancers. These IPs change
-# every time clusters are recreated. This script detects the current IPs and
-# patches all deployment YAMLs and ArgoCD cluster secrets automatically.
+# k3d clusters share the `k3d-loopzero` Docker network. Server node IPs are used
+# for cross-cluster communication (NodePorts accessible on server nodes).
+# LB IPs are used for HTTP traffic (Traefik on workload).
 #
 # Components patched:
 #   - infra/tilt/api-deployment.yaml       (GITEA/API cross-cluster URLs, workload ingress)
 #   - infra/tilt/operator-deployment.yaml   (WORKLOAD_CLUSTER_URL for ArgoCD Applications)
-#   - ArgoCD cluster-workload secret        (workload cluster API server endpoint)
-#   - Build cluster secrets                 (loopzero-gitea-credentials, loopzero-minio-credentials)
+#   - Build cluster secrets                 (loopzero-minio-credentials MINIO_ENDPOINT)
 #   - infra/helm/monitoring/values.yaml     (scrape targets)
+#
+# ArgoCD cluster-workload secret and repo credentials are managed by
+# provision-api-tokens.sh (uses Docker hostnames, not IPs).
 #
 # Run after: task setup OR task clusters:create
 # Usage: bash infra/scripts/update-cross-cluster-ips.sh
 set -euo pipefail
 
+SHARED_NETWORK="k3d-loopzero"
 DEPLOYMENT="infra/tilt/api-deployment.yaml"
 OPERATOR_DEPLOYMENT="infra/tilt/operator-deployment.yaml"
 
@@ -24,143 +27,91 @@ if [ ! -f "$DEPLOYMENT" ]; then
   exit 1
 fi
 
-echo "=== Detecting cross-cluster IPs ==="
+echo "=== Detecting cross-cluster IPs on ${SHARED_NETWORK} network ==="
 
-# Mgmt LB IP on the build network (for build cluster → mgmt Gitea/API callback)
-MGMT_ON_BUILD=$(docker inspect k3d-loopzero-mgmt-serverlb \
-  --format '{{(index .NetworkSettings.Networks "k3d-loopzero-build").IPAddress}}' 2>/dev/null)
+# Helper: get IP on the shared network
+get_ip() {
+  docker inspect "$1" --format "{{(index .NetworkSettings.Networks \"${SHARED_NETWORK}\").IPAddress}}" 2>/dev/null || true
+}
 
-if [ -z "$MGMT_ON_BUILD" ]; then
-  echo "ERROR: Cannot find mgmt LB IP on k3d-loopzero-build network."
+# Mgmt server node IP (NodePorts: 30000=Gitea, 30001=API, 32000=MinIO)
+MGMT_SERVER=$(get_ip k3d-loopzero-mgmt-server-0)
+if [ -z "$MGMT_SERVER" ]; then
+  echo "ERROR: Cannot find mgmt server IP on ${SHARED_NETWORK}."
   echo "  Are all clusters running? Run: k3d cluster list"
   exit 1
 fi
-echo "  Mgmt LB on build network: $MGMT_ON_BUILD"
+echo "  Mgmt server: $MGMT_SERVER (Gitea:30000, API:30001, MinIO:32000)"
 
-# Workload LB IP on the workload network (for API → workload ingress health probes)
-WORKLOAD_LB=$(docker inspect k3d-loopzero-workload-serverlb \
-  --format '{{(index .NetworkSettings.Networks "k3d-loopzero-workload").IPAddress}}' 2>/dev/null)
-
+# Workload LB IP (HTTP/HTTPS traffic via Traefik)
+WORKLOAD_LB=$(get_ip k3d-loopzero-workload-serverlb)
 if [ -z "$WORKLOAD_LB" ]; then
-  echo "ERROR: Cannot find workload LB IP on k3d-loopzero-workload network."
+  echo "ERROR: Cannot find workload LB IP on ${SHARED_NETWORK}."
   exit 1
 fi
-echo "  Workload LB on workload network: $WORKLOAD_LB"
+echo "  Workload LB: $WORKLOAD_LB (Traefik:80/443)"
 
-# Workload K8s API server — the LB IP that serves port 6443.
-# This is the endpoint ArgoCD and the operator use to deploy to the workload cluster.
-WORKLOAD_K8S_API="${WORKLOAD_LB}:6443"
-echo "  Workload K8s API server: https://$WORKLOAD_K8S_API"
+# Workload server IP (K8s API: 6443)
+WORKLOAD_SERVER=$(get_ip k3d-loopzero-workload-server-0)
+echo "  Workload server: $WORKLOAD_SERVER (K8s API:6443)"
 
+# Build LB IP (monitoring scrape targets)
+BUILD_LB=$(get_ip k3d-loopzero-build-serverlb)
+echo "  Build LB: $BUILD_LB (Argo metrics:30090)"
+
+# ---------------------------------------------------------------------------
+# Patch API deployment
+# ---------------------------------------------------------------------------
 echo ""
 echo "=== Patching $DEPLOYMENT ==="
 
-# Patch GITEA_CROSS_CLUSTER_URL and API_CROSS_CLUSTER_URL
-# These use the mgmt LB IP visible from the build cluster
-sed -i "s|value: \"http://[0-9.]*:30000\"  # GITEA_CROSS_CLUSTER|value: \"http://${MGMT_ON_BUILD}:30000\"  # GITEA_CROSS_CLUSTER|" "$DEPLOYMENT" 2>/dev/null || true
+patch_env() {
+  local file="$1" env_name="$2" new_value="$3"
+  OLD=$(grep "${env_name}" -A1 "$file" | grep 'value:' | head -1 | sed 's/.*value: "\([^"]*\)".*/\1/')
+  if [ -n "$OLD" ] && [ "$OLD" != "$new_value" ]; then
+    sed -i "s|${OLD}|${new_value}|" "$file"
+    echo "  ${env_name}: $OLD → $new_value"
+  else
+    echo "  ${env_name}: already correct ($new_value)"
+  fi
+}
 
-# Generic sed for the cross-cluster URLs (match the line by context)
-# GITEA_CROSS_CLUSTER_URL
-OLD_GITEA=$(grep 'GITEA_CROSS_CLUSTER_URL' -A1 "$DEPLOYMENT" | grep 'value:' | head -1 | sed 's/.*value: "\([^"]*\)".*/\1/')
-NEW_GITEA="http://${MGMT_ON_BUILD}:30000"
-if [ -n "$OLD_GITEA" ] && [ "$OLD_GITEA" != "$NEW_GITEA" ]; then
-  sed -i "s|${OLD_GITEA}|${NEW_GITEA}|g" "$DEPLOYMENT"
-  echo "  GITEA_CROSS_CLUSTER_URL: $OLD_GITEA → $NEW_GITEA"
-else
-  echo "  GITEA_CROSS_CLUSTER_URL: already correct ($NEW_GITEA)"
-fi
-
-# API_CROSS_CLUSTER_URL
-OLD_API=$(grep 'API_CROSS_CLUSTER_URL' -A1 "$DEPLOYMENT" | grep 'value:' | head -1 | sed 's/.*value: "\([^"]*\)".*/\1/')
-NEW_API="http://${MGMT_ON_BUILD}:30001"
-if [ -n "$OLD_API" ] && [ "$OLD_API" != "$NEW_API" ]; then
-  sed -i "s|${OLD_API}|${NEW_API}|g" "$DEPLOYMENT"
-  echo "  API_CROSS_CLUSTER_URL: $OLD_API → $NEW_API"
-else
-  echo "  API_CROSS_CLUSTER_URL: already correct ($NEW_API)"
-fi
-
-# WORKLOAD_INGRESS_URL
-OLD_WORKLOAD=$(grep 'WORKLOAD_INGRESS_URL' -A1 "$DEPLOYMENT" | grep 'value:' | head -1 | sed 's/.*value: "\([^"]*\)".*/\1/')
-NEW_WORKLOAD="http://${WORKLOAD_LB}:80"
-if [ -n "$OLD_WORKLOAD" ] && [ "$OLD_WORKLOAD" != "$NEW_WORKLOAD" ]; then
-  sed -i "s|${OLD_WORKLOAD}|${NEW_WORKLOAD}|g" "$DEPLOYMENT"
-  echo "  WORKLOAD_INGRESS_URL: $OLD_WORKLOAD → $NEW_WORKLOAD"
-else
-  echo "  WORKLOAD_INGRESS_URL: already correct ($NEW_WORKLOAD)"
-fi
+patch_env "$DEPLOYMENT" "MINIO_CROSS_CLUSTER_ENDPOINT" "http://${MGMT_SERVER}:32000"
+patch_env "$DEPLOYMENT" "GITEA_CROSS_CLUSTER_URL" "http://${MGMT_SERVER}:30000"
+patch_env "$DEPLOYMENT" "API_CROSS_CLUSTER_URL" "http://${MGMT_SERVER}:30001"
+patch_env "$DEPLOYMENT" "WORKLOAD_INGRESS_URL" "http://${WORKLOAD_LB}:80"
 
 # ---------------------------------------------------------------------------
-# Operator deployment — WORKLOAD_CLUSTER_URL
+# Patch operator deployment
 # ---------------------------------------------------------------------------
 if [ -f "$OPERATOR_DEPLOYMENT" ]; then
   echo ""
   echo "=== Patching $OPERATOR_DEPLOYMENT ==="
-
-  OLD_WORKLOAD_K8S=$(grep 'WORKLOAD_CLUSTER_URL' -A1 "$OPERATOR_DEPLOYMENT" | grep 'value:' | head -1 | sed 's/.*value: "\([^"]*\)".*/\1/')
-  NEW_WORKLOAD_K8S="https://${WORKLOAD_K8S_API}"
-  if [ -n "$OLD_WORKLOAD_K8S" ] && [ "$OLD_WORKLOAD_K8S" != "$NEW_WORKLOAD_K8S" ]; then
-    sed -i "s|${OLD_WORKLOAD_K8S}|${NEW_WORKLOAD_K8S}|" "$OPERATOR_DEPLOYMENT"
-    echo "  WORKLOAD_CLUSTER_URL: $OLD_WORKLOAD_K8S → $NEW_WORKLOAD_K8S"
-  else
-    echo "  WORKLOAD_CLUSTER_URL: already correct ($NEW_WORKLOAD_K8S)"
-  fi
-else
-  echo "WARNING: $OPERATOR_DEPLOYMENT not found — skipping operator patch"
+  patch_env "$OPERATOR_DEPLOYMENT" "WORKLOAD_CLUSTER_URL" "https://${WORKLOAD_SERVER}:6443"
 fi
 
 # ---------------------------------------------------------------------------
-# ArgoCD cluster secret — workload cluster endpoint
+# Build cluster MinIO credentials (cross-cluster endpoint)
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Patching ArgoCD cluster-workload secret ==="
+echo "=== Patching build cluster secrets ==="
 
-# The cluster-workload secret tells ArgoCD where the workload K8s API server lives.
-# It must match WORKLOAD_CLUSTER_URL so that ArgoCD Applications can sync.
-# For local k3d clusters, we use insecure TLS because the API server certificate
-# contains SANs for the original Docker IPs, which change on cluster recreate.
-ARGOCD_KUBECONFIG=$(k3d kubeconfig write loopzero-mgmt 2>/dev/null)
-if [ -n "$ARGOCD_KUBECONFIG" ]; then
-  CURRENT_SERVER=$(kubectl --kubeconfig="$ARGOCD_KUBECONFIG" get secret cluster-workload -n argocd \
-    -o jsonpath='{.data.server}' 2>/dev/null | base64 -d 2>/dev/null)
-  NEW_SERVER="https://${WORKLOAD_K8S_API}"
-
-  if [ "$CURRENT_SERVER" != "$NEW_SERVER" ]; then
-    # Update server URL
-    ENCODED_SERVER=$(echo -n "$NEW_SERVER" | base64 -w0)
-    kubectl --kubeconfig="$ARGOCD_KUBECONFIG" patch secret cluster-workload -n argocd \
-      --type='json' -p="[{\"op\":\"replace\",\"path\":\"/data/server\",\"value\":\"${ENCODED_SERVER}\"}]" 2>&1
-    echo "  ArgoCD cluster-workload server: $CURRENT_SERVER → $NEW_SERVER"
+BUILD_KUBECONFIG=$(k3d kubeconfig write loopzero-build 2>/dev/null || true)
+if [ -n "$BUILD_KUBECONFIG" ]; then
+  # loopzero-minio-credentials — MINIO_ENDPOINT used by CWTs
+  CURRENT_MINIO=$(kubectl --kubeconfig="$BUILD_KUBECONFIG" get secret loopzero-minio-credentials -n argo \
+    -o jsonpath='{.data.MINIO_ENDPOINT}' 2>/dev/null | base64 -d 2>/dev/null || true)
+  NEW_MINIO="http://${MGMT_SERVER}:32000"
+  if [ -n "$CURRENT_MINIO" ] && [ "$CURRENT_MINIO" != "$NEW_MINIO" ]; then
+    ENCODED=$(echo -n "$NEW_MINIO" | base64 -w0)
+    kubectl --kubeconfig="$BUILD_KUBECONFIG" patch secret loopzero-minio-credentials -n argo \
+      -p "{\"data\":{\"MINIO_ENDPOINT\":\"${ENCODED}\"}}" 2>&1
+    echo "  loopzero-minio-credentials MINIO_ENDPOINT: $CURRENT_MINIO → $NEW_MINIO"
   else
-    echo "  ArgoCD cluster-workload server: already correct ($NEW_SERVER)"
+    echo "  loopzero-minio-credentials MINIO_ENDPOINT: already correct ($NEW_MINIO)"
   fi
-
-  # Always ensure TLS config uses insecure mode for local k3d clusters.
-  # k3d API server certs have SANs for specific Docker IPs that change on recreate.
-  BEARER_TOKEN=$(kubectl --kubeconfig="$ARGOCD_KUBECONFIG" get secret cluster-workload -n argocd \
-    -o jsonpath='{.data.config}' 2>/dev/null | base64 -d 2>/dev/null \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('bearerToken',''))" 2>/dev/null)
-  if [ -n "$BEARER_TOKEN" ]; then
-    NEW_CONFIG=$(printf '{"bearerToken":"%s","tlsClientConfig":{"insecure":true}}' "$BEARER_TOKEN")
-    ENCODED_CONFIG=$(echo -n "$NEW_CONFIG" | base64 -w0)
-    kubectl --kubeconfig="$ARGOCD_KUBECONFIG" patch secret cluster-workload -n argocd \
-      --type='json' -p="[{\"op\":\"replace\",\"path\":\"/data/config\",\"value\":\"${ENCODED_CONFIG}\"}]" 2>&1
-    echo "  ArgoCD cluster-workload TLS: insecure=true (k3d local dev)"
-  fi
-
-  # Update all ArgoCD Applications that reference the old server URL
-  APPS_WITH_OLD_SERVER=$(kubectl --kubeconfig="$ARGOCD_KUBECONFIG" get applications -n argocd \
-    -o jsonpath='{range .items[*]}{.metadata.name}={.spec.destination.server}{"\n"}{end}' 2>/dev/null \
-    | grep -v "$NEW_SERVER" | grep -v "^=" | cut -d= -f1)
-  for app_name in $APPS_WITH_OLD_SERVER; do
-    if [ -n "$app_name" ]; then
-      kubectl --kubeconfig="$ARGOCD_KUBECONFIG" patch application "$app_name" -n argocd \
-        --type='json' -p="[{\"op\":\"replace\",\"path\":\"/spec/destination/server\",\"value\":\"${NEW_SERVER}\"}]" 2>&1
-      echo "  ArgoCD Application $app_name: destination updated to $NEW_SERVER"
-    fi
-  done
 else
-  echo "WARNING: Cannot get kubeconfig for loopzero-mgmt — skipping ArgoCD secret patch"
+  echo "WARNING: Cannot get kubeconfig for loopzero-build — skipping"
 fi
 
 # ---------------------------------------------------------------------------
@@ -171,12 +122,8 @@ if [ -f "$MONITORING_VALUES" ]; then
   echo ""
   echo "=== Patching $MONITORING_VALUES ==="
 
-  # Build cluster LB IP on build network (for Argo Workflows metrics)
-  BUILD_LB=$(docker inspect k3d-loopzero-build-serverlb \
-    --format '{{(index .NetworkSettings.Networks "k3d-loopzero-build").IPAddress}}' 2>/dev/null)
   if [ -n "$BUILD_LB" ]; then
-    # Replace the Argo Workflows target IP (format: "IP:30090")
-    OLD_ARGO=$(grep -o '"[0-9.]*:30090"' "$MONITORING_VALUES" | tr -d '"')
+    OLD_ARGO=$(grep -o '"[0-9.]*:30090"' "$MONITORING_VALUES" | tr -d '"' || true)
     NEW_ARGO="${BUILD_LB}:30090"
     if [ -n "$OLD_ARGO" ] && [ "$OLD_ARGO" != "$NEW_ARGO" ]; then
       sed -i "s|\"${OLD_ARGO}\"|\"${NEW_ARGO}\"|g" "$MONITORING_VALUES"
@@ -186,8 +133,7 @@ if [ -f "$MONITORING_VALUES" ]; then
     fi
   fi
 
-  # Workload LB IP for Traefik metrics
-  OLD_TRAEFIK=$(grep -o '"[0-9.]*:30091"' "$MONITORING_VALUES" | tr -d '"')
+  OLD_TRAEFIK=$(grep -o '"[0-9.]*:30091"' "$MONITORING_VALUES" | tr -d '"' || true)
   NEW_TRAEFIK="${WORKLOAD_LB}:30091"
   if [ -n "$OLD_TRAEFIK" ] && [ "$OLD_TRAEFIK" != "$NEW_TRAEFIK" ]; then
     sed -i "s|\"${OLD_TRAEFIK}\"|\"${NEW_TRAEFIK}\"|g" "$MONITORING_VALUES"
@@ -197,45 +143,6 @@ if [ -f "$MONITORING_VALUES" ]; then
   fi
 fi
 
-# ---------------------------------------------------------------------------
-# Build cluster secrets — Gitea and MinIO credentials used by Argo Workflows
-# ---------------------------------------------------------------------------
-echo ""
-echo "=== Patching build cluster secrets ==="
-
-BUILD_KUBECONFIG=$(k3d kubeconfig write loopzero-build 2>/dev/null)
-if [ -n "$BUILD_KUBECONFIG" ]; then
-  # loopzero-gitea-credentials — GITEA_URL used by loopzero-clone CWT
-  CURRENT_GITEA_URL=$(kubectl --kubeconfig="$BUILD_KUBECONFIG" get secret loopzero-gitea-credentials -n argo \
-    -o jsonpath='{.data.GITEA_URL}' 2>/dev/null | base64 -d 2>/dev/null)
-  NEW_GITEA_URL="http://${MGMT_ON_BUILD}:30000"
-  if [ -n "$CURRENT_GITEA_URL" ] && [ "$CURRENT_GITEA_URL" != "$NEW_GITEA_URL" ]; then
-    ENCODED=$(echo -n "$NEW_GITEA_URL" | base64 -w0)
-    kubectl --kubeconfig="$BUILD_KUBECONFIG" patch secret loopzero-gitea-credentials -n argo \
-      -p "{\"data\":{\"GITEA_URL\":\"${ENCODED}\"}}" 2>&1
-    echo "  loopzero-gitea-credentials GITEA_URL: $CURRENT_GITEA_URL → $NEW_GITEA_URL"
-  else
-    echo "  loopzero-gitea-credentials GITEA_URL: already correct ($NEW_GITEA_URL)"
-  fi
-
-  # loopzero-minio-credentials — MINIO_ENDPOINT used by cache CWTs
-  CURRENT_MINIO=$(kubectl --kubeconfig="$BUILD_KUBECONFIG" get secret loopzero-minio-credentials -n argo \
-    -o jsonpath='{.data.MINIO_ENDPOINT}' 2>/dev/null | base64 -d 2>/dev/null)
-  NEW_MINIO="http://${MGMT_ON_BUILD}:32000"
-  if [ -n "$CURRENT_MINIO" ] && [ "$CURRENT_MINIO" != "$NEW_MINIO" ]; then
-    ENCODED=$(echo -n "$NEW_MINIO" | base64 -w0)
-    kubectl --kubeconfig="$BUILD_KUBECONFIG" patch secret loopzero-minio-credentials -n argo \
-      -p "{\"data\":{\"MINIO_ENDPOINT\":\"${ENCODED}\"}}" 2>&1
-    echo "  loopzero-minio-credentials MINIO_ENDPOINT: $CURRENT_MINIO → $NEW_MINIO"
-  else
-    echo "  loopzero-minio-credentials MINIO_ENDPOINT: already correct ($NEW_MINIO)"
-  fi
-else
-  echo "WARNING: Cannot get kubeconfig for loopzero-build — skipping build cluster secret patch"
-fi
-
 echo ""
 echo "=== Done ==="
 echo "Cross-cluster IPs updated. Run 'tilt up' to apply."
-echo "If monitoring is already running, apply with:"
-echo "  helm upgrade monitoring prometheus-community/kube-prometheus-stack --kube-context k3d-loopzero-mgmt -n monitoring -f infra/helm/monitoring/values.yaml --reuse-values"
