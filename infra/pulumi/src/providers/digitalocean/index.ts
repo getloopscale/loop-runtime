@@ -6,7 +6,6 @@ import { DigitalOceanNetworkProvider } from "./network";
 import { DigitalOceanKubernetesProvider } from "./kubernetes";
 import { DigitalOceanStorageProvider } from "./storage";
 import { DigitalOceanDnsProvider } from "./dns";
-import { DigitalOceanComputeProvider } from "./compute";
 import { DigitalOceanDatabaseProvider } from "./database";
 import { DigitalOceanRegistryProvider } from "./registry";
 
@@ -30,7 +29,6 @@ export class DigitalOceanProviderFactory implements CloudProviderFactory {
   private readonly kubernetes = new DigitalOceanKubernetesProvider();
   private readonly storage = new DigitalOceanStorageProvider();
   private readonly dns: IProviderDns;
-  private readonly compute = new DigitalOceanComputeProvider();
   private readonly database = new DigitalOceanDatabaseProvider();
   private readonly registry = new DigitalOceanRegistryProvider();
 
@@ -42,7 +40,6 @@ export class DigitalOceanProviderFactory implements CloudProviderFactory {
   createKubernetesCluster = this.kubernetes.createKubernetesCluster.bind(this.kubernetes);
   createObjectStorage = this.storage.createObjectStorage.bind(this.storage);
   createDnsRecord = (spec: import("../../contracts/dns").DnsRecordSpec) => this.dns.createDnsRecord(spec);
-  createComputeInstance = this.compute.createComputeInstance.bind(this.compute);
   createDatabaseCluster = this.database.createDatabaseCluster.bind(this.database);
   createContainerRegistry = this.registry.createContainerRegistry.bind(this.registry);
 }

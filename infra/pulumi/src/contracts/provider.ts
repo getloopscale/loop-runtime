@@ -5,7 +5,6 @@ import { NetworkSpec, NetworkOutput } from "./network";
 import { KubernetesClusterSpec, KubernetesClusterOutput } from "./kubernetes";
 import { ObjectStorageSpec, ObjectStorageOutput } from "./storage";
 import { DnsRecordSpec, DnsRecordOutput } from "./dns";
-import { ComputeInstanceSpec, ComputeInstanceOutput } from "./compute";
 import { DatabaseClusterSpec, DatabaseClusterOutput } from "./database";
 import { ContainerRegistrySpec, ContainerRegistryOutput } from "./registry";
 
@@ -36,10 +35,6 @@ export interface IProviderDns {
   createDnsRecord(spec: DnsRecordSpec): DnsRecordOutput;
 }
 
-export interface IProviderCompute {
-  createComputeInstance(spec: ComputeInstanceSpec): ComputeInstanceOutput;
-}
-
 export interface IProviderDatabase {
   createDatabaseCluster(spec: DatabaseClusterSpec): DatabaseClusterOutput;
 }
@@ -51,11 +46,11 @@ export interface IProviderRegistry {
   createContainerRegistry(spec: ContainerRegistrySpec): ContainerRegistryOutput;
 }
 
+// REVIEW-2026-03-30: Fixes MED-02 — removed IProviderCompute (dead code, zero call sites).
 export interface CloudProviderFactory
   extends IProviderNetwork,
     IProviderKubernetes,
     IProviderStorage,
     IProviderDns,
-    IProviderCompute,
     IProviderDatabase,
     IProviderRegistry {}

@@ -44,6 +44,9 @@ export interface InfraOutputs {
   readonly buildsBucketName: pulumi.Output<string>;
   readonly staticBucketName: pulumi.Output<string>;
   readonly staticCdnEndpoint: pulumi.Output<string>;
+  // REVIEW-2026-03-30: Fixes MED-10 — centralized S3/Spaces endpoint.
+  // Was constructed inline in 5 locations with 2 different patterns.
+  readonly spacesEndpoint: pulumi.Output<string>;
 
   // Container Registry
   readonly registryEndpoint: pulumi.Output<string>;
@@ -191,6 +194,15 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     tags,
   });
 
+  // Loki logs bucket — stores build logs from Argo Workflows via Loki S3 backend.
+  // Without this bucket, Loki pod crashes on startup with "bucket not found".
+  factory.createObjectStorage({
+    name: "loopzero-logs",
+    region: config.region,
+    versioning: false,
+    tags,
+  });
+
   // Static assets bucket — stores built frontend assets uploaded by Argo Workflows.
   // CF Worker (or nginx-s3-gateway fallback) serves these to browsers.
   // Created directly (not via factory) to support import of existing bucket.
@@ -212,14 +224,12 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
   });
 
   // --- Container registry ---
+  // REVIEW-2026-03-30: Fixes MED-01 — now uses factory instead of direct DO import.
   // DigitalOcean has one registry per account (global, not per-region).
   // Professional tier: unlimited repos, 100GB storage.
-  // Required because LoopZero creates dynamic repos per tenant/project/app.
-  // Basic (5 repos) is insufficient for even 2 tenants with 3 apps each.
-  // DOKS clusters pull automatically via `doctl kubernetes cluster registry add`.
-  const registry = new digitalocean.ContainerRegistry(`${baseName}-registry`, {
+  const registry = factory.createContainerRegistry({
     name: `${config.project}-registry`,
-    subscriptionTierSlug: "professional",
+    tier: "professional",
     region: config.region,
   });
 
@@ -250,6 +260,7 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     buildsBucketName: buildsBucket.bucketName,
     staticBucketName: staticBucket.bucketName,
     staticCdnEndpoint: staticCdn.endpoint,
+    spacesEndpoint: pulumi.output(`https://${config.region}.digitaloceanspaces.com`),
     registryEndpoint: registry.endpoint,
     registryName: registry.name,
   };

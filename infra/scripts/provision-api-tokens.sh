@@ -11,7 +11,9 @@ set -euo pipefail
 
 MGMT_CTX="k3d-loopzero-mgmt"
 BUILD_CTX="k3d-loopzero-build"
-NAMESPACE="loopzero-system"
+# REVIEW-2026-03-30: Fixes MED-12 — was "loopzero-system" but Pulumi uses "platform-system".
+# Local dev uses loopzero-system, production uses platform-system.
+NAMESPACE="${LOOPZERO_NAMESPACE:-loopzero-system}"
 
 echo "=== Provisioning API tokens ==="
 
@@ -27,19 +29,21 @@ sleep 2
 
 # Ensure 'loopzero' org exists (idempotent — Gitea returns 422 if already exists)
 curl -s -X POST "http://localhost:13000/api/v1/orgs" \
-  -u "REDACTED_SECRET_037" \
+  -u "gitea_admin:${GITEA_PASS:-loopzero-gitea-dev-2026}" \
   -H "Content-Type: application/json" \
   -d '{"username":"loopzero","full_name":"LoopZero Platform","visibility":"private"}' > /dev/null 2>&1
 echo "Gitea org 'loopzero': ensured"
 
 # Scopes: write:repository (clone + push) + write:organization (create repos in org) + read:user
 # Use fixed token name to avoid accumulating stale tokens on repeated runs (E-13).
+# REVIEW-2026-03-30: Fixes HIGH-06 — was "loopzero-admin", now "gitea_admin" to match Pulumi Helm config.
 TOKEN_NAME="loopzero-api"
+GITEA_USER="gitea_admin"
 # Delete existing token with this name (idempotent — 404 if not found)
-curl -s -X DELETE "http://localhost:13000/api/v1/users/loopzero-admin/tokens/${TOKEN_NAME}" \
-  -u "REDACTED_SECRET_037" > /dev/null 2>&1 || true
-GITEA_TOKEN=$(curl -s -X POST "http://localhost:13000/api/v1/users/loopzero-admin/tokens" \
-  -u "REDACTED_SECRET_037" \
+curl -s -X DELETE "http://localhost:13000/api/v1/users/${GITEA_USER}/tokens/${TOKEN_NAME}" \
+  -u "REDACTED_SECRET_016" > /dev/null 2>&1 || true
+GITEA_TOKEN=$(curl -s -X POST "http://localhost:13000/api/v1/users/${GITEA_USER}/tokens" \
+  -u "REDACTED_SECRET_016" \
   -H "Content-Type: application/json" \
   -d "{\"name\":\"${TOKEN_NAME}\",\"scopes\":[\"write:repository\",\"write:organization\",\"read:user\"]}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha1',''))")
 

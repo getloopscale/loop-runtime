@@ -50,7 +50,7 @@ export function bootstrapBuildCluster(
       stringData: {
         AWS_ACCESS_KEY_ID: config.spacesAccessKeyId,
         AWS_SECRET_ACCESS_KEY: config.spacesSecretAccessKey,
-        MINIO_ENDPOINT: `https://${config.region}.digitaloceanspaces.com`,
+        MINIO_ENDPOINT: infra.spacesEndpoint,
       },
     },
     { provider, dependsOn: [ns] },
