@@ -704,7 +704,8 @@ tasks:
         --version 5.4.0
         -f infra/helm/minio/values.yaml
         --wait --timeout 3m
-      # MinIO lifecycle rules (cache expiration) — idempotent Job
+      # MinIO lifecycle rules (cache expiration) — delete-and-recreate (Job spec is immutable)
+      - kubectl --context {{.MGMT_CONTEXT}} delete job minio-lifecycle-setup -n loopzero-system --ignore-not-found 2>/dev/null
       - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/minio/lifecycle-job.yaml
       - >-
         helm upgrade --install argocd argo/argo-cd
