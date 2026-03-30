@@ -49,7 +49,10 @@ type Tenant struct {
 // TenantSpec defines the desired state of a Tenant as described in spec section 9.2.
 type TenantSpec struct {
 	// DisplayName is the human-readable name of the tenant.
+	// SEC-011: Pattern constraint prevents injection of control characters or markup.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9][a-zA-Z0-9 _.\-]*$`
 	DisplayName string `json:"displayName"`
 
 	// Plan is the subscription tier: starter, growth, or enterprise.

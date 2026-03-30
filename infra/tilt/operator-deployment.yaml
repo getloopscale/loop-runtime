@@ -154,7 +154,6 @@ spec:
                 secretKeyRef:
                   name: loopzero-api-tokens
                   key: gitea-token
-                  optional: true
             - name: ARGOCD_NAMESPACE
               value: "argocd"
             # Workload cluster API server URL for ArgoCD Application destination.

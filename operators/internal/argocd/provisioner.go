@@ -49,6 +49,12 @@ type AppProjectSpec struct {
 	// DestinationNamespaces restricts which namespaces ArgoCD can deploy to.
 	// If empty, defaults to "loopzero-{tenantID}-*" wildcard pattern.
 	DestinationNamespaces []string
+
+	// DestinationServer is the Kubernetes API server URL for allowed destinations.
+	// SEC-007: Replaces wildcard `server: *` with explicit server URL to prevent
+	// cross-cluster deployment via ArgoCD when multiple clusters are registered.
+	// If empty, defaults to "*" for backward compatibility.
+	DestinationServer string
 }
 
 // Provisioner manages ArgoCD Application and AppProject CRs.

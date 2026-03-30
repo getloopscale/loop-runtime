@@ -96,7 +96,9 @@ type GiteaBootstrapSpec struct {
 	TokenScopes []string `json:"tokenScopes,omitempty"`
 
 	// InternalURL is the cluster-internal URL for Gitea HTTP API.
+	// SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
 	// +kubebuilder:default="http://gitea-http.platform-system.svc.cluster.local:3000"
+	// +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`
 	// +optional
 	InternalURL string `json:"internalURL,omitempty"`
 }
@@ -124,7 +126,9 @@ type ArgoCDBootstrapSpec struct {
 	RepoCredentials []ArgoCDRepoCredential `json:"repoCredentials,omitempty"`
 
 	// InternalURL is the cluster-internal URL for ArgoCD API.
+	// SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
 	// +kubebuilder:default="https://argocd-server.argocd.svc.cluster.local"
+	// +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`
 	// +optional
 	InternalURL string `json:"internalURL,omitempty"`
 }
@@ -141,12 +145,16 @@ type ArgoCDRepoCredential struct {
 // APIBootstrapSpec configures the API bootstrap endpoint.
 type APIBootstrapSpec struct {
 	// BootstrapEndpoint is the internal URL for the bootstrap endpoint.
+	// SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
 	// +kubebuilder:default="http://loopzero-api.platform-system.svc.cluster.local:8080/internal/bootstrap"
+	// +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`
 	// +optional
 	BootstrapEndpoint string `json:"bootstrapEndpoint,omitempty"`
 
 	// HealthEndpoint is the internal URL for the API health check.
+	// SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
 	// +kubebuilder:default="http://loopzero-api.platform-system.svc.cluster.local:8080/api/v1/health"
+	// +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`
 	// +optional
 	HealthEndpoint string `json:"healthEndpoint,omitempty"`
 

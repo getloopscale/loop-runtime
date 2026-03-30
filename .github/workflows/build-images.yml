@@ -56,6 +56,7 @@ jobs:
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       sha_tag: ${{ steps.resolve.outputs.sha_tag }}
+      env_tag: ${{ steps.resolve.outputs.env_tag }}
       build_api: ${{ steps.resolve.outputs.build_api }}
       build_operator: ${{ steps.resolve.outputs.build_operator }}
     steps:
@@ -78,6 +79,15 @@ jobs:
             *)       TAG="dev" ;;
           esac
 
+          # Also tag as the environment name for Pulumi stack references.
+          # Pulumi stacks use IMAGE_TAG=config.environment (dev/staging/prod).
+          # "main" maps to both :latest and :prod for production deploy.
+          ENV_TAG=""
+          case "$BRANCH" in
+            develop) ENV_TAG="dev" ;;
+            main)    ENV_TAG="prod" ;;
+          esac
+
           # Determine which components to build
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             case "${{ inputs.component }}" in
@@ -93,6 +103,7 @@ jobs:
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "sha_tag=$SHA_SHORT" >> "$GITHUB_OUTPUT"
+          echo "env_tag=$ENV_TAG" >> "$GITHUB_OUTPUT"
           echo "build_api=$BUILD_API" >> "$GITHUB_OUTPUT"
           echo "build_operator=$BUILD_OP" >> "$GITHUB_OUTPUT"
 
@@ -131,6 +142,7 @@ jobs:
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
           docker build -f api/Dockerfile \
             -t ${{ env.REGISTRY }}/loopzero-api:${TAG} \
@@ -139,6 +151,16 @@ jobs:
 
           docker push ${{ env.REGISTRY }}/loopzero-api:${TAG}
           docker push ${{ env.REGISTRY }}/loopzero-api:${SHA}
+
+          # Push environment-specific tag (e.g., :prod) for Pulumi stack references.
+          # INFRA-001: Pulumi uses IMAGE_TAG=config.environment which resolves to
+          # "prod" for the production stack. Without this tag, production deploys
+          # fail with ImagePullBackOff.
+          if [[ -n "$ENV_TAG" && "$ENV_TAG" != "$TAG" ]]; then
+            docker tag ${{ env.REGISTRY }}/loopzero-api:${TAG} ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}
+            docker push ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}
+            echo "- \`${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
           echo "### loopzero-api" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/loopzero-api:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
@@ -171,6 +193,7 @@ jobs:
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
           docker build -f operators/Dockerfile \
             -t ${{ env.REGISTRY }}/tenant-controller:${TAG} \
@@ -179,6 +202,13 @@ jobs:
 
           docker push ${{ env.REGISTRY }}/tenant-controller:${TAG}
           docker push ${{ env.REGISTRY }}/tenant-controller:${SHA}
+
+          # Push environment-specific tag for Pulumi stack references (INFRA-001).
+          if [[ -n "$ENV_TAG" && "$ENV_TAG" != "$TAG" ]]; then
+            docker tag ${{ env.REGISTRY }}/tenant-controller:${TAG} ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}
+            docker push ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}
+            echo "- \`${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
           echo "### tenant-controller" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/tenant-controller:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"

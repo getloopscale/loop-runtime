@@ -37,8 +37,9 @@ const (
 // It manages certificate status checks and reachability probes.
 type ExposureReconciler struct {
 	client.Client
-	Scheme     *runtime.Scheme
-	HTTPClient *http.Client
+	Scheme                *runtime.Scheme
+	HTTPClient            *http.Client
+	AllowProbeURLOverride bool // only true in test environments (SEC-005: prevents SSRF via annotation)
 }
 
 // Reconcile handles the reconciliation loop for ExposedRoute resources.
@@ -189,10 +190,13 @@ func (r *ExposureReconciler) checkCertificateReady(ctx context.Context, route *l
 }
 
 // resolveProbeURL determines the URL to probe for reachability.
-// In tests, the loopzero.io/probe-url-override annotation can override this.
+// The loopzero.io/probe-url-override annotation is only respected when AllowProbeURLOverride
+// is true (test environments only). In production this annotation is ignored to prevent SSRF.
 func (r *ExposureReconciler) resolveProbeURL(route *loopzerov1.ExposedRoute) string {
-	if override, ok := route.Annotations[probeURLOverrideAnnotation]; ok && override != "" {
-		return override
+	if r.AllowProbeURLOverride {
+		if override, ok := route.Annotations[probeURLOverrideAnnotation]; ok && override != "" {
+			return override
+		}
 	}
 	if route.Spec.TLS.Enabled {
 		return "https://" + route.Spec.Hostname
@@ -218,14 +222,26 @@ func (r *ExposureReconciler) performProbe(ctx context.Context, url string) (int3
 	return int32(resp.StatusCode), nil
 }
 
+// ExposureControllerConfig holds optional configuration for the ExposureController.
+type ExposureControllerConfig struct {
+	// AllowProbeURLOverride enables the loopzero.io/probe-url-override annotation.
+	// Must only be true in test environments (SEC-005: prevents SSRF).
+	AllowProbeURLOverride bool
+}
+
 // SetupExposureController registers the ExposureController with the manager.
-func SetupExposureController(mgr ctrl.Manager) error {
+func SetupExposureController(mgr ctrl.Manager, cfgs ...ExposureControllerConfig) error {
+	var cfg ExposureControllerConfig
+	if len(cfgs) > 0 {
+		cfg = cfgs[0]
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.ExposedRoute{}).
 		Named("exposure").
 		Complete(&ExposureReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			HTTPClient: httpclient.NewWithTimeout(constants.ProbeTimeout),
+			Client:                mgr.GetClient(),
+			Scheme:                mgr.GetScheme(),
+			HTTPClient:            httpclient.NewWithTimeout(constants.ProbeTimeout),
+			AllowProbeURLOverride: cfg.AllowProbeURLOverride,
 		})
 }

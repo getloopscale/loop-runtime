@@ -32,6 +32,12 @@ func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *
 		return fmt.Errorf("invalid build namespace name for tenant %s: %w", tenant.Name, err)
 	}
 
+	// COMP-006: Initialize QuotaEnforced to False so that if the function fails partway,
+	// the condition is present (as False) providing diagnostic info. It will be set to True
+	// only after all steps succeed below.
+	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeQuotaEnforced,
+		metav1.ConditionFalse, "Pending", "quota enforcement in progress", tenant.Generation)
+
 	steps := []struct {
 		name string
 		fn   func() error
@@ -352,9 +358,26 @@ func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, n
 				k.KeyMinIOEndpoint:      r.Credentials.MinIOEndpoint,
 			}
 		} else if secret.CreationTimestamp.IsZero() {
-			// Secret doesn't exist yet but user already has credentials — this shouldn't
-			// happen normally but is handled defensively.
-			return fmt.Errorf("minio user %s exists but secret is missing — manual credential rotation required", accessKey)
+			// Auto-recover: delete and reprovision MinIO user to regenerate credentials.
+			// This handles the case where the K8s Secret was deleted but the MinIO user still exists.
+			if err := r.MinIOProvisioner.DeleteTenantCredentials(ctx, tenantID); err != nil {
+				return fmt.Errorf("force-rotate: delete minio user %s: %w", accessKey, err)
+			}
+			newAccessKey, newSecretKey, reproErr := r.MinIOProvisioner.EnsureTenantCredentials(ctx, tenantID)
+			if reproErr != nil {
+				return fmt.Errorf("force-rotate: reprovision minio for %s: %w", tenantID, reproErr)
+			}
+			secret.Labels = map[string]string{
+				k.LabelTenant:    tenantID,
+				k.LabelComponent: k.ComponentBuild,
+				k.LabelManagedBy: k.ManagedByTenantController,
+			}
+			secret.Type = corev1.SecretTypeOpaque
+			secret.StringData = map[string]string{
+				k.KeyAWSAccessKeyID:     newAccessKey,
+				k.KeyAWSSecretAccessKey: newSecretKey,
+				k.KeyMinIOEndpoint:      r.Credentials.MinIOEndpoint,
+			}
 		}
 		// Existing secret with existing user — labels updated, data preserved.
 		return nil

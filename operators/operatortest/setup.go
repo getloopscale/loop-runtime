@@ -23,6 +23,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/controller"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
+	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 )
 
 // GitRepoProvisioner is the interface for Git repository provisioning.
@@ -30,6 +31,9 @@ type GitRepoProvisioner = gitea.GitRepoProvisioner
 
 // ArgoCDProvisioner is the interface for ArgoCD Application provisioning.
 type ArgoCDProvisioner = argocd.Provisioner
+
+// MinIOCredentialProvisioner is the interface for MinIO credential provisioning.
+type MinIOCredentialProvisioner = miniop.CredentialProvisioner
 
 // FakeGitProvisioner is a test double for GitRepoProvisioner.
 // Tracks created repos in memory and can be configured to return errors.
@@ -188,6 +192,91 @@ func (f *FakeArgoCDProvisioner) DeleteAppProject(_ context.Context, tenantID str
 	return nil
 }
 
+// Compile-time interface compliance check.
+var _ miniop.CredentialProvisioner = (*FakeMinIOProvisioner)(nil)
+
+// FakeMinIOProvisioner is an in-memory implementation of minio.CredentialProvisioner for tests.
+// Tracks created credentials per tenant and can be configured to return errors.
+type FakeMinIOProvisioner struct {
+	mu          sync.Mutex
+	Credentials map[string]struct{ AccessKey, SecretKey string } // tenantID -> credentials
+	Errors      map[string]error                                 // tenantID -> error to return
+	EnsureCalls int
+	DeleteCalls int
+}
+
+// NewFakeMinIOProvisioner returns a fake MinIO CredentialProvisioner for testing.
+func NewFakeMinIOProvisioner() *FakeMinIOProvisioner {
+	return &FakeMinIOProvisioner{
+		Credentials: make(map[string]struct{ AccessKey, SecretKey string }),
+		Errors:      make(map[string]error),
+	}
+}
+
+// Reset clears all state in the fake provisioner, restoring it to initial state.
+// Call this between tests to ensure isolation.
+func (f *FakeMinIOProvisioner) Reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Credentials = make(map[string]struct{ AccessKey, SecretKey string })
+	f.Errors = make(map[string]error)
+	f.EnsureCalls = 0
+	f.DeleteCalls = 0
+}
+
+// SetError configures the fake to return the given error for a specific tenant.
+func (f *FakeMinIOProvisioner) SetError(tenantID string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Errors[tenantID] = err
+}
+
+// GetEnsureCalls returns the number of EnsureTenantCredentials calls (thread-safe).
+func (f *FakeMinIOProvisioner) GetEnsureCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.EnsureCalls
+}
+
+// GetDeleteCalls returns the number of DeleteTenantCredentials calls (thread-safe).
+func (f *FakeMinIOProvisioner) GetDeleteCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.DeleteCalls
+}
+
+// EnsureTenantCredentials creates or returns existing MinIO credentials for a tenant.
+// If the tenant already has credentials, returns the access key with an empty secret
+// (matching the real provisioner's idempotent behavior).
+func (f *FakeMinIOProvisioner) EnsureTenantCredentials(_ context.Context, tenantID string) (string, string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.EnsureCalls++
+	if err, ok := f.Errors[tenantID]; ok {
+		return "", "", err
+	}
+	if cred, ok := f.Credentials[tenantID]; ok {
+		return cred.AccessKey, "", nil // existing user, empty secret
+	}
+	accessKey := fmt.Sprintf("loopzero-build-%s", tenantID)
+	secretKey := fmt.Sprintf("fake-secret-%s", tenantID)
+	f.Credentials[tenantID] = struct{ AccessKey, SecretKey string }{accessKey, secretKey}
+	return accessKey, secretKey, nil
+}
+
+// DeleteTenantCredentials removes MinIO credentials for a tenant.
+// Idempotent: returns nil if the tenant has no credentials.
+func (f *FakeMinIOProvisioner) DeleteTenantCredentials(_ context.Context, tenantID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.DeleteCalls++
+	if err, ok := f.Errors[tenantID]; ok {
+		return err
+	}
+	delete(f.Credentials, tenantID)
+	return nil
+}
+
 // SetupTenantController registers the TenantController with the given manager.
 // Use this in E2E tests to start the operator in-process against envtest.
 // buildClient and runtimeClient target the build and runtime clusters respectively.
@@ -215,8 +304,11 @@ func SetupApplicationController(mgr ctrl.Manager, baseDomain string) error {
 }
 
 // SetupExposureController registers the ExposureController with the given manager.
+// Enables AllowProbeURLOverride for test environments (SEC-005).
 func SetupExposureController(mgr ctrl.Manager) error {
-	return controller.SetupExposureController(mgr)
+	return controller.SetupExposureController(mgr, controller.ExposureControllerConfig{
+		AllowProbeURLOverride: true,
+	})
 }
 
 // SetupGitRepositoryBindingController registers the GitRepositoryBindingController with the given manager.

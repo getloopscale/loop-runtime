@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+cli/node_modules
+infra/tests
+infra/pulumi/node_modules
+**/*.env
+**/.env*
+**/__pycache__
+**/testdata/
+**/*_test.go
+*.md
+!README.md
+review-output/

@@ -6,9 +6,9 @@ package gitea
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/operators/internal/httpclient"
 )
 
 // Compile-time interface compliance check.
@@ -23,7 +23,7 @@ type RealProvisioner struct {
 
 // NewRealProvisioner creates a provisioner that manages real Gitea repositories.
 func NewRealProvisioner(baseURL, token, orgName string) *RealProvisioner {
-	httpClient := &http.Client{Timeout: constants.HTTPTimeoutDefault}
+	httpClient := httpclient.NewWithTimeout(constants.HTTPTimeoutDefault)
 	return &RealProvisioner{
 		api:     NewAPIClient(baseURL, httpClient),
 		token:   token,

@@ -1207,16 +1207,13 @@ function installTenantController(
     { provider, dependsOn: [ns] },
   );
 
-  return new k8s.apps.v1.Deployment(
+  const deploy = new k8s.apps.v1.Deployment(
     "tenant-controller",
     {
       metadata: {
         name: "tenant-controller",
         namespace: PLATFORM_NAMESPACE,
         labels: { app: "tenant-controller" },
-        annotations: {
-          "pulumi.com/skipAwait": "true",
-        },
       },
       spec: {
         replicas: 1,
@@ -1231,6 +1228,11 @@ function installTenantController(
           },
           spec: {
             serviceAccountName: "tenant-controller",
+            securityContext: {
+              runAsNonRoot: true,
+              runAsUser: 1000,
+              fsGroup: 1000,
+            },
             imagePullSecrets: [{ name: "loopzero-infra-registry" }],
             volumes: [
               {
@@ -1336,6 +1338,12 @@ function installTenantController(
                   httpGet: { path: "/readyz", port: 8081 },
                   initialDelaySeconds: 5,
                 },
+                securityContext: {
+                  runAsNonRoot: true,
+                  allowPrivilegeEscalation: false,
+                  readOnlyRootFilesystem: true,
+                  capabilities: { drop: ["ALL"] },
+                },
               },
             ],
           },
@@ -1347,6 +1355,47 @@ function installTenantController(
       dependsOn: [ns, crds, binding, controllerKubeconfig, controllerCredentials],
     },
   );
+
+  // Service — exposes metrics and health ports for Prometheus scraping and readiness checks.
+  new k8s.core.v1.Service(
+    "tenant-controller-svc",
+    {
+      metadata: {
+        name: "tenant-controller",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { app: "tenant-controller" },
+      },
+      spec: {
+        selector: { app: "tenant-controller" },
+        ports: [
+          { name: "metrics", port: 8080, targetPort: 8080 },
+          { name: "health", port: 8081, targetPort: 8081 },
+        ],
+      },
+    },
+    { provider, dependsOn: [deploy] },
+  );
+
+  // PodDisruptionBudget — ensures at least 1 controller pod stays available during
+  // voluntary disruptions (node drain, cluster upgrade).
+  new k8s.policy.v1.PodDisruptionBudget(
+    "tenant-controller-pdb",
+    {
+      metadata: {
+        name: "tenant-controller",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        minAvailable: 1,
+        selector: {
+          matchLabels: { app: "tenant-controller" },
+        },
+      },
+    },
+    { provider },
+  );
+
+  return deploy;
 }
 
 // ---------------------------------------------------------------------------

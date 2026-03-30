@@ -49,6 +49,8 @@ func (c *APIClient) CheckVersion(ctx context.Context) error {
 		return fmt.Errorf("connecting to Gitea: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	// Drain body for connection reuse.
+	_, _ = io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status %d from Gitea version endpoint", resp.StatusCode)
 	}
@@ -75,6 +77,8 @@ func (c *APIClient) ValidateToken(ctx context.Context, token string) error {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	// Drain body for connection reuse.
+	_, _ = io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("token validation failed with status %d", resp.StatusCode)
 	}
@@ -179,6 +183,8 @@ func (c *APIClient) EnsureOrg(ctx context.Context, token, orgName string) error 
 		return fmt.Errorf("checking org %s: %w", orgName, err)
 	}
 	defer func() { _ = checkResp.Body.Close() }()
+	// Drain body for connection reuse.
+	_, _ = io.ReadAll(checkResp.Body)
 
 	if checkResp.StatusCode == http.StatusOK {
 		return nil // Org exists
@@ -202,12 +208,32 @@ func (c *APIClient) EnsureOrg(ctx context.Context, token, orgName string) error 
 		return fmt.Errorf("creating org %s: %w", orgName, err)
 	}
 	defer func() { _ = createResp.Body.Close() }()
+	// Drain body for connection reuse.
+	_, _ = io.ReadAll(createResp.Body)
 
-	// 201 Created or 422 already exists are both acceptable
-	if createResp.StatusCode != http.StatusCreated && createResp.StatusCode != http.StatusUnprocessableEntity {
-		return fmt.Errorf("unexpected status %d when creating org %s", createResp.StatusCode, orgName)
+	if createResp.StatusCode == http.StatusCreated {
+		return nil
 	}
-	return nil
+	// COMP-005: On 422, verify the org actually exists rather than assuming it does.
+	// A 422 could indicate other validation errors besides "already exists".
+	if createResp.StatusCode == http.StatusUnprocessableEntity {
+		verifyReq, verifyErr := http.NewRequestWithContext(ctx, http.MethodGet, c.apiV1("orgs", orgName), nil)
+		if verifyErr != nil {
+			return nil // best-effort: assume org exists if we can't verify
+		}
+		verifyReq.Header.Set("Authorization", "token "+token)
+		verifyResp, verifyErr := c.client.Do(verifyReq)
+		if verifyErr != nil {
+			return nil // best-effort
+		}
+		defer func() { _ = verifyResp.Body.Close() }()
+		_, _ = io.ReadAll(verifyResp.Body)
+		if verifyResp.StatusCode == http.StatusOK {
+			return nil // org confirmed to exist
+		}
+		return fmt.Errorf("org creation returned 422 but org %s does not exist (verify returned %d)", orgName, verifyResp.StatusCode)
+	}
+	return fmt.Errorf("unexpected status %d when creating org %s", createResp.StatusCode, orgName)
 }
 
 // --- Repository Management ---
@@ -309,6 +335,8 @@ func (c *APIClient) ArchiveRepo(ctx context.Context, token, orgName, repoName st
 		return fmt.Errorf("gitea: archive repo %s: %w", repoName, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	// Drain body for connection reuse.
+	_, _ = io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
 		return fmt.Errorf("gitea: archive repo %s: status %d", repoName, resp.StatusCode)

@@ -179,11 +179,16 @@ func main() {
 	// Disabled for DigitalOcean Spaces — Spaces uses SPACES_ACCESS_KEY_ID/SECRET_ACCESS_KEY
 	// (no admin API). The controller falls back to global credentials from BuildCredentials.
 	if minIOEndpoint != "" && minIOAccessKey != "" && minIOSecretKey != "" {
-		minIOProvisioner = miniop.NewAdminProvisioner(miniop.AdminConfig{
+		var provErr error
+		minIOProvisioner, provErr = miniop.NewAdminProvisioner(miniop.AdminConfig{
 			Endpoint:  minIOEndpoint,
 			AccessKey: minIOAccessKey,
 			SecretKey: minIOSecretKey,
 		})
+		if provErr != nil {
+			setupLog.Error(provErr, "failed to create MinIO admin provisioner")
+			os.Exit(1)
+		}
 		setupLog.Info("minio per-tenant provisioner enabled", "endpoint", minIOEndpoint)
 	} else {
 		setupLog.Info("minio per-tenant provisioner disabled — using global credentials from SPACES_ACCESS_KEY_ID",
@@ -204,6 +209,16 @@ func main() {
 		setupLog.Info("registry CIDR restriction enabled", "cidrs", registryCIDRs)
 	}
 
+	// ARCH-OP-005: Validate DOToken and RegistryDockerConfig are mutually exclusive at startup.
+	// Both configure registry credentials — DOToken calls the DO API, RegistryDockerConfig is static.
+	// If both are set, the behavior is ambiguous (DOToken silently wins). Fail fast instead.
+	doToken := os.Getenv("DIGITALOCEAN_TOKEN")
+	registryDockerConfig := os.Getenv("REGISTRY_DOCKER_CONFIG")
+	if doToken != "" && registryDockerConfig != "" {
+		setupLog.Error(nil, "DIGITALOCEAN_TOKEN and REGISTRY_DOCKER_CONFIG are mutually exclusive — set only one")
+		os.Exit(1)
+	}
+
 	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, controller.TenantControllerConfig{
 		GiteaURL:           giteaURL,
 		WorkloadClusterURL: workloadClusterURL,
@@ -213,8 +228,8 @@ func main() {
 			MinIOEndpoint:        minIOEndpoint,
 			SpacesAccessKeyID:    os.Getenv("SPACES_ACCESS_KEY_ID"),
 			SpacesSecretAccessKey: os.Getenv("SPACES_SECRET_ACCESS_KEY"),
-			DOToken:              os.Getenv("DIGITALOCEAN_TOKEN"),
-			RegistryDockerConfig: os.Getenv("REGISTRY_DOCKER_CONFIG"),
+			DOToken:              doToken,
+			RegistryDockerConfig: registryDockerConfig,
 		},
 	}); err != nil {
 		setupLog.Error(err, "unable to setup TenantController")

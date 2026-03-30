@@ -21,6 +21,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
+	"github.com/loopzero/loopzero/operators/internal/httpclient"
 )
 
 const (
@@ -164,10 +165,10 @@ func (r *GitRepositoryBindingReconciler) resolveCredential(ctx context.Context, 
 	return token, nil
 }
 
-// computeCredentialHash returns the first 12 characters of the sha256 hex hash of the token.
+// computeCredentialHash returns the full sha256 hex hash of the token.
 func computeCredentialHash(token string) string {
 	h := sha256.Sum256([]byte(token))
-	return fmt.Sprintf("%x", h)[:12]
+	return fmt.Sprintf("%x", h)
 }
 
 // ensureArgoCDSecret creates or updates the ArgoCD repository Secret in the consumer namespace.
@@ -234,7 +235,7 @@ func (r *GitRepositoryBindingReconciler) checkReachability(ctx context.Context, 
 
 	httpClient := r.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: constants.ReachabilityTimeout}
+		httpClient = httpclient.NewWithTimeout(constants.ReachabilityTimeout)
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, constants.ReachabilityTimeout)
