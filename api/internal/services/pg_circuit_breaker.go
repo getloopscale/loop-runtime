@@ -107,6 +107,19 @@ func (cb *CircuitBreakerSyncClient) GetAppStatus(ctx context.Context, appName st
 	return false, false, nil
 }
 
+// TerminateOperation delegates to the inner SyncClient.
+// Required so that the ReleaseConvergenceLoop type assertion succeeds
+// when the SyncClient is wrapped by the circuit breaker (MEET-2026-03-29-019).
+func (cb *CircuitBreakerSyncClient) TerminateOperation(ctx context.Context, appName string) error {
+	type terminator interface {
+		TerminateOperation(ctx context.Context, appName string) error
+	}
+	if t, ok := cb.inner.(terminator); ok {
+		return t.TerminateOperation(ctx, appName)
+	}
+	return nil
+}
+
 // GetSyncRevision delegates to the inner SyncClient.
 // Read-only operation — no circuit breaker needed.
 // Required so that the commit SHA verification type assertion succeeds

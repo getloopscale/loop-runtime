@@ -111,8 +111,11 @@ func (s *PostgresBuildStore) GetByID(ctx context.Context, buildID string) (*Buil
 	))
 }
 
-// HasActiveBuild checks if there is a build in QUEUED or RUNNING status
+// HasActiveBuild checks if there is a build in QUEUED, RUNNING, or RELEASING status
 // for the given tenant, project, and environment.
+// RELEASING is included because a build in this state has completed its image build
+// and is in the process of creating a release — allowing a new deploy would create
+// two concurrent releases for the same environment (ARCH-002 fix).
 // This runs inside the advisory lock transaction.
 func (s *PostgresBuildStore) HasActiveBuild(ctx context.Context, tx DBTX, tenantID, projectID, env string) (bool, error) {
 	var exists bool
@@ -120,7 +123,7 @@ func (s *PostgresBuildStore) HasActiveBuild(ctx context.Context, tx DBTX, tenant
 		`SELECT EXISTS(
 			SELECT 1 FROM builds
 			WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
-			AND status IN ('QUEUED', 'RUNNING')
+			AND status IN ('QUEUED', 'RUNNING', 'RELEASING')
 		)`,
 		tenantID, projectID, env,
 	).Scan(&exists)

@@ -26,9 +26,13 @@ function envInt(name: string, defaultValue: number): number {
  */
 export const DEFAULT_API_URL_FALLBACK = 'http://localhost:13001';
 
-/** Returns the API base URL, checking LOOPZERO_API_URL at call time. */
+/** Returns the API base URL, checking LOOPZERO_API_URL at call time. Validates scheme. */
 export function getDefaultApiUrl(): string {
-  return process.env.LOOPZERO_API_URL || DEFAULT_API_URL_FALLBACK;
+  const url = process.env.LOOPZERO_API_URL || DEFAULT_API_URL_FALLBACK;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    throw new Error(`Invalid LOOPZERO_API_URL: must start with http:// or https://. Got: ${url}`);
+  }
+  return url;
 }
 
 /**

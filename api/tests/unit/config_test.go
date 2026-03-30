@@ -259,6 +259,8 @@ func TestConfig_Validate_RegistryInsecure_BlockedInProduction(t *testing.T) {
 	// Arrange: production + REGISTRY_INSECURE=true → must return error
 	t.Setenv("LOOPZERO_ENV", "production")
 	t.Setenv("REGISTRY_INSECURE", "true")
+	// SEC-001: encryption key required in production — set a valid 32-byte hex key
+	t.Setenv("LOOPZERO_SECRET_ENCRYPTION_KEY", "REDACTED_SECRET_010")
 
 	cfg := config.Load()
 
@@ -296,6 +298,8 @@ func TestConfig_Validate_RegistryInsecure_FalseInProduction_OK(t *testing.T) {
 	t.Setenv("REGISTRY_INSECURE", "false")
 	// Also fix ArgoCD insecure to avoid that check failing
 	t.Setenv("ARGOCD_INSECURE", "false")
+	// SEC-001: encryption key required in production
+	t.Setenv("LOOPZERO_SECRET_ENCRYPTION_KEY", "REDACTED_SECRET_010")
 
 	cfg := config.Load()
 

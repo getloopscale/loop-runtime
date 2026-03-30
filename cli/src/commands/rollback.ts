@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client';
+import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
 
 interface RollbackApiResponse {
   status: string;
@@ -8,23 +9,14 @@ interface RollbackApiResponse {
   url?: string;
 }
 
-interface LoopZeroYaml {
-  project: string;
-  apps: Record<string, unknown>;
-}
-
-interface LoopZeroYamlResult {
-  path: string;
-  content: LoopZeroYaml;
-  parseError?: string;
-}
-
 export interface RollbackDeps {
   getToken: () => string | null;
   findLoopZeroYaml: () => LoopZeroYamlResult | null;
   rollback: (project: string, environment: string, toReleaseId?: string) => Promise<RollbackApiResponse>;
+  confirm?: (message: string) => Promise<boolean>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
+  isCI?: boolean;
 }
 
 export interface RollbackOptions {
@@ -67,6 +59,26 @@ export class RollbackCommand {
       this.deps.writeTo('  If the deployment you\'re reverting from included schema changes,');
       this.deps.writeTo('  the previous version may not be compatible with the current database.');
       this.deps.writeTo('');
+    }
+
+    // 3b. Confirmation required (unless --yes)
+    if (!opts.yes) {
+      if (this.deps.isCI) {
+        return this.exitWithError(opts, 'Confirmation required. Use --yes in CI mode.', 1, 'CONFIRMATION_REQUIRED');
+      }
+      if (this.deps.confirm) {
+        const confirmed = await this.deps.confirm(
+          `Rollback ${environment}${opts.to ? ` to release ${opts.to}` : ' to previous release'}? [y/N] `
+        );
+        if (!confirmed) {
+          if (opts.json) {
+            this.deps.writeTo(JSON.stringify({ status: 'cancelled' }));
+          } else {
+            this.deps.writeTo('Rollback cancelled.');
+          }
+          return 0;
+        }
+      }
     }
 
     // 4. Call API

@@ -446,6 +446,7 @@ func main() {
 	// Rate limiter: 60 requests per minute per tenant (C-01).
 	// Generous for normal use but prevents abuse.
 	rateLimiter := middleware.NewRateLimiter(60, 1*time.Minute)
+	defer rateLimiter.Stop() // SEC-007 fix: stop cleanup goroutine on shutdown
 
 	// C-01 fix: BuildHandler no longer handles callbacks. The BuildReconcileLoop
 	// detects build completion by polling Argo Workflow CRDs.
@@ -508,6 +509,7 @@ func main() {
 		SSEPollInterval:         cfg.SSEPollInterval,
 		SSESafetyTimeout:        cfg.SSESafetyTimeout,
 		SSEMaxConcurrentStreams: int64(cfg.SSEMaxConcurrentStreams),
+		IsProduction:           cfg.IsProduction(),
 	}
 
 	if err := server.Run(srvCfg); err != nil {

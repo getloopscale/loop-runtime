@@ -2,25 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import { ApiError } from '../api/client';
-
-interface LoopZeroYamlApp {
-  path: string;
-  framework: string;
-  type?: string;
-  port: number | null;
-  secrets?: string[];
-}
-
-interface LoopZeroYaml {
-  project: string;
-  apps: Record<string, LoopZeroYamlApp>;
-}
-
-interface LoopZeroYamlResult {
-  path: string;
-  content: LoopZeroYaml;
-  parseError?: string;
-}
+import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
 
 interface StatusApiResponse {
   environment: string;
