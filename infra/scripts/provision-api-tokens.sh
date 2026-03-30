@@ -107,14 +107,16 @@ kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create secret generic loopzero-api
 # ---------------------------------------------------------------------------
 if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1 && [ -n "$GITEA_TOKEN" ]; then
   echo "Setting up ArgoCD repo credentials..."
-  kubectl --context "$MGMT_CTX" -n argocd create secret generic argocd-repo-gitea-internal \
+  # Use repo-creds (credential template) — matches ALL repos under this URL prefix.
+  # This is more robust than per-repo secrets because tenant repos are created dynamically.
+  kubectl --context "$MGMT_CTX" -n argocd create secret generic argocd-creds-gitea \
     --from-literal=type=git \
     --from-literal=url="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000" \
     --from-literal=username="${GITEA_USER}" \
     --from-literal=password="${GITEA_TOKEN}" \
     --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" -n argocd apply -f -
-  kubectl --context "$MGMT_CTX" -n argocd label secret argocd-repo-gitea-internal argocd.argoproj.io/secret-type=repository --overwrite 2>/dev/null
-  echo "ArgoCD repo credentials: configured"
+  kubectl --context "$MGMT_CTX" -n argocd label secret argocd-creds-gitea argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
+  echo "ArgoCD repo credentials: configured (credential template)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -124,7 +126,11 @@ if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1; then
   echo "Registering workload cluster in ArgoCD..."
   WORKLOAD_CERT=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
   WORKLOAD_KEY=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
-  WORKLOAD_SERVER="https://k3d-loopzero-workload-server-0:6443"
+  # Use the same server URL that update-cross-cluster-ips.sh writes to WORKLOAD_CLUSTER_URL
+  # in the operator deployment. The ArgoCD Application destination.server must match exactly.
+  WORKLOAD_IP=$(docker inspect k3d-loopzero-workload-server-0 --format '{{(index .NetworkSettings.Networks "k3d-loopzero").IPAddress}}' 2>/dev/null)
+  WORKLOAD_SERVER="https://${WORKLOAD_IP}:6443"
+  echo "  Workload server: $WORKLOAD_SERVER"
 
   CLUSTER_CONFIG=$(python3 -c "
 import json
