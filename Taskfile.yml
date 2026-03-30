@@ -896,9 +896,9 @@ tasks:
   dev:seed:
     desc: Seed database with a dev user + tenant for manual testing
     vars:
-      GITHUB_USER: '{{.GITHUB_USER | default "paulohenriquevn"}}'
-      GITHUB_EMAIL: '{{.GITHUB_EMAIL | default "paulohenriquevn@gmail.com"}}'
-      GITHUB_ID: '{{.GITHUB_ID | default "6766298"}}'
+      GITHUB_USER: '{{.GITHUB_USER | default "getloopscale"}}'
+      GITHUB_EMAIL: '{{.GITHUB_EMAIL | default "getloopscale@users.noreply.github.com"}}'
+      GITHUB_ID: '{{.GITHUB_ID | default "241186089"}}'
       TENANT: '{{.TENANT | default "acme"}}'
       PLAN: '{{.PLAN | default "starter"}}'
     cmds:
@@ -923,6 +923,11 @@ tasks:
         SELECT '✓ Tenant: {{.TENANT}} (plan: {{.PLAN}})';
         SELECT '✓ Membership: owner of {{.TENANT}}';
         SQL
+
+  dev:ensure-project:
+    desc: Create default project via API (triggers Tenant CR + ArgoCD Application)
+    cmds:
+      - bash infra/scripts/ensure-project.sh
 
   # ---------------------------------------------------------------------------
   # S2: E2E seed data
@@ -1076,6 +1081,7 @@ tasks:
       - task: networking:setup
       - task: crds:install
       - task: db:migrate
+      - task: dev:seed
       - task: tokens:provision
 
   dev:up:
