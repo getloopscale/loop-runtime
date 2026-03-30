@@ -30,6 +30,8 @@ config:
   #   pulumi config set --secret digitaloceanToken <value> --stack prod
   #   pulumi config set --secret giteaAdminPassword <strong-password> --stack prod
   #   pulumi config set --secret minioRootPassword <strong-password> --stack prod
+  # Observability — Tempo trace storage (MEET-020)
+  loopzero-infra:tempoStorageBucket: loopzero-traces
   # Cloudflare (required for CF Tunnel + static delivery):
   #   pulumi config set --secret cfApiToken <value> --stack prod
   #   pulumi config set cfAccountId <value> --stack prod

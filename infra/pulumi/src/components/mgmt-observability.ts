@@ -137,6 +137,23 @@ export function installGrafana(
                 access: "proxy",
                 isDefault: true,
               },
+              {
+                // MEET-2026-03-30-020: Tempo datasource for distributed tracing
+                name: "Tempo",
+                type: "tempo",
+                url: `http://tempo.${PLATFORM_NAMESPACE}.svc.cluster.local:3200`,
+                access: "proxy",
+                jsonData: {
+                  // C2: Correlation-ID remains UUID v4; trace_id is a separate slog field.
+                  // Grafana bridges trace→log via derived field query on trace_id.
+                  tracesToLogsV2: {
+                    datasourceUid: "loki",
+                    filterByTraceID: false,
+                    customQuery: true,
+                    query: `{job="loopzero-api"} |= "\${__trace.traceId}"`,
+                  },
+                },
+              },
             ],
           },
         },
@@ -179,6 +196,71 @@ export function installGrafana(
         resources: {
           requests: { cpu: "100m", memory: "128Mi" },
           limits: { cpu: "300m", memory: "256Mi" },
+        },
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tempo — distributed trace backend (MEET-2026-03-30-020)
+// ---------------------------------------------------------------------------
+
+export function installTempo(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  config: PlatformStackConfig,
+): k8s.helm.v3.Release {
+  // Storage config: local filesystem for dev, S3 (DO Spaces) for prod.
+  const useS3 = !!config.tempoStorageBucket;
+  const storageConfig: Record<string, unknown> = {
+    trace: {
+      backend: useS3 ? "s3" : "local",
+      local: { path: "/var/tempo/traces" },
+      wal: { path: "/var/tempo/wal" },
+      ...(useS3
+        ? {
+            s3: {
+              bucket: config.tempoStorageBucket,
+              endpoint: `${config.region}.digitaloceanspaces.com`,
+              forcepathstyle: true,
+            },
+          }
+        : {}),
+    },
+  };
+
+  return new k8s.helm.v3.Release(
+    "tempo",
+    {
+      name: "tempo",
+      chart: "tempo",
+      version: HELM_VERSIONS.tempo,
+      repositoryOpts: {
+        repo: "https://grafana.github.io/helm-charts",
+      },
+      namespace: PLATFORM_NAMESPACE,
+      createNamespace: false,
+      values: {
+        fullnameOverride: "tempo",
+        tempo: {
+          receivers: {
+            otlp: {
+              protocols: {
+                grpc: { endpoint: "0.0.0.0:4317" },
+                http: { endpoint: "0.0.0.0:4318" },
+              },
+            },
+          },
+          retention: "168h",
+          storage: storageConfig,
+        },
+        server: { http_listen_port: 3200 },
+        persistence: { enabled: true, size: "5Gi" },
+        resources: {
+          requests: { cpu: "100m", memory: "256Mi" },
+          limits: { cpu: "300m", memory: "512Mi" },
         },
       },
     },

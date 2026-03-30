@@ -60,6 +60,10 @@ export interface PlatformStackConfig {
   readonly giteaAdminPassword?: pulumi.Output<string>;
   readonly minioRootPassword?: pulumi.Output<string>;
 
+  // Observability — Tempo trace storage (MEET-2026-03-30-020)
+  // S3 bucket for Tempo trace data in production. Omit for local filesystem (dev).
+  readonly tempoStorageBucket?: string;
+
 }
 
 /**
@@ -119,5 +123,8 @@ export function loadStackConfig(): PlatformStackConfig {
     // Dev uses defaults from values.yaml; prod MUST set these via --secret.
     giteaAdminPassword: config.getSecret("giteaAdminPassword") ?? undefined,
     minioRootPassword: config.getSecret("minioRootPassword") ?? undefined,
+
+    // Observability — Tempo trace storage (MEET-020)
+    tempoStorageBucket: config.get("tempoStorageBucket") ?? undefined,
   };
 }

@@ -15,6 +15,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // GiteaSourceStoreConfig holds configuration for connecting to Gitea.
@@ -52,6 +56,13 @@ func NewGiteaSourceStore(cfg GiteaSourceStoreConfig) (*GiteaSourceStore, error) 
 // repo, and pushes to the Gitea source repo for this tenant/project.
 // Returns the HEAD commit SHA after push.
 func (s *GiteaSourceStore) PushBundle(ctx context.Context, tenantID, projectID string, bundle io.Reader) (string, error) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.source.push_git",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", tenantID),
+			attribute.String("loopzero.project", projectID),
+		))
+	defer span.End()
+
 	data, err := io.ReadAll(bundle)
 	if err != nil {
 		return "", fmt.Errorf("gitea source: reading bundle: %w", err)

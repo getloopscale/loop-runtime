@@ -1188,3 +1188,16 @@ tasks:
         echo ""
         echo "=== Grafana Dashboards ==="
         curl -sf -u REDACTED_SECRET_056 http://localhost:{{.GRAFANA_PORT}}/api/search?type=dash-db | jq -r '.[].title' 2>/dev/null || echo "Grafana not reachable at localhost:{{.GRAFANA_PORT}}"
+
+  tempo:status:
+    desc: Check Tempo health, ServiceMonitor, and PrometheusRules (MEET-020)
+    cmds:
+      - |
+        echo "=== Tempo Pod ==="
+        kubectl --context k3d-loopzero-mgmt -n platform-system get pods -l app.kubernetes.io/name=tempo 2>/dev/null || echo "Tempo pod not found"
+        echo ""
+        echo "=== ServiceMonitor ==="
+        kubectl --context k3d-loopzero-mgmt -n monitoring get servicemonitor loopzero-tempo 2>/dev/null || echo "ServiceMonitor not found"
+        echo ""
+        echo "=== PrometheusRules ==="
+        kubectl --context k3d-loopzero-mgmt -n monitoring get prometheusrules loopzero-tracing 2>/dev/null || echo "PrometheusRule not found"

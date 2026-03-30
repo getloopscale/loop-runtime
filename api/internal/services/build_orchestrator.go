@@ -17,6 +17,10 @@ import (
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	"github.com/loopzero/loopzero/pkg/statemachine"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // WorkflowStatus represents the external state of a build workflow.
@@ -261,6 +265,15 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 // Returns ErrDeployInProgress if another build is active.
 // Returns ErrLockTimeout if the lock cannot be acquired within 5s.
 func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequest) (*SubmitBuildResponse, error) {
+	// MEET-2026-03-30-020: distributed tracing (C3 naming convention)
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.submit",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", req.TenantID),
+			attribute.String("loopzero.project", req.ProjectID),
+			attribute.String("loopzero.environment", req.Environment),
+		))
+	defer span.End()
+
 	// Phase 1 (INSIDE lock): reserve build slot as QUEUED
 	var buildID string
 
@@ -386,6 +399,8 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 
 	metrics.DeploysTotal.WithLabelValues(req.TenantID, req.Environment, "submitted").Inc()
 	metrics.BuildQueueDepth.Inc()
+
+	span.SetAttributes(attribute.String("loopzero.build_id", buildID))
 
 	streamURL := fmt.Sprintf("/api/v1/builds/%s/stream", buildID)
 	return &SubmitBuildResponse{

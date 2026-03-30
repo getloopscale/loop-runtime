@@ -1,0 +1,21 @@
+# ServiceMonitor for Grafana Tempo trace backend (C1 — MEET-2026-03-30-020)
+# Enables Prometheus to scrape Tempo metrics for alerting and dashboards.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: loopzero-tempo
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - platform-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tempo
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

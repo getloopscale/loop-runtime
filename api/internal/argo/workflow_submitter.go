@@ -17,6 +17,11 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
@@ -91,6 +96,12 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 // Submit generates a self-contained Workflow CR via the WorkflowBuilder and creates it
 // in the build cluster with retry for transient errors.
 func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSpec) (string, error) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.workflow_submit",
+		trace.WithAttributes(
+			attribute.String("loopzero.workflow.namespace", spec.Namespace),
+		))
+	defer span.End()
+
 	wf, err := s.builder.Build(spec)
 	if err != nil {
 		return "", fmt.Errorf("argo: build workflow: %w", err)
@@ -118,7 +129,9 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 
 		created, err := s.client.Resource(workflowGVR).Namespace(spec.Namespace).Create(ctx, workflow, metav1.CreateOptions{})
 		if err == nil {
-			return created.GetName(), nil
+			name := created.GetName()
+			span.SetAttributes(attribute.String("loopzero.workflow.name", name))
+			return name, nil
 		}
 
 		lastErr = err
@@ -133,6 +146,8 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 		return "", fmt.Errorf("argo: create workflow: %w", err)
 	}
 
+	span.RecordError(lastErr)
+	span.SetStatus(codes.Error, "workflow submission failed after retries")
 	return "", fmt.Errorf("argo: create workflow after %d retries: %w", submitMaxRetries, lastErr)
 }
 

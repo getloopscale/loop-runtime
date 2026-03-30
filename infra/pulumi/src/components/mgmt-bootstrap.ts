@@ -8,7 +8,7 @@ import * as path from "path";
 import { InfraOutputs, ClusterOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
 import { InfraError } from "../core/errors";
-import { installPrometheus, installGrafana } from "./mgmt-observability";
+import { installPrometheus, installGrafana, installTempo } from "./mgmt-observability";
 import {
   PLATFORM_NAMESPACE,
   HELM_VERSIONS,
@@ -89,6 +89,9 @@ export function bootstrapMgmtCluster(
 
   // Grafana — dashboards and visualization, pre-configured with Prometheus + Loki data sources
   const grafana = installGrafana(provider, ns, config);
+
+  // Tempo — distributed trace backend (MEET-2026-03-30-020)
+  const tempo = installTempo(provider, ns, config);
 
   // Gitea bootstrap — creates admin token, orgs, and stores credentials in K8s Secret.
   // The Job runs after Gitea is ready and is idempotent (safe to re-run).
