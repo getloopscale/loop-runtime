@@ -145,15 +145,13 @@ export class DeployCommand {
       return this.exitWithError(opts, 'No apps defined in loopzero.yaml. Add at least one app to deploy.', 1, 'INVALID_CONFIG');
     }
 
-    // 5. Validate --env (DA-10)
+    // 6. Validate --env (DA-10)
     const envError = this.validateEnvironment(environment);
     if (envError) {
       return this.exitWithError(opts, envError, 1, 'INVALID_ENVIRONMENT');
     }
 
-
-
-    // 6. Validate --app flag (DA-19) — fail fast before any upload
+    // 7. Validate --app flag (DA-19) — fail fast before any upload
     const selectedApps = opts.app ?? appNames;
     for (const app of selectedApps) {
       if (!appNames.includes(app)) {
@@ -343,6 +341,8 @@ export class DeployCommand {
 
       const finish = async (exitCode: number): Promise<void> => {
         if (resolved) return;
+        resolved = true; // Set immediately — no TOCTOU window before the await below
+        clearTimeout(activityTimeout);
 
         // BLOCKER-1: On stream-related failures, verify actual build state
         // before reporting failure. The build may have completed successfully
@@ -364,8 +364,6 @@ export class DeployCommand {
           }
         }
 
-        resolved = true;
-        clearTimeout(activityTimeout);
         if (sseConnection) {
           sseConnection.close();
         }
@@ -582,6 +580,13 @@ export class DeployCommand {
     msg = msg.replace(/\bGitea\b/gi, 'repository');
     msg = msg.replace(/\bMinIO\b/gi, 'storage');
     msg = msg.replace(/\bKaniko\b/gi, 'image builder');
+    msg = msg.replace(/\bCRD\b/g, 'service configuration');
+    msg = msg.replace(/\btenant_id\b/gi, 'account');
+    msg = msg.replace(/\badvisory\s*lock\b/gi, '');
+    msg = msg.replace(/\bpg_advisory[_a-z]*/gi, '');
+    msg = msg.replace(/\bgitops[-_]push\b/gi, 'deploy');
+    msg = msg.replace(/\bkubebuilder\b/gi, '');
+    msg = msg.replace(/\benvtest\b/gi, '');
     // Clean up extra whitespace
     msg = msg.replace(/\s{2,}/g, ' ').trim();
     return msg || 'unknown error';

@@ -23,7 +23,7 @@ export interface AppUnit {
   secrets: string[];
 }
 
-const FRONTEND_FRAMEWORKS = ['nextjs', 'next', 'vite', 'remix', 'react', 'vue', 'svelte', 'astro'];
+export const FRONTEND_FRAMEWORKS = ['nextjs', 'next', 'vite', 'remix', 'react', 'vue', 'svelte', 'astro', 'angular'];
 
 // NOTE: Framework lists for auto-detection of rendering mode (MEET-009):
 // Static-default: vite, react, vue, svelte

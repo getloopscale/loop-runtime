@@ -4,6 +4,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ApiError } from '../api/client';
+import { FRONTEND_FRAMEWORKS } from '../adapters/app-unit';
 
 interface MonorepoResult {
   tool: string;
@@ -60,7 +61,7 @@ interface DetectedInfo {
 // Frameworks that are frontends — they serve static assets, not APIs
 // MEET-2026-03-29-016: Frontends are ALWAYS static delivery (zero pods).
 // Remix is SSR-first — classified as server, not frontend.
-const FRONTEND_FRAMEWORKS = ['nextjs', 'vite', 'react', 'vue', 'svelte', 'astro', 'angular'];
+// FRONTEND_FRAMEWORKS imported from adapters/app-unit.ts (single source of truth)
 
 // Well-known directory names for shared packages (not deployable)
 const PACKAGE_DIR_PATTERNS = ['packages/', 'libs/', 'shared/', 'common/', 'config/'];

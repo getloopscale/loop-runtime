@@ -57,34 +57,6 @@ export class DeployRenderer {
     return this.renderTTYResult(result);
   }
 
-  /**
-   * Render the final deploy result as a JSON string for --json mode.
-   */
-  renderJSON(result: DeployResult): string {
-    const output: Record<string, unknown> = {
-      deploy_id: result.deploy_id,
-      status: result.status,
-      duration_seconds: result.duration_seconds,
-      apps: result.apps.map((app) => {
-        const entry: Record<string, unknown> = {
-          name: app.name,
-          status: app.status,
-        };
-        // F-08: Use null for absent/empty URLs (workers), never empty string
-        entry.url = app.url || null;
-        if (app.build_duration_seconds !== undefined) {
-          entry.build_duration_seconds = app.build_duration_seconds;
-        }
-        if (app.error !== undefined) {
-          entry.error = app.error;
-        }
-        return entry;
-      }),
-    };
-
-    return JSON.stringify(output);
-  }
-
   private renderTTYEvent(event: DeployEvent): string | null {
     const app = String(event.data.app ?? '');
 

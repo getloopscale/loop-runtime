@@ -332,6 +332,7 @@ export function createProgram(): Command {
           const url = `${baseURL}/api/v1/builds/${buildId}/stream`;
           const client = new SSEClient({
             url,
+            pollUrl: `${baseURL}/api/v1/builds/${buildId}`,
             headers: token ? { Authorization: `Bearer ${token}` } : {},
             onEvent: (sseEvent) => {
               onEvent({ type: sseEvent.event, data: sseEvent.data });
@@ -426,7 +427,6 @@ export function createProgram(): Command {
       const jsonMode = Boolean(cmdOpts.json || globalOpts.json);
 
       const validateCmd = new ValidateCommand({
-        getToken: () => configStore.getToken(),
         findLoopZeroYaml: () => {
           const gitRoot = getGitRoot();
           if (!gitRoot) return null;
@@ -437,7 +437,7 @@ export function createProgram(): Command {
       });
 
       const exitCode = await validateCmd.execute({ json: jsonMode });
-      process.exit(exitCode);
+      process.exitCode = exitCode;
     });
 
   // --- status ---
@@ -467,9 +467,17 @@ export function createProgram(): Command {
         writeError,
       });
 
-      const exitCode = await statusCmd.execute({
-        env: cmdOpts.env,
-        json: globalOpts.json,
+      const exitCode = await withTimeout(
+        statusCmd.execute({ env: cmdOpts.env, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Status request timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'STATUS_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
       process.exitCode = exitCode;
     });
@@ -481,7 +489,6 @@ export function createProgram(): Command {
     .requiredOption('--build <id>', 'Build ID to show logs for')
     .option('--tail <n>', 'Show last N lines', parseInt)
     .option('--step <name>', 'Filter by build step')
-    .option('--follow', 'Follow log output in real-time')
     .option('--env <name>', 'Target environment', 'production')
     .action(async (cmdOpts) => {
       const globalOpts = program.opts();
@@ -508,12 +515,17 @@ export function createProgram(): Command {
         writeError,
       });
 
-      const exitCode = await logsCmd.execute({
-        build: cmdOpts.build,
-        tail: cmdOpts.tail,
-        step: cmdOpts.step,
-        follow: cmdOpts.follow,
-        json: globalOpts.json,
+      const exitCode = await withTimeout(
+        logsCmd.execute({ build: cmdOpts.build, tail: cmdOpts.tail, step: cmdOpts.step, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Logs request timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'LOGS_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
       process.exitCode = exitCode;
     });
@@ -546,15 +558,32 @@ export function createProgram(): Command {
             body,
           );
         },
+        confirm: async (message: string) => {
+          const readline = await import('readline');
+          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+          return new Promise<boolean>((resolve) => {
+            rl.question(message, (answer) => {
+              rl.close();
+              resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+            });
+          });
+        },
         writeTo,
         writeError,
+        isCI,
       });
 
-      const exitCode = await rollbackCmd.execute({
-        env: cmdOpts.env,
-        to: cmdOpts.to,
-        json: globalOpts.json,
-        yes: cmdOpts.yes,
+      const exitCode = await withTimeout(
+        rollbackCmd.execute({ env: cmdOpts.env, to: cmdOpts.to, json: globalOpts.json, yes: cmdOpts.yes }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Rollback timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'ROLLBACK_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
       process.exitCode = exitCode;
     });
@@ -594,11 +623,17 @@ export function createProgram(): Command {
       };
 
       const cmd = new SecretSetCommand(deps);
-      process.exitCode = await cmd.execute({
-        nameValue,
-        env: cmdOpts.env,
-        app: cmdOpts.app,
-        json: globalOpts.json,
+      process.exitCode = await withTimeout(
+        cmd.execute({ nameValue, env: cmdOpts.env, app: cmdOpts.app, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Secret set timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'SECRET_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
     });
 
@@ -629,7 +664,18 @@ export function createProgram(): Command {
       };
 
       const cmd = new SecretListCommand(deps);
-      process.exitCode = await cmd.execute({ env: cmdOpts.env, json: globalOpts.json });
+      process.exitCode = await withTimeout(
+        cmd.execute({ env: cmdOpts.env, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Secret list timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'SECRET_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
+      });
     });
 
   secretCmd
@@ -662,17 +708,33 @@ export function createProgram(): Command {
             `/api/v1/secrets/${encodeURIComponent(secretName)}?project=${encodeURIComponent(project)}&environment=${encodeURIComponent(env)}&app=${encodeURIComponent(app)}`,
           );
         },
+        confirm: async (message: string) => {
+          const readline = await import('readline');
+          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+          return new Promise<boolean>((resolve) => {
+            rl.question(message, (answer) => {
+              rl.close();
+              resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+            });
+          });
+        },
         writeTo,
         writeError,
+        isCI,
       };
 
       const cmd = new SecretDeleteCommand(deps);
-      process.exitCode = await cmd.execute({
-        name,
-        env: cmdOpts.env,
-        app: cmdOpts.app,
-        yes: cmdOpts.yes,
-        json: globalOpts.json,
+      process.exitCode = await withTimeout(
+        cmd.execute({ name, env: cmdOpts.env, app: cmdOpts.app, yes: cmdOpts.yes, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Secret delete timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'SECRET_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
     });
 
@@ -722,10 +784,17 @@ export function createProgram(): Command {
         isCI,
       });
 
-      const exitCode = await deleteCmd.execute(name, {
-        env: cmdOpts.env,
-        yes: cmdOpts.yes,
-        json: globalOpts.json,
+      const exitCode = await withTimeout(
+        deleteCmd.execute(name, { env: cmdOpts.env, yes: cmdOpts.yes, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Delete timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'DELETE_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
       process.exitCode = exitCode;
     });
