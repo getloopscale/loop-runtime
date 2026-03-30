@@ -254,12 +254,32 @@ kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create configmap loopzero-runtime-
 rm -f /tmp/runtime-kubeconfig.yaml
 echo "Runtime cluster kubeconfig: created (admin certs, insecure TLS)"
 
+# ---------------------------------------------------------------------------
+# 8. MinIO buckets (idempotent — mc mb --ignore-existing)
+# ---------------------------------------------------------------------------
+# The lifecycle Job can fail if MinIO isn't ready during Helm install.
+# By this point MinIO has been running for several minutes — guaranteed ready.
+echo "Ensuring MinIO buckets exist..."
+MINIO_POD=$(kubectl --context "$MGMT_CTX" -n "$NAMESPACE" get pod -l app=minio -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+if [ -n "$MINIO_POD" ]; then
+  kubectl --context "$MGMT_CTX" -n "$NAMESPACE" exec "$MINIO_POD" -- sh -c "
+    mc alias set local http://localhost:9000 \$MINIO_ROOT_USER \$MINIO_ROOT_PASSWORD 2>/dev/null
+    mc mb --ignore-existing local/loopzero-builds
+    mc mb --ignore-existing local/loopzero-artifacts
+    mc mb --ignore-existing local/loopzero-static-assets
+  " 2>&1 | grep -E "created|already"
+  echo "MinIO buckets: ensured"
+else
+  echo "WARNING: MinIO pod not found — buckets not created"
+fi
+
 echo ""
 echo "=== Done ==="
 echo "Secret 'loopzero-api-tokens' created in $NAMESPACE"
 echo "ConfigMap 'loopzero-build-kubeconfig' created in $NAMESPACE"
 echo "ConfigMap 'loopzero-runtime-kubeconfig' created in $NAMESPACE"
 echo "ArgoCD repo + cluster secrets configured"
+echo "MinIO buckets ensured"
 echo ""
 echo "Restart pods to pick up new tokens:"
 echo "  kubectl --context $MGMT_CTX -n $NAMESPACE rollout restart deployment/loopzero-api deployment/tenant-controller"
