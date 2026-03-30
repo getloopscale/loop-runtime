@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -41,8 +42,9 @@ var environmentSM = statemachine.NewEnvironmentMachine()
 //   - r.RuntimeClient -> runtime cluster (for creating namespaces, RBAC, etc.)
 type EnvironmentReconciler struct {
 	client.Client
-	RuntimeClient client.Client
-	Scheme        *runtime.Scheme
+	RuntimeClient    client.Client
+	Scheme           *runtime.Scheme
+	IngressNamespace string // Namespace where ingress controller (Traefik) runs. Default: platform-system.
 }
 
 // Reconcile handles the reconciliation loop for Environment resources.
@@ -353,7 +355,7 @@ func (r *EnvironmentReconciler) reconcileEnvAllowIngressPolicy(ctx context.Conte
 						{
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									constants.KubeMetadataNameLabel: constants.NamespacePlatformSystem,
+									constants.KubeMetadataNameLabel: r.ingressNS(),
 								},
 							},
 						},
@@ -546,14 +548,24 @@ func rbacRulesForPlan(plan loopzerov1.PlanTier) []rbacv1.PolicyRule {
 	return rules
 }
 
+// ingressNS returns the namespace where the ingress controller runs.
+func (r *EnvironmentReconciler) ingressNS() string {
+	if r.IngressNamespace != "" {
+		return r.IngressNamespace
+	}
+	return constants.NamespacePlatformSystem
+}
+
 // SetupEnvironmentController registers the EnvironmentController with the manager.
 func SetupEnvironmentController(mgr ctrl.Manager, runtimeClient client.Client) error {
+	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.Environment{}).
 		Named("environment").
 		Complete(&EnvironmentReconciler{
-			Client:        mgr.GetClient(),
-			RuntimeClient: runtimeClient,
-			Scheme:        mgr.GetScheme(),
+			Client:           mgr.GetClient(),
+			RuntimeClient:    runtimeClient,
+			Scheme:           mgr.GetScheme(),
+			IngressNamespace: ingressNS,
 		})
 }

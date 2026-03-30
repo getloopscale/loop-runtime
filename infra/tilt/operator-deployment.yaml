@@ -170,6 +170,9 @@ spec:
             # Update after cluster recreate: docker inspect k3d-loopzero-workload-server-0
             - name: WORKLOAD_CLUSTER_URL
               value: "https://172.18.0.11:6443"
+            # Local dev: Traefik is in 'traefik' namespace (production: platform-system)
+            - name: INGRESS_NAMESPACE
+              value: "traefik"
           ports:
             - containerPort: 8081
               name: health
