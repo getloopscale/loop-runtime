@@ -162,8 +162,15 @@ func (s *WorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID st
 func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*services.WorkflowStatus, error) {
 	wf, err := s.client.Resource(workflowGVR).Namespace(namespace).Get(ctx, workflowID, metav1.GetOptions{})
 	if err != nil {
-		// Not found — workflow was cleaned up or never existed
-		return nil, nil
+		// BRC-006 fix: distinguish NotFound (workflow deleted/expired) from transient
+		// errors (network timeout, auth expiry, API server blip). Previously ALL errors
+		// returned (nil, nil), causing the reconcile loop to permanently fail live builds
+		// on any transient K8s API disruption.
+		if k8serrors.IsNotFound(err) {
+			return nil, nil
+		}
+		// Transient error — propagate to caller so reconcile loop retries next tick
+		return nil, fmt.Errorf("argo: get workflow %s/%s: %w", namespace, workflowID, err)
 	}
 
 	phase, _, _ := unstructured.NestedString(wf.Object, "status", "phase")

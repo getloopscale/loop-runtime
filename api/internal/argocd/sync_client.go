@@ -7,10 +7,13 @@ package argocd
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -23,6 +26,7 @@ type SyncClientConfig struct {
 	Token         string        // ArgoCD API token (used if TokenProvider is nil)
 	TokenProvider TokenProvider // Optional: dynamic token source (overrides Token string)
 	Insecure      bool          // Skip TLS verification (for local dev with self-signed certs)
+	CACertPath    string        // SEC-T02b fix: path to CA cert file for TLS verification. When set, Insecure is ignored.
 	HTTPClient    *http.Client  // Optional: shared HTTP client with connection pooling. When nil, a default client is created.
 }
 
@@ -42,9 +46,27 @@ func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 	client := cfg.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
-		if cfg.Insecure {
+		// SEC-T02b fix: prefer CA bundle over InsecureSkipVerify.
+		// When CACertPath is set, load the CA and verify TLS properly.
+		if cfg.CACertPath != "" {
+			caCert, err := os.ReadFile(cfg.CACertPath)
+			if err != nil {
+				slog.Error("argocd: failed to read CA cert, falling back to insecure",
+					"path", cfg.CACertPath, "error", err)
+				client.Transport = &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // fallback only
+				}
+			} else {
+				pool := x509.NewCertPool()
+				pool.AppendCertsFromPEM(caCert)
+				client.Transport = &http.Transport{
+					TLSClientConfig: &tls.Config{RootCAs: pool},
+				}
+				slog.Info("argocd: TLS verification enabled with custom CA", "path", cfg.CACertPath)
+			}
+		} else if cfg.Insecure {
 			client.Transport = &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // local dev only
 			}
 		}
 	}

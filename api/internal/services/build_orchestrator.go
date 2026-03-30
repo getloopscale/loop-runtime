@@ -7,6 +7,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -322,6 +323,10 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 	for _, a := range req.Apps {
 		unit, normErr := NormalizeApp(a.Name, a)
 		if normErr != nil {
+			// BRC-001 fix: fail the QUEUED build immediately so the environment
+			// is unblocked. Previously, the build sat QUEUED until the reaper
+			// fired (5min timeout), blocking all deploys to this environment.
+			o.failQueuedBuild(ctx, buildID, fmt.Sprintf("app normalization failed: %v", normErr))
 			return nil, fmt.Errorf("normalize app %q: %w", a.Name, normErr)
 		}
 		units = append(units, unit)
@@ -666,9 +671,13 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	activationErr := o.delivery.Activate(ctx, build, result)
 
 	if activationErr != nil {
-		// Activation failed — emit deploy failure event so the CLI knows.
+		// BRC-002 fix: if the delivery activator already handled the failure
+		// (emitted SSE event, transitioned release state), skip our own emit
+		// to prevent duplicate deploy.sync_failed events in the CLI stream.
+		if !errors.Is(activationErr, ErrActivationAlreadyHandled) {
+			o.emitActivationFailure(ctx, buildID, activationErr)
+		}
 		// Build stays in RELEASING so the reconcile loop retries (MEET-2026-03-26-008).
-		o.emitActivationFailure(ctx, buildID, activationErr)
 		return nil
 	}
 

@@ -105,10 +105,19 @@ func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db
 	})
 }
 
-// ParseArgoAppName extracts tenantID and environment from "{tenant}-{env}".
-// Returns false if the format is invalid.
+// ParseArgoAppName extracts tenantID and environment from an ArgoCD Application name.
+// Format: "{tenantID}-{environment}" (e.g., "tn-loopzero-production").
+//
+// ARCH-002 fix: Uses LastIndex("-") to split, which means the environment name
+// MUST NOT contain hyphens. This is enforced because:
+//   - Tenant IDs contain hyphens (e.g., "tn-loopzero-e2e")
+//   - Environment is always the last segment after the last hyphen
+//   - Sprint 5 preview environments MUST use underscore or single-word names
+//     (e.g., "preview_pr42" not "preview-pr-42")
+//
+// TODO(sprint-5): Consider switching to ArgoCD labels in the webhook payload
+// instead of parsing the app name. Labels contain tenant/env as separate fields.
 func ParseArgoAppName(appName string) (tenantID, env string, ok bool) {
-	// Find the last hyphen — environment is always the last segment
 	idx := strings.LastIndex(appName, "-")
 	if idx <= 0 || idx >= len(appName)-1 {
 		return "", "", false

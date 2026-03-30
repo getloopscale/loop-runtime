@@ -185,14 +185,56 @@ jobs:
           echo "- \`${{ env.REGISTRY }}/tenant-controller:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
+  # BUILD LOOPZERO-PACKS-RUNNER (COMP-003 fix)
+  # ─────────────────────────────────────────────
+  build-loopzero-packs:
+    name: Build loopzero-packs-runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: resolve
+    # Always build loopzero-packs — it's a critical dependency for all deploys.
+    # COMP-003: Previously had no CI job. If this image is missing from the
+    # registry, every deploy for every tenant fails at Dockerfile generation.
+    environment: infra-dev
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        run: doctl registry login --expiry-seconds 3600
+
+      - name: Build and push loopzero-packs-runner
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+
+          docker build -f loopzero-packs/Dockerfile.generate \
+            -t ${{ env.REGISTRY }}/loopzero-packs-runner:v0.1.0 \
+            -t ${{ env.REGISTRY }}/loopzero-packs-runner:${SHA} \
+            loopzero-packs/
+
+          docker push ${{ env.REGISTRY }}/loopzero-packs-runner:v0.1.0
+          docker push ${{ env.REGISTRY }}/loopzero-packs-runner:${SHA}
+
+          echo "### loopzero-packs-runner" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-packs-runner:v0.1.0\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-packs-runner:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
   # POST-BUILD — integrate registry with DOKS clusters
   # ─────────────────────────────────────────────
   integrate-registry:
     name: Integrate registry with DOKS
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [build-api, build-operator]
-    if: always() && (needs.build-api.result == 'success' || needs.build-operator.result == 'success')
+    needs: [build-api, build-operator, build-loopzero-packs]
+    if: always() && (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-loopzero-packs.result == 'success')
     environment: infra-dev
     steps:
       - name: Install doctl
@@ -223,8 +265,8 @@ jobs:
     name: Update CWTs on build cluster
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [build-api, build-operator]
-    if: always() && (needs.build-api.result == 'success' || needs.build-operator.result == 'success')
+    needs: [build-api, build-operator, build-loopzero-packs]
+    if: always() && (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-loopzero-packs.result == 'success')
     environment: infra-dev
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

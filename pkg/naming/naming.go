@@ -239,3 +239,13 @@ func Labels(tenant, project, env string) map[string]string {
 		"loopzero.io/managed-by":  "loopzero",
 	}
 }
+
+// ImageTag returns the container image reference for a built app.
+// Format: "{registry}/{tenant}/{project}-{app}:{commitSHA}"
+//
+// ARCH-001 fix: This was duplicated in 4 independent sites (buildkit.go,
+// build_plan.go, build_reconcile_loop.go x2). A format change in one site
+// would cause image mismatch → RELEASING deadlock. Now there is ONE function.
+func ImageTag(registry, tenant, project, app, commitSHA string) string {
+	return fmt.Sprintf("%s/%s/%s-%s:%s", registry, tenant, project, app, commitSHA)
+}

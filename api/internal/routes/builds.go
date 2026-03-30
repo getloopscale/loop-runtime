@@ -170,7 +170,17 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// SEC-3 fix: Validate app paths before they reach shell scripts in the build pipeline.
 	// Prevents path traversal and command injection via crafted app.path values.
+	// CODE-001 fix: Also validate app names — they flow into shell scripts in
+	// loopzeroPacksDockerfileStep() and buildctl arguments.
 	for _, app := range req.Apps {
+		if err := validation.ValidateAppName(app.Name); err != nil {
+			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				"INVALID_APP_NAME",
+				fmt.Sprintf("Invalid name for app: %s", err.Error()),
+				400,
+			))
+			return
+		}
 		if err := validation.ValidateAppPath(app.Path); err != nil {
 			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"INVALID_APP_PATH",

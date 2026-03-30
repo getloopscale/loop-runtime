@@ -24,15 +24,11 @@ spec:
           maxDuration: "30s"
       container:
         # BLOCKER-1 fix: Source bundle downloaded from MinIO (not cloned from Gitea).
-        # REVIEW-SEC-MINIO: Changed from alpine/git + unauthenticated wget to
-        # minio/mc for authenticated S3 download. git installed via apk for unpack.
-        #
-        # minio/mc is Alpine-based (~30MB) and handles S3 authentication natively
-        # using AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from the injected Secret.
-        # Without authentication, the MinIO bucket would need to be public-read,
-        # allowing any pod in the cluster to read any tenant's source code.
-        # alpine/git includes git pre-installed; mc downloaded to user-writable /tmp
-        image: alpine/git:2.45.2
+        # SEC-004 fix: Replaced alpine/git + runtime wget of mc binary with
+        # minio/mc base image (same as cache-restore/cache-save CWTs). This eliminates
+        # the supply chain risk of downloading an unverified binary at runtime.
+        # git installed via apk for bundle unpacking.
+        image: minio/mc:RELEASE.2024-01-16T16-06-34Z
         env:
           - name: HOME
             value: /tmp
@@ -45,20 +41,19 @@ spec:
           - |
             set -euo pipefail
 
-            # Download mc to user-writable path (no root needed)
-            wget -q https://dl.min.io/client/mc/release/linux-amd64/mc -O /tmp/mc
-            chmod +x /tmp/mc
+            # Install git for bundle unpacking (mc image is Alpine-based)
+            apk add --no-cache git >/dev/null 2>&1
 
             BUNDLE_PATH="{{ "{{inputs.parameters.tenant-id}}" }}/source/{{ "{{inputs.parameters.build-id}}" }}.bundle"
             echo "Downloading source bundle: ${BUNDLE_PATH}"
 
-            /tmp/mc alias set loopzero "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
+            mc alias set loopzero "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
               {{- if .Values.minio.insecure }}
               --insecure \
               {{- end }}
               --api S3v4 >/dev/null 2>&1
 
-            /tmp/mc cp \
+            mc cp \
               {{- if .Values.minio.insecure }}
               --insecure \
               {{- end }}

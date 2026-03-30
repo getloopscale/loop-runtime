@@ -141,8 +141,9 @@ func TestLoopZeroPacksDockerfileStep_SingleApp(t *testing.T) {
 
 	script := extractContainerScript(t, c)
 	assertContains(t, script, "loopzeropacks-generate")
-	assertContains(t, script, "--app-path apps/api")
-	assertContains(t, script, "--output /workspace/Dockerfile")
+	// CODE-001 defense-in-depth: values are now %q-quoted in the shell script
+	assertContains(t, script, `--app-path "apps/api"`)
+	assertContains(t, script, `--output "/workspace/Dockerfile"`)
 	// Must NOT contain .api suffix for single app
 	if strings.Contains(script, "Dockerfile.api") {
 		t.Error("single app should output Dockerfile, not Dockerfile.api")

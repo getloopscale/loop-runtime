@@ -7,7 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Fix shell injection via `app.Name` in `loopzeroPacksDockerfileStep` — added `ValidateAppName` with RFC-1123 allowlist + `%q` shell quoting as defense-in-depth (#CODE-001)
+- Fix unvalidated build-arg keys flowing into `buildctl --opt` — validates env key format, skips invalid keys (#SEC-002)
+
 ### Fixed
+- Fix `GetStatus` swallowing all K8s API errors — now distinguishes `IsNotFound` from transient errors; prevents mass build failures on K8s API blips (#BRC-006)
+- Add panic recovery to reconcile loop goroutines — prevents single corrupted build from crashing entire API process (#BRC-004)
+- Fix `NormalizeApp` failure leaving build QUEUED for 5 minutes — now calls `failQueuedBuild` immediately (#BRC-001)
+- Fix Go/Python cache dirs pointing to `/root/.cache` while containers run as uid 1000 — caches now use `/workspace/.cache/` (#CODE-005)
+- Fix static asset manifest truncated at 100 files — removed `head -100` limit (#CODE-003)
+- Fix asset manifest JSON corruption on filenames with special characters — proper escaping (#CODE-006)
+- Pin `imageLoopZeroPacks` from `:latest` to `v0.1.0` — deterministic builds (#COMP-004)
+
+### Changed
+- Security scan is now a build gate — generate-dockerfile depends on security-scan completion (#CODE-008)
+- Python security scan now runs after install-deps, not in parallel — pip-audit scans installed packages (#CODE-002)
+- cwt-clone.yaml uses minio/mc base image instead of runtime wget — eliminates supply chain risk (#SEC-004)
+- Extract `naming.ImageTag()` — single source of truth for image tag format, replaces 4 duplicate sites (#ARCH-001)
+- Add `DispatchingDeliveryActivator` — selects container vs static delivery based on app type (#ARCH-009)
+- Add activation retry limit (max 3 attempts) — fails build immediately instead of 10-minute reaper wait (#BRC-003)
+- Fix duplicate `deploy.sync_failed` SSE events — `ErrActivationAlreadyHandled` sentinel prevents double emit (#BRC-002)
+- ArgoCD sync client supports CA cert file for proper TLS verification — `CACertPath` config replaces `InsecureSkipVerify` (#SEC-T02b)
+
+### Added
+- CI build job for loopzero-packs-runner — was missing, absence breaks all deploys (#COMP-003)
+- Build pod NetworkPolicy — default-deny egress with allowlist for DNS, MinIO, registry, packages (#SEC-009)
+- Document ParseArgoAppName limitation for hyphenated env names, TODO for Sprint 5 labels (#ARCH-002)
+- Unit tests for StaticDeliveryActivator — 3 tests covering nil KV client, release creation, SSE events (#COMP-007)
+
+### Removed
+- Remove 3 deprecated `scriptDockerfile*` functions — dead code with `//nolint:unused` (#COMP-005)
+- Remove `cwt-summary.yaml` — ClusterWorkflowTemplate deployed but never called by WorkflowBuilder (#COMP-006)
+
+### Previously Fixed
 - ArgoCD notifications config moved from `configs:` to root level in Helm values — was being silently ignored by argo-cd chart (#MEET-015-IaC)
 - Pulumi `installArgoCD()` now includes full config: RBAC, accounts, notifications, metrics, security contexts — was deploying with minimal inline values (#MEET-015-IaC)
 - Gitea bootstrap Job uses `deleteBeforeReplace` + `replaceOnChanges` — fixes `pulumi up` failure when TTL garbage-collects completed Job (#MEET-015-IaC)

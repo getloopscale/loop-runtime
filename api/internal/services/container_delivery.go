@@ -106,8 +106,13 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Bui
 	if err := c.triggerSyncWithRetry(ctx, argoAppName); err != nil {
 		slog.Error("argocd trigger sync failed after retries",
 			"build_id", build.ID, "app", argoAppName, "error", err)
-		// Sync trigger failed — fail the release immediately
-		return c.phaseEFinalize(ctx, build, release, result, true)
+		// Sync trigger failed — fail the release immediately.
+		// BRC-002 fix: phaseEFinalize emits deploy.sync_failed SSE event.
+		// Return ErrActivationAlreadyHandled so OnBuildCompleted skips its own emit.
+		if finalizeErr := c.phaseEFinalize(ctx, build, release, result, true); finalizeErr != nil {
+			return finalizeErr
+		}
+		return fmt.Errorf("sync trigger failed: %w", ErrActivationAlreadyHandled)
 	}
 
 	// Emit deploy.verifying to show async verification started
