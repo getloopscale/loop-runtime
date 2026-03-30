@@ -962,6 +962,14 @@ tasks:
         else
           echo "API deployment not found (not running yet — tokens will be picked up on first start)."
         fi
+      # ArgoCD repo-server caches repo credentials at startup.
+      # After updating the repo secret with Gitea credentials, restart it.
+      - |
+        if kubectl --context {{.MGMT_CONTEXT}} -n argocd get deployment/argocd-repo-server >/dev/null 2>&1; then
+          echo "Restarting ArgoCD repo-server to pick up new credentials..."
+          kubectl --context {{.MGMT_CONTEXT}} -n argocd rollout restart deployment/argocd-repo-server
+          kubectl --context {{.MGMT_CONTEXT}} -n argocd rollout status deployment/argocd-repo-server --timeout=60s
+        fi
 
   tokens:verify:
     desc: Verify API tokens are valid (non-expired) and services are reachable
