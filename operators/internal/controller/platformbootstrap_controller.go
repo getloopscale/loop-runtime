@@ -117,10 +117,13 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 // transitionToFailed transitions the CR to Failed phase via the state machine.
+// Uses TryTransition because pb.Status.Phase comes from CRD status (external source).
 func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb *loopzerov1.PlatformBootstrap, message string) (ctrl.Result, error) {
-	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(
-		platformBootstrapSM.Transition(statemachine.State(pb.Status.Phase), statemachine.PlatformBootstrapRetryExhaust),
-	)
+	next, err := platformBootstrapSM.TryTransition(statemachine.State(pb.Status.Phase), statemachine.PlatformBootstrapRetryExhaust)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("transition to failed: %w", err)
+	}
+	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
 	pb.Status.Message = message
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
@@ -131,10 +134,13 @@ func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb
 }
 
 // transitionToNextPhase transitions the CR to the next phase via the state machine.
+// Uses TryTransition because pb.Status.Phase comes from CRD status (external source).
 func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, event statemachine.Event, message string) (ctrl.Result, error) {
-	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(
-		platformBootstrapSM.Transition(statemachine.State(pb.Status.Phase), event),
-	)
+	next, err := platformBootstrapSM.TryTransition(statemachine.State(pb.Status.Phase), event)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("transition to next phase: %w", err)
+	}
+	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
 	pb.Status.Message = message
 	pb.Status.RetryCount = 0
 	now := metav1.Now()

@@ -128,10 +128,14 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// All conditions True -> transition to Active via state machine (Rule 8).
 	// Only transition if not already Active (idempotent reconcile).
+	// Uses TryTransition because env.Status.Phase comes from CRD status (external source).
 	if env.Status.Phase != loopzerov1.EnvironmentPhaseActive {
-		env.Status.Phase = loopzerov1.EnvironmentPhase(
-			environmentSM.Transition(statemachine.State(env.Status.Phase), statemachine.EnvironmentProvisioned),
-		)
+		next, err := environmentSM.TryTransition(statemachine.State(env.Status.Phase), statemachine.EnvironmentProvisioned)
+		if err != nil {
+			logger.Error(err, "invalid state transition", "phase", env.Status.Phase)
+			return ctrl.Result{}, err
+		}
+		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
 	}
 	env.Status.Namespace = nsName
 	env.Status.ObservedGeneration = env.Generation
@@ -164,10 +168,14 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 	logger.Info("environment is being deleted", "environment", env.Name)
 
 	// Transition to Deleting via state machine (Rule 8).
+	// Uses TryTransition because env.Status.Phase comes from CRD status (external source).
 	if env.Status.Phase != loopzerov1.EnvironmentPhaseDeleting {
-		env.Status.Phase = loopzerov1.EnvironmentPhase(
-			environmentSM.Transition(statemachine.State(env.Status.Phase), statemachine.EnvironmentDeleteRequested),
-		)
+		next, err := environmentSM.TryTransition(statemachine.State(env.Status.Phase), statemachine.EnvironmentDeleteRequested)
+		if err != nil {
+			logger.Error(err, "invalid state transition for delete", "phase", env.Status.Phase)
+			return ctrl.Result{}, err
+		}
+		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
 		if err := r.Status().Update(ctx, env); err != nil {
 			return ctrl.Result{}, err
 		}

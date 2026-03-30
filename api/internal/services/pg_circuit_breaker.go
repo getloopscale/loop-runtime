@@ -156,7 +156,7 @@ func (cb *CircuitBreakerSyncClient) preCheck() error {
 // indicate a credential problem, not a transient ArgoCD outage (MEET-013 Phase 1.3).
 func (cb *CircuitBreakerSyncClient) recordResult(err error) {
 	// Auth failures bypass the circuit breaker entirely (MEET-013 Phase 1.3)
-	if err != nil && errors.Is(err, loopzeroerrors.ErrArgoCDUnauthorized) {
+	if err != nil && errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
 		metrics.ArgoCDAuthFailures.Inc()
 		cb.logger.Error("argocd auth failure — not counted toward circuit breaker",
 			"suggestion", "check ARGOCD_TOKEN or see docs/runbooks/argocd-token-regeneration.md")

@@ -161,9 +161,13 @@ func GitOpsRepoName(teamSlug, projectSlug, envName string) (string, error) {
 // Hostname returns the hostname for a service in an environment.
 // Format: "{projectSlug}-{envName}.{baseDomain}"
 // The subdomain part is sanitized to ensure RFC 1123 compliance.
-func Hostname(projectSlug, envName, baseDomain string) string {
+// Returns an error if the sanitized subdomain is empty (all-special-char inputs).
+func Hostname(projectSlug, envName, baseDomain string) (string, error) {
 	subdomain := Sanitize(fmt.Sprintf("%s-%s", projectSlug, envName))
-	return fmt.Sprintf("%s.%s", subdomain, baseDomain)
+	if subdomain == "" {
+		return "", fmt.Errorf("hostname subdomain is empty after sanitizing project %q and env %q", projectSlug, envName)
+	}
+	return fmt.Sprintf("%s.%s", subdomain, baseDomain), nil
 }
 
 // ArgoAppName returns the ArgoCD Application resource name.
@@ -189,15 +193,19 @@ func ArgoAppName(teamSlug, projectSlug, envName string) (string, error) {
 // Format: "{sanitized-hostname}-tls"
 // The hostname is sanitized (dots become hyphens) and truncated to fit
 // within MaxKubernetesNameLength including the "-tls" suffix.
-func CertSecretName(hostname string) string {
+// Returns an error if the sanitized hostname is empty.
+func CertSecretName(hostname string) (string, error) {
 	const suffix = "-tls"
 	maxBase := MaxKubernetesNameLength - len(suffix)
 	sanitized := Sanitize(hostname)
+	if sanitized == "" {
+		return "", fmt.Errorf("cert secret name is empty after sanitizing hostname %q", hostname)
+	}
 	if len(sanitized) > maxBase {
 		sanitized = sanitized[:maxBase]
 		sanitized = strings.TrimRight(sanitized, "-")
 	}
-	return sanitized + suffix
+	return sanitized + suffix, nil
 }
 
 // GitRepoBindingName returns the GitRepositoryBinding CR name for a tenant's environment.

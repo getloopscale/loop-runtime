@@ -210,10 +210,14 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		currentPhase = statemachine.TenantEmpty
 	}
 	// Only transition if not already Deleting (idempotent)
+	// Uses TryTransition because tenant.Status.Phase comes from CRD status (external source).
 	if tenant.Status.Phase != loopzerov1.TenantPhaseDeleting {
-		tenant.Status.Phase = loopzerov1.TenantPhase(
-			tenantSM.Transition(currentPhase, statemachine.TenantDelete),
-		)
+		next, err := tenantSM.TryTransition(currentPhase, statemachine.TenantDelete)
+		if err != nil {
+			logger.Error(err, "invalid state transition for delete", "phase", tenant.Status.Phase)
+			return ctrl.Result{}, err
+		}
+		tenant.Status.Phase = loopzerov1.TenantPhase(next)
 	}
 	if err := r.Status().Update(ctx, tenant); err != nil {
 		return ctrl.Result{}, err

@@ -62,8 +62,11 @@ func AggregatePlatform(components []ComponentHealth) PlatformHealth {
 	for _, c := range components {
 		severity, ok := phaseSeverity[c.Phase]
 		if !ok {
-			// Unknown phase treated as maximum severity to fail visibly.
-			severity = len(phaseSeverity)
+			// Unknown phase clamped to PhaseFailed severity — the highest defined phase.
+			// This prevents unknown strings from ranking above Failed and leaking into
+			// the Overall field. The worst phase returned is always PhaseFailed.
+			c = ComponentHealth{Name: c.Name, Phase: PhaseFailed, Detail: c.Detail}
+			severity = phaseSeverity[PhaseFailed]
 		}
 		if severity > worstSeverity {
 			worst = c.Phase

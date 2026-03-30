@@ -177,7 +177,10 @@ func (r *ExposureReconciler) checkCertificateReady(ctx context.Context, route *l
 		return true
 	}
 
-	secretName := naming.CertSecretName(route.Spec.Hostname)
+	secretName, err := naming.CertSecretName(route.Spec.Hostname)
+	if err != nil {
+		return false
+	}
 	var secret corev1.Secret
 	key := types.NamespacedName{
 		Name:      secretName,

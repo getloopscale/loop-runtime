@@ -50,16 +50,12 @@ const (
 	ReleaseReactivated        Event = "Reactivated" // Rollback reactivates a SUPERSEDED or ROLLED_BACK release
 )
 
-// IsReleaseTerminal returns true if the given state is a terminal release state
-// (SUPERSEDED, ROLLED_BACK, or CANCELLED). This is a standalone helper that avoids
-// requiring a Machine instance, useful in places like the ReleaseReaper and
-// orchestrators that only need a quick terminal-state check.
+// IsReleaseTerminal returns true if the given state is a truly terminal release state.
+// Only CANCELLED is terminal — SUPERSEDED and ROLLED_BACK can be reactivated
+// via the ReleaseReactivated event (rollback flow). This is consistent with
+// NewReleaseMachine().Terminal which only lists ReleaseCancelled.
 func IsReleaseTerminal(state State) bool {
-	switch state {
-	case ReleaseSuperseded, ReleaseRolledBack, ReleaseCancelled:
-		return true
-	}
-	return false
+	return state == ReleaseCancelled
 }
 
 // IsReleaseReapable returns true if the state is one the ReleaseReaper should skip

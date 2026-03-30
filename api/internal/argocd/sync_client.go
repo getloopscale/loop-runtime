@@ -84,7 +84,7 @@ func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 }
 
 // ValidateToken checks that the configured token is valid by calling
-// GET /api/v1/session/userinfo. Returns ErrArgoCDUnauthorized if invalid.
+// GET /api/v1/session/userinfo. Returns ErrDeployServiceAuthFailed if invalid.
 // Called at API startup to fail fast with a clear error (MEET-013 Phase 1.7).
 func (c *SyncClient) ValidateToken(ctx context.Context) error {
 	url := fmt.Sprintf("%s/api/v1/session/userinfo", c.baseURL)
@@ -101,7 +101,7 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return loopzeroerrors.ErrArgoCDUnauthorized
+		return loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	return nil
 }
@@ -125,7 +125,7 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return loopzeroerrors.ErrArgoCDUnauthorized
+		return loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	if resp.StatusCode == 404 {
 		return fmt.Errorf("argocd sync: application %q not found", appName)
@@ -163,7 +163,7 @@ func (c *SyncClient) TerminateOperation(ctx context.Context, appName string) err
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return loopzeroerrors.ErrArgoCDUnauthorized
+		return loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	// 404 means no operation is running — idempotent success
 	if resp.StatusCode == 404 {
@@ -238,7 +238,7 @@ func (c *SyncClient) GetAppStatus(ctx context.Context, appName string, deployedA
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return false, false, loopzeroerrors.ErrArgoCDUnauthorized
+		return false, false, loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	if resp.StatusCode == 404 {
 		return false, false, fmt.Errorf("application %q not found", appName)
@@ -317,7 +317,7 @@ func (c *SyncClient) GetSyncRevision(ctx context.Context, appName string) (strin
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return "", loopzeroerrors.ErrArgoCDUnauthorized
+		return "", loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	if resp.StatusCode >= 400 {
 		return "", fmt.Errorf("get sync revision: status %d", resp.StatusCode)
