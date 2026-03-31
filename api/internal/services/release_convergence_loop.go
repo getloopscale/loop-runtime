@@ -263,6 +263,9 @@ func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *d
 			"release_id", release.ID, "error", err)
 		return
 	}
+	// MEET-2026-03-31-024: Clean up syncRetriggers entry to prevent memory leak.
+	r.syncRetriggers.Delete(release.ID)
+
 	r.logger.Info("release convergence: release activated",
 		"release_id", release.ID, "build_id", release.BuildID)
 }
@@ -290,6 +293,9 @@ func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Re
 	if _, err := r.eventStore.Append(ctx, release.BuildID, "deploy.sync_failed", failedData); err != nil {
 		r.logger.Error("failed to emit deploy.sync_failed event", "release_id", release.ID, "error", err)
 	}
+
+	// MEET-2026-03-31-024: Clean up syncRetriggers entry to prevent memory leak.
+	r.syncRetriggers.Delete(release.ID)
 }
 
 // maxSyncRetriggers bounds the number of times the convergence loop will

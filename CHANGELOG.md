@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- ADR-0008: Cell-Based Architecture for 50k+ app scale (#MEET-024)
+  - Cells provide linear scaling: 1 Cell = ~5k apps, 10 Cells = 50k apps
+  - Each Cell has independent K8s cluster + ArgoCD + Traefik + Prometheus
+  - PlacementEngine assigns tenants to Cells, CellRouter routes operations
+  - Phase 0 plan: add cell_id to tenant model, no behavioral change
+  - Supersedes ADR-0007 (ArgoCD Application model)
+  - Evidence: CNOE 50k benchmark, Fly.io cell-based, Heroku Private Spaces, K8s 150k pod limit
 - Database Hardening Phase 1 — MEET-2026-03-31-024 (#MEET-024)
   - Migration 000009: Role separation (loopzero_api, loopzero_migrate, loopzero_readonly)
   - Migration 000009: Row-Level Security on all tenant-scoped tables (builds, releases,
@@ -24,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Runbooks: pool-exhaustion, slow-queries, rls-disable, credential-rotation
 
 ### Fixed
+- SetGitCommit failure in container_delivery now fatal — prevents wrong-version activation
+  when SyncCallbackActivator revision guard is bypassed by empty GitCommit (#MEET-024 BUG-03)
+- syncRetriggers memory leak in ReleaseConvergenceLoop — cleanup on activate and fail (#MEET-024 BUG-04)
 - Idempotency key lookup now scoped by tenant_id — prevents cross-tenant response replay (#MEET-024 BUG-01)
 - Secret store Set() race condition: replaced SELECT+INSERT with atomic UPSERT using xmax (#MEET-024 BUG-02)
 - DSN builder default sslmode changed from "disable" to "require" (#MEET-024 H3)
