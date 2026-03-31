@@ -144,8 +144,8 @@ type k8sDeployStrategy struct {
 }
 
 type k8sRollingUpdate struct {
-	MaxUnavailable string `json:"maxUnavailable"`
-	MaxSurge       string `json:"maxSurge"`
+	MaxUnavailable int `json:"maxUnavailable"`
+	MaxSurge       int `json:"maxSurge"`
 }
 
 type k8sLabelSelector struct {
@@ -636,8 +636,8 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 			Strategy: &k8sDeployStrategy{
 				Type: "RollingUpdate",
 				RollingUpdate: &k8sRollingUpdate{
-					MaxUnavailable: "0",
-					MaxSurge:       "1",
+					MaxUnavailable: 0,
+					MaxSurge:       1,
 				},
 			},
 			Selector: k8sLabelSelector{MatchLabels: selectorLabels},

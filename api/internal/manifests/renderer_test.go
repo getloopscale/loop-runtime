@@ -501,10 +501,10 @@ func TestRender_Deployment_ZeroDowntimeRollingStrategy(t *testing.T) {
 	if dep.Spec.Strategy.RollingUpdate == nil {
 		t.Fatal("strategy must have rollingUpdate config")
 	}
-	if dep.Spec.Strategy.RollingUpdate.MaxUnavailable != "0" {
-		t.Errorf("maxUnavailable: got %q, want 0 (zero-downtime)", dep.Spec.Strategy.RollingUpdate.MaxUnavailable)
+	if dep.Spec.Strategy.RollingUpdate.MaxUnavailable != 0 {
+		t.Errorf("maxUnavailable: got %d, want 0 (zero-downtime)", dep.Spec.Strategy.RollingUpdate.MaxUnavailable)
 	}
-	if dep.Spec.Strategy.RollingUpdate.MaxSurge != "1" {
+	if dep.Spec.Strategy.RollingUpdate.MaxSurge != 1 {
 		t.Errorf("maxSurge: got %q, want 1", dep.Spec.Strategy.RollingUpdate.MaxSurge)
 	}
 }
@@ -573,8 +573,8 @@ func TestRender_WorkerApp_DeploymentProtection(t *testing.T) {
 	if dep.Spec.Strategy == nil || dep.Spec.Strategy.RollingUpdate == nil {
 		t.Fatal("worker must have rolling update strategy")
 	}
-	if dep.Spec.Strategy.RollingUpdate.MaxUnavailable != "0" {
-		t.Errorf("worker maxUnavailable: got %q, want 0", dep.Spec.Strategy.RollingUpdate.MaxUnavailable)
+	if dep.Spec.Strategy.RollingUpdate.MaxUnavailable != 0 {
+		t.Errorf("worker maxUnavailable: got %d, want 0", dep.Spec.Strategy.RollingUpdate.MaxUnavailable)
 	}
 	if dep.Spec.Template.Spec.TerminationGracePeriodSeconds != 30 {
 		t.Errorf("worker terminationGracePeriodSeconds: got %d, want 30", dep.Spec.Template.Spec.TerminationGracePeriodSeconds)
