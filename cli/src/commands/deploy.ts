@@ -38,7 +38,6 @@ interface SubmitBuildInput {
   idempotencyKey: string;
   commitSha: string;
   noCache?: boolean;
-  force?: boolean;
 }
 
 interface SubmitBuildResult {
@@ -104,7 +103,6 @@ export interface DeployOptions {
   wait?: boolean;
   json?: boolean;
   noCache?: boolean;
-  force?: boolean;
 }
 
 export class DeployCommand {
@@ -293,7 +291,6 @@ export class DeployCommand {
         idempotencyKey,
         commitSha: uploadResult.commit_sha,
         noCache: opts.noCache,
-        force: opts.force,
       });
     } catch (err) {
       return this.handleError(opts, err, 'Deploy rejected');

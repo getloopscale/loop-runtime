@@ -4,6 +4,7 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
@@ -23,22 +24,42 @@ import (
 // When tracing is disabled (no TracerProvider registered), otelhttp produces
 // no-op spans with zero overhead.
 func OtelHTTP(next http.Handler) http.Handler {
-	wrapped := otelhttp.NewHandler(next, "loopzero-api",
+	// Wrap next with a trace_id injector that runs INSIDE the otelhttp span.
+	// otelhttp.NewHandler creates the span and passes it via context to `inner`.
+	// The injector extracts trace_id from the span and adds it to the slog context
+	// BEFORE downstream handlers execute, so all request logs include trace_id.
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		span := trace.SpanFromContext(r.Context())
+		if span.SpanContext().IsValid() {
+			traceID := span.SpanContext().TraceID().String()
+			// Add trace_id to the slog default handler for this request's context.
+			// This does NOT modify Correlation-ID — trace_id is a separate field (C2).
+			ctx := r.Context()
+			logger := slog.Default().With("trace_id", traceID)
+			ctx = contextWithLogger(ctx, logger)
+			r = r.WithContext(ctx)
+		}
+		next.ServeHTTP(w, r)
+	})
+
+	return otelhttp.NewHandler(inner, "loopzero-api",
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
 			return r.Method + " " + r.URL.Path
 		}),
 	)
+}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		wrapped.ServeHTTP(w, r)
+type loggerCtxKey struct{}
 
-		// After otelhttp processes the request, extract trace_id for structured logging.
-		// This does NOT modify Correlation-ID — trace_id is a separate field (C2).
-		span := trace.SpanFromContext(r.Context())
-		if span.SpanContext().IsValid() {
-			slog.DebugContext(r.Context(), "trace context active",
-				"trace_id", span.SpanContext().TraceID().String(),
-			)
-		}
-	})
+// contextWithLogger stores a logger in context for trace_id propagation.
+func contextWithLogger(ctx context.Context, logger *slog.Logger) context.Context {
+	return context.WithValue(ctx, loggerCtxKey{}, logger)
+}
+
+// LoggerFromContext retrieves the trace-enriched logger, falling back to slog.Default().
+func LoggerFromContext(ctx context.Context) *slog.Logger {
+	if l, ok := ctx.Value(loggerCtxKey{}).(*slog.Logger); ok {
+		return l
+	}
+	return slog.Default()
 }

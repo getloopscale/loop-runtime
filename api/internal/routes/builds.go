@@ -43,7 +43,6 @@ type SubmitBuildInput struct {
 	Environment   string
 	CommitSHA     string
 	NoCache       bool // Skip BuildKit layer cache (full rebuild)
-	Force         bool // Deploy even if current release is unhealthy (MEET-021 F3-C1)
 	Apps          []AppInput
 	CreatedBy     string
 	CorrelationID string
@@ -119,7 +118,6 @@ type createBuildRequest struct {
 	Environment string     `json:"environment"`
 	CommitSHA   string     `json:"commit_sha,omitempty"`
 	NoCache     bool       `json:"no_cache,omitempty"` // Skip BuildKit layer cache (full rebuild)
-	Force       bool       `json:"force,omitempty"`    // Deploy over unhealthy release (MEET-021)
 	Apps        []AppInput `json:"apps,omitempty"`
 }
 
@@ -199,7 +197,6 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Environment:   req.Environment,
 		CommitSHA:     req.CommitSHA,
 		NoCache:       req.NoCache,
-		Force:         req.Force,
 		Apps:          req.Apps,
 		CreatedBy:     uc.UserID,
 		CorrelationID: r.Header.Get("Correlation-ID"), //nolint:contextcheck // header from original request
