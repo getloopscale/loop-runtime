@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -136,7 +137,12 @@ func ActivateReleaseKernel(
 
 // releaseAppsToActivationApps converts the JSON-encoded apps from a release
 // into ActivationAppInfo structs for the activation kernel.
+// F-03 fix: computes URL for server/frontend apps so deploy.completed SSE event includes it.
 func releaseAppsToActivationApps(release *db.Release) []ActivationAppInfo {
+	// F-03 fix: compute URL for server/frontend apps using baseDomain from env.
+	// The async activation paths (convergence loop, callback activator) emit
+	// deploy.completed events that need URLs for the CLI to display.
+	baseDomain := os.Getenv("BASE_DOMAIN")
 	var specs []db.BuildAppSpec
 	if release.Apps != nil {
 		if err := json.Unmarshal(release.Apps, &specs); err != nil {
@@ -146,7 +152,12 @@ func releaseAppsToActivationApps(release *db.Release) []ActivationAppInfo {
 	}
 	apps := make([]ActivationAppInfo, 0, len(specs))
 	for _, s := range specs {
-		apps = append(apps, ActivationAppInfo{Name: s.Name, Status: "deployed"})
+		url := ""
+		if (s.Type == "server" || s.Type == "frontend") && baseDomain != "" {
+			url = fmt.Sprintf("https://%s-%s-%s-%s.%s",
+				release.TenantID, release.ProjectID, s.Name, release.Environment, baseDomain)
+		}
+		apps = append(apps, ActivationAppInfo{Name: s.Name, Status: "deployed", URL: url})
 	}
 	return apps
 }

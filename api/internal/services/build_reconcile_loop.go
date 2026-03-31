@@ -89,6 +89,11 @@ type BuildReconcileLoop struct {
 	// After maxActivationAttempts consecutive failures, the build is failed
 	// immediately instead of waiting for the 10-minute reaper timeout.
 	activationAttempts sync.Map // map[string]int
+
+	// F-01 fix: tracks OnBuildCompleted failure count per build ID.
+	// After maxCompletionAttempts failures, the build is failed to avoid
+	// permanent RUNNING state when completion processing is broken.
+	completionAttempts sync.Map // map[string]int
 }
 
 // NewBuildReconcileLoop creates a new BuildReconcileLoop.
@@ -278,6 +283,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 
 	metrics.BuildsTotal.WithLabelValues(build.TenantID, build.Environment, "succeeded").Inc()
 	metrics.BuildDuration.WithLabelValues(build.TenantID, build.Environment, "succeeded").Observe(time.Since(build.CreatedAt).Seconds())
+	metrics.BuildQueueDepth.Dec()
 
 	// Compute image references from deterministic pattern
 	var buildApps []AppRelease
@@ -341,8 +347,24 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	}
 
 	if err := r.orch.OnBuildCompleted(ctx, build.ID, result); err != nil {
-		r.logger.Error("reconcile loop: build completion processing failed",
-			"build_id", build.ID, "error", err)
+		// F-01 fix: track completion failures. After 3 attempts, fail the build
+		// to prevent permanent RUNNING state when completion processing is broken.
+		attemptsVal, _ := r.completionAttempts.LoadOrStore(build.ID, 0)
+		attempts := attemptsVal.(int) + 1
+		r.completionAttempts.Store(build.ID, attempts)
+
+		if attempts >= maxActivationAttempts {
+			r.logger.Error("reconcile loop: build completion failed after max attempts, failing build",
+				"build_id", build.ID, "attempts", attempts, "error", err)
+			r.completionAttempts.Delete(build.ID)
+			r.failBuild(ctx, build, fmt.Sprintf("Build completion processing failed after %d attempts: %v", attempts, err))
+			return
+		}
+
+		r.logger.Error("reconcile loop: build completion processing failed, will retry",
+			"build_id", build.ID, "attempt", attempts, "error", err)
+	} else {
+		r.completionAttempts.Delete(build.ID)
 	}
 }
 
@@ -497,6 +519,7 @@ func (r *BuildReconcileLoop) completeBuild(ctx context.Context, build *db.Build)
 func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, reason string) {
 	metrics.BuildsTotal.WithLabelValues(build.TenantID, build.Environment, "failed").Inc()
 	metrics.BuildDuration.WithLabelValues(build.TenantID, build.Environment, "failed").Observe(time.Since(build.CreatedAt).Seconds())
+	metrics.BuildQueueDepth.Dec()
 
 	err := r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		// Re-fetch inside lock — state may have changed

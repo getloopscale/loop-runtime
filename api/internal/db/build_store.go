@@ -161,11 +161,27 @@ func (s *PostgresBuildStore) UpdateStatus(ctx context.Context, tx DBTX, buildID 
 		return nil, err
 	}
 
-	// Update in DB
-	_, err = executor.Exec(ctx,
-		`UPDATE builds SET status = $1 WHERE id = $2`,
-		string(newState), buildID,
-	)
+	// Update in DB — set timing fields based on state transition.
+	// RUNNING: record started_at (build execution began)
+	// Terminal states (SUCCEEDED/FAILED/CANCELLED): record finished_at + compute duration
+	var query string
+	var args []interface{}
+
+	switch newState {
+	case statemachine.BuildRunning:
+		query = `UPDATE builds SET status = $1, started_at = NOW() WHERE id = $2`
+		args = []interface{}{string(newState), buildID}
+	case statemachine.BuildSucceeded, statemachine.BuildFailed, statemachine.BuildCancelled:
+		query = `UPDATE builds SET status = $1, finished_at = NOW(),
+			duration_seconds = COALESCE(EXTRACT(EPOCH FROM (NOW() - started_at))::int, 0)
+			WHERE id = $2`
+		args = []interface{}{string(newState), buildID}
+	default:
+		query = `UPDATE builds SET status = $1 WHERE id = $2`
+		args = []interface{}{string(newState), buildID}
+	}
+
+	_, err = executor.Exec(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("build store: update status failed: %w", err)
 	}
