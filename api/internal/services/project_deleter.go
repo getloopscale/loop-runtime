@@ -85,6 +85,14 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInp
 		DeletedEnvironments: []string{},
 	}
 
+	// CLAUDE.md "Project name vs project ID": builds and environment_targets store
+	// the project name (from loopzero.yaml), not the UUID from the projects table.
+	// All queries against these tables must use the name.
+	projectNameForQueries := req.ProjectName
+	if projectNameForQueries == "" {
+		projectNameForQueries = req.ProjectID
+	}
+
 	if req.Environment != "" {
 		// Single environment delete
 		cancelled, err := d.deleteEnvironment(ctx, req, req.Environment)
@@ -95,7 +103,7 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInp
 		result.DeletedEnvironments = append(result.DeletedEnvironments, req.Environment)
 	} else {
 		// All environments
-		targets, err := d.envTargetStore.ListByProject(ctx, req.TenantID, req.ProjectID)
+		targets, err := d.envTargetStore.ListByProject(ctx, req.TenantID, projectNameForQueries)
 		if err != nil {
 			return nil, fmt.Errorf("project delete: list environments: %w", err)
 		}
@@ -165,18 +173,27 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.Proje
 	var cancelledBuilds int
 	var workflowIDs []string
 
+	// CLAUDE.md "Project name vs project ID": builds store the project name
+	// (from loopzero.yaml) as project_id, not the UUID from the projects table.
+	// The advisory lock hash and CancelActiveBuilds query must use the same
+	// value that the deploy flow uses — the project name.
+	buildProjectID := req.ProjectName
+	if buildProjectID == "" {
+		buildProjectID = req.ProjectID // fallback to UUID if name unavailable
+	}
+
 	// Phase 1 (Lock): Cancel active builds + delete environment target
-	err := d.locker.WithLock(ctx, req.TenantID, req.ProjectID, env, func(tx db.DBTX) error {
+	err := d.locker.WithLock(ctx, req.TenantID, buildProjectID, env, func(tx db.DBTX) error {
 		// Cancel active builds inside the lock (Rule 6)
-		cancelled, wfIDs, err := d.buildStore.CancelActiveBuilds(ctx, tx, req.TenantID, req.ProjectID, env)
+		cancelled, wfIDs, err := d.buildStore.CancelActiveBuilds(ctx, tx, req.TenantID, buildProjectID, env)
 		if err != nil {
 			return fmt.Errorf("cancel active builds: %w", err)
 		}
 		cancelledBuilds = cancelled
 		workflowIDs = wfIDs
 
-		// Delete environment target
-		if err := d.envTargetStore.DeleteTarget(ctx, tx, req.TenantID, req.ProjectID, env); err != nil {
+		// Delete environment target (uses project name, not UUID — same as builds)
+		if err := d.envTargetStore.DeleteTarget(ctx, tx, req.TenantID, buildProjectID, env); err != nil {
 			return fmt.Errorf("delete environment target: %w", err)
 		}
 
