@@ -27,7 +27,7 @@ loki:
     retention_period: 168h                   # 7 days
     max_query_series: 500
     max_query_length: 721h
-  schema_config:
+  schemaConfig:
     configs:
       - from: "2026-01-01"
         store: tsdb
@@ -48,6 +48,16 @@ singleBinary:
     limits:
       cpu: 500m
       memory: 512Mi
+
+# Explicitly disable SimpleScalable components (required by chart v6.24+)
+# Without this, the chart validation fails: "more than zero replicas for both
+# single binary and simple scalable targets"
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
 
 # Gateway not needed — API queries Loki directly via ClusterIP
 gateway:
