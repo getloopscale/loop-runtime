@@ -90,8 +90,11 @@ type Config struct {
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 
-	// Middleware chain: metrics → correlation-id → logging
+	// Middleware chain: metrics → otel-tracing → correlation-id → logging
+	// OtelHTTP MUST be before CorrelationID so span context is available,
+	// but CorrelationID remains independent (C2 — MEET-020).
 	r.Use(metrics.HTTPMetrics)
+	r.Use(middleware.OtelHTTP)
 	r.Use(middleware.CorrelationID)
 	r.Use(middleware.RequestLogging(cfg.Logger))
 

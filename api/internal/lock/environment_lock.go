@@ -17,6 +17,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
@@ -39,6 +44,16 @@ type Tx = pgx.Tx
 // Collision risk is acceptable (~0.001% with 2000 envs): impact is false serialization
 // (liveness), not data corruption (safety).
 func WithEnvironmentLock[T any](ctx context.Context, pool *pgxpool.Pool, tenant, project, env string, fn func(tx Tx) (T, error)) (T, error) {
+	// MEET-2026-03-30-020: Span wraps the entire lock lifecycle (acquire + fn + commit).
+	// Instrumented AROUND the lock, NOT inside the critical section (C3, meeting condition).
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.lock.acquire",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", tenant),
+			attribute.String("loopzero.project", project),
+			attribute.String("loopzero.environment", env),
+		))
+	defer span.End()
+
 	var zero T
 
 	// Begin transaction with READ COMMITTED isolation (PostgreSQL default,
@@ -70,6 +85,7 @@ func WithEnvironmentLock[T any](ctx context.Context, pool *pgxpool.Pool, tenant,
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", lockKey); err != nil {
 		if isLockTimeoutError(err) {
 			metrics.LockConflicts.WithLabelValues(tenant, env).Inc()
+			span.SetStatus(codes.Error, "lock timeout")
 			return zero, loopzeroerrors.ErrLockTimeout
 		}
 		return zero, fmt.Errorf("lock: acquire advisory lock: %w", err)

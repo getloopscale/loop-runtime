@@ -1,0 +1,37 @@
+# ValidatingAdmissionPolicy: Protect platform-created NetworkPolicies from tenant deletion.
+# Enterprise RBAC grants networkpolicies delete — this prevents deletion of platform policies.
+# F2-C2: Mitigates RISK-3 from MEET-2026-03-30-021 security review.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: loopzero-protect-platform-networkpolicies
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["networking.k8s.io"]
+        apiVersions: ["v1"]
+        operations: ["DELETE"]
+        resources: ["networkpolicies"]
+    namespaceSelector:
+      matchLabels:
+        loopzero.io/managed-by: environment-controller
+  validations:
+    - expression: >-
+        !has(object.metadata.labels) ||
+        !('loopzero.io/managed-by' in object.metadata.labels) ||
+        object.metadata.labels['loopzero.io/managed-by'] != 'environment-controller'
+      message: "Platform-managed NetworkPolicies cannot be deleted by tenants. Contact platform team."
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: loopzero-protect-platform-networkpolicies-binding
+spec:
+  policyName: loopzero-protect-platform-networkpolicies
+  validationActions:
+    - Deny
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        loopzero.io/managed-by: environment-controller

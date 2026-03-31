@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
@@ -69,6 +71,9 @@ func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // local dev only
 			}
 		}
+		// MEET-2026-03-30-020: Wrap transport with OTel for trace context propagation.
+		// Injects traceparent header into outgoing requests to ArgoCD.
+		client.Transport = otelhttp.NewTransport(client.Transport)
 	}
 
 	tp := cfg.TokenProvider

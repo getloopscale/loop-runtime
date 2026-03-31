@@ -21,7 +21,7 @@ func baseInput() RenderInput {
 	}
 }
 
-func TestRender_ServerApp_ProducesFourDocuments(t *testing.T) {
+func TestRender_ServerApp_ProducesFiveDocuments(t *testing.T) {
 	input := baseInput()
 	input.Apps = []AppManifestInput{
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
@@ -30,12 +30,13 @@ func TestRender_ServerApp_ProducesFourDocuments(t *testing.T) {
 	result := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
-	if len(docs) != 4 {
-		t.Fatalf("expected 4 YAML documents (Deployment, Service, Certificate, IngressRoute), got %d", len(docs))
+	// Deployment + PDB + Service + Certificate + IngressRoute = 5
+	if len(docs) != 5 {
+		t.Fatalf("expected 5 YAML documents (Deployment, PDB, Service, Certificate, IngressRoute), got %d", len(docs))
 	}
 }
 
-func TestRender_WorkerApp_ProducesOneDocument(t *testing.T) {
+func TestRender_WorkerApp_ProducesTwoDocuments(t *testing.T) {
 	input := baseInput()
 	input.Apps = []AppManifestInput{
 		{Name: "processor", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
@@ -44,12 +45,13 @@ func TestRender_WorkerApp_ProducesOneDocument(t *testing.T) {
 	result := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
-	if len(docs) != 1 {
-		t.Fatalf("expected 1 YAML document (Deployment only), got %d", len(docs))
+	// Deployment + PDB = 2 (F1-C2: workers MUST get PDB)
+	if len(docs) != 2 {
+		t.Fatalf("expected 2 YAML documents (Deployment, PDB), got %d", len(docs))
 	}
 }
 
-func TestRender_FrontendApp_ProducesFourDocuments(t *testing.T) {
+func TestRender_FrontendApp_ProducesFiveDocuments(t *testing.T) {
 	input := baseInput()
 	input.Apps = []AppManifestInput{
 		{Name: "dashboard", Type: "frontend", Port: 80, ImageRef: "reg:5000/acme/webapp:abc123"},
@@ -58,8 +60,9 @@ func TestRender_FrontendApp_ProducesFourDocuments(t *testing.T) {
 	result := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
-	if len(docs) != 4 {
-		t.Fatalf("expected 4 YAML documents (Deployment, Service, Certificate, IngressRoute), got %d", len(docs))
+	// Deployment + PDB + Service + Certificate + IngressRoute = 5
+	if len(docs) != 5 {
+		t.Fatalf("expected 5 YAML documents (Deployment, PDB, Service, Certificate, IngressRoute), got %d", len(docs))
 	}
 }
 
@@ -148,7 +151,7 @@ func TestRender_IngressRouteTLS_UsesSecretName(t *testing.T) {
 	}
 }
 
-func TestRender_WorkerApp_HasNoPorts(t *testing.T) {
+func TestRender_WorkerApp_HasNoPortsOrProbes(t *testing.T) {
 	input := baseInput()
 	input.Apps = []AppManifestInput{
 		{Name: "worker", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
@@ -158,6 +161,9 @@ func TestRender_WorkerApp_HasNoPorts(t *testing.T) {
 
 	if strings.Contains(result, "containerPort") {
 		t.Error("worker app should not have container ports")
+	}
+	if strings.Contains(result, "startupProbe") {
+		t.Error("worker app should not have startup probe")
 	}
 	if strings.Contains(result, "readinessProbe") {
 		t.Error("worker app should not have readiness probe")
@@ -251,9 +257,9 @@ func TestRender_MultipleApps(t *testing.T) {
 	result := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
-	// server=4 + worker=1 + frontend=4 = 9
-	if len(docs) != 9 {
-		t.Fatalf("expected 9 YAML documents, got %d", len(docs))
+	// server=5 + worker=2 + frontend=5 = 12
+	if len(docs) != 12 {
+		t.Fatalf("expected 12 YAML documents, got %d", len(docs))
 	}
 
 	// All documents must be valid YAML
@@ -329,5 +335,281 @@ func TestRender_AllDocumentsAreValidYAML(t *testing.T) {
 		if _, ok := parsed["metadata"]; !ok {
 			t.Errorf("document %d missing metadata", i)
 		}
+	}
+}
+
+// --- Structural tests (F1-C7: parse YAML into typed structs, not string matching) ---
+
+// parseDeployment extracts the first Deployment from rendered output.
+func parseDeployment(t *testing.T, rendered string) k8sDeployment {
+	t.Helper()
+	docs := strings.Split(rendered, "\n---\n")
+	for _, doc := range docs {
+		var resource struct {
+			Kind string `json:"kind"`
+		}
+		if err := sigsyaml.Unmarshal([]byte(doc), &resource); err != nil {
+			continue
+		}
+		if resource.Kind == "Deployment" {
+			var dep k8sDeployment
+			if err := sigsyaml.Unmarshal([]byte(doc), &dep); err != nil {
+				t.Fatalf("failed to parse Deployment: %v", err)
+			}
+			return dep
+		}
+	}
+	t.Fatal("no Deployment found in rendered output")
+	return k8sDeployment{}
+}
+
+// parsePDB extracts the first PDB from rendered output.
+func parsePDB(t *testing.T, rendered string) k8sPDB {
+	t.Helper()
+	docs := strings.Split(rendered, "\n---\n")
+	for _, doc := range docs {
+		var resource struct {
+			Kind string `json:"kind"`
+		}
+		if err := sigsyaml.Unmarshal([]byte(doc), &resource); err != nil {
+			continue
+		}
+		if resource.Kind == "PodDisruptionBudget" {
+			var pdb k8sPDB
+			if err := sigsyaml.Unmarshal([]byte(doc), &pdb); err != nil {
+				t.Fatalf("failed to parse PDB: %v", err)
+			}
+			return pdb
+		}
+	}
+	t.Fatal("no PodDisruptionBudget found in rendered output")
+	return k8sPDB{}
+}
+
+func TestRender_ServerApp_StartupProbe(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	dep := parseDeployment(t, Render(input))
+	container := dep.Spec.Template.Spec.Containers[0]
+
+	if container.StartupProbe == nil {
+		t.Fatal("server app must have startup probe")
+	}
+	sp := container.StartupProbe
+	if sp.HTTPGet.Path != "/health" {
+		t.Errorf("startup probe path: got %q, want /health", sp.HTTPGet.Path)
+	}
+	if sp.PeriodSeconds != 5 {
+		t.Errorf("startup probe periodSeconds: got %d, want 5", sp.PeriodSeconds)
+	}
+	if sp.TimeoutSeconds != 3 {
+		t.Errorf("startup probe timeoutSeconds: got %d, want 3", sp.TimeoutSeconds)
+	}
+	if sp.FailureThreshold != 30 {
+		t.Errorf("startup probe failureThreshold: got %d, want 30 (150s max startup)", sp.FailureThreshold)
+	}
+}
+
+func TestRender_ServerApp_ReadinessProbeThresholds(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	dep := parseDeployment(t, Render(input))
+	container := dep.Spec.Template.Spec.Containers[0]
+
+	if container.ReadinessProbe == nil {
+		t.Fatal("server app must have readiness probe")
+	}
+	rp := container.ReadinessProbe
+	if rp.PeriodSeconds != 10 {
+		t.Errorf("readiness periodSeconds: got %d, want 10", rp.PeriodSeconds)
+	}
+	if rp.TimeoutSeconds != 3 {
+		t.Errorf("readiness timeoutSeconds: got %d, want 3", rp.TimeoutSeconds)
+	}
+	if rp.SuccessThreshold != 1 {
+		t.Errorf("readiness successThreshold: got %d, want 1", rp.SuccessThreshold)
+	}
+	if rp.FailureThreshold != 3 {
+		t.Errorf("readiness failureThreshold: got %d, want 3", rp.FailureThreshold)
+	}
+}
+
+func TestRender_ServerApp_LivenessProbeThresholds(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	dep := parseDeployment(t, Render(input))
+	container := dep.Spec.Template.Spec.Containers[0]
+
+	if container.LivenessProbe == nil {
+		t.Fatal("server app must have liveness probe")
+	}
+	lp := container.LivenessProbe
+	if lp.PeriodSeconds != 15 {
+		t.Errorf("liveness periodSeconds: got %d, want 15", lp.PeriodSeconds)
+	}
+	if lp.TimeoutSeconds != 3 {
+		t.Errorf("liveness timeoutSeconds: got %d, want 3", lp.TimeoutSeconds)
+	}
+	if lp.SuccessThreshold != 1 {
+		t.Errorf("liveness successThreshold: got %d, want 1", lp.SuccessThreshold)
+	}
+	if lp.FailureThreshold != 5 {
+		t.Errorf("liveness failureThreshold: got %d, want 5 (more tolerant than readiness)", lp.FailureThreshold)
+	}
+}
+
+func TestRender_Deployment_ProgressDeadlineAndMinReady(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	dep := parseDeployment(t, Render(input))
+
+	// F1-C1: progressDeadlineSeconds = 210 (not 180)
+	if dep.Spec.ProgressDeadlineSeconds != 210 {
+		t.Errorf("progressDeadlineSeconds: got %d, want 210", dep.Spec.ProgressDeadlineSeconds)
+	}
+	if dep.Spec.MinReadySeconds != 10 {
+		t.Errorf("minReadySeconds: got %d, want 10", dep.Spec.MinReadySeconds)
+	}
+}
+
+func TestRender_Deployment_ZeroDowntimeRollingStrategy(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	dep := parseDeployment(t, Render(input))
+
+	if dep.Spec.Strategy == nil {
+		t.Fatal("deployment must have strategy defined")
+	}
+	if dep.Spec.Strategy.Type != "RollingUpdate" {
+		t.Errorf("strategy type: got %q, want RollingUpdate", dep.Spec.Strategy.Type)
+	}
+	if dep.Spec.Strategy.RollingUpdate == nil {
+		t.Fatal("strategy must have rollingUpdate config")
+	}
+	if dep.Spec.Strategy.RollingUpdate.MaxUnavailable != "0" {
+		t.Errorf("maxUnavailable: got %q, want 0 (zero-downtime)", dep.Spec.Strategy.RollingUpdate.MaxUnavailable)
+	}
+	if dep.Spec.Strategy.RollingUpdate.MaxSurge != "1" {
+		t.Errorf("maxSurge: got %q, want 1", dep.Spec.Strategy.RollingUpdate.MaxSurge)
+	}
+}
+
+func TestRender_Deployment_GracefulShutdown(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	dep := parseDeployment(t, Render(input))
+
+	if dep.Spec.Template.Spec.TerminationGracePeriodSeconds != 30 {
+		t.Errorf("terminationGracePeriodSeconds: got %d, want 30", dep.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	}
+}
+
+func TestRender_ServerApp_PDB(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	pdb := parsePDB(t, Render(input))
+
+	if pdb.APIVersion != "policy/v1" {
+		t.Errorf("PDB apiVersion: got %q, want policy/v1", pdb.APIVersion)
+	}
+	if pdb.Metadata.Name != "api-pdb" {
+		t.Errorf("PDB name: got %q, want api-pdb", pdb.Metadata.Name)
+	}
+	if pdb.Spec.MaxUnavailable != 1 {
+		t.Errorf("PDB maxUnavailable: got %d, want 1", pdb.Spec.MaxUnavailable)
+	}
+	if pdb.Spec.UnhealthyPodEvictionPolicy != "AlwaysAllow" {
+		t.Errorf("PDB unhealthyPodEvictionPolicy: got %q, want AlwaysAllow", pdb.Spec.UnhealthyPodEvictionPolicy)
+	}
+}
+
+// F1-C2: Workers MUST get PDB (no tenant workload should block node drain)
+func TestRender_WorkerApp_HasPDB(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "processor", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	pdb := parsePDB(t, Render(input))
+
+	if pdb.Spec.UnhealthyPodEvictionPolicy != "AlwaysAllow" {
+		t.Errorf("worker PDB unhealthyPodEvictionPolicy: got %q, want AlwaysAllow", pdb.Spec.UnhealthyPodEvictionPolicy)
+	}
+}
+
+// Worker deployments also get strategy, deadline, and graceful shutdown
+func TestRender_WorkerApp_DeploymentProtection(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "processor", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	dep := parseDeployment(t, Render(input))
+
+	if dep.Spec.ProgressDeadlineSeconds != 210 {
+		t.Errorf("worker progressDeadlineSeconds: got %d, want 210", dep.Spec.ProgressDeadlineSeconds)
+	}
+	if dep.Spec.Strategy == nil || dep.Spec.Strategy.RollingUpdate == nil {
+		t.Fatal("worker must have rolling update strategy")
+	}
+	if dep.Spec.Strategy.RollingUpdate.MaxUnavailable != "0" {
+		t.Errorf("worker maxUnavailable: got %q, want 0", dep.Spec.Strategy.RollingUpdate.MaxUnavailable)
+	}
+	if dep.Spec.Template.Spec.TerminationGracePeriodSeconds != 30 {
+		t.Errorf("worker terminationGracePeriodSeconds: got %d, want 30", dep.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	}
+}
+
+// Backward compatibility: baseInput with no new config produces valid manifests (W3 gate)
+func TestRender_BackwardCompat_DefaultsApplied(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	result := Render(input)
+	docs := strings.Split(result, "\n---\n")
+
+	// Must produce exactly 5 documents (Deployment + PDB + Service + Certificate + IngressRoute)
+	if len(docs) != 5 {
+		t.Fatalf("backward compat: expected 5 docs, got %d", len(docs))
+	}
+
+	// All documents must be valid YAML
+	for i, doc := range docs {
+		var parsed interface{}
+		if err := sigsyaml.Unmarshal([]byte(doc), &parsed); err != nil {
+			t.Errorf("backward compat: document %d is not valid YAML: %v", i, err)
+		}
+	}
+
+	// Deployment must have all protection fields with defaults
+	dep := parseDeployment(t, result)
+	if dep.Spec.ProgressDeadlineSeconds == 0 {
+		t.Error("backward compat: progressDeadlineSeconds must have a default value")
+	}
+	if dep.Spec.Strategy == nil {
+		t.Error("backward compat: strategy must have a default value")
 	}
 }

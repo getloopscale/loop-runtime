@@ -18,6 +18,11 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
@@ -47,7 +52,10 @@ func NewGiteaGitOpsPusher(cfg GiteaGitOpsPusherConfig) *GiteaGitOpsPusher {
 		baseURL: cfg.BaseURL,
 		token:   cfg.Token,
 		orgName: cfg.OrgName,
-		client:  &http.Client{Timeout: 15 * time.Second},
+		client: &http.Client{
+			Timeout:   15 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
 	}
 }
 
@@ -55,6 +63,14 @@ func NewGiteaGitOpsPusher(cfg GiteaGitOpsPusherConfig) *GiteaGitOpsPusher {
 // The operation is idempotent: pushing the same manifests twice is safe (git
 // will detect "nothing to commit" and we return the current HEAD SHA).
 func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpts) (string, error) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.gitops.push_manifests",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", opts.TenantID),
+			attribute.String("loopzero.project", opts.ProjectID),
+			attribute.String("loopzero.environment", opts.Environment),
+		))
+	defer span.End()
+
 	if opts.Manifests == "" {
 		return "", fmt.Errorf("gitops push: manifests cannot be empty")
 	}
@@ -157,6 +173,7 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 		return "", fmt.Errorf("gitops push: get commit SHA: %w", err)
 	}
 
+	span.SetAttributes(attribute.String("loopzero.gitops.commit_sha", sha))
 	return sha, nil
 }
 

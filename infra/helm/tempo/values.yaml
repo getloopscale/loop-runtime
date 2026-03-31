@@ -1,0 +1,56 @@
+# Grafana Tempo — trace backend for distributed tracing
+# Chart: grafana/tempo (standalone mode)
+# Sufficient for <100 deploys/day (same rationale as Loki SingleBinary)
+# MEET-2026-03-30-020: APPROVED_WITH_CONDITIONS
+
+tempo:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+  retention: 168h  # 7 days, same as Loki
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+
+server:
+  http_listen_port: 3200
+
+persistence:
+  enabled: true
+  size: 5Gi
+
+securityContext:
+  runAsNonRoot: true
+
+resources:
+  limits:
+    cpu: "300m"
+    memory: "512Mi"
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+
+# C8: PriorityClass lower than core platform services (PG, ArgoCD, API, operators)
+# Telemetry is first-to-shed under resource pressure.
+# priorityClassName: loopzero-observability  # Uncomment when PriorityClass is created
+
+livenessProbe:
+  httpGet:
+    path: /ready
+    port: 3200
+  initialDelaySeconds: 15
+  periodSeconds: 15
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 3200
+  initialDelaySeconds: 10
+  periodSeconds: 10

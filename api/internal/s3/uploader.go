@@ -15,6 +15,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Uploader implements routes.ObjectUploader for S3-compatible storage.
@@ -31,16 +37,29 @@ func New(endpoint, accessKey, secretKey string) *Uploader {
 		endpoint:  strings.TrimRight(endpoint, "/"),
 		accessKey: accessKey,
 		secretKey: secretKey,
-		client:    &http.Client{Timeout: 60 * time.Second},
+		client: &http.Client{
+			Timeout:   60 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
 	}
 }
 
 // Upload puts an object into the specified bucket.
 func (u *Uploader) Upload(ctx context.Context, bucket, key string, data io.Reader) error {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.source.upload",
+		trace.WithAttributes(
+			attribute.String("loopzero.s3.bucket", bucket),
+			attribute.String("loopzero.s3.key", key),
+		))
+	defer span.End()
+
 	body, err := io.ReadAll(data)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "read body failed")
 		return fmt.Errorf("s3: read body: %w", err)
 	}
+	span.SetAttributes(attribute.Int("loopzero.s3.size_bytes", len(body)))
 
 	url := fmt.Sprintf("%s/%s/%s", u.endpoint, bucket, key)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, strings.NewReader(string(body)))

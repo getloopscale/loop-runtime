@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Workload protection Phase 1 + Phase 2: defense against broken/unhealthy container images (#MEET-021)
+  - Startup probe on all server/frontend apps (150s max startup, 5s period, 3s timeout)
+  - Readiness probe with thresholds (10s period, 3 failures before removal from Service)
+  - Liveness probe with thresholds (15s period, 5 failures — more tolerant than readiness)
+  - progressDeadlineSeconds: 210s (fail-fast broken deploys, 40s margin over startup)
+  - minReadySeconds: 10s (stabilization window for quick crashes)
+  - Rolling update strategy: maxUnavailable=0, maxSurge=1 (zero-downtime deploys)
+  - PodDisruptionBudget for ALL tenant workloads (server + worker + frontend)
+  - unhealthyPodEvictionPolicy: AlwaysAllow (broken pods never block node drain)
+  - terminationGracePeriodSeconds: 30s (explicit graceful shutdown contract)
+  - 6 new PrometheusRules: CrashLoop (5m), ImagePullFailed, ReplicaMismatch (5m),
+    HighRestartRate, DeployStuck (ProgressDeadlineExceeded), CrashLoopCritical (30m)
+  - 4 ValidatingAdmissionPolicies (K8s native, no Kyverno): restrict registries,
+    disallow :latest, require resource limits, protect platform NetworkPolicies
+  - Build retry skips OOM (exit 137) via retryStrategy.expression (Argo Workflows native)
+- Distributed tracing with Grafana Tempo + OpenTelemetry SDK for deploy flow troubleshooting (#MEET-020)
+  - Grafana Tempo as trace backend (standalone, 7d retention, S3 in prod)
+  - OTel Collector reconfigured: traces exported to Tempo (was debug/discard)
+  - API instrumented with 6 sync span points: build.submit, source.upload, source.push_git, build.workflow_submit, lock.acquire, gitops.push_manifests
+  - HTTP middleware auto-spans with otelhttp (trace context propagation)
+  - Grafana Tempo datasource with trace-to-log correlation
+  - PrometheusRules: LoopZeroTempoDown, LoopZeroTempoStorageHigh, LoopZeroOTelCollectorDown, LoopZeroCollectorExportErrors
+  - ServiceMonitor for Tempo metrics scraping
+  - Feature flag `LOOPZERO_TRACING_ENABLED` (default true dev, false prod)
+  - Graceful degradation: API works without Collector (export timeout 1s, bounded queue)
+
 ### Security
 - Replace full admin kubeconfigs with scoped ServiceAccount tokens — API and controller now get minimal RBAC per cluster instead of cluster-admin (#CRIT-02)
 - Replace ESO admin token with scoped ServiceAccount — read-only access to Secrets in platform-system only (#HIGH-04)

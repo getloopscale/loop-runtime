@@ -17,6 +17,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/logging"
 
 	"github.com/loopzero/loopzero/api/internal/adapters"
+	"github.com/loopzero/loopzero/api/internal/tracing"
 	"github.com/loopzero/loopzero/api/internal/config"
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/github"
@@ -58,6 +59,20 @@ func main() {
 	if err := cfg.Validate(); err != nil {
 		logger.Error("configuration validation failed", "error", err)
 		os.Exit(1)
+	}
+
+	// Distributed tracing (MEET-2026-03-30-020)
+	// C7: Controlled by LOOPZERO_TRACING_ENABLED env var.
+	// Graceful degradation: API works without Collector.
+	tracingShutdown, err := tracing.Init(context.Background(), "loopzero-api")
+	if err != nil {
+		logger.Warn("tracing disabled", "error", err)
+	} else {
+		defer func() {
+			if err := tracingShutdown(context.Background()); err != nil {
+				logger.Error("tracing shutdown failed", "error", err)
+			}
+		}()
 	}
 
 	// A-05: Create the shutdown context BEFORE starting any background goroutines.
