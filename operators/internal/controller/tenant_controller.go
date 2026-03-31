@@ -223,19 +223,36 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		return ctrl.Result{}, err
 	}
 
-	// Phase 1: Wait for child Environment CRs to be deleted.
-	// Environment CRs are owned by the Tenant (ownerRef cascade), so K8s marks them
-	// for deletion automatically. Each EnvironmentController handles its own namespace cleanup.
+	// Phase 1: Delete child Environment CRs and wait for them to be fully cleaned up.
+	// Environment CRs have a finalizer (loopzero.io/environment-cleanup) that the
+	// EnvironmentController handles — it cleans up the target namespace before
+	// removing the finalizer. We explicitly delete them here because ownerRef
+	// cascade with blockOwnerDeletion + finalizer creates a deadlock: GC waits
+	// for the child to be deleted, but the child's finalizer prevents GC deletion.
 	var envList loopzerov1.EnvironmentList
 	if err := r.List(ctx, &envList, client.InNamespace(tenant.Namespace)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("listing child Environment CRs: %w", err)
 	}
 	childEnvCount := 0
-	for _, env := range envList.Items {
+	for i := range envList.Items {
+		env := &envList.Items[i]
+		isChild := false
 		for _, ref := range env.OwnerReferences {
 			if ref.UID == tenant.UID {
-				childEnvCount++
+				isChild = true
 				break
+			}
+		}
+		if !isChild {
+			continue
+		}
+		childEnvCount++
+		// Explicitly delete if not already marked for deletion
+		if env.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, env); err != nil {
+				logger.Error(err, "failed to delete child Environment CR", "environment", env.Name)
+			} else {
+				logger.Info("deleted child Environment CR", "environment", env.Name)
 			}
 		}
 	}
