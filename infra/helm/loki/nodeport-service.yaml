@@ -14,5 +14,5 @@ spec:
   ports:
     - port: 3100
       targetPort: 3100
-      nodePort: 30093
+      nodePort: 30094
       protocol: TCP

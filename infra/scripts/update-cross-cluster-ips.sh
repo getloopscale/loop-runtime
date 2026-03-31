@@ -151,12 +151,12 @@ PROMTAIL_VALUES="infra/helm/promtail/values.yaml"
 if [ -f "$PROMTAIL_VALUES" ]; then
   echo ""
   echo "=== Patching $PROMTAIL_VALUES ==="
-  NEW_LOKI_URL="http://${MGMT_SERVER}:30093/loki/api/v1/push"
-  OLD_LOKI_URL=$(grep -o 'http://[^/]*:30093/loki/api/v1/push' "$PROMTAIL_VALUES" 2>/dev/null || true)
+  NEW_LOKI_URL="http://${MGMT_SERVER}:30094/loki/api/v1/push"
+  OLD_LOKI_URL=$(grep -o 'http://[^/]*:30094/loki/api/v1/push' "$PROMTAIL_VALUES" 2>/dev/null || true)
   if [ -z "$OLD_LOKI_URL" ]; then
     # First time — replace placeholder or cluster-local URL
     sed -i "s|url: http://.*loki.*/loki/api/v1/push|url: ${NEW_LOKI_URL}|" "$PROMTAIL_VALUES"
-    sed -i "s|url: http://MGMT_SERVER_IP:30093/loki/api/v1/push|url: ${NEW_LOKI_URL}|" "$PROMTAIL_VALUES"
+    sed -i "s|url: http://MGMT_SERVER_IP:30094/loki/api/v1/push|url: ${NEW_LOKI_URL}|" "$PROMTAIL_VALUES"
     echo "  Loki URL: → $NEW_LOKI_URL"
   elif [ "$OLD_LOKI_URL" != "$NEW_LOKI_URL" ]; then
     sed -i "s|${OLD_LOKI_URL}|${NEW_LOKI_URL}|" "$PROMTAIL_VALUES"

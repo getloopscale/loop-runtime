@@ -7,7 +7,7 @@
 # - Production (DO): clusters in same VPC, use internal LB IP of Loki
 config:
   clients:
-    - url: http://MGMT_SERVER_IP:30093/loki/api/v1/push
+    - url: http://172.18.0.3:30094/loki/api/v1/push
       batchwait: 5s
       batchsize: 1048576
       backoff_config:
