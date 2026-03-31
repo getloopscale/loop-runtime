@@ -128,6 +128,112 @@ spec:
             description: "MinIO has been unreachable for more than 2 minutes. Build cache unavailable. Source uploads will fail."
             runbook: "Check MinIO pod status. Verify PVC. Builds will run without cache (slower but not blocked)."
 
+    # ═══════════════════════════════════════════════════
+    # Workload Protection Alerts (MEET-2026-03-30-021)
+    # ═══════════════════════════════════════════════════
+
+    - name: loopzero.workload.warning
+      rules:
+        # F1-C4: CrashLoopBackOff for 5+ minutes (reduced from 10m per SRE review)
+        - alert: LoopZeroAppCrashLoop
+          expr: |
+            max by (namespace, pod) (
+              kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}
+            ) * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "App pod {{ $labels.pod }} in {{ $labels.namespace }} stuck in CrashLoopBackOff"
+            description: "Pod has been crash-looping for 5+ minutes. Resources consumed without serving traffic."
+            runbook: "Check app logs via `loopzero logs`. If image is broken, rollback via `loopzero rollback`."
+
+        # Image pull failure for 5+ minutes
+        - alert: LoopZeroAppImagePullFailed
+          expr: |
+            max by (namespace, pod) (
+              kube_pod_container_status_waiting_reason{reason="ImagePullBackOff"}
+              or
+              kube_pod_container_status_waiting_reason{reason="ErrImagePull"}
+            ) * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "App pod {{ $labels.pod }} in {{ $labels.namespace }} cannot pull image"
+            description: "Image pull failing for 5+ minutes. Possible causes: wrong image tag, registry auth, network."
+            runbook: "Verify image exists in registry. Check registry credentials. Redeploy with correct image."
+
+        # F1-C4: Replica mismatch for 5+ minutes (reduced from 15m per SRE review)
+        - alert: LoopZeroAppReplicaMismatch
+          expr: |
+            (
+              kube_deployment_spec_replicas
+              - kube_deployment_status_replicas_ready
+            ) * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Deployment {{ $labels.deployment }} in {{ $labels.namespace }} has unavailable replicas"
+            description: "Desired replicas != ready replicas for 5+ minutes. App may be partially down."
+            runbook: "Check pod status. Common causes: resource pressure, crash loop, image issues."
+
+        # High restart rate (10+ restarts in 30 minutes)
+        - alert: LoopZeroAppHighRestartRate
+          expr: |
+            increase(
+              kube_pod_container_status_restarts_total[30m]
+            ) * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "App pod {{ $labels.pod }} in {{ $labels.namespace }} restarting excessively"
+            description: "Pod has restarted 10+ times in 30 minutes. Likely unstable or misconfigured."
+            runbook: "Check app logs. Consider rollback if latest deploy caused the instability."
+
+        # F1-C5: ProgressDeadlineExceeded — primary signal for stuck deploys
+        - alert: LoopZeroAppDeployStuck
+          expr: |
+            kube_deployment_status_condition{condition="Progressing",status="false"}
+            * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Deployment {{ $labels.deployment }} in {{ $labels.namespace }} failed to progress"
+            description: "Deployment hit progressDeadlineSeconds (210s). New pods could not become ready."
+            runbook: "Check pod events and logs. Likely causes: image crash, failing health check, insufficient resources. Use `loopzero rollback` to revert."
+
+    - name: loopzero.workload.critical
+      rules:
+        # F1-C6: CrashLoopBackOff persisting for 30+ minutes — critical escalation
+        - alert: LoopZeroAppCrashLoopCritical
+          expr: |
+            max by (namespace, pod) (
+              kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}
+            ) * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 0
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "App pod {{ $labels.pod }} in {{ $labels.namespace }} crash-looping for 30+ minutes"
+            description: "Pod has been crash-looping for 30+ minutes. Actively consuming cluster resources with zero value. May affect other tenants."
+            runbook: "Immediate action required. Contact tenant owner. If unreachable, consider rollback via API. This pod is wasting cluster resources."
+
     # ═══════════════════════════════════════
     # SLO Alerts (Sprint 4 — Observability)
     # ═══════════════════════════════════════

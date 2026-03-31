@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Workload protection Phase 1: defense against broken/unhealthy container images (#MEET-021)
+  - Startup probe on all server/frontend apps (150s max startup, 5s period, 3s timeout)
+  - Readiness probe with thresholds (10s period, 3 failures before removal from Service)
+  - Liveness probe with thresholds (15s period, 5 failures — more tolerant than readiness)
+  - progressDeadlineSeconds: 210s (fail-fast broken deploys, 40s margin over startup)
+  - minReadySeconds: 10s (stabilization window for quick crashes)
+  - Rolling update strategy: maxUnavailable=0, maxSurge=1 (zero-downtime deploys)
+  - PodDisruptionBudget for ALL tenant workloads (server + worker + frontend)
+  - unhealthyPodEvictionPolicy: AlwaysAllow (broken pods never block node drain)
+  - terminationGracePeriodSeconds: 30s (explicit graceful shutdown contract)
+  - 6 new PrometheusRules: CrashLoop (5m), ImagePullFailed, ReplicaMismatch (5m),
+    HighRestartRate, DeployStuck (ProgressDeadlineExceeded), CrashLoopCritical (30m)
 - Distributed tracing with Grafana Tempo + OpenTelemetry SDK for deploy flow troubleshooting (#MEET-020)
   - Grafana Tempo as trace backend (standalone, 7d retention, S3 in prod)
   - OTel Collector reconfigured: traces exported to Tempo (was debug/discard)
