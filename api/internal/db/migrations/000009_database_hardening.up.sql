@@ -67,45 +67,76 @@ DROP INDEX IF EXISTS idempotency_keys_key_tenant_idx;
 -- The API connects as loopzero_api. Migration runner uses admin.
 -- ============================================================
 
+-- Role creation requires CREATEROLE privilege on the executing user.
+-- In local dev (k3d), the default 'loopzero' user may lack this privilege.
+-- Wrap in a block that gracefully skips when CREATEROLE is unavailable.
+-- Production: Pulumi provisions roles via the admin user (has CREATEROLE).
 DO $$ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'loopzero_api') THEN
-    CREATE ROLE loopzero_api LOGIN PASSWORD 'loopzero-api-change-me'
-      NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    BEGIN
+      CREATE ROLE loopzero_api LOGIN PASSWORD 'loopzero-api-change-me'
+        NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    EXCEPTION WHEN insufficient_privilege THEN
+      RAISE NOTICE 'Skipping loopzero_api role creation — current user lacks CREATEROLE (expected in local dev)';
+    END;
   END IF;
 END $$;
 
-GRANT CONNECT ON DATABASE loopzero TO loopzero_api;
-GRANT USAGE ON SCHEMA public TO loopzero_api;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO loopzero_api;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO loopzero_api;
-GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO loopzero_api;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO loopzero_api;
+DO $$ BEGIN
+  PERFORM 1 FROM pg_roles WHERE rolname = 'loopzero_api';
+  IF FOUND THEN
+    GRANT CONNECT ON DATABASE loopzero TO loopzero_api;
+    GRANT USAGE ON SCHEMA public TO loopzero_api;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO loopzero_api;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO loopzero_api;
+    GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO loopzero_api;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO loopzero_api;
+  END IF;
+END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'loopzero_migrate') THEN
-    CREATE ROLE loopzero_migrate LOGIN PASSWORD 'loopzero-migrate-change-me'
-      NOSUPERUSER NOCREATEROLE;
+    BEGIN
+      CREATE ROLE loopzero_migrate LOGIN PASSWORD 'loopzero-migrate-change-me'
+        NOSUPERUSER NOCREATEROLE;
+    EXCEPTION WHEN insufficient_privilege THEN
+      RAISE NOTICE 'Skipping loopzero_migrate role creation — current user lacks CREATEROLE (expected in local dev)';
+    END;
   END IF;
 END $$;
 
-GRANT CONNECT ON DATABASE loopzero TO loopzero_migrate;
-GRANT ALL ON SCHEMA public TO loopzero_migrate;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO loopzero_migrate;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO loopzero_migrate;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO loopzero_migrate;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO loopzero_migrate;
+DO $$ BEGIN
+  PERFORM 1 FROM pg_roles WHERE rolname = 'loopzero_migrate';
+  IF FOUND THEN
+    GRANT CONNECT ON DATABASE loopzero TO loopzero_migrate;
+    GRANT ALL ON SCHEMA public TO loopzero_migrate;
+    GRANT ALL ON ALL TABLES IN SCHEMA public TO loopzero_migrate;
+    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO loopzero_migrate;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO loopzero_migrate;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO loopzero_migrate;
+  END IF;
+END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'loopzero_readonly') THEN
-    CREATE ROLE loopzero_readonly LOGIN PASSWORD 'loopzero-readonly-change-me'
-      NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    BEGIN
+      CREATE ROLE loopzero_readonly LOGIN PASSWORD 'loopzero-readonly-change-me'
+        NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    EXCEPTION WHEN insufficient_privilege THEN
+      RAISE NOTICE 'Skipping loopzero_readonly role creation — current user lacks CREATEROLE (expected in local dev)';
+    END;
   END IF;
 END $$;
 
-GRANT CONNECT ON DATABASE loopzero TO loopzero_readonly;
-GRANT USAGE ON SCHEMA public TO loopzero_readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO loopzero_readonly;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO loopzero_readonly;
+DO $$ BEGIN
+  PERFORM 1 FROM pg_roles WHERE rolname = 'loopzero_readonly';
+  IF FOUND THEN
+    GRANT CONNECT ON DATABASE loopzero TO loopzero_readonly;
+    GRANT USAGE ON SCHEMA public TO loopzero_readonly;
+    GRANT SELECT ON ALL TABLES IN SCHEMA public TO loopzero_readonly;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO loopzero_readonly;
+  END IF;
+END $$;
 
 
 -- ============================================================
