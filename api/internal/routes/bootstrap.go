@@ -162,9 +162,10 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 // It tracks created records in memory to simulate ON CONFLICT DO NOTHING.
 type InMemoryBootstrapStore struct {
 	mu       sync.Mutex
-	users    map[string]bool // keyed by github_id
-	tenants  map[string]bool // keyed by tenant_id
-	members  map[string]bool // keyed by "tenant_id:user_id"
+	users    map[string]bool   // keyed by github_id
+	tenants  map[string]bool   // keyed by tenant_id
+	members  map[string]bool   // keyed by "tenant_id:user_id"
+	cellIDs  map[string]string // keyed by tenant_id → cell_id (ADR-0008)
 }
 
 // NewInMemoryBootstrapStore creates a new InMemoryBootstrapStore.
@@ -173,6 +174,7 @@ func NewInMemoryBootstrapStore() *InMemoryBootstrapStore {
 		users:   make(map[string]bool),
 		tenants: make(map[string]bool),
 		members: make(map[string]bool),
+		cellIDs: make(map[string]string),
 	}
 }
 
@@ -193,6 +195,7 @@ func (s *InMemoryBootstrapStore) Bootstrap(_ context.Context, req BootstrapReque
 	}
 	if !s.tenants[tenantID] {
 		s.tenants[tenantID] = true
+		s.cellIDs[tenantID] = req.CellID // ADR-0008: track cell assignment
 		created = true
 	}
 	if !s.members[memberKey] {
@@ -201,4 +204,11 @@ func (s *InMemoryBootstrapStore) Bootstrap(_ context.Context, req BootstrapReque
 	}
 
 	return userID, tenantID, created, nil
+}
+
+// GetCellID returns the stored cell_id for a tenant (test helper).
+func (s *InMemoryBootstrapStore) GetCellID(tenantID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cellIDs[tenantID]
 }

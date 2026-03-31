@@ -479,10 +479,6 @@ func main() {
 			go func() { defer bgWg.Done(); idempotencyCleaner.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); eventPruner.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); cellMetrics.Start(shutdownCtx) }()
-		} else {
-			// Non-leader replicas still collect cell metrics
-			bgWg.Add(1)
-			go func() { defer bgWg.Done(); cellMetrics.Start(shutdownCtx) }()
 		}
 
 		defer func() {
