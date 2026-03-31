@@ -190,6 +190,28 @@ describe('loopzero --json with no command', () => {
     expect(parsed).toHaveProperty('exit_code', 1);
   });
 
+  it('should return structured JSON for missing required argument with --json (F-05)', () => {
+    let output: string;
+    let exitCode: number;
+    try {
+      output = execSync(`node ${binPath} project delete --yes --json`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      exitCode = 0;
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; status: number };
+      output = (e.stdout || '') + (e.stderr || '');
+      exitCode = e.status;
+    }
+
+    expect(exitCode).toBe(1);
+    const parsed = JSON.parse(output.trim());
+    expect(parsed).toHaveProperty('error');
+    expect(parsed.error).toMatch(/missing|required|name/i);
+    expect(parsed).toHaveProperty('exit_code', 1);
+  });
+
   it('should still show text help when --json is NOT passed and no command is given', () => {
     let stdout = '';
     let stderr = '';

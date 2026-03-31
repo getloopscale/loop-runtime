@@ -113,10 +113,15 @@ export class InitCommand {
     projectName = this.sanitizeProjectName(projectName);
 
     // Warn user if name was changed by sanitization
-    if (opts.name && projectName !== originalName) {
-      const warning = `Project name sanitized: "${originalName}" → "${projectName}" (RFC 1123: lowercase, letters/numbers/hyphens, max 63 chars)`;
-      if (!opts.json) {
-        this.deps.writeTo(warning);
+    let sanitizationWarning: string | undefined;
+    if (projectName !== originalName) {
+      if (originalName.length > 63) {
+        sanitizationWarning = `Project name truncated to 63 characters: "${originalName}" → "${projectName}"`;
+      } else {
+        sanitizationWarning = `Project name sanitized: "${originalName}" → "${projectName}" (RFC 1123: lowercase, letters/numbers/hyphens, max 63 chars)`;
+      }
+      if (opts.name && !opts.json) {
+        this.deps.writeTo(sanitizationWarning);
       }
     }
 
@@ -284,8 +289,8 @@ export class InitCommand {
       if (projectName !== originalName) {
         jsonOutput.sanitized_from = originalName;
       }
-      if (warning) {
-        jsonOutput.warning = warning;
+      if (sanitizationWarning || warning) {
+        jsonOutput.warning = [sanitizationWarning, warning].filter(Boolean).join('. ');
       }
       this.deps.writeTo(JSON.stringify(jsonOutput));
     } else {

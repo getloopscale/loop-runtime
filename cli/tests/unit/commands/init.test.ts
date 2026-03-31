@@ -746,6 +746,40 @@ describe('InitCommand', () => {
     });
   });
 
+  describe('name truncation warning (F-02)', () => {
+    it('should include warning in JSON when name is truncated by length', async () => {
+      const longName = 'a'.repeat(65);
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 3000 }),
+        createProject: jest.fn().mockResolvedValue({ id: 'proj-123', name: 'a'.repeat(63), team: 'acme' }),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true, name: longName, json: true });
+
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
+      const parsed = JSON.parse(allWrites[allWrites.length - 1]);
+      expect(parsed.sanitized_from).toBe(longName);
+      expect(parsed.warning).toMatch(/truncated|length|63/i);
+    });
+
+    it('should show human warning when name is truncated by length', async () => {
+      const longName = 'a'.repeat(65);
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 3000 }),
+        createProject: jest.fn().mockResolvedValue({ id: 'proj-123', name: 'a'.repeat(63), team: 'acme' }),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true, name: longName });
+
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(allWrites).toMatch(/sanitized|truncated|63/i);
+    });
+  });
+
   describe('custom framework default port (F-06)', () => {
     it('should default to port 3000 when root app has custom framework and no port', async () => {
       const deps = createMockDeps(tmpDir, {

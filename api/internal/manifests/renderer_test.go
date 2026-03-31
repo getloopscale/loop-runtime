@@ -581,6 +581,87 @@ func TestRender_WorkerApp_DeploymentProtection(t *testing.T) {
 	}
 }
 
+// --- Sprint 7: Workload Security ---
+
+// Task 7.1: Pod SecurityContext — pods must run as non-root with restricted capabilities.
+func TestRender_SecurityContext_PodRunsAsNonRoot(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	dep := parseDeployment(t, Render(input))
+	podSec := dep.Spec.Template.Spec.SecurityContext
+	if podSec == nil {
+		t.Fatal("pod must have securityContext")
+	}
+	if podSec.RunAsNonRoot == nil || !*podSec.RunAsNonRoot {
+		t.Error("pod securityContext.runAsNonRoot must be true")
+	}
+	if podSec.RunAsUser == nil || *podSec.RunAsUser != 1000 {
+		t.Error("pod securityContext.runAsUser must be 1000")
+	}
+	if podSec.RunAsGroup == nil || *podSec.RunAsGroup != 1000 {
+		t.Error("pod securityContext.runAsGroup must be 1000")
+	}
+	if podSec.FSGroup == nil || *podSec.FSGroup != 1000 {
+		t.Error("pod securityContext.fsGroup must be 1000")
+	}
+}
+
+func TestRender_SecurityContext_ContainerRestricted(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	dep := parseDeployment(t, Render(input))
+	cSec := dep.Spec.Template.Spec.Containers[0].SecurityContext
+	if cSec == nil {
+		t.Fatal("container must have securityContext")
+	}
+	if cSec.AllowPrivilegeEscalation == nil || *cSec.AllowPrivilegeEscalation {
+		t.Error("container securityContext.allowPrivilegeEscalation must be false")
+	}
+	if cSec.ReadOnlyRootFilesystem == nil || !*cSec.ReadOnlyRootFilesystem {
+		t.Error("container securityContext.readOnlyRootFilesystem must be true")
+	}
+	if cSec.Capabilities == nil || len(cSec.Capabilities.Drop) == 0 || cSec.Capabilities.Drop[0] != "ALL" {
+		t.Error("container securityContext.capabilities.drop must contain ALL")
+	}
+}
+
+func TestRender_SecurityContext_WorkerAlsoSecured(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "worker", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	dep := parseDeployment(t, Render(input))
+	if dep.Spec.Template.Spec.SecurityContext == nil {
+		t.Fatal("worker pod must also have securityContext")
+	}
+	if dep.Spec.Template.Spec.Containers[0].SecurityContext == nil {
+		t.Fatal("worker container must also have securityContext")
+	}
+}
+
+// Task 7.4: ServiceAccount — pods must use a dedicated SA, not default.
+func TestRender_ServiceAccount_Dedicated(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	dep := parseDeployment(t, Render(input))
+	if dep.Spec.Template.Spec.ServiceAccountName != "loopzero-app" {
+		t.Errorf("serviceAccountName: got %q, want loopzero-app", dep.Spec.Template.Spec.ServiceAccountName)
+	}
+	if dep.Spec.Template.Spec.AutomountServiceAccountToken == nil || *dep.Spec.Template.Spec.AutomountServiceAccountToken {
+		t.Error("automountServiceAccountToken must be false")
+	}
+}
+
 // Backward compatibility: baseInput with no new config produces valid manifests (W3 gate)
 func TestRender_BackwardCompat_DefaultsApplied(t *testing.T) {
 	input := baseInput()

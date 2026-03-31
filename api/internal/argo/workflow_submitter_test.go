@@ -134,9 +134,12 @@ func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
 
 	t.Logf("created workflow: %s", workflowID)
 
-	// Cleanup: cancel the workflow so it doesn't run indefinitely
+	// Cleanup: cancel then delete the workflow to free ResourceQuota
 	if err := submitter.Cancel(ctx, "build-acme", workflowID); err != nil {
 		t.Logf("warning: cleanup cancel failed: %v", err)
+	}
+	if err := submitter.Delete(ctx, "build-acme", workflowID); err != nil {
+		t.Logf("warning: cleanup delete failed: %v", err)
 	}
 }
 
@@ -166,6 +169,11 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Cancel failed: %v", err)
 	}
+
+	// Cleanup: delete the workflow to free ResourceQuota
+	if err := submitter.Delete(ctx, "build-acme", workflowID); err != nil {
+		t.Logf("warning: cleanup delete failed: %v", err)
+	}
 }
 
 func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
@@ -194,8 +202,11 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 		t.Fatal("expected non-empty workflow ID")
 	}
 
-	// Cleanup
+	// Cleanup: cancel then delete to free ResourceQuota
 	_ = submitter.Cancel(ctx, "build-acme", workflowID)
+	if err := submitter.Delete(ctx, "build-acme", workflowID); err != nil {
+		t.Logf("warning: cleanup delete failed: %v", err)
+	}
 }
 
 // ---------------------------------------------------------------------------

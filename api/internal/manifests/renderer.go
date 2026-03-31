@@ -162,20 +162,46 @@ type k8sPodMeta struct {
 }
 
 type k8sPodSpec struct {
-	Containers                    []k8sContainer `json:"containers"`
-	TerminationGracePeriodSeconds int            `json:"terminationGracePeriodSeconds,omitempty"`
+	ServiceAccountName            string                  `json:"serviceAccountName,omitempty"`
+	AutomountServiceAccountToken  *bool                   `json:"automountServiceAccountToken,omitempty"`
+	SecurityContext               *k8sPodSecurityContext   `json:"securityContext,omitempty"`
+	Containers                    []k8sContainer           `json:"containers"`
+	TerminationGracePeriodSeconds int                      `json:"terminationGracePeriodSeconds,omitempty"`
+}
+
+type k8sPodSecurityContext struct {
+	RunAsNonRoot   *bool              `json:"runAsNonRoot,omitempty"`
+	RunAsUser      *int64             `json:"runAsUser,omitempty"`
+	RunAsGroup     *int64             `json:"runAsGroup,omitempty"`
+	FSGroup        *int64             `json:"fsGroup,omitempty"`
+	SeccompProfile *k8sSeccompProfile `json:"seccompProfile,omitempty"`
+}
+
+type k8sSeccompProfile struct {
+	Type string `json:"type"`
 }
 
 type k8sContainer struct {
-	Name           string             `json:"name"`
-	Image          string             `json:"image"`
-	Ports          []k8sContainerPort `json:"ports,omitempty"`
-	Resources      k8sResources       `json:"resources"`
-	Env            []k8sEnvVar        `json:"env,omitempty"`
-	EnvFrom        []k8sEnvFromSource `json:"envFrom,omitempty"`
-	StartupProbe   *k8sProbe          `json:"startupProbe,omitempty"`
-	ReadinessProbe *k8sProbe          `json:"readinessProbe,omitempty"`
-	LivenessProbe  *k8sProbe          `json:"livenessProbe,omitempty"`
+	Name            string                      `json:"name"`
+	Image           string                      `json:"image"`
+	Ports           []k8sContainerPort          `json:"ports,omitempty"`
+	Resources       k8sResources                `json:"resources"`
+	Env             []k8sEnvVar                 `json:"env,omitempty"`
+	EnvFrom         []k8sEnvFromSource          `json:"envFrom,omitempty"`
+	SecurityContext *k8sContainerSecurityContext `json:"securityContext,omitempty"`
+	StartupProbe    *k8sProbe                   `json:"startupProbe,omitempty"`
+	ReadinessProbe  *k8sProbe                   `json:"readinessProbe,omitempty"`
+	LivenessProbe   *k8sProbe                   `json:"livenessProbe,omitempty"`
+}
+
+type k8sContainerSecurityContext struct {
+	AllowPrivilegeEscalation *bool              `json:"allowPrivilegeEscalation,omitempty"`
+	ReadOnlyRootFilesystem   *bool              `json:"readOnlyRootFilesystem,omitempty"`
+	Capabilities             *k8sCapabilities   `json:"capabilities,omitempty"`
+}
+
+type k8sCapabilities struct {
+	Drop []string `json:"drop,omitempty"`
 }
 
 type k8sContainerPort struct {
@@ -556,12 +582,20 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 		"loopzero.io/project":  ri.ProjectID,
 	}
 
+	falseVal := false
+	trueVal := true
+
 	container := k8sContainer{
 		Name:  app.Name,
 		Image: app.ImageRef,
 		Resources: k8sResources{
 			Requests: k8sResourceList{CPU: ri.cpuRequest(), Memory: ri.memoryRequest()},
 			Limits:   k8sResourceList{CPU: ri.cpuLimit(), Memory: ri.memoryLimit()},
+		},
+		SecurityContext: &k8sContainerSecurityContext{
+			AllowPrivilegeEscalation: &falseVal,
+			ReadOnlyRootFilesystem:   &trueVal,
+			Capabilities:             &k8sCapabilities{Drop: []string{"ALL"}},
 		},
 	}
 
@@ -644,6 +678,15 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 			Template: k8sPodTemplateSpec{
 				Metadata: k8sPodMeta{Labels: labels},
 				Spec: k8sPodSpec{
+					ServiceAccountName:           "loopzero-app",
+					AutomountServiceAccountToken: &falseVal,
+					SecurityContext: &k8sPodSecurityContext{
+						RunAsNonRoot:   &trueVal,
+						RunAsUser:      int64Ptr(1000),
+						RunAsGroup:     int64Ptr(1000),
+						FSGroup:        int64Ptr(1000),
+						SeccompProfile: &k8sSeccompProfile{Type: "RuntimeDefault"},
+					},
 					Containers:                    []k8sContainer{container},
 					TerminationGracePeriodSeconds: 30,
 				},
@@ -783,6 +826,8 @@ func commonLabels(ri RenderInput, app AppManifestInput) map[string]string {
 }
 
 // namespace returns the Kubernetes namespace for a tenant environment.
+func int64Ptr(v int64) *int64 { return &v }
+
 func namespace(tenantID, environment string) string {
 	return fmt.Sprintf("loopzero-%s-%s", tenantID, environment)
 }

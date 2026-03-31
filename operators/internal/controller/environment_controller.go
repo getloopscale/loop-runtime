@@ -100,10 +100,9 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			func() error { return r.reconcileRBAC(ctx, &env, nsName) }},
 		{conditions.TypeEnvNetworkPolicyReady, "NetworkPoliciesConfigured", "network policies provisioned",
 			func() error {
-				if env.Spec.NetworkPolicy.Isolate {
-					return r.reconcileNetworkPolicies(ctx, nsName)
-				}
-				return nil
+				// Task 7.3: NetworkPolicy is ALWAYS applied, regardless of Isolate flag.
+				// Every tenant namespace must have baseline network policies.
+				return r.reconcileNetworkPolicies(ctx, nsName)
 			}},
 		{conditions.TypeEnvQuotaReady, "QuotaReady", "resource quota applied",
 			func() error { return r.reconcileQuota(ctx, &env, nsName) }},
@@ -229,6 +228,11 @@ func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, env *loo
 		ns.Labels[constants.LabelTenant] = tenantName
 		ns.Labels[constants.LabelEnvironment] = env.Spec.Environment
 		ns.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
+		// Task 7.2: PodSecurity Admission — enforce restricted profile on all tenant namespaces.
+		// This prevents pods from running as root, using hostPath, etc.
+		ns.Labels["pod-security.kubernetes.io/enforce"] = "restricted"
+		ns.Labels["pod-security.kubernetes.io/warn"] = "restricted"
+		ns.Labels["pod-security.kubernetes.io/audit"] = "restricted"
 		return nil
 	})
 	if err != nil {
@@ -294,6 +298,26 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		return nil
 	}); err != nil {
 		return fmt.Errorf("rolebinding %s/%s: %w", nsName, constants.RoleBindingDeployer, err)
+	}
+
+	// Task 7.4: Dedicated ServiceAccount for app workloads (separate from deployer SA).
+	// Pods use this SA with automountServiceAccountToken=false.
+	appSA := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "loopzero-app",
+			Namespace: nsName,
+		},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, appSA, func() error {
+		if appSA.Labels == nil {
+			appSA.Labels = make(map[string]string)
+		}
+		appSA.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
+		falseVal := false
+		appSA.AutomountServiceAccountToken = &falseVal
+		return nil
+	}); err != nil {
+		return fmt.Errorf("serviceaccount %s/loopzero-app: %w", nsName, err)
 	}
 
 	return nil

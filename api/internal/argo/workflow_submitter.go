@@ -163,6 +163,17 @@ func (s *WorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID st
 	return nil
 }
 
+// Delete removes a workflow object from the build cluster.
+// Used to free ResourceQuota (count/workflows.argoproj.io) after a build completes.
+// Returns nil if the workflow is already deleted (NotFound).
+func (s *WorkflowSubmitter) Delete(ctx context.Context, namespace, workflowID string) error {
+	err := s.client.Resource(workflowGVR).Namespace(namespace).Delete(ctx, workflowID, metav1.DeleteOptions{})
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return fmt.Errorf("argo: delete workflow %s/%s: %w", namespace, workflowID, err)
+	}
+	return nil
+}
+
 // GetStatus checks the external state of a workflow in the build cluster.
 // Returns (status, nil) if the workflow exists, or (nil, nil) if not found.
 //

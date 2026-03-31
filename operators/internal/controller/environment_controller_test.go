@@ -88,6 +88,31 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
+		// Task 7.2: PSA labels on namespaces
+		It("should set PodSecurity Admission labels to restricted", func() {
+			Eventually(func(g Gomega) {
+				var ns corev1.Namespace
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
+				g.Expect(ns.Labels).To(HaveKeyWithValue("pod-security.kubernetes.io/enforce", "restricted"))
+				g.Expect(ns.Labels).To(HaveKeyWithValue("pod-security.kubernetes.io/warn", "restricted"))
+				g.Expect(ns.Labels).To(HaveKeyWithValue("pod-security.kubernetes.io/audit", "restricted"))
+			}, timeout, interval).Should(Succeed())
+		})
+
+		// Task 7.4: Dedicated ServiceAccount for app workloads
+		It("should create loopzero-app ServiceAccount for workloads", func() {
+			Eventually(func(g Gomega) {
+				var sa corev1.ServiceAccount
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "loopzero-app", Namespace: nsName,
+				}, &sa)).To(Succeed())
+				g.Expect(sa.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "environment-controller"))
+				// automountServiceAccountToken should be false
+				g.Expect(sa.AutomountServiceAccountToken).NotTo(BeNil())
+				g.Expect(*sa.AutomountServiceAccountToken).To(BeFalse())
+			}, timeout, interval).Should(Succeed())
+		})
+
 		It("should create RBAC resources (ServiceAccount, Role, RoleBinding)", func() {
 			Eventually(func(g Gomega) {
 				var sa corev1.ServiceAccount
@@ -429,6 +454,63 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 				}
 			}
 			Expect(found).To(BeTrue())
+		})
+
+		AfterAll(func() {
+			env := &loopzerov1.Environment{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: envCRName, Namespace: "default"}, env); err == nil {
+				env.Finalizers = nil
+				_ = k8sClient.Update(ctx, env)
+				_ = k8sClient.Delete(ctx, env)
+			}
+			ns := &corev1.Namespace{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
+				_ = k8sClient.Delete(ctx, ns)
+			}
+		})
+	})
+
+	// Task 7.3: NetworkPolicy must be created even when Isolate=false
+	Context("NetworkPolicy with Isolate=false", func() {
+		const (
+			envCRName  = "env-noisol-production"
+			tenantName = "env-noisol"
+			envName    = "production"
+			nsName     = "loopzero-env-noisol-production"
+		)
+
+		BeforeAll(func() {
+			envCR := &loopzerov1.Environment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      envCRName,
+					Namespace: "default",
+				},
+				Spec: loopzerov1.EnvironmentCRSpec{
+					TenantRef:   loopzerov1.TenantRef{Name: tenantName},
+					Environment: envName,
+					Namespace:   loopzerov1.NamespaceSpec{Name: nsName},
+					NetworkPolicy: loopzerov1.NetworkPolicyConfig{
+						Isolate: false,
+					},
+					Plan: loopzerov1.PlanStarter,
+				},
+			}
+			Expect(k8sClient.Create(ctx, envCR)).To(Succeed())
+		})
+
+		It("should still create NetworkPolicies even with Isolate=false", func() {
+			Eventually(func(g Gomega) {
+				var env loopzerov1.Environment
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: envCRName, Namespace: "default",
+				}, &env)).To(Succeed())
+				g.Expect(env.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
+
+				var policies networkingv1.NetworkPolicyList
+				g.Expect(k8sClient.List(ctx, &policies, client.InNamespace(nsName))).To(Succeed())
+				g.Expect(len(policies.Items)).To(BeNumerically(">=", 1),
+					"NetworkPolicy must exist even with Isolate=false")
+			}, timeout, interval).Should(Succeed())
 		})
 
 		AfterAll(func() {

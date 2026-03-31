@@ -85,6 +85,26 @@ export function createProgram(): Command {
     .description('CLI-first Kubernetes PaaS for monorepo deployments')
     .option('--json', 'Output in JSON format');
 
+  // F-05: Configure Commander to output JSON errors when --json is present.
+  // Commander calls configureOutput hooks for validation errors (missing args,
+  // unknown options) BEFORE the action handler runs, so we must intercept here.
+  program.configureOutput({
+    writeOut: (str: string) => process.stdout.write(str),
+    writeErr: (str: string) => {
+      if (process.argv.includes('--json')) {
+        const cleaned = str.replace(/^error:\s*/i, '').trim();
+        process.stdout.write(JSON.stringify({
+          error: cleaned,
+          exit_code: 1,
+          code: 'COMMAND_VALIDATION_ERROR',
+        }) + '\n');
+      } else {
+        process.stderr.write(str);
+      }
+    },
+    outputError: (str: string, write: (s: string) => void) => write(str),
+  });
+
   const configStore = ConfigStore.default();
   const isCI = Formatter.detectCI();
 
