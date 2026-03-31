@@ -95,8 +95,18 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 
 	activated := 0
 	for _, release := range releases {
-		// Verify revision matches if available
-		if revision != "" && release.GitCommit != "" && release.GitCommit != revision {
+		// MEET-2026-03-31-024 BUG-03 defense-in-depth: if GitCommit is empty,
+		// do NOT activate via callback — let the convergence loop handle it.
+		// Empty GitCommit means SetGitCommit failed (now fatal) or a race occurred.
+		// Activating with empty GitCommit bypasses revision verification.
+		if release.GitCommit == "" {
+			a.logger.Warn("sync callback: release has empty GitCommit, deferring to convergence loop",
+				"release_id", release.ID)
+			continue
+		}
+
+		// Verify revision matches
+		if revision != "" && release.GitCommit != revision {
 			a.logger.Warn("sync callback: revision mismatch, skipping",
 				"release_id", release.ID, "expected", release.GitCommit, "actual", revision)
 			continue

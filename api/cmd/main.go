@@ -31,6 +31,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/gitops"
 	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/loki"
+	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/cfkv"
 	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
 	"github.com/loopzero/loopzero/api/internal/source"
@@ -264,6 +265,18 @@ func main() {
 			argocdHTTPClient.Transport = httpTransport
 		}
 
+		// TODO(ADR-0008 Phase 1 wiring): Replace single syncClient with SyncClientFactory.
+		// When multi-cell infra is ready:
+		//   1. Create: syncFactory := argocd.NewSyncClientFactory(cellRouter, buildSyncClient)
+		//      where buildSyncClient creates a CircuitBreakerSyncClient per Cell
+		//   2. Inject syncFactory into ContainerDeliveryActivator, ReleaseConvergenceLoop,
+		//      SyncCallbackActivator (requires interface change to accept factory)
+		//   3. Each service resolves cell_id from release.TenantID → tenant.CellID → factory.ClientFor
+		// Similarly for K8s clients:
+		//   4. Create: clientMgr := cellmgr.New(cellRouter, clientFactory)
+		//   5. Replace hardcoded RuntimeKubeconfig usage with clientMgr.ClientFor(cellID)
+		// These changes require validation with 2 real clusters on DigitalOcean.
+
 		// ArgoCD sync client with in-memory circuit breaker (M-02 fix).
 		// State is per-replica, not shared via PostgreSQL. This eliminates
 		// write amplification and the circular dependency where the circuit
@@ -466,14 +479,22 @@ func main() {
 		// Defers run LIFO, so this defer runs BEFORE defer dbAdapter.Close() (line 167).
 		var bgWg sync.WaitGroup
 
+		// ADR-0008 Phase 0: Cell metrics collector (leader-only to avoid N identical PG queries).
+		cellMetrics := placement.NewCellMetricsCollector(
+			&db.PostgresCellStore{DB: dbAdapter},
+			logger,
+			60*time.Second,
+		)
+
 		if isLeader {
-			bgWg.Add(6)
+			bgWg.Add(7) // 6 leader loops + 1 cell metrics
 			go func() { defer bgWg.Done(); reconcileLoop.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); reaper.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); releaseReaper.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); releaseConvergenceLoop.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); idempotencyCleaner.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); eventPruner.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); cellMetrics.Start(shutdownCtx) }()
 		}
 
 		defer func() {
@@ -552,6 +573,7 @@ func main() {
 		SecretK8sSync:      secretK8sMgr,
 		BootstrapStore:     bootstrapStore,
 		BootstrapSecret:    cfg.BootstrapSecret,
+		CellPlacement:      placement.NewDefaultEngine(), // ADR-0008 Phase 0
 		BuildHandler:        buildHandler,
 		ArgoCallbackHandler: argoCallbackHandler,
 		LogsHandler:        logsHandler,

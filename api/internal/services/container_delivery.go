@@ -254,10 +254,13 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 			return nil
 		}
 
+		// MEET-2026-03-31-024: SetGitCommit MUST be fatal.
+		// If GitCommit is not recorded, the SyncCallbackActivator revision guard
+		// (release.GitCommit != revision) is bypassed when GitCommit is empty,
+		// allowing wrong-version activation on rapid sequential deploys.
 		if commitSHA != "" {
 			if err := c.releaseStore.SetGitCommit(ctx, tx, release.ID, commitSHA); err != nil {
-				slog.Warn("failed to persist git_commit on release (non-fatal)",
-					"release_id", release.ID, "commit_sha", commitSHA, "error", err)
+				return fmt.Errorf("persist git_commit on release: %w", err)
 			}
 		}
 

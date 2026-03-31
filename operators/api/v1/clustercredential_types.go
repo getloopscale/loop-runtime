@@ -45,6 +45,14 @@ type ClusterCredentialSpec struct {
 	// TLS configures TLS verification for the target cluster API server.
 	// +optional
 	TLS ClusterTLSConfig `json:"tls,omitempty"`
+
+	// CellID identifies which Cell this cluster belongs to.
+	// Used by CellRouter to discover available Cells and their kubeconfigs.
+	// ADR-0008 Phase 1.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^cell-[a-z0-9-]+$`
+	// +kubebuilder:default="cell-default"
+	CellID string `json:"cellID,omitempty"`
 }
 
 // CredentialScope defines which components can use a ClusterCredential.

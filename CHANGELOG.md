@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Cell-Based Architecture Phase 0 implementation (#ADR-0008)
+  - Migration 000011: `cell_id` column on tenants table (DEFAULT 'cell-default', indexed)
+  - `CellID` field added to Tenant CRD spec (+kubebuilder:default="cell-default")
+  - PlacementEngine interface + DefaultEngine (returns "cell-default" for all tenants)
+  - CellRouter interface + PassthroughRouter (resolves any cell_id to current cluster config)
+  - BootstrapHandler wired with PlacementEngine for cell assignment on tenant creation
+  - CellMetricsCollector emits `loopzero_cell_tenant_count` gauge per cell_id (60s interval)
+  - PostgresCellStore with `CellTenantCounts()` query
+  - 9 unit tests for placement package (Engine + Router + interface compliance)
+  - ADR-0008 approved with 5-phase roadmap (Phase 0-4, overview + per-phase plans)
+  - Supersedes ADR-0007 (ArgoCD Application model)
+- Cell Architecture Phase 1 — multi-cell foundation code (#ADR-0008)
+  - ClientManager: lazy-init cached K8s clients per Cell (api/internal/cellmgr/)
+  - SyncClientFactory: per-cell ArgoCD sync client resolution (api/internal/argocd/)
+  - StaticRouter: resolves cell_id from configured CellConfig list
+  - RoundRobinEngine: bin-packing placement with maxPerCell capacity (500 default)
+  - TenantCellQuerier interface + CountByCell/GetTenantCellID in PostgresCellStore
+  - ClusterCredential CRD CellID field (+kubebuilder:validation:Pattern)
+  - ApplicationSpec.CellID passed from TenantController to ArgoCD provisioner
+  - CF KV PutCellRouting/DeleteCellRouting for multi-cell DNS routing
+  - Cell Provisioner Pulumi interfaces (CellConfig/CellOutput/createCell scaffold)
+  - Cell Health Grafana dashboard (6 panels: tenant count, capacity, pods, sync latency, failures, convergence)
+  - 28 new unit tests across placement, cellmgr, argocd packages
 - Database Hardening Phase 1 — MEET-2026-03-31-024 (#MEET-024)
   - Migration 000009: Role separation (loopzero_api, loopzero_migrate, loopzero_readonly)
   - Migration 000009: Row-Level Security on all tenant-scoped tables (builds, releases,
@@ -24,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Runbooks: pool-exhaustion, slow-queries, rls-disable, credential-rotation
 
 ### Fixed
+- SetGitCommit failure in container_delivery now fatal — prevents wrong-version activation
+  when SyncCallbackActivator revision guard is bypassed by empty GitCommit (#MEET-024 BUG-03)
+- syncRetriggers memory leak in ReleaseConvergenceLoop — cleanup on activate and fail (#MEET-024 BUG-04)
 - Idempotency key lookup now scoped by tenant_id — prevents cross-tenant response replay (#MEET-024 BUG-01)
 - Secret store Set() race condition: replaced SELECT+INSERT with atomic UPSERT using xmax (#MEET-024 BUG-02)
 - DSN builder default sslmode changed from "disable" to "require" (#MEET-024 H3)

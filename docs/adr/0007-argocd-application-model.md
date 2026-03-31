@@ -1,6 +1,6 @@
 # ADR-0007: ArgoCD Application Model — Per-Environment vs Per-Project
 
-**Status:** PROPOSED
+**Status:** SUPERSEDED by ADR-0008 (Cell-Based Architecture)
 **Date:** 2026-03-31
 **Decision Required By:** Before multi-tenant scale
 **Origin:** MEET-2026-03-31-023 (Architect vs Distributed Systems divergence, governance Rule 4)
@@ -145,7 +145,10 @@ Rationale:
 
 ## Decision
 
-**PENDING** — requires meeting vote.
+**SUPERSEDED** — ADR-0008 (Cell-Based Architecture) resolves the blast radius problem
+by limiting each Cell to ~5k apps with its own ArgoCD instance. Within a Cell, the
+per-environment Application model is acceptable because the blast radius is bounded
+to a single Cell. See `docs/adr/0008-cell-based-architecture.md`.
 
 ---
 

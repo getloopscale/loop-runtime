@@ -30,6 +30,11 @@ type ApplicationSpec struct {
 
 	// DestinationURL is the Kubernetes API server URL for the destination cluster.
 	DestinationURL string
+
+	// CellID identifies which Cell this Application targets.
+	// ADR-0008 Phase 1: The provisioner resolves CellID to the correct ArgoCD instance.
+	// Phase 0: empty or "cell-default" — uses the single ArgoCD instance.
+	CellID string
 }
 
 // AppProjectSpec defines the desired state of an ArgoCD AppProject for tenant RBAC isolation.

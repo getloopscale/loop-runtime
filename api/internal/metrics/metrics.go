@@ -222,6 +222,18 @@ var (
 	}, []string{"tenant", "environment"})
 )
 
+// Cell metrics — ADR-0008 Phase 0.
+// Emitted by a periodic collector (query: SELECT cell_id, COUNT(*) FROM tenants GROUP BY cell_id).
+var (
+	// CellTenantCount tracks the number of tenants assigned to each Cell.
+	// Used to monitor Cell capacity and trigger auto-provisioning in Phase 3.
+	// Alert (Phase 3): LoopZeroCellCapacityWarning fires when > 500 tenants per Cell.
+	CellTenantCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "loopzero_cell_tenant_count",
+		Help: "Number of tenants assigned to each Cell.",
+	}, []string{"cell_id"})
+)
+
 // Database connection pool metrics — emitted by a periodic collector.
 var (
 	DBConnectionsActive = promauto.NewGauge(prometheus.GaugeOpts{
