@@ -8,13 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- ADR-0008: Cell-Based Architecture for 50k+ app scale (#MEET-024)
-  - Cells provide linear scaling: 1 Cell = ~5k apps, 10 Cells = 50k apps
-  - Each Cell has independent K8s cluster + ArgoCD + Traefik + Prometheus
-  - PlacementEngine assigns tenants to Cells, CellRouter routes operations
-  - Phase 0 plan: add cell_id to tenant model, no behavioral change
+- Cell-Based Architecture Phase 0 implementation (#ADR-0008)
+  - Migration 000011: `cell_id` column on tenants table (DEFAULT 'cell-default', indexed)
+  - `CellID` field added to Tenant CRD spec (+kubebuilder:default="cell-default")
+  - PlacementEngine interface + DefaultEngine (returns "cell-default" for all tenants)
+  - CellRouter interface + PassthroughRouter (resolves any cell_id to current cluster config)
+  - BootstrapHandler wired with PlacementEngine for cell assignment on tenant creation
+  - CellMetricsCollector emits `loopzero_cell_tenant_count` gauge per cell_id (60s interval)
+  - PostgresCellStore with `CellTenantCounts()` query
+  - 9 unit tests for placement package (Engine + Router + interface compliance)
+  - ADR-0008 approved with 5-phase roadmap (Phase 0-4, overview + per-phase plans)
   - Supersedes ADR-0007 (ArgoCD Application model)
-  - Evidence: CNOE 50k benchmark, Fly.io cell-based, Heroku Private Spaces, K8s 150k pod limit
 - Database Hardening Phase 1 — MEET-2026-03-31-024 (#MEET-024)
   - Migration 000009: Role separation (loopzero_api, loopzero_migrate, loopzero_readonly)
   - Migration 000009: Row-Level Security on all tenant-scoped tables (builds, releases,

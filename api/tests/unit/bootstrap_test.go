@@ -10,13 +10,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
 func TestBootstrapRoute(t *testing.T) {
 	t.Run("POST /internal/bootstrap → 200 creates records", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "")
+		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -57,7 +58,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → 200 idempotent on second call", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "")
+		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -100,7 +101,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → 400 missing admin_github_id", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "")
+		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
 
 		body := map[string]string{
 			"admin_login":         "paulo",
@@ -130,7 +131,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → 400 missing admin_login", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "")
+		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -152,7 +153,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → 400 missing tenant_slug", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "")
+		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -174,7 +175,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → 400 invalid JSON body", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "")
+		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
 
 		req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewReader([]byte("not json")))
 		req.Header.Set("Content-Type", "application/json")
@@ -189,7 +190,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → tenant_id uses tn- prefix", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "")
+		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
 
 		body := map[string]string{
 			"admin_github_id":     "999",
@@ -223,7 +224,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → defaults plan to starter when empty", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "")
+		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
 
 		body := map[string]string{
 			"admin_github_id":     "123456",

@@ -31,6 +31,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/gitops"
 	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/loki"
+	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/cfkv"
 	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
 	"github.com/loopzero/loopzero/api/internal/source"
@@ -462,14 +463,26 @@ func main() {
 		// Defers run LIFO, so this defer runs BEFORE defer dbAdapter.Close() (line 167).
 		var bgWg sync.WaitGroup
 
+		// ADR-0008 Phase 0: Cell metrics collector (runs on all replicas, not just leader).
+		cellMetrics := placement.NewCellMetricsCollector(
+			&db.PostgresCellStore{DB: dbAdapter},
+			logger,
+			60*time.Second,
+		)
+
 		if isLeader {
-			bgWg.Add(6)
+			bgWg.Add(7) // 6 leader loops + 1 cell metrics
 			go func() { defer bgWg.Done(); reconcileLoop.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); reaper.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); releaseReaper.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); releaseConvergenceLoop.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); idempotencyCleaner.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); eventPruner.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); cellMetrics.Start(shutdownCtx) }()
+		} else {
+			// Non-leader replicas still collect cell metrics
+			bgWg.Add(1)
+			go func() { defer bgWg.Done(); cellMetrics.Start(shutdownCtx) }()
 		}
 
 		defer func() {
@@ -548,6 +561,7 @@ func main() {
 		SecretK8sSync:      secretK8sMgr,
 		BootstrapStore:     bootstrapStore,
 		BootstrapSecret:    cfg.BootstrapSecret,
+		CellPlacement:      placement.NewDefaultEngine(), // ADR-0008 Phase 0
 		BuildHandler:        buildHandler,
 		ArgoCallbackHandler: argoCallbackHandler,
 		LogsHandler:        logsHandler,

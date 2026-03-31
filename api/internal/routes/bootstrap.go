@@ -26,11 +26,15 @@ import (
 
 // BootstrapRequest is the JSON body for POST /internal/bootstrap.
 type BootstrapRequest struct {
-	AdminGitHubID    string `json:"admin_github_id"`
-	AdminLogin       string `json:"admin_login"`
-	TenantSlug       string `json:"tenant_slug"`
+	AdminGitHubID     string `json:"admin_github_id"`
+	AdminLogin        string `json:"admin_login"`
+	TenantSlug        string `json:"tenant_slug"`
 	TenantDisplayName string `json:"tenant_display_name"`
-	Plan             string `json:"plan"`
+	Plan              string `json:"plan"`
+	// CellID is set by the PlacementEngine before persisting.
+	// Not part of the JSON body — injected by the handler.
+	// ADR-0008: Phase 0 = "cell-default", Phase 1+ = PlacementEngine assigns.
+	CellID string `json:"-"`
 }
 
 // BootstrapResponse is the JSON response for POST /internal/bootstrap.
@@ -51,17 +55,24 @@ type BootstrapStore interface {
 	Bootstrap(ctx context.Context, req BootstrapRequest) (userID, tenantID string, created bool, err error)
 }
 
+// CellPlacementEngine assigns tenants to Cells.
+// ADR-0008: Phase 0 = DefaultEngine (always "cell-default").
+type CellPlacementEngine interface {
+	AssignCell(ctx context.Context) (cellID string, err error)
+}
+
 // BootstrapHandler handles POST /internal/bootstrap.
 type BootstrapHandler struct {
-	store  BootstrapStore
-	secret string // SEC-003: shared secret for authentication
+	store     BootstrapStore
+	secret    string // SEC-003: shared secret for authentication
+	placement CellPlacementEngine // ADR-0008: Cell assignment
 }
 
 // NewBootstrapHandler creates a new BootstrapHandler.
 // The secret parameter is the shared secret for authenticating bootstrap requests.
 // When non-empty, requests must include Authorization: Bearer <secret>.
-func NewBootstrapHandler(store BootstrapStore, secret string) *BootstrapHandler {
-	return &BootstrapHandler{store: store, secret: secret}
+func NewBootstrapHandler(store BootstrapStore, secret string, placement CellPlacementEngine) *BootstrapHandler {
+	return &BootstrapHandler{store: store, secret: secret, placement: placement}
 }
 
 // Bootstrap handles POST /internal/bootstrap.
@@ -122,6 +133,15 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 
 	// Sanitize the tenant slug to ensure RFC 1123 compliance.
 	req.TenantSlug = naming.Sanitize(req.TenantSlug)
+
+	// ADR-0008: Assign Cell before persisting tenant.
+	cellID, cellErr := h.placement.AssignCell(r.Context())
+	if cellErr != nil {
+		slog.Error("cell placement failed", "error", cellErr)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+	req.CellID = cellID
 
 	userID, tenantID, created, err := h.store.Bootstrap(r.Context(), req)
 	if err != nil {

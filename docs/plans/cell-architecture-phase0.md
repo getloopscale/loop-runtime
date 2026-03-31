@@ -301,17 +301,18 @@ query `SELECT cell_id, COUNT(*) FROM tenants GROUP BY cell_id` e setar o gauge.
 
 ### Gate: Phase 0 Complete
 
-- [ ] P0-1: DB migration executada, `cell_id` no schema
-- [ ] P0-2: Struct atualizado (API + CRD), queries atualizadas
-- [ ] P0-3: PlacementEngine interface + DefaultEngine
-- [ ] P0-4: CellRouter interface + PassthroughRouter
-- [ ] P0-5: Tenant creation usa PlacementEngine
-- [ ] P0-6: Metrica `loopzero_cell_tenant_count` emitida
-- [ ] Todos: `go build ./api/... ./operators/... ./pkg/...` passa
-- [ ] Todos: `go test ./api/... ./operators/... ./pkg/...` passa
+- [x] P0-1: DB migration 000011 criada — `cell_id TEXT NOT NULL DEFAULT 'cell-default'` + index
+- [x] P0-2: CRD TenantSpec.CellID + bootstrap INSERT atualizado
+- [x] P0-3: PlacementEngine interface + DefaultEngine — 3 tests
+- [x] P0-4: CellRouter interface + PassthroughRouter — 6 tests
+- [x] P0-5: BootstrapHandler wired com PlacementEngine — 8 bootstrap tests pass
+- [x] P0-6: CellMetricsCollector + PostgresCellStore + `loopzero_cell_tenant_count` gauge
+- [x] Todos: `go build ./api/... ./operators/... ./pkg/...` passa
+- [x] Todos: `go test ./api/... ./pkg/...` passa (21 API + 6 pkg = 27 packages)
+- [ ] Todos: `go test ./operators/...` passa (envtest)
 - [ ] Todos: `task validate:manifests` passa
 - [ ] Zero mudanca comportamental verificada (deploy E2E identico)
-- [ ] Changelog atualizado
+- [x] Changelog atualizado
 - [ ] Validado em DigitalOcean
 
 ### O Que NAO Fazer na Phase 0

@@ -48,6 +48,7 @@ type Config struct {
 	// When set, POST /internal/bootstrap is available.
 	BootstrapStore     routes.BootstrapStore
 	BootstrapSecret    string // SEC-003: shared secret for /internal/bootstrap auth
+	CellPlacement      routes.CellPlacementEngine // ADR-0008: Cell assignment for new tenants
 	// ShutdownCtx is cancelled when the server begins graceful shutdown.
 	// Background goroutines (reaper, cleaner, pruner, callback processing)
 	// should use this context so they stop before the connection pool closes (A-05).
@@ -117,7 +118,7 @@ func NewRouter(cfg Config) *chi.Mux {
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
 	if cfg.BootstrapStore != nil {
-		bootstrap := routes.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret)
+		bootstrap := routes.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret, cfg.CellPlacement)
 		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
 	}
 	if cfg.ArgoCallbackHandler != nil {
