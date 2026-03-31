@@ -47,6 +47,24 @@ func (e *DefaultEngine) GetCell(_ context.Context, _ string) (string, error) {
 	return DefaultCellID, nil
 }
 
+// ExtractRegion derives region from cell_id.
+// "cell-default" → "default", "cell-sfo3-02" → "sfo3".
+func ExtractRegion(cellID string) string {
+	if cellID == DefaultCellID {
+		return "default"
+	}
+	if len(cellID) > 5 { // "cell-" prefix
+		rest := cellID[5:]
+		for i := len(rest) - 1; i >= 0; i-- {
+			if rest[i] == '-' {
+				return rest[:i]
+			}
+		}
+		return rest
+	}
+	return cellID
+}
+
 // TenantCellQuerier abstracts tenant-to-cell lookups.
 // Implemented by the DB layer.
 type TenantCellQuerier interface {

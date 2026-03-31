@@ -63,7 +63,7 @@ func (s *CellService) ListCells(ctx context.Context) ([]CellStatus, error) {
 	for _, cell := range cells {
 		result = append(result, CellStatus{
 			CellID:        cell.CellID,
-			Region:        extractRegion(cell.CellID),
+			Region:        placement.ExtractRegion(cell.CellID),
 			TenantCount:   counts[cell.CellID],
 			AppCount:      0, // TODO(phase-2): query actual app count per cell
 			ClusterHealth: "Ready",   // TODO(phase-2): probe cluster health
@@ -74,21 +74,4 @@ func (s *CellService) ListCells(ctx context.Context) ([]CellStatus, error) {
 	return result, nil
 }
 
-// extractRegion derives region from cell_id.
-// "cell-default" → "default", "cell-sfo3-02" → "sfo3".
-func extractRegion(cellID string) string {
-	if cellID == placement.DefaultCellID {
-		return "default"
-	}
-	// cell-{region}-{seq} → extract region
-	if len(cellID) > 5 { // "cell-" prefix
-		rest := cellID[5:]
-		for i := len(rest) - 1; i >= 0; i-- {
-			if rest[i] == '-' {
-				return rest[:i]
-			}
-		}
-		return rest
-	}
-	return cellID
-}
+// extractRegion is now in placement.ExtractRegion (shared with ConstraintEngine).

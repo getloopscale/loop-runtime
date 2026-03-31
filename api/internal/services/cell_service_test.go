@@ -80,9 +80,9 @@ func TestExtractRegion(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.cellID, func(t *testing.T) {
-			got := extractRegion(tt.cellID)
+			got := placement.ExtractRegion(tt.cellID)
 			if got != tt.want {
-				t.Errorf("extractRegion(%q) = %q, want %q", tt.cellID, got, tt.want)
+				t.Errorf("placement.ExtractRegion(%q) = %q, want %q", tt.cellID, got, tt.want)
 			}
 		})
 	}
