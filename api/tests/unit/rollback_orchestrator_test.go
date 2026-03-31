@@ -45,6 +45,19 @@ func (f *fakeRollbackReleaseStore) GetByIDForTenant(_ context.Context, _, releas
 	return r, nil
 }
 
+func (f *fakeRollbackReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
+	r, ok := f.byID[id]
+	if !ok {
+		return nil, fmt.Errorf("release not found")
+	}
+	if status, ok := f.statuses[id]; ok {
+		copy := *r
+		copy.Status = status
+		return &copy, nil
+	}
+	return r, nil
+}
+
 func (f *fakeRollbackReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX, id string, event string) (*db.Release, error) {
 	m := statemachine.NewReleaseMachine()
 	current := f.statuses[id]

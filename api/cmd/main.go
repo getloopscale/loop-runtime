@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/logging"
@@ -366,7 +367,6 @@ func main() {
 				BaseDomain:  cfg.BaseDomain,
 			},
 		)
-		go reconcileLoop.Start(shutdownCtx)
 
 		// Build reaper — enforces spec §5.1 timeouts
 		// MOD-6: reconcileLoop is passed so reaper skips builds being reconciled.
@@ -385,7 +385,6 @@ func main() {
 			},
 			reconcileLoop,
 		)
-		go reaper.Start(shutdownCtx)
 
 		// Release reaper — enforces spec §5.2 timeouts
 		// Releases stuck in READY past 5min → GIT_MIRROR_FAILED
@@ -402,7 +401,6 @@ func main() {
 				Interval:       cfg.ReleaseReaperInterval,
 			},
 		)
-		go releaseReaper.Start(shutdownCtx)
 
 		// MEET-2026-03-27-012 Phase 1.1: Release Convergence Loop
 		// Asynchronously verifies PENDING releases converge (ArgoCD sync + health).
@@ -423,7 +421,6 @@ func main() {
 				MaxConcurrent: 10,
 			},
 		)
-		go releaseConvergenceLoop.Start(shutdownCtx)
 
 		// Idempotency cleaner — prunes expired keys every hour (A-08)
 		idempotencyCleaner := services.NewIdempotencyCleaner(
@@ -431,7 +428,6 @@ func main() {
 			logger,
 			1*time.Hour,
 		)
-		go idempotencyCleaner.Start(shutdownCtx)
 
 		// SSE event pruner — removes events older than 24h every hour (C-06)
 		eventPruner := sse.NewEventPruner(
@@ -440,7 +436,55 @@ func main() {
 			24*time.Hour,
 			1*time.Hour,
 		)
-		go eventPruner.Start(shutdownCtx)
+
+		// MEET-2026-03-31-023 T2-11: Leader election guard.
+		// Background loops (reconcile, reapers, convergence) MUST run on exactly
+		// one API replica. This advisory lock prevents duplicate loop execution
+		// if the Deployment is accidentally scaled to 2+ replicas.
+		// Uses pg_try_advisory_lock (session-scoped): returns false immediately if
+		// another session holds the lock. NOTE: session-scoped lock is correct here
+		// (not xact-scoped) because we need the lock for the entire process lifetime.
+		const leaderLockID int64 = 0x7468656F6C656164 // "loopzerolead" in hex
+		var isLeader bool
+		if err := dbAdapter.QueryRow(context.Background(),
+			"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&isLeader); err != nil {
+			logger.Error("failed to acquire leader lock", "error", err)
+			os.Exit(1)
+		}
+		if !isLeader {
+			logger.Warn("another API instance holds the leader lock — background loops will NOT start on this replica",
+				"hint", "The API can serve HTTP requests but reconcile/reaper loops are disabled. See docs/runbooks/api-scaling.md")
+		}
+
+		// T1-7: Drain-on-Shutdown — WaitGroup tracks all background goroutines.
+		// On SIGTERM, shutdownCtx is cancelled (goroutines stop), then we wait
+		// up to 30s for them to finish before closing the DB pool.
+		// Defers run LIFO, so this defer runs BEFORE defer dbAdapter.Close() (line 167).
+		var bgWg sync.WaitGroup
+
+		if isLeader {
+			bgWg.Add(6)
+			go func() { defer bgWg.Done(); reconcileLoop.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); reaper.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); releaseReaper.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); releaseConvergenceLoop.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); idempotencyCleaner.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); eventPruner.Start(shutdownCtx) }()
+		}
+
+		defer func() {
+			waitDone := make(chan struct{})
+			go func() {
+				bgWg.Wait()
+				close(waitDone)
+			}()
+			select {
+			case <-waitDone:
+				logger.Info("all background goroutines stopped")
+			case <-time.After(30 * time.Second):
+				logger.Warn("background goroutines did not stop within 30s, proceeding with shutdown")
+			}
+		}()
 
 		// ArgoCD sync callback activator — processes webhook from ArgoCD Notifications.
 		// Push-based activation: ArgoCD notifies when sync completes instead of API polling.

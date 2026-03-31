@@ -238,6 +238,20 @@ func Load() Config {
 // security violations in production that must not be ignored.
 // Called after Load() to surface non-production configuration (C-03).
 func (c Config) Validate() error {
+	// MEET-2026-03-31-023 T2-13: Cross-field validation rules.
+	// These prevent silent misconfigurations that cause runtime failures.
+	if c.DBMaxConns > 0 && c.DBMinConns > 0 && c.DBMaxConns < c.DBMinConns {
+		return fmt.Errorf("DB_MAX_CONNS (%d) must be >= DB_MIN_CONNS (%d)", c.DBMaxConns, c.DBMinConns)
+	}
+	if c.ReleasePendingTimeout > 0 && c.ArgocdSyncTimeout > 0 && c.ReleasePendingTimeout < c.ArgocdSyncTimeout {
+		slog.Warn("RELEASE_PENDING_TIMEOUT is less than ARGOCD_SYNC_TIMEOUT — releases may be reaped before ArgoCD sync completes",
+			"release_pending_timeout", c.ReleasePendingTimeout, "argocd_sync_timeout", c.ArgocdSyncTimeout)
+	}
+	if c.BuildRunningTimeout > 0 && c.BuildQueueTimeout > 0 && c.BuildRunningTimeout < c.BuildQueueTimeout {
+		slog.Warn("BUILD_RUNNING_TIMEOUT is less than BUILD_QUEUE_TIMEOUT — unusual configuration",
+			"running_timeout", c.BuildRunningTimeout, "queue_timeout", c.BuildQueueTimeout)
+	}
+
 	// Dev credential warnings (production check is done below as fatal)
 	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" && !c.IsProduction() {
 		slog.Warn("using default callback secret — only acceptable for local development")

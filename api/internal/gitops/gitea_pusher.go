@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
@@ -63,6 +64,12 @@ func NewGiteaGitOpsPusher(cfg GiteaGitOpsPusherConfig) *GiteaGitOpsPusher {
 // The operation is idempotent: pushing the same manifests twice is safe (git
 // will detect "nothing to commit" and we return the current HEAD SHA).
 func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpts) (string, error) {
+	// MEET-2026-03-31-023 T1-8: Measure GitOps push duration.
+	pushStart := time.Now()
+	defer func() {
+		metrics.GitOpsOperationDuration.WithLabelValues("push").Observe(time.Since(pushStart).Seconds())
+	}()
+
 	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.gitops.push_manifests",
 		trace.WithAttributes(
 			attribute.String("loopzero.tenant", opts.TenantID),
@@ -181,6 +188,12 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 // The operation is idempotent: if the directory doesn't exist, returns success.
 // ArgoCD with prune: true will automatically remove the K8s resources.
 func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemoveOpts) (string, error) {
+	// MEET-2026-03-31-023 T1-8: Measure GitOps remove duration.
+	removeStart := time.Now()
+	defer func() {
+		metrics.GitOpsOperationDuration.WithLabelValues("remove").Observe(time.Since(removeStart).Seconds())
+	}()
+
 	repoName := fmt.Sprintf("%s-gitops", opts.TenantID)
 	remoteURL := p.repoURL(repoName)
 

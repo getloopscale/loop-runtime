@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Cross-validation remediation plan and implementation (#MEET-023)
+  - Meeting record with 6 specialist agents (Architect, DistSys, SRE, GitOps, API Domain, Verification)
+  - Executable plan at docs/plans/cross-validation-remediation.md
+  - ADR-0007: ArgoCD Application model evaluation (per-project vs notification scoping)
+  - Leader election guard via pg_try_advisory_lock — prevents duplicate background loops on multi-replica
+  - API scaling runbook at docs/runbooks/api-scaling.md
+  - 7 new Prometheus metrics: drift_detected, release_state_divergence, releases_pending,
+    reconcile_loop_last_success_timestamp, gitops_operation_duration, release_convergence_duration,
+    releasing_builds (was registered, now has PrometheusRule)
+  - 3 new PrometheusRules: LoopZeroOrphanBuild, LoopZeroReleasesPendingStuck, LoopZeroReconcileLoopStale
+  - Post-activation health monitoring for ACTIVE releases (convergence loop extension)
+  - Config cross-field validation: DBMaxConns >= DBMinConns, timeout coherence checks
+
+### Fixed
+- Idempotency guard in ActivateReleaseKernel prevents panic when SyncCallbackActivator and
+  ReleaseConvergenceLoop race on the same release (#MEET-023 T0-1)
+- Phantom alert LoopZeroDriftDetected: metric loopzero_drift_detected was referenced in PrometheusRule
+  but never emitted — now registered and wired to health monitor (#MEET-023 T0-2)
+- Convergence loop now retriggers TriggerSync for PENDING releases stuck > 30s with no active
+  ArgoCD sync operation — prevents silent timeout with manual sync policy (#MEET-023 T1-5)
+- Drain-on-shutdown: WaitGroup tracks all 6 background goroutines, waits up to 30s before
+  closing DB pool on SIGTERM (#MEET-023 T1-7)
+
 - Workload protection Phase 1 + Phase 2: defense against broken/unhealthy container images (#MEET-021)
   - Startup probe on all server/frontend apps (150s max startup, 5s period, 3s timeout)
   - Readiness probe with thresholds (10s period, 3 failures before removal from Service)
