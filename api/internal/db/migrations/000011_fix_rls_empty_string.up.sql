@@ -33,6 +33,21 @@ END $$;
 -- Fix audit_log.correlation_id to be nullable (admin/seed operations don't have correlation_id)
 ALTER TABLE audit_log ALTER COLUMN correlation_id DROP NOT NULL;
 
+-- Fix CHECK constraints: migration 000009 missed states from the state machine.
+-- builds: missing CANCELLING
+ALTER TABLE builds DROP CONSTRAINT IF EXISTS chk_builds_status;
+ALTER TABLE builds ADD CONSTRAINT chk_builds_status
+  CHECK (status IN ('QUEUED', 'RUNNING', 'RELEASING', 'SUCCEEDED', 'FAILED', 'CANCELLING', 'CANCELLED'))
+  NOT VALID;
+ALTER TABLE builds VALIDATE CONSTRAINT chk_builds_status;
+
+-- releases: missing GIT_MIRROR_FAILED, SYNC_FAILED, DRIFT_ALERT, ROLLING_BACK, ROLLBACK_FAILED
+ALTER TABLE releases DROP CONSTRAINT IF EXISTS chk_releases_status;
+ALTER TABLE releases ADD CONSTRAINT chk_releases_status
+  CHECK (status IN ('READY', 'PENDING', 'ACTIVE', 'GIT_MIRROR_FAILED', 'SYNC_FAILED', 'DRIFT_ALERT', 'SUPERSEDED', 'ROLLING_BACK', 'ROLLED_BACK', 'ROLLBACK_FAILED', 'CANCELLED'))
+  NOT VALID;
+ALTER TABLE releases VALIDATE CONSTRAINT chk_releases_status;
+
 -- Disable FORCE ROW LEVEL SECURITY on all tables.
 -- The owner (loopzero) bypasses RLS by default — FORCE was incorrectly enabled.
 -- Background services (reconcile loop, reaper, convergence loop) run as owner
