@@ -266,6 +266,10 @@ func retryStrategy(limit int, duration, factor, maxDuration string) *forge.Retry
 			Factor:      factor,
 			MaxDuration: maxDuration,
 		},
+		// Skip retry on OOM kill (exit 137) — retrying will fail again with same memory limits.
+		// Exit code 1 remains retryable (transient DNS/npm/registry failures).
+		// MEET-2026-03-30-021 F3-C2: only exit 137 is irrecoverable.
+		Expression: `asInt(lastRetry.exitCode) != 137`,
 	}
 }
 

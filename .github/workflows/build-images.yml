@@ -34,6 +34,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write  # Required for cosign keyless signing via Sigstore OIDC (MEET-022)
 
 env:
   REGISTRY: registry.digitalocean.com/loopzero-infra-registry
@@ -166,6 +167,26 @@ jobs:
           echo "- \`${{ env.REGISTRY }}/loopzero-api:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/loopzero-api:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
+      # MEET-2026-03-30-022 item 4.2: Sign platform images with cosign (keyless via Sigstore OIDC).
+      # Signing failure = build failure (not silent skip). SRE condition from meeting.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign loopzero-api images
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+
+          echo "Signing loopzero-api:${TAG}..."
+          cosign sign --yes ${{ env.REGISTRY }}/loopzero-api:${TAG}
+
+          echo "Signing loopzero-api:${SHA}..."
+          cosign sign --yes ${{ env.REGISTRY }}/loopzero-api:${SHA}
+
+          echo "### cosign signatures (loopzero-api)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`loopzero-api:${TAG}\` ✅ signed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`loopzero-api:${SHA}\` ✅ signed" >> "$GITHUB_STEP_SUMMARY"
+
   # ─────────────────────────────────────────────
   # BUILD OPERATOR
   # ─────────────────────────────────────────────
@@ -213,6 +234,25 @@ jobs:
           echo "### tenant-controller" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/tenant-controller:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/tenant-controller:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # MEET-2026-03-30-022 item 4.2: Sign platform images with cosign (keyless via Sigstore OIDC).
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign tenant-controller images
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+
+          echo "Signing tenant-controller:${TAG}..."
+          cosign sign --yes ${{ env.REGISTRY }}/tenant-controller:${TAG}
+
+          echo "Signing tenant-controller:${SHA}..."
+          cosign sign --yes ${{ env.REGISTRY }}/tenant-controller:${SHA}
+
+          echo "### cosign signatures (tenant-controller)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`tenant-controller:${TAG}\` ✅ signed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`tenant-controller:${SHA}\` ✅ signed" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # BUILD LOOPZERO-PACKS-RUNNER (COMP-003 fix)

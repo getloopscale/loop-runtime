@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Workload protection Phase 1: defense against broken/unhealthy container images (#MEET-021)
+- Workload protection Phases 1-3: defense against broken/unhealthy container images (#MEET-021)
   - Startup probe on all server/frontend apps (150s max startup, 5s period, 3s timeout)
   - Readiness probe with thresholds (10s period, 3 failures before removal from Service)
   - Liveness probe with thresholds (15s period, 5 failures — more tolerant than readiness)
@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - terminationGracePeriodSeconds: 30s (explicit graceful shutdown contract)
   - 6 new PrometheusRules: CrashLoop (5m), ImagePullFailed, ReplicaMismatch (5m),
     HighRestartRate, DeployStuck (ProgressDeadlineExceeded), CrashLoopCritical (30m)
+  - 4 ValidatingAdmissionPolicies (K8s native, no Kyverno): restrict registries,
+    disallow :latest, require resource limits, protect platform NetworkPolicies
+  - Build retry skips OOM (exit 137) via retryStrategy.expression (Argo Workflows native)
+  - `loopzero deploy --force` flag to deploy over unhealthy releases
+  - `force` field in POST /api/v1/builds request body
+  - cosign keyless signing for platform images in GitHub Actions pipeline (loopzero-api + tenant-controller)
+  - Kyverno verifyImages policy for workload cluster (Audit mode, cosign + Sigstore OIDC)
+  - UnhealthyWorkloadReaperController: auto-rollback for apps unhealthy > 5 minutes via API endpoint
 - Distributed tracing with Grafana Tempo + OpenTelemetry SDK for deploy flow troubleshooting (#MEET-020)
   - Grafana Tempo as trace backend (standalone, 7d retention, S3 in prod)
   - OTel Collector reconfigured: traces exported to Tempo (was debug/discard)

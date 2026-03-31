@@ -1,0 +1,46 @@
+# Kyverno ClusterPolicy: Verify cosign signatures on container images.
+# MEET-2026-03-30-022 item 4.2: Audit mode until BOTH platform AND user signing pipelines are complete.
+#
+# This policy validates that images from the LoopZero registry have valid cosign
+# keyless signatures issued by the GitHub Actions OIDC provider for the
+# getloopscale organization.
+#
+# Scope: tenant workload namespaces only (namespaceSelector).
+# Mode: Audit (does not block deploys — logs violations for monitoring).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: loopzero-verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: "Verify LoopZero Image Signatures"
+    policies.kyverno.io/description: >-
+      Verifies that container images from the LoopZero registry are signed with
+      cosign keyless signatures via GitHub Actions OIDC.
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Audit
+  webhookTimeoutSeconds: 10
+  rules:
+    - name: verify-platform-images
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaceSelector:
+                matchLabels:
+                  loopzero.io/managed-by: environment-controller
+      verifyImages:
+        - imageReferences:
+            - "registry.digitalocean.com/loopzero-infra-registry/*"
+          attestors:
+            - entries:
+                - keyless:
+                    issuer: "https://token.actions.githubusercontent.com"
+                    subject: "https://github.com/getloopscale/*"
+                  rekor:
+                    url: "https://rekor.sigstore.dev"
+          # Do not block on missing signatures during Audit phase.
+          # When ready for Enforce, remove mutateDigest and set validationFailureAction: Enforce.
+          mutateDigest: false
+          required: false
