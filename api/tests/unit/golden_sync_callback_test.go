@@ -87,6 +87,19 @@ func (f *fakeSyncReleaseStore) GetActiveByEnvTx(_ context.Context, _ db.DBTX, te
 	return f.active[key], nil
 }
 
+func (f *fakeSyncReleaseStore) FindActiveReleases(_ context.Context) ([]db.Release, error) {
+	return nil, nil
+}
+
+func (f *fakeSyncReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
+	for _, r := range f.pending {
+		if r.ID == id {
+			return &r, nil
+		}
+	}
+	return nil, fmt.Errorf("release %s not found", id)
+}
+
 func safeTransition(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (statemachine.State, error) {
 	defer func() {
 		if r := recover(); r != nil {
