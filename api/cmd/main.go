@@ -149,6 +149,8 @@ func main() {
 	var rollbackHandler *routes.RollbackHandler
 	var statusHandler *routes.StatusHandler
 	var projectDeleter routes.ProjectDeleter
+	var cellRouter placement.Router = placement.NewPassthroughRouter(placement.CellConfig{CellID: placement.DefaultCellID}) // fallback
+	var cellStore *db.PostgresCellStore // implements both TenantCellQuerier and CellMetricsQuerier
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -265,19 +267,11 @@ func main() {
 			argocdHTTPClient.Transport = httpTransport
 		}
 
-		// TODO(ADR-0008 Phase 1 wiring): Replace single syncClient with SyncClientFactory.
-		// When multi-cell infra is ready:
-		//   1. Create: syncFactory := argocd.NewSyncClientFactory(cellRouter, buildSyncClient)
-		//      where buildSyncClient creates a CircuitBreakerSyncClient per Cell
-		//   2. Inject syncFactory into ContainerDeliveryActivator, ReleaseConvergenceLoop,
-		//      SyncCallbackActivator (requires interface change to accept factory)
-		//   3. Each service resolves cell_id from release.TenantID → tenant.CellID → factory.ClientFor
-		// Similarly for K8s clients:
-		//   4. Create: clientMgr := cellmgr.New(cellRouter, clientFactory)
-		//   5. Replace hardcoded RuntimeKubeconfig usage with clientMgr.ClientFor(cellID)
-		// These changes require validation with 2 real clusters on DigitalOcean.
-
 		// ArgoCD sync client with in-memory circuit breaker (M-02 fix).
+		// ADR-0008 Phase 1+: Replace single syncClient with SyncClientFactory per Cell.
+		// For now (single Cell), the circuit-breaker-wrapped client is used directly.
+		// When multi-cell activates, create SyncClientFactory(cellRouter, builderFn)
+		// and wrap each Cell's client with its own circuit breaker.
 		// State is per-replica, not shared via PostgreSQL. This eliminates
 		// write amplification and the circular dependency where the circuit
 		// breaker protecting ArgoCD depended on PostgreSQL being healthy.
@@ -475,9 +469,27 @@ func main() {
 		// Defers run LIFO, so this defer runs BEFORE defer dbAdapter.Close() (line 167).
 		var bgWg sync.WaitGroup
 
-		// ADR-0008 Phase 0: Cell metrics collector (leader-only to avoid N identical PG queries).
+		// ADR-0008: Cell Router — resolves cell_id to cluster connection details.
+		// Phase 0/1: StaticRouter with single Cell (backward compat).
+		// Phase 2+: populated from ClusterCredential CRDs or Pulumi outputs.
+		staticRouter, err := placement.NewStaticRouter([]placement.CellConfig{{
+			CellID:        placement.DefaultCellID,
+			KubeConfig:    cfg.RuntimeKubeconfig,
+			KubeContext:   cfg.RuntimeKubeContext,
+			ArgocdURL:     cfg.ArgocdURL,
+			ArgocdToken:   cfg.ArgocdToken,
+			IngressDomain: cfg.BaseDomain,
+		}})
+		if err != nil {
+			logger.Error("failed to create cell router", "error", err)
+			os.Exit(1)
+		}
+		cellRouter = staticRouter
+
+		// ADR-0008: Cell metrics collector (leader-only to avoid N identical PG queries).
+		cellStore = &db.PostgresCellStore{DB: dbAdapter}
 		cellMetrics := placement.NewCellMetricsCollector(
-			&db.PostgresCellStore{DB: dbAdapter},
+			cellStore,
 			logger,
 			60*time.Second,
 		)
@@ -569,7 +581,7 @@ func main() {
 		SecretK8sSync:      secretK8sMgr,
 		BootstrapStore:     bootstrapStore,
 		BootstrapSecret:    cfg.BootstrapSecret,
-		CellPlacement:      placement.NewDefaultEngine(), // ADR-0008 Phase 0
+		CellPlacement:      placement.NewRoundRobinEngine(cellRouter, cellStore, 500), // ADR-0008: bin-packing
 		BuildHandler:        buildHandler,
 		ArgoCallbackHandler: argoCallbackHandler,
 		LogsHandler:        logsHandler,

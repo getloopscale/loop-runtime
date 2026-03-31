@@ -35,11 +35,36 @@ async function handleRequest(request) {
     return fetch(request);
   }
 
+  // 1. Check static routing (existing — S3/CDN delivery)
   var routingData = await LOOPZERO_ROUTING.get(subdomain, { type: "json" });
   if (!routingData) {
+    // 2. ADR-0008: Check cell routing for dynamic apps.
+    // Key format: "cell:{tenant}" → { cellId, ingressIp }
+    // Subdomain format: {app}.{tenant} or just {tenant}
+    var parts = subdomain.split(".");
+    if (parts.length >= 2) {
+      var tenant = parts[parts.length - 1]; // last segment = tenant
+      var cellRoute = await LOOPZERO_ROUTING.get("cell:" + tenant, { type: "json" });
+      if (cellRoute && cellRoute.ingressIp) {
+        // Proxy to the Cell's Traefik ingress (preserve original Host header)
+        var targetUrl = "https://" + cellRoute.ingressIp + url.pathname + url.search;
+        return fetch(targetUrl, {
+          method: request.method,
+          headers: new Headers({
+            ...Object.fromEntries(request.headers),
+            "Host": hostname,
+            "X-Forwarded-Host": hostname,
+            "X-Cell-ID": cellRoute.cellId,
+          }),
+          body: request.body,
+        });
+      }
+    }
+    // 3. Fallback: pass through to default origin (CF Tunnel)
     return fetch(request);
   }
 
+  // Static app routing (existing logic — unchanged)
   var buildId = routingData.buildId;
   var s3Prefix = routingData.s3Prefix;
   var pathname = url.pathname;
