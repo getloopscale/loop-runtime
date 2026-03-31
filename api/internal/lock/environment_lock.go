@@ -78,6 +78,18 @@ func WithEnvironmentLock[T any](ctx context.Context, pool *pgxpool.Pool, tenant,
 		return zero, fmt.Errorf("lock: set lock_timeout: %w", err)
 	}
 
+	// MEET-2026-03-31-024: Set tenant context for RLS enforcement.
+	// All queries inside this transaction will be scoped to this tenant.
+	// This is defense-in-depth: even if a query forgets WHERE tenant_id,
+	// the RLS policy enforces isolation.
+	// Uses set_config() with parameterized value ($1) instead of SET LOCAL
+	// to avoid string concatenation in SQL.
+	if tenant != "" {
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenant); err != nil {
+			return zero, fmt.Errorf("lock: set tenant_id for RLS: %w", err)
+		}
+	}
+
 	// Acquire the transaction-scoped advisory lock.
 	// hashtext() converts the composite key string to int4 for pg_advisory_xact_lock.
 	lockKey := fmt.Sprintf("%s:%s:%s", tenant, project, env)

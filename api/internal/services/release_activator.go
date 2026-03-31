@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -37,6 +38,9 @@ func (o *BuildOrchestrator) emitActivationFailure(ctx context.Context, buildID s
 type ReleaseActivationStore interface {
 	UpdateStatus(ctx context.Context, tx db.DBTX, id string, event string) (*db.Release, error)
 	GetActiveByEnvTx(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (*db.Release, error)
+	// GetByIDTx re-fetches a release inside the lock transaction.
+	// MEET-2026-03-31-023 T0-1: prevents duplicate activation race.
+	GetByIDTx(ctx context.Context, tx db.DBTX, id string) (*db.Release, error)
 }
 
 // ReleaseActivationEventStore is the subset of EventStore used by activation.
@@ -73,6 +77,19 @@ func ActivateReleaseKernel(
 	durationSecs int,
 	logger *slog.Logger,
 ) error {
+	// MEET-2026-03-31-023 T0-1: Idempotency guard — re-fetch release inside the lock
+	// to prevent duplicate activation when SyncCallbackActivator and
+	// ReleaseConvergenceLoop race on the same release.
+	current, err := releaseStore.GetByIDTx(ctx, tx, release.ID)
+	if err != nil {
+		return fmt.Errorf("activate release: re-fetch inside lock: %w", err)
+	}
+	if current.Status != string(statemachine.ReleasePending) {
+		logger.Info("activate release: already transitioned, skipping",
+			"release_id", release.ID, "current_status", current.Status)
+		return nil
+	}
+
 	// Step 1: CODE-0001 — query previous ACTIVE release BEFORE activating new one.
 	prevRelease, err := releaseStore.GetActiveByEnvTx(ctx, tx, release.TenantID, release.ProjectID, release.Environment)
 	if err != nil {
@@ -83,6 +100,10 @@ func ActivateReleaseKernel(
 	if _, err := releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncCompleted)); err != nil {
 		return fmt.Errorf("activate release: transition to ACTIVE: %w", err)
 	}
+
+	// MEET-2026-03-31-023 T1-8: Record convergence duration (PENDING → ACTIVE).
+	convergenceDuration := time.Since(release.CreatedAt).Seconds()
+	metrics.ReleaseConvergenceDuration.WithLabelValues(release.TenantID, release.Environment).Observe(convergenceDuration)
 
 	// Step 3: Emit deploy.live SSE event.
 	liveData, _ := json.Marshal(map[string]interface{}{

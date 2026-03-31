@@ -58,6 +58,10 @@ func (f *fakeReleaseStoreStatic) GetActiveByEnvTx(_ context.Context, _ db.DBTX, 
 	return f.activeByEnv[key], nil
 }
 
+func (f *fakeReleaseStoreStatic) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
+	return f.releases[id], nil
+}
+
 func (f *fakeReleaseStoreStatic) GetPreviousRelease(_ context.Context, _, _, _ string) (*db.Release, error) {
 	return nil, nil
 }
@@ -75,6 +79,10 @@ func (f *fakeReleaseStoreStatic) GetLatestByBuildID(_ context.Context, _ string)
 }
 
 func (f *fakeReleaseStoreStatic) FindPendingReleases(_ context.Context) ([]db.Release, error) {
+	return nil, nil
+}
+
+func (f *fakeReleaseStoreStatic) FindActiveReleases(_ context.Context) ([]db.Release, error) {
 	return nil, nil
 }
 

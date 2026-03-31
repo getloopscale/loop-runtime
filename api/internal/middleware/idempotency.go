@@ -28,7 +28,7 @@ type IdempotencyRecord struct {
 
 // IdempotencyStore abstracts persistence for idempotency keys (DIP).
 type IdempotencyStore interface {
-	Get(ctx context.Context, key string) (*IdempotencyRecord, error)
+	Get(ctx context.Context, key string, tenantID string) (*IdempotencyRecord, error)
 	Store(ctx context.Context, rec *IdempotencyRecord) error
 }
 
@@ -79,8 +79,14 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 
 			hash := hashRequestBody(body)
 
-			// Check for existing key
-			existing, err := store.Get(r.Context(), key)
+			// Extract tenant for scoped lookup
+			var tenantID string
+			if uc := GetUserContext(r.Context()); uc != nil {
+				tenantID = uc.TenantID
+			}
+
+			// Check for existing key (scoped by tenant to prevent cross-tenant replay)
+			existing, err := store.Get(r.Context(), key, tenantID)
 			if err != nil {
 				writeIdempotencyError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to check idempotency key")
 				return

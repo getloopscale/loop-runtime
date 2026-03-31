@@ -8,6 +8,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Database Hardening Phase 1 — MEET-2026-03-31-024 (#MEET-024)
+  - Migration 000009: Role separation (loopzero_api, loopzero_migrate, loopzero_readonly)
+  - Migration 000009: Row-Level Security on all tenant-scoped tables (builds, releases,
+    secrets, projects, environment_targets, tenant_members, audit_log, idempotency_keys)
+  - Migration 000009: CHECK constraints on builds.status and releases.status columns
+  - Migration 000009: Missing indexes (idx_releases_build_id, idx_releases_pending)
+  - Migration 000009: Deferred audit triggers on secrets and tenant_members (COMMIT-time)
+  - Migration 000009: Append-only enforcement trigger on audit_log table
+  - Migration 000010: Pre-written emergency RLS disable (no-op, uncomment if needed)
+  - SET LOCAL app.tenant_id via set_config() inside WithEnvironmentLock for RLS enforcement
+  - Application-level audit logging (AuditLogger interface + AuditAdapter for secret/project ops)
+  - Database health PrometheusRules (pool exhaustion, slow queries, long transactions, RLS denial)
+  - Database Health Grafana dashboard
+  - Runbooks: pool-exhaustion, slow-queries, rls-disable, credential-rotation
+
+### Fixed
+- Idempotency key lookup now scoped by tenant_id — prevents cross-tenant response replay (#MEET-024 BUG-01)
+- Secret store Set() race condition: replaced SELECT+INSERT with atomic UPSERT using xmax (#MEET-024 BUG-02)
+- DSN builder default sslmode changed from "disable" to "require" (#MEET-024 H3)
+
+### Security
+- Row-Level Security enforces tenant isolation at database level — defense-in-depth (#MEET-024 C2)
+- Role separation: API connects as loopzero_api (DML only), no DDL access (#MEET-024 C1)
+- Redundant idempotency_keys index dropped (key is already PK) (#MEET-024 DB-05)
+
+- Cross-validation remediation plan and implementation (#MEET-023)
+  - Meeting record with 6 specialist agents (Architect, DistSys, SRE, GitOps, API Domain, Verification)
+  - Executable plan at docs/plans/cross-validation-remediation.md
+  - ADR-0007: ArgoCD Application model evaluation (per-project vs notification scoping)
+  - Leader election guard via pg_try_advisory_lock — prevents duplicate background loops on multi-replica
+  - API scaling runbook at docs/runbooks/api-scaling.md
+  - 7 new Prometheus metrics: drift_detected, release_state_divergence, releases_pending,
+    reconcile_loop_last_success_timestamp, gitops_operation_duration, release_convergence_duration,
+    releasing_builds (was registered, now has PrometheusRule)
+  - 3 new PrometheusRules: LoopZeroOrphanBuild, LoopZeroReleasesPendingStuck, LoopZeroReconcileLoopStale
+  - Post-activation health monitoring for ACTIVE releases (convergence loop extension)
+  - Config cross-field validation: DBMaxConns >= DBMinConns, timeout coherence checks
+  - GoGitGitOpsPusher: alternative GitOps pusher using go-git library (no git CLI subprocess),
+    with exponential backoff, SEC-1 credential handling, and 7 unit tests (#MEET-023 T2-12)
+
+### Fixed
+- Idempotency guard in ActivateReleaseKernel prevents panic when SyncCallbackActivator and
+  ReleaseConvergenceLoop race on the same release (#MEET-023 T0-1)
+- Phantom alert LoopZeroDriftDetected: metric loopzero_drift_detected was referenced in PrometheusRule
+  but never emitted — now registered and wired to health monitor (#MEET-023 T0-2)
+- Convergence loop now retriggers TriggerSync for PENDING releases stuck > 30s with no active
+  ArgoCD sync operation — prevents silent timeout with manual sync policy (#MEET-023 T1-5)
+- Drain-on-shutdown: WaitGroup tracks all 6 background goroutines, waits up to 30s before
+  closing DB pool on SIGTERM (#MEET-023 T1-7)
+
 - Workload protection Phase 1 + Phase 2: defense against broken/unhealthy container images (#MEET-021)
   - Startup probe on all server/frontend apps (150s max startup, 5s period, 3s timeout)
   - Readiness probe with thresholds (10s period, 3 failures before removal from Service)

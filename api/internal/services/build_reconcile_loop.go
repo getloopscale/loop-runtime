@@ -171,6 +171,9 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 		return
 	}
 
+	// MEET-2026-03-31-023 T1-8: Record successful tick timestamp.
+	metrics.ReconcileLoopLastSuccess.WithLabelValues("build").SetToCurrentTime()
+
 	if len(builds) == 0 {
 		return
 	}

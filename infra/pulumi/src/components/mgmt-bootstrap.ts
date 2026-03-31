@@ -836,7 +836,12 @@ function installLoopZeroAPI(
   lokiEndpoint: pulumi.Output<string>,
 ): k8s.apps.v1.Deployment {
   // Database connection string for the `loopzero` database (created in Phase 1).
-  const databaseUrl = pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`;
+  // MEET-2026-03-31-024: When loopzeroApiDbPassword is set, the API connects as loopzero_api role
+  // (DML only, no DDL). Migrations continue using the admin user.
+  // When not set, falls back to admin user (acceptable for dev only).
+  const databaseUrl = config.loopzeroApiDbPassword
+    ? pulumi.interpolate`postgres://loopzero_api:${config.loopzeroApiDbPassword}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`
+    : pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`;
 
   const secret = new k8s.core.v1.Secret(
     "loopzero-api-secrets",

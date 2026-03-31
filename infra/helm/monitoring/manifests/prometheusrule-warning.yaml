@@ -118,6 +118,41 @@ spec:
             description: "ArgoCD application reconciliation is taking longer than 30 seconds (p95)."
             runbook: "Check ArgoCD controller resources and application count. May indicate capacity issues."
 
+        # MEET-2026-03-31-023 T0-3: Build stuck in RELEASING state.
+        # The metric loopzero_releasing_builds exists in api/internal/metrics/metrics.go.
+        # This alert was designed but never created as a PrometheusRule.
+        - alert: LoopZeroOrphanBuild
+          expr: loopzero_releasing_builds > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $value }} build(s) stuck in RELEASING state for 5+ minutes"
+            description: "Builds in RELEASING state indicate a failed release activation that the reconcile loop is not recovering."
+            runbook: "Check API logs for release activation errors. Verify ArgoCD connectivity. The build reconcile loop should retry automatically on next tick."
+
+        # MEET-2026-03-31-023 T1-8: Releases stuck in PENDING state.
+        - alert: LoopZeroReleasesPendingStuck
+          expr: loopzero_releases_pending > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $value }} release(s) stuck in PENDING for 10+ minutes"
+            description: "Releases should converge within 5 minutes. Check ArgoCD sync status and convergence loop health."
+            runbook: "Check ArgoCD Application health. Verify convergence loop is running (loopzero_reconcile_loop_last_success_timestamp). Check if TriggerSync failed."
+
+        # MEET-2026-03-31-023 T1-8: Reconcile loop health heartbeat.
+        - alert: LoopZeroReconcileLoopStale
+          expr: time() - loopzero_reconcile_loop_last_success_timestamp{loop="build"} > 120
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Build reconcile loop stale (no successful tick in 2 minutes)"
+            description: "The build reconcile loop may have crashed or be stuck. Check API pod logs."
+            runbook: "Check API pod health and logs. Restart API pod if loop is stuck."
+
         - alert: LoopZeroMinIODown
           expr: up{job=~".*minio.*"} == 0
           for: 2m

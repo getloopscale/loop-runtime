@@ -364,7 +364,8 @@ func Run(cfg Config) error {
 		cfg.Logger.Error("metrics server shutdown failed", "error", err)
 	}
 
-	// Step 3: After Run() returns, main.go's defer dbAdapter.Close() runs,
-	// closing the connection pool. By this point all goroutines have stopped.
+	// Step 3: After Run() returns, main.go defers execute in LIFO order:
+	//   a) bgWg wait (up to 30s for background goroutines to finish)
+	//   b) dbAdapter.Close() (connection pool closed only after goroutines drain)
 	return srv.Shutdown(ctx)
 }
