@@ -128,6 +128,28 @@ spec:
             description: "MinIO has been unreachable for more than 2 minutes. Build cache unavailable. Source uploads will fail."
             runbook: "Check MinIO pod status. Verify PVC. Builds will run without cache (slower but not blocked)."
 
+        # MEET-020 F-01: Build stuck in RUNNING beyond reaper timeout
+        - alert: LoopZeroBuildStuckRunning
+          expr: (time() - loopzero_build_started_timestamp) > 2100 and loopzero_build_status == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Build stuck in RUNNING state > 35 minutes"
+            description: "A build has been in RUNNING state for more than 35 minutes (beyond the 30m reaper timeout). The reaper may have failed to catch it."
+            runbook: "Check build_reaper logs. Verify started_at is populated in the builds table. If stuck, manually fail: UPDATE builds SET status='FAILED' WHERE id='<build_id>'."
+
+        # MEET-020 F-07: ArgoCD Application stuck in Progressing
+        - alert: LoopZeroArgoCDHealthStuck
+          expr: argocd_app_info{health_status="Progressing"} == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ArgoCD Application {{ $labels.name }} stuck in Progressing > 10min"
+            description: "ArgoCD Application {{ $labels.name }} has been in Progressing health state for more than 10 minutes. This may block deploy notifications for the entire tenant."
+            runbook: "Check for orphaned resources in the Application. Common cause: IngressRoute referencing non-existent Service (static frontend without nginx proxy). Remove orphaned resources or configure ArgoCD health check exclusion."
+
     # ═══════════════════════════════════════
     # SLO Alerts (Sprint 4 — Observability)
     # ═══════════════════════════════════════
