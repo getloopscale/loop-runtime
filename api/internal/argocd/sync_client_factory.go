@@ -59,18 +59,19 @@ func (f *SyncClientFactory) ClientFor(ctx context.Context, cellID string) (SyncC
 	}
 	f.mu.RUnlock()
 
-	// Slow path: resolve cell, build client under write lock.
-	cfg, err := f.router.Resolve(ctx, cellID)
-	if err != nil {
-		return nil, fmt.Errorf("sync client factory: resolve cell %q: %w", cellID, err)
-	}
-
+	// Slow path: write lock, then resolve + build.
+	// R-09 fix: Resolve() inside write lock for consistency with ClientManager.
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Double-check: another goroutine may have created it while we waited.
 	if client, ok := f.clients[cellID]; ok {
 		return client, nil
+	}
+
+	cfg, err := f.router.Resolve(ctx, cellID)
+	if err != nil {
+		return nil, fmt.Errorf("sync client factory: resolve cell %q: %w", cellID, err)
 	}
 
 	client, err := f.builder(cfg)

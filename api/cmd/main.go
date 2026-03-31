@@ -475,7 +475,7 @@ func main() {
 		// Defers run LIFO, so this defer runs BEFORE defer dbAdapter.Close() (line 167).
 		var bgWg sync.WaitGroup
 
-		// ADR-0008 Phase 0: Cell metrics collector (runs on all replicas, not just leader).
+		// ADR-0008 Phase 0: Cell metrics collector (leader-only to avoid N identical PG queries).
 		cellMetrics := placement.NewCellMetricsCollector(
 			&db.PostgresCellStore{DB: dbAdapter},
 			logger,
