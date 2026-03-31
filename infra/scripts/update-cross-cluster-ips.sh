@@ -143,6 +143,29 @@ if [ -f "$MONITORING_VALUES" ]; then
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# Promtail values — Loki cross-cluster endpoint (build → mgmt)
+# Promtail runs on the build cluster and ships logs to Loki on mgmt via NodePort.
+# ---------------------------------------------------------------------------
+PROMTAIL_VALUES="infra/helm/promtail/values.yaml"
+if [ -f "$PROMTAIL_VALUES" ]; then
+  echo ""
+  echo "=== Patching $PROMTAIL_VALUES ==="
+  NEW_LOKI_URL="http://${MGMT_SERVER}:30093/loki/api/v1/push"
+  OLD_LOKI_URL=$(grep -o 'http://[^/]*:30093/loki/api/v1/push' "$PROMTAIL_VALUES" 2>/dev/null || true)
+  if [ -z "$OLD_LOKI_URL" ]; then
+    # First time — replace placeholder or cluster-local URL
+    sed -i "s|url: http://.*loki.*/loki/api/v1/push|url: ${NEW_LOKI_URL}|" "$PROMTAIL_VALUES"
+    sed -i "s|url: http://MGMT_SERVER_IP:30093/loki/api/v1/push|url: ${NEW_LOKI_URL}|" "$PROMTAIL_VALUES"
+    echo "  Loki URL: → $NEW_LOKI_URL"
+  elif [ "$OLD_LOKI_URL" != "$NEW_LOKI_URL" ]; then
+    sed -i "s|${OLD_LOKI_URL}|${NEW_LOKI_URL}|" "$PROMTAIL_VALUES"
+    echo "  Loki URL: $OLD_LOKI_URL → $NEW_LOKI_URL"
+  else
+    echo "  Loki URL: already correct ($NEW_LOKI_URL)"
+  fi
+fi
+
 echo ""
 echo "=== Done ==="
 echo "Cross-cluster IPs updated. Run 'tilt up' to apply."

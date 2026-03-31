@@ -810,6 +810,9 @@ tasks:
         -f infra/helm/loki/values.yaml
         --wait --timeout 5m
       - >-
+        kubectl --context {{.MGMT_CONTEXT}}
+        apply -f infra/helm/loki/nodeport-service.yaml
+      - >-
         helm upgrade --install promtail grafana/promtail
         --kube-context {{.BUILD_CONTEXT}}
         --namespace monitoring --create-namespace

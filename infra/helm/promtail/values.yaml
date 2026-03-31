@@ -3,11 +3,11 @@
 # Purpose: DaemonSet on build cluster that ships Argo Workflows pod logs to Loki
 #
 # Cross-cluster networking:
-# - Local (k3d): clusters share Docker network, loki.monitoring:3100 resolves via DNS
+# - Local (k3d): uses mgmt server NodePort (patched by update-cross-cluster-ips.sh)
 # - Production (DO): clusters in same VPC, use internal LB IP of Loki
 config:
   clients:
-    - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+    - url: http://MGMT_SERVER_IP:30093/loki/api/v1/push
       batchwait: 5s
       batchsize: 1048576
       backoff_config:
