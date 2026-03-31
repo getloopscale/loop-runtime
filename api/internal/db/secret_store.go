@@ -55,6 +55,8 @@ func (s *PostgresSecretStore) encrypt(plaintext []byte) ([]byte, error) {
 // Set creates or updates a secret. Uses upsert (ON CONFLICT DO UPDATE).
 // SEC-001: Values are encrypted with AES-256-GCM before storage.
 // Returns true if the secret was created, false if updated.
+// Uses a single atomic statement to avoid race conditions between
+// concurrent Set calls for the same secret.
 func (s *PostgresSecretStore) Set(ctx context.Context, tenantID, projectID, env, app, name string, value []byte) (created bool, err error) {
 	// SEC-001: Encrypt the value before storing.
 	encrypted, err := s.encrypt(value)
@@ -62,31 +64,24 @@ func (s *PostgresSecretStore) Set(ctx context.Context, tenantID, projectID, env,
 		return false, fmt.Errorf("secret_store: encrypt: %w", err)
 	}
 
-	// Check if secret exists first (to determine created vs updated)
-	rows, err := s.DB.Query(ctx,
-		`SELECT 1 FROM secrets WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND app = $4 AND name = $5`,
-		tenantID, projectID, env, app, name,
-	)
-	if err != nil {
-		return false, fmt.Errorf("secret_store: check exists: %w", err)
-	}
-	exists := rows.Next()
-	rows.Close()
-
 	id := fmt.Sprintf("sec-%s-%s-%s-%s", tenantID, projectID, app, name)
 
-	_, err = s.DB.Exec(ctx,
+	// Single atomic upsert: xmax = 0 means the row was inserted (not updated).
+	// This eliminates the race condition from the previous SELECT + INSERT pattern.
+	row := s.DB.QueryRow(ctx,
 		`INSERT INTO secrets (id, tenant_id, project_id, environment, app, name, encrypted_value)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (tenant_id, project_id, environment, app, name)
-		 DO UPDATE SET encrypted_value = $7, updated_at = NOW()`,
+		 DO UPDATE SET encrypted_value = $7, updated_at = NOW()
+		 RETURNING (xmax = 0) AS created`,
 		id, tenantID, projectID, env, app, name, encrypted,
 	)
-	if err != nil {
+
+	if err := row.Scan(&created); err != nil {
 		return false, fmt.Errorf("secret_store: set: %w", err)
 	}
 
-	return !exists, nil
+	return created, nil
 }
 
 // Delete removes a secret by name within tenant/project/env/app scope.

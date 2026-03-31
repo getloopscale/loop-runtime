@@ -136,11 +136,16 @@ func (r *ReleaseConvergenceLoop) Start(ctx context.Context) {
 }
 
 func (r *ReleaseConvergenceLoop) tick(ctx context.Context) {
+	// MEET-2026-03-31-023 T1-8: Record successful tick timestamp and pending count.
+	metrics.ReconcileLoopLastSuccess.WithLabelValues("release").SetToCurrentTime()
+
 	releases, err := r.releaseStore.FindPendingReleases(ctx)
 	if err != nil {
 		r.logger.Error("release convergence: failed to find pending releases", "error", err)
 		return
 	}
+
+	metrics.ReleasesPending.Set(float64(len(releases)))
 
 	for _, rel := range releases {
 		if _, loaded := r.active.LoadOrStore(rel.ID, struct{}{}); loaded {

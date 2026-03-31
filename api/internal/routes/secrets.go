@@ -38,15 +38,27 @@ type SecretK8sSync interface {
 	DeleteSecret(ctx context.Context, tenantID, env, app, name string) error
 }
 
+// AuditLogger abstracts audit log writing (DIP).
+// MEET-2026-03-31-024: Application-level audit for sensitive operations.
+type AuditLogger interface {
+	LogAudit(ctx context.Context, tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) error
+}
+
 // SecretHandler provides HTTP handlers for secret operations.
 type SecretHandler struct {
-	store  SecretStore
+	store   SecretStore
 	k8sSync SecretK8sSync // optional — nil disables K8s sync
+	audit   AuditLogger   // optional — nil disables audit logging
 }
 
 // NewSecretHandler creates a new SecretHandler.
 func NewSecretHandler(store SecretStore) *SecretHandler {
 	return &SecretHandler{store: store}
+}
+
+// SetAuditLogger configures audit logging for sensitive operations.
+func (h *SecretHandler) SetAuditLogger(audit AuditLogger) {
+	h.audit = audit
 }
 
 // SetK8sSync configures the K8s sync for creating Secrets and ExternalSecret CRs.
@@ -160,6 +172,19 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// MEET-2026-03-31-024: Audit log for secret operations
+	if h.audit != nil {
+		action := "SECRET_UPDATED"
+		if created {
+			action = "SECRET_CREATED"
+		}
+		if auditErr := h.audit.LogAudit(ctx, uc.TenantID, action, uc.UserID,
+			"secret", req.Name, r.Header.Get("Correlation-ID"),
+			map[string]any{"environment": req.Environment, "app": req.App, "project": project}); auditErr != nil {
+			slog.Error("failed to write audit log for secret set", "name", req.Name, "error", auditErr)
+		}
+	}
+
 	// Create K8s Secret on mgmt + ExternalSecret CR on workload for ESO sync
 	if h.k8sSync != nil {
 		if syncErr := h.k8sSync.CreateSecret(ctx, uc.TenantID, project, req.Environment, req.App, req.Name, req.Value); syncErr != nil {
@@ -209,6 +234,15 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 			"message": "Secret '" + name + "' not found.",
 		})
 		return
+	}
+
+	// MEET-2026-03-31-024: Audit log for secret deletion
+	if h.audit != nil {
+		if auditErr := h.audit.LogAudit(ctx, uc.TenantID, "SECRET_DELETED", uc.UserID,
+			"secret", name, r.Header.Get("Correlation-ID"),
+			map[string]any{"environment": env, "app": app, "project": project}); auditErr != nil {
+			slog.Error("failed to write audit log for secret delete", "name", name, "error", auditErr)
+		}
 	}
 
 	// Remove K8s Secret from mgmt + ExternalSecret CR from workload

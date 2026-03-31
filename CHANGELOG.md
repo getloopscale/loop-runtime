@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Database Hardening Phase 1 — MEET-2026-03-31-024 (#MEET-024)
+  - Migration 000009: Role separation (loopzero_api, loopzero_migrate, loopzero_readonly)
+  - Migration 000009: Row-Level Security on all tenant-scoped tables (builds, releases,
+    secrets, projects, environment_targets, tenant_members, audit_log, idempotency_keys)
+  - Migration 000009: CHECK constraints on builds.status and releases.status columns
+  - Migration 000009: Missing indexes (idx_releases_build_id, idx_releases_pending)
+  - Migration 000009: Deferred audit triggers on secrets and tenant_members (COMMIT-time)
+  - Migration 000009: Append-only enforcement trigger on audit_log table
+  - Migration 000010: Pre-written emergency RLS disable (no-op, uncomment if needed)
+  - SET LOCAL app.tenant_id via set_config() inside WithEnvironmentLock for RLS enforcement
+  - Application-level audit logging (AuditLogger interface + AuditAdapter for secret/project ops)
+  - Database health PrometheusRules (pool exhaustion, slow queries, long transactions, RLS denial)
+  - Database Health Grafana dashboard
+  - Runbooks: pool-exhaustion, slow-queries, rls-disable, credential-rotation
+
+### Fixed
+- Idempotency key lookup now scoped by tenant_id — prevents cross-tenant response replay (#MEET-024 BUG-01)
+- Secret store Set() race condition: replaced SELECT+INSERT with atomic UPSERT using xmax (#MEET-024 BUG-02)
+- DSN builder default sslmode changed from "disable" to "require" (#MEET-024 H3)
+
+### Security
+- Row-Level Security enforces tenant isolation at database level — defense-in-depth (#MEET-024 C2)
+- Role separation: API connects as loopzero_api (DML only), no DDL access (#MEET-024 C1)
+- Redundant idempotency_keys index dropped (key is already PK) (#MEET-024 DB-05)
+
 - Cross-validation remediation plan and implementation (#MEET-023)
   - Meeting record with 6 specialist agents (Architect, DistSys, SRE, GitOps, API Domain, Verification)
   - Executable plan at docs/plans/cross-validation-remediation.md
@@ -20,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - 3 new PrometheusRules: LoopZeroOrphanBuild, LoopZeroReleasesPendingStuck, LoopZeroReconcileLoopStale
   - Post-activation health monitoring for ACTIVE releases (convergence loop extension)
   - Config cross-field validation: DBMaxConns >= DBMinConns, timeout coherence checks
+  - GoGitGitOpsPusher: alternative GitOps pusher using go-git library (no git CLI subprocess),
+    with exponential backoff, SEC-1 credential handling, and 7 unit tests (#MEET-023 T2-12)
 
 ### Fixed
 - Idempotency guard in ActivateReleaseKernel prevents panic when SyncCallbackActivator and

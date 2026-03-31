@@ -36,9 +36,10 @@ func GetDatabaseConfig() DatabaseConfig {
 
 // DSN returns the PostgreSQL connection string.
 // SEC-006: sslmode is configurable via DATABASE_SSLMODE env var.
-// Defaults to "disable" for local dev, should be "require" in production.
+// MEET-2026-03-31-024: Default changed from "disable" to "require".
+// Local dev must explicitly set DATABASE_SSLMODE=disable.
 func (c DatabaseConfig) DSN() string {
-	sslmode := getEnvOrDefault("DATABASE_SSLMODE", "disable")
+	sslmode := getEnvOrDefault("DATABASE_SSLMODE", "require")
 	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		c.User, c.Password, c.Host, c.Port, c.Database, sslmode)
 }
