@@ -265,6 +265,18 @@ func main() {
 			argocdHTTPClient.Transport = httpTransport
 		}
 
+		// TODO(ADR-0008 Phase 1 wiring): Replace single syncClient with SyncClientFactory.
+		// When multi-cell infra is ready:
+		//   1. Create: syncFactory := argocd.NewSyncClientFactory(cellRouter, buildSyncClient)
+		//      where buildSyncClient creates a CircuitBreakerSyncClient per Cell
+		//   2. Inject syncFactory into ContainerDeliveryActivator, ReleaseConvergenceLoop,
+		//      SyncCallbackActivator (requires interface change to accept factory)
+		//   3. Each service resolves cell_id from release.TenantID → tenant.CellID → factory.ClientFor
+		// Similarly for K8s clients:
+		//   4. Create: clientMgr := cellmgr.New(cellRouter, clientFactory)
+		//   5. Replace hardcoded RuntimeKubeconfig usage with clientMgr.ClientFor(cellID)
+		// These changes require validation with 2 real clusters on DigitalOcean.
+
 		// ArgoCD sync client with in-memory circuit breaker (M-02 fix).
 		// State is per-replica, not shared via PostgreSQL. This eliminates
 		// write amplification and the circular dependency where the circuit

@@ -71,6 +71,12 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 		// preventing cross-environment contamination (e.g., staging manifests applied to production).
 		path := env.Name
 
+		// ADR-0008: Pass CellID so the provisioner can resolve the correct ArgoCD instance.
+		cellID := tenant.Spec.CellID
+		if cellID == "" {
+			cellID = "cell-default"
+		}
+
 		spec := argocd.ApplicationSpec{
 			Name:           appName,
 			Namespace:      constants.DefaultArgoCDNamespace,
@@ -80,6 +86,7 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 			Path:           path,
 			DestinationNS:  destNS,
 			DestinationURL: r.WorkloadClusterURL,
+			CellID:         cellID,
 		}
 
 		if err := r.ArgoCDProvisioner.EnsureApplication(ctx, spec); err != nil {

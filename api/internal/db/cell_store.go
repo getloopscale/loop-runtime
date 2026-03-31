@@ -9,9 +9,10 @@ import (
 )
 
 // PostgresCellStore provides Cell-related database queries.
-// ADR-0008 Phase 0: only CellTenantCounts is needed.
+// ADR-0008 Phase 0: CellTenantCounts for metrics.
+// ADR-0008 Phase 1: CountByCell and GetTenantCellID for PlacementEngine.
 type PostgresCellStore struct {
-	DB QueryExecutor
+	DB DBTX
 }
 
 // CellTenantCounts returns the number of tenants per cell_id.
@@ -38,4 +39,22 @@ func (s *PostgresCellStore) CellTenantCounts(ctx context.Context) (map[string]in
 	}
 
 	return counts, nil
+}
+
+// CountByCell is an alias for CellTenantCounts that satisfies
+// the placement.TenantCellQuerier interface.
+func (s *PostgresCellStore) CountByCell(ctx context.Context) (map[string]int, error) {
+	return s.CellTenantCounts(ctx)
+}
+
+// GetTenantCellID returns the cell_id for a specific tenant.
+// Returns error if the tenant does not exist.
+func (s *PostgresCellStore) GetTenantCellID(ctx context.Context, tenantID string) (string, error) {
+	var cellID string
+	err := s.DB.QueryRow(ctx,
+		`SELECT cell_id FROM tenants WHERE id = $1`, tenantID).Scan(&cellID)
+	if err != nil {
+		return "", fmt.Errorf("cell store: get tenant cell_id: %w", err)
+	}
+	return cellID, nil
 }

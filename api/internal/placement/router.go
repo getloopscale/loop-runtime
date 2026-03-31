@@ -56,3 +56,51 @@ func (r *PassthroughRouter) Resolve(_ context.Context, cellID string) (*CellConf
 func (r *PassthroughRouter) ListCells(_ context.Context) ([]CellConfig, error) {
 	return []CellConfig{r.defaultCell}, nil
 }
+
+// StaticRouter resolves cell_id from a static list of CellConfigs.
+// This is the Phase 1 implementation — configured at startup from
+// ClusterCredential CRDs, Pulumi outputs, or environment variables.
+// ADR-0008 Phase 1.
+type StaticRouter struct {
+	cells map[string]CellConfig // keyed by cell_id
+}
+
+// NewStaticRouter creates a router from a list of CellConfigs.
+// Returns error if the list is empty or contains duplicate cell_ids.
+func NewStaticRouter(configs []CellConfig) (*StaticRouter, error) {
+	if len(configs) == 0 {
+		return nil, fmt.Errorf("cell router: no cells configured")
+	}
+	cells := make(map[string]CellConfig, len(configs))
+	for _, cfg := range configs {
+		if cfg.CellID == "" {
+			return nil, fmt.Errorf("cell router: cell with empty cell_id")
+		}
+		if _, exists := cells[cfg.CellID]; exists {
+			return nil, fmt.Errorf("cell router: duplicate cell_id %q", cfg.CellID)
+		}
+		cells[cfg.CellID] = cfg
+	}
+	return &StaticRouter{cells: cells}, nil
+}
+
+// Resolve returns the CellConfig for the given cell_id.
+func (r *StaticRouter) Resolve(_ context.Context, cellID string) (*CellConfig, error) {
+	if cellID == "" {
+		return nil, fmt.Errorf("cell router: empty cell_id")
+	}
+	cfg, ok := r.cells[cellID]
+	if !ok {
+		return nil, fmt.Errorf("cell router: unknown cell_id %q", cellID)
+	}
+	return &cfg, nil
+}
+
+// ListCells returns all configured Cells.
+func (r *StaticRouter) ListCells(_ context.Context) ([]CellConfig, error) {
+	cells := make([]CellConfig, 0, len(r.cells))
+	for _, cfg := range r.cells {
+		cells = append(cells, cfg)
+	}
+	return cells, nil
+}
