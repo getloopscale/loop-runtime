@@ -158,16 +158,29 @@ export function createProgram(): Command {
   program
     .command('logout')
     .description('Remove stored credentials')
-    .action(async () => {
+    .option('-y, --yes', 'Skip confirmation prompt')
+    .action(async (cmdOpts) => {
       const globalOpts = program.opts();
 
       const logoutCmd = new LogoutCommand({
         clearToken: () => configStore.clearToken(),
         writeTo,
+        confirm: async (message: string) => {
+          const readline = await import('readline');
+          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+          return new Promise<boolean>((resolve) => {
+            rl.question(message + ' ', (answer) => {
+              rl.close();
+              resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+            });
+          });
+        },
+        isCI: process.env.CI === 'true',
       });
 
       const exitCode = await logoutCmd.execute({
         json: globalOpts.json,
+        yes: cmdOpts.yes,
       });
       process.exitCode = exitCode;
     });
