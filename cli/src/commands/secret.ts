@@ -222,8 +222,8 @@ export class SecretDeleteCommand {
 
     // Confirmation required (unless --yes)
     if (!opts.yes) {
-      if (this.deps.isCI) {
-        return this.exitWithError(opts, 'Confirmation required. Use --yes in CI mode.', 1, 'CONFIRMATION_REQUIRED');
+      if (this.deps.isCI || opts.json) {
+        return this.exitWithError(opts, 'Confirmation required. Use --yes to skip confirmation. Example: loopzero secret delete KEY --yes --json', 1, 'CONFIRMATION_REQUIRED');
       }
       if (this.deps.confirm) {
         const confirmed = await this.deps.confirm(

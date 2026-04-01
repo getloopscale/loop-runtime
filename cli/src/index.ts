@@ -519,7 +519,7 @@ export function createProgram(): Command {
   program
     .command('logs')
     .description('Show build output logs')
-    .requiredOption('--build <id>', 'Build ID to show logs for')
+    .option('--build <id>', 'Build ID to show logs for (infers from last build if omitted)')
     .option('--tail <n>', 'Show last N lines', parseInt)
     .option('--step <name>', 'Filter by build step')
     .option('--env <name>', 'Target environment', 'production')
@@ -543,6 +543,12 @@ export function createProgram(): Command {
           const query = params.toString();
           const path = `/api/v1/builds/${encodeURIComponent(buildID)}/logs${query ? `?${query}` : ''}`;
           return apiClient.get(path);
+        },
+        // F-03: infer last build ID from project status when --build not provided
+        getProjectStatus: async (project: string, env: string) => {
+          return apiClient.get<{ last_build?: { id: string } }>(
+            `/api/v1/projects/${encodeURIComponent(project)}/status?environment=${encodeURIComponent(env)}`
+          );
         },
         writeTo,
         writeError,

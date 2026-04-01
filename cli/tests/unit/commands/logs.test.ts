@@ -149,8 +149,12 @@ describe('LogsCommand', () => {
       const exitCode = await cmd.execute({});
 
       expect(exitCode).toBe(1);
-      const errorOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
-      expect(errorOutput).toContain('Build ID is required');
+      // F-03: without loopzero.yaml and without --build, we can't infer the build
+      const allOutput = [
+        ...(deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]),
+        ...(deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]),
+      ].join('\n');
+      expect(allOutput).toMatch(/loopzero\.yaml|--build/);
     });
   });
 
@@ -223,6 +227,50 @@ describe('LogsCommand', () => {
           expect(allOutput).not.toContain(term);
         }
       }
+    });
+  });
+
+  // F-03: Infer build ID from project status when --build not provided
+  describe('build ID inference (F-03)', () => {
+    it('should infer build ID from project status when --build not provided', async () => {
+      const deps = createMockDeps({
+        getProjectStatus: jest.fn().mockResolvedValue({
+          last_build: { id: 'build-inferred-123' },
+        }),
+      });
+      const cmd = new LogsCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(0);
+      expect(deps.getLogs).toHaveBeenCalledWith('build-inferred-123', expect.any(Object));
+    });
+
+    it('should return NO_BUILDS when project has no builds', async () => {
+      const deps = createMockDeps({
+        getProjectStatus: jest.fn().mockResolvedValue({ last_build: null }),
+      });
+      const cmd = new LogsCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      expect(output).toContain('NO_BUILDS');
+    });
+
+    it('should return MISSING_CONFIG when no loopzero.yaml and no --build', async () => {
+      const deps = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue(null),
+        getProjectStatus: jest.fn(),
+      });
+      const cmd = new LogsCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      expect(output).toContain('MISSING_CONFIG');
     });
   });
 });

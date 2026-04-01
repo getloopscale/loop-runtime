@@ -121,13 +121,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Secret K8s manager — creates K8s Secrets on mgmt + ExternalSecret CRs on workload for ESO sync
-	secretK8sMgr, err := k8s.NewSecretK8sManager(
+	// Secret K8s manager — creates K8s Secrets on mgmt + ExternalSecret CRs on workload for ESO sync.
+	// F-01 fix: Use interface variable to avoid Go nil interface trap.
+	// A typed nil (*SecretK8sManager)(nil) passes `!= nil` interface checks,
+	// causing panic in CreateSecret. Only assign to interface on success.
+	var secretK8sSync routes.SecretK8sSync
+	if mgr, err := k8s.NewSecretK8sManager(
 		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
 		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,
-	)
-	if err != nil {
+	); err != nil {
 		logger.Warn("secret K8s manager not available — ESO sync disabled", "error", err)
+	} else {
+		secretK8sSync = mgr
 	}
 
 	// Database connection (optional — graceful degradation if not configured)
@@ -582,7 +587,7 @@ func main() {
 		EventStore:         eventStore,
 		BuildStoreReader:   buildStoreReader,
 		SecretStore:        secretStore,
-		SecretK8sSync:      secretK8sMgr,
+		SecretK8sSync:      secretK8sSync,
 		BootstrapStore:     bootstrapStore,
 		BootstrapSecret:    cfg.BootstrapSecret,
 		CellPlacement:      placement.NewRoundRobinEngine(cellRouter, cellStore, 500), // ADR-0008: bin-packing
