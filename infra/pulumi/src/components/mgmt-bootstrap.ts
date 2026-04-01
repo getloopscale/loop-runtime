@@ -1901,12 +1901,14 @@ function createScopedKubeconfig(
   return pulumi
     .all([cluster.endpoint, tokenSecret.data])
     .apply(([endpoint, data]) => {
+      // Pulumi returns Secret data as base64-encoded strings.
+      // token: decode to UTF-8 for bearer auth.
+      // ca.crt: already base64 — use directly as certificate-authority-data
+      // (kubeconfig expects base64-encoded PEM in that field).
       const token = data?.["token"]
         ? Buffer.from(data["token"], "base64").toString("utf-8")
         : "";
-      const ca = data?.["ca.crt"]
-        ? Buffer.from(data["ca.crt"]).toString("base64")
-        : "";
+      const ca = data?.["ca.crt"] ?? "";
 
       return `apiVersion: v1
 kind: Config
