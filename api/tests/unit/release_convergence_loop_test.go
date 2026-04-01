@@ -96,9 +96,15 @@ func safeTransitionRelease(m *statemachine.Machine, current statemachine.State, 
 }
 
 type fakeConvergenceEnvTargetStore struct {
+	mu          sync.Mutex
 	activeCalls int
 }
 
+func (f *fakeConvergenceEnvTargetStore) getActiveCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.activeCalls
+}
 func (f *fakeConvergenceEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
 	return nil, nil
 }
@@ -109,6 +115,8 @@ func (f *fakeConvergenceEnvTargetStore) SetDesired(_ context.Context, _ db.DBTX,
 	return nil
 }
 func (f *fakeConvergenceEnvTargetStore) SetActive(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.activeCalls++
 	return nil
 }
@@ -174,14 +182,29 @@ func (f *fakeConvergenceEventStore) getEvents() []string {
 // Used to verify the convergence loop calls TerminateOperation on timeout (MEET-2026-03-29-019).
 type fakeTerminatingSyncClient struct {
 	fakeConvergenceSyncClient
+	tmu            sync.Mutex
 	terminateCalls int
 	terminatedApp  string
 }
 
 func (f *fakeTerminatingSyncClient) TerminateOperation(_ context.Context, appName string) error {
+	f.tmu.Lock()
+	defer f.tmu.Unlock()
 	f.terminateCalls++
 	f.terminatedApp = appName
 	return nil
+}
+
+func (f *fakeTerminatingSyncClient) getTerminateCalls() int {
+	f.tmu.Lock()
+	defer f.tmu.Unlock()
+	return f.terminateCalls
+}
+
+func (f *fakeTerminatingSyncClient) getTerminatedApp() string {
+	f.tmu.Lock()
+	defer f.tmu.Unlock()
+	return f.terminatedApp
 }
 
 type fakeConvergenceLocker struct{}
@@ -224,7 +247,7 @@ func TestReleaseConvergenceLoop_ActivatesPendingRelease(t *testing.T) {
 	if releaseStore.getStatus("rel-001") != "ACTIVE" {
 		t.Errorf("expected release ACTIVE, got %q", releaseStore.getStatus("rel-001"))
 	}
-	if envTargetStore.activeCalls == 0 {
+	if envTargetStore.getActiveCalls() == 0 {
 		t.Error("expected SetActive to be called")
 	}
 	// Should emit deploy.live event
@@ -354,11 +377,11 @@ func TestReleaseConvergenceLoop_TerminatesStuckOperationOnTimeout(t *testing.T) 
 	time.Sleep(300 * time.Millisecond)
 
 	// Assert: TerminateOperation was called
-	if terminatingSyncClient.terminateCalls == 0 {
+	if terminatingSyncClient.getTerminateCalls() == 0 {
 		t.Error("expected TerminateOperation to be called on timeout")
 	}
-	if terminatingSyncClient.terminatedApp != "acme-production" {
-		t.Errorf("expected TerminateOperation for 'acme-production', got %q", terminatingSyncClient.terminatedApp)
+	if terminatingSyncClient.getTerminatedApp() != "acme-production" {
+		t.Errorf("expected TerminateOperation for 'acme-production', got %q", terminatingSyncClient.getTerminatedApp())
 	}
 	// Release should be SYNC_FAILED
 	if releaseStore.getStatus("rel-stuck") != "SYNC_FAILED" {
@@ -428,8 +451,8 @@ func TestActivateReleaseKernel_SkipsAlreadyActiveRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected nil error (idempotent skip), got %v", err)
 	}
-	if envTargetStore.activeCalls != 0 {
-		t.Errorf("expected SetActive NOT called (release already ACTIVE), got %d calls", envTargetStore.activeCalls)
+	if envTargetStore.getActiveCalls() != 0 {
+		t.Errorf("expected SetActive NOT called (release already ACTIVE), got %d calls", envTargetStore.getActiveCalls())
 	}
 	if len(eventStore.getEvents()) != 0 {
 		t.Errorf("expected no events emitted (idempotent skip), got %v", eventStore.getEvents())
@@ -469,7 +492,7 @@ func TestActivateReleaseKernel_ProceedsWhenStillPending(t *testing.T) {
 	if releaseStore.getStatus("rel-dup-002") != "ACTIVE" {
 		t.Errorf("expected release ACTIVE, got %q", releaseStore.getStatus("rel-dup-002"))
 	}
-	if envTargetStore.activeCalls == 0 {
+	if envTargetStore.getActiveCalls() == 0 {
 		t.Error("expected SetActive to be called")
 	}
 }
