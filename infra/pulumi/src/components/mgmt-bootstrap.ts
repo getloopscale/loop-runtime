@@ -19,7 +19,6 @@ import {
   lookupLoadBalancerEndpoint,
   createClusterIssuer,
   parseKubeconfig,
-  webhookCaBundleTransform,
 } from "./bootstrap-shared";
 
 // ---------------------------------------------------------------------------
@@ -52,11 +51,6 @@ export function bootstrapMgmtCluster(
 
   const provider = new k8s.Provider("mgmt-k8s", {
     kubeconfig: infra.mgmtCluster.kubeconfig,
-  }, {
-    // Wait for cainjector to inject CA bundles into webhook configs before
-    // creating resources that depend on webhooks (e.g., ClusterIssuer).
-    // See: https://www.pulumi.com/blog/improved-kubernetes-await-logic/
-    transforms: [webhookCaBundleTransform],
   });
 
   const ns = createPlatformNamespace("mgmt", config, provider);
