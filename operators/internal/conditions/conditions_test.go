@@ -140,9 +140,9 @@ func TestGetCondition_ReturnsCorrectCondition(t *testing.T) {
 	}
 
 	result := GetCondition(conditions, TypeBuildNamespaceReady)
-
 	if result == nil {
 		t.Fatal("expected non-nil condition, got nil")
+		return // unreachable, but satisfies staticcheck SA5011
 	}
 	if result.Type != TypeBuildNamespaceReady {
 		t.Errorf("expected type %q, got %q", TypeBuildNamespaceReady, result.Type)
