@@ -217,6 +217,11 @@ export function installTraefik(
       },
       namespace: PLATFORM_NAMESPACE,
       createNamespace: false,
+      // Force update to adopt resources with stale ownership metadata.
+      // Required after MED-06 rename (mgmt-traefik → ${role}-traefik).
+      // Helm refuses to install when existing resources have a different
+      // release-name annotation. forceUpdate re-labels them.
+      forceUpdate: true,
       values: {
         // Deterministic Service name so lookupLoadBalancerEndpoint can find it.
         // Without this, the chart template may produce an unexpected name.
