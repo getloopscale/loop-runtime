@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,9 +19,10 @@ import (
 // --- Fakes for ReleaseConvergenceLoop ---
 
 type fakeConvergenceReleaseStore struct {
+	mu            sync.Mutex
 	pending       []db.Release
 	activeList    []db.Release          // releases returned by FindActiveReleases
-	statuses      map[string]string     // releaseID → current status
+	statuses      map[string]string     // releaseID → current status (guarded by mu)
 	active        map[string]*db.Release // key: tenant:project:env → active release
 }
 
@@ -29,6 +31,13 @@ func newFakeConvergenceReleaseStore() *fakeConvergenceReleaseStore {
 		statuses: make(map[string]string),
 		active:   make(map[string]*db.Release),
 	}
+}
+
+// getStatus returns the status of a release (thread-safe).
+func (f *fakeConvergenceReleaseStore) getStatus(id string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.statuses[id]
 }
 
 func (f *fakeConvergenceReleaseStore) FindPendingReleases(_ context.Context) ([]db.Release, error) {
@@ -40,6 +49,8 @@ func (f *fakeConvergenceReleaseStore) FindActiveReleases(_ context.Context) ([]d
 }
 
 func (f *fakeConvergenceReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX, id string, event string) (*db.Release, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	m := statemachine.NewReleaseMachine()
 	current := f.statuses[id]
 	if current == "" {
@@ -59,7 +70,9 @@ func (f *fakeConvergenceReleaseStore) GetActiveByEnvTx(_ context.Context, _ db.D
 }
 
 func (f *fakeConvergenceReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
+	f.mu.Lock()
 	status := f.statuses[id]
+	f.mu.Unlock()
 	if status == "" {
 		status = string(statemachine.ReleasePending)
 	}
