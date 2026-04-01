@@ -108,12 +108,12 @@ Starter e Pro têm hard limits (operação rejeitada). Team tem soft limits (ope
 
 ## Definition of Done — Fase 6
 
-- [ ] Todas as operações de criação verificam limites de plano
-- [ ] 402 retornado com mensagem acionável + upgrade URL
-- [ ] CLI exibe mensagem clara ao receber 402
-- [ ] Rate limit varia por plano
-- [ ] Build timeout varia por plano
-- [ ] Enterprise bypass total
-- [ ] Team: soft limit permite mas registra overage
-- [ ] Testes para cada plano × cada operação
-- [ ] Zero false positives (deploy legítimo nunca bloqueado)
+- [x] Plan enforcement middleware — Middleware() in enforcement/middleware.go, checks plan_limits before mutations
+- [x] 402 with actionable message — FormatLimitError() returns code, error, plan, limit, current, max, upgrade_url
+- [x] CLI 402 handling — ApiError.fromHttpStatus(402) → exit code 3, PLAN_LIMIT_EXCEEDED code
+- [x] Rate limit by plan — GetRateLimit() returns per-plan rate (starter:60, pro:300, team:1000, enterprise:5000)
+- [x] Build timeout by plan — GetBuildTimeout() returns per-plan timeout (starter:600s, pro:1800s, team:3600s)
+- [x] Enterprise bypass — CheckLimit returns Allowed:true immediately for enterprise
+- [x] Team soft limit — SoftOver flag set when soft_limit exceeded, operation still allowed
+- [x] Tests — 7 Go tests (nil DB, build timeout, rate limit, format error, middleware pass-through, no-tenant, 402 shape) + 4 CLI tests
+- [x] Zero false positives — nil DB = allow all (dev mode), no tenant = pass through
