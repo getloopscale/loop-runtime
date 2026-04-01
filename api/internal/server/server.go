@@ -216,7 +216,9 @@ func NewRouter(cfg Config) *chi.Mux {
 
 				// Mutating build routes with rate limiting + idempotency
 				r.With(idempotentMiddlewares...).Post("/api/v1/builds", cfg.BuildHandler.Create)
-				r.With(idempotentMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
+				// Cancel is inherently idempotent (cancelling twice = same result).
+				// Rate-limited but no Idempotency-Key required.
+				r.With(rateLimitMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
 			}
 
 			// Build logs route (read-only, no idempotency needed)
