@@ -1709,8 +1709,8 @@ function createPlatformNetworkPolicies(
         egress: [
           // DNS
           { ports: [{ port: 53, protocol: "UDP" }, { port: 53, protocol: "TCP" }] },
-          // PostgreSQL (managed — external to cluster, needs broad egress on 5432)
-          { ports: [{ port: 5432, protocol: "TCP" }] },
+          // PostgreSQL (managed DO database — uses port 25060, not standard 5432)
+          { ports: [{ port: 25060, protocol: "TCP" }] },
           // Gitea (in-namespace)
           {
             to: [{ podSelector: { matchLabels: { "app.kubernetes.io/name": "gitea" } } }],
