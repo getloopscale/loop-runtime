@@ -8,9 +8,16 @@ export interface TokenValidationResult {
   serverError?: boolean;
 }
 
+export interface DeviceFlowResult {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
+
 export interface LoginDeps {
-  saveToken: (token: string, email: string, team: string) => void;
+  saveToken: (token: string, email: string, team: string, refreshToken?: string, expiresIn?: number) => void;
   validateToken: (token: string) => Promise<TokenValidationResult>;
+  executeDeviceFlow?: () => Promise<DeviceFlowResult | null>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
   isCI: boolean;
@@ -33,6 +40,11 @@ export class LoginCommand {
     if (!opts.token) {
       if (this.deps.isCI) {
         return this.exitWithError(opts, 'In CI mode, use: loopzero login --token <token>', 1, 'MISSING_TOKEN');
+      }
+
+      // Device Code Flow — interactive browser-based login
+      if (this.deps.executeDeviceFlow) {
+        return this.executeDeviceFlow(opts);
       }
 
       return this.exitWithError(
@@ -81,6 +93,33 @@ export class LoginCommand {
       this.deps.writeTo(`Authenticated as ${result.email} (team: ${team})`);
     }
 
+    return 0;
+  }
+
+  private async executeDeviceFlow(opts: LoginOptions): Promise<number> {
+    const result = await this.deps.executeDeviceFlow!();
+    if (!result) {
+      return this.exitWithError(opts, 'Authentication failed. Try again with: loopzero login', 4, 'AUTH_FAILED');
+    }
+
+    // Validate the received token to get user info
+    const validation = await this.deps.validateToken(result.access_token);
+    if (!validation.valid || !validation.email) {
+      return this.exitWithError(opts, 'Authentication succeeded but token validation failed. Try again.', 4, 'AUTH_FAILED');
+    }
+
+    const team = this.resolveTeam(validation.teams, opts.team);
+    if (team === null) {
+      return this.handleTeamResolutionFailure(opts, validation.teams, opts.team);
+    }
+
+    this.deps.saveToken(result.access_token, validation.email, team, result.refresh_token, result.expires_in);
+
+    if (opts.json) {
+      this.deps.writeTo(JSON.stringify({ authenticated: true, email: validation.email, team }));
+    } else {
+      this.deps.writeTo(`Authenticated as ${validation.email} (team: ${team})`);
+    }
     return 0;
   }
 

@@ -1017,6 +1017,29 @@ tasks:
         echo "  PASS: $PASS  |  FAIL: $FAIL"
         if [ "$FAIL" -gt 0 ]; then exit 1; fi
 
+  cloud:register-client:
+    desc: Register the loopzero-cli OAuth2 client in Hydra (idempotent)
+    cmds:
+      - |
+        HYDRA_POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=hydra -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [ -z "$HYDRA_POD" ]; then
+          echo "Hydra not running. Run: task cloud:setup"
+          exit 1
+        fi
+        # Check if client exists
+        EXISTS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec "$HYDRA_POD" -c hydra -- \
+          wget -qO- http://localhost:4445/admin/clients/loopzero-cli 2>/dev/null | grep -c "loopzero-cli" || true)
+        if [ "$EXISTS" -gt 0 ]; then
+          echo "OAuth2 client 'loopzero-cli' already registered"
+          exit 0
+        fi
+        # Register public client with device_code + refresh_token grants
+        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec "$HYDRA_POD" -c hydra -- \
+          wget -qO- --post-data='{"client_id":"loopzero-cli","client_name":"LoopZero CLI","grant_types":["urn:ietf:params:oauth:grant-type:device_code","refresh_token","authorization_code"],"response_types":["code"],"scope":"openid offline_access","token_endpoint_auth_method":"none","redirect_uris":["http://localhost:9876/auth"]}' \
+          --header="Content-Type: application/json" \
+          http://localhost:4445/admin/clients 2>/dev/null
+        echo "OAuth2 client 'loopzero-cli' registered"
+
   # ---------------------------------------------------------------------------
   # S0.5: Database
   # ---------------------------------------------------------------------------

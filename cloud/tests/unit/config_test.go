@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package unit
+
+import (
+	"os"
+	"testing"
+
+	"github.com/loopzero/loopzero/cloud/internal/config"
+)
+
+func TestConfigLoadDefaults(t *testing.T) {
+	// Clear env to test defaults
+	for _, key := range []string{"CLOUD_LISTEN_ADDR", "KRATOS_PUBLIC_URL", "HYDRA_PUBLIC_URL", "HYDRA_CLIENT_ID", "LOOPZERO_ENV"} {
+		os.Unsetenv(key)
+	}
+
+	cfg := config.Load()
+
+	if cfg.ListenAddr != ":13002" {
+		t.Errorf("ListenAddr = %q, want %q", cfg.ListenAddr, ":13002")
+	}
+	if cfg.HydraClientID != "loopzero-cli" {
+		t.Errorf("HydraClientID = %q, want %q", cfg.HydraClientID, "loopzero-cli")
+	}
+	if cfg.Environment != "dev" {
+		t.Errorf("Environment = %q, want %q", cfg.Environment, "dev")
+	}
+}
+
+func TestConfigLoadFromEnv(t *testing.T) {
+	t.Setenv("CLOUD_LISTEN_ADDR", ":9999")
+	t.Setenv("HYDRA_CLIENT_ID", "custom-cli")
+	t.Setenv("LOOPZERO_ENV", "prod")
+
+	cfg := config.Load()
+
+	if cfg.ListenAddr != ":9999" {
+		t.Errorf("ListenAddr = %q, want %q", cfg.ListenAddr, ":9999")
+	}
+	if cfg.HydraClientID != "custom-cli" {
+		t.Errorf("HydraClientID = %q, want %q", cfg.HydraClientID, "custom-cli")
+	}
+	if cfg.Environment != "prod" {
+		t.Errorf("Environment = %q, want %q", cfg.Environment, "prod")
+	}
+}
+
+func TestConfigValidateProd(t *testing.T) {
+	t.Setenv("LOOPZERO_ENV", "prod")
+	t.Setenv("HYDRA_PUBLIC_URL", "")
+
+	cfg := config.Load()
+	cfg.Environment = "prod"
+	cfg.HydraPublicURL = ""
+
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() should fail when HYDRA_PUBLIC_URL is empty in prod")
+	}
+}
+
+func TestConfigValidateDevOK(t *testing.T) {
+	cfg := config.Load()
+	cfg.Environment = "dev"
+
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() should pass in dev: %v", err)
+	}
+}

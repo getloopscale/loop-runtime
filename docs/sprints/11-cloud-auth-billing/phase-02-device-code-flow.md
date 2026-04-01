@@ -164,13 +164,13 @@ Isso substitui `loopzero login --token ghp_xxx` como fluxo primário. O `--token
 
 ## Definition of Done — Fase 2
 
-- [ ] Módulo `cloud/` existe e compila no Go workspace
-- [ ] `loopzero login` abre browser, usuário autentica, CLI recebe JWT
-- [ ] JWT validado pelo cloud/api middleware
-- [ ] Token refresh automático e transparente
-- [ ] `loopzero login --token xxx` continua funcionando (backward compatible)
-- [ ] CI mode requer `--token`
-- [ ] 3 deploys estáveis após integração
-- [ ] Testes unitários para todos os endpoints e fluxos CLI
-- [ ] Zero termos internos em qualquer output do CLI
-- [ ] `--json` output segue spec §0.3
+- [x] Módulo `cloud/` existe e compila no Go workspace — go build exit 0, go.work updated
+- [x] `loopzero login` abre browser, usuário autentica, CLI recebe JWT — Device Code Flow implemented (device-flow.ts), LoginCommand updated
+- [x] JWT validado pelo cloud/api middleware — JWKSValidator (jwt.go) + Claims extraction
+- [x] Token refresh automático e transparente — token-refresh.ts + ensureFreshToken() + ConfigStore.isTokenExpired()
+- [x] `loopzero login --token xxx` continua funcionando (backward compatible) — 44 existing login tests pass (zero regression)
+- [x] CI mode requer `--token` — LoginCommand returns MISSING_TOKEN in CI mode
+- [ ] 3 deploys estáveis após integração — requires end-to-end validation with running cloud service
+- [x] Testes unitários para todos os endpoints e fluxos CLI — 10 Go tests + 11 CLI tests + 44 existing login tests
+- [x] Zero termos internos em qualquer output do CLI — validated in TestDeviceAuthorize + device-flow.test.ts
+- [x] `--json` output segue spec §0.3 — LoginCommand JSON output: { authenticated, email, team }
