@@ -601,6 +601,7 @@ func main() {
 		RollbackHandler:    rollbackHandler,
 		StatusHandler:      statusHandler,
 		BuildListHandler:   buildListHandler,
+		EnvironmentHandler: routes.NewEnvironmentHandler(tenantCRMgr),
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,

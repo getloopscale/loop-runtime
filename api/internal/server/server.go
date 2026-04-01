@@ -85,6 +85,8 @@ type Config struct {
 	BuildListHandler *routes.BuildListHandler
 	// SecretK8sSync creates K8s Secrets on mgmt + ExternalSecret CRs on workload.
 	SecretK8sSync routes.SecretK8sSync
+	// EnvironmentHandler handles GET/POST/DELETE /api/v1/environments.
+	EnvironmentHandler *routes.EnvironmentHandler
 	// IsProduction indicates production mode — enables strict error handling.
 	IsProduction bool
 }
@@ -243,6 +245,14 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Rollback route — mutation, needs rate limiting
 			if cfg.RollbackHandler != nil {
 				r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
+			}
+
+			// Environment routes
+			if cfg.EnvironmentHandler != nil {
+				r.Get("/api/v1/environments", cfg.EnvironmentHandler.List)
+				r.Get("/api/v1/environments/{name}", cfg.EnvironmentHandler.Get)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/environments", cfg.EnvironmentHandler.Create)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/environments/{name}", cfg.EnvironmentHandler.Delete)
 			}
 		})
 	}
