@@ -144,7 +144,7 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
               {
                 name: "cloudflared",
                 image: "cloudflare/cloudflared:2024.12.2",
-                args: ["tunnel", "--no-autoupdate", "run", "--token", "$(TUNNEL_TOKEN)"],
+                args: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run", "--token", "$(TUNNEL_TOKEN)"],
                 env: [
                   {
                     name: "TUNNEL_TOKEN",
