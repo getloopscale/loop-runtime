@@ -410,8 +410,21 @@ jobs:
             echo "Deleted gitea-bootstrap Job from cluster"
           fi
 
-          # Create all resources — skipAwait prevents blocking on ImagePullBackOff
-          pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
+          # Create all resources with retry for webhook readiness.
+          # On fresh deploys, cert-manager webhook may not be serving TLS when
+          # ClusterIssuer is created. The first `pulumi up` creates the Helm charts
+          # and fails on CRs. The wait gives webhooks time to become ready.
+          # The retry `pulumi up` then creates the remaining CRs successfully.
+          echo "Running pulumi up (attempt 1)..."
+          if ! pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1; then
+            echo ""
+            echo "::notice::First pulumi up had errors — waiting for webhooks to become ready..."
+            echo "Waiting 90s for cert-manager/ArgoCD webhooks to initialize..."
+            sleep 90
+
+            echo "Running pulumi up (attempt 2 — webhook retry)..."
+            pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
+          fi
 
       # Step 2: Build and push container images.
       # Only runs if Step 1 succeeded (all infra provisioned, registry exists).
