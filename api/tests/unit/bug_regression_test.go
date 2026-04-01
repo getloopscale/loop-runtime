@@ -109,13 +109,12 @@ func TestBUG04_SyncRetriggersCleanedUpOnActivation(t *testing.T) {
 	time.Sleep(150*time.Millisecond)
 
 	// Verify retrigger happened (sync was called)
-	if syncClient.triggerSyncCalls == 0 {
+	if syncClient.getTriggerSyncCalls() == 0 {
 		t.Fatal("expected sync retrigger to have happened")
 	}
 
 	// Now make ArgoCD healthy and run another tick to activate
-	syncClient.synced = true
-	syncClient.healthy = true
+	syncClient.setStatus(true, true)
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel2()
@@ -167,12 +166,12 @@ func TestBUG04_SyncRetriggersCleanedUpOnFailure(t *testing.T) {
 
 	// deploy.sync_failed SSE event should have been emitted
 	found := false
-	for _, e := range eventStore.events {
+	for _, e := range eventStore.getEvents() {
 		if e == "deploy.sync_failed" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected deploy.sync_failed event, got %v", eventStore.events)
+		t.Errorf("expected deploy.sync_failed event, got %v", eventStore.getEvents())
 	}
 }
