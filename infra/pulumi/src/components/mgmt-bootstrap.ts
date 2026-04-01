@@ -450,14 +450,26 @@ function installMinIO(
           requests: { cpu: "100m", memory: "128Mi" },
           limits: { cpu: "500m", memory: "512Mi" },
         },
-        // Auto-create buckets for platform use
+        // Auto-create buckets for platform use.
+        // The MinIO chart creates a post-install hook Job to create these buckets.
+        // The hook Job needs to connect to MinIO pod on port 9000.
         buckets: [
           { name: "loopzero-artifacts", policy: "none" },
           { name: "loopzero-builds", policy: "none" },
         ],
+        // Increase post-install hook timeout — on fresh clusters with slow storage
+        // provisioning, the default 60s may not be enough for MinIO to start + create buckets.
+        postJob: {
+          activeDeadlineSeconds: 300,
+        },
       },
     },
-    { provider, dependsOn: [ns] },
+    {
+      provider,
+      dependsOn: [ns],
+      // Increase timeout: MinIO make-bucket-job may take time on fresh clusters.
+      customTimeouts: { create: "10m", update: "10m" },
+    },
   );
 }
 
