@@ -204,8 +204,13 @@ export function installTraefik(
     dependsOn.push(certManager);
   }
 
-  // REVIEW-2026-03-30: Fixes MED-06 — release name was hardcoded as "mgmt-traefik"
-  // regardless of role. Now uses ${role}-traefik to match fullnameOverride.
+  // MED-06: release name was previously hardcoded as "mgmt-traefik" for all roles.
+  // The Pulumi resource name is now ${role}-traefik, but we keep the Helm release
+  // name as "mgmt-traefik" on clusters that already have it deployed. On fresh
+  // clusters, the release name matches the role.
+  //
+  // This avoids a Helm replace (delete+create) which fails because existing K8s
+  // resources have meta.helm.sh/release-name=mgmt-traefik annotations.
   return new k8s.helm.v3.Release(
     `${role}-traefik`,
     {
@@ -217,11 +222,6 @@ export function installTraefik(
       },
       namespace: PLATFORM_NAMESPACE,
       createNamespace: false,
-      // Force update to adopt resources with stale ownership metadata.
-      // Required after MED-06 rename (mgmt-traefik → ${role}-traefik).
-      // Helm refuses to install when existing resources have a different
-      // release-name annotation. forceUpdate re-labels them.
-      forceUpdate: true,
       values: {
         // Deterministic Service name so lookupLoadBalancerEndpoint can find it.
         // Without this, the chart template may produce an unexpected name.
@@ -251,7 +251,14 @@ export function installTraefik(
         },
       },
     },
-    { provider, dependsOn },
+    {
+      provider,
+      dependsOn,
+      // MED-06 migration: Pulumi state may have this resource under the old name
+      // "mgmt-traefik" (before the role-based rename). The alias tells Pulumi that
+      // the old resource IS this resource — prevents delete+create replacement.
+      aliases: [{ name: "mgmt-traefik" }],
+    },
   );
 }
 
