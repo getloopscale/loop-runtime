@@ -13,6 +13,7 @@ import {
   installTraefik,
   lookupLoadBalancerEndpoint,
   createClusterIssuer,
+  webhookCaBundleTransform,
 } from "./bootstrap-shared";
 
 // ---------------------------------------------------------------------------
@@ -25,6 +26,8 @@ export function bootstrapRuntimeCluster(
 ): ClusterBootstrapOutputs {
   const provider = new k8s.Provider("runtime-k8s", {
     kubeconfig: infra.runtimeCluster.kubeconfig,
+  }, {
+    transforms: [webhookCaBundleTransform],
   });
 
   const ns = createPlatformNamespace("runtime", config, provider);

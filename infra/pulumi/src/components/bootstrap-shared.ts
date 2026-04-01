@@ -137,6 +137,36 @@ export interface BootstrapOutputs {
 // Shared utilities — used by mgmt, build, and runtime bootstrap modules
 // ---------------------------------------------------------------------------
 
+/**
+ * Pulumi transform that makes webhook resources wait for CA bundle injection.
+ *
+ * cert-manager's cainjector asynchronously injects CA data into webhook configs.
+ * Without this, Pulumi proceeds to create ClusterIssuers before the webhook is
+ * ready to validate them, causing: "http: server gave HTTP response to HTTPS client"
+ *
+ * This transform adds `pulumi.com/waitFor: "jsonpath={.webhooks[*].clientConfig.caBundle}"`
+ * to ALL ValidatingWebhookConfiguration and MutatingWebhookConfiguration resources.
+ * Pulumi then polls until the caBundle field is populated before proceeding.
+ *
+ * Requires @pulumi/kubernetes >= 4.18.0 (improved await logic).
+ * See: https://www.pulumi.com/blog/improved-kubernetes-await-logic/
+ */
+export function webhookCaBundleTransform(
+  args: pulumi.ResourceTransformArgs,
+): pulumi.ResourceTransformResult | undefined {
+  if (
+    args.type === "kubernetes:admissionregistration.k8s.io/v1:ValidatingWebhookConfiguration" ||
+    args.type === "kubernetes:admissionregistration.k8s.io/v1:MutatingWebhookConfiguration"
+  ) {
+    const metadata = args.props.metadata ?? {};
+    const annotations = metadata.annotations ?? {};
+    annotations["pulumi.com/waitFor"] = "jsonpath={.webhooks[*].clientConfig.caBundle}";
+    args.props.metadata = { ...metadata, annotations };
+    return { props: args.props, opts: args.opts };
+  }
+  return undefined;
+}
+
 export function createPlatformNamespace(
   role: string,
   config: PlatformStackConfig,
@@ -359,35 +389,13 @@ export function createClusterIssuer(
         },
       ];
 
-  // MEET-2026-04-01-025 Action #5: cert-manager webhook readiness gate.
-  // The Helm release reports "deployed" before the webhook's self-signed TLS cert is ready.
-  // Without this gate, the ClusterIssuer creation fails with:
-  //   "http: server gave HTTP response to HTTPS client"
+  // MEET-2026-04-01-025 Action #5: cert-manager webhook readiness.
+  // The webhook readiness is now handled by `webhookCaBundleTransform` on the K8s Provider.
+  // It adds `pulumi.com/waitFor: "jsonpath={.webhooks[*].clientConfig.caBundle}"` to all
+  // webhook configurations, making Pulumi wait for the cainjector to inject the CA bundle
+  // before proceeding. This solves "http: server gave HTTP response to HTTPS client".
   //
-  // Strategy: look up the cert-manager webhook Deployment and wait for it to have
-  // ready replicas. The Pulumi K8s provider's `Service.get()` / `Deployment.get()`
-  // blocks until the resource is in a ready state. By adding this as a dependency,
-  // the ClusterIssuer waits for the webhook to be fully running.
-  //
-  // Combined with `customTimeouts: { create: "5m" }` on the ClusterIssuer itself,
-  // this provides a two-layer defense: (1) webhook Deployment is Ready, (2) Pulumi
-  // retries ClusterIssuer creation for up to 5 minutes if the webhook TLS cert
-  // isn't serving yet.
-  const dependsOn: pulumi.Resource[] = [certManager];
-
-  // Look up the cert-manager webhook Deployment to ensure it's fully ready.
-  // Pulumi's K8s provider waits for Deployments to have the desired number of
-  // ready replicas before marking the get() as resolved.
-  const webhookDeployment = k8s.apps.v1.Deployment.get(
-    `${role}-cert-manager-webhook-lookup`,
-    pulumi.interpolate`${PLATFORM_NAMESPACE}/${role}-cert-manager-webhook`,
-    { provider, dependsOn: [certManager] },
-  );
-  dependsOn.push(webhookDeployment);
-
-  // The ClusterIssuer depends on the cert-manager webhook being fully ready.
-  // On fresh deploys, the webhook may not be serving when Pulumi tries to create
-  // the CR. The webhookReady gate above ensures deterministic readiness.
+  // The `customTimeouts` below is a secondary safety net for edge cases.
   return new k8s.apiextensions.CustomResource(
     `${role}-letsencrypt-prod`,
     {
@@ -414,8 +422,9 @@ export function createClusterIssuer(
     },
     {
       provider,
-      dependsOn,
-      // Retry for up to 5 min — webhook may not be ready on fresh deploys.
+      dependsOn: [certManager],
+      // Secondary safety net: retry for up to 5 min if webhook TLS still initializing.
+      // Primary defense is webhookCaBundleTransform on the K8s Provider.
       customTimeouts: { create: "5m", update: "2m" },
     },
   );
