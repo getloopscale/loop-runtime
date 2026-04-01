@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,9 +19,10 @@ import (
 // --- Fakes for ReleaseConvergenceLoop ---
 
 type fakeConvergenceReleaseStore struct {
+	mu            sync.Mutex
 	pending       []db.Release
 	activeList    []db.Release          // releases returned by FindActiveReleases
-	statuses      map[string]string     // releaseID → current status
+	statuses      map[string]string     // releaseID → current status (guarded by mu)
 	active        map[string]*db.Release // key: tenant:project:env → active release
 }
 
@@ -29,6 +31,13 @@ func newFakeConvergenceReleaseStore() *fakeConvergenceReleaseStore {
 		statuses: make(map[string]string),
 		active:   make(map[string]*db.Release),
 	}
+}
+
+// getStatus returns the status of a release (thread-safe).
+func (f *fakeConvergenceReleaseStore) getStatus(id string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.statuses[id]
 }
 
 func (f *fakeConvergenceReleaseStore) FindPendingReleases(_ context.Context) ([]db.Release, error) {
@@ -40,6 +49,8 @@ func (f *fakeConvergenceReleaseStore) FindActiveReleases(_ context.Context) ([]d
 }
 
 func (f *fakeConvergenceReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX, id string, event string) (*db.Release, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	m := statemachine.NewReleaseMachine()
 	current := f.statuses[id]
 	if current == "" {
@@ -59,7 +70,9 @@ func (f *fakeConvergenceReleaseStore) GetActiveByEnvTx(_ context.Context, _ db.D
 }
 
 func (f *fakeConvergenceReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
+	f.mu.Lock()
 	status := f.statuses[id]
+	f.mu.Unlock()
 	if status == "" {
 		status = string(statemachine.ReleasePending)
 	}
@@ -83,9 +96,15 @@ func safeTransitionRelease(m *statemachine.Machine, current statemachine.State, 
 }
 
 type fakeConvergenceEnvTargetStore struct {
+	mu          sync.Mutex
 	activeCalls int
 }
 
+func (f *fakeConvergenceEnvTargetStore) getActiveCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.activeCalls
+}
 func (f *fakeConvergenceEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
 	return nil, nil
 }
@@ -96,6 +115,8 @@ func (f *fakeConvergenceEnvTargetStore) SetDesired(_ context.Context, _ db.DBTX,
 	return nil
 }
 func (f *fakeConvergenceEnvTargetStore) SetActive(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.activeCalls++
 	return nil
 }
@@ -104,6 +125,7 @@ func (f *fakeConvergenceEnvTargetStore) Get(_ context.Context, _, _, _ string) (
 }
 
 type fakeConvergenceSyncClient struct {
+	mu               sync.Mutex
 	synced           bool
 	healthy          bool
 	err              error
@@ -112,6 +134,8 @@ type fakeConvergenceSyncClient struct {
 }
 
 func (f *fakeConvergenceSyncClient) TriggerSync(_ context.Context, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.triggerSyncCalls++
 	return f.triggerSyncErr
 }
@@ -119,30 +143,68 @@ func (f *fakeConvergenceSyncClient) WaitForSync(_ context.Context, _ string, _ t
 	return nil
 }
 func (f *fakeConvergenceSyncClient) GetAppStatus(_ context.Context, _ string, _ []string) (bool, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.synced, f.healthy, f.err
+}
+func (f *fakeConvergenceSyncClient) setStatus(synced, healthy bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.synced = synced
+	f.healthy = healthy
+}
+func (f *fakeConvergenceSyncClient) getTriggerSyncCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.triggerSyncCalls
 }
 
 type fakeConvergenceEventStore struct {
+	mu     sync.Mutex
 	events []string
 }
 
 func (f *fakeConvergenceEventStore) Append(_ context.Context, _ string, eventType string, _ json.RawMessage) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.events = append(f.events, eventType)
 	return 1, nil
+}
+func (f *fakeConvergenceEventStore) getEvents() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	cp := make([]string, len(f.events))
+	copy(cp, f.events)
+	return cp
 }
 
 // fakeTerminatingSyncClient extends fakeConvergenceSyncClient with TerminateOperation.
 // Used to verify the convergence loop calls TerminateOperation on timeout (MEET-2026-03-29-019).
 type fakeTerminatingSyncClient struct {
 	fakeConvergenceSyncClient
+	tmu            sync.Mutex
 	terminateCalls int
 	terminatedApp  string
 }
 
 func (f *fakeTerminatingSyncClient) TerminateOperation(_ context.Context, appName string) error {
+	f.tmu.Lock()
+	defer f.tmu.Unlock()
 	f.terminateCalls++
 	f.terminatedApp = appName
 	return nil
+}
+
+func (f *fakeTerminatingSyncClient) getTerminateCalls() int {
+	f.tmu.Lock()
+	defer f.tmu.Unlock()
+	return f.terminateCalls
+}
+
+func (f *fakeTerminatingSyncClient) getTerminatedApp() string {
+	f.tmu.Lock()
+	defer f.tmu.Unlock()
+	return f.terminatedApp
 }
 
 type fakeConvergenceLocker struct{}
@@ -182,21 +244,21 @@ func TestReleaseConvergenceLoop_ActivatesPendingRelease(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	// Assert: release should be ACTIVE
-	if releaseStore.statuses["rel-001"] != "ACTIVE" {
-		t.Errorf("expected release ACTIVE, got %q", releaseStore.statuses["rel-001"])
+	if releaseStore.getStatus("rel-001") != "ACTIVE" {
+		t.Errorf("expected release ACTIVE, got %q", releaseStore.getStatus("rel-001"))
 	}
-	if envTargetStore.activeCalls == 0 {
+	if envTargetStore.getActiveCalls() == 0 {
 		t.Error("expected SetActive to be called")
 	}
 	// Should emit deploy.live event
 	found := false
-	for _, e := range eventStore.events {
+	for _, e := range eventStore.getEvents() {
 		if e == "deploy.live" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected deploy.live event, got %v", eventStore.events)
+		t.Errorf("expected deploy.live event, got %v", eventStore.getEvents())
 	}
 }
 
@@ -229,18 +291,18 @@ func TestReleaseConvergenceLoop_TimesOutStaleRelease(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	// Assert: release should be SYNC_FAILED
-	if releaseStore.statuses["rel-002"] != "SYNC_FAILED" {
-		t.Errorf("expected release SYNC_FAILED, got %q", releaseStore.statuses["rel-002"])
+	if releaseStore.getStatus("rel-002") != "SYNC_FAILED" {
+		t.Errorf("expected release SYNC_FAILED, got %q", releaseStore.getStatus("rel-002"))
 	}
 	// Should emit deploy.sync_failed event
 	found := false
-	for _, e := range eventStore.events {
+	for _, e := range eventStore.getEvents() {
 		if e == "deploy.sync_failed" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected deploy.sync_failed event, got %v", eventStore.events)
+		t.Errorf("expected deploy.sync_failed event, got %v", eventStore.getEvents())
 	}
 }
 
@@ -273,11 +335,11 @@ func TestReleaseConvergenceLoop_SkipsWhenNotReady(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Assert: release stays PENDING (not activated, not failed)
-	if releaseStore.statuses["rel-003"] != "PENDING" {
-		t.Errorf("expected release to stay PENDING, got %q", releaseStore.statuses["rel-003"])
+	if releaseStore.getStatus("rel-003") != "PENDING" {
+		t.Errorf("expected release to stay PENDING, got %q", releaseStore.getStatus("rel-003"))
 	}
-	if len(eventStore.events) != 0 {
-		t.Errorf("expected no events (still waiting), got %v", eventStore.events)
+	if len(eventStore.getEvents()) != 0 {
+		t.Errorf("expected no events (still waiting), got %v", eventStore.getEvents())
 	}
 }
 
@@ -315,15 +377,15 @@ func TestReleaseConvergenceLoop_TerminatesStuckOperationOnTimeout(t *testing.T) 
 	time.Sleep(300 * time.Millisecond)
 
 	// Assert: TerminateOperation was called
-	if terminatingSyncClient.terminateCalls == 0 {
+	if terminatingSyncClient.getTerminateCalls() == 0 {
 		t.Error("expected TerminateOperation to be called on timeout")
 	}
-	if terminatingSyncClient.terminatedApp != "acme-production" {
-		t.Errorf("expected TerminateOperation for 'acme-production', got %q", terminatingSyncClient.terminatedApp)
+	if terminatingSyncClient.getTerminatedApp() != "acme-production" {
+		t.Errorf("expected TerminateOperation for 'acme-production', got %q", terminatingSyncClient.getTerminatedApp())
 	}
 	// Release should be SYNC_FAILED
-	if releaseStore.statuses["rel-stuck"] != "SYNC_FAILED" {
-		t.Errorf("expected release SYNC_FAILED, got %q", releaseStore.statuses["rel-stuck"])
+	if releaseStore.getStatus("rel-stuck") != "SYNC_FAILED" {
+		t.Errorf("expected release SYNC_FAILED, got %q", releaseStore.getStatus("rel-stuck"))
 	}
 }
 
@@ -349,8 +411,8 @@ func TestReleaseConvergenceLoop_HandlesEmptyPendingList(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	// Assert: nothing happened
-	if len(eventStore.events) != 0 {
-		t.Errorf("expected no events, got %v", eventStore.events)
+	if len(eventStore.getEvents()) != 0 {
+		t.Errorf("expected no events, got %v", eventStore.getEvents())
 	}
 }
 
@@ -389,11 +451,11 @@ func TestActivateReleaseKernel_SkipsAlreadyActiveRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected nil error (idempotent skip), got %v", err)
 	}
-	if envTargetStore.activeCalls != 0 {
-		t.Errorf("expected SetActive NOT called (release already ACTIVE), got %d calls", envTargetStore.activeCalls)
+	if envTargetStore.getActiveCalls() != 0 {
+		t.Errorf("expected SetActive NOT called (release already ACTIVE), got %d calls", envTargetStore.getActiveCalls())
 	}
-	if len(eventStore.events) != 0 {
-		t.Errorf("expected no events emitted (idempotent skip), got %v", eventStore.events)
+	if len(eventStore.getEvents()) != 0 {
+		t.Errorf("expected no events emitted (idempotent skip), got %v", eventStore.getEvents())
 	}
 }
 
@@ -427,10 +489,10 @@ func TestActivateReleaseKernel_ProceedsWhenStillPending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if releaseStore.statuses["rel-dup-002"] != "ACTIVE" {
-		t.Errorf("expected release ACTIVE, got %q", releaseStore.statuses["rel-dup-002"])
+	if releaseStore.getStatus("rel-dup-002") != "ACTIVE" {
+		t.Errorf("expected release ACTIVE, got %q", releaseStore.getStatus("rel-dup-002"))
 	}
-	if envTargetStore.activeCalls == 0 {
+	if envTargetStore.getActiveCalls() == 0 {
 		t.Error("expected SetActive to be called")
 	}
 }
@@ -466,7 +528,7 @@ func TestReleaseConvergenceLoop_RetriggersSyncForStalledRelease(t *testing.T) {
 	time.Sleep(350 * time.Millisecond)
 
 	// Assert: TriggerSync was called (retrigger for stalled release)
-	if syncClient.triggerSyncCalls == 0 {
+	if syncClient.getTriggerSyncCalls() == 0 {
 		t.Error("expected TriggerSync to be called for stalled release")
 	}
 }
@@ -541,8 +603,8 @@ func TestHealthCheckActiveReleases_DetectsDivergence(t *testing.T) {
 	// The release status should remain ACTIVE — health check does not mutate state.
 	// We verify the method was called by checking that no state transitions happened
 	// and no events were emitted (health check is silent except for metrics+logs).
-	if len(eventStore.events) != 0 {
-		t.Errorf("expected no events from health check (observability only), got %v", eventStore.events)
+	if len(eventStore.getEvents()) != 0 {
+		t.Errorf("expected no events from health check (observability only), got %v", eventStore.getEvents())
 	}
 }
 
@@ -577,7 +639,7 @@ func TestHealthCheckActiveReleases_ClearsDivergenceWhenHealthy(t *testing.T) {
 	time.Sleep(350 * time.Millisecond)
 
 	// Assert: no state changes, no events (health check is observability-only)
-	if len(eventStore.events) != 0 {
-		t.Errorf("expected no events from health check, got %v", eventStore.events)
+	if len(eventStore.getEvents()) != 0 {
+		t.Errorf("expected no events from health check, got %v", eventStore.getEvents())
 	}
 }

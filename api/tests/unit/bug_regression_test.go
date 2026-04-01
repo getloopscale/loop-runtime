@@ -68,9 +68,9 @@ func TestBUG03_SetGitCommitFailurePreventsWrongVersionActivation(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	// The release should still be PENDING because empty GitCommit != "def456"
-	if releaseStore.statuses["rel-bug03"] != "PENDING" {
+	if releaseStore.getStatus("rel-bug03") != "PENDING" {
 		t.Errorf("BUG-03 regression: release with empty GitCommit was activated! status=%q (should be PENDING)",
-			releaseStore.statuses["rel-bug03"])
+			releaseStore.getStatus("rel-bug03"))
 	}
 	if envTargetStore.activeCalls != 0 {
 		t.Errorf("BUG-03 regression: SetActive was called for release with empty GitCommit")
@@ -109,13 +109,12 @@ func TestBUG04_SyncRetriggersCleanedUpOnActivation(t *testing.T) {
 	time.Sleep(150*time.Millisecond)
 
 	// Verify retrigger happened (sync was called)
-	if syncClient.triggerSyncCalls == 0 {
+	if syncClient.getTriggerSyncCalls() == 0 {
 		t.Fatal("expected sync retrigger to have happened")
 	}
 
 	// Now make ArgoCD healthy and run another tick to activate
-	syncClient.synced = true
-	syncClient.healthy = true
+	syncClient.setStatus(true, true)
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel2()
@@ -123,8 +122,8 @@ func TestBUG04_SyncRetriggersCleanedUpOnActivation(t *testing.T) {
 	time.Sleep(150*time.Millisecond)
 
 	// Assert: release should be ACTIVE
-	if releaseStore.statuses["rel-bug04-a"] != "ACTIVE" {
-		t.Errorf("expected release ACTIVE, got %q", releaseStore.statuses["rel-bug04-a"])
+	if releaseStore.getStatus("rel-bug04-a") != "ACTIVE" {
+		t.Errorf("expected release ACTIVE, got %q", releaseStore.getStatus("rel-bug04-a"))
 	}
 
 	// The syncRetriggers cleanup is internal (sync.Map) and not directly observable
@@ -161,18 +160,18 @@ func TestBUG04_SyncRetriggersCleanedUpOnFailure(t *testing.T) {
 	time.Sleep(150*time.Millisecond)
 
 	// Assert: release should be SYNC_FAILED (timed out)
-	if releaseStore.statuses["rel-bug04-b"] != string(statemachine.ReleaseSyncFailed) {
-		t.Errorf("expected release SYNC_FAILED, got %q", releaseStore.statuses["rel-bug04-b"])
+	if releaseStore.getStatus("rel-bug04-b") != string(statemachine.ReleaseSyncFailed) {
+		t.Errorf("expected release SYNC_FAILED, got %q", releaseStore.getStatus("rel-bug04-b"))
 	}
 
 	// deploy.sync_failed SSE event should have been emitted
 	found := false
-	for _, e := range eventStore.events {
+	for _, e := range eventStore.getEvents() {
 		if e == "deploy.sync_failed" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected deploy.sync_failed event, got %v", eventStore.events)
+		t.Errorf("expected deploy.sync_failed event, got %v", eventStore.getEvents())
 	}
 }
