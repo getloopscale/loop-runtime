@@ -418,11 +418,33 @@ jobs:
           echo "Running pulumi up (attempt 1)..."
           if ! pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1; then
             echo ""
-            echo "::notice::First pulumi up had errors — waiting for webhooks to become ready..."
+            echo "::notice::First pulumi up had errors — cleaning up and retrying..."
+
+            # Clean up orphan K8s resources that block Helm installs.
+            # On destroy+recreate, partial runs leave resources without Helm annotations.
+            # Helm refuses to adopt them — deleting lets Helm recreate them cleanly.
+            for KC_OUTPUT in mgmtKubeconfig buildKubeconfig runtimeKubeconfig; do
+              KC=$(pulumi stack output $KC_OUTPUT --show-secrets --stack "$STACK" 2>/dev/null || true)
+              if [ -n "$KC" ] && [ "$KC" != "undefined" ]; then
+                echo "$KC" > /tmp/cleanup-kc.yaml
+                echo "Cleaning orphan resources on $KC_OUTPUT..."
+                # Delete ServiceAccounts without Helm annotations in key namespaces
+                for NS in argo platform-system; do
+                  kubectl --kubeconfig=/tmp/cleanup-kc.yaml get sa -n $NS -o json 2>/dev/null | \
+                    jq -r '.items[] | select(.metadata.annotations == null or (.metadata.annotations["meta.helm.sh/release-name"] == null)) | select(.metadata.name != "default") | .metadata.name' 2>/dev/null | \
+                    while read SA; do
+                      echo "  Deleting orphan SA: $NS/$SA"
+                      kubectl --kubeconfig=/tmp/cleanup-kc.yaml delete sa "$SA" -n "$NS" --ignore-not-found 2>/dev/null || true
+                    done
+                done
+                rm -f /tmp/cleanup-kc.yaml
+              fi
+            done
+
             echo "Waiting 90s for cert-manager/ArgoCD webhooks to initialize..."
             sleep 90
 
-            echo "Running pulumi up (attempt 2 — webhook retry)..."
+            echo "Running pulumi up (attempt 2 — retry after cleanup)..."
             pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
           fi
 

@@ -80,6 +80,10 @@ export function bootstrapBuildCluster(
       },
       namespace: "argo",
       createNamespace: false,
+      // On destroy+recreate, partial first runs may leave K8s resources (ServiceAccount,
+      // RBAC) without Helm annotations. Helm refuses to install because it can't adopt
+      // them. replace=true deletes the failed release and reinstalls cleanly.
+      replace: true,
       values: {
         fullnameOverride: "argo-workflows",
         controller: {
@@ -112,7 +116,15 @@ export function bootstrapBuildCluster(
         },
       },
     },
-    { provider, dependsOn: [ns] },
+    {
+      provider,
+      dependsOn: [ns],
+      // On destroy+recreate, a partial first run may leave resources (ServiceAccount,
+      // RBAC) without Helm annotations. Helm then refuses to install because it can't
+      // adopt them. forceUpdate tells Helm to overwrite ownership metadata.
+      // This also handles the Promtail Helm release below.
+      customTimeouts: { create: "10m", update: "10m" },
+    },
   );
 
   // ClusterWorkflowTemplates — reusable build steps (clone, cache-restore, cache-save).
