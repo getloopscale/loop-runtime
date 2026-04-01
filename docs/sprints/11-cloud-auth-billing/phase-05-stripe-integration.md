@@ -116,12 +116,13 @@ O flow: signup → Stripe Customer criado → subscription `starter` (free) cria
 
 ## Definition of Done — Fase 5
 
-- [ ] Stripe Customer criado automaticamente no signup
-- [ ] Subscription starter (free) criada automaticamente
-- [ ] Webhooks recebidos e processados (4 eventos)
-- [ ] Webhook signature validated
-- [ ] Customer Portal acessível via `loopzero billing portal`
-- [ ] `loopzero billing` mostra plano e uso
-- [ ] Tabelas de billing populadas e sincronizadas com Stripe
-- [ ] Idempotência em todos os handlers de webhook
-- [ ] Secrets (Stripe API key, webhook secret) em env vars / Pulumi secrets
+- [x] Stripe Customer creation — StripeClient.CreateCustomer() + CreateSubscription() in cloud/internal/billing/stripe.go
+- [x] Subscription starter — CreateSubscription with configurable price ID via env vars
+- [x] Webhooks — 4 events handled: subscription.updated, subscription.deleted, invoice.paid, payment_failed
+- [x] Webhook signature — VerifySignature() with HMAC-SHA256, 5min timestamp tolerance, 4 tests (valid, invalid, missing, expired)
+- [x] Customer Portal — BillingHandler.Portal() returns portal session URL, `loopzero billing portal` opens browser
+- [x] `loopzero billing` — shows plan + usage, --json output, 6 CLI tests
+- [x] Billing tables — migration 000013: subscriptions, usage_records, plan_limits (40 seed rows), webhook_events
+- [x] Idempotency — webhook_events table tracks processed event IDs, duplicate events are no-ops
+- [x] Secrets — Pulumi config: stripeApiKey, stripeWebhookSecret (getSecret), env vars STRIPE_API_KEY, STRIPE_WEBHOOK_SECRET
+- [x] Zero internal terms — "subscription"→"plan", "invoice"→"billing history" in all user-facing output

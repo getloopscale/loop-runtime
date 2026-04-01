@@ -70,6 +70,12 @@ export interface PlatformStackConfig {
   // S3 bucket for Tempo trace data in production. Omit for local filesystem (dev).
   readonly tempoStorageBucket?: string;
 
+  // Stripe Billing (Sprint 11, Phase 5)
+  // Set via: pulumi config set --secret stripeApiKey sk_live_xxx
+  //          pulumi config set --secret stripeWebhookSecret whsec_xxx
+  readonly stripeApiKey?: pulumi.Output<string>;
+  readonly stripeWebhookSecret?: pulumi.Output<string>;
+
   // Ory SMTP — email delivery for verification and recovery (Sprint 11, Phase 4)
   // Set via: pulumi config set --secret smtpConnectionUri "smtps://key:secret@smtp.resend.com:465"
   readonly smtpConnectionUri?: pulumi.Output<string>;
@@ -151,6 +157,10 @@ export function loadStackConfig(): PlatformStackConfig {
 
     // Observability — Tempo trace storage (MEET-020)
     tempoStorageBucket: config.get("tempoStorageBucket") ?? undefined,
+
+    // Stripe Billing (Sprint 11, Phase 5)
+    stripeApiKey: config.getSecret("stripeApiKey") ?? undefined,
+    stripeWebhookSecret: config.getSecret("stripeWebhookSecret") ?? undefined,
 
     // Ory SMTP (Sprint 11, Phase 4)
     smtpConnectionUri: config.getSecret("smtpConnectionUri") ?? undefined,

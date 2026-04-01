@@ -46,6 +46,18 @@ type Config struct {
 	// Environment is the deployment environment (dev, staging, prod).
 	// Env: LOOPZERO_ENV (default: "dev")
 	Environment string
+
+	// StripeAPIKey is the Stripe secret key for API calls.
+	// Env: STRIPE_API_KEY (required in production)
+	StripeAPIKey string
+
+	// StripeWebhookSecret is the webhook signing secret for verifying Stripe events.
+	// Env: STRIPE_WEBHOOK_SECRET (required in production)
+	StripeWebhookSecret string
+
+	// BillingReturnURL is the URL users return to after Stripe portal/checkout.
+	// Env: BILLING_RETURN_URL (default: "http://localhost:3000")
+	BillingReturnURL string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -61,6 +73,9 @@ func Load() Config {
 		Environment:     envOr("LOOPZERO_ENV", "dev"),
 	}
 	cfg.JWTIssuer = envOr("JWT_ISSUER", cfg.HydraPublicURL+"/")
+	cfg.StripeAPIKey = envOr("STRIPE_API_KEY", "")
+	cfg.StripeWebhookSecret = envOr("STRIPE_WEBHOOK_SECRET", "")
+	cfg.BillingReturnURL = envOr("BILLING_RETURN_URL", "http://localhost:3000")
 	return cfg
 }
 
