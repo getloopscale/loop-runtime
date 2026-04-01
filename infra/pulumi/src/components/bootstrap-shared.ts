@@ -204,17 +204,18 @@ export function installTraefik(
     dependsOn.push(certManager);
   }
 
-  // MED-06: release name was previously hardcoded as "mgmt-traefik" for all roles.
-  // The Pulumi resource name is now ${role}-traefik, but we keep the Helm release
-  // name as "mgmt-traefik" on clusters that already have it deployed. On fresh
-  // clusters, the release name matches the role.
+  // Helm release name is "mgmt-traefik" for backward compatibility with existing
+  // clusters. K8s resources (ServiceAccount, Deployment, etc.) have the annotation
+  // meta.helm.sh/release-name=mgmt-traefik. Changing the release name causes Helm
+  // to reject the install because the resources "belong" to a different release.
   //
-  // This avoids a Helm replace (delete+create) which fails because existing K8s
-  // resources have meta.helm.sh/release-name=mgmt-traefik annotations.
+  // The Pulumi resource name uses ${role} for uniqueness in the state file, but
+  // the Helm release name on the cluster stays "mgmt-traefik" (both mgmt and runtime).
+  // The fullnameOverride differentiates the K8s resource names (mgmt-traefik vs runtime-traefik).
   return new k8s.helm.v3.Release(
     `${role}-traefik`,
     {
-      name: `${role}-traefik`,
+      name: "mgmt-traefik",
       chart: "traefik",
       version: HELM_VERSIONS.traefik,
       repositoryOpts: {
