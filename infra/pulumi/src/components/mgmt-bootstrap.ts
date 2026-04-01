@@ -1325,6 +1325,11 @@ function installTenantController(
         name: "tenant-controller",
         namespace: PLATFORM_NAMESPACE,
         labels: { app: "tenant-controller" },
+        annotations: {
+          // skipAwait: don't block on pod readiness. On fresh deploys,
+          // images don't exist yet (built in Step 2). Step 3 converges.
+          "pulumi.com/skipAwait": "true",
+        },
       },
       spec: {
         replicas: 1,
