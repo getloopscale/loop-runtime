@@ -11,14 +11,14 @@ import { ContainerRegistrySpec, ContainerRegistryOutput } from "../../contracts/
  * DigitalOcean allows only ONE container registry per account.
  * All stacks (dev/staging/prod) share the same registry.
  *
- * We always import the registry by name — if it already exists in
- * the DO account, Pulumi adopts it into the current stack's state.
- * If it doesn't exist, the import fails and Pulumi shows a clear
- * error asking the operator to create it first (via the prod stack
- * or manually).
+ * The first stack to run creates the registry. Subsequent stacks
+ * also declare it — Pulumi handles this via retainOnDelete (so
+ * destroying one stack doesn't delete the shared registry) and
+ * the DO API returns the existing registry on create (idempotent).
  *
- * This prevents the 409 "name already exists" error that occurs
- * when multiple stacks try to create the same registry.
+ * If the registry already exists in the Pulumi state, subsequent
+ * `pulumi up` runs are no-ops. If it exists in DO but not in state,
+ * run: `pulumi import digitalocean:index/containerRegistry:ContainerRegistry loopzero-infra-registry loopzero-infra-registry`
  */
 export class DigitalOceanRegistryProvider implements IProviderRegistry {
   createContainerRegistry(spec: ContainerRegistrySpec): ContainerRegistryOutput {
@@ -27,20 +27,12 @@ export class DigitalOceanRegistryProvider implements IProviderRegistry {
       subscriptionTierSlug: spec.tier,
       region: spec.region,
     }, {
-      // Import existing registry — DO only allows one per account.
-      // The registry name is deterministic, so we can always import by name.
-      import: spec.name,
-      // Protect from accidental deletion — registry contains all production images.
-      protect: true,
-      // Don't fail if subscription tier differs between stacks
-      // (dev may use "starter", prod may use "professional").
-      ignoreChanges: ["subscriptionTierSlug"],
+      // retainOnDelete: if this stack is destroyed, the registry stays in DO.
+      // Other stacks (and all images) depend on it.
+      retainOnDelete: true,
     });
 
     // Construct the endpoint deterministically: registry.digitalocean.com/{name}
-    // The serverUrl property from imported resources may return just the base URL
-    // (registry.digitalocean.com) without the registry name. Using interpolation
-    // ensures the endpoint always includes the registry name.
     const endpoint = registry.name.apply(n => `registry.digitalocean.com/${n}`);
 
     return {
