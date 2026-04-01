@@ -172,6 +172,8 @@ func NewRouter(cfg Config) *chi.Mux {
 				if cfg.ProjectDeleter != nil {
 					projects.SetDeleter(cfg.ProjectDeleter)
 				}
+				r.Get("/api/v1/projects", projects.List)
+				r.Get("/api/v1/projects/{name}", projects.Get)
 				r.With(rateLimitMiddlewares...).Post("/api/v1/projects", projects.Create)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}", projects.Delete)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}/environments/{env}", projects.DeleteEnvironment)

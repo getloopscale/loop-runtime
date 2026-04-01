@@ -34,17 +34,20 @@ type CreateProjectInput struct {
 	CreatedBy string
 }
 
-// ProjectResult is the result of creating a project.
+// ProjectResult is the result of creating or retrieving a project.
 type ProjectResult struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	TeamID string `json:"team"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	TeamID    string    `json:"team"`
+	CreatedBy string    `json:"created_by,omitempty"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
 }
 
 // ProjectStore abstracts project persistence (DIP).
 type ProjectStore interface {
 	CreateProject(ctx context.Context, input CreateProjectInput) (ProjectResult, error)
 	GetByName(ctx context.Context, tenantID, name string) (*ProjectResult, error)
+	ListByTenant(ctx context.Context, tenantID string) ([]ProjectResult, error)
 	DeleteProject(ctx context.Context, tenantID, projectID string) error
 }
 
@@ -95,6 +98,69 @@ func NewProjectHandler(store ProjectStore, crMgr TenantCRManager) *ProjectHandle
 // SetDeleter configures the project deleter. Called from main.go after all deps are ready.
 func (h *ProjectHandler) SetDeleter(d ProjectDeleter) {
 	h.deleter = d
+}
+
+// List handles GET /api/v1/projects.
+// Returns all projects for the authenticated tenant.
+func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
+	if uc == nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		return
+	}
+
+	projects, err := h.store.ListByTenant(ctx, uc.TenantID)
+	if err != nil {
+		slog.Error("failed to list projects",
+			"tenant_id", uc.TenantID,
+			"error", err.Error(),
+		)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"projects": projects,
+	})
+}
+
+// Get handles GET /api/v1/projects/{name}.
+// Returns a single project by name.
+func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
+	if uc == nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		return
+	}
+
+	name := chi.URLParam(r, "name")
+	if name == "" {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		return
+	}
+
+	project, err := h.store.GetByName(ctx, uc.TenantID, name)
+	if err != nil {
+		slog.Error("failed to get project",
+			"tenant_id", uc.TenantID,
+			"project", name,
+			"error", err.Error(),
+		)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+	if project == nil {
+		writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, project)
 }
 
 // createProjectRequest is the JSON request body for POST /api/v1/projects.

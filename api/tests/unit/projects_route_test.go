@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
@@ -19,6 +21,7 @@ import (
 type fakeProjectStore struct {
 	projects  map[string]bool
 	createErr error
+	listErr   error
 }
 
 func (f *fakeProjectStore) CreateProject(ctx context.Context, p routes.CreateProjectInput) (routes.ProjectResult, error) {
@@ -43,6 +46,36 @@ func (f *fakeProjectStore) GetByName(_ context.Context, tenantID, name string) (
 		return &routes.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
 	}
 	return nil, nil
+}
+
+func (f *fakeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]routes.ProjectResult, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	var results []routes.ProjectResult
+	for key := range f.projects {
+		parts := splitKey(key)
+		if parts[0] == tenantID {
+			results = append(results, routes.ProjectResult{
+				ID:     "proj-12345678",
+				Name:   parts[1],
+				TeamID: tenantID,
+			})
+		}
+	}
+	if results == nil {
+		results = []routes.ProjectResult{}
+	}
+	return results, nil
+}
+
+func splitKey(key string) [2]string {
+	for i, c := range key {
+		if c == '/' {
+			return [2]string{key[:i], key[i+1:]}
+		}
+	}
+	return [2]string{key, ""}
 }
 
 func (f *fakeProjectStore) DeleteProject(_ context.Context, _, _ string) error {
@@ -239,6 +272,185 @@ func TestProjectsRoute(t *testing.T) {
 	})
 }
 
+func TestProjectListRoute(t *testing.T) {
+	t.Run("GET /api/v1/projects → 200 with projects list", func(t *testing.T) {
+		store := &fakeProjectStore{
+			projects: map[string]bool{
+				"acme/api-service": true,
+				"acme/web-app":    true,
+			},
+		}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		rec := httptest.NewRecorder()
+
+		handler.List(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var result map[string]interface{}
+		_ = json.NewDecoder(rec.Body).Decode(&result)
+		projects, ok := result["projects"].([]interface{})
+		if !ok {
+			t.Fatal("expected 'projects' array in response")
+		}
+		if len(projects) != 2 {
+			t.Fatalf("expected 2 projects, got %d", len(projects))
+		}
+	})
+
+	t.Run("GET /api/v1/projects → 200 with empty list when no projects", func(t *testing.T) {
+		store := &fakeProjectStore{projects: make(map[string]bool)}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		rec := httptest.NewRecorder()
+
+		handler.List(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var result map[string]interface{}
+		_ = json.NewDecoder(rec.Body).Decode(&result)
+		projects, ok := result["projects"].([]interface{})
+		if !ok {
+			t.Fatal("expected 'projects' array in response")
+		}
+		if len(projects) != 0 {
+			t.Fatalf("expected 0 projects, got %d", len(projects))
+		}
+	})
+
+	t.Run("GET /api/v1/projects → 401 without auth", func(t *testing.T) {
+		store := &fakeProjectStore{projects: make(map[string]bool)}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
+		rec := httptest.NewRecorder()
+
+		handler.List(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", rec.Code)
+		}
+	})
+
+	t.Run("GET /api/v1/projects → only returns tenant's own projects", func(t *testing.T) {
+		store := &fakeProjectStore{
+			projects: map[string]bool{
+				"acme/my-app":       true,
+				"other-tenant/app": true,
+			},
+		}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		rec := httptest.NewRecorder()
+
+		handler.List(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var result map[string]interface{}
+		_ = json.NewDecoder(rec.Body).Decode(&result)
+		projects := result["projects"].([]interface{})
+		if len(projects) != 1 {
+			t.Fatalf("expected 1 project for acme tenant, got %d", len(projects))
+		}
+	})
+}
+
+func TestProjectGetRoute(t *testing.T) {
+	t.Run("GET /api/v1/projects/{name} → 200 with project details", func(t *testing.T) {
+		store := &fakeProjectStore{
+			projects: map[string]bool{"acme/my-app": true},
+		}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("name", "my-app")
+		ctx := makeAuthCtx("github-lucas", "acme", "owner")
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+		rec := httptest.NewRecorder()
+
+		handler.Get(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var result map[string]interface{}
+		_ = json.NewDecoder(rec.Body).Decode(&result)
+		if result["name"] != "my-app" {
+			t.Fatalf("expected name=my-app, got %v", result["name"])
+		}
+		if result["team"] != "acme" {
+			t.Fatalf("expected team=acme, got %v", result["team"])
+		}
+	})
+
+	t.Run("GET /api/v1/projects/{name} → 404 when not found", func(t *testing.T) {
+		store := &fakeProjectStore{projects: make(map[string]bool)}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("name", "nonexistent")
+		ctx := makeAuthCtx("github-lucas", "acme", "owner")
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+		rec := httptest.NewRecorder()
+
+		handler.Get(rec, req)
+
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var errResp map[string]interface{}
+		_ = json.NewDecoder(rec.Body).Decode(&errResp)
+		if errResp["code"] != "PROJECT_NOT_FOUND" {
+			t.Fatalf("expected error code PROJECT_NOT_FOUND, got %v", errResp["code"])
+		}
+	})
+
+	t.Run("GET /api/v1/projects/{name} → 401 without auth", func(t *testing.T) {
+		store := &fakeProjectStore{projects: make(map[string]bool)}
+		crMgr := &fakeTenantCRManager{}
+		handler := routes.NewProjectHandler(store, crMgr)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("name", "my-app")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rec := httptest.NewRecorder()
+
+		handler.Get(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", rec.Code)
+		}
+	})
+}
+
 // threadSafeProjectStore wraps fakeProjectStore with a mutex for concurrent test safety.
 type threadSafeProjectStore struct {
 	mu       sync.Mutex
@@ -269,6 +481,26 @@ func (f *threadSafeProjectStore) GetByName(_ context.Context, tenantID, name str
 		return &routes.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
 	}
 	return nil, nil
+}
+
+func (f *threadSafeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]routes.ProjectResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var results []routes.ProjectResult
+	for key := range f.projects {
+		parts := splitKey(key)
+		if parts[0] == tenantID {
+			results = append(results, routes.ProjectResult{
+				ID:     "proj-12345678",
+				Name:   parts[1],
+				TeamID: tenantID,
+			})
+		}
+	}
+	if results == nil {
+		results = []routes.ProjectResult{}
+	}
+	return results, nil
 }
 
 func (f *threadSafeProjectStore) DeleteProject(_ context.Context, _, _ string) error {
