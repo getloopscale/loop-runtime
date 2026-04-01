@@ -62,7 +62,7 @@ cmd-preview ◄── precisa de env + promote
 | # | Comando | Meeting | Implementacao | Tests | DO Validation |
 |---|---------|---------|---------------|-------|---------------|
 | 1 | cancel | SKIPPED (T1) | DONE | 13/13 pass | — |
-| 2 | build | PENDING | — | — | — |
+| 2 | build | SKIPPED (T1) | DONE | 32 new tests | — |
 | 3 | project | PENDING | — | — | — |
 | 4 | team | PENDING | — | — | — |
 | 5 | env | PENDING | — | — | — |

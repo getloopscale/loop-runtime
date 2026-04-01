@@ -64,6 +64,9 @@ func (f *fakeDeleteBuildStore) GetBuildApps(context.Context, string) ([]db.Build
 func (f *fakeDeleteBuildStore) ListByProject(context.Context, string, string, int, int) ([]db.Build, error) {
 	return nil, nil
 }
+func (f *fakeDeleteBuildStore) ListByProjectAndEnv(context.Context, string, string, string, int, int) ([]db.Build, int, error) {
+	return nil, 0, nil
+}
 func (f *fakeDeleteBuildStore) FindActiveBuilds(context.Context) ([]db.Build, error) {
 	return nil, nil
 }

@@ -148,6 +148,7 @@ func main() {
 	var argoCallbackHandler *routes.ArgoCallbackHandler
 	var rollbackHandler *routes.RollbackHandler
 	var statusHandler *routes.StatusHandler
+	var buildListHandler *routes.BuildListHandler
 	var projectDeleter routes.ProjectDeleter
 	var cellRouter placement.Router = placement.NewPassthroughRouter(placement.CellConfig{CellID: placement.DefaultCellID}) // fallback
 	var cellStore *db.PostgresCellStore // implements both TenantCellQuerier and CellMetricsQuerier
@@ -345,6 +346,9 @@ func main() {
 		statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: buildStore}
 		statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: releaseStore}
 		statusHandler = routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain)
+
+		// Build list handler — lists builds for a project with optional env filter
+		buildListHandler = routes.NewBuildListHandler(&adapters.BuildListStoreAdapter{Store: buildStore})
 
 		// Project deleter — orchestrates project removal across DB, GitOps, and builds.
 		// WorkflowCanceller stops running Argo Workflows during deletion (DF-2.1).
@@ -587,6 +591,7 @@ func main() {
 		LogsHandler:        logsHandler,
 		RollbackHandler:    rollbackHandler,
 		StatusHandler:      statusHandler,
+		BuildListHandler:   buildListHandler,
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,
