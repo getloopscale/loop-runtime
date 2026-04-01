@@ -90,6 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [validate, resolve-stack]
+    environment: infra-dev
     env:
       # S3 state backend auth (Pulumi reads AWS_* for S3 protocol)
       AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
