@@ -50,11 +50,41 @@ func (s *PostgresProjectStore) CreateProject(ctx context.Context, input routes.C
 	}, nil
 }
 
+// ListByTenant returns all projects for a tenant, ordered by name.
+func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string) ([]routes.ProjectResult, error) {
+	rows, err := s.DB.Query(ctx,
+		"SELECT id, name, tenant_id, created_by, created_at FROM projects WHERE tenant_id = $1 ORDER BY name",
+		tenantID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("project store: list by tenant: %w", err)
+	}
+	defer rows.Close()
+
+	var results []routes.ProjectResult
+	for rows.Next() {
+		var r routes.ProjectResult
+		if err := rows.Scan(&r.ID, &r.Name, &r.TeamID, &r.CreatedBy, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("project store: list by tenant scan: %w", err)
+		}
+		results = append(results, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("project store: list by tenant rows error: %w", err)
+	}
+
+	// Return empty slice instead of nil for consistent JSON serialization.
+	if results == nil {
+		results = []routes.ProjectResult{}
+	}
+	return results, nil
+}
+
 // GetByName retrieves a project by tenant and name.
 // Returns nil when not found (not an error — caller decides).
 func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name string) (*routes.ProjectResult, error) {
 	rows, err := s.DB.Query(ctx,
-		"SELECT id, name, tenant_id FROM projects WHERE tenant_id = $1 AND name = $2",
+		"SELECT id, name, tenant_id, created_by, created_at FROM projects WHERE tenant_id = $1 AND name = $2",
 		tenantID, name,
 	)
 	if err != nil {
@@ -70,7 +100,7 @@ func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name str
 	}
 
 	var result routes.ProjectResult
-	if err := rows.Scan(&result.ID, &result.Name, &result.TeamID); err != nil {
+	if err := rows.Scan(&result.ID, &result.Name, &result.TeamID, &result.CreatedBy, &result.CreatedAt); err != nil {
 		return nil, fmt.Errorf("project store: get by name scan: %w", err)
 	}
 	return &result, nil

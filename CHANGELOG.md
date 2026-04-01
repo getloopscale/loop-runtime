@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- CLI command `loopzero project list` to list all projects in the current team (#cmd-project)
+  - New API route `GET /api/v1/projects` with tenant isolation
+  - New DB query `ListByTenant` returning projects ordered by name
+- CLI command `loopzero project create <name>` to create a project manually (#cmd-project)
+  - Handles 409 (already exists) as idempotent success
+- CLI command `loopzero project inspect <name>` to show project details (#cmd-project)
+  - New API route `GET /api/v1/projects/{name}` with 404 handling
 - CLI command `loopzero build list [--env] [--limit]` to list recent builds for a project (#cmd-build)
   - New API route `GET /api/v1/projects/{name}/builds` with env filter and pagination
   - New DB query `ListByProjectAndEnv` with total count

@@ -63,7 +63,7 @@ cmd-preview ◄── precisa de env + promote
 |---|---------|---------|---------------|-------|---------------|
 | 1 | cancel | SKIPPED (T1) | DONE | 13/13 pass | — |
 | 2 | build | SKIPPED (T1) | DONE | 32 new tests | — |
-| 3 | project | PENDING | — | — | — |
+| 3 | project | SKIPPED (T1) | DONE | 46 new tests | — |
 | 4 | team | PENDING | — | — | — |
 | 5 | env | PENDING | — | — | — |
 | 6 | promote | PENDING | — | — | — |
