@@ -1765,6 +1765,58 @@ function createPlatformNetworkPolicies(
     },
     { provider, dependsOn: [ns] },
   );
+
+  // Gitea: ingress from loopzero-api, tenant-controller, and ArgoCD repo-server
+  new k8s.networking.v1.NetworkPolicy(
+    "allow-gitea",
+    {
+      metadata: {
+        name: "allow-gitea",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        podSelector: { matchLabels: { "app.kubernetes.io/name": "gitea" } },
+        policyTypes: ["Ingress"],
+        ingress: [
+          {
+            from: [
+              { podSelector: { matchLabels: { app: "loopzero-api" } } },
+              { podSelector: { matchLabels: { app: "tenant-controller" } } },
+              // ArgoCD repo-server clones from Gitea
+              { podSelector: { matchLabels: { "app.kubernetes.io/name": "argocd-repo-server" } } },
+            ],
+            ports: [{ port: 3000, protocol: "TCP" }],
+          },
+        ],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // MinIO: ingress from loopzero-api and tenant-controller
+  new k8s.networking.v1.NetworkPolicy(
+    "allow-minio",
+    {
+      metadata: {
+        name: "allow-minio",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        podSelector: { matchLabels: { "app.kubernetes.io/name": "minio" } },
+        policyTypes: ["Ingress"],
+        ingress: [
+          {
+            from: [
+              { podSelector: { matchLabels: { app: "loopzero-api" } } },
+              { podSelector: { matchLabels: { app: "tenant-controller" } } },
+            ],
+            ports: [{ port: 9000, protocol: "TCP" }],
+          },
+        ],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
 }
 
 // ---------------------------------------------------------------------------
