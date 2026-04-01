@@ -455,6 +455,24 @@ jobs:
               done
             fi
 
+            # Restart deployments stuck in ImagePullBackOff so they pick up
+            # the new registry credentials. K8s doesn't retry pulls automatically
+            # after credentials are added — pods must be recreated.
+            for KC_OUTPUT in mgmtKubeconfig buildKubeconfig runtimeKubeconfig; do
+              KC=$(pulumi stack output $KC_OUTPUT --show-secrets --stack "$STACK" 2>/dev/null || true)
+              if [ -n "$KC" ] && [ "$KC" != "undefined" ]; then
+                echo "$KC" > /tmp/restart-kc.yaml
+                for NS in platform-system argo; do
+                  STUCK=$(kubectl --kubeconfig=/tmp/restart-kc.yaml get pods -n $NS 2>/dev/null | grep -E "ImagePull|ErrImage" | awk '{print $1}' || true)
+                  for POD in $STUCK; do
+                    echo "  Deleting stuck pod: $NS/$POD"
+                    kubectl --kubeconfig=/tmp/restart-kc.yaml delete pod "$POD" -n "$NS" --ignore-not-found 2>/dev/null || true
+                  done
+                done
+                rm -f /tmp/restart-kc.yaml
+              fi
+            done
+
             echo "Waiting 90s for cert-manager/ArgoCD webhooks to initialize..."
             sleep 90
 
