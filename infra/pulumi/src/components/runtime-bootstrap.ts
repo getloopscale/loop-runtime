@@ -33,7 +33,10 @@ export function bootstrapRuntimeCluster(
   const certManager = installCertManager("runtime", provider, ns);
 
   // ClusterIssuer — Let's Encrypt production certs for tenant apps
-  const runtimeClusterIssuer = createClusterIssuer(provider, certManager, config, "runtime");
+  // Pass kubeconfig for deterministic webhook readiness check (MEET-2026-04-01-025 #5)
+  const runtimeClusterIssuer = createClusterIssuer(
+    provider, certManager, config, "runtime", infra.runtimeCluster.kubeconfig,
+  );
 
   // Traefik — ingress for user apps, depends on cert-manager for TLS
   const traefik = installTraefik("runtime", provider, ns, certManager);

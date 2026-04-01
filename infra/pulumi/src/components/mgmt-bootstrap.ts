@@ -119,7 +119,10 @@ export function bootstrapMgmtCluster(
   );
 
   // ClusterIssuer — Let's Encrypt production certificates via HTTP-01
-  const clusterIssuer = createClusterIssuer(provider, certManager, config);
+  // Pass kubeconfig for deterministic webhook readiness check (MEET-2026-04-01-025 #5)
+  const clusterIssuer = createClusterIssuer(
+    provider, certManager, config, "mgmt", infra.mgmtCluster.kubeconfig,
+  );
 
   // TLS IngressRoutes for platform services
   const tlsRoutes = createPlatformIngressRoutes(
