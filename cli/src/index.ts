@@ -28,6 +28,8 @@ import { StatusCommand } from './commands/status';
 import { LogsCommand } from './commands/logs';
 import { RollbackCommand } from './commands/rollback';
 import { CancelCommand } from './commands/cancel';
+import { BuildListCommand } from './commands/build-list';
+import { BuildInspectCommand } from './commands/build-inspect';
 import { SecretSetCommand, SecretListCommand, SecretDeleteCommand } from './commands/secret';
 import { ValidateCommand } from './commands/validate';
 import { detectMonorepoTool } from './detection/monorepo';
@@ -647,6 +649,89 @@ export function createProgram(): Command {
       });
 
       const exitCode = await cancelCmd.execute(buildId, { json: globalOpts.json });
+      process.exitCode = exitCode;
+    });
+
+  // --- build ---
+  const buildCmd = program
+    .command('build')
+    .description('Manage builds');
+
+  buildCmd
+    .command('list')
+    .description('List recent builds')
+    .option('--env <name>', 'Filter by environment')
+    .option('--limit <n>', 'Max builds to show')
+    .action(async (cmdOpts: { env?: string; limit?: string }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const buildListCmd = new BuildListCommand({
+        getToken: () => configStore.getToken(),
+        findLoopZeroYaml: () => {
+          const gitRoot = getGitRoot();
+          if (!gitRoot) return null;
+          return findLoopZeroYaml(process.cwd(), gitRoot);
+        },
+        listBuilds: async (project: string, env?: string, limit?: number) => {
+          const params = new URLSearchParams();
+          if (env) params.set('env', env);
+          if (limit) params.set('limit', String(limit));
+          const query = params.toString();
+          const path = `/api/v1/projects/${encodeURIComponent(project)}/builds${query ? `?${query}` : ''}`;
+          return apiClient.get(path);
+        },
+        writeTo,
+        writeError,
+      });
+
+      const limit = cmdOpts.limit ? parseInt(cmdOpts.limit, 10) : undefined;
+      const exitCode = await withTimeout(
+        buildListCmd.execute({ env: cmdOpts.env, limit, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Build list request timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'BUILD_LIST_TIMEOUT', error: err.message, exit_code: 1 }));
+        } else {
+          writeError(err.message);
+        }
+        return 1;
+      });
+      process.exitCode = exitCode;
+    });
+
+  buildCmd
+    .command('inspect <build-id>')
+    .description('Show build details')
+    .action(async (buildId: string) => {
+      const globalOpts = program.opts();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: configStore.getToken() ?? undefined });
+
+      const buildInspectCmd = new BuildInspectCommand({
+        getToken: () => configStore.getToken(),
+        getBuild: async (id: string) => {
+          return apiClient.get(`/api/v1/builds/${encodeURIComponent(id)}`);
+        },
+        writeTo,
+        writeError,
+      });
+
+      const exitCode = await withTimeout(
+        buildInspectCmd.execute(buildId, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Build inspect request timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'BUILD_INSPECT_TIMEOUT', error: err.message, exit_code: 1 }));
+        } else {
+          writeError(err.message);
+        }
+        return 1;
+      });
       process.exitCode = exitCode;
     });
 

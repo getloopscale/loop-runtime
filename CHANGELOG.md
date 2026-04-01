@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- CLI command `loopzero build list [--env] [--limit]` to list recent builds for a project (#cmd-build)
+  - New API route `GET /api/v1/projects/{name}/builds` with env filter and pagination
+  - New DB query `ListByProjectAndEnv` with total count
+  - Expanded `BuildStatusResponse` with timestamps, duration, error, apps
+- CLI command `loopzero build inspect <build-id>` to show detailed build info (#cmd-build)
 - CLI command `loopzero cancel <build-id>` to cancel running or queued builds (#cmd-cancel)
   - Exit codes: 0 success, 1 usage, 3 cancel failed, 4 auth
   - `--json` output: `{ ok, build_id, status }` on success, `{ code, error, exit_code }` on error

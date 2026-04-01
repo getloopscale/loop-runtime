@@ -84,14 +84,26 @@ type BuildOrchestratorService interface {
 	GetBuildTenantID(ctx context.Context, buildID string) (string, error)
 }
 
+// BuildAppInfo describes a built app in a build status response.
+type BuildAppInfo struct {
+	Name string `json:"name"`
+	Type string `json:"type,omitempty"`
+}
+
 // BuildStatusResponse is the JSON response for GET /builds/:id.
 type BuildStatusResponse struct {
-	BuildID     string `json:"build_id"`
-	ProjectID   string `json:"project_id"`
-	Environment string `json:"environment"`
-	Status      string `json:"status"`
-	CommitSHA   string `json:"commit_sha"`
-	CreatedBy   string `json:"created_by"`
+	BuildID         string         `json:"build_id"`
+	ProjectID       string         `json:"project_id"`
+	Environment     string         `json:"environment"`
+	Status          string         `json:"status"`
+	CommitSHA       string         `json:"commit_sha"`
+	CreatedBy       string         `json:"created_by"`
+	CreatedAt       string         `json:"created_at"`
+	StartedAt       string         `json:"started_at,omitempty"`
+	FinishedAt      string         `json:"finished_at,omitempty"`
+	DurationSeconds *int           `json:"duration_seconds,omitempty"`
+	ErrorMessage    string         `json:"error,omitempty"`
+	Apps            []BuildAppInfo `json:"apps,omitempty"`
 }
 
 // BuildHandler provides HTTP handlers for build operations.

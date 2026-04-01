@@ -124,6 +124,10 @@ func (f *fakeBuildStoreOrch) GetBuildApps(ctx context.Context, buildID string) (
 	return nil, nil
 }
 
+func (f *fakeBuildStoreOrch) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]db.Build, int, error) {
+	return nil, 0, nil
+}
+
 func (f *fakeBuildStoreOrch) CancelActiveBuilds(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, []string, error) {
 	count := 0
 	var wfIDs []string
