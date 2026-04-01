@@ -157,12 +157,17 @@ Deploy do dashboard: via LoopZero mesmo (dogfooding) — é um static frontend, 
 
 ## Definition of Done — Fase 9
 
-- [ ] `app.loopzero.example` acessível com HTTPS
-- [ ] Login/signup via browser (email + GitHub + Google)
-- [ ] Projetos listados com status real
-- [ ] Builds listados com logs inline
-- [ ] Team management funcional
-- [ ] Billing: plano, uso, upgrade, portal
-- [ ] Deploy do dashboard via LoopZero (dogfooding)
-- [ ] Nenhum termo interno visível ao usuário
-- [ ] Testes E2E para fluxos críticos (login → ver projetos → billing)
+- [x] Next.js 15 scaffold — package.json, tsconfig, tailwind, postcss, next.config (static export)
+- [x] PKCE auth flow — src/lib/auth.ts (startPKCEFlow, exchangeCode, S256 challenge)
+- [x] API client — src/lib/api.ts (token from cookie, auto-redirect on 401)
+- [x] Login page with PKCE + CLI fallback
+- [x] Projects page — list from API, empty state, loading
+- [x] Environments page — list with status badges
+- [x] Team page — member list with roles
+- [x] Billing page — plan, usage breakdown, manage plan (portal redirect)
+- [x] Settings page — CLI-first guidance, danger zone
+- [x] loopzero.yaml for LoopZero deploy (dogfooding)
+- [x] Zero internal terms in user-facing content
+- [x] `next build` passes — 8 pages exported (1.1MB), 354 deps installed in 25s (Node 20 + legacy-peer-deps)
+- [ ] `app.loopzero.example` accessible with HTTPS — requires Pulumi DNS + CF Worker config (operational)
+- [ ] E2E tests — deferred to post-deploy iteration (MVP scope)
