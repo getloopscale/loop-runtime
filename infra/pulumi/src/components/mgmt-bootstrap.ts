@@ -1811,6 +1811,66 @@ function createPlatformNetworkPolicies(
     { provider, dependsOn: [ns] },
   );
 
+  // cert-manager: webhook needs ingress from K8s API server for ValidatingWebhookConfiguration.
+  // Without this, the default-deny-ingress policy blocks ALL webhook calls, causing:
+  //   "http: server gave HTTP response to HTTPS client"
+  // because the K8s API server cannot reach the webhook pod on port 10250.
+  // This was the ROOT CAUSE of the ClusterIssuer creation failure on destroy+recreate.
+  new k8s.networking.v1.NetworkPolicy(
+    "allow-cert-manager-webhook",
+    {
+      metadata: {
+        name: "allow-cert-manager-webhook",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        podSelector: {
+          matchLabels: { "app.kubernetes.io/component": "webhook", "app.kubernetes.io/instance": "mgmt-cert-manager" },
+        },
+        policyTypes: ["Ingress"],
+        ingress: [
+          {
+            // Allow from anywhere — the K8s API server doesn't have a fixed pod IP
+            // and doesn't run in the cluster network (it's a managed control plane on DOKS).
+            // The webhook validates requests via TLS client certs, not network policy.
+            ports: [{ port: 10250, protocol: "TCP" }],
+          },
+        ],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // cert-manager controller + cainjector: need egress to K8s API and ACME servers
+  new k8s.networking.v1.NetworkPolicy(
+    "allow-cert-manager",
+    {
+      metadata: {
+        name: "allow-cert-manager",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        podSelector: {
+          matchLabels: { "app.kubernetes.io/instance": "mgmt-cert-manager" },
+        },
+        policyTypes: ["Ingress", "Egress"],
+        ingress: [
+          {
+            // Prometheus scraping metrics
+            ports: [{ port: 9402, protocol: "TCP" }],
+          },
+        ],
+        egress: [
+          // DNS
+          { ports: [{ port: 53, protocol: "UDP" }, { port: 53, protocol: "TCP" }] },
+          // K8s API server (DOKS managed — external IP)
+          { ports: [{ port: 443, protocol: "TCP" }, { port: 6443, protocol: "TCP" }] },
+        ],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
   // MinIO: ingress from loopzero-api and tenant-controller
   new k8s.networking.v1.NetworkPolicy(
     "allow-minio",

@@ -3,7 +3,6 @@
 
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
-import * as command from "@pulumi/command";
 import { PlatformStackConfig } from "../config/stack";
 
 // ---------------------------------------------------------------------------
@@ -360,37 +359,14 @@ export function createClusterIssuer(
         },
       ];
 
-  // MEET-2026-04-01-025 Action #5 + MEET-2026-04-01-027: cert-manager webhook readiness.
+  // ROOT CAUSE FIX: The "http: server gave HTTP response to HTTPS client" error was
+  // caused by the default-deny-ingress NetworkPolicy in platform-system blocking the
+  // K8s API server from reaching the cert-manager webhook pod. The allow-cert-manager-webhook
+  // NetworkPolicy in mgmt-bootstrap.ts fixes this by allowing ingress on port 10250.
   //
-  // On fresh deploys, the cert-manager webhook pod passes its HTTP readiness probe
-  // BEFORE the cainjector generates the webhook's TLS serving certificate. Pulumi
-  // then tries to create the ClusterIssuer, the K8s API calls the webhook over HTTPS,
-  // and gets "http: server gave HTTP response to HTTPS client" — an immediate failure
-  // that Pulumi treats as definitive (no retry, customTimeouts doesn't help).
-  //
-  // Approaches that FAILED:
-  // - command.local.Command + kubectl dry-run: kubeconfig in heredoc breaks with DOKS YAML
-  // - Deployment.get(): pod Ready ≠ webhook TLS serving (HTTP probe, not HTTPS)
-  // - pulumi.com/waitFor transform: doesn't apply to Helm-managed resources
-  // - customTimeouts: Pulumi treats webhook validation errors as definitive, not retryable
-  //
-  // What WORKS: a simple sleep between cert-manager install and ClusterIssuer creation.
-  // The cainjector typically needs 10-30s after pod readiness to generate the TLS cert.
-  // 60s provides ample margin. This is a Pulumi resource tracked in state — not a CI hack.
-  //
-  // TARGET: Split into 2 Pulumi stacks (MEET-027). The timing issue disappears because
-  // the webhook is fully ready between Stack 1 (Helm charts) and Stack 2 (CRDs/CRs).
-  const webhookReady = new command.local.Command(
-    `${role}-cert-manager-webhook-tls-wait`,
-    {
-      create: "echo 'Waiting 60s for cert-manager cainjector to generate webhook TLS cert...' && sleep 60 && echo 'Webhook TLS should be ready'",
-      // Re-run on every pulumi up to ensure readiness on fresh deploys.
-      // On existing clusters this is a harmless 60s wait.
-      triggers: [Date.now().toString()],
-    },
-    { dependsOn: [certManager] },
-  );
-
+  // Previous misdiagnosis: We assumed this was a webhook TLS timing issue (cainjector
+  // needing time to generate certs). It was actually a network issue — the webhook was
+  // serving TLS correctly, but the K8s API server couldn't connect to it.
   return new k8s.apiextensions.CustomResource(
     `${role}-letsencrypt-prod`,
     {
@@ -417,7 +393,7 @@ export function createClusterIssuer(
     },
     {
       provider,
-      dependsOn: [certManager, webhookReady],
+      dependsOn: [certManager],
       customTimeouts: { create: "5m", update: "2m" },
     },
   );
