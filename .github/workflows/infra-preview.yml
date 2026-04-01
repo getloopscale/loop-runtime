@@ -15,7 +15,7 @@ name: "Infra: Preview"
 
 on:
   pull_request:
-    branches: [develop, main]
+    branches: [develop, homolog, main]
     paths:
       - "infra/pulumi/**"
       - ".github/workflows/infra-preview.yml"
@@ -77,6 +77,7 @@ jobs:
         run: |
           case "${{ github.base_ref }}" in
             develop) echo "stack=dev" >> "$GITHUB_OUTPUT" ;;
+            homolog) echo "stack=staging" >> "$GITHUB_OUTPUT" ;;
             main)    echo "stack=prod" >> "$GITHUB_OUTPUT" ;;
             *)       echo "stack=dev" >> "$GITHUB_OUTPUT" ;;
           esac

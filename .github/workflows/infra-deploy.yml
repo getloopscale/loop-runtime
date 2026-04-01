@@ -1,8 +1,9 @@
 # Infrastructure Deploy — provisions cloud resources via Pulumi
 #
 # Trigger map:
-#   push to develop  → deploy to dev   (automatic)
-#   push to main     → deploy to prod  (requires approval)
+#   push to develop  → deploy to dev     (automatic, every push)
+#   push to homolog  → deploy to staging (automatic, every push)
+#   push to main     → deploy to prod    (requires approval)
 #   workflow_dispatch → manual operations (any stack, any command)
 #
 # State backend: DigitalOcean Spaces (S3-compatible) — no Pulumi Cloud dependency.
@@ -14,20 +15,15 @@
 #   PULUMI_CONFIG_PASSPHRASE   — Passphrase for secrets encryption in state
 #
 # Required GitHub Environments:
-#   infra-dev   — no protection rules (auto-deploy)
-#   infra-prod  — required reviewers + deployment branch = main
+#   infra-dev      — no protection rules (auto-deploy on develop)
+#   infra-staging  — no protection rules (auto-deploy on homolog)
+#   infra-prod     — required reviewers + deployment branch = main
 
 name: "Infra: Deploy"
 
 on:
   push:
-    branches: [develop, main]
-    paths:
-      - "infra/pulumi/**"
-      - "infra/helm/**"
-      - "infra/cloudflare/**"
-      - "api/internal/db/migrations/**"
-      - ".github/workflows/infra-deploy.yml"
+    branches: [develop, homolog, main]
 
   workflow_dispatch:
     inputs:
@@ -83,6 +79,7 @@ jobs:
           else
             case "${{ github.ref_name }}" in
               develop) STACK="dev" ;;
+              homolog) STACK="staging" ;;
               main)    STACK="prod" ;;
               *)       echo "::error::Unexpected branch: ${{ github.ref_name }}" && exit 1 ;;
             esac

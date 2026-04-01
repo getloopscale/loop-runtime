@@ -2,6 +2,7 @@
 #
 # Trigger map:
 #   push to develop → build + push with :dev tag + :sha tag
+#   push to homolog → build + push with :staging tag + :sha tag
 #   push to main    → build + push with :latest tag + :sha tag
 #   workflow_dispatch → manual build for any component
 #
@@ -19,7 +20,7 @@ on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
-    branches: [develop, main]
+    branches: [develop, homolog, main]
 
   workflow_dispatch:
     inputs:
@@ -75,6 +76,7 @@ jobs:
 
           case "$BRANCH" in
             develop) TAG="dev" ;;
+            homolog) TAG="staging" ;;
             main)    TAG="latest" ;;
             *)       TAG="dev" ;;
           esac
@@ -85,6 +87,7 @@ jobs:
           ENV_TAG=""
           case "$BRANCH" in
             develop) ENV_TAG="dev" ;;
+            homolog) ENV_TAG="staging" ;;
             main)    ENV_TAG="prod" ;;
           esac
 
