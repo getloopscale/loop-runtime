@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- CLI command `loopzero env list` to list environments for the current team (#cmd-env)
+  - New API route `GET /api/v1/environments` with tenant isolation
+  - New API route `POST /api/v1/environments` to create environments (patches Tenant CRD)
+  - New API route `GET /api/v1/environments/{name}` for environment details
+  - New API route `DELETE /api/v1/environments/{name}` with production protection (403)
+- CLI command `loopzero env create <name>` with reserved name validation (#cmd-env)
+- CLI command `loopzero env delete <name> --confirm <name>` with safety guards (#cmd-env)
+- CLI command `loopzero env inspect <name>` showing active releases per project (#cmd-env)
 - CLI command `loopzero project list` to list all projects in the current team (#cmd-project)
   - New API route `GET /api/v1/projects` with tenant isolation
   - New DB query `ListByTenant` returning projects ordered by name

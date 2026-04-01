@@ -327,6 +327,22 @@ func NewProjectNotFound(name string) *LoopZeroError {
 	}
 }
 
+// NewEnvironmentNotFound creates an ENVIRONMENT_NOT_FOUND error with environment name context.
+func NewEnvironmentNotFound(name string) *LoopZeroError {
+	return &LoopZeroError{
+		Code:       "ENVIRONMENT_NOT_FOUND",
+		Message:    fmt.Sprintf("environment '%s' not found", name),
+		HTTPStatus: 404,
+	}
+}
+
+// ErrForbidden is returned when an operation is not permitted.
+var ErrForbidden = &LoopZeroError{
+	Code:       "FORBIDDEN",
+	Message:    "this operation is not permitted",
+	HTTPStatus: 403,
+}
+
 // NewIdempotencyConflict creates an IDEMPOTENCY_CONFLICT error with key context.
 func NewIdempotencyConflict(key string) *LoopZeroError {
 	return &LoopZeroError{
