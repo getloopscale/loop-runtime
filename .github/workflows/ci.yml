@@ -86,9 +86,9 @@ jobs:
     timeout-minutes: 10
     needs: [changes]
     if: >-
-      (matrix.component == 'pkg' && needs.changes.outputs.go-pkg == 'true') ||
-      (matrix.component == 'api' && needs.changes.outputs.go-api == 'true') ||
-      (matrix.component == 'operators' && needs.changes.outputs.go-operators == 'true')
+      needs.changes.outputs.go-pkg == 'true' ||
+      needs.changes.outputs.go-api == 'true' ||
+      needs.changes.outputs.go-operators == 'true'
     strategy:
       fail-fast: false
       matrix:
