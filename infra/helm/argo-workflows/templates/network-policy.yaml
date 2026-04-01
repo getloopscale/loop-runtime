@@ -1,0 +1,43 @@
+# SEC-009 fix: Default-deny egress for build pods with explicit allowlist.
+# Without this, compromised builds can exfiltrate source code/credentials to any host.
+# The loopzero-system namespace has NetworkPolicies; this extends coverage to build pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: build-pod-egress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: loopzero
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS resolution (required by all pods)
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow MinIO/S3 access (source bundles, cache, static assets)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 9000
+        - protocol: TCP
+          port: 443
+    # Allow container registry access (image push)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 5000
+    # Allow HTTP/HTTPS for package managers (npm, pip, go mod)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443

@@ -130,9 +130,22 @@ type k8sDeployment struct {
 }
 
 type k8sDeploymentSpec struct {
-	Replicas int                `json:"replicas"`
-	Selector k8sLabelSelector   `json:"selector"`
-	Template k8sPodTemplateSpec `json:"template"`
+	Replicas                int                 `json:"replicas"`
+	ProgressDeadlineSeconds int                 `json:"progressDeadlineSeconds,omitempty"`
+	MinReadySeconds         int                 `json:"minReadySeconds,omitempty"`
+	Strategy                *k8sDeployStrategy  `json:"strategy,omitempty"`
+	Selector                k8sLabelSelector    `json:"selector"`
+	Template                k8sPodTemplateSpec  `json:"template"`
+}
+
+type k8sDeployStrategy struct {
+	Type          string             `json:"type"`
+	RollingUpdate *k8sRollingUpdate  `json:"rollingUpdate,omitempty"`
+}
+
+type k8sRollingUpdate struct {
+	MaxUnavailable int `json:"maxUnavailable"`
+	MaxSurge       int `json:"maxSurge"`
 }
 
 type k8sLabelSelector struct {
@@ -149,18 +162,46 @@ type k8sPodMeta struct {
 }
 
 type k8sPodSpec struct {
-	Containers []k8sContainer `json:"containers"`
+	ServiceAccountName            string                  `json:"serviceAccountName,omitempty"`
+	AutomountServiceAccountToken  *bool                   `json:"automountServiceAccountToken,omitempty"`
+	SecurityContext               *k8sPodSecurityContext   `json:"securityContext,omitempty"`
+	Containers                    []k8sContainer           `json:"containers"`
+	TerminationGracePeriodSeconds int                      `json:"terminationGracePeriodSeconds,omitempty"`
+}
+
+type k8sPodSecurityContext struct {
+	RunAsNonRoot   *bool              `json:"runAsNonRoot,omitempty"`
+	RunAsUser      *int64             `json:"runAsUser,omitempty"`
+	RunAsGroup     *int64             `json:"runAsGroup,omitempty"`
+	FSGroup        *int64             `json:"fsGroup,omitempty"`
+	SeccompProfile *k8sSeccompProfile `json:"seccompProfile,omitempty"`
+}
+
+type k8sSeccompProfile struct {
+	Type string `json:"type"`
 }
 
 type k8sContainer struct {
-	Name           string             `json:"name"`
-	Image          string             `json:"image"`
-	Ports          []k8sContainerPort `json:"ports,omitempty"`
-	Resources      k8sResources       `json:"resources"`
-	Env            []k8sEnvVar        `json:"env,omitempty"`
-	EnvFrom        []k8sEnvFromSource `json:"envFrom,omitempty"`
-	ReadinessProbe *k8sProbe          `json:"readinessProbe,omitempty"`
-	LivenessProbe  *k8sProbe          `json:"livenessProbe,omitempty"`
+	Name            string                      `json:"name"`
+	Image           string                      `json:"image"`
+	Ports           []k8sContainerPort          `json:"ports,omitempty"`
+	Resources       k8sResources                `json:"resources"`
+	Env             []k8sEnvVar                 `json:"env,omitempty"`
+	EnvFrom         []k8sEnvFromSource          `json:"envFrom,omitempty"`
+	SecurityContext *k8sContainerSecurityContext `json:"securityContext,omitempty"`
+	StartupProbe    *k8sProbe                   `json:"startupProbe,omitempty"`
+	ReadinessProbe  *k8sProbe                   `json:"readinessProbe,omitempty"`
+	LivenessProbe   *k8sProbe                   `json:"livenessProbe,omitempty"`
+}
+
+type k8sContainerSecurityContext struct {
+	AllowPrivilegeEscalation *bool              `json:"allowPrivilegeEscalation,omitempty"`
+	ReadOnlyRootFilesystem   *bool              `json:"readOnlyRootFilesystem,omitempty"`
+	Capabilities             *k8sCapabilities   `json:"capabilities,omitempty"`
+}
+
+type k8sCapabilities struct {
+	Drop []string `json:"drop,omitempty"`
 }
 
 type k8sContainerPort struct {
@@ -193,13 +234,31 @@ type k8sSecretRef struct {
 
 type k8sProbe struct {
 	HTTPGet             k8sHTTPGet `json:"httpGet"`
-	InitialDelaySeconds int        `json:"initialDelaySeconds"`
+	InitialDelaySeconds int        `json:"initialDelaySeconds,omitempty"`
 	PeriodSeconds       int        `json:"periodSeconds"`
+	TimeoutSeconds      int        `json:"timeoutSeconds,omitempty"`
+	SuccessThreshold    int        `json:"successThreshold,omitempty"`
+	FailureThreshold    int        `json:"failureThreshold,omitempty"`
 }
 
 type k8sHTTPGet struct {
 	Path string `json:"path"`
 	Port int    `json:"port"`
+}
+
+// PodDisruptionBudget types
+
+type k8sPDB struct {
+	APIVersion string      `json:"apiVersion"`
+	Kind       string      `json:"kind"`
+	Metadata   k8sMetadata `json:"metadata"`
+	Spec       k8sPDBSpec  `json:"spec"`
+}
+
+type k8sPDBSpec struct {
+	MaxUnavailable             int              `json:"maxUnavailable"`
+	UnhealthyPodEvictionPolicy string           `json:"unhealthyPodEvictionPolicy,omitempty"`
+	Selector                   k8sLabelSelector `json:"selector"`
 }
 
 // Service types
@@ -331,24 +390,27 @@ func renderServerApp(ri RenderInput, app AppManifestInput) []string {
 	}
 
 	deployment := buildDeployment(ri, app, port)
+	pdb := buildPDB(ri, app)
 	service := buildService(ri, app, port)
 	ingressResources := buildIngressResources(ri, app, port)
 
 	docs := []string{
 		marshalResource(deployment),
+		marshalResource(pdb),
 		marshalResource(service),
 	}
 	docs = append(docs, ingressResources...)
 	return docs
 }
 
-// renderWorkerApp generates Deployment only (no Service/Ingress — workers don't receive traffic).
+// renderWorkerApp generates Deployment + PDB (no Service/Ingress — workers don't receive traffic).
 func renderWorkerApp(ri RenderInput, app AppManifestInput) []string {
 	deployment := buildDeployment(ri, app, 0)
-	return []string{marshalResource(deployment)}
+	pdb := buildPDB(ri, app)
+	return []string{marshalResource(deployment), marshalResource(pdb)}
 }
 
-// renderFrontendApp generates Deployment + Service + IngressRoute for a frontend app.
+// renderFrontendApp generates Deployment + PDB + Service + IngressRoute for a frontend app.
 // The container serves static assets via a lightweight HTTP server.
 func renderFrontendApp(ri RenderInput, app AppManifestInput) []string {
 	port := app.Port
@@ -357,11 +419,13 @@ func renderFrontendApp(ri RenderInput, app AppManifestInput) []string {
 	}
 
 	deployment := buildDeployment(ri, app, port)
+	pdb := buildPDB(ri, app)
 	service := buildService(ri, app, port)
 	ingressResources := buildIngressResources(ri, app, port)
 
 	docs := []string{
 		marshalResource(deployment),
+		marshalResource(pdb),
 		marshalResource(service),
 	}
 	docs = append(docs, ingressResources...)
@@ -518,6 +582,9 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 		"loopzero.io/project":  ri.ProjectID,
 	}
 
+	falseVal := false
+	trueVal := true
+
 	container := k8sContainer{
 		Name:  app.Name,
 		Image: app.ImageRef,
@@ -525,21 +592,41 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 			Requests: k8sResourceList{CPU: ri.cpuRequest(), Memory: ri.memoryRequest()},
 			Limits:   k8sResourceList{CPU: ri.cpuLimit(), Memory: ri.memoryLimit()},
 		},
+		SecurityContext: &k8sContainerSecurityContext{
+			AllowPrivilegeEscalation: &falseVal,
+			ReadOnlyRootFilesystem:   &trueVal,
+			Capabilities:             &k8sCapabilities{Drop: []string{"ALL"}},
+		},
 	}
 
 	if port > 0 {
 		container.Ports = []k8sContainerPort{
 			{ContainerPort: port, Protocol: "TCP"},
 		}
+		// Inject PORT env var so the app knows which port to listen on.
+		// Many frameworks use PORT env var (Express, Fastify, Next.js, etc.).
+		container.Env = append(container.Env, k8sEnvVar{
+			Name: "PORT", Value: fmt.Sprintf("%d", port),
+		})
+		container.StartupProbe = &k8sProbe{
+			HTTPGet:          k8sHTTPGet{Path: "/health", Port: port},
+			PeriodSeconds:    5,
+			TimeoutSeconds:   3,
+			FailureThreshold: 30, // 30 * 5s = 150s max startup time
+		}
 		container.ReadinessProbe = &k8sProbe{
-			HTTPGet:             k8sHTTPGet{Path: "/health", Port: port},
-			InitialDelaySeconds: 5,
-			PeriodSeconds:       10,
+			HTTPGet:          k8sHTTPGet{Path: "/health", Port: port},
+			PeriodSeconds:    10,
+			TimeoutSeconds:   3,
+			SuccessThreshold: 1,
+			FailureThreshold: 3, // 3 * 10s = 30s before removing from Service
 		}
 		container.LivenessProbe = &k8sProbe{
-			HTTPGet:             k8sHTTPGet{Path: "/health", Port: port},
-			InitialDelaySeconds: 15,
-			PeriodSeconds:       20,
+			HTTPGet:          k8sHTTPGet{Path: "/health", Port: port},
+			PeriodSeconds:    15,
+			TimeoutSeconds:   3,
+			SuccessThreshold: 1,
+			FailureThreshold: 5, // 5 * 15s = 75s — more tolerant than readiness
 		}
 	}
 
@@ -577,12 +664,58 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 			},
 		},
 		Spec: k8sDeploymentSpec{
-			Replicas: 1,
+			Replicas:                1,
+			ProgressDeadlineSeconds: 210,
+			MinReadySeconds:         10,
+			Strategy: &k8sDeployStrategy{
+				Type: "RollingUpdate",
+				RollingUpdate: &k8sRollingUpdate{
+					MaxUnavailable: 0,
+					MaxSurge:       1,
+				},
+			},
 			Selector: k8sLabelSelector{MatchLabels: selectorLabels},
 			Template: k8sPodTemplateSpec{
 				Metadata: k8sPodMeta{Labels: labels},
-				Spec:     k8sPodSpec{Containers: []k8sContainer{container}},
+				Spec: k8sPodSpec{
+					ServiceAccountName:           "loopzero-app",
+					AutomountServiceAccountToken: &falseVal,
+					SecurityContext: &k8sPodSecurityContext{
+						RunAsNonRoot:   &trueVal,
+						RunAsUser:      int64Ptr(1000),
+						RunAsGroup:     int64Ptr(1000),
+						FSGroup:        int64Ptr(1000),
+						SeccompProfile: &k8sSeccompProfile{Type: "RuntimeDefault"},
+					},
+					Containers:                    []k8sContainer{container},
+					TerminationGracePeriodSeconds: 30,
+				},
 			},
+		},
+	}
+}
+
+func buildPDB(ri RenderInput, app AppManifestInput) k8sPDB {
+	ns := namespace(ri.TenantID, ri.Environment)
+	labels := commonLabels(ri, app)
+	selectorLabels := map[string]string{
+		"app":             app.Name,
+		"loopzero.io/tenant":  ri.TenantID,
+		"loopzero.io/project": ri.ProjectID,
+	}
+
+	return k8sPDB{
+		APIVersion: "policy/v1",
+		Kind:       "PodDisruptionBudget",
+		Metadata: k8sMetadata{
+			Name:      app.Name + "-pdb",
+			Namespace: ns,
+			Labels:    labels,
+		},
+		Spec: k8sPDBSpec{
+			MaxUnavailable:             1,
+			UnhealthyPodEvictionPolicy: "AlwaysAllow",
+			Selector:                   k8sLabelSelector{MatchLabels: selectorLabels},
 		},
 	}
 }
@@ -693,6 +826,8 @@ func commonLabels(ri RenderInput, app AppManifestInput) map[string]string {
 }
 
 // namespace returns the Kubernetes namespace for a tenant environment.
+func int64Ptr(v int64) *int64 { return &v }
+
 func namespace(tenantID, environment string) string {
 	return fmt.Sprintf("loopzero-%s-%s", tenantID, environment)
 }

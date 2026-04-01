@@ -5,6 +5,8 @@ package middleware
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -159,14 +161,24 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 	}
 }
 
+// tokenCacheKey returns a SHA256 hash of the token for use as cache key.
+// SEC-001 fix: raw tokens as map keys means a heap dump exposes all active sessions.
+// Using a hash prevents token recovery from memory dumps.
+func tokenCacheKey(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
+}
+
 func validateWithCache(ctx context.Context, validator TokenValidator, cache *sync.Map, cacheSize *atomic.Int64, token string, ttl time.Duration) (*TokenValidationResult, error) {
+	cacheKey := tokenCacheKey(token)
+
 	// Check cache
-	if cached, ok := cache.Load(token); ok {
+	if cached, ok := cache.Load(cacheKey); ok {
 		cv := cached.(*cachedValidation)
 		if time.Now().Before(cv.expiresAt) {
 			return cv.result, nil
 		}
-		cache.Delete(token)
+		cache.Delete(cacheKey)
 		cacheSize.Add(-1)
 	}
 
@@ -183,7 +195,7 @@ func validateWithCache(ctx context.Context, validator TokenValidator, cache *syn
 		evictCache(cache, cacheSize, now)
 	}
 
-	cache.Store(token, &cachedValidation{
+	cache.Store(cacheKey, &cachedValidation{
 		result:    result,
 		createdAt: now,
 		expiresAt: now.Add(ttl),

@@ -42,6 +42,7 @@ var (
 	cancel         context.CancelFunc
 	fakeGitProvider    *fakeGiteaProvisioner
 	fakeArgoCDProvider *fakeArgoCDProvisioner
+	fakeMinIOProvider  *fakeMinIOProvisioner
 )
 
 func TestControllers(t *testing.T) {
@@ -106,6 +107,7 @@ var _ = BeforeSuite(func() {
 
 	fakeGitProvider = newFakeGiteaProvisioner()
 	fakeArgoCDProvider = newFakeArgoCDProvisioner()
+	fakeMinIOProvider = newFakeMinIOProvisioner()
 
 	// Multi-cluster: in envtest all three "clusters" share the same API server.
 	// This validates client routing logic; physical separation is tested in E2E (Sprint 8).
@@ -114,7 +116,9 @@ var _ = BeforeSuite(func() {
 	runtimeClient, err := client.New(cfg, client.Options{Scheme: scheme})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = controller.SetupTenantController(mgr, fakeGitProvider, fakeArgoCDProvider, buildClient, runtimeClient, controller.TenantControllerConfig{})
+	err = controller.SetupTenantController(mgr, fakeGitProvider, fakeArgoCDProvider, buildClient, runtimeClient, controller.TenantControllerConfig{
+		MinIOProvisioner: fakeMinIOProvider,
+	})
 	Expect(err).NotTo(HaveOccurred())
 
 	err = controller.SetupClusterCredentialController(mgr, constants.DefaultArgoCDNamespace)
@@ -132,7 +136,9 @@ var _ = BeforeSuite(func() {
 	err = controller.SetupApplicationController(mgr, "dev.loopzero.example")
 	Expect(err).NotTo(HaveOccurred())
 
-	err = controller.SetupExposureController(mgr)
+	err = controller.SetupExposureController(mgr, controller.ExposureControllerConfig{
+		AllowProbeURLOverride: true, // test environment only — allows probe URL injection via annotation
+	})
 	Expect(err).NotTo(HaveOccurred())
 
 	// ADR-0006: LoopZeroBuild and LoopZeroRelease CRDs removed.

@@ -210,28 +210,49 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		currentPhase = statemachine.TenantEmpty
 	}
 	// Only transition if not already Deleting (idempotent)
+	// Uses TryTransition because tenant.Status.Phase comes from CRD status (external source).
 	if tenant.Status.Phase != loopzerov1.TenantPhaseDeleting {
-		tenant.Status.Phase = loopzerov1.TenantPhase(
-			tenantSM.Transition(currentPhase, statemachine.TenantDelete),
-		)
+		next, err := tenantSM.TryTransition(currentPhase, statemachine.TenantDelete)
+		if err != nil {
+			logger.Error(err, "invalid state transition for delete", "phase", tenant.Status.Phase)
+			return ctrl.Result{}, err
+		}
+		tenant.Status.Phase = loopzerov1.TenantPhase(next)
 	}
 	if err := r.Status().Update(ctx, tenant); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Phase 1: Wait for child Environment CRs to be deleted.
-	// Environment CRs are owned by the Tenant (ownerRef cascade), so K8s marks them
-	// for deletion automatically. Each EnvironmentController handles its own namespace cleanup.
+	// Phase 1: Delete child Environment CRs and wait for them to be fully cleaned up.
+	// Environment CRs have a finalizer (loopzero.io/environment-cleanup) that the
+	// EnvironmentController handles — it cleans up the target namespace before
+	// removing the finalizer. We explicitly delete them here because ownerRef
+	// cascade with blockOwnerDeletion + finalizer creates a deadlock: GC waits
+	// for the child to be deleted, but the child's finalizer prevents GC deletion.
 	var envList loopzerov1.EnvironmentList
 	if err := r.List(ctx, &envList, client.InNamespace(tenant.Namespace)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("listing child Environment CRs: %w", err)
 	}
 	childEnvCount := 0
-	for _, env := range envList.Items {
+	for i := range envList.Items {
+		env := &envList.Items[i]
+		isChild := false
 		for _, ref := range env.OwnerReferences {
 			if ref.UID == tenant.UID {
-				childEnvCount++
+				isChild = true
 				break
+			}
+		}
+		if !isChild {
+			continue
+		}
+		childEnvCount++
+		// Explicitly delete if not already marked for deletion
+		if env.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, env); err != nil {
+				logger.Error(err, "failed to delete child Environment CR", "environment", env.Name)
+			} else {
+				logger.Info("deleted child Environment CR", "environment", env.Name)
 			}
 		}
 	}
@@ -314,10 +335,20 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	return ctrl.Result{}, nil
 }
 
-// reconcileEnvironmentCRs creates/updates Environment CRs for each spec.environments[].
+// reconcileEnvironmentCRs creates/updates Environment CRs for each spec.environments[],
+// then garbage-collects orphaned Environment CRs that are no longer in the spec.
 // Each Environment CR is owned by the Tenant CR (cascade delete).
 // The EnvironmentController watches these CRs and manages namespaces/RBAC/NetworkPolicy.
 func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *loopzerov1.Tenant) error {
+	logger := log.FromContext(ctx)
+
+	// Build the desired set of Environment CR names from spec.
+	desired := make(map[string]bool, len(tenant.Spec.Environments))
+	for _, env := range tenant.Spec.Environments {
+		desired[fmt.Sprintf("%s-%s", tenant.Name, env.Name)] = true
+	}
+
+	// Create/update loop — one Environment CR per spec entry.
 	for _, env := range tenant.Spec.Environments {
 		envCRName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
 		nsName, err := naming.EnvironmentNamespace(tenant.Name, env.Name)
@@ -342,14 +373,45 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 				Memory:  tenant.Spec.Limits.MaxMemory.String(),
 				Storage: tenant.Spec.Limits.MaxStorage.String(),
 			}
+			// Propagate tenant generation to force EnvironmentController re-reconcile
+			// when Tenant spec changes. This enables drift correction: if child resources
+			// (NetworkPolicy, ResourceQuota) are manually modified/deleted, the next
+			// Tenant reconcile bumps this annotation → EnvironmentController re-runs.
+			if envCR.Annotations == nil {
+				envCR.Annotations = make(map[string]string)
+			}
+			envCR.Annotations[constants.AnnotationParentGeneration] = fmt.Sprintf("%d", tenant.Generation)
 			return controllerutil.SetControllerReference(tenant, envCR, r.Scheme)
 		})
 		if err != nil {
 			return fmt.Errorf("environment CR %s: %w", envCRName, err)
 		}
 
-		log.FromContext(ctx).Info("environment CR reconciled", "environment", envCRName)
+		logger.Info("environment CR reconciled", "environment", envCRName)
 	}
+
+	// GC: delete Environment CRs owned by this tenant that are no longer in spec.
+	// The EnvironmentController's finalizer handles namespace/RBAC/quota cleanup
+	// when its CR is deleted, so we only need to trigger the delete here.
+	var envList loopzerov1.EnvironmentList
+	if err := r.List(ctx, &envList, client.InNamespace(tenant.Namespace)); err != nil {
+		return fmt.Errorf("gc: list environments: %w", err)
+	}
+	for i := range envList.Items {
+		envCR := &envList.Items[i]
+		if !metav1.IsControlledBy(envCR, tenant) {
+			continue // not owned by this tenant
+		}
+		if desired[envCR.Name] {
+			continue // still in spec — keep it
+		}
+		logger.Info("garbage-collecting orphan Environment CR",
+			"environment", envCR.Name, "tenant", tenant.Name)
+		if err := r.Delete(ctx, envCR); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("gc environment CR %s: %w", envCR.Name, err)
+		}
+	}
+
 	return nil
 }
 

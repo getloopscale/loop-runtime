@@ -1774,3 +1774,188 @@ var _ = Describe("TenantController — ArgoCD Deletion Cleanup", Ordered, func()
 		}
 	})
 })
+
+var _ = Describe("TenantController — Environment CR Garbage Collection", Ordered, func() {
+	const tenantName = "gc-env-test"
+
+	BeforeAll(func() {
+		tenant := newTenant(tenantName, loopzerov1.PlanStarter, []string{"production", "staging", "dev"})
+		Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
+
+		// Wait for controller to reconcile and create all 3 Environment CRs
+		Eventually(func(g Gomega) {
+			for _, env := range []string{"production", "staging", "dev"} {
+				var envCR loopzerov1.Environment
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName + "-" + env, Namespace: "default",
+				}, &envCR)).To(Succeed())
+			}
+		}, timeout, interval).Should(Succeed())
+	})
+
+	AfterAll(func() {
+		cleanupTenantEnvCRs(tenantName)
+		var t loopzerov1.Tenant
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, &t); err == nil {
+			t.Finalizers = nil
+			_ = k8sClient.Update(ctx, &t)
+			_ = k8sClient.Delete(ctx, &t)
+		}
+	})
+
+	Context("when an environment is removed from spec.environments[]", func() {
+		It("should garbage-collect the orphaned Environment CR", func() {
+			// Arrange: verify all 3 Environment CRs exist
+			var envList loopzerov1.EnvironmentList
+			Expect(k8sClient.List(ctx, &envList, client.InNamespace("default"))).To(Succeed())
+			ownedCount := 0
+			for _, env := range envList.Items {
+				for _, ref := range env.OwnerReferences {
+					if ref.Name == tenantName {
+						ownedCount++
+						break
+					}
+				}
+			}
+			Expect(ownedCount).To(Equal(3), "should have 3 Environment CRs before removal")
+
+			// Act: remove "dev" from spec.environments[]
+			var t loopzerov1.Tenant
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: tenantName, Namespace: "default",
+			}, &t)).To(Succeed())
+			t.Spec.Environments = []loopzerov1.TenantEnvironmentEntry{
+				{Name: "production", Cluster: "workload"},
+				{Name: "staging", Cluster: "workload"},
+			}
+			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+
+			// Wait for TenantController to issue Delete on the orphan Environment CR.
+			// The EnvironmentController has a finalizer that waits for the namespace to be
+			// deleted, but envtest doesn't delete namespaces. Simulate namespace cleanup
+			// so the EnvironmentController can remove the finalizer.
+			Eventually(func(g Gomega) {
+				var devEnv loopzerov1.Environment
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName + "-dev", Namespace: "default",
+				}, &devEnv)
+				g.Expect(err).NotTo(HaveOccurred())
+				// DeletionTimestamp should be set (tenant controller issued Delete)
+				g.Expect(devEnv.DeletionTimestamp.IsZero()).To(BeFalse(),
+					"orphan Environment CR should be marked for deletion")
+			}, timeout, interval).Should(Succeed())
+
+			// Simulate EnvironmentController completing namespace cleanup:
+			// remove the namespace labels and finalizer from the Environment CR.
+			Eventually(func(g Gomega) {
+				var devEnv loopzerov1.Environment
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName + "-dev", Namespace: "default",
+				}, &devEnv)).To(Succeed())
+				// Clean up the runtime namespace so EnvironmentController can proceed
+				var ns corev1.Namespace
+				if err := k8sClient.Get(ctx, types.NamespacedName{Name: devEnv.Spec.Namespace.Name}, &ns); err == nil {
+					ns.Finalizers = nil
+					delete(ns.Labels, "loopzero.io/tenant")
+					g.Expect(k8sClient.Update(ctx, &ns)).To(Succeed())
+				}
+				// Remove environment-cleanup finalizer
+				devEnv.Finalizers = nil
+				g.Expect(k8sClient.Update(ctx, &devEnv)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			// Assert: the "dev" Environment CR should be fully deleted
+			Eventually(func(g Gomega) {
+				var devEnv loopzerov1.Environment
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName + "-dev", Namespace: "default",
+				}, &devEnv)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}, timeout, interval).Should(Succeed())
+
+			// The other 2 Environment CRs should still exist
+			for _, env := range []string{"production", "staging"} {
+				var envCR loopzerov1.Environment
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName + "-" + env, Namespace: "default",
+				}, &envCR)).To(Succeed())
+			}
+		})
+
+		It("should not delete Environment CRs owned by a different tenant", func() {
+			// Arrange: create a second tenant with an env that has a similar name pattern
+			otherTenant := newTenant("gc-env-other", loopzerov1.PlanStarter, []string{"staging"})
+			Expect(k8sClient.Create(ctx, otherTenant)).To(Succeed())
+
+			// Wait for other tenant's Environment CR to exist
+			Eventually(func(g Gomega) {
+				var envCR loopzerov1.Environment
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "gc-env-other-staging", Namespace: "default",
+				}, &envCR)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			// Act: remove "staging" from the FIRST tenant
+			var t loopzerov1.Tenant
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: tenantName, Namespace: "default",
+			}, &t)).To(Succeed())
+			t.Spec.Environments = []loopzerov1.TenantEnvironmentEntry{
+				{Name: "production", Cluster: "workload"},
+			}
+			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+
+			// Wait for TenantController to mark the staging CR for deletion
+			Eventually(func(g Gomega) {
+				var envCR loopzerov1.Environment
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName + "-staging", Namespace: "default",
+				}, &envCR)).To(Succeed())
+				g.Expect(envCR.DeletionTimestamp.IsZero()).To(BeFalse())
+			}, timeout, interval).Should(Succeed())
+
+			// Simulate EnvironmentController completing cleanup
+			Eventually(func(g Gomega) {
+				var envCR loopzerov1.Environment
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName + "-staging", Namespace: "default",
+				}, &envCR)).To(Succeed())
+				var ns corev1.Namespace
+				if err := k8sClient.Get(ctx, types.NamespacedName{Name: envCR.Spec.Namespace.Name}, &ns); err == nil {
+					ns.Finalizers = nil
+					delete(ns.Labels, "loopzero.io/tenant")
+					g.Expect(k8sClient.Update(ctx, &ns)).To(Succeed())
+				}
+				envCR.Finalizers = nil
+				g.Expect(k8sClient.Update(ctx, &envCR)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			// Assert: first tenant's staging CR should be fully deleted
+			Eventually(func(g Gomega) {
+				var envCR loopzerov1.Environment
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName + "-staging", Namespace: "default",
+				}, &envCR)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}, timeout, interval).Should(Succeed())
+
+			// Assert: other tenant's staging CR must still exist
+			var otherEnv loopzerov1.Environment
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: "gc-env-other-staging", Namespace: "default",
+			}, &otherEnv)).To(Succeed())
+			Expect(otherEnv.OwnerReferences[0].Name).To(Equal("gc-env-other"))
+
+			// Cleanup
+			cleanupTenantEnvCRs("gc-env-other")
+			var ot loopzerov1.Tenant
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: "gc-env-other", Namespace: "default"}, &ot); err == nil {
+				ot.Finalizers = nil
+				_ = k8sClient.Update(ctx, &ot)
+				_ = k8sClient.Delete(ctx, &ot)
+			}
+		})
+	})
+})

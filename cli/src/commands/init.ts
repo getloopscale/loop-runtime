@@ -4,6 +4,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ApiError } from '../api/client';
+import { FRONTEND_FRAMEWORKS } from '../adapters/app-unit';
 
 interface MonorepoResult {
   tool: string;
@@ -60,7 +61,7 @@ interface DetectedInfo {
 // Frameworks that are frontends — they serve static assets, not APIs
 // MEET-2026-03-29-016: Frontends are ALWAYS static delivery (zero pods).
 // Remix is SSR-first — classified as server, not frontend.
-const FRONTEND_FRAMEWORKS = ['nextjs', 'vite', 'react', 'vue', 'svelte', 'astro', 'angular'];
+// FRONTEND_FRAMEWORKS imported from adapters/app-unit.ts (single source of truth)
 
 // Well-known directory names for shared packages (not deployable)
 const PACKAGE_DIR_PATTERNS = ['packages/', 'libs/', 'shared/', 'common/', 'config/'];
@@ -112,10 +113,15 @@ export class InitCommand {
     projectName = this.sanitizeProjectName(projectName);
 
     // Warn user if name was changed by sanitization
-    if (opts.name && projectName !== originalName) {
-      const warning = `Project name sanitized: "${originalName}" → "${projectName}" (RFC 1123: lowercase, letters/numbers/hyphens, max 63 chars)`;
-      if (!opts.json) {
-        this.deps.writeTo(warning);
+    let sanitizationWarning: string | undefined;
+    if (projectName !== originalName) {
+      if (originalName.length > 63) {
+        sanitizationWarning = `Project name truncated to 63 characters: "${originalName}" → "${projectName}"`;
+      } else {
+        sanitizationWarning = `Project name sanitized: "${originalName}" → "${projectName}" (RFC 1123: lowercase, letters/numbers/hyphens, max 63 chars)`;
+      }
+      if (opts.name && !opts.json) {
+        this.deps.writeTo(sanitizationWarning);
       }
     }
 
@@ -283,8 +289,8 @@ export class InitCommand {
       if (projectName !== originalName) {
         jsonOutput.sanitized_from = originalName;
       }
-      if (warning) {
-        jsonOutput.warning = warning;
+      if (sanitizationWarning || warning) {
+        jsonOutput.warning = [sanitizationWarning, warning].filter(Boolean).join('. ');
       }
       this.deps.writeTo(JSON.stringify(jsonOutput));
     } else {

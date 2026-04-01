@@ -17,6 +17,11 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
@@ -91,6 +96,12 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 // Submit generates a self-contained Workflow CR via the WorkflowBuilder and creates it
 // in the build cluster with retry for transient errors.
 func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSpec) (string, error) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.workflow_submit",
+		trace.WithAttributes(
+			attribute.String("loopzero.workflow.namespace", spec.Namespace),
+		))
+	defer span.End()
+
 	wf, err := s.builder.Build(spec)
 	if err != nil {
 		return "", fmt.Errorf("argo: build workflow: %w", err)
@@ -118,7 +129,9 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 
 		created, err := s.client.Resource(workflowGVR).Namespace(spec.Namespace).Create(ctx, workflow, metav1.CreateOptions{})
 		if err == nil {
-			return created.GetName(), nil
+			name := created.GetName()
+			span.SetAttributes(attribute.String("loopzero.workflow.name", name))
+			return name, nil
 		}
 
 		lastErr = err
@@ -133,6 +146,8 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 		return "", fmt.Errorf("argo: create workflow: %w", err)
 	}
 
+	span.RecordError(lastErr)
+	span.SetStatus(codes.Error, "workflow submission failed after retries")
 	return "", fmt.Errorf("argo: create workflow after %d retries: %w", submitMaxRetries, lastErr)
 }
 
@@ -144,6 +159,17 @@ func (s *WorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID st
 	)
 	if err != nil {
 		return fmt.Errorf("argo: cancel workflow %s: %w", workflowID, err)
+	}
+	return nil
+}
+
+// Delete removes a workflow object from the build cluster.
+// Used to free ResourceQuota (count/workflows.argoproj.io) after a build completes.
+// Returns nil if the workflow is already deleted (NotFound).
+func (s *WorkflowSubmitter) Delete(ctx context.Context, namespace, workflowID string) error {
+	err := s.client.Resource(workflowGVR).Namespace(namespace).Delete(ctx, workflowID, metav1.DeleteOptions{})
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return fmt.Errorf("argo: delete workflow %s/%s: %w", namespace, workflowID, err)
 	}
 	return nil
 }
@@ -162,8 +188,15 @@ func (s *WorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID st
 func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*services.WorkflowStatus, error) {
 	wf, err := s.client.Resource(workflowGVR).Namespace(namespace).Get(ctx, workflowID, metav1.GetOptions{})
 	if err != nil {
-		// Not found — workflow was cleaned up or never existed
-		return nil, nil
+		// BRC-006 fix: distinguish NotFound (workflow deleted/expired) from transient
+		// errors (network timeout, auth expiry, API server blip). Previously ALL errors
+		// returned (nil, nil), causing the reconcile loop to permanently fail live builds
+		// on any transient K8s API disruption.
+		if k8serrors.IsNotFound(err) {
+			return nil, nil
+		}
+		// Transient error — propagate to caller so reconcile loop retries next tick
+		return nil, fmt.Errorf("argo: get workflow %s/%s: %w", namespace, workflowID, err)
 	}
 
 	phase, _, _ := unstructured.NestedString(wf.Object, "status", "phase")

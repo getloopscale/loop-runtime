@@ -80,6 +80,20 @@ var (
 	}, []string{"tenant", "environment"})
 )
 
+// Rollback metrics — emitted by the rollback orchestrator (VAL-OBS-001 fix).
+var (
+	RollbacksTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_rollbacks_total",
+		Help: "Total number of rollback attempts by final status.",
+	}, []string{"tenant", "environment", "status"})
+
+	RollbackDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_rollback_duration_seconds",
+		Help:    "Rollback duration from initiation to completion.",
+		Buckets: []float64{1, 2, 5, 10, 30, 60, 120},
+	}, []string{"tenant", "environment"})
+)
+
 // ArgoCD circuit breaker + auth metrics (MEET-2026-03-28-013).
 var (
 	// ArgoCDCircuitState tracks the circuit breaker state.
@@ -155,6 +169,69 @@ var (
 		Name: "loopzero_sse_events_emitted_total",
 		Help: "Total number of SSE events emitted to clients.",
 	}, []string{"event_type"})
+)
+
+// State divergence metrics — MEET-2026-03-31-023 T0-2 and T1-4/T1-8.
+// Emitted by the release convergence loop when checking ACTIVE releases against ArgoCD health.
+var (
+	// DriftDetected is set to 1 when cluster state diverges from desired state in Git.
+	// Referenced by PrometheusRule LoopZeroDriftDetected (prometheusrule-critical.yaml).
+	// T0-2 fix: this metric was referenced in alerts but never emitted (phantom alert).
+	DriftDetected = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "loopzero_drift_detected",
+		Help: "Set to 1 when cluster state diverges from desired state in Git for a tenant/environment.",
+	}, []string{"tenant", "env"})
+
+	// ReleaseStateDivergence is set to 1 when a release marked ACTIVE in PG
+	// does not correspond to a healthy deployment in ArgoCD.
+	// T1-4: Post-activation health monitoring.
+	ReleaseStateDivergence = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "loopzero_release_state_divergence",
+		Help: "Set to 1 when a release is ACTIVE in PostgreSQL but unhealthy in ArgoCD.",
+	}, []string{"tenant", "project", "env"})
+
+	// ReleasesPending tracks the count of releases currently in PENDING state.
+	// Alert: LoopZeroReleasesPendingStuck fires when > 0 for 10 minutes.
+	ReleasesPending = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_releases_pending",
+		Help: "Number of releases currently in PENDING state (awaiting ArgoCD convergence).",
+	})
+)
+
+// Reconciliation loop health metrics — MEET-2026-03-31-023 T1-8.
+var (
+	// ReconcileLoopLastSuccess records the timestamp of the last successful loop tick.
+	// Alert: LoopZeroReconcileLoopStale fires when stale > 2x interval.
+	ReconcileLoopLastSuccess = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "loopzero_reconcile_loop_last_success_timestamp",
+		Help: "Unix timestamp of the last successful reconcile loop tick.",
+	}, []string{"loop"}) // "build" or "release"
+
+	// GitOpsOperationDuration measures the latency of GitOps operations (clone, push, remove).
+	GitOpsOperationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_gitops_operation_duration_seconds",
+		Help:    "Duration of GitOps operations (git clone, push, remove).",
+		Buckets: []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60},
+	}, []string{"operation"}) // "push", "remove"
+
+	// ReleaseConvergenceDuration measures time from release creation (PENDING) to activation (ACTIVE).
+	ReleaseConvergenceDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_release_convergence_duration_seconds",
+		Help:    "Duration from release creation to ACTIVE state.",
+		Buckets: []float64{5, 10, 30, 60, 120, 180, 300},
+	}, []string{"tenant", "environment"})
+)
+
+// Cell metrics — ADR-0008 Phase 0.
+// Emitted by a periodic collector (query: SELECT cell_id, COUNT(*) FROM tenants GROUP BY cell_id).
+var (
+	// CellTenantCount tracks the number of tenants assigned to each Cell.
+	// Used to monitor Cell capacity and trigger auto-provisioning in Phase 3.
+	// Alert (Phase 3): LoopZeroCellCapacityWarning fires when > 500 tenants per Cell.
+	CellTenantCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "loopzero_cell_tenant_count",
+		Help: "Number of tenants assigned to each Cell.",
+	}, []string{"cell_id"})
 )
 
 // Database connection pool metrics — emitted by a periodic collector.

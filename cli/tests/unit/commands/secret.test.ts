@@ -172,6 +172,28 @@ describe('no internal terms', () => {
     }
   });
 
+  // F-02: --json without --yes should require confirmation
+  it('secret delete with --json but no --yes should return exit 1 CONFIRMATION_REQUIRED', async () => {
+    const deps = createMockDeps();
+    const cmd = new SecretDeleteCommand(deps);
+
+    const exitCode = await cmd.execute({ name: 'KEY', json: true });
+
+    expect(exitCode).toBe(1);
+    const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+    expect(output).toContain('CONFIRMATION_REQUIRED');
+  });
+
+  it('secret delete with --json and --yes should proceed', async () => {
+    const deps = createMockDeps();
+    const cmd = new SecretDeleteCommand(deps);
+
+    const exitCode = await cmd.execute({ name: 'KEY', json: true, yes: true });
+
+    expect(exitCode).toBe(0);
+    expect(deps.deleteSecret).toHaveBeenCalled();
+  });
+
   it('value should NEVER appear in writeTo or writeError calls', async () => {
     const secretValue = 'super-secret-db-connection-string';
     const deps = createMockDeps();

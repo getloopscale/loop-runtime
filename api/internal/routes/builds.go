@@ -84,14 +84,26 @@ type BuildOrchestratorService interface {
 	GetBuildTenantID(ctx context.Context, buildID string) (string, error)
 }
 
+// BuildAppInfo describes a built app in a build status response.
+type BuildAppInfo struct {
+	Name string `json:"name"`
+	Type string `json:"type,omitempty"`
+}
+
 // BuildStatusResponse is the JSON response for GET /builds/:id.
 type BuildStatusResponse struct {
-	BuildID     string `json:"build_id"`
-	ProjectID   string `json:"project_id"`
-	Environment string `json:"environment"`
-	Status      string `json:"status"`
-	CommitSHA   string `json:"commit_sha"`
-	CreatedBy   string `json:"created_by"`
+	BuildID         string         `json:"build_id"`
+	ProjectID       string         `json:"project_id"`
+	Environment     string         `json:"environment"`
+	Status          string         `json:"status"`
+	CommitSHA       string         `json:"commit_sha"`
+	CreatedBy       string         `json:"created_by"`
+	CreatedAt       string         `json:"created_at"`
+	StartedAt       string         `json:"started_at,omitempty"`
+	FinishedAt      string         `json:"finished_at,omitempty"`
+	DurationSeconds *int           `json:"duration_seconds,omitempty"`
+	ErrorMessage    string         `json:"error,omitempty"`
+	Apps            []BuildAppInfo `json:"apps,omitempty"`
 }
 
 // BuildHandler provides HTTP handlers for build operations.
@@ -170,7 +182,17 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// SEC-3 fix: Validate app paths before they reach shell scripts in the build pipeline.
 	// Prevents path traversal and command injection via crafted app.path values.
+	// CODE-001 fix: Also validate app names — they flow into shell scripts in
+	// loopzeroPacksDockerfileStep() and buildctl arguments.
 	for _, app := range req.Apps {
+		if err := validation.ValidateAppName(app.Name); err != nil {
+			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				"INVALID_APP_NAME",
+				fmt.Sprintf("Invalid name for app: %s", err.Error()),
+				400,
+			))
+			return
+		}
 		if err := validation.ValidateAppPath(app.Path); err != nil {
 			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"INVALID_APP_PATH",

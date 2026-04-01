@@ -48,6 +48,7 @@ type Config struct {
 	// When set, POST /internal/bootstrap is available.
 	BootstrapStore     routes.BootstrapStore
 	BootstrapSecret    string // SEC-003: shared secret for /internal/bootstrap auth
+	CellPlacement      routes.CellPlacementEngine // ADR-0008: Cell assignment for new tenants
 	// ShutdownCtx is cancelled when the server begins graceful shutdown.
 	// Background goroutines (reaper, cleaner, pruner, callback processing)
 	// should use this context so they stop before the connection pool closes (A-05).
@@ -80,16 +81,27 @@ type Config struct {
 	RollbackHandler *routes.RollbackHandler
 	// StatusHandler handles GET /api/v1/projects/{name}/status.
 	StatusHandler *routes.StatusHandler
+	// BuildListHandler handles GET /api/v1/projects/{name}/builds.
+	BuildListHandler *routes.BuildListHandler
 	// SecretK8sSync creates K8s Secrets on mgmt + ExternalSecret CRs on workload.
 	SecretK8sSync routes.SecretK8sSync
+	// EnvironmentHandler handles GET/POST/DELETE /api/v1/environments.
+	EnvironmentHandler *routes.EnvironmentHandler
+	// TeamHandler handles GET/POST/DELETE/PATCH /api/v1/teams/members.
+	TeamHandler *routes.TeamHandler
+	// IsProduction indicates production mode — enables strict error handling.
+	IsProduction bool
 }
 
 // NewRouter creates a chi router with middleware and routes.
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 
-	// Middleware chain: metrics → correlation-id → logging
+	// Middleware chain: metrics → otel-tracing → correlation-id → logging
+	// OtelHTTP MUST be before CorrelationID so span context is available,
+	// but CorrelationID remains independent (C2 — MEET-020).
 	r.Use(metrics.HTTPMetrics)
+	r.Use(middleware.OtelHTTP)
 	r.Use(middleware.CorrelationID)
 	r.Use(middleware.RequestLogging(cfg.Logger))
 
@@ -112,7 +124,7 @@ func NewRouter(cfg Config) *chi.Mux {
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
 	if cfg.BootstrapStore != nil {
-		bootstrap := routes.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret)
+		bootstrap := routes.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret, cfg.CellPlacement)
 		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
 	}
 	if cfg.ArgoCallbackHandler != nil {
@@ -150,6 +162,9 @@ func NewRouter(cfg Config) *chi.Mux {
 				if cfg.ObjectUploader != nil {
 					sourceOpts = append(sourceOpts, routes.WithObjectUploader(cfg.ObjectUploader))
 				}
+				if cfg.IsProduction {
+					sourceOpts = append(sourceOpts, routes.WithProductionMode())
+				}
 				sourceHandler := routes.NewSourceHandler(cfg.SourceStore, sourceOpts...)
 				r.With(rateLimitMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)
 			}
@@ -161,6 +176,8 @@ func NewRouter(cfg Config) *chi.Mux {
 				if cfg.ProjectDeleter != nil {
 					projects.SetDeleter(cfg.ProjectDeleter)
 				}
+				r.Get("/api/v1/projects", projects.List)
+				r.Get("/api/v1/projects/{name}", projects.Get)
 				r.With(rateLimitMiddlewares...).Post("/api/v1/projects", projects.Create)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}", projects.Delete)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}/environments/{env}", projects.DeleteEnvironment)
@@ -207,7 +224,9 @@ func NewRouter(cfg Config) *chi.Mux {
 
 				// Mutating build routes with rate limiting + idempotency
 				r.With(idempotentMiddlewares...).Post("/api/v1/builds", cfg.BuildHandler.Create)
-				r.With(idempotentMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
+				// Cancel is inherently idempotent (cancelling twice = same result).
+				// Rate-limited but no Idempotency-Key required.
+				r.With(rateLimitMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
 			}
 
 			// Build logs route (read-only, no idempotency needed)
@@ -220,9 +239,30 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.Get("/api/v1/projects/{name}/status", cfg.StatusHandler.Get)
 			}
 
+			// Build list route (read-only, no idempotency needed)
+			if cfg.BuildListHandler != nil {
+				r.Get("/api/v1/projects/{name}/builds", cfg.BuildListHandler.List)
+			}
+
 			// Rollback route — mutation, needs rate limiting
 			if cfg.RollbackHandler != nil {
 				r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
+			}
+
+			// Team routes
+			if cfg.TeamHandler != nil {
+				r.Get("/api/v1/teams/members", cfg.TeamHandler.List)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/teams/members", cfg.TeamHandler.Add)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/teams/members/{username}", cfg.TeamHandler.Remove)
+				r.With(rateLimitMiddlewares...).Patch("/api/v1/teams/members/{username}", cfg.TeamHandler.UpdateRole)
+			}
+
+			// Environment routes
+			if cfg.EnvironmentHandler != nil {
+				r.Get("/api/v1/environments", cfg.EnvironmentHandler.List)
+				r.Get("/api/v1/environments/{name}", cfg.EnvironmentHandler.Get)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/environments", cfg.EnvironmentHandler.Create)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/environments/{name}", cfg.EnvironmentHandler.Delete)
 			}
 		})
 	}
@@ -356,7 +396,8 @@ func Run(cfg Config) error {
 		cfg.Logger.Error("metrics server shutdown failed", "error", err)
 	}
 
-	// Step 3: After Run() returns, main.go's defer dbAdapter.Close() runs,
-	// closing the connection pool. By this point all goroutines have stopped.
+	// Step 3: After Run() returns, main.go defers execute in LIFO order:
+	//   a) bgWg wait (up to 30s for background goroutines to finish)
+	//   b) dbAdapter.Close() (connection pool closed only after goroutines drain)
 	return srv.Shutdown(ctx)
 }

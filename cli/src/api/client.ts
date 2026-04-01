@@ -120,6 +120,13 @@ export class ApiClient {
     return this.request<T>('POST', path, body, extraHeaders);
   }
 
+  async patch<T = unknown>(
+    path: string,
+    body: Record<string, unknown>,
+  ): Promise<T> {
+    return this.request<T>('PATCH', path, body);
+  }
+
   async del<T = unknown>(path: string): Promise<T> {
     return this.request<T>('DELETE', path);
   }

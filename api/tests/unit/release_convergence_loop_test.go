@@ -18,9 +18,10 @@ import (
 // --- Fakes for ReleaseConvergenceLoop ---
 
 type fakeConvergenceReleaseStore struct {
-	pending  []db.Release
-	statuses map[string]string // releaseID → current status
-	active   map[string]*db.Release // key: tenant:project:env → active release
+	pending       []db.Release
+	activeList    []db.Release          // releases returned by FindActiveReleases
+	statuses      map[string]string     // releaseID → current status
+	active        map[string]*db.Release // key: tenant:project:env → active release
 }
 
 func newFakeConvergenceReleaseStore() *fakeConvergenceReleaseStore {
@@ -32,6 +33,10 @@ func newFakeConvergenceReleaseStore() *fakeConvergenceReleaseStore {
 
 func (f *fakeConvergenceReleaseStore) FindPendingReleases(_ context.Context) ([]db.Release, error) {
 	return f.pending, nil
+}
+
+func (f *fakeConvergenceReleaseStore) FindActiveReleases(_ context.Context) ([]db.Release, error) {
+	return f.activeList, nil
 }
 
 func (f *fakeConvergenceReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX, id string, event string) (*db.Release, error) {
@@ -51,6 +56,20 @@ func (f *fakeConvergenceReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX,
 func (f *fakeConvergenceReleaseStore) GetActiveByEnvTx(_ context.Context, _ db.DBTX, tenantID, projectID, env string) (*db.Release, error) {
 	key := fmt.Sprintf("%s:%s:%s", tenantID, projectID, env)
 	return f.active[key], nil
+}
+
+func (f *fakeConvergenceReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
+	status := f.statuses[id]
+	if status == "" {
+		status = string(statemachine.ReleasePending)
+	}
+	for _, r := range f.pending {
+		if r.ID == id {
+			r.Status = status
+			return &r, nil
+		}
+	}
+	return &db.Release{ID: id, Status: status}, nil
 }
 
 func safeTransitionRelease(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (newState statemachine.State, err error) {
@@ -85,12 +104,17 @@ func (f *fakeConvergenceEnvTargetStore) Get(_ context.Context, _, _, _ string) (
 }
 
 type fakeConvergenceSyncClient struct {
-	synced  bool
-	healthy bool
-	err     error
+	synced           bool
+	healthy          bool
+	err              error
+	triggerSyncCalls int
+	triggerSyncErr   error
 }
 
-func (f *fakeConvergenceSyncClient) TriggerSync(_ context.Context, _ string) error { return nil }
+func (f *fakeConvergenceSyncClient) TriggerSync(_ context.Context, _ string) error {
+	f.triggerSyncCalls++
+	return f.triggerSyncErr
+}
 func (f *fakeConvergenceSyncClient) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
 	return nil
 }
@@ -327,5 +351,233 @@ func TestReleaseConvergenceLoop_HandlesEmptyPendingList(t *testing.T) {
 	// Assert: nothing happened
 	if len(eventStore.events) != 0 {
 		t.Errorf("expected no events, got %v", eventStore.events)
+	}
+}
+
+// --- MEET-2026-03-31-023 T0-1: ActivateReleaseKernel idempotency guard ---
+
+func TestActivateReleaseKernel_SkipsAlreadyActiveRelease(t *testing.T) {
+	// Arrange: release is passed as PENDING but has already been transitioned
+	// to ACTIVE by another activator (simulates callback + polling race).
+	releaseStore := newFakeConvergenceReleaseStore()
+	releaseStore.pending = []db.Release{{
+		ID: "rel-dup-001", BuildID: "build-dup-001",
+		TenantID: "acme", ProjectID: "my-app", Environment: "production",
+		Status: "PENDING", CreatedAt: time.Now(),
+	}}
+	// Simulate that another activator already transitioned to ACTIVE
+	releaseStore.statuses["rel-dup-001"] = "ACTIVE"
+
+	envTargetStore := &fakeConvergenceEnvTargetStore{}
+	eventStore := &fakeConvergenceEventStore{}
+
+	// The release object still says PENDING (stale), but the store says ACTIVE
+	staleRelease := &db.Release{
+		ID: "rel-dup-001", BuildID: "build-dup-001",
+		TenantID: "acme", ProjectID: "my-app", Environment: "production",
+		Status: "PENDING", CreatedAt: time.Now(),
+	}
+
+	// Act: call ActivateReleaseKernel with the stale release
+	err := services.ActivateReleaseKernel(
+		context.Background(), nil, staleRelease,
+		releaseStore, envTargetStore, eventStore,
+		nil, 10, testLogger,
+	)
+
+	// Assert: no error (idempotent skip), no side effects
+	if err != nil {
+		t.Fatalf("expected nil error (idempotent skip), got %v", err)
+	}
+	if envTargetStore.activeCalls != 0 {
+		t.Errorf("expected SetActive NOT called (release already ACTIVE), got %d calls", envTargetStore.activeCalls)
+	}
+	if len(eventStore.events) != 0 {
+		t.Errorf("expected no events emitted (idempotent skip), got %v", eventStore.events)
+	}
+}
+
+func TestActivateReleaseKernel_ProceedsWhenStillPending(t *testing.T) {
+	// Arrange: release is PENDING in both the object and the store
+	releaseStore := newFakeConvergenceReleaseStore()
+	releaseStore.pending = []db.Release{{
+		ID: "rel-dup-002", BuildID: "build-dup-002",
+		TenantID: "acme", ProjectID: "my-app", Environment: "staging",
+		Status: "PENDING", CreatedAt: time.Now(),
+	}}
+	releaseStore.statuses["rel-dup-002"] = "PENDING"
+
+	envTargetStore := &fakeConvergenceEnvTargetStore{}
+	eventStore := &fakeConvergenceEventStore{}
+
+	release := &db.Release{
+		ID: "rel-dup-002", BuildID: "build-dup-002",
+		TenantID: "acme", ProjectID: "my-app", Environment: "staging",
+		Status: "PENDING", CreatedAt: time.Now(),
+	}
+
+	// Act
+	err := services.ActivateReleaseKernel(
+		context.Background(), nil, release,
+		releaseStore, envTargetStore, eventStore,
+		nil, 5, testLogger,
+	)
+
+	// Assert: activation proceeds normally
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if releaseStore.statuses["rel-dup-002"] != "ACTIVE" {
+		t.Errorf("expected release ACTIVE, got %q", releaseStore.statuses["rel-dup-002"])
+	}
+	if envTargetStore.activeCalls == 0 {
+		t.Error("expected SetActive to be called")
+	}
+}
+
+// --- MEET-2026-03-31-023 T1-5: Convergence loop retriggers TriggerSync ---
+
+func TestReleaseConvergenceLoop_RetriggersSyncForStalledRelease(t *testing.T) {
+	// Arrange: PENDING release > 30s old, ArgoCD reports NOT synced
+	releaseStore := newFakeConvergenceReleaseStore()
+	releaseStore.pending = []db.Release{{
+		ID: "rel-retrigger-001", BuildID: "build-retrigger-001",
+		TenantID: "acme", ProjectID: "my-app", Environment: "production",
+		Status: "PENDING", CreatedAt: time.Now().Add(-1 * time.Minute), // 1 minute old
+	}}
+	releaseStore.statuses["rel-retrigger-001"] = "PENDING"
+
+	syncClient := &fakeConvergenceSyncClient{synced: false, healthy: false}
+	eventStore := &fakeConvergenceEventStore{}
+	locker := &fakeConvergenceLocker{}
+	envTargetStore := &fakeConvergenceEnvTargetStore{}
+
+	loop := services.NewReleaseConvergenceLoop(
+		releaseStore, envTargetStore, syncClient, locker, eventStore,
+		testLogger, services.ReleaseConvergenceLoopConfig{
+			Interval: 100 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
+		},
+	)
+
+	// Act: run a few ticks
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	go loop.Start(ctx)
+	time.Sleep(350 * time.Millisecond)
+
+	// Assert: TriggerSync was called (retrigger for stalled release)
+	if syncClient.triggerSyncCalls == 0 {
+		t.Error("expected TriggerSync to be called for stalled release")
+	}
+}
+
+func TestReleaseConvergenceLoop_DoesNotRetriggerRecentRelease(t *testing.T) {
+	// Arrange: PENDING release only 5s old (< 30s threshold), ArgoCD not synced
+	releaseStore := newFakeConvergenceReleaseStore()
+	releaseStore.pending = []db.Release{{
+		ID: "rel-retrigger-002", BuildID: "build-retrigger-002",
+		TenantID: "acme", ProjectID: "my-app", Environment: "staging",
+		Status: "PENDING", CreatedAt: time.Now().Add(-5 * time.Second), // only 5s old
+	}}
+	releaseStore.statuses["rel-retrigger-002"] = "PENDING"
+
+	syncClient := &fakeConvergenceSyncClient{synced: false, healthy: false}
+	eventStore := &fakeConvergenceEventStore{}
+	locker := &fakeConvergenceLocker{}
+	envTargetStore := &fakeConvergenceEnvTargetStore{}
+
+	loop := services.NewReleaseConvergenceLoop(
+		releaseStore, envTargetStore, syncClient, locker, eventStore,
+		testLogger, services.ReleaseConvergenceLoopConfig{
+			Interval: 100 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
+		},
+	)
+
+	// Act
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	go loop.Start(ctx)
+	time.Sleep(250 * time.Millisecond)
+
+	// Assert: TriggerSync NOT called (release too recent, < 30s)
+	if syncClient.triggerSyncCalls != 0 {
+		t.Errorf("expected NO TriggerSync for recent release, got %d calls", syncClient.triggerSyncCalls)
+	}
+}
+
+// --- MEET-2026-03-31-023 T1-4: Post-activation health monitoring ---
+
+func TestHealthCheckActiveReleases_DetectsDivergence(t *testing.T) {
+	// Arrange: one ACTIVE release, ArgoCD reports NOT healthy
+	releaseStore := newFakeConvergenceReleaseStore()
+	releaseStore.activeList = []db.Release{{
+		ID: "rel-health-001", BuildID: "build-health-001",
+		TenantID: "acme", ProjectID: "my-app", Environment: "production",
+		Status: "ACTIVE", CreatedAt: time.Now().Add(-5 * time.Minute),
+	}}
+
+	syncClient := &fakeConvergenceSyncClient{synced: true, healthy: false} // synced but NOT healthy
+	eventStore := &fakeConvergenceEventStore{}
+	locker := &fakeConvergenceLocker{}
+	envTargetStore := &fakeConvergenceEnvTargetStore{}
+
+	loop := services.NewReleaseConvergenceLoop(
+		releaseStore, envTargetStore, syncClient, locker, eventStore,
+		testLogger, services.ReleaseConvergenceLoopConfig{
+			Interval:      1 * time.Second,     // slow PENDING ticker
+			HealthInterval: 100 * time.Millisecond, // fast health ticker for test
+			SyncTimeout:   5 * time.Minute,
+			MaxConcurrent: 2,
+		},
+	)
+
+	// Act: run long enough for health ticker to fire
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	go loop.Start(ctx)
+	time.Sleep(350 * time.Millisecond)
+
+	// Assert: release should NOT be state-changed (observability only)
+	// The release status should remain ACTIVE — health check does not mutate state.
+	// We verify the method was called by checking that no state transitions happened
+	// and no events were emitted (health check is silent except for metrics+logs).
+	if len(eventStore.events) != 0 {
+		t.Errorf("expected no events from health check (observability only), got %v", eventStore.events)
+	}
+}
+
+func TestHealthCheckActiveReleases_ClearsDivergenceWhenHealthy(t *testing.T) {
+	// Arrange: one ACTIVE release, ArgoCD reports healthy
+	releaseStore := newFakeConvergenceReleaseStore()
+	releaseStore.activeList = []db.Release{{
+		ID: "rel-health-002", BuildID: "build-health-002",
+		TenantID: "acme", ProjectID: "my-app", Environment: "staging",
+		Status: "ACTIVE", CreatedAt: time.Now().Add(-10 * time.Minute),
+	}}
+
+	syncClient := &fakeConvergenceSyncClient{synced: true, healthy: true} // healthy
+	eventStore := &fakeConvergenceEventStore{}
+	locker := &fakeConvergenceLocker{}
+	envTargetStore := &fakeConvergenceEnvTargetStore{}
+
+	loop := services.NewReleaseConvergenceLoop(
+		releaseStore, envTargetStore, syncClient, locker, eventStore,
+		testLogger, services.ReleaseConvergenceLoopConfig{
+			Interval:      1 * time.Second,
+			HealthInterval: 100 * time.Millisecond,
+			SyncTimeout:   5 * time.Minute,
+			MaxConcurrent: 2,
+		},
+	)
+
+	// Act
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	go loop.Start(ctx)
+	time.Sleep(350 * time.Millisecond)
+
+	// Assert: no state changes, no events (health check is observability-only)
+	if len(eventStore.events) != 0 {
+		t.Errorf("expected no events from health check, got %v", eventStore.events)
 	}
 }

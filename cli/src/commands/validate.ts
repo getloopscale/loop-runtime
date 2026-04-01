@@ -6,7 +6,6 @@ import { validateConfig } from '../adapters/validate-config';
 import * as path from 'path';
 
 export interface ValidateDeps {
-  getToken: () => string | null;
   findLoopZeroYaml: () => LoopZeroYamlResult | null;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;

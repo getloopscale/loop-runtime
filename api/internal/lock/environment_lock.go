@@ -17,6 +17,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
@@ -39,6 +44,16 @@ type Tx = pgx.Tx
 // Collision risk is acceptable (~0.001% with 2000 envs): impact is false serialization
 // (liveness), not data corruption (safety).
 func WithEnvironmentLock[T any](ctx context.Context, pool *pgxpool.Pool, tenant, project, env string, fn func(tx Tx) (T, error)) (T, error) {
+	// MEET-2026-03-30-020: Span wraps the entire lock lifecycle (acquire + fn + commit).
+	// Instrumented AROUND the lock, NOT inside the critical section (C3, meeting condition).
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.lock.acquire",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", tenant),
+			attribute.String("loopzero.project", project),
+			attribute.String("loopzero.environment", env),
+		))
+	defer span.End()
+
 	var zero T
 
 	// Begin transaction with READ COMMITTED isolation (PostgreSQL default,
@@ -63,6 +78,18 @@ func WithEnvironmentLock[T any](ctx context.Context, pool *pgxpool.Pool, tenant,
 		return zero, fmt.Errorf("lock: set lock_timeout: %w", err)
 	}
 
+	// MEET-2026-03-31-024: Set tenant context for RLS enforcement.
+	// All queries inside this transaction will be scoped to this tenant.
+	// This is defense-in-depth: even if a query forgets WHERE tenant_id,
+	// the RLS policy enforces isolation.
+	// Uses set_config() with parameterized value ($1) instead of SET LOCAL
+	// to avoid string concatenation in SQL.
+	if tenant != "" {
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenant); err != nil {
+			return zero, fmt.Errorf("lock: set tenant_id for RLS: %w", err)
+		}
+	}
+
 	// Acquire the transaction-scoped advisory lock.
 	// hashtext() converts the composite key string to int4 for pg_advisory_xact_lock.
 	lockKey := fmt.Sprintf("%s:%s:%s", tenant, project, env)
@@ -70,6 +97,7 @@ func WithEnvironmentLock[T any](ctx context.Context, pool *pgxpool.Pool, tenant,
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", lockKey); err != nil {
 		if isLockTimeoutError(err) {
 			metrics.LockConflicts.WithLabelValues(tenant, env).Inc()
+			span.SetStatus(codes.Error, "lock timeout")
 			return zero, loopzeroerrors.ErrLockTimeout
 		}
 		return zero, fmt.Errorf("lock: acquire advisory lock: %w", err)

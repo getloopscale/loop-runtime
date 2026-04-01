@@ -143,6 +143,20 @@ func TestAggregatePlatform_UpdatedAtIsSet(t *testing.T) {
 	}
 }
 
+func TestAggregatePlatform_UnknownPhaseClampedToFailed(t *testing.T) {
+	components := []ComponentHealth{
+		{Name: "bootstrap", Phase: PhaseFailed, Detail: "real failure"},
+		{Name: "gitops", Phase: "UnknownPhaseXYZ", Detail: "corrupted"},
+	}
+
+	result := AggregatePlatform(components)
+
+	// Unknown phase must be clamped to PhaseFailed, not rank above it.
+	if result.Overall != PhaseFailed {
+		t.Errorf("Overall = %q, want %q (unknown phase should clamp to Failed)", result.Overall, PhaseFailed)
+	}
+}
+
 func TestAggregatePlatform_PreservesComponentOrder(t *testing.T) {
 	components := []ComponentHealth{
 		{Name: "alpha", Phase: PhaseReady, Detail: "a"},

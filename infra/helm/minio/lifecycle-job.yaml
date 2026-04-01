@@ -60,6 +60,18 @@ spec:
             - |
               set -euo pipefail
 
+              # Wait for MinIO to be ready (may still be starting during setup)
+              echo "Waiting for MinIO..."
+              for i in $(seq 1 30); do
+                if mc alias set local http://minio.loopzero-system.svc.cluster.local:9000 \
+                  "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; then
+                  echo "MinIO ready"
+                  break
+                fi
+                echo "  attempt $i/30..."
+                sleep 2
+              done
+
               # Configure mc alias
               mc alias set local http://minio.loopzero-system.svc.cluster.local:9000 \
                 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
@@ -67,6 +79,7 @@ spec:
               # Ensure buckets exist (idempotent)
               mc mb --ignore-existing local/loopzero-builds
               mc mb --ignore-existing local/loopzero-artifacts
+              mc mb --ignore-existing local/loopzero-static-assets
 
               # Apply lifecycle rule: expire cache entries after 30 days
               # This prevents unbounded cache growth from lockfile hash changes.
@@ -79,6 +92,8 @@ spec:
               echo "MinIO lifecycle rules configured successfully"
               mc ilm rule ls local/loopzero-builds
           env:
+            - name: HOME
+              value: /tmp
             - name: MINIO_ROOT_USER
               value: "loopzero-admin"
             - name: MINIO_ROOT_PASSWORD

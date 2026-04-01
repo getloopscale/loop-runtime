@@ -12,9 +12,11 @@ import (
 // let unit tests use them without qualifying every reference.
 type fakeGiteaProvisioner = operatortest.FakeGitProvisioner
 type fakeArgoCDProvisioner = operatortest.FakeArgoCDProvisioner
+type fakeMinIOProvisioner = operatortest.FakeMinIOProvisioner
 
 // Factory functions delegate to operatortest constructors.
 var (
 	newFakeGiteaProvisioner  = operatortest.NewFakeGitProvisioner
 	newFakeArgoCDProvisioner = operatortest.NewFakeArgoCDProvisioner
+	newFakeMinIOProvisioner  = operatortest.NewFakeMinIOProvisioner
 )

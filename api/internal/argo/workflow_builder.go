@@ -249,17 +249,23 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 		validateName := "validate-workspace" + suffix
 		tasks = append(tasks, inlineTask(validateName, validateName, []string{"clone-repo"}))
 
-		scanName := "security-scan" + suffix
-		tasks = append(tasks, inlineTask(scanName, scanName, []string{restoreName}))
-
 		installName := "install-deps" + suffix
 		tasks = append(tasks, inlineTask(installName, installName, []string{restoreName, validateName}))
+
+		// CODE-002 fix: security-scan now depends on install-deps (not restore-cache).
+		// Previously, pip-audit scanned an empty Python environment because install
+		// and scan ran in parallel. Now scan sees installed packages.
+		scanName := "security-scan" + suffix
+		tasks = append(tasks, inlineTask(scanName, scanName, []string{installName}))
 
 		buildName := "build-apps" + suffix
 		tasks = append(tasks, inlineTask(buildName, buildName, []string{installName}))
 
+		// CODE-008 fix: generate-dockerfile now depends on security-scan AND build-apps.
+		// Previously, scan had no downstream deps — builds with critical vulnerabilities
+		// still produced container images. Now scan is a true gate.
 		dockerfileName := "generate-dockerfile" + suffix
-		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName}))
+		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName, scanName}))
 	}
 
 	// Per-app delivery — BuildKit for containers, upload for static.

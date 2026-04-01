@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/manifests"
 	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -82,6 +84,16 @@ type BuildReconcileLoop struct {
 	// active tracks build IDs currently being processed to avoid
 	// duplicate processing and coordinate with BuildReaper (MOD-6 fix).
 	active sync.Map
+
+	// BRC-003 fix: tracks activation attempt counts per build ID.
+	// After maxActivationAttempts consecutive failures, the build is failed
+	// immediately instead of waiting for the 10-minute reaper timeout.
+	activationAttempts sync.Map // map[string]int
+
+	// F-01 fix: tracks OnBuildCompleted failure count per build ID.
+	// After maxCompletionAttempts failures, the build is failed to avoid
+	// permanent RUNNING state when completion processing is broken.
+	completionAttempts sync.Map // map[string]int
 }
 
 // NewBuildReconcileLoop creates a new BuildReconcileLoop.
@@ -159,6 +171,9 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 		return
 	}
 
+	// MEET-2026-03-31-023 T1-8: Record successful tick timestamp.
+	metrics.ReconcileLoopLastSuccess.WithLabelValues("build").SetToCurrentTime()
+
 	if len(builds) == 0 {
 		return
 	}
@@ -178,6 +193,17 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 			go func() {
 				defer func() { <-r.sem }()
 				defer r.active.Delete(b.ID)
+				// BRC-004 fix: recover from panics in reconcileBuild. The call chain
+				// reaches deep into BuildOrchestrator → DeliveryActivator → ActivateReleaseKernel.
+				// State machine panics on invalid transitions (by design). Without recovery,
+				// a single corrupted build record crashes the entire API process.
+				defer func() {
+					if p := recover(); p != nil {
+						r.logger.Error("reconcile loop: panic in reconcileBuild — recovered",
+							"build_id", b.ID, "panic", fmt.Sprintf("%v", p),
+							"stack", string(debug.Stack()))
+					}
+				}()
 				r.reconcileBuild(ctx, &b)
 			}()
 		default:
@@ -260,6 +286,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 
 	metrics.BuildsTotal.WithLabelValues(build.TenantID, build.Environment, "succeeded").Inc()
 	metrics.BuildDuration.WithLabelValues(build.TenantID, build.Environment, "succeeded").Observe(time.Since(build.CreatedAt).Seconds())
+	metrics.BuildQueueDepth.Dec()
 
 	// Compute image references from deterministic pattern
 	var buildApps []AppRelease
@@ -277,8 +304,8 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	for _, app := range apps {
 		// REVIEW-MOD-4: Per-app image tag: {registry}/{tenant}/{project}/{app}:{sha}
 		// Each app gets its own BuildKit build and independent image.
-		imageRef := fmt.Sprintf("%s/%s/%s-%s:%s",
-			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
+		// ARCH-001 fix: single source of truth for image tag format
+		imageRef := naming.ImageTag(r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
 
 		url := ""
 		if app.Type == "server" || app.Type == "frontend" {
@@ -323,8 +350,24 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	}
 
 	if err := r.orch.OnBuildCompleted(ctx, build.ID, result); err != nil {
-		r.logger.Error("reconcile loop: build completion processing failed",
-			"build_id", build.ID, "error", err)
+		// F-01 fix: track completion failures. After 3 attempts, fail the build
+		// to prevent permanent RUNNING state when completion processing is broken.
+		attemptsVal, _ := r.completionAttempts.LoadOrStore(build.ID, 0)
+		attempts := attemptsVal.(int) + 1
+		r.completionAttempts.Store(build.ID, attempts)
+
+		if attempts >= maxActivationAttempts {
+			r.logger.Error("reconcile loop: build completion failed after max attempts, failing build",
+				"build_id", build.ID, "attempts", attempts, "error", err)
+			r.completionAttempts.Delete(build.ID)
+			r.failBuild(ctx, build, fmt.Sprintf("Build completion processing failed after %d attempts: %v", attempts, err))
+			return
+		}
+
+		r.logger.Error("reconcile loop: build completion processing failed, will retry",
+			"build_id", build.ID, "attempt", attempts, "error", err)
+	} else {
+		r.completionAttempts.Delete(build.ID)
 	}
 }
 
@@ -335,9 +378,27 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 //
 // Guard: if a release already exists for this build, do NOT create another one.
 // Check the existing release's state and decide whether to retry or fail.
+const maxActivationAttempts = 3
+
 func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *db.Build) {
+	// BRC-003 fix: track and limit activation attempts. Without this, a RELEASING
+	// build with persistent failures (e.g., Gitea down) blocks the environment for
+	// the full 10-minute reaper timeout. After maxActivationAttempts failures, fail
+	// the build immediately so the user can re-deploy.
+	attemptsVal, _ := r.activationAttempts.LoadOrStore(build.ID, 0)
+	attempts := attemptsVal.(int) + 1
+	r.activationAttempts.Store(build.ID, attempts)
+
+	if attempts > maxActivationAttempts {
+		r.logger.Error("reconcile loop: activation exceeded max attempts, failing build",
+			"build_id", build.ID, "attempts", attempts, "max", maxActivationAttempts)
+		r.activationAttempts.Delete(build.ID)
+		r.failBuild(ctx, build, fmt.Sprintf("Release activation failed after %d attempts", maxActivationAttempts))
+		return
+	}
+
 	r.logger.Info("reconcile loop: retrying release activation for RELEASING build",
-		"build_id", build.ID, "age", time.Since(build.CreatedAt).String())
+		"build_id", build.ID, "age", time.Since(build.CreatedAt).String(), "attempt", attempts)
 
 	// Guard: check if a release already exists for this build.
 	// Activate() creates a new release on each call. If we call it again after a
@@ -386,8 +447,8 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 	var manifestApps []manifests.AppManifestInput
 
 	for _, app := range apps {
-		imageRef := fmt.Sprintf("%s/%s/%s-%s:%s",
-			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
+		// ARCH-001 fix: single source of truth for image tag format
+		imageRef := naming.ImageTag(r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
 
 		url := ""
 		if app.Type == "server" || app.Type == "frontend" {
@@ -437,6 +498,7 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 // completeBuild transitions a RELEASING build to SUCCEEDED (MEET-2026-03-26-008).
 // Called when the reconcile loop detects that the release is already ACTIVE.
 func (r *BuildReconcileLoop) completeBuild(ctx context.Context, build *db.Build) {
+	r.activationAttempts.Delete(build.ID) // BRC-003: cleanup on success
 	err := r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		current, err := r.buildStore.GetByID(ctx, build.ID)
 		if err != nil {
@@ -460,6 +522,7 @@ func (r *BuildReconcileLoop) completeBuild(ctx context.Context, build *db.Build)
 func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, reason string) {
 	metrics.BuildsTotal.WithLabelValues(build.TenantID, build.Environment, "failed").Inc()
 	metrics.BuildDuration.WithLabelValues(build.TenantID, build.Environment, "failed").Observe(time.Since(build.CreatedAt).Seconds())
+	metrics.BuildQueueDepth.Dec()
 
 	err := r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		// Re-fetch inside lock — state may have changed

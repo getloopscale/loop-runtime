@@ -32,6 +32,12 @@ var appProjectGVR = schema.GroupVersionResource{
 var _ Provisioner = (*RealProvisioner)(nil)
 
 // RealProvisioner manages ArgoCD Application CRs using the Kubernetes API.
+//
+// ARCH-OP-003: Uses dynamic/unstructured client intentionally to avoid pinning
+// the argoproj.io CRD Go types as a dependency. The ArgoCD Application and
+// AppProject schemas evolve independently of this operator, and a typed client
+// would create a tight coupling requiring coordinated version bumps. The trade-off
+// is no compile-time type safety for the CR spec — mitigated by integration tests.
 type RealProvisioner struct {
 	client    dynamic.Interface
 	namespace string // ArgoCD namespace (typically "argocd")
@@ -52,18 +58,25 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 	// Build destination list scoped to tenant namespaces only.
 	// Each destination restricts to the tenant's environment namespaces,
 	// preventing cross-tenant deployment via ArgoCD.
+	// SEC-007: Use explicit destination server instead of wildcard to prevent
+	// cross-cluster deployment when multiple clusters are registered in ArgoCD.
+	destServer := spec.DestinationServer
+	if destServer == "" {
+		destServer = "*"
+	}
+
 	destinations := make([]interface{}, 0, len(spec.DestinationNamespaces))
 	for _, ns := range spec.DestinationNamespaces {
 		destinations = append(destinations, map[string]interface{}{
 			"namespace": ns,
-			"server":    "*",
+			"server":    destServer,
 		})
 	}
 	// Fallback: if no specific namespaces provided, allow tenant-prefixed namespaces.
 	if len(destinations) == 0 {
 		destinations = append(destinations, map[string]interface{}{
 			"namespace": fmt.Sprintf("loopzero-%s-*", spec.TenantID),
-			"server":    "*",
+			"server":    destServer,
 		})
 	}
 
@@ -105,6 +118,10 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 	}
 
 	proj.SetResourceVersion(existing.GetResourceVersion())
+
+	// Preserve existing metadata that we don't manage (annotations added by ArgoCD, finalizers).
+	mergeExistingMetadata(existing, proj)
+
 	_, err = p.client.Resource(appProjectGVR).Namespace(p.namespace).Update(ctx, proj, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("argocd: update appproject %s: %w", spec.Name, err)
@@ -198,12 +215,61 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 
 	// Update existing — preserve resourceVersion
 	app.SetResourceVersion(existing.GetResourceVersion())
+
+	// Preserve existing metadata that we don't manage (e.g., notifications annotations, finalizers).
+	mergeExistingMetadata(existing, app)
+
 	_, err = p.client.Resource(applicationGVR).Namespace(p.namespace).Update(ctx, app, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("argocd: update application %s: %w", spec.Name, err)
 	}
 
 	return nil
+}
+
+// mergeExistingMetadata preserves annotations, labels, and finalizers from the existing
+// resource that our desired object does not explicitly set. This prevents full-replace
+// updates from erasing metadata added by ArgoCD itself (e.g., notification subscriptions,
+// resource finalizers).
+func mergeExistingMetadata(existing, desired *unstructured.Unstructured) {
+	existingMeta, _ := existing.Object["metadata"].(map[string]interface{})
+	desiredMeta, _ := desired.Object["metadata"].(map[string]interface{})
+	if existingMeta == nil || desiredMeta == nil {
+		return
+	}
+
+	// Merge annotations: keep existing, overlay ours
+	if existingAnnotations, ok := existingMeta["annotations"].(map[string]interface{}); ok {
+		merged := make(map[string]interface{}, len(existingAnnotations))
+		for k, v := range existingAnnotations {
+			merged[k] = v
+		}
+		if ourAnnotations, ok := desiredMeta["annotations"].(map[string]interface{}); ok {
+			for k, v := range ourAnnotations {
+				merged[k] = v
+			}
+		}
+		desiredMeta["annotations"] = merged
+	}
+
+	// Merge labels: keep existing, overlay ours
+	if existingLabels, ok := existingMeta["labels"].(map[string]interface{}); ok {
+		merged := make(map[string]interface{}, len(existingLabels))
+		for k, v := range existingLabels {
+			merged[k] = v
+		}
+		if ourLabels, ok := desiredMeta["labels"].(map[string]interface{}); ok {
+			for k, v := range ourLabels {
+				merged[k] = v
+			}
+		}
+		desiredMeta["labels"] = merged
+	}
+
+	// Preserve existing finalizers
+	if existingFinalizers, ok := existingMeta["finalizers"]; ok {
+		desiredMeta["finalizers"] = existingFinalizers
+	}
 }
 
 // DeleteApplications removes all ArgoCD Application CRs for a tenant.

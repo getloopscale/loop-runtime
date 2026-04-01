@@ -98,6 +98,12 @@ func (r *PlatformBootstrapReconciler) reconcileGiteaPhase(ctx context.Context, p
 func (r *PlatformBootstrapReconciler) createGiteaToken(ctx context.Context, giteaClient gitea.BootstrapClient, username, password, tokenName string) (string, error) {
 	// Check if token already exists by listing tokens.
 	tokens, err := giteaClient.ListTokens(ctx, username, password)
+	if err != nil {
+		// CODE-012: Log the error instead of silently proceeding to CreateToken.
+		// ListTokens failure means we cannot check for duplicates — the CreateToken
+		// call may fail with a conflict if a token with this name already exists.
+		log.FromContext(ctx).Info("ListTokens failed, proceeding to create", "error", err, "tokenName", tokenName)
+	}
 	if err == nil {
 		for _, t := range tokens {
 			if t.Name == tokenName {

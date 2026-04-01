@@ -118,6 +118,41 @@ spec:
             description: "ArgoCD application reconciliation is taking longer than 30 seconds (p95)."
             runbook: "Check ArgoCD controller resources and application count. May indicate capacity issues."
 
+        # MEET-2026-03-31-023 T0-3: Build stuck in RELEASING state.
+        # The metric loopzero_releasing_builds exists in api/internal/metrics/metrics.go.
+        # This alert was designed but never created as a PrometheusRule.
+        - alert: LoopZeroOrphanBuild
+          expr: loopzero_releasing_builds > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $value }} build(s) stuck in RELEASING state for 5+ minutes"
+            description: "Builds in RELEASING state indicate a failed release activation that the reconcile loop is not recovering."
+            runbook: "Check API logs for release activation errors. Verify ArgoCD connectivity. The build reconcile loop should retry automatically on next tick."
+
+        # MEET-2026-03-31-023 T1-8: Releases stuck in PENDING state.
+        - alert: LoopZeroReleasesPendingStuck
+          expr: loopzero_releases_pending > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $value }} release(s) stuck in PENDING for 10+ minutes"
+            description: "Releases should converge within 5 minutes. Check ArgoCD sync status and convergence loop health."
+            runbook: "Check ArgoCD Application health. Verify convergence loop is running (loopzero_reconcile_loop_last_success_timestamp). Check if TriggerSync failed."
+
+        # MEET-2026-03-31-023 T1-8: Reconcile loop health heartbeat.
+        - alert: LoopZeroReconcileLoopStale
+          expr: time() - loopzero_reconcile_loop_last_success_timestamp{loop="build"} > 120
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Build reconcile loop stale (no successful tick in 2 minutes)"
+            description: "The build reconcile loop may have crashed or be stuck. Check API pod logs."
+            runbook: "Check API pod health and logs. Restart API pod if loop is stuck."
+
         - alert: LoopZeroMinIODown
           expr: up{job=~".*minio.*"} == 0
           for: 2m
@@ -127,6 +162,134 @@ spec:
             summary: "MinIO is down"
             description: "MinIO has been unreachable for more than 2 minutes. Build cache unavailable. Source uploads will fail."
             runbook: "Check MinIO pod status. Verify PVC. Builds will run without cache (slower but not blocked)."
+
+        # MEET-020 F-01: Build stuck in RUNNING beyond reaper timeout
+        - alert: LoopZeroBuildStuckRunning
+          expr: (time() - loopzero_build_started_timestamp) > 2100 and loopzero_build_status == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Build stuck in RUNNING state > 35 minutes"
+            description: "A build has been in RUNNING state for more than 35 minutes (beyond the 30m reaper timeout). The reaper may have failed to catch it."
+            runbook: "Check build_reaper logs. Verify started_at is populated in the builds table. If stuck, manually fail: UPDATE builds SET status='FAILED' WHERE id='<build_id>'."
+
+        # MEET-020 F-07: ArgoCD Application stuck in Progressing
+        - alert: LoopZeroArgoCDHealthStuck
+          expr: argocd_app_info{health_status="Progressing"} == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ArgoCD Application {{ $labels.name }} stuck in Progressing > 10min"
+            description: "ArgoCD Application {{ $labels.name }} has been in Progressing health state for more than 10 minutes. This may block deploy notifications for the entire tenant."
+            runbook: "Check for orphaned resources in the Application. Common cause: IngressRoute referencing non-existent Service (static frontend without nginx proxy). Remove orphaned resources or configure ArgoCD health check exclusion."
+
+    # ═══════════════════════════════════════════════════
+    # Workload Protection Alerts (MEET-2026-03-30-021)
+    # ═══════════════════════════════════════════════════
+
+    - name: loopzero.workload.warning
+      rules:
+        # F1-C4: CrashLoopBackOff for 5+ minutes (reduced from 10m per SRE review)
+        - alert: LoopZeroAppCrashLoop
+          expr: |
+            max by (namespace, pod) (
+              kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}
+            ) * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "App pod {{ $labels.pod }} in {{ $labels.namespace }} stuck in CrashLoopBackOff"
+            description: "Pod has been crash-looping for 5+ minutes. Resources consumed without serving traffic."
+            runbook: "Check app logs via `loopzero logs`. If image is broken, rollback via `loopzero rollback`."
+
+        # Image pull failure for 5+ minutes
+        - alert: LoopZeroAppImagePullFailed
+          expr: |
+            max by (namespace, pod) (
+              kube_pod_container_status_waiting_reason{reason="ImagePullBackOff"}
+              or
+              kube_pod_container_status_waiting_reason{reason="ErrImagePull"}
+            ) * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "App pod {{ $labels.pod }} in {{ $labels.namespace }} cannot pull image"
+            description: "Image pull failing for 5+ minutes. Possible causes: wrong image tag, registry auth, network."
+            runbook: "Verify image exists in registry. Check registry credentials. Redeploy with correct image."
+
+        # F1-C4: Replica mismatch for 5+ minutes (reduced from 15m per SRE review)
+        - alert: LoopZeroAppReplicaMismatch
+          expr: |
+            (
+              kube_deployment_spec_replicas
+              - kube_deployment_status_replicas_ready
+            ) * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Deployment {{ $labels.deployment }} in {{ $labels.namespace }} has unavailable replicas"
+            description: "Desired replicas != ready replicas for 5+ minutes. App may be partially down."
+            runbook: "Check pod status. Common causes: resource pressure, crash loop, image issues."
+
+        # High restart rate (10+ restarts in 30 minutes)
+        - alert: LoopZeroAppHighRestartRate
+          expr: |
+            increase(
+              kube_pod_container_status_restarts_total[30m]
+            ) * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "App pod {{ $labels.pod }} in {{ $labels.namespace }} restarting excessively"
+            description: "Pod has restarted 10+ times in 30 minutes. Likely unstable or misconfigured."
+            runbook: "Check app logs. Consider rollback if latest deploy caused the instability."
+
+        # F1-C5: ProgressDeadlineExceeded — primary signal for stuck deploys
+        - alert: LoopZeroAppDeployStuck
+          expr: |
+            kube_deployment_status_condition{condition="Progressing",status="false"}
+            * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Deployment {{ $labels.deployment }} in {{ $labels.namespace }} failed to progress"
+            description: "Deployment hit progressDeadlineSeconds (210s). New pods could not become ready."
+            runbook: "Check pod events and logs. Likely causes: image crash, failing health check, insufficient resources. Use `loopzero rollback` to revert."
+
+    - name: loopzero.workload.critical
+      rules:
+        # F1-C6: CrashLoopBackOff persisting for 30+ minutes — critical escalation
+        - alert: LoopZeroAppCrashLoopCritical
+          expr: |
+            max by (namespace, pod) (
+              kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}
+            ) * on(namespace) group_left()
+            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            > 0
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "App pod {{ $labels.pod }} in {{ $labels.namespace }} crash-looping for 30+ minutes"
+            description: "Pod has been crash-looping for 30+ minutes. Actively consuming cluster resources with zero value. May affect other tenants."
+            runbook: "Immediate action required. Contact tenant owner. If unreachable, consider rollback via API. This pod is wasting cluster resources."
 
     # ═══════════════════════════════════════
     # SLO Alerts (Sprint 4 — Observability)

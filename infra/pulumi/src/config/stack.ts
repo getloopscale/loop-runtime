@@ -60,6 +60,16 @@ export interface PlatformStackConfig {
   readonly giteaAdminPassword?: pulumi.Output<string>;
   readonly minioRootPassword?: pulumi.Output<string>;
 
+  // Database role separation (MEET-2026-03-31-024)
+  // When set, the API connects as loopzero_api role (DML only, no DDL).
+  // Migrations continue using the admin user.
+  // Set via: pulumi config set --secret loopzeroApiDbPassword <password>
+  readonly loopzeroApiDbPassword?: pulumi.Output<string>;
+
+  // Observability — Tempo trace storage (MEET-2026-03-30-020)
+  // S3 bucket for Tempo trace data in production. Omit for local filesystem (dev).
+  readonly tempoStorageBucket?: string;
+
 }
 
 /**
@@ -119,5 +129,11 @@ export function loadStackConfig(): PlatformStackConfig {
     // Dev uses defaults from values.yaml; prod MUST set these via --secret.
     giteaAdminPassword: config.getSecret("giteaAdminPassword") ?? undefined,
     minioRootPassword: config.getSecret("minioRootPassword") ?? undefined,
+
+    // Database role separation (MEET-2026-03-31-024)
+    loopzeroApiDbPassword: config.getSecret("loopzeroApiDbPassword") ?? undefined,
+
+    // Observability — Tempo trace storage (MEET-020)
+    tempoStorageBucket: config.get("tempoStorageBucket") ?? undefined,
   };
 }

@@ -24,11 +24,25 @@ import { WhoamiCommand } from './commands/whoami';
 import { InitCommand } from './commands/init';
 import { DeployCommand } from './commands/deploy';
 import { ProjectDeleteCommand } from './commands/project-delete';
+import { ProjectListCommand } from './commands/project-list';
+import { ProjectInspectCommand } from './commands/project-inspect';
+import { ProjectCreateCommand } from './commands/project-create';
+import { EnvListCommand } from './commands/env-list';
+import { EnvCreateCommand } from './commands/env-create';
+import { EnvDeleteCommand } from './commands/env-delete';
+import { EnvInspectCommand } from './commands/env-inspect';
 import { StatusCommand } from './commands/status';
 import { LogsCommand } from './commands/logs';
 import { RollbackCommand } from './commands/rollback';
+import { CancelCommand } from './commands/cancel';
+import { BuildListCommand } from './commands/build-list';
+import { BuildInspectCommand } from './commands/build-inspect';
 import { SecretSetCommand, SecretListCommand, SecretDeleteCommand } from './commands/secret';
 import { ValidateCommand } from './commands/validate';
+import { TeamListCommand } from './commands/team-list';
+import { TeamAddCommand } from './commands/team-add';
+import { TeamRemoveCommand } from './commands/team-remove';
+import { TeamRoleCommand } from './commands/team-role';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
@@ -84,6 +98,26 @@ export function createProgram(): Command {
     .version('0.1.0')
     .description('CLI-first Kubernetes PaaS for monorepo deployments')
     .option('--json', 'Output in JSON format');
+
+  // F-05: Configure Commander to output JSON errors when --json is present.
+  // Commander calls configureOutput hooks for validation errors (missing args,
+  // unknown options) BEFORE the action handler runs, so we must intercept here.
+  program.configureOutput({
+    writeOut: (str: string) => process.stdout.write(str),
+    writeErr: (str: string) => {
+      if (process.argv.includes('--json')) {
+        const cleaned = str.replace(/^error:\s*/i, '').trim();
+        process.stdout.write(JSON.stringify({
+          error: cleaned,
+          exit_code: 1,
+          code: 'COMMAND_VALIDATION_ERROR',
+        }) + '\n');
+      } else {
+        process.stderr.write(str);
+      }
+    },
+    outputError: (str: string, write: (s: string) => void) => write(str),
+  });
 
   const configStore = ConfigStore.default();
   const isCI = Formatter.detectCI();
@@ -158,16 +192,29 @@ export function createProgram(): Command {
   program
     .command('logout')
     .description('Remove stored credentials')
-    .action(async () => {
+    .option('-y, --yes', 'Skip confirmation prompt')
+    .action(async (cmdOpts) => {
       const globalOpts = program.opts();
 
       const logoutCmd = new LogoutCommand({
         clearToken: () => configStore.clearToken(),
         writeTo,
+        confirm: async (message: string) => {
+          const readline = await import('readline');
+          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+          return new Promise<boolean>((resolve) => {
+            rl.question(message + ' ', (answer) => {
+              rl.close();
+              resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+            });
+          });
+        },
+        isCI: process.env.CI === 'true',
       });
 
       const exitCode = await logoutCmd.execute({
         json: globalOpts.json,
+        yes: cmdOpts.yes,
       });
       process.exitCode = exitCode;
     });
@@ -332,6 +379,7 @@ export function createProgram(): Command {
           const url = `${baseURL}/api/v1/builds/${buildId}/stream`;
           const client = new SSEClient({
             url,
+            pollUrl: `${baseURL}/api/v1/builds/${buildId}`,
             headers: token ? { Authorization: `Bearer ${token}` } : {},
             onEvent: (sseEvent) => {
               onEvent({ type: sseEvent.event, data: sseEvent.data });
@@ -426,7 +474,6 @@ export function createProgram(): Command {
       const jsonMode = Boolean(cmdOpts.json || globalOpts.json);
 
       const validateCmd = new ValidateCommand({
-        getToken: () => configStore.getToken(),
         findLoopZeroYaml: () => {
           const gitRoot = getGitRoot();
           if (!gitRoot) return null;
@@ -437,7 +484,7 @@ export function createProgram(): Command {
       });
 
       const exitCode = await validateCmd.execute({ json: jsonMode });
-      process.exit(exitCode);
+      process.exitCode = exitCode;
     });
 
   // --- status ---
@@ -467,9 +514,17 @@ export function createProgram(): Command {
         writeError,
       });
 
-      const exitCode = await statusCmd.execute({
-        env: cmdOpts.env,
-        json: globalOpts.json,
+      const exitCode = await withTimeout(
+        statusCmd.execute({ env: cmdOpts.env, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Status request timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'STATUS_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
       process.exitCode = exitCode;
     });
@@ -478,10 +533,9 @@ export function createProgram(): Command {
   program
     .command('logs')
     .description('Show build output logs')
-    .requiredOption('--build <id>', 'Build ID to show logs for')
+    .option('--build <id>', 'Build ID to show logs for (infers from last build if omitted)')
     .option('--tail <n>', 'Show last N lines', parseInt)
     .option('--step <name>', 'Filter by build step')
-    .option('--follow', 'Follow log output in real-time')
     .option('--env <name>', 'Target environment', 'production')
     .action(async (cmdOpts) => {
       const globalOpts = program.opts();
@@ -504,16 +558,27 @@ export function createProgram(): Command {
           const path = `/api/v1/builds/${encodeURIComponent(buildID)}/logs${query ? `?${query}` : ''}`;
           return apiClient.get(path);
         },
+        // F-03: infer last build ID from project status when --build not provided
+        getProjectStatus: async (project: string, env: string) => {
+          return apiClient.get<{ last_build?: { id: string } }>(
+            `/api/v1/projects/${encodeURIComponent(project)}/status?environment=${encodeURIComponent(env)}`
+          );
+        },
         writeTo,
         writeError,
       });
 
-      const exitCode = await logsCmd.execute({
-        build: cmdOpts.build,
-        tail: cmdOpts.tail,
-        step: cmdOpts.step,
-        follow: cmdOpts.follow,
-        json: globalOpts.json,
+      const exitCode = await withTimeout(
+        logsCmd.execute({ build: cmdOpts.build, tail: cmdOpts.tail, step: cmdOpts.step, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Logs request timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'LOGS_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
       process.exitCode = exitCode;
     });
@@ -546,15 +611,137 @@ export function createProgram(): Command {
             body,
           );
         },
+        confirm: async (message: string) => {
+          const readline = await import('readline');
+          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+          return new Promise<boolean>((resolve) => {
+            rl.question(message, (answer) => {
+              rl.close();
+              resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+            });
+          });
+        },
+        writeTo,
+        writeError,
+        isCI,
+      });
+
+      const exitCode = await withTimeout(
+        rollbackCmd.execute({ env: cmdOpts.env, to: cmdOpts.to, json: globalOpts.json, yes: cmdOpts.yes }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Rollback timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'ROLLBACK_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
+      });
+      process.exitCode = exitCode;
+    });
+
+  // --- cancel ---
+  program
+    .command('cancel <build-id>')
+    .description('Cancel a running or queued build')
+    .action(async (buildId: string) => {
+      const globalOpts = program.opts();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: configStore.getToken() ?? undefined });
+
+      const cancelCmd = new CancelCommand({
+        getToken: () => configStore.getToken(),
+        cancelBuild: async (id: string) => {
+          return apiClient.post(`/api/v1/builds/${encodeURIComponent(id)}/cancel`, {});
+        },
         writeTo,
         writeError,
       });
 
-      const exitCode = await rollbackCmd.execute({
-        env: cmdOpts.env,
-        to: cmdOpts.to,
-        json: globalOpts.json,
-        yes: cmdOpts.yes,
+      const exitCode = await cancelCmd.execute(buildId, { json: globalOpts.json });
+      process.exitCode = exitCode;
+    });
+
+  // --- build ---
+  const buildCmd = program
+    .command('build')
+    .description('Manage builds');
+
+  buildCmd
+    .command('list')
+    .description('List recent builds')
+    .option('--env <name>', 'Filter by environment')
+    .option('--limit <n>', 'Max builds to show')
+    .action(async (cmdOpts: { env?: string; limit?: string }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const buildListCmd = new BuildListCommand({
+        getToken: () => configStore.getToken(),
+        findLoopZeroYaml: () => {
+          const gitRoot = getGitRoot();
+          if (!gitRoot) return null;
+          return findLoopZeroYaml(process.cwd(), gitRoot);
+        },
+        listBuilds: async (project: string, env?: string, limit?: number) => {
+          const params = new URLSearchParams();
+          if (env) params.set('env', env);
+          if (limit) params.set('limit', String(limit));
+          const query = params.toString();
+          const path = `/api/v1/projects/${encodeURIComponent(project)}/builds${query ? `?${query}` : ''}`;
+          return apiClient.get(path);
+        },
+        writeTo,
+        writeError,
+      });
+
+      const limit = cmdOpts.limit ? parseInt(cmdOpts.limit, 10) : undefined;
+      const exitCode = await withTimeout(
+        buildListCmd.execute({ env: cmdOpts.env, limit, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Build list request timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'BUILD_LIST_TIMEOUT', error: err.message, exit_code: 1 }));
+        } else {
+          writeError(err.message);
+        }
+        return 1;
+      });
+      process.exitCode = exitCode;
+    });
+
+  buildCmd
+    .command('inspect <build-id>')
+    .description('Show build details')
+    .action(async (buildId: string) => {
+      const globalOpts = program.opts();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: configStore.getToken() ?? undefined });
+
+      const buildInspectCmd = new BuildInspectCommand({
+        getToken: () => configStore.getToken(),
+        getBuild: async (id: string) => {
+          return apiClient.get(`/api/v1/builds/${encodeURIComponent(id)}`);
+        },
+        writeTo,
+        writeError,
+      });
+
+      const exitCode = await withTimeout(
+        buildInspectCmd.execute(buildId, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Build inspect request timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'BUILD_INSPECT_TIMEOUT', error: err.message, exit_code: 1 }));
+        } else {
+          writeError(err.message);
+        }
+        return 1;
       });
       process.exitCode = exitCode;
     });
@@ -594,11 +781,17 @@ export function createProgram(): Command {
       };
 
       const cmd = new SecretSetCommand(deps);
-      process.exitCode = await cmd.execute({
-        nameValue,
-        env: cmdOpts.env,
-        app: cmdOpts.app,
-        json: globalOpts.json,
+      process.exitCode = await withTimeout(
+        cmd.execute({ nameValue, env: cmdOpts.env, app: cmdOpts.app, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Secret set timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'SECRET_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
     });
 
@@ -629,7 +822,18 @@ export function createProgram(): Command {
       };
 
       const cmd = new SecretListCommand(deps);
-      process.exitCode = await cmd.execute({ env: cmdOpts.env, json: globalOpts.json });
+      process.exitCode = await withTimeout(
+        cmd.execute({ env: cmdOpts.env, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Secret list timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'SECRET_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
+      });
     });
 
   secretCmd
@@ -662,17 +866,33 @@ export function createProgram(): Command {
             `/api/v1/secrets/${encodeURIComponent(secretName)}?project=${encodeURIComponent(project)}&environment=${encodeURIComponent(env)}&app=${encodeURIComponent(app)}`,
           );
         },
+        confirm: async (message: string) => {
+          const readline = await import('readline');
+          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+          return new Promise<boolean>((resolve) => {
+            rl.question(message, (answer) => {
+              rl.close();
+              resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+            });
+          });
+        },
         writeTo,
         writeError,
+        isCI,
       };
 
       const cmd = new SecretDeleteCommand(deps);
-      process.exitCode = await cmd.execute({
-        name,
-        env: cmdOpts.env,
-        app: cmdOpts.app,
-        yes: cmdOpts.yes,
-        json: globalOpts.json,
+      process.exitCode = await withTimeout(
+        cmd.execute({ name, env: cmdOpts.env, app: cmdOpts.app, yes: cmdOpts.yes, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Secret delete timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'SECRET_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
     });
 
@@ -722,12 +942,398 @@ export function createProgram(): Command {
         isCI,
       });
 
-      const exitCode = await deleteCmd.execute(name, {
-        env: cmdOpts.env,
-        yes: cmdOpts.yes,
-        json: globalOpts.json,
+      const exitCode = await withTimeout(
+        deleteCmd.execute(name, { env: cmdOpts.env, yes: cmdOpts.yes, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Delete timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'DELETE_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
       process.exitCode = exitCode;
+    });
+
+  projectCmd
+    .command('list')
+    .description('List all projects for the current team')
+    .action(async () => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new ProjectListCommand({
+        getToken: () => configStore.getToken(),
+        listProjects: async () => {
+          return apiClient.get<{ projects: Array<{ id: string; name: string; team_id: string; created_at: string }> }>('/api/v1/projects');
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute({ json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Project list timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'PROJECT_LIST_TIMEOUT', error: err.message, exit_code: 1 }));
+        } else {
+          writeError(err.message);
+        }
+        return 1;
+      });
+    });
+
+  projectCmd
+    .command('inspect <name>')
+    .description('Show detailed information about a project')
+    .action(async (name: string) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new ProjectInspectCommand({
+        getToken: () => configStore.getToken(),
+        getProject: async (projectName: string) => {
+          return apiClient.get<{ id: string; name: string; team_id: string; created_at: string; created_by?: string }>(
+            `/api/v1/projects/${encodeURIComponent(projectName)}`
+          );
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute(name, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Project inspect timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'PROJECT_INSPECT_TIMEOUT', error: err.message, exit_code: 1 }));
+        } else {
+          writeError(err.message);
+        }
+        return 1;
+      });
+    });
+
+  projectCmd
+    .command('create <name>')
+    .description('Create a new project')
+    .action(async (name: string) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new ProjectCreateCommand({
+        getToken: () => configStore.getToken(),
+        createProject: async (projectName: string) => {
+          return apiClient.post<{ id: string; name: string; team_id: string; created_at: string }>(
+            '/api/v1/projects',
+            { name: projectName }
+          );
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute(name, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Project create timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'PROJECT_CREATE_TIMEOUT', error: err.message, exit_code: 1 }));
+        } else {
+          writeError(err.message);
+        }
+        return 1;
+      });
+    });
+
+  // --- team ---
+  const teamCmd = program
+    .command('team')
+    .description('Manage team members');
+
+  teamCmd
+    .command('list')
+    .description('List all team members')
+    .action(async () => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new TeamListCommand({
+        getToken: () => configStore.getToken(),
+        listMembers: async () => {
+          return apiClient.get<{ members: Array<{ username: string; email: string; role: string; joined_at: string }> }>('/api/v1/teams/members');
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute({ json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Team list timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'TEAM_LIST_TIMEOUT', error: err.message, exit_code: 1 }));
+        } else {
+          writeError(err.message);
+        }
+        return 1;
+      });
+    });
+
+  teamCmd
+    .command('add <username>')
+    .description('Add a member to the team')
+    .option('--role <role>', 'Role to assign (member or admin)', 'member')
+    .action(async (username: string, cmdOpts: { role?: string }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new TeamAddCommand({
+        getToken: () => configStore.getToken(),
+        addMember: async (user: string, role: string) => {
+          return apiClient.post<{ username: string; role: string }>('/api/v1/teams/members', { username: user, role });
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute(username, { role: cmdOpts.role, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Team add timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'TEAM_ADD_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
+      });
+    });
+
+  teamCmd
+    .command('remove <username>')
+    .description('Remove a member from the team')
+    .action(async (username: string) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new TeamRemoveCommand({
+        getToken: () => configStore.getToken(),
+        removeMember: async (user: string) => {
+          await apiClient.del<void>(`/api/v1/teams/members/${encodeURIComponent(user)}`);
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute(username, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Team remove timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'TEAM_REMOVE_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
+      });
+    });
+
+  teamCmd
+    .command('role <username> <role>')
+    .description('Change a team member\'s role')
+    .action(async (username: string, role: string) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new TeamRoleCommand({
+        getToken: () => configStore.getToken(),
+        changeRole: async (user: string, newRole: string) => {
+          return apiClient.patch<{ username: string; role: string }>(
+            `/api/v1/teams/members/${encodeURIComponent(user)}`,
+            { role: newRole },
+          );
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute(username, role, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Team role change timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'TEAM_ROLE_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
+      });
+    });
+
+  // --- env ---
+  const envCmd = program
+    .command('env')
+    .description('Manage environments');
+
+  envCmd
+    .command('list')
+    .description('List all environments for the current team')
+    .action(async () => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new EnvListCommand({
+        getToken: () => configStore.getToken(),
+        listEnvironments: async () => {
+          return apiClient.get<{ environments: Array<{ name: string; status: string }> }>('/api/v1/environments');
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute({ json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Environment list timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'ENV_LIST_TIMEOUT', error: err.message, exit_code: 1 }));
+        } else {
+          writeError(err.message);
+        }
+        return 1;
+      });
+    });
+
+  envCmd
+    .command('create <name>')
+    .description('Create a new environment')
+    .action(async (name: string) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new EnvCreateCommand({
+        getToken: () => configStore.getToken(),
+        createEnvironment: async (envName: string) => {
+          return apiClient.post<{ name: string; status: string }>(
+            '/api/v1/environments',
+            { name: envName }
+          );
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute(name, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Environment create timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'ENV_CREATE_TIMEOUT', error: err.message, exit_code: 1 }));
+        } else {
+          writeError(err.message);
+        }
+        return 1;
+      });
+    });
+
+  envCmd
+    .command('delete <name>')
+    .description('Delete an environment and its deployed resources')
+    .option('--confirm <name>', 'Confirm deletion by repeating the environment name')
+    .action(async (name: string, cmdOpts: { confirm?: string }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new EnvDeleteCommand({
+        getToken: () => configStore.getToken(),
+        deleteEnvironment: async (envName: string) => {
+          await apiClient.del<void>(
+            `/api/v1/environments/${encodeURIComponent(envName)}`
+          );
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute(name, { confirm: cmdOpts.confirm, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Environment delete timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'ENV_DELETE_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
+      });
+    });
+
+  envCmd
+    .command('inspect <name>')
+    .description('Show detailed information about an environment')
+    .action(async (name: string) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new EnvInspectCommand({
+        getToken: () => configStore.getToken(),
+        getEnvironment: async (envName: string) => {
+          return apiClient.get<{ name: string; status: string; projects: Array<{ name: string; release_id: string; url: string }> }>(
+            `/api/v1/environments/${encodeURIComponent(envName)}`
+          );
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute(name, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Environment inspect timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'ENV_INSPECT_TIMEOUT', error: err.message, exit_code: 1 }));
+        } else {
+          writeError(err.message);
+        }
+        return 1;
+      });
     });
 
   // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)

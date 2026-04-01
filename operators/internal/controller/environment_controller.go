@@ -6,6 +6,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -40,8 +42,9 @@ var environmentSM = statemachine.NewEnvironmentMachine()
 //   - r.RuntimeClient -> runtime cluster (for creating namespaces, RBAC, etc.)
 type EnvironmentReconciler struct {
 	client.Client
-	RuntimeClient client.Client
-	Scheme        *runtime.Scheme
+	RuntimeClient    client.Client
+	Scheme           *runtime.Scheme
+	IngressNamespace string // Namespace where ingress controller (Traefik) runs. Default: platform-system.
 }
 
 // Reconcile handles the reconciliation loop for Environment resources.
@@ -97,10 +100,9 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			func() error { return r.reconcileRBAC(ctx, &env, nsName) }},
 		{conditions.TypeEnvNetworkPolicyReady, "NetworkPoliciesConfigured", "network policies provisioned",
 			func() error {
-				if env.Spec.NetworkPolicy.Isolate {
-					return r.reconcileNetworkPolicies(ctx, nsName)
-				}
-				return nil
+				// Task 7.3: NetworkPolicy is ALWAYS applied, regardless of Isolate flag.
+				// Every tenant namespace must have baseline network policies.
+				return r.reconcileNetworkPolicies(ctx, nsName)
 			}},
 		{conditions.TypeEnvQuotaReady, "QuotaReady", "resource quota applied",
 			func() error { return r.reconcileQuota(ctx, &env, nsName) }},
@@ -128,10 +130,14 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// All conditions True -> transition to Active via state machine (Rule 8).
 	// Only transition if not already Active (idempotent reconcile).
+	// Uses TryTransition because env.Status.Phase comes from CRD status (external source).
 	if env.Status.Phase != loopzerov1.EnvironmentPhaseActive {
-		env.Status.Phase = loopzerov1.EnvironmentPhase(
-			environmentSM.Transition(statemachine.State(env.Status.Phase), statemachine.EnvironmentProvisioned),
-		)
+		next, err := environmentSM.TryTransition(statemachine.State(env.Status.Phase), statemachine.EnvironmentProvisioned)
+		if err != nil {
+			logger.Error(err, "invalid state transition", "phase", env.Status.Phase)
+			return ctrl.Result{}, err
+		}
+		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
 	}
 	env.Status.Namespace = nsName
 	env.Status.ObservedGeneration = env.Generation
@@ -150,7 +156,10 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	logger.Info("reconciled environment", "environment", env.Name, "phase", env.Status.Phase, "namespace", nsName)
-	return ctrl.Result{}, nil
+	// Requeue periodically to detect and correct drift on cross-cluster resources
+	// (NetworkPolicy, ResourceQuota, RBAC). Since these live on RuntimeClient,
+	// we cannot use Owns() to watch them — periodic reconcile is the safety net.
+	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
 // reconcileDelete handles the verify-then-remove finalizer pattern for Environment deletion.
@@ -164,10 +173,14 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 	logger.Info("environment is being deleted", "environment", env.Name)
 
 	// Transition to Deleting via state machine (Rule 8).
+	// Uses TryTransition because env.Status.Phase comes from CRD status (external source).
 	if env.Status.Phase != loopzerov1.EnvironmentPhaseDeleting {
-		env.Status.Phase = loopzerov1.EnvironmentPhase(
-			environmentSM.Transition(statemachine.State(env.Status.Phase), statemachine.EnvironmentDeleteRequested),
-		)
+		next, err := environmentSM.TryTransition(statemachine.State(env.Status.Phase), statemachine.EnvironmentDeleteRequested)
+		if err != nil {
+			logger.Error(err, "invalid state transition for delete", "phase", env.Status.Phase)
+			return ctrl.Result{}, err
+		}
+		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
 		if err := r.Status().Update(ctx, env); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -215,6 +228,11 @@ func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, env *loo
 		ns.Labels[constants.LabelTenant] = tenantName
 		ns.Labels[constants.LabelEnvironment] = env.Spec.Environment
 		ns.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
+		// Task 7.2: PodSecurity Admission — enforce restricted profile on all tenant namespaces.
+		// This prevents pods from running as root, using hostPath, etc.
+		ns.Labels["pod-security.kubernetes.io/enforce"] = "restricted"
+		ns.Labels["pod-security.kubernetes.io/warn"] = "restricted"
+		ns.Labels["pod-security.kubernetes.io/audit"] = "restricted"
 		return nil
 	})
 	if err != nil {
@@ -282,6 +300,26 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		return fmt.Errorf("rolebinding %s/%s: %w", nsName, constants.RoleBindingDeployer, err)
 	}
 
+	// Task 7.4: Dedicated ServiceAccount for app workloads (separate from deployer SA).
+	// Pods use this SA with automountServiceAccountToken=false.
+	appSA := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "loopzero-app",
+			Namespace: nsName,
+		},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, appSA, func() error {
+		if appSA.Labels == nil {
+			appSA.Labels = make(map[string]string)
+		}
+		appSA.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
+		falseVal := false
+		appSA.AutomountServiceAccountToken = &falseVal
+		return nil
+	}); err != nil {
+		return fmt.Errorf("serviceaccount %s/loopzero-app: %w", nsName, err)
+	}
+
 	return nil
 }
 
@@ -341,7 +379,7 @@ func (r *EnvironmentReconciler) reconcileEnvAllowIngressPolicy(ctx context.Conte
 						{
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									constants.KubeMetadataNameLabel: constants.NamespacePlatformSystem,
+									constants.KubeMetadataNameLabel: r.ingressNS(),
 								},
 							},
 						},
@@ -534,14 +572,24 @@ func rbacRulesForPlan(plan loopzerov1.PlanTier) []rbacv1.PolicyRule {
 	return rules
 }
 
+// ingressNS returns the namespace where the ingress controller runs.
+func (r *EnvironmentReconciler) ingressNS() string {
+	if r.IngressNamespace != "" {
+		return r.IngressNamespace
+	}
+	return constants.NamespacePlatformSystem
+}
+
 // SetupEnvironmentController registers the EnvironmentController with the manager.
 func SetupEnvironmentController(mgr ctrl.Manager, runtimeClient client.Client) error {
+	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.Environment{}).
 		Named("environment").
 		Complete(&EnvironmentReconciler{
-			Client:        mgr.GetClient(),
-			RuntimeClient: runtimeClient,
-			Scheme:        mgr.GetScheme(),
+			Client:           mgr.GetClient(),
+			RuntimeClient:    runtimeClient,
+			Scheme:           mgr.GetScheme(),
+			IngressNamespace: ingressNS,
 		})
 }

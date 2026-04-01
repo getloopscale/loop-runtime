@@ -3,8 +3,8 @@
 # Use --set gitea.admin.password=<secure-value> or a values override file.
 gitea:
   admin:
-    username: loopzero-admin
-    password: loopzero-dev-password  # LOCAL DEV ONLY — override for production
+    username: gitea_admin
+    password: loopzero-gitea-dev-2026  # LOCAL DEV ONLY — matches provision-api-tokens.sh defaults
     email: admin@loopzero.local
   livenessProbe:
     enabled: true
@@ -19,7 +19,7 @@ gitea:
       PASSWD: loopzero-dev-password  # LOCAL DEV ONLY — override for production
       SSL_MODE: disable
     server:
-      ROOT_URL: http://localhost:3000
+      ROOT_URL: http://gitea-http.loopzero-system.svc.cluster.local:3000
       HTTP_PORT: 3000
     service:
       DISABLE_REGISTRATION: true

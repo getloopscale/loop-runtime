@@ -12,11 +12,13 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/logging"
 
 	"github.com/loopzero/loopzero/api/internal/adapters"
+	"github.com/loopzero/loopzero/api/internal/tracing"
 	"github.com/loopzero/loopzero/api/internal/config"
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/github"
@@ -29,6 +31,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/gitops"
 	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/loki"
+	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/cfkv"
 	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
 	"github.com/loopzero/loopzero/api/internal/source"
@@ -58,6 +61,20 @@ func main() {
 	if err := cfg.Validate(); err != nil {
 		logger.Error("configuration validation failed", "error", err)
 		os.Exit(1)
+	}
+
+	// Distributed tracing (MEET-2026-03-30-020)
+	// C7: Controlled by LOOPZERO_TRACING_ENABLED env var.
+	// Graceful degradation: API works without Collector.
+	tracingShutdown, err := tracing.Init(context.Background(), "loopzero-api")
+	if err != nil {
+		logger.Warn("tracing disabled", "error", err)
+	} else {
+		defer func() {
+			if err := tracingShutdown(context.Background()); err != nil {
+				logger.Error("tracing shutdown failed", "error", err)
+			}
+		}()
 	}
 
 	// A-05: Create the shutdown context BEFORE starting any background goroutines.
@@ -104,13 +121,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Secret K8s manager — creates K8s Secrets on mgmt + ExternalSecret CRs on workload for ESO sync
-	secretK8sMgr, err := k8s.NewSecretK8sManager(
+	// Secret K8s manager — creates K8s Secrets on mgmt + ExternalSecret CRs on workload for ESO sync.
+	// F-01 fix: Use interface variable to avoid Go nil interface trap.
+	// A typed nil (*SecretK8sManager)(nil) passes `!= nil` interface checks,
+	// causing panic in CreateSecret. Only assign to interface on success.
+	var secretK8sSync routes.SecretK8sSync
+	if mgr, err := k8s.NewSecretK8sManager(
 		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
 		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,
-	)
-	if err != nil {
+	); err != nil {
 		logger.Warn("secret K8s manager not available — ESO sync disabled", "error", err)
+	} else {
+		secretK8sSync = mgr
 	}
 
 	// Database connection (optional — graceful degradation if not configured)
@@ -131,7 +153,10 @@ func main() {
 	var argoCallbackHandler *routes.ArgoCallbackHandler
 	var rollbackHandler *routes.RollbackHandler
 	var statusHandler *routes.StatusHandler
+	var buildListHandler *routes.BuildListHandler
 	var projectDeleter routes.ProjectDeleter
+	var cellRouter placement.Router = placement.NewPassthroughRouter(placement.CellConfig{CellID: placement.DefaultCellID}) // fallback
+	var cellStore *db.PostgresCellStore // implements both TenantCellQuerier and CellMetricsQuerier
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -249,6 +274,10 @@ func main() {
 		}
 
 		// ArgoCD sync client with in-memory circuit breaker (M-02 fix).
+		// ADR-0008 Phase 1+: Replace single syncClient with SyncClientFactory per Cell.
+		// For now (single Cell), the circuit-breaker-wrapped client is used directly.
+		// When multi-cell activates, create SyncClientFactory(cellRouter, builderFn)
+		// and wrap each Cell's client with its own circuit breaker.
 		// State is per-replica, not shared via PostgreSQL. This eliminates
 		// write amplification and the circular dependency where the circuit
 		// breaker protecting ArgoCD depended on PostgreSQL being healthy.
@@ -273,8 +302,12 @@ func main() {
 
 		// Cloudflare KV client for static frontend routing (Sprint 10).
 		// nil when CF credentials not configured (local dev).
-		kvClient := cfkv.NewClient(cfg.CFAccountID, cfg.CFKVNamespaceID, cfg.CFAPIToken)
-		if kvClient != nil {
+		// IMPORTANT: Assign to the interface type directly to avoid the Go nil interface trap.
+		// A typed nil *cfkv.Client assigned to a StaticRoutingClient interface is NOT nil,
+		// which causes panics when methods are called on it.
+		var kvClient services.StaticRoutingClient
+		if c := cfkv.NewClient(cfg.CFAccountID, cfg.CFKVNamespaceID, cfg.CFAPIToken); c != nil {
+			kvClient = c
 			slog.Info("cloudflare KV client configured for static frontend routing")
 		}
 
@@ -323,6 +356,9 @@ func main() {
 		statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: releaseStore}
 		statusHandler = routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain)
 
+		// Build list handler — lists builds for a project with optional env filter
+		buildListHandler = routes.NewBuildListHandler(&adapters.BuildListStoreAdapter{Store: buildStore})
+
 		// Project deleter — orchestrates project removal across DB, GitOps, and builds.
 		// WorkflowCanceller stops running Argo Workflows during deletion (DF-2.1).
 		projectDeleter = services.NewProjectDeleter(services.ProjectDeleterDeps{
@@ -351,7 +387,6 @@ func main() {
 				BaseDomain:  cfg.BaseDomain,
 			},
 		)
-		go reconcileLoop.Start(shutdownCtx)
 
 		// Build reaper — enforces spec §5.1 timeouts
 		// MOD-6: reconcileLoop is passed so reaper skips builds being reconciled.
@@ -370,7 +405,6 @@ func main() {
 			},
 			reconcileLoop,
 		)
-		go reaper.Start(shutdownCtx)
 
 		// Release reaper — enforces spec §5.2 timeouts
 		// Releases stuck in READY past 5min → GIT_MIRROR_FAILED
@@ -387,7 +421,6 @@ func main() {
 				Interval:       cfg.ReleaseReaperInterval,
 			},
 		)
-		go releaseReaper.Start(shutdownCtx)
 
 		// MEET-2026-03-27-012 Phase 1.1: Release Convergence Loop
 		// Asynchronously verifies PENDING releases converge (ArgoCD sync + health).
@@ -408,7 +441,6 @@ func main() {
 				MaxConcurrent: 10,
 			},
 		)
-		go releaseConvergenceLoop.Start(shutdownCtx)
 
 		// Idempotency cleaner — prunes expired keys every hour (A-08)
 		idempotencyCleaner := services.NewIdempotencyCleaner(
@@ -416,7 +448,6 @@ func main() {
 			logger,
 			1*time.Hour,
 		)
-		go idempotencyCleaner.Start(shutdownCtx)
 
 		// SSE event pruner — removes events older than 24h every hour (C-06)
 		eventPruner := sse.NewEventPruner(
@@ -425,7 +456,81 @@ func main() {
 			24*time.Hour,
 			1*time.Hour,
 		)
-		go eventPruner.Start(shutdownCtx)
+
+		// MEET-2026-03-31-023 T2-11: Leader election guard.
+		// Background loops (reconcile, reapers, convergence) MUST run on exactly
+		// one API replica. This advisory lock prevents duplicate loop execution
+		// if the Deployment is accidentally scaled to 2+ replicas.
+		// Uses pg_try_advisory_lock (session-scoped): returns false immediately if
+		// another session holds the lock. NOTE: session-scoped lock is correct here
+		// (not xact-scoped) because we need the lock for the entire process lifetime.
+		const leaderLockID int64 = 0x7468656F6C656164 // "loopzerolead" in hex
+		var isLeader bool
+		if err := dbAdapter.QueryRow(context.Background(),
+			"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&isLeader); err != nil {
+			logger.Error("failed to acquire leader lock", "error", err)
+			os.Exit(1)
+		}
+		if !isLeader {
+			logger.Warn("another API instance holds the leader lock — background loops will NOT start on this replica",
+				"hint", "The API can serve HTTP requests but reconcile/reaper loops are disabled. See docs/runbooks/api-scaling.md")
+		}
+
+		// T1-7: Drain-on-Shutdown — WaitGroup tracks all background goroutines.
+		// On SIGTERM, shutdownCtx is cancelled (goroutines stop), then we wait
+		// up to 30s for them to finish before closing the DB pool.
+		// Defers run LIFO, so this defer runs BEFORE defer dbAdapter.Close() (line 167).
+		var bgWg sync.WaitGroup
+
+		// ADR-0008: Cell Router — resolves cell_id to cluster connection details.
+		// Phase 0/1: StaticRouter with single Cell (backward compat).
+		// Phase 2+: populated from ClusterCredential CRDs or Pulumi outputs.
+		staticRouter, err := placement.NewStaticRouter([]placement.CellConfig{{
+			CellID:        placement.DefaultCellID,
+			KubeConfig:    cfg.RuntimeKubeconfig,
+			KubeContext:   cfg.RuntimeKubeContext,
+			ArgocdURL:     cfg.ArgocdURL,
+			ArgocdToken:   cfg.ArgocdToken,
+			IngressDomain: cfg.BaseDomain,
+		}})
+		if err != nil {
+			logger.Error("failed to create cell router", "error", err)
+			os.Exit(1)
+		}
+		cellRouter = staticRouter
+
+		// ADR-0008: Cell metrics collector (leader-only to avoid N identical PG queries).
+		cellStore = &db.PostgresCellStore{DB: dbAdapter}
+		cellMetrics := placement.NewCellMetricsCollector(
+			cellStore,
+			logger,
+			60*time.Second,
+		)
+
+		if isLeader {
+			bgWg.Add(7) // 6 leader loops + 1 cell metrics
+			go func() { defer bgWg.Done(); reconcileLoop.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); reaper.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); releaseReaper.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); releaseConvergenceLoop.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); idempotencyCleaner.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); eventPruner.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); cellMetrics.Start(shutdownCtx) }()
+		}
+
+		defer func() {
+			waitDone := make(chan struct{})
+			go func() {
+				bgWg.Wait()
+				close(waitDone)
+			}()
+			select {
+			case <-waitDone:
+				logger.Info("all background goroutines stopped")
+			case <-time.After(30 * time.Second):
+				logger.Warn("background goroutines did not stop within 30s, proceeding with shutdown")
+			}
+		}()
 
 		// ArgoCD sync callback activator — processes webhook from ArgoCD Notifications.
 		// Push-based activation: ArgoCD notifies when sync completes instead of API polling.
@@ -442,6 +547,7 @@ func main() {
 	// Rate limiter: 60 requests per minute per tenant (C-01).
 	// Generous for normal use but prevents abuse.
 	rateLimiter := middleware.NewRateLimiter(60, 1*time.Minute)
+	defer rateLimiter.Stop() // SEC-007 fix: stop cleanup goroutine on shutdown
 
 	// C-01 fix: BuildHandler no longer handles callbacks. The BuildReconcileLoop
 	// detects build completion by polling Argo Workflow CRDs.
@@ -485,14 +591,18 @@ func main() {
 		EventStore:         eventStore,
 		BuildStoreReader:   buildStoreReader,
 		SecretStore:        secretStore,
-		SecretK8sSync:      secretK8sMgr,
+		SecretK8sSync:      secretK8sSync,
 		BootstrapStore:     bootstrapStore,
 		BootstrapSecret:    cfg.BootstrapSecret,
+		CellPlacement:      placement.NewRoundRobinEngine(cellRouter, cellStore, 500), // ADR-0008: bin-packing
 		BuildHandler:        buildHandler,
 		ArgoCallbackHandler: argoCallbackHandler,
 		LogsHandler:        logsHandler,
 		RollbackHandler:    rollbackHandler,
 		StatusHandler:      statusHandler,
+		BuildListHandler:   buildListHandler,
+		TeamHandler:        routes.NewTeamHandler(&db.PostgresTeamStore{DB: dbAdapter}),
+		EnvironmentHandler: routes.NewEnvironmentHandler(tenantCRMgr),
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,
@@ -504,6 +614,7 @@ func main() {
 		SSEPollInterval:         cfg.SSEPollInterval,
 		SSESafetyTimeout:        cfg.SSESafetyTimeout,
 		SSEMaxConcurrentStreams: int64(cfg.SSEMaxConcurrentStreams),
+		IsProduction:           cfg.IsProduction(),
 	}
 
 	if err := server.Run(srvCfg); err != nil {

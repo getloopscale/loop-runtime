@@ -3,6 +3,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { FRONTEND_FRAMEWORKS } from '../adapters/app-unit';
 
 export type AppCategory = 'frontend' | 'server';
 
@@ -14,10 +15,9 @@ export interface FrameworkDetection {
   startCommand?: string;
 }
 
-// Frameworks classified as frontend are ALWAYS static delivery (zero pods).
-// MEET-2026-03-29-016: No server-rendered frontends allowed.
-// Remix is classified as server (SSR-first framework, static is a downgrade).
-const FRONTEND_FRAMEWORKS = new Set(['nextjs', 'vite', 'react', 'vue', 'svelte', 'astro', 'angular']);
+// Single source of truth for frontend frameworks is in adapters/app-unit.ts.
+// MEET-2026-03-29-016: Frontend frameworks are ALWAYS static delivery (zero pods).
+const FRONTEND_FRAMEWORKS_SET = new Set(FRONTEND_FRAMEWORKS);
 
 interface FrameworkSpec {
   name: string;
@@ -134,7 +134,7 @@ export function detectFramework(appDir: string): FrameworkDetection {
   const classify = (name: string, port: number): FrameworkDetection => ({
     framework: name,
     port,
-    category: FRONTEND_FRAMEWORKS.has(name) ? 'frontend' : 'server',
+    category: FRONTEND_FRAMEWORKS_SET.has(name) ? 'frontend' : 'server',
   });
 
   // Phase 1: config file detection (highest priority)

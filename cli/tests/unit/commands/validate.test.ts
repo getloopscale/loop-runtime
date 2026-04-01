@@ -14,7 +14,6 @@ function createDeps(yamlResult: ReturnType<ValidateDeps['findLoopZeroYaml']>): V
   const output: string[] = [];
   const errors: string[] = [];
   return {
-    getToken: () => 'test-token',
     findLoopZeroYaml: () => yamlResult,
     writeTo: (msg: string) => output.push(msg),
     writeError: (msg: string) => errors.push(msg),

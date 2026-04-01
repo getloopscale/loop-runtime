@@ -33,6 +33,11 @@ func (e *LoopZeroError) Error() string {
 
 // Is checks whether the target error has the same code as this LoopZeroError.
 // This enables errors.Is() support for comparing error codes.
+//
+// NOTE: Only the Code field is compared. HTTPStatus is intentionally excluded
+// because factory functions (e.g. NewLockTimeout) may return errors with the
+// same code but different messages/statuses. Callers that need the HTTP status
+// should use errors.As to extract the actual LoopZeroError, not the sentinel.
 func (e *LoopZeroError) Is(target error) bool {
 	t, ok := target.(*LoopZeroError)
 	if !ok {
@@ -247,19 +252,19 @@ var (
 		HTTPStatus: 503,
 	}
 
-	// ErrArgoCDUnauthorized is returned when ArgoCD rejects the API token (401/403).
-	// This is NOT a transient failure — the token is invalid and must be renewed.
+	// ErrDeployServiceAuthFailed is returned when the deploy service rejects its credentials (401/403).
+	// This is NOT a transient failure — the credentials are invalid and must be renewed.
 	// The circuit breaker MUST NOT count this toward the open threshold (MEET-013).
-	ErrArgoCDUnauthorized = &LoopZeroError{
-		Code:       "ARGOCD_UNAUTHORIZED",
-		Message:    "ArgoCD rejected the API token — check ARGOCD_TOKEN configuration",
-		HTTPStatus: 401,
+	ErrDeployServiceAuthFailed = &LoopZeroError{
+		Code:       "DEPLOY_SERVICE_AUTH_FAILED",
+		Message:    "deploy service credentials rejected — contact your platform administrator",
+		HTTPStatus: 503,
 	}
 
-	// ErrSyncOperationInProgress is returned when ArgoCD has a sync already running (409).
+	// ErrSyncOperationInProgress is returned when the deploy service has a sync already running (409).
 	// MEET-2026-03-29-019: This is NOT a transient failure — the previous operation must
 	// be terminated before a new sync can start. The circuit breaker MUST NOT count this
-	// toward the open threshold (same exclusion pattern as ErrArgoCDUnauthorized).
+	// toward the open threshold (same exclusion pattern as ErrDeployServiceAuthFailed).
 	ErrSyncOperationInProgress = &LoopZeroError{
 		Code:       "SYNC_OPERATION_IN_PROGRESS",
 		Message:    "another sync operation is already in progress",
@@ -268,11 +273,13 @@ var (
 )
 
 // NewLockTimeout creates a LOCK_TIMEOUT error with optional detail.
+// Always returns a fresh copy to prevent mutation of the global sentinel.
 func NewLockTimeout(detail string) *LoopZeroError {
-	if detail == "" {
-		return ErrLockTimeout
+	msg := ErrLockTimeout.Message
+	if detail != "" {
+		msg = detail
 	}
-	return &LoopZeroError{Code: "LOCK_TIMEOUT", Message: detail, HTTPStatus: 409}
+	return &LoopZeroError{Code: "LOCK_TIMEOUT", Message: msg, HTTPStatus: 409}
 }
 
 // NewInvalidTransition creates an INVALID_TRANSITION error with state context.
@@ -318,6 +325,22 @@ func NewProjectNotFound(name string) *LoopZeroError {
 		Message:    fmt.Sprintf("project '%s' not found", name),
 		HTTPStatus: 404,
 	}
+}
+
+// NewEnvironmentNotFound creates an ENVIRONMENT_NOT_FOUND error with environment name context.
+func NewEnvironmentNotFound(name string) *LoopZeroError {
+	return &LoopZeroError{
+		Code:       "ENVIRONMENT_NOT_FOUND",
+		Message:    fmt.Sprintf("environment '%s' not found", name),
+		HTTPStatus: 404,
+	}
+}
+
+// ErrForbidden is returned when an operation is not permitted.
+var ErrForbidden = &LoopZeroError{
+	Code:       "FORBIDDEN",
+	Message:    "this operation is not permitted",
+	HTTPStatus: 403,
 }
 
 // NewIdempotencyConflict creates an IDEMPOTENCY_CONFLICT error with key context.

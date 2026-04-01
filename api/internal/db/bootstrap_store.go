@@ -47,14 +47,21 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 	if displayName == "" {
 		displayName = req.TenantSlug
 	}
+	// ADR-0008: cell_id assigned by PlacementEngine via BootstrapRequest.
+	// Phase 0: always "cell-default". Phase 1+: PlacementEngine provides real cell_id.
+	cellID := req.CellID
+	if cellID == "" {
+		cellID = "cell-default"
+	}
 	res, err = s.DB.Exec(ctx,
-		`INSERT INTO tenants (id, display_name, plan, owner_id)
-		 VALUES ($1, $2, $3, $4)
+		`INSERT INTO tenants (id, display_name, plan, owner_id, cell_id)
+		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (id) DO NOTHING`,
 		tenantID,
 		displayName,
 		req.Plan,
 		userID,
+		cellID,
 	)
 	if err != nil {
 		return "", "", false, fmt.Errorf("bootstrap: insert tenant: %w", err)

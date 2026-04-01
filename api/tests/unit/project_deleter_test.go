@@ -64,6 +64,9 @@ func (f *fakeDeleteBuildStore) GetBuildApps(context.Context, string) ([]db.Build
 func (f *fakeDeleteBuildStore) ListByProject(context.Context, string, string, int, int) ([]db.Build, error) {
 	return nil, nil
 }
+func (f *fakeDeleteBuildStore) ListByProjectAndEnv(context.Context, string, string, string, int, int) ([]db.Build, int, error) {
+	return nil, 0, nil
+}
 func (f *fakeDeleteBuildStore) FindActiveBuilds(context.Context) ([]db.Build, error) {
 	return nil, nil
 }
@@ -169,7 +172,7 @@ func (f *fakeWorkflowCanceller) Cancel(_ context.Context, _, workflowID string) 
 func TestProjectDeleterDeleteSingleEnvironment(t *testing.T) {
 	// Arrange
 	buildStore := newFakeDeleteBuildStore()
-	buildStore.cancelledByEnv["tenant-1:proj-abc:production"] = 2
+	buildStore.cancelledByEnv["tenant-1:my-saas:production"] = 2
 
 	envTargetStore := newFakeDeleteEnvTargetStore()
 	projectStore := &fakeDeleteProjectStore{}
@@ -231,13 +234,13 @@ func TestProjectDeleterDeleteSingleEnvironment(t *testing.T) {
 func TestProjectDeleterDeleteAllEnvironments(t *testing.T) {
 	// Arrange
 	buildStore := newFakeDeleteBuildStore()
-	buildStore.cancelledByEnv["tenant-1:proj-abc:production"] = 1
-	buildStore.cancelledByEnv["tenant-1:proj-abc:staging"] = 3
+	buildStore.cancelledByEnv["tenant-1:my-saas:production"] = 1
+	buildStore.cancelledByEnv["tenant-1:my-saas:staging"] = 3
 
 	envTargetStore := newFakeDeleteEnvTargetStore()
 	envTargetStore.targets = []db.EnvironmentTarget{
-		{TenantID: "tenant-1", ProjectID: "proj-abc", Environment: "production"},
-		{TenantID: "tenant-1", ProjectID: "proj-abc", Environment: "staging"},
+		{TenantID: "tenant-1", ProjectID: "my-saas", Environment: "production"},
+		{TenantID: "tenant-1", ProjectID: "my-saas", Environment: "staging"},
 	}
 
 	projectStore := &fakeDeleteProjectStore{}
@@ -441,7 +444,7 @@ func TestProjectDeleterDeleteAllEnvsProjectDeleteFails(t *testing.T) {
 	buildStore := newFakeDeleteBuildStore()
 	envTargetStore := newFakeDeleteEnvTargetStore()
 	envTargetStore.targets = []db.EnvironmentTarget{
-		{TenantID: "tenant-1", ProjectID: "proj-abc", Environment: "production"},
+		{TenantID: "tenant-1", ProjectID: "my-saas", Environment: "production"},
 	}
 
 	projectStore := &fakeDeleteProjectStore{deleteErr: fmt.Errorf("db error")}
@@ -604,8 +607,8 @@ func TestProjectDeleterDeleteAllEnvsNoEnvironments(t *testing.T) {
 func TestProjectDeleterCancelsActiveWorkflows(t *testing.T) {
 	// Arrange: 2 builds RUNNING with workflow IDs
 	buildStore := newFakeDeleteBuildStore()
-	buildStore.cancelledByEnv["tenant-1:proj-abc:production"] = 2
-	buildStore.workflowsByEnv["tenant-1:proj-abc:production"] = []string{"wf-aaa", "wf-bbb"}
+	buildStore.cancelledByEnv["tenant-1:my-saas:production"] = 2
+	buildStore.workflowsByEnv["tenant-1:my-saas:production"] = []string{"wf-aaa", "wf-bbb"}
 
 	envTargetStore := newFakeDeleteEnvTargetStore()
 	projectStore := &fakeDeleteProjectStore{}
@@ -652,7 +655,7 @@ func TestProjectDeleterCancelsActiveWorkflows(t *testing.T) {
 func TestProjectDeleterSkipsBuildWithoutWorkflowID(t *testing.T) {
 	// Arrange: 1 build QUEUED without workflow_id (empty string filtered out by store)
 	buildStore := newFakeDeleteBuildStore()
-	buildStore.cancelledByEnv["tenant-1:proj-abc:production"] = 1
+	buildStore.cancelledByEnv["tenant-1:my-saas:production"] = 1
 	// No workflow IDs — build was QUEUED, never got a workflow assigned
 
 	envTargetStore := newFakeDeleteEnvTargetStore()
@@ -694,8 +697,8 @@ func TestProjectDeleterSkipsBuildWithoutWorkflowID(t *testing.T) {
 func TestProjectDeleterContinuesOnWorkflowCancelFailure(t *testing.T) {
 	// Arrange: workflow cancel fails but delete should still succeed
 	buildStore := newFakeDeleteBuildStore()
-	buildStore.cancelledByEnv["tenant-1:proj-abc:production"] = 1
-	buildStore.workflowsByEnv["tenant-1:proj-abc:production"] = []string{"wf-failing"}
+	buildStore.cancelledByEnv["tenant-1:my-saas:production"] = 1
+	buildStore.workflowsByEnv["tenant-1:my-saas:production"] = []string{"wf-failing"}
 
 	envTargetStore := newFakeDeleteEnvTargetStore()
 	projectStore := &fakeDeleteProjectStore{}

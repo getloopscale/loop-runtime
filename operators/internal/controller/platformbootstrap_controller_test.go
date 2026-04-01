@@ -130,6 +130,10 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = fmt.Fprint(w, `{"Version":"v2.10.0"}`)
 
+				case r.URL.Path == "/api/v1/account/loopzero-api/token" && r.Method == http.MethodPost:
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = fmt.Fprint(w, `{"token":"argocd-api-key-token-67890"}`)
+
 				default:
 					http.Error(w, fmt.Sprintf("unexpected argocd request: %s %s", r.Method, r.URL.Path), http.StatusNotFound)
 				}

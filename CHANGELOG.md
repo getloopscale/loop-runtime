@@ -7,7 +7,209 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- CLI command `loopzero team list` to list team members with roles (#cmd-team)
+  - New API routes `GET/POST/DELETE/PATCH /api/v1/teams/members`
+  - TeamStore with ListMembers, AddMember, RemoveMember, UpdateMemberRole, GetUserByUsername
+  - Authorization: owner/admin can add/remove, owner-only for role changes, owner cannot be removed
+  - GitHub username resolution (strips `github-` prefix in all output)
+- CLI command `loopzero team add <username> [--role]` to invite team members (#cmd-team)
+- CLI command `loopzero team remove <username>` with owner protection (#cmd-team)
+- CLI command `loopzero team role <username> <role>` for owner-only role changes (#cmd-team)
+- CLI command `loopzero env list` to list environments for the current team (#cmd-env)
+  - New API route `GET /api/v1/environments` with tenant isolation
+  - New API route `POST /api/v1/environments` to create environments (patches Tenant CRD)
+  - New API route `GET /api/v1/environments/{name}` for environment details
+  - New API route `DELETE /api/v1/environments/{name}` with production protection (403)
+- CLI command `loopzero env create <name>` with reserved name validation (#cmd-env)
+- CLI command `loopzero env delete <name> --confirm <name>` with safety guards (#cmd-env)
+- CLI command `loopzero env inspect <name>` showing active releases per project (#cmd-env)
+- CLI command `loopzero project list` to list all projects in the current team (#cmd-project)
+  - New API route `GET /api/v1/projects` with tenant isolation
+  - New DB query `ListByTenant` returning projects ordered by name
+- CLI command `loopzero project create <name>` to create a project manually (#cmd-project)
+  - Handles 409 (already exists) as idempotent success
+- CLI command `loopzero project inspect <name>` to show project details (#cmd-project)
+  - New API route `GET /api/v1/projects/{name}` with 404 handling
+- CLI command `loopzero build list [--env] [--limit]` to list recent builds for a project (#cmd-build)
+  - New API route `GET /api/v1/projects/{name}/builds` with env filter and pagination
+  - New DB query `ListByProjectAndEnv` with total count
+  - Expanded `BuildStatusResponse` with timestamps, duration, error, apps
+- CLI command `loopzero build inspect <build-id>` to show detailed build info (#cmd-build)
+- CLI command `loopzero cancel <build-id>` to cancel running or queued builds (#cmd-cancel)
+  - Exit codes: 0 success, 1 usage, 3 cancel failed, 4 auth
+  - `--json` output: `{ ok, build_id, status }` on success, `{ code, error, exit_code }` on error
+  - Rule 3 compliant: zero internal terms in any output
+  - 13 unit tests covering all error cases + Rule 3 compliance
+- Cell-Based Architecture Phase 0 implementation (#ADR-0008)
+  - Migration 000011: `cell_id` column on tenants table (DEFAULT 'cell-default', indexed)
+  - `CellID` field added to Tenant CRD spec (+kubebuilder:default="cell-default")
+  - PlacementEngine interface + DefaultEngine (returns "cell-default" for all tenants)
+  - CellRouter interface + PassthroughRouter (resolves any cell_id to current cluster config)
+  - BootstrapHandler wired with PlacementEngine for cell assignment on tenant creation
+  - CellMetricsCollector emits `loopzero_cell_tenant_count` gauge per cell_id (60s interval)
+  - PostgresCellStore with `CellTenantCounts()` query
+  - 9 unit tests for placement package (Engine + Router + interface compliance)
+  - ADR-0008 approved with 5-phase roadmap (Phase 0-4, overview + per-phase plans)
+  - Supersedes ADR-0007 (ArgoCD Application model)
+- Cell Architecture Phase 1 — multi-cell foundation code (#ADR-0008)
+  - ClientManager: lazy-init cached K8s clients per Cell (api/internal/cellmgr/)
+  - SyncClientFactory: per-cell ArgoCD sync client resolution (api/internal/argocd/)
+  - StaticRouter: resolves cell_id from configured CellConfig list
+  - RoundRobinEngine: bin-packing placement with maxPerCell capacity (500 default)
+  - TenantCellQuerier interface + CountByCell/GetTenantCellID in PostgresCellStore
+  - ClusterCredential CRD CellID field (+kubebuilder:validation:Pattern)
+  - ApplicationSpec.CellID passed from TenantController to ArgoCD provisioner
+  - CF KV PutCellRouting/DeleteCellRouting for multi-cell DNS routing
+  - Cell Provisioner Pulumi interfaces (CellConfig/CellOutput/createCell scaffold)
+  - Cell Health Grafana dashboard (6 panels: tenant count, capacity, pods, sync latency, failures, convergence)
+  - 28 new unit tests across placement, cellmgr, argocd packages
+- Database Hardening Phase 1 — MEET-2026-03-31-024 (#MEET-024)
+  - Migration 000009: Role separation (loopzero_api, loopzero_migrate, loopzero_readonly)
+  - Migration 000009: Row-Level Security on all tenant-scoped tables (builds, releases,
+    secrets, projects, environment_targets, tenant_members, audit_log, idempotency_keys)
+  - Migration 000009: CHECK constraints on builds.status and releases.status columns
+  - Migration 000009: Missing indexes (idx_releases_build_id, idx_releases_pending)
+  - Migration 000009: Deferred audit triggers on secrets and tenant_members (COMMIT-time)
+  - Migration 000009: Append-only enforcement trigger on audit_log table
+  - Migration 000010: Pre-written emergency RLS disable (no-op, uncomment if needed)
+  - SET LOCAL app.tenant_id via set_config() inside WithEnvironmentLock for RLS enforcement
+  - Application-level audit logging (AuditLogger interface + AuditAdapter for secret/project ops)
+  - Database health PrometheusRules (pool exhaustion, slow queries, long transactions, RLS denial)
+  - Database Health Grafana dashboard
+  - Runbooks: pool-exhaustion, slow-queries, rls-disable, credential-rotation
+
 ### Fixed
+- SetGitCommit failure in container_delivery now fatal — prevents wrong-version activation
+  when SyncCallbackActivator revision guard is bypassed by empty GitCommit (#MEET-024 BUG-03)
+- syncRetriggers memory leak in ReleaseConvergenceLoop — cleanup on activate and fail (#MEET-024 BUG-04)
+- Idempotency key lookup now scoped by tenant_id — prevents cross-tenant response replay (#MEET-024 BUG-01)
+- Secret store Set() race condition: replaced SELECT+INSERT with atomic UPSERT using xmax (#MEET-024 BUG-02)
+- DSN builder default sslmode changed from "disable" to "require" (#MEET-024 H3)
+
+### Security
+- Row-Level Security enforces tenant isolation at database level — defense-in-depth (#MEET-024 C2)
+- Role separation: API connects as loopzero_api (DML only), no DDL access (#MEET-024 C1)
+- Redundant idempotency_keys index dropped (key is already PK) (#MEET-024 DB-05)
+
+- Cross-validation remediation plan and implementation (#MEET-023)
+  - Meeting record with 6 specialist agents (Architect, DistSys, SRE, GitOps, API Domain, Verification)
+  - Executable plan at docs/plans/cross-validation-remediation.md
+  - ADR-0007: ArgoCD Application model evaluation (per-project vs notification scoping)
+  - Leader election guard via pg_try_advisory_lock — prevents duplicate background loops on multi-replica
+  - API scaling runbook at docs/runbooks/api-scaling.md
+  - 7 new Prometheus metrics: drift_detected, release_state_divergence, releases_pending,
+    reconcile_loop_last_success_timestamp, gitops_operation_duration, release_convergence_duration,
+    releasing_builds (was registered, now has PrometheusRule)
+  - 3 new PrometheusRules: LoopZeroOrphanBuild, LoopZeroReleasesPendingStuck, LoopZeroReconcileLoopStale
+  - Post-activation health monitoring for ACTIVE releases (convergence loop extension)
+  - Config cross-field validation: DBMaxConns >= DBMinConns, timeout coherence checks
+  - GoGitGitOpsPusher: alternative GitOps pusher using go-git library (no git CLI subprocess),
+    with exponential backoff, SEC-1 credential handling, and 7 unit tests (#MEET-023 T2-12)
+
+### Fixed
+- Idempotency guard in ActivateReleaseKernel prevents panic when SyncCallbackActivator and
+  ReleaseConvergenceLoop race on the same release (#MEET-023 T0-1)
+- Phantom alert LoopZeroDriftDetected: metric loopzero_drift_detected was referenced in PrometheusRule
+  but never emitted — now registered and wired to health monitor (#MEET-023 T0-2)
+- Convergence loop now retriggers TriggerSync for PENDING releases stuck > 30s with no active
+  ArgoCD sync operation — prevents silent timeout with manual sync policy (#MEET-023 T1-5)
+- Drain-on-shutdown: WaitGroup tracks all 6 background goroutines, waits up to 30s before
+  closing DB pool on SIGTERM (#MEET-023 T1-7)
+
+- Workload protection Phase 1 + Phase 2: defense against broken/unhealthy container images (#MEET-021)
+  - Startup probe on all server/frontend apps (150s max startup, 5s period, 3s timeout)
+  - Readiness probe with thresholds (10s period, 3 failures before removal from Service)
+  - Liveness probe with thresholds (15s period, 5 failures — more tolerant than readiness)
+  - progressDeadlineSeconds: 210s (fail-fast broken deploys, 40s margin over startup)
+  - minReadySeconds: 10s (stabilization window for quick crashes)
+  - Rolling update strategy: maxUnavailable=0, maxSurge=1 (zero-downtime deploys)
+  - PodDisruptionBudget for ALL tenant workloads (server + worker + frontend)
+  - unhealthyPodEvictionPolicy: AlwaysAllow (broken pods never block node drain)
+  - terminationGracePeriodSeconds: 30s (explicit graceful shutdown contract)
+  - 6 new PrometheusRules: CrashLoop (5m), ImagePullFailed, ReplicaMismatch (5m),
+    HighRestartRate, DeployStuck (ProgressDeadlineExceeded), CrashLoopCritical (30m)
+  - 4 ValidatingAdmissionPolicies (K8s native, no Kyverno): restrict registries,
+    disallow :latest, require resource limits, protect platform NetworkPolicies
+  - Build retry skips OOM (exit 137) via retryStrategy.expression (Argo Workflows native)
+- Distributed tracing with Grafana Tempo + OpenTelemetry SDK for deploy flow troubleshooting (#MEET-020)
+  - Grafana Tempo as trace backend (standalone, 7d retention, S3 in prod)
+  - OTel Collector reconfigured: traces exported to Tempo (was debug/discard)
+  - API instrumented with 6 sync span points: build.submit, source.upload, source.push_git, build.workflow_submit, lock.acquire, gitops.push_manifests
+  - HTTP middleware auto-spans with otelhttp (trace context propagation)
+  - Grafana Tempo datasource with trace-to-log correlation
+  - PrometheusRules: LoopZeroTempoDown, LoopZeroTempoStorageHigh, LoopZeroOTelCollectorDown, LoopZeroCollectorExportErrors
+  - ServiceMonitor for Tempo metrics scraping
+  - Feature flag `LOOPZERO_TRACING_ENABLED` (default true dev, false prod)
+  - Graceful degradation: API works without Collector (export timeout 1s, bounded queue)
+
+### Security
+- Replace full admin kubeconfigs with scoped ServiceAccount tokens — API and controller now get minimal RBAC per cluster instead of cluster-admin (#CRIT-02)
+- Replace ESO admin token with scoped ServiceAccount — read-only access to Secrets in platform-system only (#HIGH-04)
+- Fix CF Tunnel secret non-deterministic — was using `crypto.randomBytes()` at program time, causing tunnel recreation on every `pulumi up`. Now reads from Pulumi config (#CRIT-03)
+- Fix hardcoded passwords fail-fast — production deploy now fails immediately if `giteaAdminPassword` or `minioRootPassword` not set (#CRIT-01)
+- Fix tunnel token exposed in pod args — moved to K8s Secret with env var injection (#HIGH-03)
+- Fix Gitea token scope from `all` to minimal `write:repository,write:organization,read:user` (#HIGH-05)
+- Fix ArgoCD placeholder token was literal admin password — changed to invalid placeholder (#HIGH-09)
+- Fix cloudflared Deployment missing securityContext, probes, and non-root enforcement (#MED-11)
+- Fix PostgreSQL NetworkPolicy allowing all egress — restricted to metrics and replication ports (#MED-09)
+- Disable Grafana anonymous Viewer access in production (#MED-08)
+- Fix parseKubeconfig returning empty strings silently — now throws on missing fields (#MED-04)
+- Fix ArgoCD token generation failure was WARN-only — bootstrap Job now fails on token errors (#MED-05)
+- Fix shell injection via `app.Name` in `loopzeroPacksDockerfileStep` — added `ValidateAppName` with RFC-1123 allowlist + `%q` shell quoting as defense-in-depth (#CODE-001)
+- Fix unvalidated build-arg keys flowing into `buildctl --opt` — validates env key format, skips invalid keys (#SEC-002)
+
+### Fixed
+- Fix `GetStatus` swallowing all K8s API errors — now distinguishes `IsNotFound` from transient errors; prevents mass build failures on K8s API blips (#BRC-006)
+- Add panic recovery to reconcile loop goroutines — prevents single corrupted build from crashing entire API process (#BRC-004)
+- Fix `NormalizeApp` failure leaving build QUEUED for 5 minutes — now calls `failQueuedBuild` immediately (#BRC-001)
+- Fix Go/Python cache dirs pointing to `/root/.cache` while containers run as uid 1000 — caches now use `/workspace/.cache/` (#CODE-005)
+- Fix static asset manifest truncated at 100 files — removed `head -100` limit (#CODE-003)
+- Fix asset manifest JSON corruption on filenames with special characters — proper escaping (#CODE-006)
+- Pin `imageLoopZeroPacks` from `:latest` to `v0.1.0` — deterministic builds (#COMP-004)
+
+### Removed
+- Remove dead compute provider (`IProviderCompute`, `DigitalOceanComputeProvider`, `contracts/compute.ts`) — zero call sites (#MED-02)
+
+### Changed
+- E2E failure scenario tests and chaos tests changed from Skip() to Pending (PIt) — shows yellow instead of false green (#HIGH-07)
+- Container registry creation uses factory abstraction instead of direct DO import (#MED-01)
+- API and controller image references use `infra.registryEndpoint` instead of hardcoded constant (#HIGH-08)
+- Traefik Helm release name uses `${role}-traefik` instead of hardcoded `mgmt-traefik` (#MED-06)
+- Bootstrap Job run-id uses deterministic `env-version` instead of `Date.toISOString()` (#MED-07)
+- `provision-api-tokens.sh` Gitea username aligned to `gitea_admin` and namespace parameterized (#HIGH-06, #MED-12)
+- Centralize DO Spaces endpoint in `InfraOutputs.spacesEndpoint` — replaces 5 inline constructions (#MED-10)
+- Pipeline Step 2 reads REGISTRY from Pulumi output instead of hardcoded constant (#PIPELINE-01)
+- CF Worker deploy step now fails the pipeline on error instead of silently continuing (#PIPELINE-02)
+
+### Added
+- PodDisruptionBudget for LoopZero API (`minAvailable: 1`) — prevents both pods being evicted during drain (#HIGH-02)
+- NetworkPolicies for production (platform-system namespace) — default deny ingress + per-component rules (#HIGH-01)
+- Auto-generate `tunnelSecret` in Pulumi config on first deploy — no manual pre-setup needed (#PIPELINE-03)
+- Create `loopzero-logs` Spaces bucket via Pulumi — Loki log storage bucket was missing (#PIPELINE-04)
+- Import `loopzero-logs` bucket in pipeline pre-step (survives destroy cycles) (#PIPELINE-04)
+- Build `loopzero-packs-runner` image in infra-deploy Step 2 — was only in build-images.yml, missing from destroy+recreate (#PIPELINE-05)
+- Update CWTs + BuildKit registry credentials in infra-deploy Step 2 — fully self-contained pipeline (#PIPELINE-06)
+- Security scan is now a build gate — generate-dockerfile depends on security-scan completion (#CODE-008)
+- Python security scan now runs after install-deps, not in parallel — pip-audit scans installed packages (#CODE-002)
+- cwt-clone.yaml uses minio/mc base image instead of runtime wget — eliminates supply chain risk (#SEC-004)
+- Extract `naming.ImageTag()` — single source of truth for image tag format, replaces 4 duplicate sites (#ARCH-001)
+- Add `DispatchingDeliveryActivator` — selects container vs static delivery based on app type (#ARCH-009)
+- Add activation retry limit (max 3 attempts) — fails build immediately instead of 10-minute reaper wait (#BRC-003)
+- Fix duplicate `deploy.sync_failed` SSE events — `ErrActivationAlreadyHandled` sentinel prevents double emit (#BRC-002)
+- ArgoCD sync client supports CA cert file for proper TLS verification — `CACertPath` config replaces `InsecureSkipVerify` (#SEC-T02b)
+
+### Added
+- CI build job for loopzero-packs-runner — was missing, absence breaks all deploys (#COMP-003)
+- Build pod NetworkPolicy — default-deny egress with allowlist for DNS, MinIO, registry, packages (#SEC-009)
+- Document ParseArgoAppName limitation for hyphenated env names, TODO for Sprint 5 labels (#ARCH-002)
+- Unit tests for StaticDeliveryActivator — 3 tests covering nil KV client, release creation, SSE events (#COMP-007)
+
+### Removed
+- Remove 3 deprecated `scriptDockerfile*` functions — dead code with `//nolint:unused` (#COMP-005)
+- Remove `cwt-summary.yaml` — ClusterWorkflowTemplate deployed but never called by WorkflowBuilder (#COMP-006)
+
+### Previously Fixed
 - ArgoCD notifications config moved from `configs:` to root level in Helm values — was being silently ignored by argo-cd chart (#MEET-015-IaC)
 - Pulumi `installArgoCD()` now includes full config: RBAC, accounts, notifications, metrics, security contexts — was deploying with minimal inline values (#MEET-015-IaC)
 - Gitea bootstrap Job uses `deleteBeforeReplace` + `replaceOnChanges` — fixes `pulumi up` failure when TTL garbage-collects completed Job (#MEET-015-IaC)

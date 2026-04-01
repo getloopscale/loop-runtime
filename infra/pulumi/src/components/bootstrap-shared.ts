@@ -30,6 +30,7 @@ export const HELM_VERSIONS = {
   grafana: "8.5.2",
   loki: "6.24.0",
   promtail: "6.16.6",
+  tempo: "1.14.0",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -80,6 +81,21 @@ export function parseKubeconfig(raw: string): KubeconfigFields {
         if (!server) server = value;
         break;
     }
+  }
+
+  // REVIEW-2026-03-30: Fixes MED-04 — fail fast on missing fields instead of
+  // returning empty strings that cause deferred runtime failures (e.g., ESO
+  // trying to authenticate with an empty bearer token).
+  if (!token || !certificateAuthorityData || !server) {
+    const missing = [
+      !token && "token",
+      !certificateAuthorityData && "certificate-authority-data",
+      !server && "server",
+    ].filter(Boolean);
+    throw new Error(
+      `parseKubeconfig: missing required fields: ${missing.join(", ")}. ` +
+      `The kubeconfig may use exec-based auth (not bearer token) or has an unexpected format.`,
+    );
   }
 
   return { token, certificateAuthorityData, server };
@@ -188,10 +204,12 @@ export function installTraefik(
     dependsOn.push(certManager);
   }
 
+  // REVIEW-2026-03-30: Fixes MED-06 — release name was hardcoded as "mgmt-traefik"
+  // regardless of role. Now uses ${role}-traefik to match fullnameOverride.
   return new k8s.helm.v3.Release(
     `${role}-traefik`,
     {
-      name: "mgmt-traefik",
+      name: `${role}-traefik`,
       chart: "traefik",
       version: HELM_VERSIONS.traefik,
       repositoryOpts: {

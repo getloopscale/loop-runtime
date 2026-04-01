@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero-forge/model"
 
 	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // buildkitParams holds the resolved parameters for a BuildKit build container.
@@ -43,8 +44,8 @@ func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app
 	// Image path: {registry}/{tenant}/{project}-{app}:{sha}
 	// Flattened to 2 levels to stay within DO Container Registry nesting limit.
 	// Previously 3 levels ({tenant}/{project}/{app}) caused 403 on DO.
-	destination := fmt.Sprintf("%s/%s/%s-%s:%s",
-		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
+	// ARCH-001 fix: single source of truth for image tag format
+	destination := naming.ImageTag(b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
 	cacheRef := fmt.Sprintf("%s/%s/%s-%s:buildcache",
 		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name)
 

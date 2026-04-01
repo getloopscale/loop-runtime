@@ -11,6 +11,7 @@ package argo
 import (
 	"fmt"
 	"log/slog"
+	"os"
 
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
@@ -106,7 +107,11 @@ func (s *GoStrategy) Name() string { return "go" }
 
 func (s *GoStrategy) CacheKey() string { return "go-modules" }
 
-func (s *GoStrategy) CacheDirs() []string { return []string{"/go/pkg/mod", "/root/.cache/go-build"} }
+// CODE-005 fix: containers run as uid 1000 — /root/.cache is inaccessible.
+// Use /workspace/.cache which is writable by the build user.
+func (s *GoStrategy) CacheDirs() []string {
+	return []string{"/go/pkg/mod", "/workspace/.cache/go-build"}
+}
 
 func (s *GoStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
 	return buildContainer("validate-workspace", imageGolang, resourcesTiny(), scriptValidateGo(apps))
@@ -139,7 +144,8 @@ func (s *PythonStrategy) Name() string { return "python" }
 
 func (s *PythonStrategy) CacheKey() string { return "pip-cache" }
 
-func (s *PythonStrategy) CacheDirs() []string { return []string{"/root/.cache/pip"} }
+// CODE-005 fix: containers run as uid 1000 — /root/.cache is inaccessible.
+func (s *PythonStrategy) CacheDirs() []string { return []string{"/workspace/.cache/pip"} }
 
 func (s *PythonStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
 	return buildContainer("validate-workspace", imagePython, resourcesTiny(), scriptValidatePython(apps))
@@ -220,12 +226,23 @@ func loopzeroPacksDockerfileStep(apps []services.AppSpec, totalApps int) *forge.
 		}
 		// Use shared naming function (MEET-2026-03-29-018).
 		output := dockerfilePathForApp(app.Name, totalApps)
+		// CODE-001 defense-in-depth: use %q for shell quoting of user-derived values.
+		// Primary defense is ValidateAppName at the API boundary (builds.go).
 		script += fmt.Sprintf(
-			"loopzeropacks-generate --source %s --app-path %s --app-name %s --output %s\n",
+			"loopzeropacks-generate --source %q --app-path %q --app-name %q --output %q\n",
 			workspaceMountPath, appPath, app.Name, output,
 		)
 	}
-	return buildContainer("generate-dockerfile", imageLoopZeroPacks, resourcesSmall(), script)
+	return buildContainer("generate-dockerfile", loopzeroPacks(), resourcesSmall(), script)
+}
+
+// loopzeroPacks returns the loopzero-packs-runner image, allowing override via env var.
+// Local dev sets LOOPZERO_PACKS_IMAGE to use the k3d registry image.
+func loopzeroPacks() string {
+	if v := os.Getenv("LOOPZERO_PACKS_IMAGE"); v != "" {
+		return v
+	}
+	return imageLoopZeroPacks
 }
 
 // ---------------------------------------------------------------------------
@@ -259,6 +276,10 @@ func retryStrategy(limit int, duration, factor, maxDuration string) *forge.Retry
 			Factor:      factor,
 			MaxDuration: maxDuration,
 		},
+		// Skip retry on OOM kill (exit 137) — retrying will fail again with same memory limits.
+		// Exit code 1 remains retryable (transient DNS/npm/registry failures).
+		// MEET-2026-03-30-021 F3-C2: only exit 137 is irrecoverable.
+		Expression: `asInt(lastRetry.exitCode) != 137`,
 	}
 }
 

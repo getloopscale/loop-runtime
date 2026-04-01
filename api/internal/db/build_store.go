@@ -60,6 +60,7 @@ type BuildStore interface {
 	SetAppsSpec(ctx context.Context, tx DBTX, id string, apps []BuildAppSpec) error
 	GetBuildApps(ctx context.Context, buildID string) ([]BuildAppSpec, error)
 	ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error)
+	ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]Build, int, error)
 	FindActiveBuilds(ctx context.Context) ([]Build, error)
 	CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, []string, error)
 }
@@ -111,8 +112,11 @@ func (s *PostgresBuildStore) GetByID(ctx context.Context, buildID string) (*Buil
 	))
 }
 
-// HasActiveBuild checks if there is a build in QUEUED or RUNNING status
+// HasActiveBuild checks if there is a build in QUEUED, RUNNING, or RELEASING status
 // for the given tenant, project, and environment.
+// RELEASING is included because a build in this state has completed its image build
+// and is in the process of creating a release — allowing a new deploy would create
+// two concurrent releases for the same environment (ARCH-002 fix).
 // This runs inside the advisory lock transaction.
 func (s *PostgresBuildStore) HasActiveBuild(ctx context.Context, tx DBTX, tenantID, projectID, env string) (bool, error) {
 	var exists bool
@@ -120,7 +124,7 @@ func (s *PostgresBuildStore) HasActiveBuild(ctx context.Context, tx DBTX, tenant
 		`SELECT EXISTS(
 			SELECT 1 FROM builds
 			WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
-			AND status IN ('QUEUED', 'RUNNING')
+			AND status IN ('QUEUED', 'RUNNING', 'RELEASING')
 		)`,
 		tenantID, projectID, env,
 	).Scan(&exists)
@@ -158,11 +162,27 @@ func (s *PostgresBuildStore) UpdateStatus(ctx context.Context, tx DBTX, buildID 
 		return nil, err
 	}
 
-	// Update in DB
-	_, err = executor.Exec(ctx,
-		`UPDATE builds SET status = $1 WHERE id = $2`,
-		string(newState), buildID,
-	)
+	// Update in DB — set timing fields based on state transition.
+	// RUNNING: record started_at (build execution began)
+	// Terminal states (SUCCEEDED/FAILED/CANCELLED): record finished_at + compute duration
+	var query string
+	var args []interface{}
+
+	switch newState {
+	case statemachine.BuildRunning:
+		query = `UPDATE builds SET status = $1, started_at = NOW() WHERE id = $2`
+		args = []interface{}{string(newState), buildID}
+	case statemachine.BuildSucceeded, statemachine.BuildFailed, statemachine.BuildCancelled:
+		query = `UPDATE builds SET status = $1, finished_at = NOW(),
+			duration_seconds = COALESCE(EXTRACT(EPOCH FROM (NOW() - started_at))::int, 0)
+			WHERE id = $2`
+		args = []interface{}{string(newState), buildID}
+	default:
+		query = `UPDATE builds SET status = $1 WHERE id = $2`
+		args = []interface{}{string(newState), buildID}
+	}
+
+	_, err = executor.Exec(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("build store: update status failed: %w", err)
 	}
@@ -291,6 +311,93 @@ func (s *PostgresBuildStore) ListByProject(ctx context.Context, tenantID, projec
 		builds = []Build{}
 	}
 	return builds, nil
+}
+
+// ListByProjectAndEnv returns builds for a project, optionally filtered by environment.
+// Returns (builds, totalCount, error). If env is empty, returns builds for all environments.
+func (s *PostgresBuildStore) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]Build, int, error) {
+	// Clamp limit to 1-50
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	var rows Rows
+	var err error
+	var total int
+
+	if env != "" {
+		rows, err = s.db.Query(ctx,
+			`SELECT id, tenant_id, project_id, environment, status, COALESCE(commit_sha, ''),
+			        correlation_id, created_by, created_at, started_at, finished_at,
+			        COALESCE(error_message, ''), duration_seconds, COALESCE(workflow_id, '')
+			 FROM builds
+			 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
+			 ORDER BY created_at DESC
+			 LIMIT $4 OFFSET $5`,
+			tenantID, projectID, env, limit, offset,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("build store: list by project and env query failed: %w", err)
+		}
+
+		err = s.db.QueryRow(ctx,
+			`SELECT COUNT(*) FROM builds WHERE tenant_id = $1 AND project_id = $2 AND environment = $3`,
+			tenantID, projectID, env,
+		).Scan(&total)
+	} else {
+		rows, err = s.db.Query(ctx,
+			`SELECT id, tenant_id, project_id, environment, status, COALESCE(commit_sha, ''),
+			        correlation_id, created_by, created_at, started_at, finished_at,
+			        COALESCE(error_message, ''), duration_seconds, COALESCE(workflow_id, '')
+			 FROM builds
+			 WHERE tenant_id = $1 AND project_id = $2
+			 ORDER BY created_at DESC
+			 LIMIT $3 OFFSET $4`,
+			tenantID, projectID, limit, offset,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("build store: list by project query failed: %w", err)
+		}
+
+		err = s.db.QueryRow(ctx,
+			`SELECT COUNT(*) FROM builds WHERE tenant_id = $1 AND project_id = $2`,
+			tenantID, projectID,
+		).Scan(&total)
+	}
+
+	if err != nil {
+		return nil, 0, fmt.Errorf("build store: count query failed: %w", err)
+	}
+
+	defer rows.Close()
+
+	var builds []Build
+	for rows.Next() {
+		var b Build
+		if err := rows.Scan(
+			&b.ID, &b.TenantID, &b.ProjectID, &b.Environment, &b.Status,
+			&b.CommitSHA, &b.CorrelationID, &b.CreatedBy,
+			&b.CreatedAt, &b.StartedAt, &b.FinishedAt, &b.ErrorMessage,
+			&b.DurationSeconds, &b.WorkflowID,
+		); err != nil {
+			return nil, 0, fmt.Errorf("build store: scan failed: %w", err)
+		}
+		builds = append(builds, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("build store: rows error: %w", err)
+	}
+
+	if builds == nil {
+		builds = []Build{}
+	}
+	return builds, total, nil
 }
 
 // FindActiveBuilds returns all builds in QUEUED or RUNNING state.

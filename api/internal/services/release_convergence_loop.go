@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -19,6 +20,10 @@ import (
 type ReleaseConvergenceLoopConfig struct {
 	// Interval is how often the loop polls for pending releases.
 	Interval time.Duration
+	// HealthInterval is how often the loop checks ACTIVE releases against ArgoCD health.
+	// MEET-2026-03-31-023 T1-4: Post-activation health monitoring.
+	// Defaults to 60 seconds if not set.
+	HealthInterval time.Duration
 	// SyncTimeout is how long to wait for ArgoCD sync before marking SYNC_FAILED.
 	SyncTimeout time.Duration
 	// MaxConcurrent bounds parallel release verifications.
@@ -28,8 +33,12 @@ type ReleaseConvergenceLoopConfig struct {
 // ReleaseConvergenceStore defines the release store methods needed by the loop.
 type ReleaseConvergenceStore interface {
 	FindPendingReleases(ctx context.Context) ([]db.Release, error)
+	// FindActiveReleases returns releases in ACTIVE state for post-activation health monitoring.
+	// MEET-2026-03-31-023 T1-4: Used by the health check ticker to detect divergence.
+	FindActiveReleases(ctx context.Context) ([]db.Release, error)
 	UpdateStatus(ctx context.Context, tx db.DBTX, id string, event string) (*db.Release, error)
 	GetActiveByEnvTx(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (*db.Release, error)
+	GetByIDTx(ctx context.Context, tx db.DBTX, id string) (*db.Release, error)
 }
 
 // ReleaseConvergenceLoop asynchronously verifies that PENDING releases
@@ -53,6 +62,10 @@ type ReleaseConvergenceLoop struct {
 
 	sem    chan struct{}
 	active sync.Map
+
+	// MEET-2026-03-31-023 T1-5: track sync retrigger attempts per release.
+	// Prevents infinite retry loops (max 3 retriggers per release).
+	syncRetriggers sync.Map // releaseID → int
 }
 
 // NewReleaseConvergenceLoop creates the convergence loop.
@@ -73,6 +86,9 @@ func NewReleaseConvergenceLoop(
 	if cfg.SyncTimeout <= 0 {
 		cfg.SyncTimeout = 180 * time.Second
 	}
+	if cfg.HealthInterval <= 0 {
+		cfg.HealthInterval = 60 * time.Second
+	}
 	if cfg.MaxConcurrent <= 0 {
 		cfg.MaxConcurrent = 10
 	}
@@ -92,6 +108,7 @@ func NewReleaseConvergenceLoop(
 func (r *ReleaseConvergenceLoop) Start(ctx context.Context) {
 	r.logger.Info("release convergence loop started",
 		"interval", r.cfg.Interval,
+		"health_interval", r.cfg.HealthInterval,
 		"sync_timeout", r.cfg.SyncTimeout,
 		"max_concurrent", r.cfg.MaxConcurrent)
 
@@ -101,6 +118,10 @@ func (r *ReleaseConvergenceLoop) Start(ctx context.Context) {
 	ticker := time.NewTicker(r.cfg.Interval)
 	defer ticker.Stop()
 
+	// MEET-2026-03-31-023 T1-4: Separate ticker for ACTIVE release health monitoring.
+	healthTicker := time.NewTicker(r.cfg.HealthInterval)
+	defer healthTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -108,16 +129,23 @@ func (r *ReleaseConvergenceLoop) Start(ctx context.Context) {
 			return
 		case <-ticker.C:
 			r.tick(ctx)
+		case <-healthTicker.C:
+			r.healthCheckActiveReleases(ctx)
 		}
 	}
 }
 
 func (r *ReleaseConvergenceLoop) tick(ctx context.Context) {
+	// MEET-2026-03-31-023 T1-8: Record successful tick timestamp and pending count.
+	metrics.ReconcileLoopLastSuccess.WithLabelValues("release").SetToCurrentTime()
+
 	releases, err := r.releaseStore.FindPendingReleases(ctx)
 	if err != nil {
 		r.logger.Error("release convergence: failed to find pending releases", "error", err)
 		return
 	}
+
+	metrics.ReleasesPending.Set(float64(len(releases)))
 
 	for _, rel := range releases {
 		if _, loaded := r.active.LoadOrStore(rel.ID, struct{}{}); loaded {
@@ -189,6 +217,12 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 	}
 
 	if !synced || !healthy {
+		// MEET-2026-03-31-023 T1-5: If no sync is in progress and release is > 30s old,
+		// retrigger TriggerSync. With manual sync policy, ArgoCD won't auto-sync from Gitea
+		// if the initial TriggerSync failed. Max 3 retriggers per release.
+		if !synced && elapsed > 30*time.Second {
+			r.retriggerSyncIfNeeded(ctx, release, argoAppName)
+		}
 		return // Not ready yet, will check on next tick
 	}
 
@@ -229,6 +263,9 @@ func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *d
 			"release_id", release.ID, "error", err)
 		return
 	}
+	// MEET-2026-03-31-024: Clean up syncRetriggers entry to prevent memory leak.
+	r.syncRetriggers.Delete(release.ID)
+
 	r.logger.Info("release convergence: release activated",
 		"release_id", release.ID, "build_id", release.BuildID)
 }
@@ -255,5 +292,90 @@ func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Re
 	})
 	if _, err := r.eventStore.Append(ctx, release.BuildID, "deploy.sync_failed", failedData); err != nil {
 		r.logger.Error("failed to emit deploy.sync_failed event", "release_id", release.ID, "error", err)
+	}
+
+	// MEET-2026-03-31-024: Clean up syncRetriggers entry to prevent memory leak.
+	r.syncRetriggers.Delete(release.ID)
+}
+
+// maxSyncRetriggers bounds the number of times the convergence loop will
+// retrigger TriggerSync for a single release. Prevents infinite retry loops.
+const maxSyncRetriggers = 3
+
+// retriggerSyncIfNeeded calls TriggerSync when a PENDING release has no active
+// sync operation in ArgoCD. With manual sync policy, a failed initial TriggerSync
+// means ArgoCD will never auto-sync from Gitea, leaving the release stuck.
+// MEET-2026-03-31-023 T1-5.
+func (r *ReleaseConvergenceLoop) retriggerSyncIfNeeded(ctx context.Context, release *db.Release, argoAppName string) {
+	// Check retrigger count
+	val, _ := r.syncRetriggers.LoadOrStore(release.ID, 0)
+	count := val.(int)
+	if count >= maxSyncRetriggers {
+		r.logger.Warn("release convergence: max sync retriggers reached",
+			"release_id", release.ID, "retriggers", count)
+		return
+	}
+
+	// Attempt to trigger sync
+	if err := r.sync_.TriggerSync(ctx, argoAppName); err != nil {
+		r.logger.Warn("release convergence: sync retrigger failed",
+			"release_id", release.ID, "app", argoAppName, "error", err)
+		return
+	}
+
+	r.syncRetriggers.Store(release.ID, count+1)
+	r.logger.Info("release convergence: retriggered sync for stalled release",
+		"release_id", release.ID, "app", argoAppName, "attempt", count+1)
+}
+
+// healthCheckActiveReleases checks ACTIVE releases against ArgoCD health.
+// MEET-2026-03-31-023 T1-4: Post-activation health monitoring.
+//
+// This is observability-only — it does NOT change release state. It emits
+// metrics (ReleaseStateDivergence, DriftDetected) so Prometheus alerts can
+// fire when an ACTIVE release becomes unhealthy in ArgoCD.
+func (r *ReleaseConvergenceLoop) healthCheckActiveReleases(ctx context.Context) {
+	releases, err := r.releaseStore.FindActiveReleases(ctx)
+	if err != nil {
+		r.logger.Error("health check: failed to find active releases", "error", err)
+		return
+	}
+
+	for _, rel := range releases {
+		argoAppName := fmt.Sprintf("%s-%s", rel.TenantID, rel.Environment)
+
+		// Parse app specs to filter out static apps (no ArgoCD resources)
+		var apps []db.BuildAppSpec
+		if rel.Apps != nil {
+			if parseErr := json.Unmarshal(rel.Apps, &apps); parseErr != nil {
+				r.logger.Error("health check: failed to parse app specs",
+					"release_id", rel.ID, "error", parseErr)
+			}
+		}
+		var deployedAppNames []string
+		for _, app := range apps {
+			if app.Rendering == "static" {
+				continue
+			}
+			deployedAppNames = append(deployedAppNames, app.Name)
+		}
+
+		_, healthy, checkErr := r.checkSync(ctx, argoAppName, deployedAppNames)
+		if checkErr != nil {
+			r.logger.Warn("health check: ArgoCD status check error",
+				"release_id", rel.ID, "app", argoAppName, "error", checkErr)
+			continue
+		}
+
+		if !healthy {
+			metrics.ReleaseStateDivergence.WithLabelValues(rel.TenantID, rel.ProjectID, rel.Environment).Set(1)
+			metrics.DriftDetected.WithLabelValues(rel.TenantID, rel.Environment).Set(1)
+			r.logger.Warn("health check: ACTIVE release is unhealthy in ArgoCD",
+				"release_id", rel.ID, "tenant", rel.TenantID,
+				"project", rel.ProjectID, "env", rel.Environment)
+		} else {
+			metrics.ReleaseStateDivergence.WithLabelValues(rel.TenantID, rel.ProjectID, rel.Environment).Set(0)
+			metrics.DriftDetected.WithLabelValues(rel.TenantID, rel.Environment).Set(0)
+		}
 	}
 }

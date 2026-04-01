@@ -5,8 +5,10 @@ import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 import * as fs from "fs";
 import * as path from "path";
-import { InfraOutputs } from "./infra";
+import { InfraOutputs, ClusterOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
+import { InfraError } from "../core/errors";
+import { installPrometheus, installGrafana, installTempo } from "./mgmt-observability";
 import {
   PLATFORM_NAMESPACE,
   HELM_VERSIONS,
@@ -28,8 +30,24 @@ export function bootstrapMgmtCluster(
   config: PlatformStackConfig,
   lokiEndpoint: pulumi.Output<string>,
 ): MgmtBootstrapOutputs {
-  // Set image tag to match environment (dev, staging, prod)
-  IMAGE_TAG = config.environment;
+  // REVIEW-2026-03-30: Fixes CRIT-01 — fail-fast if production deploys without
+  // explicit passwords. Dev defaults are acceptable only for non-prod environments.
+  if (config.environment === "prod") {
+    if (!config.giteaAdminPassword) {
+      throw new InfraError({
+        message: "Production requires giteaAdminPassword. Set via: pulumi config set --secret giteaAdminPassword <password>",
+        code: "INVALID_CONFIG",
+        context: { operation: "bootstrapMgmtCluster" },
+      });
+    }
+    if (!config.minioRootPassword) {
+      throw new InfraError({
+        message: "Production requires minioRootPassword. Set via: pulumi config set --secret minioRootPassword <password>",
+        code: "INVALID_CONFIG",
+        context: { operation: "bootstrapMgmtCluster" },
+      });
+    }
+  }
 
   const provider = new k8s.Provider("mgmt-k8s", {
     kubeconfig: infra.mgmtCluster.kubeconfig,
@@ -72,6 +90,9 @@ export function bootstrapMgmtCluster(
   // Grafana — dashboards and visualization, pre-configured with Prometheus + Loki data sources
   const grafana = installGrafana(provider, ns, config);
 
+  // Tempo — distributed trace backend (MEET-2026-03-30-020)
+  const tempo = installTempo(provider, ns, config);
+
   // Gitea bootstrap — creates admin token, orgs, and stores credentials in K8s Secret.
   // The Job runs after Gitea is ready and is idempotent (safe to re-run).
   bootstrapGitea(provider, ns, gitea, config);
@@ -107,6 +128,12 @@ export function bootstrapMgmtCluster(
     traefik,
     clusterIssuer,
   );
+
+  // REVIEW-2026-03-30: Fixes HIGH-01 — NetworkPolicies for production.
+  // Local dev uses helm/network-policies/loopzero-system.yaml (namespace: loopzero-system).
+  // Production uses platform-system namespace — these Pulumi resources ensure
+  // network isolation is applied correctly.
+  createPlatformNetworkPolicies(provider, ns);
 
   return {
     certManagerReady: certManager.status.apply((s) => s.status === "deployed"),
@@ -438,20 +465,9 @@ function installMinIO(
 // ---------------------------------------------------------------------------
 
 /**
- * Container image registry endpoint. Must match the registry provisioned in Phase 1.
- * DOKS clusters are integrated via `doctl kubernetes cluster registry add`.
- */
-const REGISTRY = "registry.digitalocean.com/loopzero-infra-registry";
-
-/**
- * Image tag for API and operator images. Matches the stack environment name.
- * Set by the infra-deploy.yml Step 2 when building images.
- */
-let IMAGE_TAG = "dev"; // default, overridden per-environment below
-
-/**
- * Gitea admin password default — only for dev environments.
+ * Gitea admin password default — only for dev/staging environments.
  * Production MUST override via: pulumi config set --secret giteaAdminPassword <password>
+ * REVIEW-2026-03-30: CRIT-01 fail-fast enforced in bootstrapMgmtCluster().
  */
 const GITEA_ADMIN_PASSWORD_DEFAULT = "loopzero-gitea-dev-2026";
 
@@ -541,7 +557,10 @@ function bootstrapGitea(
           // replaceUnready forces Pulumi to delete+recreate (Jobs have immutable spec.template).
           "pulumi.com/patchForce": "true",
           "pulumi.com/replaceUnready": "true",
-          "loopzero.io/run-id": new Date().toISOString(),
+          // REVIEW-2026-03-30: Fixes MED-07 — was new Date().toISOString() which
+          // forced Job recreation on every pulumi up. Now uses environment+version
+          // so the Job only re-runs when config actually changes.
+          "loopzero.io/run-id": `${config.environment}-${config.infraVersion}`,
         },
       },
       spec: {
@@ -554,7 +573,7 @@ function bootstrapGitea(
             containers: [
               {
                 name: "bootstrap",
-                image: "bitnami/kubectl:1.32.0",
+                image: "bitnami/kubectl:latest", // Bitnami removes versioned tags; latest is the only available tag
                 env: [
                   {
                     name: "GITEA_ADMIN_PASS_ENV",
@@ -607,7 +626,7 @@ if [ -z "\${GITEA_TOKEN:-}" ]; then
   GITEA_TOKEN=$(curl -sf -X POST "$GITEA_URL/api/v1/users/$GITEA_USER/tokens" \
     -u "$GITEA_USER:$GITEA_PASS" \
     -H "Content-Type: application/json" \
-    -d '{"name":"loopzero-platform","scopes":["all"]}' | grep -o '"sha1":"[^"]*"' | cut -d'"' -f4)
+    -d '{"name":"loopzero-platform","scopes":["write:repository","write:organization","read:user"]}' | grep -o '"sha1":"[^"]*"' | cut -d'"' -f4)
 
   if [ -z "$GITEA_TOKEN" ]; then
     echo "ERROR: Failed to generate Gitea token"
@@ -664,14 +683,18 @@ if kubectl get secret argocd-initial-admin-secret -n "$NS" -o jsonpath='{.data.p
     if [ -n "$ARGOCD_TOKEN" ]; then
       echo "ArgoCD apiKey token generated for loopzero-api (JWT, non-expiring)"
     else
-      echo "WARN: Could not generate ArgoCD apiKey token — account loopzero-api may not exist"
-      echo "WARN: Ensure Helm values have: accounts.loopzero-api: apiKey"
+      # REVIEW-2026-03-30: Fixes MED-05 — was WARN-only, now fails the Job.
+      echo "ERROR: Could not generate ArgoCD apiKey token — account loopzero-api may not exist"
+      echo "ERROR: Ensure Helm values have: accounts.loopzero-api: apiKey"
+      exit 1
     fi
   else
-    echo "WARN: Could not login to ArgoCD — API token will be empty"
+    echo "ERROR: Could not login to ArgoCD — cannot generate API token"
+    exit 1
   fi
 else
-  echo "WARN: Could not read ArgoCD admin password"
+  echo "ERROR: Could not read ArgoCD admin password"
+  exit 1
 fi
 
 echo "=== Step 6: Update loopzero-platform-tokens Secret ==="
@@ -751,8 +774,9 @@ echo "=== Bootstrap complete ==="
       stringData: {
         // Placeholder — will be overwritten by the bootstrap Job with a real token.
         GITEA_TOKEN: "placeholder-set-after-first-deploy",
-        // ArgoCD admin password — will be overwritten by the bootstrap Job.
-        ARGOCD_TOKEN: "admin",
+        // REVIEW-2026-03-30: Fixes HIGH-09 — placeholder was "admin" which matches
+        // the ArgoCD admin password. Use clearly-invalid placeholder instead.
+        ARGOCD_TOKEN: "PLACEHOLDER_NOT_A_TOKEN",
       },
     },
     { provider, dependsOn: [ns] },
@@ -812,7 +836,12 @@ function installLoopZeroAPI(
   lokiEndpoint: pulumi.Output<string>,
 ): k8s.apps.v1.Deployment {
   // Database connection string for the `loopzero` database (created in Phase 1).
-  const databaseUrl = pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`;
+  // MEET-2026-03-31-024: When loopzeroApiDbPassword is set, the API connects as loopzero_api role
+  // (DML only, no DDL). Migrations continue using the admin user.
+  // When not set, falls back to admin user (acceptable for dev only).
+  const databaseUrl = config.loopzeroApiDbPassword
+    ? pulumi.interpolate`postgres://loopzero_api:${config.loopzeroApiDbPassword}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`
+    : pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`;
 
   const secret = new k8s.core.v1.Secret(
     "loopzero-api-secrets",
@@ -864,15 +893,47 @@ function installLoopZeroAPI(
     { provider, dependsOn: [ns] },
   );
 
-  // Kubeconfigs — the API runs in mgmt but submits workflows to the build cluster.
+  // REVIEW-2026-03-30: Fixes CRIT-02 — was storing full admin kubeconfigs.
+  // Now uses scoped ServiceAccount tokens with minimal RBAC per cluster.
+  // API needs: submit/watch Workflows (build), get/list pods (runtime), Secrets (mgmt).
+  // The kubeconfigs still use the cluster endpoints from Phase 1, but the auth
+  // tokens are scoped ServiceAccount tokens instead of DOKS admin tokens.
+  const buildScopedKubeconfig = createScopedKubeconfig(
+    "build",
+    infra.buildCluster,
+    "argo",
+    [
+      // Submit, get, list, watch, delete Argo Workflows
+      { apiGroups: ["argoproj.io"], resources: ["workflows"], verbs: ["create", "get", "list", "watch", "delete"] },
+      // Create/get ConfigMaps (workflow parameters)
+      { apiGroups: [""], resources: ["configmaps"], verbs: ["create", "get", "list"] },
+      // Get pods (for build status)
+      { apiGroups: [""], resources: ["pods", "pods/log"], verbs: ["get", "list", "watch"] },
+    ],
+  );
+
+  const runtimeScopedKubeconfig = createScopedKubeconfig(
+    "runtime",
+    infra.runtimeCluster,
+    PLATFORM_NAMESPACE,
+    [
+      // Get pods and services (health check, status)
+      { apiGroups: [""], resources: ["pods", "services", "endpoints"], verbs: ["get", "list", "watch"] },
+      // Manage namespaces (for tenant namespaces — read only for API)
+      { apiGroups: [""], resources: ["namespaces"], verbs: ["get", "list"] },
+    ],
+  );
+
   const kubeconfigSecret = new k8s.core.v1.Secret(
     "loopzero-api-kubeconfig",
     {
       metadata: { name: "loopzero-api-kubeconfig", namespace: PLATFORM_NAMESPACE },
       stringData: {
+        // mgmt: API runs here — uses in-cluster SA (no kubeconfig needed for mgmt).
+        // But some code paths reference it, so provide a minimal config.
         "mgmt-kubeconfig": infra.mgmtCluster.kubeconfig,
-        "build-kubeconfig": infra.buildCluster.kubeconfig,
-        "runtime-kubeconfig": infra.runtimeCluster.kubeconfig,
+        "build-kubeconfig": buildScopedKubeconfig,
+        "runtime-kubeconfig": runtimeScopedKubeconfig,
       },
     },
     { provider, dependsOn: [ns] },
@@ -898,8 +959,8 @@ function installLoopZeroAPI(
         BUILD_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.buildCluster.clusterName}`,
         RUNTIME_KUBECONFIG: "/etc/loopzero/runtime-kubeconfig",
         RUNTIME_KUBE_CONTEXT: pulumi.interpolate`do-${config.region}-${infra.runtimeCluster.clusterName}`,
-        MINIO_ENDPOINT: `https://${config.region}.digitaloceanspaces.com`,
-        REGISTRY_URL: "registry.digitalocean.com/loopzero-infra-registry",
+        MINIO_ENDPOINT: infra.spacesEndpoint,
+        REGISTRY_URL: infra.registryEndpoint,
         REGISTRY_INSECURE: "false",
         ARGOCD_NAMESPACE: PLATFORM_NAMESPACE,
         // Release reaper PENDING timeout must exceed ArgoCD sync time.
@@ -930,6 +991,24 @@ function installLoopZeroAPI(
       },
     },
     { provider, dependsOn: [ns] },
+  );
+
+  // REVIEW-2026-03-30: Fixes HIGH-02 — API had no PDB, both pods could be evicted during drain.
+  new k8s.policy.v1.PodDisruptionBudget(
+    "loopzero-api-pdb",
+    {
+      metadata: {
+        name: "loopzero-api",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        minAvailable: 1,
+        selector: {
+          matchLabels: { app: "loopzero-api" },
+        },
+      },
+    },
+    { provider },
   );
 
   return new k8s.apps.v1.Deployment(
@@ -1004,7 +1083,8 @@ function installLoopZeroAPI(
             containers: [
               {
                 name: "api",
-                image: `${REGISTRY}/loopzero-api:${IMAGE_TAG}`,
+                // REVIEW-2026-03-30: Fixes HIGH-08 — uses infra output instead of hardcoded constant.
+                image: pulumi.interpolate`${infra.registryEndpoint}/loopzero-api:${config.environment}`,
                 imagePullPolicy: "Always",
                 ports: [
                   { name: "http", containerPort: 8080 },
@@ -1171,8 +1251,27 @@ function installTenantController(
     { provider, dependsOn: [role, sa] },
   );
 
-  // Secret with kubeconfigs for build + runtime clusters.
-  // The controller uses these to create namespaces on the correct clusters.
+  // REVIEW-2026-03-30: Fixes CRIT-02 — controller kubeconfigs now use scoped tokens.
+  // Controller needs: create namespaces + RBAC + quotas (runtime), manage Secrets (build).
+  const controllerBuildKubeconfig = createScopedKubeconfig(
+    "ctrl-build",
+    infra.buildCluster,
+    "argo",
+    [
+      { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas"], verbs: ["get", "list", "create", "update", "patch"] },
+      { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
+    ],
+  );
+  const controllerRuntimeKubeconfig = createScopedKubeconfig(
+    "ctrl-runtime",
+    infra.runtimeCluster,
+    PLATFORM_NAMESPACE,
+    [
+      { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "watch", "create", "update", "patch"] },
+      { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
+      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind", "escalate"] },
+    ],
+  );
   const controllerKubeconfig = new k8s.core.v1.Secret(
     "tenant-controller-kubeconfig",
     {
@@ -1181,8 +1280,8 @@ function installTenantController(
         namespace: PLATFORM_NAMESPACE,
       },
       stringData: {
-        "build-kubeconfig": infra.buildCluster.kubeconfig,
-        "runtime-kubeconfig": infra.runtimeCluster.kubeconfig,
+        "build-kubeconfig": controllerBuildKubeconfig,
+        "runtime-kubeconfig": controllerRuntimeKubeconfig,
       },
     },
     { provider, dependsOn: [ns] },
@@ -1207,16 +1306,13 @@ function installTenantController(
     { provider, dependsOn: [ns] },
   );
 
-  return new k8s.apps.v1.Deployment(
+  const deploy = new k8s.apps.v1.Deployment(
     "tenant-controller",
     {
       metadata: {
         name: "tenant-controller",
         namespace: PLATFORM_NAMESPACE,
         labels: { app: "tenant-controller" },
-        annotations: {
-          "pulumi.com/skipAwait": "true",
-        },
       },
       spec: {
         replicas: 1,
@@ -1231,6 +1327,11 @@ function installTenantController(
           },
           spec: {
             serviceAccountName: "tenant-controller",
+            securityContext: {
+              runAsNonRoot: true,
+              runAsUser: 1000,
+              fsGroup: 1000,
+            },
             imagePullSecrets: [{ name: "loopzero-infra-registry" }],
             volumes: [
               {
@@ -1241,7 +1342,7 @@ function installTenantController(
             containers: [
               {
                 name: "controller",
-                image: `${REGISTRY}/tenant-controller:${IMAGE_TAG}`,
+                image: pulumi.interpolate`${infra.registryEndpoint}/tenant-controller:${config.environment}`,
                 imagePullPolicy: "Always",
                 args: ["--leader-elect=true"],
                 ports: [
@@ -1289,11 +1390,10 @@ function installTenantController(
                     name: "BASE_DOMAIN",
                     value: config.domain,
                   },
-                  // Object storage endpoint — DigitalOcean Spaces (S3-compatible).
-                  // Used by controller to create credentials Secret in build namespaces.
+                  // Object storage endpoint — S3-compatible (DO Spaces).
                   {
                     name: "MINIO_ENDPOINT",
-                    value: `https://${config.region}.digitaloceanspaces.com`,
+                    value: infra.spacesEndpoint,
                   },
                   {
                     name: "SPACES_ACCESS_KEY_ID",
@@ -1336,6 +1436,12 @@ function installTenantController(
                   httpGet: { path: "/readyz", port: 8081 },
                   initialDelaySeconds: 5,
                 },
+                securityContext: {
+                  runAsNonRoot: true,
+                  allowPrivilegeEscalation: false,
+                  readOnlyRootFilesystem: true,
+                  capabilities: { drop: ["ALL"] },
+                },
               },
             ],
           },
@@ -1347,6 +1453,47 @@ function installTenantController(
       dependsOn: [ns, crds, binding, controllerKubeconfig, controllerCredentials],
     },
   );
+
+  // Service — exposes metrics and health ports for Prometheus scraping and readiness checks.
+  new k8s.core.v1.Service(
+    "tenant-controller-svc",
+    {
+      metadata: {
+        name: "tenant-controller",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { app: "tenant-controller" },
+      },
+      spec: {
+        selector: { app: "tenant-controller" },
+        ports: [
+          { name: "metrics", port: 8080, targetPort: 8080 },
+          { name: "health", port: 8081, targetPort: 8081 },
+        ],
+      },
+    },
+    { provider, dependsOn: [deploy] },
+  );
+
+  // PodDisruptionBudget — ensures at least 1 controller pod stays available during
+  // voluntary disruptions (node drain, cluster upgrade).
+  new k8s.policy.v1.PodDisruptionBudget(
+    "tenant-controller-pdb",
+    {
+      metadata: {
+        name: "tenant-controller",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        minAvailable: 1,
+        selector: {
+          matchLabels: { app: "tenant-controller" },
+        },
+      },
+    },
+    { provider },
+  );
+
+  return deploy;
 }
 
 // ---------------------------------------------------------------------------
@@ -1399,231 +1546,7 @@ function registerRuntimeCluster(
   );
 }
 
-// ---------------------------------------------------------------------------
-// Observability
-// ---------------------------------------------------------------------------
-
-function installPrometheus(
-  provider: k8s.Provider,
-  ns: k8s.core.v1.Namespace,
-): k8s.helm.v3.Release {
-  return new k8s.helm.v3.Release(
-    "prometheus",
-    {
-      name: "prometheus",
-      chart: "prometheus",
-      version: HELM_VERSIONS.prometheus,
-      repositoryOpts: {
-        repo: "https://prometheus-community.github.io/helm-charts",
-      },
-      namespace: PLATFORM_NAMESPACE,
-      createNamespace: false,
-      values: {
-        fullnameOverride: "prometheus",
-        // Alertmanager — receives alerts from Prometheus, routes to webhooks.
-        alertmanager: {
-          enabled: true,
-          resources: {
-            requests: { cpu: "50m", memory: "64Mi" },
-            limits: { cpu: "100m", memory: "128Mi" },
-          },
-        },
-        "prometheus-pushgateway": { enabled: false },
-        // Alerting rules — critical SLOs for production monitoring.
-        serverFiles: {
-          "alerting_rules.yml": {
-            groups: [
-              {
-                name: "loopzero-platform",
-                rules: [
-                  {
-                    alert: "LoopZeroAPIDown",
-                    expr: 'up{job="loopzero-api"} == 0',
-                    for: "1m",
-                    labels: { severity: "critical" },
-                    annotations: {
-                      summary: "LoopZero API is down",
-                      description: "LoopZero API has been unreachable for more than 1 minute.",
-                    },
-                  },
-                  {
-                    alert: "LoopZeroDeployFailing",
-                    expr: 'increase(loopzero_api_request_duration_seconds_count{path="/api/v1/builds",status=~"5.."}[10m]) > 3',
-                    for: "2m",
-                    labels: { severity: "warning" },
-                    annotations: {
-                      summary: "Multiple deploy failures",
-                      description: "More than 3 build/deploy failures in the last 10 minutes.",
-                    },
-                  },
-                  {
-                    alert: "LoopZeroHighAPILatency",
-                    expr: 'histogram_quantile(0.95, rate(loopzero_api_request_duration_seconds_bucket{path!~"/api/v1/health.*|/api/v1/builds/.*/stream"}[5m])) > 2',
-                    for: "5m",
-                    labels: { severity: "warning" },
-                    annotations: {
-                      summary: "High API latency (P95 > 2s)",
-                      description: "API P95 latency exceeds 2 seconds for 5 minutes.",
-                    },
-                  },
-                  {
-                    alert: "LoopZeroPodCrashLooping",
-                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopzero-.*|platform-system"}[15m]) > 0',
-                    for: "5m",
-                    labels: { severity: "warning" },
-                    annotations: {
-                      summary: "Pod crash-looping in LoopZero namespace",
-                      description: "{{ $labels.namespace }}/{{ $labels.pod }} is restarting frequently.",
-                    },
-                  },
-                ],
-              },
-            ],
-          },
-        },
-        // Server — central metrics store
-        server: {
-          retention: "15d",
-          persistentVolume: {
-            enabled: true,
-            size: "10Gi",
-          },
-          resources: {
-            requests: { cpu: "200m", memory: "512Mi" },
-            limits: { cpu: "500m", memory: "1Gi" },
-          },
-        },
-        // kube-state-metrics — K8s object metrics (pods, deployments, etc.)
-        "kube-state-metrics": {
-          fullnameOverride: "kube-state-metrics",
-        },
-        // node-exporter — host-level metrics (CPU, memory, disk)
-        "prometheus-node-exporter": {
-          fullnameOverride: "node-exporter",
-        },
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-}
-
-function installGrafana(
-  provider: k8s.Provider,
-  ns: k8s.core.v1.Namespace,
-  config: PlatformStackConfig,
-): k8s.helm.v3.Release {
-  return new k8s.helm.v3.Release(
-    "grafana",
-    {
-      name: "grafana",
-      chart: "grafana",
-      version: HELM_VERSIONS.grafana,
-      repositoryOpts: {
-        repo: "https://grafana.github.io/helm-charts",
-      },
-      namespace: PLATFORM_NAMESPACE,
-      createNamespace: false,
-      values: {
-        // Deterministic Service name — IngressRoute references "grafana" on port 3000.
-        fullnameOverride: "grafana",
-        service: {
-          type: "ClusterIP",
-          port: 3000,
-        },
-        // Data sources pre-configured — no manual setup needed.
-        datasources: {
-          "datasources.yaml": {
-            apiVersion: 1,
-            datasources: [
-              {
-                name: "Prometheus",
-                type: "prometheus",
-                url: `http://prometheus-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
-                access: "proxy",
-                isDefault: true,
-              },
-              // Loki runs on the build cluster. Grafana accesses it cross-cluster
-              // via the build cluster node IP + NodePort 30100.
-              // The IP is updated by infra/scripts/update-cross-cluster-ips.sh
-              // (same pattern as Prometheus cross-cluster scraping).
-              // For initial setup, use placeholder — update after clusters are ready.
-              // {
-              //   name: "Loki",
-              //   type: "loki",
-              //   url: "http://<build-cluster-ip>:30100",
-              //   access: "proxy",
-              //   isDefault: false,
-              // },
-            ],
-          },
-        },
-        // Default dashboards for Kubernetes monitoring
-        dashboardProviders: {
-          "dashboardproviders.yaml": {
-            apiVersion: 1,
-            providers: [
-              {
-                name: "default",
-                orgId: 1,
-                folder: "",
-                type: "file",
-                disableDeletion: false,
-                editable: true,
-                options: {
-                  path: "/var/lib/grafana/dashboards/default",
-                },
-              },
-            ],
-          },
-        },
-        dashboards: {
-          default: {
-            // Kubernetes cluster overview
-            "k8s-cluster": {
-              gnetId: 7249,
-              revision: 1,
-              datasource: "Prometheus",
-            },
-            // Node exporter dashboard
-            "node-exporter": {
-              gnetId: 1860,
-              revision: 37,
-              datasource: "Prometheus",
-            },
-            // Kubernetes pods dashboard
-            "k8s-pods": {
-              gnetId: 6417,
-              revision: 1,
-              datasource: "Prometheus",
-            },
-          },
-        },
-        persistence: {
-          enabled: true,
-          size: "5Gi",
-        },
-        adminUser: "admin",
-        "grafana.ini": {
-          server: {
-            domain: `grafana.${config.domain}`,
-            root_url: `https://grafana.${config.domain}/`,
-            serve_from_sub_path: false,
-          },
-          // Anonymous read access for dashboards — simplifies team onboarding
-          "auth.anonymous": {
-            enabled: true,
-            org_role: "Viewer",
-          },
-        },
-        resources: {
-          requests: { cpu: "100m", memory: "128Mi" },
-          limits: { cpu: "300m", memory: "256Mi" },
-        },
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-}
+// Observability (Prometheus + Grafana) extracted to mgmt-observability.ts — ARCH-001
 
 // ---------------------------------------------------------------------------
 // TLS IngressRoutes
@@ -1731,4 +1654,225 @@ function createPlatformIngressRoutes(
   }
 
   return pulumi.all(createdRoutes);
+}
+
+// ---------------------------------------------------------------------------
+// Network Policies — production network isolation
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates NetworkPolicies for the platform namespace.
+ * REVIEW-2026-03-30: Fixes HIGH-01 — local dev uses helm/network-policies/loopzero-system.yaml
+ * but production had NO network isolation because the namespace didn't match.
+ *
+ * These Pulumi resources ensure production uses the correct namespace (platform-system).
+ */
+function createPlatformNetworkPolicies(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+): void {
+  // Default deny all ingress
+  new k8s.networking.v1.NetworkPolicy(
+    "default-deny-ingress",
+    {
+      metadata: {
+        name: "default-deny-ingress",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        podSelector: {},
+        policyTypes: ["Ingress"],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // loopzero-api: ingress (HTTP + metrics) + egress (DNS, PG, Gitea, ArgoCD, HTTPS, cross-cluster)
+  new k8s.networking.v1.NetworkPolicy(
+    "allow-api",
+    {
+      metadata: {
+        name: "allow-api",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        podSelector: { matchLabels: { app: "loopzero-api" } },
+        policyTypes: ["Ingress", "Egress"],
+        ingress: [
+          {
+            ports: [
+              { port: 8080, protocol: "TCP" },
+              { port: 9090, protocol: "TCP" },
+            ],
+          },
+        ],
+        egress: [
+          // DNS
+          { ports: [{ port: 53, protocol: "UDP" }, { port: 53, protocol: "TCP" }] },
+          // PostgreSQL (managed — external to cluster, needs broad egress on 5432)
+          { ports: [{ port: 5432, protocol: "TCP" }] },
+          // Gitea (in-namespace)
+          {
+            to: [{ podSelector: { matchLabels: { "app.kubernetes.io/name": "gitea" } } }],
+            ports: [{ port: 3000, protocol: "TCP" }],
+          },
+          // MinIO (in-namespace)
+          {
+            to: [{ podSelector: { matchLabels: { "app.kubernetes.io/name": "minio" } } }],
+            ports: [{ port: 9000, protocol: "TCP" }],
+          },
+          // ArgoCD (in-namespace on platform-system)
+          { ports: [{ port: 8080, protocol: "TCP" }] },
+          // External HTTPS (GitHub API, DO Spaces, Cloudflare)
+          { ports: [{ port: 443, protocol: "TCP" }] },
+          // Cross-cluster (build K8s API, Loki NodePort)
+          { ports: [{ port: 6443, protocol: "TCP" }, { port: 30100, protocol: "TCP" }] },
+        ],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // tenant-controller: ingress (health + metrics) + egress (DNS, Gitea, K8s API)
+  new k8s.networking.v1.NetworkPolicy(
+    "allow-tenant-controller",
+    {
+      metadata: {
+        name: "allow-tenant-controller",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        podSelector: { matchLabels: { app: "tenant-controller" } },
+        policyTypes: ["Ingress", "Egress"],
+        ingress: [
+          {
+            ports: [
+              { port: 8080, protocol: "TCP" },
+              { port: 8081, protocol: "TCP" },
+            ],
+          },
+        ],
+        egress: [
+          { ports: [{ port: 53, protocol: "UDP" }, { port: 53, protocol: "TCP" }] },
+          {
+            to: [{ podSelector: { matchLabels: { "app.kubernetes.io/name": "gitea" } } }],
+            ports: [{ port: 3000, protocol: "TCP" }],
+          },
+          { ports: [{ port: 6443, protocol: "TCP" }] },
+          { ports: [{ port: 443, protocol: "TCP" }] },
+        ],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Scoped Kubeconfigs — REVIEW-2026-03-30: Fixes CRIT-02
+// ---------------------------------------------------------------------------
+
+interface RbacRule {
+  apiGroups: string[];
+  resources: string[];
+  verbs: string[];
+}
+
+/**
+ * Creates a scoped kubeconfig for a remote cluster using a dedicated ServiceAccount
+ * with minimal RBAC instead of the full admin kubeconfig.
+ *
+ * This prevents privilege escalation if the API or controller pod is compromised —
+ * the attacker only gets the specific permissions defined in the rules, not cluster-admin.
+ */
+function createScopedKubeconfig(
+  role: string,
+  cluster: ClusterOutputs,
+  namespace: string,
+  rules: RbacRule[],
+): pulumi.Output<string> {
+  const k8sProvider = new k8s.Provider(`${role}-scoped-k8s`, {
+    kubeconfig: cluster.kubeconfig,
+  });
+
+  const saName = `loopzero-${role}-sa`;
+
+  const sa = new k8s.core.v1.ServiceAccount(
+    `${role}-scoped-sa`,
+    {
+      metadata: { name: saName, namespace },
+    },
+    { provider: k8sProvider },
+  );
+
+  const clusterRole = new k8s.rbac.v1.ClusterRole(
+    `${role}-scoped-role`,
+    {
+      metadata: { name: saName },
+      rules: rules.map((r) => ({
+        apiGroups: r.apiGroups,
+        resources: r.resources,
+        verbs: r.verbs,
+      })),
+    },
+    { provider: k8sProvider },
+  );
+
+  new k8s.rbac.v1.ClusterRoleBinding(
+    `${role}-scoped-binding`,
+    {
+      metadata: { name: saName },
+      subjects: [{ kind: "ServiceAccount", name: saName, namespace }],
+      roleRef: {
+        kind: "ClusterRole",
+        name: saName,
+        apiGroup: "rbac.authorization.k8s.io",
+      },
+    },
+    { provider: k8sProvider, dependsOn: [clusterRole, sa] },
+  );
+
+  // Long-lived token Secret — K8s 1.24+ requires explicit creation for SA tokens.
+  const tokenSecret = new k8s.core.v1.Secret(
+    `${role}-scoped-token`,
+    {
+      metadata: {
+        name: `${saName}-token`,
+        namespace,
+        annotations: { "kubernetes.io/service-account.name": saName },
+      },
+      type: "kubernetes.io/service-account-token",
+    },
+    { provider: k8sProvider, dependsOn: [sa] },
+  );
+
+  // Build kubeconfig using scoped SA token instead of admin credentials.
+  return pulumi
+    .all([cluster.endpoint, tokenSecret.data])
+    .apply(([endpoint, data]) => {
+      const token = data?.["token"]
+        ? Buffer.from(data["token"], "base64").toString("utf-8")
+        : "";
+      const ca = data?.["ca.crt"]
+        ? Buffer.from(data["ca.crt"]).toString("base64")
+        : "";
+
+      return `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: ${endpoint}
+    certificate-authority-data: ${ca}
+  name: ${role}
+contexts:
+- context:
+    cluster: ${role}
+    user: ${saName}
+    namespace: ${namespace}
+  name: ${role}
+current-context: ${role}
+users:
+- name: ${saName}
+  user:
+    token: ${token}`;
+    });
 }

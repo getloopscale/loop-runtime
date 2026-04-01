@@ -124,6 +124,10 @@ func (f *fakeBuildStoreOrch) GetBuildApps(ctx context.Context, buildID string) (
 	return nil, nil
 }
 
+func (f *fakeBuildStoreOrch) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]db.Build, int, error) {
+	return nil, 0, nil
+}
+
 func (f *fakeBuildStoreOrch) CancelActiveBuilds(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, []string, error) {
 	count := 0
 	var wfIDs []string
@@ -231,6 +235,10 @@ func (f *fakeReleaseStoreOrch) GetActiveByEnvTx(_ context.Context, _ db.DBTX, te
 	return f.GetActiveByEnv(context.Background(), tenantID, projectID, env)
 }
 
+func (f *fakeReleaseStoreOrch) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
+	return f.GetByID(context.Background(), id)
+}
+
 // setActiveByEnv manually sets an active release (for test setup).
 func (f *fakeReleaseStoreOrch) setActiveByEnv(tenantID, projectID, env string, r *db.Release) {
 	key := fmt.Sprintf("%s:%s:%s", tenantID, projectID, env)
@@ -267,6 +275,16 @@ func (f *fakeReleaseStoreOrch) FindPendingReleases(_ context.Context) ([]db.Rele
 		}
 	}
 	return pending, nil
+}
+
+func (f *fakeReleaseStoreOrch) FindActiveReleases(_ context.Context) ([]db.Release, error) {
+	var active []db.Release
+	for _, r := range f.releases {
+		if r.Status == "ACTIVE" {
+			active = append(active, *r)
+		}
+	}
+	return active, nil
 }
 
 // fakeEnvTargetStoreOrch implements db.EnvironmentTargetStore.

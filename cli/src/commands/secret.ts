@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client';
+import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
 
 interface SecretListResponse {
   secrets: Array<{ name: string; environment: string; app: string }>;
@@ -16,25 +17,16 @@ interface SecretDeleteResponse {
   deleted: boolean;
 }
 
-interface LoopZeroYaml {
-  project: string;
-  apps: Record<string, unknown>;
-}
-
-interface LoopZeroYamlResult {
-  path: string;
-  content: LoopZeroYaml;
-  parseError?: string;
-}
-
 export interface SecretDeps {
   getToken: () => string | null;
   findLoopZeroYaml: () => LoopZeroYamlResult | null;
   setSecret: (project: string, name: string, value: string, env: string, app: string) => Promise<SecretSetResponse>;
   listSecrets: (project: string, env: string) => Promise<SecretListResponse>;
   deleteSecret: (project: string, name: string, env: string, app: string) => Promise<SecretDeleteResponse>;
+  confirm?: (message: string) => Promise<boolean>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
+  isCI?: boolean;
 }
 
 export interface SecretSetOptions {
@@ -227,6 +219,26 @@ export class SecretDeleteCommand {
     const env = opts.env ?? 'production';
     const app = opts.app ?? Object.keys(yamlResult.content.apps)[0] ?? '';
     const project = yamlResult.content.project;
+
+    // Confirmation required (unless --yes)
+    if (!opts.yes) {
+      if (this.deps.isCI || opts.json) {
+        return this.exitWithError(opts, 'Confirmation required. Use --yes to skip confirmation. Example: loopzero secret delete KEY --yes --json', 1, 'CONFIRMATION_REQUIRED');
+      }
+      if (this.deps.confirm) {
+        const confirmed = await this.deps.confirm(
+          `Delete secret "${opts.name}" from ${env}/${app}? [y/N] `
+        );
+        if (!confirmed) {
+          if (opts.json) {
+            this.deps.writeTo(JSON.stringify({ status: 'cancelled', name: opts.name }));
+          } else {
+            this.deps.writeTo('Delete cancelled.');
+          }
+          return 0;
+        }
+      }
+    }
 
     let response: SecretDeleteResponse;
     try {

@@ -250,15 +250,15 @@ func TestCircuitBreaker_InnerErrorPropagated(t *testing.T) {
 
 func TestCircuitBreaker_AuthFailure_DoesNotOpenCircuit(t *testing.T) {
 	// 401 errors MUST NOT count toward circuit breaker threshold (MEET-013)
-	inner := &fakeInnerSync{triggerErr: loopzeroerrors.ErrArgoCDUnauthorized}
+	inner := &fakeInnerSync{triggerErr: loopzeroerrors.ErrDeployServiceAuthFailed}
 	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Send 10 auth failures — more than the open threshold (3)
 	for i := 0; i < 10; i++ {
 		err := cb.TriggerSync(context.Background(), "my-app")
 		// Error should be propagated as-is (not ErrPlatformDegraded)
-		if !errors.Is(err, loopzeroerrors.ErrArgoCDUnauthorized) {
-			t.Fatalf("iteration %d: expected ErrArgoCDUnauthorized, got %v", i, err)
+		if !errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
+			t.Fatalf("iteration %d: expected ErrDeployServiceAuthFailed, got %v", i, err)
 		}
 	}
 

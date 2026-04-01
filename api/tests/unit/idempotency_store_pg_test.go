@@ -40,7 +40,7 @@ func TestPostgresIdempotencyStoreStoreAndGet(t *testing.T) {
 		}
 
 		// Act — get
-		got, err := store.Get(ctx, "idem-key-123")
+		got, err := store.Get(ctx, "idem-key-123", "tenant-acme")
 		if err != nil {
 			t.Fatalf("Get() returned error: %v", err)
 		}
@@ -78,7 +78,7 @@ func TestPostgresIdempotencyStoreGetNonexistent(t *testing.T) {
 		ctx := context.Background()
 
 		// Act
-		got, err := store.Get(ctx, "nonexistent-key")
+		got, err := store.Get(ctx, "nonexistent-key", "tenant-acme")
 
 		// Assert
 		if err != nil {
@@ -115,7 +115,7 @@ func TestPostgresIdempotencyStoreGetExpired(t *testing.T) {
 		fake.expireKey("expired-key")
 
 		// Act
-		got, err := store.Get(ctx, "expired-key")
+		got, err := store.Get(ctx, "expired-key", "tenant-acme")
 
 		// Assert
 		if err != nil {
@@ -200,7 +200,7 @@ func TestPostgresIdempotencyStoreCleanupPreservesValid(t *testing.T) {
 
 		// Assert valid records are still retrievable
 		for _, key := range []string{"valid-1", "valid-2"} {
-			got, err := store.Get(ctx, key)
+			got, err := store.Get(ctx, key, "tenant-acme")
 			if err != nil {
 				t.Fatalf("Get(%q) returned error: %v", key, err)
 			}
@@ -210,7 +210,7 @@ func TestPostgresIdempotencyStoreCleanupPreservesValid(t *testing.T) {
 		}
 
 		// Assert expired record is gone
-		got, err := store.Get(ctx, "expired-1")
+		got, err := store.Get(ctx, "expired-1", "tenant-acme")
 		if err != nil {
 			t.Fatalf("Get(expired-1) returned error: %v", err)
 		}
@@ -252,11 +252,15 @@ func (f *fakeIdempotencyDB) expireKey(key string) {
 	}
 }
 
-// Query simulates SELECT from idempotency_keys WHERE key = $1 AND expires_at > NOW().
+// Query simulates SELECT from idempotency_keys WHERE key = $1 AND tenant_id = $2 AND expires_at > NOW().
 func (f *fakeIdempotencyDB) Query(ctx context.Context, sql string, args ...any) (db.Rows, error) {
 	key := args[0].(string)
+	tenantID := args[1].(string)
 	rec, ok := f.records[key]
 	if !ok || rec.expiresAt.Before(time.Now()) {
+		return &fakeIdempotencyRows{records: nil, pos: 0}, nil
+	}
+	if tenantID != "" && rec.tenantID != tenantID {
 		return &fakeIdempotencyRows{records: nil, pos: 0}, nil
 	}
 	return &fakeIdempotencyRows{records: []*fakeIdempotencyRecord{rec}, pos: 0}, nil

@@ -7,12 +7,17 @@ package argocd
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
@@ -23,6 +28,7 @@ type SyncClientConfig struct {
 	Token         string        // ArgoCD API token (used if TokenProvider is nil)
 	TokenProvider TokenProvider // Optional: dynamic token source (overrides Token string)
 	Insecure      bool          // Skip TLS verification (for local dev with self-signed certs)
+	CACertPath    string        // SEC-T02b fix: path to CA cert file for TLS verification. When set, Insecure is ignored.
 	HTTPClient    *http.Client  // Optional: shared HTTP client with connection pooling. When nil, a default client is created.
 }
 
@@ -42,11 +48,32 @@ func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 	client := cfg.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
-		if cfg.Insecure {
+		// SEC-T02b fix: prefer CA bundle over InsecureSkipVerify.
+		// When CACertPath is set, load the CA and verify TLS properly.
+		if cfg.CACertPath != "" {
+			caCert, err := os.ReadFile(cfg.CACertPath)
+			if err != nil {
+				slog.Error("argocd: failed to read CA cert, falling back to insecure",
+					"path", cfg.CACertPath, "error", err)
+				client.Transport = &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // fallback only
+				}
+			} else {
+				pool := x509.NewCertPool()
+				pool.AppendCertsFromPEM(caCert)
+				client.Transport = &http.Transport{
+					TLSClientConfig: &tls.Config{RootCAs: pool},
+				}
+				slog.Info("argocd: TLS verification enabled with custom CA", "path", cfg.CACertPath)
+			}
+		} else if cfg.Insecure {
 			client.Transport = &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // local dev only
 			}
 		}
+		// MEET-2026-03-30-020: Wrap transport with OTel for trace context propagation.
+		// Injects traceparent header into outgoing requests to ArgoCD.
+		client.Transport = otelhttp.NewTransport(client.Transport)
 	}
 
 	tp := cfg.TokenProvider
@@ -62,7 +89,7 @@ func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 }
 
 // ValidateToken checks that the configured token is valid by calling
-// GET /api/v1/session/userinfo. Returns ErrArgoCDUnauthorized if invalid.
+// GET /api/v1/session/userinfo. Returns ErrDeployServiceAuthFailed if invalid.
 // Called at API startup to fail fast with a clear error (MEET-013 Phase 1.7).
 func (c *SyncClient) ValidateToken(ctx context.Context) error {
 	url := fmt.Sprintf("%s/api/v1/session/userinfo", c.baseURL)
@@ -79,7 +106,7 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return loopzeroerrors.ErrArgoCDUnauthorized
+		return loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	return nil
 }
@@ -103,7 +130,7 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return loopzeroerrors.ErrArgoCDUnauthorized
+		return loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	if resp.StatusCode == 404 {
 		return fmt.Errorf("argocd sync: application %q not found", appName)
@@ -141,7 +168,7 @@ func (c *SyncClient) TerminateOperation(ctx context.Context, appName string) err
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return loopzeroerrors.ErrArgoCDUnauthorized
+		return loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	// 404 means no operation is running — idempotent success
 	if resp.StatusCode == 404 {
@@ -216,7 +243,7 @@ func (c *SyncClient) GetAppStatus(ctx context.Context, appName string, deployedA
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return false, false, loopzeroerrors.ErrArgoCDUnauthorized
+		return false, false, loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	if resp.StatusCode == 404 {
 		return false, false, fmt.Errorf("application %q not found", appName)
@@ -295,7 +322,7 @@ func (c *SyncClient) GetSyncRevision(ctx context.Context, appName string) (strin
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return "", loopzeroerrors.ErrArgoCDUnauthorized
+		return "", loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	if resp.StatusCode >= 400 {
 		return "", fmt.Errorf("get sync revision: status %d", resp.StatusCode)

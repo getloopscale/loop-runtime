@@ -7,7 +7,15 @@ import (
 	"fmt"
 	"log/slog"
 	"path"
+	"regexp"
+
+	"github.com/loopzero/loopzero/pkg/naming"
 )
+
+// envKeyRegex validates environment variable key names.
+// SEC-002 fix: user-supplied env keys from loopzero.yaml flow into buildctl --opt build-arg:KEY=VALUE.
+// Without validation, a crafted key could inject additional buildctl flags.
+var envKeyRegex = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // BuildPlan contains resolved build instructions for all apps in a deploy.
 // This is the intermediary between "what the user wants" (AppUnit) and
@@ -42,8 +50,8 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 	plans := make([]AppBuildPlan, 0, len(units))
 
 	for _, unit := range units {
-		imageTag := fmt.Sprintf("%s/%s/%s-%s:%s",
-			registryURL, tenantID, projectID, unit.Name, commitSHA)
+		// ARCH-001 fix: single source of truth for image tag format
+		imageTag := naming.ImageTag(registryURL, tenantID, projectID, unit.Name, commitSHA)
 
 		cacheRef := fmt.Sprintf("%s/%s/%s-%s:buildcache",
 			registryURL, tenantID, projectID, unit.Name)
@@ -73,8 +81,14 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		}
 
 		// Build args: user env + system vars
+		// SEC-002 fix: validate env key names before they reach buildctl --opt.
 		buildArgs := make(map[string]string, len(unit.Env)+2)
 		for k, v := range unit.Env {
+			if !envKeyRegex.MatchString(k) {
+				slog.Warn("build plan: skipping env with invalid key name",
+					"key", k, "app", unit.Name, "reason", "must match [A-Za-z_][A-Za-z0-9_]*")
+				continue
+			}
 			buildArgs[k] = v
 		}
 		buildArgs["COMMIT_SHA"] = commitSHA

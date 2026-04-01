@@ -95,7 +95,11 @@ func (r *ApplicationReconciler) reconcileHostname(ctx context.Context, req ctrl.
 	if app.Spec.Hostname != "" {
 		return nil
 	}
-	app.Spec.Hostname = naming.Hostname(app.Spec.Project, app.Spec.Environment, r.BaseDomain)
+	hostname, err := naming.Hostname(app.Spec.Project, app.Spec.Environment, r.BaseDomain)
+	if err != nil {
+		return fmt.Errorf("computing hostname: %w", err)
+	}
+	app.Spec.Hostname = hostname
 	if err := r.Update(ctx, app); err != nil {
 		return fmt.Errorf("setting hostname: %w", err)
 	}

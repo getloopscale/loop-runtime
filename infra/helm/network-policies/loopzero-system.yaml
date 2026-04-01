@@ -9,7 +9,7 @@
 #   tenant-controller:  app: tenant-controller                 (infra/tilt/operator-deployment.yaml)
 #   postgresql:         app.kubernetes.io/name: postgresql      (Bitnami Helm chart)
 #   gitea:              app.kubernetes.io/name: gitea           (Gitea Helm chart)
-#   minio:              app.kubernetes.io/name: minio           (Bitnami Helm chart)
+#   minio:              app: minio                               (MinIO Helm chart)
 #
 # Egress strategy: per-component policies instead of global blanket.
 # A global "Egress" policy with podSelector: {} would restrict ALL pods
@@ -70,7 +70,7 @@ spec:
     - to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/name: minio
+              app: minio
       ports:
         - port: 9000
           protocol: TCP
@@ -135,6 +135,14 @@ spec:
       ports:
         - port: 3000
           protocol: TCP
+    # MinIO (in-namespace — per-tenant credential provisioning)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: minio
+      ports:
+        - port: 9000
+          protocol: TCP
     # Kubernetes API server (for CRD reconciliation, namespace management)
     - ports:
         - port: 6443
@@ -179,8 +187,16 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
-    # Allow all egress for metrics and replication
-    - {}
+    # REVIEW-2026-03-30: Fixes MED-09 — was "- {}" (allow all egress).
+    # Now restricted to specific ports for metrics and replication.
+    # Metrics (Prometheus scrape)
+    - ports:
+        - port: 9090
+          protocol: TCP
+    # PostgreSQL replication
+    - ports:
+        - port: 5432
+          protocol: TCP
   policyTypes:
     - Ingress
     - Egress
@@ -250,13 +266,16 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: minio
+      app: minio
   ingress:
     # In-cluster: loopzero-api pod
     - from:
         - podSelector:
             matchLabels:
               app: loopzero-api
+        - podSelector:
+            matchLabels:
+              app: tenant-controller
       ports:
         - port: 9000
           protocol: TCP

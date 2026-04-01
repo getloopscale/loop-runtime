@@ -52,15 +52,22 @@ fi
 echo "Upload source: $OUTPUT_DIR"
 
 # Generate asset-manifest.json with SHA256 checksums
+# CODE-003 fix: removed head -100 limit — real builds produce 200-500+ chunk files.
+# CODE-006 fix: use proper JSON escaping to handle filenames with special characters.
 echo '{"files":[' > /tmp/manifest.json
-ls -1 "$OUTPUT_DIR" | head -100 | while read f; do
-  if [ -f "$OUTPUT_DIR/$f" ]; then
-    HASH=$(sha256sum "$OUTPUT_DIR/$f" | cut -d' ' -f1)
-    printf '{"path":"%%s","sha256":"%%s"},' "$f" "$HASH" >> /tmp/manifest.json
+FIRST=true
+find "$OUTPUT_DIR" -maxdepth 1 -type f | while read filepath; do
+  f=$(basename "$filepath")
+  HASH=$(sha256sum "$filepath" | cut -d' ' -f1)
+  if [ "$FIRST" = true ]; then
+    FIRST=false
+  else
+    printf ',' >> /tmp/manifest.json
   fi
+  # Escape double quotes in filenames for valid JSON
+  SAFE_F=$(echo "$f" | sed 's/"/\\"/g')
+  printf '{"path":"%%s","sha256":"%%s"}' "$SAFE_F" "$HASH" >> /tmp/manifest.json
 done
-# Remove trailing comma and close
-sed -i 's/,$//' /tmp/manifest.json
 echo ']}' >> /tmp/manifest.json
 cp /tmp/manifest.json "$OUTPUT_DIR/asset-manifest.json"
 echo "Asset manifest:"

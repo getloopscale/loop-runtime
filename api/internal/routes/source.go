@@ -4,13 +4,13 @@
 package routes
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"sort"
 	"time"
 
@@ -35,8 +35,9 @@ type ObjectUploader interface {
 
 // SourceHandler provides HTTP handlers for source upload operations.
 type SourceHandler struct {
-	store    source.SourceStore
-	objStore ObjectUploader // optional: upload bundle to object storage for build cluster access
+	store        source.SourceStore
+	objStore     ObjectUploader // optional: upload bundle to object storage for build cluster access
+	isProduction bool           // when true, S3 upload failure is fatal (CODE-SILENT-S3-001 fix)
 }
 
 // NewSourceHandler creates a new SourceHandler.
@@ -53,6 +54,14 @@ func NewSourceHandler(store source.SourceStore, opts ...func(*SourceHandler)) *S
 func WithObjectUploader(u ObjectUploader) func(*SourceHandler) {
 	return func(h *SourceHandler) {
 		h.objStore = u
+	}
+}
+
+// WithProductionMode marks the handler as running in production.
+// In production, S3 upload failures are fatal instead of warnings.
+func WithProductionMode() func(*SourceHandler) {
+	return func(h *SourceHandler) {
+		h.isProduction = true
 	}
 }
 
@@ -132,7 +141,8 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract bundle file and buffer it (needed for dual-write to Gitea + Spaces)
+	// Extract bundle file and stream to temp file (CODE-003 fix: avoids triple-buffering
+	// up to 1.5GB per request by writing once to disk instead of io.ReadAll).
 	bundleFile, _, err := r.FormFile("bundle")
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
@@ -144,8 +154,20 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = bundleFile.Close() }()
 
-	bundleData, err := io.ReadAll(bundleFile)
+	// Write bundle to temp file once — Gitea and S3 read from disk, not memory.
+	tmpFile, err := os.CreateTemp("", "loopzero-bundle-*.tar.gz")
 	if err != nil {
+		slog.Error("source upload: failed to create temp file", "error", err)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+	defer func() {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+	}()
+
+	if _, err := io.Copy(tmpFile, bundleFile); err != nil {
+		slog.Error("source upload: failed to write temp file", "error", err)
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
@@ -156,8 +178,14 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		projectName = cfg.Name
 	}
 
+	// Rewind temp file for Gitea push
+	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
 	// Push bundle to source store (Gitea) — repo: loopzero-source-{tenant}-{project}
-	commitSHA, err := h.store.PushBundle(ctx, uc.TenantID, projectName, bytes.NewReader(bundleData))
+	commitSHA, err := h.store.PushBundle(ctx, uc.TenantID, projectName, tmpFile)
 	if err != nil {
 		slog.Error("source upload failed", "error", err, "team_id", uc.TenantID)
 		writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
@@ -165,12 +193,22 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Upload bundle to object storage (Spaces/MinIO) for build cluster access.
-	// The CWT clone step downloads from: loopzero-builds/{tenant}/source/{build_id}.bundle
-	// We use commit_sha as a temporary key; the build submission will copy/rename it.
+	// CODE-SILENT-S3-001 fix: in production, S3 failure is fatal because the
+	// build will fail later when clone step can't download the bundle.
 	if h.objStore != nil {
+		// Rewind temp file for S3 upload
+		if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			return
+		}
 		objKey := fmt.Sprintf("%s/source/%s.bundle", uc.TenantID, commitSHA)
-		if uploadErr := h.objStore.Upload(ctx, "loopzero-builds", objKey, bytes.NewReader(bundleData)); uploadErr != nil {
-			slog.Warn("object store upload failed (non-fatal)", "error", uploadErr, "key", objKey)
+		if uploadErr := h.objStore.Upload(ctx, "loopzero-builds", objKey, tmpFile); uploadErr != nil {
+			if h.isProduction {
+				slog.Error("object store upload failed (fatal in production)", "error", uploadErr, "key", objKey)
+				writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
+				return
+			}
+			slog.Warn("object store upload failed (non-fatal in dev)", "error", uploadErr, "key", objKey)
 		}
 	}
 

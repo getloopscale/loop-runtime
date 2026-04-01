@@ -6,7 +6,6 @@ import { NetworkSpec, NetworkOutput } from "../../contracts/network";
 import { KubernetesClusterSpec, KubernetesClusterOutput } from "../../contracts/kubernetes";
 import { ObjectStorageSpec, ObjectStorageOutput } from "../../contracts/storage";
 import { DnsRecordSpec, DnsRecordOutput } from "../../contracts/dns";
-import { ComputeInstanceSpec, ComputeInstanceOutput } from "../../contracts/compute";
 import { DatabaseClusterSpec, DatabaseClusterOutput } from "../../contracts/database";
 import { ContainerRegistrySpec, ContainerRegistryOutput } from "../../contracts/registry";
 import { InfraError } from "../../core/errors";
@@ -39,10 +38,6 @@ export class AwsProviderFactory implements CloudProviderFactory {
 
   createDnsRecord(_spec: DnsRecordSpec): DnsRecordOutput {
     throw this.notImplemented("dns");
-  }
-
-  createComputeInstance(_spec: ComputeInstanceSpec): ComputeInstanceOutput {
-    throw this.notImplemented("compute");
   }
 
   createDatabaseCluster(_spec: DatabaseClusterSpec): DatabaseClusterOutput {

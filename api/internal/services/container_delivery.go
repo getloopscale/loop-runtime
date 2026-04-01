@@ -106,8 +106,13 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Bui
 	if err := c.triggerSyncWithRetry(ctx, argoAppName); err != nil {
 		slog.Error("argocd trigger sync failed after retries",
 			"build_id", build.ID, "app", argoAppName, "error", err)
-		// Sync trigger failed — fail the release immediately
-		return c.phaseEFinalize(ctx, build, release, result, true)
+		// Sync trigger failed — fail the release immediately.
+		// BRC-002 fix: phaseEFinalize emits deploy.sync_failed SSE event.
+		// Return ErrActivationAlreadyHandled so OnBuildCompleted skips its own emit.
+		if finalizeErr := c.phaseEFinalize(ctx, build, release, result, true); finalizeErr != nil {
+			return finalizeErr
+		}
+		return fmt.Errorf("sync trigger failed: %w", ErrActivationAlreadyHandled)
 	}
 
 	// Emit deploy.verifying to show async verification started
@@ -249,10 +254,13 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 			return nil
 		}
 
+		// MEET-2026-03-31-024: SetGitCommit MUST be fatal.
+		// If GitCommit is not recorded, the SyncCallbackActivator revision guard
+		// (release.GitCommit != revision) is bypassed when GitCommit is empty,
+		// allowing wrong-version activation on rapid sequential deploys.
 		if commitSHA != "" {
 			if err := c.releaseStore.SetGitCommit(ctx, tx, release.ID, commitSHA); err != nil {
-				slog.Warn("failed to persist git_commit on release (non-fatal)",
-					"release_id", release.ID, "commit_sha", commitSHA, "error", err)
+				return fmt.Errorf("persist git_commit on release: %w", err)
 			}
 		}
 

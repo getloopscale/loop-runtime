@@ -49,10 +49,20 @@ func NewSyncCallbackActivator(
 	}
 }
 
+// PendingReleaseByTenantEnvFinder is an optional interface for efficient tenant+env lookup.
+// Falls back to FindPendingReleases + Go-side filtering if not implemented (CODE-SCAN-001).
+type PendingReleaseByTenantEnvFinder interface {
+	FindPendingReleasesByTenantEnv(ctx context.Context, tenantID, env string) ([]db.Release, error)
+}
+
 // OnSyncCompleted is called when ArgoCD reports an Application as Synced + Healthy.
 // The appName is in format "{tenantID}-{environment}" (e.g., "tn-loopzero-production").
 // It finds all PENDING releases matching that tenant+environment and activates them.
 func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error {
+	// ARCH-006 fix: Use a timeout context derived from the server shutdown context
+	// would be ideal, but since this is called from an HTTP handler that already
+	// has a request context with timeout (argocd_callback.go), we use a bounded
+	// background context as fallback.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -62,20 +72,41 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 		return fmt.Errorf("sync callback: invalid app name %q (expected {tenant}-{env})", appName)
 	}
 
-	// Find PENDING releases for this tenant+environment
-	releases, err := a.releaseStore.FindPendingReleases(ctx)
+	// CODE-SCAN-001 fix: Use tenant+env-filtered query when available,
+	// avoiding full table scan of all PENDING releases.
+	var releases []db.Release
+	var err error
+	if finder, ok := a.releaseStore.(PendingReleaseByTenantEnvFinder); ok {
+		releases, err = finder.FindPendingReleasesByTenantEnv(ctx, tenantID, env)
+	} else {
+		var allReleases []db.Release
+		allReleases, err = a.releaseStore.FindPendingReleases(ctx)
+		if err == nil {
+			for _, r := range allReleases {
+				if r.TenantID == tenantID && r.Environment == env {
+					releases = append(releases, r)
+				}
+			}
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("sync callback: find pending releases: %w", err)
 	}
 
 	activated := 0
 	for _, release := range releases {
-		if release.TenantID != tenantID || release.Environment != env {
+		// MEET-2026-03-31-024 BUG-03 defense-in-depth: if GitCommit is empty,
+		// do NOT activate via callback — let the convergence loop handle it.
+		// Empty GitCommit means SetGitCommit failed (now fatal) or a race occurred.
+		// Activating with empty GitCommit bypasses revision verification.
+		if release.GitCommit == "" {
+			a.logger.Warn("sync callback: release has empty GitCommit, deferring to convergence loop",
+				"release_id", release.ID)
 			continue
 		}
 
-		// Verify revision matches if available
-		if revision != "" && release.GitCommit != "" && release.GitCommit != revision {
+		// Verify revision matches
+		if revision != "" && release.GitCommit != revision {
 			a.logger.Warn("sync callback: revision mismatch, skipping",
 				"release_id", release.ID, "expected", release.GitCommit, "actual", revision)
 			continue
@@ -105,10 +136,19 @@ func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db
 	})
 }
 
-// ParseArgoAppName extracts tenantID and environment from "{tenant}-{env}".
-// Returns false if the format is invalid.
+// ParseArgoAppName extracts tenantID and environment from an ArgoCD Application name.
+// Format: "{tenantID}-{environment}" (e.g., "tn-loopzero-production").
+//
+// ARCH-002 fix: Uses LastIndex("-") to split, which means the environment name
+// MUST NOT contain hyphens. This is enforced because:
+//   - Tenant IDs contain hyphens (e.g., "tn-loopzero-e2e")
+//   - Environment is always the last segment after the last hyphen
+//   - Sprint 5 preview environments MUST use underscore or single-word names
+//     (e.g., "preview_pr42" not "preview-pr-42")
+//
+// TODO(sprint-5): Consider switching to ArgoCD labels in the webhook payload
+// instead of parsing the app name. Labels contain tenant/env as separate fields.
 func ParseArgoAppName(appName string) (tenantID, env string, ok bool) {
-	// Find the last hyphen — environment is always the last segment
 	idx := strings.LastIndex(appName, "-")
 	if idx <= 0 || idx >= len(appName)-1 {
 		return "", "", false

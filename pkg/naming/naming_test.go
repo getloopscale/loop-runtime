@@ -322,16 +322,29 @@ func TestGitOpsRepoName_empty_env(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHostname_format(t *testing.T) {
-	got := Hostname("backend", "production", "example.com")
+	got, err := Hostname("backend", "production", "example.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if got != "backend-production.example.com" {
 		t.Errorf("got %q, want %q", got, "backend-production.example.com")
 	}
 }
 
 func TestHostname_sanitizes_parts(t *testing.T) {
-	got := Hostname("My_App", "PROD", "example.com")
+	got, err := Hostname("My_App", "PROD", "example.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if got != "my-app-prod.example.com" {
 		t.Errorf("got %q, want %q", got, "my-app-prod.example.com")
+	}
+}
+
+func TestHostname_empty_subdomain_returns_error(t *testing.T) {
+	_, err := Hostname("@#$", "!!!", "example.com")
+	if err == nil {
+		t.Error("Hostname with all-special-char inputs should return error")
 	}
 }
 
@@ -361,14 +374,20 @@ func TestArgoAppName_empty_team(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCertSecretName_format(t *testing.T) {
-	got := CertSecretName("backend-production.example.com")
+	got, err := CertSecretName("backend-production.example.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if got != "backend-production-example-com-tls" {
 		t.Errorf("got %q, want %q", got, "backend-production-example-com-tls")
 	}
 }
 
 func TestCertSecretName_sanitizes(t *testing.T) {
-	got := CertSecretName("My.App.io")
+	got, err := CertSecretName("My.App.io")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if got != "my-app-io-tls" {
 		t.Errorf("got %q, want %q", got, "my-app-io-tls")
 	}
@@ -376,12 +395,22 @@ func TestCertSecretName_sanitizes(t *testing.T) {
 
 func TestCertSecretName_truncates_long_hostname(t *testing.T) {
 	long := strings.Repeat("a", 60) + ".example.com"
-	got := CertSecretName(long)
+	got, err := CertSecretName(long)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(got) > MaxKubernetesNameLength {
 		t.Errorf("CertSecretName result length %d exceeds max %d", len(got), MaxKubernetesNameLength)
 	}
 	if !strings.HasSuffix(got, "-tls") {
 		t.Errorf("CertSecretName result %q does not end with -tls", got)
+	}
+}
+
+func TestCertSecretName_empty_hostname_returns_error(t *testing.T) {
+	_, err := CertSecretName("@#$%")
+	if err == nil {
+		t.Error("CertSecretName with all-special-char hostname should return error")
 	}
 }
 
@@ -525,7 +554,7 @@ func TestDeterminism_all_functions(t *testing.T) {
 			t.Fatalf("GitOpsRepoName not deterministic on iteration %d", i)
 		}
 
-		h := Hostname("api", "prod", "example.com")
+		h, _ := Hostname("api", "prod", "example.com")
 		if h != "api-prod.example.com" {
 			t.Fatalf("Hostname not deterministic on iteration %d", i)
 		}
@@ -535,7 +564,7 @@ func TestDeterminism_all_functions(t *testing.T) {
 			t.Fatalf("ArgoAppName not deterministic on iteration %d", i)
 		}
 
-		cn := CertSecretName("api-prod.example.com")
+		cn, _ := CertSecretName("api-prod.example.com")
 		if cn != "api-prod-example-com-tls" {
 			t.Fatalf("CertSecretName not deterministic on iteration %d", i)
 		}
@@ -549,5 +578,52 @@ func TestDeterminism_all_functions(t *testing.T) {
 		if ars != "repo-tn-acme-gitops" {
 			t.Fatalf("ArgoRepoSecretName not deterministic on iteration %d", i)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ImageTag
+// ---------------------------------------------------------------------------
+
+func TestImageTag_format(t *testing.T) {
+	got := ImageTag("registry.do.com", "loopzero", "my-app", "api", "abc123")
+	want := "registry.do.com/loopzero/my-app-api:abc123"
+	if got != want {
+		t.Errorf("ImageTag = %q, want %q", got, want)
+	}
+}
+
+func TestImageTag_all_parts_present(t *testing.T) {
+	got := ImageTag("r", "t", "p", "a", "sha")
+	// Verify separators: / between registry and tenant, / between tenant and project-app, - between project and app, : before SHA
+	if got != "r/t/p-a:sha" {
+		t.Errorf("ImageTag = %q, want %q", got, "r/t/p-a:sha")
+	}
+}
+
+func TestImageTag_deterministic(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		got := ImageTag("reg", "tenant", "proj", "app", "sha256")
+		if got != "reg/tenant/proj-app:sha256" {
+			t.Fatalf("ImageTag not deterministic on iteration %d: %q", i, got)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ArgoAppName — missing edge case tests
+// ---------------------------------------------------------------------------
+
+func TestArgoAppName_empty_project(t *testing.T) {
+	_, err := ArgoAppName("acme", "", "production")
+	if err == nil {
+		t.Error("should return error for empty project")
+	}
+}
+
+func TestArgoAppName_empty_env(t *testing.T) {
+	_, err := ArgoAppName("acme", "backend", "")
+	if err == nil {
+		t.Error("should return error for empty env")
 	}
 }

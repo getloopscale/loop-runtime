@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,7 +58,10 @@ func (r *PlatformBootstrapReconciler) checkAPIHealth(ctx context.Context, health
 	if err != nil {
 		return fmt.Errorf("calling health endpoint: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body) // drain for connection reuse
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("health endpoint returned status %d", resp.StatusCode)
@@ -101,7 +105,10 @@ func (r *PlatformBootstrapReconciler) callBootstrapEndpoint(ctx context.Context,
 	if err != nil {
 		return fmt.Errorf("calling bootstrap endpoint: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body) // drain for connection reuse
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bootstrap endpoint returned status %d", resp.StatusCode)

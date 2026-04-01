@@ -18,8 +18,10 @@ const (
 
 	// loopzero-packs-runner generates optimized Dockerfiles by analyzing source code.
 	// Replaces hardcoded bash Dockerfile templates (MEET-2026-03-29-017).
-	// Built from: getloopscale/loopzero-packs Dockerfile.generate
-	imageLoopZeroPacks = "registry.digitalocean.com/loopzero-infra-registry/loopzero-packs-runner:latest"
+	// Built from: loopzero-packs/Dockerfile.generate — CI builds via build-images.yml.
+	// COMP-004 fix: pinned to v0.1.0 (was :latest — non-deterministic builds).
+	// Local dev: override via LOOPZERO_PACKS_IMAGE env or use k3d-loopzero-registry:5000/loopzero-packs-runner:latest
+	imageLoopZeroPacks = "registry.digitalocean.com/loopzero-infra-registry/loopzero-packs-runner:v0.1.0"
 )
 
 // ---------------------------------------------------------------------------

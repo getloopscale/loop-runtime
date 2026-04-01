@@ -30,13 +30,24 @@ const platformBootstrapRequeueDelay = constants.RequeuePlatformBootstrapDelay
 // Phase transitions go through this machine -- direct assignment is forbidden.
 var platformBootstrapSM = statemachine.NewPlatformBootstrapMachine()
 
+// ArgoCDBootstrapClient abstracts ArgoCD HTTP operations for testability.
+// ARCH-OP-001: Mirrors the Gitea BootstrapClient pattern — controllers depend
+// on this interface instead of constructing HTTP requests inline.
+type ArgoCDBootstrapClient interface {
+	// CheckReachable verifies ArgoCD is reachable (GET /api/version).
+	CheckReachable(ctx context.Context) error
+	// GenerateApiKey creates a non-expiring apiKey for the loopzero-api account.
+	GenerateApiKey(ctx context.Context, adminPassword string) (string, error)
+}
+
 // PlatformBootstrapReconciler reconciles a PlatformBootstrap object.
 // It configures Gitea, ArgoCD, and seeds the database via the API,
 // delegating external calls to typed clients (no inline HTTP).
 type PlatformBootstrapReconciler struct {
 	client.Client
-	HTTPClient      *http.Client
-	GiteaClientFunc func(baseURL string) gitea.BootstrapClient // factory, set at init; nil uses default
+	HTTPClient         *http.Client
+	GiteaClientFunc    func(baseURL string) gitea.BootstrapClient    // factory, set at init; nil uses default
+	ArgoCDClientFunc   func(baseURL string) ArgoCDBootstrapClient    // factory, set at init; nil uses default (inline HTTP)
 }
 
 // Reconcile handles the reconciliation loop for PlatformBootstrap resources.
@@ -106,10 +117,13 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 // transitionToFailed transitions the CR to Failed phase via the state machine.
+// Uses TryTransition because pb.Status.Phase comes from CRD status (external source).
 func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb *loopzerov1.PlatformBootstrap, message string) (ctrl.Result, error) {
-	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(
-		platformBootstrapSM.Transition(statemachine.State(pb.Status.Phase), statemachine.PlatformBootstrapRetryExhaust),
-	)
+	next, err := platformBootstrapSM.TryTransition(statemachine.State(pb.Status.Phase), statemachine.PlatformBootstrapRetryExhaust)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("transition to failed: %w", err)
+	}
+	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
 	pb.Status.Message = message
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
@@ -120,10 +134,13 @@ func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb
 }
 
 // transitionToNextPhase transitions the CR to the next phase via the state machine.
+// Uses TryTransition because pb.Status.Phase comes from CRD status (external source).
 func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, event statemachine.Event, message string) (ctrl.Result, error) {
-	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(
-		platformBootstrapSM.Transition(statemachine.State(pb.Status.Phase), event),
-	)
+	next, err := platformBootstrapSM.TryTransition(statemachine.State(pb.Status.Phase), event)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("transition to next phase: %w", err)
+	}
+	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
 	pb.Status.Message = message
 	pb.Status.RetryCount = 0
 	now := metav1.Now()
@@ -168,6 +185,16 @@ func (r *PlatformBootstrapReconciler) giteaClient(baseURL string) gitea.Bootstra
 		return r.GiteaClientFunc(baseURL)
 	}
 	return gitea.NewAPIClient(baseURL, r.httpClient())
+}
+
+// argoCDClient returns an ArgoCDBootstrapClient for the given ArgoCD base URL.
+// ARCH-OP-001: Uses the injected factory if set (for tests), otherwise creates
+// a real HTTP client that talks to the ArgoCD API.
+func (r *PlatformBootstrapReconciler) argoCDClient(baseURL string) ArgoCDBootstrapClient {
+	if r.ArgoCDClientFunc != nil {
+		return r.ArgoCDClientFunc(baseURL)
+	}
+	return &argoCDHTTPClient{baseURL: baseURL, client: r.httpClient()}
 }
 
 // getSecret reads a Secret by name in the same namespace as the CR.

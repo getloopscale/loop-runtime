@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -76,7 +77,10 @@ func NewRollbackHandler(projects RollbackProjectStore, service RollbackService, 
 
 // Create handles POST /api/v1/projects/{name}/rollback.
 func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -101,7 +105,7 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Look up project
-	project, err := h.projects.GetByName(r.Context(), uc.TenantID, name)
+	project, err := h.projects.GetByName(ctx, uc.TenantID, name)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
@@ -114,7 +118,7 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 	correlationID := r.Header.Get("X-Correlation-ID")
 
 	// Execute rollback
-	result, err := h.service.Rollback(r.Context(), RollbackInput{
+	result, err := h.service.Rollback(ctx, RollbackInput{
 		TenantID:      uc.TenantID,
 		ProjectID:     name, // Deploy uses project name as project_id in builds/releases
 		ProjectName:   name,

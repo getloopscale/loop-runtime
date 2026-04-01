@@ -49,7 +49,10 @@ type Tenant struct {
 // TenantSpec defines the desired state of a Tenant as described in spec section 9.2.
 type TenantSpec struct {
 	// DisplayName is the human-readable name of the tenant.
+	// SEC-011: Pattern constraint prevents injection of control characters or markup.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9][a-zA-Z0-9 _.\-]*$`
 	DisplayName string `json:"displayName"`
 
 	// Plan is the subscription tier: starter, growth, or enterprise.
@@ -67,6 +70,13 @@ type TenantSpec struct {
 
 	// Limits defines resource limits for the tenant.
 	Limits ResourceLimits `json:"limits"`
+
+	// CellID identifies which Cell this tenant's workloads run in.
+	// ADR-0008: Phase 0 defaults to "cell-default" (single Cell).
+	// Phase 1+ PlacementEngine assigns tenants to specific Cells.
+	// +kubebuilder:default="cell-default"
+	// +kubebuilder:validation:MinLength=1
+	CellID string `json:"cellID,omitempty"`
 }
 
 // TenantEnvironmentEntry defines an environment reference within a Tenant spec.

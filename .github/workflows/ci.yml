@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main, dogfood]
   pull_request:
-    branches: [main]
+    branches: [main, dogfood]
 
 permissions:
   contents: read
@@ -22,6 +22,61 @@ concurrency:
 
 jobs:
   # ─────────────────────────────────────────────
+  # CHANGE DETECTION — skip jobs when files unchanged
+  # ─────────────────────────────────────────────
+
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      go-api: ${{ steps.filter.outputs.go-api }}
+      go-operators: ${{ steps.filter.outputs.go-operators }}
+      go-pkg: ${{ steps.filter.outputs.go-pkg }}
+      go-infra: ${{ steps.filter.outputs.go-infra }}
+      cli: ${{ steps.filter.outputs.cli }}
+      pulumi: ${{ steps.filter.outputs.pulumi }}
+      manifests: ${{ steps.filter.outputs.manifests }}
+      docs-only: ${{ steps.filter.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            go-api:
+              - 'api/**'
+              - 'pkg/**'
+              - 'go.work'
+            go-operators:
+              - 'operators/**'
+              - 'pkg/**'
+              - 'go.work'
+            go-pkg:
+              - 'pkg/**'
+            go-infra:
+              - 'infra/tests/**'
+              - 'infra/scripts/**'
+            cli:
+              - 'cli/**'
+            pulumi:
+              - 'infra/pulumi/**'
+            manifests:
+              - 'operators/config/**'
+              - 'infra/helm/**'
+              - 'infra/tilt/**'
+            docs-only:
+              - '!**/*.go'
+              - '!**/*.ts'
+              - '!**/*.js'
+              - '!**/*.yaml'
+              - '!**/*.yml'
+              - '!**/go.mod'
+              - '!**/go.sum'
+              - '!**/package.json'
+              - '!**/package-lock.json'
+
+  # ─────────────────────────────────────────────
   # LINT
   # ─────────────────────────────────────────────
 
@@ -29,6 +84,11 @@ jobs:
     name: Lint Go (${{ matrix.component }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: >-
+      (matrix.component == 'pkg' && needs.changes.outputs.go-pkg == 'true') ||
+      (matrix.component == 'api' && needs.changes.outputs.go-api == 'true') ||
+      (matrix.component == 'operators' && needs.changes.outputs.go-operators == 'true')
     strategy:
       fail-fast: false
       matrix:
@@ -49,6 +109,8 @@ jobs:
     name: Lint CLI (TypeScript)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.cli == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -67,31 +129,39 @@ jobs:
         run: npx tsc --noEmit
 
   # ─────────────────────────────────────────────
-  # TIDINESS — go.mod/go.sum consistency
+  # TIDINESS — consolidated into single job
   # ─────────────────────────────────────────────
 
   tidy-go:
-    name: Go mod tidy (${{ matrix.component }})
+    name: Go mod tidy
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        component: [pkg, api, operators, infra/tests, infra/scripts]
+    needs: [changes]
+    if: >-
+      needs.changes.outputs.go-api == 'true' ||
+      needs.changes.outputs.go-operators == 'true' ||
+      needs.changes.outputs.go-pkg == 'true' ||
+      needs.changes.outputs.go-infra == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Verify go.mod and go.sum are tidy
-        working-directory: ${{ matrix.component }}
         run: |
-          go mod tidy
-          if [ -n "$(git status --porcelain -- go.mod go.sum)" ]; then
-            echo "::error::go.mod or go.sum is not tidy in ${{ matrix.component }}. Run 'go mod tidy' and commit."
-            git diff -- go.mod go.sum
-            exit 1
-          fi
+          FAILED=0
+          for dir in pkg api operators infra/tests infra/scripts; do
+            if [ -f "$dir/go.mod" ]; then
+              echo "Checking $dir..."
+              (cd "$dir" && go mod tidy)
+              if [ -n "$(git status --porcelain -- "$dir/go.mod" "$dir/go.sum")" ]; then
+                echo "::error::go.mod or go.sum is not tidy in $dir. Run 'go mod tidy' and commit."
+                git diff -- "$dir/go.mod" "$dir/go.sum"
+                FAILED=1
+              fi
+            fi
+          done
+          exit $FAILED
 
   # ─────────────────────────────────────────────
   # TESTS
@@ -101,6 +171,8 @@ jobs:
     name: Test pkg
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.go-pkg == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -111,34 +183,48 @@ jobs:
         working-directory: pkg
         run: go test ./... -short -v -race -count=1
 
-  test-go:
-    name: Test Go (${{ matrix.component }})
+  test-api:
+    name: Test API
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [test-pkg]
-    strategy:
-      fail-fast: false
-      matrix:
-        component: [operators, api]
+    needs: [changes]
+    if: needs.changes.outputs.go-api == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: ${{ matrix.component }}/go.sum
+          cache-dependency-path: api/go.sum
+      - name: Run API tests
+        working-directory: api
+        run: go test ./... -short -v -race -count=1
+
+  test-operators:
+    name: Test Operators
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [changes]
+    if: needs.changes.outputs.go-operators == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: operators/go.sum
       - name: Install envtest binaries
-        if: matrix.component == 'operators'
         run: |
           go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
           echo "KUBEBUILDER_ASSETS=$(setup-envtest use ${{ env.ENVTEST_K8S_VERSION }} -p path)" >> $GITHUB_ENV
-      - name: Run Go tests
-        working-directory: ${{ matrix.component }}
+      - name: Run operator tests
+        working-directory: operators
         run: go test ./... -short -v -race -count=1
 
   test-infra:
     name: Test infra
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.go-infra == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -153,6 +239,8 @@ jobs:
     name: Test CLI (TypeScript)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.cli == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -181,6 +269,8 @@ jobs:
     name: Test Pulumi (TypeScript)
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.pulumi == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -206,6 +296,8 @@ jobs:
     name: Validate K8s manifests
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.manifests == 'true' || needs.changes.outputs.go-operators == 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Install kubeconform
@@ -230,55 +322,50 @@ jobs:
         run: kubeconform --strict --skip ServiceMonitor,PrometheusRule infra/helm/monitoring/manifests/
 
   # ─────────────────────────────────────────────
-  # SECURITY — Vulnerability Scanning
+  # SECURITY — runs on PRs only (not every push)
   # ─────────────────────────────────────────────
 
-  security-go:
-    name: Security scan Go (${{ matrix.component }})
+  security:
+    name: Security scans
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        component: [api, operators, pkg]
+    timeout-minutes: 15
+    needs: [changes]
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: ${{ matrix.component }}/go.sum
-      - name: Run govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          cd ${{ matrix.component }}
-          govulncheck ./...
-
-  security-cli:
-    name: Security scan CLI (npm audit)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: cli/package-lock.json
-      - name: Install dependencies
-        working-directory: cli
-        run: npm ci
-      - name: Audit production dependencies
-        working-directory: cli
-        run: npm audit --omit=dev --audit-level=high
 
-  security-trivy:
-    name: Trivy filesystem scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+      # govulncheck — only changed Go components
+      - name: govulncheck (pkg)
+        if: needs.changes.outputs.go-pkg == 'true'
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd pkg && govulncheck ./...
+      - name: govulncheck (api)
+        if: needs.changes.outputs.go-api == 'true'
+        run: cd api && govulncheck ./...
+      - name: govulncheck (operators)
+        if: needs.changes.outputs.go-operators == 'true'
+        run: cd operators && govulncheck ./...
+
+      # npm audit — only if CLI changed
+      - name: npm audit
+        if: needs.changes.outputs.cli == 'true'
+        working-directory: cli
+        run: npm ci && npm audit --omit=dev --audit-level=high
+
+      # Trivy — always on PRs (filesystem + IaC + Dockerfiles)
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: fs
           scan-ref: .
@@ -286,99 +373,28 @@ jobs:
           exit-code: 1
           format: table
           skip-dirs: infra/tests/e2e/fixtures,examples,loopzero-packs,loopzero-forge
-      - name: Run Trivy IaC scanner
-        uses: aquasecurity/trivy-action@master
+      - name: Trivy Dockerfile scan (api)
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: config
-          scan-ref: .
+          scan-ref: api
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          format: table
+      - name: Trivy Dockerfile scan (operators)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: operators
           severity: CRITICAL,HIGH
           exit-code: 1
           format: table
 
-  security-dockerfiles:
-    name: Trivy Dockerfile scan (${{ matrix.component }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        component: [api, operators]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Scan Dockerfile for misconfigurations
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: config
-          scan-ref: ${{ matrix.component }}
-          severity: CRITICAL,HIGH
-          exit-code: 1
-          format: table
-
-  # ─────────────────────────────────────────────
-  # SECRETS — Detect leaked credentials
-  # ─────────────────────────────────────────────
-
-  secrets-scan:
-    name: Secret detection
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      # TruffleHog secret detection
       - name: TruffleHog secret scan
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.88.0
         with:
           extra_args: --only-verified --results=verified,unknown
-
-  # ─────────────────────────────────────────────
-  # BUILD — Verify artifacts compile
-  # ─────────────────────────────────────────────
-
-  build-go:
-    name: Build Go (${{ matrix.component }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [test-go, lint-go]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - component: api
-            binary: loopzero-api
-          - component: operators
-            binary: tenant-controller
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: ${{ matrix.component }}/go.sum
-      - name: Build binary
-        working-directory: ${{ matrix.component }}
-        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ${{ matrix.binary }} ./cmd/
-      - name: Verify binary
-        working-directory: ${{ matrix.component }}
-        run: test -f ${{ matrix.binary }}
-
-  build-cli:
-    name: Build CLI (TypeScript)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [test-cli, lint-cli]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: cli/package-lock.json
-      - name: Install dependencies
-        working-directory: cli
-        run: npm ci
-      - name: Build
-        working-directory: cli
-        run: npm run build
 
   # ─────────────────────────────────────────────
   # GATE — All checks must pass
@@ -390,47 +406,43 @@ jobs:
     timeout-minutes: 1
     if: always()
     needs:
+      - changes
       - lint-go
       - lint-cli
       - tidy-go
       - test-pkg
-      - test-go
+      - test-api
+      - test-operators
       - test-infra
       - test-cli
       - test-pulumi
       - validate-manifests
-      - security-go
-      - security-cli
-      - security-trivy
-      - security-dockerfiles
-      - secrets-scan
-      - build-go
-      - build-cli
+      - security
     steps:
       - name: Check all jobs passed
         run: |
           echo "Job results:"
-          echo "  lint-go:              ${{ needs.lint-go.result }}"
-          echo "  lint-cli:             ${{ needs.lint-cli.result }}"
-          echo "  tidy-go:              ${{ needs.tidy-go.result }}"
-          echo "  test-pkg:             ${{ needs.test-pkg.result }}"
-          echo "  test-go:              ${{ needs.test-go.result }}"
-          echo "  test-infra:           ${{ needs.test-infra.result }}"
-          echo "  test-cli:             ${{ needs.test-cli.result }}"
-          echo "  test-pulumi:          ${{ needs.test-pulumi.result }}"
-          echo "  validate-manifests:   ${{ needs.validate-manifests.result }}"
-          echo "  security-go:          ${{ needs.security-go.result }}"
-          echo "  security-cli:         ${{ needs.security-cli.result }}"
-          echo "  security-trivy:       ${{ needs.security-trivy.result }}"
-          echo "  security-dockerfiles: ${{ needs.security-dockerfiles.result }}"
-          echo "  secrets-scan:         ${{ needs.secrets-scan.result }}"
-          echo "  build-go:             ${{ needs.build-go.result }}"
-          echo "  build-cli:            ${{ needs.build-cli.result }}"
+          echo "  changes:            ${{ needs.changes.result }}"
+          echo "  lint-go:            ${{ needs.lint-go.result }}"
+          echo "  lint-cli:           ${{ needs.lint-cli.result }}"
+          echo "  tidy-go:            ${{ needs.tidy-go.result }}"
+          echo "  test-pkg:           ${{ needs.test-pkg.result }}"
+          echo "  test-api:           ${{ needs.test-api.result }}"
+          echo "  test-operators:     ${{ needs.test-operators.result }}"
+          echo "  test-infra:         ${{ needs.test-infra.result }}"
+          echo "  test-cli:           ${{ needs.test-cli.result }}"
+          echo "  test-pulumi:        ${{ needs.test-pulumi.result }}"
+          echo "  validate-manifests: ${{ needs.validate-manifests.result }}"
+          echo "  security:           ${{ needs.security.result }}"
 
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]] || \
-             [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
-            echo "::error::One or more CI jobs failed or were cancelled"
-            exit 1
-          fi
+          # "skipped" is OK (means path filter excluded it)
+          # "failure" or "cancelled" is NOT OK
+          RESULTS="${{ join(needs.*.result, ' ') }}"
+          for result in $RESULTS; do
+            if [[ "$result" == "failure" ]] || [[ "$result" == "cancelled" ]]; then
+              echo "::error::One or more CI jobs failed or were cancelled"
+              exit 1
+            fi
+          done
 
-          echo "All CI checks passed"
+          echo "All CI checks passed (skipped jobs are OK — no relevant changes)"

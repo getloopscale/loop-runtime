@@ -107,6 +107,19 @@ func (cb *CircuitBreakerSyncClient) GetAppStatus(ctx context.Context, appName st
 	return false, false, nil
 }
 
+// TerminateOperation delegates to the inner SyncClient.
+// Required so that the ReleaseConvergenceLoop type assertion succeeds
+// when the SyncClient is wrapped by the circuit breaker (MEET-2026-03-29-019).
+func (cb *CircuitBreakerSyncClient) TerminateOperation(ctx context.Context, appName string) error {
+	type terminator interface {
+		TerminateOperation(ctx context.Context, appName string) error
+	}
+	if t, ok := cb.inner.(terminator); ok {
+		return t.TerminateOperation(ctx, appName)
+	}
+	return nil
+}
+
 // GetSyncRevision delegates to the inner SyncClient.
 // Read-only operation — no circuit breaker needed.
 // Required so that the commit SHA verification type assertion succeeds
@@ -156,7 +169,7 @@ func (cb *CircuitBreakerSyncClient) preCheck() error {
 // indicate a credential problem, not a transient ArgoCD outage (MEET-013 Phase 1.3).
 func (cb *CircuitBreakerSyncClient) recordResult(err error) {
 	// Auth failures bypass the circuit breaker entirely (MEET-013 Phase 1.3)
-	if err != nil && errors.Is(err, loopzeroerrors.ErrArgoCDUnauthorized) {
+	if err != nil && errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
 		metrics.ArgoCDAuthFailures.Inc()
 		cb.logger.Error("argocd auth failure — not counted toward circuit breaker",
 			"suggestion", "check ARGOCD_TOKEN or see docs/runbooks/argocd-token-regeneration.md")

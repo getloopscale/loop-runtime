@@ -54,6 +54,12 @@ type ReleaseStore interface {
 	// FindPendingReleases returns releases in PENDING state (awaiting ArgoCD sync verification).
 	// Used by the Release Convergence Loop (MEET-2026-03-27-012 Phase 1.1).
 	FindPendingReleases(ctx context.Context) ([]Release, error)
+	// FindActiveReleases returns releases in ACTIVE state for post-activation health monitoring.
+	// MEET-2026-03-31-023 T1-4: Used by the health check ticker to detect divergence.
+	FindActiveReleases(ctx context.Context) ([]Release, error)
+	// GetByIDTx retrieves a release by ID within a transaction.
+	// MEET-2026-03-31-023 T0-1: Used by ActivateReleaseKernel idempotency guard.
+	GetByIDTx(ctx context.Context, tx DBTX, id string) (*Release, error)
 }
 
 // PostgresReleaseStore implements ReleaseStore using PostgreSQL.
@@ -91,6 +97,25 @@ func (s *PostgresReleaseStore) Create(ctx context.Context, tx DBTX, release *Rel
 // Returns ErrReleaseNotFound if the release does not exist.
 func (s *PostgresReleaseStore) GetByID(ctx context.Context, releaseID string) (*Release, error) {
 	return s.scanRelease(s.db.QueryRow(ctx,
+		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
+		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
+		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
+		        COALESCE(side_effects, 'null'::jsonb)
+		 FROM releases WHERE id = $1`,
+		releaseID,
+	))
+}
+
+// GetByIDTx retrieves a release by its ID within a transaction.
+// MEET-2026-03-31-023 T0-1: Used by ActivateReleaseKernel to re-fetch
+// release state inside the advisory lock, preventing duplicate activation
+// when SyncCallbackActivator and ReleaseConvergenceLoop race.
+func (s *PostgresReleaseStore) GetByIDTx(ctx context.Context, tx DBTX, releaseID string) (*Release, error) {
+	executor := tx
+	if executor == nil {
+		executor = s.db
+	}
+	return s.scanRelease(executor.QueryRow(ctx,
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
@@ -307,7 +332,8 @@ func (s *PostgresReleaseStore) GetLatestByBuildID(ctx context.Context, buildID s
 	return r, nil
 }
 
-// FindPendingReleases returns all releases in PENDING state.
+// FindPendingReleases returns releases in PENDING state, limited to 100 rows
+// to prevent unbounded result sets under load (CODE-001 fix).
 // These are releases where GitOps push succeeded but ArgoCD sync verification
 // has not yet completed. The Release Convergence Loop processes these.
 func (s *PostgresReleaseStore) FindPendingReleases(ctx context.Context) ([]Release, error) {
@@ -318,7 +344,8 @@ func (s *PostgresReleaseStore) FindPendingReleases(ctx context.Context) ([]Relea
 		        COALESCE(side_effects, 'null'::jsonb)
 		 FROM releases
 		 WHERE status = 'PENDING'
-		 ORDER BY created_at ASC`,
+		 ORDER BY created_at ASC
+		 LIMIT 100`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("release store: find pending releases: %w", err)
@@ -335,6 +362,83 @@ func (s *PostgresReleaseStore) FindPendingReleases(ctx context.Context) ([]Relea
 			&r.Apps, &r.Artifacts, &r.SideEffects,
 		); err != nil {
 			return nil, fmt.Errorf("release store: scan pending release: %w", err)
+		}
+		releases = append(releases, r)
+	}
+	if releases == nil {
+		releases = []Release{}
+	}
+	return releases, nil
+}
+
+// FindActiveReleases returns releases in ACTIVE state, limited to 100 rows.
+// MEET-2026-03-31-023 T1-4: Used by the convergence loop health ticker to check
+// post-activation ArgoCD health. Returns one ACTIVE release per (tenant, project, env)
+// combination (the most recent one).
+func (s *PostgresReleaseStore) FindActiveReleases(ctx context.Context) ([]Release, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT DISTINCT ON (tenant_id, project_id, environment)
+		        id, build_id, tenant_id, project_id, environment, status, correlation_id,
+		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
+		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
+		        COALESCE(side_effects, 'null'::jsonb)
+		 FROM releases
+		 WHERE status = 'ACTIVE'
+		 ORDER BY tenant_id, project_id, environment, created_at DESC
+		 LIMIT 100`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("release store: find active releases: %w", err)
+	}
+	defer rows.Close()
+
+	var releases []Release
+	for rows.Next() {
+		var r Release
+		if err := rows.Scan(
+			&r.ID, &r.BuildID, &r.TenantID, &r.ProjectID, &r.Environment,
+			&r.Status, &r.CorrelationID, &r.CreatedBy,
+			&r.CreatedAt, &r.GitCommit, &r.GitMirrorStatus,
+			&r.Apps, &r.Artifacts, &r.SideEffects,
+		); err != nil {
+			return nil, fmt.Errorf("release store: scan active release: %w", err)
+		}
+		releases = append(releases, r)
+	}
+	if releases == nil {
+		releases = []Release{}
+	}
+	return releases, nil
+}
+
+// FindPendingReleasesByTenantEnv returns PENDING releases filtered by tenant and environment.
+// More efficient than FindPendingReleases for callback-driven activation (CODE-SCAN-001 fix).
+func (s *PostgresReleaseStore) FindPendingReleasesByTenantEnv(ctx context.Context, tenantID, env string) ([]Release, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
+		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
+		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
+		        COALESCE(side_effects, 'null'::jsonb)
+		 FROM releases
+		 WHERE status = 'PENDING' AND tenant_id = $1 AND environment = $2
+		 ORDER BY created_at ASC`,
+		tenantID, env,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("release store: find pending releases by tenant+env: %w", err)
+	}
+	defer rows.Close()
+
+	var releases []Release
+	for rows.Next() {
+		var r Release
+		if err := rows.Scan(
+			&r.ID, &r.BuildID, &r.TenantID, &r.ProjectID, &r.Environment,
+			&r.Status, &r.CorrelationID, &r.CreatedBy,
+			&r.CreatedAt, &r.GitCommit, &r.GitMirrorStatus,
+			&r.Apps, &r.Artifacts, &r.SideEffects,
+		); err != nil {
+			return nil, fmt.Errorf("release store: scan pending release by tenant+env: %w", err)
 		}
 		releases = append(releases, r)
 	}

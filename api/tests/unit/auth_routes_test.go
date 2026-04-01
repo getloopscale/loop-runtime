@@ -64,6 +64,33 @@ func TestWhoamiRoute(t *testing.T) {
 		}
 	})
 
+	t.Run("returns noreply email when GitHub email is empty", func(t *testing.T) {
+		handler := routes.NewAuthHandler()
+
+		uc := &middleware.UserContext{
+			UserID:   "github-getloopscale",
+			Email:    "", // GitHub /user returns null for private emails
+			TenantID: "acme",
+			Role:     "owner",
+		}
+		ctx := context.WithValue(context.Background(), middleware.UserContextKeyPublic(), uc)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil).WithContext(ctx)
+		rec := httptest.NewRecorder()
+
+		handler.Whoami(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+
+		var body map[string]string
+		_ = json.NewDecoder(rec.Body).Decode(&body)
+		if body["email"] != "getloopscale@users.noreply.github.com" {
+			t.Fatalf("expected noreply email, got %q", body["email"])
+		}
+	})
+
 	t.Run("response has Correlation-ID header when present in request", func(t *testing.T) {
 		handler := routes.NewAuthHandler()
 

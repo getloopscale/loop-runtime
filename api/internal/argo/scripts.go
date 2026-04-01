@@ -7,7 +7,6 @@ package argo
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/loopzero/loopzero/api/internal/services"
 )
@@ -94,66 +93,8 @@ fi
 `
 }
 
-// Deprecated: replaced by loopzeroPacksDockerfileStep (MEET-2026-03-29-017).
-// Kept temporarily for rollback safety. Remove after loopzero-packs is validated in production.
-func scriptDockerfileNode(apps []services.AppSpec) string { //nolint:unused
-	if len(apps) == 0 {
-		return `echo "No apps to generate Dockerfiles for"`
-	}
-
-	var script strings.Builder
-	script.WriteString("set -euo pipefail\ncd /workspace\n")
-
-	for _, app := range apps {
-		appPath := app.Path
-		if appPath == "" || appPath == "." {
-			appPath = "."
-		}
-
-		dockerfileName := "Dockerfile"
-		if len(apps) > 1 {
-			dockerfileName = fmt.Sprintf("Dockerfile.%s", app.Name)
-		}
-
-		fmt.Fprintf(&script,
-			"if [ -f \"%s/Dockerfile\" ]; then\n  echo \"User Dockerfile found in %s\"\n  cp \"%s/Dockerfile\" \"%s\"\nelse\n",
-			appPath, appPath, appPath, dockerfileName)
-
-		var df strings.Builder
-		df.WriteString("FROM node:20-alpine\n")
-		df.WriteString("WORKDIR /app\n")
-
-		if appPath == "." {
-			df.WriteString("COPY package.json package-lock.json ./\n")
-			df.WriteString("RUN npm ci --omit=dev\n")
-			df.WriteString("COPY . .\n")
-		} else {
-			df.WriteString("COPY package.json package-lock.json ./\n")
-			fmt.Fprintf(&df, "COPY %s ./%s\n", appPath, appPath)
-			df.WriteString("RUN npm ci --omit=dev 2>/dev/null || true\n")
-		}
-
-		fmt.Fprintf(&df, "WORKDIR /app/%s\n", appPath)
-
-		if app.Type != "worker" {
-			port := app.Port
-			if port <= 0 {
-				port = 3000
-			}
-			fmt.Fprintf(&df, "EXPOSE %d\n", port)
-		}
-		df.WriteString("CMD [\"node\", \"index.js\"]\n")
-
-		content := strings.ReplaceAll(df.String(), "%", "%%")
-		content = strings.ReplaceAll(content, "\\", "\\\\")
-		fmt.Fprintf(&script, "  echo 'Generating %s for %s'\n", dockerfileName, app.Name)
-		fmt.Fprintf(&script, "  printf '%s' > \"%s\"\n", content, dockerfileName)
-		script.WriteString("fi\n")
-	}
-
-	script.WriteString("echo 'Dockerfiles generated:'\nls -la /workspace/Dockerfile*\nfor f in /workspace/Dockerfile*; do echo \"--- $f ---\"; cat \"$f\"; done\n")
-	return script.String()
-}
+// COMP-005: scriptDockerfileNode removed — was deprecated dead code (MEET-2026-03-29-017).
+// Replaced by universal loopzeroPacksDockerfileStep() in languages.go.
 
 // ---------------------------------------------------------------------------
 // Go scripts
@@ -180,7 +121,8 @@ echo "Workspace validation passed"
 
 func scriptInstallGo(apps []services.AppSpec) string {
 	paths := appPaths(apps)
-	script := "set -euo pipefail\ncd /workspace\n"
+	// CODE-005 fix: set GOCACHE to writable path (container runs as uid 1000, not root)
+	script := "set -euo pipefail\nexport GOCACHE=/workspace/.cache/go-build\nmkdir -p $GOCACHE\ncd /workspace\n"
 	for _, p := range paths {
 		script += fmt.Sprintf(`echo "Downloading Go modules in %s..."
 cd "/workspace/%s"
@@ -218,37 +160,7 @@ fi
 `
 }
 
-// Deprecated: replaced by loopzeroPacksDockerfileStep (MEET-2026-03-29-017).
-func scriptDockerfileGo(apps []services.AppSpec) string { //nolint:unused
-	port := defaultPort(apps, 8080)
-	buildTarget := "./cmd/..."
-	if len(apps) > 0 && apps[0].Path != "" && apps[0].Path != "." {
-		buildTarget = fmt.Sprintf("./%s/...", apps[0].Path)
-	}
-	return fmt.Sprintf(`set -euo pipefail
-cd /workspace
-if [ -f Dockerfile ]; then
-  echo "User-provided Dockerfile found — skipping generation"
-  cat Dockerfile
-  exit 0
-fi
-echo "No Dockerfile found — generating for Go"
-cat > Dockerfile << 'DEOF'
-FROM golang:1.22-alpine AS builder
-WORKDIR /src
-COPY . .
-RUN CGO_ENABLED=0 go build -o /app %s
-
-FROM alpine:3.19
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app /app
-EXPOSE %d
-ENTRYPOINT ["/app"]
-DEOF
-echo "Generated Dockerfile:"
-cat Dockerfile
-`, buildTarget, port)
-}
+// COMP-005: scriptDockerfileGo removed — was deprecated dead code (MEET-2026-03-29-017).
 
 // ---------------------------------------------------------------------------
 // Python scripts
@@ -277,7 +189,8 @@ echo "Workspace validation passed"
 
 func scriptInstallPython(apps []services.AppSpec) string {
 	paths := appPaths(apps)
-	script := "set -euo pipefail\ncd /workspace\n"
+	// CODE-005 fix: set PIP_CACHE_DIR to writable path (container runs as uid 1000, not root)
+	script := "set -euo pipefail\nexport PIP_CACHE_DIR=/workspace/.cache/pip\nmkdir -p $PIP_CACHE_DIR\ncd /workspace\n"
 	for _, p := range paths {
 		script += fmt.Sprintf(`echo "Installing deps in %s..."
 cd "/workspace/%s"
@@ -323,29 +236,7 @@ fi
 `
 }
 
-// Deprecated: replaced by loopzeroPacksDockerfileStep (MEET-2026-03-29-017).
-func scriptDockerfilePython(apps []services.AppSpec) string { //nolint:unused
-	port := defaultPort(apps, 8000)
-	return fmt.Sprintf(`set -euo pipefail
-cd /workspace
-if [ -f Dockerfile ]; then
-  echo "User-provided Dockerfile found — skipping generation"
-  cat Dockerfile
-  exit 0
-fi
-echo "No Dockerfile found — generating for Python"
-cat > Dockerfile << 'DEOF'
-FROM python:3.12-slim
-WORKDIR /app
-COPY . .
-RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || pip install --no-cache-dir .
-EXPOSE %d
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "%d"]
-DEOF
-echo "Generated Dockerfile:"
-cat Dockerfile
-`, port, port)
-}
+// COMP-005: scriptDockerfilePython removed — was deprecated dead code (MEET-2026-03-29-017).
 
 // ---------------------------------------------------------------------------
 // Custom scripts

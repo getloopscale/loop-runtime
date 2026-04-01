@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	k "github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/operators/internal/httpclient"
 )
 
 // BuildCredentials encapsulates all credential fields needed by TenantReconciler
@@ -68,7 +69,7 @@ func (c *BuildCredentials) FetchRegistryDockerConfig(ctx context.Context) (strin
 func (c *BuildCredentials) fetchDORegistryCredentials(ctx context.Context) (string, error) {
 	httpClient := c.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: k.HTTPTimeoutExternal}
+		httpClient = httpclient.NewWithTimeout(k.HTTPTimeoutExternal)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -37,15 +38,27 @@ type SecretK8sSync interface {
 	DeleteSecret(ctx context.Context, tenantID, env, app, name string) error
 }
 
+// AuditLogger abstracts audit log writing (DIP).
+// MEET-2026-03-31-024: Application-level audit for sensitive operations.
+type AuditLogger interface {
+	LogAudit(ctx context.Context, tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) error
+}
+
 // SecretHandler provides HTTP handlers for secret operations.
 type SecretHandler struct {
-	store  SecretStore
+	store   SecretStore
 	k8sSync SecretK8sSync // optional — nil disables K8s sync
+	audit   AuditLogger   // optional — nil disables audit logging
 }
 
 // NewSecretHandler creates a new SecretHandler.
 func NewSecretHandler(store SecretStore) *SecretHandler {
 	return &SecretHandler{store: store}
+}
+
+// SetAuditLogger configures audit logging for sensitive operations.
+func (h *SecretHandler) SetAuditLogger(audit AuditLogger) {
+	h.audit = audit
 }
 
 // SetK8sSync configures the K8s sync for creating Secrets and ExternalSecret CRs.
@@ -112,7 +125,10 @@ func (h *SecretHandler) List(w http.ResponseWriter, r *http.Request) {
 // Set handles POST /api/v1/secrets.
 // Creates or updates a secret. Value is NEVER returned in the response.
 func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -150,15 +166,28 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	// Use project name from query or default
 	project := r.URL.Query().Get("project")
 
-	created, err := h.store.Set(r.Context(), uc.TenantID, project, req.Environment, req.App, req.Name, []byte(req.Value))
+	created, err := h.store.Set(ctx, uc.TenantID, project, req.Environment, req.App, req.Name, []byte(req.Value))
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
+	// MEET-2026-03-31-024: Audit log for secret operations
+	if h.audit != nil {
+		action := "SECRET_UPDATED"
+		if created {
+			action = "SECRET_CREATED"
+		}
+		if auditErr := h.audit.LogAudit(ctx, uc.TenantID, action, uc.UserID,
+			"secret", req.Name, r.Header.Get("Correlation-ID"),
+			map[string]any{"environment": req.Environment, "app": req.App, "project": project}); auditErr != nil {
+			slog.Error("failed to write audit log for secret set", "name", req.Name, "error", auditErr)
+		}
+	}
+
 	// Create K8s Secret on mgmt + ExternalSecret CR on workload for ESO sync
 	if h.k8sSync != nil {
-		if syncErr := h.k8sSync.CreateSecret(r.Context(), uc.TenantID, project, req.Environment, req.App, req.Name, req.Value); syncErr != nil {
+		if syncErr := h.k8sSync.CreateSecret(ctx, uc.TenantID, project, req.Environment, req.App, req.Name, req.Value); syncErr != nil {
 			// Log but don't fail — PG is source of truth, K8s sync is eventual
 			slog.Error("failed to sync secret to K8s", "name", req.Name, "error", syncErr)
 		}
@@ -174,7 +203,10 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 
 // DeleteSecret handles DELETE /api/v1/secrets/{name}?environment={env}&app={app}.
 func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -190,7 +222,7 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	app := r.URL.Query().Get("app")
 	project := r.URL.Query().Get("project")
 
-	deleted, err := h.store.Delete(r.Context(), uc.TenantID, project, env, app, name)
+	deleted, err := h.store.Delete(ctx, uc.TenantID, project, env, app, name)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
@@ -204,9 +236,18 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// MEET-2026-03-31-024: Audit log for secret deletion
+	if h.audit != nil {
+		if auditErr := h.audit.LogAudit(ctx, uc.TenantID, "SECRET_DELETED", uc.UserID,
+			"secret", name, r.Header.Get("Correlation-ID"),
+			map[string]any{"environment": env, "app": app, "project": project}); auditErr != nil {
+			slog.Error("failed to write audit log for secret delete", "name", name, "error", auditErr)
+		}
+	}
+
 	// Remove K8s Secret from mgmt + ExternalSecret CR from workload
 	if h.k8sSync != nil {
-		if syncErr := h.k8sSync.DeleteSecret(r.Context(), uc.TenantID, env, app, name); syncErr != nil {
+		if syncErr := h.k8sSync.DeleteSecret(ctx, uc.TenantID, env, app, name); syncErr != nil {
 			slog.Error("failed to delete secret from K8s", "name", name, "error", syncErr)
 		}
 	}

@@ -23,6 +23,7 @@ ports:
   - port: 30091:30091
     nodeFilters:
       - loadbalancer
+network: k3d-loopzero
 registries:
   use:
     - k3d-loopzero-registry:5000
