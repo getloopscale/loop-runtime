@@ -601,6 +601,7 @@ func main() {
 		RollbackHandler:    rollbackHandler,
 		StatusHandler:      statusHandler,
 		BuildListHandler:   buildListHandler,
+		TeamHandler:        routes.NewTeamHandler(&db.PostgresTeamStore{DB: dbAdapter}),
 		EnvironmentHandler: routes.NewEnvironmentHandler(tenantCRMgr),
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,

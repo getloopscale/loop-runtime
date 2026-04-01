@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- CLI command `loopzero team list` to list team members with roles (#cmd-team)
+  - New API routes `GET/POST/DELETE/PATCH /api/v1/teams/members`
+  - TeamStore with ListMembers, AddMember, RemoveMember, UpdateMemberRole, GetUserByUsername
+  - Authorization: owner/admin can add/remove, owner-only for role changes, owner cannot be removed
+  - GitHub username resolution (strips `github-` prefix in all output)
+- CLI command `loopzero team add <username> [--role]` to invite team members (#cmd-team)
+- CLI command `loopzero team remove <username>` with owner protection (#cmd-team)
+- CLI command `loopzero team role <username> <role>` for owner-only role changes (#cmd-team)
 - CLI command `loopzero env list` to list environments for the current team (#cmd-env)
   - New API route `GET /api/v1/environments` with tenant isolation
   - New API route `POST /api/v1/environments` to create environments (patches Tenant CRD)

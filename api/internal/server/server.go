@@ -87,6 +87,8 @@ type Config struct {
 	SecretK8sSync routes.SecretK8sSync
 	// EnvironmentHandler handles GET/POST/DELETE /api/v1/environments.
 	EnvironmentHandler *routes.EnvironmentHandler
+	// TeamHandler handles GET/POST/DELETE/PATCH /api/v1/teams/members.
+	TeamHandler *routes.TeamHandler
 	// IsProduction indicates production mode — enables strict error handling.
 	IsProduction bool
 }
@@ -245,6 +247,14 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Rollback route — mutation, needs rate limiting
 			if cfg.RollbackHandler != nil {
 				r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
+			}
+
+			// Team routes
+			if cfg.TeamHandler != nil {
+				r.Get("/api/v1/teams/members", cfg.TeamHandler.List)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/teams/members", cfg.TeamHandler.Add)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/teams/members/{username}", cfg.TeamHandler.Remove)
+				r.With(rateLimitMiddlewares...).Patch("/api/v1/teams/members/{username}", cfg.TeamHandler.UpdateRole)
 			}
 
 			// Environment routes

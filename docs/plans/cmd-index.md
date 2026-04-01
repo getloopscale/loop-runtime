@@ -64,7 +64,7 @@ cmd-preview ◄── precisa de env + promote
 | 1 | cancel | SKIPPED (T1) | DONE | 13/13 pass | — |
 | 2 | build | SKIPPED (T1) | DONE | 32 new tests | — |
 | 3 | project | SKIPPED (T1) | DONE | 46 new tests | — |
-| 4 | team | PENDING | — | — | — |
+| 4 | team | SKIPPED (T2) | DONE | 69 new tests | — |
 | 5 | env | SKIPPED (T2) | DONE (API stub + CLI) | 78 new tests | Operator GC pending |
 | 6 | promote | PENDING | — | — | — |
 | 7 | preview | PENDING | — | — | — |
