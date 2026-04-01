@@ -37,8 +37,14 @@ export class DigitalOceanRegistryProvider implements IProviderRegistry {
       ignoreChanges: ["subscriptionTierSlug"],
     });
 
+    // Construct the endpoint deterministically: registry.digitalocean.com/{name}
+    // The serverUrl property from imported resources may return just the base URL
+    // (registry.digitalocean.com) without the registry name. Using interpolation
+    // ensures the endpoint always includes the registry name.
+    const endpoint = registry.name.apply(n => `registry.digitalocean.com/${n}`);
+
     return {
-      endpoint: registry.serverUrl,
+      endpoint,
       name: registry.name,
       resource: registry,
     };
