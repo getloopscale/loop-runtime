@@ -43,6 +43,19 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
       name: "loopzero",
     });
 
+    // Firewall: allow only specified K8s clusters to connect.
+    // Without this, the DB is unreachable from all pods (connection timeout on port 25060).
+    // This is critical for idempotency — destroy+recreate must re-add firewall rules.
+    if (spec.trustedK8sClusters && spec.trustedK8sClusters.length > 0) {
+      new digitalocean.DatabaseFirewall(`${spec.name}-firewall`, {
+        clusterId: cluster.id,
+        rules: spec.trustedK8sClusters.map((id, i) => ({
+          type: "k8s",
+          value: id,
+        })),
+      });
+    }
+
     return {
       clusterId: cluster.id,
       host: cluster.host,

@@ -24,6 +24,8 @@ export interface DatabaseClusterSpec {
   readonly nodeCount: number;
   readonly network: { readonly vpcId: pulumi.Input<string> };
   readonly tags: BaseLabels;
+  /** K8s cluster IDs allowed to connect to the database (firewall trusted sources). */
+  readonly trustedK8sClusters?: pulumi.Input<string>[];
 }
 
 export interface DatabaseClusterOutput {

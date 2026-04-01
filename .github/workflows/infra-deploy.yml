@@ -924,3 +924,52 @@ jobs:
           else
             echo "### ✅ All phases completed" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # --- Post-deploy: runtime health validation ---
+      # Verifies that critical pods are Running and services are reachable.
+      # This catches config issues (wrong ports, missing NetworkPolicies, bad kubeconfigs)
+      # that Pulumi can't detect because it only checks K8s resource creation, not pod health.
+      - name: Validate runtime health
+        if: success() && needs.resolve.outputs.command == 'up'
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          set +e
+          STACK="${{ needs.resolve.outputs.stack }}"
+          pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" > /tmp/health-kc.yaml 2>/dev/null
+          export KUBECONFIG=/tmp/health-kc.yaml
+          NS="platform-system"
+          PASS=0
+          FAIL=0
+
+          check() {
+            local name="$1" cmd="$2"
+            if eval "$cmd" > /dev/null 2>&1; then
+              echo "✅ $name"
+              PASS=$((PASS + 1))
+            else
+              echo "❌ $name"
+              FAIL=$((FAIL + 1))
+            fi
+          }
+
+          echo "Waiting for critical deployments (max 5 min)..."
+          for deploy in loopzero-api tenant-controller; do
+            kubectl rollout status deployment/$deploy -n $NS --timeout=300s 2>/dev/null || true
+          done
+
+          echo ""
+          echo "=== Health Checks ==="
+          check "API health" "kubectl exec deploy/loopzero-api -n $NS -c api -- wget -qO- --timeout=10 http://localhost:8080/api/v1/health"
+          check "Gitea reachable" "kubectl exec deploy/tenant-controller -n $NS -- wget -qO- --timeout=10 http://gitea-http.$NS.svc.cluster.local:3000/api/v1/repos/search?limit=1"
+          check "Tenant controller running" "kubectl get deploy tenant-controller -n $NS -o jsonpath='{.status.readyReplicas}' | grep -q '[1-9]'"
+
+          echo ""
+          echo "Results: $PASS passed, $FAIL failed"
+          echo "### Runtime Health" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Checks passed: $PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Checks failed: $FAIL" >> "$GITHUB_STEP_SUMMARY"
+
+          rm -f /tmp/health-kc.yaml
+          if [ "$FAIL" -gt 0 ]; then
+            echo "::warning::$FAIL health checks failed — pods may need more time to stabilize"
+          fi

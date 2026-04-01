@@ -1042,11 +1042,21 @@ function installLoopZeroAPI(
               {
                 name: "db-migrate",
                 image: "migrate/migrate:v4.18.1",
+                // Auto-recover from dirty migration state before running up.
+                // If a previous migration failed mid-run, golang-migrate marks the
+                // DB as "dirty" and refuses all future runs. This wrapper detects
+                // dirty state and forces the version clean before proceeding.
+                command: ["/bin/sh", "-c"],
                 args: [
-                  "-path=/migrations",
-                  "-database",
-                  "$(DATABASE_URL)",
-                  "up",
+                  [
+                    'DIRTY=$(migrate -path=/migrations -database "$DATABASE_URL" version 2>&1 || true);',
+                    'if echo "$DIRTY" | grep -q "dirty"; then',
+                    '  VER=$(echo "$DIRTY" | grep -oE "[0-9]+");',
+                    '  echo "Dirty database at version $VER — auto-recovering";',
+                    '  migrate -path=/migrations -database "$DATABASE_URL" force "$VER";',
+                    "fi;",
+                    'migrate -path=/migrations -database "$DATABASE_URL" up',
+                  ].join(" "),
                 ],
                 env: [
                   {

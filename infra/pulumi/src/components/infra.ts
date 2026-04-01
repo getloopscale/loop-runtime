@@ -170,6 +170,9 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     nodeCount: config.dbNodeCount,
     network: { vpcId: network.vpcId },
     tags,
+    // Allow all 3 DOKS clusters to connect — critical for pipeline idempotency.
+    // Without this, destroy+recreate leaves DB unreachable (no trusted sources).
+    trustedK8sClusters: [mgmtCluster.clusterId, buildCluster.clusterId, runtimeCluster.clusterId],
   });
 
   // --- Object storage ---
