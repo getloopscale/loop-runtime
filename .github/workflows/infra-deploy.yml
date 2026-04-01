@@ -441,6 +441,20 @@ jobs:
               fi
             done
 
+            # Integrate registry with DOKS clusters (needed for image pulls).
+            # On fresh deploys, clusters don't have registry credentials yet.
+            echo "Integrating container registry with DOKS clusters..."
+            REGISTRY_NAME=$(pulumi stack output registryName --stack "$STACK" 2>/dev/null || echo "")
+            if [ -n "$REGISTRY_NAME" ]; then
+              for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
+                CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || echo "")
+                if [ -n "$CLUSTER" ]; then
+                  echo "  Integrating $CLUSTER with $REGISTRY_NAME..."
+                  doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
+                fi
+              done
+            fi
+
             echo "Waiting 90s for cert-manager/ArgoCD webhooks to initialize..."
             sleep 90
 
