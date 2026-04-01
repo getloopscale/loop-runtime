@@ -322,6 +322,25 @@ func TestTeamAdd(t *testing.T) {
 		}
 	})
 
+	// SECURITY R-01: privilege escalation — "owner" role must be rejected via API
+	t.Run("POST /api/v1/teams/members → 400 rejects owner role (privilege escalation)", func(t *testing.T) {
+		store := storeWithOwner("acme", "github-lucas")
+		store.users["github-hacker"] = &routes.TeamUserInfo{ID: "github-hacker", Email: "h@x.com"}
+		handler := routes.NewTeamHandler(store)
+
+		body := `{"username":"hacker","role":"owner"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body)).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		handler.Add(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("SECURITY: owner role should be rejected, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
 	t.Run("POST /api/v1/teams/members → 404 when user not found", func(t *testing.T) {
 		store := storeWithOwner("acme", "github-lucas")
 		// Do NOT add "unknownuser" to store.users
@@ -575,6 +594,28 @@ func TestTeamUpdateRole(t *testing.T) {
 
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	// SECURITY R-01: privilege escalation — "owner" role must be rejected in UpdateRole
+	t.Run("PATCH /api/v1/teams/members/{username} → 400 rejects owner role (privilege escalation)", func(t *testing.T) {
+		store := storeWithOwnerAndMember("acme", "github-lucas", "github-bob")
+		handler := routes.NewTeamHandler(store)
+
+		body := `{"role":"owner"}`
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/bob", bytes.NewBufferString(body))
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("username", "bob")
+		ctx := makeAuthCtx("github-lucas", "acme", "owner")
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		handler.UpdateRole(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("SECURITY: owner role should be rejected in UpdateRole, got %d: %s", rec.Code, rec.Body.String())
 		}
 	})
 

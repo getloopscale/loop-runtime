@@ -137,9 +137,10 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate role
-	if !validRoles[req.Role] {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("role must be one of: owner, admin, member"))
+	// Validate role — SECURITY: "owner" cannot be assigned via API (privilege escalation).
+	// Ownership is set only during bootstrap. R-01 fix.
+	if !validRoles[req.Role] || req.Role == "owner" {
+		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("role must be one of: admin, member"))
 		return
 	}
 
@@ -282,9 +283,9 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate role
-	if !validRoles[req.Role] {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("role must be one of: owner, admin, member"))
+	// Validate role — SECURITY: "owner" cannot be assigned via API (privilege escalation). R-01 fix.
+	if !validRoles[req.Role] || req.Role == "owner" {
+		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("role must be one of: admin, member"))
 		return
 	}
 
