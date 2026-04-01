@@ -72,7 +72,8 @@ operators/config/crd/bases/*.bak
 .tilt-dev/
 tilt_modules/
 
-# Next.js (cloud/dashboard)
+# Frontend build artifacts (cloud/dashboard)
+dist/
 .next/
 out/
 

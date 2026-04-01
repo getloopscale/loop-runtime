@@ -4,6 +4,6 @@ project: loopzero-dashboard
 apps:
   dashboard:
     path: .
-    framework: nextjs
+    framework: vite
     type: frontend
     build: buildpack
