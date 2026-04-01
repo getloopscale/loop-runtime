@@ -3,7 +3,6 @@
 
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
-import * as command from "@pulumi/command";
 import { PlatformStackConfig } from "../config/stack";
 
 // ---------------------------------------------------------------------------
@@ -315,7 +314,6 @@ export function createClusterIssuer(
   certManager: k8s.helm.v3.Release,
   config: PlatformStackConfig,
   role: string = "mgmt",
-  kubeconfig?: pulumi.Output<string>,
 ): k8s.apiextensions.CustomResource {
   // Cloudflare API token secret for DNS-01 challenge.
   // Created on EVERY cluster with cert-manager — each cluster's ClusterIssuer
@@ -361,55 +359,31 @@ export function createClusterIssuer(
         },
       ];
 
-  // MEET-2026-04-01-025 Action #5: Deterministic cert-manager webhook readiness check.
+  // MEET-2026-04-01-025 Action #5: cert-manager webhook readiness gate.
   // The Helm release reports "deployed" before the webhook's self-signed TLS cert is ready.
   // Without this gate, the ClusterIssuer creation fails with:
   //   "http: server gave HTTP response to HTTPS client"
-  // because the K8s API server calls the webhook over HTTPS but gets plain HTTP.
   //
-  // This command uses `kubectl apply --dry-run=server` with a self-signed ClusterIssuer
-  // to validate the webhook is responding. dry-run=server hits the validating webhook
-  // without creating any real resources — the most reliable readiness signal.
-  // It runs AFTER cert-manager Helm install and BEFORE the real ClusterIssuer creation.
+  // Strategy: look up the cert-manager webhook Deployment and wait for it to have
+  // ready replicas. The Pulumi K8s provider's `Service.get()` / `Deployment.get()`
+  // blocks until the resource is in a ready state. By adding this as a dependency,
+  // the ClusterIssuer waits for the webhook to be fully running.
+  //
+  // Combined with `customTimeouts: { create: "5m" }` on the ClusterIssuer itself,
+  // this provides a two-layer defense: (1) webhook Deployment is Ready, (2) Pulumi
+  // retries ClusterIssuer creation for up to 5 minutes if the webhook TLS cert
+  // isn't serving yet.
   const dependsOn: pulumi.Resource[] = [certManager];
 
-  if (kubeconfig) {
-    const webhookReady = new command.local.Command(
-      `${role}-cert-manager-webhook-ready`,
-      {
-        create: pulumi.interpolate`
-export KUBECONFIG=$(mktemp)
-cat > "$KUBECONFIG" <<'KUBEEOF'
-${kubeconfig}
-KUBEEOF
-echo "Waiting for cert-manager webhook to serve TLS..."
-for i in $(seq 1 60); do
-  if kubectl apply --dry-run=server -f - 2>/dev/null <<'YAMLEOF'
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: webhook-readiness-probe
-spec:
-  selfSigned: {}
-YAMLEOF
-  then
-    echo "cert-manager webhook is ready (attempt $i)"
-    rm -f "$KUBECONFIG"
-    exit 0
-  fi
-  echo "Attempt $i/60: webhook not ready, waiting 5s..."
-  sleep 5
-done
-echo "FATAL: cert-manager webhook not ready after 5 minutes"
-rm -f "$KUBECONFIG"
-exit 1
-        `,
-        interpreter: ["/bin/bash", "-c"],
-      },
-      { dependsOn: [certManager] },
-    );
-    dependsOn.push(webhookReady);
-  }
+  // Look up the cert-manager webhook Deployment to ensure it's fully ready.
+  // Pulumi's K8s provider waits for Deployments to have the desired number of
+  // ready replicas before marking the get() as resolved.
+  const webhookDeployment = k8s.apps.v1.Deployment.get(
+    `${role}-cert-manager-webhook-lookup`,
+    pulumi.interpolate`${PLATFORM_NAMESPACE}/${role}-cert-manager-webhook`,
+    { provider, dependsOn: [certManager] },
+  );
+  dependsOn.push(webhookDeployment);
 
   // The ClusterIssuer depends on the cert-manager webhook being fully ready.
   // On fresh deploys, the webhook may not be serving when Pulumi tries to create
