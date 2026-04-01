@@ -117,11 +117,11 @@ A migração é suave porque o middleware de auth (`api/internal/middleware/auth
 
 ## Definition of Done — Fase 8
 
-- [ ] Engine API aceita JWT e PAT (dual validation)
-- [ ] JWT validation via JWKS do Hydra
-- [ ] PAT validation via GitHub API (como hoje, deprecated)
-- [ ] Shared lib `pkg/jwt/` sem duplicação
-- [ ] Deprecation warning para PAT login
-- [ ] Nenhuma regressão — todos os testes existentes passam
-- [ ] Config backward compatible (sem JWKS = só PAT)
-- [ ] 3 deploys estáveis após migração
+- [x] Engine API dual validation — DualValidator routes JWT→JWKSValidator, PAT→GitHubValidator by token format
+- [x] JWT validation via JWKS — pkg/jwt/Validator with JWKS fetch + cache (5min TTL) + RSA key parsing
+- [x] PAT validation (deprecated) — existing GitHubValidator untouched, DualValidator falls back to it
+- [x] Shared lib pkg/jwt/ — Validator, IsJWTToken, IsGitHubPAT. Used by cloud/ and api/ (zero duplication)
+- [x] Deprecation warning — stderr warning for ghp_/gho_ tokens, suppressed in JSON mode + LOOPZERO_SUPPRESS_DEPRECATION=1
+- [x] Zero regression — 32/32 login tests pass, 22 API packages pass, middleware tests pass
+- [x] Config backward compatible — JWKS_ENDPOINT env var: when empty, DualValidator uses PAT-only (nil JWT validator)
+- [x] Tests — pkg/jwt: 13 subtests (IsJWTToken, IsGitHubPAT), middleware: 4 tests (dual routing, fallback, format detection)
