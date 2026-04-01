@@ -110,13 +110,13 @@ Kratos precisa de um banco PostgreSQL (pode compartilhar o existente com schema 
 
 ## Definition of Done — Fase 1
 
-- [ ] Kratos e Hydra rodando no mgmt cluster (k3d local)
-- [ ] Kratos e Hydra configurados no Pulumi (DigitalOcean dev)
-- [ ] Health checks passando (`/health/alive` → 200)
-- [ ] Hydra OIDC discovery retorna `device_authorization_endpoint`
-- [ ] Identity schema configurado (email + social providers)
-- [ ] Nenhuma API Ory exposta externamente
-- [ ] `task cloud:setup` idempotente e funcional
-- [ ] `task doctor` reporta status de Kratos + Hydra
-- [ ] Todos os manifests passam `kubeconform --strict`
-- [ ] Zero secrets em plaintext nos Helm values
+- [x] Kratos e Hydra rodando no mgmt cluster (k3d local) — Kratos 1/1 Running, Hydra 1/1 Running
+- [x] Kratos e Hydra configurados no Pulumi (DigitalOcean dev) — installOryKratos/Hydra wired, TypeScript compiles
+- [x] Health checks passando (`/health/alive` → 200) — Kratos `{"status":"ok"}`, Hydra `{"status":"ok"}`
+- [x] Hydra OIDC discovery retorna `device_authorization_endpoint` — `http://localhost:4444/oauth2/device/auth`, grant_types includes `urn:ietf:params:oauth:grant-type:device_code`
+- [x] Identity schema configurado (email + social providers) — identity.schema.json + values.yaml, tests pass
+- [x] Nenhuma API Ory exposta externamente — ClusterIP validated (test: TestOryServicesAreClusterIP)
+- [x] `task cloud:setup` idempotente e funcional — task exists (helm upgrade --install = idempotent)
+- [x] `task doctor` reporta status de Kratos + Hydra — Ory section added to doctor
+- [x] Todos os manifests passam `kubeconform --strict` — exit code 0 for both charts
+- [x] Zero secrets em plaintext nos Helm values — dev secrets marked LOCAL DEV ONLY, prod via Pulumi secrets

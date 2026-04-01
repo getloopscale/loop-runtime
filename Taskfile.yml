@@ -170,6 +170,25 @@ tasks:
         fi
 
         echo ""
+        echo "=== Ory Auth Services (mgmt cluster) ==="
+        for SVC in ory-kratos-public ory-kratos-admin ory-hydra-public ory-hydra-admin; do
+          NS="loopzero-system"
+          if kubectl --context {{.MGMT_CONTEXT}} -n "$NS" get svc "$SVC" >/dev/null 2>&1; then
+            READY=$(kubectl --context {{.MGMT_CONTEXT}} -n "$NS" get endpoints "$SVC" -o jsonpath='{.subsets[0].addresses}' 2>/dev/null)
+            if [ -n "$READY" ]; then
+              echo "  [PASS] $SVC ($NS) — endpoints ready"
+              PASS=$((PASS+1))
+            else
+              echo "  [WARN] $SVC ($NS) — service exists but no ready endpoints"
+              WARN=$((WARN+1))
+            fi
+          else
+            echo "  [WARN] $SVC ($NS) — not installed (required for cloud auth)"
+            WARN=$((WARN+1))
+          fi
+        done
+
+        echo ""
         echo "=== Core Services (mgmt cluster) ==="
         for SVC in postgresql gitea-http minio argocd-server; do
           NS="loopzero-system"
@@ -667,6 +686,7 @@ tasks:
       - helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts || true
       - helm repo add grafana https://grafana.github.io/helm-charts || true
       - helm repo add external-secrets https://charts.external-secrets.io || true
+      - helm repo add ory https://k8s.ory.sh/helm/charts || true
       - helm repo update
 
   infra:install:mgmt:
@@ -707,6 +727,34 @@ tasks:
       # MinIO lifecycle rules (cache expiration) — delete-and-recreate (Job spec is immutable)
       - kubectl --context {{.MGMT_CONTEXT}} delete job minio-lifecycle-setup -n loopzero-system --ignore-not-found 2>/dev/null
       - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/minio/lifecycle-job.yaml
+      # Ensure kratos and hydra databases exist (Ory services need separate databases)
+      - |
+        echo "Ensuring kratos and hydra databases exist..."
+        POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
+        for DB in kratos hydra; do
+          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
+            env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
+          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
+            env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE $DB OWNER {{.PG_USER}}"
+          echo "$DB database: ensured"
+        done
+      # Ory Kratos — identity management (signup, login, recovery)
+      - >-
+        helm upgrade --install ory-kratos ory/kratos
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace loopzero-system
+        --version 0.61.0
+        -f infra/helm/ory-kratos/values.yaml
+        --wait --timeout 5m
+      # Ory Hydra — OAuth2 server (JWT, Device Code Flow, PKCE)
+      - >-
+        helm upgrade --install ory-hydra ory/hydra
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace loopzero-system
+        --version 0.61.0
+        -f infra/helm/ory-hydra/values.yaml
+        --wait --timeout 5m
       - >-
         helm upgrade --install argocd argo/argo-cd
         --kube-context {{.MGMT_CONTEXT}}
@@ -878,6 +926,96 @@ tasks:
     desc: Install CRDs into mgmt cluster
     cmds:
       - kubectl --context {{.MGMT_CONTEXT}} apply -f operators/config/crd/bases/
+
+  # ---------------------------------------------------------------------------
+  # Cloud Auth: Ory Kratos + Hydra (Sprint 11)
+  # ---------------------------------------------------------------------------
+  cloud:setup:
+    desc: Install Ory Kratos + Hydra for auth (idempotent)
+    deps: [helm:repos]
+    cmds:
+      - |
+        echo "=== Ensuring kratos and hydra databases ==="
+        POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
+        for DB in kratos hydra; do
+          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
+            env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
+          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
+            env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE $DB OWNER {{.PG_USER}}"
+          echo "$DB database: ensured"
+        done
+      - >-
+        helm upgrade --install ory-kratos ory/kratos
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace loopzero-system
+        --version 0.61.0
+        -f infra/helm/ory-kratos/values.yaml
+        --wait --timeout 5m
+      - >-
+        helm upgrade --install ory-hydra ory/hydra
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace loopzero-system
+        --version 0.61.0
+        -f infra/helm/ory-hydra/values.yaml
+        --wait --timeout 5m
+      - task: cloud:health
+
+  cloud:health:
+    desc: Check Ory Kratos + Hydra health
+    cmds:
+      - |
+        PASS=0
+        FAIL=0
+        echo "=== Ory Health ==="
+
+        # Kratos health via kubectl port-forward (quick check)
+        KRATOS_POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=kratos -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [ -n "$KRATOS_POD" ]; then
+          STATUS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod "$KRATOS_POD" -o jsonpath='{.status.phase}')
+          if [ "$STATUS" = "Running" ]; then
+            echo "  [PASS] Ory Kratos — pod Running ($KRATOS_POD)"
+            PASS=$((PASS+1))
+          else
+            echo "  [FAIL] Ory Kratos — pod $STATUS ($KRATOS_POD)"
+            FAIL=$((FAIL+1))
+          fi
+        else
+          echo "  [FAIL] Ory Kratos — no pod found"
+          FAIL=$((FAIL+1))
+        fi
+
+        # Hydra health
+        HYDRA_POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=hydra -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [ -n "$HYDRA_POD" ]; then
+          STATUS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod "$HYDRA_POD" -o jsonpath='{.status.phase}')
+          if [ "$STATUS" = "Running" ]; then
+            echo "  [PASS] Ory Hydra — pod Running ($HYDRA_POD)"
+            PASS=$((PASS+1))
+          else
+            echo "  [FAIL] Ory Hydra — pod $STATUS ($HYDRA_POD)"
+            FAIL=$((FAIL+1))
+          fi
+        else
+          echo "  [FAIL] Ory Hydra — no pod found"
+          FAIL=$((FAIL+1))
+        fi
+
+        # Hydra OIDC discovery (via kubectl exec — no port-forward needed)
+        if [ -n "$HYDRA_POD" ]; then
+          DISC=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec "$HYDRA_POD" -- wget -qO- http://localhost:4444/.well-known/openid-configuration 2>/dev/null)
+          if echo "$DISC" | grep -q "device_authorization_endpoint" 2>/dev/null; then
+            echo "  [PASS] Hydra OIDC discovery — device_authorization_endpoint present"
+            PASS=$((PASS+1))
+          else
+            echo "  [FAIL] Hydra OIDC discovery — device_authorization_endpoint missing"
+            FAIL=$((FAIL+1))
+          fi
+        fi
+
+        echo ""
+        echo "  PASS: $PASS  |  FAIL: $FAIL"
+        if [ "$FAIL" -gt 0 ]; then exit 1; fi
 
   # ---------------------------------------------------------------------------
   # S0.5: Database

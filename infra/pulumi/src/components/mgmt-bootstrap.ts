@@ -84,6 +84,12 @@ export function bootstrapMgmtCluster(
     { provider, dependsOn: [minio] },
   );
 
+  // Ory Kratos — identity management (signup, login, recovery)
+  const oryKratos = installOryKratos(provider, ns, infra, config);
+
+  // Ory Hydra — OAuth2 server (JWT tokens, Device Code Flow, PKCE)
+  const oryHydra = installOryHydra(provider, ns, infra, config, oryKratos);
+
   // Prometheus — metrics collection (kube-state-metrics, node-exporter, cAdvisor)
   const prometheus = installPrometheus(provider, ns);
 
@@ -143,6 +149,8 @@ export function bootstrapMgmtCluster(
     grafanaReady: grafana.status.apply((s) => s.status === "deployed"),
     loopzeroApiReady: loopzeroApi.metadata.name.apply((n) => !!n),
     tenantControllerReady: tenantController.metadata.name.apply((n) => !!n),
+    oryKratosReady: oryKratos.status.apply((s) => s.status === "deployed"),
+    oryHydraReady: oryHydra.status.apply((s) => s.status === "deployed"),
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
     tlsConfigured: tlsRoutes.apply((routes) => routes.length > 0),
     ingressEndpoint,
@@ -457,6 +465,156 @@ function installMinIO(
       },
     },
     { provider, dependsOn: [ns] },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ory — Identity (Kratos) + OAuth2 (Hydra) for LoopZero Cloud auth
+// ---------------------------------------------------------------------------
+
+/**
+ * Ory Kratos — Identity management (signup, login, recovery, verification).
+ * Uses the managed PostgreSQL instance with a dedicated `kratos` database.
+ * Configured with email+password and OIDC (GitHub, Google) identity methods.
+ */
+function installOryKratos(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  infra: InfraOutputs,
+  config: PlatformStackConfig,
+): k8s.helm.v3.Release {
+  const kratosValuesPath = path.resolve(
+    __dirname,
+    "../../../helm/ory-kratos/values.yaml",
+  );
+  const kratosValues = fs.existsSync(kratosValuesPath)
+    ? kratosValuesPath
+    : undefined;
+
+  // Build DSN for Kratos database.
+  // Production: managed PostgreSQL (sslmode=require).
+  // Local dev: falls back to values.yaml default.
+  const kratosDsn = infra.database
+    ? pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/kratos?sslmode=require`
+    : undefined;
+
+  return new k8s.helm.v3.Release(
+    "ory-kratos",
+    {
+      name: "ory-kratos",
+      chart: "kratos",
+      version: HELM_VERSIONS.oryKratos,
+      repositoryOpts: {
+        repo: "https://k8s.ory.sh/helm/charts",
+      },
+      namespace: PLATFORM_NAMESPACE,
+      createNamespace: false,
+      ...(kratosValues ? { valueYamlFiles: [new pulumi.asset.FileAsset(kratosValues)] } : {}),
+      values: {
+        fullnameOverride: "ory-kratos",
+        ...(kratosDsn
+          ? {
+              kratos: {
+                config: {
+                  dsn: kratosDsn,
+                },
+              },
+            }
+          : {}),
+        resources: {
+          requests: { cpu: "50m", memory: "128Mi" },
+          limits: { cpu: "300m", memory: "256Mi" },
+        },
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+}
+
+/**
+ * Ory Hydra — OAuth2 / OpenID Connect server.
+ * Issues JWT access tokens (RFC 8628 Device Code Flow for CLI, PKCE for dashboard).
+ * Uses the managed PostgreSQL instance with a dedicated `hydra` database.
+ */
+function installOryHydra(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  infra: InfraOutputs,
+  config: PlatformStackConfig,
+  kratos: k8s.helm.v3.Release,
+): k8s.helm.v3.Release {
+  const hydraValuesPath = path.resolve(
+    __dirname,
+    "../../../helm/ory-hydra/values.yaml",
+  );
+  const hydraValues = fs.existsSync(hydraValuesPath)
+    ? hydraValuesPath
+    : undefined;
+
+  // Build DSN for Hydra database.
+  const hydraDsn = infra.database
+    ? pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/hydra?sslmode=require`
+    : undefined;
+
+  // Production issuer URL: https://api.<domain>/
+  const issuerUrl =
+    config.environment !== "dev"
+      ? `https://api.${config.domain}/`
+      : undefined;
+
+  return new k8s.helm.v3.Release(
+    "ory-hydra",
+    {
+      name: "ory-hydra",
+      chart: "hydra",
+      version: HELM_VERSIONS.oryHydra,
+      repositoryOpts: {
+        repo: "https://k8s.ory.sh/helm/charts",
+      },
+      namespace: PLATFORM_NAMESPACE,
+      createNamespace: false,
+      ...(hydraValues ? { valueYamlFiles: [new pulumi.asset.FileAsset(hydraValues)] } : {}),
+      values: {
+        fullnameOverride: "ory-hydra",
+        ...(hydraDsn || issuerUrl
+          ? {
+              hydra: {
+                config: {
+                  ...(hydraDsn ? { dsn: hydraDsn } : {}),
+                  ...(issuerUrl
+                    ? {
+                        urls: {
+                          self: { issuer: issuerUrl },
+                          login: `https://app.${config.domain}/login`,
+                          consent: `https://app.${config.domain}/consent`,
+                          logout: `https://app.${config.domain}/logout`,
+                          device_verification: `https://app.${config.domain}/device`,
+                        },
+                        serve: {
+                          public: {
+                            cors: {
+                              enabled: true,
+                              allowed_origins: [
+                                `https://app.${config.domain}`,
+                                `https://*.${config.domain}`,
+                              ],
+                            },
+                          },
+                        },
+                      }
+                    : {}),
+                },
+              },
+            }
+          : {}),
+        resources: {
+          requests: { cpu: "50m", memory: "128Mi" },
+          limits: { cpu: "300m", memory: "256Mi" },
+        },
+      },
+    },
+    // Hydra depends on Kratos being deployed first (same auth system)
+    { provider, dependsOn: [ns, kratos] },
   );
 }
 
