@@ -176,6 +176,12 @@ export function installCertManager(
       },
       namespace: PLATFORM_NAMESPACE,
       createNamespace: false,
+      // Wait for ALL cert-manager pods (including webhook) to be Ready.
+      // Without this, the ClusterIssuer creation fails because the webhook
+      // isn't serving yet: "http: server gave HTTP response to HTTPS client".
+      // Critical for fresh deploys (destroy+recreate).
+      waitForJobs: true,
+      timeout: 300, // 5 min for webhook to become ready
       values: {
         installCRDs: true,
         global: {
@@ -353,6 +359,9 @@ export function createClusterIssuer(
         },
       ];
 
+  // The ClusterIssuer depends on the cert-manager webhook being fully ready.
+  // On fresh deploys, the webhook may not be serving when Pulumi tries to create
+  // the CR. customTimeouts gives the K8s API server time to retry the webhook call.
   return new k8s.apiextensions.CustomResource(
     `${role}-letsencrypt-prod`,
     {
@@ -377,6 +386,11 @@ export function createClusterIssuer(
         },
       },
     },
-    { provider, dependsOn: [certManager] },
+    {
+      provider,
+      dependsOn: [certManager],
+      // Retry for up to 5 min — webhook may not be ready on fresh deploys.
+      customTimeouts: { create: "5m", update: "2m" },
+    },
   );
 }
