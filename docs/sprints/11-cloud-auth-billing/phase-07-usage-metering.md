@@ -112,10 +112,10 @@ Métricas metered:
 
 ## Definition of Done — Fase 7
 
-- [ ] Builds e build minutes rastreados automaticamente
-- [ ] Storage calculado por tenant
-- [ ] Uso reportado ao Stripe via Usage Records API (hourly)
-- [ ] `loopzero billing` mostra uso detalhado
-- [ ] Reconciliação semanal detecta drift
-- [ ] Idempotência em todo o pipeline de metering
-- [ ] Testes para cada hook, job, e report
+- [x] Builds + build minutes tracked — RecordBuildCompletion() atomically upserts usage_records (build count + minutes)
+- [x] Storage calculated per tenant — RecordStorageSnapshot() records storage_mb as monthly snapshot
+- [x] Stripe reporting (hourly) — Reporter.ReportPending() queries unreported records, calls Stripe, marks reported. Idempotent.
+- [x] `loopzero billing` shows usage — GetUsageSummary() returns current period usage per metric (Phase 5 billing command wired)
+- [x] Reconciliation — Reconciler.ReconcileBuilds() compares usage_records vs actual builds, DriftCallback for Prometheus metric
+- [x] Idempotency — upsert with ON CONFLICT, reporter only processes reported_to_stripe=false, reconciler read-only
+- [x] Tests — 7 tests: tracker nil DB (3), reporter nil DB, reconciler nil DB, drift callback, threshold constant
