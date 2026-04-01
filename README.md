@@ -1,14 +1,19 @@
-# LoopZero
-
-> **Deploy your entire monorepo to Kubernetes in under 5 minutes. No infrastructure YAML. No Kubernetes knowledge required.**
-
-LoopZero is the Vercel for developers who have a backend. If you already use Vercel and love it — but your monorepo has an API, workers, and a frontend that Vercel can't handle — LoopZero solves the rest with the same DX, via CLI.
+<p align="center">
+  <h1 align="center">LoopZero</h1>
+  <p align="center">
+    <strong>The deployment platform for teams who outgrew Vercel but don't want to manage Kubernetes.</strong>
+  </p>
+  <p align="center">
+    <a href="#quickstart">Quickstart</a> &bull;
+    <a href="#cli-reference">CLI Reference</a> &bull;
+    <a href="#how-it-works">How It Works</a> &bull;
+    <a href="#development">Development</a>
+  </p>
+</p>
 
 ---
 
-## The 5-Minute Promise
-
-Three commands. Everything live.
+Three commands. Your monorepo is live.
 
 ```bash
 loopzero login
@@ -17,374 +22,321 @@ loopzero deploy
 ```
 
 ```
-✓ Building api...    [62s]
-✓ Building web...    [51s]
-✓ Building worker... [34s]
-✓ Deploying...       [46s]
+✓ Building api...    [24s]
+✓ Building web...    [18s]
+✓ Building worker... [12s]
+✓ Deploying...       [15s]
 
-🚀 Live:
-  api    → https://acme-my-saas-api-production.dev.loopzero.example
-  web    → https://acme-my-saas-web-production.dev.loopzero.example (static CDN)
-  worker → (no URL — background worker)
-
-Total: 193s — exit code 0
+Live:
+  api    → https://acme-my-saas-api-production.loopzero.example
+  web    → https://acme-my-saas-web-production.loopzero.example (CDN)
+  worker → (background)
 ```
 
-**Roadmap:** auto-deploy on `git push` to `main` and preview environments per PR are planned for future sprints. See [Roadmap](docs/sprints/ROADMAP.md).
+No Kubernetes. No Helm. No Dockerfile required.
 
 ---
 
-## Who This Is For
+## Why LoopZero
 
-**Lucas** is a fullstack tech lead at a 15-person startup. Stack: NestJS API + Vite frontend + BullMQ workers in a Turborepo monorepo. He maintains a 400-line GitHub Actions pipeline alone. Every new env var or service means editing YAML he barely understands and waiting 20 minutes for CI.
+You have a monorepo with an API, a frontend, and workers. Vercel handles the frontend beautifully — but the rest is a mess of Dockerfiles, Helm charts, and CI pipelines that only one person understands.
 
-He uses Vercel for the marketing site and wishes the rest of the stack was that simple.
+LoopZero gives you Vercel-quality DX for everything Vercel can't deploy.
 
-**LoopZero is built for Lucas.**
-
-The primary user is a backend engineer who prefers terminal workflows over web dashboards. Any feature that requires the dashboard but cannot be done via CLI is a product bug.
+| | Vercel | LoopZero |
+|---|:---:|:---:|
+| Static frontends (React, Vite, Next.js) | ✓ | ✓ via CDN |
+| API servers (Express, NestJS, Go, Python) | Serverless only | ✓ Any framework |
+| Background workers | - | ✓ |
+| Multiple services per repo | - | ✓ |
+| Rollback in seconds | ✓ | ✓ (~3s) |
+| Secrets per environment | ✓ | ✓ (encrypted, ESO sync) |
+| Preview environments per PR | ✓ | Roadmap |
+| CLI-first | ✓ | ✓ |
+| Team management + RBAC | ✓ | ✓ |
+| Real-time build logs | ✓ | ✓ (Loki) |
 
 ---
 
-## Core Workflows
+## Quickstart
 
-### Deploy
+### 1. Authenticate
 
 ```bash
-$ loopzero deploy
-✓ Building api...    [62s]
-✓ Building web...    [51s]
-✓ Deploying...       [46s]
-
-🚀 Live:
-  api → https://tn-loopzero-e2e-project-api-production.dev.loopzero.example
-  web → https://tn-loopzero-e2e-project-web-production.dev.loopzero.example (static CDN)
-
-Total: 193s — exit code 0
+loopzero login
 ```
 
-### Implemented CLI commands
-
-The following commands are implemented and functional:
-- `loopzero login` — authenticate via GitHub OAuth
-- `loopzero logout` — remove stored credentials
-- `loopzero whoami` — show authenticated user and team
-- `loopzero init` — detect monorepo and generate `loopzero.yaml`
-- `loopzero deploy` — build and deploy all apps (API servers, static frontends, workers)
-- `loopzero logs` — stream build and runtime logs (backed by Loki)
-- `loopzero rollback` — revert to a previous release (~3s)
-- `loopzero secret` — manage environment secrets (synced via External Secrets Operator)
-- `loopzero validate` — validate `loopzero.yaml` configuration locally
-- `loopzero status` — show project status (active release, last build, sync status)
-- `loopzero project delete` — remove project and all deployed resources
-
-Preview environments and inspect are planned for future sprints.
-
-### Preview Environments (Planned)
-
-Preview environments per PR are planned for Sprint 5. The target experience:
+### 2. Initialize your project
 
 ```bash
-$ git push origin feat/payments
-# GitHub webhook fires automatically
-# PR comment appears:
-#   api → https://acme-my-saas-api-feat-payments.dev.loopzero.example
-#   web → https://acme-my-saas-web-feat-payments.dev.loopzero.example
+cd my-monorepo
+loopzero init
 ```
 
-No CLI command needed. Previews will be destroyed automatically when the PR is merged or closed.
-
----
-
-## LoopZero vs. Vercel
-
-| Capability | Vercel | LoopZero |
-|---|---|---|
-| Frontend (React, Next.js, Vite) | ✅ | ✅ (static CDN via Cloudflare) |
-| Backend / API server | ❌ Serverless only | ✅ Any framework |
-| Workers / background jobs | ❌ | ✅ |
-| Multiple services in one repo | ❌ | ✅ |
-| Preview environments per PR | ✅ | 🔜 Sprint 5 |
-| Rollback with one command | ✅ | ✅ |
-| Env variables per environment | ✅ | ✅ |
-| Auto-deploy on push to main | ✅ | 🔜 Roadmap |
-| Real-time logs | ✅ | ✅ |
-| CLI as complete interface | ✅ | ✅ |
-| Managed databases | ❌ | 🔜 Roadmap |
-| Multi-region | ✅ | 🔜 v3 |
-| Custom domains | ✅ | 🔜 v3 |
-
----
-
-## Configuration
-
-The only file you write is `loopzero.yaml`. LoopZero generates it for you during `loopzero init`.
+LoopZero detects your monorepo structure (Turborepo, Nx, pnpm workspaces) and frameworks (Node.js, Go, Python, Next.js, Vite, and 10+ others), then generates `loopzero.yaml`:
 
 ```yaml
-# Minimal configuration — auto-generated by `loopzero init`
+version: 1
 project: my-saas
 
 apps:
-  - name: api
+  api:
     path: apps/api
+    framework: express
+    type: server
     port: 3000
 
-  - name: web
+  web:
     path: apps/web
-    port: 5173
+    framework: vite
+    type: frontend
 
-  - name: worker
+  worker:
     path: apps/worker
-    # no port — background worker
+    type: worker
 ```
 
-No Kubernetes. No Helm. No Dockerfile required (auto-detected from framework).
+### 3. Deploy
 
-**Supported frameworks (auto-detected):**
+```bash
+loopzero deploy
+```
 
-Node.js, NestJS, Next.js, Vite, Remix, Go, Python/FastAPI, Python/Django, Java/Spring, Ruby on Rails — and any Dockerfile-based app.
+That's it. TLS, health checks, ingress routing, and zero-downtime rolling updates are automatic.
 
 ---
 
 ## CLI Reference
 
-| Command | Purpose | Vercel equivalent |
-|---|---|---|
-| `loopzero login` | Authenticate | `vercel login` |
-| `loopzero whoami` | Show authenticated user/team | `vercel whoami` |
-| `loopzero logout` | Remove stored credentials | N/A |
-| `loopzero init` | Detect monorepo, generate `loopzero.yaml` | `vercel` (first run) |
-| `loopzero deploy` | Build and deploy all apps | `vercel` |
-| `loopzero deploy --env staging` | Deploy to a specific environment | `vercel --prod` |
-| `loopzero deploy --app api` | Deploy specific app(s) | N/A |
-| `loopzero deploy --no-wait` | Submit deploy and return immediately | N/A |
-| `loopzero logs` | Stream build and runtime logs | `vercel logs` |
-| `loopzero rollback` | Revert to a previous release (~3s) | `vercel rollback` |
-| `loopzero secret` | Manage environment secrets | `vercel env` |
-| `loopzero validate` | Validate `loopzero.yaml` configuration locally | N/A |
+### Core Workflow
 
-Full reference: see [CLI Reference](#) in the system design docs.
+| Command | Purpose |
+|---------|---------|
+| `loopzero login` | Authenticate via GitHub |
+| `loopzero init` | Detect monorepo, generate `loopzero.yaml` |
+| `loopzero deploy` | Build and deploy all apps |
+| `loopzero deploy --env staging` | Deploy to a specific environment |
+| `loopzero deploy --app api` | Deploy a single app |
+| `loopzero deploy --no-wait` | Submit and return immediately |
+| `loopzero status` | Show project status, active release, URL |
+| `loopzero logs` | Show build logs (auto-detects last build) |
+| `loopzero rollback` | Revert to previous release (~3s) |
+| `loopzero cancel <build-id>` | Cancel a running build |
+| `loopzero validate` | Validate `loopzero.yaml` locally |
+
+### Project & Environment Management
+
+| Command | Purpose |
+|---------|---------|
+| `loopzero project list` | List all projects |
+| `loopzero project inspect <name>` | Show project details |
+| `loopzero project create <name>` | Create a new project |
+| `loopzero project delete <name>` | Delete project and all resources |
+| `loopzero env list` | List environments |
+| `loopzero env create <name>` | Create a new environment |
+| `loopzero env inspect <name>` | Show environment details |
+| `loopzero env delete <name>` | Delete environment (with `--confirm`) |
+
+### Team Management
+
+| Command | Purpose |
+|---------|---------|
+| `loopzero team list` | List team members and roles |
+| `loopzero team add <user>` | Add a member (`--role admin` or `--role member`) |
+| `loopzero team remove <user>` | Remove a member |
+| `loopzero team role <user> <role>` | Change a member's role (owner only) |
+
+### Secrets
+
+| Command | Purpose |
+|---------|---------|
+| `loopzero secret set KEY=value` | Set a secret (encrypted at rest, synced via ESO) |
+| `loopzero secret list` | List secret names (values never exposed) |
+| `loopzero secret delete KEY` | Delete a secret |
+
+### Build Management
+
+| Command | Purpose |
+|---------|---------|
+| `loopzero build list` | List recent builds |
+| `loopzero build inspect <id>` | Show build details |
+
+### Session
+
+| Command | Purpose |
+|---------|---------|
+| `loopzero whoami` | Show authenticated user and team |
+| `loopzero logout` | Remove stored credentials |
+
+Every command supports `--json` for CI/CD integration. JSON output is a **stability contract** — field names never change without a major version bump.
+
+### Exit Codes
+
+| Code | Meaning |
+|:----:|---------|
+| `0` | Success |
+| `1` | Usage error |
+| `2` | Build failure |
+| `3` | Deploy/operation failure |
+| `4` | Authentication error |
+| `5` | Partial failure (some apps failed) |
 
 ---
 
-## Exit Codes
+## How It Works
 
-| Code | Meaning |
-|---|---|
-| `0` | Success |
-| `1` | CLI usage error (invalid command or argument) |
-| `2` | Build failure |
-| `3` | Deploy failure (build succeeded, deploy failed) |
-| `4` | Authentication error |
-| `5` | Partial failure (some apps deployed, some failed) |
+From the developer's perspective: `loopzero deploy` → URL. Everything below is invisible.
 
-All commands support `--json` for CI/CD integration. JSON output shape is a stability contract — it does not change without a major version bump.
+```
+                    ┌──────────────────────────────────────────┐
+  loopzero deploy ───►  │  LoopZero API                                │
+                    │  • Lock environment (advisory lock)       │
+                    │  • Submit build to Argo Workflows         │
+                    └────────────┬─────────────────────────────┘
+                                 │
+                    ┌────────────▼─────────────────────────────┐
+                    │  Build Cluster                            │
+                    │  • BuildKit (rootless, single-container)  │
+                    │  • Push image to container registry       │
+                    └────────────┬─────────────────────────────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              ▼                  ▼                   ▼
+        Server apps        Static apps         Worker apps
+        (API, Go, etc)     (Vite, Next.js)     (BullMQ, etc)
+              │                  │                   │
+     ArgoCD sync          Upload to S3 +       ArgoCD sync
+     → K8s Deployment     CF Worker KV         → K8s Deployment
+     → Health check       → CDN delivery       → (no ingress)
+              │                  │                   │
+              ▼                  ▼                   ▼
+          Live URL           Live URL           Running
+```
 
-### Monorepo Partial Failure
+### Platform Guarantees
+
+- **Serialization** — No two operations can mutate the same environment concurrently. Concurrent deploys get `409`.
+- **Idempotency** — Retrying any operation produces the same result.
+- **Isolation** — Tenants are isolated at compute, network, and build levels.
+- **Consistency** — A release is marked active only after cluster confirmation.
+- **Rollback** — Every deploy creates a rollback point. `loopzero rollback` reverts in ~3 seconds.
+- **Clean delete** — `loopzero project delete` removes manifests, triggers prune, verifies pods are gone.
+- **Security** — Pods run as non-root, drop all capabilities, use dedicated ServiceAccount, PSA restricted.
+
+### Stack
+
+| Layer | Technology |
+|-------|-----------|
+| CLI | TypeScript + Commander |
+| API | Go + chi + pgx |
+| Build engine | Argo Workflows + BuildKit (rootless) |
+| GitOps | ArgoCD (manual sync) + Gitea |
+| Database | PostgreSQL (advisory locks, RLS) |
+| Secrets | External Secrets Operator |
+| Edge | Cloudflare Tunnel + Worker + KV |
+| Static assets | DigitalOcean Spaces + CDN |
+| Monitoring | Prometheus + Grafana + Loki + Alertmanager |
+| IaC | Pulumi (TypeScript) |
+| Operators | Go + kubebuilder + controller-runtime |
+
+---
+
+## Configuration
+
+The only file you write is `loopzero.yaml`. Generated by `loopzero init`.
+
+```yaml
+version: 1
+project: my-saas
+
+apps:
+  api:
+    path: apps/api
+    framework: express
+    type: server
+    build: buildpack
+    port: 3000
+
+  web:
+    path: apps/web
+    framework: vite
+    type: frontend
+    build: buildpack
+
+  worker:
+    path: apps/worker
+    type: worker
+    build: buildpack
+```
+
+**Auto-detected frameworks:** Node.js, Express, NestJS, Next.js, Vite, Remix, Go, Python/FastAPI, Python/Django, Java/Spring, Ruby on Rails, and any Dockerfile.
+
+---
+
+## Development
+
+### Prerequisites
+
+Go 1.25+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), [Task](https://taskfile.dev), [Helm](https://helm.sh) v3.14+, kubectl
+
+### Setup
 
 ```bash
-$ loopzero deploy
-✓ Building api...    [45s]
-✗ Building worker... FAILED
+task setup       # Create 3 k3d clusters + install all infrastructure
+tilt up          # Start dev loop with hot reload
+task doctor      # Verify everything is healthy
+```
 
-⚠ Partial deploy:
-  api    → deployed (https://acme-my-saas-api-production.dev.loopzero.example)
-  worker → NOT deployed (build failed — run: loopzero logs --build b-4a2c)
+### Tests
+
+```bash
+task test              # All tests (unit + lint + manifests)
+cd cli && npm test     # 747 CLI tests (Jest)
+go test ./api/...      # API tests (Go testing)
+go test ./operators/...# Operator tests (Ginkgo + envtest)
+go test ./pkg/...      # Shared library tests
+```
+
+### Local Observability
+
+| Tool | URL |
+|------|-----|
+| Grafana | [localhost:3002](http://localhost:3002) |
+| Prometheus | [localhost:9090](http://localhost:9090) |
+| ArgoCD | [localhost:30082](http://localhost:30082) |
+
+---
+
+## Partial Failure Handling
+
+Apps build and deploy independently. A failing app does not block siblings.
+
+```
+$ loopzero deploy
+✓ api     → deployed
+✗ worker  → build failed (run: loopzero logs --build b-4a2c)
 
 Exit code: 5 (partial failure)
 ```
 
-Apps build and deploy independently. A failing app does not block its siblings.
-
 ---
 
-## How It Works (Architecture)
+## What LoopZero Does Not Solve
 
-LoopZero is a GitOps-based platform. The deploy pipeline is:
-
-```
-CLI → API → Argo Workflows (build) → Gitea (manifests) → ArgoCD → Kubernetes
-                                                       ↘ Cloudflare Worker (static frontends)
-```
-
-**From the developer's perspective:** none of this exists. You run `loopzero deploy` and get a URL. Validated end-to-end on DigitalOcean with a monorepo containing API server, static web frontend (zero pods), and worker — all deployed in 193s.
-
-**Under the hood:**
-
-1. `loopzero deploy` sends the request to the LoopZero API
-2. Argo Workflows builds your container image via BuildKit (rootless, single-container)
-3. The image is pushed to DigitalOcean Container Registry
-4. For API/worker apps: ArgoCD syncs Kubernetes manifests from Gitea and deploys the new version
-5. For static frontends: assets are uploaded to DO Spaces and served via Cloudflare Worker + CDN (zero pods)
-6. Health checks confirm the service is live; a RELEASING state machine handles crash recovery
-7. The URL is returned to the CLI
-
-All platform traffic is protected by Cloudflare Tunnel (DDoS/WAF).
-
-**State model:** Git (Gitea) is the source of truth for desired state. Kubernetes CRDs are the source of truth for operational state. PostgreSQL handles serialization, build history, and audit logs.
-
----
-
-## Platform Guarantees
-
-Things LoopZero guarantees at the platform level:
-
-- **Serialization:** No two concurrent operations can mutate the same project/environment. Concurrent deploy attempts return `409` immediately.
-- **Idempotency:** Retrying any operation produces the same result as the first attempt.
-- **Isolation:** A single tenant cannot degrade the platform for others (compute, network, build resources).
-- **Consistency:** A release is only marked active after confirmed sync from the cluster via ArgoCD notification callback. No silent inconsistencies.
-- **Rollback is always available:** Every successful deploy creates a rollback point. `loopzero rollback` reverts in ~3 seconds.
-- **Delete cleans everything:** `loopzero project delete` removes manifests from GitOps, triggers ArgoCD prune, and verifies pods are removed.
-- **Observability:** Prometheus with Alertmanager (API down, deploy failing, latency, crash loop). Build logs via Loki.
-
----
-
-## What LoopZero Does NOT Solve
-
-Being explicit about the boundaries:
-
-- **Database migration rollback** — LoopZero can revert a deployment. It cannot revert a schema change.
-- **Application-level data repair** — If a bug corrupted your data, LoopZero can't fix that.
-- **Custom DNS / certificates** — Preview and production URLs are on `*.loopzero.example`. Custom domains are v3.
-- **Multi-region replication** — Single-region in v1. Multi-region is v3.
-- **Cost allocation per tenant** — v3 scope.
-
----
-
-## Development Setup
-
-### Prerequisites
-
-- Go 1.25+
-- Node.js 20+
-- Docker
-- [k3d](https://k3d.io) (local Kubernetes)
-- [Tilt](https://tilt.dev) (local dev loop)
-- [Task](https://taskfile.dev) (task runner)
-
-### Local Environment
-
-The local dev environment uses k3d and Tilt to run the same Helm charts and operators as production. There is no "development mode" — local and production behavior are identical.
-
-```bash
-# Full setup from scratch (clusters + infra + monitoring + networking + CRDs + DB + tokens)
-task setup
-
-# Start Tilt (hot reload for all services)
-tilt up
-
-# Check environment health
-task doctor                # Full prerequisite check
-task status                # Cluster, pod, and service status
-task test:smoke            # Quick platform smoke test (<30s)
-
-# Run tests
-task test                  # Unit + lint + manifest validation
-task test:e2e              # E2E tests (requires tilt up)
-
-# Database
-task db:status             # Tables, connections, migrations, advisory locks
-task db:shell              # Interactive psql session
-task db:reset              # Drop + recreate + migrate (with confirmation prompt)
-```
-
-### Observability
-
-The monitoring stack is installed automatically by `task setup`. All tools are available at fixed local ports — no port-forward needed.
-
-| Tool | URL | Credentials | Purpose |
-|------|-----|------------|---------|
-| **Grafana** | [http://localhost:3002](http://localhost:3002) | `admin` / `loopzero-dev-password` | Dashboards and visualization |
-| **Prometheus** | [http://localhost:9090](http://localhost:9090) | (none) | Metrics and alerting |
-| **ArgoCD** | [http://localhost:30082](http://localhost:30082) | `admin` / `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` | GitOps sync status |
-| **MinIO Console** | [http://localhost:9001](http://localhost:9001) | `loopzero-admin` / `loopzero-dev-password` | Artifact storage |
-
-#### Grafana Dashboards
-
-LoopZero ships with 6 custom dashboards (auto-installed):
-
-- **LoopZero — System Home** — top-level health overview
-- **LoopZero — Platform Overview** — API latency, build throughput, deploy success rate
-- **LoopZero — Build Pipeline** — build duration, cache hit rate, queue depth
-- **LoopZero — Per-Tenant Health** — resource usage and quota per tenant
-- **LoopZero — Drift Detection** — Git vs cluster state divergence
-- **LoopZero — Failure Investigation** — drill-down for incident response
-
-Plus 29 Kubernetes infrastructure dashboards from kube-prometheus-stack.
-
-#### Alerting
-
-23 LoopZero-specific alert rules are pre-configured:
-
-| Severity | Examples |
-|----------|----------|
-| **Critical** (11) | `LoopZeroPostgresDown`, `LoopZeroBuildClusterUnreachable`, `LoopZeroArgoCDCircuitOpen`, `LoopZeroDriftDetected` |
-| **Warning** (12) | `LoopZeroAPIHighLatency`, `LoopZeroBuildQueueBacklog`, `LoopZeroReconcilerUnhealthy`, `LoopZeroSecretSyncFailed` |
-
-#### Taskfile Commands
-
-```bash
-task status                       # Quick health overview (clusters, pods, API, monitoring)
-task doctor                       # Full prerequisite and environment check
-task monitoring:status            # Prometheus targets, active alerts, Grafana dashboards
-task monitoring:validate-targets  # Verify all scrape targets are UP
-```
-
-#### After Recreating Clusters
-
-k3d assigns dynamic Docker IPs to cluster loadbalancers. After `task clusters:delete` + `task setup`, the cross-cluster IPs in `infra/tilt/api-deployment.yaml` must be updated:
-
-```bash
-# Automatic — runs as part of `task networking:setup` (included in `task setup`)
-bash infra/scripts/update-cross-cluster-ips.sh
-
-# Manual verification
-docker inspect k3d-loopzero-mgmt-serverlb --format '{{json .NetworkSettings.Networks}}'
-docker inspect k3d-loopzero-workload-serverlb --format '{{json .NetworkSettings.Networks}}'
-```
-
-After starting Tilt, force Prometheus to pick up the new API metrics target:
-
-```bash
-curl -X POST http://localhost:9090/-/reload
-```
-
-### Testing Philosophy
-
-Every feature starts as a Ginkgo BDD test. No production code is written before a failing test exists.
-
-```
-BDD spec → Go interface → Implementation → Integration test → E2E test
-```
-
----
-
-## Performance Targets
-
-| Phase | Cold cache (p95) | Warm cache (p95) |
-|---|---|---|
-| Pre-deploy validation | < 2s | < 2s |
-| Code ingestion | < 5s | < 5s |
-| Build (compile + image) | < 180s | < 90s |
-| Release + GitOps push | < 10s | < 10s |
-| ArgoCD sync + health check | < 60s | < 60s |
-| **Total** | **< 5 min** | **< 3 min** |
-
-**Validated:** Full monorepo deploy (API server + Web static + Worker) completes in 193s with exit code 0 on DigitalOcean. Infrastructure destroy + recreate tested via GitHub Actions pipeline.
-
-Reference hardware: 4 vCPU, 8 GB RAM, 3000 IOPS, 100 Mbps network.
+- **Database migrations** — LoopZero deploys code, not schema changes.
+- **Application data repair** — If a bug corrupted data, that's on you.
+- **Custom domains** — All URLs are on `*.loopzero.example` for now.
+- **Multi-region** — Single-region in v1.
 
 ---
 
 ## Stability Contract
 
-The CLI follows semver. Once shipped, commands do not break.
-
-- **Commands are permanent** — a shipped command cannot be removed without a 6-month deprecation warning and a major version bump.
-- **Flags are permanent** — semantics cannot change. New flags can be added.
-- **Default behavior is frozen** — if `loopzero deploy` defaults to `production`, it always will.
-- **`--json` output is a contract** — shape cannot change without a major version bump.
-- **Exit codes are permanent** — once defined, their meaning cannot change.
+- Commands are permanent — no removal without 6-month deprecation + major version bump.
+- Flags are permanent — semantics don't change.
+- `--json` output is a contract — shape doesn't change without major version.
+- Exit codes are permanent.
+- Default behavior is frozen.
 
 ---
 
@@ -392,20 +344,12 @@ The CLI follows semver. Once shipped, commands do not break.
 
 [Apache License 2.0](LICENSE)
 
----
-
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and the PR checklist.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Every PR starts with a failing test.
 
-The authoritative specification lives in [`docs/technical.md`](docs/technical.md) — read the relevant section before opening a PR. Every PR must start with a failing test.
+## Links
 
----
-
-## Community
-
+- [Roadmap](docs/sprints/ROADMAP.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Governance](GOVERNANCE.md)
-- [Maintainers](MAINTAINERS.md)
 - [Security Policy](SECURITY.md)
-- [Release Process](RELEASES.md)
