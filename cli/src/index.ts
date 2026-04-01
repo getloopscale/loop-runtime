@@ -27,6 +27,7 @@ import { ProjectDeleteCommand } from './commands/project-delete';
 import { StatusCommand } from './commands/status';
 import { LogsCommand } from './commands/logs';
 import { RollbackCommand } from './commands/rollback';
+import { CancelCommand } from './commands/cancel';
 import { SecretSetCommand, SecretListCommand, SecretDeleteCommand } from './commands/secret';
 import { ValidateCommand } from './commands/validate';
 import { detectMonorepoTool } from './detection/monorepo';
@@ -585,6 +586,28 @@ export function createProgram(): Command {
         }
         return 3;
       });
+      process.exitCode = exitCode;
+    });
+
+  // --- cancel ---
+  program
+    .command('cancel <build-id>')
+    .description('Cancel a running or queued build')
+    .action(async (buildId: string) => {
+      const globalOpts = program.opts();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: configStore.getToken() ?? undefined });
+
+      const cancelCmd = new CancelCommand({
+        getToken: () => configStore.getToken(),
+        cancelBuild: async (id: string) => {
+          return apiClient.post(`/api/v1/builds/${encodeURIComponent(id)}/cancel`, {});
+        },
+        writeTo,
+        writeError,
+      });
+
+      const exitCode = await cancelCmd.execute(buildId, { json: globalOpts.json });
       process.exitCode = exitCode;
     });
 

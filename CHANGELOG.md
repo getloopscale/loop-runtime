@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- CLI command `loopzero cancel <build-id>` to cancel running or queued builds (#cmd-cancel)
+  - Exit codes: 0 success, 1 usage, 3 cancel failed, 4 auth
+  - `--json` output: `{ ok, build_id, status }` on success, `{ code, error, exit_code }` on error
+  - Rule 3 compliant: zero internal terms in any output
+  - 13 unit tests covering all error cases + Rule 3 compliance
 - Cell-Based Architecture Phase 0 implementation (#ADR-0008)
   - Migration 000011: `cell_id` column on tenants table (DEFAULT 'cell-default', indexed)
   - `CellID` field added to Tenant CRD spec (+kubebuilder:default="cell-default")
