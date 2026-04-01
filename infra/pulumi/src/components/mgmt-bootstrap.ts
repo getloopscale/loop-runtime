@@ -1690,206 +1690,84 @@ function createPlatformNetworkPolicies(
   ns: k8s.core.v1.Namespace,
 ): void {
   // Default deny all ingress
+  // Network isolation: allow all intra-namespace traffic + external webhook access.
+  //
+  // The platform namespace runs trusted services (cert-manager, ArgoCD, Gitea, MinIO,
+  // Prometheus, Grafana, Traefik, loopzero-api, tenant-controller) that need to communicate
+  // freely. Helm post-install hooks (Jobs) also need access to their parent services.
+  //
+  // Previous approach (default-deny + per-service allow-list) was brittle: every new
+  // service or Helm hook required a new NetworkPolicy. Missing policies caused silent
+  // failures (cert-manager webhook blocked, MinIO hook blocked).
+  //
+  // Current approach: allow all namespace-internal traffic + external access for
+  // services that need it (webhooks from K8s API, Traefik from LoadBalancer).
+  // Workload namespaces (tenant apps) use stricter isolation.
   new k8s.networking.v1.NetworkPolicy(
-    "default-deny-ingress",
+    "platform-network-policy",
     {
       metadata: {
-        name: "default-deny-ingress",
+        name: "platform-network-policy",
         namespace: PLATFORM_NAMESPACE,
       },
       spec: {
         podSelector: {},
         policyTypes: ["Ingress"],
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-
-  // loopzero-api: ingress (HTTP + metrics) + egress (DNS, PG, Gitea, ArgoCD, HTTPS, cross-cluster)
-  new k8s.networking.v1.NetworkPolicy(
-    "allow-api",
-    {
-      metadata: {
-        name: "allow-api",
-        namespace: PLATFORM_NAMESPACE,
-      },
-      spec: {
-        podSelector: { matchLabels: { app: "loopzero-api" } },
-        policyTypes: ["Ingress", "Egress"],
         ingress: [
           {
+            // Allow all traffic from pods within the same namespace
+            from: [{ podSelector: {} }],
+          },
+          {
+            // Allow external ingress on specific ports:
+            // - 10250: cert-manager webhook (K8s API server calls)
+            // - 8443: ArgoCD webhook
+            // - 8000/8443: Traefik (LoadBalancer → ingress controller)
+            // - 8080: loopzero-api, ArgoCD server (Traefik → backends)
+            // - 3000: Gitea (ArgoCD, cross-namespace access)
+            // - 9090/9402: Prometheus metrics scraping
             ports: [
+              { port: 10250, protocol: "TCP" },
+              { port: 8443, protocol: "TCP" },
+              { port: 8000, protocol: "TCP" },
               { port: 8080, protocol: "TCP" },
+              { port: 3000, protocol: "TCP" },
               { port: 9090, protocol: "TCP" },
+              { port: 9402, protocol: "TCP" },
             ],
           },
         ],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // Egress: allow all pods to reach external services.
+  // Platform services need: DNS, K8s API, PostgreSQL (managed DO), HTTPS (GitHub,
+  // DO Spaces, CF, Let's Encrypt), cross-cluster (build K8s API, Loki NodePort).
+  new k8s.networking.v1.NetworkPolicy(
+    "platform-egress-policy",
+    {
+      metadata: {
+        name: "platform-egress-policy",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        podSelector: {},
+        policyTypes: ["Egress"],
         egress: [
           // DNS
           { ports: [{ port: 53, protocol: "UDP" }, { port: 53, protocol: "TCP" }] },
-          // PostgreSQL (managed DO database — uses port 25060, not standard 5432)
-          { ports: [{ port: 25060, protocol: "TCP" }] },
-          // Gitea (in-namespace)
-          {
-            to: [{ podSelector: { matchLabels: { "app.kubernetes.io/name": "gitea" } } }],
-            ports: [{ port: 3000, protocol: "TCP" }],
-          },
-          // MinIO (in-namespace)
-          {
-            to: [{ podSelector: { matchLabels: { "app.kubernetes.io/name": "minio" } } }],
-            ports: [{ port: 9000, protocol: "TCP" }],
-          },
-          // ArgoCD (in-namespace on platform-system)
-          { ports: [{ port: 8080, protocol: "TCP" }] },
-          // External HTTPS (GitHub API, DO Spaces, Cloudflare)
-          { ports: [{ port: 443, protocol: "TCP" }] },
-          // Cross-cluster (build K8s API, Loki NodePort)
-          { ports: [{ port: 6443, protocol: "TCP" }, { port: 30100, protocol: "TCP" }] },
-        ],
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-
-  // tenant-controller: ingress (health + metrics) + egress (DNS, Gitea, K8s API)
-  new k8s.networking.v1.NetworkPolicy(
-    "allow-tenant-controller",
-    {
-      metadata: {
-        name: "allow-tenant-controller",
-        namespace: PLATFORM_NAMESPACE,
-      },
-      spec: {
-        podSelector: { matchLabels: { app: "tenant-controller" } },
-        policyTypes: ["Ingress", "Egress"],
-        ingress: [
-          {
-            ports: [
-              { port: 8080, protocol: "TCP" },
-              { port: 8081, protocol: "TCP" },
-            ],
-          },
-        ],
-        egress: [
-          { ports: [{ port: 53, protocol: "UDP" }, { port: 53, protocol: "TCP" }] },
-          {
-            to: [{ podSelector: { matchLabels: { "app.kubernetes.io/name": "gitea" } } }],
-            ports: [{ port: 3000, protocol: "TCP" }],
-          },
-          { ports: [{ port: 6443, protocol: "TCP" }] },
-          { ports: [{ port: 443, protocol: "TCP" }] },
-        ],
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-
-  // Gitea: ingress from loopzero-api, tenant-controller, and ArgoCD repo-server
-  new k8s.networking.v1.NetworkPolicy(
-    "allow-gitea",
-    {
-      metadata: {
-        name: "allow-gitea",
-        namespace: PLATFORM_NAMESPACE,
-      },
-      spec: {
-        podSelector: { matchLabels: { "app.kubernetes.io/name": "gitea" } },
-        policyTypes: ["Ingress"],
-        ingress: [
-          {
-            from: [
-              { podSelector: { matchLabels: { app: "loopzero-api" } } },
-              { podSelector: { matchLabels: { app: "tenant-controller" } } },
-              // ArgoCD repo-server clones from Gitea
-              { podSelector: { matchLabels: { "app.kubernetes.io/name": "argocd-repo-server" } } },
-            ],
-            ports: [{ port: 3000, protocol: "TCP" }],
-          },
-        ],
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-
-  // cert-manager: webhook needs ingress from K8s API server for ValidatingWebhookConfiguration.
-  // Without this, the default-deny-ingress policy blocks ALL webhook calls, causing:
-  //   "http: server gave HTTP response to HTTPS client"
-  // because the K8s API server cannot reach the webhook pod on port 10250.
-  // This was the ROOT CAUSE of the ClusterIssuer creation failure on destroy+recreate.
-  new k8s.networking.v1.NetworkPolicy(
-    "allow-cert-manager-webhook",
-    {
-      metadata: {
-        name: "allow-cert-manager-webhook",
-        namespace: PLATFORM_NAMESPACE,
-      },
-      spec: {
-        podSelector: {
-          matchLabels: { "app.kubernetes.io/component": "webhook", "app.kubernetes.io/instance": "mgmt-cert-manager" },
-        },
-        policyTypes: ["Ingress"],
-        ingress: [
-          {
-            // Allow from anywhere — the K8s API server doesn't have a fixed pod IP
-            // and doesn't run in the cluster network (it's a managed control plane on DOKS).
-            // The webhook validates requests via TLS client certs, not network policy.
-            ports: [{ port: 10250, protocol: "TCP" }],
-          },
-        ],
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-
-  // cert-manager controller + cainjector: need egress to K8s API and ACME servers
-  new k8s.networking.v1.NetworkPolicy(
-    "allow-cert-manager",
-    {
-      metadata: {
-        name: "allow-cert-manager",
-        namespace: PLATFORM_NAMESPACE,
-      },
-      spec: {
-        podSelector: {
-          matchLabels: { "app.kubernetes.io/instance": "mgmt-cert-manager" },
-        },
-        policyTypes: ["Ingress", "Egress"],
-        ingress: [
-          {
-            // Prometheus scraping metrics
-            ports: [{ port: 9402, protocol: "TCP" }],
-          },
-        ],
-        egress: [
-          // DNS
-          { ports: [{ port: 53, protocol: "UDP" }, { port: 53, protocol: "TCP" }] },
-          // K8s API server (DOKS managed — external IP)
+          // K8s API server (DOKS managed — external, uses 443 or 6443)
           { ports: [{ port: 443, protocol: "TCP" }, { port: 6443, protocol: "TCP" }] },
-        ],
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-
-  // MinIO: ingress from loopzero-api and tenant-controller
-  new k8s.networking.v1.NetworkPolicy(
-    "allow-minio",
-    {
-      metadata: {
-        name: "allow-minio",
-        namespace: PLATFORM_NAMESPACE,
-      },
-      spec: {
-        podSelector: { matchLabels: { "app.kubernetes.io/name": "minio" } },
-        policyTypes: ["Ingress"],
-        ingress: [
-          {
-            from: [
-              { podSelector: { matchLabels: { app: "loopzero-api" } } },
-              { podSelector: { matchLabels: { app: "tenant-controller" } } },
-            ],
-            ports: [{ port: 9000, protocol: "TCP" }],
-          },
+          // PostgreSQL (managed DO database — port 25060)
+          { ports: [{ port: 25060, protocol: "TCP" }] },
+          // HTTP (Gitea internal, MinIO, Loki cross-cluster on NodePort)
+          { ports: [{ port: 80, protocol: "TCP" }, { port: 8080, protocol: "TCP" }, { port: 9000, protocol: "TCP" }] },
+          // Cross-cluster (build K8s API, Loki NodePort 30100)
+          { ports: [{ port: 30100, protocol: "TCP" }] },
+          // Intra-namespace (all pods can talk to each other)
+          { to: [{ podSelector: {} }] },
         ],
       },
     },
