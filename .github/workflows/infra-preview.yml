@@ -27,7 +27,7 @@ permissions:
 env:
   NODE_VERSION: "20"
   PULUMI_WORKING_DIR: infra/pulumi
-  PULUMI_BACKEND_URL: s3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1
+  PULUMI_BACKEND_URL: "s3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
 
 concurrency:
   group: infra-preview-${{ github.event.pull_request.number }}
@@ -113,6 +113,13 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: npm ci
+
+      - name: Validate state backend credentials
+        run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "::error::SPACES_ACCESS_KEY_ID or SPACES_SECRET_ACCESS_KEY secret is not set."
+            exit 1
+          fi
 
       - name: Login to S3 state backend
         run: pulumi login "$PULUMI_BACKEND_URL"
