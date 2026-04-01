@@ -69,6 +69,27 @@ export function bootstrapBuildCluster(
   //
   // See MEET-2026-03-27-012: without this secret, build-image pods stay in PodInitializing.
 
+  // Pre-create the workflow ServiceAccount with Helm annotations.
+  // This prevents the "invalid ownership metadata" error on destroy+recreate:
+  // Helm requires resources to have release annotations, but partial first runs
+  // create the SA without them. By creating via Pulumi with the correct
+  // annotations, Helm recognizes it as owned and skips creation.
+  const buildSA = new k8s.core.v1.ServiceAccount(
+    "loopzero-build-sa",
+    {
+      metadata: {
+        name: "loopzero-build-sa",
+        namespace: "argo",
+        labels: { "app.kubernetes.io/managed-by": "Helm" },
+        annotations: {
+          "meta.helm.sh/release-name": "argo-workflows",
+          "meta.helm.sh/release-namespace": "argo",
+        },
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
   const argoWorkflows = new k8s.helm.v3.Release(
     "argo-workflows",
     {
@@ -80,10 +101,6 @@ export function bootstrapBuildCluster(
       },
       namespace: "argo",
       createNamespace: false,
-      // On destroy+recreate, partial first runs may leave K8s resources (ServiceAccount,
-      // RBAC) without Helm annotations. Helm refuses to install because it can't adopt
-      // them. replace=true deletes the failed release and reinstalls cleanly.
-      replace: true,
       values: {
         fullnameOverride: "argo-workflows",
         controller: {
@@ -108,8 +125,10 @@ export function bootstrapBuildCluster(
           },
         },
         workflow: {
+          // SA is pre-created by Pulumi with Helm annotations above.
+          // Helm sees it as owned and skips creation — avoids ownership conflicts.
           serviceAccount: {
-            create: true,
+            create: false,
             name: "loopzero-build-sa",
           },
           rbac: { create: true },
