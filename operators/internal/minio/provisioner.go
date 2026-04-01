@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/minio/madmin-go/v3"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/loopzero/loopzero/pkg/naming"
 )
@@ -59,7 +60,10 @@ type AdminConfig struct {
 // COMP-002: Uses madmin-go which handles AWS SigV4 authentication correctly,
 // replacing the previous HTTP Basic Auth implementation that returned 403.
 func NewAdminProvisioner(cfg AdminConfig) (*AdminProvisioner, error) {
-	client, err := madmin.New(cfg.Endpoint, cfg.AccessKey, cfg.SecretKey, false)
+	client, err := madmin.NewWithOptions(cfg.Endpoint, &madmin.Options{
+		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Secure: false,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("minio: create admin client: %w", err)
 	}

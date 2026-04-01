@@ -80,7 +80,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 
 	// Cleanup
 	t.Cleanup(func() {
-		pool.Exec(ctx, "DELETE FROM builds WHERE id IN ($1, $2)", buildA, buildB)
+		_, _ = pool.Exec(ctx, "DELETE FROM builds WHERE id IN ($1, $2)", buildA, buildB)
 	})
 
 	t.Run("tenant A cannot see tenant B builds when tenant_id is set", func(t *testing.T) {
@@ -88,7 +88,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("begin tx: %v", err)
 		}
-		defer tx.Rollback(ctx)
+		defer func() { _ = tx.Rollback(ctx) }()
 
 		// Set tenant context to tenant A
 		_, err = tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantA)
@@ -125,7 +125,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("begin tx: %v", err)
 		}
-		defer tx.Rollback(ctx)
+		defer func() { _ = tx.Rollback(ctx) }()
 
 		// Do NOT set app.tenant_id — simulates reconciliation/reaper queries
 		rows, err := tx.Query(ctx, "SELECT id FROM builds WHERE id IN ($1, $2)", buildA, buildB)
@@ -213,7 +213,7 @@ func TestCheckConstraintsOnStatus(t *testing.T) {
 			 VALUES ('bld-invalid-status', 'test', 'proj', 'prod', 'INVALID_STATUS', 'corr', 'test')`)
 		if err == nil {
 			// Cleanup if somehow it succeeded
-			pool.Exec(ctx, "DELETE FROM builds WHERE id = 'bld-invalid-status'")
+			_, _ = pool.Exec(ctx, "DELETE FROM builds WHERE id = 'bld-invalid-status'")
 			t.Error("expected CHECK constraint violation for invalid status, but INSERT succeeded")
 		}
 	})
@@ -272,7 +272,7 @@ func TestLoopZeroApiCannotDDL(t *testing.T) {
 	t.Run("ALTER TABLE is denied", func(t *testing.T) {
 		_, err := pool.Exec(ctx, "ALTER TABLE builds ADD COLUMN test_col TEXT")
 		if err == nil {
-			pool.Exec(ctx, "ALTER TABLE builds DROP COLUMN test_col")
+			_, _ = pool.Exec(ctx, "ALTER TABLE builds DROP COLUMN test_col")
 			t.Error("expected permission denied for ALTER TABLE, but it succeeded!")
 		}
 	})
@@ -316,7 +316,7 @@ func TestAuditLogAppendOnly(t *testing.T) {
 			"UPDATE audit_log SET action = 'TAMPERED' WHERE tenant_id = 'test-audit'")
 		if err != nil {
 			// Some configurations reject immediately
-			tx.Rollback(ctx)
+			_ = tx.Rollback(ctx)
 			return // Expected — trigger fired
 		}
 
@@ -336,7 +336,7 @@ func TestAuditLogAppendOnly(t *testing.T) {
 		_, err = tx.Exec(ctx,
 			"DELETE FROM audit_log WHERE tenant_id = 'test-audit'")
 		if err != nil {
-			tx.Rollback(ctx)
+			_ = tx.Rollback(ctx)
 			return // Expected — trigger fired
 		}
 
@@ -349,9 +349,9 @@ func TestAuditLogAppendOnly(t *testing.T) {
 	// Cleanup — need to disable trigger temporarily to clean test data
 	// In production, old audit entries would be archived via partition rotation
 	t.Cleanup(func() {
-		pool.Exec(ctx, "ALTER TABLE audit_log DISABLE TRIGGER trg_audit_log_immutable")
-		pool.Exec(ctx, "DELETE FROM audit_log WHERE tenant_id = 'test-audit'")
-		pool.Exec(ctx, "ALTER TABLE audit_log ENABLE TRIGGER trg_audit_log_immutable")
+		_, _ = pool.Exec(ctx, "ALTER TABLE audit_log DISABLE TRIGGER trg_audit_log_immutable")
+		_, _ = pool.Exec(ctx, "DELETE FROM audit_log WHERE tenant_id = 'test-audit'")
+		_, _ = pool.Exec(ctx, "ALTER TABLE audit_log ENABLE TRIGGER trg_audit_log_immutable")
 	})
 }
 
@@ -380,7 +380,7 @@ func TestReconciliationQueriesWithRLS(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		pool.Exec(ctx, "DELETE FROM builds WHERE id IN ($1, $2)", buildA, buildB)
+		_, _ = pool.Exec(ctx, "DELETE FROM builds WHERE id IN ($1, $2)", buildA, buildB)
 	})
 
 	t.Run("FindActiveBuilds pattern sees both tenants without tenant_id set", func(t *testing.T) {

@@ -14,12 +14,6 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-var applicationSetGVR = schema.GroupVersionResource{
-	Group:    "argoproj.io",
-	Version:  "v1alpha1",
-	Resource: "applicationsets",
-}
-
 var configMapGVR = schema.GroupVersionResource{
 	Group:    "",
 	Version:  "v1",

@@ -9,7 +9,6 @@ package unit
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -23,17 +22,6 @@ import (
 // inside the lock. If SetGitCommit fails, the release must NOT reach PENDING.
 // This prevents wrong-version activation via SyncCallbackActivator.
 
-// fakeReleaseStoreWithSetGitCommitFailure wraps fakeConvergenceReleaseStore
-// and makes SetGitCommit fail with an error.
-type fakeReleaseStoreWithSetGitCommitFailure struct {
-	*fakeConvergenceReleaseStore
-	setGitCommitCalled bool
-}
-
-func (f *fakeReleaseStoreWithSetGitCommitFailure) SetGitCommit(_ context.Context, _ db.DBTX, _ string, _ string) error {
-	f.setGitCommitCalled = true
-	return fmt.Errorf("simulated SetGitCommit failure")
-}
 
 // TestBUG03_SetGitCommitFailureBlocksActivation verifies that when
 // SetGitCommit fails, the release stays in READY state (doesn't transition

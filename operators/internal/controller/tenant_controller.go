@@ -394,7 +394,7 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 	// The EnvironmentController's finalizer handles namespace/RBAC/quota cleanup
 	// when its CR is deleted, so we only need to trigger the delete here.
 	var envList loopzerov1.EnvironmentList
-	if err := r.Client.List(ctx, &envList, client.InNamespace(tenant.Namespace)); err != nil {
+	if err := r.List(ctx, &envList, client.InNamespace(tenant.Namespace)); err != nil {
 		return fmt.Errorf("gc: list environments: %w", err)
 	}
 	for i := range envList.Items {
@@ -407,7 +407,7 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 		}
 		logger.Info("garbage-collecting orphan Environment CR",
 			"environment", envCR.Name, "tenant", tenant.Name)
-		if err := r.Client.Delete(ctx, envCR); err != nil && !errors.IsNotFound(err) {
+		if err := r.Delete(ctx, envCR); err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("gc environment CR %s: %w", envCR.Name, err)
 		}
 	}

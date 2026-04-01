@@ -102,15 +102,15 @@ func (f *fakeSyncReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id string
 
 func safeTransition(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (statemachine.State, error) {
 	defer func() {
-		if r := recover(); r != nil {
-			// swallowed — error returned below
-		}
+		// recover is needed to catch panics from invalid state machine transitions;
+		// the inner closure below handles the actual error conversion.
+		recover() //nolint:errcheck
 	}()
 	// This may panic on invalid transition; the deferred recover turns it into an error.
 	var errResult error
 	func() {
 		defer func() {
-			if r := recover(); r != nil {
+			if r := recover(); r != nil { // expected: no panic
 				errResult = fmt.Errorf("invalid transition: %s + %s: %v", current, event, r)
 			}
 		}()

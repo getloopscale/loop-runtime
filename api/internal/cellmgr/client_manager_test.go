@@ -45,7 +45,7 @@ func (r *errorRouter) ListCells(_ context.Context) ([]placement.CellConfig, erro
 // Each call returns a new fake.Clientset so identity checks work.
 func fakeFactory() ClientFactory {
 	return func(kubeconfig, kubecontext string) (kubernetes.Interface, error) {
-		return fake.NewSimpleClientset(), nil
+		return fake.NewClientset(), nil
 	}
 }
 

@@ -12,7 +12,6 @@ import (
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
@@ -118,43 +117,6 @@ func fileExistsInBare(t *testing.T, bareDir, filePath string) bool {
 }
 
 // getAllFilesInBare returns all file paths in HEAD of the bare repo.
-func getAllFilesInBare(t *testing.T, bareDir string) []string {
-	t.Helper()
-	cloneDir := t.TempDir()
-	repo, err := gogit.PlainClone(cloneDir, false, &gogit.CloneOptions{
-		URL:           bareDir,
-		ReferenceName: plumbing.Main,
-		SingleBranch:  true,
-	})
-	if err != nil {
-		t.Fatalf("clone bare repo: %v", err)
-	}
-
-	ref, err := repo.Head()
-	if err != nil {
-		t.Fatalf("get HEAD: %v", err)
-	}
-
-	commit, err := repo.CommitObject(ref.Hash())
-	if err != nil {
-		t.Fatalf("get commit: %v", err)
-	}
-
-	tree, err := commit.Tree()
-	if err != nil {
-		t.Fatalf("get tree: %v", err)
-	}
-
-	var files []string
-	err = tree.Files().ForEach(func(f *object.File) error {
-		files = append(files, f.Name)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("iterate files: %v", err)
-	}
-	return files
-}
 
 func TestGoGitPush_WritesManifestsToCorrectPath(t *testing.T) {
 	bareDir := initBareRepo(t)
