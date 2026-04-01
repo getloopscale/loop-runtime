@@ -34,9 +34,29 @@ kratos:
         oidc:
           enabled: true
           config:
-            providers: []
-            # GitHub and Google providers configured via Pulumi secrets in production.
-            # Local dev: add providers manually or test with password only.
+            # Account linking: when a user signs in with a social provider and
+            # the email already exists, link the accounts automatically.
+            base_redirect_uri: "http://localhost:4455/"
+            providers:
+              # GitHub OAuth — configured via Pulumi secrets in production.
+              # LOCAL DEV: set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET env vars,
+              # or leave as placeholders (OIDC will be disabled for that provider).
+              - id: github
+                provider: github
+                client_id: "REPLACE_VIA_PULUMI"
+                client_secret: "REPLACE_VIA_PULUMI"
+                mapper_url: "base64://bG9jYWwgY2xhaW1zID0gc3RkLmV4dFZhcignY2xhaW1zJyk7CnsKICBpZGVudGl0eTogewogICAgdHJhaXRzOiB7CiAgICAgIGVtYWlsOiBjbGFpbXMuZW1haWwsCiAgICAgIFtpZiBzdGQub2JqZWN0SGFzKGNsYWltcywgJ25hbWUnKSAmJiBjbGFpbXMubmFtZSAhPSBudWxsIHRoZW4gJ25hbWUnXTogY2xhaW1zLm5hbWUsCiAgICB9LAogIH0sCn0K"
+                scope:
+                  - user:email
+              # Google OAuth — configured via Pulumi secrets in production.
+              - id: google
+                provider: google
+                client_id: "REPLACE_VIA_PULUMI"
+                client_secret: "REPLACE_VIA_PULUMI"
+                mapper_url: "base64://bG9jYWwgY2xhaW1zID0gc3RkLmV4dFZhcignY2xhaW1zJyk7CnsKICBpZGVudGl0eTogewogICAgdHJhaXRzOiB7CiAgICAgIGVtYWlsOiBjbGFpbXMuZW1haWwsCiAgICAgIFtpZiBzdGQub2JqZWN0SGFzKGNsYWltcywgJ25hbWUnKSAmJiBjbGFpbXMubmFtZSAhPSBudWxsIHRoZW4gJ25hbWUnXTogY2xhaW1zLm5hbWUsCiAgICB9LAogIH0sCn0K"
+                scope:
+                  - email
+                  - profile
 
       flows:
         registration:

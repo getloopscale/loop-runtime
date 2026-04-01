@@ -70,6 +70,18 @@ export interface PlatformStackConfig {
   // S3 bucket for Tempo trace data in production. Omit for local filesystem (dev).
   readonly tempoStorageBucket?: string;
 
+  // Ory Social Login — GitHub OAuth (Sprint 11, Phase 3)
+  // Set via: pulumi config set --secret githubOAuthClientId <id>
+  //          pulumi config set --secret githubOAuthClientSecret <secret>
+  readonly githubOAuthClientId?: pulumi.Output<string>;
+  readonly githubOAuthClientSecret?: pulumi.Output<string>;
+
+  // Ory Social Login — Google OAuth (Sprint 11, Phase 3)
+  // Set via: pulumi config set --secret googleOAuthClientId <id>
+  //          pulumi config set --secret googleOAuthClientSecret <secret>
+  readonly googleOAuthClientId?: pulumi.Output<string>;
+  readonly googleOAuthClientSecret?: pulumi.Output<string>;
+
 }
 
 /**
@@ -135,5 +147,13 @@ export function loadStackConfig(): PlatformStackConfig {
 
     // Observability — Tempo trace storage (MEET-020)
     tempoStorageBucket: config.get("tempoStorageBucket") ?? undefined,
+
+    // Ory Social Login — GitHub OAuth (Sprint 11, Phase 3)
+    githubOAuthClientId: config.getSecret("githubOAuthClientId") ?? undefined,
+    githubOAuthClientSecret: config.getSecret("githubOAuthClientSecret") ?? undefined,
+
+    // Ory Social Login — Google OAuth (Sprint 11, Phase 3)
+    googleOAuthClientId: config.getSecret("googleOAuthClientId") ?? undefined,
+    googleOAuthClientSecret: config.getSecret("googleOAuthClientSecret") ?? undefined,
   };
 }

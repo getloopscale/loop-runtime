@@ -512,15 +512,54 @@ function installOryKratos(
       ...(kratosValues ? { valueYamlFiles: [new pulumi.asset.FileAsset(kratosValues)] } : {}),
       values: {
         fullnameOverride: "ory-kratos",
-        ...(kratosDsn
-          ? {
-              kratos: {
-                config: {
-                  dsn: kratosDsn,
-                },
-              },
-            }
-          : {}),
+        kratos: {
+          config: {
+            ...(kratosDsn ? { dsn: kratosDsn } : {}),
+            // Social login providers — only override when secrets are configured.
+            // When not set, falls back to values.yaml placeholders (REPLACE_VIA_PULUMI).
+            ...(config.githubOAuthClientId || config.googleOAuthClientId
+              ? {
+                  selfservice: {
+                    methods: {
+                      oidc: {
+                        enabled: true,
+                        config: {
+                          providers: [
+                            ...(config.githubOAuthClientId
+                              ? [
+                                  {
+                                    id: "github",
+                                    provider: "github",
+                                    client_id: config.githubOAuthClientId,
+                                    client_secret: config.githubOAuthClientSecret,
+                                    mapper_url:
+                                      "base64://bG9jYWwgY2xhaW1zID0gc3RkLmV4dFZhcignY2xhaW1zJyk7CnsKICBpZGVudGl0eTogewogICAgdHJhaXRzOiB7CiAgICAgIGVtYWlsOiBjbGFpbXMuZW1haWwsCiAgICAgIFtpZiBzdGQub2JqZWN0SGFzKGNsYWltcywgJ25hbWUnKSAmJiBjbGFpbXMubmFtZSAhPSBudWxsIHRoZW4gJ25hbWUnXTogY2xhaW1zLm5hbWUsCiAgICB9LAogIH0sCn0K",
+                                    scope: ["user:email"],
+                                  },
+                                ]
+                              : []),
+                            ...(config.googleOAuthClientId
+                              ? [
+                                  {
+                                    id: "google",
+                                    provider: "google",
+                                    client_id: config.googleOAuthClientId,
+                                    client_secret: config.googleOAuthClientSecret,
+                                    mapper_url:
+                                      "base64://bG9jYWwgY2xhaW1zID0gc3RkLmV4dFZhcignY2xhaW1zJyk7CnsKICBpZGVudGl0eTogewogICAgdHJhaXRzOiB7CiAgICAgIGVtYWlsOiBjbGFpbXMuZW1haWwsCiAgICAgIFtpZiBzdGQub2JqZWN0SGFzKGNsYWltcywgJ25hbWUnKSAmJiBjbGFpbXMubmFtZSAhPSBudWxsIHRoZW4gJ25hbWUnXTogY2xhaW1zLm5hbWUsCiAgICB9LAogIH0sCn0K",
+                                    scope: ["email", "profile"],
+                                  },
+                                ]
+                              : []),
+                          ],
+                        },
+                      },
+                    },
+                  },
+                }
+              : {}),
+          },
+        },
         resources: {
           requests: { cpu: "50m", memory: "128Mi" },
           limits: { cpu: "300m", memory: "256Mi" },

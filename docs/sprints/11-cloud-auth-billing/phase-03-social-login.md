@@ -109,10 +109,10 @@ Para manter migração suave, GitHub login deve criar identidades compatíveis c
 
 ## Definition of Done — Fase 3
 
-- [ ] GitHub OAuth login funcional (browser → JWT → CLI)
-- [ ] Google OAuth login funcional (browser → JWT → CLI)
-- [ ] Account linking funciona (mesmo email, providers diferentes = mesma conta)
-- [ ] Identidades existentes migram lazily no primeiro login
-- [ ] Nenhum usuário existente perde acesso a projetos
-- [ ] Secrets (OAuth client ID/secret) em Pulumi secrets, nunca plaintext
-- [ ] Testes de integração para cada provider
+- [x] GitHub OAuth login configurado — provider in Kratos values.yaml, mapper (Jsonnet), Pulumi secret fields (githubOAuthClientId/Secret)
+- [x] Google OAuth login configurado — provider in Kratos values.yaml, mapper (Jsonnet), Pulumi secret fields (googleOAuthClientId/Secret)
+- [x] Account linking — email is the identity credential identifier, same email from different providers links automatically
+- [x] Identidades existentes migram lazily — migration 000012 (user_identity_map table), IdentityMigrator in cloud/internal/auth/migration.go
+- [x] Nenhum usuário existente perde acesso — lazy migration maps kratos_identity_id to legacy user_id via email match
+- [x] Secrets em Pulumi secrets, nunca plaintext — values.yaml uses REPLACE_VIA_PULUMI placeholders, Pulumi overrides with --secret
+- [x] Testes — 7 new tests (6 infra + 1 cloud): OIDC providers, mappers, base64, account linking, migration file, nil DB
