@@ -515,6 +515,19 @@ function installOryKratos(
         kratos: {
           config: {
             ...(kratosDsn ? { dsn: kratosDsn } : {}),
+            // SMTP for email delivery — verification and recovery emails.
+            // When not set, falls back to values.yaml default (stdout in dev).
+            ...(config.smtpConnectionUri
+              ? {
+                  courier: {
+                    smtp: {
+                      connection_uri: config.smtpConnectionUri,
+                      from_address: `noreply@${config.domain}`,
+                      from_name: "LoopZero",
+                    },
+                  },
+                }
+              : {}),
             // Social login providers — only override when secrets are configured.
             // When not set, falls back to values.yaml placeholders (REPLACE_VIA_PULUMI).
             ...(config.githubOAuthClientId || config.googleOAuthClientId

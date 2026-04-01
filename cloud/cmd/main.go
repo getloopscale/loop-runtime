@@ -45,10 +45,11 @@ func main() {
 
 	// Initialize JWKS validator
 	jwksURL := cfg.HydraPublicURL + "/.well-known/jwks.json"
-	_ = auth.NewJWKSValidator(jwksURL, cfg.JWTIssuer)
+	jwtValidator := auth.NewJWKSValidator(jwksURL, cfg.JWTIssuer)
 
 	// Handlers
 	deviceHandler := routes.NewDeviceHandler(hydra)
+	meHandler := routes.NewMeHandler(jwtValidator)
 	consentHandler := consent.NewHandler(hydra, cfg.KratosPublicURL, logger)
 
 	// Router
@@ -68,6 +69,7 @@ func main() {
 		r.Post("/device/authorize", deviceHandler.Authorize)
 		r.Post("/device/token", deviceHandler.Token)
 		r.Post("/token/refresh", deviceHandler.Refresh)
+		r.Get("/me", meHandler.Get)
 	})
 
 	// Hydra consent/login callbacks (browser redirects)

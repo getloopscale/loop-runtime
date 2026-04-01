@@ -70,6 +70,10 @@ export interface PlatformStackConfig {
   // S3 bucket for Tempo trace data in production. Omit for local filesystem (dev).
   readonly tempoStorageBucket?: string;
 
+  // Ory SMTP — email delivery for verification and recovery (Sprint 11, Phase 4)
+  // Set via: pulumi config set --secret smtpConnectionUri "smtps://key:secret@smtp.resend.com:465"
+  readonly smtpConnectionUri?: pulumi.Output<string>;
+
   // Ory Social Login — GitHub OAuth (Sprint 11, Phase 3)
   // Set via: pulumi config set --secret githubOAuthClientId <id>
   //          pulumi config set --secret githubOAuthClientSecret <secret>
@@ -147,6 +151,9 @@ export function loadStackConfig(): PlatformStackConfig {
 
     // Observability — Tempo trace storage (MEET-020)
     tempoStorageBucket: config.get("tempoStorageBucket") ?? undefined,
+
+    // Ory SMTP (Sprint 11, Phase 4)
+    smtpConnectionUri: config.getSecret("smtpConnectionUri") ?? undefined,
 
     // Ory Social Login — GitHub OAuth (Sprint 11, Phase 3)
     githubOAuthClientId: config.getSecret("githubOAuthClientId") ?? undefined,

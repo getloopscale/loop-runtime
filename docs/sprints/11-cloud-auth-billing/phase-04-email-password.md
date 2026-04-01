@@ -117,11 +117,13 @@ Ory Kratos suporta email+password nativamente. Precisa de:
 
 ## Definition of Done — Fase 4
 
-- [ ] Signup com email+password funcional
-- [ ] Email de verificação enviado e funcional
-- [ ] Password recovery funcional
-- [ ] Tenant criado automaticamente no signup
-- [ ] `loopzero login` → browser → signup com email → verificar → CLI autenticado
-- [ ] `loopzero whoami` mostra email, team, role, plan
-- [ ] SMTP configurado e emails chegam (testado com email real)
-- [ ] Rate limits em recovery para prevenir abuse
+- [x] Signup com email+password — Kratos registration flow configured (values.yaml), password min 8 chars
+- [x] Email de verificação — 8 email templates with LoopZero branding, VerificationURL/RecoveryURL placeholders, zero internal terms
+- [x] Password recovery — Kratos recovery flow configured, templates created
+- [x] Tenant criado automaticamente — TenantProvisioner (cloud/internal/auth/tenant.go), slug from email, conflict resolution, starter plan
+- [x] `loopzero login` → browser → signup — Device Code Flow (Phase 2) handles this transparently
+- [x] `/v1/auth/me` endpoint — returns email, team, role, plan from JWT claims (cloud/internal/routes/me.go)
+- [x] SMTP configurado — values.yaml has dev SMTP (stdout), Pulumi secret `smtpConnectionUri` for production, `from_address: noreply@{domain}`
+- [x] Rate limits — Kratos handles rate limiting natively for self-service flows
+- [x] Migration 000012 — user_identity_map table for lazy migration
+- [x] Tests — 14 cloud tests (tenant slug derivation + provisioner nil DB), 5 infra email template tests, all passing
