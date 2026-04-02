@@ -11,6 +11,7 @@
 #   SPACES_SECRET_ACCESS_KEY — DO Spaces secret key
 #   CLOUDFLARE_API_TOKEN     — CF API token (optional, for Sprint 10 resources)
 #   STACK                    — Pulumi stack name (dev/staging/prod)
+#   DOCTL_VERSION            — doctl version (default: 1.104.0)
 #   PULUMI_WORKING_DIR       — Path to infra/pulumi/ directory
 #
 # Usage: STACK=dev bash infra/scripts/pre-destroy-cleanup.sh
@@ -77,7 +78,8 @@ echo "Deleting cloud resources via DO API..."
 
 # Install doctl if not available
 if ! command -v doctl &>/dev/null; then
-  curl -sL https://github.com/digitalocean/doctl/releases/download/v1.104.0/doctl-1.104.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin 2>/dev/null
+  DOCTL_VERSION="${DOCTL_VERSION:-1.104.0}"
+  curl -sL "https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-amd64.tar.gz" | tar xz -C /usr/local/bin 2>/dev/null
 fi
 doctl auth init --access-token "$DIGITALOCEAN_TOKEN" 2>/dev/null
 
@@ -108,10 +110,11 @@ for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
   echo "  DB $ID deleting"
 done
 
-# Container registry
-curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
-  "https://api.digitalocean.com/v2/registry" 2>/dev/null
-echo "  Registry deleting"
+# Container registry — NEVER delete automatically.
+# DO allows only 1 registry per account (shared across all stacks).
+# retainOnDelete: true in Pulumi already prevents destroy from deleting it.
+# Manual deletion only: doctl registry delete (requires confirmation).
+echo "  Registry: skipped (shared resource, retainOnDelete)"
 
 # Spaces buckets (any region, skip pulumi-state)
 for REGION in nyc3 sfo3 ams3 fra1 sgp1 lon1 sfo2 syd1; do

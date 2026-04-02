@@ -67,7 +67,10 @@ export function bootstrapMgmtCluster(
   // MinIO — S3-compatible artifact storage (source bundles, build cache)
   const minio = installMinIO(provider, ns, config);
 
-  // MinIO credentials — needed by API for source bundle upload/download
+  // MinIO credentials — needed by API for source bundle upload/download.
+  // Credentials MUST match the rootUser/rootPassword in installMinIO() Helm values.
+  // In production, minioRootPassword is set via: pulumi config set --secret minioRootPassword
+  const minioPassword = config.minioRootPassword ?? pulumi.output("loopzero-minio-dev-2026");
   new k8s.core.v1.Secret(
     "minio-credentials-mgmt",
     {
@@ -77,7 +80,7 @@ export function bootstrapMgmtCluster(
       },
       stringData: {
         AWS_ACCESS_KEY_ID: "loopzero-admin",
-        AWS_SECRET_ACCESS_KEY: "loopzero-minio-dev-2026",
+        AWS_SECRET_ACCESS_KEY: minioPassword,
         MINIO_ENDPOINT: `http://minio.${PLATFORM_NAMESPACE}.svc.cluster.local:9000`,
       },
     },
