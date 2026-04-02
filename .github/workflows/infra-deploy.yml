@@ -525,19 +525,22 @@ jobs:
           docker build -f operators/Dockerfile -t "$REGISTRY/tenant-controller:$TAG" .
           docker push "$REGISTRY/tenant-controller:$TAG"
 
-          # loopzero-packs-runner — generates Dockerfiles for user apps.
+          # loopzero-clone-runner — downloads source bundles from S3 and unpacks via git clone.
+          # Used by the loopzero-clone CWT (ClusterWorkflowTemplate) in build workflows.
+          # Without this image, ALL builds fail at clone-repo step (ImagePullBackOff).
+          echo "Building loopzero-clone-runner..."
+          docker build -f infra/images/clone-runner/Dockerfile \
+            -t "$REGISTRY/loopzero-clone-runner:v0.1.0" \
+            infra/images/clone-runner/
+          docker push "$REGISTRY/loopzero-clone-runner:v0.1.0"
+
+          # loopzero-packs-runner — analyzes source code and generates optimized Dockerfiles.
           # Without this image, Argo Workflows fail at generate-dockerfile step.
-          # Only built if the source directory exists (may not be present in all branches).
-          if [ -d "$GITHUB_WORKSPACE/loopzero-packs" ]; then
-            echo "Building loopzero-packs-runner..."
-            docker build -f loopzero-packs/Dockerfile.generate \
-              -t "$REGISTRY/loopzero-packs-runner:v0.1.0" \
-              loopzero-packs/
-            docker push "$REGISTRY/loopzero-packs-runner:v0.1.0"
-          else
-            echo "::warning::loopzero-packs/ directory not found — skipping loopzero-packs-runner build"
-            echo "::warning::Ensure this image exists in the registry or user deploys will fail"
-          fi
+          echo "Building loopzero-packs-runner..."
+          docker build -f infra/images/packs-runner/Dockerfile \
+            -t "$REGISTRY/loopzero-packs-runner:v0.1.0" \
+            infra/images/packs-runner/
+          docker push "$REGISTRY/loopzero-packs-runner:v0.1.0"
 
           # Integrate registry with all DOKS clusters (idempotent)
           cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}"
