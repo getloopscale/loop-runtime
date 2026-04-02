@@ -1338,6 +1338,9 @@ function installTenantController(
       { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "watch", "create", "update", "patch"] },
       { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
       { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind", "escalate"] },
+      // PriorityClasses are cluster-scoped. Tenant controller creates per-plan classes
+      // (loopzero-tenant-starter, loopzero-tenant-growth, loopzero-tenant-enterprise) on the runtime cluster.
+      { apiGroups: ["scheduling.k8s.io"], resources: ["priorityclasses"], verbs: ["get", "list", "create", "update", "patch"] },
     ],
   );
   const controllerKubeconfig = new k8s.core.v1.Secret(
