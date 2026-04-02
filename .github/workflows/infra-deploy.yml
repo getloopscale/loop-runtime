@@ -778,13 +778,16 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
           kubectl -n $NAMESPACE label secret gitea-repo-creds argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
 
-          # Public URL credential template (for Applications using public Gitea URL)
+          # Public URL credential template (for Applications using public Gitea URL).
+          # insecure=true: Gitea behind Cloudflare Tunnel uses CF's TLS cert, not
+          # Let's Encrypt. Git inside ArgoCD repo-server fails TLS verification.
           if [ -n "$DOMAIN" ]; then
             kubectl -n $NAMESPACE create secret generic gitea-repo-creds-public \
               --from-literal=type=git \
               --from-literal=url="$GITEA_PUBLIC" \
               --from-literal=username=gitea_admin \
               --from-literal=password="$GITEA_TOKEN" \
+              --from-literal=insecure=true \
               --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
             kubectl -n $NAMESPACE label secret gitea-repo-creds-public argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
           fi
