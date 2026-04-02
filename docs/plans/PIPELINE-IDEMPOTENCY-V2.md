@@ -1,8 +1,18 @@
 # Plano: Pipeline Idempotente v2
 
 **Data:** 2026-04-02
+**Status:** ✅ **CONCLUÍDO** — validado em DigitalOcean (02/Abr, run 23899478737)
 **Pré-requisito:** Análise de idempotência (sessão 02/Abr)
 **Objetivo:** `pulumi destroy --stack dev && pulumi up --stack dev` funciona sem intervenção manual, com zero falsos positivos (pipeline green = plataforma funcional)
+
+### Resultado da validação (02/Abr)
+
+- Destroy: ✅ success (run 23898986300, 7min)
+- Recreate from zero: ✅ success (run 23899478737, ~38min)
+- Zero errors, zero intervenção manual
+- Runtime health: 3/3 (API, Gitea, tenant-controller)
+- Seed via kubectl run: ✅ (DB firewall bypass)
+- Bootstrap final gate: ✅ (tokens + secrets verified)
 
 ---
 
