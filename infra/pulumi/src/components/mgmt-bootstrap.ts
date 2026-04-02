@@ -217,13 +217,11 @@ function installArgoCD(
 p, loopzero-api, applications, get, */*, allow
 p, loopzero-api, applications, action/*, */*, allow`,
           },
-          repositories: {
-            // Gitea repository credentials for tenant GitOps repos.
-            "gitea-internal": {
-              url: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
-              type: "git",
-            },
-          },
+          // repositories: Gitea repo credentials are created by the Bootstrap step
+          // in infra-deploy.yml with real Gitea admin tokens. Do NOT configure
+          // repos here — Helm creates secrets WITHOUT credentials, and ArgoCD
+          // prioritizes repository-type secrets over repo-creds templates,
+          // causing "authentication required" errors.
           cm: {
             // Dedicated service account for LoopZero API — apiKey only, no login.
             // Tokens generated with `argocd account generate-token` never expire.
