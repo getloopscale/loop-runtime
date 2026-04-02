@@ -801,43 +801,25 @@ echo "=== Bootstrap complete ==="
 
 /**
  * ArgoCD repo credentials — allows ArgoCD to clone from Gitea repos.
- * Uses a repo-creds pattern (URL prefix match) so all repos under the
- * Gitea org are automatically authenticated.
+ *
+ * IMPORTANT: This function intentionally does NOT create the repo-creds secret.
+ * The secret is created by the Bootstrap step in infra-deploy.yml with a real
+ * Gitea admin token. Creating it here with a placeholder causes ArgoCD to
+ * immediately try (and fail) to authenticate before bootstrap runs.
+ *
+ * The Bootstrap step creates two secrets:
+ *   1. gitea-repo-creds (type=repo-creds) — credential template for all repos
+ *   2. argocd-repo-tn-loopzero-gitops (type=repository) — explicit repo for bootstrap tenant
+ * Both use the real Gitea token generated during bootstrap.
  */
 function createArgoCDRepoCredentials(
-  provider: k8s.Provider,
-  ns: k8s.core.v1.Namespace,
-  argocd: k8s.helm.v3.Release,
-  gitea: k8s.helm.v3.Release,
+  _provider: k8s.Provider,
+  _ns: k8s.core.v1.Namespace,
+  _argocd: k8s.helm.v3.Release,
+  _gitea: k8s.helm.v3.Release,
 ): void {
-  new k8s.core.v1.Secret(
-    "argocd-gitea-repo-creds",
-    {
-      metadata: {
-        name: "gitea-repo-creds",
-        namespace: PLATFORM_NAMESPACE,
-        labels: {
-          "argocd.argoproj.io/secret-type": "repo-creds",
-        },
-        annotations: {
-          // Force Pulumi to take field ownership from kubectl-client-side-apply.
-          // The Bootstrap step updates the password via kubectl after first deploy.
-          "pulumi.com/patchForce": "true",
-        },
-      },
-      stringData: {
-        type: "git",
-        url: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
-        username: "gitea_admin",
-        password: "placeholder-set-after-first-deploy",
-      },
-    },
-    {
-      provider,
-      dependsOn: [ns, argocd, gitea],
-      ignoreChanges: ["stringData"],
-    },
-  );
+  // No-op: credentials created by Bootstrap step with real token.
+  // See .github/workflows/infra-deploy.yml section "3. UPDATE K8s SECRETS".
 }
 
 // ---------------------------------------------------------------------------
@@ -955,6 +937,58 @@ function installLoopZeroAPI(
     { provider, dependsOn: [ns] },
   );
 
+  // ServiceAccount for loopzero-api — provides RBAC for Tenant CR management.
+  // The API needs to create/update Tenant CRs on the mgmt cluster when users
+  // run `loopzero init` or `loopzero deploy` for the first time. Without this SA,
+  // the API uses the default SA which has no permissions for loopzero.io CRDs.
+  const apiSA = new k8s.core.v1.ServiceAccount(
+    "loopzero-api-sa",
+    {
+      metadata: {
+        name: "loopzero-api",
+        namespace: PLATFORM_NAMESPACE,
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // ClusterRole for loopzero-api — minimal RBAC for Tenant CR operations.
+  // Only get/create/update/patch — no delete (tenant deletion goes through operator).
+  const apiClusterRole = new k8s.rbac.v1.ClusterRole(
+    "loopzero-api",
+    {
+      metadata: { name: "loopzero-api" },
+      rules: [
+        {
+          apiGroups: ["loopzero.io"],
+          resources: ["tenants"],
+          verbs: ["get", "list", "create", "update", "patch"],
+        },
+      ],
+    },
+    { provider },
+  );
+
+  new k8s.rbac.v1.ClusterRoleBinding(
+    "loopzero-api",
+    {
+      metadata: { name: "loopzero-api" },
+      roleRef: {
+        apiGroup: "rbac.authorization.k8s.io",
+        kind: "ClusterRole",
+        name: "loopzero-api",
+      },
+      subjects: [
+        {
+          kind: "ServiceAccount",
+          name: "loopzero-api",
+          namespace: PLATFORM_NAMESPACE,
+        },
+      ],
+    },
+    { provider, dependsOn: [apiClusterRole, apiSA] },
+  );
+
   const configMap = new k8s.core.v1.ConfigMap(
     "loopzero-api-config",
     {
@@ -962,6 +996,9 @@ function installLoopZeroAPI(
       data: {
         PORT: "8080",
         METRICS_PORT: "9090",
+        // Tenant CRs live in the same namespace as the platform services.
+        // Local dev uses loopzero-system; production uses platform-system.
+        TENANT_NAMESPACE: PLATFORM_NAMESPACE,
         LOOPZERO_ENV: config.environment === "prod" ? "production" : "development",
         BASE_DOMAIN: config.domain,
         WORKLOAD_INGRESS_URL: `https://${config.domain}`,
@@ -1052,6 +1089,7 @@ function installLoopZeroAPI(
             },
           },
           spec: {
+            serviceAccountName: "loopzero-api",
             // Database migrations run before API starts via init container.
             // The API image includes migration SQL files at /migrations/.
             initContainers: [
@@ -1154,7 +1192,7 @@ function installLoopZeroAPI(
         },
       },
     },
-    { provider, dependsOn: [ns, secret, kubeconfigSecret, migrationsConfigMap, configMap, svc] },
+    { provider, dependsOn: [ns, secret, kubeconfigSecret, migrationsConfigMap, configMap, svc, apiSA] },
   );
 }
 

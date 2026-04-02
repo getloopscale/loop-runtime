@@ -7,6 +7,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"os"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,7 +21,15 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
-const tenantNamespace = "loopzero-system"
+// tenantNamespace is the Kubernetes namespace where Tenant CRs live.
+// Local dev: loopzero-system (Tilt/k3d). Production: platform-system (Pulumi/DO).
+// Configurable via TENANT_NAMESPACE env var.
+var tenantNamespace = func() string {
+	if ns := os.Getenv("TENANT_NAMESPACE"); ns != "" {
+		return ns
+	}
+	return "loopzero-system"
+}()
 
 var tenantCRGVR = schema.GroupVersionResource{
 	Group:    "loopzero.io",

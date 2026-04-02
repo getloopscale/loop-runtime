@@ -411,6 +411,14 @@ jobs:
             echo "Deleted gitea-bootstrap Job from cluster"
           fi
 
+          # Remove ArgoCD repo-creds secret from Pulumi state.
+          # This secret is now created exclusively by the Bootstrap step with real tokens.
+          # Leaving the placeholder in Pulumi caused ArgoCD auth failures on fresh deploys.
+          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.urn | contains("argocd-gitea-repo-creds")) | .urn' 2>/dev/null); do
+            echo "Removing placeholder repo-creds from state: $URN"
+            pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
+          done
+
           # Create all resources with retry for webhook readiness.
           # On fresh deploys, cert-manager webhook may not be serving TLS when
           # ClusterIssuer is created. The first `pulumi up` creates the Helm charts
