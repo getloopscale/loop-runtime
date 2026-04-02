@@ -1322,10 +1322,12 @@ function installTenantController(
     infra.buildCluster,
     "argo",
     [
-      // limitranges required for build namespace resource enforcement (build-limits LimitRange).
-      // Without it, tenant reconcile fails with "forbidden" and stays in Provisioning.
+      // Tenant controller creates per-tenant build namespaces with quotas, limits, RBAC,
+      // network policies, and Argo workflow executor roles.
+      // Must match runtime cluster RBAC (below) — both clusters need the same resource access.
       { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "create", "update", "patch"] },
       { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
+      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind", "escalate"] },
     ],
   );
   const controllerRuntimeKubeconfig = createScopedKubeconfig(
