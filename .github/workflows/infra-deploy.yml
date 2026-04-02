@@ -794,6 +794,7 @@ jobs:
 
           # Explicit repo registration for the bootstrap tenant gitops repo.
           # ArgoCD reliably detects type=repository secrets (unlike repo-creds).
+          # Internal URL (used by operator when creating Applications via internal Gitea):
           kubectl -n $NAMESPACE create secret generic argocd-repo-tn-loopzero-gitops \
             --from-literal=type=git \
             --from-literal=url="${GITEA_BASE}/loopzero/tn-loopzero-gitops.git" \
@@ -801,6 +802,20 @@ jobs:
             --from-literal=password="$GITEA_TOKEN" \
             --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
           kubectl -n $NAMESPACE label secret argocd-repo-tn-loopzero-gitops argocd.argoproj.io/secret-type=repository --overwrite 2>/dev/null
+
+          # Public URL (used when Application repoURL points to public Gitea).
+          # insecure=true: Traefik serves self-signed cert until Let's Encrypt issues.
+          # ArgoCD repo-server verifies TLS by default — must skip for public Gitea URL.
+          if [ -n "$DOMAIN" ]; then
+            kubectl -n $NAMESPACE create secret generic argocd-repo-tn-loopzero-gitops-public \
+              --from-literal=type=git \
+              --from-literal=url="${GITEA_PUBLIC}/loopzero/tn-loopzero-gitops.git" \
+              --from-literal=username=gitea_admin \
+              --from-literal=password="$GITEA_TOKEN" \
+              --from-literal=insecure=true \
+              --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
+            kubectl -n $NAMESPACE label secret argocd-repo-tn-loopzero-gitops-public argocd.argoproj.io/secret-type=repository --overwrite 2>/dev/null
+          fi
 
           # Flush ArgoCD Redis cache and restart all ArgoCD components.
           # On destroy+recreate, ArgoCD may cache stale state (e.g., "project not found")
