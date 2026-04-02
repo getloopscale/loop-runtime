@@ -802,10 +802,16 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
           kubectl -n $NAMESPACE label secret argocd-repo-tn-loopzero-gitops argocd.argoproj.io/secret-type=repository --overwrite 2>/dev/null
 
-          # Restart ArgoCD repo-server to pick up credential changes immediately.
-          # Without this, ArgoCD caches old credentials and returns "authentication required".
+          # Flush ArgoCD Redis cache and restart all ArgoCD components.
+          # On destroy+recreate, ArgoCD may cache stale state (e.g., "project not found")
+          # from before credentials and AppProjects are fully configured.
+          # Deleting the Redis pod clears the cache; restarting repo-server and
+          # application-controller forces fresh credential + project discovery.
+          kubectl -n $NAMESPACE delete pod -l app.kubernetes.io/name=argocd-redis 2>/dev/null || true
           kubectl -n $NAMESPACE rollout restart deployment argocd-repo-server 2>/dev/null || true
           kubectl -n $NAMESPACE rollout restart statefulset argocd-application-controller 2>/dev/null || true
+          # Wait for ArgoCD to be ready before creating Tenant CR (which triggers sync).
+          kubectl -n $NAMESPACE wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=120s 2>/dev/null || true
 
           # ═══════════════════════════════════════
           # 4. SEED DATABASE (idempotent)
