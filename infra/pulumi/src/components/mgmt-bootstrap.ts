@@ -939,6 +939,11 @@ function installLoopZeroAPI(
   // The API needs to create/update Tenant CRs on the mgmt cluster when users
   // run `loopzero init` or `loopzero deploy` for the first time. Without this SA,
   // the API uses the default SA which has no permissions for loopzero.io CRDs.
+  //
+  // imagePullSecrets: doctl kubernetes cluster registry add configures the
+  // default SA in the default namespace, not custom SAs in platform-system.
+  // Without this, API pods get 401 Unauthorized pulling from DO registry.
+  const registrySecretName = "loopzero-infra-registry";
   const apiSA = new k8s.core.v1.ServiceAccount(
     "loopzero-api-sa",
     {
@@ -946,6 +951,7 @@ function installLoopZeroAPI(
         name: "loopzero-api",
         namespace: PLATFORM_NAMESPACE,
       },
+      imagePullSecrets: [{ name: registrySecretName }],
     },
     { provider, dependsOn: [ns] },
   );
