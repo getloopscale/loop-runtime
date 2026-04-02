@@ -608,9 +608,10 @@ jobs:
       # --- Post-deploy: bootstrap platform (credentials + seed data) ---
       # This step makes the system fully functional after a from-scratch deploy.
       # All operations are idempotent — safe to re-run on existing infrastructure.
+      # MEET-2026-04-01-026 CRIT-01: Bootstrap failure MUST fail the pipeline.
+      # Previously continue-on-error masked total platform failure (no tokens, no seed).
       - name: Bootstrap platform
         if: success() && needs.resolve.outputs.command == 'up'
-        continue-on-error: true
         run: |
           set +e
           STACK="${{ needs.resolve.outputs.stack }}"
@@ -967,9 +968,10 @@ jobs:
           rm -f /tmp/build-kubeconfig.yaml /tmp/mgmt-kubeconfig.yaml
 
       # --- Post-deploy: verify all phases completed ---
+      # MEET-2026-04-01-026 CRIT-02: Health validation failure MUST fail the pipeline.
+      # Previously continue-on-error reported green while platform was non-functional.
       - name: Verify deployment health
         if: success() && needs.resolve.outputs.command == 'up'
-        continue-on-error: true
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           set +e
@@ -1038,5 +1040,6 @@ jobs:
 
           rm -f /tmp/health-kc.yaml
           if [ "$FAIL" -gt 0 ]; then
-            echo "::warning::$FAIL health checks failed — pods may need more time to stabilize"
+            echo "::error::$FAIL health checks failed — platform is not fully functional"
+            exit 1
           fi
