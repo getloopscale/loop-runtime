@@ -628,12 +628,12 @@ jobs:
         run: |
           set +e
           STACK="${{ needs.resolve.outputs.stack }}"
+          BOOT_FAIL=0
 
-          # Install tools
+          # Install tools (psql no longer needed — seed runs inside cluster)
           curl -sL "https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-amd64.tar.gz" | tar xz -C /usr/local/bin
           curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
           chmod +x kubectl && mv kubectl /usr/local/bin/
-          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client > /dev/null 2>&1
 
           # Get kubeconfigs + DB URI from Pulumi
           cd ${{ env.PULUMI_WORKING_DIR }}
@@ -780,54 +780,39 @@ jobs:
 
           # ═══════════════════════════════════════
           # 4. SEED DATABASE (idempotent)
+          # Runs inside the cluster via ephemeral pod because the DB firewall
+          # only allows DOKS clusters (not GH Actions runners).
           # ═══════════════════════════════════════
           if [ -n "$DB_URI" ]; then
             echo "Seeding database..."
             LOOPZERO_DB_URI=$(echo "$DB_URI" | sed 's|/defaultdb?|/loopzero?|; s|/defaultdb$|/loopzero|')
 
-            # Seed uses a well-known admin user. Real users are added via
-            # auto-registration when they `loopzero login` with a GitHub token.
-            # The triggering_actor is the human who ran the workflow.
             # Sanitize: remove single quotes to prevent SQL injection via GitHub username.
             GH_LOGIN=$(echo "${{ github.triggering_actor }}" | tr -d "'")
             GH_USER_ID="github-${GH_LOGIN}"
             GH_EMAIL="${GH_LOGIN}@users.noreply.github.com"
 
-            # Use psql -v for safe variable binding (:'var' syntax auto-quotes).
-            # Quoted heredoc <<'SEED_SQL' prevents shell expansion inside SQL.
-            psql "$LOOPZERO_DB_URI" \
-              -v gh_user_id="$GH_USER_ID" \
-              -v gh_login="$GH_LOGIN" \
-              -v gh_email="$GH_EMAIL" \
-              -v ON_ERROR_STOP=0 <<'SEED_SQL'
-          -- Bootstrap admin user (idempotent).
-          -- Uses a deterministic github_id derived from the login hash to avoid
-          -- unique constraint violations when different users trigger the workflow.
-          -- Real github_id is set when the user authenticates via 'loopzero login'.
+            # Build seed SQL with sanitized variables (quotes already stripped above).
+            SEED_SQL=$(cat <<SEEDEOF
           INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
-          VALUES (:'gh_user_id', :'gh_email',
-                  abs(hashtext(:'gh_login')), :'gh_login', NOW(), NOW())
+          VALUES ('${GH_USER_ID}', '${GH_EMAIL}',
+                  abs(hashtext('${GH_LOGIN}')), '${GH_LOGIN}', NOW(), NOW())
           ON CONFLICT (id) DO UPDATE SET updated_at = NOW(), display_name = EXCLUDED.display_name;
 
-          -- Handle github_id conflict (same user, different id format from previous seed)
           INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
-          VALUES (:'gh_user_id', :'gh_email',
-                  abs(hashtext(:'gh_login')), :'gh_login', NOW(), NOW())
+          VALUES ('${GH_USER_ID}', '${GH_EMAIL}',
+                  abs(hashtext('${GH_LOGIN}')), '${GH_LOGIN}', NOW(), NOW())
           ON CONFLICT (github_id) DO UPDATE SET id = EXCLUDED.id, email = EXCLUDED.email,
                   display_name = EXCLUDED.display_name, updated_at = NOW();
 
-          -- Bootstrap tenant (idempotent)
           INSERT INTO tenants (id, display_name, plan, owner_id, created_at, updated_at)
-          VALUES ('tn-loopzero', 'loopzero', 'starter', :'gh_user_id', NOW(), NOW())
+          VALUES ('tn-loopzero', 'loopzero', 'starter', '${GH_USER_ID}', NOW(), NOW())
           ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id, updated_at = NOW();
 
-          -- Bootstrap membership (idempotent)
           INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)
-          VALUES ('tn-loopzero', :'gh_user_id', 'owner', NOW(), NOW())
+          VALUES ('tn-loopzero', '${GH_USER_ID}', 'owner', NOW(), NOW())
           ON CONFLICT DO NOTHING;
 
-          -- Seed additional admin user (paulohenriquevn — primary developer).
-          -- The triggering_actor is often a CI bot; the real user needs access too.
           INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
           VALUES ('github-paulohenriquevn', 'paulohenriquevn@gmail.com',
                   6766298, 'paulohenriquevn', NOW(), NOW())
@@ -836,10 +821,26 @@ jobs:
           INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)
           VALUES ('tn-loopzero', 'github-paulohenriquevn', 'owner', NOW(), NOW())
           ON CONFLICT DO NOTHING;
-          SEED_SQL
-            echo "Database seeded: user=${GH_USER_ID} + paulohenriquevn tenant=tn-loopzero"
+          SEEDEOF
+          )
+
+            # Run seed inside the cluster via ephemeral pod.
+            # DB firewall only allows DOKS clusters — GH runner can't connect directly.
+            kubectl -n $NAMESPACE delete pod db-seed --ignore-not-found 2>/dev/null
+            if kubectl run db-seed -n $NAMESPACE \
+              --image=postgres:16-alpine \
+              --restart=Never \
+              --rm -i \
+              --env="PGCONNECT_TIMEOUT=30" \
+              --command -- psql "$LOOPZERO_DB_URI" -c "$SEED_SQL" 2>&1; then
+              echo "Database seeded: user=${GH_USER_ID} + paulohenriquevn tenant=tn-loopzero"
+            else
+              echo "::error::Database seed failed — platform will lack admin user and tenant"
+              BOOT_FAIL=$((BOOT_FAIL + 1))
+            fi
           else
-            echo "::warning::DB_URI not available, skipping seed"
+            echo "::error::DB_URI not available — cannot seed database"
+            BOOT_FAIL=$((BOOT_FAIL + 1))
           fi
 
           # ═══════════════════════════════════════
@@ -905,8 +906,8 @@ jobs:
           # FINAL GATE: verify minimum viable bootstrap
           # Pipeline MUST fail if critical tokens are missing — a green pipeline
           # with missing tokens means the platform is non-functional.
+          # BOOT_FAIL may already be >0 from seed failure above.
           # ═══════════════════════════════════════
-          BOOT_FAIL=0
           [ -z "$GITEA_TOKEN" ] && echo "::error::Missing Gitea token" && BOOT_FAIL=$((BOOT_FAIL + 1))
           [ -z "$ARGOCD_JWT" ] && echo "::error::Missing ArgoCD JWT" && BOOT_FAIL=$((BOOT_FAIL + 1))
 
