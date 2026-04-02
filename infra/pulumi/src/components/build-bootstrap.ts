@@ -74,6 +74,12 @@ export function bootstrapBuildCluster(
   // Helm requires resources to have release annotations, but partial first runs
   // create the SA without them. By creating via Pulumi with the correct
   // annotations, Helm recognizes it as owned and skips creation.
+  // Registry credentials secret — created by `doctl kubernetes cluster registry add`
+  // on the default SA. Workflow pods use loopzero-build-sa, so we must also reference it here.
+  // Without this, workflow pods get 401 Unauthorized when pulling private images
+  // (loopzero-clone-runner, loopzero-packs-runner) from the DO container registry.
+  const registrySecretName = "loopzero-infra-registry";
+
   const buildSA = new k8s.core.v1.ServiceAccount(
     "loopzero-build-sa",
     {
@@ -86,6 +92,7 @@ export function bootstrapBuildCluster(
           "meta.helm.sh/release-namespace": "argo",
         },
       },
+      imagePullSecrets: [{ name: registrySecretName }],
     },
     { provider, dependsOn: [ns] },
   );
