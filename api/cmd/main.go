@@ -461,17 +461,33 @@ func main() {
 		// Background loops (reconcile, reapers, convergence) MUST run on exactly
 		// one API replica. This advisory lock prevents duplicate loop execution
 		// if the Deployment is accidentally scaled to 2+ replicas.
-		// Uses pg_try_advisory_lock (session-scoped): returns false immediately if
-		// another session holds the lock. NOTE: session-scoped lock is correct here
-		// (not xact-scoped) because we need the lock for the entire process lifetime.
+		//
+		// CRITICAL: pg_try_advisory_lock is SESSION-scoped — the lock persists only
+		// while the underlying database CONNECTION is open. Using pool.QueryRow()
+		// acquires a connection, executes, and returns it to the pool — releasing
+		// the lock immediately. We must use pool.Acquire() to hold a dedicated
+		// connection for the entire process lifetime.
 		const leaderLockID int64 = 0x7468656F6C656164 // "loopzerolead" in hex
 		var isLeader bool
-		if err := dbAdapter.QueryRow(context.Background(),
+
+		// Acquire a dedicated connection from the pool. This connection will NOT
+		// be returned to the pool until explicitly released, keeping the advisory
+		// lock held for the entire process lifetime.
+		leaderConn, err := dbAdapter.Pool.Acquire(context.Background())
+		if err != nil {
+			logger.Error("failed to acquire database connection for leader election", "error", err)
+			os.Exit(1)
+		}
+		defer leaderConn.Release() // Released on process shutdown (after bgWg.Wait)
+
+		if err := leaderConn.QueryRow(context.Background(),
 			"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&isLeader); err != nil {
 			logger.Error("failed to acquire leader lock", "error", err)
 			os.Exit(1)
 		}
-		if !isLeader {
+		if isLeader {
+			logger.Info("leader lock acquired — background loops will start on this replica")
+		} else {
 			logger.Warn("another API instance holds the leader lock — background loops will NOT start on this replica",
 				"hint", "The API can serve HTTP requests but reconcile/reaper loops are disabled. See docs/runbooks/api-scaling.md")
 		}
