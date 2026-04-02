@@ -302,6 +302,9 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 
 	// Task 7.4: Dedicated ServiceAccount for app workloads (separate from deployer SA).
 	// Pods use this SA with automountServiceAccountToken=false.
+	// imagePullSecrets: registry credentials created by `doctl kubernetes cluster registry add`
+	// are added to the default SA but NOT to custom SAs. Without this, pods using
+	// loopzero-app SA get 401 Unauthorized pulling from the DO container registry.
 	appSA := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "loopzero-app",
@@ -315,6 +318,13 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		appSA.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
 		falseVal := false
 		appSA.AutomountServiceAccountToken = &falseVal
+		// Copy imagePullSecrets from default SA to loopzero-app SA.
+		// `doctl kubernetes cluster registry add` adds registry credentials to the default SA.
+		// Custom SAs don't inherit these — we must copy them explicitly.
+		var defaultSA corev1.ServiceAccount
+		if err := r.RuntimeClient.Get(ctx, client.ObjectKey{Namespace: nsName, Name: "default"}, &defaultSA); err == nil {
+			appSA.ImagePullSecrets = defaultSA.ImagePullSecrets
+		}
 		return nil
 	}); err != nil {
 		return fmt.Errorf("serviceaccount %s/loopzero-app: %w", nsName, err)
