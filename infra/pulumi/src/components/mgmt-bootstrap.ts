@@ -1322,7 +1322,9 @@ function installTenantController(
     infra.buildCluster,
     "argo",
     [
-      { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas"], verbs: ["get", "list", "create", "update", "patch"] },
+      // limitranges required for build namespace resource enforcement (build-limits LimitRange).
+      // Without it, tenant reconcile fails with "forbidden" and stays in Provisioning.
+      { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "create", "update", "patch"] },
       { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
     ],
   );
