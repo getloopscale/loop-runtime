@@ -759,13 +759,17 @@ jobs:
             --from-literal=ARGOCD_TOKEN="$ARGOCD_JWT" \
             --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
 
-          # ArgoCD repo credentials: use type=repository (not repo-creds).
-          # repo-creds are credential TEMPLATES that ArgoCD doesn't reliably
-          # reload on secret change (known issue #7673). Type=repository is
-          # an explicit repo registration that ArgoCD watches properly.
+          # ArgoCD repo credentials — both internal AND public URLs.
+          # The TenantController creates ArgoCD Applications using either:
+          #   - Internal URL: http://gitea-http.platform-system.svc.cluster.local:3000/...
+          #   - Public URL: https://git.{domain}/... (set by bootstrap or API)
+          # ArgoCD does prefix matching: credentials must cover BOTH URL patterns.
           GITEA_BASE="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000"
+          STACK="${{ needs.resolve.outputs.stack }}"
+          DOMAIN=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi config get domain --stack "$STACK" 2>/dev/null || echo "")
+          GITEA_PUBLIC="https://git.${DOMAIN}"
 
-          # Credential template (fallback for any loopzero/* repo)
+          # Internal credential template (for operator-created Applications)
           kubectl -n $NAMESPACE create secret generic gitea-repo-creds \
             --from-literal=type=git \
             --from-literal=url="$GITEA_BASE" \
@@ -773,6 +777,17 @@ jobs:
             --from-literal=password="$GITEA_TOKEN" \
             --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
           kubectl -n $NAMESPACE label secret gitea-repo-creds argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
+
+          # Public URL credential template (for Applications using public Gitea URL)
+          if [ -n "$DOMAIN" ]; then
+            kubectl -n $NAMESPACE create secret generic gitea-repo-creds-public \
+              --from-literal=type=git \
+              --from-literal=url="$GITEA_PUBLIC" \
+              --from-literal=username=gitea_admin \
+              --from-literal=password="$GITEA_TOKEN" \
+              --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
+            kubectl -n $NAMESPACE label secret gitea-repo-creds-public argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
+          fi
 
           # Explicit repo registration for the bootstrap tenant gitops repo.
           # ArgoCD reliably detects type=repository secrets (unlike repo-creds).
