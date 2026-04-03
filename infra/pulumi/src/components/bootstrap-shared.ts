@@ -258,10 +258,6 @@ export function installTraefik(
     {
       provider,
       dependsOn,
-      // MED-06 migration: Pulumi state may have this resource under the old name
-      // "mgmt-traefik" (before the role-based rename). The alias tells Pulumi that
-      // the old resource IS this resource — prevents delete+create replacement.
-      aliases: [{ name: "mgmt-traefik" }],
     },
   );
 }
