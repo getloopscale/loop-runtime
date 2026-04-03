@@ -620,6 +620,20 @@ jobs:
           # Converge: update Deployments (now images exist), recreate GC'd Jobs
           pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
 
+          # Restart API pods to re-acquire leader lock.
+          # On fresh deploy, Step 1 creates pods that try leader election before
+          # the DB pool is stable. Both replicas may fail to acquire the lock.
+          # After Step 3 convergence, all infrastructure is ready — restart ensures
+          # exactly one replica wins the leader lock and starts background loops.
+          MGMT_KC=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
+          if [ -n "$MGMT_KC" ]; then
+            echo "$MGMT_KC" > /tmp/step3-kc.yaml
+            kubectl --kubeconfig=/tmp/step3-kc.yaml rollout restart deployment loopzero-api -n platform-system 2>/dev/null || true
+            kubectl --kubeconfig=/tmp/step3-kc.yaml rollout status deployment loopzero-api -n platform-system --timeout=120s 2>/dev/null || true
+            rm -f /tmp/step3-kc.yaml
+            echo "API pods restarted for leader election"
+          fi
+
       # --- Post-deploy: capture execution state ---
       - name: Capture execution state
         if: always() && needs.resolve.outputs.command == 'up'
