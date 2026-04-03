@@ -550,12 +550,32 @@ jobs:
             infra/images/packs-runner/
           docker push "$REGISTRY/loopzero-packs-runner:v0.1.0"
 
-          # Integrate registry with all DOKS clusters (idempotent)
+          # Integrate registry with all DOKS clusters (idempotent).
+          # This creates the imagePullSecret in each cluster's default namespace
+          # and patches the default SA. Must run BEFORE Step 3 convergence.
           cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}"
           for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
             CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || echo "")
             [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
           done
+
+          # Copy registry secret to platform-system namespace on mgmt cluster.
+          # doctl only creates the secret in the default namespace.
+          # Pods in platform-system (loopzero-api, tenant-controller) need it too.
+          MGMT_KC=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
+          if [ -n "$MGMT_KC" ]; then
+            echo "$MGMT_KC" > /tmp/mgmt-registry-kc.yaml
+            # Copy secret from default to platform-system
+            kubectl --kubeconfig=/tmp/mgmt-registry-kc.yaml get secret loopzero-infra-registry -n default -o json 2>/dev/null | \
+              jq '.metadata.namespace = "platform-system" | del(.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp)' | \
+              kubectl --kubeconfig=/tmp/mgmt-registry-kc.yaml apply -f - 2>/dev/null || true
+            # Restart stuck pods so they pick up the new secret
+            for DEPLOY in loopzero-api tenant-controller; do
+              kubectl --kubeconfig=/tmp/mgmt-registry-kc.yaml rollout restart deployment "$DEPLOY" -n platform-system 2>/dev/null || true
+            done
+            rm -f /tmp/mgmt-registry-kc.yaml
+            echo "Registry secret copied to platform-system + deployments restarted"
+          fi
 
           # Update CWTs on build cluster — ensures build templates match latest code.
           echo "Updating CWTs on build cluster..."
