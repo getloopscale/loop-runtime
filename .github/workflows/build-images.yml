@@ -330,9 +330,9 @@ jobs:
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
           docker build \
-            --build-arg VITE_API_URL=https://cloud.dev.loopzero.example \
+            --build-arg VITE_API_URL=https://api.dev.loopzero.example \
             --build-arg VITE_ENGINE_URL=https://api.dev.loopzero.example \
-            --build-arg VITE_HYDRA_URL=https://hydra.dev.loopzero.example \
+            --build-arg VITE_AUTH_URL=https://auth.dev.loopzero.example \
             -t ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} \
             -t ${{ env.REGISTRY }}/loopzero-dashboard:${SHA} \
             cloud/dashboard/

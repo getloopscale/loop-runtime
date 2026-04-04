@@ -6,7 +6,7 @@ COPY . .
 # Build-time env vars for Vite (baked into the static output)
 ARG VITE_API_URL=http://localhost:13002
 ARG VITE_ENGINE_URL=http://localhost:13001
-ARG VITE_HYDRA_URL=http://localhost:4444
+ARG VITE_AUTH_URL=http://localhost:4444
 RUN npm run build
 
 FROM nginx:alpine

@@ -21,7 +21,7 @@ export interface ExposeOutputs {
  * Management cluster subdomains.
  * Each maps to a platform service exposed via Traefik ingress.
  */
-const MGMT_SUBDOMAINS = ["api", "argocd", "git", "grafana", "dashboard"] as const;
+const MGMT_SUBDOMAINS = ["api", "argocd", "git", "grafana", "dashboard", "auth", "accounts"] as const;
 
 /**
  * Computes the DNS record name prefix based on domain and zone.

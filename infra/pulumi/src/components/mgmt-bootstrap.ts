@@ -1062,10 +1062,11 @@ function installCloudService(
       data: {
         CLOUD_LISTEN_ADDR: ":13002",
         LOOPZERO_ENV: config.environment || "dev",
-        // In-cluster DNS for Ory services (same namespace)
-        KRATOS_PUBLIC_URL: `http://ory-kratos-public.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
+        // Browser-accessible URLs (used for redirects in consent/login flows)
+        KRATOS_PUBLIC_URL: `https://accounts.${config.domain || "dev.loopzero.example"}`,
+        HYDRA_PUBLIC_URL: `https://auth.${config.domain || "dev.loopzero.example"}`,
+        // Internal URLs (server-to-server, never exposed to browser)
         KRATOS_ADMIN_URL: `http://ory-kratos-admin.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
-        HYDRA_PUBLIC_URL: `http://ory-hydra-public.${PLATFORM_NAMESPACE}.svc.cluster.local:4444`,
         HYDRA_ADMIN_URL: `http://ory-hydra-admin.${PLATFORM_NAMESPACE}.svc.cluster.local:4445`,
         HYDRA_CLIENT_ID: "loopzero-cli",
         ENGINE_API_URL: `http://loopzero-api.${PLATFORM_NAMESPACE}.svc.cluster.local:8080`,
@@ -2019,6 +2020,12 @@ const PLATFORM_INGRESS_ROUTES = [
   // "api" subdomain uses path-based routing (see createAPIGatewayRoute below)
   // to serve loopzero-api, loopzero-cloud, and loopzero-dashboard under one domain.
   { subdomain: "dashboard", serviceName: "loopzero-dashboard", servicePort: 80 },
+  // OAuth2 authorization server — browser-accessible for PKCE/consent flows.
+  // User-facing URL is auth.{domain}, no internal technology names exposed.
+  // OAuth2 authorization server — browser-accessible for PKCE/consent flows.
+  { subdomain: "auth", serviceName: "ory-hydra-public", servicePort: 4444 },
+  // Identity management — browser-accessible for login/signup/recovery UI.
+  { subdomain: "accounts", serviceName: "ory-kratos-public", servicePort: 80 },
 ] as const;
 
 /**

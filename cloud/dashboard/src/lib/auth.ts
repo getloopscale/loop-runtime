@@ -3,7 +3,7 @@
 
 import { getApiBase, setAuth } from './api';
 
-const HYDRA_URL = import.meta.env.VITE_HYDRA_URL || 'http://localhost:4444';
+const AUTH_URL = import.meta.env.VITE_AUTH_URL || 'http://localhost:4444';
 const CLIENT_ID = 'loopzero-cli';
 
 function getRedirectUri(): string {
@@ -29,7 +29,7 @@ export async function startPKCELogin(): Promise<void> {
     state,
   });
 
-  window.location.href = `${HYDRA_URL}/oauth2/auth?${params}`;
+  window.location.href = `${AUTH_URL}/oauth2/auth?${params}`;
 }
 
 // Handle callback — exchange code for tokens
@@ -45,7 +45,7 @@ export async function handleCallback(code: string, state: string): Promise<boole
   }
 
   try {
-    const resp = await fetch(`${HYDRA_URL}/oauth2/token`, {
+    const resp = await fetch(`${AUTH_URL}/oauth2/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
