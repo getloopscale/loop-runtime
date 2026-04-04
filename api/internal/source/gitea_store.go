@@ -234,6 +234,37 @@ func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectI
 	return "ch-" + contentHash, nil
 }
 
+// CreateGitBundleFromRepo clones the Gitea repo and creates a git bundle for S3 upload.
+// Used when original source was tar.gz — the Argo Workflow CWT expects git bundles in S3.
+func (s *GiteaSourceStore) CreateGitBundleFromRepo(ctx context.Context, tenantID, projectID string) (string, error) {
+	repoName := fmt.Sprintf("loopzero-source-%s", tenantID)
+	if projectID != "" {
+		repoName = fmt.Sprintf("loopzero-source-%s-%s", tenantID, projectID)
+	}
+	remoteURL := s.repoURL(repoName)
+
+	tmpDir, err := os.MkdirTemp("", "loopzero-gitbundle-*")
+	if err != nil {
+		return "", fmt.Errorf("gitea source: create temp dir: %w", err)
+	}
+
+	repoDir := filepath.Join(tmpDir, "repo")
+	if err := s.gitCmdWithAuth(ctx, tmpDir, "clone", remoteURL, repoDir); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("gitea source: clone for bundle: %w", err)
+	}
+
+	bundlePath := filepath.Join(tmpDir, "source.bundle")
+	if err := s.gitCmd(ctx, repoDir, "git", "bundle", "create", bundlePath, "HEAD"); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("gitea source: create bundle: %w", err)
+	}
+
+	// Clean up repo dir but keep the bundle
+	_ = os.RemoveAll(repoDir)
+	return bundlePath, nil
+}
+
 // computeDirHash computes a deterministic SHA256 hash of all files in a directory.
 // Uses sorted paths and file contents for reproducibility.
 func computeDirHash(dir string) (string, error) {

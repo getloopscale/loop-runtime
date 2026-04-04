@@ -11,7 +11,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
@@ -193,16 +195,38 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Upload bundle to object storage (Spaces/MinIO) for build cluster access.
-	// CODE-SILENT-S3-001 fix: in production, S3 failure is fatal because the
-	// build will fail later when clone step can't download the bundle.
+	// The CWT clone step expects a git bundle — if the source was tar.gz,
+	// we need to create a git bundle from the Gitea repo.
 	if h.objStore != nil {
-		// Rewind temp file for S3 upload
-		if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
-			return
-		}
 		objKey := fmt.Sprintf("%s/source/%s.bundle", uc.TenantID, commitSHA)
-		if uploadErr := h.objStore.Upload(ctx, "loopzero-builds", objKey, tmpFile); uploadErr != nil {
+
+		// For content-hash sources (tar.gz input), create a git bundle from Gitea.
+		// For git sources, reuse the original bundle.
+		var uploadReader io.Reader
+		if strings.HasPrefix(commitSHA, "ch-") {
+			gitBundlePath, bundleErr := h.store.CreateGitBundleFromRepo(ctx, uc.TenantID, projectName)
+			if bundleErr != nil {
+				slog.Error("failed to create git bundle from repo", "error", bundleErr)
+				writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
+				return
+			}
+			defer func() { _ = os.RemoveAll(filepath.Dir(gitBundlePath)) }()
+			gitBundleFile, openErr := os.Open(gitBundlePath)
+			if openErr != nil {
+				writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+				return
+			}
+			defer func() { _ = gitBundleFile.Close() }()
+			uploadReader = gitBundleFile
+		} else {
+			if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+				writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+				return
+			}
+			uploadReader = tmpFile
+		}
+
+		if uploadErr := h.objStore.Upload(ctx, "loopzero-builds", objKey, uploadReader); uploadErr != nil {
 			if h.isProduction {
 				slog.Error("object store upload failed (fatal in production)", "error", uploadErr, "key", objKey)
 				writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)

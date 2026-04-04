@@ -45,6 +45,10 @@ func (f *fakeSourceStore) PushBundle(_ context.Context, tenantID, projectID stri
 	return f.CommitSHA, nil
 }
 
+func (f *fakeSourceStore) CreateGitBundleFromRepo(_ context.Context, _, _ string) (string, error) {
+	return "", fmt.Errorf("not implemented in test fake")
+}
+
 // newMultipartRequest creates a multipart/form-data request with optional bundle and loopzero_yaml fields.
 // loopzero_yaml is sent as a text field (WriteField).
 func newMultipartRequest(t *testing.T, bundleContent []byte, loopzeroYAML string) *http.Request {

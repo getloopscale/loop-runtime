@@ -333,8 +333,7 @@ export function createProgram(): Command {
       const deployCmd = new DeployCommand({
         getToken: () => configStore.getToken(),
         findLoopZeroYaml: () => {
-          const gitRoot = getGitRoot();
-          if (!gitRoot) return null;
+          const gitRoot = getGitRoot() ?? process.cwd();
           return findLoopZeroYaml(process.cwd(), gitRoot);
         },
         hasGitRepo,
@@ -475,8 +474,7 @@ export function createProgram(): Command {
 
       const validateCmd = new ValidateCommand({
         findLoopZeroYaml: () => {
-          const gitRoot = getGitRoot();
-          if (!gitRoot) return null;
+          const gitRoot = getGitRoot() ?? process.cwd();
           return findLoopZeroYaml(process.cwd(), gitRoot);
         },
         writeTo,
@@ -501,8 +499,7 @@ export function createProgram(): Command {
       const statusCmd = new StatusCommand({
         getToken: () => configStore.getToken(),
         findLoopZeroYaml: () => {
-          const gitRoot = getGitRoot();
-          if (!gitRoot) return null;
+          const gitRoot = getGitRoot() ?? process.cwd();
           return findLoopZeroYaml(process.cwd(), gitRoot);
         },
         getStatus: async (project: string, environment: string) => {
@@ -546,8 +543,7 @@ export function createProgram(): Command {
       const logsCmd = new LogsCommand({
         getToken: () => configStore.getToken(),
         findLoopZeroYaml: () => {
-          const gitRoot = getGitRoot();
-          if (!gitRoot) return null;
+          const gitRoot = getGitRoot() ?? process.cwd();
           return findLoopZeroYaml(process.cwd(), gitRoot);
         },
         getLogs: async (buildID: string, opts: { tail?: number; step?: string }) => {
@@ -599,8 +595,7 @@ export function createProgram(): Command {
       const rollbackCmd = new RollbackCommand({
         getToken: () => configStore.getToken(),
         findLoopZeroYaml: () => {
-          const gitRoot = getGitRoot();
-          if (!gitRoot) return null;
+          const gitRoot = getGitRoot() ?? process.cwd();
           return findLoopZeroYaml(process.cwd(), gitRoot);
         },
         rollback: async (project: string, environment: string, toReleaseId?: string) => {
@@ -682,8 +677,7 @@ export function createProgram(): Command {
       const buildListCmd = new BuildListCommand({
         getToken: () => configStore.getToken(),
         findLoopZeroYaml: () => {
-          const gitRoot = getGitRoot();
-          if (!gitRoot) return null;
+          const gitRoot = getGitRoot() ?? process.cwd();
           return findLoopZeroYaml(process.cwd(), gitRoot);
         },
         listBuilds: async (project: string, env?: string, limit?: number) => {
@@ -765,8 +759,7 @@ export function createProgram(): Command {
       const deps = {
         getToken: () => configStore.getToken(),
         findLoopZeroYaml: () => {
-          const gitRoot = getGitRoot();
-          if (!gitRoot) return null;
+          const gitRoot = getGitRoot() ?? process.cwd();
           return findLoopZeroYaml(process.cwd(), gitRoot);
         },
         setSecret: async (project: string, name: string, value: string, env: string, app: string) => {
@@ -808,8 +801,7 @@ export function createProgram(): Command {
       const deps = {
         getToken: () => configStore.getToken(),
         findLoopZeroYaml: () => {
-          const gitRoot = getGitRoot();
-          if (!gitRoot) return null;
+          const gitRoot = getGitRoot() ?? process.cwd();
           return findLoopZeroYaml(process.cwd(), gitRoot);
         },
         setSecret: async () => ({ name: '', environment: '', app: '', created: false }),
@@ -849,8 +841,7 @@ export function createProgram(): Command {
       const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
 
       const yamlResult = (() => {
-        const gitRoot = getGitRoot();
-        if (!gitRoot) return null;
+        const gitRoot = getGitRoot() ?? process.cwd();
         return findLoopZeroYaml(process.cwd(), gitRoot);
       })();
 
