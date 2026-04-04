@@ -50,7 +50,6 @@ export function AccountPage() {
         setErrorMessage(errors[0] || messages[0] || 'Failed to update password.');
       } else {
         setSuccess(true);
-        setPassword('');
         setNewPassword('');
       }
     } catch {
