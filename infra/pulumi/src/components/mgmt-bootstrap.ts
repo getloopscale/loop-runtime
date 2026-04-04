@@ -142,6 +142,10 @@ export function bootstrapMgmtCluster(
     clusterIssuer,
   );
 
+  // API Gateway — path-based routing under api.{domain}
+  // Serves loopzero-api, loopzero-cloud, and dashboard from a single domain.
+  createAPIGatewayRoute(provider, config, traefik, clusterIssuer);
+
   // REVIEW-2026-03-30: Fixes HIGH-01 — NetworkPolicies for production.
   // Local dev uses helm/network-policies/loopzero-system.yaml (namespace: loopzero-system).
   // Production uses platform-system namespace — these Pulumi resources ensure
@@ -2012,10 +2016,88 @@ const PLATFORM_INGRESS_ROUTES = [
   { subdomain: "argocd", serviceName: "argocd-server", servicePort: 80 },
   { subdomain: "git", serviceName: "gitea-http", servicePort: 3000 },
   { subdomain: "grafana", serviceName: "grafana", servicePort: 3000 },
-  { subdomain: "api", serviceName: "loopzero-api", servicePort: 8080 },
-  { subdomain: "cloud", serviceName: "loopzero-cloud", servicePort: 13002 },
+  // "api" subdomain uses path-based routing (see createAPIGatewayRoute below)
+  // to serve loopzero-api, loopzero-cloud, and loopzero-dashboard under one domain.
   { subdomain: "dashboard", serviceName: "loopzero-dashboard", servicePort: 80 },
 ] as const;
+
+/**
+ * API Gateway — path-based routing under api.{domain}.
+ *
+ * Routes:
+ *   /v1/auth/*        → loopzero-cloud:13002 (OAuth2 Device Flow, token refresh)
+ *   /v1/billing/*     → loopzero-cloud:13002 (Stripe integration)
+ *   /v1/webhooks/*    → loopzero-cloud:13002 (Stripe webhooks)
+ *   /auth/*           → loopzero-cloud:13002 (Kratos/Hydra consent handlers)
+ *   /health           → loopzero-cloud:13002 (cloud service health)
+ *   /*                → loopzero-api:8080    (default: all other API routes)
+ *
+ * This eliminates separate subdomains for cloud service — one domain,
+ * one TLS cert, no CORS, CLI only needs one URL.
+ */
+function createAPIGatewayRoute(
+  provider: k8s.Provider,
+  config: PlatformStackConfig,
+  traefik: k8s.helm.v3.Release,
+  clusterIssuer: k8s.apiextensions.CustomResource,
+): void {
+  const fqdn = `api.${config.domain}`;
+  const certName = "tls-api";
+
+  // TLS Certificate
+  const cert = new k8s.apiextensions.CustomResource(
+    "cert-api",
+    {
+      apiVersion: "cert-manager.io/v1",
+      kind: "Certificate",
+      metadata: { name: certName, namespace: PLATFORM_NAMESPACE },
+      spec: {
+        secretName: `${certName}-secret`,
+        issuerRef: { name: "letsencrypt-prod", kind: "ClusterIssuer" },
+        dnsNames: [fqdn],
+      },
+    },
+    { provider, dependsOn: [clusterIssuer] },
+  );
+
+  // IngressRoute with path-based routing (priority: specific paths first)
+  new k8s.apiextensions.CustomResource(
+    "ingress-api-gateway",
+    {
+      apiVersion: "traefik.io/v1alpha1",
+      kind: "IngressRoute",
+      metadata: {
+        name: "api-gateway",
+        namespace: PLATFORM_NAMESPACE,
+        labels: {
+          "app.kubernetes.io/managed-by": "pulumi",
+          "app.kubernetes.io/part-of": "loopzero-platform",
+        },
+      },
+      spec: {
+        entryPoints: ["websecure"],
+        routes: [
+          // Cloud auth service routes (higher priority — matched first)
+          {
+            match: `Host(\`${fqdn}\`) && (PathPrefix(\`/v1/auth\`) || PathPrefix(\`/v1/billing\`) || PathPrefix(\`/v1/webhooks\`) || PathPrefix(\`/auth\`))`,
+            kind: "Rule",
+            priority: 100,
+            services: [{ name: "loopzero-cloud", port: 13002, namespace: PLATFORM_NAMESPACE }],
+          },
+          // Default: all other routes go to loopzero-api
+          {
+            match: `Host(\`${fqdn}\`)`,
+            kind: "Rule",
+            priority: 1,
+            services: [{ name: "loopzero-api", port: 8080, namespace: PLATFORM_NAMESPACE }],
+          },
+        ],
+        tls: { secretName: `${certName}-secret` },
+      },
+    },
+    { provider, dependsOn: [cert, traefik] },
+  );
+}
 
 /**
  * Creates TLS-terminated IngressRoutes for platform services.
