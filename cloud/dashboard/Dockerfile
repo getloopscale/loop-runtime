@@ -1,7 +1,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 COPY . .
 # Build-time env vars for Vite (baked into the static output)
 ARG VITE_API_URL=http://localhost:13002
