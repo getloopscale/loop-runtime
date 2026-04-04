@@ -7,6 +7,7 @@ COPY . .
 ARG VITE_API_URL=http://localhost:13002
 ARG VITE_ENGINE_URL=http://localhost:13001
 ARG VITE_AUTH_URL=http://localhost:4444
+ARG VITE_ACCOUNTS_URL=http://localhost:4433
 RUN npm run build
 
 FROM nginx:alpine

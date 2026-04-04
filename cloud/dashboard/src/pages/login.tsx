@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Github, Mail, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -94,6 +94,11 @@ export function LoginPage() {
             <div className="rounded-lg bg-surface-0 border border-white/[0.06] p-3 font-mono text-sm text-center">
               <span className="text-accent/60">$</span>
               <span className="text-white/50 ml-2">loopzero login</span>
+            </div>
+
+            <div className="mt-4 flex justify-between text-sm text-white/30">
+              <Link to="/register" className="text-accent hover:text-accent/80">Create account</Link>
+              <Link to="/recovery" className="hover:text-white/50">Forgot password?</Link>
             </div>
           </motion.div>
         </div>

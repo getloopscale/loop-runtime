@@ -220,6 +220,8 @@ jobs:
       LOOPZERO_GITHUB_CLIENT_SECRET: ${{ secrets.LOOPZERO_GITHUB_CLIENT_SECRET }}
       LOOPZERO_GOOGLE_CLIENT_ID: ${{ secrets.LOOPZERO_GOOGLE_CLIENT_ID }}
       LOOPZERO_GOOGLE_CLIENT_SECRET: ${{ secrets.LOOPZERO_GOOGLE_CLIENT_SECRET }}
+      # SMTP — email delivery via Resend (verification, recovery)
+      LOOPZERO_SMTP_CONNECTION_URI: ${{ secrets.LOOPZERO_SMTP_CONNECTION_URI }}
 
     steps:
       - uses: actions/checkout@v4

@@ -162,8 +162,10 @@ export function loadStackConfig(): PlatformStackConfig {
     stripeApiKey: config.getSecret("stripeApiKey") ?? undefined,
     stripeWebhookSecret: config.getSecret("stripeWebhookSecret") ?? undefined,
 
-    // Ory SMTP (Sprint 11, Phase 4)
-    smtpConnectionUri: config.getSecret("smtpConnectionUri") ?? undefined,
+    // Ory SMTP — email delivery via Resend (verification, recovery)
+    smtpConnectionUri: process.env.LOOPZERO_SMTP_CONNECTION_URI
+      ? pulumi.output(process.env.LOOPZERO_SMTP_CONNECTION_URI)
+      : config.getSecret("smtpConnectionUri") ?? undefined,
 
     // Ory Social Login — GitHub OAuth (Sprint 11, Phase 3)
     // Reads from env vars (GitHub Actions secrets) or Pulumi config (local dev).

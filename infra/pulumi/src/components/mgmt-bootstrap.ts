@@ -553,6 +553,19 @@ function installOryKratos(
                   },
                 }
               : {}),
+            // MEET-2026-04-04-031: Selfservice URLs must point to dashboard (not localhost).
+            selfservice: {
+              default_browser_return_url: `https://dashboard.${config.domain}/`,
+              flows: {
+                login: { ui_url: `https://dashboard.${config.domain}/login` },
+                registration: { ui_url: `https://dashboard.${config.domain}/register` },
+                verification: { ui_url: `https://dashboard.${config.domain}/verification`, enabled: true },
+                recovery: { ui_url: `https://dashboard.${config.domain}/recovery`, enabled: true },
+                settings: { ui_url: `https://dashboard.${config.domain}/account` },
+                error: { ui_url: `https://dashboard.${config.domain}/error` },
+                logout: { after: { default_browser_return_url: `https://dashboard.${config.domain}/login` } },
+              },
+            },
             // Social login providers — only override when secrets are configured.
             // When not set, falls back to values.yaml placeholders (REPLACE_VIA_PULUMI).
             ...(config.githubOAuthClientId || config.googleOAuthClientId
