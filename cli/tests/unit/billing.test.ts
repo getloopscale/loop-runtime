@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import { BillingCommand, BillingDeps, BillingOptions } from '../../src/commands/billing';
+import { BillingCommand, BillingDeps } from '../../src/commands/billing';
 
 describe('BillingCommand', () => {
   function createDeps(overrides: Partial<BillingDeps> = {}): BillingDeps {
