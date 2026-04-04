@@ -49,6 +49,43 @@ export function bootstrapRuntimeCluster(
   // ESO runs on runtime (workload) cluster and reads from mgmt via kubeconfig.
   installESO(provider, infra);
 
+  // MEET-2026-04-04-030 Phase 3.1: RBAC for loopzero-api to create ExternalSecret CRs
+  // on the runtime cluster. The SecretK8sManager (api/internal/k8s/secret_k8s_manager.go)
+  // creates ExternalSecret CRs in tenant namespaces when `loopzero secret set` is called.
+  // The scoped kubeconfig SA (loopzero-runtime-sa) needs permissions for ESO CRDs.
+  const esoWriterRole = new k8s.rbac.v1.ClusterRole(
+    "loopzero-eso-writer",
+    {
+      metadata: { name: "loopzero-eso-writer" },
+      rules: [
+        {
+          apiGroups: ["external-secrets.io"],
+          resources: ["externalsecrets"],
+          verbs: ["get", "list", "create", "update", "patch", "delete"],
+        },
+        // Also need K8s Secret read to verify sync status
+        {
+          apiGroups: [""],
+          resources: ["secrets"],
+          verbs: ["get", "list", "create", "update", "patch", "delete"],
+        },
+      ],
+    },
+    { provider },
+  );
+
+  new k8s.rbac.v1.ClusterRoleBinding(
+    "loopzero-eso-writer",
+    {
+      metadata: { name: "loopzero-eso-writer" },
+      subjects: [
+        { kind: "ServiceAccount", name: "loopzero-runtime-sa", namespace: PLATFORM_NAMESPACE },
+      ],
+      roleRef: { kind: "ClusterRole", name: "loopzero-eso-writer", apiGroup: "rbac.authorization.k8s.io" },
+    },
+    { provider, dependsOn: [esoWriterRole] },
+  );
+
   return {
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
     ingressEndpoint,

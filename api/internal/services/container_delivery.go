@@ -108,9 +108,10 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Bui
 		// MEET-2026-04-04-029 P3: 404 (app not found) is recoverable — the TenantController
 		// may not have created the ArgoCD Application yet. Leave release in PENDING and let
 		// the convergence loop retrigger sync once the Application CR exists.
-		if strings.Contains(err.Error(), "not found") {
-			slog.Warn("argocd application not found — release stays PENDING for convergence loop retry",
-				"build_id", build.ID, "app", argoAppName, "error", err)
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "DEPLOY_SERVICE_AUTH_FAILED") {
+			slog.Warn("argocd sync trigger failed (recoverable) — release stays PENDING for convergence loop retry",
+				"build_id", build.ID, "app", argoAppName, "error", err,
+				"hint", "If this persists, verify the environment exists for this tenant and ArgoCD credentials are valid")
 			// Don't fail the release — convergence loop will retrigger
 		} else {
 			slog.Error("argocd trigger sync failed after retries",
