@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { KeyRound, CheckCircle2, Loader2 } from 'lucide-react';
+import { KeyRound, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { type Flow, getFlow, submitFlow, getCsrfToken, getFlowMessages, getFieldErrors } from '@/lib/kratos';
+import { type Flow, getFlow, submitFlow, getCsrfToken, getFlowMessages } from '@/lib/kratos';
 
 const ACCOUNTS_URL = import.meta.env.VITE_ACCOUNTS_URL || 'http://localhost:4433';
 
@@ -13,7 +13,6 @@ export function RecoveryPage() {
   const [phase, setPhase] = useState<'email' | 'code' | 'password' | 'success'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 

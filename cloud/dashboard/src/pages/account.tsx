@@ -14,7 +14,6 @@ export function AccountPage() {
   useRequireAuth();
   const [searchParams] = useSearchParams();
   const [flow, setFlow] = useState<Flow | null>(null);
-  const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -63,7 +62,7 @@ export function AccountPage() {
 
   if (!flow) {
     return (
-      <PageWrapper title="Account" subtitle="Manage your account settings">
+      <PageWrapper title="Account" description="Manage your account settings">
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-6 w-6 text-accent animate-spin" />
         </div>
@@ -75,7 +74,7 @@ export function AccountPage() {
   const oidcNodes = flow.ui.nodes.filter(n => n.group === 'oidc');
 
   return (
-    <PageWrapper title="Account" subtitle="Manage your account settings">
+    <PageWrapper title="Account" description="Manage your account settings">
       <div className="max-w-2xl space-y-6">
         {/* Change Password */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
