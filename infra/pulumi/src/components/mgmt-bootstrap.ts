@@ -2013,6 +2013,8 @@ const PLATFORM_INGRESS_ROUTES = [
   { subdomain: "git", serviceName: "gitea-http", servicePort: 3000 },
   { subdomain: "grafana", serviceName: "grafana", servicePort: 3000 },
   { subdomain: "api", serviceName: "loopzero-api", servicePort: 8080 },
+  { subdomain: "cloud", serviceName: "loopzero-cloud", servicePort: 13002 },
+  { subdomain: "dashboard", serviceName: "loopzero-dashboard", servicePort: 80 },
 ] as const;
 
 /**
