@@ -26,8 +26,8 @@ function createMockDeps(overrides: Partial<DeployDeps> = {}): DeployDeps {
     }),
     hasGitRepo: jest.fn().mockReturnValue(true),
     hasLockfile: jest.fn().mockReturnValue(true),
-    getHeadCommit: jest.fn().mockReturnValue('abc1234'),
-    createGitBundle: jest.fn().mockResolvedValue('/tmp/bundle.bundle'),
+    getSourceIdentifier: jest.fn().mockReturnValue('abc1234'),
+    createSourceBundle: jest.fn().mockResolvedValue('/tmp/bundle.bundle'),
     uploadSource: jest.fn().mockResolvedValue({ commit_sha: 'abc1234', apps: ['api', 'web'] }),
     submitBuild: jest.fn().mockResolvedValue({
       build_id: 'build-deadbeef',
@@ -72,8 +72,8 @@ describe('DeployCommand', () => {
       expect(deps.getToken).toHaveBeenCalled();
       expect(deps.findLoopZeroYaml).toHaveBeenCalled();
       expect(deps.hasGitRepo).toHaveBeenCalled();
-      expect(deps.getHeadCommit).toHaveBeenCalled();
-      expect(deps.createGitBundle).toHaveBeenCalled();
+      expect(deps.getSourceIdentifier).toHaveBeenCalled();
+      expect(deps.createSourceBundle).toHaveBeenCalled();
       expect(deps.uploadSource).toHaveBeenCalled();
       expect(deps.submitBuild).toHaveBeenCalled();
       expect(deps.connectSSE).toHaveBeenCalled();
@@ -239,7 +239,7 @@ describe('DeployCommand', () => {
 
       expect(deps.findLoopZeroYaml).not.toHaveBeenCalled();
       expect(deps.hasGitRepo).not.toHaveBeenCalled();
-      expect(deps.createGitBundle).not.toHaveBeenCalled();
+      expect(deps.createSourceBundle).not.toHaveBeenCalled();
     });
 
     it('should exit 4 when token is empty string', async () => {
@@ -445,17 +445,16 @@ describe('DeployCommand', () => {
   });
 
   describe('no .git', () => {
-    it('should exit 1 with message when no git repository', async () => {
+    it('should succeed without git repository (uses content hash)', async () => {
       const deps = createMockDeps({
         hasGitRepo: jest.fn().mockReturnValue(false),
       });
       const cmd = new DeployCommand(deps);
 
-      const exitCode = await cmd.execute({});
+      const exitCode = await cmd.execute({ wait: false });
 
-      expect(exitCode).toBe(1);
-      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
-      expect(errOutput).toContain('Not a git repository.');
+      // Deploy should succeed — content hash used instead of git commit
+      expect(exitCode).toBe(0);
     });
   });
 
@@ -629,7 +628,7 @@ describe('DeployCommand', () => {
       const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
       expect(errOutput).toContain('nonexistent');
       // Must fail BEFORE any upload
-      expect(deps.createGitBundle).not.toHaveBeenCalled();
+      expect(deps.createSourceBundle).not.toHaveBeenCalled();
       expect(deps.uploadSource).not.toHaveBeenCalled();
     });
 
@@ -649,7 +648,7 @@ describe('DeployCommand', () => {
       const exitCode = await cmd.execute({ app: ['api', 'ghost'] });
 
       expect(exitCode).toBe(1);
-      expect(deps.createGitBundle).not.toHaveBeenCalled();
+      expect(deps.createSourceBundle).not.toHaveBeenCalled();
     });
   });
 
@@ -962,7 +961,7 @@ describe('DeployCommand', () => {
       const exitCode = await cmd.execute({ app: ['api', 'nonexistent'] });
 
       expect(exitCode).toBe(1);
-      expect(deps.createGitBundle).not.toHaveBeenCalled();
+      expect(deps.createSourceBundle).not.toHaveBeenCalled();
       expect(deps.uploadSource).not.toHaveBeenCalled();
       expect(deps.submitBuild).not.toHaveBeenCalled();
       const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
@@ -990,7 +989,7 @@ describe('DeployCommand', () => {
       const exitCode = await cmd.execute({});
 
       expect(exitCode).toBe(0);
-      expect(deps.createGitBundle).toHaveBeenCalled();
+      expect(deps.createSourceBundle).toHaveBeenCalled();
       expect(deps.uploadSource).toHaveBeenCalled();
     });
 
@@ -1017,7 +1016,7 @@ describe('DeployCommand', () => {
       expect(errOutput).toContain('JWT_SECRET');
       expect(errOutput).toContain('production');
       // Must fail BEFORE any upload (fail fast)
-      expect(deps.createGitBundle).not.toHaveBeenCalled();
+      expect(deps.createSourceBundle).not.toHaveBeenCalled();
       expect(deps.uploadSource).not.toHaveBeenCalled();
     });
 
@@ -1268,7 +1267,7 @@ describe('DeployCommand', () => {
       const exitCode = await cmd.execute({});
 
       expect(exitCode).toBe(0);
-      expect(deps.createGitBundle).toHaveBeenCalled();
+      expect(deps.createSourceBundle).toHaveBeenCalled();
       expect(deps.uploadSource).toHaveBeenCalled();
       expect(deps.submitBuild).toHaveBeenCalled();
     });
@@ -1325,19 +1324,16 @@ describe('DeployCommand', () => {
       expect(deps.writeError).not.toHaveBeenCalled();
     });
 
-    it('should output JSON when --json and no .git repo', async () => {
+    it('should succeed without .git repo (uses content hash)', async () => {
       const deps = createMockDeps({
         hasGitRepo: jest.fn().mockReturnValue(false),
       });
       const cmd = new DeployCommand(deps);
 
-      const exitCode = await cmd.execute({ json: true });
+      const exitCode = await cmd.execute({ json: true, wait: false });
 
-      expect(exitCode).toBe(1);
-      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
-      const parsed = JSON.parse(output);
-      expect(parsed).toEqual({ code: 'NOT_GIT_REPO', error: 'Not a git repository. Run this command from your project directory.', exit_code: 1 });
-      expect(deps.writeError).not.toHaveBeenCalled();
+      // Deploy should succeed — content hash used instead of git commit
+      expect(exitCode).toBe(0);
     });
 
     it('should output JSON when --json and no loopzero.yaml', async () => {
@@ -1419,11 +1415,7 @@ describe('DeployCommand', () => {
       expect(parsed.code).toBe('AUTH_REQUIRED');
       expect(exitCode).toBe(4);
 
-      // Test NOT_GIT_REPO
-      const gitDeps = createMockDeps({ hasGitRepo: jest.fn().mockReturnValue(false) });
-      exitCode = await new DeployCommand(gitDeps).execute({ json: true });
-      parsed = JSON.parse((gitDeps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(''));
-      expect(parsed.code).toBe('NOT_GIT_REPO');
+      // NOT_GIT_REPO is no longer an error — deploy uses content hash without git
 
       // Test INVALID_ENVIRONMENT
       const envDeps = createMockDeps();

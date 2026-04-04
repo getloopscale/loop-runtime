@@ -86,10 +86,10 @@ export class InitCommand {
       return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
 
-    // Git repo check — loopzero requires a git repository
-    if (this.deps.hasGitRepo && !this.deps.hasGitRepo()) {
-      return this.exitWithError(opts, 'Not a git repository. Run: git init', 1, 'NOT_GIT_REPO');
-    }
+    // Git repo check — warn if not a git repository (content hash will be used for versioning)
+    const noGitWarning = (this.deps.hasGitRepo && !this.deps.hasGitRepo())
+      ? 'No git repository detected. Deploy will use content-based versioning.'
+      : undefined;
 
     // CI mode requires --yes
     if (this.deps.isCI && !opts.yes) {
@@ -289,8 +289,8 @@ export class InitCommand {
       if (projectName !== originalName) {
         jsonOutput.sanitized_from = originalName;
       }
-      if (sanitizationWarning || warning) {
-        jsonOutput.warning = [sanitizationWarning, warning].filter(Boolean).join('. ');
+      if (sanitizationWarning || warning || noGitWarning) {
+        jsonOutput.warning = [sanitizationWarning, warning, noGitWarning].filter(Boolean).join('. ');
       }
       this.deps.writeTo(JSON.stringify(jsonOutput));
     } else {

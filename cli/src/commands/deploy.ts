@@ -80,8 +80,8 @@ export interface DeployDeps {
   hasGitRepo: () => boolean;
   hasUncommittedChanges: () => boolean;
   hasLockfile: () => boolean;
-  getHeadCommit: () => string;
-  createGitBundle: () => Promise<string>;
+  getSourceIdentifier: () => string;
+  createSourceBundle: () => Promise<string>;
   checkSensitiveFiles?: () => string[];
   uploadSource: (bundlePath: string, loopzeroYamlPath: string) => Promise<UploadResult>;
   submitBuild: (input: SubmitBuildInput) => Promise<SubmitBuildResult>;
@@ -121,10 +121,7 @@ export class DeployCommand {
       return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
 
-    // 2. Validate .git exists
-    if (!this.deps.hasGitRepo()) {
-      return this.exitWithError(opts, 'Not a git repository. Run this command from your project directory.', 1, 'NOT_GIT_REPO');
-    }
+    // 2. (Removed) .git is no longer required — content hash used when git is unavailable.
 
     // 3. Find loopzero.yaml
     const yamlResult = this.deps.findLoopZeroYaml();
@@ -191,8 +188,8 @@ export class DeployCommand {
       }
     }
 
-    // 8. Warn about uncommitted changes
-    if (this.deps.hasUncommittedChanges()) {
+    // 8. Warn about uncommitted changes (only relevant for git projects)
+    if (this.deps.hasGitRepo() && this.deps.hasUncommittedChanges()) {
       if (!opts.json) {
         this.deps.writeTo('Warning: You have uncommitted changes. Only committed code will be deployed.');
       }
@@ -212,26 +209,27 @@ export class DeployCommand {
       }
     }
 
-    // 9. Validate git has at least one commit (HEAD must exist for bundle creation)
+    // 9. Get source identifier (git SHA or content hash)
+    let sourceId: string;
     try {
-      this.deps.getHeadCommit();
+      sourceId = this.deps.getSourceIdentifier();
     } catch {
       return this.exitWithError(opts,
-        'No commits found. Commit your changes first: git add . && git commit -m "initial commit"',
-        1, 'NO_COMMITS');
+        'Failed to identify source version. Ensure your project has files to deploy.',
+        1, 'SOURCE_ID_FAILED');
     }
 
-    // 9b. Warn about potentially sensitive files in git (F-04)
+    // 9b. Warn about potentially sensitive files (only for git projects)
     const sensitiveFiles = this.deps.checkSensitiveFiles?.() ?? [];
     if (sensitiveFiles.length > 0 && !opts.json) {
-      this.deps.writeTo(`Warning: Potentially sensitive files detected in git: ${sensitiveFiles.join(', ')}`);
+      this.deps.writeTo(`Warning: Potentially sensitive files detected: ${sensitiveFiles.join(', ')}`);
       this.deps.writeTo('These files will be included in the deploy bundle.');
     }
 
-    // 10. Create git bundle
+    // 10. Create source bundle (git bundle or tar.gz)
     let bundlePath: string;
     try {
-      bundlePath = await this.deps.createGitBundle();
+      bundlePath = await this.deps.createSourceBundle();
     } catch (err) {
       return this.exitWithError(opts, `Failed to create source bundle. ${(err as Error).message}`, 1, 'BUNDLE_FAILED');
     }

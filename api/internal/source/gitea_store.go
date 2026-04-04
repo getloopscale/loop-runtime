@@ -6,6 +6,8 @@ package source
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -52,17 +55,10 @@ func NewGiteaSourceStore(cfg GiteaSourceStoreConfig) (*GiteaSourceStore, error) 
 	}, nil
 }
 
-// PushBundle receives a git bundle from the CLI, unbundles it into a temp
-// repo, and pushes to the Gitea source repo for this tenant/project.
-// Returns the HEAD commit SHA after push.
+// PushBundle receives a source bundle from the CLI (git bundle or tar.gz),
+// detects the format, and pushes to the Gitea source repo.
+// Returns the source identifier (git SHA or "ch-{content-hash}").
 func (s *GiteaSourceStore) PushBundle(ctx context.Context, tenantID, projectID string, bundle io.Reader) (string, error) {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.source.push_git",
-		trace.WithAttributes(
-			attribute.String("loopzero.tenant", tenantID),
-			attribute.String("loopzero.project", projectID),
-		))
-	defer span.End()
-
 	data, err := io.ReadAll(bundle)
 	if err != nil {
 		return "", fmt.Errorf("gitea source: reading bundle: %w", err)
@@ -70,6 +66,24 @@ func (s *GiteaSourceStore) PushBundle(ctx context.Context, tenantID, projectID s
 	if len(data) == 0 {
 		return "", fmt.Errorf("gitea source: bundle is empty")
 	}
+
+	// Detect bundle format by magic bytes:
+	//   tar.gz: 0x1f 0x8b (gzip magic)
+	//   git bundle: "# v2 git bundle\n" or "# v3 git bundle\n"
+	if len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b {
+		return s.pushTarBundle(ctx, tenantID, projectID, data)
+	}
+	return s.pushGitBundle(ctx, tenantID, projectID, data)
+}
+
+// pushGitBundle handles git bundle format (original flow).
+func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectID string, data []byte) (string, error) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.source.push_git",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", tenantID),
+			attribute.String("loopzero.project", projectID),
+		))
+	defer span.End()
 
 	// Create temp directory for git operations
 	tmpDir, err := os.MkdirTemp("", "loopzero-source-*")
@@ -145,6 +159,114 @@ func (s *GiteaSourceStore) PushBundle(ctx context.Context, tenantID, projectID s
 	}
 
 	return commitSHA, nil
+}
+
+// pushTarBundle handles tar.gz format for projects without git.
+// Extracts the archive, computes a content hash, creates a git repo,
+// commits all files, and pushes to Gitea. Returns "ch-{sha256}".
+func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectID string, data []byte) (string, error) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.source.push_tar",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", tenantID),
+			attribute.String("loopzero.project", projectID),
+		))
+	defer span.End()
+
+	tmpDir, err := os.MkdirTemp("", "loopzero-tar-source-*")
+	if err != nil {
+		return "", fmt.Errorf("gitea source: create temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	repoDir := filepath.Join(tmpDir, "repo")
+	if err := os.MkdirAll(repoDir, 0755); err != nil {
+		return "", fmt.Errorf("gitea source: mkdir repo: %w", err)
+	}
+
+	// Extract tar.gz
+	tarPath := filepath.Join(tmpDir, "source.tar.gz")
+	if err := os.WriteFile(tarPath, data, 0644); err != nil {
+		return "", fmt.Errorf("gitea source: write tar: %w", err)
+	}
+	if err := s.gitCmd(ctx, repoDir, "tar", "xzf", tarPath); err != nil {
+		return "", fmt.Errorf("gitea source: extract tar: %w", err)
+	}
+
+	// Compute content hash from extracted files
+	contentHash, err := computeDirHash(repoDir)
+	if err != nil {
+		return "", fmt.Errorf("gitea source: content hash: %w", err)
+	}
+
+	// Repo naming per spec §7.5
+	repoName := fmt.Sprintf("loopzero-source-%s", tenantID)
+	if projectID != "" {
+		repoName = fmt.Sprintf("loopzero-source-%s-%s", tenantID, projectID)
+	}
+	remoteURL := s.repoURL(repoName)
+
+	if err := s.ensureRepo(ctx, repoName); err != nil {
+		return "", fmt.Errorf("gitea source: ensure repo: %w", err)
+	}
+
+	// Initialize git repo from extracted files
+	if err := s.gitCmd(ctx, repoDir, "git", "init"); err != nil {
+		return "", fmt.Errorf("gitea source: git init: %w", err)
+	}
+	_ = s.gitCmd(ctx, repoDir, "git", "config", "user.email", "loopzero-api@loopzero.io")
+	_ = s.gitCmd(ctx, repoDir, "git", "config", "user.name", "LoopZero API")
+	if err := s.gitCmd(ctx, repoDir, "git", "add", "-A"); err != nil {
+		return "", fmt.Errorf("gitea source: git add: %w", err)
+	}
+	if err := s.gitCmd(ctx, repoDir, "git", "commit", "-m", fmt.Sprintf("source upload ch-%s", contentHash[:12])); err != nil {
+		return "", fmt.Errorf("gitea source: git commit: %w", err)
+	}
+
+	// Push to Gitea
+	_ = s.gitCmd(ctx, repoDir, "git", "remote", "remove", "origin")
+	if err := s.gitCmd(ctx, repoDir, "git", "remote", "add", "origin", remoteURL); err != nil {
+		return "", fmt.Errorf("gitea source: set remote: %w", err)
+	}
+	if err := s.gitCmdWithAuth(ctx, repoDir, "push", "--force", "origin", "HEAD:refs/heads/main"); err != nil {
+		return "", fmt.Errorf("gitea source: git push: %w", err)
+	}
+
+	return "ch-" + contentHash, nil
+}
+
+// computeDirHash computes a deterministic SHA256 hash of all files in a directory.
+// Uses sorted paths and file contents for reproducibility.
+func computeDirHash(dir string) (string, error) {
+	var paths []string
+	err := filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(dir, p)
+		// Skip .git directory (created during processing)
+		if strings.HasPrefix(rel, ".git") {
+			return filepath.SkipDir
+		}
+		if !info.IsDir() {
+			paths = append(paths, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	sort.Strings(paths)
+
+	h := sha256.New()
+	for _, rel := range paths {
+		h.Write([]byte(rel))
+		data, err := os.ReadFile(filepath.Join(dir, rel))
+		if err != nil {
+			return "", err
+		}
+		h.Write(data)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // createSourceRepoRequest is the JSON body for Gitea's create-repo API.

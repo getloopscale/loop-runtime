@@ -46,7 +46,7 @@ import { TeamRoleCommand } from './commands/team-role';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
-import { hasGitRepo, hasUncommittedChanges, hasLockfile, getHeadCommit, getGitRoot, createGitBundle, checkSensitiveFiles } from './adapters/git';
+import { hasGitRepo, hasUncommittedChanges, hasLockfile, getSourceIdentifier, getGitRoot, createSourceBundle, checkSensitiveFiles } from './adapters/git';
 import { findLoopZeroYaml } from './adapters/loopzero-yaml';
 import { cleanupFile } from './adapters/source-bundle';
 import { uploadSource } from './adapters/source-upload';
@@ -340,8 +340,8 @@ export function createProgram(): Command {
         hasGitRepo,
         hasUncommittedChanges,
         hasLockfile,
-        getHeadCommit,
-        createGitBundle,
+        getSourceIdentifier,
+        createSourceBundle,
         checkSensitiveFiles,
         uploadSource: (bundlePath: string, loopzeroYamlPath: string) =>
           uploadSource(baseURL, configStore.getConfig()?.token ?? null, bundlePath, loopzeroYamlPath),
