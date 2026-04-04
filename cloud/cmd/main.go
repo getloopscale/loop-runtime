@@ -36,11 +36,14 @@ func main() {
 	// Initialize Hydra client
 	hydra := auth.NewHydraClient(cfg.HydraPublicURL, cfg.HydraAdminURL, cfg.HydraClientID)
 
-	// Register CLI OAuth2 client in Hydra (idempotent — safe on every startup)
-	if err := hydra.RegisterClient(); err != nil {
+	// Register CLI OAuth2 client in Hydra (idempotent — safe on every startup).
+	// Include both localhost (dev) and production dashboard callback URLs.
+	redirectURIs := []string{
+		"http://localhost:9876/auth",
+		cfg.BillingReturnURL + "/login/callback",
+	}
+	if err := hydra.RegisterClient(redirectURIs); err != nil {
 		logger.Warn("failed to register OAuth2 client (Hydra may not be ready yet)", "error", err)
-		// Non-fatal: Hydra may not be reachable during initial deploy.
-		// The client registration will succeed on subsequent requests or restarts.
 	}
 
 	// Initialize JWKS validator

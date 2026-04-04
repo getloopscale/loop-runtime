@@ -277,20 +277,13 @@ func (c *HydraClient) AcceptConsent(challenge string, grantScope []string) (stri
 	return result.RedirectTo, nil
 }
 
-// RegisterClient registers the CLI OAuth2 client in Hydra (idempotent).
-func (c *HydraClient) RegisterClient() error {
-	// Check if client already exists
-	getURL := fmt.Sprintf("%s/admin/clients/%s", c.adminURL, c.clientID)
-	resp, err := c.httpClient.Get(getURL)
-	if err == nil && resp.StatusCode == http.StatusOK {
-		resp.Body.Close()
-		return nil // Already exists
-	}
-	if resp != nil {
-		resp.Body.Close()
+// RegisterClient registers or updates the CLI OAuth2 client in Hydra (idempotent).
+// redirectURIs should include both localhost (dev) and production dashboard callback URLs.
+func (c *HydraClient) RegisterClient(redirectURIs []string) error {
+	if len(redirectURIs) == 0 {
+		redirectURIs = []string{"http://localhost:9876/auth"}
 	}
 
-	// Create the client
 	payload := map[string]interface{}{
 		"client_id":                  c.clientID,
 		"client_name":                "LoopZero CLI",
@@ -298,20 +291,21 @@ func (c *HydraClient) RegisterClient() error {
 		"response_types":             []string{"code"},
 		"scope":                      "openid offline_access",
 		"token_endpoint_auth_method": "none", // Public client
-		"redirect_uris":              []string{"http://localhost:9876/auth"},
+		"redirect_uris":              redirectURIs,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal register client payload: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", c.adminURL+"/admin/clients", bytes.NewReader(body))
+	// Use PUT to create-or-update (idempotent)
+	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/admin/clients/%s", c.adminURL, c.clientID), bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create register client request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err = c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("register client failed: %w", err)
 	}
