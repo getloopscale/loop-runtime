@@ -12,6 +12,22 @@ import (
 	"testing"
 )
 
+// mustMkdir creates a directory in tests, failing on error.
+func mustMkdir(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+}
+
+// mustWriteFile writes a file in tests, failing on error.
+func mustWriteFile(t *testing.T, path string, content []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
 // createTestTarGz creates a tar.gz archive at archivePath with the given entries.
 func createTestTarGz(t *testing.T, archivePath string, entries []testTarEntry) {
 	t.Helper()
@@ -19,13 +35,13 @@ func createTestTarGz(t *testing.T, archivePath string, entries []testTarEntry) {
 	if err != nil {
 		t.Fatalf("create archive: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gz := gzip.NewWriter(f)
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tw := tar.NewWriter(gz)
-	defer tw.Close()
+	defer func() { _ = tw.Close() }()
 
 	for _, e := range entries {
 		hdr := &tar.Header{
@@ -70,7 +86,7 @@ func TestSafeExtractTarGz_ValidArchive(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := filepath.Join(tmpDir, "valid.tar.gz")
 	targetDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(targetDir, 0755)
+	mustMkdir(t, targetDir)
 
 	createTestTarGz(t, archivePath, []testTarEntry{
 		{Name: "src/", Typeflag: tar.TypeDir},
@@ -108,7 +124,7 @@ func TestSafeExtractTarGz_RejectsPathTraversal(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := filepath.Join(tmpDir, "traversal.tar.gz")
 	targetDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(targetDir, 0755)
+	mustMkdir(t, targetDir)
 
 	createTestTarGz(t, archivePath, []testTarEntry{
 		{Name: "../../etc/cron.d/backdoor", Typeflag: tar.TypeReg, Content: "pwned"},
@@ -132,7 +148,7 @@ func TestSafeExtractTarGz_RejectsAbsolutePath(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := filepath.Join(tmpDir, "absolute.tar.gz")
 	targetDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(targetDir, 0755)
+	mustMkdir(t, targetDir)
 
 	createTestTarGz(t, archivePath, []testTarEntry{
 		{Name: "/etc/passwd", Typeflag: tar.TypeReg, Content: "root:x:0:0"},
@@ -151,7 +167,7 @@ func TestSafeExtractTarGz_RejectsSymlink(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := filepath.Join(tmpDir, "symlink.tar.gz")
 	targetDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(targetDir, 0755)
+	mustMkdir(t, targetDir)
 
 	createTestTarGz(t, archivePath, []testTarEntry{
 		{Name: "token", Typeflag: tar.TypeSymlink, Linkname: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
@@ -170,7 +186,7 @@ func TestSafeExtractTarGz_RejectsHardlink(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := filepath.Join(tmpDir, "hardlink.tar.gz")
 	targetDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(targetDir, 0755)
+	mustMkdir(t, targetDir)
 
 	createTestTarGz(t, archivePath, []testTarEntry{
 		{Name: "hardlink-to-secrets", Typeflag: tar.TypeLink, Linkname: "/etc/shadow"},
@@ -189,7 +205,7 @@ func TestSafeExtractTarGz_RejectsEmbeddedTraversal(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := filepath.Join(tmpDir, "embedded.tar.gz")
 	targetDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(targetDir, 0755)
+	mustMkdir(t, targetDir)
 
 	// Sneaky traversal: valid-looking prefix then ..
 	createTestTarGz(t, archivePath, []testTarEntry{
@@ -209,7 +225,7 @@ func TestSafeExtractTarGz_EmptyArchive(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := filepath.Join(tmpDir, "empty.tar.gz")
 	targetDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(targetDir, 0755)
+	mustMkdir(t, targetDir)
 
 	createTestTarGz(t, archivePath, nil)
 
@@ -224,8 +240,8 @@ func TestSafeExtractTarGz_EmptyArchive(t *testing.T) {
 
 func TestComputeDirHash_Deterministic(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "a.txt"), []byte("hello"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "b.txt"), []byte("world"), 0644)
+	mustWriteFile(t, filepath.Join(tmpDir, "a.txt"), []byte("hello"))
+	mustWriteFile(t, filepath.Join(tmpDir, "b.txt"), []byte("world"))
 
 	h1, err := computeDirHash(tmpDir)
 	if err != nil {
@@ -245,15 +261,15 @@ func TestComputeDirHash_Deterministic(t *testing.T) {
 
 func TestComputeDirHash_SkipsGitDir(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "app.js"), []byte("code"), 0644)
+	mustWriteFile(t, filepath.Join(tmpDir, "app.js"), []byte("code"))
 	hashWithout, err := computeDirHash(tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Add .git directory — should not change hash
-	os.MkdirAll(filepath.Join(tmpDir, ".git", "objects"), 0755)
-	os.WriteFile(filepath.Join(tmpDir, ".git", "HEAD"), []byte("ref: refs/heads/main"), 0644)
+	mustMkdir(t, filepath.Join(tmpDir, ".git", "objects"))
+	mustWriteFile(t, filepath.Join(tmpDir, ".git", "HEAD"), []byte("ref: refs/heads/main"))
 	hashWith, err := computeDirHash(tmpDir)
 	if err != nil {
 		t.Fatal(err)
@@ -266,15 +282,15 @@ func TestComputeDirHash_SkipsGitDir(t *testing.T) {
 
 func TestComputeDirHash_IncludesGithubDir(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "app.js"), []byte("code"), 0644)
+	mustWriteFile(t, filepath.Join(tmpDir, "app.js"), []byte("code"))
 	hashWithout, err := computeDirHash(tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Add .github directory — MUST be included in hash (F-03 bug fix)
-	os.MkdirAll(filepath.Join(tmpDir, ".github", "workflows"), 0755)
-	os.WriteFile(filepath.Join(tmpDir, ".github", "workflows", "ci.yml"), []byte("name: CI"), 0644)
+	mustMkdir(t, filepath.Join(tmpDir, ".github", "workflows"))
+	mustWriteFile(t, filepath.Join(tmpDir, ".github", "workflows", "ci.yml"), []byte("name: CI"))
 	hashWith, err := computeDirHash(tmpDir)
 	if err != nil {
 		t.Fatal(err)
@@ -287,14 +303,14 @@ func TestComputeDirHash_IncludesGithubDir(t *testing.T) {
 
 func TestComputeDirHash_IncludesGitignore(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "app.js"), []byte("code"), 0644)
+	mustWriteFile(t, filepath.Join(tmpDir, "app.js"), []byte("code"))
 	hashWithout, err := computeDirHash(tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Add .gitignore — MUST be included in hash (F-03 bug fix)
-	os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("node_modules/"), 0644)
+	mustWriteFile(t, filepath.Join(tmpDir, ".gitignore"), []byte("node_modules/"))
 	hashWith, err := computeDirHash(tmpDir)
 	if err != nil {
 		t.Fatal(err)
@@ -309,7 +325,7 @@ func TestSafeExtractTarGz_SkipsSpecialTypes(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := filepath.Join(tmpDir, "special.tar.gz")
 	targetDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(targetDir, 0755)
+	mustMkdir(t, targetDir)
 
 	// FIFO and char device entries should be silently skipped
 	createTestTarGz(t, archivePath, []testTarEntry{

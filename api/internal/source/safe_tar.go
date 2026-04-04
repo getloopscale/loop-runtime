@@ -49,13 +49,13 @@ func SafeExtractTarGz(archivePath, targetDir string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("open archive: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return 0, fmt.Errorf("gzip reader: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	var totalBytes int64
