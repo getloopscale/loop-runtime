@@ -14,7 +14,7 @@ The authoritative specification is **`docs/technical.md`**. Every state machine,
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
-**Current status:** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-6 complete (runtime, TLS, PG HA, observability, pipeline, operation). **Sprint 10 (static frontend delivery) complete.** **Production readiness validated (2026-03-29):** full destroy + recreate via GitHub Actions pipeline (10m33s), deploy E2E (24s build, pod Running, health OK), delete with ArgoCD prune (pods removed), rollback (3s, version verified), ArgoCD notifications callback (push-based activation), Alertmanager with 4 SLO rules, Loki cross-cluster logs (resolved by Pulumi), TLS via Let's Encrypt DNS-01 Cloudflare. Passwords configurable via Pulumi secrets for production. Build engine: single-container BuildKit (rootless). 498 CLI tests + 60+ API test files passing. Production infrastructure running on DigitalOcean (3 DOKS clusters + Loki + Promtail + ESO + Cloudflare Tunnel + CF Worker + DO Spaces CDN). **Next:** ESO/Secrets E2E validation, then production deploy.
+**Current status: Pre-release.** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-6 complete (runtime, TLS, PG HA, observability, pipeline, operation). Workload security hardening implemented (SecurityContext non-root, PSA restricted, NetworkPolicy mandatory). **Sprint 10 (static frontend delivery) complete.** **Production readiness validated (2026-03-29):** full destroy + recreate via GitHub Actions pipeline (10m33s), deploy E2E (24s build, pod Running, health OK), delete with ArgoCD prune (pods removed), rollback (3s, version verified), ArgoCD notifications callback (push-based activation), Alertmanager with 4 SLO rules, Loki cross-cluster logs (resolved by Pulumi), TLS via Let's Encrypt DNS-01 Cloudflare. Passwords configurable via Pulumi secrets for production. Build engine: single-container BuildKit (rootless). 747 CLI tests + 28 Go API/pkg packages + 4 operator packages passing. Production infrastructure running on DigitalOcean (3 DOKS clusters + Loki + Promtail + ESO + Cloudflare Tunnel + CF Worker + DO Spaces CDN). **Not yet built:** preview environments (Sprint 5), `loopzero promote` (Sprint 4), image signing (Sprint 6), chaos tests (Sprint 8). **Known issues:** 1 CLI test failing (`--json` contract for missing argument), AppSecret controller not implemented (CRD exists, secrets work via ESO directly).
 
 ---
 
@@ -35,8 +35,8 @@ task lint                # Lint all components (golangci-lint + ESLint)
 task validate:manifests  # kubeconform --strict on all manifests
 
 # Per-component
-cd cli  && npm test           # CLI unit tests (Jest, 498 tests)
-cd api  && go test ./...      # API tests (Go testing, 60+ files)
+cd cli  && npm test           # CLI unit tests (Jest, 747 tests)
+cd api  && go test ./...      # API tests (Go testing, 80+ test files, 22 packages)
 cd operators && go test ./... # Operator tests (Ginkgo + envtest)
 cd pkg && go test ./...       # Shared library tests
 cd infra/pulumi && npm test   # Pulumi IaC tests (vitest)
@@ -145,9 +145,9 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | Security scanning | govulncheck + npm audit + Trivy (fs + IaC + Dockerfile) + TruffleHog | Vulnerability + secret detection |
 | Manifest validation | kubeconform --strict | K8s YAML correctness |
 | Tests (Go) | Go testing + Ginkgo v2 + Gomega + envtest (K8s 1.31.0) | Unit, integration, operator tests |
-| Tests (TS) | Jest | CLI unit tests (498 tests) |
+| Tests (TS) | Jest | CLI unit tests (747 tests) |
 | Migrations | golang-migrate (forward-only, .up.sql only) | Database schema evolution |
-| Image signing | cosign + syft (Sprint 6 — not yet implemented) | Supply chain security |
+| Image signing | cosign + syft (Sprint 6 — not yet built) | Supply chain security |
 | CLI tools | doctl, gh (GitHub CLI) | Cloud + CI interaction |
 
 ---
@@ -191,7 +191,7 @@ loopzero/
 │   │   ├── detection/                 ← monorepo detection (Turbo/Nx/Lerna/pnpm) + framework detection (10 frameworks)
 │   │   ├── adapters/                  ← git operations, loopzero.yaml parsing (v2: render, build, secrets), source upload, bundle cleanup, app-unit, validate-config
 │   │   └── config/                    ← credential store (~/.loopzero/config.json), constants, env overrides
-│   └── tests/unit/                    ← 498 tests, 20+ suites (Jest)
+│   └── tests/unit/                    ← 747 tests, 40+ suites (Jest)
 ├── api/                               ← loopzero/api (Go + chi + pgx)
 │   ├── cmd/                           ← entrypoint (server bootstrap, background services)
 │   ├── internal/
@@ -508,12 +508,12 @@ Run the pre-completion checklist:
 |--------|-------|-------|-----------|--------------|--------|
 | **[0](docs/sprints/00-foundation/sprint.md)** | 1-2 | Foundation | `task setup` boots, Grafana running | — | ✅ Complete |
 | **[1](docs/sprints/01-login-init-tenant-controller/sprint.md)** | 3-5 | Login + Init + TenantController | `loopzero login` → `loopzero init` → `loopzero.yaml` | `login`, `logout`, `whoami`, `init` | ✅ Complete |
-| **[2](docs/sprints/02-deploy-happy-path/sprint.md)** | 6-9 | Deploy happy path | CLI → live URL | `deploy` | ⚠️ Feature-complete |
-| **[3](docs/sprints/03-logs-status-secrets/sprint.md)** | 10-12 | Logs + Status + Secrets | All daily workflows functional | `logs`, `status`, `inspect`, `secret` | ⚠️ Replaced by hardening sprint 6 |
-| **[4](docs/sprints/04-rollback-promote-cancel/sprint.md)** | 13-15 | Rollback + Promote + Cancel | Recovery in < 30s | `rollback`, `promote`, `build`, `env`, `team`, `project` | ⚠️ `rollback` done via hardening 6B |
-| **[5](docs/sprints/05-preview-environments/sprint.md)** | 16-18 | Preview environments | PR → preview URL → cleanup | `preview` | ❌ Not started |
-| **[6](docs/sprints/06-security-supply-chain/sprint.md)** | 19-21 | Security + Supply chain | Signed images, encrypted secrets, RBAC | — | ❌ Not started |
-| **[7](docs/sprints/07-observability/sprint.md)** | 22-23 | Observability complete | Incident resolved via dashboards in < 15 min | — | ❌ Not started |
+| **[2](docs/sprints/02-deploy-happy-path/sprint.md)** | 6-9 | Deploy happy path | CLI → live URL | `deploy` | ✅ Complete (validated on DO) |
+| **[3](docs/sprints/03-logs-status-secrets/sprint.md)** | 10-12 | Logs + Status + Secrets | All daily workflows functional | `logs`, `status`, `inspect`, `secret` | ✅ Done via hardening H6 |
+| **[4](docs/sprints/04-rollback-promote-cancel/sprint.md)** | 13-15 | Rollback + Promote + Cancel | Recovery in < 30s | `rollback`, `promote`, `build`, `env`, `team`, `project` | ⚠️ `rollback` done (H6B), `promote` not started |
+| **[5](docs/sprints/05-preview-environments/sprint.md)** | 16-18 | Preview environments | PR → preview URL → cleanup | `preview` | ❌ Not started (CRD defined, no controller) |
+| **[6](docs/sprints/06-security-supply-chain/sprint.md)** | 19-21 | Security + Supply chain | Signed images, encrypted secrets, RBAC | — | ❌ Not started (cosign+syft) |
+| **[7](docs/sprints/07-observability/sprint.md)** | 22-23 | Observability complete | Incident resolved via dashboards in < 15 min | — | ✅ Done via hardening H4 |
 | **[8](docs/sprints/08-hardening-chaos/sprint.md)** | 24-25 | Hardening + Chaos | 50 concurrent deploys, all chaos passes | — | ❌ Not started |
 | **[9](docs/sprints/09-polish-launch/sprint.md)** | 26-27 | Polish + Launch | Non-team-member onboards in < 10 min | — | ❌ Not started |
 | **[10](docs/sprints/10-static-frontend-delivery/sprint.md)** | — | Static Frontend + Security | Monorepo (API+Web+Worker) on DO, static via CF edge, zero pods for frontend | — | ✅ Complete |
@@ -528,21 +528,25 @@ Run the pre-completion checklist:
 | H4-Observabilidade | Metrics + SLOs + Dashboards | ✅ Complete |
 | H5-Pipeline | Build fix + cache | ✅ Complete |
 | H6-Operação | logs (Loki) + rollback + secrets (ESO) + status | ✅ Complete |
+| H7-Workload Security | SecurityContext non-root + PSA restricted + NetworkPolicy mandatory | ✅ Complete (code implemented, roadmap doc stale) |
 
 Full hardening details: [`docs/hardening-sprints/ROADMAP.md`](docs/hardening-sprints/ROADMAP.md)
 
 Check the current sprint before starting any implementation. Only implement what belongs to the current sprint.
 
-**Production Readiness** (validated 2026-03-29, plan at `docs/sprints/production-readiness/PLAN.md`):
+**Production Readiness** (validated 2026-03-29):
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Secure passwords | ✅ | Gitea + MinIO passwords configurable via `pulumi config set --secret` |
 | Pulumi.prod.yaml | ✅ | Production sizing (medium nodes, 3 HA DB, nyc3) |
 | Rollback | ✅ | `loopzero rollback` validated (3s, version verified) |
-| ESO/Secrets | ⏳ | External Secrets Operator E2E validation pending |
+| ESO/Secrets | ⚠️ | ESO sync works (<30s). AppSecret controller not implemented — secrets work via ESO directly but lack lifecycle automation. E2E test not in CI. |
 | SLOs + Alerts | ✅ | Alertmanager + 4 rules (API down, deploy failing, latency, crash loop) |
-| `loopzero status` | ✅ | Wired and functional |
+| `loopzero status` | ✅ | Handler wired in main.go + server.go, functional |
+| Workload security | ✅ | SecurityContext (non-root, drop ALL, readOnlyRootFilesystem), PSA restricted, NetworkPolicy mandatory |
+| Image signing | ❌ | cosign + syft not implemented (Sprint 6) |
+| Preview environments | ❌ | CRD defined, controller not implemented (Sprint 5) |
 
 ---
 
@@ -590,9 +594,9 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | PlatformBootstrap | PlatformBootstrapController | ✅ Wired | Declarative setup: Gitea → ArgoCD → API seed |
 | GitRepositoryBinding | GitRepositoryBindingController | ✅ Wired | Credential sync to ArgoCD with rotation |
 | ClusterCredential | ClusterCredentialController | ✅ | Connectivity check + kubeconfig distribution |
-| AppSecret | — | ❌ | Secret sync mgmt → workload (not implemented) |
-| PreviewEnvironment | — | ❌ | Ephemeral PR environments (Sprint 5) |
-| ReconciliationReport | — | ❌ | Drift detection (not implemented) |
+| AppSecret | — | ❌ | CRD defined, no controller. Secrets work via ESO directly. |
+| PreviewEnvironment | — | ❌ | CRD defined, no controller (Sprint 5) |
+| ReconciliationReport | — | ❌ | CRD placeholder, no controller (drift detection, deferred) |
 
 ### State Machines (7 total, defined in `pkg/statemachine/`)
 
@@ -629,6 +633,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | "Project name vs project ID" | CLI sends project name (from loopzero.yaml) as `project_id` in builds. DB `projects` table uses UUID. Status/rollback/delete must use the **name** for build/release queries, not the UUID. | All queries against builds/releases use the project name. Only the `projects` table uses UUID. |
 | "ArgoCD notifications `notifiers`" | The argo-cd Helm chart v7.x uses `notifications.notifiers` for webhook services in the ConfigMap. `notifications.services` is silently ignored. | Always use `notifiers` key in Pulumi values and helm/argocd/values.yaml |
 | "Single ArgoCD Application per tenant" | One Application manages all projects in an environment. If ANY resource is Degraded, ALL notifications are blocked. | Clean orphaned manifests immediately on delete; gitops.Remove failure is FATAL |
+| "Implemented but not documented" | Code is implemented and tested but roadmap/docs still say "TODO" or "not started". Inverse of "implemented but not wired". | Before claiming something is missing, verify in the code — roadmaps can be stale. The code is the source of truth for what exists. |
 
 ---
 

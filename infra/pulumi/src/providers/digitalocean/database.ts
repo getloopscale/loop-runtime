@@ -43,6 +43,18 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
       name: "loopzero",
     });
 
+    // Ory Kratos (identity management) and Hydra (OAuth2 server) require separate databases.
+    // Each manages its own migration history and expects full ownership of the database.
+    new digitalocean.DatabaseDb(`${spec.name}-kratos`, {
+      clusterId: cluster.id,
+      name: "kratos",
+    });
+
+    new digitalocean.DatabaseDb(`${spec.name}-hydra`, {
+      clusterId: cluster.id,
+      name: "hydra",
+    });
+
     // Firewall: allow only specified K8s clusters to connect.
     // Without this, the DB is unreachable from all pods (connection timeout on port 25060).
     // This is critical for idempotency — destroy+recreate must re-add firewall rules.

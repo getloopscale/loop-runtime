@@ -11,14 +11,9 @@ import { ContainerRegistrySpec, ContainerRegistryOutput } from "../../contracts/
  * DigitalOcean allows only ONE container registry per account.
  * All stacks (dev/staging/prod) share the same registry.
  *
- * The first stack to run creates the registry. Subsequent stacks
- * also declare it — Pulumi handles this via retainOnDelete (so
- * destroying one stack doesn't delete the shared registry) and
- * the DO API returns the existing registry on create (idempotent).
- *
- * If the registry already exists in the Pulumi state, subsequent
- * `pulumi up` runs are no-ops. If it exists in DO but not in state,
- * run: `pulumi import digitalocean:index/containerRegistry:ContainerRegistry loopzero-infra-registry loopzero-infra-registry`
+ * We import the registry by name — if it already exists in the DO
+ * account, Pulumi adopts it into the current stack's state. Combined
+ * with retainOnDelete, destroying one stack never deletes the shared registry.
  */
 export class DigitalOceanRegistryProvider implements IProviderRegistry {
   createContainerRegistry(spec: ContainerRegistrySpec): ContainerRegistryOutput {
@@ -27,9 +22,12 @@ export class DigitalOceanRegistryProvider implements IProviderRegistry {
       subscriptionTierSlug: spec.tier,
       region: spec.region,
     }, {
-      // retainOnDelete: if this stack is destroyed, the registry stays in DO.
-      // Other stacks (and all images) depend on it.
+      // Import existing registry — DO only allows one per account.
+      import: spec.name,
+      // retainOnDelete + protect: destroying a stack never deletes the shared registry.
       retainOnDelete: true,
+      protect: true,
+      ignoreChanges: ["subscriptionTierSlug"],
     });
 
     // Construct the endpoint deterministically: registry.digitalocean.com/{name}

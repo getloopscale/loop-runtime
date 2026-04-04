@@ -31,6 +31,8 @@ export const HELM_VERSIONS = {
   loki: "6.24.0",
   promtail: "6.16.6",
   tempo: "1.14.0",
+  oryKratos: "0.61.0",
+  oryHydra: "0.61.0",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -119,6 +121,8 @@ export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
   readonly grafanaReady: pulumi.Output<boolean>;
   readonly loopzeroApiReady: pulumi.Output<boolean>;
   readonly tenantControllerReady: pulumi.Output<boolean>;
+  readonly oryKratosReady: pulumi.Output<boolean>;
+  readonly oryHydraReady: pulumi.Output<boolean>;
   readonly tlsConfigured: pulumi.Output<boolean>;
 }
 
