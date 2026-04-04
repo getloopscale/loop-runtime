@@ -166,11 +166,20 @@ export function loadStackConfig(): PlatformStackConfig {
     smtpConnectionUri: config.getSecret("smtpConnectionUri") ?? undefined,
 
     // Ory Social Login — GitHub OAuth (Sprint 11, Phase 3)
-    githubOAuthClientId: config.getSecret("githubOAuthClientId") ?? undefined,
-    githubOAuthClientSecret: config.getSecret("githubOAuthClientSecret") ?? undefined,
+    // Reads from env vars (GitHub Actions secrets) or Pulumi config (local dev).
+    githubOAuthClientId: process.env.LOOPZERO_GITHUB_CLIENT_ID
+      ? pulumi.output(process.env.LOOPZERO_GITHUB_CLIENT_ID)
+      : config.getSecret("githubOAuthClientId") ?? undefined,
+    githubOAuthClientSecret: process.env.LOOPZERO_GITHUB_CLIENT_SECRET
+      ? pulumi.output(process.env.LOOPZERO_GITHUB_CLIENT_SECRET)
+      : config.getSecret("githubOAuthClientSecret") ?? undefined,
 
     // Ory Social Login — Google OAuth (Sprint 11, Phase 3)
-    googleOAuthClientId: config.getSecret("googleOAuthClientId") ?? undefined,
-    googleOAuthClientSecret: config.getSecret("googleOAuthClientSecret") ?? undefined,
+    googleOAuthClientId: process.env.LOOPZERO_GOOGLE_CLIENT_ID
+      ? pulumi.output(process.env.LOOPZERO_GOOGLE_CLIENT_ID)
+      : config.getSecret("googleOAuthClientId") ?? undefined,
+    googleOAuthClientSecret: process.env.LOOPZERO_GOOGLE_CLIENT_SECRET
+      ? pulumi.output(process.env.LOOPZERO_GOOGLE_CLIENT_SECRET)
+      : config.getSecret("googleOAuthClientSecret") ?? undefined,
   };
 }
