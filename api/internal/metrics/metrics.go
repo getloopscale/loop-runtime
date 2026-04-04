@@ -234,6 +234,16 @@ var (
 	}, []string{"cell_id"})
 )
 
+// Leader election metrics — MEET-2026-04-04-029 P1.
+var (
+	// LeaderStatus is 1 if this replica holds the leader advisory lock, 0 otherwise.
+	// Alert: LoopZeroLeaderLost fires when all replicas report 0 for > 2 minutes.
+	LeaderStatus = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_api_leader_status",
+		Help: "Whether this API replica holds the leader advisory lock (1=leader, 0=follower).",
+	})
+)
+
 // Database connection pool metrics — emitted by a periodic collector.
 var (
 	DBConnectionsActive = promauto.NewGauge(prometheus.GaugeOpts{

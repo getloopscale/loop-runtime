@@ -226,7 +226,30 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 		return // Not ready yet, will check on next tick
 	}
 
-	// Synced + healthy — activate the release
+	// MEET-2026-04-04-029 P4: Verify synced revision matches release GitCommit.
+	// Without this, rapid sequential deploys could activate the wrong release
+	// via the convergence path. The callback activator already has this check
+	// (sync_callback_activator.go:108-114); convergence loop must match.
+	if release.GitCommit != "" {
+		type revisionChecker interface {
+			GetSyncRevision(ctx context.Context, appName string) (string, error)
+		}
+		if checker, ok := r.sync_.(revisionChecker); ok {
+			revision, revErr := checker.GetSyncRevision(ctx, argoAppName)
+			if revErr != nil {
+				r.logger.Warn("release convergence: revision check failed",
+					"release_id", release.ID, "error", revErr)
+				return // Retry on next tick
+			}
+			if revision != "" && revision != release.GitCommit {
+				r.logger.Warn("release convergence: revision mismatch — skipping activation",
+					"release_id", release.ID, "expected", release.GitCommit, "actual", revision)
+				return // ArgoCD synced a different revision — don't activate wrong version
+			}
+		}
+	}
+
+	// Synced + healthy + revision verified — activate the release
 	r.activateRelease(ctx, release)
 }
 

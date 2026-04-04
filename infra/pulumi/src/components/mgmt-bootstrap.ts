@@ -252,10 +252,14 @@ return hs`,
           // IMPORTANT: the argo-cd Helm chart v7.x uses "notifiers" (not "services")
           // for the notifications ConfigMap. "services" is silently ignored.
           notifiers: {
+            // MEET-2026-04-04-029 P0: Authorization header must match LOOPZERO_ARGO_CALLBACK_SECRET.
+            // TODO (Sprint 6): inject from Kubernetes Secret instead of hardcode.
             "service.webhook.loopzero-api": `url: http://loopzero-api.${PLATFORM_NAMESPACE}.svc.cluster.local:8080/internal/argocd-callback
 headers:
 - name: Content-Type
-  value: application/json`,
+  value: application/json
+- name: Authorization
+  value: "Bearer cb-loopzero-dev-2026"`,
           },
           templates: {
             "template.sync-completed": `webhook:

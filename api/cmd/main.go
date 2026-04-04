@@ -35,6 +35,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/cfkv"
 	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
 	"github.com/loopzero/loopzero/api/internal/source"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/sse"
 
 	"k8s.io/klog/v2"
@@ -488,14 +489,30 @@ func main() {
 		}
 		defer leaderConn.Release() // Released on process shutdown (after bgWg.Wait)
 
+		// MEET-2026-04-04-029 P1: Stale lock detection.
+		// If a previous pod died without releasing its connection (pgx pool reuse),
+		// the advisory lock may still be held on this connection. Attempt to unlock
+		// any stale lock first, then acquire fresh.
+		var unlocked bool
+		if err := leaderConn.QueryRow(context.Background(),
+			"SELECT pg_advisory_unlock($1)", leaderLockID).Scan(&unlocked); err != nil {
+			logger.Warn("stale lock cleanup failed (non-fatal)", "error", err)
+		} else if unlocked {
+			logger.Info("cleared stale leader lock from previous session on this connection")
+		}
+
 		if err := leaderConn.QueryRow(context.Background(),
 			"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&isLeader); err != nil {
 			logger.Error("failed to acquire leader lock", "error", err)
 			os.Exit(1)
 		}
+
+		// MEET-2026-04-04-029 P1: Export leader status metric.
 		if isLeader {
+			metrics.LeaderStatus.Set(1)
 			logger.Info("leader lock acquired — background loops will start on this replica")
 		} else {
+			metrics.LeaderStatus.Set(0)
 			logger.Warn("another API instance holds the leader lock — background loops will NOT start on this replica",
 				"hint", "The API can serve HTTP requests but reconcile/reaper loops are disabled. See docs/runbooks/api-scaling.md")
 		}
@@ -532,7 +549,7 @@ func main() {
 		)
 
 		if isLeader {
-			bgWg.Add(7) // 6 leader loops + 1 cell metrics
+			bgWg.Add(8) // 6 leader loops + 1 cell metrics + 1 leader heartbeat
 			go func() { defer bgWg.Done(); reconcileLoop.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); reaper.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); releaseReaper.Start(shutdownCtx) }()
@@ -540,6 +557,36 @@ func main() {
 			go func() { defer bgWg.Done(); idempotencyCleaner.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); eventPruner.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); cellMetrics.Start(shutdownCtx) }()
+
+			// MEET-2026-04-04-029 P1: Leader heartbeat — verify lock every 60s.
+			// If the advisory lock is lost (pgx reconnect, PG failover), crash the
+			// process so the container orchestrator restarts it with a fresh election.
+			go func() {
+				defer bgWg.Done()
+				ticker := time.NewTicker(60 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-shutdownCtx.Done():
+						return
+					case <-ticker.C:
+						var stillLeader bool
+						if err := leaderConn.QueryRow(context.Background(),
+							"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&stillLeader); err != nil {
+							logger.Error("leader heartbeat: lock check failed — exiting", "error", err)
+							metrics.LeaderStatus.Set(0)
+							os.Exit(1)
+						}
+						if !stillLeader {
+							logger.Error("leader heartbeat: lock LOST — exiting for re-election")
+							metrics.LeaderStatus.Set(0)
+							os.Exit(1)
+						}
+						// Lock still held — pg_try_advisory_lock is idempotent for the holder
+						metrics.LeaderStatus.Set(1)
+					}
+				}
+			}()
 		}
 
 		defer func() {

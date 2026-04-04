@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -104,15 +105,22 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Bui
 	// The release stays in PENDING state until async activation.
 	argoAppName := fmt.Sprintf("%s-%s", build.TenantID, build.Environment)
 	if err := c.triggerSyncWithRetry(ctx, argoAppName); err != nil {
-		slog.Error("argocd trigger sync failed after retries",
-			"build_id", build.ID, "app", argoAppName, "error", err)
-		// Sync trigger failed — fail the release immediately.
-		// BRC-002 fix: phaseEFinalize emits deploy.sync_failed SSE event.
-		// Return ErrActivationAlreadyHandled so OnBuildCompleted skips its own emit.
-		if finalizeErr := c.phaseEFinalize(ctx, build, release, result, true); finalizeErr != nil {
-			return finalizeErr
+		// MEET-2026-04-04-029 P3: 404 (app not found) is recoverable — the TenantController
+		// may not have created the ArgoCD Application yet. Leave release in PENDING and let
+		// the convergence loop retrigger sync once the Application CR exists.
+		if strings.Contains(err.Error(), "not found") {
+			slog.Warn("argocd application not found — release stays PENDING for convergence loop retry",
+				"build_id", build.ID, "app", argoAppName, "error", err)
+			// Don't fail the release — convergence loop will retrigger
+		} else {
+			slog.Error("argocd trigger sync failed after retries",
+				"build_id", build.ID, "app", argoAppName, "error", err)
+			// Non-404 failure — fail the release immediately.
+			if finalizeErr := c.phaseEFinalize(ctx, build, release, result, true); finalizeErr != nil {
+				return finalizeErr
+			}
+			return fmt.Errorf("sync trigger failed: %w", ErrActivationAlreadyHandled)
 		}
-		return fmt.Errorf("sync trigger failed: %w", ErrActivationAlreadyHandled)
 	}
 
 	// Emit deploy.verifying to show async verification started
@@ -297,10 +305,11 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *
 				return fmt.Errorf("activate release: transition to SYNC_FAILED: %w", err)
 			}
 
+			// MEET-2026-04-04-029 P6: Use product language, not internal terms.
 			failedData, _ := json.Marshal(map[string]interface{}{
 				"deploy_id": deriveDeployID(release.ID),
-				"status":    "sync_failed",
-				"reason":    "HEALTH_PROBE_FAILED",
+				"status":    "failed",
+				"reason":    "Deploy verification failed. The service did not become healthy after sync. Run `loopzero logs` to check application errors.",
 			})
 			if _, err := c.eventStore.Append(ctx, build.ID, "deploy.sync_failed", failedData); err != nil {
 				return fmt.Errorf("activate release: emit deploy.sync_failed: %w", err)

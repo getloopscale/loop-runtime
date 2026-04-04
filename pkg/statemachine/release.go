@@ -9,9 +9,10 @@ import "time"
 // Release state timeout defaults (spec §5.2).
 const (
 	ReleaseReadyTimeout       = 5 * time.Minute
-	// ReleasePendingTimeout must be >= convergence loop SyncTimeout (5min)
-	// to avoid premature reaping during DNS-01 cert challenges (60-90s).
-	ReleasePendingTimeout = 5 * time.Minute
+	// MEET-2026-04-04-029 P2: Reaper PendingTimeout MUST be strictly greater than
+	// convergence loop SyncTimeout (300s) to prevent race conditions.
+	// Hierarchy: convergence gives up at 300s → reaper cleans up at 600s.
+	ReleasePendingTimeout = 10 * time.Minute
 	ReleaseRollingBackTimeout = 2 * time.Minute
 )
 

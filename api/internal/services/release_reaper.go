@@ -20,7 +20,8 @@ import (
 type ReleaseReaperConfig struct {
 	// ReadyTimeout is how long a release can stay READY before being reaped (spec §5.2: 5min).
 	ReadyTimeout time.Duration
-	// PendingTimeout is how long a release can stay PENDING before being reaped (spec §5.2: 2min).
+	// PendingTimeout is how long a release can stay PENDING before being reaped.
+	// MEET-2026-04-04-029: Must be strictly > convergence SyncTimeout (300s).
 	PendingTimeout time.Duration
 	// Interval is how often the reaper runs.
 	Interval time.Duration
@@ -121,9 +122,9 @@ func (r *ReleaseReaper) ReapOnce(ctx context.Context) int {
 func releaseReaperReason(event statemachine.Event) string {
 	switch event {
 	case statemachine.ReleaseGitPushTimeout:
-		return "Release timed out waiting for git push to complete (5 min limit)"
+		return "Deploy timed out preparing deployment (5 min limit). Run `loopzero deploy` to retry."
 	case statemachine.ReleaseSyncTimeout:
-		return "Release timed out waiting for sync to complete (2 min limit)"
+		return "Deploy timed out waiting for service to become healthy (10 min limit). Run `loopzero deploy` to retry."
 	default:
 		return "Release reaped due to timeout"
 	}
