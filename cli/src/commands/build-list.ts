@@ -85,7 +85,7 @@ export class BuildListCommand {
     this.deps.writeTo(`Builds for ${project}:`);
     this.deps.writeTo('');
     this.deps.writeTo(
-      `  ${pad('ID', 16)}${pad('STATUS', 11)}${pad('COMMIT', 9)}${pad('STARTED', 21)}DURATION`
+      `  ${pad('ID', 16)}${pad('STATUS', 11)}${pad('VERSION', 9)}${pad('STARTED', 21)}DURATION`
     );
     for (const b of response.builds) {
       const started = formatTimestamp(b.created_at);

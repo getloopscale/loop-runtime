@@ -19,6 +19,12 @@ const DEFAULT_IGNORE_PATTERNS = [
   'coverage/', '.nyc_output/', '.cache/', 'tmp/', '.turbo/',
 ];
 
+/** Additional patterns excluded from content hash only (not from tar bundles).
+ * loopzero.yaml changes config, not source code — it shouldn't change the version hash. */
+const HASH_ONLY_IGNORE_PATTERNS = [
+  'loopzero.yaml',
+];
+
 export function hasGitRepo(): boolean {
   try {
     execSync('git rev-parse --git-dir', { encoding: 'utf-8', stdio: 'pipe' });
@@ -64,6 +70,7 @@ export function getSourceIdentifier(): string {
  */
 export function computeContentHash(dir: string): string {
   const ig = loadIgnorePatterns(dir);
+  ig.add(HASH_ONLY_IGNORE_PATTERNS);
   const files = collectFiles(dir, dir, ig);
   files.sort(); // deterministic order
 
@@ -146,28 +153,70 @@ export async function createTarBundle(): Promise<string> {
   const ig = loadIgnorePatterns(dir);
   const files = collectFiles(dir, dir, ig);
 
-  await tar.create(
-    { gzip: true, file: tmpFile, cwd: dir },
-    files,
-  );
+  if (files.length === 0) {
+    // tar library throws on empty file list — create an empty gzip file
+    const { createGzip } = await import('zlib');
+    const { pipeline } = await import('stream/promises');
+    const { Readable } = await import('stream');
+    const gzip = createGzip();
+    const out = fs.createWriteStream(tmpFile);
+    await pipeline(Readable.from(Buffer.alloc(0)), gzip, out);
+  } else {
+    await tar.create(
+      { gzip: true, file: tmpFile, cwd: dir },
+      files,
+    );
+  }
   return tmpFile;
 }
 
+/** Patterns that indicate potentially sensitive files. */
+const SENSITIVE_PATTERNS = [
+  /\.env$/,
+  /\.env\..+$/,
+  /\.key$/,
+  /\.pem$/,
+  /credentials/i,
+  /secret/i,
+  /\.p12$/,
+  /\.pfx$/,
+  /id_rsa/,
+  /id_ed25519/,
+  /\.keystore$/,
+];
+
 /**
- * Check for potentially sensitive files tracked in git.
+ * Check for potentially sensitive files in the project.
+ * Uses git ls-files when available, falls back to filesystem scan.
  * Returns file paths that match common sensitive patterns.
- * Uses git pathspec filtering to avoid listing all tracked files.
  */
 export function checkSensitiveFiles(): string[] {
-  if (!hasGitRepo()) return [];
-  try {
-    const output = execSync(
-      'git ls-files -- "*.env" "*.env.*" "*.key" "*.pem" "*credentials*" "*secret*"',
-      { encoding: 'utf-8' },
-    ).trim();
-    if (!output) return [];
-    return output.split('\n');
-  } catch {
-    return [];
+  if (hasGitRepo()) {
+    try {
+      const output = execSync(
+        'git ls-files -- "*.env" "*.env.*" "*.key" "*.pem" "*credentials*" "*secret*"',
+        { encoding: 'utf-8' },
+      ).trim();
+      if (!output) return [];
+      return output.split('\n');
+    } catch {
+      return [];
+    }
   }
+
+  // Filesystem-based scan for non-git projects
+  return checkSensitiveFilesOnDisk(process.cwd());
+}
+
+/**
+ * Scans the directory for sensitive files using ignore patterns + sensitive patterns.
+ * Respects .gitignore / .loopzeroignore so node_modules etc. are skipped.
+ */
+export function checkSensitiveFilesOnDisk(dir: string): string[] {
+  const ig = loadIgnorePatterns(dir);
+  const files = collectFiles(dir, dir, ig);
+  return files.filter((f) => {
+    const basename = path.basename(f);
+    return SENSITIVE_PATTERNS.some((p) => p.test(basename));
+  });
 }

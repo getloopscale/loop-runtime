@@ -55,16 +55,24 @@ func NewGiteaSourceStore(cfg GiteaSourceStoreConfig) (*GiteaSourceStore, error) 
 	}, nil
 }
 
+// sourceRepoName returns the deterministic Gitea repo name per spec §7.5.
+func sourceRepoName(tenantID, projectID string) string {
+	if projectID != "" {
+		return fmt.Sprintf("loopzero-source-%s-%s", tenantID, projectID)
+	}
+	return fmt.Sprintf("loopzero-source-%s", tenantID)
+}
+
 // PushBundle receives a source bundle from the CLI (git bundle or tar.gz),
 // detects the format, and pushes to the Gitea source repo.
-// Returns the source identifier (git SHA or "ch-{content-hash}").
-func (s *GiteaSourceStore) PushBundle(ctx context.Context, tenantID, projectID string, bundle io.Reader) (string, error) {
+// Returns PushResult with SourceID and optionally a GitBundlePath for S3.
+func (s *GiteaSourceStore) PushBundle(ctx context.Context, tenantID, projectID string, bundle io.Reader) (PushResult, error) {
 	data, err := io.ReadAll(bundle)
 	if err != nil {
-		return "", fmt.Errorf("gitea source: reading bundle: %w", err)
+		return PushResult{}, fmt.Errorf("gitea source: reading bundle: %w", err)
 	}
 	if len(data) == 0 {
-		return "", fmt.Errorf("gitea source: bundle is empty")
+		return PushResult{}, fmt.Errorf("gitea source: bundle is empty")
 	}
 
 	// Detect bundle format by magic bytes:
@@ -73,7 +81,11 @@ func (s *GiteaSourceStore) PushBundle(ctx context.Context, tenantID, projectID s
 	if len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b {
 		return s.pushTarBundle(ctx, tenantID, projectID, data)
 	}
-	return s.pushGitBundle(ctx, tenantID, projectID, data)
+	sourceID, err := s.pushGitBundle(ctx, tenantID, projectID, data)
+	if err != nil {
+		return PushResult{}, err
+	}
+	return PushResult{SourceID: sourceID}, nil
 }
 
 // pushGitBundle handles git bundle format (original flow).
@@ -100,14 +112,7 @@ func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectI
 
 	repoDir := filepath.Join(tmpDir, "repo")
 
-	// Repo naming per spec §7.5: loopzero-source-{tenant}-{project}
-	repoName := fmt.Sprintf("loopzero-source-%s", tenantID)
-	if projectID != "" {
-		repoName = fmt.Sprintf("loopzero-source-%s-%s", tenantID, projectID)
-	}
-
-	// Construct plain remote URL (no embedded credentials).
-	// SEC-1: Auth is injected via http.extraHeader in gitCmdWithAuth.
+	repoName := sourceRepoName(tenantID, projectID)
 	remoteURL := s.repoURL(repoName)
 
 	// Ensure repo exists in Gitea (create via API if not)
@@ -163,8 +168,8 @@ func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectI
 
 // pushTarBundle handles tar.gz format for projects without git.
 // Extracts the archive, computes a content hash, creates a git repo,
-// commits all files, and pushes to Gitea. Returns "ch-{sha256}".
-func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectID string, data []byte) (string, error) {
+// commits all files, pushes to Gitea, and creates a git bundle for S3.
+func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectID string, data []byte) (PushResult, error) {
 	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.source.push_tar",
 		trace.WithAttributes(
 			attribute.String("loopzero.tenant", tenantID),
@@ -172,97 +177,88 @@ func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectI
 		))
 	defer span.End()
 
+	// tmpDir is NOT deferred for cleanup — the git bundle file lives inside it.
+	// The caller is responsible for cleaning up via PushResult.GitBundlePath's parent dir.
 	tmpDir, err := os.MkdirTemp("", "loopzero-tar-source-*")
 	if err != nil {
-		return "", fmt.Errorf("gitea source: create temp dir: %w", err)
+		return PushResult{}, fmt.Errorf("gitea source: create temp dir: %w", err)
 	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	repoDir := filepath.Join(tmpDir, "repo")
 	if err := os.MkdirAll(repoDir, 0755); err != nil {
-		return "", fmt.Errorf("gitea source: mkdir repo: %w", err)
+		_ = os.RemoveAll(tmpDir)
+		return PushResult{}, fmt.Errorf("gitea source: mkdir repo: %w", err)
 	}
 
-	// Extract tar.gz
+	// SEC: Extract tar.gz with strict validation — no symlinks, no path traversal,
+	// no absolute paths, decompressed size limit, file count limit.
 	tarPath := filepath.Join(tmpDir, "source.tar.gz")
 	if err := os.WriteFile(tarPath, data, 0644); err != nil {
-		return "", fmt.Errorf("gitea source: write tar: %w", err)
+		_ = os.RemoveAll(tmpDir)
+		return PushResult{}, fmt.Errorf("gitea source: write tar: %w", err)
 	}
-	if err := s.gitCmd(ctx, repoDir, "tar", "xzf", tarPath); err != nil {
-		return "", fmt.Errorf("gitea source: extract tar: %w", err)
+	if _, err := SafeExtractTarGz(tarPath, repoDir); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return PushResult{}, fmt.Errorf("gitea source: extract tar: %w", err)
 	}
 
 	// Compute content hash from extracted files
 	contentHash, err := computeDirHash(repoDir)
 	if err != nil {
-		return "", fmt.Errorf("gitea source: content hash: %w", err)
+		_ = os.RemoveAll(tmpDir)
+		return PushResult{}, fmt.Errorf("gitea source: content hash: %w", err)
 	}
 
-	// Repo naming per spec §7.5
-	repoName := fmt.Sprintf("loopzero-source-%s", tenantID)
-	if projectID != "" {
-		repoName = fmt.Sprintf("loopzero-source-%s-%s", tenantID, projectID)
-	}
+	repoName := sourceRepoName(tenantID, projectID)
 	remoteURL := s.repoURL(repoName)
 
 	if err := s.ensureRepo(ctx, repoName); err != nil {
-		return "", fmt.Errorf("gitea source: ensure repo: %w", err)
+		_ = os.RemoveAll(tmpDir)
+		return PushResult{}, fmt.Errorf("gitea source: ensure repo: %w", err)
 	}
 
 	// Initialize git repo from extracted files
 	if err := s.gitCmd(ctx, repoDir, "git", "init"); err != nil {
-		return "", fmt.Errorf("gitea source: git init: %w", err)
+		_ = os.RemoveAll(tmpDir)
+		return PushResult{}, fmt.Errorf("gitea source: git init: %w", err)
 	}
 	_ = s.gitCmd(ctx, repoDir, "git", "config", "user.email", "loopzero-api@loopzero.io")
 	_ = s.gitCmd(ctx, repoDir, "git", "config", "user.name", "LoopZero API")
 	if err := s.gitCmd(ctx, repoDir, "git", "add", "-A"); err != nil {
-		return "", fmt.Errorf("gitea source: git add: %w", err)
+		_ = os.RemoveAll(tmpDir)
+		return PushResult{}, fmt.Errorf("gitea source: git add: %w", err)
 	}
 	if err := s.gitCmd(ctx, repoDir, "git", "commit", "-m", fmt.Sprintf("source upload ch-%s", contentHash[:12])); err != nil {
-		return "", fmt.Errorf("gitea source: git commit: %w", err)
+		_ = os.RemoveAll(tmpDir)
+		return PushResult{}, fmt.Errorf("gitea source: git commit: %w", err)
 	}
 
 	// Push to Gitea
 	_ = s.gitCmd(ctx, repoDir, "git", "remote", "remove", "origin")
 	if err := s.gitCmd(ctx, repoDir, "git", "remote", "add", "origin", remoteURL); err != nil {
-		return "", fmt.Errorf("gitea source: set remote: %w", err)
+		_ = os.RemoveAll(tmpDir)
+		return PushResult{}, fmt.Errorf("gitea source: set remote: %w", err)
 	}
 	if err := s.gitCmdWithAuth(ctx, repoDir, "push", "--force", "origin", "HEAD:refs/heads/main"); err != nil {
-		return "", fmt.Errorf("gitea source: git push: %w", err)
-	}
-
-	return "ch-" + contentHash, nil
-}
-
-// CreateGitBundleFromRepo clones the Gitea repo and creates a git bundle for S3 upload.
-// Used when original source was tar.gz — the Argo Workflow CWT expects git bundles in S3.
-func (s *GiteaSourceStore) CreateGitBundleFromRepo(ctx context.Context, tenantID, projectID string) (string, error) {
-	repoName := fmt.Sprintf("loopzero-source-%s", tenantID)
-	if projectID != "" {
-		repoName = fmt.Sprintf("loopzero-source-%s-%s", tenantID, projectID)
-	}
-	remoteURL := s.repoURL(repoName)
-
-	tmpDir, err := os.MkdirTemp("", "loopzero-gitbundle-*")
-	if err != nil {
-		return "", fmt.Errorf("gitea source: create temp dir: %w", err)
-	}
-
-	repoDir := filepath.Join(tmpDir, "repo")
-	if err := s.gitCmdWithAuth(ctx, tmpDir, "clone", remoteURL, repoDir); err != nil {
 		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("gitea source: clone for bundle: %w", err)
+		return PushResult{}, fmt.Errorf("gitea source: git push: %w", err)
 	}
 
+	// Create git bundle for S3 upload (CWT expects git bundle format).
+	// This is done inline instead of a separate interface method (ISP).
 	bundlePath := filepath.Join(tmpDir, "source.bundle")
 	if err := s.gitCmd(ctx, repoDir, "git", "bundle", "create", bundlePath, "HEAD"); err != nil {
 		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("gitea source: create bundle: %w", err)
+		return PushResult{}, fmt.Errorf("gitea source: create git bundle: %w", err)
 	}
 
-	// Clean up repo dir but keep the bundle
+	// Clean up repo dir but keep the bundle and tmpDir
 	_ = os.RemoveAll(repoDir)
-	return bundlePath, nil
+
+	return PushResult{
+		SourceID:      "ch-" + contentHash,
+		GitBundlePath: bundlePath,
+	}, nil
 }
 
 // computeDirHash computes a deterministic SHA256 hash of all files in a directory.
@@ -274,9 +270,12 @@ func computeDirHash(dir string) (string, error) {
 			return err
 		}
 		rel, _ := filepath.Rel(dir, p)
-		// Skip .git directory (created during processing)
-		if strings.HasPrefix(rel, ".git") {
-			return filepath.SkipDir
+		// Skip .git directory only (not .github/, .gitignore, .gitattributes)
+		if rel == ".git" || strings.HasPrefix(rel, ".git"+string(filepath.Separator)) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if !info.IsDir() {
 			paths = append(paths, rel)

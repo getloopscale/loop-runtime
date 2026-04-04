@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
@@ -187,31 +186,27 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Push bundle to source store (Gitea) — repo: loopzero-source-{tenant}-{project}
-	commitSHA, err := h.store.PushBundle(ctx, uc.TenantID, projectName, tmpFile)
+	result, err := h.store.PushBundle(ctx, uc.TenantID, projectName, tmpFile)
 	if err != nil {
 		slog.Error("source upload failed", "error", err, "team_id", uc.TenantID)
 		writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
 		return
 	}
 
-	// Upload bundle to object storage (Spaces/MinIO) for build cluster access.
-	// The CWT clone step expects a git bundle — if the source was tar.gz,
-	// we need to create a git bundle from the Gitea repo.
-	if h.objStore != nil {
-		objKey := fmt.Sprintf("%s/source/%s.bundle", uc.TenantID, commitSHA)
+	// Clean up the git bundle temp dir if one was created (tar.gz flow).
+	if result.GitBundlePath != "" {
+		defer func() { _ = os.RemoveAll(filepath.Dir(result.GitBundlePath)) }()
+	}
 
-		// For content-hash sources (tar.gz input), create a git bundle from Gitea.
-		// For git sources, reuse the original bundle.
+	// Upload bundle to object storage (Spaces/MinIO) for build cluster access.
+	if h.objStore != nil {
+		objKey := fmt.Sprintf("%s/source/%s.bundle", uc.TenantID, result.SourceID)
+
+		// For tar.gz sources, PushBundle already created a git bundle (in GitBundlePath).
+		// For git bundle sources, reuse the original uploaded bundle.
 		var uploadReader io.Reader
-		if strings.HasPrefix(commitSHA, "ch-") {
-			gitBundlePath, bundleErr := h.store.CreateGitBundleFromRepo(ctx, uc.TenantID, projectName)
-			if bundleErr != nil {
-				slog.Error("failed to create git bundle from repo", "error", bundleErr)
-				writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
-				return
-			}
-			defer func() { _ = os.RemoveAll(filepath.Dir(gitBundlePath)) }()
-			gitBundleFile, openErr := os.Open(gitBundlePath)
+		if result.GitBundlePath != "" {
+			gitBundleFile, openErr := os.Open(result.GitBundlePath)
 			if openErr != nil {
 				writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 				return
@@ -240,7 +235,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	sort.Strings(appNames)
 
 	resp := SourceUploadResponse{
-		CommitSHA: commitSHA,
+		CommitSHA: result.SourceID,
 		Apps:      appNames,
 	}
 

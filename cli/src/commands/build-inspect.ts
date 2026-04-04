@@ -77,7 +77,7 @@ export class BuildInspectCommand {
     this.deps.writeTo(`  Project:      ${build.project}`);
     this.deps.writeTo(`  Environment:  ${build.environment}`);
     this.deps.writeTo(`  Status:       ${build.status}`);
-    this.deps.writeTo(`  Commit:       ${build.commit_sha.substring(0, 7)}`);
+    this.deps.writeTo(`  Version:      ${build.commit_sha.substring(0, 15)}`);
     this.deps.writeTo(`  Started:      ${formatTimestamp(build.created_at)}`);
     if (build.finished_at) {
       this.deps.writeTo(`  Finished:     ${formatTimestamp(build.finished_at)}`);

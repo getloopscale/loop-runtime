@@ -209,17 +209,26 @@ export class DeployCommand {
       }
     }
 
-    // 9. Get source identifier (git SHA or content hash)
-    let sourceId: string;
+    // 9. Validate source is deployable (has files)
+    let sourceVersion: string;
     try {
-      sourceId = this.deps.getSourceIdentifier();
+      sourceVersion = this.deps.getSourceIdentifier();
     } catch {
       return this.exitWithError(opts,
         'Failed to identify source version. Ensure your project has files to deploy.',
         1, 'SOURCE_ID_FAILED');
     }
 
-    // 9b. Warn about potentially sensitive files (only for git projects)
+    // 9a. Show deploy source feedback
+    if (!opts.json) {
+      if (this.deps.hasGitRepo()) {
+        this.deps.writeTo(`Deploying from git commit ${sourceVersion.substring(0, 12)}`);
+      } else {
+        this.deps.writeTo(`Deploying all files in current directory (version: ${sourceVersion.substring(0, 15)})`);
+      }
+    }
+
+    // 9b. Warn about potentially sensitive files
     const sensitiveFiles = this.deps.checkSensitiveFiles?.() ?? [];
     if (sensitiveFiles.length > 0 && !opts.json) {
       this.deps.writeTo(`Warning: Potentially sensitive files detected: ${sensitiveFiles.join(', ')}`);

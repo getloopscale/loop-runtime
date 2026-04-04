@@ -86,9 +86,9 @@ export class InitCommand {
       return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
 
-    // Git repo check — warn if not a git repository (content hash will be used for versioning)
+    // Git repo check — warn if not a git repository
     const noGitWarning = (this.deps.hasGitRepo && !this.deps.hasGitRepo())
-      ? 'No git repository detected. Deploy will use content-based versioning.'
+      ? 'No git repository detected. Deploys will track file changes instead of commits. Run `git init` to enable git-based versioning.'
       : undefined;
 
     // CI mode requires --yes

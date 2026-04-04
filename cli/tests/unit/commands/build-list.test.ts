@@ -65,7 +65,7 @@ describe('BuildListCommand', () => {
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
       expect(output).toContain('ID');
       expect(output).toContain('STATUS');
-      expect(output).toContain('COMMIT');
+      expect(output).toContain('VERSION');
     });
   });
 
