@@ -130,8 +130,13 @@ async function pollDeviceToken(
     if (data.status === 'pending') {
       return { status: 'pending' };
     }
-    if (data.access_token) {
-      return data as unknown as TokenResponse;
+    if (data.access_token && data.refresh_token && typeof data.expires_in === 'number') {
+      return {
+        access_token: String(data.access_token),
+        refresh_token: String(data.refresh_token),
+        token_type: String(data.token_type || 'bearer'),
+        expires_in: Number(data.expires_in),
+      };
     }
     return null;
   } catch {
@@ -158,8 +163,13 @@ export async function refreshAccessToken(
 
     if (!resp.ok) return null;
     const data = await resp.json() as Record<string, unknown>;
-    if (data.access_token) {
-      return data as unknown as TokenResponse;
+    if (data.access_token && data.refresh_token && typeof data.expires_in === 'number') {
+      return {
+        access_token: String(data.access_token),
+        refresh_token: String(data.refresh_token),
+        token_type: String(data.token_type || 'bearer'),
+        expires_in: Number(data.expires_in),
+      };
     }
     return null;
   } catch {

@@ -9,10 +9,12 @@
 package consent
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
 )
@@ -21,6 +23,7 @@ import (
 type Handler struct {
 	hydra           *auth.HydraClient
 	kratosPublicURL string
+	kratosClient    *http.Client
 	logger          *slog.Logger
 }
 
@@ -29,6 +32,7 @@ func NewHandler(hydra *auth.HydraClient, kratosPublicURL string, logger *slog.Lo
 	return &Handler{
 		hydra:           hydra,
 		kratosPublicURL: kratosPublicURL,
+		kratosClient:    &http.Client{Timeout: 5 * time.Second},
 		logger:          logger,
 	}
 }
@@ -74,7 +78,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 // LoginComplete is called after Kratos authenticates the user.
-// It accepts the Hydra login challenge with the authenticated subject.
+// It validates the Kratos session cookie, then accepts the Hydra login challenge.
 // GET /auth/login/complete?login_challenge=...
 func (h *Handler) LoginComplete(w http.ResponseWriter, r *http.Request) {
 	challenge := r.URL.Query().Get("login_challenge")
@@ -83,24 +87,65 @@ func (h *Handler) LoginComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract the Kratos session to get the subject (user identity).
-	// In a full implementation, this reads the Kratos session cookie.
-	// For now, we accept with the subject from the login request
-	// (Kratos session validation will be added in Phase 3-4).
-	loginReq, err := h.hydra.GetLoginRequest(challenge)
+	// Validate Kratos session — the user must have an active session cookie.
+	// Without this check, an attacker could call /auth/login/complete directly.
+	subject, err := h.getKratosSessionSubject(r)
 	if err != nil {
-		h.logger.Error("failed to get login request for completion", "error", err)
-		http.Error(w, "Authentication service error", http.StatusBadGateway)
+		h.logger.Error("kratos session validation failed", "error", err, "challenge", challenge)
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
 
-	redirectTo, err := h.hydra.AcceptLogin(challenge, loginReq.Subject)
+	redirectTo, err := h.hydra.AcceptLogin(challenge, subject)
 	if err != nil {
 		h.logger.Error("failed to accept login", "error", err)
 		http.Error(w, "Authentication service error", http.StatusBadGateway)
 		return
 	}
 	http.Redirect(w, r, redirectTo, http.StatusFound)
+}
+
+// getKratosSessionSubject validates the Kratos session cookie and returns the subject.
+func (h *Handler) getKratosSessionSubject(r *http.Request) (string, error) {
+	// Forward the cookies from the original request to Kratos /sessions/whoami
+	whoamiURL := fmt.Sprintf("%s/sessions/whoami", h.kratosPublicURL)
+	req, err := http.NewRequest("GET", whoamiURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("create whoami request: %w", err)
+	}
+
+	// Forward session cookies
+	for _, cookie := range r.Cookies() {
+		if cookie.Name == "ory_kratos_session" || cookie.Name == "csrf_token" {
+			req.AddCookie(cookie)
+		}
+	}
+
+	resp, err := h.kratosClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("kratos whoami request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("no active kratos session (status %d)", resp.StatusCode)
+	}
+
+	var session struct {
+		Identity struct {
+			ID string `json:"id"`
+		} `json:"identity"`
+		Active bool `json:"active"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&session); err != nil {
+		return "", fmt.Errorf("decode kratos session: %w", err)
+	}
+
+	if !session.Active || session.Identity.ID == "" {
+		return "", fmt.Errorf("kratos session is not active")
+	}
+
+	return session.Identity.ID, nil
 }
 
 // Consent handles the consent challenge from Hydra.

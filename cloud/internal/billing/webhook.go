@@ -193,12 +193,12 @@ func VerifySignature(payload []byte, sigHeader, secret string) error {
 		return fmt.Errorf("invalid signature format")
 	}
 
-	// Check timestamp freshness (5 minute tolerance)
+	// Check timestamp freshness — Stripe recommends ≤5 seconds to limit replay attacks
 	ts, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid timestamp: %w", err)
 	}
-	if time.Since(time.Unix(ts, 0)) > 5*time.Minute {
+	if time.Since(time.Unix(ts, 0)) > 5*time.Second {
 		return fmt.Errorf("timestamp too old")
 	}
 

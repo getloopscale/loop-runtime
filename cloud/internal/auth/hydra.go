@@ -72,7 +72,10 @@ func (c *HydraClient) DeviceAuthorize(scope string) (*DeviceAuthorizeResponse, e
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read device authorize response: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("device authorize failed (status %d): %s", resp.StatusCode, body)
 	}
@@ -100,7 +103,10 @@ func (c *HydraClient) DeviceToken(deviceCode string) (*TokenResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read token response: %w", err)
+	}
 
 	if resp.StatusCode == http.StatusOK {
 		var token TokenResponse
@@ -136,7 +142,10 @@ func (c *HydraClient) RefreshToken(refreshToken string) (*TokenResponse, error) 
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read refresh response: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("refresh failed (status %d): %s", resp.StatusCode, body)
 	}
@@ -185,14 +194,20 @@ func (c *HydraClient) GetLoginRequest(challenge string) (*LoginRequest, error) {
 // AcceptLogin accepts the login challenge and returns the redirect URL.
 func (c *HydraClient) AcceptLogin(challenge, subject string) (string, error) {
 	payload := map[string]interface{}{
-		"subject":     subject,
-		"remember":    true,
+		"subject":      subject,
+		"remember":     true,
 		"remember_for": 3600,
 	}
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal accept login payload: %w", err)
+	}
 
-	url := fmt.Sprintf("%s/admin/oauth2/auth/requests/login/accept?login_challenge=%s", c.adminURL, challenge)
-	req, _ := http.NewRequest("PUT", url, bytes.NewReader(body))
+	reqURL := fmt.Sprintf("%s/admin/oauth2/auth/requests/login/accept?login_challenge=%s", c.adminURL, challenge)
+	req, err := http.NewRequest("PUT", reqURL, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create accept login request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -205,7 +220,7 @@ func (c *HydraClient) AcceptLogin(challenge, subject string) (string, error) {
 		RedirectTo string `json:"redirect_to"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return "", fmt.Errorf("decode accept login response: %w", err)
 	}
 	return result.RedirectTo, nil
 }
@@ -230,15 +245,21 @@ func (c *HydraClient) GetConsentRequest(challenge string) (*ConsentRequest, erro
 // AcceptConsent accepts the consent challenge, granting requested scopes.
 func (c *HydraClient) AcceptConsent(challenge string, grantScope []string) (string, error) {
 	payload := map[string]interface{}{
-		"grant_scope":                grantScope,
-		"remember":                   true,
-		"remember_for":               3600,
+		"grant_scope":                 grantScope,
+		"remember":                    true,
+		"remember_for":                3600,
 		"grant_access_token_audience": []string{},
 	}
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal accept consent payload: %w", err)
+	}
 
-	url := fmt.Sprintf("%s/admin/oauth2/auth/requests/consent/accept?consent_challenge=%s", c.adminURL, challenge)
-	req, _ := http.NewRequest("PUT", url, bytes.NewReader(body))
+	reqURL := fmt.Sprintf("%s/admin/oauth2/auth/requests/consent/accept?consent_challenge=%s", c.adminURL, challenge)
+	req, err := http.NewRequest("PUT", reqURL, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create accept consent request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -251,7 +272,7 @@ func (c *HydraClient) AcceptConsent(challenge string, grantScope []string) (stri
 		RedirectTo string `json:"redirect_to"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return "", fmt.Errorf("decode accept consent response: %w", err)
 	}
 	return result.RedirectTo, nil
 }
@@ -272,16 +293,22 @@ func (c *HydraClient) RegisterClient() error {
 	// Create the client
 	payload := map[string]interface{}{
 		"client_id":                  c.clientID,
-		"client_name":               "LoopZero CLI",
-		"grant_types":               []string{"urn:ietf:params:oauth:grant-type:device_code", "refresh_token", "authorization_code"},
-		"response_types":            []string{"code"},
-		"scope":                     "openid offline_access",
+		"client_name":                "LoopZero CLI",
+		"grant_types":                []string{"urn:ietf:params:oauth:grant-type:device_code", "refresh_token", "authorization_code"},
+		"response_types":             []string{"code"},
+		"scope":                      "openid offline_access",
 		"token_endpoint_auth_method": "none", // Public client
-		"redirect_uris":             []string{"http://localhost:9876/auth"},
+		"redirect_uris":              []string{"http://localhost:9876/auth"},
 	}
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal register client payload: %w", err)
+	}
 
-	req, _ := http.NewRequest("POST", c.adminURL+"/admin/clients", bytes.NewReader(body))
+	req, err := http.NewRequest("POST", c.adminURL+"/admin/clients", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create register client request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err = c.httpClient.Do(req)
@@ -291,7 +318,10 @@ func (c *HydraClient) RegisterClient() error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("register client failed (status %d, body unreadable)", resp.StatusCode)
+		}
 		return fmt.Errorf("register client failed (status %d): %s", resp.StatusCode, respBody)
 	}
 	return nil

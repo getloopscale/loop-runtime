@@ -1,8 +1,16 @@
 // Real API client for the LoopZero Cloud service.
 // All dashboard API calls go through this client with real authentication.
+//
+// Security: access and refresh tokens are kept in memory only (not localStorage)
+// to prevent XSS exfiltration. Page refresh requires re-authentication via PKCE
+// (Hydra session makes this transparent — no password re-entry).
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:13002';
 const ENGINE_API = import.meta.env.VITE_ENGINE_URL || 'http://localhost:13001';
+
+// In-memory token storage — cleared on page refresh (XSS-safe)
+let accessToken: string | null = null;
+let refreshToken: string | null = null;
 
 export function getApiBase() { return API_BASE; }
 export function getEngineBase() { return ENGINE_API; }
@@ -42,20 +50,24 @@ async function apiFetch<T>(base: string, path: string, options: RequestInit = {}
   }
 }
 
-// Token storage — HttpOnly cookie preferred, localStorage as fallback for SPA
 export function getToken(): string | null {
-  return localStorage.getItem('loopzero_token');
+  return accessToken;
 }
 
-export function setAuth(token: string, refreshToken: string, email: string) {
-  localStorage.setItem('loopzero_token', token);
-  localStorage.setItem('loopzero_refresh_token', refreshToken);
+export function getRefreshToken(): string | null {
+  return refreshToken;
+}
+
+export function setAuth(token: string, refresh: string, email: string) {
+  accessToken = token;
+  refreshToken = refresh;
+  // Email is non-sensitive — safe in localStorage for display after refresh
   localStorage.setItem('loopzero_email', email);
 }
 
 export function clearAuth() {
-  localStorage.removeItem('loopzero_token');
-  localStorage.removeItem('loopzero_refresh_token');
+  accessToken = null;
+  refreshToken = null;
   localStorage.removeItem('loopzero_email');
 }
 
