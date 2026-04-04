@@ -1140,6 +1140,52 @@ function installCloudService(
     },
     { provider, dependsOn: [ns, configMap, secret] },
   );
+
+  // Dashboard — React SPA served by nginx
+  new k8s.core.v1.Service(
+    "loopzero-dashboard",
+    {
+      metadata: { name: "loopzero-dashboard", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        selector: { app: "loopzero-dashboard" },
+        ports: [{ name: "http", port: 80, targetPort: 80 }],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  new k8s.apps.v1.Deployment(
+    "loopzero-dashboard",
+    {
+      metadata: { name: "loopzero-dashboard", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        replicas: 1,
+        selector: { matchLabels: { app: "loopzero-dashboard" } },
+        template: {
+          metadata: { labels: { app: "loopzero-dashboard" } },
+          spec: {
+            imagePullSecrets: [{ name: registrySecretName }],
+            containers: [{
+              name: "dashboard",
+              image: `registry.digitalocean.com/loopzero-infra-registry/loopzero-dashboard:${imageTag}`,
+              imagePullPolicy: "Always",
+              ports: [{ containerPort: 80 }],
+              resources: {
+                requests: { cpu: "10m", memory: "16Mi" },
+                limits: { cpu: "100m", memory: "64Mi" },
+              },
+              readinessProbe: {
+                httpGet: { path: "/", port: 80 },
+                initialDelaySeconds: 2,
+                periodSeconds: 10,
+              },
+            }],
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
 }
 
 // ---------------------------------------------------------------------------

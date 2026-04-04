@@ -271,6 +271,54 @@ jobs:
           echo "- \`${{ env.REGISTRY }}/loopzero-cloud:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
+  # BUILD DASHBOARD
+  # ─────────────────────────────────────────────
+  build-dashboard:
+    name: Build dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: resolve
+    if: needs.resolve.outputs.build_cloud == 'true'
+    environment: infra-dev
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        run: doctl registry login --expiry-seconds 3600
+
+      - name: Build and push dashboard
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker build \
+            --build-arg VITE_API_URL=https://cloud.dev.loopzero.example \
+            --build-arg VITE_ENGINE_URL=https://api.dev.loopzero.example \
+            --build-arg VITE_HYDRA_URL=https://hydra.dev.loopzero.example \
+            -t ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} \
+            -t ${{ env.REGISTRY }}/loopzero-dashboard:${SHA} \
+            cloud/dashboard/
+
+          docker push ${{ env.REGISTRY }}/loopzero-dashboard:${TAG}
+          docker push ${{ env.REGISTRY }}/loopzero-dashboard:${SHA}
+
+          if [[ -n "$ENV_TAG" && "$ENV_TAG" != "$TAG" ]]; then
+            docker tag ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG}
+            docker push ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG}
+          fi
+
+          echo "### dashboard" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-dashboard:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
   # BUILD LOOPZERO-PACKS-RUNNER (COMP-003 fix)
   # ─────────────────────────────────────────────
   build-loopzero-packs:
