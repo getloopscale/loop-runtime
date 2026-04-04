@@ -15,11 +15,9 @@
 name: "Build: Container Images"
 
 on:
-  # Only build images after CI passes — prevents pushing untested images to registry.
-  # Fix for CICD-002: build-images.yml previously ran independently of CI.
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  # NOTE: workflow_run requires the file to exist on the default branch (main).
+  # Until develop is merged to main, we use push + wait-for-ci polling instead.
+  push:
     branches: [develop, homolog, main]
 
   workflow_dispatch:
@@ -36,6 +34,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   REGISTRY: registry.digitalocean.com/loopzero-infra-registry
@@ -46,12 +45,49 @@ concurrency:
 
 jobs:
   # ─────────────────────────────────────────────
+  # WAIT FOR CI — ensures tests pass before building images
+  # ─────────────────────────────────────────────
+  wait-for-ci:
+    name: Wait for CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name == 'push'
+    steps:
+      - name: Wait for CI workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Waiting for CI workflow to complete for commit ${{ github.sha }}..."
+          for i in $(seq 1 30); do
+            RUN_STATUS=$(gh run list \
+              --repo "${{ github.repository }}" \
+              --workflow "CI" \
+              --commit "${{ github.sha }}" \
+              --json status,conclusion \
+              --jq '.[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
+
+            STATUS=$(echo "$RUN_STATUS" | awk '{print $1}')
+            CONCLUSION=$(echo "$RUN_STATUS" | awk '{print $2}')
+            echo "  Attempt $i/30: status=$STATUS conclusion=$CONCLUSION"
+
+            if [[ "$STATUS" == "completed" && "$CONCLUSION" == "success" ]]; then
+              echo "✅ CI passed — proceeding with image build"
+              exit 0
+            elif [[ "$STATUS" == "completed" && "$CONCLUSION" != "success" ]]; then
+              echo "❌ CI failed — aborting image build"
+              exit 1
+            fi
+            sleep 30
+          done
+          echo "⏰ Timeout waiting for CI"
+          exit 1
+
+  # ─────────────────────────────────────────────
   # RESOLVE — determine what to build and how to tag
   # ─────────────────────────────────────────────
   resolve:
-    # Only proceed if CI workflow succeeded (skip on failure/cancellation).
-    # workflow_dispatch bypasses this gate (manual builds always allowed).
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: [wait-for-ci]
+    if: always() && (needs.wait-for-ci.result == 'success' || needs.wait-for-ci.result == 'skipped')
     name: Resolve build targets
     runs-on: ubuntu-latest
     timeout-minutes: 1
@@ -66,14 +102,8 @@ jobs:
       - name: Resolve tags and targets
         id: resolve
         run: |
-          # For workflow_run events, use the triggering commit SHA.
-          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            SHA_SHORT="${{ github.event.workflow_run.head_sha }}"
-            BRANCH="${{ github.event.workflow_run.head_branch }}"
-          else
-            SHA_SHORT="${{ github.sha }}"
-            BRANCH="${{ github.ref_name }}"
-          fi
+          SHA_SHORT="${{ github.sha }}"
+          BRANCH="${{ github.ref_name }}"
           SHA_SHORT="${SHA_SHORT:0:7}"
 
           case "$BRANCH" in
