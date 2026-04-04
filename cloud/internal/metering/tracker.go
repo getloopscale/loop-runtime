@@ -37,7 +37,7 @@ func (t *Tracker) RecordBuildCompletion(tenantID string, durationSeconds int) er
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer tx.Rollback() // no-op after Commit — standard Go tx pattern
 
 	// Increment builds count
 	if err := t.upsertUsage(tx, tenantID, "builds", 1, periodStart, periodEnd); err != nil {

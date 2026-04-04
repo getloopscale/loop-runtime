@@ -8,6 +8,15 @@ import (
 	"os"
 )
 
+// Secret is a string that redacts itself in logs, fmt output, and JSON serialization.
+type Secret string
+
+func (s Secret) String() string                { return "***" }
+func (s Secret) GoString() string              { return "***" }
+func (s Secret) MarshalJSON() ([]byte, error)  { return []byte(`"***"`), nil }
+func (s Secret) MarshalText() ([]byte, error)  { return []byte("***"), nil }
+func (s Secret) Value() string                 { return string(s) }
+
 // Config holds all configuration for the cloud auth service.
 // All fields are loaded from environment variables.
 type Config struct {
@@ -49,11 +58,11 @@ type Config struct {
 
 	// StripeAPIKey is the Stripe secret key for API calls.
 	// Env: STRIPE_API_KEY (required in production)
-	StripeAPIKey string
+	StripeAPIKey Secret
 
 	// StripeWebhookSecret is the webhook signing secret for verifying Stripe events.
 	// Env: STRIPE_WEBHOOK_SECRET (required in production)
-	StripeWebhookSecret string
+	StripeWebhookSecret Secret
 
 	// BillingReturnURL is the URL users return to after Stripe portal/checkout.
 	// Env: BILLING_RETURN_URL (default: "http://localhost:3000")
@@ -73,8 +82,8 @@ func Load() Config {
 		Environment:     envOr("LOOPZERO_ENV", "dev"),
 	}
 	cfg.JWTIssuer = envOr("JWT_ISSUER", cfg.HydraPublicURL+"/")
-	cfg.StripeAPIKey = envOr("STRIPE_API_KEY", "")
-	cfg.StripeWebhookSecret = envOr("STRIPE_WEBHOOK_SECRET", "")
+	cfg.StripeAPIKey = Secret(envOr("STRIPE_API_KEY", ""))
+	cfg.StripeWebhookSecret = Secret(envOr("STRIPE_WEBHOOK_SECRET", ""))
 	cfg.BillingReturnURL = envOr("BILLING_RETURN_URL", "http://localhost:3000")
 	return cfg
 }
