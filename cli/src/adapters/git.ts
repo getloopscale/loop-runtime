@@ -114,7 +114,7 @@ function loadIgnorePatterns(dir: string): ReturnType<typeof ignore> {
 
 export function getGitRoot(): string | null {
   try {
-    return execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+    return execSync('git rev-parse --show-toplevel', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   } catch {
     return null;
   }
