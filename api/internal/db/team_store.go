@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
@@ -34,7 +35,8 @@ func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([
 
 	var members []routes.TeamMemberInfo
 	for rows.Next() {
-		var userID, email, displayName, role, joinedAt string
+		var userID, email, displayName, role string
+		var joinedAt time.Time
 		if err := rows.Scan(&userID, &email, &displayName, &role, &joinedAt); err != nil {
 			return nil, fmt.Errorf("team store: scan failed: %w", err)
 		}
@@ -42,7 +44,7 @@ func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([
 			Username: stripGitHubPrefix(userID),
 			Email:    email,
 			Role:     role,
-			JoinedAt: joinedAt,
+			JoinedAt: joinedAt.Format(time.RFC3339),
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -110,7 +112,8 @@ func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID stri
 		tenantID, userID,
 	)
 
-	var id, email, displayName, role, joinedAt string
+	var id, email, displayName, role string
+	var joinedAt time.Time
 	if err := row.Scan(&id, &email, &displayName, &role, &joinedAt); err != nil {
 		if err.Error() == ErrNoRows.Error() {
 			return nil, nil
@@ -122,7 +125,7 @@ func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID stri
 		Username: stripGitHubPrefix(id),
 		Email:    email,
 		Role:     role,
-		JoinedAt: joinedAt,
+		JoinedAt: joinedAt.Format(time.RFC3339),
 	}, nil
 }
 

@@ -157,10 +157,18 @@ type BuildCallbackRequest struct {
 }
 
 // BuildOrchestratorDeps holds all dependencies for BuildOrchestrator.
+// ProjectEnsurer guarantees a project exists in the projects table.
+// Used by the deploy flow so that deleted-then-redeployed projects
+// reappear in `loopzero project list`.
+type ProjectEnsurer interface {
+	EnsureProject(ctx context.Context, tx db.DBTX, tenantID, name, createdBy string) error
+}
+
 type BuildOrchestratorDeps struct {
 	BuildStore     db.BuildStore
 	ReleaseStore   db.ReleaseStore
 	EnvTargetStore db.EnvironmentTargetStore
+	ProjectStore   ProjectEnsurer // nil = project ensure disabled (local dev without projects table)
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -184,6 +192,7 @@ type BuildOrchestrator struct {
 	buildStore     db.BuildStore
 	releaseStore   db.ReleaseStore
 	envTargetStore db.EnvironmentTargetStore
+	projectStore   ProjectEnsurer
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -233,6 +242,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		buildStore:        deps.BuildStore,
 		releaseStore:      deps.ReleaseStore,
 		envTargetStore:    deps.EnvTargetStore,
+		projectStore:      deps.ProjectStore,
 		eventStore:        deps.EventStore,
 		workflow:          deps.Workflow,
 		sync:              deps.Sync,
@@ -285,6 +295,15 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		}
 		if hasActive {
 			return loopzeroerrors.ErrDeployInProgress
+		}
+
+		// Step 2.5: ensure project exists in projects table (idempotent).
+		// After `loopzero project delete` + redeploy, the build succeeds but the
+		// project doesn't appear in `loopzero project list` because it was hard-deleted.
+		if o.projectStore != nil {
+			if err := o.projectStore.EnsureProject(ctx, tx, req.TenantID, req.ProjectID, req.CreatedBy); err != nil {
+				return fmt.Errorf("submit build: ensure project: %w", err)
+			}
 		}
 
 		// Step 3: create Build (QUEUED)

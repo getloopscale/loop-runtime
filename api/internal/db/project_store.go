@@ -50,6 +50,24 @@ func (s *PostgresProjectStore) CreateProject(ctx context.Context, input routes.C
 	}, nil
 }
 
+// EnsureProject creates a project if it doesn't exist (idempotent).
+// Used by the deploy flow to guarantee the project is registered in the
+// projects table. Without this, a project deleted via `loopzero project delete`
+// and redeployed would not appear in `loopzero project list`.
+func (s *PostgresProjectStore) EnsureProject(ctx context.Context, tx DBTX, tenantID, name, createdBy string) error {
+	id := GenerateProjectID()
+	_, err := tx.Exec(ctx,
+		`INSERT INTO projects (id, tenant_id, name, created_by)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (tenant_id, name) DO NOTHING`,
+		id, tenantID, name, createdBy,
+	)
+	if err != nil {
+		return fmt.Errorf("project store: ensure project failed: %w", err)
+	}
+	return nil
+}
+
 // ListByTenant returns all projects for a tenant, ordered by name.
 func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string) ([]routes.ProjectResult, error) {
 	rows, err := s.DB.Query(ctx,

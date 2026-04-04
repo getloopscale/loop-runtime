@@ -315,6 +315,7 @@ func main() {
 			BuildStore:        buildStore,
 			ReleaseStore:      releaseStore,
 			EnvTargetStore:    envTargetStore,
+			ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
 			EventStore:        pgEventStore,
 			Workflow:          workflowSubmitter,
 			Sync:              syncClient,
@@ -333,8 +334,15 @@ func main() {
 
 		buildStoreReader = &adapters.BuildStoreReaderAdapter{Store: buildStore}
 
-		// Build logs via Loki
-		lokiClient := loki.NewClient(cfg.LokiURL, httpClient, logger)
+		// Build logs via Loki — uses a dedicated HTTP client with longer timeout.
+		// Loki queries cross-cluster (mgmt → build NodePort) can take 15-30s for
+		// large builds. The default httpClient has 10s timeout which causes
+		// "context deadline exceeded" on most queries.
+		lokiHTTPClient := &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: httpTransport,
+		}
+		lokiClient := loki.NewClient(cfg.LokiURL, lokiHTTPClient, logger)
 		logBuildStore := &adapters.LogBuildStoreAdapter{Store: buildStore}
 		logsHandler = routes.NewLogsHandler(logBuildStore, lokiClient)
 
