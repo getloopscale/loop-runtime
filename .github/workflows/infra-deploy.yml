@@ -1,9 +1,13 @@
 # Infrastructure Deploy — provisions cloud resources via Pulumi
 #
+# Trigger chain: push → CI → Build Images → Infra Deploy
+#   This ensures container images exist in registry BEFORE Pulumi creates
+#   Deployments that reference them (prevents ImagePullBackOff).
+#
 # Trigger map:
-#   push to develop  → deploy to dev     (automatic, every push)
-#   push to homolog  → deploy to staging (automatic, every push)
-#   push to main     → deploy to prod    (requires approval)
+#   Build Images completes on develop  → deploy to dev     (automatic)
+#   Build Images completes on homolog  → deploy to staging (automatic)
+#   Build Images completes on main     → deploy to prod    (requires approval)
 #   workflow_dispatch → manual operations (any stack, any command)
 #
 # State backend: DigitalOcean Spaces (S3-compatible) — no Pulumi Cloud dependency.
@@ -22,7 +26,10 @@
 name: "Infra: Deploy"
 
 on:
-  push:
+  # Only deploy after images are built — prevents ImagePullBackOff on new services.
+  workflow_run:
+    workflows: ["Build: Container Images"]
+    types: [completed]
     branches: [develop, homolog, main]
 
   workflow_dispatch:
@@ -63,6 +70,9 @@ jobs:
   # RESOLVE — determine stack and environment
   # ─────────────────────────────────────────────
   resolve:
+    # Only proceed if Build Images succeeded (skip on failure/cancellation).
+    # workflow_dispatch bypasses this gate (manual deploys always allowed).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     name: Resolve deployment target
     runs-on: ubuntu-latest
     timeout-minutes: 1
@@ -78,11 +88,13 @@ jobs:
             STACK="${{ inputs.stack }}"
             COMMAND="${{ inputs.command }}"
           else
-            case "${{ github.ref_name }}" in
+            # workflow_run: branch is in event payload, not github.ref_name
+            BRANCH="${{ github.event.workflow_run.head_branch }}"
+            case "$BRANCH" in
               develop) STACK="dev" ;;
               homolog) STACK="staging" ;;
               main)    STACK="prod" ;;
-              *)       echo "::error::Unexpected branch: ${{ github.ref_name }}" && exit 1 ;;
+              *)       echo "::error::Unexpected branch: $BRANCH" && exit 1 ;;
             esac
             COMMAND="up"
           fi
@@ -116,6 +128,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -164,6 +178,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
