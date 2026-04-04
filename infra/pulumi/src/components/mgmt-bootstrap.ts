@@ -633,11 +633,10 @@ function installOryHydra(
     ? pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/hydra?sslmode=require`
     : undefined;
 
-  // Production issuer URL: https://api.<domain>/
-  const issuerUrl =
-    config.environment !== "dev"
-      ? `https://api.${config.domain}/`
-      : undefined;
+  // Issuer URL must match the public-facing auth domain.
+  // Always set — dev mode uses auth.dev.loopzero.example, prod uses auth.loopzero.example.
+  const authDomain = config.domain || "dev.loopzero.example";
+  const issuerUrl = `https://auth.${authDomain}/`;
 
   return new k8s.helm.v3.Release(
     "ory-hydra",
@@ -653,37 +652,31 @@ function installOryHydra(
       ...(hydraValues ? { valueYamlFiles: [new pulumi.asset.FileAsset(hydraValues)] } : {}),
       values: {
         fullnameOverride: "ory-hydra",
-        ...(hydraDsn || issuerUrl
-          ? {
-              hydra: {
-                config: {
-                  ...(hydraDsn ? { dsn: hydraDsn } : {}),
-                  ...(issuerUrl
-                    ? {
-                        urls: {
-                          self: { issuer: issuerUrl },
-                          login: `https://app.${config.domain}/login`,
-                          consent: `https://app.${config.domain}/consent`,
-                          logout: `https://app.${config.domain}/logout`,
-                          device_verification: `https://app.${config.domain}/device`,
-                        },
-                        serve: {
-                          public: {
-                            cors: {
-                              enabled: true,
-                              allowed_origins: [
-                                `https://app.${config.domain}`,
-                                `https://*.${config.domain}`,
-                              ],
-                            },
-                          },
-                        },
-                      }
-                    : {}),
+        hydra: {
+              dev: false, // Disable dev mode — use real HTTPS issuer
+              config: {
+                ...(hydraDsn ? { dsn: hydraDsn } : {}),
+                urls: {
+                  self: { issuer: issuerUrl },
+                  // Cloud service handles login/consent/logout flows
+                  login: `https://api.${authDomain}/auth/login`,
+                  consent: `https://api.${authDomain}/auth/consent`,
+                  logout: `https://api.${authDomain}/auth/logout`,
+                  device_verification: `https://dashboard.${authDomain}/device`,
+                },
+                serve: {
+                  public: {
+                    cors: {
+                      enabled: true,
+                      allowed_origins: [
+                        `https://dashboard.${authDomain}`,
+                        `https://*.${authDomain}`,
+                      ],
+                    },
+                  },
                 },
               },
-            }
-          : {}),
+            },
         resources: {
           requests: { cpu: "50m", memory: "128Mi" },
           limits: { cpu: "300m", memory: "256Mi" },
