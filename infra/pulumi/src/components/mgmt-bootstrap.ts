@@ -675,7 +675,6 @@ function installOryHydra(
                   login: `https://api.${authDomain}/auth/login`,
                   consent: `https://api.${authDomain}/auth/consent`,
                   logout: `https://api.${authDomain}/auth/logout`,
-                  device_verification: `https://dashboard.${authDomain}/device`,
                 },
                 serve: {
                   public: {
