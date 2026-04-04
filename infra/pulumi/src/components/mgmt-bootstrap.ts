@@ -112,6 +112,9 @@ export function bootstrapMgmtCluster(
   // LoopZero API — platform HTTP server (connects to DB, Gitea, ArgoCD, Argo Workflows)
   const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config, lokiEndpoint);
 
+  // Cloud Auth Service — OAuth2 (Hydra), identity (Kratos), billing (Stripe), dashboard
+  installCloudService(provider, ns, infra, config);
+
   // TenantController — K8s operator for tenant lifecycle (namespaces, RBAC, quotas)
   const tenantController = installTenantController(provider, ns, infra, config);
 
@@ -1032,6 +1035,111 @@ function createArgoCDRepoCredentials(
 ): void {
   // No-op: credentials created by Bootstrap step with real token.
   // See .github/workflows/infra-deploy.yml section "3. UPDATE K8s SECRETS".
+}
+
+// ---------------------------------------------------------------------------
+// Cloud Auth Service (OAuth2 + Billing + Dashboard)
+// ---------------------------------------------------------------------------
+
+function installCloudService(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  infra: InfraOutputs,
+  config: PlatformStackConfig,
+): void {
+  const registrySecretName = "loopzero-infra-registry";
+  const imageTag = config.environment || "dev";
+
+  // ConfigMap — non-sensitive environment variables
+  const configMap = new k8s.core.v1.ConfigMap(
+    "loopzero-cloud-config",
+    {
+      metadata: { name: "loopzero-cloud-config", namespace: PLATFORM_NAMESPACE },
+      data: {
+        CLOUD_LISTEN_ADDR: ":13002",
+        LOOPZERO_ENV: config.environment || "dev",
+        // In-cluster DNS for Ory services (same namespace)
+        KRATOS_PUBLIC_URL: `http://ory-kratos-public.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
+        KRATOS_ADMIN_URL: `http://ory-kratos-admin.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
+        HYDRA_PUBLIC_URL: `http://ory-hydra-public.${PLATFORM_NAMESPACE}.svc.cluster.local:4444`,
+        HYDRA_ADMIN_URL: `http://ory-hydra-admin.${PLATFORM_NAMESPACE}.svc.cluster.local:4445`,
+        HYDRA_CLIENT_ID: "loopzero-cli",
+        ENGINE_API_URL: `http://loopzero-api.${PLATFORM_NAMESPACE}.svc.cluster.local:8080`,
+        BILLING_RETURN_URL: `https://dashboard.${config.domain || "dev.loopzero.example"}`,
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // Secret — Stripe API keys (empty in dev, set via pulumi config in prod)
+  const secret = new k8s.core.v1.Secret(
+    "loopzero-cloud-secrets",
+    {
+      metadata: { name: "loopzero-cloud-secrets", namespace: PLATFORM_NAMESPACE },
+      stringData: {
+        STRIPE_API_KEY: config.stripeApiKey || "",
+        STRIPE_WEBHOOK_SECRET: config.stripeWebhookSecret || "",
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // Service
+  new k8s.core.v1.Service(
+    "loopzero-cloud",
+    {
+      metadata: { name: "loopzero-cloud", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        selector: { app: "loopzero-cloud" },
+        ports: [{ name: "http", port: 13002, targetPort: 13002 }],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // Deployment
+  new k8s.apps.v1.Deployment(
+    "loopzero-cloud",
+    {
+      metadata: { name: "loopzero-cloud", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        replicas: 1,
+        selector: { matchLabels: { app: "loopzero-cloud" } },
+        template: {
+          metadata: { labels: { app: "loopzero-cloud" } },
+          spec: {
+            serviceAccountName: "default",
+            imagePullSecrets: [{ name: registrySecretName }],
+            containers: [{
+              name: "cloud",
+              image: `registry.digitalocean.com/loopzero-infra-registry/loopzero-cloud:${imageTag}`,
+              imagePullPolicy: "Always",
+              ports: [{ containerPort: 13002 }],
+              envFrom: [
+                { configMapRef: { name: "loopzero-cloud-config" } },
+                { secretRef: { name: "loopzero-cloud-secrets" } },
+              ],
+              resources: {
+                requests: { cpu: "50m", memory: "64Mi" },
+                limits: { cpu: "200m", memory: "128Mi" },
+              },
+              readinessProbe: {
+                httpGet: { path: "/health", port: 13002 },
+                initialDelaySeconds: 5,
+                periodSeconds: 10,
+              },
+              livenessProbe: {
+                httpGet: { path: "/health", port: 13002 },
+                initialDelaySeconds: 10,
+                periodSeconds: 30,
+              },
+            }],
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [ns, configMap, secret] },
+  );
 }
 
 // ---------------------------------------------------------------------------
