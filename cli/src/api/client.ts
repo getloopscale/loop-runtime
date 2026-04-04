@@ -56,6 +56,12 @@ export class ApiError extends Error {
         4, status, serverCode ?? 'PERMISSION_DENIED',
       );
     }
+    if (status === 402) {
+      return new ApiError(
+        serverMessage || 'Plan limit reached. Upgrade your plan to continue.',
+        3, status, serverCode ?? 'PLAN_LIMIT_EXCEEDED',
+      );
+    }
     if (status === 409) {
       return new ApiError(
         serverMessage

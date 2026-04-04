@@ -28,6 +28,8 @@ var helmCharts = []string{
 	"traefik",
 	"monitoring",
 	"otel",
+	"ory-kratos",
+	"ory-hydra",
 }
 
 func TestHelmValuesFilesExist(t *testing.T) {
@@ -123,6 +125,8 @@ func TestHelmValuesHaveHealthProbes(t *testing.T) {
 	// Charts that manage probes internally (not configurable via values.yaml)
 	skipProbeCheck := map[string]bool{
 		"cert-manager": true, // cert-manager v1.20+ manages probes internally
+		"ory-kratos":   true, // Ory charts manage probes internally via chart defaults
+		"ory-hydra":    true, // Ory charts manage probes internally via chart defaults
 	}
 	for _, chart := range helmCharts {
 		if skipProbeCheck[chart] {

@@ -9,6 +9,8 @@ interface LoopZeroConfig {
   token: string;
   email: string;
   team: string;
+  refresh_token?: string;
+  token_expires_at?: number; // Unix timestamp (seconds)
 }
 
 export class ConfigStore {
@@ -30,10 +32,16 @@ export class ConfigStore {
     return new ConfigStore(os.homedir());
   }
 
-  saveToken(token: string, email: string, team: string): void {
+  saveToken(token: string, email: string, team: string, refreshToken?: string, expiresIn?: number): void {
     fs.mkdirSync(this.configDir, { recursive: true, mode: 0o700 });
 
     const config: LoopZeroConfig = { token, email, team };
+    if (refreshToken) {
+      config.refresh_token = refreshToken;
+    }
+    if (expiresIn) {
+      config.token_expires_at = Math.floor(Date.now() / 1000) + expiresIn;
+    }
     // Atomic write: write to temp file with correct permissions, then rename.
     // This avoids a window where the file exists with stale permissions
     // and token content is world-readable.
@@ -66,6 +74,17 @@ export class ConfigStore {
 
   getTeam(): string | null {
     return this.getConfig()?.team ?? null;
+  }
+
+  getRefreshToken(): string | null {
+    return this.getConfig()?.refresh_token ?? null;
+  }
+
+  isTokenExpired(): boolean {
+    const config = this.getConfig();
+    if (!config?.token_expires_at) return false; // PAT tokens don't expire
+    // Consider expired 60 seconds before actual expiration (buffer for clock skew)
+    return Math.floor(Date.now() / 1000) >= config.token_expires_at - 60;
   }
 
   clearToken(): void {

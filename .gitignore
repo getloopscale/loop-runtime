@@ -52,6 +52,7 @@ bin/
 # Compiled Go binaries (should never be committed)
 api/main
 operators/main
+cloud/main
 /cmd
 /scripts
 
@@ -70,6 +71,11 @@ operators/config/crd/bases/*.bak
 # Tilt
 .tilt-dev/
 tilt_modules/
+
+# Frontend build artifacts (cloud/dashboard)
+dist/
+.next/
+out/
 
 # Helm
 infra/helm/**/charts/

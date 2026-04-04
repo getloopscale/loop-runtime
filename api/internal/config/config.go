@@ -120,6 +120,15 @@ type Config struct {
 	CFAPIToken      string // Cloudflare API token
 	CFAccountID     string // Cloudflare account ID
 	CFKVNamespaceID string // KV namespace ID for routing table
+
+	// JWT Authentication (Sprint 11 — Ory Hydra integration)
+	// When set, enables dual validation: JWT (via JWKS) + GitHub PAT (legacy).
+	// When empty, only GitHub PAT validation is used (backward compatible).
+	// Env: JWKS_ENDPOINT (e.g., "http://ory-hydra-public.loopzero-system:4444/.well-known/jwks.json")
+	JWKSEndpoint string
+	// JWTIssuer is the expected issuer in JWT tokens (must match Hydra config).
+	// Env: JWT_ISSUER (e.g., "http://ory-hydra-public.loopzero-system:4444/")
+	JWTIssuer string
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -231,6 +240,10 @@ func Load() Config {
 		CFAPIToken:      os.Getenv("CF_API_TOKEN"),
 		CFAccountID:     os.Getenv("CF_ACCOUNT_ID"),
 		CFKVNamespaceID: os.Getenv("CF_KV_NAMESPACE_ID"),
+
+		// JWT Authentication (Sprint 11 — when set, enables dual JWT + PAT validation)
+		JWKSEndpoint: os.Getenv("JWKS_ENDPOINT"),
+		JWTIssuer:    os.Getenv("JWT_ISSUER"),
 	}
 }
 

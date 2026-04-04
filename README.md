@@ -4,6 +4,7 @@
     <strong>The deployment platform for teams who outgrew Vercel but don't want to manage Kubernetes.</strong>
   </p>
   <p align="center">
+    <a href="#project-status">Status</a> &bull;
     <a href="#quickstart">Quickstart</a> &bull;
     <a href="#cli-reference">CLI Reference</a> &bull;
     <a href="#how-it-works">How It Works</a> &bull;
@@ -37,6 +38,71 @@ No Kubernetes. No Helm. No Dockerfile required.
 
 ---
 
+## Project Status
+
+> **Phase: Pre-release.** Infrastructure validated on production (DigitalOcean). Not yet available to external users.
+>
+> Last validation: 2026-03-29 — full destroy + recreate via GitHub Actions pipeline (10m33s).
+
+### What Works (Validated on DigitalOcean)
+
+| Capability | Status | Evidence |
+|------------|:------:|----------|
+| `loopzero login` / `logout` / `whoami` | **Working** | GitHub token auth + RBAC |
+| `loopzero init` (monorepo detection) | **Working** | Turbo/Nx/Lerna/pnpm + 10 frameworks |
+| `loopzero deploy` (full pipeline) | **Working** | 24s build, pod Running, health OK |
+| `loopzero deploy` (static frontends) | **Working** | S3 upload + CF Worker KV routing + CDN delivery |
+| `loopzero rollback` | **Working** | ~3s revert, version verified |
+| `loopzero logs` | **Working** | Loki cross-cluster, real-time streaming |
+| `loopzero status` | **Working** | Project status with active release + URL |
+| `loopzero secret set/list/delete` | **Working** | ESO sync <30s, values never exposed |
+| `loopzero cancel` | **Working** | Cancels running/queued builds |
+| `loopzero project create/list/inspect/delete` | **Working** | Full CRUD with clean resource removal |
+| `loopzero env create/list/inspect/delete` | **Working** | Production env protected from deletion |
+| `loopzero team list/add/remove/role` | **Working** | RBAC: owner/admin/member roles |
+| `loopzero build list/inspect` | **Working** | Build history with env filter |
+| `loopzero validate` | **Working** | Local loopzero.yaml validation |
+| TLS (HTTPS) | **Working** | Let's Encrypt DNS-01 via Cloudflare |
+| Observability | **Working** | Prometheus + Grafana + Loki + 4 SLO alert rules |
+| Concurrent deploy protection | **Working** | `pg_advisory_xact_lock` → 409 on conflict |
+| Idempotency | **Working** | Retry-safe via `Idempotency-Key` header |
+| SecurityContext (non-root pods) | **Working** | `runAsNonRoot: true`, `drop: ALL`, `readOnlyRootFilesystem` |
+| PodSecurity Admission | **Working** | `restricted` profile enforced on all tenant namespaces |
+| NetworkPolicy | **Working** | Mandatory deny-all + allow-ingress + allow-egress |
+| IaC destroy + recreate | **Working** | Full pipeline in 10m33s via GitHub Actions |
+| ArgoCD notifications | **Working** | Push-based sync callback activation |
+
+### What's Not Built Yet
+
+| Feature | Sprint | Notes |
+|---------|--------|-------|
+| Preview environments (PR → temp URL → cleanup) | Sprint 5 | CRD defined, controller not implemented |
+| `loopzero promote` (staging → production) | Sprint 4 | Not started |
+| Image signing (cosign + syft) | Sprint 6 | Supply chain security, not started |
+| Chaos engineering tests | Sprint 8 | Not started |
+| AppSecret controller | — | CRD defined, no reconciler. Secrets work via ESO directly but lack lifecycle automation |
+
+### Known Issues
+
+| Issue | Severity | Detail |
+|-------|----------|--------|
+| 1 CLI test failing | High | `--json` output for missing required argument returns text instead of JSON (`index.test.ts:209`). Stability contract §0.3 violation. |
+| `feat/auth` branch not merged | High | 440 commits ahead of `main` with team management, security, and CI improvements. `main` is stale. |
+| Hardening roadmap stale | Low | `docs/hardening-sprints/ROADMAP.md` marks Sprint 7 (security) as TODO, but SecurityContext + PSA + NetworkPolicy are already implemented in code. |
+
+### Test Suite
+
+| Component | Tests | Status |
+|-----------|------:|--------|
+| CLI (Jest) | 747 | 746 passing, 1 failing |
+| API (Go) | 28 packages | All passing |
+| Shared libraries (Go) | 7 packages | All passing |
+| Operators (Ginkgo + envtest) | — | Passing (requires envtest binary) |
+| Infra (Pulumi + vitest) | — | Passing |
+| CI pipeline | 4 workflows | Green (lint, test, security, manifests) |
+
+---
+
 ## Why LoopZero
 
 You have a monorepo with an API, a frontend, and workers. Vercel handles the frontend beautifully — but the rest is a mess of Dockerfiles, Helm charts, and CI pipelines that only one person understands.
@@ -45,16 +111,16 @@ LoopZero gives you Vercel-quality DX for everything Vercel can't deploy.
 
 | | Vercel | LoopZero |
 |---|:---:|:---:|
-| Static frontends (React, Vite, Next.js) | ✓ | ✓ via CDN |
-| API servers (Express, NestJS, Go, Python) | Serverless only | ✓ Any framework |
-| Background workers | - | ✓ |
-| Multiple services per repo | - | ✓ |
-| Rollback in seconds | ✓ | ✓ (~3s) |
-| Secrets per environment | ✓ | ✓ (encrypted, ESO sync) |
-| Preview environments per PR | ✓ | Roadmap |
-| CLI-first | ✓ | ✓ |
-| Team management + RBAC | ✓ | ✓ |
-| Real-time build logs | ✓ | ✓ (Loki) |
+| Static frontends (React, Vite, Next.js) | Yes | Yes (CDN) |
+| API servers (Express, NestJS, Go, Python) | Serverless only | Any framework |
+| Background workers | — | Yes |
+| Multiple services per repo | — | Yes |
+| Rollback in seconds | Yes | Yes (~3s) |
+| Secrets per environment | Yes | Yes (encrypted, ESO sync) |
+| Preview environments per PR | Yes | Not yet (Sprint 5) |
+| CLI-first | Yes | Yes |
+| Team management + RBAC | Yes | Yes |
+| Real-time build logs | Yes | Yes (Loki) |
 
 ---
 
@@ -223,21 +289,45 @@ From the developer's perspective: `loopzero deploy` → URL. Everything below is
 - **Clean delete** — `loopzero project delete` removes manifests, triggers prune, verifies pods are gone.
 - **Security** — Pods run as non-root, drop all capabilities, use dedicated ServiceAccount, PSA restricted.
 
+### Architecture
+
+Four-plane separation with dedicated Kubernetes clusters:
+
+| Plane | Cluster | Purpose |
+|-------|---------|---------|
+| Developer | — | CLI (TypeScript) + API (Go) |
+| Control | mgmt | Operators, Gitea, PostgreSQL, ArgoCD, Traefik, cert-manager |
+| Build | build | Argo Workflows + BuildKit (rootless) |
+| Workload | workload | User applications managed by ArgoCD |
+
 ### Stack
 
 | Layer | Technology |
 |-------|-----------|
 | CLI | TypeScript + Commander |
 | API | Go + chi + pgx |
-| Build engine | Argo Workflows + BuildKit (rootless) |
+| Operators | Go + kubebuilder + controller-runtime (9 CRDs, 7 controllers) |
+| Build engine | Argo Workflows + BuildKit (rootless, single-container) |
 | GitOps | ArgoCD (manual sync) + Gitea |
-| Database | PostgreSQL (advisory locks, RLS) |
+| Database | PostgreSQL 16 (managed, advisory locks) |
 | Secrets | External Secrets Operator |
 | Edge | Cloudflare Tunnel + Worker + KV |
 | Static assets | DigitalOcean Spaces + CDN |
 | Monitoring | Prometheus + Grafana + Loki + Alertmanager |
-| IaC | Pulumi (TypeScript) |
-| Operators | Go + kubebuilder + controller-runtime |
+| IaC | Pulumi (TypeScript) — DigitalOcean + Cloudflare |
+| CI/CD | GitHub Actions (4 workflows: CI, Build Images, Infra Deploy, Infra Preview) |
+
+### Production Infrastructure (DigitalOcean)
+
+| Resource | Configuration |
+|----------|---------------|
+| 3 DOKS clusters | v1.32.13, SFO3 (dev) / NYC3 (prod) |
+| PostgreSQL | v16, managed, HA (3 nodes in prod) |
+| Container Registry | DigitalOcean Container Registry (Professional) |
+| Edge proxy | Cloudflare Tunnel (DDoS/WAF, zero public IPs) |
+| Static delivery | CF Worker + DO Spaces CDN |
+| DNS | `*.dev.loopzero.example` (dev), `*.loopzero.example` (prod) |
+| State backend | DO Spaces (S3-compatible) for Pulumi state |
 
 ---
 
@@ -277,12 +367,12 @@ apps:
 
 ### Prerequisites
 
-Go 1.25+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), [Task](https://taskfile.dev), [Helm](https://helm.sh) v3.14+, kubectl
+Go 1.25+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), [Task](https://taskfile.dev), [Helm](https://helm.sh) v3.14+, kubectl, [kubeconform](https://github.com/yannh/kubeconform), [golangci-lint](https://golangci-lint.run) v2.11+
 
 ### Setup
 
 ```bash
-task setup       # Create 3 k3d clusters + install all infrastructure
+task setup       # Create 3 k3d clusters + install all infrastructure (idempotent)
 tilt up          # Start dev loop with hot reload
 task doctor      # Verify everything is healthy
 ```
@@ -291,7 +381,7 @@ task doctor      # Verify everything is healthy
 
 ```bash
 task test              # All tests (unit + lint + manifests)
-cd cli && npm test     # 747 CLI tests (Jest)
+cd cli && npm test     # CLI tests (Jest)
 go test ./api/...      # API tests (Go testing)
 go test ./operators/...# Operator tests (Ginkgo + envtest)
 go test ./pkg/...      # Shared library tests
@@ -327,6 +417,8 @@ Exit code: 5 (partial failure)
 - **Application data repair** — If a bug corrupted data, that's on you.
 - **Custom domains** — All URLs are on `*.loopzero.example` for now.
 - **Multi-region** — Single-region in v1.
+- **Preview environments** — Planned for Sprint 5, not yet implemented.
+- **Image signing** — Supply chain security (cosign + syft) planned for Sprint 6.
 
 ---
 
@@ -350,6 +442,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Every PR starts with a failing test.
 
 ## Links
 
-- [Roadmap](docs/sprints/ROADMAP.md)
+- [System Design](docs/technical.md) — authoritative specification
+- [Sprint Roadmap](docs/sprints/ROADMAP.md)
+- [Hardening Roadmap](docs/hardening-sprints/ROADMAP.md)
+- [Changelog](CHANGELOG.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security Policy](SECURITY.md)
