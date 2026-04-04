@@ -62,10 +62,10 @@ export function ProjectsPage() {
                         <h3 className="font-mono text-sm font-semibold text-white">{project.name}</h3>
                         <div className="flex items-center gap-2 mt-0.5">
                           <Globe className="h-3 w-3 text-white/20" />
-                          <span className="text-xs text-white/30">{project.env}</span>
+                          <span className="text-xs text-white/30">{project.environment ?? 'production'}</span>
                           <span className="text-white/10">·</span>
                           <Clock className="h-3 w-3 text-white/20" />
-                          <span className="text-xs text-white/30">{project.lastDeploy}</span>
+                          <span className="text-xs text-white/30">{project.last_deploy ?? '—'}</span>
                         </div>
                       </div>
                     </div>
@@ -73,7 +73,7 @@ export function ProjectsPage() {
                   </div>
 
                   <div className="border-t border-white/[0.04] px-5 py-3 flex gap-2">
-                    {project.apps.map((app) => (
+                    {(project.apps ?? []).map((app) => (
                       <div key={app.name} className="flex items-center gap-2 rounded-md bg-surface-3/50 px-2.5 py-1.5">
                         <div className={`h-1.5 w-1.5 rounded-full ${app.status === 'live' ? 'bg-accent' : 'bg-danger'}`} />
                         <span className="font-mono text-xs text-white/50">{app.name}</span>
