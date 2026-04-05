@@ -28,8 +28,11 @@ kratos:
         password:
           enabled: true
           config:
-            min_password_length: 8
+            min_password_length: 10
             identifier_similarity_check_enabled: true
+            haveibeenpwned_enabled: true
+            # Don't block registration if HIBP API is unreachable
+            ignore_network_errors: true
 
         oidc:
           enabled: true
