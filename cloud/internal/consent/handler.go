@@ -21,19 +21,25 @@ import (
 
 // Handler manages Hydra's login and consent callbacks.
 type Handler struct {
-	hydra           *auth.HydraClient
-	kratosPublicURL string
-	kratosClient    *http.Client
-	logger          *slog.Logger
+	hydra            *auth.HydraClient
+	kratosPublicURL  string // Browser-facing URL (for redirects)
+	kratosInternalURL string // Cluster-internal URL (for server-to-server calls)
+	kratosClient     *http.Client
+	logger           *slog.Logger
 }
 
 // NewHandler creates a consent handler.
-func NewHandler(hydra *auth.HydraClient, kratosPublicURL string, logger *slog.Logger) *Handler {
+// kratosPublicURL is used for browser redirects, kratosInternalURL for server-to-server (whoami).
+func NewHandler(hydra *auth.HydraClient, kratosPublicURL, kratosInternalURL string, logger *slog.Logger) *Handler {
+	if kratosInternalURL == "" {
+		kratosInternalURL = kratosPublicURL
+	}
 	return &Handler{
-		hydra:           hydra,
-		kratosPublicURL: kratosPublicURL,
-		kratosClient:    &http.Client{Timeout: 5 * time.Second},
-		logger:          logger,
+		hydra:            hydra,
+		kratosPublicURL:  kratosPublicURL,
+		kratosInternalURL: kratosInternalURL,
+		kratosClient:     &http.Client{Timeout: 5 * time.Second},
+		logger:           logger,
 	}
 }
 
@@ -107,8 +113,9 @@ func (h *Handler) LoginComplete(w http.ResponseWriter, r *http.Request) {
 
 // getKratosSessionSubject validates the Kratos session cookie and returns the subject.
 func (h *Handler) getKratosSessionSubject(r *http.Request) (string, error) {
-	// Forward the cookies from the original request to Kratos /sessions/whoami
-	whoamiURL := fmt.Sprintf("%s/sessions/whoami", h.kratosPublicURL)
+	// Forward the cookies from the original request to Kratos /sessions/whoami.
+	// Uses internal URL to avoid going through external proxy/TLS.
+	whoamiURL := fmt.Sprintf("%s/sessions/whoami", h.kratosInternalURL)
 	req, err := http.NewRequest("GET", whoamiURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("create whoami request: %w", err)

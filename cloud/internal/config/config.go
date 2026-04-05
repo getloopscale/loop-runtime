@@ -24,9 +24,14 @@ type Config struct {
 	// Env: CLOUD_LISTEN_ADDR (default: ":13002")
 	ListenAddr string
 
-	// KratosPublicURL is the Ory Kratos public API URL (user-facing flows).
-	// Env: KRATOS_PUBLIC_URL (default: "http://ory-kratos-public.loopzero-system:80")
+	// KratosPublicURL is the browser-facing Kratos URL (used for redirects).
+	// Env: KRATOS_PUBLIC_URL
 	KratosPublicURL string
+
+	// KratosInternalURL is the cluster-internal Kratos public URL (server-to-server).
+	// Used for session validation (whoami) without going through external TLS/proxy.
+	// Env: KRATOS_INTERNAL_URL (default: same as KRATOS_PUBLIC_URL)
+	KratosInternalURL string
 
 	// KratosAdminURL is the Ory Kratos admin API URL (identity management).
 	// Env: KRATOS_ADMIN_URL (default: "http://ory-kratos-admin.loopzero-system:80")
@@ -73,8 +78,9 @@ type Config struct {
 func Load() Config {
 	cfg := Config{
 		ListenAddr:      envOr("CLOUD_LISTEN_ADDR", ":13002"),
-		KratosPublicURL: envOr("KRATOS_PUBLIC_URL", "http://ory-kratos-public.loopzero-system:80"),
-		KratosAdminURL:  envOr("KRATOS_ADMIN_URL", "http://ory-kratos-admin.loopzero-system:80"),
+		KratosPublicURL:   envOr("KRATOS_PUBLIC_URL", "http://ory-kratos-public.loopzero-system:80"),
+		KratosInternalURL: envOr("KRATOS_INTERNAL_URL", envOr("KRATOS_PUBLIC_URL", "http://ory-kratos-public.loopzero-system:80")),
+		KratosAdminURL:    envOr("KRATOS_ADMIN_URL", "http://ory-kratos-admin.loopzero-system:80"),
 		HydraPublicURL:  envOr("HYDRA_PUBLIC_URL", "http://ory-hydra-public.loopzero-system:4444"),
 		HydraAdminURL:   envOr("HYDRA_ADMIN_URL", "http://ory-hydra-admin.loopzero-system:4445"),
 		HydraClientID:   envOr("HYDRA_CLIENT_ID", "loopzero-cli"),

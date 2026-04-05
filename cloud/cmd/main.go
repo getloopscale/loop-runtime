@@ -62,7 +62,7 @@ func main() {
 	// Handlers
 	deviceHandler := routes.NewDeviceHandler(hydra)
 	meHandler := routes.NewMeHandler(jwtValidator)
-	consentHandler := consent.NewHandler(hydra, cfg.KratosPublicURL, logger)
+	consentHandler := consent.NewHandler(hydra, cfg.KratosPublicURL, cfg.KratosInternalURL, logger)
 
 	// Router
 	r := chi.NewRouter()
