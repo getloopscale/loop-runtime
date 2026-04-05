@@ -43,10 +43,11 @@ export function LoginPage() {
     });
   }, [navigate]);
 
-  // Load Kratos login flow when ?flow= is present
+  // Load or create Kratos login flow
   useEffect(() => {
     const flowId = searchParams.get('flow');
     if (flowId) {
+      // Flow exists — load it
       fetch(`${KRATOS_URL}/self-service/login/flows?id=${flowId}`, {
         credentials: 'include',
         headers: { Accept: 'application/json' },
@@ -54,8 +55,18 @@ export function LoginPage() {
         .then(r => r.ok ? r.json() : null)
         .then(f => { if (f) setFlow(f); })
         .catch(() => {});
+    } else if (!loading) {
+      // No flow yet — create one automatically so buttons work on first click
+      fetch(`${KRATOS_URL}/self-service/login/browser`, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+        redirect: 'follow',
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(f => { if (f?.ui) setFlow(f); })
+        .catch(() => {});
     }
-  }, [searchParams]);
+  }, [searchParams, loading]);
 
   // Submit OIDC provider (GitHub/Google)
   const submitOIDC = (provider: string) => {
