@@ -121,11 +121,9 @@ func (h *Handler) getKratosSessionSubject(r *http.Request) (string, error) {
 		return "", fmt.Errorf("create whoami request: %w", err)
 	}
 
-	// Forward session cookies
+	// Forward ALL cookies — Kratos uses dynamic cookie names (e.g., csrf_token_{hash}).
 	for _, cookie := range r.Cookies() {
-		if cookie.Name == "ory_kratos_session" || cookie.Name == "csrf_token" {
-			req.AddCookie(cookie)
-		}
+		req.AddCookie(cookie)
 	}
 
 	resp, err := h.kratosClient.Do(req)
