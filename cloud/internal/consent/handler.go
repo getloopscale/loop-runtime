@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
@@ -153,6 +154,48 @@ func (h *Handler) getKratosSessionSubject(r *http.Request) (string, error) {
 	return session.Identity.ID, nil
 }
 
+// fetchIdentityClaims fetches Kratos identity traits (email, name) for JWT claims.
+func (h *Handler) fetchIdentityClaims(subject string) map[string]interface{} {
+	claims := map[string]interface{}{}
+
+	// Fetch identity from Kratos admin API (server-to-server).
+	// Admin API has /admin/identities endpoint; public API doesn't.
+	kratosAdmin := h.kratosInternalURL // Same cluster, admin is on separate port
+	// Try admin URL pattern: replace "public" with "admin" in service name
+	kratosAdmin = strings.Replace(kratosAdmin, "kratos-public", "kratos-admin", 1)
+	identityURL := fmt.Sprintf("%s/admin/identities/%s", kratosAdmin, subject)
+	resp, err := h.kratosClient.Get(identityURL)
+	if err != nil {
+		h.logger.Warn("failed to fetch identity for claims", "subject", subject, "error", err)
+		return claims
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		h.logger.Warn("identity fetch returned non-200", "subject", subject, "status", resp.StatusCode)
+		return claims
+	}
+
+	var identity struct {
+		Traits struct {
+			Email string `json:"email"`
+			Name  string `json:"name"`
+		} `json:"traits"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&identity); err != nil {
+		h.logger.Warn("failed to decode identity", "error", err)
+		return claims
+	}
+
+	if identity.Traits.Email != "" {
+		claims["email"] = identity.Traits.Email
+	}
+	if identity.Traits.Name != "" {
+		claims["name"] = identity.Traits.Name
+	}
+	return claims
+}
+
 // Consent handles the consent challenge from Hydra.
 // For the CLI (first-party client), auto-approve all requested scopes.
 // GET /auth/consent?consent_challenge=...
@@ -170,8 +213,11 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch user identity from Kratos to include email/name in JWT.
+	tokenClaims := h.fetchIdentityClaims(consentReq.Subject)
+
 	// Auto-approve — LoopZero CLI is a first-party trusted client.
-	redirectTo, err := h.hydra.AcceptConsent(challenge, consentReq.RequestedScope)
+	redirectTo, err := h.hydra.AcceptConsent(challenge, consentReq.RequestedScope, tokenClaims)
 	if err != nil {
 		h.logger.Error("failed to accept consent", "error", err)
 		http.Error(w, "Authentication service error", http.StatusBadGateway)
@@ -182,6 +228,7 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 		"client", consentReq.ClientID,
 		"subject", consentReq.Subject,
 		"scopes", consentReq.RequestedScope,
+		"claims", tokenClaims,
 	)
 	http.Redirect(w, r, redirectTo, http.StatusFound)
 }

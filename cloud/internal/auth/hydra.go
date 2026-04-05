@@ -243,12 +243,19 @@ func (c *HydraClient) GetConsentRequest(challenge string) (*ConsentRequest, erro
 }
 
 // AcceptConsent accepts the consent challenge, granting requested scopes.
-func (c *HydraClient) AcceptConsent(challenge string, grantScope []string) (string, error) {
+// tokenClaims are injected into the access token (e.g., email, name).
+func (c *HydraClient) AcceptConsent(challenge string, grantScope []string, tokenClaims map[string]interface{}) (string, error) {
 	payload := map[string]interface{}{
 		"grant_scope":                 grantScope,
 		"remember":                    true,
 		"remember_for":                3600,
 		"grant_access_token_audience": []string{},
+	}
+	if len(tokenClaims) > 0 {
+		payload["session"] = map[string]interface{}{
+			"access_token": tokenClaims,
+			"id_token":     tokenClaims,
+		}
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

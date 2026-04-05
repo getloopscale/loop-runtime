@@ -28,14 +28,22 @@ type JWKSValidator struct {
 }
 
 // Claims represents the JWT claims extracted from a Hydra-issued token.
+// Custom claims (email, name) are injected via the consent handler's
+// session.access_token field and appear in the "ext" claim.
 type Claims struct {
 	Subject  string   `json:"sub"`
 	Email    string   `json:"email,omitempty"`
+	Name     string   `json:"name,omitempty"`
 	TenantID string   `json:"tenant_id,omitempty"`
 	Role     string   `json:"role,omitempty"`
 	Scope    string   `json:"scope,omitempty"`
 	Issuer   string   `json:"iss"`
 	Audience []string `json:"aud,omitempty"`
+	// Hydra puts custom session claims in "ext"
+	Ext      struct {
+		Email string `json:"email,omitempty"`
+		Name  string `json:"name,omitempty"`
+	} `json:"ext,omitempty"`
 	jwt.RegisteredClaims
 }
 

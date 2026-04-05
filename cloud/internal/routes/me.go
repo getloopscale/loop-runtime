@@ -37,11 +37,22 @@ func (h *MeHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Custom claims from consent handler are in "ext" (Hydra convention).
+	email := claims.Email
+	if email == "" {
+		email = claims.Ext.Email
+	}
+	name := claims.Name
+	if name == "" {
+		name = claims.Ext.Name
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"email":    claims.Email,
+		"email":    email,
+		"name":     name,
 		"team":     claims.TenantID,
 		"role":     claims.Role,
-		"plan":     "starter", // Default until billing is wired (Phase 5)
+		"plan":     "starter",
 		"user_id":  claims.Subject,
 	})
 }
