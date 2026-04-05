@@ -725,8 +725,9 @@ function installOryHydra(
 
   // Issuer URL must match the public-facing auth domain.
   // Always set — dev mode uses auth.dev.loopzero.example, prod uses auth.loopzero.example.
+  // Hydra issuer + OAuth2 endpoints served via cloud gateway (same-origin).
   const authDomain = config.domain || "dev.loopzero.example";
-  const issuerUrl = `https://auth.${authDomain}/`;
+  const issuerUrl = `https://cloud.${authDomain}/`;
 
   return new k8s.helm.v3.Release(
     "ory-hydra",
@@ -749,9 +750,9 @@ function installOryHydra(
                 urls: {
                   self: { issuer: issuerUrl },
                   // Cloud service handles login/consent/logout flows
-                  login: `https://api.${authDomain}/auth/login`,
-                  consent: `https://api.${authDomain}/auth/consent`,
-                  logout: `https://api.${authDomain}/auth/logout`,
+                  login: `https://cloud.${authDomain}/auth/login`,
+                  consent: `https://cloud.${authDomain}/auth/consent`,
+                  logout: `https://cloud.${authDomain}/auth/logout`,
                 },
                 serve: {
                   public: {
