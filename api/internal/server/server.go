@@ -97,6 +97,10 @@ type Config struct {
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 
+	// CORS — allow dashboard (cloud.{domain}) to call API (api.{domain}).
+	// Must be FIRST middleware so preflight OPTIONS get handled before auth.
+	r.Use(corsMiddleware(os.Getenv("CORS_ALLOWED_ORIGIN")))
+
 	// Middleware chain: metrics → otel-tracing → correlation-id → logging
 	// OtelHTTP MUST be before CorrelationID so span context is available,
 	// but CorrelationID remains independent (C2 — MEET-020).
@@ -400,4 +404,42 @@ func Run(cfg Config) error {
 	//   a) bgWg wait (up to 30s for background goroutines to finish)
 	//   b) dbAdapter.Close() (connection pool closed only after goroutines drain)
 	return srv.Shutdown(ctx)
+}
+
+// corsMiddleware adds CORS headers for the dashboard to call the API cross-origin.
+func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Allow specific origin or wildcard for dev
+			allowed := false
+			if allowedOrigin != "" && origin == allowedOrigin {
+				allowed = true
+			} else if allowedOrigin == "" {
+				// No restriction configured — allow any *.loopzero.example
+				allowed = true
+			}
+
+			if allowed {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Correlation-ID")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Max-Age", "86400")
+			}
+
+			// Handle preflight
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
