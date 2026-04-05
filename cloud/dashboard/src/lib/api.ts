@@ -58,21 +58,27 @@ export function getRefreshToken(): string | null {
   return refreshToken;
 }
 
-export function setAuth(token: string, refresh: string, email: string) {
+export function setAuth(token: string, refresh: string, email: string, name?: string) {
   accessToken = token;
   refreshToken = refresh;
-  // Email is non-sensitive — safe in localStorage for display after refresh
+  // Non-sensitive user info — safe in localStorage for display after refresh
   localStorage.setItem('loopzero_email', email);
+  if (name) localStorage.setItem('loopzero_name', name);
 }
 
 export function clearAuth() {
   accessToken = null;
   refreshToken = null;
   localStorage.removeItem('loopzero_email');
+  localStorage.removeItem('loopzero_name');
 }
 
 export function getEmail(): string | null {
   return localStorage.getItem('loopzero_email');
+}
+
+export function getName(): string | null {
+  return localStorage.getItem('loopzero_name');
 }
 
 export function isAuthenticated(): boolean {

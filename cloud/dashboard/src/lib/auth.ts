@@ -66,9 +66,9 @@ export async function handleCallback(code: string, state: string): Promise<boole
     const meResp = await fetch(`${getApiBase()}/v1/auth/me`, {
       headers: { Authorization: `Bearer ${data.access_token}` },
     });
-    const me = meResp.ok ? await meResp.json() : { email: '' };
+    const me = meResp.ok ? await meResp.json() : { email: '', name: '' };
 
-    setAuth(data.access_token, data.refresh_token || '', me.email || '');
+    setAuth(data.access_token, data.refresh_token || '', me.email || '', me.name || '');
     return true;
   } catch {
     return false;
