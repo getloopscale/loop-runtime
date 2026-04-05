@@ -7,6 +7,7 @@ import { TeamPage } from '@/pages/team';
 import { BillingPage } from '@/pages/billing';
 import { SettingsPage } from '@/pages/settings';
 import { ProfilePage } from '@/pages/profile';
+import { DomainsPage } from '@/pages/domains';
 import { LoginPage } from '@/pages/login';
 import { useRequireAuth } from '@/hooks/use-auth';
 
@@ -41,6 +42,7 @@ export default function App() {
               <Route path="/environments" element={<EnvironmentsPage />} />
               <Route path="/team" element={<TeamPage />} />
               <Route path="/billing" element={<BillingPage />} />
+              <Route path="/domains" element={<DomainsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/profile" element={<ProfilePage />} />
             </Routes>

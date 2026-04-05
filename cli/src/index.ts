@@ -43,6 +43,7 @@ import { TeamListCommand } from './commands/team-list';
 import { TeamAddCommand } from './commands/team-add';
 import { TeamRemoveCommand } from './commands/team-remove';
 import { TeamRoleCommand } from './commands/team-role';
+import { DomainAddCommand, DomainVerifyCommand, DomainStatusCommand, DomainListCommand, DomainRemoveCommand } from './commands/domain';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
@@ -1325,6 +1326,145 @@ export function createProgram(): Command {
         }
         return 1;
       });
+    });
+
+  // --- domain (MEET-2026-04-05-033: Custom Domains) ---
+  const domainCmd = program
+    .command('domain')
+    .description('Manage custom domains');
+
+  domainCmd
+    .command('add <domain>')
+    .description('Register a custom domain for an app')
+    .requiredOption('--project <name>', 'Project name')
+    .requiredOption('--app <name>', 'App name')
+    .requiredOption('--env <name>', 'Environment name')
+    .action(async (domain: string, opts: { project: string; app: string; env: string }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new DomainAddCommand({
+        getToken: () => configStore.getToken(),
+        createDomain: async (body) => apiClient.post('/api/v1/domains', body),
+        verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}),
+        getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`),
+        listDomains: async (params) => {
+          const qs = new URLSearchParams();
+          if (params.project) qs.set('project', params.project);
+          if (params.app) qs.set('app', params.app);
+          if (params.environment) qs.set('environment', params.environment);
+          return apiClient.get(`/api/v1/domains?${qs.toString()}`);
+        },
+        deleteDomain: async (d) => apiClient.del(`/api/v1/domains/${encodeURIComponent(d)}`),
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute(domain, { ...opts, json: globalOpts.json });
+    });
+
+  domainCmd
+    .command('verify <domain>')
+    .description('Verify DNS records for a custom domain')
+    .action(async (domain: string) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new DomainVerifyCommand({
+        getToken: () => configStore.getToken(),
+        createDomain: async (body) => apiClient.post('/api/v1/domains', body),
+        verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}),
+        getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`),
+        listDomains: async () => apiClient.get('/api/v1/domains'),
+        deleteDomain: async (d) => apiClient.del(`/api/v1/domains/${encodeURIComponent(d)}`),
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute(domain, { json: globalOpts.json });
+    });
+
+  domainCmd
+    .command('status <domain>')
+    .description('Show custom domain status and details')
+    .action(async (domain: string) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new DomainStatusCommand({
+        getToken: () => configStore.getToken(),
+        createDomain: async (body) => apiClient.post('/api/v1/domains', body),
+        verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}),
+        getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`),
+        listDomains: async () => apiClient.get('/api/v1/domains'),
+        deleteDomain: async (d) => apiClient.del(`/api/v1/domains/${encodeURIComponent(d)}`),
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute(domain, { json: globalOpts.json });
+    });
+
+  domainCmd
+    .command('list')
+    .description('List custom domains')
+    .option('--project <name>', 'Filter by project')
+    .option('--app <name>', 'Filter by app')
+    .option('--env <name>', 'Filter by environment')
+    .action(async (opts: { project?: string; app?: string; env?: string }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new DomainListCommand({
+        getToken: () => configStore.getToken(),
+        createDomain: async (body) => apiClient.post('/api/v1/domains', body),
+        verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}),
+        getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`),
+        listDomains: async (params) => {
+          const qs = new URLSearchParams();
+          if (params.project) qs.set('project', params.project);
+          if (params.app) qs.set('app', params.app);
+          if (params.environment) qs.set('environment', params.environment);
+          return apiClient.get(`/api/v1/domains?${qs.toString()}`);
+        },
+        deleteDomain: async (d) => apiClient.del(`/api/v1/domains/${encodeURIComponent(d)}`),
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute({ ...opts, json: globalOpts.json });
+    });
+
+  domainCmd
+    .command('remove <domain>')
+    .description('Remove a custom domain')
+    .option('--confirm <domain>', 'Confirm domain removal')
+    .action(async (domain: string, opts: { confirm?: string }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new DomainRemoveCommand({
+        getToken: () => configStore.getToken(),
+        createDomain: async (body) => apiClient.post('/api/v1/domains', body),
+        verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}),
+        getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`),
+        listDomains: async () => apiClient.get('/api/v1/domains'),
+        deleteDomain: async (d) => apiClient.del(`/api/v1/domains/${encodeURIComponent(d)}`),
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute(domain, { ...opts, json: globalOpts.json });
     });
 
   // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)

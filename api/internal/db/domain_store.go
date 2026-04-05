@@ -1,0 +1,374 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package db
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/loopzero/loopzero/api/internal/routes"
+)
+
+
+// PostgresDomainStore implements routes.DomainStore using PostgreSQL.
+type PostgresDomainStore struct {
+	DB DBTX
+}
+
+// Create inserts a new custom domain.
+// Returns ErrDomainExists if the domain is already registered (CODE-001 fix: atomic conflict detection).
+func (s *PostgresDomainStore) Create(ctx context.Context, d *routes.CustomDomain) error {
+	_, err := s.DB.Exec(ctx,
+		`INSERT INTO custom_domains (id, tenant_id, project_name, app_name, environment, domain, status, verification_token, tls_status, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now())`,
+		d.ID, d.TenantID, d.ProjectName, d.AppName, d.Environment, d.Domain, d.Status, d.VerificationToken, d.TLSStatus,
+	)
+	if err != nil {
+		var uv *UniqueViolationError
+		if errors.As(err, &uv) {
+			return routes.ErrDomainExists
+		}
+		return fmt.Errorf("domain store: create: %w", err)
+	}
+	return nil
+}
+
+// GetByDomain retrieves a domain by its FQDN (globally unique).
+func (s *PostgresDomainStore) GetByDomain(ctx context.Context, domain string) (*routes.CustomDomain, error) {
+	return s.scanOne(ctx,
+		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
+		        verification_token, verified_at, tls_status, tls_expires_at,
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		 FROM custom_domains WHERE domain = $1`,
+		domain,
+	)
+}
+
+// GetByDomainAndTenant retrieves a domain by FQDN filtered by tenant (tenant isolation).
+func (s *PostgresDomainStore) GetByDomainAndTenant(ctx context.Context, domain, tenantID string) (*routes.CustomDomain, error) {
+	return s.scanOne(ctx,
+		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
+		        verification_token, verified_at, tls_status, tls_expires_at,
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		 FROM custom_domains WHERE domain = $1 AND tenant_id = $2`,
+		domain, tenantID,
+	)
+}
+
+// ListByTenant returns domains for a tenant with optional filters.
+func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string, filter routes.DomainListFilter) ([]routes.CustomDomain, int, error) {
+	var conditions []string
+	var args []any
+	argIdx := 1
+
+	conditions = append(conditions, fmt.Sprintf("tenant_id = $%d", argIdx))
+	args = append(args, tenantID)
+	argIdx++
+
+	if filter.Project != "" {
+		conditions = append(conditions, fmt.Sprintf("project_name = $%d", argIdx))
+		args = append(args, filter.Project)
+		argIdx++
+	}
+	if filter.App != "" {
+		conditions = append(conditions, fmt.Sprintf("app_name = $%d", argIdx))
+		args = append(args, filter.App)
+		argIdx++
+	}
+	if filter.Environment != "" {
+		conditions = append(conditions, fmt.Sprintf("environment = $%d", argIdx))
+		args = append(args, filter.Environment)
+		argIdx++
+	}
+
+	where := strings.Join(conditions, " AND ")
+
+	// Count total
+	var total int
+	countRow := s.DB.QueryRow(ctx, "SELECT COUNT(*) FROM custom_domains WHERE "+where, args...)
+	if err := countRow.Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("domain store: count: %w", err)
+	}
+
+	// Fetch with limit/offset
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+
+	query := fmt.Sprintf(
+		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
+		        verification_token, verified_at, tls_status, tls_expires_at,
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		 FROM custom_domains WHERE %s
+		 ORDER BY created_at DESC
+		 LIMIT $%d OFFSET $%d`,
+		where, argIdx, argIdx+1,
+	)
+	args = append(args, limit, filter.Offset)
+
+	rows, err := s.DB.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("domain store: list: %w", err)
+	}
+	defer rows.Close()
+
+	var results []routes.CustomDomain
+	for rows.Next() {
+		d, err := scanDomain(rows)
+		if err != nil {
+			return nil, 0, fmt.Errorf("domain store: list scan: %w", err)
+		}
+		results = append(results, *d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("domain store: list rows: %w", err)
+	}
+
+	if results == nil {
+		results = []routes.CustomDomain{}
+	}
+	return results, total, nil
+}
+
+// UpdateStatus sets the status of a domain.
+func (s *PostgresDomainStore) UpdateStatus(ctx context.Context, domain, status string) error {
+	result, err := s.DB.Exec(ctx,
+		"UPDATE custom_domains SET status = $1, updated_at = now() WHERE domain = $2",
+		status, domain,
+	)
+	if err != nil {
+		return fmt.Errorf("domain store: update status: %w", err)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("domain store: domain not found: %s", domain)
+	}
+	return nil
+}
+
+// UpdateVerified transitions a domain to verified status.
+func (s *PostgresDomainStore) UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error {
+	result, err := s.DB.Exec(ctx,
+		"UPDATE custom_domains SET status = 'verified', verified_at = $1, updated_at = now() WHERE domain = $2",
+		verifiedAt, domain,
+	)
+	if err != nil {
+		return fmt.Errorf("domain store: update verified: %w", err)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("domain store: domain not found: %s", domain)
+	}
+	return nil
+}
+
+// UpdateTLS updates the TLS status and expiry for a domain.
+func (s *PostgresDomainStore) UpdateTLS(ctx context.Context, domain, tlsStatus string, expiresAt *time.Time) error {
+	result, err := s.DB.Exec(ctx,
+		"UPDATE custom_domains SET tls_status = $1, tls_expires_at = $2, updated_at = now() WHERE domain = $3",
+		tlsStatus, expiresAt, domain,
+	)
+	if err != nil {
+		return fmt.Errorf("domain store: update tls: %w", err)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("domain store: domain not found: %s", domain)
+	}
+	return nil
+}
+
+// UpdateFailure transitions a domain to failed with a reason.
+func (s *PostgresDomainStore) UpdateFailure(ctx context.Context, domain, status, reason string) error {
+	result, err := s.DB.Exec(ctx,
+		"UPDATE custom_domains SET status = $1, failure_reason = $2, updated_at = now() WHERE domain = $3",
+		status, reason, domain,
+	)
+	if err != nil {
+		return fmt.Errorf("domain store: update failure: %w", err)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("domain store: domain not found: %s", domain)
+	}
+	return nil
+}
+
+// Delete removes a domain row permanently.
+func (s *PostgresDomainStore) Delete(ctx context.Context, domain string) error {
+	result, err := s.DB.Exec(ctx,
+		"DELETE FROM custom_domains WHERE domain = $1",
+		domain,
+	)
+	if err != nil {
+		return fmt.Errorf("domain store: delete: %w", err)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("domain store: domain not found: %s", domain)
+	}
+	return nil
+}
+
+// --- Methods for background services (DomainProvisioner + DomainHealthChecker) ---
+
+// FindVerified returns domains in "verified" status ready for provisioning.
+func (s *PostgresDomainStore) FindVerified(ctx context.Context) ([]routes.CustomDomain, error) {
+	return s.findByStatus(ctx, "verified")
+}
+
+// FindRemoving returns domains in "removing" status ready for cleanup.
+func (s *PostgresDomainStore) FindRemoving(ctx context.Context) ([]routes.CustomDomain, error) {
+	return s.findByStatus(ctx, "removing")
+}
+
+// FindPendingForAutoVerify returns pending_verification domains (for background auto-verify).
+func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context) ([]routes.CustomDomain, error) {
+	return s.findByStatus(ctx, "pending_verification")
+}
+
+// FindActiveForCNAMECheck returns active domains due for weekly CNAME re-verification.
+func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]routes.CustomDomain, error) {
+	rows, err := s.DB.Query(ctx,
+		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
+		        verification_token, verified_at, tls_status, tls_expires_at,
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		 FROM custom_domains
+		 WHERE status = 'active' AND (last_cname_check IS NULL OR last_cname_check < $1)
+		 ORDER BY last_cname_check ASC NULLS FIRST
+		 LIMIT 50
+		 FOR UPDATE SKIP LOCKED`,
+		staleAfter,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("domain store: find active for CNAME check: %w", err)
+	}
+	defer rows.Close()
+	return scanDomains(rows)
+}
+
+// FindStalePending returns domains in pending_verification older than maxAge.
+func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.Duration) ([]routes.CustomDomain, error) {
+	cutoff := time.Now().UTC().Add(-maxAge)
+	rows, err := s.DB.Query(ctx,
+		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
+		        verification_token, verified_at, tls_status, tls_expires_at,
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		 FROM custom_domains
+		 WHERE status = 'pending_verification' AND created_at < $1
+		 ORDER BY created_at ASC
+		 LIMIT 50`,
+		cutoff,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("domain store: find stale pending: %w", err)
+	}
+	defer rows.Close()
+	return scanDomains(rows)
+}
+
+// UpdateCNAMECheck records the result of a CNAME re-verification check.
+func (s *PostgresDomainStore) UpdateCNAMECheck(ctx context.Context, domain string, checkTime time.Time, consecutiveFailures int) error {
+	result, err := s.DB.Exec(ctx,
+		"UPDATE custom_domains SET last_cname_check = $1, cname_consecutive_failures = $2, updated_at = now() WHERE domain = $3",
+		checkTime, consecutiveFailures, domain,
+	)
+	if err != nil {
+		return fmt.Errorf("domain store: update CNAME check: %w", err)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("domain store: domain not found: %s", domain)
+	}
+	return nil
+}
+
+// ListActiveByApp returns active custom domains for a specific app (used by manifest renderer).
+func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]routes.CustomDomain, error) {
+	rows, err := s.DB.Query(ctx,
+		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
+		        verification_token, verified_at, tls_status, tls_expires_at,
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		 FROM custom_domains
+		 WHERE tenant_id = $1 AND project_name = $2 AND app_name = $3 AND environment = $4
+		   AND status IN ('active', 'provisioning')
+		 ORDER BY domain`,
+		tenantID, project, app, env,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("domain store: list active by app: %w", err)
+	}
+	defer rows.Close()
+	return scanDomains(rows)
+}
+
+func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) ([]routes.CustomDomain, error) {
+	// CODE-002 fix: FOR UPDATE SKIP LOCKED prevents double-processing in HA deployments.
+	// If two API leader instances run briefly during failover, each picks different rows.
+	// Note: FOR UPDATE SKIP LOCKED works without explicit BEGIN/COMMIT in pgx —
+	// each pool.Query runs in an implicit transaction.
+	rows, err := s.DB.Query(ctx,
+		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
+		        verification_token, verified_at, tls_status, tls_expires_at,
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		 FROM custom_domains
+		 WHERE status = $1
+		 ORDER BY created_at ASC
+		 LIMIT 50
+		 FOR UPDATE SKIP LOCKED`,
+		status,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("domain store: find by status %s: %w", status, err)
+	}
+	defer rows.Close()
+	return scanDomains(rows)
+}
+
+func scanDomains(rows Rows) ([]routes.CustomDomain, error) {
+	var results []routes.CustomDomain
+	for rows.Next() {
+		d, err := scanDomain(rows)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, *d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("domain store: rows error: %w", err)
+	}
+	if results == nil {
+		results = []routes.CustomDomain{}
+	}
+	return results, nil
+}
+
+// --- Internal helpers ---
+
+func (s *PostgresDomainStore) scanOne(ctx context.Context, query string, args ...any) (*routes.CustomDomain, error) {
+	rows, err := s.DB.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("domain store: query: %w", err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("domain store: rows error: %w", err)
+		}
+		return nil, nil
+	}
+
+	return scanDomain(rows)
+}
+
+func scanDomain(rows Rows) (*routes.CustomDomain, error) {
+	var d routes.CustomDomain
+	if err := rows.Scan(
+		&d.ID, &d.TenantID, &d.ProjectName, &d.AppName, &d.Environment, &d.Domain, &d.Status,
+		&d.VerificationToken, &d.VerifiedAt, &d.TLSStatus, &d.TLSExpiresAt,
+		&d.FailureReason, &d.LastCNAMECheck, &d.CNAMEConsecutiveFailures, &d.CreatedAt, &d.UpdatedAt,
+	); err != nil {
+		return nil, fmt.Errorf("domain store: scan: %w", err)
+	}
+	return &d, nil
+}

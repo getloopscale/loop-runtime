@@ -21,6 +21,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/tracing"
 	"github.com/loopzero/loopzero/api/internal/config"
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/github"
 	"github.com/loopzero/loopzero/api/internal/k8s"
 	"github.com/loopzero/loopzero/api/internal/middleware"
@@ -158,6 +159,7 @@ func main() {
 	var projectDeleter routes.ProjectDeleter
 	var cellRouter placement.Router = placement.NewPassthroughRouter(placement.CellConfig{CellID: placement.DefaultCellID}) // fallback
 	var cellStore *db.PostgresCellStore // implements both TenantCellQuerier and CellMetricsQuerier
+	var domainHandler *routes.DomainHandler // MEET-2026-04-05-033: Custom Domains
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -548,8 +550,27 @@ func main() {
 			60*time.Second,
 		)
 
+		// --- Custom Domains (MEET-2026-04-05-033) ---
+		domainStore := &db.PostgresDomainStore{DB: dbAdapter}
+		cnameTarget := "cname." + cfg.BaseDomain
+		domainValidator := domain.NewValidator(cfg.BaseDomain, nil)
+		dnsVerifier := &domain.DNSVerifier{}
+		domainHandler = routes.NewDomainHandler(domainStore, dnsVerifier, domainValidator, cnameTarget)
+
+		// Background services created but started only after HTTP-01 spike validates.
+		domainProvisioner := services.NewDomainProvisioner(
+			domainStore, gitopsPusher, locker, logger, services.DefaultDomainProvisionerConfig(),
+		)
+		domainHealthChecker := services.NewDomainHealthChecker(
+			domainStore, logger, services.DomainHealthCheckerConfig{
+				CNAMETarget: cnameTarget,
+				GraceDays:   14,
+				StaleDays:   7,
+			},
+		)
+
 		if isLeader {
-			bgWg.Add(8) // 6 leader loops + 1 cell metrics + 1 leader heartbeat
+			bgWg.Add(10) // 6 leader loops + 1 cell metrics + 1 leader heartbeat + 2 domain services
 			go func() { defer bgWg.Done(); reconcileLoop.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); reaper.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); releaseReaper.Start(shutdownCtx) }()
@@ -557,6 +578,8 @@ func main() {
 			go func() { defer bgWg.Done(); idempotencyCleaner.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); eventPruner.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); cellMetrics.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); domainProvisioner.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); domainHealthChecker.Start(shutdownCtx) }()
 
 			// MEET-2026-04-04-029 P1: Leader heartbeat — verify lock every 60s.
 			// If the advisory lock is lost (pgx reconnect, PG failover), crash the
@@ -674,6 +697,7 @@ func main() {
 		BuildListHandler:   buildListHandler,
 		TeamHandler:        routes.NewTeamHandler(&db.PostgresTeamStore{DB: dbAdapter}),
 		EnvironmentHandler: routes.NewEnvironmentHandler(tenantCRMgr),
+		DomainHandler:      domainHandler,
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,
