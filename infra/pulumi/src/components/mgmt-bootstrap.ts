@@ -559,6 +559,12 @@ function installOryKratos(
                 base_url: `https://accounts.${config.domain}/`,
               },
             },
+            // Cookies must be accessible across subdomains (dashboard, accounts, api)
+            // so the Kratos session cookie is sent with fetch requests from the dashboard.
+            cookies: {
+              domain: `.${config.domain}`,
+              same_site: "Lax",
+            },
             // Allow return_to URLs from dashboard and API (consent handler).
             selfservice: {
               default_browser_return_url: `https://dashboard.${config.domain}/`,
