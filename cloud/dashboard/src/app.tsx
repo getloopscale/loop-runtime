@@ -13,8 +13,20 @@ import { RecoveryPage } from '@/pages/recovery';
 import { AccountPage } from '@/pages/account';
 import { ErrorPage } from '@/pages/error';
 import { ProfilePage } from '@/pages/profile';
+import { useRequireAuth } from '@/hooks/use-auth';
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const authed = useRequireAuth();
+
+  // Block rendering until auth is verified — prevents content flash
+  if (!authed) {
+    return (
+      <div className="dark bg-surface-0 min-h-screen text-white flex items-center justify-center">
+        <div className="text-white/20 text-sm">Redirecting to login...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="dark bg-surface-0 min-h-screen text-white">
       <Sidebar />
