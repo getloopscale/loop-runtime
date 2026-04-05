@@ -3,9 +3,11 @@
 
 import { getApiBase, setAuth } from './api';
 
-// OAuth2 endpoints served via cloud gateway (same origin — no CORS issues).
-// Traefik routes /oauth2/* → Hydra, /self-service/* → Kratos.
-const AUTH_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
+// Hydra endpoints:
+// - Authorize: browser redirect to auth.{domain} (no CORS needed)
+// - Token: POST to same origin via gateway (avoids CORS — Hydra CORS is unreliable)
+const HYDRA_URL = import.meta.env.VITE_AUTH_URL || 'http://localhost:4444';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
 const CLIENT_ID = 'loopzero-cli';
 
 function getRedirectUri(): string {
@@ -31,7 +33,8 @@ export async function startPKCELogin(): Promise<void> {
     state,
   });
 
-  window.location.href = `${AUTH_URL}/oauth2/auth?${params}`;
+  // Browser redirect — goes to Hydra directly (no CORS needed for redirects)
+  window.location.href = `${HYDRA_URL}/oauth2/auth?${params}`;
 }
 
 // Handle callback — exchange code for tokens
@@ -48,7 +51,8 @@ export async function handleCallback(code: string, state: string): Promise<boole
   }
 
   try {
-    const resp = await fetch(`${AUTH_URL}/oauth2/token`, {
+    // Token exchange via same-origin gateway (cloud.dev/oauth2/token → Hydra)
+    const resp = await fetch(`${API_URL}/oauth2/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({

@@ -725,9 +725,9 @@ function installOryHydra(
 
   // Issuer URL must match the public-facing auth domain.
   // Always set — dev mode uses auth.dev.loopzero.example, prod uses auth.loopzero.example.
-  // Hydra issuer + OAuth2 endpoints served via cloud gateway (same-origin).
+  // Hydra issuer URL must match the browser-facing domain where Hydra is reachable.
   const authDomain = config.domain || "dev.loopzero.example";
-  const issuerUrl = `https://cloud.${authDomain}/`;
+  const issuerUrl = `https://auth.${authDomain}/`;
 
   return new k8s.helm.v3.Release(
     "ory-hydra",
@@ -750,18 +750,21 @@ function installOryHydra(
                 urls: {
                   self: { issuer: issuerUrl },
                   // Cloud service handles login/consent/logout flows
-                  login: `https://cloud.${authDomain}/auth/login`,
-                  consent: `https://cloud.${authDomain}/auth/consent`,
-                  logout: `https://cloud.${authDomain}/auth/logout`,
+                  // Consent handler is at api.{domain}/auth/* via API gateway
+                  login: `https://api.${authDomain}/auth/login`,
+                  consent: `https://api.${authDomain}/auth/consent`,
+                  logout: `https://api.${authDomain}/auth/logout`,
                 },
                 serve: {
                   public: {
                     cors: {
                       enabled: true,
                       allowed_origins: [
-                        `https://dashboard.${authDomain}`,
-                        `https://*.${authDomain}`,
+                        `https://cloud.${authDomain}`,
                       ],
+                      allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                      allowed_headers: ["Authorization", "Content-Type", "Cookie"],
+                      allow_credentials: true,
                     },
                   },
                 },
@@ -1153,6 +1156,7 @@ function installCloudService(
         HYDRA_ADMIN_URL: `http://ory-hydra-admin.${PLATFORM_NAMESPACE}.svc.cluster.local:4445`,
         HYDRA_CLIENT_ID: "loopzero-cli",
         ENGINE_API_URL: `http://loopzero-api.${PLATFORM_NAMESPACE}.svc.cluster.local:8080`,
+        // Dashboard URL — used for OAuth2 redirect_uri registration
         BILLING_RETURN_URL: `https://cloud.${config.domain || "dev.loopzero.example"}`,
         KRATOS_INTERNAL_URL: `http://ory-kratos-public.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
       },
