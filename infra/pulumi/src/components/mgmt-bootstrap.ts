@@ -553,7 +553,8 @@ function installOryKratos(
                   },
                 }
               : {}),
-            // MEET-2026-04-04-031: Selfservice URLs must point to dashboard (not localhost).
+            // MEET-2026-04-04-031: Single selfservice block with URLs + OIDC providers.
+            // CRITICAL: Must be ONE block — JS spread operator overwrites duplicate keys.
             selfservice: {
               default_browser_return_url: `https://dashboard.${config.domain}/`,
               flows: {
@@ -565,12 +566,9 @@ function installOryKratos(
                 error: { ui_url: `https://dashboard.${config.domain}/error` },
                 logout: { after: { default_browser_return_url: `https://dashboard.${config.domain}/login` } },
               },
-            },
-            // Social login providers — only override when secrets are configured.
-            // When not set, falls back to values.yaml placeholders (REPLACE_VIA_PULUMI).
-            ...(config.githubOAuthClientId || config.googleOAuthClientId
-              ? {
-                  selfservice: {
+              // Social login providers — only included when secrets are configured.
+              ...(config.githubOAuthClientId || config.googleOAuthClientId
+                ? {
                     methods: {
                       oidc: {
                         enabled: true,
@@ -606,9 +604,9 @@ function installOryKratos(
                         },
                       },
                     },
-                  },
-                }
-              : {}),
+                  }
+                : {}),
+            },
           },
         },
         resources: {
