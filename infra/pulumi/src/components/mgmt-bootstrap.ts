@@ -553,10 +553,19 @@ function installOryKratos(
                   },
                 }
               : {}),
-            // MEET-2026-04-04-031: Single selfservice block with URLs + OIDC providers.
-            // CRITICAL: Must be ONE block — JS spread operator overwrites duplicate keys.
+            // Kratos must know its public URL for CSRF, return_to validation, etc.
+            serve: {
+              public: {
+                base_url: `https://accounts.${config.domain}/`,
+              },
+            },
+            // Allow return_to URLs from dashboard and API (consent handler).
             selfservice: {
               default_browser_return_url: `https://dashboard.${config.domain}/`,
+              allowed_return_urls: [
+                `https://dashboard.${config.domain}/`,
+                `https://api.${config.domain}/`,
+              ],
               flows: {
                 login: { ui_url: `https://dashboard.${config.domain}/login` },
                 registration: { ui_url: `https://dashboard.${config.domain}/register` },
@@ -573,6 +582,7 @@ function installOryKratos(
                       oidc: {
                         enabled: true,
                         config: {
+                          base_redirect_uri: `https://accounts.${config.domain}/`,
                           providers: [
                             ...(config.githubOAuthClientId
                               ? [
