@@ -1144,8 +1144,10 @@ function installCloudService(
       data: {
         CLOUD_LISTEN_ADDR: ":13002",
         LOOPZERO_ENV: config.environment || "dev",
-        // Browser-accessible URLs (used for redirects in consent/login flows)
-        KRATOS_PUBLIC_URL: `https://accounts.${config.domain || "dev.loopzero.example"}`,
+        // Kratos public URL — served via API gateway (same domain, no CORS).
+        // MEET-2026-04-05-032 Option D: consent handler redirects browser to
+        // api.{domain}/self-service/* which Traefik routes to Kratos.
+        KRATOS_PUBLIC_URL: `https://api.${config.domain || "dev.loopzero.example"}`,
         HYDRA_PUBLIC_URL: `https://auth.${config.domain || "dev.loopzero.example"}`,
         // Internal URLs (server-to-server, never exposed to browser)
         KRATOS_ADMIN_URL: `http://ory-kratos-admin.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
