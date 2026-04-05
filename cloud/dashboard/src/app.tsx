@@ -12,6 +12,7 @@ import { VerificationPage } from '@/pages/verification';
 import { RecoveryPage } from '@/pages/recovery';
 import { AccountPage } from '@/pages/account';
 import { ErrorPage } from '@/pages/error';
+import { ProfilePage } from '@/pages/profile';
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -49,6 +50,7 @@ export default function App() {
                 <Route path="/billing" element={<BillingPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/account" element={<AccountPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
               </Routes>
             </DashboardLayout>
           }

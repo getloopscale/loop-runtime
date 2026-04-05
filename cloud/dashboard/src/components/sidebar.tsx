@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   LayoutDashboard,
@@ -9,8 +9,11 @@ import {
   Settings,
   Terminal,
   Zap,
+  User,
+  LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { clearAuth, getEmail } from '@/lib/api';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Overview' },
@@ -19,7 +22,32 @@ const navItems = [
   { to: '/team', icon: Users, label: 'Team' },
   { to: '/billing', icon: CreditCard, label: 'Billing' },
   { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/profile', icon: User, label: 'Profile' },
 ];
+
+function UserFooter() {
+  const navigate = useNavigate();
+  const email = getEmail();
+
+  const handleLogout = () => {
+    clearAuth();
+    navigate('/login', { replace: true });
+  };
+
+  return (
+    <div className="mx-3 mb-4 flex items-center justify-between rounded-lg border border-white/[0.06] bg-surface-1 px-3 py-2.5">
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/10 flex-shrink-0">
+          <User className="h-3 w-3 text-accent/60" />
+        </div>
+        <span className="text-xs text-white/40 truncate">{email || 'User'}</span>
+      </div>
+      <button onClick={handleLogout} className="p-1 text-white/20 hover:text-white/50 transition-colors" title="Sign out">
+        <LogOut className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
 
 export function Sidebar() {
   return (
@@ -68,7 +96,7 @@ export function Sidebar() {
       </nav>
 
       {/* CLI hint */}
-      <div className="mx-3 mb-4 rounded-lg border border-white/[0.06] bg-surface-1 p-3">
+      <div className="mx-3 mb-3 rounded-lg border border-white/[0.06] bg-surface-1 p-3">
         <div className="flex items-center gap-2 text-xs text-white/30">
           <Terminal className="h-3.5 w-3.5" />
           <span className="font-mono">loopzero deploy</span>
@@ -77,6 +105,9 @@ export function Sidebar() {
           CLI-first. Deploy from your terminal.
         </p>
       </div>
+
+      {/* User + Logout */}
+      <UserFooter />
     </aside>
   );
 }
