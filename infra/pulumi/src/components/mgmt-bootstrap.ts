@@ -566,19 +566,22 @@ function installOryKratos(
               same_site: "Lax",
             },
             // Allow return_to URLs from dashboard and API (consent handler).
+            // MEET-2026-04-05-032: Kratos UI at accounts.{domain} (same-origin, no CORS).
+            // Dashboard is a pure PKCE client — never renders Kratos flows.
             selfservice: {
               default_browser_return_url: `https://dashboard.${config.domain}/`,
               allowed_return_urls: [
                 `https://dashboard.${config.domain}/`,
                 `https://api.${config.domain}/`,
+                `https://accounts.${config.domain}/`,
               ],
               flows: {
-                login: { ui_url: `https://dashboard.${config.domain}/login` },
-                registration: { ui_url: `https://dashboard.${config.domain}/register` },
-                verification: { ui_url: `https://dashboard.${config.domain}/verification`, enabled: true },
-                recovery: { ui_url: `https://dashboard.${config.domain}/recovery`, enabled: true },
-                settings: { ui_url: `https://dashboard.${config.domain}/account` },
-                error: { ui_url: `https://dashboard.${config.domain}/error` },
+                login: { ui_url: `https://accounts.${config.domain}/login` },
+                registration: { ui_url: `https://accounts.${config.domain}/registration` },
+                verification: { ui_url: `https://accounts.${config.domain}/verification`, enabled: true },
+                recovery: { ui_url: `https://accounts.${config.domain}/recovery`, enabled: true },
+                settings: { ui_url: `https://accounts.${config.domain}/settings` },
+                error: { ui_url: `https://accounts.${config.domain}/error` },
                 logout: { after: { default_browser_return_url: `https://dashboard.${config.domain}/login` } },
               },
               // Social login providers — only included when secrets are configured.
@@ -628,6 +631,66 @@ function installOryKratos(
         resources: {
           requests: { cpu: "50m", memory: "128Mi" },
           limits: { cpu: "300m", memory: "256Mi" },
+        },
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // MEET-2026-04-05-032: Kratos Self-Service UI — renders login/registration/recovery forms.
+  // Deployed at accounts.{domain} (same origin as Kratos API — no CORS issues).
+  // Uses ory/kratos-selfservice-ui-node (official, maintained by Ory).
+  const kratosUiImage = "oryd/kratos-selfservice-ui-node:v1.3.0";
+
+  new k8s.core.v1.Service(
+    "kratos-ui",
+    {
+      metadata: { name: "kratos-ui", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        selector: { app: "kratos-ui" },
+        ports: [{ name: "http", port: 3000, targetPort: 3000 }],
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  new k8s.apps.v1.Deployment(
+    "kratos-ui",
+    {
+      metadata: { name: "kratos-ui", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        replicas: 1,
+        selector: { matchLabels: { app: "kratos-ui" } },
+        template: {
+          metadata: { labels: { app: "kratos-ui" } },
+          spec: {
+            containers: [{
+              name: "ui",
+              image: kratosUiImage,
+              ports: [{ containerPort: 3000 }],
+              env: [
+                // Kratos public URL (internal — same cluster, no TLS needed)
+                { name: "KRATOS_PUBLIC_URL", value: `http://ory-kratos-public.${PLATFORM_NAMESPACE}.svc.cluster.local:80` },
+                // Hydra admin URL (for consent/login challenge resolution)
+                { name: "HYDRA_ADMIN_URL", value: `http://ory-hydra-admin.${PLATFORM_NAMESPACE}.svc.cluster.local:4445` },
+                // Base URL for CSRF cookie domain
+                { name: "KRATOS_BROWSER_URL", value: `https://accounts.${config.domain}` },
+                { name: "PORT", value: "3000" },
+                { name: "SECURITY_MODE", value: "" },
+                { name: "COOKIE_SECRET", value: "loopzero-kratos-ui-cookie-secret-32chars!" },
+                { name: "CSRF_COOKIE_NAME", value: "loopzero_csrf" },
+              ],
+              resources: {
+                requests: { cpu: "20m", memory: "32Mi" },
+                limits: { cpu: "100m", memory: "64Mi" },
+              },
+              readinessProbe: {
+                httpGet: { path: "/health/alive", port: 3000 },
+                initialDelaySeconds: 5,
+                periodSeconds: 10,
+              },
+            }],
+          },
         },
       },
     },
@@ -2043,8 +2106,9 @@ const PLATFORM_INGRESS_ROUTES = [
   // User-facing URL is auth.{domain}, no internal technology names exposed.
   // OAuth2 authorization server — browser-accessible for PKCE/consent flows.
   { subdomain: "auth", serviceName: "ory-hydra-public", servicePort: 4444 },
-  // Identity management — browser-accessible for login/signup/recovery UI.
-  { subdomain: "accounts", serviceName: "ory-kratos-public", servicePort: 80 },
+  // Identity management — Kratos Self-Service UI (login/signup/recovery).
+  // MEET-2026-04-05-032: kratos-ui renders forms; ory-kratos-public is the API (same origin).
+  { subdomain: "accounts", serviceName: "kratos-ui", servicePort: 3000 },
 ] as const;
 
 /**
