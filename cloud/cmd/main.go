@@ -38,9 +38,18 @@ func main() {
 
 	// Register CLI OAuth2 client in Hydra (idempotent — safe on every startup).
 	// Include both localhost (dev) and production dashboard callback URLs.
+	// Register redirect URIs for PKCE callback.
+	// Include localhost (dev) and dashboard URL (which may be served at a different domain).
+	// The dashboard uses window.location.origin for redirect_uri, so we register both
+	// the dashboard subdomain and the API gateway domain where it may also be served.
 	redirectURIs := []string{
 		"http://localhost:9876/auth",
 		cfg.BillingReturnURL + "/login/callback",
+	}
+	// If Kratos public URL differs from BillingReturnURL, the dashboard may be
+	// served at the Kratos domain (Option D: API gateway). Register that too.
+	if cfg.KratosPublicURL != "" && cfg.KratosPublicURL != cfg.BillingReturnURL {
+		redirectURIs = append(redirectURIs, cfg.KratosPublicURL+"/login/callback")
 	}
 	if err := hydra.RegisterClient(redirectURIs); err != nil {
 		logger.Warn("failed to register OAuth2 client (Hydra may not be ready yet)", "error", err)
