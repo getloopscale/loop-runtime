@@ -9,10 +9,19 @@ import { SettingsPage } from '@/pages/settings';
 import { ProfilePage } from '@/pages/profile';
 import { LoginPage } from '@/pages/login';
 import { useRequireAuth } from '@/hooks/use-auth';
+import { Loader2 } from 'lucide-react';
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const authed = useRequireAuth();
-  if (!authed) return null; // Redirect happening — render nothing
+  const session = useRequireAuth();
+
+  // Loading session check
+  if (session === null) {
+    return (
+      <div className="dark bg-surface-0 min-h-screen text-white flex items-center justify-center">
+        <Loader2 className="h-6 w-6 text-accent animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="dark bg-surface-0 min-h-screen text-white">
@@ -28,11 +37,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/login/callback" element={<LoginPage />} />
-
-        {/* Protected routes */}
         <Route path="*" element={
           <DashboardLayout>
             <Routes>

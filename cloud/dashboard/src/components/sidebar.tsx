@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   LayoutDashboard,
@@ -13,7 +13,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { clearAuth, getEmail } from '@/lib/api';
+import { logout } from '@/lib/auth';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Overview' },
@@ -26,13 +26,7 @@ const navItems = [
 ];
 
 function UserFooter() {
-  const navigate = useNavigate();
-  const email = getEmail();
-
-  const handleLogout = () => {
-    clearAuth();
-    navigate('/login', { replace: true });
-  };
+  const email = ''; // Will be populated by session in future
 
   return (
     <div className="mx-3 mb-4 flex items-center justify-between rounded-lg border border-white/[0.06] bg-surface-1 px-3 py-2.5">
@@ -42,7 +36,7 @@ function UserFooter() {
         </div>
         <span className="text-xs text-white/40 truncate">{email || 'User'}</span>
       </div>
-      <button onClick={handleLogout} className="p-1 text-white/20 hover:text-white/50 transition-colors" title="Sign out">
+      <button onClick={logout} className="p-1 text-white/20 hover:text-white/50 transition-colors" title="Sign out">
         <LogOut className="h-3.5 w-3.5" />
       </button>
     </div>

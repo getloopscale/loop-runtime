@@ -1,18 +1,23 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { isAuthenticated } from '@/lib/api';
+import { getSession, type Session } from '@/lib/auth';
 
-// Redirects to /login if not authenticated.
-// Returns false during redirect to prevent content flash.
-export function useRequireAuth(): boolean {
+/** Check Kratos session. Redirects to /login if not authenticated. */
+export function useRequireAuth(): Session | null {
   const navigate = useNavigate();
-  const authed = isAuthenticated();
+  const [session, setSession] = useState<Session | null>(null);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    if (!authed) {
-      navigate('/login', { replace: true });
-    }
-  }, [authed, navigate]);
+    getSession().then(s => {
+      setSession(s);
+      setChecked(true);
+      if (!s) {
+        navigate('/login', { replace: true });
+      }
+    });
+  }, [navigate]);
 
-  return authed;
+  if (!checked) return null; // Still loading
+  return session;
 }
