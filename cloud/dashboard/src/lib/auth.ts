@@ -3,7 +3,9 @@
 
 import { getApiBase, setAuth } from './api';
 
-const AUTH_URL = import.meta.env.VITE_AUTH_URL || 'http://localhost:4444';
+// OAuth2 endpoints served via cloud gateway (same origin — no CORS issues).
+// Traefik routes /oauth2/* → Hydra, /self-service/* → Kratos.
+const AUTH_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
 const CLIENT_ID = 'loopzero-cli';
 
 function getRedirectUri(): string {
