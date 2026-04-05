@@ -43,6 +43,7 @@ export async function handleCallback(code: string, state: string): Promise<boole
   sessionStorage.removeItem('pkce_verifier');
 
   if (!verifier || state !== savedState) {
+    console.error('[auth] PKCE validation failed:', { hasVerifier: !!verifier, stateMatch: state === savedState, savedState: savedState?.substring(0, 8), receivedState: state?.substring(0, 8) });
     return false;
   }
 
@@ -59,7 +60,11 @@ export async function handleCallback(code: string, state: string): Promise<boole
       }),
     });
 
-    if (!resp.ok) return false;
+    if (!resp.ok) {
+      const errBody = await resp.text().catch(() => '');
+      console.error('[auth] Token exchange failed:', resp.status, errBody.substring(0, 200));
+      return false;
+    }
 
     const data = await resp.json();
     if (!data.access_token) return false;

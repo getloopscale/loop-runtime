@@ -1,16 +1,12 @@
-// Real API client for the LoopZero Cloud service.
-// All dashboard API calls go through this client with real authentication.
+// API client for the LoopZero Cloud dashboard.
 //
-// Security: access and refresh tokens are kept in memory only (not localStorage)
-// to prevent XSS exfiltration. Page refresh requires re-authentication via PKCE
-// (Hydra session makes this transparent — no password re-entry).
+// Token storage strategy:
+// - Access token in sessionStorage (survives redirects, cleared on tab close)
+// - NOT localStorage (XSS risk for long-lived tokens)
+// - NOT in-memory (lost on OAuth redirects)
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:13002';
 const ENGINE_API = import.meta.env.VITE_ENGINE_URL || 'http://localhost:13001';
-
-// In-memory token storage — cleared on page refresh (XSS-safe)
-let accessToken: string | null = null;
-let refreshToken: string | null = null;
 
 export function getApiBase() { return API_BASE; }
 export function getEngineBase() { return ENGINE_API; }
@@ -50,35 +46,32 @@ async function apiFetch<T>(base: string, path: string, options: RequestInit = {}
   }
 }
 
-export function getToken(): string | null {
-  return accessToken;
-}
+// --- Auth state (sessionStorage — survives OAuth redirects) ---
 
-export function getRefreshToken(): string | null {
-  return refreshToken;
+export function getToken(): string | null {
+  return sessionStorage.getItem('loopzero_token');
 }
 
 export function setAuth(token: string, refresh: string, email: string, name?: string) {
-  accessToken = token;
-  refreshToken = refresh;
-  // Non-sensitive user info — safe in localStorage for display after refresh
-  localStorage.setItem('loopzero_email', email);
-  if (name) localStorage.setItem('loopzero_name', name);
+  sessionStorage.setItem('loopzero_token', token);
+  sessionStorage.setItem('loopzero_refresh', refresh);
+  sessionStorage.setItem('loopzero_email', email);
+  if (name) sessionStorage.setItem('loopzero_name', name);
 }
 
 export function clearAuth() {
-  accessToken = null;
-  refreshToken = null;
-  localStorage.removeItem('loopzero_email');
-  localStorage.removeItem('loopzero_name');
+  sessionStorage.removeItem('loopzero_token');
+  sessionStorage.removeItem('loopzero_refresh');
+  sessionStorage.removeItem('loopzero_email');
+  sessionStorage.removeItem('loopzero_name');
 }
 
 export function getEmail(): string | null {
-  return localStorage.getItem('loopzero_email');
+  return sessionStorage.getItem('loopzero_email');
 }
 
 export function getName(): string | null {
-  return localStorage.getItem('loopzero_name');
+  return sessionStorage.getItem('loopzero_name');
 }
 
 export function isAuthenticated(): boolean {
