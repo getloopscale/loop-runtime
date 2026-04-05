@@ -5,7 +5,7 @@ import { CheckCircle2, XCircle, Loader2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { type Flow, getFlow, submitFlow, getCsrfToken, getFlowMessages } from '@/lib/kratos';
 
-const ACCOUNTS_URL = import.meta.env.VITE_ACCOUNTS_URL || 'http://localhost:4433';
+const ACCOUNTS_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
 
 export function VerificationPage() {
   const [searchParams] = useSearchParams();

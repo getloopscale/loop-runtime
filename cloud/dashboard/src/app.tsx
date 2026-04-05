@@ -7,6 +7,11 @@ import { TeamPage } from '@/pages/team';
 import { BillingPage } from '@/pages/billing';
 import { SettingsPage } from '@/pages/settings';
 import { LoginPage } from '@/pages/login';
+import { RegisterPage } from '@/pages/register';
+import { VerificationPage } from '@/pages/verification';
+import { RecoveryPage } from '@/pages/recovery';
+import { AccountPage } from '@/pages/account';
+import { ErrorPage } from '@/pages/error';
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -23,9 +28,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Auth — PKCE only (Kratos UI is at accounts.{domain}) */}
+        {/* Auth pages — standalone layout, no sidebar */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/login/callback" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/verification" element={<VerificationPage />} />
+        <Route path="/recovery" element={<RecoveryPage />} />
+        <Route path="/error" element={<ErrorPage />} />
 
         {/* Dashboard pages — sidebar layout, auth required */}
         <Route
@@ -39,6 +48,7 @@ export default function App() {
                 <Route path="/team" element={<TeamPage />} />
                 <Route path="/billing" element={<BillingPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/account" element={<AccountPage />} />
               </Routes>
             </DashboardLayout>
           }

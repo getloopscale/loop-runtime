@@ -8,7 +8,7 @@ import { PageWrapper } from '@/components/page-wrapper';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { type Flow, getFlow, submitFlow, getCsrfToken, getFlowMessages, getFieldErrors } from '@/lib/kratos';
 
-const ACCOUNTS_URL = import.meta.env.VITE_ACCOUNTS_URL || 'http://localhost:4433';
+const ACCOUNTS_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
 
 export function AccountPage() {
   useRequireAuth();
