@@ -13,6 +13,12 @@ export interface VerifiableAddress {
   via: string;
 }
 
+export interface AuthenticationMethod {
+  method: string;
+  provider?: string;
+  completed_at?: string;
+}
+
 export interface Session {
   active: boolean;
   identity: {
@@ -23,17 +29,39 @@ export interface Session {
     };
     verifiable_addresses?: VerifiableAddress[];
   };
+  authentication_methods?: AuthenticationMethod[];
 }
+
+// OIDC providers whose email verification we trust (MEET-037 security mandate).
+const TRUSTED_OIDC_PROVIDERS = ['github', 'google'];
 
 /**
  * Check if the user's email is verified.
- * OIDC users (GitHub/Google) don't have verifiable_addresses — treated as verified
- * since the provider already verified their email.
+ *
+ * Three cases:
+ * 1. No verifiable_addresses → OIDC user without Kratos-managed email → verified
+ * 2. Authenticated via trusted OIDC provider (GitHub/Google) → verified
+ *    (provider already verified the email; Kratos marks it unverified because
+ *    the mapper doesn't pass email_verified — MEET-037)
+ * 3. Otherwise → check verifiable_addresses for at least one verified entry
  */
 export function isEmailVerified(session: Session): boolean {
   const addrs = session.identity.verifiable_addresses;
-  if (!addrs || addrs.length === 0) return true; // OIDC — pre-verified
-  return addrs.some(a => a.verified);
+  if (!addrs || addrs.length === 0) return true;
+
+  // If any address is already verified in Kratos, short-circuit
+  if (addrs.some(a => a.verified)) return true;
+
+  // Check if authenticated via a trusted OIDC provider
+  const methods = session.authentication_methods;
+  if (methods) {
+    const hasTrustedOIDC = methods.some(
+      m => m.method === 'oidc' && TRUSTED_OIDC_PROVIDERS.includes(m.provider ?? ''),
+    );
+    if (hasTrustedOIDC) return true;
+  }
+
+  return false;
 }
 
 /** Check if user has an active session. Returns session or null. */
