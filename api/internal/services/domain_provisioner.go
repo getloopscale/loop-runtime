@@ -8,14 +8,13 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/manifests"
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
 // DomainProvisionerStore abstracts the domain persistence needed by the provisioner.
 type DomainProvisionerStore interface {
-	// FindVerified returns domains in "verified" status ready for provisioning.
-	FindVerified(ctx context.Context) ([]routes.CustomDomain, error)
+	// FindAndClaimVerified atomically claims verified → provisioning (FIND-001 fix).
+	FindAndClaimVerified(ctx context.Context) ([]routes.CustomDomain, error)
 	// FindRemoving returns domains in "removing" status ready for cleanup.
 	FindRemoving(ctx context.Context) ([]routes.CustomDomain, error)
 	// UpdateStatus transitions a domain's status.
@@ -24,14 +23,6 @@ type DomainProvisionerStore interface {
 	UpdateFailure(ctx context.Context, domain, status, reason string) error
 	// Delete permanently removes a domain row.
 	Delete(ctx context.Context, domain string) error
-	// ListActiveByApp returns active custom domains for a specific app.
-	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]routes.CustomDomain, error)
-}
-
-// DomainManifestRenderer generates manifests for a project+environment.
-type DomainManifestRenderer interface {
-	// RenderForDomainChange re-renders manifests including custom domains.
-	RenderForDomainChange(ctx context.Context, tenantID, project, env string, customDomains map[string][]manifests.CustomDomainInput) (string, error)
 }
 
 // DomainProvisioner picks up verified domains and provisions them (manifests → gitops → ArgoCD).
@@ -98,11 +89,13 @@ func (p *DomainProvisioner) Start(ctx context.Context) {
 	}
 }
 
-// processVerified picks up domains in "verified" status and provisions them.
+// processVerified atomically claims verified→provisioning and provisions them.
+// FIND-001 fix: ClaimByStatus does atomic UPDATE...RETURNING — no lock window.
 func (p *DomainProvisioner) processVerified(ctx context.Context) {
-	domains, err := p.store.FindVerified(ctx)
+	// Atomic: domains are already transitioned to "provisioning" by the claim.
+	domains, err := p.store.FindAndClaimVerified(ctx)
 	if err != nil {
-		p.logger.Error("domain provisioner: find verified failed", "error", err)
+		p.logger.Error("domain provisioner: claim verified failed", "error", err)
 		return
 	}
 
@@ -115,23 +108,21 @@ func (p *DomainProvisioner) processVerified(ctx context.Context) {
 }
 
 // provisionDomain handles a single verified domain: manifests → gitops push.
+// provisionDomain handles a single domain already claimed as "provisioning".
+// The status was already atomically set by FindAndClaimVerified.
 func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.CustomDomain) {
 	log := p.logger.With("domain", d.Domain, "tenant", d.TenantID, "project", d.ProjectName, "app", d.AppName, "env", d.Environment)
 
-	// Transition to provisioning
-	if err := p.store.UpdateStatus(ctx, d.Domain, "provisioning"); err != nil {
-		log.Error("domain provisioner: update to provisioning failed", "error", err)
-		return
-	}
-
-	// The actual manifest re-rendering and gitops push would happen here.
-	// This requires fetching the current release's manifest input, adding the
-	// custom domain, re-rendering, and pushing to gitops — all under environment lock.
-	//
-	// For now, this is a placeholder that transitions to provisioning.
-	// The full integration with the manifest renderer and gitops pusher will be
-	// connected when the DomainManifestRenderer is implemented with the build store.
-	log.Info("domain provisioner: domain moved to provisioning (manifest integration pending)")
+	// TODO(CODE-004): Implement manifest re-render + gitops push here.
+	// Pattern: p.locker.WithLock(ctx, d.TenantID, d.ProjectName, d.Environment, func(tx) error {
+	//     1. Fetch active release for (tenant, project, env)
+	//     2. Get all active/provisioning custom domains for this app
+	//     3. Re-render manifests with custom domains
+	//     4. Push to gitops
+	// })
+	// On success: domain transitions provisioning → active (by health checker detecting cert issued)
+	// On failure: UpdateFailure(d.Domain, "failed", reason)
+	log.Info("domain provisioner: domain claimed as provisioning (manifest integration pending)")
 }
 
 // processRemoving picks up domains in "removing" status and cleans them up.

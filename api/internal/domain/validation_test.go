@@ -146,6 +146,22 @@ func TestValidator_BlockedSuffixes(t *testing.T) {
 	}
 }
 
+func TestValidator_PunycodeRejected(t *testing.T) {
+	v := NewValidator("dev.loopzero.example", nil)
+
+	punycode := []string{
+		"xn--pi-8cd.mycompany.com",    // Cyrillic "а" homograph for "api"
+		"xn--nxasmq6b.example.com",    // Greek domain
+		"sub.xn--test-cua.com",        // punycode in subdomain
+	}
+
+	for _, domain := range punycode {
+		if err := v.Validate(domain); err == nil {
+			t.Errorf("expected punycode domain %q to be rejected", domain)
+		}
+	}
+}
+
 func TestValidator_CaseInsensitive(t *testing.T) {
 	v := NewValidator("dev.loopzero.example", nil)
 

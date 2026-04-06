@@ -210,14 +210,29 @@ func (s *PostgresDomainStore) Delete(ctx context.Context, domain string) error {
 	return nil
 }
 
-// --- Methods for background services (DomainProvisioner + DomainHealthChecker) ---
-
-// FindVerified returns domains in "verified" status ready for provisioning.
-func (s *PostgresDomainStore) FindVerified(ctx context.Context) ([]routes.CustomDomain, error) {
-	return s.findByStatus(ctx, "verified")
+// CountByTenant returns the total number of non-deleted custom domains for a tenant.
+// SEC-007 fix: Used by Create handler to enforce per-tenant domain quota.
+func (s *PostgresDomainStore) CountByTenant(ctx context.Context, tenantID string) (int, error) {
+	row := s.DB.QueryRow(ctx,
+		"SELECT COUNT(*) FROM custom_domains WHERE tenant_id = $1 AND status != 'removing'",
+		tenantID,
+	)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return 0, fmt.Errorf("domain store: count by tenant: %w", err)
+	}
+	return count, nil
 }
 
-// FindRemoving returns domains in "removing" status ready for cleanup.
+// --- Methods for background services (DomainProvisioner + DomainHealthChecker) ---
+
+// FindAndClaimVerified atomically claims verified domains → provisioning.
+// FIND-001: atomic claim prevents HA double-processing.
+func (s *PostgresDomainStore) FindAndClaimVerified(ctx context.Context) ([]routes.CustomDomain, error) {
+	return s.ClaimByStatus(ctx, "verified", "provisioning")
+}
+
+// FindRemoving returns domains in "removing" status for cleanup (read-only, no claim needed).
 func (s *PostgresDomainStore) FindRemoving(ctx context.Context) ([]routes.CustomDomain, error) {
 	return s.findByStatus(ctx, "removing")
 }
@@ -236,8 +251,7 @@ func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, stale
 		 FROM custom_domains
 		 WHERE status = 'active' AND (last_cname_check IS NULL OR last_cname_check < $1)
 		 ORDER BY last_cname_check ASC NULLS FIRST
-		 LIMIT 50
-		 FOR UPDATE SKIP LOCKED`,
+		 LIMIT 50`,
 		staleAfter,
 	)
 	if err != nil {
@@ -301,11 +315,37 @@ func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, pro
 	return scanDomains(rows)
 }
 
+// ClaimByStatus atomically finds and transitions domains from one status to another.
+// FIND-001 fix: Uses a single UPDATE...WHERE id IN (SELECT...FOR UPDATE SKIP LOCKED)
+// RETURNING statement. This is atomic — the row is claimed and transitioned in one
+// statement, so the lock is never released before the transition completes.
+// This replaces the broken findByStatus which used FOR UPDATE SKIP LOCKED in a
+// plain SELECT that released locks before processing began.
+func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toStatus string) ([]routes.CustomDomain, error) {
+	rows, err := s.DB.Query(ctx,
+		`UPDATE custom_domains
+		 SET status = $2, updated_at = now()
+		 WHERE id IN (
+		     SELECT id FROM custom_domains
+		     WHERE status = $1
+		     ORDER BY created_at ASC
+		     LIMIT 50
+		     FOR UPDATE SKIP LOCKED
+		 )
+		 RETURNING id, tenant_id, project_name, app_name, environment, domain, status,
+		           verification_token, verified_at, tls_status, tls_expires_at,
+		           failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at`,
+		fromStatus, toStatus,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("domain store: claim %s→%s: %w", fromStatus, toStatus, err)
+	}
+	defer rows.Close()
+	return scanDomains(rows)
+}
+
+// findByStatus is a simple read-only query (no locking) for non-critical reads.
 func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) ([]routes.CustomDomain, error) {
-	// CODE-002 fix: FOR UPDATE SKIP LOCKED prevents double-processing in HA deployments.
-	// If two API leader instances run briefly during failover, each picks different rows.
-	// Note: FOR UPDATE SKIP LOCKED works without explicit BEGIN/COMMIT in pgx —
-	// each pool.Query runs in an implicit transaction.
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
@@ -313,8 +353,7 @@ func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) (
 		 FROM custom_domains
 		 WHERE status = $1
 		 ORDER BY created_at ASC
-		 LIMIT 50
-		 FOR UPDATE SKIP LOCKED`,
+		 LIMIT 50`,
 		status,
 	)
 	if err != nil {

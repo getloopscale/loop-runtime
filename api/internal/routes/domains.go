@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -60,9 +61,9 @@ type CustomDomain struct {
 // DomainStore abstracts custom domain persistence (DIP).
 type DomainStore interface {
 	Create(ctx context.Context, d *CustomDomain) error
-	GetByDomain(ctx context.Context, domain string) (*CustomDomain, error)
 	GetByDomainAndTenant(ctx context.Context, domain, tenantID string) (*CustomDomain, error)
 	ListByTenant(ctx context.Context, tenantID string, filter DomainListFilter) ([]CustomDomain, int, error)
+	CountByTenant(ctx context.Context, tenantID string) (int, error)
 	UpdateStatus(ctx context.Context, domain, status string) error
 	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
 	UpdateTLS(ctx context.Context, domain, tlsStatus string, expiresAt *time.Time) error
@@ -238,6 +239,22 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SEC-007 fix: enforce per-tenant domain quota (hard cap prevents squatting DoS).
+	const maxDomainsPerTenant = 25
+	count, err := h.store.CountByTenant(ctx, uc.TenantID)
+	if err != nil {
+		slog.ErrorContext(ctx, "domain count failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if count >= maxDomainsPerTenant {
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error": "Domain limit reached. You can register up to " + fmt.Sprintf("%d", maxDomainsPerTenant) + " custom domains.",
+			"code":  "DOMAIN_LIMIT_REACHED",
+		})
+		return
+	}
+
 	// Generate verification token and attempt atomic insert.
 	// CODE-001 fix: no check-then-insert TOCTOU. The unique index on domain
 	// column handles conflict detection atomically. ErrDomainExists → 409.
@@ -405,7 +422,9 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if d.Status == "pending_verification" {
+	// FIND-004/SEC-009 fix: only expose verification token to owner/admin.
+	// Members can see domain status but not the raw TXT value.
+	if d.Status == "pending_verification" && (uc.Role == "owner" || uc.Role == "admin") {
 		resp.Verification = &domainVerificationInfo{
 			TXTName:  "_loopzero-verify." + d.Domain,
 			TXTValue: d.VerificationToken,

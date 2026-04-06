@@ -76,6 +76,16 @@ func (v *Validator) Validate(domainInput string) error {
 		return fmt.Errorf("invalid domain format. Must be a valid hostname (e.g., api.mycompany.com)")
 	}
 
+	// SEC-008 fix: reject punycode/IDN domains (homograph attack prevention).
+	// Punycode labels start with "xn--" and are structurally valid ASCII, so the
+	// FQDN regex accepts them. We reject them explicitly to prevent homograph attacks
+	// (e.g., xn--pi-8cd.mycompany.com renders as аpi.mycompany.com in browsers).
+	for _, label := range strings.Split(d, ".") {
+		if strings.HasPrefix(label, "xn--") {
+			return fmt.Errorf("internationalized (punycode) domain names are not supported. Use ASCII domain names only")
+		}
+	}
+
 	// Reserved domains (RFC 2606)
 	for _, reserved := range reservedDomains {
 		if d == reserved || strings.HasSuffix(d, "."+reserved) {

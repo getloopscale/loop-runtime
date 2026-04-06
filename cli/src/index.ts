@@ -1362,7 +1362,15 @@ export function createProgram(): Command {
         writeError,
       });
 
-      process.exitCode = await cmd.execute(domain, { ...opts, json: globalOpts.json });
+      process.exitCode = await withTimeout(
+        cmd.execute(domain, { ...opts, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Domain add timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'DOMAIN_ADD_TIMEOUT', error: err.message, exit_code: 3 })); }
+        else { writeError(err.message); }
+        return 3;
+      });
     });
 
   domainCmd
@@ -1385,7 +1393,15 @@ export function createProgram(): Command {
         writeError,
       });
 
-      process.exitCode = await cmd.execute(domain, { json: globalOpts.json });
+      process.exitCode = await withTimeout(
+        cmd.execute(domain, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Domain verify timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'DOMAIN_VERIFY_TIMEOUT', error: err.message, exit_code: 3 })); }
+        else { writeError(err.message); }
+        return 3;
+      });
     });
 
   domainCmd
@@ -1408,7 +1424,15 @@ export function createProgram(): Command {
         writeError,
       });
 
-      process.exitCode = await cmd.execute(domain, { json: globalOpts.json });
+      process.exitCode = await withTimeout(
+        cmd.execute(domain, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Domain status timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'DOMAIN_STATUS_TIMEOUT', error: err.message, exit_code: 3 })); }
+        else { writeError(err.message); }
+        return 3;
+      });
     });
 
   domainCmd
@@ -1440,7 +1464,15 @@ export function createProgram(): Command {
         writeError,
       });
 
-      process.exitCode = await cmd.execute({ ...opts, json: globalOpts.json });
+      process.exitCode = await withTimeout(
+        cmd.execute({ ...opts, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Domain list timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'DOMAIN_LIST_TIMEOUT', error: err.message, exit_code: 3 })); }
+        else { writeError(err.message); }
+        return 3;
+      });
     });
 
   domainCmd
@@ -1464,7 +1496,15 @@ export function createProgram(): Command {
         writeError,
       });
 
-      process.exitCode = await cmd.execute(domain, { ...opts, json: globalOpts.json });
+      process.exitCode = await withTimeout(
+        cmd.execute(domain, { ...opts, json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Domain remove timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'DOMAIN_REMOVE_TIMEOUT', error: err.message, exit_code: 3 })); }
+        else { writeError(err.message); }
+        return 3;
+      });
     });
 
   // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)

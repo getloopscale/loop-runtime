@@ -234,10 +234,13 @@ func (h *DomainHealthChecker) cleanupStalePending(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if err := h.store.Delete(ctx, d.Domain); err != nil {
-			h.logger.Error("domain health: stale cleanup delete failed", "error", err, "domain", d.Domain)
+		// FIND-005 fix: transition to "removing" instead of direct delete.
+		// This preserves the state machine invariant and lets the provisioner's
+		// processRemoving handle actual deletion (preventing race with concurrent verify).
+		if err := h.store.UpdateStatus(ctx, d.Domain, "removing"); err != nil {
+			h.logger.Error("domain health: stale cleanup transition failed", "error", err, "domain", d.Domain)
 		} else {
-			h.logger.Info("domain health: cleaned up stale pending domain", "domain", d.Domain, "age_days", h.staleDays)
+			h.logger.Info("domain health: stale pending domain marked for removal", "domain", d.Domain, "age_days", h.staleDays)
 		}
 	}
 }
