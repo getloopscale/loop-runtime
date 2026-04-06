@@ -222,6 +222,9 @@ jobs:
       LOOPZERO_GOOGLE_CLIENT_SECRET: ${{ secrets.LOOPZERO_GOOGLE_CLIENT_SECRET }}
       # Resend API key for email delivery (HTTP API, not SMTP — DO blocks SMTP)
       LOOPZERO_RESEND_API_KEY: ${{ secrets.LOOPZERO_RESEND_API_KEY }}
+      # Stripe Billing (MEET-038)
+      LOOPZERO_STRIPE_API_KEY: ${{ secrets.LOOPZERO_STRIPE_API_KEY }}
+      LOOPZERO_STRIPE_WEBHOOK_SECRET: ${{ secrets.LOOPZERO_STRIPE_WEBHOOK_SECRET }}
 
     steps:
       - uses: actions/checkout@v4

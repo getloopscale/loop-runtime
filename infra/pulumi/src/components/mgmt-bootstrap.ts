@@ -1169,12 +1169,20 @@ function installCloudService(
         // Dashboard URL — used for OAuth2 redirect_uri registration
         BILLING_RETURN_URL: `https://cloud.${config.domain || "dev.loopzero.example"}`,
         KRATOS_INTERNAL_URL: `http://ory-kratos-public.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
+        // Stripe price IDs (MEET-038 Phase 6)
+        STRIPE_PRICE_PRO: config.stripePriceProId || "",
+        STRIPE_PRICE_TEAM: config.stripePriceTeamId || "",
       },
     },
     { provider, dependsOn: [ns] },
   );
 
-  // Secret — Stripe API keys (empty in dev, set via pulumi config in prod)
+  // Database URL — same DB as engine API (cloud service does NOT run migrations)
+  const cloudDatabaseUrl = config.loopzeroApiDbPassword
+    ? pulumi.interpolate`postgres://loopzero_api:${config.loopzeroApiDbPassword}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`
+    : pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`;
+
+  // Secret — Stripe API keys + DATABASE_URL
   const secret = new k8s.core.v1.Secret(
     "loopzero-cloud-secrets",
     {
@@ -1182,6 +1190,7 @@ function installCloudService(
       stringData: {
         STRIPE_API_KEY: config.stripeApiKey || "",
         STRIPE_WEBHOOK_SECRET: config.stripeWebhookSecret || "",
+        DATABASE_URL: cloudDatabaseUrl,
       },
     },
     { provider, dependsOn: [ns] },

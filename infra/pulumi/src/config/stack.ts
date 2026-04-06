@@ -73,8 +73,12 @@ export interface PlatformStackConfig {
   // Stripe Billing (Sprint 11, Phase 5)
   // Set via: pulumi config set --secret stripeApiKey sk_live_xxx
   //          pulumi config set --secret stripeWebhookSecret whsec_xxx
+  //          pulumi config set stripePriceProId price_xxx
+  //          pulumi config set stripePriceTeamId price_xxx
   readonly stripeApiKey?: pulumi.Output<string>;
   readonly stripeWebhookSecret?: pulumi.Output<string>;
+  readonly stripePriceProId?: string;
+  readonly stripePriceTeamId?: string;
 
   // Resend API key for email delivery (verification, recovery).
   // MEET-036: HTTP API replaces SMTP (DO blocks SMTP ports).
@@ -159,8 +163,15 @@ export function loadStackConfig(): PlatformStackConfig {
     tempoStorageBucket: config.get("tempoStorageBucket") ?? undefined,
 
     // Stripe Billing (Sprint 11, Phase 5)
-    stripeApiKey: config.getSecret("stripeApiKey") ?? undefined,
-    stripeWebhookSecret: config.getSecret("stripeWebhookSecret") ?? undefined,
+    // Reads from env vars (GitHub Actions secrets) or Pulumi config (local dev).
+    stripeApiKey: process.env.LOOPZERO_STRIPE_API_KEY
+      ? pulumi.output(process.env.LOOPZERO_STRIPE_API_KEY)
+      : config.getSecret("stripeApiKey") ?? undefined,
+    stripeWebhookSecret: process.env.LOOPZERO_STRIPE_WEBHOOK_SECRET
+      ? pulumi.output(process.env.LOOPZERO_STRIPE_WEBHOOK_SECRET)
+      : config.getSecret("stripeWebhookSecret") ?? undefined,
+    stripePriceProId: config.get("stripePriceProId") ?? undefined,
+    stripePriceTeamId: config.get("stripePriceTeamId") ?? undefined,
 
     // Resend API key for email delivery (MEET-036: HTTP API, not SMTP)
     resendApiKey: process.env.LOOPZERO_RESEND_API_KEY
