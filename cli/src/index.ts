@@ -14,7 +14,7 @@ import { Command } from 'commander';
 import { createHash } from 'crypto';
 
 import { ConfigStore } from './config/store';
-import { getDefaultApiUrl, API_REQUEST_TIMEOUT_MS, DEPLOY_TIMEOUT_MS } from './config/constants';
+import { getDefaultApiUrl, getCloudUrl, API_REQUEST_TIMEOUT_MS, DEPLOY_TIMEOUT_MS } from './config/constants';
 import { ApiClient } from './api/client';
 import { SSEClient } from './api/sse-client';
 import { Formatter } from './output/formatter';
@@ -47,6 +47,8 @@ import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
 import { hasGitRepo, hasUncommittedChanges, hasLockfile, getSourceIdentifier, getGitRoot, createSourceBundle, checkSensitiveFiles } from './adapters/git';
+import { executeDeviceCodeFlow } from './auth/device-flow';
+import { openBrowser } from './auth/open-browser';
 import { findLoopZeroYaml } from './adapters/loopzero-yaml';
 import { cleanupFile } from './adapters/source-bundle';
 import { uploadSource } from './adapters/source-upload';
@@ -139,8 +141,16 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
 
       const loginCmd = new LoginCommand({
-        saveToken: (token, email, team) =>
-          configStore.saveToken(token, email, team),
+        saveToken: (token, email, team, refreshToken?, expiresIn?) =>
+          configStore.saveToken(token, email, team, refreshToken, expiresIn),
+        executeDeviceFlow: () => executeDeviceCodeFlow({
+          fetchFn: globalThis.fetch,
+          baseURL: getCloudUrl(),
+          openBrowser,
+          writeTo,
+          writeError,
+          sleep: (ms: number) => new Promise(r => setTimeout(r, ms)),
+        }),
         validateToken: async (token: string) => {
           try {
             const client = new ApiClient({

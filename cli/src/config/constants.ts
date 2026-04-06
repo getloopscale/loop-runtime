@@ -50,6 +50,20 @@ export const API_REQUEST_TIMEOUT_MS = envInt('LOOPZERO_API_TIMEOUT', 30000);
 /** HTTP timeout for source bundle upload (ms). Override: LOOPZERO_UPLOAD_TIMEOUT */
 export const UPLOAD_TIMEOUT_MS = envInt('LOOPZERO_UPLOAD_TIMEOUT', 120000);
 
+// --- Cloud Service ---
+
+/** Default cloud service URL. Override: LOOPZERO_CLOUD_URL */
+export const DEFAULT_CLOUD_URL_FALLBACK = 'http://localhost:13002';
+
+/** Returns the cloud service URL for auth/device flow. */
+export function getCloudUrl(): string {
+  const url = process.env.LOOPZERO_CLOUD_URL || DEFAULT_CLOUD_URL_FALLBACK;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    throw new Error(`Invalid LOOPZERO_CLOUD_URL: must start with http:// or https://. Got: ${url}`);
+  }
+  return url;
+}
+
 // --- OAuth ---
 
 /** Local server port for OAuth callback. Override: LOOPZERO_OAUTH_PORT */

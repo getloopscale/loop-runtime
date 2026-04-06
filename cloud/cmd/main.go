@@ -60,7 +60,7 @@ func main() {
 	jwtValidator := auth.NewJWKSValidator(jwksURL, cfg.JWTIssuer)
 
 	// Handlers
-	deviceHandler := routes.NewDeviceHandler(hydra)
+	deviceHandler := routes.NewDeviceHandler(hydra, cfg.BillingReturnURL)
 	meHandler := routes.NewMeHandler(jwtValidator)
 	consentHandler := consent.NewHandler(hydra, cfg.KratosPublicURL, cfg.KratosInternalURL, logger)
 
