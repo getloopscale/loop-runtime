@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Zap, Github, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getSession, startLogin } from '@/lib/auth';
+import { clearToken } from '@/lib/api';
 
 const KRATOS_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
 
@@ -32,6 +33,11 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Clear stale JWT on login page visit (user may have been redirected here)
+  useEffect(() => {
+    clearToken();
+  }, []);
 
   // Check if already authenticated
   useEffect(() => {

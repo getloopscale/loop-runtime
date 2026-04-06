@@ -59,7 +59,15 @@ async function ensureToken(): Promise<string | null> {
   return ok ? accessToken : null;
 }
 
-/** Clear token (on logout). */
+let redirecting = false;
+
+function redirectToLogin(): void {
+  if (redirecting) return; // Prevent multiple redirects from concurrent calls
+  redirecting = true;
+  window.location.href = '/login';
+}
+
+/** Clear token (on logout or login page visit). */
 export function clearToken(): void {
   accessToken = null;
   tokenExpiresAt = 0;
@@ -68,7 +76,7 @@ export function clearToken(): void {
 export async function cloudFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
   const token = await ensureToken();
   if (!token) {
-    window.location.href = '/login';
+    redirectToLogin();
     return null;
   }
   return apiFetch<T>(API_BASE, path, token, options);
@@ -93,7 +101,7 @@ async function apiFetch<T>(base: string, path: string, token: string, options: R
       accessToken = null;
       const newToken = await ensureToken();
       if (!newToken) {
-        window.location.href = '/login';
+        redirectToLogin();
         return null;
       }
       // Retry with new token
