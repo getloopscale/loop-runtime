@@ -119,7 +119,8 @@ kratos:
             # LOCAL DEV: no API key (emails not sent).
             # Production: overridden by Pulumi with real Resend key.
             Authorization: "Bearer placeholder"
-          body: "base64://ZnVuY3Rpb24oY3R4KSB7CiAgZnJvbTogIlRoZW8gPG5vcmVwbHlAdXNldGhlby5kZXY+IiwKICB0bzogW2N0eC5SZWNpcGllbnRdLAogIHN1YmplY3Q6IGN0eC5TdWJqZWN0LAogIGh0bWw6IGN0eC5Cb2R5LAp9"
+          # Jsonnet template: ctx.recipient, ctx.subject, ctx.html_body (lowercase snake_case)
+          body: "base64://ZnVuY3Rpb24oY3R4KSB7CiAgZnJvbTogIlRoZW8gPG5vcmVwbHlAdXNldGhlby5kZXY+IiwKICB0bzogW2N0eC5yZWNpcGllbnRdLAogIHN1YmplY3Q6IGN0eC5zdWJqZWN0LAogIGh0bWw6IGN0eC5odG1sX2JvZHksCn0="
 
     # --- Session ---
     session:

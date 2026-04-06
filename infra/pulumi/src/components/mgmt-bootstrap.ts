@@ -554,7 +554,8 @@ function installOryKratos(
                           "Content-Type": "application/json",
                           Authorization: pulumi.interpolate`Bearer ${config.resendApiKey}`,
                         },
-                        body: "base64://ZnVuY3Rpb24oY3R4KSB7CiAgZnJvbTogIlRoZW8gPG5vcmVwbHlAdXNldGhlby5kZXY+IiwKICB0bzogW2N0eC5SZWNpcGllbnRdLAogIHN1YmplY3Q6IGN0eC5TdWJqZWN0LAogIGh0bWw6IGN0eC5Cb2R5LAp9",
+                        // Jsonnet: ctx.recipient, ctx.subject, ctx.html_body (lowercase snake_case)
+                        body: "base64://ZnVuY3Rpb24oY3R4KSB7CiAgZnJvbTogIlRoZW8gPG5vcmVwbHlAdXNldGhlby5kZXY+IiwKICB0bzogW2N0eC5yZWNpcGllbnRdLAogIHN1YmplY3Q6IGN0eC5zdWJqZWN0LAogIGh0bWw6IGN0eC5odG1sX2JvZHksCn0=",
                       },
                     },
                   },
