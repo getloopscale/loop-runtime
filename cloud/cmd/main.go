@@ -101,7 +101,7 @@ func main() {
 		stripeClient = billing.NewStripeClient(cfg.StripeAPIKey.Value())
 		webhookHandler = billing.NewWebhookHandler(db, cfg.StripeWebhookSecret.Value(), logger)
 		billingProvisioner = billing.NewProvisioner(db, stripeClient, logger)
-		billingHandler = routes.NewBillingHandler(stripeClient, webhookHandler, billingProvisioner, jwtValidator, cfg.BillingReturnURL)
+		billingHandler = routes.NewBillingHandler(db, stripeClient, webhookHandler, billingProvisioner, jwtValidator, cfg.BillingReturnURL)
 		logger.Info("billing enabled")
 	} else {
 		logger.Warn("STRIPE_API_KEY not set — billing endpoints disabled")

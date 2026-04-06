@@ -7,10 +7,17 @@ import { useCloudApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { cloudFetch } from '@/lib/api';
 
+interface UsageMetric {
+  used: number;
+  limit: number;
+}
+
 interface BillingResponse {
   plan: string;
   team: string;
-  usage: Record<string, number>;
+  usage: Record<string, UsageMetric>;
+  period_start?: string;
+  period_end?: string;
 }
 
 export function BillingPage() {
@@ -22,11 +29,11 @@ export function BillingPage() {
     if (portal?.url) window.open(portal.url, '_blank');
   };
 
-  const usage = billing ? Object.entries(billing.usage).map(([metric, used]) => ({
+  const usage = billing ? Object.entries(billing.usage).map(([metric, data]) => ({
     metric: metric.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-    used: used as number,
-    limit: 100, // Limits come from plan_limits — will be in billing response after Phase 6 wiring
-    unit: metric.includes('minute') ? 'min' : '',
+    used: data.used,
+    limit: data.limit,
+    unit: metric.includes('minute') ? 'min' : metric.includes('mb') ? 'MB' : '',
   })) : [];
 
   if (loading) {
@@ -101,7 +108,7 @@ export function BillingPage() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-white/60">{item.metric}</span>
                       <span className="font-mono text-sm text-white/80">
-                        {item.used}{item.unit} <span className="text-white/20">/ {item.limit}{item.unit}</span>
+                        {item.used}{item.unit} <span className="text-white/20">/ {item.limit >= 999999 ? '∞' : `${item.limit}${item.unit}`}</span>
                       </span>
                     </div>
                     <div className="h-1.5 rounded-full bg-surface-4 overflow-hidden">
