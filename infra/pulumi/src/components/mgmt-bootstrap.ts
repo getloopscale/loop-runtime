@@ -578,8 +578,8 @@ function installOryKratos(
               flows: {
                 login: { ui_url: `https://accounts.${config.domain}/login` },
                 registration: { ui_url: `https://accounts.${config.domain}/registration` },
-                verification: { ui_url: `https://accounts.${config.domain}/verification`, enabled: true },
-                recovery: { ui_url: `https://accounts.${config.domain}/recovery`, enabled: true },
+                verification: { ui_url: `https://cloud.${config.domain}/self-service/verification`, enabled: true, use: 'code' },
+                recovery: { ui_url: `https://cloud.${config.domain}/self-service/recovery`, enabled: true },
                 settings: { ui_url: `https://accounts.${config.domain}/settings` },
                 error: { ui_url: `https://accounts.${config.domain}/error` },
                 logout: { after: { default_browser_return_url: `https://dashboard.${config.domain}/login` } },

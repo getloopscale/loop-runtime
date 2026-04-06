@@ -7,6 +7,12 @@
 
 const KRATOS_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
 
+export interface VerifiableAddress {
+  value: string;
+  verified: boolean;
+  via: string;
+}
+
 export interface Session {
   active: boolean;
   identity: {
@@ -15,7 +21,19 @@ export interface Session {
       email: string;
       name?: string;
     };
+    verifiable_addresses?: VerifiableAddress[];
   };
+}
+
+/**
+ * Check if the user's email is verified.
+ * OIDC users (GitHub/Google) don't have verifiable_addresses — treated as verified
+ * since the provider already verified their email.
+ */
+export function isEmailVerified(session: Session): boolean {
+  const addrs = session.identity.verifiable_addresses;
+  if (!addrs || addrs.length === 0) return true; // OIDC — pre-verified
+  return addrs.some(a => a.verified);
 }
 
 /** Check if user has an active session. Returns session or null. */
@@ -43,10 +61,14 @@ export function startRegistration(): void {
   window.location.href = `${KRATOS_URL}/self-service/registration/browser`;
 }
 
+/** Get verification URL — redirects to Kratos verification flow. */
+export function getVerificationURL(): string {
+  return `${KRATOS_URL}/self-service/verification/browser`;
+}
+
 /** Logout — destroy Kratos session. */
 export async function logout(): Promise<void> {
   try {
-    // Create logout flow
     const resp = await fetch(`${KRATOS_URL}/self-service/logout/browser`, {
       credentials: 'include',
       headers: { Accept: 'application/json' },

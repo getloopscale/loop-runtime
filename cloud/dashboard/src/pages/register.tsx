@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Zap, Github, Loader2, AlertCircle } from 'lucide-react';
+import { Zap, Github, Loader2, AlertCircle, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getSession } from '@/lib/auth';
 
@@ -32,6 +32,7 @@ export function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
   useEffect(() => {
     getSession().then(s => {
@@ -104,13 +105,40 @@ export function RegisterPage() {
       });
       const data = await resp.json();
       if (data.redirect_browser_to) { window.location.href = data.redirect_browser_to; return; }
-      if (data.session) { navigate('/', { replace: true }); return; }
+      if (data.session) {
+        // Registration succeeded — show "check your email" before going to dashboard
+        setRegistered(true);
+        setTimeout(() => navigate('/', { replace: true }), 3000);
+        return;
+      }
       if (data.ui) setFlow(data);
     } catch { /* */ } finally { setSubmitting(false); }
   };
 
   if (loading) {
     return <div className="min-h-screen bg-surface-0 flex items-center justify-center"><Loader2 className="h-6 w-6 text-accent animate-spin" /></div>;
+  }
+
+  if (registered) {
+    return (
+      <div className="min-h-screen bg-surface-0 flex items-center justify-center">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
+          <div className="rounded-2xl border border-white/[0.06] bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 border border-accent/20 mx-auto mb-4">
+              <Mail className="h-6 w-6 text-accent" />
+            </div>
+            <h1 className="font-display text-xl font-semibold text-white mb-2">Check your email</h1>
+            <p className="text-sm text-white/40 mb-2">
+              We sent a verification code to <span className="text-white/60">{email}</span>.
+            </p>
+            <p className="text-xs text-white/30 mb-6">
+              Enter the code to verify your account. Redirecting to dashboard...
+            </p>
+            <Loader2 className="h-4 w-4 text-accent animate-spin mx-auto" />
+          </div>
+        </motion.div>
+      </div>
+    );
   }
 
   const flowErrors = flow?.ui?.messages?.filter(m => m.type === 'error') || [];
