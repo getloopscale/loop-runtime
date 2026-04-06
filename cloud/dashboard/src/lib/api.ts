@@ -8,27 +8,37 @@ export function getApiBase() { return API_BASE; }
 export function getEngineBase() { return ENGINE_API; }
 
 export async function cloudFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
-  return apiFetch<T>(API_BASE, path, options);
+  return apiFetch<T>(API_BASE, path, { ...options, redirectOnAuth: true });
 }
 
 export async function engineFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
-  return apiFetch<T>(ENGINE_API, path, options);
+  // Engine API uses PAT tokens, not Kratos sessions.
+  // Don't redirect to login on 401 — the session may be valid but
+  // the engine doesn't accept session cookies. Treat as data error.
+  return apiFetch<T>(ENGINE_API, path, { ...options, redirectOnAuth: false });
 }
 
-async function apiFetch<T>(base: string, path: string, options: RequestInit = {}): Promise<T | null> {
+interface FetchOptions extends RequestInit {
+  redirectOnAuth?: boolean;
+}
+
+async function apiFetch<T>(base: string, path: string, options: FetchOptions = {}): Promise<T | null> {
+  const { redirectOnAuth = true, ...fetchOpts } = options;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> || {}),
+    ...(fetchOpts.headers as Record<string, string> || {}),
   };
 
   try {
     const resp = await fetch(`${base}${path}`, {
-      ...options,
+      ...fetchOpts,
       headers,
-      credentials: 'include', // Send session cookie
+      credentials: 'include',
     });
     if (resp.status === 401) {
-      window.location.href = '/login';
+      if (redirectOnAuth) {
+        window.location.href = '/login';
+      }
       return null;
     }
     if (!resp.ok) return null;
