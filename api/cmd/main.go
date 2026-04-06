@@ -21,7 +21,6 @@ import (
 	"github.com/loopzero/loopzero/api/internal/tracing"
 	"github.com/loopzero/loopzero/api/internal/config"
 	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/github"
 	"github.com/loopzero/loopzero/api/internal/k8s"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/routes"
@@ -105,30 +104,19 @@ func main() {
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
 	}
-	httpClient := &http.Client{
-		Timeout:   cfg.HTTPClientTimeout,
-		Transport: httpTransport,
+	// JWT-only auth — Hydra RSA JWTs (CLI) + HMAC session JWTs (dashboard).
+	// GitHub PAT authentication removed — all clients use JWT.
+	jwksURL := os.Getenv("JWKS_URL")
+	jwtIssuer := os.Getenv("JWT_ISSUER")
+	jwtVal := middleware.NewJWTValidator(jwksURL, jwtIssuer)
+
+	var hmacVal *middleware.HMACTokenValidator
+	if secret := os.Getenv("SESSION_TOKEN_SECRET"); secret != "" {
+		hmacVal = middleware.NewHMACTokenValidator(secret, "loopzero-cloud")
 	}
 
-	// GitHub token validator (PAT tokens from CLI)
-	githubValidator := &github.TokenValidator{
-		HTTPClient: httpClient,
-	}
-
-	// JWT validators — accept Hydra RSA JWTs (CLI) + HMAC session JWTs (dashboard)
-	var tokenValidator middleware.TokenValidator = githubValidator
-	if jwksURL := os.Getenv("JWKS_URL"); jwksURL != "" {
-		jwtIssuer := os.Getenv("JWT_ISSUER")
-		jwtVal := middleware.NewJWTValidator(jwksURL, jwtIssuer)
-
-		var hmacVal *middleware.HMACTokenValidator
-		if secret := os.Getenv("SESSION_TOKEN_SECRET"); secret != "" {
-			hmacVal = middleware.NewHMACTokenValidator(secret, "loopzero-cloud")
-		}
-
-		tokenValidator = middleware.NewDualValidator(jwtVal, hmacVal, githubValidator)
-		logger.Info("JWT + HMAC session token validation enabled")
-	}
+	tokenValidator := middleware.NewJWTOnlyValidator(jwtVal, hmacVal)
+	logger.Info("JWT auth enabled", "jwks_url", jwksURL, "hmac", hmacVal != nil)
 
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
 	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)

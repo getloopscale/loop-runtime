@@ -11,8 +11,8 @@ import (
 	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 )
 
-// JWTValidator validates JWT tokens against Ory Hydra's JWKS endpoint.
-// Implements the TokenValidator interface for the engine API.
+// JWTValidator validates RSA JWT tokens against Ory Hydra's JWKS endpoint.
+// Used for CLI authentication (Device Code Flow → Hydra-issued JWT).
 type JWTValidator struct {
 	validator *loopzerojwt.Validator
 }
@@ -24,8 +24,7 @@ func NewJWTValidator(jwksURL, issuer string) *JWTValidator {
 	}
 }
 
-// ValidateToken validates a JWT and returns a TokenValidationResult compatible
-// with the existing auth middleware.
+// ValidateToken validates a Hydra RSA JWT.
 func (v *JWTValidator) ValidateToken(_ context.Context, token string) (*TokenValidationResult, error) {
 	claims, err := v.validator.Validate(token)
 	if err != nil {
@@ -33,65 +32,13 @@ func (v *JWTValidator) ValidateToken(_ context.Context, token string) (*TokenVal
 	}
 
 	return &TokenValidationResult{
-		UserID:   claims.Subject,
-		Email:    claims.Email,
-		GitHubID: 0, // JWT tokens don't carry GitHub ID
+		UserID: claims.Subject,
+		Email:  claims.Email,
 	}, nil
 }
 
-// DualValidator tries JWT validation first, then HMAC session token, then GitHub PAT.
-// Accepts all three token types for unified auth across CLI and dashboard.
-type DualValidator struct {
-	jwtValidator  *JWTValidator
-	hmacValidator *HMACTokenValidator
-	patValidator  TokenValidator // Existing GitHub PAT validator
-}
-
-// NewDualValidator creates a validator that accepts JWT, HMAC session, and GitHub PAT tokens.
-// If jwtValidator or hmacValidator is nil, that validation path is skipped.
-func NewDualValidator(jwtValidator *JWTValidator, hmacValidator *HMACTokenValidator, patValidator TokenValidator) *DualValidator {
-	return &DualValidator{
-		jwtValidator:  jwtValidator,
-		hmacValidator: hmacValidator,
-		patValidator:  patValidator,
-	}
-}
-
-// ValidateToken routes to the appropriate validator based on token format.
-// - Tokens starting with "ghp_", "gho_", or "github_pat_" → GitHub PAT validator
-// - Tokens with 3 dot-separated segments → JWT validator
-// - Everything else → try JWT first, then PAT
-func (v *DualValidator) ValidateToken(ctx context.Context, token string) (*TokenValidationResult, error) {
-	// If no JWT validator configured, fall back to PAT only
-	if v.jwtValidator == nil {
-		return v.patValidator.ValidateToken(ctx, token)
-	}
-
-	// Route by token format
-	if loopzerojwt.IsGitHubPAT(token) {
-		return v.patValidator.ValidateToken(ctx, token)
-	}
-
-	if loopzerojwt.IsJWTToken(token) {
-		return v.jwtValidator.ValidateToken(ctx, token)
-	}
-
-	// Unknown format — try JWT first, then HMAC, then PAT
-	result, err := v.jwtValidator.ValidateToken(ctx, token)
-	if err == nil {
-		return result, nil
-	}
-	if v.hmacValidator != nil {
-		result, err := v.hmacValidator.ValidateToken(ctx, token)
-		if err == nil {
-			return result, nil
-		}
-	}
-	return v.patValidator.ValidateToken(ctx, token)
-}
-
 // HMACTokenValidator validates HMAC-SHA256 session tokens issued by the cloud service.
-// Used for dashboard → engine API authentication.
+// Used for dashboard authentication (Kratos session → BFF token exchange → HMAC JWT).
 type HMACTokenValidator struct {
 	secret   []byte
 	issuer   string
@@ -140,4 +87,40 @@ func (v *HMACTokenValidator) ValidateToken(_ context.Context, token string) (*To
 		UserID: claims.RegisteredClaims.Subject,
 		Email:  claims.Email,
 	}, nil
+}
+
+// JWTOnlyValidator validates JWT tokens only (no GitHub PAT).
+// Tries Hydra RSA JWT first, then HMAC session token.
+type JWTOnlyValidator struct {
+	rsaValidator  *JWTValidator
+	hmacValidator *HMACTokenValidator
+}
+
+// NewJWTOnlyValidator creates a validator that accepts RSA + HMAC JWTs.
+func NewJWTOnlyValidator(rsaValidator *JWTValidator, hmacValidator *HMACTokenValidator) *JWTOnlyValidator {
+	return &JWTOnlyValidator{
+		rsaValidator:  rsaValidator,
+		hmacValidator: hmacValidator,
+	}
+}
+
+// ValidateToken tries RSA JWT first, then HMAC session token.
+func (v *JWTOnlyValidator) ValidateToken(ctx context.Context, token string) (*TokenValidationResult, error) {
+	// Try RSA JWT (Hydra — CLI)
+	if v.rsaValidator != nil {
+		result, err := v.rsaValidator.ValidateToken(ctx, token)
+		if err == nil {
+			return result, nil
+		}
+	}
+
+	// Try HMAC session token (dashboard)
+	if v.hmacValidator != nil {
+		result, err := v.hmacValidator.ValidateToken(ctx, token)
+		if err == nil {
+			return result, nil
+		}
+	}
+
+	return nil, ErrInvalidToken
 }
