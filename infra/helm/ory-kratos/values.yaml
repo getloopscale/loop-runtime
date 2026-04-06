@@ -75,13 +75,8 @@ kratos:
 
         login:
           ui_url: "http://localhost:4455/login"
-          after:
-            password:
-              hooks:
-                - hook: session
-            oidc:
-              hooks:
-                - hook: session
+          # NOTE: login.after hooks are NOT supported in Kratos v26.
+          # Kratos creates sessions automatically on successful login.
 
         verification:
           enabled: true
