@@ -21,6 +21,7 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
+	"github.com/loopzero/loopzero/cloud/internal/billing"
 	"github.com/loopzero/loopzero/cloud/internal/config"
 	"github.com/loopzero/loopzero/cloud/internal/consent"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
@@ -88,6 +89,20 @@ func main() {
 	jwksURL := cfg.HydraPublicURL + "/.well-known/jwks.json"
 	jwtValidator := auth.NewJWKSValidator(jwksURL, cfg.JWTIssuer)
 
+	// Billing (optional — requires Stripe keys and DB)
+	var stripeClient *billing.StripeClient
+	var webhookHandler *billing.WebhookHandler
+	var billingHandler *routes.BillingHandler
+
+	if cfg.StripeAPIKey.Value() != "" {
+		stripeClient = billing.NewStripeClient(cfg.StripeAPIKey.Value())
+		webhookHandler = billing.NewWebhookHandler(db, cfg.StripeWebhookSecret.Value(), logger)
+		billingHandler = routes.NewBillingHandler(stripeClient, webhookHandler, jwtValidator, cfg.BillingReturnURL)
+		logger.Info("billing enabled")
+	} else {
+		logger.Warn("STRIPE_API_KEY not set — billing endpoints disabled")
+	}
+
 	// Handlers
 	deviceHandler := routes.NewDeviceHandler(hydra, cfg.BillingReturnURL)
 	meHandler := routes.NewMeHandler(jwtValidator)
@@ -138,6 +153,16 @@ func main() {
 	r.Get("/auth/login/complete", consentHandler.LoginComplete)
 	r.Get("/auth/consent", consentHandler.Consent)
 	r.Get("/auth/device", consentHandler.DeviceVerify)
+
+	// Billing endpoints (JWT-authenticated except webhook)
+	if billingHandler != nil {
+		r.Route("/v1/billing", func(r chi.Router) {
+			r.Get("/", billingHandler.GetBilling)
+			r.Get("/portal", billingHandler.Portal)
+		})
+		// Webhook endpoint — NO JWT auth (Stripe signs with its own secret)
+		r.Post("/v1/webhooks/stripe", billingHandler.Webhook)
+	}
 
 	// Start server
 	srv := &http.Server{

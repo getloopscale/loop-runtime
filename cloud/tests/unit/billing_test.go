@@ -61,6 +61,34 @@ func TestVerifySignature_ExpiredTimestamp(t *testing.T) {
 	}
 }
 
+func TestVerifySignature_299sAccepted(t *testing.T) {
+	// Stripe recommends 300s tolerance — 299s should be accepted
+	secret := "whsec_test_secret"
+	payload := []byte(`{"id":"evt_299"}`)
+	ts := fmt.Sprintf("%d", time.Now().Add(-299*time.Second).Unix())
+
+	sig := computeSignature(t, ts, payload, secret)
+	header := fmt.Sprintf("t=%s,v1=%s", ts, sig)
+
+	if err := billing.VerifySignature(payload, header, secret); err != nil {
+		t.Errorf("299s-old timestamp should be accepted: %v", err)
+	}
+}
+
+func TestVerifySignature_301sRejected(t *testing.T) {
+	// Beyond 300s tolerance — should be rejected
+	secret := "whsec_test_secret"
+	payload := []byte(`{"id":"evt_301"}`)
+	ts := fmt.Sprintf("%d", time.Now().Add(-301*time.Second).Unix())
+
+	sig := computeSignature(t, ts, payload, secret)
+	header := fmt.Sprintf("t=%s,v1=%s", ts, sig)
+
+	if err := billing.VerifySignature(payload, header, secret); err == nil {
+		t.Error("301s-old timestamp should be rejected")
+	}
+}
+
 func TestWebhookHandlerNilDB(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	handler := billing.NewWebhookHandler(nil, "secret", logger)
