@@ -17,6 +17,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/manifests"
 	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
@@ -65,11 +66,18 @@ type BuildReconcileLoopConfig struct {
 //
 // This loop also subsumes the StartupReconciler: on boot, it immediately catches up
 // with any workflows that completed while the API was down.
+// CustomDomainQuerier queries active custom domains for manifest rendering.
+// MEET-2026-04-06-034 Block 0: both deploy and domain provisioner must include custom domains.
+type CustomDomainQuerier interface {
+	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]routes.CustomDomain, error)
+}
+
 type BuildReconcileLoop struct {
-	buildStore db.BuildStore
-	workflow   WorkflowSubmitter
-	orch       BuildCompletionHandler
-	locker     EnvironmentLocker
+	buildStore   db.BuildStore
+	workflow     WorkflowSubmitter
+	orch         BuildCompletionHandler
+	locker       EnvironmentLocker
+	domainStore  CustomDomainQuerier // MEET-034: custom domains in manifests
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -102,6 +110,7 @@ func NewBuildReconcileLoop(
 	workflow WorkflowSubmitter,
 	orch BuildCompletionHandler,
 	locker EnvironmentLocker,
+	domainStore CustomDomainQuerier,
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	},
@@ -112,12 +121,13 @@ func NewBuildReconcileLoop(
 		cfg.MaxConcurrent = 10
 	}
 	return &BuildReconcileLoop{
-		buildStore: buildStore,
-		workflow:   workflow,
-		orch:       orch,
-		locker:     locker,
-		eventStore: eventStore,
-		logger:     logger,
+		buildStore:  buildStore,
+		workflow:    workflow,
+		orch:        orch,
+		locker:      locker,
+		domainStore: domainStore,
+		eventStore:  eventStore,
+		logger:      logger,
 		cfg:        cfg,
 		sem:        make(chan struct{}, cfg.MaxConcurrent),
 	}
@@ -321,13 +331,29 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 			Rendering:   app.Rendering,
 		})
 
+		// MEET-2026-04-06-034 Block 0: include custom domains in manifest rendering.
+		// Without this, every deploy silently removes custom domain IngressRoutes.
+		var customDomains []manifests.CustomDomainInput
+		if r.domainStore != nil {
+			domains, err := r.domainStore.ListActiveByApp(ctx, build.TenantID, build.ProjectID, app.Name, build.Environment)
+			if err != nil {
+				r.logger.Warn("reconcile loop: failed to query custom domains for app, continuing without",
+					"app", app.Name, "error", err)
+			} else {
+				for _, d := range domains {
+					customDomains = append(customDomains, manifests.CustomDomainInput{Domain: d.Domain, ID: d.ID})
+				}
+			}
+		}
+
 		manifestApps = append(manifestApps, manifests.AppManifestInput{
-			Name:      app.Name,
-			Type:      app.Type,
-			Rendering: app.Rendering,
-			Port:      app.Port,
-			ImageRef:  imageRef,
-			Secrets:   app.Secrets,
+			Name:          app.Name,
+			Type:          app.Type,
+			Rendering:     app.Rendering,
+			Port:          app.Port,
+			ImageRef:      imageRef,
+			Secrets:       app.Secrets,
+			CustomDomains: customDomains,
 		})
 	}
 
@@ -463,13 +489,28 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 			Type:        app.Type,
 			Rendering:   app.Rendering,
 		})
+		// MEET-2026-04-06-034 Block 0: include custom domains (same as onWorkflowSucceeded path)
+		var customDomains []manifests.CustomDomainInput
+		if r.domainStore != nil {
+			domains, err := r.domainStore.ListActiveByApp(ctx, build.TenantID, build.ProjectID, app.Name, build.Environment)
+			if err != nil {
+				r.logger.Warn("reconcile loop: failed to query custom domains for retry, continuing without",
+					"app", app.Name, "error", err)
+			} else {
+				for _, d := range domains {
+					customDomains = append(customDomains, manifests.CustomDomainInput{Domain: d.Domain, ID: d.ID})
+				}
+			}
+		}
+
 		manifestApps = append(manifestApps, manifests.AppManifestInput{
-			Name:      app.Name,
-			Type:      app.Type,
-			Rendering: app.Rendering,
-			Port:      app.Port,
-			ImageRef:  imageRef,
-			Secrets:   app.Secrets,
+			Name:          app.Name,
+			Type:          app.Type,
+			Rendering:     app.Rendering,
+			Port:          app.Port,
+			ImageRef:      imageRef,
+			Secrets:       app.Secrets,
+			CustomDomains: customDomains,
 		})
 	}
 

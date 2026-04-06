@@ -382,6 +382,10 @@ func main() {
 			Sync:              syncClient,
 		})
 
+		// Domain store — declared early because both build reconcile loop and
+		// domain provisioner need it (MEET-2026-04-06-034).
+		domainStore := &db.PostgresDomainStore{DB: dbAdapter}
+
 		// C-01/C-03 fix: BuildReconcileLoop replaces both the HTTP callback
 		// and the StartupReconciler. The control plane POLLS the build cluster's
 		// Workflow CRDs instead of the build cluster calling the API.
@@ -390,6 +394,7 @@ func main() {
 			workflowSubmitter,
 			orch,
 			locker,
+			domainStore, // MEET-034: custom domains in manifest rendering
 			pgEventStore,
 			logger,
 			services.BuildReconcileLoopConfig{
@@ -551,7 +556,7 @@ func main() {
 		)
 
 		// --- Custom Domains (MEET-2026-04-05-033) ---
-		domainStore := &db.PostgresDomainStore{DB: dbAdapter}
+		// domainStore declared above (line ~387) for build reconcile loop.
 		cnameTarget := "cname." + cfg.BaseDomain
 		domainValidator := domain.NewValidator(cfg.BaseDomain, nil)
 		dnsVerifier := &domain.DNSVerifier{}
@@ -559,7 +564,12 @@ func main() {
 
 		// Background services created but started only after HTTP-01 spike validates.
 		domainProvisioner := services.NewDomainProvisioner(
-			domainStore, gitopsPusher, locker, logger, services.DefaultDomainProvisionerConfig(),
+			domainStore, releaseStore, buildStore, gitopsPusher, locker, logger,
+			services.DomainProvisionerConfig{
+				Interval:    30 * time.Second,
+				BaseDomain:  cfg.BaseDomain,
+				RegistryURL: cfg.RegistryURL,
+			},
 		)
 		domainHealthChecker := services.NewDomainHealthChecker(
 			domainStore, logger, services.DomainHealthCheckerConfig{
