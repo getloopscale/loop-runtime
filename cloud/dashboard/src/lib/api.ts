@@ -79,15 +79,16 @@ export async function cloudFetch<T>(path: string, options: RequestInit = {}): Pr
     redirectToLogin();
     return null;
   }
-  return apiFetch<T>(API_BASE, path, token, options);
+  return apiFetch<T>(API_BASE, path, token, options, true);
 }
 
-export async function engineFetch<T>(_path: string, _options: RequestInit = {}): Promise<T | null> {
-  // Engine API not yet integrated with dashboard JWT — return null gracefully
-  return null;
+export async function engineFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
+  const token = await ensureToken();
+  if (!token) return null; // No redirect — engine API failure is not a session issue
+  return apiFetch<T>(ENGINE_API, path, token, options, false);
 }
 
-async function apiFetch<T>(base: string, path: string, token: string, options: RequestInit = {}): Promise<T | null> {
+async function apiFetch<T>(base: string, path: string, token: string, options: RequestInit = {}, redirectOnAuthFailure = true): Promise<T | null> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
@@ -97,6 +98,7 @@ async function apiFetch<T>(base: string, path: string, token: string, options: R
   try {
     const resp = await fetch(`${base}${path}`, { ...options, headers });
     if (resp.status === 401) {
+      if (!redirectOnAuthFailure) return null; // Engine API — don't retry/redirect
       // Token expired — try refresh once
       accessToken = null;
       const newToken = await ensureToken();
