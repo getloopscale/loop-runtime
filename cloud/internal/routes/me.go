@@ -32,8 +32,12 @@ func (h *MeHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	claims, err := h.validator.Validate(token)
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "AUTH_FAILED",
-			"Session expired or invalid. Run: loopzero login")
+		// Log the actual error for debugging
+		writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
+			"code":  "AUTH_FAILED",
+			"error": "Session expired or invalid. Run: loopzero login",
+			"debug": err.Error(),
+		})
 		return
 	}
 
@@ -53,7 +57,7 @@ func (h *MeHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"team":     claims.TenantID,
 		"role":     claims.Role,
 		"plan":     "starter",
-		"user_id":  claims.Subject,
+		"user_id":  claims.RegisteredClaims.Subject,
 	})
 }
 

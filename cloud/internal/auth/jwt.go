@@ -31,20 +31,22 @@ type JWKSValidator struct {
 // Custom claims (email, name) are injected via the consent handler's
 // session.access_token field and appear in the "ext" claim.
 type Claims struct {
-	Subject  string   `json:"sub"`
-	Email    string   `json:"email,omitempty"`
-	Name     string   `json:"name,omitempty"`
-	TenantID string   `json:"tenant_id,omitempty"`
-	Role     string   `json:"role,omitempty"`
-	Scope    string   `json:"scope,omitempty"`
-	Issuer   string   `json:"iss"`
-	Audience []string `json:"aud,omitempty"`
-	// Hydra puts custom session claims in "ext"
-	Ext      struct {
+	// Standard claims (sub, iss, aud, exp, etc.) are in RegisteredClaims.
+	// Do NOT redeclare them here — Go json parser can't handle duplicate tags.
+	jwt.RegisteredClaims
+
+	// Hydra custom claims
+	ClientID string `json:"client_id,omitempty"`
+	TenantID string `json:"tenant_id,omitempty"`
+	Role     string `json:"role,omitempty"`
+	Scope    string `json:"scope,omitempty"`
+	Email    string `json:"email,omitempty"`
+	Name     string `json:"name,omitempty"`
+	// Hydra puts consent session claims in "ext"
+	Ext struct {
 		Email string `json:"email,omitempty"`
 		Name  string `json:"name,omitempty"`
 	} `json:"ext,omitempty"`
-	jwt.RegisteredClaims
 }
 
 // NewJWKSValidator creates a validator that fetches JWKS from Hydra.
