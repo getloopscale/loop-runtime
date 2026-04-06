@@ -26,8 +26,8 @@ func TestSessionTokenIssuer_IssueAndValidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateSession failed: %v", err)
 	}
-	if claims.RegisteredClaims.Subject != "user-123" {
-		t.Errorf("Subject = %q, want user-123", claims.RegisteredClaims.Subject)
+	if claims.Subject != "user-123" {
+		t.Errorf("Subject = %q, want user-123", claims.Subject)
 	}
 	if claims.Email != "test@test.com" {
 		t.Errorf("Email = %q, want test@test.com", claims.Email)
