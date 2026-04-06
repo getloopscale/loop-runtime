@@ -3,56 +3,93 @@
 
 package jwt
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
-func TestIsJWTToken(t *testing.T) {
-	tests := []struct {
-		token string
-		want  bool
-	}{
-		{"eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyMSJ9.signature", true},
-		{"ghp_abc123def456", false},
-		{"gho_abc123def456", false},
-		{"github_pat_abc", false},
-		{"short.jwt", false},
-		{"", false},
-		{"plaintext-token-no-dots", false},
+func TestSessionTokenIssuer_IssueAndValidate(t *testing.T) {
+	issuer := NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", 1*time.Hour)
+
+	token, expiresIn, err := issuer.Issue("user-123", "test@test.com", "Test User", "tn-acme")
+	if err != nil {
+		t.Fatalf("Issue failed: %v", err)
+	}
+	if token == "" {
+		t.Fatal("empty token")
+	}
+	if expiresIn != 3600 {
+		t.Errorf("expiresIn = %d, want 3600", expiresIn)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.token[:min(len(tt.token), 20)], func(t *testing.T) {
-			if got := IsJWTToken(tt.token); got != tt.want {
-				t.Errorf("IsJWTToken(%q) = %v, want %v", tt.token[:min(len(tt.token), 20)], got, tt.want)
-			}
-		})
+	claims, err := issuer.ValidateSession(token)
+	if err != nil {
+		t.Fatalf("ValidateSession failed: %v", err)
 	}
-}
-
-func TestIsGitHubPAT(t *testing.T) {
-	tests := []struct {
-		token string
-		want  bool
-	}{
-		{"ghp_abc123def456ghi789", true},
-		{"gho_abc123", true},
-		{"github_pat_abc123", true},
-		{"eyJhbGciOiJSUzI1NiJ9.payload.sig", false},
-		{"random-token", false},
-		{"", false},
+	if claims.RegisteredClaims.Subject != "user-123" {
+		t.Errorf("Subject = %q, want user-123", claims.RegisteredClaims.Subject)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.token[:min(len(tt.token), 15)], func(t *testing.T) {
-			if got := IsGitHubPAT(tt.token); got != tt.want {
-				t.Errorf("IsGitHubPAT(%q) = %v, want %v", tt.token[:min(len(tt.token), 15)], got, tt.want)
-			}
-		})
+	if claims.Email != "test@test.com" {
+		t.Errorf("Email = %q, want test@test.com", claims.Email)
+	}
+	if claims.Name != "Test User" {
+		t.Errorf("Name = %q, want Test User", claims.Name)
+	}
+	if claims.TenantID != "tn-acme" {
+		t.Errorf("TenantID = %q, want tn-acme", claims.TenantID)
 	}
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+func TestSessionTokenIssuer_WrongSecret(t *testing.T) {
+	issuerA := NewSessionTokenIssuer("secret-aaaaaaaaaaaaaaaaaaaaaaaaa", "loopzero-cloud", 1*time.Hour)
+	issuerB := NewSessionTokenIssuer("secret-bbbbbbbbbbbbbbbbbbbbbbbbb", "loopzero-cloud", 1*time.Hour)
+
+	token, _, _ := issuerA.Issue("user-1", "a@test.com", "A", "tn")
+
+	_, err := issuerB.ValidateSession(token)
+	if err == nil {
+		t.Error("token signed with wrong secret should be rejected")
 	}
-	return b
+}
+
+func TestSessionTokenIssuer_ExpiredToken(t *testing.T) {
+	issuer := NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", -1*time.Second)
+
+	token, _, err := issuer.Issue("user-1", "a@test.com", "A", "tn")
+	if err != nil {
+		t.Fatalf("Issue failed: %v", err)
+	}
+
+	_, err = issuer.ValidateSession(token)
+	if err == nil {
+		t.Error("expired token should be rejected")
+	}
+}
+
+func TestSessionTokenIssuer_WrongIssuer(t *testing.T) {
+	issuerA := NewSessionTokenIssuer("same-secret-32-chars-minimum!!!!", "issuer-a", 1*time.Hour)
+	issuerB := NewSessionTokenIssuer("same-secret-32-chars-minimum!!!!", "issuer-b", 1*time.Hour)
+
+	token, _, _ := issuerA.Issue("user-1", "a@test.com", "A", "tn")
+
+	_, err := issuerB.ValidateSession(token)
+	if err == nil {
+		t.Error("token with wrong issuer should be rejected")
+	}
+}
+
+func TestSessionTokenIssuer_ValidatesAudience(t *testing.T) {
+	issuer := NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", 1*time.Hour)
+
+	token, _, _ := issuer.Issue("user-1", "a@test.com", "A", "tn")
+
+	claims, err := issuer.ValidateSession(token)
+	if err != nil {
+		t.Fatalf("ValidateSession failed: %v", err)
+	}
+
+	// Verify audience is set
+	if len(claims.Audience) == 0 || claims.Audience[0] != "loopzero-cloud" {
+		t.Errorf("Audience = %v, want [loopzero-cloud]", claims.Audience)
+	}
 }

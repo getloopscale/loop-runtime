@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 )
 
 // UserContext holds authenticated user info, set by the auth middleware.
@@ -32,9 +34,9 @@ func GetUser(ctx context.Context) *UserContext {
 }
 
 // RequireJWT returns chi middleware that validates JWT Bearer tokens.
-// Accepts both Hydra RSA JWTs (CLI) and HMAC session JWTs (dashboard).
-// Sets UserContext on the request context for downstream handlers.
-func RequireJWT(jwks *JWKSValidator, sess *SessionTokenIssuer) func(http.Handler) http.Handler {
+// Accepts Hydra RSA JWTs (CLI) and HMAC session JWTs (dashboard).
+// Uses pkg/jwt — single source of truth for JWT validation.
+func RequireJWT(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.SessionTokenIssuer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -45,8 +47,8 @@ func RequireJWT(jwks *JWKSValidator, sess *SessionTokenIssuer) func(http.Handler
 			token := authHeader[7:]
 
 			// Try RSA JWT (Hydra — CLI)
-			if jwks != nil {
-				claims, err := jwks.Validate(token)
+			if rsaValidator != nil {
+				claims, err := rsaValidator.Validate(token)
 				if err == nil {
 					email := claims.Email
 					if email == "" {
@@ -72,8 +74,8 @@ func RequireJWT(jwks *JWKSValidator, sess *SessionTokenIssuer) func(http.Handler
 			}
 
 			// Try HMAC session JWT (dashboard)
-			if sess != nil {
-				claims, err := sess.Validate(token)
+			if sessValidator != nil {
+				claims, err := sessValidator.ValidateSession(token)
 				if err == nil {
 					tenantID := claims.TenantID
 					if tenantID == "" {
@@ -99,7 +101,7 @@ func writeAuthError(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
 	json.NewEncoder(w).Encode(map[string]string{
-		"code":  "AUTH_REQUIRED",
-		"error": message,
+		"code":    "AUTH_REQUIRED",
+		"message": message,
 	})
 }

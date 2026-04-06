@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/logging"
+	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 
 	"github.com/loopzero/loopzero/api/internal/adapters"
 	"github.com/loopzero/loopzero/api/internal/tracing"
@@ -104,19 +105,18 @@ func main() {
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
 	}
-	// JWT-only auth — Hydra RSA JWTs (CLI) + HMAC session JWTs (dashboard).
-	// GitHub PAT authentication removed — all clients use JWT.
+	// JWT-only auth — uses pkg/jwt (single source of truth).
 	jwksURL := os.Getenv("JWKS_URL")
 	jwtIssuer := os.Getenv("JWT_ISSUER")
-	jwtVal := middleware.NewJWTValidator(jwksURL, jwtIssuer)
+	rsaValidator := loopzerojwt.NewValidator(jwksURL, jwtIssuer)
 
-	var hmacVal *middleware.HMACTokenValidator
+	var sessValidator *loopzerojwt.SessionTokenIssuer
 	if secret := os.Getenv("SESSION_TOKEN_SECRET"); secret != "" {
-		hmacVal = middleware.NewHMACTokenValidator(secret, "loopzero-cloud")
+		sessValidator = loopzerojwt.NewSessionTokenIssuer(secret, "loopzero-cloud", 1*time.Hour)
 	}
 
-	tokenValidator := middleware.NewJWTOnlyValidator(jwtVal, hmacVal)
-	logger.Info("JWT auth enabled", "jwks_url", jwksURL, "hmac", hmacVal != nil)
+	tokenValidator := middleware.NewJWTOnlyValidator(rsaValidator, sessValidator)
+	logger.Info("JWT auth enabled", "jwks_url", jwksURL, "hmac", sessValidator != nil)
 
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
 	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)

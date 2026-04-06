@@ -6,6 +6,9 @@ package middleware
 import (
 	"context"
 	"testing"
+	"time"
+
+	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 )
 
 func TestJWTOnlyValidator_NilValidators_ReturnsError(t *testing.T) {
@@ -16,34 +19,49 @@ func TestJWTOnlyValidator_NilValidators_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestJWTOnlyValidator_RSAFirst_ThenHMAC(t *testing.T) {
-	// RSA validator will fail (invalid JWKS URL), HMAC should be tried
-	rsaVal := NewJWTValidator("http://invalid:4444/.well-known/jwks.json", "http://invalid:4444/")
-	hmacVal := NewHMACTokenValidator("test-secret-32-chars-minimum!!!!", "loopzero-cloud")
+func TestJWTOnlyValidator_HMACValidToken(t *testing.T) {
+	secret := "test-secret-32-chars-minimum!!!!"
+	issuer := loopzerojwt.NewSessionTokenIssuer(secret, "loopzero-cloud", 1*time.Hour)
+	v := NewJWTOnlyValidator(nil, issuer)
 
-	v := NewJWTOnlyValidator(rsaVal, hmacVal)
+	// Issue a valid token
+	token, _, err := issuer.Issue("user-123", "test@test.com", "Test User", "tn-test")
+	if err != nil {
+		t.Fatalf("failed to issue token: %v", err)
+	}
 
-	// Create a valid HMAC token
-	// (can't easily test without the issuer, but we verify the flow)
-	_, err := v.ValidateToken(context.Background(), "not-a-valid-jwt")
-	if err == nil {
-		t.Error("invalid token should return error")
+	result, err := v.ValidateToken(context.Background(), token)
+	if err != nil {
+		t.Fatalf("valid HMAC token rejected: %v", err)
+	}
+	if result.UserID != "user-123" {
+		t.Errorf("UserID = %q, want user-123", result.UserID)
+	}
+	if result.Email != "test@test.com" {
+		t.Errorf("Email = %q, want test@test.com", result.Email)
 	}
 }
 
-func TestHMACTokenValidator_InvalidToken(t *testing.T) {
-	v := NewHMACTokenValidator("test-secret-32-chars-minimum!!!!", "loopzero-cloud")
+func TestJWTOnlyValidator_InvalidToken(t *testing.T) {
+	issuer := loopzerojwt.NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", 1*time.Hour)
+	v := NewJWTOnlyValidator(nil, issuer)
+
 	_, err := v.ValidateToken(context.Background(), "not-a-jwt")
 	if err == nil {
 		t.Error("invalid token should return error")
 	}
 }
 
-func TestHMACTokenValidator_WrongSecret(t *testing.T) {
-	v := NewHMACTokenValidator("wrong-secret-32-chars-minimum!!!", "loopzero-cloud")
-	// This is a token signed with a different secret — should fail
-	_, err := v.ValidateToken(context.Background(), "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMSJ9.invalid")
+func TestJWTOnlyValidator_WrongSecret(t *testing.T) {
+	// Issue with one secret, validate with another
+	issuerA := loopzerojwt.NewSessionTokenIssuer("secret-aaaaaaaaaaaaaaaaaaaaaaaaa", "loopzero-cloud", 1*time.Hour)
+	issuerB := loopzerojwt.NewSessionTokenIssuer("secret-bbbbbbbbbbbbbbbbbbbbbbbbb", "loopzero-cloud", 1*time.Hour)
+
+	token, _, _ := issuerA.Issue("user-1", "a@test.com", "A", "tn")
+	v := NewJWTOnlyValidator(nil, issuerB)
+
+	_, err := v.ValidateToken(context.Background(), token)
 	if err == nil {
-		t.Error("token with wrong secret should return error")
+		t.Error("token signed with wrong secret should be rejected")
 	}
 }

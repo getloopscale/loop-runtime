@@ -33,11 +33,3 @@ func (h *MeHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"user_id": user.Subject,
 	})
 }
-
-func extractBearerToken(r *http.Request) string {
-	a := r.Header.Get("Authorization")
-	if len(a) > 7 && a[:7] == "Bearer " {
-		return a[7:]
-	}
-	return ""
-}

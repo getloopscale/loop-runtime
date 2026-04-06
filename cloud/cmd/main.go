@@ -20,6 +20,8 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 	_ "github.com/lib/pq"
 
+	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
+
 	"github.com/loopzero/loopzero/cloud/internal/auth"
 	"github.com/loopzero/loopzero/cloud/internal/billing"
 	"github.com/loopzero/loopzero/cloud/internal/config"
@@ -86,12 +88,12 @@ func main() {
 		logger.Warn("failed to register OAuth2 client (Hydra may not be ready yet)", "error", err)
 	}
 
-	// Initialize JWKS validator (Hydra-issued JWTs for CLI)
+	// JWT validation — single source of truth (pkg/jwt)
 	jwksURL := cfg.HydraPublicURL + "/.well-known/jwks.json"
-	jwtValidator := auth.NewJWKSValidator(jwksURL, cfg.JWTIssuer)
+	jwtValidator := loopzerojwt.NewValidator(jwksURL, cfg.JWTIssuer)
 
-	// Session token issuer (HMAC JWTs for dashboard)
-	sessIssuer := auth.NewSessionTokenIssuer(
+	// Session token issuer/validator (HMAC JWTs for dashboard)
+	sessIssuer := loopzerojwt.NewSessionTokenIssuer(
 		cfg.SessionTokenSecret.Value(),
 		"loopzero-cloud",
 		1*time.Hour,
@@ -113,8 +115,6 @@ func main() {
 	} else {
 		logger.Warn("STRIPE_API_KEY not set — billing endpoints disabled")
 	}
-
-	_ = billingProvisioner // Used in billing handler
 
 	// Universal JWT auth middleware (RSA + HMAC — one path for all)
 	requireJWT := auth.RequireJWT(jwtValidator, sessIssuer)

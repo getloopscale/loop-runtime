@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -19,13 +18,28 @@ import (
 )
 
 // Claims represents the JWT claims extracted from a Hydra-issued token.
+// Subject is in RegisteredClaims.Subject — do NOT redeclare it here.
 type Claims struct {
-	Subject  string `json:"sub"`
+	goJWT.RegisteredClaims
 	Email    string `json:"email,omitempty"`
+	Name     string `json:"name,omitempty"`
 	TenantID string `json:"tenant_id,omitempty"`
 	Role     string `json:"role,omitempty"`
 	Scope    string `json:"scope,omitempty"`
+	// Hydra puts consent session claims in "ext" (access_token session).
+	Ext struct {
+		Email string `json:"email,omitempty"`
+		Name  string `json:"name,omitempty"`
+	} `json:"ext,omitempty"`
+}
+
+// SessionClaims are the claims in HMAC session tokens (dashboard → API).
+// Shared between cloud service (issuer) and engine API (validator).
+type SessionClaims struct {
 	goJWT.RegisteredClaims
+	Email    string `json:"email,omitempty"`
+	Name     string `json:"name,omitempty"`
+	TenantID string `json:"tenant_id,omitempty"`
 }
 
 // Validator validates JWT tokens against a JWKS endpoint.
@@ -89,15 +103,71 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-// IsJWTToken returns true if the token looks like a JWT (has 3 dot-separated segments).
-func IsJWTToken(token string) bool {
-	parts := strings.Split(token, ".")
-	return len(parts) == 3 && len(parts[0]) > 10
+// SessionTokenIssuer issues and validates HMAC-SHA256 session JWTs.
+// Used by the cloud service to issue tokens and by both services to validate.
+type SessionTokenIssuer struct {
+	secret   []byte
+	issuer   string
+	audience string
+	lifetime time.Duration
 }
 
-// IsGitHubPAT returns true if the token looks like a GitHub PAT.
-func IsGitHubPAT(token string) bool {
-	return strings.HasPrefix(token, "ghp_") || strings.HasPrefix(token, "gho_") || strings.HasPrefix(token, "github_pat_")
+// NewSessionTokenIssuer creates an issuer/validator for HMAC session tokens.
+func NewSessionTokenIssuer(secret, issuer string, lifetime time.Duration) *SessionTokenIssuer {
+	return &SessionTokenIssuer{
+		secret:   []byte(secret),
+		issuer:   issuer,
+		audience: "loopzero-cloud",
+		lifetime: lifetime,
+	}
+}
+
+// Issue creates a signed HMAC JWT for a dashboard user.
+func (s *SessionTokenIssuer) Issue(sub, email, name, tenantID string) (string, int64, error) {
+	now := time.Now()
+	claims := SessionClaims{
+		RegisteredClaims: goJWT.RegisteredClaims{
+			Subject:   sub,
+			Issuer:    s.issuer,
+			Audience:  goJWT.ClaimStrings{s.audience},
+			IssuedAt:  goJWT.NewNumericDate(now),
+			NotBefore: goJWT.NewNumericDate(now),
+			ExpiresAt: goJWT.NewNumericDate(now.Add(s.lifetime)),
+		},
+		Email:    email,
+		Name:     name,
+		TenantID: tenantID,
+	}
+
+	token := goJWT.NewWithClaims(goJWT.SigningMethodHS256, claims)
+	signed, err := token.SignedString(s.secret)
+	if err != nil {
+		return "", 0, fmt.Errorf("sign session token: %w", err)
+	}
+	return signed, int64(s.lifetime.Seconds()), nil
+}
+
+// ValidateSession parses and validates an HMAC session token.
+func (s *SessionTokenIssuer) ValidateSession(tokenString string) (*SessionClaims, error) {
+	token, err := goJWT.ParseWithClaims(tokenString, &SessionClaims{}, func(token *goJWT.Token) (interface{}, error) {
+		if _, ok := token.Method.(*goJWT.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return s.secret, nil
+	},
+		goJWT.WithIssuer(s.issuer),
+		goJWT.WithAudience(s.audience),
+		goJWT.WithExpirationRequired(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("invalid session token: %w", err)
+	}
+
+	claims, ok := token.Claims.(*SessionClaims)
+	if !ok || !token.Valid {
+		return nil, fmt.Errorf("invalid session token claims")
+	}
+	return claims, nil
 }
 
 func (v *Validator) getKey(kid string) (*rsa.PublicKey, error) {
