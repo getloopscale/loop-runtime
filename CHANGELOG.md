@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-04-06
+
+### Added
+- **Cloud Auth System** — full authentication deployed on DigitalOcean
+  - Login via GitHub, Google (OIDC), and email/password
+  - User registration with email verification (6-digit code via Resend)
+  - Ory Kratos session-based auth (cookie, no tokens in browser)
+  - Ory Hydra for CLI Device Code Flow (RFC 8628)
+  - Dashboard at `cloud.dev.loopzero.example` with profile, logout, verification banner
+  - Verification page auto-submits code from email link
+- **Cloud Service** (`cloud/`) — Go service for OAuth2 consent, billing, metering
+  - Device Code Flow endpoints (`/v1/auth/device/*`)
+  - User info endpoint (`/v1/auth/me`) with JWT claims from Kratos identity
+  - Stripe billing integration (webhook, subscriptions, plan limits)
+  - Consent handler for Hydra login/consent flows
+- **Dashboard** (`cloud/dashboard/`) — React SPA (Vite + Tailwind)
+  - Login, register, verification, profile pages
+  - Overview, projects, environments, team, billing, settings pages
+  - Session-based auth guard (redirects to login when unauthenticated)
+  - Verification banner for unverified email users
+- **Email delivery via Resend HTTP API** — Kratos HTTP courier
+  - DigitalOcean blocks SMTP ports; uses `delivery_strategy: http`
+  - Jsonnet template maps `ctx.recipient/subject/html_body` to Resend API
+  - Requires `--watch-courier` flag on Kratos
+- **Security hardening** (MEET-033)
+  - Password: min 10 chars + HaveIBeenPwned breach check
+  - Cloudflare WAF rate-limiting: 10 login/min, 5 register/min per IP
+  - Account enumeration mitigation (`security.account_enumeration.mitigate: true`)
+- **Content hash deploy** — deploy without git (MEET-028)
+  - Safe tar extraction (Go `archive/tar`, no path traversal/symlinks)
+  - 30 new tests for content hash functions
+- **ArgoCD SYNC_FAILED fix** — 7 root causes resolved (MEET-029)
+  - Callback auth header, leader election hardening, timeout hierarchy
+  - TriggerSync 404 recovery, convergence loop revision check
+- **CI/CD pipeline chain** — push → CI → Build Images → Infra Deploy
+  - Wait-for-CI polling in Build Images
+  - Wait-for-images polling in Infra Deploy
+  - cloud-api + dashboard added to build pipeline
+- **API Gateway** — Traefik path-based routing under `cloud.dev.loopzero.example`
+  - `/self-service/*` → Kratos, `/oauth2/*` → Hydra, `/auth/*` → cloud service
+  - CORS middleware on loopzero-api for cross-origin dashboard calls
+
+### Changed
+- `COMMIT` → `VERSION` in CLI build list/inspect output
+- Deploy error messages use product language (no internal terms)
+- `ReleasePendingTimeout`: 5min → 10min (reaper/convergence race fix)
+
+### Fixed
+- Content hash: `.git` prefix bug excluded `.github/`, `.gitignore`
+- `SourceStore` collapsed from 2 methods to 1 (`PushResult`)
+- `getGitRoot()` stderr leak in non-git directories
+- Dashboard auth: in-memory tokens → sessionStorage → Kratos sessions
+- Kratos `login.after` hooks removed (invalid in v26, caused CrashLoopBackOff)
+
+### Security
+- Safe tar extraction: rejects symlinks, hardlinks, path traversal, decompression bombs
+- Sensitive file detection for non-git projects
+- ArgoCD callback Authorization header (was missing — 401 on every callback)
+- Leader election: stale lock detection + 60s heartbeat + FATAL on loss
+- `loopzero_api_leader_status` Prometheus gauge metric
+
+### Infrastructure
+- Cloudflare Pro plan for WAF rate-limiting
+- DNS A records: `cloud.dev.loopzero.example`, `auth.dev.loopzero.example`
+- Ory Kratos + Hydra deployed on mgmt cluster
+- Resend SMTP secret in GitHub Actions (`LOOPZERO_RESEND_API_KEY`)
+- OAuth secrets: `LOOPZERO_GITHUB_CLIENT_ID/SECRET`, `LOOPZERO_GOOGLE_CLIENT_ID/SECRET`
+
+### Meetings
+- MEET-028: Content hash security rework
+- MEET-029: ArgoCD SYNC_FAILED definitive fix (7 root causes)
+- MEET-030: Production readiness final push plan
+- MEET-031: Email flows implementation
+- MEET-032: Login redirect loop architecture fix
+- MEET-033: Password hardening + Cloudflare WAF
+- MEET-034: Kratos URL consistency fix
+- MEET-035: SMTP NetworkPolicy (superseded by MEET-036)
+- MEET-036: Resend HTTP API for email delivery
+
 ### Added
 - CLI command `loopzero team list` to list team members with roles (#cmd-team)
   - New API routes `GET/POST/DELETE/PATCH /api/v1/teams/members`
