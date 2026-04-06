@@ -101,6 +101,15 @@ kratos:
           after:
             default_browser_return_url: "http://localhost:4455/login"
 
+    # --- Security ---
+    security:
+      account_enumeration:
+        # Prevents attackers from discovering which emails have accounts.
+        # Registration: "check your email" instead of "email already exists"
+        # Login: same error for wrong email and wrong password
+        # Recovery: always "check your email" even if email doesn't exist
+        mitigate: true
+
     # --- Courier (Email) ---
     courier:
       smtp:
