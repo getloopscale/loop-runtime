@@ -32,12 +32,9 @@ func (h *DeviceHandler) Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Override verification_uri to use the branded dashboard URL.
-	// The dashboard routes /oauth2/* to Hydra via Traefik gateway.
+	// Use Hydra's native verification URI — CSRF cookies are domain-bound.
+	// Routing through cloud gateway breaks CSRF because cookies are set for auth.{domain}.
 	verificationURI := resp.VerificationURI
-	if h.dashboardURL != "" {
-		verificationURI = h.dashboardURL + "/oauth2/device/verify"
-	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"user_code":                 resp.UserCode,
