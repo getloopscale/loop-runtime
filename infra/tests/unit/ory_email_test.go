@@ -105,19 +105,20 @@ func TestEmailTemplatesValidURLs(t *testing.T) {
 	}
 }
 
-func TestKratosSMTPConfigured(t *testing.T) {
+func TestKratosHTTPCourierConfigured(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(helmDir(), "ory-kratos", "values.yaml"))
 	if err != nil {
 		t.Fatalf("values.yaml missing: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "smtp:") {
-		t.Error("Kratos values.yaml missing SMTP configuration")
+	// MEET-036: DigitalOcean blocks SMTP — using Resend HTTP API instead.
+	if !strings.Contains(content, "delivery_strategy: http") {
+		t.Error("Kratos values.yaml missing HTTP courier delivery_strategy")
 	}
-	if !strings.Contains(content, "from_address:") {
-		t.Error("Kratos values.yaml missing SMTP from_address")
+	if !strings.Contains(content, "api.resend.com") {
+		t.Error("Kratos values.yaml missing Resend API URL")
 	}
-	if !strings.Contains(content, "noreply@loopzero.example") {
-		t.Error("Kratos values.yaml SMTP from_address should be noreply@loopzero.example")
+	if !strings.Contains(content, "Authorization:") {
+		t.Error("Kratos values.yaml missing Authorization header for Resend API")
 	}
 }

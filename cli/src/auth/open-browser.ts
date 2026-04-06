@@ -17,7 +17,7 @@ export async function openBrowser(url: string): Promise<void> {
       : `xdg-open "${url}"`;
 
   return new Promise((resolve) => {
-    exec(cmd, (err) => {
+    exec(cmd, (_err) => {
       // Silent failure — in SSH/headless, the URL is displayed in the terminal
       resolve();
     });
