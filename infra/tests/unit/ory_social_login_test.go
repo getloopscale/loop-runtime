@@ -149,10 +149,10 @@ func TestOryKratosAccountLinking(t *testing.T) {
 // TestUserIdentityMapMigrationExists ensures the migration for
 // lazy identity migration exists.
 func TestUserIdentityMapMigrationExists(t *testing.T) {
-	migrationPath := filepath.Join(helmDir(), "..", "..", "api", "internal", "db", "migrations", "000012_user_identity_map.up.sql")
+	migrationPath := filepath.Join(helmDir(), "..", "..", "api", "internal", "db", "migrations", "000014_user_identity_map.up.sql")
 	data, err := os.ReadFile(migrationPath)
 	if err != nil {
-		t.Fatalf("migration 000012 missing: %v", err)
+		t.Fatalf("migration 000014 missing: %v", err)
 	}
 
 	content := string(data)
