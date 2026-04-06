@@ -556,7 +556,7 @@ function installOryKratos(
             // Kratos must know its public URL for CSRF, return_to validation, etc.
             serve: {
               public: {
-                base_url: `https://accounts.${config.domain}/`,
+                base_url: `https://cloud.${config.domain}/`,
               },
             },
             // Cookies must be accessible across subdomains (dashboard, accounts, api)
@@ -569,20 +569,18 @@ function installOryKratos(
             // MEET-2026-04-05-032: Kratos UI at accounts.{domain} (same-origin, no CORS).
             // Dashboard is a pure PKCE client — never renders Kratos flows.
             selfservice: {
-              default_browser_return_url: `https://dashboard.${config.domain}/`,
+              default_browser_return_url: `https://cloud.${config.domain}/`,
               allowed_return_urls: [
-                `https://dashboard.${config.domain}/`,
-                `https://api.${config.domain}/`,
-                `https://accounts.${config.domain}/`,
+                `https://cloud.${config.domain}/`,
               ],
               flows: {
-                login: { ui_url: `https://accounts.${config.domain}/login` },
-                registration: { ui_url: `https://accounts.${config.domain}/registration` },
-                verification: { ui_url: `https://cloud.${config.domain}/self-service/verification`, enabled: true, use: 'code' },
-                recovery: { ui_url: `https://cloud.${config.domain}/self-service/recovery`, enabled: true },
-                settings: { ui_url: `https://accounts.${config.domain}/settings` },
-                error: { ui_url: `https://accounts.${config.domain}/error` },
-                logout: { after: { default_browser_return_url: `https://dashboard.${config.domain}/login` } },
+                login: { ui_url: `https://cloud.${config.domain}/login` },
+                registration: { ui_url: `https://cloud.${config.domain}/register` },
+                verification: { ui_url: `https://cloud.${config.domain}/verification`, enabled: true, use: 'code' },
+                recovery: { ui_url: `https://cloud.${config.domain}/recovery`, enabled: true },
+                settings: { ui_url: `https://cloud.${config.domain}/settings` },
+                error: { ui_url: `https://cloud.${config.domain}/error` },
+                logout: { after: { default_browser_return_url: `https://cloud.${config.domain}/login` } },
               },
               // Social login providers — only included when secrets are configured.
               ...(config.githubOAuthClientId || config.googleOAuthClientId
@@ -591,7 +589,7 @@ function installOryKratos(
                       oidc: {
                         enabled: true,
                         config: {
-                          base_redirect_uri: `https://accounts.${config.domain}/`,
+                          base_redirect_uri: `https://cloud.${config.domain}/`,
                           providers: [
                             ...(config.githubOAuthClientId
                               ? [
@@ -2113,8 +2111,7 @@ const PLATFORM_INGRESS_ROUTES = [
   // OAuth2 authorization server — browser-accessible for PKCE/consent flows.
   { subdomain: "auth", serviceName: "ory-hydra-public", servicePort: 4444 },
   // Identity management — Kratos Self-Service UI (login/signup/recovery).
-  // MEET-2026-04-05-032: kratos-ui renders forms; ory-kratos-public is the API (same origin).
-  { subdomain: "accounts", serviceName: "kratos-ui", servicePort: 3000 },
+  // Kratos flows are served at cloud.{domain}/self-service/* via cloud-gateway IngressRoute.
 ] as const;
 
 /**
