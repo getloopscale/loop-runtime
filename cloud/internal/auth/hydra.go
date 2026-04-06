@@ -285,9 +285,16 @@ func (c *HydraClient) AcceptConsent(challenge string, grantScope []string, token
 }
 
 // AcceptDeviceChallenge accepts a device authorization challenge (user confirmed the code).
-func (c *HydraClient) AcceptDeviceChallenge(challenge string) (string, error) {
+func (c *HydraClient) AcceptDeviceChallenge(challenge, userCode string) (string, error) {
 	reqURL := fmt.Sprintf("%s/admin/oauth2/auth/requests/device/accept?device_challenge=%s", c.adminURL, challenge)
-	req, err := http.NewRequest("PUT", reqURL, bytes.NewReader([]byte("{}")))
+	payload := map[string]interface{}{
+		"user_code": userCode,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal accept device payload: %w", err)
+	}
+	req, err := http.NewRequest("PUT", reqURL, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create accept device request: %w", err)
 	}

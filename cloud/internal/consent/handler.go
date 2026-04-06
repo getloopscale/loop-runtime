@@ -247,21 +247,23 @@ func (h *Handler) DeviceVerify(w http.ResponseWriter, r *http.Request) {
 	// Validate Kratos session — user must be authenticated
 	subject, err := h.getKratosSessionSubject(r)
 	if err != nil {
-		h.logger.Error("device verify: kratos session validation failed", "error", err)
-		// Redirect to login
-		http.Redirect(w, r, "/login", http.StatusFound)
+		h.logger.Warn("device verify: no session, redirecting to login", "error", err)
+		// Redirect to Kratos login with return_to back to this device verify URL
+		returnTo := r.URL.String()
+		loginURL := fmt.Sprintf("%s/self-service/login/browser?return_to=%s",
+			h.kratosPublicURL, url.QueryEscape(returnTo))
+		http.Redirect(w, r, loginURL, http.StatusFound)
 		return
 	}
 
 	// Accept the device challenge via Hydra admin
-	redirectTo, err := h.hydra.AcceptDeviceChallenge(challenge)
+	userCode := r.URL.Query().Get("user_code")
+	redirectTo, err := h.hydra.AcceptDeviceChallenge(challenge, userCode)
 	if err != nil {
 		h.logger.Error("device verify: failed to accept device challenge", "error", err, "subject", subject)
 		http.Error(w, "Failed to authorize device. Please try again.", http.StatusBadGateway)
 		return
 	}
-
-	userCode := r.URL.Query().Get("user_code")
 	h.logger.Info("device authorized", "subject", subject, "user_code", userCode)
 
 	if redirectTo != "" {
