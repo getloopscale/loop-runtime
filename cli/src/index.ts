@@ -152,6 +152,21 @@ export function createProgram(): Command {
           sleep: (ms: number) => new Promise(r => setTimeout(r, ms)),
         }),
         validateToken: async (token: string) => {
+          // Try cloud service /v1/auth/me first (for Hydra JWTs)
+          // Falls back to engine API /api/v1/auth/whoami (for GitHub PATs)
+          try {
+            const cloudResp = await globalThis.fetch(`${getCloudUrl()}/v1/auth/me`, {
+              headers: { Authorization: `Bearer ${token}` },
+              signal: AbortSignal.timeout(5000),
+            });
+            if (cloudResp.ok) {
+              const me = await cloudResp.json() as { email?: string; name?: string; team?: string; user_id?: string };
+              if (me.email) {
+                return { valid: true, email: me.email, teams: me.team ? [me.team] : ['default'] };
+              }
+            }
+          } catch { /* cloud service unavailable — try engine API */ }
+
           try {
             const client = new ApiClient({
               baseURL: getDefaultApiUrl(),
@@ -171,13 +186,11 @@ export function createProgram(): Command {
               teams: [result.team],
             };
           } catch (err) {
-            // Network/connection errors — server unreachable
             const errMsg = (err as Error).message || '';
             if (errMsg.includes('ECONNREFUSED') || errMsg.includes('ETIMEDOUT') ||
                 errMsg.includes('ENOTFOUND') || errMsg.includes('fetch failed')) {
               return { valid: false, email: null, teams: [], serverError: true };
             }
-            // API returned 5xx server error
             const apiErr = err as { statusCode?: number };
             if (apiErr.statusCode !== undefined && apiErr.statusCode >= 500) {
               return { valid: false, email: null, teams: [], serverError: true };
