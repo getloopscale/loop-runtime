@@ -14,19 +14,21 @@ import (
 
 // BillingHandler handles billing-related endpoints.
 type BillingHandler struct {
-	stripe    *billing.StripeClient
-	webhook   *billing.WebhookHandler
-	validator *auth.JWKSValidator
-	returnURL string
+	stripe      *billing.StripeClient
+	webhook     *billing.WebhookHandler
+	provisioner *billing.Provisioner
+	validator   *auth.JWKSValidator
+	returnURL   string
 }
 
 // NewBillingHandler creates billing route handlers.
-func NewBillingHandler(stripe *billing.StripeClient, webhook *billing.WebhookHandler, validator *auth.JWKSValidator, returnURL string) *BillingHandler {
+func NewBillingHandler(stripe *billing.StripeClient, webhook *billing.WebhookHandler, provisioner *billing.Provisioner, validator *auth.JWKSValidator, returnURL string) *BillingHandler {
 	return &BillingHandler{
-		stripe:    stripe,
-		webhook:   webhook,
-		validator: validator,
-		returnURL: returnURL,
+		stripe:      stripe,
+		webhook:     webhook,
+		provisioner: provisioner,
+		validator:   validator,
+		returnURL:   returnURL,
 	}
 }
 
@@ -45,10 +47,20 @@ func (h *BillingHandler) GetBilling(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return plan info — usage details will be added in Phase 7 (metering)
+	tenantID := claims.TenantID
+	if tenantID == "" {
+		tenantID = "default"
+	}
+
+	// Lazy provisioning: ensure starter plan exists for this tenant
+	if h.provisioner != nil {
+		_ = h.provisioner.ProvisionStarter(r.Context(), claims.RegisteredClaims.Subject, claims.Email, tenantID)
+	}
+
+	// Return plan info — usage details will be enriched in Phase 6 (dashboard)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"plan":    billing.PlanDisplayName(claims.TenantID), // Will be from DB in production
-		"team":    claims.TenantID,
+		"plan":    "Starter",
+		"team":    tenantID,
 		"usage":   map[string]interface{}{},
 		"message": "Manage your plan at the billing portal.",
 	})
@@ -63,14 +75,42 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.validator.Validate(token)
+	claims, err := h.validator.Validate(token)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "AUTH_FAILED", "Session expired. Run: loopzero login")
 		return
 	}
 
-	// For now, return a placeholder — real portal session requires Stripe customer ID
-	// which will be available after tenant auto-creation wires Stripe customer.
+	tenantID := claims.TenantID
+	if tenantID == "" {
+		tenantID = "default"
+	}
+
+	// Lazy-create Stripe customer on first portal visit
+	if h.provisioner != nil && h.stripe != nil {
+		email := claims.Email
+		if email == "" {
+			email = claims.Ext.Email
+		}
+		name := claims.Name
+		if name == "" {
+			name = claims.Ext.Name
+		}
+
+		customerID, err := h.provisioner.EnsureStripeCustomer(r.Context(), tenantID, email, name)
+		if err == nil && customerID != "" {
+			session, err := h.stripe.CreatePortalSession(customerID, h.returnURL+"/billing")
+			if err == nil {
+				writeJSON(w, http.StatusOK, map[string]interface{}{
+					"url":     session.URL,
+					"message": "Manage your plan, payment methods, and billing history.",
+				})
+				return
+			}
+		}
+	}
+
+	// Fallback: return dashboard billing page
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"url":     h.returnURL + "/billing",
 		"message": "Manage your plan, payment methods, and billing history.",

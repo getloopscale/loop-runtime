@@ -94,14 +94,19 @@ func main() {
 	var webhookHandler *billing.WebhookHandler
 	var billingHandler *routes.BillingHandler
 
+	var billingProvisioner *billing.Provisioner
+
 	if cfg.StripeAPIKey.Value() != "" {
 		stripeClient = billing.NewStripeClient(cfg.StripeAPIKey.Value())
 		webhookHandler = billing.NewWebhookHandler(db, cfg.StripeWebhookSecret.Value(), logger)
-		billingHandler = routes.NewBillingHandler(stripeClient, webhookHandler, jwtValidator, cfg.BillingReturnURL)
+		billingProvisioner = billing.NewProvisioner(db, stripeClient, logger)
+		billingHandler = routes.NewBillingHandler(stripeClient, webhookHandler, billingProvisioner, jwtValidator, cfg.BillingReturnURL)
 		logger.Info("billing enabled")
 	} else {
 		logger.Warn("STRIPE_API_KEY not set — billing endpoints disabled")
 	}
+
+	_ = billingProvisioner // Used in billing handler
 
 	// Handlers
 	deviceHandler := routes.NewDeviceHandler(hydra, cfg.BillingReturnURL)

@@ -23,9 +23,14 @@ type StripeClient struct {
 
 // NewStripeClient creates a Stripe API client.
 func NewStripeClient(apiKey string) *StripeClient {
+	return NewStripeClientWithURL(apiKey, "https://api.stripe.com/v1")
+}
+
+// NewStripeClientWithURL creates a Stripe API client with a custom base URL (for testing).
+func NewStripeClientWithURL(apiKey, baseURL string) *StripeClient {
 	return &StripeClient{
 		apiKey:  apiKey,
-		baseURL: "https://api.stripe.com/v1",
+		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 15 * time.Second,
 		},
@@ -62,15 +67,18 @@ func (c *StripeClient) CreateCustomer(email, tenantID, name string) (*Customer, 
 		"metadata[tenant_id]": {tenantID},
 	}
 
+	// Idempotency key prevents duplicate customers on crash/retry
+	idempotencyKey := fmt.Sprintf("%s-create-customer", tenantID)
+
 	var customer Customer
-	if err := c.post("/customers", data, &customer); err != nil {
+	if err := c.post("/customers", data, &customer, idempotencyKey); err != nil {
 		return nil, fmt.Errorf("create customer: %w", err)
 	}
 	return &customer, nil
 }
 
 // CreateSubscription creates a subscription for a customer.
-func (c *StripeClient) CreateSubscription(customerID, priceID string) (*Subscription, error) {
+func (c *StripeClient) CreateSubscription(customerID, priceID, tenantID string) (*Subscription, error) {
 	data := url.Values{
 		"customer":               {customerID},
 		"items[0][price]":        {priceID},
@@ -78,13 +86,10 @@ func (c *StripeClient) CreateSubscription(customerID, priceID string) (*Subscrip
 		"payment_settings[save_default_payment_method]": {"on_subscription"},
 	}
 
-	// For free plans (starter), allow without payment method
-	if priceID != "" {
-		data.Set("items[0][price]", priceID)
-	}
+	idempotencyKey := fmt.Sprintf("%s-create-subscription", tenantID)
 
 	var sub Subscription
-	if err := c.post("/subscriptions", data, &sub); err != nil {
+	if err := c.post("/subscriptions", data, &sub, idempotencyKey); err != nil {
 		return nil, fmt.Errorf("create subscription: %w", err)
 	}
 	return &sub, nil
@@ -98,7 +103,7 @@ func (c *StripeClient) CreatePortalSession(customerID, returnURL string) (*Porta
 	}
 
 	var session PortalSession
-	if err := c.post("/billing_portal/sessions", data, &session); err != nil {
+	if err := c.post("/billing_portal/sessions", data, &session, ""); err != nil {
 		return nil, fmt.Errorf("create portal session: %w", err)
 	}
 	return &session, nil
@@ -113,16 +118,19 @@ func (c *StripeClient) ReportUsage(subscriptionItemID string, quantity int64, ti
 	}
 
 	path := fmt.Sprintf("/subscription_items/%s/usage_records", subscriptionItemID)
-	return c.post(path, data, nil)
+	return c.post(path, data, nil, "")
 }
 
-func (c *StripeClient) post(path string, data url.Values, result interface{}) error {
+func (c *StripeClient) post(path string, data url.Values, result interface{}, idempotencyKey string) error {
 	req, err := http.NewRequest("POST", c.baseURL+path, bytes.NewBufferString(data.Encode()))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if idempotencyKey != "" {
+		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
