@@ -762,6 +762,7 @@ function installOryHydra(
                   logout: `https://api.${authDomain}/auth/logout`,
                   device: {
                     verification: `https://cloud.${authDomain}/auth/device`,
+                    success: `https://cloud.${authDomain}/device-success`,
                   },
                 },
                 serve: {
