@@ -10,6 +10,7 @@ import { SettingsPage } from '@/pages/settings';
 import { ProfilePage } from '@/pages/profile';
 import { LoginPage } from '@/pages/login';
 import { RegisterPage } from '@/pages/register';
+import { VerificationPage } from '@/pages/verification';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { isEmailVerified } from '@/lib/auth';
 import { Loader2 } from 'lucide-react';
@@ -44,6 +45,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/verification" element={<VerificationPage />} />
         <Route path="*" element={
           <DashboardLayout>
             <Routes>
