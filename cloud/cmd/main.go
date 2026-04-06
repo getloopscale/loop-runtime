@@ -24,6 +24,7 @@ import (
 	"github.com/loopzero/loopzero/cloud/internal/billing"
 	"github.com/loopzero/loopzero/cloud/internal/config"
 	"github.com/loopzero/loopzero/cloud/internal/consent"
+	"github.com/loopzero/loopzero/cloud/internal/metering"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
 )
 
@@ -169,6 +170,14 @@ func main() {
 		r.Post("/v1/webhooks/stripe", billingHandler.Webhook)
 	}
 
+	// Start metering scheduler (background goroutines)
+	schedulerCtx, schedulerCancel := context.WithCancel(context.Background())
+	if db != nil && stripeClient != nil {
+		reporter := metering.NewReporter(db, stripeClient, logger)
+		reconciler := metering.NewReconciler(db, logger)
+		go metering.StartScheduler(schedulerCtx, reporter, reconciler, logger)
+	}
+
 	// Start server
 	srv := &http.Server{
 		Addr:         cfg.ListenAddr,
@@ -184,6 +193,7 @@ func main() {
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 		logger.Info("shutting down cloud service")
+		schedulerCancel() // Stop background metering jobs
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)
