@@ -232,3 +232,44 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 	)
 	http.Redirect(w, r, redirectTo, http.StatusFound)
 }
+
+// DeviceVerify handles the device authorization challenge from Hydra.
+// When a user visits the device verification URL, Hydra redirects here with a challenge.
+// This handler validates the Kratos session, then accepts the device challenge.
+// GET /auth/device?device_challenge=...&user_code=...
+func (h *Handler) DeviceVerify(w http.ResponseWriter, r *http.Request) {
+	challenge := r.URL.Query().Get("device_challenge")
+	if challenge == "" {
+		http.Error(w, "Missing device_challenge", http.StatusBadRequest)
+		return
+	}
+
+	// Validate Kratos session — user must be authenticated
+	subject, err := h.getKratosSessionSubject(r)
+	if err != nil {
+		h.logger.Error("device verify: kratos session validation failed", "error", err)
+		// Redirect to login
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
+	// Accept the device challenge via Hydra admin
+	redirectTo, err := h.hydra.AcceptDeviceChallenge(challenge)
+	if err != nil {
+		h.logger.Error("device verify: failed to accept device challenge", "error", err, "subject", subject)
+		http.Error(w, "Failed to authorize device. Please try again.", http.StatusBadGateway)
+		return
+	}
+
+	userCode := r.URL.Query().Get("user_code")
+	h.logger.Info("device authorized", "subject", subject, "user_code", userCode)
+
+	if redirectTo != "" {
+		http.Redirect(w, r, redirectTo, http.StatusFound)
+		return
+	}
+
+	// Success — show confirmation
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprint(w, `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;background:#0a0a0a;color:#fff;margin:0"><div style="text-align:center"><h2>CLI authorized</h2><p style="color:#888">You can close this tab and return to your terminal.</p></div></body></html>`)
+}

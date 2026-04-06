@@ -88,6 +88,7 @@ func main() {
 	r.Get("/auth/login", consentHandler.Login)
 	r.Get("/auth/login/complete", consentHandler.LoginComplete)
 	r.Get("/auth/consent", consentHandler.Consent)
+	r.Get("/auth/device", consentHandler.DeviceVerify)
 
 	// Start server
 	srv := &http.Server{

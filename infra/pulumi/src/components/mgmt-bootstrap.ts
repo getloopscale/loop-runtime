@@ -760,6 +760,9 @@ function installOryHydra(
                   login: `https://api.${authDomain}/auth/login`,
                   consent: `https://api.${authDomain}/auth/consent`,
                   logout: `https://api.${authDomain}/auth/logout`,
+                  device: {
+                    verification: `https://cloud.${authDomain}/auth/device`,
+                  },
                 },
                 serve: {
                   public: {
