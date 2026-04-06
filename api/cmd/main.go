@@ -110,9 +110,24 @@ func main() {
 		Transport: httpTransport,
 	}
 
-	// GitHub token validator
+	// GitHub token validator (PAT tokens from CLI)
 	githubValidator := &github.TokenValidator{
 		HTTPClient: httpClient,
+	}
+
+	// JWT validators — accept Hydra RSA JWTs (CLI) + HMAC session JWTs (dashboard)
+	var tokenValidator middleware.TokenValidator = githubValidator
+	if jwksURL := os.Getenv("JWKS_URL"); jwksURL != "" {
+		jwtIssuer := os.Getenv("JWT_ISSUER")
+		jwtVal := middleware.NewJWTValidator(jwksURL, jwtIssuer)
+
+		var hmacVal *middleware.HMACTokenValidator
+		if secret := os.Getenv("SESSION_TOKEN_SECRET"); secret != "" {
+			hmacVal = middleware.NewHMACTokenValidator(secret, "loopzero-cloud")
+		}
+
+		tokenValidator = middleware.NewDualValidator(jwtVal, hmacVal, githubValidator)
+		logger.Info("JWT + HMAC session token validation enabled")
 	}
 
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
@@ -645,7 +660,7 @@ func main() {
 		Logger:           logger,
 		DB:               dbHealth,
 		HealthServices:   healthServices,
-		TokenValidator:   githubValidator,
+		TokenValidator:   tokenValidator,
 		MemberStore:      memberStore,
 		ProjectStore:     projectStore,
 		TenantCRMgr:      tenantCRMgr,

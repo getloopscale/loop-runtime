@@ -1341,6 +1341,8 @@ function installLoopZeroAPI(
         // Spaces credentials (S3-compatible) — used by S3 uploader for source bundles
         MINIO_ACCESS_KEY: config.spacesAccessKeyId,
         MINIO_SECRET_KEY: config.spacesSecretAccessKey,
+        // Session token HMAC secret — same key as cloud service for JWT validation
+        SESSION_TOKEN_SECRET: config.sessionTokenSecret || "",
       },
     },
     { provider, dependsOn: [ns] },
@@ -1501,6 +1503,9 @@ function installLoopZeroAPI(
         GITEA_URL: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
         ARGOCD_URL: `http://argocd-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
         ARGOCD_INSECURE: "true",
+        // JWT validation for dashboard session tokens + CLI Hydra JWTs
+        JWKS_URL: `https://auth.${config.domain}/.well-known/jwks.json`,
+        JWT_ISSUER: `https://auth.${config.domain}/`,
         ARGO_NAMESPACE: "argo",
         MGMT_KUBECONFIG: "/etc/loopzero/mgmt-kubeconfig",
         // Mgmt uses the DOKS admin kubeconfig (API runs on mgmt cluster).

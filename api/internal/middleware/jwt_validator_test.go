@@ -27,7 +27,7 @@ func TestDualValidator_PAT_RoutesToPATValidator(t *testing.T) {
 		GitHubID: 123456,
 	}
 	pat := &mockPATValidator{result: patResult}
-	dual := NewDualValidator(nil, pat) // No JWT validator
+	dual := NewDualValidator(nil, nil, pat) // No JWT validator
 
 	result, err := dual.ValidateToken(context.Background(), "ghp_abc123def456")
 	if err != nil {
@@ -44,7 +44,7 @@ func TestDualValidator_PATPrefix_RoutesCorrectly(t *testing.T) {
 	}
 	// JWT validator exists but PAT token should route to PAT validator
 	jwtVal := NewJWTValidator("http://invalid:4444/.well-known/jwks.json", "http://invalid:4444/")
-	dual := NewDualValidator(jwtVal, pat)
+	dual := NewDualValidator(jwtVal, nil, pat)
 
 	for _, prefix := range []string{"ghp_", "gho_", "github_pat_"} {
 		token := prefix + "testtoken123"
@@ -63,7 +63,7 @@ func TestDualValidator_NilJWT_FallsToPAT(t *testing.T) {
 	pat := &mockPATValidator{
 		result: &TokenValidationResult{UserID: "fallback-user"},
 	}
-	dual := NewDualValidator(nil, pat)
+	dual := NewDualValidator(nil, nil, pat)
 
 	// Any token format should fall to PAT when JWT validator is nil
 	result, err := dual.ValidateToken(context.Background(), "any-token-format")

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	goJWT "github.com/golang-jwt/jwt/v5"
 	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 )
 
@@ -38,19 +39,21 @@ func (v *JWTValidator) ValidateToken(_ context.Context, token string) (*TokenVal
 	}, nil
 }
 
-// DualValidator tries JWT validation first, then falls back to GitHub PAT validation.
-// During the migration period, both token types are accepted.
+// DualValidator tries JWT validation first, then HMAC session token, then GitHub PAT.
+// Accepts all three token types for unified auth across CLI and dashboard.
 type DualValidator struct {
-	jwtValidator *JWTValidator
-	patValidator TokenValidator // Existing GitHub PAT validator
+	jwtValidator  *JWTValidator
+	hmacValidator *HMACTokenValidator
+	patValidator  TokenValidator // Existing GitHub PAT validator
 }
 
-// NewDualValidator creates a validator that accepts both JWT and GitHub PAT tokens.
-// If jwtValidator is nil, only PAT validation is used (backward compatible).
-func NewDualValidator(jwtValidator *JWTValidator, patValidator TokenValidator) *DualValidator {
+// NewDualValidator creates a validator that accepts JWT, HMAC session, and GitHub PAT tokens.
+// If jwtValidator or hmacValidator is nil, that validation path is skipped.
+func NewDualValidator(jwtValidator *JWTValidator, hmacValidator *HMACTokenValidator, patValidator TokenValidator) *DualValidator {
 	return &DualValidator{
-		jwtValidator: jwtValidator,
-		patValidator: patValidator,
+		jwtValidator:  jwtValidator,
+		hmacValidator: hmacValidator,
+		patValidator:  patValidator,
 	}
 }
 
@@ -73,10 +76,68 @@ func (v *DualValidator) ValidateToken(ctx context.Context, token string) (*Token
 		return v.jwtValidator.ValidateToken(ctx, token)
 	}
 
-	// Unknown format — try JWT first, then PAT
+	// Unknown format — try JWT first, then HMAC, then PAT
 	result, err := v.jwtValidator.ValidateToken(ctx, token)
 	if err == nil {
 		return result, nil
 	}
+	if v.hmacValidator != nil {
+		result, err := v.hmacValidator.ValidateToken(ctx, token)
+		if err == nil {
+			return result, nil
+		}
+	}
 	return v.patValidator.ValidateToken(ctx, token)
+}
+
+// HMACTokenValidator validates HMAC-SHA256 session tokens issued by the cloud service.
+// Used for dashboard → engine API authentication.
+type HMACTokenValidator struct {
+	secret   []byte
+	issuer   string
+	audience string
+}
+
+// NewHMACTokenValidator creates a validator for cloud service session JWTs.
+func NewHMACTokenValidator(secret, issuer string) *HMACTokenValidator {
+	return &HMACTokenValidator{
+		secret:   []byte(secret),
+		issuer:   issuer,
+		audience: "loopzero-cloud",
+	}
+}
+
+// SessionClaims for HMAC tokens (matches cloud service SessionClaims).
+type SessionClaims struct {
+	goJWT.RegisteredClaims
+	Email    string `json:"email,omitempty"`
+	Name     string `json:"name,omitempty"`
+	TenantID string `json:"tenant_id,omitempty"`
+}
+
+// ValidateToken validates an HMAC session token.
+func (v *HMACTokenValidator) ValidateToken(_ context.Context, token string) (*TokenValidationResult, error) {
+	parsed, err := goJWT.ParseWithClaims(token, &SessionClaims{}, func(t *goJWT.Token) (interface{}, error) {
+		if _, ok := t.Method.(*goJWT.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return v.secret, nil
+	},
+		goJWT.WithIssuer(v.issuer),
+		goJWT.WithAudience(v.audience),
+		goJWT.WithExpirationRequired(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
+	}
+
+	claims, ok := parsed.Claims.(*SessionClaims)
+	if !ok || !parsed.Valid {
+		return nil, fmt.Errorf("%w: invalid claims", ErrInvalidToken)
+	}
+
+	return &TokenValidationResult{
+		UserID: claims.RegisteredClaims.Subject,
+		Email:  claims.Email,
+	}, nil
 }
