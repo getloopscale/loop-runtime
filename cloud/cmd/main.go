@@ -7,6 +7,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+	_ "github.com/lib/pq"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
 	"github.com/loopzero/loopzero/cloud/internal/config"
@@ -31,6 +34,32 @@ func main() {
 	if err := cfg.Validate(); err != nil {
 		logger.Error("invalid configuration", "error", err)
 		os.Exit(1)
+	}
+
+	// Initialize database connection (optional in dev, required in prod).
+	// The cloud service shares the database with the engine API.
+	// It does NOT run migrations — the API owns all schema changes.
+	var db *sql.DB
+	if cfg.DatabaseURL != "" {
+		var err error
+		db, err = sql.Open("postgres", cfg.DatabaseURL)
+		if err != nil {
+			logger.Error("failed to open database", "error", err)
+			os.Exit(1)
+		}
+		db.SetMaxOpenConns(10)
+		db.SetMaxIdleConns(5)
+		db.SetConnMaxLifetime(5 * time.Minute)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := db.PingContext(ctx); err != nil {
+			logger.Warn("database not reachable at startup (will retry on requests)", "error", err)
+		} else {
+			logger.Info("database connected")
+		}
+	} else {
+		logger.Warn("DATABASE_URL not set — billing, enforcement, and metering disabled")
 	}
 
 	// Initialize Hydra client
@@ -70,10 +99,30 @@ func main() {
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 
-	// Health check
+	// Health check — reports DB connectivity for operational visibility
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok"}`))
+
+		dbStatus := "not_configured"
+		if db != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			if err := db.PingContext(ctx); err != nil {
+				dbStatus = "disconnected"
+			} else {
+				dbStatus = "connected"
+			}
+		}
+
+		status := "ok"
+		if db != nil && dbStatus != "connected" {
+			status = "degraded"
+		}
+
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": status,
+			"db":     dbStatus,
+		})
 	})
 
 	// Device Code Flow endpoints (no auth required — these ARE the auth flow)
@@ -108,6 +157,9 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)
+		if db != nil {
+			db.Close()
+		}
 	}()
 
 	logger.Info("cloud auth service starting",

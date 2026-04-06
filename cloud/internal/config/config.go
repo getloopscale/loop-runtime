@@ -72,6 +72,11 @@ type Config struct {
 	// BillingReturnURL is the URL users return to after Stripe portal/checkout.
 	// Env: BILLING_RETURN_URL (default: "http://localhost:3000")
 	BillingReturnURL string
+
+	// DatabaseURL is the PostgreSQL connection string.
+	// Shared with the engine API (same DB, cloud service does NOT run migrations).
+	// Env: DATABASE_URL (required in production, optional in dev for graceful degradation)
+	DatabaseURL string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -91,6 +96,7 @@ func Load() Config {
 	cfg.StripeAPIKey = Secret(envOr("STRIPE_API_KEY", ""))
 	cfg.StripeWebhookSecret = Secret(envOr("STRIPE_WEBHOOK_SECRET", ""))
 	cfg.BillingReturnURL = envOr("BILLING_RETURN_URL", "http://localhost:3000")
+	cfg.DatabaseURL = envOr("DATABASE_URL", "")
 	return cfg
 }
 
@@ -102,6 +108,15 @@ func (c Config) Validate() error {
 		}
 		if c.KratosPublicURL == "" {
 			return fmt.Errorf("KRATOS_PUBLIC_URL is required in production")
+		}
+		if c.DatabaseURL == "" {
+			return fmt.Errorf("DATABASE_URL is required in production")
+		}
+		if c.StripeAPIKey.Value() == "" {
+			return fmt.Errorf("STRIPE_API_KEY is required in production")
+		}
+		if c.StripeWebhookSecret.Value() == "" {
+			return fmt.Errorf("STRIPE_WEBHOOK_SECRET is required in production")
 		}
 	}
 	return nil

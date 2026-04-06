@@ -7,4 +7,6 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 )
 
+require github.com/lib/pq v1.12.3 // indirect
+
 replace github.com/loopzero/loopzero/pkg => ../pkg

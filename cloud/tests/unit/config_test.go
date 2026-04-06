@@ -68,3 +68,61 @@ func TestConfigValidateDevOK(t *testing.T) {
 		t.Errorf("Validate() should pass in dev: %v", err)
 	}
 }
+
+func TestConfigDatabaseURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/loopzerodb?sslmode=disable")
+	cfg := config.Load()
+
+	if cfg.DatabaseURL != "postgres://user:pass@localhost:5432/loopzerodb?sslmode=disable" {
+		t.Errorf("DatabaseURL = %q, want postgres URL", cfg.DatabaseURL)
+	}
+}
+
+func TestConfigDatabaseURLDefault(t *testing.T) {
+	os.Unsetenv("DATABASE_URL")
+	cfg := config.Load()
+
+	if cfg.DatabaseURL != "" {
+		t.Errorf("DatabaseURL default should be empty, got %q", cfg.DatabaseURL)
+	}
+}
+
+func TestConfigValidateProdRequiresDatabaseURL(t *testing.T) {
+	cfg := config.Load()
+	cfg.Environment = "prod"
+	cfg.HydraPublicURL = "https://hydra.example.com"
+	cfg.KratosPublicURL = "https://kratos.example.com"
+	cfg.DatabaseURL = ""
+
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() should fail when DATABASE_URL is empty in prod")
+	}
+}
+
+func TestConfigValidateProdRequiresStripeKeys(t *testing.T) {
+	cfg := config.Load()
+	cfg.Environment = "prod"
+	cfg.HydraPublicURL = "https://hydra.example.com"
+	cfg.KratosPublicURL = "https://kratos.example.com"
+	cfg.DatabaseURL = "postgres://localhost/db"
+	cfg.StripeAPIKey = ""
+	cfg.StripeWebhookSecret = ""
+
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() should fail when Stripe keys are empty in prod")
+	}
+}
+
+func TestConfigValidateProdPassesWithAllKeys(t *testing.T) {
+	cfg := config.Load()
+	cfg.Environment = "prod"
+	cfg.HydraPublicURL = "https://hydra.example.com"
+	cfg.KratosPublicURL = "https://kratos.example.com"
+	cfg.DatabaseURL = "postgres://localhost/db"
+	cfg.StripeAPIKey = "sk_live_xxx"
+	cfg.StripeWebhookSecret = "whsec_xxx"
+
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() should pass with all prod keys set: %v", err)
+	}
+}
