@@ -6,6 +6,7 @@ package routes
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -20,51 +21,86 @@ type UsageMetric struct {
 	Limit int `json:"limit"`
 }
 
+// billingUser holds authenticated user info extracted from JWT.
+type billingUser struct {
+	Subject  string
+	Email    string
+	Name     string
+	TenantID string
+}
+
 // BillingHandler handles billing-related endpoints.
+// All endpoints require JWT (from Hydra for CLI, or session token for dashboard).
 type BillingHandler struct {
-	db          *sql.DB
-	stripe      *billing.StripeClient
-	webhook     *billing.WebhookHandler
-	provisioner *billing.Provisioner
-	validator   *auth.JWKSValidator
-	returnURL   string
+	db           *sql.DB
+	stripe       *billing.StripeClient
+	webhook      *billing.WebhookHandler
+	provisioner  *billing.Provisioner
+	jwtValidator *auth.JWKSValidator
+	sessValidator *auth.SessionTokenIssuer
+	returnURL    string
 }
 
 // NewBillingHandler creates billing route handlers.
-func NewBillingHandler(db *sql.DB, stripe *billing.StripeClient, webhook *billing.WebhookHandler, provisioner *billing.Provisioner, validator *auth.JWKSValidator, returnURL string) *BillingHandler {
+func NewBillingHandler(db *sql.DB, stripe *billing.StripeClient, webhook *billing.WebhookHandler, provisioner *billing.Provisioner, jwtValidator *auth.JWKSValidator, sessValidator *auth.SessionTokenIssuer, returnURL string) *BillingHandler {
 	return &BillingHandler{
-		db:          db,
-		stripe:      stripe,
-		webhook:     webhook,
-		provisioner: provisioner,
-		validator:   validator,
-		returnURL:   returnURL,
+		db:           db,
+		stripe:       stripe,
+		webhook:      webhook,
+		provisioner:  provisioner,
+		jwtValidator: jwtValidator,
+		sessValidator: sessValidator,
+		returnURL:    returnURL,
 	}
+}
+
+// authenticateRequest validates the Bearer JWT token.
+// Tries Hydra JWKS first (CLI tokens), then HMAC session tokens (dashboard).
+func (h *BillingHandler) authenticateRequest(r *http.Request) (*billingUser, error) {
+	token := extractBearerToken(r)
+	if token == "" {
+		return nil, fmt.Errorf("not authenticated")
+	}
+
+	// Try 1: Hydra JWT (CLI — RSA signed)
+	if h.jwtValidator != nil {
+		claims, err := h.jwtValidator.Validate(token)
+		if err == nil {
+			email := claims.Email
+			if email == "" { email = claims.Ext.Email }
+			name := claims.Name
+			if name == "" { name = claims.Ext.Name }
+			tenantID := claims.TenantID
+			if tenantID == "" { tenantID = "default" }
+			return &billingUser{Subject: claims.RegisteredClaims.Subject, Email: email, Name: name, TenantID: tenantID}, nil
+		}
+	}
+
+	// Try 2: Session token (dashboard — HMAC signed)
+	if h.sessValidator != nil {
+		claims, err := h.sessValidator.Validate(token)
+		if err == nil {
+			return &billingUser{Subject: claims.Sub, Email: claims.Email, Name: claims.Name, TenantID: claims.TenantID}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("invalid token")
 }
 
 // GetBilling returns the current plan and usage for the authenticated user.
 // GET /v1/billing
 func (h *BillingHandler) GetBilling(w http.ResponseWriter, r *http.Request) {
-	token := extractBearerToken(r)
-	if token == "" {
+	user, err := h.authenticateRequest(r)
+	if err != nil {
 		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "Not authenticated. Run: loopzero login")
 		return
 	}
 
-	claims, err := h.validator.Validate(token)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "AUTH_FAILED", "Session expired. Run: loopzero login")
-		return
-	}
-
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = "default"
-	}
+	tenantID := user.TenantID
 
 	// Lazy provisioning: ensure starter plan exists for this tenant
 	if h.provisioner != nil {
-		_ = h.provisioner.ProvisionStarter(r.Context(), claims.RegisteredClaims.Subject, claims.Email, tenantID)
+		_ = h.provisioner.ProvisionStarter(r.Context(), user.Subject, user.Email, tenantID)
 	}
 
 	// Determine plan from DB (fallback to starter)
@@ -118,35 +154,17 @@ func (h *BillingHandler) GetBilling(w http.ResponseWriter, r *http.Request) {
 // Portal creates a Stripe Customer Portal session and returns the URL.
 // GET /v1/billing/portal
 func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
-	token := extractBearerToken(r)
-	if token == "" {
+	user, err := h.authenticateRequest(r)
+	if err != nil {
 		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "Not authenticated. Run: loopzero login")
 		return
 	}
 
-	claims, err := h.validator.Validate(token)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "AUTH_FAILED", "Session expired. Run: loopzero login")
-		return
-	}
-
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = "default"
-	}
+	tenantID := user.TenantID
 
 	// Lazy-create Stripe customer on first portal visit
 	if h.provisioner != nil && h.stripe != nil {
-		email := claims.Email
-		if email == "" {
-			email = claims.Ext.Email
-		}
-		name := claims.Name
-		if name == "" {
-			name = claims.Ext.Name
-		}
-
-		customerID, err := h.provisioner.EnsureStripeCustomer(r.Context(), tenantID, email, name)
+		customerID, err := h.provisioner.EnsureStripeCustomer(r.Context(), tenantID, user.Email, user.Name)
 		if err == nil && customerID != "" {
 			session, err := h.stripe.CreatePortalSession(customerID, h.returnURL+"/billing")
 			if err == nil {

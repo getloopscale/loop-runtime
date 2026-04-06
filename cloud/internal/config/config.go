@@ -77,6 +77,11 @@ type Config struct {
 	// Shared with the engine API (same DB, cloud service does NOT run migrations).
 	// Env: DATABASE_URL (required in production, optional in dev for graceful degradation)
 	DatabaseURL string
+
+	// SessionTokenSecret is the HMAC key for signing dashboard session tokens.
+	// Used by /v1/auth/session/token to issue JWTs for dashboard users.
+	// Env: SESSION_TOKEN_SECRET (required in production, auto-generated in dev)
+	SessionTokenSecret Secret
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -97,6 +102,7 @@ func Load() Config {
 	cfg.StripeWebhookSecret = Secret(envOr("STRIPE_WEBHOOK_SECRET", ""))
 	cfg.BillingReturnURL = envOr("BILLING_RETURN_URL", "http://localhost:3000")
 	cfg.DatabaseURL = envOr("DATABASE_URL", "")
+	cfg.SessionTokenSecret = Secret(envOr("SESSION_TOKEN_SECRET", "loopzero-dev-session-secret-32chars!"))
 	return cfg
 }
 

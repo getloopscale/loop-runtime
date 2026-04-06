@@ -94,8 +94,12 @@ export function getVerificationURL(): string {
   return `${KRATOS_URL}/self-service/verification/browser`;
 }
 
-/** Logout — destroy Kratos session. */
+/** Logout — destroy Kratos session and clear JWT. */
 export async function logout(): Promise<void> {
+  // Clear in-memory JWT
+  const { clearToken } = await import('./api');
+  clearToken();
+
   try {
     const resp = await fetch(`${KRATOS_URL}/self-service/logout/browser`, {
       credentials: 'include',

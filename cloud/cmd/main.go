@@ -86,22 +86,29 @@ func main() {
 		logger.Warn("failed to register OAuth2 client (Hydra may not be ready yet)", "error", err)
 	}
 
-	// Initialize JWKS validator
+	// Initialize JWKS validator (Hydra-issued JWTs for CLI)
 	jwksURL := cfg.HydraPublicURL + "/.well-known/jwks.json"
 	jwtValidator := auth.NewJWKSValidator(jwksURL, cfg.JWTIssuer)
+
+	// Session token issuer (HMAC JWTs for dashboard)
+	sessIssuer := auth.NewSessionTokenIssuer(
+		cfg.SessionTokenSecret.Value(),
+		"loopzero-cloud",
+		1*time.Hour,
+	)
+	sessionTokenHandler := routes.NewSessionTokenHandler(sessIssuer, cfg.KratosInternalURL)
 
 	// Billing (optional — requires Stripe keys and DB)
 	var stripeClient *billing.StripeClient
 	var webhookHandler *billing.WebhookHandler
 	var billingHandler *routes.BillingHandler
-
 	var billingProvisioner *billing.Provisioner
 
 	if cfg.StripeAPIKey.Value() != "" {
 		stripeClient = billing.NewStripeClient(cfg.StripeAPIKey.Value())
 		webhookHandler = billing.NewWebhookHandler(db, cfg.StripeWebhookSecret.Value(), logger)
 		billingProvisioner = billing.NewProvisioner(db, stripeClient, logger)
-		billingHandler = routes.NewBillingHandler(db, stripeClient, webhookHandler, billingProvisioner, jwtValidator, cfg.BillingReturnURL)
+		billingHandler = routes.NewBillingHandler(db, stripeClient, webhookHandler, billingProvisioner, jwtValidator, sessIssuer, cfg.BillingReturnURL)
 		logger.Info("billing enabled")
 	} else {
 		logger.Warn("STRIPE_API_KEY not set — billing endpoints disabled")
@@ -146,11 +153,12 @@ func main() {
 		})
 	})
 
-	// Device Code Flow endpoints (no auth required — these ARE the auth flow)
+	// Auth endpoints (no auth required — these ARE the auth flow)
 	r.Route("/v1/auth", func(r chi.Router) {
 		r.Post("/device/authorize", deviceHandler.Authorize)
 		r.Post("/device/token", deviceHandler.Token)
 		r.Post("/token/refresh", deviceHandler.Refresh)
+		r.Post("/session/token", sessionTokenHandler.Exchange) // Dashboard: Kratos session → JWT
 		r.Get("/me", meHandler.Get)
 	})
 
