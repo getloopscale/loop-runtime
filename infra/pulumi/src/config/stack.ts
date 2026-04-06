@@ -79,6 +79,9 @@ export interface PlatformStackConfig {
   readonly stripeWebhookSecret?: pulumi.Output<string>;
   readonly stripePriceProId?: string;
   readonly stripePriceTeamId?: string;
+  // Session token HMAC secret for dashboard JWT issuance.
+  // Set via: pulumi config set --secret sessionTokenSecret <32+ char secret>
+  readonly sessionTokenSecret?: pulumi.Output<string>;
 
   // Resend API key for email delivery (verification, recovery).
   // MEET-036: HTTP API replaces SMTP (DO blocks SMTP ports).
@@ -172,6 +175,9 @@ export function loadStackConfig(): PlatformStackConfig {
       : config.getSecret("stripeWebhookSecret") ?? undefined,
     stripePriceProId: config.get("stripePriceProId") ?? undefined,
     stripePriceTeamId: config.get("stripePriceTeamId") ?? undefined,
+    sessionTokenSecret: process.env.LOOPZERO_SESSION_TOKEN_SECRET
+      ? pulumi.output(process.env.LOOPZERO_SESSION_TOKEN_SECRET)
+      : config.getSecret("sessionTokenSecret") ?? undefined,
 
     // Resend API key for email delivery (MEET-036: HTTP API, not SMTP)
     resendApiKey: process.env.LOOPZERO_RESEND_API_KEY

@@ -200,8 +200,13 @@ func VerifySignature(payload []byte, sigHeader, secret string) error {
 	if err != nil {
 		return fmt.Errorf("invalid timestamp: %w", err)
 	}
-	if time.Since(time.Unix(ts, 0)) > 300*time.Second {
+	eventTime := time.Unix(ts, 0)
+	age := time.Since(eventTime)
+	if age > 300*time.Second {
 		return fmt.Errorf("timestamp too old")
+	}
+	if age < -300*time.Second {
+		return fmt.Errorf("timestamp in the future")
 	}
 
 	// Compute expected signature

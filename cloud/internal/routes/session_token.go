@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
@@ -18,16 +19,41 @@ import (
 type SessionTokenHandler struct {
 	issuer            *auth.SessionTokenIssuer
 	kratosInternalURL string
+	kratosClient      *http.Client
+
+	// IP-based rate limiting (10 requests/minute per IP)
+	mu       sync.Mutex
+	attempts map[string][]time.Time
 }
+
+const (
+	rateLimitWindow   = 1 * time.Minute
+	rateLimitMaxCalls = 10
+)
 
 // NewSessionTokenHandler creates a session token exchange handler.
 func NewSessionTokenHandler(issuer *auth.SessionTokenIssuer, kratosInternalURL string) *SessionTokenHandler {
-	return &SessionTokenHandler{issuer: issuer, kratosInternalURL: kratosInternalURL}
+	return &SessionTokenHandler{
+		issuer:            issuer,
+		kratosInternalURL: kratosInternalURL,
+		kratosClient:      &http.Client{Timeout: 5 * time.Second},
+		attempts:          make(map[string][]time.Time),
+	}
 }
 
 // Exchange validates the Kratos session cookie and returns a JWT.
 // POST /v1/auth/session/token
 func (h *SessionTokenHandler) Exchange(w http.ResponseWriter, r *http.Request) {
+	// Rate limit by IP
+	ip := r.RemoteAddr
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		ip = fwd
+	}
+	if !h.checkRateLimit(ip) {
+		writeError(w, http.StatusTooManyRequests, "RATE_LIMITED", "Too many requests. Try again in a moment.")
+		return
+	}
+
 	// Validate Kratos session by forwarding cookies to whoami
 	whoamiURL := fmt.Sprintf("%s/sessions/whoami", h.kratosInternalURL)
 	req, err := http.NewRequestWithContext(r.Context(), "GET", whoamiURL, nil)
@@ -39,8 +65,7 @@ func (h *SessionTokenHandler) Exchange(w http.ResponseWriter, r *http.Request) {
 		req.AddCookie(cookie)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := h.kratosClient.Do(req)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "AUTH_SERVICE_UNAVAILABLE", "Authentication service unavailable. Try again.")
 		return
@@ -72,7 +97,7 @@ func (h *SessionTokenHandler) Exchange(w http.ResponseWriter, r *http.Request) {
 		session.Identity.ID,
 		session.Identity.Traits.Email,
 		session.Identity.Traits.Name,
-		"default", // Tenant resolved later via DB lookup
+		"default", // TODO: resolve tenant from DB when multi-tenancy ships
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Failed to create access token.")
@@ -84,4 +109,29 @@ func (h *SessionTokenHandler) Exchange(w http.ResponseWriter, r *http.Request) {
 		"token_type":   "Bearer",
 		"expires_in":   expiresIn,
 	})
+}
+
+func (h *SessionTokenHandler) checkRateLimit(ip string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	now := time.Now()
+	cutoff := now.Add(-rateLimitWindow)
+
+	// Prune old entries
+	recent := h.attempts[ip]
+	pruned := recent[:0]
+	for _, t := range recent {
+		if t.After(cutoff) {
+			pruned = append(pruned, t)
+		}
+	}
+
+	if len(pruned) >= rateLimitMaxCalls {
+		h.attempts[ip] = pruned
+		return false
+	}
+
+	h.attempts[ip] = append(pruned, now)
+	return true
 }

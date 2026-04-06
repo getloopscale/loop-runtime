@@ -4,6 +4,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 )
@@ -102,7 +104,7 @@ func Load() Config {
 	cfg.StripeWebhookSecret = Secret(envOr("STRIPE_WEBHOOK_SECRET", ""))
 	cfg.BillingReturnURL = envOr("BILLING_RETURN_URL", "http://localhost:3000")
 	cfg.DatabaseURL = envOr("DATABASE_URL", "")
-	cfg.SessionTokenSecret = Secret(envOr("SESSION_TOKEN_SECRET", "loopzero-dev-session-secret-32chars!"))
+	cfg.SessionTokenSecret = Secret(envOr("SESSION_TOKEN_SECRET", generateDevSecret()))
 	return cfg
 }
 
@@ -124,6 +126,9 @@ func (c Config) Validate() error {
 		if c.StripeWebhookSecret.Value() == "" {
 			return fmt.Errorf("STRIPE_WEBHOOK_SECRET is required in production")
 		}
+		if len(c.SessionTokenSecret.Value()) < 32 {
+			return fmt.Errorf("SESSION_TOKEN_SECRET must be at least 32 characters in production")
+		}
 	}
 	return nil
 }
@@ -133,4 +138,14 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// generateDevSecret creates a random secret for development.
+// Each startup gets a different secret — sessions don't survive restarts (fine for dev).
+func generateDevSecret() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "dev-fallback-insecure-" + fmt.Sprintf("%d", os.Getpid())
+	}
+	return hex.EncodeToString(b)
 }

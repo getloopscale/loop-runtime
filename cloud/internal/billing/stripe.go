@@ -140,7 +140,9 @@ func (c *StripeClient) post(path string, data url.Values, result interface{}, id
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("stripe error (status %d): %s", resp.StatusCode, body)
+		// Don't leak Stripe error details — they may contain account info.
+		// Raw body is available for debug logging by the caller.
+		return fmt.Errorf("payment service error (status %d)", resp.StatusCode)
 	}
 
 	if result != nil {

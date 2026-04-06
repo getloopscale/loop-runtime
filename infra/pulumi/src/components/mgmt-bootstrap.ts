@@ -1202,6 +1202,7 @@ function installCloudService(
         STRIPE_API_KEY: config.stripeApiKey || "",
         STRIPE_WEBHOOK_SECRET: config.stripeWebhookSecret || "",
         DATABASE_URL: cloudDatabaseUrl,
+        SESSION_TOKEN_SECRET: config.sessionTokenSecret || "",
       },
     },
     { provider, dependsOn: [ns] },

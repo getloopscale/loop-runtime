@@ -80,7 +80,9 @@ func (h *BillingHandler) authenticateRequest(r *http.Request) (*billingUser, err
 	if h.sessValidator != nil {
 		claims, err := h.sessValidator.Validate(token)
 		if err == nil {
-			return &billingUser{Subject: claims.Sub, Email: claims.Email, Name: claims.Name, TenantID: claims.TenantID}, nil
+			tenantID := claims.TenantID
+			if tenantID == "" { tenantID = "default" }
+			return &billingUser{Subject: claims.RegisteredClaims.Subject, Email: claims.Email, Name: claims.Name, TenantID: tenantID}, nil
 		}
 	}
 

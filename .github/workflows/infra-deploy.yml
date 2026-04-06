@@ -225,6 +225,8 @@ jobs:
       # Stripe Billing (MEET-038)
       LOOPZERO_STRIPE_API_KEY: ${{ secrets.LOOPZERO_STRIPE_API_KEY }}
       LOOPZERO_STRIPE_WEBHOOK_SECRET: ${{ secrets.LOOPZERO_STRIPE_WEBHOOK_SECRET }}
+      # Session token HMAC secret (dashboard JWT issuance)
+      LOOPZERO_SESSION_TOKEN_SECRET: ${{ secrets.LOOPZERO_SESSION_TOKEN_SECRET }}
 
     steps:
       - uses: actions/checkout@v4
