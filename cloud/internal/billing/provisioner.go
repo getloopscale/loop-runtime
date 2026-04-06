@@ -5,7 +5,9 @@ package billing
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"fmt"
 	"log/slog"
 )
 
@@ -31,11 +33,12 @@ func (p *Provisioner) ProvisionStarter(ctx context.Context, userID, email, tenan
 	}
 
 	// Insert subscription row for starter plan (DB-only, no Stripe)
+	id := generateSubscriptionID()
 	_, err := p.db.ExecContext(ctx,
-		`INSERT INTO subscriptions (tenant_id, stripe_customer_id, stripe_subscription_id, plan, status, created_at, updated_at)
-		 VALUES ($1, '', '', 'starter', 'active', now(), now())
+		`INSERT INTO subscriptions (id, tenant_id, plan, status, created_at, updated_at)
+		 VALUES ($1, $2, 'starter', 'active', now(), now())
 		 ON CONFLICT (tenant_id) DO NOTHING`,
-		tenantID,
+		id, tenantID,
 	)
 	if err != nil {
 		p.logger.Error("failed to provision starter subscription",
@@ -102,4 +105,10 @@ func (p *Provisioner) EnsureStripeCustomer(ctx context.Context, tenantID, email,
 		"customer_id", customer.ID,
 	)
 	return customer.ID, nil
+}
+
+func generateSubscriptionID() string {
+	b := make([]byte, 12)
+	rand.Read(b)
+	return fmt.Sprintf("sub_%x", b)
 }
