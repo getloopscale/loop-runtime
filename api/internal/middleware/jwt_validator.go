@@ -36,7 +36,7 @@ func (v *JWTOnlyValidator) ValidateToken(ctx context.Context, token string) (*To
 				email = claims.Ext.Email
 			}
 			return &TokenValidationResult{
-				UserID: claims.RegisteredClaims.Subject,
+				UserID: claims.Subject,
 				Email:  email,
 			}, nil
 		}
@@ -47,7 +47,7 @@ func (v *JWTOnlyValidator) ValidateToken(ctx context.Context, token string) (*To
 		claims, err := v.sessValidator.ValidateSession(token)
 		if err == nil {
 			return &TokenValidationResult{
-				UserID: claims.RegisteredClaims.Subject,
+				UserID: claims.Subject,
 				Email:  claims.Email,
 			}, nil
 		}
