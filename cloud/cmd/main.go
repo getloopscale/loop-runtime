@@ -108,7 +108,7 @@ func main() {
 		stripeClient = billing.NewStripeClient(cfg.StripeAPIKey.Value())
 		webhookHandler = billing.NewWebhookHandler(db, cfg.StripeWebhookSecret.Value(), logger)
 		billingProvisioner = billing.NewProvisioner(db, stripeClient, logger)
-		billingHandler = routes.NewBillingHandler(db, stripeClient, webhookHandler, billingProvisioner, jwtValidator, sessIssuer, cfg.BillingReturnURL)
+		billingHandler = routes.NewBillingHandler(db, stripeClient, webhookHandler, billingProvisioner, cfg.BillingReturnURL)
 		logger.Info("billing enabled")
 	} else {
 		logger.Warn("STRIPE_API_KEY not set — billing endpoints disabled")
@@ -116,9 +116,12 @@ func main() {
 
 	_ = billingProvisioner // Used in billing handler
 
+	// Universal JWT auth middleware (RSA + HMAC — one path for all)
+	requireJWT := auth.RequireJWT(jwtValidator, sessIssuer)
+
 	// Handlers
 	deviceHandler := routes.NewDeviceHandler(hydra, cfg.BillingReturnURL)
-	meHandler := routes.NewMeHandler(jwtValidator)
+	meHandler := routes.NewMeHandler()
 	consentHandler := consent.NewHandler(hydra, cfg.KratosPublicURL, cfg.KratosInternalURL, logger)
 
 	// Router
@@ -153,13 +156,15 @@ func main() {
 		})
 	})
 
-	// Auth endpoints (no auth required — these ARE the auth flow)
+	// Auth endpoints (no auth — these ARE the auth flow)
 	r.Route("/v1/auth", func(r chi.Router) {
 		r.Post("/device/authorize", deviceHandler.Authorize)
 		r.Post("/device/token", deviceHandler.Token)
 		r.Post("/token/refresh", deviceHandler.Refresh)
 		r.Post("/session/token", sessionTokenHandler.Exchange) // Dashboard: Kratos session → JWT
-		r.Get("/me", meHandler.Get)
+
+		// /me requires JWT
+		r.With(requireJWT).Get("/me", meHandler.Get)
 	})
 
 	// Hydra consent/login callbacks (browser redirects)
@@ -168,13 +173,14 @@ func main() {
 	r.Get("/auth/consent", consentHandler.Consent)
 	r.Get("/auth/device", consentHandler.DeviceVerify)
 
-	// Billing endpoints (JWT-authenticated except webhook)
+	// Billing endpoints (JWT required via middleware, except webhook)
 	if billingHandler != nil {
 		r.Route("/v1/billing", func(r chi.Router) {
+			r.Use(requireJWT)
 			r.Get("/", billingHandler.GetBilling)
 			r.Get("/portal", billingHandler.Portal)
 		})
-		// Webhook endpoint — NO JWT auth (Stripe signs with its own secret)
+		// Webhook — NO JWT (Stripe signs with its own secret)
 		r.Post("/v1/webhooks/stripe", billingHandler.Webhook)
 	}
 

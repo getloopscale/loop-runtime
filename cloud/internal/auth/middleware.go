@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package auth
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+)
+
+// UserContext holds authenticated user info, set by the auth middleware.
+type UserContext struct {
+	Subject  string
+	Email    string
+	Name     string
+	TenantID string
+}
+
+type contextKey string
+
+const userCtxKey contextKey = "user"
+
+// GetUser extracts the authenticated user from the request context.
+func GetUser(ctx context.Context) *UserContext {
+	uc, ok := ctx.Value(userCtxKey).(*UserContext)
+	if !ok {
+		return nil
+	}
+	return uc
+}
+
+// RequireJWT returns chi middleware that validates JWT Bearer tokens.
+// Accepts both Hydra RSA JWTs (CLI) and HMAC session JWTs (dashboard).
+// Sets UserContext on the request context for downstream handlers.
+func RequireJWT(jwks *JWKSValidator, sess *SessionTokenIssuer) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+			if !strings.HasPrefix(authHeader, "Bearer ") {
+				writeAuthError(w, "Not authenticated. Run: loopzero login")
+				return
+			}
+			token := authHeader[7:]
+
+			// Try RSA JWT (Hydra — CLI)
+			if jwks != nil {
+				claims, err := jwks.Validate(token)
+				if err == nil {
+					email := claims.Email
+					if email == "" {
+						email = claims.Ext.Email
+					}
+					name := claims.Name
+					if name == "" {
+						name = claims.Ext.Name
+					}
+					tenantID := claims.TenantID
+					if tenantID == "" {
+						tenantID = "default"
+					}
+					ctx := context.WithValue(r.Context(), userCtxKey, &UserContext{
+						Subject:  claims.RegisteredClaims.Subject,
+						Email:    email,
+						Name:     name,
+						TenantID: tenantID,
+					})
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
+			// Try HMAC session JWT (dashboard)
+			if sess != nil {
+				claims, err := sess.Validate(token)
+				if err == nil {
+					tenantID := claims.TenantID
+					if tenantID == "" {
+						tenantID = "default"
+					}
+					ctx := context.WithValue(r.Context(), userCtxKey, &UserContext{
+						Subject:  claims.RegisteredClaims.Subject,
+						Email:    claims.Email,
+						Name:     claims.Name,
+						TenantID: tenantID,
+					})
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
+			writeAuthError(w, "Invalid or expired token. Run: loopzero login")
+		})
+	}
+}
+
+func writeAuthError(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	json.NewEncoder(w).Encode(map[string]string{
+		"code":  "AUTH_REQUIRED",
+		"error": message,
+	})
+}
