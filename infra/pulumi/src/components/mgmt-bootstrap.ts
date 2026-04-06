@@ -573,6 +573,17 @@ function installOryKratos(
               domain: `.${config.domain}`,
               same_site: "Lax",
             },
+            // Session cookie must also use the parent domain so the dashboard
+            // (cloud.dev.loopzero.example) can send it on /sessions/whoami requests.
+            // Without this, the session cookie defaults to the exact request host,
+            // which breaks after OIDC redirect chains.
+            session: {
+              cookie: {
+                domain: `.${config.domain}`,
+                same_site: "Lax",
+              },
+              lifespan: "24h",
+            },
             // Allow return_to URLs from dashboard and API (consent handler).
             // MEET-2026-04-05-032: Kratos UI at accounts.{domain} (same-origin, no CORS).
             // Dashboard is a pure PKCE client — never renders Kratos flows.
