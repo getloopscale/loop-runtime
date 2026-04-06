@@ -39,6 +39,7 @@ import { BuildListCommand } from './commands/build-list';
 import { BuildInspectCommand } from './commands/build-inspect';
 import { SecretSetCommand, SecretListCommand, SecretDeleteCommand } from './commands/secret';
 import { ValidateCommand } from './commands/validate';
+import { BillingCommand } from './commands/billing';
 import { TeamListCommand } from './commands/team-list';
 import { TeamAddCommand } from './commands/team-add';
 import { TeamRemoveCommand } from './commands/team-remove';
@@ -1364,6 +1365,49 @@ export function createProgram(): Command {
         }
         return 1;
       });
+    });
+
+  // --- billing ---
+  const billingCmd = program
+    .command('billing')
+    .description('View plan and usage, or open the billing portal');
+
+  billingCmd
+    .command('portal')
+    .description('Open the billing portal in your browser')
+    .action(async () => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const cloudURL = getCloudUrl();
+      const apiClient = new ApiClient({ baseURL: cloudURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
+
+      const cmd = new BillingCommand({
+        getBilling: async () => apiClient.get('/v1/billing'),
+        getPortalURL: async () => apiClient.get('/v1/billing/portal'),
+        openBrowser,
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute({ json: globalOpts.json, subcommand: 'portal' });
+    });
+
+  billingCmd
+    .action(async () => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const cloudURL = getCloudUrl();
+      const apiClient = new ApiClient({ baseURL: cloudURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
+
+      const cmd = new BillingCommand({
+        getBilling: async () => apiClient.get('/v1/billing'),
+        getPortalURL: async () => apiClient.get('/v1/billing/portal'),
+        openBrowser,
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute({ json: globalOpts.json });
     });
 
   // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)
