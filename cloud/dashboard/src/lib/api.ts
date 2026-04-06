@@ -17,24 +17,34 @@ export function getEngineBase() { return ENGINE_API; }
 // In-memory JWT token (never localStorage — XSS risk)
 let accessToken: string | null = null;
 let tokenExpiresAt = 0;
+let refreshPromise: Promise<boolean> | null = null; // Dedup concurrent refreshes
 
 /** Exchange Kratos session cookie for a JWT. Called after login. */
 export async function exchangeSessionToken(): Promise<boolean> {
-  try {
-    const resp = await fetch(`${API_BASE}/v1/auth/session/token`, {
-      method: 'POST',
-      credentials: 'include', // Send Kratos session cookie
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (!resp.ok) return false;
+  // Dedup: if a refresh is already in flight, reuse it
+  if (refreshPromise) return refreshPromise;
 
-    const data = await resp.json() as { access_token: string; expires_in: number };
-    accessToken = data.access_token;
-    tokenExpiresAt = Date.now() + (data.expires_in * 1000) - 60000; // 60s buffer
-    return true;
-  } catch {
-    return false;
-  }
+  refreshPromise = (async () => {
+    try {
+      const resp = await fetch(`${API_BASE}/v1/auth/session/token`, {
+        method: 'POST',
+        credentials: 'include', // Send Kratos session cookie
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!resp.ok) return false;
+
+      const data = await resp.json() as { access_token: string; expires_in: number };
+      accessToken = data.access_token;
+      tokenExpiresAt = Date.now() + (data.expires_in * 1000) - 60000; // 60s buffer
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
 }
 
 /** Check if we have a valid token. */
