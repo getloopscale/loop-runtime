@@ -540,15 +540,22 @@ function installOryKratos(
         kratos: {
           config: {
             ...(kratosDsn ? { dsn: kratosDsn } : {}),
-            // SMTP for email delivery — verification and recovery emails.
-            // When not set, falls back to values.yaml default (stdout in dev).
-            ...(config.smtpConnectionUri
+            // MEET-2026-04-06-036: Email via Resend HTTP API (SMTP blocked by DO).
+            // Kratos HTTP courier calls Resend directly — no SMTP needed.
+            ...(config.resendApiKey
               ? {
                   courier: {
-                    smtp: {
-                      connection_uri: config.smtpConnectionUri,
-                      from_address: `noreply@${config.domain}`,
-                      from_name: "LoopZero",
+                    delivery_strategy: "http",
+                    http: {
+                      request_config: {
+                        url: "https://api.resend.com/emails",
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: pulumi.interpolate`Bearer ${config.resendApiKey}`,
+                        },
+                        body: "base64://ZnVuY3Rpb24oY3R4KSB7CiAgZnJvbTogIlRoZW8gPG5vcmVwbHlAdXNldGhlby5kZXY+IiwKICB0bzogW2N0eC5SZWNpcGllbnRdLAogIHN1YmplY3Q6IGN0eC5TdWJqZWN0LAogIGh0bWw6IGN0eC5Cb2R5LAp9",
+                      },
                     },
                   },
                 }
@@ -2382,6 +2389,9 @@ function createPlatformNetworkPolicies(
     },
     { provider, dependsOn: [ns] },
   );
+
+  // MEET-2026-04-06-036: SMTP NetworkPolicy removed — DO blocks all SMTP ports.
+  // Email delivery uses Resend HTTP API (port 443, already allowed).
 }
 
 // ---------------------------------------------------------------------------

@@ -76,9 +76,9 @@ export interface PlatformStackConfig {
   readonly stripeApiKey?: pulumi.Output<string>;
   readonly stripeWebhookSecret?: pulumi.Output<string>;
 
-  // Ory SMTP — email delivery for verification and recovery (Sprint 11, Phase 4)
-  // Set via: pulumi config set --secret smtpConnectionUri "smtps://key:secret@smtp.resend.com:465"
-  readonly smtpConnectionUri?: pulumi.Output<string>;
+  // Resend API key for email delivery (verification, recovery).
+  // MEET-036: HTTP API replaces SMTP (DO blocks SMTP ports).
+  readonly resendApiKey?: pulumi.Output<string>;
 
   // Ory Social Login — GitHub OAuth (Sprint 11, Phase 3)
   // Set via: pulumi config set --secret githubOAuthClientId <id>
@@ -162,10 +162,10 @@ export function loadStackConfig(): PlatformStackConfig {
     stripeApiKey: config.getSecret("stripeApiKey") ?? undefined,
     stripeWebhookSecret: config.getSecret("stripeWebhookSecret") ?? undefined,
 
-    // Ory SMTP — email delivery via Resend (verification, recovery)
-    smtpConnectionUri: process.env.LOOPZERO_SMTP_CONNECTION_URI
-      ? pulumi.output(process.env.LOOPZERO_SMTP_CONNECTION_URI)
-      : config.getSecret("smtpConnectionUri") ?? undefined,
+    // Resend API key for email delivery (MEET-036: HTTP API, not SMTP)
+    resendApiKey: process.env.LOOPZERO_RESEND_API_KEY
+      ? pulumi.output(process.env.LOOPZERO_RESEND_API_KEY)
+      : config.getSecret("resendApiKey") ?? undefined,
 
     // Ory Social Login — GitHub OAuth (Sprint 11, Phase 3)
     // Reads from env vars (GitHub Actions secrets) or Pulumi config (local dev).
