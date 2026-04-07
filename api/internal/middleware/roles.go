@@ -4,7 +4,6 @@
 package middleware
 
 import (
-	"encoding/json"
 	"net/http"
 )
 
@@ -29,22 +28,13 @@ func RequireRole(minRole string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			uc := GetUserContext(r.Context())
 			if uc == nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]string{
-					"code":    "UNAUTHORIZED",
-					"message": "Not authenticated.",
-				})
+				writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Not authenticated.")
 				return
 			}
 
 			if !HasMinRole(uc.Role, minRole) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				json.NewEncoder(w).Encode(map[string]string{
-					"code":    "INSUFFICIENT_ROLE",
-					"message": "Requires " + minRole + " role. Your role: " + uc.Role,
-				})
+				writeError(w, http.StatusForbidden, "INSUFFICIENT_ROLE",
+					"Requires "+minRole+" role. Your role: "+uc.Role)
 				return
 			}
 
