@@ -14,6 +14,11 @@ import (
 // IdentityMigrator handles lazy migration of existing users to Kratos identities.
 // When a user authenticates via social login (GitHub/Google) and already exists
 // in the legacy `users` table, this maps their Kratos identity ID to the legacy user.
+//
+// DEPRECATED: This table and migrator will be removed after all legacy users are migrated.
+// Target removal: 2026-Q3. Once no rows in user_identity_map reference users that
+// authenticate only via the legacy GitHub flow, this can be dropped.
+// §5.2: users.id IS the Kratos UUID for all new users. This bridge is transitional.
 type IdentityMigrator struct {
 	db     *sql.DB
 	logger *slog.Logger

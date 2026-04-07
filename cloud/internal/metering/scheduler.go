@@ -14,7 +14,8 @@ const (
 	ReporterInterval = 1 * time.Hour
 
 	// ReconcilerInterval is how often the drift reconciler runs.
-	ReconcilerInterval = 168 * time.Hour // weekly
+	// §1.6: Daily instead of weekly for faster drift detection.
+	ReconcilerInterval = 24 * time.Hour
 )
 
 // StartScheduler runs the metering reporter and reconciler as background

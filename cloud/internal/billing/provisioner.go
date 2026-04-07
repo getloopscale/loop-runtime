@@ -86,18 +86,18 @@ func (p *Provisioner) EnsureStripeCustomer(ctx context.Context, tenantID, email,
 		return "", err
 	}
 
-	// Store customer ID
+	// Store customer ID — §1.4: DB failure returns error, not orphan ID
 	_, err = p.db.ExecContext(ctx,
 		"UPDATE subscriptions SET stripe_customer_id = $1, updated_at = now() WHERE tenant_id = $2",
 		customer.ID, tenantID,
 	)
 	if err != nil {
-		p.logger.Error("failed to store Stripe customer ID",
+		p.logger.Error("failed to store Stripe customer ID — customer created in Stripe but not linked",
 			"tenant_id", tenantID,
 			"customer_id", customer.ID,
 			"error", err,
 		)
-		return customer.ID, err // Return customer ID even if DB write fails
+		return "", fmt.Errorf("store customer ID: %w", err)
 	}
 
 	p.logger.Info("created Stripe customer",

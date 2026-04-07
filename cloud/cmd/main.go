@@ -27,6 +27,7 @@ import (
 	"github.com/loopzero/loopzero/cloud/internal/config"
 	"github.com/loopzero/loopzero/cloud/internal/consent"
 	"github.com/loopzero/loopzero/cloud/internal/metering"
+	cloudmetrics "github.com/loopzero/loopzero/cloud/internal/metrics"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
 )
 
@@ -93,13 +94,13 @@ func main() {
 	jwtValidator := loopzerojwt.NewValidator(jwksURL, cfg.JWTIssuer, "loopzero-cloud")
 
 	// Session token issuer/validator (HMAC JWTs for dashboard)
-	// MEET-2026-04-07-039: audience is explicit per service.
+	// MEET-2026-04-07-039: audience explicit. §2.2: kid + dual-key rotation.
 	sessIssuer := loopzerojwt.NewSessionTokenIssuer(
 		cfg.SessionTokenSecret.Value(),
 		"loopzero-cloud",
 		"loopzero-cloud",
 		15*time.Minute,
-	)
+	).WithPreviousSecret(string(cfg.SessionTokenSecretPrevious))
 	tenantProvisioner := auth.NewTenantProvisioner(db, logger)
 	sessionTokenHandler := routes.NewSessionTokenHandler(sessIssuer, tenantProvisioner, cfg.KratosInternalURL)
 
@@ -111,7 +112,7 @@ func main() {
 
 	if cfg.StripeAPIKey.Value() != "" {
 		stripeClient = billing.NewStripeClient(cfg.StripeAPIKey.Value())
-		webhookHandler = billing.NewWebhookHandler(db, cfg.StripeWebhookSecret.Value(), logger)
+		webhookHandler = billing.NewWebhookHandler(db, cfg.StripeWebhookSecret.Value(), billing.LoadPlanConfig(), logger)
 		billingProvisioner = billing.NewProvisioner(db, stripeClient, logger)
 		billingHandler = routes.NewBillingHandler(db, stripeClient, webhookHandler, billingProvisioner, cfg.BillingReturnURL)
 		logger.Info("billing enabled")
@@ -132,6 +133,26 @@ func main() {
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
+
+	// §3.2: CORS — explicit origin validation for dashboard
+	dashboardOrigin := cfg.BillingReturnURL // Same base URL as dashboard
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin == dashboardOrigin {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-LoopZero-Tenant")
+				w.Header().Set("Access-Control-Max-Age", "86400")
+			}
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	// Request logging — every request gets logged for observability
 	r.Use(func(next http.Handler) http.Handler {
@@ -172,6 +193,9 @@ func main() {
 			"db":     dbStatus,
 		})
 	})
+
+	// §4.1+4.2: Metrics endpoint (Prometheus text format)
+	r.Get("/metrics", cloudmetrics.Handler())
 
 	// Auth endpoints (no auth — these ARE the auth flow)
 	r.Route("/v1/auth", func(r chi.Router) {

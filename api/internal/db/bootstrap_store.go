@@ -54,12 +54,11 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 		cellID = "cell-default"
 	}
 	res, err = s.DB.Exec(ctx,
-		`INSERT INTO tenants (id, display_name, plan, owner_id, cell_id)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO tenants (id, display_name, owner_id, cell_id)
+		 VALUES ($1, $2, $3, $4)
 		 ON CONFLICT (id) DO NOTHING`,
 		tenantID,
 		displayName,
-		req.Plan,
 		userID,
 		cellID,
 	)

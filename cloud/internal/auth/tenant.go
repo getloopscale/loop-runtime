@@ -73,12 +73,12 @@ func (p *TenantProvisioner) EnsureTenant(ctx context.Context, userID, email stri
 	}
 
 	// 2. Create tenant with UUID-based ID.
-	// Slug collision on display name is handled gracefully:
-	// if the preferred slug is taken, append a short suffix.
+	// Plan is NOT stored on tenants — subscriptions table is the single source of truth (§1.1).
+	// Slug collision on display name is handled gracefully.
 	finalSlug := slug
 	result, err := tx.ExecContext(ctx,
-		`INSERT INTO tenants (id, display_name, slug, plan, owner_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, 'starter', $4, now(), now())`,
+		`INSERT INTO tenants (id, display_name, slug, owner_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, now(), now())`,
 		tenantID, slug, finalSlug, userID,
 	)
 	if err != nil {
@@ -87,8 +87,8 @@ func (p *TenantProvisioner) EnsureTenant(ctx context.Context, userID, email stri
 			shortID := tenantID[3:11] // first 8 chars of UUID portion
 			finalSlug = fmt.Sprintf("%s-%s", slug, shortID)
 			result, err = tx.ExecContext(ctx,
-				`INSERT INTO tenants (id, display_name, slug, plan, owner_id, created_at, updated_at)
-				 VALUES ($1, $2, $3, 'starter', $4, now(), now())`,
+				`INSERT INTO tenants (id, display_name, slug, owner_id, created_at, updated_at)
+				 VALUES ($1, $2, $3, $4, now(), now())`,
 				tenantID, slug, finalSlug, userID,
 			)
 			if err != nil {
@@ -114,6 +114,18 @@ func (p *TenantProvisioner) EnsureTenant(ctx context.Context, userID, email stri
 	)
 	if err != nil {
 		return "", "", fmt.Errorf("create membership: %w", err)
+	}
+
+	// 4. Create starter subscription (§1.1: subscriptions is single source of truth for plan).
+	subID := generateSubscriptionID()
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO subscriptions (id, tenant_id, plan, status, created_at, updated_at)
+		 VALUES ($1, $2, 'starter', 'active', now(), now())
+		 ON CONFLICT (tenant_id) DO NOTHING`,
+		subID, tenantID,
+	)
+	if err != nil {
+		return "", "", fmt.Errorf("create subscription: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -170,6 +182,13 @@ func generateTenantID() string {
 		panic(fmt.Sprintf("crypto/rand failed: %v", err))
 	}
 	return fmt.Sprintf("tn-%x", b)
+}
+
+// generateSubscriptionID creates a unique subscription ID.
+func generateSubscriptionID() string {
+	b := make([]byte, 12)
+	rand.Read(b)
+	return fmt.Sprintf("sub_%x", b)
 }
 
 // isUniqueViolation checks if a PostgreSQL error is a unique constraint violation.

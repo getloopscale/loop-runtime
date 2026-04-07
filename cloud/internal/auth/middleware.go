@@ -19,6 +19,7 @@ type UserContext struct {
 	Email    string
 	Name     string
 	TenantID string
+	Role     string // owner, admin, member (§5.1)
 }
 
 type contextKey string
@@ -107,11 +108,17 @@ func RequireJWT(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.
 	}
 }
 
+// writeAuthError writes a JSON error response with request_id for tracing (§4.3).
 func writeAuthError(w http.ResponseWriter, message string) {
+	requestID := w.Header().Get("X-Request-Id")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	json.NewEncoder(w).Encode(map[string]string{
+	resp := map[string]string{
 		"code":    "AUTH_REQUIRED",
 		"message": message,
-	})
+	}
+	if requestID != "" {
+		resp["request_id"] = requestID
+	}
+	json.NewEncoder(w).Encode(resp)
 }

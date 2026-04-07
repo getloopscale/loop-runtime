@@ -101,7 +101,8 @@ type CheckoutSession struct {
 }
 
 // CreateCheckoutSession creates a Stripe Checkout session for upgrading to a paid plan.
-func (c *StripeClient) CreateCheckoutSession(customerID, priceID, successURL, cancelURL string) (*CheckoutSession, error) {
+// §1.4: Deterministic idempotency key prevents duplicate checkout sessions on retry.
+func (c *StripeClient) CreateCheckoutSession(customerID, priceID, successURL, cancelURL, tenantID string) (*CheckoutSession, error) {
 	data := url.Values{
 		"customer":                 {customerID},
 		"mode":                     {"subscription"},
@@ -111,8 +112,10 @@ func (c *StripeClient) CreateCheckoutSession(customerID, priceID, successURL, ca
 		"cancel_url":               {cancelURL},
 	}
 
+	idempotencyKey := fmt.Sprintf("checkout-%s-%s", tenantID, priceID)
+
 	var session CheckoutSession
-	if err := c.post("/checkout/sessions", data, &session, ""); err != nil {
+	if err := c.post("/checkout/sessions", data, &session, idempotencyKey); err != nil {
 		return nil, fmt.Errorf("create checkout session: %w", err)
 	}
 	return &session, nil

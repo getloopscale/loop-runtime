@@ -95,7 +95,7 @@ func TestVerifySignature_301sRejected(t *testing.T) {
 
 func TestWebhookHandlerNilDB(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := billing.NewWebhookHandler(nil, "secret", logger)
+	handler := billing.NewWebhookHandler(nil, "secret", billing.LoadPlanConfig(), logger)
 	event := billing.StripeEvent{
 		ID:   "evt_test",
 		Type: "customer.subscription.updated",

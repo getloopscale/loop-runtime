@@ -98,10 +98,19 @@ export class LoginCommand {
           authenticated: true,
           email: result.email,
           team,
+          team_id: team,
+          expires_in: result.expiresIn || 3600,
         })
       );
     } else {
-      this.deps.writeTo(`Authenticated as ${result.email} (team: ${team})`);
+      // §3.5: Rich post-auth output (Vercel CLI style)
+      const expiry = result.expiresIn ? `in ${Math.round(result.expiresIn / 60)} minutes` : 'in 1 hour';
+      this.deps.writeTo('');
+      this.deps.writeTo(`  Authenticated as ${result.email}`);
+      this.deps.writeTo(`  Team: ${team}`);
+      this.deps.writeTo(`  Token expires: ${expiry}`);
+      this.deps.writeTo('');
+      this.deps.writeTo('  Next: run `loopzero deploy` to deploy your project');
     }
 
     return 0;

@@ -112,9 +112,14 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	json.NewEncoder(w).Encode(data)
 }
 
+// writeError writes a JSON error response with request_id for tracing (§4.3).
 func writeError(w http.ResponseWriter, status int, code, message string) {
-	writeJSON(w, status, map[string]interface{}{
+	resp := map[string]interface{}{
 		"code":    code,
 		"message": message,
-	})
+	}
+	if rid := w.Header().Get("X-Request-Id"); rid != "" {
+		resp["request_id"] = rid
+	}
+	writeJSON(w, status, resp)
 }

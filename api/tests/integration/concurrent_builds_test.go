@@ -335,8 +335,8 @@ func seedTestData(t *testing.T, pool *pgxpool.Pool) {
 
 	// Create test tenant
 	_, err = pool.Exec(ctx,
-		`INSERT INTO tenants (id, display_name, plan, owner_id)
-		 VALUES ('tenant-test', 'Test Tenant', 'starter', 'user-test')
+		`INSERT INTO tenants (id, display_name, owner_id)
+		 VALUES ('tenant-test', 'Test Tenant', 'user-test')
 		 ON CONFLICT (id) DO NOTHING`)
 	if err != nil {
 		t.Fatalf("failed to seed tenant: %v", err)
