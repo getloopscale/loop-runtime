@@ -781,7 +781,7 @@ function installOryHydra(
                     cors: {
                       enabled: true,
                       allowed_origins: [
-                        `https://cloud.${authDomain}`,
+                        `https://api.${authDomain}`,
                       ],
                       allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
                       allowed_headers: ["Authorization", "Content-Type", "Cookie"],
@@ -1170,7 +1170,7 @@ function installCloudService(
         CLOUD_LISTEN_ADDR: ":13002",
         LOOPZERO_ENV: config.environment || "dev",
         // Kratos public URL — served via cloud gateway (same domain as dashboard, no CORS).
-        KRATOS_PUBLIC_URL: `https://cloud.${config.domain || "dev.loopzero.example"}`,
+        KRATOS_PUBLIC_URL: `https://api.${config.domain || "dev.loopzero.example"}`,
         // Hydra public URL — routed through API gateway (/oauth2/*, /.well-known/*)
         HYDRA_PUBLIC_URL: `https://api.${config.domain || "dev.loopzero.example"}`,
         // Internal URLs (server-to-server, never exposed to browser)
@@ -1179,7 +1179,7 @@ function installCloudService(
         HYDRA_CLIENT_ID: "loopzero-cli",
         ENGINE_API_URL: `http://loopzero-api.${PLATFORM_NAMESPACE}.svc.cluster.local:8080`,
         // Dashboard URL — used for OAuth2 redirect_uri registration
-        BILLING_RETURN_URL: `https://cloud.${config.domain || "dev.loopzero.example"}`,
+        BILLING_RETURN_URL: `https://api.${config.domain || "dev.loopzero.example"}`,
         KRATOS_INTERNAL_URL: `http://ory-kratos-public.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
         // Stripe price IDs (MEET-038 Phase 6)
         STRIPE_PRICE_PRO: config.stripePriceProId || "",
