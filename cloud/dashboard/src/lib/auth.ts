@@ -5,7 +5,8 @@
 //
 // Hydra is only used for the CLI (Device Code Flow).
 
-const KRATOS_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
+// MEET-040: Same-origin — relative URLs. Local dev uses VITE_API_URL.
+const KRATOS_URL = import.meta.env.VITE_API_URL || '';
 
 export interface VerifiableAddress {
   value: string;

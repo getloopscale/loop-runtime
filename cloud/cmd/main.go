@@ -136,31 +136,8 @@ func main() {
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 
-	// §3.2: CORS — explicit origin validation for dashboard.
-	// Accepts BillingReturnURL and DASHBOARD_CORS_ORIGIN (if dashboard runs on a different domain).
-	allowedOrigins := map[string]bool{
-		cfg.BillingReturnURL: true,
-	}
-	if extra := os.Getenv("DASHBOARD_CORS_ORIGIN"); extra != "" {
-		allowedOrigins[extra] = true
-	}
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			if allowedOrigins[origin] {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Access-Control-Allow-Credentials", "true")
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-LoopZero-Tenant")
-				w.Header().Set("Access-Control-Max-Age", "86400")
-			}
-			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	})
+	// MEET-040: CORS removed — dashboard is same-origin (cloud.{domain}).
+	// All API calls are relative URLs, no cross-origin requests.
 
 	// Request logging — every request gets logged for observability
 	r.Use(func(next http.Handler) http.Handler {
@@ -252,12 +229,18 @@ func main() {
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadGateway)
-				json.NewEncoder(w).Encode(map[string]string{"code": "PROXY_ERROR", "message": "Failed to reach engine API."})
+				json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_ERROR", "message": "Service temporarily unavailable. Try again."})
 				return
 			}
-			// Forward query params and content type
+			// Forward query params, content type, and correlation ID
 			proxyReq.URL.RawQuery = r.URL.RawQuery
 			proxyReq.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+			if cid := r.Header.Get("X-Correlation-Id"); cid != "" {
+				proxyReq.Header.Set("X-Correlation-Id", cid)
+			}
+			if rid := r.Header.Get("X-Request-Id"); rid != "" {
+				proxyReq.Header.Set("X-Request-Id", rid)
+			}
 
 			// Service-to-service auth: cloud authenticates to engine via shared secret.
 			// S2.3: Proxy sends identity only (user ID, tenant, email). Engine resolves
@@ -275,7 +258,7 @@ func main() {
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadGateway)
-				json.NewEncoder(w).Encode(map[string]string{"code": "ENGINE_UNAVAILABLE", "message": "Engine API is unavailable."})
+				json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_UNAVAILABLE", "message": "Service temporarily unavailable. Try again."})
 				return
 			}
 			defer resp.Body.Close()

@@ -329,11 +329,10 @@ jobs:
           SHA="${{ needs.resolve.outputs.sha_tag }}"
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
+          # MEET-040: VITE_API_URL is empty — dashboard uses relative URLs (same-origin).
+          # No VITE_ENGINE_URL needed — engine calls go through /engine/* proxy.
           docker build \
-            --build-arg VITE_API_URL=https://cloud.dev.loopzero.example \
-            --build-arg VITE_ENGINE_URL=https://api.dev.loopzero.example \
-            --build-arg VITE_AUTH_URL=https://auth.dev.loopzero.example \
-            --build-arg VITE_ACCOUNTS_URL=https://cloud.dev.loopzero.example \
+            --build-arg VITE_API_URL= \
             -t ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} \
             -t ${{ env.REGISTRY }}/loopzero-dashboard:${SHA} \
             cloud/dashboard/

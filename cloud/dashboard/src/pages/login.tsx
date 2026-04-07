@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { getSession, startLogin } from '@/lib/auth';
 import { clearToken } from '@/lib/api';
 
-const KRATOS_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
+const KRATOS_URL = import.meta.env.VITE_API_URL || '';
 
 interface FlowNode {
   group: string;

@@ -8,11 +8,11 @@
 // §3.3: BroadcastChannel coordinates token state across browser tabs.
 // §3.6: Session expiry shows notification before redirect.
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:13002';
-const ENGINE_API = import.meta.env.VITE_ENGINE_URL || 'http://localhost:13001';
+// MEET-040: Single origin. Dashboard served at cloud.{domain} — all API calls are relative.
+// VITE_API_URL is empty in production (same-origin). Only set for local dev (localhost:13002).
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export function getApiBase() { return API_BASE; }
-export function getEngineBase() { return ENGINE_API; }
 
 // In-memory JWT token (never localStorage — XSS risk)
 let accessToken: string | null = null;
@@ -127,23 +127,27 @@ export function logout(): void {
   authChannel?.postMessage({ type: 'logged-out' } satisfies AuthMessage);
 }
 
+// MEET-040: Unified API fetch. All paths relative to same origin.
+// /v1/billing, /v1/auth/* → cloud service (direct, same origin)
+// /engine/api/v1/* → cloud service proxy → engine API (BFF pattern)
 export async function cloudFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
   const token = await ensureToken();
   if (!token) {
     redirectToLogin('expired');
     return null;
   }
-  return apiFetch<T>(API_BASE, path, token, options, true);
+  return fetchWithAuth<T>(API_BASE, path, token, options, true);
 }
 
-// Engine API calls are proxied through the cloud service.
-// The engine only accepts RSA tokens with aud=loopzero-engine, which the dashboard
-// doesn't have. The cloud service proxies /engine/* to the engine API.
+// Alias for backward compatibility during migration
+export { cloudFetch as apiFetch };
+
+// Engine API calls proxied through cloud service.
 export async function engineFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
   return cloudFetch<T>(`/engine${path}`, options);
 }
 
-async function apiFetch<T>(base: string, path: string, token: string, options: RequestInit = {}, redirectOnAuthFailure = true): Promise<T | null> {
+async function fetchWithAuth<T>(base: string, path: string, token: string, options: RequestInit = {}, redirectOnAuthFailure = true): Promise<T | null> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
