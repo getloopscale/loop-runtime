@@ -90,6 +90,25 @@ const maxTokenCacheSize = 10000
 // Set from LOOPZERO_SERVICE_AUTH_SECRET env var. When empty, service auth is disabled.
 var ServiceAuthSecret string
 
+// ServiceAuthSecretPrevious is the previous secret for zero-downtime rotation (S1.2).
+// Set from LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS env var. When empty, single-key mode.
+var ServiceAuthSecretPrevious string
+
+// validateServiceAuth checks the X-Service-Auth header against current and previous secrets.
+// S1.2: Dual-key rotation — accepts current OR previous during rotation window.
+func validateServiceAuth(provided string) bool {
+	if ServiceAuthSecret == "" {
+		return false
+	}
+	if provided == ServiceAuthSecret {
+		return true
+	}
+	if ServiceAuthSecretPrevious != "" && provided == ServiceAuthSecretPrevious {
+		return true
+	}
+	return false
+}
+
 // AuthWithTTL is like Auth but with a configurable cache TTL.
 // Also accepts internal service calls with X-Service-Auth header (cloud→engine proxy).
 func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.Duration) func(http.Handler) http.Handler {
@@ -98,18 +117,31 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Internal service auth: cloud proxy sends X-Service-Auth + user context headers.
-			// This allows the dashboard (which has HMAC tokens) to access the engine
-			// through the cloud service proxy without needing RSA tokens.
-			if serviceAuth := r.Header.Get("X-Service-Auth"); serviceAuth != "" && ServiceAuthSecret != "" {
-				if serviceAuth == ServiceAuthSecret {
+			// Internal service auth: cloud proxy sends X-Service-Auth + identity headers.
+			// S2.3: Engine resolves role from DB, not from headers. Proxy sends only
+			// identity (user ID, tenant, email). Role is NEVER trusted from headers.
+			if serviceAuth := r.Header.Get("X-Service-Auth"); serviceAuth != "" {
+				if validateServiceAuth(serviceAuth) {
 					userID := r.Header.Get("X-LoopZero-User-ID")
 					tenantID := r.Header.Get("X-LoopZero-Tenant")
 					email := r.Header.Get("X-LoopZero-Email")
-					role := r.Header.Get("X-LoopZero-Role")
 					if userID != "" && tenantID != "" {
+						// Resolve role from DB — same authority as Bearer path
+						memberships, mErr := store.GetMemberships(r.Context(), userID)
+						if mErr != nil {
+							writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to resolve team memberships")
+							return
+						}
+						role := ""
+						for _, m := range memberships {
+							if m.TenantID == tenantID {
+								role = m.Role
+								break
+							}
+						}
 						if role == "" {
-							role = "member"
+							writeError(w, http.StatusForbidden, "TENANT_NOT_FOUND", "You are not a member of the requested team")
+							return
 						}
 						ctx := context.WithValue(r.Context(), userContextKey, &UserContext{
 							UserID:   userID,

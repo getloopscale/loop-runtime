@@ -33,11 +33,12 @@ var (
 
 // Billing metrics (§4.2)
 var (
-	WebhookProcessed int64
-	WebhookFailed    int64
-	CheckoutStarted  int64
-	CheckoutError    int64
-	UsageDriftCount  int64
+	WebhookProcessed      int64
+	WebhookFailed         int64
+	CheckoutStarted       int64
+	CheckoutError         int64
+	UsageDriftCount       int64
+	SubscriptionFallback  int64 // S1.4: missing subscription row → starter fallback
 )
 
 // IncTokenExchange increments token exchange counter.
@@ -104,6 +105,11 @@ func IncUsageDrift() {
 	atomic.AddInt64(&UsageDriftCount, 1)
 }
 
+// IncSubscriptionFallback increments when plan resolution falls back to starter (S1.4).
+func IncSubscriptionFallback() {
+	atomic.AddInt64(&SubscriptionFallback, 1)
+}
+
 // Handler returns an HTTP handler that emits metrics in Prometheus text format.
 func Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -155,5 +161,9 @@ func Handler() http.HandlerFunc {
 		fmt.Fprintf(w, "# HELP loopzero_usage_drift_detected_total Usage drift detection events.\n")
 		fmt.Fprintf(w, "# TYPE loopzero_usage_drift_detected_total counter\n")
 		fmt.Fprintf(w, "loopzero_usage_drift_detected_total %d\n", atomic.LoadInt64(&UsageDriftCount))
+
+		fmt.Fprintf(w, "# HELP loopzero_subscription_fallback_total Subscription missing — defaulted to starter.\n")
+		fmt.Fprintf(w, "# TYPE loopzero_subscription_fallback_total counter\n")
+		fmt.Fprintf(w, "loopzero_subscription_fallback_total %d\n", atomic.LoadInt64(&SubscriptionFallback))
 	}
 }

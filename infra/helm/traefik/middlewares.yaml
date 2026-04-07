@@ -32,11 +32,13 @@ spec:
   headers:
     frameDeny: true
     contentTypeNosniff: true
-    browserXssFilter: true
+    # S2.4: browserXssFilter removed — X-XSS-Protection is deprecated in modern browsers
+    # (Chrome removed XSS Auditor in 2019). Rely on CSP instead.
     stsSeconds: 31536000  # 1 year
     stsIncludeSubdomains: true
-    # §3.1: Content-Security-Policy blocks XSS from loading external scripts
-    # Allows Stripe checkout iframe and connect-src for API calls
-    contentSecurityPolicy: "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.stripe.com https://checkout.stripe.com; frame-src https://checkout.stripe.com https://js.stripe.com; img-src 'self' data: https:; font-src 'self' data:;"
+    # §3.1 + S2.4: Content-Security-Policy with hardened directives.
+    # style-src 'unsafe-inline' is required for CSS-in-JS (Tailwind/styled-components).
+    # base-uri and form-action restrict base tag injection and form hijacking.
+    contentSecurityPolicy: "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.stripe.com https://checkout.stripe.com; frame-src https://checkout.stripe.com https://js.stripe.com; img-src 'self' data: https:; font-src 'self' data:; base-uri 'self'; form-action 'self';"
     customResponseHeaders:
       X-Powered-By: ""  # Remove server fingerprint

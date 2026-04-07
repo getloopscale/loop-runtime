@@ -119,7 +119,9 @@ func main() {
 
 	// Service-to-service auth for internal proxy calls (cloud→engine).
 	// Dashboard calls engine via cloud proxy with X-Service-Auth header.
+	// S1.2: Dual-key rotation — accepts current OR previous during rotation window.
 	middleware.ServiceAuthSecret = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
+	middleware.ServiceAuthSecretPrevious = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS")
 
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
 	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)

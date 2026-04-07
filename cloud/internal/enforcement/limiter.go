@@ -8,6 +8,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+
+	"github.com/loopzero/loopzero/cloud/internal/metrics"
 )
 
 // PlanLimiter checks if a tenant's operation is within their plan limits.
@@ -128,7 +130,13 @@ func (l *PlanLimiter) getTenantPlan(tenantID string) string {
 		tenantID,
 	).Scan(&plan)
 	if err != nil {
-		l.logger.Debug("could not determine tenant plan, defaulting to starter", "tenant", tenantID, "error", err)
+		// S1.4: Missing subscription is an observable anomaly, not just a silent default.
+		// This metric fires on every request for a tenant without a subscription row.
+		// In steady state this should be zero — any increment indicates data corruption
+		// or a provisioning bug.
+		l.logger.Warn("subscription row missing — falling back to starter plan",
+			"tenant", tenantID, "error", err)
+		metrics.IncSubscriptionFallback()
 		return "starter"
 	}
 	return plan
