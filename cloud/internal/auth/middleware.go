@@ -42,7 +42,7 @@ func RequireJWT(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if !strings.HasPrefix(authHeader, "Bearer ") {
-				slog.Warn("auth: missing Bearer token", "path", r.URL.Path)
+				slog.Warn("auth: rejected — no Bearer token", "method", r.Method, "path", r.URL.Path)
 				writeAuthError(w, "Not authenticated. Run: loopzero login")
 				return
 			}

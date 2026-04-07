@@ -131,6 +131,20 @@ func main() {
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 
+	// Request logging — every request gets logged for observability
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/health" { // Don't log health checks
+				logger.Info("request",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"remote", r.RemoteAddr,
+				)
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	// Health check — reports DB connectivity for operational visibility
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
