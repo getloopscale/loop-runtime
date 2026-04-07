@@ -86,13 +86,44 @@ func Auth(validator TokenValidator, store MembershipStore) func(http.Handler) ht
 // The TTL ensures entries expire naturally; this limit is a safety net.
 const maxTokenCacheSize = 10000
 
+// ServiceAuthSecret is the shared secret for internal service-to-service calls.
+// Set from LOOPZERO_SERVICE_AUTH_SECRET env var. When empty, service auth is disabled.
+var ServiceAuthSecret string
+
 // AuthWithTTL is like Auth but with a configurable cache TTL.
+// Also accepts internal service calls with X-Service-Auth header (cloud→engine proxy).
 func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.Duration) func(http.Handler) http.Handler {
 	cache := &sync.Map{}
 	var cacheSize atomic.Int64
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Internal service auth: cloud proxy sends X-Service-Auth + user context headers.
+			// This allows the dashboard (which has HMAC tokens) to access the engine
+			// through the cloud service proxy without needing RSA tokens.
+			if serviceAuth := r.Header.Get("X-Service-Auth"); serviceAuth != "" && ServiceAuthSecret != "" {
+				if serviceAuth == ServiceAuthSecret {
+					userID := r.Header.Get("X-LoopZero-User-ID")
+					tenantID := r.Header.Get("X-LoopZero-Tenant")
+					email := r.Header.Get("X-LoopZero-Email")
+					role := r.Header.Get("X-LoopZero-Role")
+					if userID != "" && tenantID != "" {
+						if role == "" {
+							role = "member"
+						}
+						ctx := context.WithValue(r.Context(), userContextKey, &UserContext{
+							UserID:   userID,
+							Email:    email,
+							TenantID: tenantID,
+							Role:     role,
+						})
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
+					}
+				}
+				// Invalid service auth — fall through to normal Bearer auth
+			}
+
 			// Extract token
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {

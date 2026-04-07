@@ -117,6 +117,10 @@ func main() {
 	tokenValidator := middleware.NewJWTOnlyValidator(rsaValidator, nil)
 	logger.Info("JWT auth enabled (RSA-only)", "jwks_url", jwksURL)
 
+	// Service-to-service auth for internal proxy calls (cloud→engine).
+	// Dashboard calls engine via cloud proxy with X-Service-Auth header.
+	middleware.ServiceAuthSecret = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
+
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
 	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
 	if err != nil {

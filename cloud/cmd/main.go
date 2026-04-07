@@ -235,10 +235,10 @@ func main() {
 	}
 
 	// Engine API proxy — dashboard calls engine through cloud service.
-	// The engine only accepts RSA tokens (aud=loopzero-engine). The cloud service
-	// proxies requests using the JWT from the dashboard session and the cloud's
-	// own trust with the engine (internal network).
+	// The engine only accepts RSA tokens (aud=loopzero-engine) or internal service auth.
+	// Dashboard has HMAC tokens, so cloud authenticates to engine via X-Service-Auth.
 	engineURL := cfg.EngineAPIURL
+	serviceSecret := string(cfg.ServiceAuthSecret)
 	r.Route("/engine", func(r chi.Router) {
 		r.Use(requireJWT) // Dashboard must be authenticated
 		r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
@@ -259,12 +259,15 @@ func main() {
 			proxyReq.URL.RawQuery = r.URL.RawQuery
 			proxyReq.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 
-			// Forward user context as headers (engine trusts cloud on internal network)
+			// Service-to-service auth: cloud authenticates to engine via shared secret.
+			// Engine trusts this header and extracts user context from X-LoopZero-* headers.
+			proxyReq.Header.Set("X-Service-Auth", serviceSecret)
 			user := auth.GetUser(r.Context())
 			if user != nil {
 				proxyReq.Header.Set("X-LoopZero-User-ID", user.Subject)
 				proxyReq.Header.Set("X-LoopZero-Tenant", user.TenantID)
 				proxyReq.Header.Set("X-LoopZero-Email", user.Email)
+				proxyReq.Header.Set("X-LoopZero-Role", user.Role)
 			}
 
 			resp, err := http.DefaultClient.Do(proxyReq)

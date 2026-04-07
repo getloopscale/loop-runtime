@@ -85,5 +85,25 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 		anyCreated = true
 	}
 
+	// 4. INSERT subscription (§1.1: subscriptions is single source of truth for plan).
+	// Plan comes from BootstrapRequest.Plan (defaults to "starter").
+	plan := req.Plan
+	if plan == "" {
+		plan = "starter"
+	}
+	subID := fmt.Sprintf("sub_bootstrap_%s", tenantID)
+	res, err = s.DB.Exec(ctx,
+		`INSERT INTO subscriptions (id, tenant_id, plan, status, created_at, updated_at)
+		 VALUES ($1, $2, $3, 'active', now(), now())
+		 ON CONFLICT (tenant_id) DO NOTHING`,
+		subID, tenantID, plan,
+	)
+	if err != nil {
+		return "", "", false, fmt.Errorf("bootstrap: insert subscription: %w", err)
+	}
+	if res.RowsAffected > 0 {
+		anyCreated = true
+	}
+
 	return userID, tenantID, anyCreated, nil
 }

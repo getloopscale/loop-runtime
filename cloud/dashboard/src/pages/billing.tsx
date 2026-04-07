@@ -33,13 +33,15 @@ function useCheckoutActivation(currentPlan: string | undefined) {
 
   useEffect(() => {
     if (searchParams.get('success') !== 'true') return;
+    // Wait for the initial billing snapshot to load before polling.
+    // Without this, currentPlan is undefined on first render, and
+    // baselinePlan becomes '' which matches any non-empty plan immediately.
+    if (currentPlan === undefined) return;
 
     setActivating(true);
     let attempts = 0;
     const maxAttempts = 15; // 30 seconds at 2s intervals
-    // Use the page's current plan as baseline (not hardcoded 'Starter').
-    // This handles Pro→Team upgrades and revisits correctly.
-    const baselinePlan = currentPlan || '';
+    const baselinePlan = currentPlan;
 
     const poll = setInterval(async () => {
       attempts++;
