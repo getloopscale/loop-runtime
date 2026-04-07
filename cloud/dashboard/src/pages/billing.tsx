@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowUpRight, Sparkles, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,17 +25,44 @@ export function BillingPage() {
   useRequireAuth();
   const { data: billing, loading } = useCloudApi<BillingResponse>('/v1/billing');
 
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState('');
+
   const openPortal = async () => {
-    const portal = await cloudFetch<{ url: string }>('/v1/billing/portal');
-    if (portal?.url) window.open(portal.url, '_blank');
+    setActionLoading(true);
+    setActionError('');
+    try {
+      const portal = await cloudFetch<{ url: string }>('/v1/billing/portal');
+      if (portal?.url) {
+        window.open(portal.url, '_blank');
+      } else {
+        setActionError('Failed to open billing portal. Please try again.');
+      }
+    } catch {
+      setActionError('Failed to open billing portal. Please try again.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const upgradePlan = async (plan: string) => {
-    const result = await cloudFetch<{ url: string }>('/v1/billing/checkout', {
-      method: 'POST',
-      body: JSON.stringify({ plan }),
-    });
-    if (result?.url) window.location.href = result.url;
+    setActionLoading(true);
+    setActionError('');
+    try {
+      const result = await cloudFetch<{ url: string }>('/v1/billing/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ plan }),
+      });
+      if (result?.url) {
+        window.location.href = result.url;
+      } else {
+        setActionError('Failed to start checkout. Please try again.');
+      }
+    } catch {
+      setActionError('Failed to start checkout. Please try again.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const usage = billing ? Object.entries(billing.usage).map(([metric, data]) => ({
@@ -50,6 +78,11 @@ export function BillingPage() {
 
   return (
     <PageWrapper title="Billing" description="Plan, usage, and payment.">
+      {actionError && (
+        <div className="mb-4 rounded-lg bg-danger/10 border border-danger/20 p-3 text-sm text-danger">
+          {actionError}
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {/* Current Plan */}
         <motion.div
@@ -66,9 +99,8 @@ export function BillingPage() {
                   <h2 className="font-display text-3xl font-bold text-white tracking-tight">{billing?.plan || 'Starter'}</h2>
                   <p className="text-sm text-white/30 mt-1">{billing?.team || ''}</p>
                 </div>
-                <Button variant="secondary" size="sm" className="gap-1.5" onClick={openPortal}>
-                  Manage Plan
-                  <ArrowUpRight className="h-3.5 w-3.5" />
+                <Button variant="secondary" size="sm" className="gap-1.5" onClick={openPortal} disabled={actionLoading}>
+                  {actionLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <>Manage Plan <ArrowUpRight className="h-3.5 w-3.5" /></>}
                 </Button>
               </div>
             </CardContent>
