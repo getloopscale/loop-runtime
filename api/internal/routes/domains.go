@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,6 +21,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
 // ErrDomainExists is returned when a domain is already registered (unique constraint violation).
@@ -66,6 +68,7 @@ type DomainStore interface {
 	ListByTenant(ctx context.Context, tenantID string, filter DomainListFilter) ([]CustomDomain, int, error)
 	CountByTenant(ctx context.Context, tenantID string) (int, error)
 	UpdateStatus(ctx context.Context, domain, status string) error
+	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
 	UpdateTLS(ctx context.Context, domain, tlsStatus string, expiresAt *time.Time) error
 	UpdateFailure(ctx context.Context, domain, status, reason string) error
@@ -91,29 +94,21 @@ type DomainValidator interface {
 	Validate(domain string) error
 }
 
-// validDomainTransitions defines allowed state transitions (Rule 8 — state machines are strict).
-// CODE-007 fix: prevents arbitrary status updates.
-var validDomainTransitions = map[string][]string{
-	"pending_verification": {"verified", "removing"},
-	"verified":             {"provisioning", "removing"},
-	"provisioning":         {"active", "failed", "removing"},
-	"active":               {"failed", "removing"},
-	"failed":               {"verified", "removing"},
-	"removing":             {}, // terminal — row is deleted
-}
+// domainMachine is the formal domain state machine (CRIT-02 fix).
+// Replaces ad-hoc map with pkg/statemachine convention.
+var domainMachine = statemachine.NewDomainMachine()
 
-// isValidTransition checks if a state transition is allowed.
-func isValidTransition(from, to string) bool {
-	allowed, ok := validDomainTransitions[from]
-	if !ok {
-		return false
-	}
-	for _, a := range allowed {
-		if a == to {
-			return true
+// canRemove checks if a domain can transition to "removing" from its current state.
+// Uses the formal state machine — does not panic on invalid transitions.
+func canRemove(currentStatus string) bool {
+	ok := true
+	defer func() {
+		if recover() != nil {
+			ok = false
 		}
-	}
-	return false
+	}()
+	result := domainMachine.Transition(statemachine.State(currentStatus), statemachine.DomainRemove)
+	return ok && result == statemachine.DomainRemoving
 }
 
 // DomainHandler provides HTTP handlers for custom domain operations.
@@ -226,6 +221,9 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
+
+	// HIGH-01 fix: normalize domain before validation and storage
+	req.Domain = strings.ToLower(strings.TrimSpace(req.Domain))
 
 	// Validate required fields
 	if req.Domain == "" || req.Project == "" || req.App == "" || req.Environment == "" {
@@ -516,8 +514,8 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// CODE-007 fix: validate state transition before applying
-	if !isValidTransition(d.Status, "removing") {
+	// CRIT-02: validate transition via formal state machine
+	if !canRemove(d.Status) {
 		writeJSON(w, http.StatusConflict, map[string]string{
 			"error": "Domain cannot be removed in its current state (" + d.Status + "). Try again later.",
 			"code":  "INVALID_STATE",
@@ -525,10 +523,13 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Transition to removing — DomainProvisioner handles cleanup
-	if err := h.store.UpdateStatus(ctx, d.Domain, "removing"); err != nil {
-		slog.ErrorContext(ctx, "domain status update failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to remove domain"})
+	// CRIT-01: CAS transition prevents TOCTOU race with concurrent deploy.
+	if err := h.store.TransitionStatus(ctx, d.Domain, d.Status, "removing"); err != nil {
+		slog.ErrorContext(ctx, "domain transition to removing failed", "error", err)
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "Domain state changed concurrently. Please retry.",
+			"code":  "CONCURRENT_MODIFICATION",
+		})
 		return
 	}
 

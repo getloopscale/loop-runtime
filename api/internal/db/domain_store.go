@@ -150,6 +150,23 @@ func (s *PostgresDomainStore) UpdateStatus(ctx context.Context, domain, status s
 	return nil
 }
 
+// TransitionStatus atomically transitions a domain from expectedStatus to newStatus.
+// CRIT-01 fix: CAS (compare-and-swap) prevents TOCTOU race conditions.
+// Returns ErrStaleTransition if the domain is no longer in expectedStatus.
+func (s *PostgresDomainStore) TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error {
+	result, err := s.DB.Exec(ctx,
+		"UPDATE custom_domains SET status = $1, updated_at = now() WHERE domain = $2 AND status = $3",
+		newStatus, domain, expectedStatus,
+	)
+	if err != nil {
+		return fmt.Errorf("domain store: transition %s→%s: %w", expectedStatus, newStatus, err)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("domain store: transition failed — domain %s not in expected status %s", domain, expectedStatus)
+	}
+	return nil
+}
+
 // UpdateVerified transitions a domain to verified status.
 func (s *PostgresDomainStore) UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error {
 	result, err := s.DB.Exec(ctx,

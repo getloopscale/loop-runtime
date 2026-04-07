@@ -56,6 +56,13 @@ func (f *fakeDomainProvisionerStore) UpdateStatus(ctx context.Context, domain, s
 	f.statuses[domain] = status
 	return nil
 }
+func (f *fakeDomainProvisionerStore) TransitionStatus(ctx context.Context, domain, expected, newStatus string) error {
+	if current, ok := f.statuses[domain]; ok && current != expected {
+		return fmt.Errorf("CAS failed: expected %s, got %s", expected, current)
+	}
+	f.statuses[domain] = newStatus
+	return nil
+}
 func (f *fakeDomainProvisionerStore) UpdateFailure(ctx context.Context, domain, status, reason string) error {
 	f.statuses[domain] = status
 	f.failures[domain] = reason

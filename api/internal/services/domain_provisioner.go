@@ -21,6 +21,7 @@ type DomainProvisionerStore interface {
 	FindRemoving(ctx context.Context) ([]routes.CustomDomain, error)
 	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]routes.CustomDomain, error)
 	UpdateStatus(ctx context.Context, domain, status string) error
+	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	UpdateFailure(ctx context.Context, domain, status, reason string) error
 	Delete(ctx context.Context, domain string) error
 }
@@ -113,6 +114,12 @@ func (p *DomainProvisioner) Start(ctx context.Context) {
 	}
 }
 
+// ProcessOnce runs a single provisioning + removal cycle. Exported for testing (T-01 fix).
+func (p *DomainProvisioner) ProcessOnce(ctx context.Context) {
+	p.processVerified(ctx)
+	p.processRemoving(ctx)
+}
+
 // processVerified atomically claims verified→provisioning and provisions them.
 func (p *DomainProvisioner) processVerified(ctx context.Context) {
 	domains, err := p.store.FindAndClaimVerified(ctx)
@@ -136,23 +143,28 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 	log := p.logger.With("domain", d.Domain, "tenant", d.TenantID, "project", d.ProjectName, "app", d.AppName, "env", d.Environment)
 	start := time.Now()
 
-	// Pre-check: is there an active release? (no lock needed for read)
-	release, err := p.releaseStore.GetActiveByEnv(ctx, d.TenantID, d.ProjectName, d.Environment)
+	// Pre-check: is there an active release? (quick read, no lock)
+	preRelease, err := p.releaseStore.GetActiveByEnv(ctx, d.TenantID, d.ProjectName, d.Environment)
 	if err != nil {
 		log.Error("domain provisioner: release lookup failed", "error", err)
-		return // retry next tick
+		return
 	}
-	if release == nil {
+	if preRelease == nil {
 		log.Info("domain provisioner: no active release, skipping (will be included on next deploy)")
 		return
 	}
 
-	// Phase A: Lock → fetch data + render manifests.
-	// The environment lock serializes with concurrent deploys (Rule 6).
+	// Phase A: Lock → re-read release (HIGH-04: release may have been superseded) + render.
 	var rendered string
 	var pushOpts GitOpsPushOpts
 
 	lockErr := p.locker.WithLock(ctx, d.TenantID, d.ProjectName, d.Environment, func(tx db.DBTX) error {
+		// HIGH-04 fix: re-read release inside lock to prevent using a superseded release
+		release, err := p.releaseStore.GetActiveByEnv(ctx, d.TenantID, d.ProjectName, d.Environment)
+		if err != nil || release == nil {
+			return fmt.Errorf("no active release inside lock")
+		}
+
 		build, err := p.buildStore.GetByID(ctx, release.BuildID)
 		if err != nil || build == nil {
 			return fmt.Errorf("build lookup failed (build_id=%s): %w", release.BuildID, err)
@@ -218,9 +230,10 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 		return // stay in provisioning — F-006 timeout handles permanent failures
 	}
 
-	// Phase C: Set active after successful push (Option C, MEET-034 Q3).
-	if err := p.store.UpdateStatus(ctx, d.Domain, "active"); err != nil {
-		log.Error("domain provisioner: status update to active failed", "error", err)
+	// Phase C: CAS transition provisioning → active (HIGH-05 fix).
+	// If a concurrent Delete already moved to "removing", this CAS fails harmlessly.
+	if err := p.store.TransitionStatus(ctx, d.Domain, "provisioning", "active"); err != nil {
+		log.Warn("domain provisioner: CAS active transition failed (domain may have been removed)", "error", err)
 		return
 	}
 
