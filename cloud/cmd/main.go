@@ -98,7 +98,8 @@ func main() {
 		"loopzero-cloud",
 		1*time.Hour,
 	)
-	sessionTokenHandler := routes.NewSessionTokenHandler(sessIssuer, cfg.KratosInternalURL)
+	tenantProvisioner := auth.NewTenantProvisioner(db, logger)
+	sessionTokenHandler := routes.NewSessionTokenHandler(sessIssuer, tenantProvisioner, cfg.KratosInternalURL)
 
 	// Billing (optional — requires Stripe keys and DB)
 	var stripeClient *billing.StripeClient

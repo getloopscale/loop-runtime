@@ -11,11 +11,14 @@ import (
 	"time"
 
 	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
+
+	"github.com/loopzero/loopzero/cloud/internal/auth"
 )
 
 // SessionTokenHandler exchanges Kratos session cookies for JWT tokens.
 type SessionTokenHandler struct {
 	issuer            *loopzerojwt.SessionTokenIssuer
+	tenantProvisioner *auth.TenantProvisioner
 	kratosInternalURL string
 	kratosClient      *http.Client
 
@@ -30,9 +33,10 @@ const (
 )
 
 // NewSessionTokenHandler creates a session token exchange handler.
-func NewSessionTokenHandler(issuer *loopzerojwt.SessionTokenIssuer, kratosInternalURL string) *SessionTokenHandler {
+func NewSessionTokenHandler(issuer *loopzerojwt.SessionTokenIssuer, tenantProv *auth.TenantProvisioner, kratosInternalURL string) *SessionTokenHandler {
 	return &SessionTokenHandler{
 		issuer:            issuer,
+		tenantProvisioner: tenantProv,
 		kratosInternalURL: kratosInternalURL,
 		kratosClient:      &http.Client{Timeout: 5 * time.Second},
 		attempts:          make(map[string][]time.Time),
@@ -86,12 +90,21 @@ func (h *SessionTokenHandler) Exchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve or create tenant for this user
+	tenantID := "default"
+	if h.tenantProvisioner != nil {
+		tid, _, tErr := h.tenantProvisioner.EnsureTenant(r.Context(), session.Identity.ID, session.Identity.Traits.Email)
+		if tErr == nil && tid != "" {
+			tenantID = tid
+		}
+	}
+
 	// Issue JWT
 	token, expiresIn, err := h.issuer.Issue(
 		session.Identity.ID,
 		session.Identity.Traits.Email,
 		session.Identity.Traits.Name,
-		"default", // TODO: resolve tenant from DB when multi-tenancy ships
+		tenantID,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Failed to create access token.")
