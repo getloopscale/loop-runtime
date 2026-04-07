@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// Reconciler compares usage_records with actual data to detect drift.
-// Runs weekly as a background job. Logs drift but does not auto-correct.
+// Reconciler compares usage_records with actual data to detect and correct drift.
+// §1.6: Runs daily. Auto-corrects drift < 5%. Alerts on drift >= 5%.
 type Reconciler struct {
 	db     *sql.DB
 	logger *slog.Logger
@@ -53,7 +53,7 @@ func (r *Reconciler) ReconcileBuilds() error {
 	}
 	defer rows.Close()
 
-	var driftCount int
+	var driftCount, correctedCount int
 	for rows.Next() {
 		var tenantID string
 		var actualCount int
@@ -76,9 +76,30 @@ func (r *Reconciler) ReconcileBuilds() error {
 		}
 
 		driftPct := math.Abs(float64(recordedCount-actualCount)) / float64(actualCount) * 100
-		if driftPct > DriftThresholdPct {
+		if driftPct > 0 && driftPct <= DriftThresholdPct {
+			// §1.6: Auto-correct small drift
+			_, corrErr := r.db.Exec(
+				`INSERT INTO usage_records (id, tenant_id, metric, quantity, period_start, period_end, reported_to_stripe, created_at)
+				 VALUES ($1, $2, 'builds', $3, $4, $5, false, now())
+				 ON CONFLICT (tenant_id, metric, period_start)
+				 DO UPDATE SET quantity = $3, reported_to_stripe = false`,
+				fmt.Sprintf("reconcile_%s_%d", tenantID, periodStart.Unix()),
+				tenantID, actualCount, periodStart,
+				periodStart.AddDate(0, 1, 0),
+			)
+			if corrErr != nil {
+				r.logger.Error("failed to auto-correct drift", "tenant", tenantID, "error", corrErr)
+			} else {
+				correctedCount++
+				r.logger.Info("auto-corrected usage drift",
+					"tenant", tenantID, "metric", "builds",
+					"recorded", recordedCount, "actual", actualCount,
+					"drift_pct", fmt.Sprintf("%.1f%%", driftPct),
+				)
+			}
+		} else if driftPct > DriftThresholdPct {
 			driftCount++
-			r.logger.Warn("usage drift detected",
+			r.logger.Warn("usage drift exceeds threshold — requires manual review",
 				"tenant", tenantID,
 				"metric", "builds",
 				"recorded", recordedCount,
@@ -91,6 +112,7 @@ func (r *Reconciler) ReconcileBuilds() error {
 		}
 	}
 
-	r.logger.Info("reconciliation complete", "metric", "builds", "tenants_with_drift", driftCount)
+	r.logger.Info("reconciliation complete", "metric", "builds",
+		"tenants_with_drift", driftCount, "auto_corrected", correctedCount)
 	return nil
 }

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowUpRight, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowUpRight, Sparkles, Loader2, CheckCircle2, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PageWrapper } from '@/components/page-wrapper';
@@ -10,7 +11,7 @@ import { cloudFetch } from '@/lib/api';
 
 interface UsageMetric {
   used: number;
-  limit: number;
+  limit: number | null; // §1.5: null = unlimited
 }
 
 interface BillingResponse {
@@ -21,9 +22,61 @@ interface BillingResponse {
   period_end?: string;
 }
 
+// §3.4: Post-checkout activation polling.
+// Returns updated billing data when activation succeeds, so the page renders fresh state.
+// Compares against the actual pre-checkout plan (captured on first poll), not a hardcoded value.
+function useCheckoutActivation(currentPlan: string | undefined) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activating, setActivating] = useState(false);
+  const [activationResult, setActivationResult] = useState<'success' | 'timeout' | null>(null);
+  const [activatedBilling, setActivatedBilling] = useState<BillingResponse | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get('success') !== 'true') return;
+    // Wait for the initial billing snapshot to load before polling.
+    // Without this, currentPlan is undefined on first render, and
+    // baselinePlan becomes '' which matches any non-empty plan immediately.
+    if (currentPlan === undefined) return;
+
+    setActivating(true);
+    let attempts = 0;
+    const maxAttempts = 15; // 30 seconds at 2s intervals
+    const baselinePlan = currentPlan;
+
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const result = await cloudFetch<BillingResponse>('/v1/billing');
+        if (result && result.plan !== baselinePlan) {
+          clearInterval(poll);
+          setActivating(false);
+          setActivatedBilling(result);
+          setActivationResult('success');
+          setSearchParams({}, { replace: true });
+        }
+      } catch { /* continue polling */ }
+
+      if (attempts >= maxAttempts) {
+        clearInterval(poll);
+        setActivating(false);
+        setActivationResult('timeout');
+        setSearchParams({}, { replace: true });
+      }
+    }, 2000);
+
+    return () => clearInterval(poll);
+  }, [searchParams, setSearchParams, currentPlan]);
+
+  return { activating, activationResult, setActivationResult, activatedBilling };
+}
+
 export function BillingPage() {
   useRequireAuth();
-  const { data: billing, loading } = useCloudApi<BillingResponse>('/v1/billing');
+  const { data: initialBilling, loading } = useCloudApi<BillingResponse>('/v1/billing');
+  const { activating, activationResult, setActivationResult, activatedBilling } = useCheckoutActivation(initialBilling?.plan);
+
+  // Use activated billing data if available (fresher than initial fetch)
+  const billing = activatedBilling ?? initialBilling;
 
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState('');
@@ -78,6 +131,38 @@ export function BillingPage() {
 
   return (
     <PageWrapper title="Billing" description="Plan, usage, and payment.">
+      {/* §3.4: Post-checkout activation states */}
+      {activating && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+          className="mb-4 rounded-lg bg-accent/10 border border-accent/20 p-4 flex items-center gap-3">
+          <Loader2 className="h-5 w-5 text-accent animate-spin flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-white">Activating your subscription...</p>
+            <p className="text-xs text-white/40 mt-0.5">This usually takes a few seconds.</p>
+          </div>
+        </motion.div>
+      )}
+      {activationResult === 'success' && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+          className="mb-4 rounded-lg bg-green-500/10 border border-green-500/20 p-4 flex items-center gap-3">
+          <CheckCircle2 className="h-5 w-5 text-green-400 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-white">Subscription activated! Welcome to {billing?.plan}.</p>
+          </div>
+          <button onClick={() => setActivationResult(null)} className="ml-auto text-white/30 hover:text-white/60 text-xs">Dismiss</button>
+        </motion.div>
+      )}
+      {activationResult === 'timeout' && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+          className="mb-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 p-4 flex items-center gap-3">
+          <Clock className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-white">Taking longer than expected.</p>
+            <p className="text-xs text-white/40 mt-0.5">Your subscription is being processed. Refresh the page in a moment, or contact support if it doesn't update within a few minutes.</p>
+          </div>
+        </motion.div>
+      )}
+
       {actionError && (
         <div className="mb-4 rounded-lg bg-danger/10 border border-danger/20 p-3 text-sm text-danger">
           {actionError}
@@ -136,8 +221,9 @@ export function BillingPage() {
           <CardContent>
             <div className="space-y-5">
               {usage.map((item, i) => {
-                const pct = Math.min((item.used / item.limit) * 100, 100);
-                const isHigh = pct > 80;
+                const isUnlimited = item.limit === null;
+                const pct = isUnlimited ? 0 : Math.min((item.used / (item.limit ?? 1)) * 100, 100);
+                const isHigh = !isUnlimited && pct > 80;
                 return (
                   <motion.div
                     key={item.metric}
@@ -148,17 +234,19 @@ export function BillingPage() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-white/60">{item.metric}</span>
                       <span className="font-mono text-sm text-white/80">
-                        {item.used}{item.unit} <span className="text-white/20">/ {item.limit >= 999999 ? '∞' : `${item.limit}${item.unit}`}</span>
+                        {item.used}{item.unit} <span className="text-white/20">/ {isUnlimited ? '∞' : `${item.limit}${item.unit}`}</span>
                       </span>
                     </div>
-                    <div className="h-1.5 rounded-full bg-surface-4 overflow-hidden">
-                      <motion.div
-                        className={`h-full rounded-full ${isHigh ? 'bg-warning' : 'bg-accent/60'}`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
-                        transition={{ delay: 0.5 + i * 0.1, duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
-                      />
-                    </div>
+                    {!isUnlimited && (
+                      <div className="h-1.5 rounded-full bg-surface-4 overflow-hidden">
+                        <motion.div
+                          className={`h-full rounded-full ${isHigh ? 'bg-warning' : 'bg-accent/60'}`}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ delay: 0.5 + i * 0.1, duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
+                        />
+                      </div>
+                    )}
                   </motion.div>
                 );
               })}

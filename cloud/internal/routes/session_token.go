@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
+	"github.com/loopzero/loopzero/cloud/internal/ratelimit"
 )
 
 // SessionTokenHandler exchanges Kratos session cookies for JWT tokens.
@@ -21,10 +21,7 @@ type SessionTokenHandler struct {
 	tenantProvisioner *auth.TenantProvisioner
 	kratosInternalURL string
 	kratosClient      *http.Client
-
-	// IP-based rate limiting (10 requests/minute per IP)
-	mu       sync.Mutex
-	attempts map[string][]time.Time
+	limiter           ratelimit.Limiter
 }
 
 const (
@@ -39,15 +36,18 @@ func NewSessionTokenHandler(issuer *loopzerojwt.SessionTokenIssuer, tenantProv *
 		tenantProvisioner: tenantProv,
 		kratosInternalURL: kratosInternalURL,
 		kratosClient:      &http.Client{Timeout: 5 * time.Second},
-		attempts:          make(map[string][]time.Time),
+		limiter:           ratelimit.NewInMemoryLimiter(rateLimitMaxCalls, rateLimitWindow),
 	}
 }
 
 // Exchange validates the Kratos session cookie and returns a JWT.
 // POST /v1/auth/session/token
 func (h *SessionTokenHandler) Exchange(w http.ResponseWriter, r *http.Request) {
-	// Rate limit by IP (uses r.RemoteAddr set by chi RealIP middleware)
-	if !h.checkRateLimit(r.RemoteAddr) {
+	// §2.3: Rate limit by identity+IP with standard headers
+	key := ratelimit.Key("", r.RemoteAddr) // Pre-auth: IP only
+	allowed, remaining, resetAt := h.limiter.Allow(key)
+	ratelimit.SetHeaders(w, rateLimitMaxCalls, remaining, resetAt)
+	if !allowed {
 		writeError(w, http.StatusTooManyRequests, "RATE_LIMITED", "Too many requests. Try again in a moment.")
 		return
 	}
@@ -123,28 +123,4 @@ func (h *SessionTokenHandler) Exchange(w http.ResponseWriter, r *http.Request) {
 		"token_type":   "Bearer",
 		"expires_in":   expiresIn,
 	})
-}
-
-func (h *SessionTokenHandler) checkRateLimit(ip string) bool {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	now := time.Now()
-	cutoff := now.Add(-rateLimitWindow)
-
-	recent := h.attempts[ip]
-	pruned := recent[:0]
-	for _, t := range recent {
-		if t.After(cutoff) {
-			pruned = append(pruned, t)
-		}
-	}
-
-	if len(pruned) >= rateLimitMaxCalls {
-		h.attempts[ip] = pruned
-		return false
-	}
-
-	h.attempts[ip] = append(pruned, now)
-	return true
 }

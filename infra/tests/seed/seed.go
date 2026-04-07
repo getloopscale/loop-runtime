@@ -98,7 +98,7 @@ INSERT INTO users (id, email, github_id, display_name)
 VALUES ('%s', '%s', %d, 'e2e-user')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO tenants (id, display_name, plan, owner_id)
+INSERT INTO tenants (id, display_name, slug, owner_id)
 VALUES ('%s', '%s', '%s', '%s')
 ON CONFLICT (id) DO NOTHING;
 
@@ -111,7 +111,7 @@ VALUES ('%s', '%s', '%s', '%s')
 ON CONFLICT (id) DO NOTHING;
 `,
 		UserID, Email, GitHubID,
-		TenantID, DisplayName, Plan, UserID,
+		TenantID, DisplayName, TenantID, UserID, // slug = TenantID
 		TenantID, UserID, Role,
 		ProjectID, TenantID, ProjectName, UserID,
 	)

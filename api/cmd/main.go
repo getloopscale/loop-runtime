@@ -106,17 +106,20 @@ func main() {
 		IdleConnTimeout:     90 * time.Second,
 	}
 	// JWT-only auth — uses pkg/jwt (single source of truth).
+	// MEET-2026-04-07-039: B3+B4 — engine uses RSA-only with strict audience.
+	// No HMAC session tokens accepted. Engine holds no signing secrets.
 	jwksURL := os.Getenv("JWKS_URL")
 	jwtIssuer := os.Getenv("JWT_ISSUER")
-	rsaValidator := loopzerojwt.NewValidator(jwksURL, jwtIssuer)
+	rsaValidator := loopzerojwt.NewValidator(jwksURL, jwtIssuer, "loopzero-engine")
 
-	var sessValidator *loopzerojwt.SessionTokenIssuer
-	if secret := os.Getenv("SESSION_TOKEN_SECRET"); secret != "" {
-		sessValidator = loopzerojwt.NewSessionTokenIssuer(secret, "loopzero-cloud", 1*time.Hour)
-	}
+	// B3: Engine drops HMAC entirely — RSA-only validation.
+	// Dashboard calls to engine must use Hydra RSA tokens or proxy through cloud.
+	tokenValidator := middleware.NewJWTOnlyValidator(rsaValidator, nil)
+	logger.Info("JWT auth enabled (RSA-only)", "jwks_url", jwksURL)
 
-	tokenValidator := middleware.NewJWTOnlyValidator(rsaValidator, sessValidator)
-	logger.Info("JWT auth enabled", "jwks_url", jwksURL, "hmac", sessValidator != nil)
+	// Service-to-service auth for internal proxy calls (cloud→engine).
+	// Dashboard calls engine via cloud proxy with X-Service-Auth header.
+	middleware.ServiceAuthSecret = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
 
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
 	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)

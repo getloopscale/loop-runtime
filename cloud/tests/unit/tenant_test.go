@@ -46,3 +46,27 @@ func TestDeriveTenantSlug(t *testing.T) {
 		})
 	}
 }
+
+// B2: DeriveTenantSlug is now display-only. Collisions are harmless because
+// tenant identity uses UUID, not slug. Verify slug derivation is deterministic.
+func TestDeriveTenantSlug_SameEmailSameSlug(t *testing.T) {
+	slug1 := auth.DeriveTenantSlug("ana@empresa.com")
+	slug2 := auth.DeriveTenantSlug("ana@gmail.com")
+	// Both derive to "ana" — this is fine because slug is display-only.
+	// Tenant IDs are UUID-based, so no collision on identity.
+	if slug1 != slug2 {
+		t.Errorf("same local-part should produce same slug: %q vs %q", slug1, slug2)
+	}
+	if slug1 != "ana" {
+		t.Errorf("slug = %q, want %q", slug1, "ana")
+	}
+}
+
+// B2: Verify slug length limit for K8s label safety.
+func TestDeriveTenantSlug_LongEmail(t *testing.T) {
+	long := "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz@test.com" // 78-char local part
+	slug := auth.DeriveTenantSlug(long)
+	if len(slug) > 60 {
+		t.Errorf("slug length = %d, want <= 60", len(slug))
+	}
+}

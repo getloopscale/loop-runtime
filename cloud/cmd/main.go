@@ -9,10 +9,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"github.com/loopzero/loopzero/cloud/internal/config"
 	"github.com/loopzero/loopzero/cloud/internal/consent"
 	"github.com/loopzero/loopzero/cloud/internal/metering"
+	cloudmetrics "github.com/loopzero/loopzero/cloud/internal/metrics"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
 )
 
@@ -90,14 +93,16 @@ func main() {
 
 	// JWT validation — single source of truth (pkg/jwt)
 	jwksURL := cfg.HydraPublicURL + "/.well-known/jwks.json"
-	jwtValidator := loopzerojwt.NewValidator(jwksURL, cfg.JWTIssuer)
+	jwtValidator := loopzerojwt.NewValidator(jwksURL, cfg.JWTIssuer, "loopzero-cloud")
 
 	// Session token issuer/validator (HMAC JWTs for dashboard)
+	// MEET-2026-04-07-039: audience explicit. §2.2: kid + dual-key rotation.
 	sessIssuer := loopzerojwt.NewSessionTokenIssuer(
 		cfg.SessionTokenSecret.Value(),
 		"loopzero-cloud",
+		"loopzero-cloud",
 		15*time.Minute,
-	)
+	).WithPreviousSecret(string(cfg.SessionTokenSecretPrevious))
 	tenantProvisioner := auth.NewTenantProvisioner(db, logger)
 	sessionTokenHandler := routes.NewSessionTokenHandler(sessIssuer, tenantProvisioner, cfg.KratosInternalURL)
 
@@ -109,7 +114,7 @@ func main() {
 
 	if cfg.StripeAPIKey.Value() != "" {
 		stripeClient = billing.NewStripeClient(cfg.StripeAPIKey.Value())
-		webhookHandler = billing.NewWebhookHandler(db, cfg.StripeWebhookSecret.Value(), logger)
+		webhookHandler = billing.NewWebhookHandler(db, cfg.StripeWebhookSecret.Value(), billing.LoadPlanConfig(), logger)
 		billingProvisioner = billing.NewProvisioner(db, stripeClient, logger)
 		billingHandler = routes.NewBillingHandler(db, stripeClient, webhookHandler, billingProvisioner, cfg.BillingReturnURL)
 		logger.Info("billing enabled")
@@ -130,6 +135,32 @@ func main() {
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
+
+	// §3.2: CORS — explicit origin validation for dashboard.
+	// Accepts BillingReturnURL and DASHBOARD_CORS_ORIGIN (if dashboard runs on a different domain).
+	allowedOrigins := map[string]bool{
+		cfg.BillingReturnURL: true,
+	}
+	if extra := os.Getenv("DASHBOARD_CORS_ORIGIN"); extra != "" {
+		allowedOrigins[extra] = true
+	}
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if allowedOrigins[origin] {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-LoopZero-Tenant")
+				w.Header().Set("Access-Control-Max-Age", "86400")
+			}
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	// Request logging — every request gets logged for observability
 	r.Use(func(next http.Handler) http.Handler {
@@ -171,6 +202,9 @@ func main() {
 		})
 	})
 
+	// §4.1+4.2: Metrics endpoint (Prometheus text format)
+	r.Get("/metrics", cloudmetrics.Handler())
+
 	// Auth endpoints (no auth — these ARE the auth flow)
 	r.Route("/v1/auth", func(r chi.Router) {
 		r.Post("/device/authorize", deviceHandler.Authorize)
@@ -199,6 +233,62 @@ func main() {
 		// Webhook — NO JWT (Stripe signs with its own secret)
 		r.Post("/v1/webhooks/stripe", billingHandler.Webhook)
 	}
+
+	// Engine API proxy — dashboard calls engine through cloud service.
+	// The engine only accepts RSA tokens (aud=loopzero-engine) or internal service auth.
+	// Dashboard has HMAC tokens, so cloud authenticates to engine via X-Service-Auth.
+	engineURL := cfg.EngineAPIURL
+	serviceSecret := string(cfg.ServiceAuthSecret)
+	r.Route("/engine", func(r chi.Router) {
+		r.Use(requireJWT) // Dashboard must be authenticated
+		r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
+			// Strip /engine prefix and forward to engine API
+			targetPath := strings.TrimPrefix(r.URL.Path, "/engine")
+			if targetPath == "" {
+				targetPath = "/"
+			}
+
+			proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, engineURL+targetPath, r.Body)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadGateway)
+				json.NewEncoder(w).Encode(map[string]string{"code": "PROXY_ERROR", "message": "Failed to reach engine API."})
+				return
+			}
+			// Forward query params and content type
+			proxyReq.URL.RawQuery = r.URL.RawQuery
+			proxyReq.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+
+			// Service-to-service auth: cloud authenticates to engine via shared secret.
+			// Engine trusts this header and extracts user context from X-LoopZero-* headers.
+			proxyReq.Header.Set("X-Service-Auth", serviceSecret)
+			user := auth.GetUser(r.Context())
+			if user != nil {
+				proxyReq.Header.Set("X-LoopZero-User-ID", user.Subject)
+				proxyReq.Header.Set("X-LoopZero-Tenant", user.TenantID)
+				proxyReq.Header.Set("X-LoopZero-Email", user.Email)
+				proxyReq.Header.Set("X-LoopZero-Role", user.Role)
+			}
+
+			resp, err := http.DefaultClient.Do(proxyReq)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadGateway)
+				json.NewEncoder(w).Encode(map[string]string{"code": "ENGINE_UNAVAILABLE", "message": "Engine API is unavailable."})
+				return
+			}
+			defer resp.Body.Close()
+
+			// Copy response headers and body
+			for k, v := range resp.Header {
+				for _, vv := range v {
+					w.Header().Add(k, vv)
+				}
+			}
+			w.WriteHeader(resp.StatusCode)
+			io.Copy(w, resp.Body)
+		})
+	})
 
 	// Start metering scheduler (background goroutines)
 	schedulerCtx, schedulerCancel := context.WithCancel(context.Background())

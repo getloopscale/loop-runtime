@@ -21,9 +21,9 @@ export interface TokenResponse {
   expires_in: number;
 }
 
-/** Pending response while user hasn't authorized yet. */
-export interface PendingResponse {
-  status: 'pending';
+/** Intermediate response during device flow polling (RFC 8628). */
+export interface PollStatusResponse {
+  status: 'pending' | 'slow_down' | 'expired_token';
 }
 
 export interface DeviceFlowDeps {
@@ -36,6 +36,16 @@ export interface DeviceFlowDeps {
 }
 
 const DEVICE_AUTH_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_POLL_ATTEMPTS = 60; // Safety limit (§2.1)
+const SLOW_DOWN_INCREMENT_MS = 5000; // RFC 8628 §3.5: increase interval by 5s on slow_down
+
+/**
+ * Adds ±20% jitter to an interval to prevent thundering herd (§2.1).
+ */
+function withJitter(intervalMs: number): number {
+  const jitter = intervalMs * 0.2 * (Math.random() * 2 - 1); // ±20%
+  return Math.max(1000, Math.round(intervalMs + jitter));
+}
 
 /**
  * Executes the Device Code Flow (RFC 8628):
@@ -43,6 +53,12 @@ const DEVICE_AUTH_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
  * 2. Display verification URL and user code
  * 3. Open browser automatically
  * 4. Poll for token until authorized or timeout
+ *
+ * RFC 8628 compliance (§2.1):
+ * - Handles slow_down: increases interval by 5s per §3.5
+ * - Handles expired_token: stops with clear message
+ * - Jitter on polling interval prevents thundering herd
+ * - Max retry count as safety limit alongside timeout
  */
 export async function executeDeviceCodeFlow(deps: DeviceFlowDeps): Promise<TokenResponse | null> {
   const baseURL = deps.baseURL || getDefaultApiUrl();
@@ -65,21 +81,34 @@ export async function executeDeviceCodeFlow(deps: DeviceFlowDeps): Promise<Token
   await deps.openBrowser(browserURL);
   deps.writeTo('  Waiting for authentication...');
 
-  // Step 4: Poll for token
-  const interval = Math.max((authResp.interval || 5) * 1000, 5000);
+  // Step 4: Poll for token with RFC 8628 compliance
+  let intervalMs = Math.max((authResp.interval || 5) * 1000, 5000);
   const deadline = Date.now() + DEVICE_AUTH_TIMEOUT_MS;
+  let attempts = 0;
 
-  while (Date.now() < deadline) {
-    await deps.sleep(interval);
+  while (Date.now() < deadline && attempts < MAX_POLL_ATTEMPTS) {
+    await deps.sleep(withJitter(intervalMs));
+    attempts++;
 
     const result = await pollDeviceToken(deps.fetchFn, baseURL, authResp.device_code);
     if (result === null) {
-      // Error — stop polling
-      deps.writeError('Authentication failed. Try again.');
+      // Unrecoverable error — stop polling
+      deps.writeError('Authentication failed. Try again with `loopzero login`.');
       return null;
     }
-    if ('status' in result && result.status === 'pending') {
-      continue; // Keep polling
+    if ('status' in result) {
+      if (result.status === 'slow_down') {
+        // RFC 8628 §3.5: increase interval by 5 seconds
+        intervalMs += SLOW_DOWN_INCREMENT_MS;
+        continue;
+      }
+      if (result.status === 'expired_token') {
+        deps.writeError('Authentication request expired. Run `loopzero login` to try again.');
+        return null;
+      }
+      if (result.status === 'pending') {
+        continue;
+      }
     }
     // Success
     return result as TokenResponse;
@@ -111,7 +140,7 @@ async function pollDeviceToken(
   fetchFn: DeviceFlowDeps['fetchFn'],
   baseURL: string,
   deviceCode: string,
-): Promise<TokenResponse | PendingResponse | null> {
+): Promise<TokenResponse | PollStatusResponse | null> {
   try {
     const resp = await fetchFn(`${baseURL}/v1/auth/device/token`, {
       method: 'POST',
@@ -123,8 +152,15 @@ async function pollDeviceToken(
     if (!resp.ok) return null;
     const data = await resp.json() as Record<string, unknown>;
 
-    if (data.status === 'pending') {
+    // RFC 8628 §3.5: handle authorization_pending, slow_down, expired_token
+    if (data.status === 'pending' || data.error === 'authorization_pending') {
       return { status: 'pending' };
+    }
+    if (data.error === 'slow_down' || data.status === 'slow_down') {
+      return { status: 'slow_down' };
+    }
+    if (data.error === 'expired_token' || data.status === 'expired_token') {
+      return { status: 'expired_token' };
     }
     if (data.access_token && data.refresh_token && typeof data.expires_in === 'number') {
       return {

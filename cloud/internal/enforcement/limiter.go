@@ -52,8 +52,12 @@ func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) Limi
 
 	// Get limits for this plan + metric
 	hardLimit, softLimit := l.getLimits(plan, metric)
-	if hardLimit <= 0 {
-		// No limit configured — allow
+	if hardLimit < 0 {
+		// NULL = unlimited — allow
+		return LimitResult{Allowed: true, Plan: plan, Metric: metric}
+	}
+	if hardLimit == 0 {
+		// No limit configured or DB error — allow (fail-open for missing config)
 		return LimitResult{Allowed: true, Plan: plan, Metric: metric}
 	}
 
@@ -120,7 +124,7 @@ func (l *PlanLimiter) GetRateLimit(tenantID string) int {
 func (l *PlanLimiter) getTenantPlan(tenantID string) string {
 	var plan string
 	err := l.db.QueryRow(
-		"SELECT COALESCE(s.plan, t.plan) FROM tenants t LEFT JOIN subscriptions s ON s.tenant_id = t.id WHERE t.id = $1",
+		"SELECT plan FROM subscriptions WHERE tenant_id = $1 AND status IN ('active', 'trialing') LIMIT 1",
 		tenantID,
 	).Scan(&plan)
 	if err != nil {
@@ -130,8 +134,12 @@ func (l *PlanLimiter) getTenantPlan(tenantID string) string {
 	return plan
 }
 
+// getLimits returns the hard and soft limits for a plan+metric.
+// Returns (-1, -1) if no limit configured.
+// Returns (0, 0) on DB error.
+// NULL hard_limit = unlimited (returned as -1).
 func (l *PlanLimiter) getLimits(plan, metric string) (hardLimit, softLimit int) {
-	var hard int
+	var hard sql.NullInt64
 	var soft sql.NullInt64
 	err := l.db.QueryRow(
 		"SELECT hard_limit, soft_limit FROM plan_limits WHERE plan = $1 AND metric = $2",
@@ -140,11 +148,15 @@ func (l *PlanLimiter) getLimits(plan, metric string) (hardLimit, softLimit int) 
 	if err != nil {
 		return 0, 0
 	}
+	hardVal := -1 // NULL = unlimited
+	if hard.Valid {
+		hardVal = int(hard.Int64)
+	}
 	softVal := 0
 	if soft.Valid {
 		softVal = int(soft.Int64)
 	}
-	return hard, softVal
+	return hardVal, softVal
 }
 
 // FormatLimitError creates a user-facing error message for a plan limit violation.

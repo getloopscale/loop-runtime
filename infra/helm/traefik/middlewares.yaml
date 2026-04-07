@@ -35,5 +35,8 @@ spec:
     browserXssFilter: true
     stsSeconds: 31536000  # 1 year
     stsIncludeSubdomains: true
+    # §3.1: Content-Security-Policy blocks XSS from loading external scripts
+    # Allows Stripe checkout iframe and connect-src for API calls
+    contentSecurityPolicy: "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.stripe.com https://checkout.stripe.com; frame-src https://checkout.stripe.com https://js.stripe.com; img-src 'self' data: https:; font-src 'self' data:;"
     customResponseHeaders:
       X-Powered-By: ""  # Remove server fingerprint
