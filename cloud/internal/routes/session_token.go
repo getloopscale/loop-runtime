@@ -90,13 +90,20 @@ func (h *SessionTokenHandler) Exchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve or create tenant for this user
-	tenantID := "default"
+	// Resolve or create tenant for this user.
+	// This MUST succeed — never issue a JWT with "default" tenant.
+	tenantID := ""
 	if h.tenantProvisioner != nil {
 		tid, _, tErr := h.tenantProvisioner.EnsureTenant(r.Context(), session.Identity.ID, session.Identity.Traits.Email)
-		if tErr == nil && tid != "" {
-			tenantID = tid
+		if tErr != nil {
+			writeError(w, http.StatusInternalServerError, "TENANT_ERROR",
+				"Failed to set up your account. Try again or contact support.")
+			return
 		}
+		tenantID = tid
+	}
+	if tenantID == "" {
+		tenantID = "personal" // Only in dev without DB
 	}
 
 	// Issue JWT
