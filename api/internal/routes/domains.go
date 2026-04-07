@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
@@ -143,6 +144,7 @@ type domainCreateRequest struct {
 }
 
 type domainCreateResponse struct {
+	OK           bool                      `json:"ok"`
 	ID           string                    `json:"id"`
 	Domain       string                    `json:"domain"`
 	Project      string                    `json:"project"`
@@ -285,7 +287,11 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// F-004 fix: emit metric on domain creation
+	metrics.CustomDomainsTotal.WithLabelValues(uc.TenantID, "pending_verification").Inc()
+
 	writeJSON(w, http.StatusCreated, domainCreateResponse{
+		OK:          true,
 		ID:          domain.ID,
 		Domain:      domain.Domain,
 		Project:     domain.ProjectName,

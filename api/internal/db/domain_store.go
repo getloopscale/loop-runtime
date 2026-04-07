@@ -232,9 +232,11 @@ func (s *PostgresDomainStore) FindAndClaimVerified(ctx context.Context) ([]route
 	return s.ClaimByStatus(ctx, "verified", "provisioning")
 }
 
-// FindRemoving returns domains in "removing" status for cleanup (read-only, no claim needed).
+// FindRemoving atomically claims removing domains for cleanup.
+// F-011 fix: uses ClaimByStatus to prevent HA double-processing.
+// The status stays "removing" (no-op transition) but the row is locked.
 func (s *PostgresDomainStore) FindRemoving(ctx context.Context) ([]routes.CustomDomain, error) {
-	return s.findByStatus(ctx, "removing")
+	return s.ClaimByStatus(ctx, "removing", "removing")
 }
 
 // FindPendingForAutoVerify returns pending_verification domains (for background auto-verify).

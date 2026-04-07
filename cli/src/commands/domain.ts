@@ -157,7 +157,7 @@ export class DomainAddCommand {
       return 0;
     } catch (err) {
       if (err instanceof ApiError && err.statusCode === 409) {
-        return exitWithError(this.deps, opts.json, `Domain ${domain} is already registered.`, 1, 'DOMAIN_ALREADY_EXISTS');
+        return exitWithError(this.deps, opts.json, `Domain ${domain} is already registered.`, 3, 'DOMAIN_ALREADY_EXISTS');
       }
       return handleApiError(this.deps, opts.json, err, 'Failed to register domain');
     }

@@ -122,13 +122,13 @@ describe('DomainAddCommand', () => {
     expect(json.cname_target).toBe('cname.dev.loopzero.example');
   });
 
-  it('returns exit 1 on 409 conflict', async () => {
+  it('returns exit 3 on 409 conflict', async () => {
     const deps = makeDeps({
       createDomain: jest.fn().mockRejectedValue(new ApiError('conflict', 1, 409, 'DOMAIN_ALREADY_EXISTS')),
     });
     const cmd = new DomainAddCommand(deps);
     const code = await cmd.execute('taken.com', { project: 'p', app: 'a', env: 'e' });
-    expect(code).toBe(1);
+    expect(code).toBe(3);
   });
 
   it('--json error has correct shape', async () => {

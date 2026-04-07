@@ -11,6 +11,7 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/manifests"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
@@ -130,7 +131,8 @@ func (p *DomainProvisioner) processVerified(ctx context.Context) {
 }
 
 // provisionDomain renders manifests with the custom domain and pushes to gitops.
-// MEET-034: Pre-check → Lock (render) → Unlock → Push → Transition to active.
+// F-002 fix: Lock (fetch + render) → Unlock → Push → Update status.
+// Pattern matches deploy flow in ContainerDeliveryActivator.
 func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.CustomDomain) {
 	log := p.logger.With("domain", d.Domain, "tenant", d.TenantID, "project", d.ProjectName, "app", d.AppName, "env", d.Environment)
 	start := time.Now()
@@ -142,93 +144,105 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 		return // retry next tick
 	}
 	if release == nil {
-		// No active release — domain cannot be provisioned yet.
-		// The next `loopzero deploy` will include it via Block 0 fix.
 		log.Info("domain provisioner: no active release, skipping (will be included on next deploy)")
 		return
 	}
 
-	// Get build record for CommitSHA (needed for image tag computation)
-	build, err := p.buildStore.GetByID(ctx, release.BuildID)
-	if err != nil || build == nil {
-		log.Error("domain provisioner: build lookup failed", "error", err, "build_id", release.BuildID)
-		p.store.UpdateFailure(ctx, d.Domain, "failed", "Failed to read build record")
-		return
-	}
+	// Phase A: Lock → fetch data + render manifests.
+	// The environment lock serializes with concurrent deploys (Rule 6).
+	var rendered string
+	var pushOpts GitOpsPushOpts
 
-	// Get build apps for manifest rendering
-	apps, err := p.buildStore.GetBuildApps(ctx, release.BuildID)
-	if err != nil {
-		log.Error("domain provisioner: build apps lookup failed", "error", err, "build_id", release.BuildID)
-		p.store.UpdateFailure(ctx, d.Domain, "failed", "Failed to read build configuration")
-		return
-	}
+	lockErr := p.locker.WithLock(ctx, d.TenantID, d.ProjectName, d.Environment, func(tx db.DBTX) error {
+		// Get build record for CommitSHA
+		build, err := p.buildStore.GetByID(ctx, release.BuildID)
+		if err != nil || build == nil {
+			return fmt.Errorf("build lookup failed (build_id=%s): %w", release.BuildID, err)
+		}
 
-	// Build manifest input with custom domains for ALL apps
-	var manifestApps []manifests.AppManifestInput
-	for _, app := range apps {
-		imageRef := naming.ImageTag(p.registryURL, d.TenantID, d.ProjectName, app.Name, build.CommitSHA)
-
-		// Query custom domains for this app
-		var customDomains []manifests.CustomDomainInput
-		activeDomains, err := p.store.ListActiveByApp(ctx, d.TenantID, d.ProjectName, app.Name, d.Environment)
+		// Get build apps for manifest rendering
+		apps, err := p.buildStore.GetBuildApps(ctx, release.BuildID)
 		if err != nil {
-			log.Warn("domain provisioner: custom domain query failed for app", "app", app.Name, "error", err)
-		} else {
+			return fmt.Errorf("build apps lookup failed: %w", err)
+		}
+
+		// Build manifest input with custom domains for ALL apps
+		var manifestApps []manifests.AppManifestInput
+		for _, app := range apps {
+			imageRef := naming.ImageTag(p.registryURL, d.TenantID, d.ProjectName, app.Name, build.CommitSHA)
+
+			var customDomains []manifests.CustomDomainInput
+			activeDomains, err := p.store.ListActiveByApp(ctx, d.TenantID, d.ProjectName, app.Name, d.Environment)
+			if err != nil {
+				return fmt.Errorf("custom domain query failed for app %s: %w", app.Name, err)
+			}
 			for _, cd := range activeDomains {
 				customDomains = append(customDomains, manifests.CustomDomainInput{Domain: cd.Domain, ID: cd.ID})
 			}
+
+			manifestApps = append(manifestApps, manifests.AppManifestInput{
+				Name:          app.Name,
+				Type:          app.Type,
+				Rendering:     app.Rendering,
+				Port:          app.Port,
+				ImageRef:      imageRef,
+				Secrets:       app.Secrets,
+				CustomDomains: customDomains,
+			})
 		}
 
-		manifestApps = append(manifestApps, manifests.AppManifestInput{
-			Name:          app.Name,
-			Type:          app.Type,
-			Rendering:     app.Rendering,
-			Port:          app.Port,
-			ImageRef:      imageRef,
-			Secrets:       app.Secrets,
-			CustomDomains: customDomains,
+		// Render full manifests (inside lock — consistent snapshot)
+		rendered = manifests.Render(manifests.RenderInput{
+			TenantID:    d.TenantID,
+			ProjectID:   d.ProjectName,
+			Environment: d.Environment,
+			BuildID:     release.BuildID,
+			ReleaseID:   release.ID,
+			BaseDomain:  p.baseDomain,
+			Apps:        manifestApps,
 		})
-	}
 
-	// Render full manifests
-	rendered := manifests.Render(manifests.RenderInput{
-		TenantID:    d.TenantID,
-		ProjectID:   d.ProjectName,
-		Environment: d.Environment,
-		BuildID:     release.BuildID,
-		ReleaseID:   release.ID,
-		BaseDomain:  p.baseDomain,
-		Apps:        manifestApps,
+		pushOpts = GitOpsPushOpts{
+			TenantID:      d.TenantID,
+			ProjectID:     d.ProjectName,
+			Environment:   d.Environment,
+			Manifests:     rendered,
+			BuildID:       release.BuildID,
+			ReleaseID:     release.ID,
+			CorrelationID: d.ID,
+		}
+
+		return nil
 	})
 
-	// Push to gitops (OUTSIDE lock — consistent with deploy pattern, MEET-034 Q1)
-	pushCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	_, err = p.gitops.Push(pushCtx, GitOpsPushOpts{
-		TenantID:      d.TenantID,
-		ProjectID:     d.ProjectName,
-		Environment:   d.Environment,
-		Manifests:     rendered,
-		BuildID:       release.BuildID,
-		ReleaseID:     release.ID,
-		CorrelationID: d.ID,
-	})
-	if err != nil {
-		log.Error("domain provisioner: gitops push failed", "error", err)
-		p.store.UpdateFailure(ctx, d.Domain, "failed", fmt.Sprintf("Deploy failed: %v", err))
+	if lockErr != nil {
+		log.Error("domain provisioner: lock/render failed", "error", lockErr)
+		if err2 := p.store.UpdateFailure(ctx, d.Domain, "failed", fmt.Sprintf("Provisioning failed: %v", lockErr)); err2 != nil {
+			log.Error("domain provisioner: failed to record failure", "error", err2)
+		}
 		return
 	}
 
-	// Option C (MEET-034 Q3): set active after gitops push. TLS tracked separately.
+	// Phase B: Push to gitops (OUTSIDE lock — avoid holding lock during network I/O).
+	// F-007 fix: on gitops error, stay in provisioning (retry next tick or next deploy).
+	pushCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	if _, err := p.gitops.Push(pushCtx, pushOpts); err != nil {
+		log.Warn("domain provisioner: gitops push failed, will retry", "error", err)
+		return // stay in provisioning — F-006 timeout handles permanent failures
+	}
+
+	// Phase C: Set active after successful push (Option C, MEET-034 Q3).
 	if err := p.store.UpdateStatus(ctx, d.Domain, "active"); err != nil {
 		log.Error("domain provisioner: status update to active failed", "error", err)
 		return
 	}
 
-	log.Info("domain provisioner: domain active",
-		"duration", time.Since(start).Seconds())
+	// F-004: emit provisioning duration metric
+	elapsed := time.Since(start).Seconds()
+	metrics.DomainProvisioningDuration.WithLabelValues("success").Observe(elapsed)
+	log.Info("domain provisioner: domain active", "duration", elapsed)
 }
 
 // processRemoving picks up domains in "removing" status and cleans them up.
@@ -248,7 +262,7 @@ func (p *DomainProvisioner) processRemoving(ctx context.Context) {
 }
 
 // removeDomain re-renders manifests WITHOUT the removed domain, pushes to gitops,
-// then deletes the DB row. MEET-034 Block 3.
+// then deletes the DB row. F-002 fix: uses withEnvironmentLock for render phase.
 func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDomain) {
 	log := p.logger.With("domain", d.Domain, "tenant", d.TenantID, "project", d.ProjectName, "env", d.Environment)
 
@@ -256,10 +270,9 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDom
 	release, err := p.releaseStore.GetActiveByEnv(ctx, d.TenantID, d.ProjectName, d.Environment)
 	if err != nil {
 		log.Error("domain provisioner: release lookup failed on remove", "error", err)
-		return // retry next tick
+		return
 	}
 	if release == nil {
-		// No active release — no gitops resources to clean up. Just delete the row.
 		log.Info("domain provisioner: no active release on remove, deleting row directly")
 		if err := p.store.Delete(ctx, d.Domain); err != nil {
 			log.Error("domain provisioner: delete failed", "error", err)
@@ -267,77 +280,81 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDom
 		return
 	}
 
-	// Get build record for CommitSHA
-	build, err := p.buildStore.GetByID(ctx, release.BuildID)
-	if err != nil || build == nil {
-		log.Error("domain provisioner: build lookup failed on remove", "error", err)
-		return
-	}
+	// Phase A: Lock → fetch + render manifests WITHOUT removed domain.
+	var pushOpts GitOpsPushOpts
 
-	// Get build apps for manifest re-rendering
-	apps, err := p.buildStore.GetBuildApps(ctx, release.BuildID)
-	if err != nil {
-		log.Error("domain provisioner: build apps lookup failed on remove", "error", err)
-		return
-	}
+	lockErr := p.locker.WithLock(ctx, d.TenantID, d.ProjectName, d.Environment, func(tx db.DBTX) error {
+		build, err := p.buildStore.GetByID(ctx, release.BuildID)
+		if err != nil || build == nil {
+			return fmt.Errorf("build lookup failed: %w", err)
+		}
 
-	// Build manifest input — custom domains for all apps EXCEPT the one being removed
-	var manifestApps []manifests.AppManifestInput
-	for _, app := range apps {
-		imageRef := naming.ImageTag(p.registryURL, d.TenantID, d.ProjectName, app.Name, build.CommitSHA)
-
-		var customDomains []manifests.CustomDomainInput
-		activeDomains, err := p.store.ListActiveByApp(ctx, d.TenantID, d.ProjectName, app.Name, d.Environment)
+		apps, err := p.buildStore.GetBuildApps(ctx, release.BuildID)
 		if err != nil {
-			log.Warn("domain provisioner: custom domain query failed for app on remove", "app", app.Name, "error", err)
-		} else {
+			return fmt.Errorf("build apps lookup failed: %w", err)
+		}
+
+		var manifestApps []manifests.AppManifestInput
+		for _, app := range apps {
+			imageRef := naming.ImageTag(p.registryURL, d.TenantID, d.ProjectName, app.Name, build.CommitSHA)
+
+			var customDomains []manifests.CustomDomainInput
+			activeDomains, err := p.store.ListActiveByApp(ctx, d.TenantID, d.ProjectName, app.Name, d.Environment)
+			if err != nil {
+				return fmt.Errorf("custom domain query failed for app %s: %w", app.Name, err)
+			}
 			for _, cd := range activeDomains {
-				// Exclude the domain being removed
 				if cd.Domain == d.Domain {
-					continue
+					continue // exclude the domain being removed
 				}
 				customDomains = append(customDomains, manifests.CustomDomainInput{Domain: cd.Domain, ID: cd.ID})
 			}
+
+			manifestApps = append(manifestApps, manifests.AppManifestInput{
+				Name:          app.Name,
+				Type:          app.Type,
+				Rendering:     app.Rendering,
+				Port:          app.Port,
+				ImageRef:      imageRef,
+				Secrets:       app.Secrets,
+				CustomDomains: customDomains,
+			})
 		}
 
-		manifestApps = append(manifestApps, manifests.AppManifestInput{
-			Name:          app.Name,
-			Type:          app.Type,
-			Rendering:     app.Rendering,
-			Port:          app.Port,
-			ImageRef:      imageRef,
-			Secrets:       app.Secrets,
-			CustomDomains: customDomains,
+		rendered := manifests.Render(manifests.RenderInput{
+			TenantID:    d.TenantID,
+			ProjectID:   d.ProjectName,
+			Environment: d.Environment,
+			BuildID:     release.BuildID,
+			ReleaseID:   release.ID,
+			BaseDomain:  p.baseDomain,
+			Apps:        manifestApps,
 		})
-	}
 
-	// Re-render WITHOUT the removed domain
-	rendered := manifests.Render(manifests.RenderInput{
-		TenantID:    d.TenantID,
-		ProjectID:   d.ProjectName,
-		Environment: d.Environment,
-		BuildID:     release.BuildID,
-		ReleaseID:   release.ID,
-		BaseDomain:  p.baseDomain,
-		Apps:        manifestApps,
+		pushOpts = GitOpsPushOpts{
+			TenantID:      d.TenantID,
+			ProjectID:     d.ProjectName,
+			Environment:   d.Environment,
+			Manifests:     rendered,
+			BuildID:       release.BuildID,
+			ReleaseID:     release.ID,
+			CorrelationID: d.ID,
+		}
+		return nil
 	})
 
-	// Push to gitops — removes IngressRoute + Certificate from repo
+	if lockErr != nil {
+		log.Error("domain provisioner: lock/render failed on remove", "error", lockErr)
+		return // stay in removing, retry next tick
+	}
+
+	// Phase B: Push to gitops (outside lock).
 	pushCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	_, err = p.gitops.Push(pushCtx, GitOpsPushOpts{
-		TenantID:      d.TenantID,
-		ProjectID:     d.ProjectName,
-		Environment:   d.Environment,
-		Manifests:     rendered,
-		BuildID:       release.BuildID,
-		ReleaseID:     release.ID,
-		CorrelationID: d.ID,
-	})
-	if err != nil {
-		log.Error("domain provisioner: gitops push failed on remove", "error", err)
-		return // leave in "removing", retry next tick
+	if _, err := p.gitops.Push(pushCtx, pushOpts); err != nil {
+		log.Warn("domain provisioner: gitops push failed on remove, will retry", "error", err)
+		return // stay in removing, retry next tick
 	}
 
 	// Gitops push succeeded — safe to delete the DB row

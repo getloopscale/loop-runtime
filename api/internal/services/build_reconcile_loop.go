@@ -334,15 +334,18 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		// MEET-2026-04-06-034 Block 0: include custom domains in manifest rendering.
 		// Without this, every deploy silently removes custom domain IngressRoutes.
 		var customDomains []manifests.CustomDomainInput
+		// CODE-002 fix: ListActiveByApp errors are fatal — continuing without
+		// custom domains would silently erase IngressRoutes from the cluster.
 		if r.domainStore != nil {
 			domains, err := r.domainStore.ListActiveByApp(ctx, build.TenantID, build.ProjectID, app.Name, build.Environment)
 			if err != nil {
-				r.logger.Warn("reconcile loop: failed to query custom domains for app, continuing without",
+				r.logger.Error("reconcile loop: custom domain query failed — aborting to prevent IngressRoute loss",
 					"app", app.Name, "error", err)
-			} else {
-				for _, d := range domains {
-					customDomains = append(customDomains, manifests.CustomDomainInput{Domain: d.Domain, ID: d.ID})
-				}
+				r.failBuild(ctx, build, "Failed to read custom domain configuration")
+				return
+			}
+			for _, d := range domains {
+				customDomains = append(customDomains, manifests.CustomDomainInput{Domain: d.Domain, ID: d.ID})
 			}
 		}
 
