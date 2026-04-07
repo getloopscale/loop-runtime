@@ -17,21 +17,15 @@ import (
 
 // DomainHealthStore abstracts persistence needed by the health checker.
 type DomainHealthStore interface {
-	// FindPendingForAutoVerify returns pending_verification domains.
 	FindPendingForAutoVerify(ctx context.Context) ([]routes.CustomDomain, error)
-	// FindActiveForCNAMECheck returns active domains due for weekly CNAME re-verification.
 	FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]routes.CustomDomain, error)
-	// FindStalePending returns domains in pending_verification older than maxAge.
 	FindStalePending(ctx context.Context, maxAge time.Duration) ([]routes.CustomDomain, error)
-	// UpdateVerified transitions a domain to verified.
+	FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]routes.CustomDomain, error)
+	FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]routes.CustomDomain, error)
 	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
-	// UpdateCNAMECheck records the result of a CNAME re-verification.
 	UpdateCNAMECheck(ctx context.Context, domain string, checkTime time.Time, consecutiveFailures int) error
-	// UpdateFailure transitions a domain to failed.
 	UpdateFailure(ctx context.Context, domain, status, reason string) error
-	// UpdateStatus transitions a domain's status.
 	UpdateStatus(ctx context.Context, domain, status string) error
-	// Delete removes a domain row.
 	Delete(ctx context.Context, domain string) error
 }
 
@@ -257,34 +251,51 @@ func (h *DomainHealthChecker) cleanupStalePending(ctx context.Context) {
 }
 
 // checkProvisioningTimeout transitions domains stuck in "provisioning" > 1 hour to "failed".
-// F-006 fix: MEET-034 action #4 — prevents permanent stuck state.
+// F-006: MEET-034 action #4 — prevents permanent stuck state.
 func (h *DomainHealthChecker) checkProvisioningTimeout(ctx context.Context) {
-	maxAge := 1 * time.Hour
-	cutoff := time.Now().UTC().Add(-maxAge)
-	domains, err := h.store.FindStalePending(ctx, 0) // reuse query pattern
+	domains, err := h.store.FindStaleProvisioning(ctx, 1*time.Hour)
 	if err != nil {
 		h.logger.Error("domain health: find stale provisioning failed", "error", err)
+		metrics.DomainHealthCheckerErrors.WithLabelValues("provisioning_timeout").Inc()
 		return
 	}
-	// Filter for provisioning (FindStalePending only gets pending_verification;
-	// we need a dedicated query, but for now filter in-memory from a broader query)
-	// TODO: add FindStaleProvisioning to store for efficiency
-	_ = domains
-	_ = cutoff
-	// Lightweight implementation: query directly
-	rows, err := h.store.FindPendingForAutoVerify(ctx) // placeholder — needs dedicated method
-	_ = rows
-	// For now, this is a structural placeholder showing the method exists and is called.
-	// Full implementation requires a FindStaleProvisioning store method.
+
+	for _, d := range domains {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := h.store.UpdateFailure(ctx, d.Domain, "failed",
+			"Provisioning timed out after 1 hour. Run `loopzero deploy` to retry."); err != nil {
+			h.logger.Error("domain health: provisioning timeout transition failed", "error", err, "domain", d.Domain)
+		} else {
+			h.logger.Warn("domain health: domain provisioning timed out", "domain", d.Domain)
+		}
+	}
 }
 
 // checkTLSExpiry monitors TLS certificate expiry for active domains.
-// F-005 fix: emits DomainTLSExpiryDays gauge for alerting.
+// F-005: emits DomainTLSExpiryDays gauge per domain for alerting.
 func (h *DomainHealthChecker) checkTLSExpiry(ctx context.Context) {
-	// TODO: add FindActiveWithTLSExpiry to store for efficiency.
-	// For now, this method exists as a structural placeholder — it is called
-	// from runChecks() and will be fully implemented when TLS status tracking
-	// is connected to cert-manager certificate status.
+	domains, err := h.store.FindActiveWithTLSExpiry(ctx, 30) // within 30 days
+	if err != nil {
+		h.logger.Error("domain health: find TLS expiry failed", "error", err)
+		metrics.DomainHealthCheckerErrors.WithLabelValues("tls_expiry").Inc()
+		return
+	}
+
+	now := time.Now().UTC()
+	for _, d := range domains {
+		if d.TLSExpiresAt == nil {
+			continue
+		}
+		daysUntilExpiry := d.TLSExpiresAt.Sub(now).Hours() / 24
+		metrics.DomainTLSExpiryDays.WithLabelValues(d.Domain, d.TenantID).Set(daysUntilExpiry)
+
+		if daysUntilExpiry < 7 {
+			h.logger.Warn("domain health: TLS certificate expiring soon",
+				"domain", d.Domain, "days_remaining", int(daysUntilExpiry))
+		}
+	}
 }
 
 // verifyTXT checks DNS TXT records.

@@ -283,6 +283,48 @@ func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.
 	return scanDomains(rows)
 }
 
+// FindStaleProvisioning returns domains stuck in "provisioning" older than maxAge.
+// F-006: used by DomainHealthChecker.checkProvisioningTimeout().
+func (s *PostgresDomainStore) FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]routes.CustomDomain, error) {
+	cutoff := time.Now().UTC().Add(-maxAge)
+	rows, err := s.DB.Query(ctx,
+		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
+		        verification_token, verified_at, tls_status, tls_expires_at,
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		 FROM custom_domains
+		 WHERE status = 'provisioning' AND updated_at < $1
+		 ORDER BY updated_at ASC
+		 LIMIT 50`,
+		cutoff,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("domain store: find stale provisioning: %w", err)
+	}
+	defer rows.Close()
+	return scanDomains(rows)
+}
+
+// FindActiveWithTLSExpiry returns active domains with TLS certificates expiring within N days.
+// F-005: used by DomainHealthChecker.checkTLSExpiry().
+func (s *PostgresDomainStore) FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]routes.CustomDomain, error) {
+	rows, err := s.DB.Query(ctx,
+		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
+		        verification_token, verified_at, tls_status, tls_expires_at,
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		 FROM custom_domains
+		 WHERE status = 'active' AND tls_expires_at IS NOT NULL
+		   AND tls_expires_at < now() + make_interval(days => $1)
+		 ORDER BY tls_expires_at ASC
+		 LIMIT 50`,
+		withinDays,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("domain store: find active with TLS expiry: %w", err)
+	}
+	defer rows.Close()
+	return scanDomains(rows)
+}
+
 // UpdateCNAMECheck records the result of a CNAME re-verification check.
 func (s *PostgresDomainStore) UpdateCNAMECheck(ctx context.Context, domain string, checkTime time.Time, consecutiveFailures int) error {
 	result, err := s.DB.Exec(ctx,

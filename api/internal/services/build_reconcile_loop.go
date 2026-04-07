@@ -18,7 +18,6 @@ import (
 	"github.com/loopzero/loopzero/api/internal/manifests"
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -311,53 +310,29 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		return
 	}
 
+	// Build AppRelease list for the build callback (URL computation, etc.)
 	for _, app := range apps {
-		// REVIEW-MOD-4: Per-app image tag: {registry}/{tenant}/{project}/{app}:{sha}
-		// Each app gets its own BuildKit build and independent image.
-		// ARCH-001 fix: single source of truth for image tag format
-		imageRef := naming.ImageTag(r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
+		buildApps = append(buildApps, BuildAppRelease(
+			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name,
+			build.CommitSHA, build.Environment, r.cfg.BaseDomain, app.Type, app.Rendering,
+		))
+	}
 
-		url := ""
-		if app.Type == "server" || app.Type == "frontend" {
-			url = fmt.Sprintf("https://%s-%s-%s-%s.%s",
-				build.TenantID, build.ProjectID, app.Name, build.Environment, r.cfg.BaseDomain)
-		}
-
-		buildApps = append(buildApps, AppRelease{
-			Name:        app.Name,
-			ImageDigest: imageRef,
-			URL:         url,
-			Type:        app.Type,
-			Rendering:   app.Rendering,
-		})
-
-		// MEET-2026-04-06-034 Block 0: include custom domains in manifest rendering.
-		// Without this, every deploy silently removes custom domain IngressRoutes.
-		var customDomains []manifests.CustomDomainInput
-		// CODE-002 fix: ListActiveByApp errors are fatal — continuing without
-		// custom domains would silently erase IngressRoutes from the cluster.
-		if r.domainStore != nil {
-			domains, err := r.domainStore.ListActiveByApp(ctx, build.TenantID, build.ProjectID, app.Name, build.Environment)
-			if err != nil {
-				r.logger.Error("reconcile loop: custom domain query failed — aborting to prevent IngressRoute loss",
-					"app", app.Name, "error", err)
-				r.failBuild(ctx, build, "Failed to read custom domain configuration")
-				return
-			}
-			for _, d := range domains {
-				customDomains = append(customDomains, manifests.CustomDomainInput{Domain: d.Domain, ID: d.ID})
-			}
-		}
-
-		manifestApps = append(manifestApps, manifests.AppManifestInput{
-			Name:          app.Name,
-			Type:          app.Type,
-			Rendering:     app.Rendering,
-			Port:          app.Port,
-			ImageRef:      imageRef,
-			Secrets:       app.Secrets,
-			CustomDomains: customDomains,
-		})
+	// F-010: shared manifest building function (includes custom domains).
+	// CODE-002: errors are fatal — prevents silent IngressRoute erasure.
+	manifestApps, err = BuildManifestApps(ctx, BuildManifestAppsInput{
+		RegistryURL: r.cfg.RegistryURL,
+		TenantID:    build.TenantID,
+		ProjectID:   build.ProjectID,
+		Environment: build.Environment,
+		CommitSHA:   build.CommitSHA,
+		Apps:        apps,
+		DomainStore: r.domainStore,
+	})
+	if err != nil {
+		r.logger.Error("reconcile loop: manifest building failed", "build_id", build.ID, "error", err)
+		r.failBuild(ctx, build, "Failed to build manifests with custom domains")
+		return
 	}
 
 	// Generate manifests in the API (C-02 fix: control plane generates manifests)
@@ -366,7 +341,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		ProjectID:   build.ProjectID,
 		Environment: build.Environment,
 		BuildID:     build.ID,
-		ReleaseID:   "", // Will be set after release creation
+		ReleaseID:   "",
 		BaseDomain:  r.cfg.BaseDomain,
 		Apps:        manifestApps,
 	})
@@ -473,48 +448,27 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 	}
 
 	var buildApps []AppRelease
-	var manifestApps []manifests.AppManifestInput
-
 	for _, app := range apps {
-		// ARCH-001 fix: single source of truth for image tag format
-		imageRef := naming.ImageTag(r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
+		buildApps = append(buildApps, BuildAppRelease(
+			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name,
+			build.CommitSHA, build.Environment, r.cfg.BaseDomain, app.Type, app.Rendering,
+		))
+	}
 
-		url := ""
-		if app.Type == "server" || app.Type == "frontend" {
-			url = fmt.Sprintf("https://%s-%s-%s-%s.%s",
-				build.TenantID, build.ProjectID, app.Name, build.Environment, r.cfg.BaseDomain)
-		}
-
-		buildApps = append(buildApps, AppRelease{
-			Name:        app.Name,
-			ImageDigest: imageRef,
-			URL:         url,
-			Type:        app.Type,
-			Rendering:   app.Rendering,
-		})
-		// MEET-2026-04-06-034 Block 0: include custom domains (same as onWorkflowSucceeded path)
-		var customDomains []manifests.CustomDomainInput
-		if r.domainStore != nil {
-			domains, err := r.domainStore.ListActiveByApp(ctx, build.TenantID, build.ProjectID, app.Name, build.Environment)
-			if err != nil {
-				r.logger.Warn("reconcile loop: failed to query custom domains for retry, continuing without",
-					"app", app.Name, "error", err)
-			} else {
-				for _, d := range domains {
-					customDomains = append(customDomains, manifests.CustomDomainInput{Domain: d.Domain, ID: d.ID})
-				}
-			}
-		}
-
-		manifestApps = append(manifestApps, manifests.AppManifestInput{
-			Name:          app.Name,
-			Type:          app.Type,
-			Rendering:     app.Rendering,
-			Port:          app.Port,
-			ImageRef:      imageRef,
-			Secrets:       app.Secrets,
-			CustomDomains: customDomains,
-		})
+	// F-010: shared manifest building (retry path)
+	manifestApps, err := BuildManifestApps(ctx, BuildManifestAppsInput{
+		RegistryURL: r.cfg.RegistryURL,
+		TenantID:    build.TenantID,
+		ProjectID:   build.ProjectID,
+		Environment: build.Environment,
+		CommitSHA:   build.CommitSHA,
+		Apps:        apps,
+		DomainStore: r.domainStore,
+	})
+	if err != nil {
+		r.logger.Error("reconcile loop: manifest building failed on retry", "build_id", build.ID, "error", err)
+		r.failBuild(ctx, build, "Failed to build manifests with custom domains")
+		return
 	}
 
 	renderedManifests := manifests.Render(manifests.RenderInput{

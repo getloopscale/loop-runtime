@@ -13,7 +13,6 @@ import (
 	"github.com/loopzero/loopzero/api/internal/manifests"
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // DomainProvisionerStore abstracts the domain persistence needed by the provisioner.
@@ -154,44 +153,30 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 	var pushOpts GitOpsPushOpts
 
 	lockErr := p.locker.WithLock(ctx, d.TenantID, d.ProjectName, d.Environment, func(tx db.DBTX) error {
-		// Get build record for CommitSHA
 		build, err := p.buildStore.GetByID(ctx, release.BuildID)
 		if err != nil || build == nil {
 			return fmt.Errorf("build lookup failed (build_id=%s): %w", release.BuildID, err)
 		}
 
-		// Get build apps for manifest rendering
 		apps, err := p.buildStore.GetBuildApps(ctx, release.BuildID)
 		if err != nil {
 			return fmt.Errorf("build apps lookup failed: %w", err)
 		}
 
-		// Build manifest input with custom domains for ALL apps
-		var manifestApps []manifests.AppManifestInput
-		for _, app := range apps {
-			imageRef := naming.ImageTag(p.registryURL, d.TenantID, d.ProjectName, app.Name, build.CommitSHA)
-
-			var customDomains []manifests.CustomDomainInput
-			activeDomains, err := p.store.ListActiveByApp(ctx, d.TenantID, d.ProjectName, app.Name, d.Environment)
-			if err != nil {
-				return fmt.Errorf("custom domain query failed for app %s: %w", app.Name, err)
-			}
-			for _, cd := range activeDomains {
-				customDomains = append(customDomains, manifests.CustomDomainInput{Domain: cd.Domain, ID: cd.ID})
-			}
-
-			manifestApps = append(manifestApps, manifests.AppManifestInput{
-				Name:          app.Name,
-				Type:          app.Type,
-				Rendering:     app.Rendering,
-				Port:          app.Port,
-				ImageRef:      imageRef,
-				Secrets:       app.Secrets,
-				CustomDomains: customDomains,
-			})
+		// F-010: shared manifest building function
+		manifestApps, err := BuildManifestApps(ctx, BuildManifestAppsInput{
+			RegistryURL: p.registryURL,
+			TenantID:    d.TenantID,
+			ProjectID:   d.ProjectName,
+			Environment: d.Environment,
+			CommitSHA:   build.CommitSHA,
+			Apps:        apps,
+			DomainStore: p.store,
+		})
+		if err != nil {
+			return err
 		}
 
-		// Render full manifests (inside lock — consistent snapshot)
 		rendered = manifests.Render(manifests.RenderInput{
 			TenantID:    d.TenantID,
 			ProjectID:   d.ProjectName,
@@ -294,31 +279,19 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDom
 			return fmt.Errorf("build apps lookup failed: %w", err)
 		}
 
-		var manifestApps []manifests.AppManifestInput
-		for _, app := range apps {
-			imageRef := naming.ImageTag(p.registryURL, d.TenantID, d.ProjectName, app.Name, build.CommitSHA)
-
-			var customDomains []manifests.CustomDomainInput
-			activeDomains, err := p.store.ListActiveByApp(ctx, d.TenantID, d.ProjectName, app.Name, d.Environment)
-			if err != nil {
-				return fmt.Errorf("custom domain query failed for app %s: %w", app.Name, err)
-			}
-			for _, cd := range activeDomains {
-				if cd.Domain == d.Domain {
-					continue // exclude the domain being removed
-				}
-				customDomains = append(customDomains, manifests.CustomDomainInput{Domain: cd.Domain, ID: cd.ID})
-			}
-
-			manifestApps = append(manifestApps, manifests.AppManifestInput{
-				Name:          app.Name,
-				Type:          app.Type,
-				Rendering:     app.Rendering,
-				Port:          app.Port,
-				ImageRef:      imageRef,
-				Secrets:       app.Secrets,
-				CustomDomains: customDomains,
-			})
+		// F-010: shared manifest building — excludes the domain being removed
+		manifestApps, err := BuildManifestApps(ctx, BuildManifestAppsInput{
+			RegistryURL:   p.registryURL,
+			TenantID:      d.TenantID,
+			ProjectID:     d.ProjectName,
+			Environment:   d.Environment,
+			CommitSHA:     build.CommitSHA,
+			Apps:          apps,
+			DomainStore:   p.store,
+			ExcludeDomain: d.Domain,
+		})
+		if err != nil {
+			return err
 		}
 
 		rendered := manifests.Render(manifests.RenderInput{
