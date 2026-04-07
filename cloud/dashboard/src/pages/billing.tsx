@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowUpRight, Sparkles, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,26 +8,68 @@ import { useCloudApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { cloudFetch } from '@/lib/api';
 
+interface UsageMetric {
+  used: number;
+  limit: number;
+}
+
 interface BillingResponse {
   plan: string;
   team: string;
-  usage: Record<string, number>;
+  usage: Record<string, UsageMetric>;
+  period_start?: string;
+  period_end?: string;
 }
 
 export function BillingPage() {
   useRequireAuth();
   const { data: billing, loading } = useCloudApi<BillingResponse>('/v1/billing');
 
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState('');
+
   const openPortal = async () => {
-    const portal = await cloudFetch<{ url: string }>('/v1/billing/portal');
-    if (portal?.url) window.open(portal.url, '_blank');
+    setActionLoading(true);
+    setActionError('');
+    try {
+      const portal = await cloudFetch<{ url: string }>('/v1/billing/portal');
+      if (portal?.url) {
+        window.open(portal.url, '_blank');
+      } else {
+        setActionError('Failed to open billing portal. Please try again.');
+      }
+    } catch {
+      setActionError('Failed to open billing portal. Please try again.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const usage = billing ? Object.entries(billing.usage).map(([metric, used]) => ({
+  const upgradePlan = async (plan: string) => {
+    setActionLoading(true);
+    setActionError('');
+    try {
+      const result = await cloudFetch<{ url: string }>('/v1/billing/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ plan }),
+      });
+      if (result?.url) {
+        window.location.href = result.url;
+      } else {
+        setActionError('Failed to start checkout. Please try again.');
+      }
+    } catch {
+      setActionError('Failed to start checkout. Please try again.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const usage = billing ? Object.entries(billing.usage).map(([metric, data]) => ({
     metric: metric.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-    used: used as number,
-    limit: 100, // Limits come from plan_limits — will be in billing response after Phase 6 wiring
-    unit: metric.includes('minute') ? 'min' : '',
+    used: data.used,
+    limit: data.limit,
+    unit: metric.includes('minute') ? 'min' : metric.includes('mb') ? 'MB' : '',
   })) : [];
 
   if (loading) {
@@ -35,6 +78,11 @@ export function BillingPage() {
 
   return (
     <PageWrapper title="Billing" description="Plan, usage, and payment.">
+      {actionError && (
+        <div className="mb-4 rounded-lg bg-danger/10 border border-danger/20 p-3 text-sm text-danger">
+          {actionError}
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {/* Current Plan */}
         <motion.div
@@ -51,9 +99,8 @@ export function BillingPage() {
                   <h2 className="font-display text-3xl font-bold text-white tracking-tight">{billing?.plan || 'Starter'}</h2>
                   <p className="text-sm text-white/30 mt-1">{billing?.team || ''}</p>
                 </div>
-                <Button variant="secondary" size="sm" className="gap-1.5" onClick={openPortal}>
-                  Manage Plan
-                  <ArrowUpRight className="h-3.5 w-3.5" />
+                <Button variant="secondary" size="sm" className="gap-1.5" onClick={openPortal} disabled={actionLoading}>
+                  {actionLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <>Manage Plan <ArrowUpRight className="h-3.5 w-3.5" /></>}
                 </Button>
               </div>
             </CardContent>
@@ -66,11 +113,11 @@ export function BillingPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Card className="h-full border-accent/10 hover:border-accent/20 cursor-pointer group">
+          <Card className="h-full border-accent/10 hover:border-accent/20 cursor-pointer group" onClick={() => upgradePlan('pro')}>
             <CardContent className="p-6 flex flex-col justify-center h-full">
               <Sparkles className="h-5 w-5 text-accent/60 mb-3 group-hover:text-accent transition-colors" />
-              <p className="text-sm font-semibold text-white/70 group-hover:text-white transition-colors">Upgrade to Team</p>
-              <p className="text-xs text-white/30 mt-1">Preview environments, more seats, priority builds</p>
+              <p className="text-sm font-semibold text-white/70 group-hover:text-white transition-colors">Upgrade to Pro — $19/mo</p>
+              <p className="text-xs text-white/30 mt-1">10 projects, 3 environments, 1000 builds/month</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -101,7 +148,7 @@ export function BillingPage() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-white/60">{item.metric}</span>
                       <span className="font-mono text-sm text-white/80">
-                        {item.used}{item.unit} <span className="text-white/20">/ {item.limit}{item.unit}</span>
+                        {item.used}{item.unit} <span className="text-white/20">/ {item.limit >= 999999 ? '∞' : `${item.limit}${item.unit}`}</span>
                       </span>
                     </div>
                     <div className="h-1.5 rounded-full bg-surface-4 overflow-hidden">

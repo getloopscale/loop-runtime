@@ -1,18 +1,34 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { isAuthenticated } from '@/lib/api';
+import { getSession, type Session } from '@/lib/auth';
+import { exchangeSessionToken, hasValidToken } from '@/lib/api';
 
-// Redirects to /login if not authenticated.
-// Returns false during redirect to prevent content flash.
-export function useRequireAuth(): boolean {
+/** Check Kratos session + exchange for JWT. Redirects to /login if not authenticated. */
+export function useRequireAuth(): Session | null {
   const navigate = useNavigate();
-  const authed = isAuthenticated();
+  const [session, setSession] = useState<Session | null>(null);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    if (!authed) {
-      navigate('/login', { replace: true });
-    }
-  }, [authed, navigate]);
+    async function init() {
+      const s = await getSession();
+      if (!s) {
+        navigate('/login', { replace: true });
+        setChecked(true);
+        return;
+      }
+      setSession(s);
 
-  return authed;
+      // Exchange Kratos session for JWT (BFF token exchange)
+      if (!hasValidToken()) {
+        await exchangeSessionToken();
+      }
+
+      setChecked(true);
+    }
+    init();
+  }, [navigate]);
+
+  if (!checked) return null; // Still loading
+  return session;
 }

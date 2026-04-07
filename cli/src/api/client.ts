@@ -24,6 +24,12 @@ export interface ApiClientOptions {
   fetchFn?: FetchFn;
   /** Max retry attempts for transient errors. Default: 3. Set to 0 to disable. */
   maxRetries?: number;
+  /**
+   * Called when a 401 is received. Should attempt token refresh and return
+   * a new access token, or null if refresh fails. The request will be
+   * retried once with the new token.
+   */
+  onUnauthorized?: () => Promise<string | null>;
 }
 
 export class ApiError extends Error {
@@ -103,15 +109,17 @@ export class ApiError extends Error {
 
 export class ApiClient {
   private readonly baseURL: string;
-  private readonly token: string | null;
+  private token: string | null;
   private readonly fetchFn: FetchFn;
   private readonly maxRetries: number;
+  private readonly onUnauthorized?: () => Promise<string | null>;
 
   constructor(opts: ApiClientOptions = {}) {
     this.baseURL = opts.baseURL ?? getDefaultApiUrl();
     this.token = opts.token ?? null;
     this.fetchFn = opts.fetchFn ?? globalThis.fetch;
     this.maxRetries = opts.maxRetries ?? MAX_RETRIES;
+    this.onUnauthorized = opts.onUnauthorized;
   }
 
   async get<T = unknown>(path: string): Promise<T> {
@@ -141,7 +149,8 @@ export class ApiClient {
     method: string,
     path: string,
     body?: Record<string, unknown>,
-    extraHeaders?: Record<string, string>
+    extraHeaders?: Record<string, string>,
+    isRetryAfterRefresh = false,
   ): Promise<T> {
     const headers: Record<string, string> = {
       'Correlation-ID': randomUUID(),
@@ -184,6 +193,15 @@ export class ApiClient {
             errorBody = (await res.json()) as { code?: string; message?: string };
           } catch {
             /* ignore parse errors */
+          }
+
+          // 401 + onUnauthorized callback → attempt token refresh once
+          if (res.status === 401 && this.onUnauthorized && !isRetryAfterRefresh) {
+            const newToken = await this.onUnauthorized();
+            if (newToken) {
+              this.token = newToken;
+              return this.request<T>(method, path, body, extraHeaders, true);
+            }
           }
 
           const apiError = this.mapError(res.status, errorBody);

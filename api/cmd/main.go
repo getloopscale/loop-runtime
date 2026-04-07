@@ -16,13 +16,13 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/logging"
+	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 
 	"github.com/loopzero/loopzero/api/internal/adapters"
 	"github.com/loopzero/loopzero/api/internal/tracing"
 	"github.com/loopzero/loopzero/api/internal/config"
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/github"
 	"github.com/loopzero/loopzero/api/internal/k8s"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/routes"
@@ -106,15 +106,18 @@ func main() {
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
 	}
-	httpClient := &http.Client{
-		Timeout:   cfg.HTTPClientTimeout,
-		Transport: httpTransport,
+	// JWT-only auth — uses pkg/jwt (single source of truth).
+	jwksURL := os.Getenv("JWKS_URL")
+	jwtIssuer := os.Getenv("JWT_ISSUER")
+	rsaValidator := loopzerojwt.NewValidator(jwksURL, jwtIssuer)
+
+	var sessValidator *loopzerojwt.SessionTokenIssuer
+	if secret := os.Getenv("SESSION_TOKEN_SECRET"); secret != "" {
+		sessValidator = loopzerojwt.NewSessionTokenIssuer(secret, "loopzero-cloud", 1*time.Hour)
 	}
 
-	// GitHub token validator
-	githubValidator := &github.TokenValidator{
-		HTTPClient: httpClient,
-	}
+	tokenValidator := middleware.NewJWTOnlyValidator(rsaValidator, sessValidator)
+	logger.Info("JWT auth enabled", "jwks_url", jwksURL, "hmac", sessValidator != nil)
 
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
 	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
@@ -678,7 +681,7 @@ func main() {
 		Logger:           logger,
 		DB:               dbHealth,
 		HealthServices:   healthServices,
-		TokenValidator:   githubValidator,
+		TokenValidator:   tokenValidator,
 		MemberStore:      memberStore,
 		ProjectStore:     projectStore,
 		TenantCRMgr:      tenantCRMgr,

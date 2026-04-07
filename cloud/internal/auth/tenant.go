@@ -43,34 +43,51 @@ func (p *TenantProvisioner) EnsureTenant(ctx context.Context, userID, email stri
 		return "", "", fmt.Errorf("query tenant membership: %w", err)
 	}
 
-	// No tenant — create one from email
+	// No tenant — create one from email.
+	// Full provisioning: user record → tenant → membership → subscription.
 	slug := DeriveTenantSlug(email)
 
-	// Resolve conflicts (slug already taken by another user)
 	finalSlug, err := p.resolveSlug(ctx, slug)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("resolve slug: %w", err)
 	}
 
 	tenantID = fmt.Sprintf("tn-%s", finalSlug)
 
-	// Create tenant + membership in a transaction
 	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
+	// 1. Ensure user record exists (Kratos UUID → users table).
+	// Without this, tenant_members FK on user_id fails.
 	_, err = tx.ExecContext(ctx,
-		"INSERT INTO tenants (id, display_name, plan, owner_id, created_at, updated_at) VALUES ($1, $2, 'starter', $3, now(), now()) ON CONFLICT (id) DO NOTHING",
+		`INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
+		 VALUES ($1, $2, 0, $3, now(), now())
+		 ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, updated_at = now()`,
+		userID, email, slug,
+	)
+	if err != nil {
+		return "", "", fmt.Errorf("ensure user record: %w", err)
+	}
+
+	// 2. Create tenant
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO tenants (id, display_name, plan, owner_id, created_at, updated_at)
+		 VALUES ($1, $2, 'starter', $3, now(), now())
+		 ON CONFLICT (id) DO NOTHING`,
 		tenantID, finalSlug, userID,
 	)
 	if err != nil {
 		return "", "", fmt.Errorf("create tenant: %w", err)
 	}
 
+	// 3. Create membership
 	_, err = tx.ExecContext(ctx,
-		"INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at) VALUES ($1, $2, 'owner', now(), now()) ON CONFLICT DO NOTHING",
+		`INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)
+		 VALUES ($1, $2, 'owner', now(), now())
+		 ON CONFLICT DO NOTHING`,
 		tenantID, userID,
 	)
 	if err != nil {

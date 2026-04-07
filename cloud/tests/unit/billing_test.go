@@ -4,13 +4,17 @@
 package unit
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,6 +62,34 @@ func TestVerifySignature_ExpiredTimestamp(t *testing.T) {
 
 	if err := billing.VerifySignature(payload, header, secret); err == nil {
 		t.Error("expired timestamp should be rejected")
+	}
+}
+
+func TestVerifySignature_299sAccepted(t *testing.T) {
+	// Stripe recommends 300s tolerance — 299s should be accepted
+	secret := "whsec_test_secret"
+	payload := []byte(`{"id":"evt_299"}`)
+	ts := fmt.Sprintf("%d", time.Now().Add(-299*time.Second).Unix())
+
+	sig := computeSignature(t, ts, payload, secret)
+	header := fmt.Sprintf("t=%s,v1=%s", ts, sig)
+
+	if err := billing.VerifySignature(payload, header, secret); err != nil {
+		t.Errorf("299s-old timestamp should be accepted: %v", err)
+	}
+}
+
+func TestVerifySignature_301sRejected(t *testing.T) {
+	// Beyond 300s tolerance — should be rejected
+	secret := "whsec_test_secret"
+	payload := []byte(`{"id":"evt_301"}`)
+	ts := fmt.Sprintf("%d", time.Now().Add(-301*time.Second).Unix())
+
+	sig := computeSignature(t, ts, payload, secret)
+	header := fmt.Sprintf("t=%s,v1=%s", ts, sig)
+
+	if err := billing.VerifySignature(payload, header, secret); err == nil {
+		t.Error("301s-old timestamp should be rejected")
 	}
 }
 
@@ -109,6 +141,39 @@ func TestPlanConfig_PriceIDForPlan(t *testing.T) {
 	}
 	if got := cfg.PriceIDForPlan("enterprise"); got != "" {
 		t.Errorf("enterprise should return empty, got %q", got)
+	}
+}
+
+func TestStripeClient_IdempotencyKey(t *testing.T) {
+	var receivedKey string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedKey = r.Header.Get("Idempotency-Key")
+		w.WriteHeader(200)
+		w.Write([]byte(`{"id":"cus_test","email":"test@test.com"}`))
+	}))
+	defer srv.Close()
+
+	client := billing.NewStripeClientWithURL("sk_test", srv.URL)
+	_, err := client.CreateCustomer("test@test.com", "tn-test", "Test User")
+	if err != nil {
+		t.Fatalf("CreateCustomer failed: %v", err)
+	}
+	if receivedKey == "" {
+		t.Error("Idempotency-Key header not sent")
+	}
+	if !strings.Contains(receivedKey, "tn-test") {
+		t.Errorf("Idempotency-Key should contain tenant ID, got %q", receivedKey)
+	}
+}
+
+func TestBillingProvisionerNilDB(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	p := billing.NewProvisioner(nil, nil, logger)
+
+	// Should not panic with nil DB — no-op
+	err := p.ProvisionStarter(context.Background(), "user-123", "test@test.com", "tn-test")
+	if err != nil {
+		t.Errorf("ProvisionStarter with nil DB should not error: %v", err)
 	}
 }
 

@@ -220,8 +220,13 @@ jobs:
       LOOPZERO_GITHUB_CLIENT_SECRET: ${{ secrets.LOOPZERO_GITHUB_CLIENT_SECRET }}
       LOOPZERO_GOOGLE_CLIENT_ID: ${{ secrets.LOOPZERO_GOOGLE_CLIENT_ID }}
       LOOPZERO_GOOGLE_CLIENT_SECRET: ${{ secrets.LOOPZERO_GOOGLE_CLIENT_SECRET }}
-      # SMTP — email delivery via Resend (verification, recovery)
-      LOOPZERO_SMTP_CONNECTION_URI: ${{ secrets.LOOPZERO_SMTP_CONNECTION_URI }}
+      # Resend API key for email delivery (HTTP API, not SMTP — DO blocks SMTP)
+      LOOPZERO_RESEND_API_KEY: ${{ secrets.LOOPZERO_RESEND_API_KEY }}
+      # Stripe Billing (MEET-038)
+      LOOPZERO_STRIPE_API_KEY: ${{ secrets.LOOPZERO_STRIPE_API_KEY }}
+      LOOPZERO_STRIPE_WEBHOOK_SECRET: ${{ secrets.LOOPZERO_STRIPE_WEBHOOK_SECRET }}
+      # Session token HMAC secret (dashboard JWT issuance)
+      LOOPZERO_SESSION_TOKEN_SECRET: ${{ secrets.LOOPZERO_SESSION_TOKEN_SECRET }}
 
     steps:
       - uses: actions/checkout@v4

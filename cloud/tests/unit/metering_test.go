@@ -4,7 +4,9 @@
 package unit
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/loopzero/loopzero/cloud/internal/metering"
 )
@@ -66,5 +68,28 @@ func TestReconcilerDriftCallback(t *testing.T) {
 func TestDriftThreshold(t *testing.T) {
 	if metering.DriftThresholdPct != 5.0 {
 		t.Errorf("DriftThresholdPct = %f, want 5.0", metering.DriftThresholdPct)
+	}
+}
+
+func TestSchedulerRespectsContextCancellation(t *testing.T) {
+	reporter := metering.NewReporter(nil, nil, nil)
+	reconciler := metering.NewReconciler(nil, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() {
+		metering.StartScheduler(ctx, reporter, reconciler, nil)
+		close(done)
+	}()
+
+	// Cancel immediately — scheduler should stop within 1 second
+	cancel()
+
+	select {
+	case <-done:
+		// OK — scheduler stopped
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not stop within 2 seconds after context cancellation")
 	}
 }

@@ -1831,38 +1831,48 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
 
 			// Wait for TenantController to issue Delete on the orphan Environment CR.
-			// The EnvironmentController has a finalizer that waits for the namespace to be
-			// deleted, but envtest doesn't delete namespaces. Simulate namespace cleanup
-			// so the EnvironmentController can remove the finalizer.
+			// Accept two outcomes: CR exists with DeletionTimestamp (finalizer holding it),
+			// or CR already fully deleted (no finalizer / envtest race).
+			var devEnvStillExists bool
 			Eventually(func(g Gomega) {
 				var devEnv loopzerov1.Environment
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName + "-dev", Namespace: "default",
 				}, &devEnv)
+				if errors.IsNotFound(err) {
+					// Already fully deleted — GC succeeded
+					devEnvStillExists = false
+					return
+				}
 				g.Expect(err).NotTo(HaveOccurred())
 				// DeletionTimestamp should be set (tenant controller issued Delete)
 				g.Expect(devEnv.DeletionTimestamp.IsZero()).To(BeFalse(),
 					"orphan Environment CR should be marked for deletion")
+				devEnvStillExists = true
 			}, timeout, interval).Should(Succeed())
 
-			// Simulate EnvironmentController completing namespace cleanup:
-			// remove the namespace labels and finalizer from the Environment CR.
-			Eventually(func(g Gomega) {
-				var devEnv loopzerov1.Environment
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-dev", Namespace: "default",
-				}, &devEnv)).To(Succeed())
-				// Clean up the runtime namespace so EnvironmentController can proceed
-				var ns corev1.Namespace
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: devEnv.Spec.Namespace.Name}, &ns); err == nil {
-					ns.Finalizers = nil
-					delete(ns.Labels, "loopzero.io/tenant")
-					g.Expect(k8sClient.Update(ctx, &ns)).To(Succeed())
-				}
-				// Remove environment-cleanup finalizer
-				devEnv.Finalizers = nil
-				g.Expect(k8sClient.Update(ctx, &devEnv)).To(Succeed())
-			}, timeout, interval).Should(Succeed())
+			// Simulate EnvironmentController completing namespace cleanup
+			// (only needed if the CR still exists with a finalizer).
+			if devEnvStillExists {
+				Eventually(func(g Gomega) {
+					var devEnv loopzerov1.Environment
+					err := k8sClient.Get(ctx, types.NamespacedName{
+						Name: tenantName + "-dev", Namespace: "default",
+					}, &devEnv)
+					if errors.IsNotFound(err) {
+						return // Already gone
+					}
+					g.Expect(err).NotTo(HaveOccurred())
+					var ns corev1.Namespace
+					if err := k8sClient.Get(ctx, types.NamespacedName{Name: devEnv.Spec.Namespace.Name}, &ns); err == nil {
+						ns.Finalizers = nil
+						delete(ns.Labels, "loopzero.io/tenant")
+						g.Expect(k8sClient.Update(ctx, &ns)).To(Succeed())
+					}
+					devEnv.Finalizers = nil
+					g.Expect(k8sClient.Update(ctx, &devEnv)).To(Succeed())
+				}, timeout, interval).Should(Succeed())
+			}
 
 			// Assert: the "dev" Environment CR should be fully deleted
 			Eventually(func(g Gomega) {

@@ -28,8 +28,11 @@ kratos:
         password:
           enabled: true
           config:
-            min_password_length: 8
+            min_password_length: 10
             identifier_similarity_check_enabled: true
+            haveibeenpwned_enabled: true
+            # Don't block registration if HIBP API is unreachable
+            ignore_network_errors: true
 
         oidc:
           enabled: true
@@ -66,9 +69,14 @@ kratos:
             password:
               hooks:
                 - hook: session
+            oidc:
+              hooks:
+                - hook: session
 
         login:
           ui_url: "http://localhost:4455/login"
+          # NOTE: login.after hooks are NOT supported in Kratos v26.
+          # Kratos creates sessions automatically on successful login.
 
         verification:
           enabled: true
@@ -88,14 +96,31 @@ kratos:
           after:
             default_browser_return_url: "http://localhost:4455/login"
 
-    # --- Courier (Email) ---
+    # --- Security ---
+    security:
+      account_enumeration:
+        # Prevents attackers from discovering which emails have accounts.
+        # Registration: "check your email" instead of "email already exists"
+        # Login: same error for wrong email and wrong password
+        # Recovery: always "check your email" even if email doesn't exist
+        mitigate: true
+
+    # --- Courier (Email via HTTP API) ---
+    # MEET-2026-04-06-036: DigitalOcean blocks SMTP ports (25, 465, 587).
+    # Uses Resend HTTP API instead. Production key injected via Pulumi.
     courier:
-      smtp:
-        # LOCAL DEV: emails logged to stdout (no real SMTP).
-        # Production: overridden by Pulumi with real SMTP (e.g., Resend).
-        connection_uri: "smtp://localhost:1025/?disable_starttls=true"
-        from_address: "noreply@loopzero.example"
-        from_name: "LoopZero"
+      delivery_strategy: http
+      http:
+        request_config:
+          url: https://api.resend.com/emails
+          method: POST
+          headers:
+            Content-Type: "application/json"
+            # LOCAL DEV: no API key (emails not sent).
+            # Production: overridden by Pulumi with real Resend key.
+            Authorization: "Bearer placeholder"
+          # Jsonnet template: ctx.recipient, ctx.subject, ctx.html_body (lowercase snake_case)
+          body: "base64://ZnVuY3Rpb24oY3R4KSB7CiAgZnJvbTogIlRoZW8gPG5vcmVwbHlAdXNldGhlby5kZXY+IiwKICB0bzogW2N0eC5yZWNpcGllbnRdLAogIHN1YmplY3Q6IGN0eC5zdWJqZWN0LAogIGh0bWw6IGN0eC5odG1sX2JvZHksCn0="
 
     # --- Session ---
     session:

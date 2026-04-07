@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import { refreshAccessToken } from './device-flow';
-import { getDefaultApiUrl } from '../config/constants';
+import { getCloudUrl } from '../config/constants';
 
 export interface TokenRefreshDeps {
   getToken: () => string | null;
@@ -36,7 +36,7 @@ export async function ensureFreshToken(deps: TokenRefreshDeps): Promise<string |
     return null;
   }
 
-  const baseURL = getDefaultApiUrl();
+  const baseURL = getCloudUrl();
   const result = await refreshAccessToken(deps.fetchFn, baseURL, refreshToken);
   if (!result) {
     deps.writeError('Session expired. Run `loopzero login` to authenticate again.');

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Sidebar } from '@/components/sidebar';
+import { VerificationBanner } from '@/components/verification-banner';
 import { OverviewPage } from '@/pages/overview';
 import { ProjectsPage } from '@/pages/projects';
 import { EnvironmentsPage } from '@/pages/environments';
@@ -9,16 +10,31 @@ import { SettingsPage } from '@/pages/settings';
 import { ProfilePage } from '@/pages/profile';
 import { DomainsPage } from '@/pages/domains';
 import { LoginPage } from '@/pages/login';
+import { RegisterPage } from '@/pages/register';
+import { VerificationPage } from '@/pages/verification';
+import { DeviceSuccessPage } from '@/pages/device-success';
 import { useRequireAuth } from '@/hooks/use-auth';
+import { isEmailVerified } from '@/lib/auth';
+import { Loader2 } from 'lucide-react';
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const authed = useRequireAuth();
-  if (!authed) return null; // Redirect happening — render nothing
+  const session = useRequireAuth();
+
+  if (session === null) {
+    return (
+      <div className="dark bg-surface-0 min-h-screen text-white flex items-center justify-center">
+        <Loader2 className="h-6 w-6 text-accent animate-spin" />
+      </div>
+    );
+  }
+
+  const verified = isEmailVerified(session);
 
   return (
     <div className="dark bg-surface-0 min-h-screen text-white">
       <Sidebar />
       <main className="ml-[220px] p-8 pt-6">
+        {!verified && <VerificationBanner />}
         {children}
       </main>
     </div>
@@ -29,11 +45,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/login/callback" element={<LoginPage />} />
-
-        {/* Protected routes */}
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/verification" element={<VerificationPage />} />
+        <Route path="/device-success" element={<DeviceSuccessPage />} />
         <Route path="*" element={
           <DashboardLayout>
             <Routes>

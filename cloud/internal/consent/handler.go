@@ -9,6 +9,7 @@
 package consent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -22,22 +23,24 @@ import (
 
 // Handler manages Hydra's login and consent callbacks.
 type Handler struct {
-	hydra            *auth.HydraClient
-	kratosPublicURL  string // Browser-facing URL (for redirects)
+	hydra             *auth.HydraClient
+	tenantProvisioner *auth.TenantProvisioner
+	kratosPublicURL   string // Browser-facing URL (for redirects)
 	kratosInternalURL string // Cluster-internal URL (for server-to-server calls)
-	kratosClient     *http.Client
-	logger           *slog.Logger
+	kratosClient      *http.Client
+	logger            *slog.Logger
 }
 
 // NewHandler creates a consent handler.
 // kratosPublicURL is used for browser redirects, kratosInternalURL for server-to-server (whoami).
-func NewHandler(hydra *auth.HydraClient, kratosPublicURL, kratosInternalURL string, logger *slog.Logger) *Handler {
+func NewHandler(hydra *auth.HydraClient, tenantProv *auth.TenantProvisioner, kratosPublicURL, kratosInternalURL string, logger *slog.Logger) *Handler {
 	if kratosInternalURL == "" {
 		kratosInternalURL = kratosPublicURL
 	}
 	return &Handler{
-		hydra:            hydra,
-		kratosPublicURL:  kratosPublicURL,
+		hydra:             hydra,
+		tenantProvisioner: tenantProv,
+		kratosPublicURL:   kratosPublicURL,
 		kratosInternalURL: kratosInternalURL,
 		kratosClient:     &http.Client{Timeout: 5 * time.Second},
 		logger:           logger,
@@ -193,6 +196,18 @@ func (h *Handler) fetchIdentityClaims(subject string) map[string]interface{} {
 	if identity.Traits.Name != "" {
 		claims["name"] = identity.Traits.Name
 	}
+
+	// Resolve tenant — injects tenant_id into Hydra JWT for CLI auth
+	if h.tenantProvisioner != nil && identity.Traits.Email != "" {
+		ctx := context.Background()
+		tenantID, _, err := h.tenantProvisioner.EnsureTenant(ctx, subject, identity.Traits.Email)
+		if err == nil && tenantID != "" {
+			claims["tenant_id"] = tenantID
+		} else if err != nil {
+			h.logger.Warn("failed to resolve tenant for JWT claims", "subject", subject, "error", err)
+		}
+	}
+
 	return claims
 }
 
@@ -231,4 +246,47 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 		"claims", tokenClaims,
 	)
 	http.Redirect(w, r, redirectTo, http.StatusFound)
+}
+
+// DeviceVerify handles the device authorization challenge from Hydra.
+// When a user visits the device verification URL, Hydra redirects here with a challenge.
+// This handler validates the Kratos session, then accepts the device challenge.
+// GET /auth/device?device_challenge=...&user_code=...
+func (h *Handler) DeviceVerify(w http.ResponseWriter, r *http.Request) {
+	challenge := r.URL.Query().Get("device_challenge")
+	if challenge == "" {
+		http.Error(w, "Missing device_challenge", http.StatusBadRequest)
+		return
+	}
+
+	// Validate Kratos session — user must be authenticated
+	subject, err := h.getKratosSessionSubject(r)
+	if err != nil {
+		h.logger.Warn("device verify: no session, redirecting to login", "error", err)
+		// Redirect to Kratos login with return_to back to this device verify URL
+		returnTo := r.URL.String()
+		loginURL := fmt.Sprintf("%s/self-service/login/browser?return_to=%s",
+			h.kratosPublicURL, url.QueryEscape(returnTo))
+		http.Redirect(w, r, loginURL, http.StatusFound)
+		return
+	}
+
+	// Accept the device challenge via Hydra admin
+	userCode := r.URL.Query().Get("user_code")
+	redirectTo, err := h.hydra.AcceptDeviceChallenge(challenge, userCode)
+	if err != nil {
+		h.logger.Error("device verify: failed to accept device challenge", "error", err, "subject", subject)
+		http.Error(w, "Failed to authorize device. Please try again.", http.StatusBadGateway)
+		return
+	}
+	h.logger.Info("device authorized", "subject", subject, "user_code", userCode)
+
+	if redirectTo != "" {
+		http.Redirect(w, r, redirectTo, http.StatusFound)
+		return
+	}
+
+	// Success — show confirmation
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprint(w, `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;background:#0a0a0a;color:#fff;margin:0"><div style="text-align:center"><h2>CLI authorized</h2><p style="color:#888">You can close this tab and return to your terminal.</p></div></body></html>`)
 }

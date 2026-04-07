@@ -1,114 +1,119 @@
-// PKCE Auth flow for the LoopZero dashboard.
-// Uses Authorization Code Flow with PKCE against Ory Hydra.
+// Kratos session-based authentication for the LoopZero dashboard.
+//
+// The dashboard is a first-party SPA — uses Kratos sessions directly.
+// No Hydra, no PKCE, no tokens. Just HTTP-only session cookies.
+//
+// Hydra is only used for the CLI (Device Code Flow).
 
-import { getApiBase, setAuth } from './api';
+const KRATOS_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
 
-// Hydra endpoints:
-// - Authorize: browser redirect to auth.{domain} (no CORS needed)
-// - Token: POST to same origin via gateway (avoids CORS — Hydra CORS is unreliable)
-const HYDRA_URL = import.meta.env.VITE_AUTH_URL || 'http://localhost:4444';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
-const CLIENT_ID = 'loopzero-cli';
-
-function getRedirectUri(): string {
-  return `${window.location.origin}/login/callback`;
+export interface VerifiableAddress {
+  value: string;
+  verified: boolean;
+  via: string;
 }
 
-// Start PKCE flow — redirect to Hydra authorization endpoint
-export async function startPKCELogin(): Promise<void> {
-  const verifier = generateCodeVerifier();
-  const challenge = await generateCodeChallenge(verifier);
-  const state = crypto.randomUUID();
-
-  sessionStorage.setItem('pkce_verifier', verifier);
-  sessionStorage.setItem('pkce_state', state);
-
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: CLIENT_ID,
-    redirect_uri: getRedirectUri(),
-    scope: 'openid offline_access',
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    state,
-  });
-
-  // Browser redirect — goes to Hydra directly (no CORS needed for redirects)
-  window.location.href = `${HYDRA_URL}/oauth2/auth?${params}`;
+export interface AuthenticationMethod {
+  method: string;
+  provider?: string;
+  completed_at?: string;
 }
 
-// Handle callback — exchange code for tokens
-export async function handleCallback(code: string, state: string): Promise<boolean> {
-  const savedState = sessionStorage.getItem('pkce_state');
-  const verifier = sessionStorage.getItem('pkce_verifier');
+export interface Session {
+  active: boolean;
+  identity: {
+    id: string;
+    traits: {
+      email: string;
+      name?: string;
+    };
+    verifiable_addresses?: VerifiableAddress[];
+  };
+  authentication_methods?: AuthenticationMethod[];
+}
 
-  sessionStorage.removeItem('pkce_state');
-  sessionStorage.removeItem('pkce_verifier');
+// OIDC providers whose email verification we trust (MEET-037 security mandate).
+const TRUSTED_OIDC_PROVIDERS = ['github', 'google'];
 
-  if (!verifier || state !== savedState) {
-    console.error('[auth] PKCE validation failed:', { hasVerifier: !!verifier, stateMatch: state === savedState, savedState: savedState?.substring(0, 8), receivedState: state?.substring(0, 8) });
-    return false;
+/**
+ * Check if the user's email is verified.
+ *
+ * Three cases:
+ * 1. No verifiable_addresses → OIDC user without Kratos-managed email → verified
+ * 2. Authenticated via trusted OIDC provider (GitHub/Google) → verified
+ *    (provider already verified the email; Kratos marks it unverified because
+ *    the mapper doesn't pass email_verified — MEET-037)
+ * 3. Otherwise → check verifiable_addresses for at least one verified entry
+ */
+export function isEmailVerified(session: Session): boolean {
+  const addrs = session.identity.verifiable_addresses;
+  if (!addrs || addrs.length === 0) return true;
+
+  // If any address is already verified in Kratos, short-circuit
+  if (addrs.some(a => a.verified)) return true;
+
+  // Check if authenticated via a trusted OIDC provider
+  const methods = session.authentication_methods;
+  if (methods) {
+    const hasTrustedOIDC = methods.some(
+      m => m.method === 'oidc' && TRUSTED_OIDC_PROVIDERS.includes(m.provider ?? ''),
+    );
+    if (hasTrustedOIDC) return true;
   }
+
+  return false;
+}
+
+/** Check if user has an active session. Returns session or null. */
+export async function getSession(): Promise<Session | null> {
+  try {
+    const resp = await fetch(`${KRATOS_URL}/sessions/whoami`, {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
+    if (!resp.ok) return null;
+    const session = await resp.json();
+    return session.active ? session : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Start login flow — redirect to Kratos login UI. */
+export function startLogin(): void {
+  window.location.href = `${KRATOS_URL}/self-service/login/browser`;
+}
+
+/** Start registration flow. */
+export function startRegistration(): void {
+  window.location.href = `${KRATOS_URL}/self-service/registration/browser`;
+}
+
+/** Get verification URL — redirects to Kratos verification flow. */
+export function getVerificationURL(): string {
+  return `${KRATOS_URL}/self-service/verification/browser`;
+}
+
+/** Logout — destroy Kratos session and clear JWT. */
+export async function logout(): Promise<void> {
+  // Clear in-memory JWT
+  const { clearToken } = await import('./api');
+  clearToken();
 
   try {
-    // Token exchange via same-origin gateway (cloud.dev/oauth2/token → Hydra)
-    const resp = await fetch(`${API_URL}/oauth2/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: getRedirectUri(),
-        client_id: CLIENT_ID,
-        code_verifier: verifier,
-      }),
+    const resp = await fetch(`${KRATOS_URL}/self-service/logout/browser`, {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
     });
-
-    if (!resp.ok) {
-      const errBody = await resp.text().catch(() => '');
-      console.error('[auth] Token exchange failed:', resp.status, errBody.substring(0, 200));
-      return false;
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.logout_url) {
+        window.location.href = data.logout_url;
+        return;
+      }
     }
-
-    const data = await resp.json();
-    if (!data.access_token) return false;
-
-    // Get user info from cloud API
-    const meResp = await fetch(`${getApiBase()}/v1/auth/me`, {
-      headers: { Authorization: `Bearer ${data.access_token}` },
-    });
-    const me = meResp.ok ? await meResp.json() : { email: '', name: '' };
-
-    setAuth(data.access_token, data.refresh_token || '', me.email || '', me.name || '');
-    return true;
   } catch {
-    return false;
+    // Fallback
   }
-}
-
-// GitHub OAuth — redirect to Kratos social login
-export function startGitHubLogin(): void {
-  startPKCELogin(); // Kratos shows GitHub option in the login UI
-}
-
-// Google OAuth — redirect to Kratos social login
-export function startGoogleLogin(): void {
-  startPKCELogin(); // Kratos shows Google option in the login UI
-}
-
-function generateCodeVerifier(): string {
-  const array = new Uint8Array(32);
-  crypto.getRandomValues(array);
-  return base64URLEncode(array);
-}
-
-async function generateCodeChallenge(verifier: string): Promise<string> {
-  const data = new TextEncoder().encode(verifier);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return base64URLEncode(new Uint8Array(digest));
-}
-
-function base64URLEncode(buffer: Uint8Array): string {
-  const str = btoa(String.fromCharCode(...buffer));
-  return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  window.location.href = '/login';
 }

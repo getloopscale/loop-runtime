@@ -14,7 +14,7 @@ import { Command } from 'commander';
 import { createHash } from 'crypto';
 
 import { ConfigStore } from './config/store';
-import { getDefaultApiUrl, API_REQUEST_TIMEOUT_MS, DEPLOY_TIMEOUT_MS } from './config/constants';
+import { getDefaultApiUrl, getCloudUrl, API_REQUEST_TIMEOUT_MS, DEPLOY_TIMEOUT_MS } from './config/constants';
 import { ApiClient } from './api/client';
 import { SSEClient } from './api/sse-client';
 import { Formatter } from './output/formatter';
@@ -39,6 +39,7 @@ import { BuildListCommand } from './commands/build-list';
 import { BuildInspectCommand } from './commands/build-inspect';
 import { SecretSetCommand, SecretListCommand, SecretDeleteCommand } from './commands/secret';
 import { ValidateCommand } from './commands/validate';
+import { BillingCommand } from './commands/billing';
 import { TeamListCommand } from './commands/team-list';
 import { TeamAddCommand } from './commands/team-add';
 import { TeamRemoveCommand } from './commands/team-remove';
@@ -48,6 +49,9 @@ import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
 import { hasGitRepo, hasUncommittedChanges, hasLockfile, getSourceIdentifier, getGitRoot, createSourceBundle, checkSensitiveFiles } from './adapters/git';
+import { executeDeviceCodeFlow } from './auth/device-flow';
+import { openBrowser } from './auth/open-browser';
+import { ensureFreshToken } from './auth/token-refresh';
 import { findLoopZeroYaml } from './adapters/loopzero-yaml';
 import { cleanupFile } from './adapters/source-bundle';
 import { uploadSource } from './adapters/source-upload';
@@ -130,6 +134,21 @@ export function createProgram(): Command {
     process.stderr.write(msg + '\n');
   };
 
+  // Token refresh callback — used by ApiClient when a 401 is received.
+  // Attempts silent refresh via refresh_token, returns new access token or null.
+  const handleUnauthorized = async (): Promise<string | null> => {
+    return ensureFreshToken({
+      getToken: () => configStore.getToken(),
+      getRefreshToken: () => configStore.getRefreshToken(),
+      isTokenExpired: () => true, // Already got 401 — treat as expired
+      saveToken: (t, e, tm, rt, ei) => configStore.saveToken(t, e, tm, rt, ei),
+      getEmail: () => configStore.getEmail(),
+      getTeam: () => configStore.getTeam(),
+      fetchFn: fetch,
+      writeError,
+    });
+  };
+
   // --- login ---
   program
     .command('login')
@@ -140,9 +159,32 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
 
       const loginCmd = new LoginCommand({
-        saveToken: (token, email, team) =>
-          configStore.saveToken(token, email, team),
+        saveToken: (token, email, team, refreshToken?, expiresIn?) =>
+          configStore.saveToken(token, email, team, refreshToken, expiresIn),
+        executeDeviceFlow: () => executeDeviceCodeFlow({
+          fetchFn: globalThis.fetch,
+          baseURL: getCloudUrl(),
+          openBrowser,
+          writeTo,
+          writeError,
+          sleep: (ms: number) => new Promise(r => setTimeout(r, ms)),
+        }),
         validateToken: async (token: string) => {
+          // Try cloud service /v1/auth/me first (for Hydra JWTs)
+          // Falls back to engine API /api/v1/auth/whoami (for GitHub PATs)
+          try {
+            const cloudResp = await globalThis.fetch(`${getCloudUrl()}/v1/auth/me`, {
+              headers: { Authorization: `Bearer ${token}` },
+              signal: AbortSignal.timeout(5000),
+            });
+            if (cloudResp.ok) {
+              const me = await cloudResp.json() as { email?: string; name?: string; team?: string; user_id?: string };
+              if (me.email) {
+                return { valid: true, email: me.email, teams: me.team ? [me.team] : ['default'] };
+              }
+            }
+          } catch { /* cloud service unavailable — try engine API */ }
+
           try {
             const client = new ApiClient({
               baseURL: getDefaultApiUrl(),
@@ -162,13 +204,11 @@ export function createProgram(): Command {
               teams: [result.team],
             };
           } catch (err) {
-            // Network/connection errors — server unreachable
             const errMsg = (err as Error).message || '';
             if (errMsg.includes('ECONNREFUSED') || errMsg.includes('ETIMEDOUT') ||
                 errMsg.includes('ENOTFOUND') || errMsg.includes('fetch failed')) {
               return { valid: false, email: null, teams: [], serverError: true };
             }
-            // API returned 5xx server error
             const apiErr = err as { statusCode?: number };
             if (apiErr.statusCode !== undefined && apiErr.statusCode >= 500) {
               return { valid: false, email: null, teams: [], serverError: true };
@@ -270,7 +310,7 @@ export function createProgram(): Command {
         detectFramework: (dir: string) => detectFramework(dir),
         createProject: async (input) => {
           const baseURL = getDefaultApiUrl();
-          const authedClient = new ApiClient({ baseURL, token: token ?? undefined });
+          const authedClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
           return authedClient.post<{ id: string; name: string; team: string }>(
             '/api/v1/projects',
             {
@@ -329,7 +369,7 @@ export function createProgram(): Command {
       };
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const deployCmd = new DeployCommand({
         getToken: () => configStore.getToken(),
@@ -495,7 +535,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const statusCmd = new StatusCommand({
         getToken: () => configStore.getToken(),
@@ -539,7 +579,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const logsCmd = new LogsCommand({
         getToken: () => configStore.getToken(),
@@ -591,7 +631,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const rollbackCmd = new RollbackCommand({
         getToken: () => configStore.getToken(),
@@ -644,7 +684,7 @@ export function createProgram(): Command {
     .action(async (buildId: string) => {
       const globalOpts = program.opts();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: configStore.getToken() ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cancelCmd = new CancelCommand({
         getToken: () => configStore.getToken(),
@@ -673,7 +713,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const buildListCmd = new BuildListCommand({
         getToken: () => configStore.getToken(),
@@ -715,7 +755,7 @@ export function createProgram(): Command {
     .action(async (buildId: string) => {
       const globalOpts = program.opts();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: configStore.getToken() ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
       const buildInspectCmd = new BuildInspectCommand({
         getToken: () => configStore.getToken(),
@@ -755,7 +795,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const deps = {
         getToken: () => configStore.getToken(),
@@ -797,7 +837,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const deps = {
         getToken: () => configStore.getToken(),
@@ -839,7 +879,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const yamlResult = (() => {
         const gitRoot = getGitRoot() ?? process.cwd();
@@ -902,7 +942,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const deleteCmd = new ProjectDeleteCommand({
         getToken: () => configStore.getToken(),
@@ -956,7 +996,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new ProjectListCommand({
         getToken: () => configStore.getToken(),
@@ -988,7 +1028,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new ProjectInspectCommand({
         getToken: () => configStore.getToken(),
@@ -1022,7 +1062,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new ProjectCreateCommand({
         getToken: () => configStore.getToken(),
@@ -1062,7 +1102,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new TeamListCommand({
         getToken: () => configStore.getToken(),
@@ -1095,7 +1135,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new TeamAddCommand({
         getToken: () => configStore.getToken(),
@@ -1127,7 +1167,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new TeamRemoveCommand({
         getToken: () => configStore.getToken(),
@@ -1159,7 +1199,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new TeamRoleCommand({
         getToken: () => configStore.getToken(),
@@ -1199,7 +1239,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new EnvListCommand({
         getToken: () => configStore.getToken(),
@@ -1231,7 +1271,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new EnvCreateCommand({
         getToken: () => configStore.getToken(),
@@ -1267,7 +1307,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new EnvDeleteCommand({
         getToken: () => configStore.getToken(),
@@ -1301,7 +1341,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new EnvInspectCommand({
         getToken: () => configStore.getToken(),
@@ -1328,6 +1368,7 @@ export function createProgram(): Command {
       });
     });
 
+<<<<<<< HEAD
   // --- domain (MEET-2026-04-05-033: Custom Domains) ---
   const domainCmd = program
     .command('domain')
@@ -1505,6 +1546,49 @@ export function createProgram(): Command {
         else { writeError(err.message); }
         return 3;
       });
+    });
+
+  // --- billing ---
+  const billingCmd = program
+    .command('billing')
+    .description('View plan and usage, or open the billing portal');
+
+  billingCmd
+    .command('portal')
+    .description('Open the billing portal in your browser')
+    .action(async () => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const cloudURL = getCloudUrl();
+      const apiClient = new ApiClient({ baseURL: cloudURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
+
+      const cmd = new BillingCommand({
+        getBilling: async () => apiClient.get('/v1/billing'),
+        getPortalURL: async () => apiClient.get('/v1/billing/portal'),
+        openBrowser,
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute({ json: globalOpts.json, subcommand: 'portal' });
+    });
+
+  billingCmd
+    .action(async () => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const cloudURL = getCloudUrl();
+      const apiClient = new ApiClient({ baseURL: cloudURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
+
+      const cmd = new BillingCommand({
+        getBilling: async () => apiClient.get('/v1/billing'),
+        getPortalURL: async () => apiClient.get('/v1/billing/portal'),
+        openBrowser,
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute({ json: globalOpts.json });
     });
 
   // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)

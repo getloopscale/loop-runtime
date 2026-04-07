@@ -13,12 +13,13 @@ import (
 
 // DeviceHandler handles Device Code Flow endpoints.
 type DeviceHandler struct {
-	hydra *auth.HydraClient
+	hydra         *auth.HydraClient
+	dashboardURL  string // Public dashboard URL for verification redirect
 }
 
 // NewDeviceHandler creates a new DeviceHandler.
-func NewDeviceHandler(hydra *auth.HydraClient) *DeviceHandler {
-	return &DeviceHandler{hydra: hydra}
+func NewDeviceHandler(hydra *auth.HydraClient, dashboardURL string) *DeviceHandler {
+	return &DeviceHandler{hydra: hydra, dashboardURL: dashboardURL}
 }
 
 // Authorize starts the Device Code Flow (RFC 8628).
@@ -31,14 +32,17 @@ func (h *DeviceHandler) Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Use Hydra's native verification URI — CSRF cookies are domain-bound.
+	// Routing through cloud gateway breaks CSRF because cookies are set for auth.{domain}.
+	verificationURI := resp.VerificationURI
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"user_code":        resp.UserCode,
-		"verification_uri": resp.VerificationURI,
-		"expires_in":       resp.ExpiresIn,
-		"interval":         resp.Interval,
-		// device_code sent to client for polling — not an internal term,
-		// it's the RFC 8628 standard field name
-		"device_code": resp.DeviceCode,
+		"user_code":                 resp.UserCode,
+		"verification_uri":          verificationURI,
+		"verification_uri_complete": verificationURI + "?user_code=" + resp.UserCode,
+		"expires_in":                resp.ExpiresIn,
+		"interval":                  resp.Interval,
+		"device_code":               resp.DeviceCode,
 	})
 }
 
@@ -110,7 +114,7 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]interface{}{
-		"code":  code,
-		"error": message,
+		"code":    code,
+		"message": message,
 	})
 }

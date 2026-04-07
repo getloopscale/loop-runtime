@@ -540,15 +540,23 @@ function installOryKratos(
         kratos: {
           config: {
             ...(kratosDsn ? { dsn: kratosDsn } : {}),
-            // SMTP for email delivery — verification and recovery emails.
-            // When not set, falls back to values.yaml default (stdout in dev).
-            ...(config.smtpConnectionUri
+            // MEET-2026-04-06-036: Email via Resend HTTP API (SMTP blocked by DO).
+            // Kratos HTTP courier calls Resend directly — no SMTP needed.
+            ...(config.resendApiKey
               ? {
                   courier: {
-                    smtp: {
-                      connection_uri: config.smtpConnectionUri,
-                      from_address: `noreply@${config.domain}`,
-                      from_name: "LoopZero",
+                    delivery_strategy: "http",
+                    http: {
+                      request_config: {
+                        url: "https://api.resend.com/emails",
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: pulumi.interpolate`Bearer ${config.resendApiKey}`,
+                        },
+                        // Jsonnet: ctx.recipient, ctx.subject, ctx.html_body (lowercase snake_case)
+                        body: "base64://ZnVuY3Rpb24oY3R4KSB7CiAgZnJvbTogIlRoZW8gPG5vcmVwbHlAdXNldGhlby5kZXY+IiwKICB0bzogW2N0eC5yZWNpcGllbnRdLAogIHN1YmplY3Q6IGN0eC5zdWJqZWN0LAogIGh0bWw6IGN0eC5odG1sX2JvZHksCn0=",
+                      },
                     },
                   },
                 }
@@ -556,7 +564,7 @@ function installOryKratos(
             // Kratos must know its public URL for CSRF, return_to validation, etc.
             serve: {
               public: {
-                base_url: `https://accounts.${config.domain}/`,
+                base_url: `https://cloud.${config.domain}/`,
               },
             },
             // Cookies must be accessible across subdomains (dashboard, accounts, api)
@@ -565,24 +573,33 @@ function installOryKratos(
               domain: `.${config.domain}`,
               same_site: "Lax",
             },
+            // Session cookie must also use the parent domain so the dashboard
+            // (cloud.dev.loopzero.example) can send it on /sessions/whoami requests.
+            // Without this, the session cookie defaults to the exact request host,
+            // which breaks after OIDC redirect chains.
+            session: {
+              cookie: {
+                domain: `.${config.domain}`,
+                same_site: "Lax",
+              },
+              lifespan: "24h",
+            },
             // Allow return_to URLs from dashboard and API (consent handler).
             // MEET-2026-04-05-032: Kratos UI at accounts.{domain} (same-origin, no CORS).
             // Dashboard is a pure PKCE client — never renders Kratos flows.
             selfservice: {
-              default_browser_return_url: `https://dashboard.${config.domain}/`,
+              default_browser_return_url: `https://cloud.${config.domain}/`,
               allowed_return_urls: [
-                `https://dashboard.${config.domain}/`,
-                `https://api.${config.domain}/`,
-                `https://accounts.${config.domain}/`,
+                `https://cloud.${config.domain}/`,
               ],
               flows: {
-                login: { ui_url: `https://accounts.${config.domain}/login` },
-                registration: { ui_url: `https://accounts.${config.domain}/registration` },
-                verification: { ui_url: `https://accounts.${config.domain}/verification`, enabled: true },
-                recovery: { ui_url: `https://accounts.${config.domain}/recovery`, enabled: true },
-                settings: { ui_url: `https://accounts.${config.domain}/settings` },
-                error: { ui_url: `https://accounts.${config.domain}/error` },
-                logout: { after: { default_browser_return_url: `https://dashboard.${config.domain}/login` } },
+                login: { ui_url: `https://cloud.${config.domain}/login` },
+                registration: { ui_url: `https://cloud.${config.domain}/register` },
+                verification: { ui_url: `https://cloud.${config.domain}/verification`, enabled: true, use: 'code' },
+                recovery: { ui_url: `https://cloud.${config.domain}/recovery`, enabled: true },
+                settings: { ui_url: `https://cloud.${config.domain}/settings` },
+                error: { ui_url: `https://cloud.${config.domain}/error` },
+                logout: { after: { default_browser_return_url: `https://cloud.${config.domain}/login` } },
               },
               // Social login providers — only included when secrets are configured.
               ...(config.githubOAuthClientId || config.googleOAuthClientId
@@ -591,7 +608,7 @@ function installOryKratos(
                       oidc: {
                         enabled: true,
                         config: {
-                          base_redirect_uri: `https://accounts.${config.domain}/`,
+                          base_redirect_uri: `https://cloud.${config.domain}/`,
                           providers: [
                             ...(config.githubOAuthClientId
                               ? [
@@ -754,6 +771,10 @@ function installOryHydra(
                   login: `https://api.${authDomain}/auth/login`,
                   consent: `https://api.${authDomain}/auth/consent`,
                   logout: `https://api.${authDomain}/auth/logout`,
+                  device: {
+                    verification: `https://cloud.${authDomain}/auth/device`,
+                    success: `https://cloud.${authDomain}/device-success`,
+                  },
                 },
                 serve: {
                   public: {
@@ -1159,12 +1180,20 @@ function installCloudService(
         // Dashboard URL — used for OAuth2 redirect_uri registration
         BILLING_RETURN_URL: `https://cloud.${config.domain || "dev.loopzero.example"}`,
         KRATOS_INTERNAL_URL: `http://ory-kratos-public.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
+        // Stripe price IDs (MEET-038 Phase 6)
+        STRIPE_PRICE_PRO: config.stripePriceProId || "",
+        STRIPE_PRICE_TEAM: config.stripePriceTeamId || "",
       },
     },
     { provider, dependsOn: [ns] },
   );
 
-  // Secret — Stripe API keys (empty in dev, set via pulumi config in prod)
+  // Database URL — same DB as engine API (cloud service does NOT run migrations)
+  const cloudDatabaseUrl = config.loopzeroApiDbPassword
+    ? pulumi.interpolate`postgres://loopzero_api:${config.loopzeroApiDbPassword}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`
+    : pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`;
+
+  // Secret — Stripe API keys + DATABASE_URL
   const secret = new k8s.core.v1.Secret(
     "loopzero-cloud-secrets",
     {
@@ -1172,6 +1201,8 @@ function installCloudService(
       stringData: {
         STRIPE_API_KEY: config.stripeApiKey || "",
         STRIPE_WEBHOOK_SECRET: config.stripeWebhookSecret || "",
+        DATABASE_URL: cloudDatabaseUrl,
+        SESSION_TOKEN_SECRET: config.sessionTokenSecret || "",
       },
     },
     { provider, dependsOn: [ns] },
@@ -1310,6 +1341,8 @@ function installLoopZeroAPI(
         // Spaces credentials (S3-compatible) — used by S3 uploader for source bundles
         MINIO_ACCESS_KEY: config.spacesAccessKeyId,
         MINIO_SECRET_KEY: config.spacesSecretAccessKey,
+        // Session token HMAC secret — same key as cloud service for JWT validation
+        SESSION_TOKEN_SECRET: config.sessionTokenSecret || "",
       },
     },
     { provider, dependsOn: [ns] },
@@ -1470,6 +1503,9 @@ function installLoopZeroAPI(
         GITEA_URL: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
         ARGOCD_URL: `http://argocd-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
         ARGOCD_INSECURE: "true",
+        // JWT validation for dashboard session tokens + CLI Hydra JWTs
+        JWKS_URL: `https://auth.${config.domain}/.well-known/jwks.json`,
+        JWT_ISSUER: `https://auth.${config.domain}/`,
         ARGO_NAMESPACE: "argo",
         MGMT_KUBECONFIG: "/etc/loopzero/mgmt-kubeconfig",
         // Mgmt uses the DOKS admin kubeconfig (API runs on mgmt cluster).
@@ -2113,8 +2149,7 @@ const PLATFORM_INGRESS_ROUTES = [
   // OAuth2 authorization server — browser-accessible for PKCE/consent flows.
   { subdomain: "auth", serviceName: "ory-hydra-public", servicePort: 4444 },
   // Identity management — Kratos Self-Service UI (login/signup/recovery).
-  // MEET-2026-04-05-032: kratos-ui renders forms; ory-kratos-public is the API (same origin).
-  { subdomain: "accounts", serviceName: "kratos-ui", servicePort: 3000 },
+  // Kratos flows are served at cloud.{domain}/self-service/* via cloud-gateway IngressRoute.
 ] as const;
 
 /**
@@ -2385,6 +2420,9 @@ function createPlatformNetworkPolicies(
     },
     { provider, dependsOn: [ns] },
   );
+
+  // MEET-2026-04-06-036: SMTP NetworkPolicy removed — DO blocks all SMTP ports.
+  // Email delivery uses Resend HTTP API (port 443, already allowed).
 }
 
 // ---------------------------------------------------------------------------

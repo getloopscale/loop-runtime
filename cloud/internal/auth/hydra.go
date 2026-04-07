@@ -284,6 +284,42 @@ func (c *HydraClient) AcceptConsent(challenge string, grantScope []string, token
 	return result.RedirectTo, nil
 }
 
+// AcceptDeviceChallenge accepts a device authorization challenge (user confirmed the code).
+func (c *HydraClient) AcceptDeviceChallenge(challenge, userCode string) (string, error) {
+	reqURL := fmt.Sprintf("%s/admin/oauth2/auth/requests/device/accept?device_challenge=%s", c.adminURL, challenge)
+	payload := map[string]interface{}{
+		"user_code": userCode,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal accept device payload: %w", err)
+	}
+	req, err := http.NewRequest("PUT", reqURL, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create accept device request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("accept device challenge failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("accept device challenge failed (status %d): %s", resp.StatusCode, respBody)
+	}
+
+	var result struct {
+		RedirectTo string `json:"redirect_to"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode accept device response: %w", err)
+	}
+	return result.RedirectTo, nil
+}
+
 // RegisterClient registers or updates the CLI OAuth2 client in Hydra (idempotent).
 // redirectURIs should include both localhost (dev) and production dashboard callback URLs.
 func (c *HydraClient) RegisterClient(redirectURIs []string) error {

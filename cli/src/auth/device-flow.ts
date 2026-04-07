@@ -8,6 +8,7 @@ export interface DeviceAuthResponse {
   device_code: string;
   user_code: string;
   verification_uri: string;
+  verification_uri_complete?: string;
   expires_in: number;
   interval: number;
 }
@@ -53,21 +54,16 @@ export async function executeDeviceCodeFlow(deps: DeviceFlowDeps): Promise<Token
     return null;
   }
 
-  // Step 2: Display instructions
+  // Step 2: Display instructions (Vercel/Railway CLI style)
+  const browserURL = authResp.verification_uri_complete || authResp.verification_uri;
   deps.writeTo('');
-  deps.writeTo(`  Open this URL in your browser:`);
-  deps.writeTo(`  ${authResp.verification_uri}`);
+  deps.writeTo(`  Visit ${browserURL}`);
+  deps.writeTo(`  Code: ${authResp.user_code}`);
   deps.writeTo('');
-  deps.writeTo(`  Enter this code: ${authResp.user_code}`);
-  deps.writeTo('');
-  deps.writeTo('  Waiting for authorization...');
 
-  // Step 3: Try to open browser
-  try {
-    await deps.openBrowser(authResp.verification_uri);
-  } catch {
-    // Browser open failed — user will open manually (already shown URL)
-  }
+  // Step 3: Open browser automatically
+  await deps.openBrowser(browserURL);
+  deps.writeTo('  Waiting for authentication...');
 
   // Step 4: Poll for token
   const interval = Math.max((authResp.interval || 5) * 1000, 5000);

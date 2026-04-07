@@ -7,6 +7,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,10 +18,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+	_ "github.com/lib/pq"
+
+	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
+	"github.com/loopzero/loopzero/cloud/internal/billing"
 	"github.com/loopzero/loopzero/cloud/internal/config"
 	"github.com/loopzero/loopzero/cloud/internal/consent"
+	"github.com/loopzero/loopzero/cloud/internal/metering"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
 )
 
@@ -31,6 +38,32 @@ func main() {
 	if err := cfg.Validate(); err != nil {
 		logger.Error("invalid configuration", "error", err)
 		os.Exit(1)
+	}
+
+	// Initialize database connection (optional in dev, required in prod).
+	// The cloud service shares the database with the engine API.
+	// It does NOT run migrations — the API owns all schema changes.
+	var db *sql.DB
+	if cfg.DatabaseURL != "" {
+		var err error
+		db, err = sql.Open("postgres", cfg.DatabaseURL)
+		if err != nil {
+			logger.Error("failed to open database", "error", err)
+			os.Exit(1)
+		}
+		db.SetMaxOpenConns(10)
+		db.SetMaxIdleConns(5)
+		db.SetConnMaxLifetime(5 * time.Minute)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := db.PingContext(ctx); err != nil {
+			logger.Warn("database not reachable at startup (will retry on requests)", "error", err)
+		} else {
+			logger.Info("database connected")
+		}
+	} else {
+		logger.Warn("DATABASE_URL not set — billing, enforcement, and metering disabled")
 	}
 
 	// Initialize Hydra client
@@ -55,14 +88,42 @@ func main() {
 		logger.Warn("failed to register OAuth2 client (Hydra may not be ready yet)", "error", err)
 	}
 
-	// Initialize JWKS validator
+	// JWT validation — single source of truth (pkg/jwt)
 	jwksURL := cfg.HydraPublicURL + "/.well-known/jwks.json"
-	jwtValidator := auth.NewJWKSValidator(jwksURL, cfg.JWTIssuer)
+	jwtValidator := loopzerojwt.NewValidator(jwksURL, cfg.JWTIssuer)
+
+	// Session token issuer/validator (HMAC JWTs for dashboard)
+	sessIssuer := loopzerojwt.NewSessionTokenIssuer(
+		cfg.SessionTokenSecret.Value(),
+		"loopzero-cloud",
+		15*time.Minute,
+	)
+	tenantProvisioner := auth.NewTenantProvisioner(db, logger)
+	sessionTokenHandler := routes.NewSessionTokenHandler(sessIssuer, tenantProvisioner, cfg.KratosInternalURL)
+
+	// Billing (optional — requires Stripe keys and DB)
+	var stripeClient *billing.StripeClient
+	var webhookHandler *billing.WebhookHandler
+	var billingHandler *routes.BillingHandler
+	var billingProvisioner *billing.Provisioner
+
+	if cfg.StripeAPIKey.Value() != "" {
+		stripeClient = billing.NewStripeClient(cfg.StripeAPIKey.Value())
+		webhookHandler = billing.NewWebhookHandler(db, cfg.StripeWebhookSecret.Value(), logger)
+		billingProvisioner = billing.NewProvisioner(db, stripeClient, logger)
+		billingHandler = routes.NewBillingHandler(db, stripeClient, webhookHandler, billingProvisioner, cfg.BillingReturnURL)
+		logger.Info("billing enabled")
+	} else {
+		logger.Warn("STRIPE_API_KEY not set — billing endpoints disabled")
+	}
+
+	// Universal JWT auth middleware (RSA + HMAC — one path for all)
+	requireJWT := auth.RequireJWT(jwtValidator, sessIssuer)
 
 	// Handlers
-	deviceHandler := routes.NewDeviceHandler(hydra)
-	meHandler := routes.NewMeHandler(jwtValidator)
-	consentHandler := consent.NewHandler(hydra, cfg.KratosPublicURL, cfg.KratosInternalURL, logger)
+	deviceHandler := routes.NewDeviceHandler(hydra, cfg.BillingReturnURL)
+	meHandler := routes.NewMeHandler()
+	consentHandler := consent.NewHandler(hydra, tenantProvisioner, cfg.KratosPublicURL, cfg.KratosInternalURL, logger)
 
 	// Router
 	r := chi.NewRouter()
@@ -70,24 +131,68 @@ func main() {
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 
-	// Health check
+	// Health check — reports DB connectivity for operational visibility
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok"}`))
+
+		dbStatus := "not_configured"
+		if db != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			if err := db.PingContext(ctx); err != nil {
+				dbStatus = "disconnected"
+			} else {
+				dbStatus = "connected"
+			}
+		}
+
+		status := "ok"
+		if db != nil && dbStatus != "connected" {
+			status = "degraded"
+		}
+
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": status,
+			"db":     dbStatus,
+		})
 	})
 
-	// Device Code Flow endpoints (no auth required — these ARE the auth flow)
+	// Auth endpoints (no auth — these ARE the auth flow)
 	r.Route("/v1/auth", func(r chi.Router) {
 		r.Post("/device/authorize", deviceHandler.Authorize)
 		r.Post("/device/token", deviceHandler.Token)
 		r.Post("/token/refresh", deviceHandler.Refresh)
-		r.Get("/me", meHandler.Get)
+		r.Post("/session/token", sessionTokenHandler.Exchange) // Dashboard: Kratos session → JWT
+
+		// /me requires JWT
+		r.With(requireJWT).Get("/me", meHandler.Get)
 	})
 
 	// Hydra consent/login callbacks (browser redirects)
 	r.Get("/auth/login", consentHandler.Login)
 	r.Get("/auth/login/complete", consentHandler.LoginComplete)
 	r.Get("/auth/consent", consentHandler.Consent)
+	r.Get("/auth/device", consentHandler.DeviceVerify)
+
+	// Billing endpoints (JWT required via middleware, except webhook)
+	if billingHandler != nil {
+		r.Route("/v1/billing", func(r chi.Router) {
+			r.Use(requireJWT)
+			r.Get("/", billingHandler.GetBilling)
+			r.Get("/portal", billingHandler.Portal)
+			r.Post("/checkout", billingHandler.Checkout)
+		})
+		// Webhook — NO JWT (Stripe signs with its own secret)
+		r.Post("/v1/webhooks/stripe", billingHandler.Webhook)
+	}
+
+	// Start metering scheduler (background goroutines)
+	schedulerCtx, schedulerCancel := context.WithCancel(context.Background())
+	if db != nil && stripeClient != nil {
+		reporter := metering.NewReporter(db, stripeClient, logger)
+		reconciler := metering.NewReconciler(db, logger)
+		go metering.StartScheduler(schedulerCtx, reporter, reconciler, logger)
+	}
 
 	// Start server
 	srv := &http.Server{
@@ -104,9 +209,13 @@ func main() {
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 		logger.Info("shutting down cloud service")
+		schedulerCancel() // Stop background metering jobs
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)
+		if db != nil {
+			db.Close()
+		}
 	}()
 
 	logger.Info("cloud auth service starting",

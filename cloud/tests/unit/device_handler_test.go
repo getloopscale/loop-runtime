@@ -78,7 +78,7 @@ func TestDeviceAuthorize(t *testing.T) {
 	defer srv.Close()
 
 	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
-	handler := routes.NewDeviceHandler(hydra)
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
 
 	req := httptest.NewRequest("POST", "/v1/auth/device/authorize", nil)
 	w := httptest.NewRecorder()
@@ -116,7 +116,7 @@ func TestDeviceTokenPending(t *testing.T) {
 	defer srv.Close()
 
 	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
-	handler := routes.NewDeviceHandler(hydra)
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
 
 	body := `{"device_code":"test-device-code"}`
 	req := httptest.NewRequest("POST", "/v1/auth/device/token", strings.NewReader(body))
@@ -141,7 +141,7 @@ func TestDeviceTokenSuccess(t *testing.T) {
 	defer srv.Close()
 
 	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
-	handler := routes.NewDeviceHandler(hydra)
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
 
 	body := `{"device_code":"test-device-code"}`
 	req := httptest.NewRequest("POST", "/v1/auth/device/token", strings.NewReader(body))
@@ -179,7 +179,7 @@ func TestDeviceTokenMissingBody(t *testing.T) {
 	defer srv.Close()
 
 	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
-	handler := routes.NewDeviceHandler(hydra)
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
 
 	req := httptest.NewRequest("POST", "/v1/auth/device/token", strings.NewReader("{}"))
 	w := httptest.NewRecorder()
@@ -196,7 +196,7 @@ func TestRefreshToken(t *testing.T) {
 	defer srv.Close()
 
 	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
-	handler := routes.NewDeviceHandler(hydra)
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
 
 	body := `{"refresh_token":"refresh-token-123"}`
 	req := httptest.NewRequest("POST", "/v1/auth/token/refresh", strings.NewReader(body))
@@ -221,7 +221,7 @@ func TestRefreshTokenMissingBody(t *testing.T) {
 	defer srv.Close()
 
 	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
-	handler := routes.NewDeviceHandler(hydra)
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
 
 	req := httptest.NewRequest("POST", "/v1/auth/token/refresh", strings.NewReader("{}"))
 	w := httptest.NewRecorder()
