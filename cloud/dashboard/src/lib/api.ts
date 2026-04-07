@@ -136,10 +136,11 @@ export async function cloudFetch<T>(path: string, options: RequestInit = {}): Pr
   return apiFetch<T>(API_BASE, path, token, options, true);
 }
 
+// Engine API calls are proxied through the cloud service.
+// The engine only accepts RSA tokens with aud=loopzero-engine, which the dashboard
+// doesn't have. The cloud service proxies /engine/* to the engine API.
 export async function engineFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
-  const token = await ensureToken();
-  if (!token) return null; // No redirect — engine API failure is not a session issue
-  return apiFetch<T>(ENGINE_API, path, token, options, false);
+  return cloudFetch<T>(`/engine${path}`, options);
 }
 
 async function apiFetch<T>(base: string, path: string, token: string, options: RequestInit = {}, redirectOnAuthFailure = true): Promise<T | null> {

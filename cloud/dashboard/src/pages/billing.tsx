@@ -22,11 +22,13 @@ interface BillingResponse {
   period_end?: string;
 }
 
-// §3.4: Post-checkout activation polling
+// §3.4: Post-checkout activation polling.
+// Returns updated billing data when activation succeeds, so the page renders fresh state.
 function useCheckoutActivation() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activating, setActivating] = useState(false);
   const [activationResult, setActivationResult] = useState<'success' | 'timeout' | null>(null);
+  const [activatedBilling, setActivatedBilling] = useState<BillingResponse | null>(null);
 
   useEffect(() => {
     if (searchParams.get('success') !== 'true') return;
@@ -34,17 +36,17 @@ function useCheckoutActivation() {
     setActivating(true);
     let attempts = 0;
     const maxAttempts = 15; // 30 seconds at 2s intervals
-    const initialPlan = 'Starter'; // We poll until plan changes
+    const initialPlan = 'Starter';
 
     const poll = setInterval(async () => {
       attempts++;
       try {
-        const billing = await cloudFetch<BillingResponse>('/v1/billing');
-        if (billing && billing.plan !== initialPlan) {
+        const result = await cloudFetch<BillingResponse>('/v1/billing');
+        if (result && result.plan !== initialPlan) {
           clearInterval(poll);
           setActivating(false);
+          setActivatedBilling(result); // Update local state with fresh billing
           setActivationResult('success');
-          // Clean URL
           setSearchParams({}, { replace: true });
         }
       } catch { /* continue polling */ }
@@ -60,13 +62,16 @@ function useCheckoutActivation() {
     return () => clearInterval(poll);
   }, [searchParams, setSearchParams]);
 
-  return { activating, activationResult, setActivationResult };
+  return { activating, activationResult, setActivationResult, activatedBilling };
 }
 
 export function BillingPage() {
   useRequireAuth();
-  const { data: billing, loading } = useCloudApi<BillingResponse>('/v1/billing');
-  const { activating, activationResult, setActivationResult } = useCheckoutActivation();
+  const { data: initialBilling, loading } = useCloudApi<BillingResponse>('/v1/billing');
+  const { activating, activationResult, setActivationResult, activatedBilling } = useCheckoutActivation();
+
+  // Use activated billing data if available (fresher than initial fetch)
+  const billing = activatedBilling ?? initialBilling;
 
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState('');

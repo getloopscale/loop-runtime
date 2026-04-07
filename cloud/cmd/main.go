@@ -9,10 +9,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -231,6 +233,59 @@ func main() {
 		// Webhook — NO JWT (Stripe signs with its own secret)
 		r.Post("/v1/webhooks/stripe", billingHandler.Webhook)
 	}
+
+	// Engine API proxy — dashboard calls engine through cloud service.
+	// The engine only accepts RSA tokens (aud=loopzero-engine). The cloud service
+	// proxies requests using the JWT from the dashboard session and the cloud's
+	// own trust with the engine (internal network).
+	engineURL := cfg.EngineAPIURL
+	r.Route("/engine", func(r chi.Router) {
+		r.Use(requireJWT) // Dashboard must be authenticated
+		r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
+			// Strip /engine prefix and forward to engine API
+			targetPath := strings.TrimPrefix(r.URL.Path, "/engine")
+			if targetPath == "" {
+				targetPath = "/"
+			}
+
+			proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, engineURL+targetPath, r.Body)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadGateway)
+				json.NewEncoder(w).Encode(map[string]string{"code": "PROXY_ERROR", "message": "Failed to reach engine API."})
+				return
+			}
+			// Forward query params and content type
+			proxyReq.URL.RawQuery = r.URL.RawQuery
+			proxyReq.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+
+			// Forward user context as headers (engine trusts cloud on internal network)
+			user := auth.GetUser(r.Context())
+			if user != nil {
+				proxyReq.Header.Set("X-LoopZero-User-ID", user.Subject)
+				proxyReq.Header.Set("X-LoopZero-Tenant", user.TenantID)
+				proxyReq.Header.Set("X-LoopZero-Email", user.Email)
+			}
+
+			resp, err := http.DefaultClient.Do(proxyReq)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadGateway)
+				json.NewEncoder(w).Encode(map[string]string{"code": "ENGINE_UNAVAILABLE", "message": "Engine API is unavailable."})
+				return
+			}
+			defer resp.Body.Close()
+
+			// Copy response headers and body
+			for k, v := range resp.Header {
+				for _, vv := range v {
+					w.Header().Add(k, vv)
+				}
+			}
+			w.WriteHeader(resp.StatusCode)
+			io.Copy(w, resp.Body)
+		})
+	})
 
 	// Start metering scheduler (background goroutines)
 	schedulerCtx, schedulerCancel := context.WithCancel(context.Background())

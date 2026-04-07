@@ -18,6 +18,16 @@ UPDATE tenants SET slug = display_name WHERE slug IS NULL AND display_name != ''
 -- For any tenants without display_name, derive slug from ID (strip tn- prefix)
 UPDATE tenants SET slug = REPLACE(id, 'tn-', '') WHERE slug IS NULL OR slug = '';
 
--- Make slug NOT NULL and UNIQUE after population
+-- De-duplicate slugs: append tenant ID suffix to resolve collisions.
+-- display_name was never unique, so duplicates are valid existing data.
+-- We must resolve them before creating the UNIQUE index.
+UPDATE tenants t
+SET slug = t.slug || '-' || SUBSTRING(t.id FROM 4 FOR 8)
+WHERE EXISTS (
+    SELECT 1 FROM tenants t2
+    WHERE t2.slug = t.slug AND t2.id < t.id
+);
+
+-- Make slug NOT NULL and UNIQUE after population and de-duplication
 ALTER TABLE tenants ALTER COLUMN slug SET NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_slug ON tenants (slug);
