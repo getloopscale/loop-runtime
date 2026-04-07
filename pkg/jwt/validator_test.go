@@ -9,7 +9,7 @@ import (
 )
 
 func TestSessionTokenIssuer_IssueAndValidate(t *testing.T) {
-	issuer := NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", 1*time.Hour)
+	issuer := NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
 
 	token, expiresIn, err := issuer.Issue("user-123", "test@test.com", "Test User", "tn-acme")
 	if err != nil {
@@ -41,8 +41,8 @@ func TestSessionTokenIssuer_IssueAndValidate(t *testing.T) {
 }
 
 func TestSessionTokenIssuer_WrongSecret(t *testing.T) {
-	issuerA := NewSessionTokenIssuer("secret-aaaaaaaaaaaaaaaaaaaaaaaaa", "loopzero-cloud", 1*time.Hour)
-	issuerB := NewSessionTokenIssuer("secret-bbbbbbbbbbbbbbbbbbbbbbbbb", "loopzero-cloud", 1*time.Hour)
+	issuerA := NewSessionTokenIssuer("secret-aaaaaaaaaaaaaaaaaaaaaaaaa", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
+	issuerB := NewSessionTokenIssuer("secret-bbbbbbbbbbbbbbbbbbbbbbbbb", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
 
 	token, _, _ := issuerA.Issue("user-1", "a@test.com", "A", "tn")
 
@@ -53,7 +53,7 @@ func TestSessionTokenIssuer_WrongSecret(t *testing.T) {
 }
 
 func TestSessionTokenIssuer_ExpiredToken(t *testing.T) {
-	issuer := NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", -1*time.Second)
+	issuer := NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", "loopzero-cloud", -1*time.Second)
 
 	token, _, err := issuer.Issue("user-1", "a@test.com", "A", "tn")
 	if err != nil {
@@ -67,8 +67,8 @@ func TestSessionTokenIssuer_ExpiredToken(t *testing.T) {
 }
 
 func TestSessionTokenIssuer_WrongIssuer(t *testing.T) {
-	issuerA := NewSessionTokenIssuer("same-secret-32-chars-minimum!!!!", "issuer-a", 1*time.Hour)
-	issuerB := NewSessionTokenIssuer("same-secret-32-chars-minimum!!!!", "issuer-b", 1*time.Hour)
+	issuerA := NewSessionTokenIssuer("same-secret-32-chars-minimum!!!!", "issuer-a", "loopzero-cloud", 1*time.Hour)
+	issuerB := NewSessionTokenIssuer("same-secret-32-chars-minimum!!!!", "issuer-b", "loopzero-cloud", 1*time.Hour)
 
 	token, _, _ := issuerA.Issue("user-1", "a@test.com", "A", "tn")
 
@@ -79,7 +79,7 @@ func TestSessionTokenIssuer_WrongIssuer(t *testing.T) {
 }
 
 func TestSessionTokenIssuer_ValidatesAudience(t *testing.T) {
-	issuer := NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", 1*time.Hour)
+	issuer := NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
 
 	token, _, _ := issuer.Issue("user-1", "a@test.com", "A", "tn")
 
@@ -88,8 +88,35 @@ func TestSessionTokenIssuer_ValidatesAudience(t *testing.T) {
 		t.Fatalf("ValidateSession failed: %v", err)
 	}
 
-	// Verify audience is set
 	if len(claims.Audience) == 0 || claims.Audience[0] != "loopzero-cloud" {
 		t.Errorf("Audience = %v, want [loopzero-cloud]", claims.Audience)
+	}
+}
+
+// B3 test: cross-audience token MUST be rejected.
+// MEET-2026-04-07-039: token issued for "loopzero-cloud" must not be accepted by "loopzero-engine".
+func TestSessionTokenIssuer_CrossAudienceRejected(t *testing.T) {
+	cloudIssuer := NewSessionTokenIssuer("shared-secret-32-chars-minimum!!", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
+	engineValidator := NewSessionTokenIssuer("shared-secret-32-chars-minimum!!", "loopzero-cloud", "loopzero-engine", 1*time.Hour)
+
+	token, _, _ := cloudIssuer.Issue("user-1", "a@test.com", "A", "tn-acme")
+
+	_, err := engineValidator.ValidateSession(token)
+	if err == nil {
+		t.Error("token with audience 'loopzero-cloud' MUST be rejected by validator expecting 'loopzero-engine'")
+	}
+}
+
+// B4 test: token with no audience must be rejected.
+func TestSessionTokenIssuer_NoAudienceRejected(t *testing.T) {
+	// Issue a token with empty audience
+	issuer := NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", "", 1*time.Hour)
+	token, _, _ := issuer.Issue("user-1", "a@test.com", "A", "tn")
+
+	// Validate with expected audience — must reject
+	validator := NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
+	_, err := validator.ValidateSession(token)
+	if err == nil {
+		t.Error("token with empty audience MUST be rejected by validator expecting 'loopzero-cloud'")
 	}
 }

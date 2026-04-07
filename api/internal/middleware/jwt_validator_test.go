@@ -21,7 +21,7 @@ func TestJWTOnlyValidator_NilValidators_ReturnsError(t *testing.T) {
 
 func TestJWTOnlyValidator_HMACValidToken(t *testing.T) {
 	secret := "test-secret-32-chars-minimum!!!!"
-	issuer := loopzerojwt.NewSessionTokenIssuer(secret, "loopzero-cloud", 1*time.Hour)
+	issuer := loopzerojwt.NewSessionTokenIssuer(secret, "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
 	v := NewJWTOnlyValidator(nil, issuer)
 
 	// Issue a valid token
@@ -43,7 +43,7 @@ func TestJWTOnlyValidator_HMACValidToken(t *testing.T) {
 }
 
 func TestJWTOnlyValidator_InvalidToken(t *testing.T) {
-	issuer := loopzerojwt.NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", 1*time.Hour)
+	issuer := loopzerojwt.NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
 	v := NewJWTOnlyValidator(nil, issuer)
 
 	_, err := v.ValidateToken(context.Background(), "not-a-jwt")
@@ -53,9 +53,8 @@ func TestJWTOnlyValidator_InvalidToken(t *testing.T) {
 }
 
 func TestJWTOnlyValidator_WrongSecret(t *testing.T) {
-	// Issue with one secret, validate with another
-	issuerA := loopzerojwt.NewSessionTokenIssuer("secret-aaaaaaaaaaaaaaaaaaaaaaaaa", "loopzero-cloud", 1*time.Hour)
-	issuerB := loopzerojwt.NewSessionTokenIssuer("secret-bbbbbbbbbbbbbbbbbbbbbbbbb", "loopzero-cloud", 1*time.Hour)
+	issuerA := loopzerojwt.NewSessionTokenIssuer("secret-aaaaaaaaaaaaaaaaaaaaaaaaa", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
+	issuerB := loopzerojwt.NewSessionTokenIssuer("secret-bbbbbbbbbbbbbbbbbbbbbbbbb", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
 
 	token, _, _ := issuerA.Issue("user-1", "a@test.com", "A", "tn")
 	v := NewJWTOnlyValidator(nil, issuerB)
@@ -63,5 +62,20 @@ func TestJWTOnlyValidator_WrongSecret(t *testing.T) {
 	_, err := v.ValidateToken(context.Background(), token)
 	if err == nil {
 		t.Error("token signed with wrong secret should be rejected")
+	}
+}
+
+// B3: Engine with nil sessValidator rejects HMAC tokens entirely.
+func TestJWTOnlyValidator_RSAOnly_RejectsHMAC(t *testing.T) {
+	// Engine configured with RSA-only (sessValidator = nil)
+	v := NewJWTOnlyValidator(nil, nil)
+
+	// Issue a valid HMAC token
+	issuer := loopzerojwt.NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
+	token, _, _ := issuer.Issue("user-1", "a@test.com", "A", "tn")
+
+	_, err := v.ValidateToken(context.Background(), token)
+	if err == nil {
+		t.Error("engine with no HMAC validator must reject HMAC tokens")
 	}
 }

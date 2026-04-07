@@ -2,6 +2,7 @@
 
 > Technical design document for LoopZero's authentication and billing system.
 > Last updated: 2026-04-07.
+> MEET-2026-04-07-039: Major security remediation applied (B1-B7).
 
 ---
 
@@ -9,12 +10,18 @@
 
 LoopZero uses a **JWT-only authentication model** across all services. There are no PAT tokens, no session cookies on API endpoints, and no mixed auth methods. Every API call carries a `Authorization: Bearer <jwt>` header.
 
-Two JWT types exist, both validated by the same shared library (`pkg/jwt`):
+Two JWT types exist, validated by the shared library (`pkg/jwt`) with **strict audience enforcement per service**:
 
 | JWT Type | Signer | Algorithm | Audience | TTL | Consumer |
 |----------|--------|-----------|----------|-----|----------|
-| **Hydra RSA JWT** | Ory Hydra | RS256 (JWKS) | Hydra client | 1h | CLI → cloud + engine API |
-| **Session HMAC JWT** | Cloud service | HS256 | `loopzero-cloud` | 15min | Dashboard → cloud + engine API |
+| **Hydra RSA JWT** | Ory Hydra | RS256 (JWKS) | `loopzero-cloud` or `loopzero-engine` | 1h | CLI → cloud or engine API (audience-specific) |
+| **Session HMAC JWT** | Cloud service | HS256 | `loopzero-cloud` | 15min | Dashboard → cloud service ONLY |
+
+**Security boundaries (MEET-2026-04-07-039):**
+- Engine API accepts **RSA tokens only** (audience `loopzero-engine`). No HMAC. No signing secrets on engine.
+- Cloud service accepts RSA (audience `loopzero-cloud`) and HMAC (audience `loopzero-cloud`).
+- Cross-audience tokens are **rejected** — a token for `loopzero-cloud` does not work on `loopzero-engine`.
+- Missing `tenant_id` in JWT → explicit 403 "Account setup required" (no "default" fallback).
 
 ---
 
@@ -172,34 +179,43 @@ pkg/jwt/
 - Handlers read `auth.GetUser(ctx)`
 
 **Engine API** (`api/internal/middleware/jwt_validator.go`):
-- `JWTOnlyValidator` tries RSA then HMAC
+- `JWTOnlyValidator` RSA-only (HMAC disabled, `sessValidator = nil`)
+- Audience: `loopzero-engine` (strictly enforced)
 - Implements `TokenValidator` interface
-- Used by existing `Auth` middleware
 
 ---
 
 ## 3. Tenant Provisioning
+
+**MEET-2026-04-07-039:** Tenant IDs are UUID-based (`tn-{hex16}`), not slug-derived.
+This eliminates the TOCTOU race condition that caused cross-tenant privilege escalation.
+The human-readable slug is stored separately for display purposes only.
 
 When a user authenticates for the first time, `EnsureTenant()` creates the full chain in one transaction:
 
 ```sql
 BEGIN;
 -- 1. User record (Kratos UUID → users table)
-INSERT INTO users (id, email, github_id, display_name, ...)
-  VALUES ($kratosID, $email, 0, $slug, ...)
+-- github_id is NULL for Kratos users (legacy column, nullable since migration 000016)
+INSERT INTO users (id, email, display_name, ...)
+  VALUES ($kratosID, $email, $slug, ...)
   ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
 
--- 2. Tenant (derived from email local part)
-INSERT INTO tenants (id, display_name, plan, owner_id, ...)
-  VALUES ('tn-{slug}', $slug, 'starter', $kratosID, ...)
-  ON CONFLICT (id) DO NOTHING;
+-- 2. Tenant (UUID-based ID, slug for display)
+INSERT INTO tenants (id, display_name, slug, plan, owner_id, ...)
+  VALUES ('tn-{uuid}', $slug, $slug, 'starter', $kratosID, ...);
+-- If slug collision: retry with slug-{shortID} suffix
 
--- 3. Membership
+-- 3. Membership (only if tenant was created by THIS transaction)
 INSERT INTO tenant_members (tenant_id, user_id, role, ...)
-  VALUES ('tn-{slug}', $kratosID, 'owner', ...)
-  ON CONFLICT DO NOTHING;
+  VALUES ('tn-{uuid}', $kratosID, 'owner', ...)
+  ON CONFLICT (tenant_id, user_id) DO NOTHING;
 COMMIT;
 ```
+
+**Auth decoupling (B5):** In the consent handler (CLI flow), `EnsureTenant()` is non-fatal.
+If provisioning fails, the JWT is issued without `tenant_id`. The auth middleware
+rejects API calls with "Account setup required" instead of falling back to a "default" tenant.
 
 **FK chain:** `tenant_members.user_id → users.id` — user must exist first.
 
@@ -353,14 +369,15 @@ Response:
 users
   id             TEXT PK        -- Kratos identity UUID or legacy github-* ID
   email          TEXT NOT NULL
-  github_id      BIGINT
+  github_id      BIGINT NULL    -- NULL for Kratos users (migration 000016)
   display_name   TEXT
   created_at     TIMESTAMPTZ
   updated_at     TIMESTAMPTZ
 
 tenants
-  id             TEXT PK        -- "tn-{slug}" derived from email
+  id             TEXT PK        -- "tn-{uuid}" collision-free (MEET-2026-04-07-039 B2)
   display_name   TEXT
+  slug           TEXT UNIQUE    -- Human-readable display name (migration 000017)
   plan           TEXT           -- starter/pro/team/enterprise
   owner_id       TEXT → users(id)
   cell_id        TEXT
@@ -444,7 +461,7 @@ Engine API at `api.dev.loopzero.example`:
 
 | Secret | Location | Rotation |
 |--------|----------|----------|
-| `SESSION_TOKEN_SECRET` | K8s Secret (`loopzero-cloud-secrets` + `loopzero-api-secrets`) | Manual restart |
+| `SESSION_TOKEN_SECRET` | K8s Secret (`loopzero-cloud-secrets` only) | Manual restart |
 | `STRIPE_API_KEY` | K8s Secret (`loopzero-cloud-secrets`) | Stripe dashboard |
 | `STRIPE_WEBHOOK_SECRET` | K8s Secret (`loopzero-cloud-secrets`) | Stripe dashboard |
 | `DATABASE_URL` | K8s Secret (both services) | Pulumi managed |

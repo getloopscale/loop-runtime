@@ -90,11 +90,13 @@ func main() {
 
 	// JWT validation — single source of truth (pkg/jwt)
 	jwksURL := cfg.HydraPublicURL + "/.well-known/jwks.json"
-	jwtValidator := loopzerojwt.NewValidator(jwksURL, cfg.JWTIssuer)
+	jwtValidator := loopzerojwt.NewValidator(jwksURL, cfg.JWTIssuer, "loopzero-cloud")
 
 	// Session token issuer/validator (HMAC JWTs for dashboard)
+	// MEET-2026-04-07-039: audience is explicit per service.
 	sessIssuer := loopzerojwt.NewSessionTokenIssuer(
 		cfg.SessionTokenSecret.Value(),
+		"loopzero-cloud",
 		"loopzero-cloud",
 		15*time.Minute,
 	)

@@ -46,6 +46,7 @@ type SessionClaims struct {
 type Validator struct {
 	jwksURL    string
 	issuer     string
+	audience   string
 	httpClient *http.Client
 
 	mu      sync.RWMutex
@@ -55,10 +56,13 @@ type Validator struct {
 }
 
 // NewValidator creates a JWT validator that fetches JWKS from the given URL.
-func NewValidator(jwksURL, issuer string) *Validator {
+// The audience parameter enforces strict audience validation on all tokens.
+// MEET-2026-04-07-039: B4 fix — audience is mandatory per service.
+func NewValidator(jwksURL, issuer, audience string) *Validator {
 	return &Validator{
-		jwksURL: jwksURL,
-		issuer:  issuer,
+		jwksURL:  jwksURL,
+		issuer:   issuer,
+		audience: audience,
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
@@ -90,7 +94,7 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 			}
 		}
 		return key, nil
-	}, goJWT.WithIssuer(v.issuer), goJWT.WithExpirationRequired())
+	}, goJWT.WithIssuer(v.issuer), goJWT.WithAudience(v.audience), goJWT.WithExpirationRequired())
 
 	if err != nil {
 		return nil, fmt.Errorf("token validation failed: %w", err)
@@ -113,11 +117,12 @@ type SessionTokenIssuer struct {
 }
 
 // NewSessionTokenIssuer creates an issuer/validator for HMAC session tokens.
-func NewSessionTokenIssuer(secret, issuer string, lifetime time.Duration) *SessionTokenIssuer {
+// MEET-2026-04-07-039: audience is now a parameter, not hardcoded.
+func NewSessionTokenIssuer(secret, issuer, audience string, lifetime time.Duration) *SessionTokenIssuer {
 	return &SessionTokenIssuer{
 		secret:   []byte(secret),
 		issuer:   issuer,
-		audience: "loopzero-cloud",
+		audience: audience,
 		lifetime: lifetime,
 	}
 }

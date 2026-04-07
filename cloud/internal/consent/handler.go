@@ -197,14 +197,24 @@ func (h *Handler) fetchIdentityClaims(subject string) map[string]interface{} {
 		claims["name"] = identity.Traits.Name
 	}
 
-	// Resolve tenant — injects tenant_id into Hydra JWT for CLI auth
+	// Resolve tenant — injects tenant_id into Hydra JWT for CLI auth.
+	// MEET-2026-04-07-039 B5: EnsureTenant is non-fatal in consent flow.
+	// If provisioning fails, JWT is issued WITHOUT tenant_id. The auth middleware
+	// (B7 fix) will reject API calls with "Account setup required" instead of
+	// silently falling back to a "default" tenant.
+	// This decouples authentication availability from DB availability.
 	if h.tenantProvisioner != nil && identity.Traits.Email != "" {
 		ctx := context.Background()
 		tenantID, _, err := h.tenantProvisioner.EnsureTenant(ctx, subject, identity.Traits.Email)
 		if err == nil && tenantID != "" {
 			claims["tenant_id"] = tenantID
 		} else if err != nil {
-			h.logger.Warn("failed to resolve tenant for JWT claims", "subject", subject, "error", err)
+			h.logger.Error("tenant provisioning failed during consent — JWT will lack tenant_id",
+				"subject", subject,
+				"email", identity.Traits.Email,
+				"error", err,
+			)
+			// Do NOT fail the consent flow. Auth succeeds; tenant resolution retries on next login.
 		}
 	}
 

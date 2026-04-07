@@ -19,11 +19,10 @@ import (
 // ErrInvalidToken is returned when token validation fails.
 var ErrInvalidToken = errors.New("invalid or expired token")
 
-// TokenValidationResult holds the result of validating a GitHub token.
+// TokenValidationResult holds the result of validating an auth token.
 type TokenValidationResult struct {
-	UserID   string
-	Email    string
-	GitHubID int64
+	UserID string
+	Email  string
 }
 
 // TokenValidator validates authentication tokens (DIP — abstracts GitHub API).
@@ -46,7 +45,6 @@ type MembershipStore interface {
 type UserContext struct {
 	UserID   string
 	Email    string
-	GitHubID int64
 	TenantID string
 	Role     string
 }
@@ -122,9 +120,8 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 			}
 
 			uc := &UserContext{
-				UserID:   result.UserID,
-				Email:    result.Email,
-				GitHubID: result.GitHubID,
+				UserID: result.UserID,
+				Email:  result.Email,
 			}
 
 			switch len(memberships) {

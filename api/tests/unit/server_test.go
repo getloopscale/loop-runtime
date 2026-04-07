@@ -46,9 +46,8 @@ func (f *fakeServerMembershipStore) GetMemberships(ctx context.Context, userID s
 func TestServerRouting(t *testing.T) {
 	validator := &fakeServerTokenValidator{
 		result: &middleware.TokenValidationResult{
-			UserID:   "github-lucas",
-			Email:    "lucas@acme.dev",
-			GitHubID: 12345,
+			UserID: "github-lucas",
+			Email:  "lucas@acme.dev",
 		},
 	}
 	memberStore := &fakeServerMembershipStore{

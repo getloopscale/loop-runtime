@@ -26,9 +26,8 @@ func (v *concurrentTokenValidator) ValidateToken(_ context.Context, token string
 	defer v.mu.Unlock()
 	v.calls++
 	return &TokenValidationResult{
-		UserID:   "user-" + token,
-		Email:    token + "@test.dev",
-		GitHubID: 1,
+		UserID: "user-" + token,
+		Email:  token + "@test.dev",
 	}, nil
 }
 

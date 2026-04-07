@@ -184,9 +184,8 @@ type fakeTokenValidator struct{}
 func (f *fakeTokenValidator) ValidateToken(ctx context.Context, token string) (*middleware.TokenValidationResult, error) {
 	if token == "valid-token" {
 		return &middleware.TokenValidationResult{
-			UserID:   "user-test",
-			Email:    "test@example.com",
-			GitHubID: 12345,
+			UserID: "user-test",
+			Email:  "test@example.com",
 		}, nil
 	}
 	return nil, middleware.ErrInvalidToken

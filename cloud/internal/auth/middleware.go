@@ -62,7 +62,11 @@ func RequireJWT(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.
 					}
 					tenantID := claims.TenantID
 					if tenantID == "" {
-						tenantID = "default"
+						// MEET-2026-04-07-039 B7: never fall back to "default" tenant.
+						// Missing tenant_id means provisioning failed or hasn't happened yet.
+						slog.Warn("auth: JWT has no tenant_id", "sub", claims.RegisteredClaims.Subject, "path", r.URL.Path)
+						writeAuthError(w, "Account setup required. Please try logging in again.")
+						return
 					}
 					ctx := context.WithValue(r.Context(), userCtxKey, &UserContext{
 						Subject:  claims.RegisteredClaims.Subject,
@@ -81,7 +85,10 @@ func RequireJWT(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.
 				if err == nil {
 					tenantID := claims.TenantID
 					if tenantID == "" {
-						tenantID = "default"
+						// MEET-2026-04-07-039 B7: never fall back to "default" tenant.
+						slog.Warn("auth: session JWT has no tenant_id", "sub", claims.RegisteredClaims.Subject, "path", r.URL.Path)
+						writeAuthError(w, "Account setup required. Please try logging in again.")
+						return
 					}
 					ctx := context.WithValue(r.Context(), userCtxKey, &UserContext{
 						Subject:  claims.RegisteredClaims.Subject,

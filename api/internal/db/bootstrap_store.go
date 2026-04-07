@@ -25,11 +25,11 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 
 	anyCreated := false
 
-	// 1. INSERT user (ON CONFLICT by github_id → DO NOTHING)
+	// 1. INSERT user (ON CONFLICT by id → DO NOTHING)
 	res, err := s.DB.Exec(ctx,
 		`INSERT INTO users (id, email, github_id, display_name)
 		 VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (github_id) DO NOTHING`,
+		 ON CONFLICT (id) DO NOTHING`,
 		userID,
 		fmt.Sprintf("%s@users.noreply.github.com", req.AdminLogin),
 		req.AdminGitHubID,
