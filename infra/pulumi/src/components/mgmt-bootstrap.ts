@@ -1203,6 +1203,8 @@ function installCloudService(
         STRIPE_WEBHOOK_SECRET: config.stripeWebhookSecret || "",
         DATABASE_URL: cloudDatabaseUrl,
         SESSION_TOKEN_SECRET: config.sessionTokenSecret || "",
+        // Cloud→Engine proxy auth (MEET-2026-04-07-039). Must match engine's value.
+        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || "dev-service-auth-secret-default",
       },
     },
     { provider, dependsOn: [ns] },
@@ -1341,8 +1343,9 @@ function installLoopZeroAPI(
         // Spaces credentials (S3-compatible) — used by S3 uploader for source bundles
         MINIO_ACCESS_KEY: config.spacesAccessKeyId,
         MINIO_SECRET_KEY: config.spacesSecretAccessKey,
-        // Session token HMAC secret — same key as cloud service for JWT validation
-        SESSION_TOKEN_SECRET: config.sessionTokenSecret || "",
+        // Cloud→Engine proxy auth (MEET-2026-04-07-039). Must match cloud's value.
+        // Engine is RSA-only — no SESSION_TOKEN_SECRET needed (HMAC dropped).
+        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || "dev-service-auth-secret-default",
       },
     },
     { provider, dependsOn: [ns] },
