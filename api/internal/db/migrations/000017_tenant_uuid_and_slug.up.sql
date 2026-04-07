@@ -18,15 +18,36 @@ UPDATE tenants SET slug = display_name WHERE slug IS NULL AND display_name != ''
 -- For any tenants without display_name, derive slug from ID (strip tn- prefix)
 UPDATE tenants SET slug = REPLACE(id, 'tn-', '') WHERE slug IS NULL OR slug = '';
 
--- De-duplicate slugs: append tenant ID suffix to resolve collisions.
--- display_name was never unique, so duplicates are valid existing data.
--- We must resolve them before creating the UNIQUE index.
-UPDATE tenants t
-SET slug = t.slug || '-' || SUBSTRING(t.id FROM 4 FOR 8)
-WHERE EXISTS (
-    SELECT 1 FROM tenants t2
-    WHERE t2.slug = t.slug AND t2.id < t.id
-);
+-- De-duplicate slugs: append incremental suffix until globally unique.
+-- Checks generated slug against ALL existing slugs, not just same-base duplicates.
+-- This handles the case where tenant A already has slug 'acme-deadbeef' and
+-- tenant B's de-dup would also produce 'acme-deadbeef'.
+DO $$
+DECLARE
+  rec RECORD;
+  candidate TEXT;
+  suffix INT;
+BEGIN
+  -- Find all duplicate slugs (keep the first occurrence, rename the rest)
+  FOR rec IN
+    SELECT t.id, t.slug
+    FROM tenants t
+    WHERE EXISTS (
+      SELECT 1 FROM tenants t2
+      WHERE t2.slug = t.slug AND t2.id < t.id
+    )
+    ORDER BY t.id
+  LOOP
+    suffix := 1;
+    candidate := rec.slug || '-' || SUBSTRING(rec.id FROM 4 FOR 8);
+    -- Check if candidate already exists anywhere in the table
+    WHILE EXISTS (SELECT 1 FROM tenants WHERE slug = candidate AND id != rec.id) LOOP
+      suffix := suffix + 1;
+      candidate := rec.slug || '-' || suffix;
+    END LOOP;
+    UPDATE tenants SET slug = candidate WHERE id = rec.id;
+  END LOOP;
+END $$;
 
 -- Make slug NOT NULL and UNIQUE after population and de-duplication
 ALTER TABLE tenants ALTER COLUMN slug SET NOT NULL;
