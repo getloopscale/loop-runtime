@@ -54,11 +54,12 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 		cellID = "cell-default"
 	}
 	res, err = s.DB.Exec(ctx,
-		`INSERT INTO tenants (id, display_name, owner_id, cell_id)
-		 VALUES ($1, $2, $3, $4)
+		`INSERT INTO tenants (id, display_name, slug, owner_id, cell_id)
+		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (id) DO NOTHING`,
 		tenantID,
 		displayName,
+		req.TenantSlug, // slug is NOT NULL since migration 000017
 		userID,
 		cellID,
 	)

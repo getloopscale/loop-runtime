@@ -112,7 +112,10 @@ func (c *StripeClient) CreateCheckoutSession(customerID, priceID, successURL, ca
 		"cancel_url":               {cancelURL},
 	}
 
-	idempotencyKey := fmt.Sprintf("checkout-%s-%s", tenantID, priceID)
+	// Scoped to a 1-hour window: prevents duplicate sessions from rapid double-clicks
+	// but allows retry after a canceled/expired session (new hour = new key).
+	hourBucket := time.Now().UTC().Truncate(time.Hour).Unix()
+	idempotencyKey := fmt.Sprintf("checkout-%s-%s-%d", tenantID, priceID, hourBucket)
 
 	var session CheckoutSession
 	if err := c.post("/checkout/sessions", data, &session, idempotencyKey); err != nil {

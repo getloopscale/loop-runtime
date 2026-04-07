@@ -7,10 +7,13 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
+
+	"github.com/lib/pq"
 )
 
 // TenantProvisioner automatically creates a tenant for new users on first signup.
@@ -214,7 +217,13 @@ func generateSubscriptionID() string {
 }
 
 // isUniqueViolation checks if a PostgreSQL error is a unique constraint violation.
+// Uses lib/pq typed error — string matching does NOT work because lib/pq does not
+// include the SQLSTATE code in the error message.
 func isUniqueViolation(err error) bool {
-	// PostgreSQL error code 23505 = unique_violation
-	return err != nil && strings.Contains(err.Error(), "23505")
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return pqErr.Code == "23505" // unique_violation
+	}
+	// Fallback for non-pq drivers (e.g., pgx): check message content
+	return err != nil && strings.Contains(err.Error(), "unique constraint")
 }
