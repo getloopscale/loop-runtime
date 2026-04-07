@@ -24,7 +24,8 @@ interface BillingResponse {
 
 // §3.4: Post-checkout activation polling.
 // Returns updated billing data when activation succeeds, so the page renders fresh state.
-function useCheckoutActivation() {
+// Compares against the actual pre-checkout plan (captured on first poll), not a hardcoded value.
+function useCheckoutActivation(currentPlan: string | undefined) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activating, setActivating] = useState(false);
   const [activationResult, setActivationResult] = useState<'success' | 'timeout' | null>(null);
@@ -36,16 +37,18 @@ function useCheckoutActivation() {
     setActivating(true);
     let attempts = 0;
     const maxAttempts = 15; // 30 seconds at 2s intervals
-    const initialPlan = 'Starter';
+    // Use the page's current plan as baseline (not hardcoded 'Starter').
+    // This handles Pro→Team upgrades and revisits correctly.
+    const baselinePlan = currentPlan || '';
 
     const poll = setInterval(async () => {
       attempts++;
       try {
         const result = await cloudFetch<BillingResponse>('/v1/billing');
-        if (result && result.plan !== initialPlan) {
+        if (result && result.plan !== baselinePlan) {
           clearInterval(poll);
           setActivating(false);
-          setActivatedBilling(result); // Update local state with fresh billing
+          setActivatedBilling(result);
           setActivationResult('success');
           setSearchParams({}, { replace: true });
         }
@@ -60,7 +63,7 @@ function useCheckoutActivation() {
     }, 2000);
 
     return () => clearInterval(poll);
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, currentPlan]);
 
   return { activating, activationResult, setActivationResult, activatedBilling };
 }
@@ -68,7 +71,7 @@ function useCheckoutActivation() {
 export function BillingPage() {
   useRequireAuth();
   const { data: initialBilling, loading } = useCloudApi<BillingResponse>('/v1/billing');
-  const { activating, activationResult, setActivationResult, activatedBilling } = useCheckoutActivation();
+  const { activating, activationResult, setActivationResult, activatedBilling } = useCheckoutActivation(initialBilling?.plan);
 
   // Use activated billing data if available (fresher than initial fetch)
   const billing = activatedBilling ?? initialBilling;

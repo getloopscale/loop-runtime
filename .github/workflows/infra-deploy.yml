@@ -955,8 +955,8 @@ jobs:
           ON CONFLICT (github_id) DO UPDATE SET id = EXCLUDED.id, email = EXCLUDED.email,
                   display_name = EXCLUDED.display_name, updated_at = NOW();
 
-          INSERT INTO tenants (id, display_name, plan, owner_id, created_at, updated_at)
-          VALUES ('tn-loopzero', 'loopzero', 'starter', '${GH_USER_ID}', NOW(), NOW())
+          INSERT INTO tenants (id, display_name, slug, owner_id, created_at, updated_at)
+          VALUES ('tn-loopzero', 'loopzero', 'loopzero', '${GH_USER_ID}', NOW(), NOW())
           ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id, updated_at = NOW();
 
           INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)

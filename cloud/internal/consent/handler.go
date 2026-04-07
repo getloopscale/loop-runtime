@@ -242,7 +242,8 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 	tokenClaims := h.fetchIdentityClaims(consentReq.Subject)
 
 	// Auto-approve — LoopZero CLI is a first-party trusted client.
-	redirectTo, err := h.hydra.AcceptConsent(challenge, consentReq.RequestedScope, tokenClaims)
+	// Forward requested audience so Hydra sets aud in the token.
+	redirectTo, err := h.hydra.AcceptConsent(challenge, consentReq.RequestedScope, consentReq.RequestedAccessTokenAud, tokenClaims)
 	if err != nil {
 		h.logger.Error("failed to accept consent", "error", err)
 		http.Error(w, "Authentication service error", http.StatusBadGateway)

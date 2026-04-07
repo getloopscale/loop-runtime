@@ -1081,8 +1081,8 @@ tasks:
         VALUES ('github-{{.GITHUB_USER}}', '{{.GITHUB_EMAIL}}', {{.GITHUB_ID}}, '{{.GITHUB_USER}}')
         ON CONFLICT (id) DO NOTHING;
 
-        INSERT INTO tenants (id, display_name, plan, owner_id)
-        VALUES ('{{.TENANT}}', '{{.TENANT}}', '{{.PLAN}}', 'github-{{.GITHUB_USER}}')
+        INSERT INTO tenants (id, display_name, slug, owner_id)
+        VALUES ('{{.TENANT}}', '{{.TENANT}}', '{{.TENANT}}', 'github-{{.GITHUB_USER}}')
         ON CONFLICT (id) DO NOTHING;
 
         INSERT INTO tenant_members (tenant_id, user_id, role)
