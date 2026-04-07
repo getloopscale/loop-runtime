@@ -5,6 +5,7 @@ package argo
 
 import (
 	"encoding/json"
+	"log/slog"
 	"sort"
 
 	forge "github.com/getloopscale/loopzero-forge"
@@ -78,12 +79,15 @@ func withSuffix(c *forge.Container, suffix string) *forge.Container {
 
 // appsJSON serializes apps to JSON for passing as a workflow parameter.
 // Uses json.Marshal for correct escaping of special characters.
+// CODE-009 fix: log error instead of swallowing silently.
 func appsJSON(apps []services.AppSpec) string {
 	if len(apps) == 0 {
 		return "[]"
 	}
 	data, err := json.Marshal(apps)
 	if err != nil {
+		slog.Error("failed to marshal apps to JSON — falling back to empty array",
+			"error", err, "app_count", len(apps))
 		return "[]"
 	}
 	return string(data)
