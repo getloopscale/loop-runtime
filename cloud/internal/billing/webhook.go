@@ -63,6 +63,8 @@ func (h *WebhookHandler) ProcessEvent(event StripeEvent) error {
 
 	var err error
 	switch event.Type {
+	case "checkout.session.completed":
+		err = h.handleCheckoutCompleted(event)
 	case "customer.subscription.updated":
 		err = h.handleSubscriptionUpdated(event)
 	case "customer.subscription.deleted":
@@ -87,6 +89,45 @@ func (h *WebhookHandler) ProcessEvent(event StripeEvent) error {
 	)
 
 	h.logger.Info("webhook event processed", "type", event.Type, "id", event.ID)
+	return nil
+}
+
+func (h *WebhookHandler) handleCheckoutCompleted(event StripeEvent) error {
+	var data StripeEventData
+	if err := json.Unmarshal(event.Data, &data); err != nil {
+		return fmt.Errorf("unmarshal checkout data: %w", err)
+	}
+
+	var session struct {
+		Customer     string `json:"customer"`
+		Subscription string `json:"subscription"`
+		Mode         string `json:"mode"`
+	}
+	if err := json.Unmarshal(data.Object, &session); err != nil {
+		return fmt.Errorf("unmarshal checkout session: %w", err)
+	}
+
+	if session.Mode != "subscription" || session.Subscription == "" {
+		return nil // Not a subscription checkout
+	}
+
+	// Link the Stripe subscription ID to our DB row and upgrade plan.
+	// The plan name is derived from the price — for now, any paid subscription = "pro".
+	// The subscription.updated webhook will set the precise plan later.
+	_, err := h.db.Exec(
+		`UPDATE subscriptions
+		 SET stripe_subscription_id = $1, plan = 'pro', status = 'active', updated_at = now()
+		 WHERE stripe_customer_id = $2`,
+		session.Subscription, session.Customer,
+	)
+	if err != nil {
+		return fmt.Errorf("link subscription: %w", err)
+	}
+
+	h.logger.Info("checkout completed — subscription linked",
+		"customer", session.Customer,
+		"subscription", session.Subscription,
+	)
 	return nil
 }
 
