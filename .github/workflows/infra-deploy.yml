@@ -944,17 +944,14 @@ jobs:
 
             # Build seed SQL with sanitized variables (quotes already stripped above).
             SEED_SQL=$(cat <<SEEDEOF
+          -- User record (ON CONFLICT by id — github_id UNIQUE was dropped in migration 000016)
           INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
           VALUES ('${GH_USER_ID}', '${GH_EMAIL}',
                   abs(hashtext('${GH_LOGIN}')), '${GH_LOGIN}', NOW(), NOW())
-          ON CONFLICT (id) DO UPDATE SET updated_at = NOW(), display_name = EXCLUDED.display_name;
-
-          INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
-          VALUES ('${GH_USER_ID}', '${GH_EMAIL}',
-                  abs(hashtext('${GH_LOGIN}')), '${GH_LOGIN}', NOW(), NOW())
-          ON CONFLICT (github_id) DO UPDATE SET id = EXCLUDED.id, email = EXCLUDED.email,
+          ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email,
                   display_name = EXCLUDED.display_name, updated_at = NOW();
 
+          -- Tenant (slug required since migration 000017, plan removed since migration 000018)
           INSERT INTO tenants (id, display_name, slug, owner_id, created_at, updated_at)
           VALUES ('tn-loopzero', 'loopzero', 'loopzero', '${GH_USER_ID}', NOW(), NOW())
           ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id, updated_at = NOW();
@@ -963,6 +960,12 @@ jobs:
           VALUES ('tn-loopzero', '${GH_USER_ID}', 'owner', NOW(), NOW())
           ON CONFLICT DO NOTHING;
 
+          -- Subscription (source of truth for plan since migration 000018)
+          INSERT INTO subscriptions (id, tenant_id, plan, status, created_at, updated_at)
+          VALUES ('sub_bootstrap_tn-loopzero', 'tn-loopzero', 'starter', 'active', NOW(), NOW())
+          ON CONFLICT (tenant_id) DO NOTHING;
+
+          -- Paulo (legacy GitHub user with real github_id)
           INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
           VALUES ('github-paulohenriquevn', 'paulohenriquevn@gmail.com',
                   6766298, 'paulohenriquevn', NOW(), NOW())
