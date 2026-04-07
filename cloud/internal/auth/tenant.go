@@ -48,16 +48,38 @@ func (p *TenantProvisioner) EnsureTenant(ctx context.Context, userID, email stri
 	}
 
 	// No tenant — create one.
-	// Tenant ID is UUID-based: no collision possible, no TOCTOU race.
-	// Slug is derived from email for human-readable display only.
 	slug := DeriveTenantSlug(email)
-	tenantID = generateTenantID()
 
 	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
+
+	// Serialize concurrent tenant creation for the same user using an advisory lock.
+	// pg_advisory_xact_lock(hashtext(userID)) ensures only one transaction at a time
+	// can proceed past this point for a given user. Released automatically on commit/rollback.
+	_, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", userID)
+	if err != nil {
+		return "", "", fmt.Errorf("advisory lock: %w", err)
+	}
+
+	// Re-check membership inside the lock. If a concurrent request already created
+	// a tenant while we were waiting for the lock, return it instead of creating a duplicate.
+	err = tx.QueryRowContext(ctx,
+		"SELECT t.id, tm.role FROM tenants t JOIN tenant_members tm ON t.id = tm.tenant_id WHERE tm.user_id = $1 LIMIT 1",
+		userID,
+	).Scan(&tenantID, &role)
+	if err == nil {
+		return tenantID, role, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", "", fmt.Errorf("re-check tenant membership: %w", err)
+	}
+
+	// Tenant ID is UUID-based: no collision possible, no TOCTOU race.
+	// Slug is derived from email for human-readable display only.
+	tenantID = generateTenantID()
 
 	// 1. Ensure user record exists (Kratos UUID → users table).
 	// Without this, tenant_members FK on user_id fails.

@@ -52,17 +52,18 @@ func (h *WebhookHandler) ProcessEvent(event StripeEvent) error {
 		return nil
 	}
 
-	// Idempotency: check if event already processed
-	var processed bool
+	// Idempotency: check if event already SUCCESSFULLY processed.
+	// Failed events (status='failed') must be retryable when Stripe sends them again.
+	var processedSuccessfully bool
 	if err := h.db.QueryRow(
-		"SELECT EXISTS(SELECT 1 FROM webhook_events WHERE event_id = $1)",
+		"SELECT EXISTS(SELECT 1 FROM webhook_events WHERE event_id = $1 AND status = 'processed')",
 		event.ID,
-	).Scan(&processed); err != nil {
+	).Scan(&processedSuccessfully); err != nil {
 		h.logger.Error("webhook idempotency check failed", "event_id", event.ID, "error", err)
 		return fmt.Errorf("idempotency check: %w", err)
 	}
-	if processed {
-		h.logger.Debug("webhook event already processed", "id", event.ID)
+	if processedSuccessfully {
+		h.logger.Debug("webhook event already processed successfully", "id", event.ID)
 		return nil
 	}
 

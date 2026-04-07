@@ -134,12 +134,18 @@ func main() {
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 
-	// §3.2: CORS — explicit origin validation for dashboard
-	dashboardOrigin := cfg.BillingReturnURL // Same base URL as dashboard
+	// §3.2: CORS — explicit origin validation for dashboard.
+	// Accepts BillingReturnURL and DASHBOARD_CORS_ORIGIN (if dashboard runs on a different domain).
+	allowedOrigins := map[string]bool{
+		cfg.BillingReturnURL: true,
+	}
+	if extra := os.Getenv("DASHBOARD_CORS_ORIGIN"); extra != "" {
+		allowedOrigins[extra] = true
+	}
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			if origin == dashboardOrigin {
+			if allowedOrigins[origin] {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
