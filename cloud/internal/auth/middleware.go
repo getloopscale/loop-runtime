@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -41,6 +42,7 @@ func RequireJWT(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if !strings.HasPrefix(authHeader, "Bearer ") {
+				slog.Warn("auth: missing Bearer token", "path", r.URL.Path)
 				writeAuthError(w, "Not authenticated. Run: loopzero login")
 				return
 			}
@@ -92,6 +94,7 @@ func RequireJWT(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.
 				}
 			}
 
+			slog.Warn("auth: all JWT validators failed", "path", r.URL.Path, "token_len", len(token))
 			writeAuthError(w, "Invalid or expired token. Run: loopzero login")
 		})
 	}
