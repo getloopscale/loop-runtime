@@ -180,6 +180,7 @@ func main() {
 			r.Use(requireJWT)
 			r.Get("/", billingHandler.GetBilling)
 			r.Get("/portal", billingHandler.Portal)
+			r.Post("/checkout", billingHandler.Checkout)
 		})
 		// Webhook — NO JWT (Stripe signs with its own secret)
 		r.Post("/v1/webhooks/stripe", billingHandler.Webhook)

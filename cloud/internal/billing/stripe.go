@@ -95,6 +95,29 @@ func (c *StripeClient) CreateSubscription(customerID, priceID, tenantID string) 
 	return &sub, nil
 }
 
+// CheckoutSession represents a Stripe Checkout session.
+type CheckoutSession struct {
+	URL string `json:"url"`
+}
+
+// CreateCheckoutSession creates a Stripe Checkout session for upgrading to a paid plan.
+func (c *StripeClient) CreateCheckoutSession(customerID, priceID, successURL, cancelURL string) (*CheckoutSession, error) {
+	data := url.Values{
+		"customer":                 {customerID},
+		"mode":                     {"subscription"},
+		"line_items[0][price]":     {priceID},
+		"line_items[0][quantity]":  {"1"},
+		"success_url":              {successURL},
+		"cancel_url":               {cancelURL},
+	}
+
+	var session CheckoutSession
+	if err := c.post("/checkout/sessions", data, &session, ""); err != nil {
+		return nil, fmt.Errorf("create checkout session: %w", err)
+	}
+	return &session, nil
+}
+
 // CreatePortalSession creates a Customer Portal session URL.
 func (c *StripeClient) CreatePortalSession(customerID, returnURL string) (*PortalSession, error) {
 	data := url.Values{

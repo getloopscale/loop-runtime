@@ -29,6 +29,14 @@ export function BillingPage() {
     if (portal?.url) window.open(portal.url, '_blank');
   };
 
+  const upgradePlan = async (plan: string) => {
+    const result = await cloudFetch<{ url: string }>('/v1/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ plan }),
+    });
+    if (result?.url) window.location.href = result.url;
+  };
+
   const usage = billing ? Object.entries(billing.usage).map(([metric, data]) => ({
     metric: metric.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
     used: data.used,
@@ -73,11 +81,11 @@ export function BillingPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Card className="h-full border-accent/10 hover:border-accent/20 cursor-pointer group">
+          <Card className="h-full border-accent/10 hover:border-accent/20 cursor-pointer group" onClick={() => upgradePlan('pro')}>
             <CardContent className="p-6 flex flex-col justify-center h-full">
               <Sparkles className="h-5 w-5 text-accent/60 mb-3 group-hover:text-accent transition-colors" />
-              <p className="text-sm font-semibold text-white/70 group-hover:text-white transition-colors">Upgrade to Team</p>
-              <p className="text-xs text-white/30 mt-1">Preview environments, more seats, priority builds</p>
+              <p className="text-sm font-semibold text-white/70 group-hover:text-white transition-colors">Upgrade to Pro — $19/mo</p>
+              <p className="text-xs text-white/30 mt-1">10 projects, 3 environments, 1000 builds/month</p>
             </CardContent>
           </Card>
         </motion.div>

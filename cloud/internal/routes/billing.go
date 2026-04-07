@@ -132,6 +132,56 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Checkout creates a Stripe Checkout session for upgrading to a paid plan.
+// POST /v1/billing/checkout  body: {"plan": "pro" | "team"}
+func (h *BillingHandler) Checkout(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "Not authenticated. Run: loopzero login")
+		return
+	}
+
+	var body struct {
+		Plan string `json:"plan"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Plan == "" {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Missing plan. Specify: pro or team")
+		return
+	}
+
+	priceID := billing.LoadPlanConfig().PriceIDForPlan(body.Plan)
+	if priceID == "" {
+		writeError(w, http.StatusBadRequest, "INVALID_PLAN", "Invalid plan. Available: pro, team")
+		return
+	}
+
+	if h.provisioner == nil || h.stripe == nil {
+		writeError(w, http.StatusServiceUnavailable, "BILLING_UNAVAILABLE", "Billing is not configured.")
+		return
+	}
+
+	customerID, err := h.provisioner.EnsureStripeCustomer(r.Context(), user.TenantID, user.Email, user.Name)
+	if err != nil || customerID == "" {
+		writeError(w, http.StatusInternalServerError, "BILLING_ERROR", "Failed to set up billing. Try again.")
+		return
+	}
+
+	session, err := h.stripe.CreateCheckoutSession(
+		customerID,
+		priceID,
+		h.returnURL+"/billing?success=true",
+		h.returnURL+"/billing?canceled=true",
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "CHECKOUT_ERROR", "Failed to create checkout. Try again.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"url": session.URL,
+	})
+}
+
 // Webhook handles incoming Stripe webhook events.
 // POST /v1/webhooks/stripe — NO auth middleware (Stripe signs with its own secret).
 func (h *BillingHandler) Webhook(w http.ResponseWriter, r *http.Request) {
