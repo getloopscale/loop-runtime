@@ -64,7 +64,7 @@ func (p *Provisioner) EnsureStripeCustomer(ctx context.Context, tenantID, email,
 	}
 
 	// Check if customer already exists
-	var customerID string
+	var customerID sql.NullString
 	err := p.db.QueryRowContext(ctx,
 		"SELECT stripe_customer_id FROM subscriptions WHERE tenant_id = $1",
 		tenantID,
@@ -72,8 +72,8 @@ func (p *Provisioner) EnsureStripeCustomer(ctx context.Context, tenantID, email,
 	if err != nil && err != sql.ErrNoRows {
 		return "", err
 	}
-	if customerID != "" {
-		return customerID, nil // Already has a Stripe customer
+	if customerID.Valid && customerID.String != "" {
+		return customerID.String, nil // Already has a Stripe customer
 	}
 
 	// Create Stripe customer (idempotent via Idempotency-Key in StripeClient)
