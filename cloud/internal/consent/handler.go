@@ -9,6 +9,7 @@
 package consent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -22,22 +23,24 @@ import (
 
 // Handler manages Hydra's login and consent callbacks.
 type Handler struct {
-	hydra            *auth.HydraClient
-	kratosPublicURL  string // Browser-facing URL (for redirects)
+	hydra             *auth.HydraClient
+	tenantProvisioner *auth.TenantProvisioner
+	kratosPublicURL   string // Browser-facing URL (for redirects)
 	kratosInternalURL string // Cluster-internal URL (for server-to-server calls)
-	kratosClient     *http.Client
-	logger           *slog.Logger
+	kratosClient      *http.Client
+	logger            *slog.Logger
 }
 
 // NewHandler creates a consent handler.
 // kratosPublicURL is used for browser redirects, kratosInternalURL for server-to-server (whoami).
-func NewHandler(hydra *auth.HydraClient, kratosPublicURL, kratosInternalURL string, logger *slog.Logger) *Handler {
+func NewHandler(hydra *auth.HydraClient, tenantProv *auth.TenantProvisioner, kratosPublicURL, kratosInternalURL string, logger *slog.Logger) *Handler {
 	if kratosInternalURL == "" {
 		kratosInternalURL = kratosPublicURL
 	}
 	return &Handler{
-		hydra:            hydra,
-		kratosPublicURL:  kratosPublicURL,
+		hydra:             hydra,
+		tenantProvisioner: tenantProv,
+		kratosPublicURL:   kratosPublicURL,
 		kratosInternalURL: kratosInternalURL,
 		kratosClient:     &http.Client{Timeout: 5 * time.Second},
 		logger:           logger,
@@ -193,6 +196,18 @@ func (h *Handler) fetchIdentityClaims(subject string) map[string]interface{} {
 	if identity.Traits.Name != "" {
 		claims["name"] = identity.Traits.Name
 	}
+
+	// Resolve tenant — injects tenant_id into Hydra JWT for CLI auth
+	if h.tenantProvisioner != nil && identity.Traits.Email != "" {
+		ctx := context.Background()
+		tenantID, _, err := h.tenantProvisioner.EnsureTenant(ctx, subject, identity.Traits.Email)
+		if err == nil && tenantID != "" {
+			claims["tenant_id"] = tenantID
+		} else if err != nil {
+			h.logger.Warn("failed to resolve tenant for JWT claims", "subject", subject, "error", err)
+		}
+	}
+
 	return claims
 }
 

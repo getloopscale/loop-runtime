@@ -123,7 +123,7 @@ func main() {
 	// Handlers
 	deviceHandler := routes.NewDeviceHandler(hydra, cfg.BillingReturnURL)
 	meHandler := routes.NewMeHandler()
-	consentHandler := consent.NewHandler(hydra, cfg.KratosPublicURL, cfg.KratosInternalURL, logger)
+	consentHandler := consent.NewHandler(hydra, tenantProvisioner, cfg.KratosPublicURL, cfg.KratosInternalURL, logger)
 
 	// Router
 	r := chi.NewRouter()
