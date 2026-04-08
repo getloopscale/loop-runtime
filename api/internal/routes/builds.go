@@ -203,6 +203,19 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// V5: Server-side framework validation — reject unsupported frameworks before pipeline.
+	// Defense-in-depth: CLI validates first, but API is the final gate.
+	for _, app := range req.Apps {
+		if isUnknownFramework(app.Framework) && app.Build != "dockerfile" {
+			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				"UNSUPPORTED_FRAMEWORK",
+				fmt.Sprintf("App '%s': framework '%s' requires 'build: dockerfile'. Set build to 'dockerfile' and provide a Dockerfile, or use a supported framework.", app.Name, app.Framework),
+				422,
+			))
+			return
+		}
+	}
+
 	resp, err := h.orch.SubmitBuild(ctx, SubmitBuildInput{
 		TenantID:      uc.TenantID,
 		ProjectID:     req.ProjectID,
@@ -321,4 +334,24 @@ func mapBuildError(w http.ResponseWriter, err error) {
 
 	// Fallback for unexpected errors
 	writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+}
+
+// isUnknownFramework returns true if the framework is not in the known list.
+// Mirrors resolveLanguageStrategy() in services/build_plan.go — kept in sync.
+// V5: Server-side validation to reject unknown frameworks before pipeline.
+func isUnknownFramework(framework string) bool {
+	switch framework {
+	case "nextjs", "next", "vite", "remix", "nestjs", "express", "node",
+		"react", "vue", "svelte", "astro", "angular", "fastify",
+		"gin", "go",
+		"fastapi", "django", "python",
+		"sinatra", "rails", "ruby",
+		"spring", "spring-boot", "java",
+		"laravel", "slim", "php",
+		"axum", "actix", "rocket", "rust",
+		"custom", "unknown", "":
+		return false
+	default:
+		return true
+	}
 }

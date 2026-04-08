@@ -163,11 +163,11 @@ describe('validateConfig', () => {
       const config: LoopZeroYaml = {
         project: 'test',
         apps: {
-          api: { path: 'api', framework: 'sinatra', type: 'server', port: 4567 },
+          api: { path: 'api', framework: 'cobol', type: 'server', port: 4567 },
         },
       };
       const { errors, warnings } = validateConfig(config, dir);
-      expect(errors.some(e => e.message.includes("unknown framework 'sinatra'"))).toBe(true);
+      expect(errors.some(e => e.message.includes("unknown framework 'cobol'"))).toBe(true);
       expect(errors.some(e => e.message.includes('Supported:'))).toBe(true);
       expect(errors.some(e => e.message.includes("framework: custom"))).toBe(true);
     });
@@ -187,8 +187,8 @@ describe('validateConfig', () => {
       }
     });
 
-    it('should accept Go and Python frameworks', () => {
-      for (const fw of ['go', 'gin', 'fastapi', 'django', 'python']) {
+    it('should accept Go, Python, Ruby, Java, PHP, Rust frameworks', () => {
+      for (const fw of ['go', 'gin', 'fastapi', 'django', 'python', 'sinatra', 'rails', 'ruby', 'spring', 'spring-boot', 'java', 'laravel', 'slim', 'php', 'axum', 'actix', 'rocket', 'rust']) {
         const config: LoopZeroYaml = {
           project: 'test',
           apps: {
@@ -653,7 +653,7 @@ describe('validateConfig', () => {
       const config: LoopZeroYaml = {
         project: 'test',
         apps: {
-          api: { path: '.', framework: 'rails', type: 'server', port: 3000 },
+          api: { path: '.', framework: 'fortran', type: 'server', port: 3000 },
         },
       };
       const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });

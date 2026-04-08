@@ -44,8 +44,17 @@ export function validateConfig(
   }
 
   for (const [name, app] of Object.entries(config.apps)) {
-    // Path existence (only when filesystem checks enabled)
+    // SEC-10: Reject path traversal (defense-in-depth, server has SEC-3)
     const appPath = path.resolve(projectRoot, app.path);
+    if (!appPath.startsWith(path.resolve(projectRoot))) {
+      errors.push({
+        field: `apps.${name}.path`,
+        message: `App '${name}': path '${app.path}' escapes project root. Use a relative path within the project.`,
+      });
+      continue; // skip further checks for this app
+    }
+
+    // Path existence (only when filesystem checks enabled)
     if (!skipFs && !fs.existsSync(appPath)) {
       errors.push({
         field: `apps.${name}.path`,
@@ -90,6 +99,14 @@ export function validateConfig(
       'gin', 'go',
       // Python
       'fastapi', 'django', 'python',
+      // Ruby
+      'sinatra', 'rails', 'ruby',
+      // Java
+      'spring', 'spring-boot', 'java',
+      // PHP
+      'laravel', 'slim', 'php',
+      // Rust
+      'axum', 'actix', 'rocket', 'rust',
       // Custom (user-provided Dockerfile)
       'custom',
     ];

@@ -125,6 +125,11 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 	return BuildPlan{Apps: plans}
 }
 
+// ResolveLanguageStrategyPublic is the exported version for use by routes/builds.go validation.
+func ResolveLanguageStrategyPublic(framework string) string {
+	return resolveLanguageStrategy(framework)
+}
+
 // resolveLanguageStrategy maps framework name to language strategy name.
 // This is the single source of truth for framework→strategy mapping.
 func resolveLanguageStrategy(framework string) string {
@@ -136,6 +141,14 @@ func resolveLanguageStrategy(framework string) string {
 		return "go"
 	case "fastapi", "django", "python":
 		return "python"
+	case "sinatra", "rails", "ruby":
+		return "ruby"
+	case "spring", "spring-boot", "java":
+		return "java"
+	case "laravel", "slim", "php":
+		return "php"
+	case "axum", "actix", "rocket", "rust":
+		return "rust"
 	default:
 		return "custom"
 	}

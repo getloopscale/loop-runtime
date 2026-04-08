@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -21,9 +23,10 @@ const (
 // Used by the custom domain feature to create per-domain zones on the
 // platform's CF account (model Vercel: user changes nameservers only).
 type Client struct {
-	accountID  string
-	apiToken   string
-	httpClient *http.Client
+	accountID   string
+	apiToken    string
+	httpClient  *http.Client
+	rateLimiter *rate.Limiter // CF API: 1200 req/5min = 4 req/s
 }
 
 // NewClient creates a CF Zone client. Returns nil if credentials are missing
@@ -38,6 +41,7 @@ func NewClient(accountID, apiToken string) *Client {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		rateLimiter: rate.NewLimiter(rate.Limit(4), 10), // 4 req/s sustained, burst 10
 	}
 }
 
@@ -146,6 +150,12 @@ func (c *Client) DeleteDNSRecord(ctx context.Context, zoneID, recordID string) e
 // --- HTTP helpers ---
 
 func (c *Client) do(ctx context.Context, method, path string, body interface{}, result interface{}) error {
+	// Rate limit: wait for token before making request
+	if c.rateLimiter != nil {
+		if err := c.rateLimiter.Wait(ctx); err != nil {
+			return fmt.Errorf("cf rate limit wait: %w", err)
+		}
+	}
 	return c.doWithBase(ctx, cfAPIBase, method, path, body, result)
 }
 

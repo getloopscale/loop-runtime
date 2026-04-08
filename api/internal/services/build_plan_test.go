@@ -149,6 +149,34 @@ func TestResolveLanguageStrategy_AllFrameworks(t *testing.T) {
 		}
 	}
 
+	rubyFrameworks := []string{"sinatra", "rails", "ruby"}
+	for _, fw := range rubyFrameworks {
+		if got := resolveLanguageStrategy(fw); got != "ruby" {
+			t.Errorf("resolveLanguageStrategy(%q) = %q, want ruby", fw, got)
+		}
+	}
+
+	javaFrameworks := []string{"spring", "spring-boot", "java"}
+	for _, fw := range javaFrameworks {
+		if got := resolveLanguageStrategy(fw); got != "java" {
+			t.Errorf("resolveLanguageStrategy(%q) = %q, want java", fw, got)
+		}
+	}
+
+	phpFrameworks := []string{"laravel", "slim", "php"}
+	for _, fw := range phpFrameworks {
+		if got := resolveLanguageStrategy(fw); got != "php" {
+			t.Errorf("resolveLanguageStrategy(%q) = %q, want php", fw, got)
+		}
+	}
+
+	rustFrameworks := []string{"axum", "actix", "rocket", "rust"}
+	for _, fw := range rustFrameworks {
+		if got := resolveLanguageStrategy(fw); got != "rust" {
+			t.Errorf("resolveLanguageStrategy(%q) = %q, want rust", fw, got)
+		}
+	}
+
 	if got := resolveLanguageStrategy("unknown"); got != "custom" {
 		t.Errorf("resolveLanguageStrategy(unknown) = %q, want custom", got)
 	}

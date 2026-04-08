@@ -283,6 +283,18 @@ var (
 		Name: "loopzero_domain_health_checker_errors_total",
 		Help: "Total errors in the domain health checker by check type.",
 	}, []string{"check"})
+
+	// v2: CF Zone Management metrics
+	DomainCFZoneErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_domain_cf_zone_errors_total",
+		Help: "Total errors from Cloudflare Zone API.",
+	}, []string{"operation"})
+
+	DomainNSPropagationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_domain_ns_propagation_duration_seconds",
+		Help:    "Duration from domain creation to NS propagation (pending_ns → ns_active).",
+		Buckets: []float64{60, 300, 900, 1800, 3600, 7200, 14400, 43200, 86400},
+	}, []string{"result"})
 )
 
 // Database connection pool metrics — emitted by a periodic collector.

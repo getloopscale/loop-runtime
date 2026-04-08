@@ -430,12 +430,25 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// Step 5: List imported records for response
+	// Step 5: List imported records, deduplicate (CF scan sometimes imports duplicates with different quoting)
 	var dnsRecords []CFDNSRecord
 	var recordCount int
 	if records, listErr := h.cfZone.ListDNSRecords(ctx, zone.ZoneID); listErr == nil {
-		dnsRecords = records
-		recordCount = len(records)
+		seen := make(map[string]bool)
+		for _, rec := range records {
+			// Normalize: strip surrounding quotes for dedup key
+			content := strings.Trim(rec.Content, "\"")
+			key := rec.Type + ":" + rec.Name + ":" + content
+			if seen[key] {
+				// Duplicate — delete from CF zone
+				slog.InfoContext(ctx, "cf removing duplicate record", "domain", req.Domain, "type", rec.Type, "name", rec.Name)
+				_ = h.cfZone.DeleteDNSRecord(ctx, zone.ZoneID, rec.ID)
+				continue
+			}
+			seen[key] = true
+			dnsRecords = append(dnsRecords, rec)
+		}
+		recordCount = len(dnsRecords)
 	}
 
 	// Step 6: Save to DB
