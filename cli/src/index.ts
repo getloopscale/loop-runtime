@@ -1387,7 +1387,7 @@ export function createProgram(): Command {
 
       const cmd = new DomainAddCommand({
         getToken: () => configStore.getToken(),
-        createDomain: async (body) => apiClient.post('/api/v1/domains', body),
+        createDomain: async (body) => apiClient.post('/api/v1/domains', body, { 'Idempotency-Key': 'domain-' + (body as any).domain + '-' + Date.now() }),
         verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}),
         getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`),
         listDomains: async (params) => {
@@ -1424,7 +1424,7 @@ export function createProgram(): Command {
 
       const cmd = new DomainVerifyCommand({
         getToken: () => configStore.getToken(),
-        createDomain: async (body) => apiClient.post('/api/v1/domains', body),
+        createDomain: async (body) => apiClient.post('/api/v1/domains', body, { 'Idempotency-Key': 'domain-' + (body as any).domain + '-' + Date.now() }),
         verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}),
         getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`),
         listDomains: async () => apiClient.get('/api/v1/domains'),
@@ -1455,7 +1455,7 @@ export function createProgram(): Command {
 
       const cmd = new DomainStatusCommand({
         getToken: () => configStore.getToken(),
-        createDomain: async (body) => apiClient.post('/api/v1/domains', body),
+        createDomain: async (body) => apiClient.post('/api/v1/domains', body, { 'Idempotency-Key': 'domain-' + (body as any).domain + '-' + Date.now() }),
         verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}),
         getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`),
         listDomains: async () => apiClient.get('/api/v1/domains'),
@@ -1489,7 +1489,7 @@ export function createProgram(): Command {
 
       const cmd = new DomainListCommand({
         getToken: () => configStore.getToken(),
-        createDomain: async (body) => apiClient.post('/api/v1/domains', body),
+        createDomain: async (body) => apiClient.post('/api/v1/domains', body, { 'Idempotency-Key': 'domain-' + (body as any).domain + '-' + Date.now() }),
         verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}),
         getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`),
         listDomains: async (params) => {
@@ -1527,7 +1527,7 @@ export function createProgram(): Command {
 
       const cmd = new DomainRemoveCommand({
         getToken: () => configStore.getToken(),
-        createDomain: async (body) => apiClient.post('/api/v1/domains', body),
+        createDomain: async (body) => apiClient.post('/api/v1/domains', body, { 'Idempotency-Key': 'domain-' + (body as any).domain + '-' + Date.now() }),
         verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}),
         getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`),
         listDomains: async () => apiClient.get('/api/v1/domains'),
