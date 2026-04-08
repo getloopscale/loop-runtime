@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -39,6 +40,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/cfkv"
 	"github.com/loopzero/loopzero/api/internal/cfzone"
+	"github.com/loopzero/loopzero/api/internal/github"
 	ghwebhook "github.com/loopzero/loopzero/api/internal/github/webhook"
 	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
 	"github.com/loopzero/loopzero/api/internal/source"
@@ -618,17 +620,90 @@ func main() {
 		// --- GitHub App Webhook (auto-deploy on push) ---
 		githubWebhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
 		if githubWebhookSecret != "" {
+			// GitHub App client for API calls (source download, commit status, PR comments)
+			appIDStr := os.Getenv("GITHUB_APP_ID")
+			appPrivateKey := os.Getenv("GITHUB_APP_PRIVATE_KEY")
+			var ghAppClient *github.AppClient
+			if appIDStr != "" && appPrivateKey != "" {
+				var appID int64
+				fmt.Sscanf(appIDStr, "%d", &appID)
+				var clientErr error
+				ghAppClient, clientErr = github.NewAppClient(appID, appPrivateKey)
+				if clientErr != nil {
+					logger.Error("github app client creation failed", "error", clientErr)
+				} else if ghAppClient != nil {
+					logger.Info("github app client created", "app_id", appID)
+				}
+			}
+
+			// Repository store for webhook lookups
+			repoStore := &db.PostgresRepositoryStore{DB: dbAdapter}
+
+			// Auto-deployer — handles push → download source → submit build
+			autoDeployer := github.NewAutoDeployer(github.AutoDeployConfig{
+				AppClient:   ghAppClient,
+				Logger:      logger,
+				// BuildSubmitter: TODO — wire to BuildOrchestrator when ready
+				// ObjectStore: TODO — wire to S3 uploader
+				// SourceStore: TODO — wire to Gitea source store
+			})
+
 			wh := ghwebhook.NewHandler(githubWebhookSecret, logger)
 			wh.OnPush(func(event ghwebhook.PushEvent) error {
-				logger.Info("github webhook: push received",
+				log := logger.With(
 					"repo", event.Repository.FullName,
 					"branch", event.Branch(),
 					"sha", event.After,
 					"sender", event.Sender.Login,
-					"is_default", event.IsDefaultBranch(),
 					"installation_id", event.Installation.ID,
 				)
-				// TODO: Phase 4 — auto-deploy on push to default branch
+
+				// Ignore non-branch pushes (tags, deletes)
+				if event.IsTag() || event.Deleted {
+					log.Debug("github webhook: ignoring tag/delete push")
+					return nil
+				}
+
+				// Only auto-deploy pushes to default branch (production)
+				if !event.IsDefaultBranch() {
+					log.Info("github webhook: push to non-default branch (preview env not yet supported)")
+					return nil
+				}
+
+				// Look up linked project
+				linked, err := repoStore.GetByRepo(context.Background(), event.Repository.FullName)
+				if err != nil {
+					log.Error("github webhook: repo lookup failed", "error", err)
+					return nil // don't fail the webhook
+				}
+				if linked == nil {
+					log.Debug("github webhook: repo not linked to any project, ignoring")
+					return nil
+				}
+				if !linked.AutoDeploy {
+					log.Info("github webhook: auto-deploy disabled for this project")
+					return nil
+				}
+
+				log = log.With("project", linked.ProjectName, "tenant", linked.TenantID)
+				log.Info("github webhook: auto-deploy triggered")
+
+				// Trigger auto-deploy (async — don't block webhook response)
+				commitMsg := ""
+				if event.HeadCommit != nil {
+					commitMsg = event.HeadCommit.Message
+				}
+				go func() {
+					deployCtx := context.Background()
+					if err := autoDeployer.HandlePush(deployCtx,
+						event.Repository.FullName, event.Branch(), event.After,
+						event.Installation.ID, linked.TenantID, linked.ProjectName,
+						commitMsg, event.Sender.Login,
+					); err != nil {
+						log.Error("github webhook: auto-deploy failed", "error", err)
+					}
+				}()
+
 				return nil
 			})
 			wh.OnPullRequest(func(event ghwebhook.PullRequestEvent) error {
@@ -638,7 +713,7 @@ func main() {
 					"pr", event.Number,
 					"branch", event.PullRequest.Head.Ref,
 				)
-				// TODO: Phase 2 (preview environments) — deploy PR branch
+				// TODO: Preview environments — deploy PR branch
 				return nil
 			})
 			wh.OnInstallation(func(event ghwebhook.InstallationEvent) error {
@@ -647,14 +722,21 @@ func main() {
 					"installation_id", event.Installation.ID,
 					"account", event.Installation.Account.Login,
 				)
-				// TODO: Phase 3 — save/remove installation in DB
+				// Save/remove installation in DB
+				if event.Action == "created" {
+					tenantID := "" // linked later via loopzero connect
+					_ = repoStore.SaveInstallation(context.Background(),
+						event.Installation.ID, event.Installation.Account.Login,
+						event.Installation.Account.Type, nil)
+					_ = tenantID
+				} else if event.Action == "deleted" {
+					_ = repoStore.DeleteInstallation(context.Background(), event.Installation.ID)
+				}
 				return nil
 			})
 			githubWebhookHandler = wh
-			logger.Info("github webhook: handler registered", "endpoint", "/api/v1/webhooks/github")
-			// Repository store for project↔repo linking
-			repoStore := &db.PostgresRepositoryStore{DB: dbAdapter}
 			repoHandler = routes.NewRepositoryHandler(&repoStoreAdapter{store: repoStore})
+			logger.Info("github webhook: handler registered", "endpoint", "/api/v1/webhooks/github")
 		} else {
 			logger.Info("github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled")
 		}
