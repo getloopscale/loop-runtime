@@ -92,6 +92,8 @@ type Config struct {
 	TeamHandler *routes.TeamHandler
 	// IsProduction indicates production mode — enables strict error handling.
 	IsProduction bool
+	// AuditWriter writes mutation events to audit_log table. Nil = slog only.
+	AuditWriter middleware.AuditWriter
 	// PlanLimiter enforces plan limits on mutation routes (Phase 1).
 	PlanLimiter *enforcement.PlanLimiter
 	// UpgradeURL is included in 402 responses when plan limits are hit.
@@ -144,7 +146,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	if cfg.TokenValidator != nil && cfg.MemberStore != nil {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Auth(cfg.TokenValidator, cfg.MemberStore))
-			r.Use(middleware.AuditLog(cfg.Logger))
+			r.Use(middleware.AuditLog(cfg.Logger, cfg.AuditWriter))
 
 			// Auth routes
 			auth := routes.NewAuthHandler()

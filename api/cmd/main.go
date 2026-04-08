@@ -715,6 +715,23 @@ func main() {
 		SSESafetyTimeout:        cfg.SSESafetyTimeout,
 		SSEMaxConcurrentStreams: int64(cfg.SSEMaxConcurrentStreams),
 		IsProduction:           cfg.IsProduction(),
+		AuditWriter: func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {
+			if dbAdapter == nil {
+				return
+			}
+			entry := db.AuditEntry{
+				TenantID:      tenantID,
+				Action:        action,
+				Actor:         actor,
+				ResourceType:  resourceType,
+				ResourceID:    resourceID,
+				CorrelationID: correlationID,
+				Metadata:      metadata,
+			}
+			if err := db.WriteAuditLog(context.Background(), dbAdapter, entry); err != nil {
+				logger.Warn("audit write failed", "error", err)
+			}
+		},
 		PlanLimiter:            planLimiter,
 		UpgradeURL:             os.Getenv("BILLING_UPGRADE_URL"),
 	}
