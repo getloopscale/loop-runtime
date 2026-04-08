@@ -43,6 +43,21 @@ func (c PlanConfig) PriceIDForPlan(plan string) string {
 	}
 }
 
+// PlanForPriceID returns the plan name for a Stripe Price ID (reverse lookup).
+// Returns empty string if the price ID is unknown.
+func (c PlanConfig) PlanForPriceID(priceID string) string {
+	switch priceID {
+	case c.StarterPriceID:
+		return "starter"
+	case c.ProPriceID:
+		return "pro"
+	case c.TeamPriceID:
+		return "team"
+	default:
+		return ""
+	}
+}
+
 // PlanDisplayName returns the user-facing name for a plan.
 func PlanDisplayName(plan string) string {
 	switch plan {

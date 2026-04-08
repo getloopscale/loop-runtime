@@ -5,19 +5,44 @@
 //   2. POST /v1/auth/session/token exchanges cookies → JWT
 //   3. All API calls use Authorization: Bearer <jwt>
 //
-// This normalizes auth: CLI (Hydra JWT) and dashboard (session JWT)
-// both use Bearer tokens. One auth method for all endpoints.
+// §3.3: BroadcastChannel coordinates token state across browser tabs.
+// §3.6: Session expiry shows notification before redirect.
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:13002';
-const ENGINE_API = import.meta.env.VITE_ENGINE_URL || 'http://localhost:13001';
+// MEET-040: Single origin. Dashboard served at cloud.{domain} — all API calls are relative.
+// VITE_API_URL is empty in production (same-origin). Only set for local dev (localhost:13002).
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export function getApiBase() { return API_BASE; }
-export function getEngineBase() { return ENGINE_API; }
 
 // In-memory JWT token (never localStorage — XSS risk)
 let accessToken: string | null = null;
 let tokenExpiresAt = 0;
 let refreshPromise: Promise<boolean> | null = null; // Dedup concurrent refreshes
+
+// §3.3: BroadcastChannel for cross-tab coordination
+type AuthMessage =
+  | { type: 'token-refreshed'; token: string; expiresAt: number }
+  | { type: 'logged-out' };
+
+let authChannel: BroadcastChannel | null = null;
+try {
+  authChannel = new BroadcastChannel('loopzero-auth');
+  authChannel.onmessage = (event: MessageEvent<AuthMessage>) => {
+    const msg = event.data;
+    if (msg.type === 'token-refreshed') {
+      // Another tab refreshed the token — use it without redundant exchange
+      accessToken = msg.token;
+      tokenExpiresAt = msg.expiresAt;
+    } else if (msg.type === 'logged-out') {
+      // Another tab logged out — redirect this tab
+      accessToken = null;
+      tokenExpiresAt = 0;
+      redirectToLogin('expired');
+    }
+  };
+} catch {
+  // BroadcastChannel not available (e.g., some workers) — graceful degradation
+}
 
 /** Exchange Kratos session cookie for a JWT. Called after login. */
 export async function exchangeSessionToken(): Promise<boolean> {
@@ -36,6 +61,14 @@ export async function exchangeSessionToken(): Promise<boolean> {
       const data = await resp.json() as { access_token: string; expires_in: number };
       accessToken = data.access_token;
       tokenExpiresAt = Date.now() + (data.expires_in * 1000) - 60000; // 60s buffer
+
+      // §3.3: Broadcast to other tabs
+      authChannel?.postMessage({
+        type: 'token-refreshed',
+        token: accessToken,
+        expiresAt: tokenExpiresAt,
+      } satisfies AuthMessage);
+
       return true;
     } catch {
       return false;
@@ -61,10 +94,24 @@ async function ensureToken(): Promise<string | null> {
 
 let redirecting = false;
 
-function redirectToLogin(): void {
-  if (redirecting) return; // Prevent multiple redirects from concurrent calls
+/** §3.6: Show notification before redirect, with reason in query param. */
+function redirectToLogin(reason?: string): void {
+  if (redirecting) return;
   redirecting = true;
-  window.location.href = '/login';
+
+  const params = reason ? `?reason=${reason}` : '';
+
+  // §3.6: Brief delay so user sees the notification
+  if (reason === 'expired') {
+    // Show a visible indicator before redirect
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;top:16px;right:16px;background:#1a1a1a;color:white;padding:12px 20px;border-radius:8px;z-index:9999;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+    toast.textContent = 'Session expired. Redirecting to login...';
+    document.body.appendChild(toast);
+    setTimeout(() => { window.location.href = `/login${params}`; }, 2000);
+  } else {
+    window.location.href = `/login${params}`;
+  }
 }
 
 /** Clear token (on logout or login page visit). */
@@ -73,22 +120,34 @@ export function clearToken(): void {
   tokenExpiresAt = 0;
 }
 
+/** Logout — clears token and broadcasts to other tabs. */
+export function logout(): void {
+  clearToken();
+  // §3.3: Broadcast logout to all tabs
+  authChannel?.postMessage({ type: 'logged-out' } satisfies AuthMessage);
+}
+
+// MEET-040: Unified API fetch. All paths relative to same origin.
+// /v1/billing, /v1/auth/* → cloud service (direct, same origin)
+// /engine/api/v1/* → cloud service proxy → engine API (BFF pattern)
 export async function cloudFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
   const token = await ensureToken();
   if (!token) {
-    redirectToLogin();
+    redirectToLogin('expired');
     return null;
   }
-  return apiFetch<T>(API_BASE, path, token, options, true);
+  return fetchWithAuth<T>(API_BASE, path, token, options, true);
 }
 
+// Alias for backward compatibility during migration
+export { cloudFetch as apiFetch };
+
+// Engine API calls proxied through cloud service.
 export async function engineFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
-  const token = await ensureToken();
-  if (!token) return null; // No redirect — engine API failure is not a session issue
-  return apiFetch<T>(ENGINE_API, path, token, options, false);
+  return cloudFetch<T>(`/engine${path}`, options);
 }
 
-async function apiFetch<T>(base: string, path: string, token: string, options: RequestInit = {}, redirectOnAuthFailure = true): Promise<T | null> {
+async function fetchWithAuth<T>(base: string, path: string, token: string, options: RequestInit = {}, redirectOnAuthFailure = true): Promise<T | null> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
@@ -98,12 +157,12 @@ async function apiFetch<T>(base: string, path: string, token: string, options: R
   try {
     const resp = await fetch(`${base}${path}`, { ...options, headers });
     if (resp.status === 401) {
-      if (!redirectOnAuthFailure) return null; // Engine API — don't retry/redirect
+      if (!redirectOnAuthFailure) return null;
       // Token expired — try refresh once
       accessToken = null;
       const newToken = await ensureToken();
       if (!newToken) {
-        redirectToLogin();
+        redirectToLogin('expired');
         return null;
       }
       // Retry with new token
@@ -118,3 +177,4 @@ async function apiFetch<T>(base: string, path: string, token: string, options: R
     return null;
   }
 }
+// build trigger 1775591972

@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/loopzero/loopzero/cloud/internal/enforcement"
+	"github.com/loopzero/loopzero/pkg/enforcement"
 )
 
 func TestPlanLimiterNilDB_AllowsEverything(t *testing.T) {
@@ -53,7 +53,7 @@ func TestFormatLimitError(t *testing.T) {
 	if errMap["code"] != "PLAN_LIMIT_EXCEEDED" {
 		t.Errorf("code = %v, want PLAN_LIMIT_EXCEEDED", errMap["code"])
 	}
-	errMsg, ok := errMap["error"].(string)
+	errMsg, ok := errMap["message"].(string)
 	if !ok {
 		t.Fatal("error should be string")
 	}
@@ -158,7 +158,7 @@ func TestLimitResult_402ResponseShape(t *testing.T) {
 		t.Fatalf("unmarshal failed: %v", err)
 	}
 
-	requiredFields := []string{"code", "error", "plan", "limit", "current", "max", "upgrade_url"}
+	requiredFields := []string{"code", "message", "plan", "limit", "current", "max", "upgrade_url"}
 	for _, field := range requiredFields {
 		if _, ok := parsed[field]; !ok {
 			t.Errorf("missing required field %q in 402 response", field)

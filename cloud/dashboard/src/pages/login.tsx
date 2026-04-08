@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { getSession, startLogin } from '@/lib/auth';
 import { clearToken } from '@/lib/api';
 
-const KRATOS_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
+const KRATOS_URL = import.meta.env.VITE_API_URL || '';
 
 interface FlowNode {
   group: string;
@@ -170,6 +170,14 @@ export function LoginPage() {
 
           <h1 className="font-display text-xl font-semibold text-white mb-1">Sign in</h1>
           <p className="text-sm text-white/40 mb-6">Deploy your apps in under 5 minutes.</p>
+
+          {/* §3.6: Session expired notification when redirected from auth failure */}
+          {searchParams.get('reason') === 'expired' && allErrors.length === 0 && (
+            <div className="mb-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 p-3 text-sm text-yellow-300 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span>Your session expired. Please sign in again.</span>
+            </div>
+          )}
 
           {allErrors.length > 0 && (
             <div className="mb-4 rounded-lg bg-danger/10 border border-danger/20 p-3 text-sm text-danger flex items-start gap-2">

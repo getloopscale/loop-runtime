@@ -184,9 +184,8 @@ type fakeTokenValidator struct{}
 func (f *fakeTokenValidator) ValidateToken(ctx context.Context, token string) (*middleware.TokenValidationResult, error) {
 	if token == "valid-token" {
 		return &middleware.TokenValidationResult{
-			UserID:   "user-test",
-			Email:    "test@example.com",
-			GitHubID: 12345,
+			UserID: "user-test",
+			Email:  "test@example.com",
 		}, nil
 	}
 	return nil, middleware.ErrInvalidToken
@@ -336,8 +335,8 @@ func seedTestData(t *testing.T, pool *pgxpool.Pool) {
 
 	// Create test tenant
 	_, err = pool.Exec(ctx,
-		`INSERT INTO tenants (id, display_name, plan, owner_id)
-		 VALUES ('tenant-test', 'Test Tenant', 'starter', 'user-test')
+		`INSERT INTO tenants (id, display_name, slug, owner_id)
+		 VALUES ('tenant-test', 'Test Tenant', 'test-tenant', 'user-test')
 		 ON CONFLICT (id) DO NOTHING`)
 	if err != nil {
 		t.Fatalf("failed to seed tenant: %v", err)

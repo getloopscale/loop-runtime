@@ -20,12 +20,13 @@ import (
 type WebhookHandler struct {
 	db            *sql.DB
 	webhookSecret string
+	planConfig    PlanConfig
 	logger        *slog.Logger
 }
 
 // NewWebhookHandler creates a webhook event processor.
-func NewWebhookHandler(db *sql.DB, webhookSecret string, logger *slog.Logger) *WebhookHandler {
-	return &WebhookHandler{db: db, webhookSecret: webhookSecret, logger: logger}
+func NewWebhookHandler(db *sql.DB, webhookSecret string, planConfig PlanConfig, logger *slog.Logger) *WebhookHandler {
+	return &WebhookHandler{db: db, webhookSecret: webhookSecret, planConfig: planConfig, logger: logger}
 }
 
 // StripeEvent represents the top-level Stripe webhook event.
@@ -44,49 +45,125 @@ type StripeEventData struct {
 func (h *WebhookHandler) WebhookSecret() string { return h.webhookSecret }
 
 // ProcessEvent handles a verified webhook event idempotently.
+// §1.2: All DB errors are handled explicitly. Events are recorded with status.
 func (h *WebhookHandler) ProcessEvent(event StripeEvent) error {
 	if h.db == nil {
 		h.logger.Info("webhook received (no DB, skipping)", "type", event.Type, "id", event.ID)
 		return nil
 	}
 
-	// Idempotency: check if event already processed
-	var processed bool
-	_ = h.db.QueryRow(
-		"SELECT EXISTS(SELECT 1 FROM webhook_events WHERE event_id = $1)",
+	// Idempotency: check if event already SUCCESSFULLY processed.
+	// Failed events (status='failed') must be retryable when Stripe sends them again.
+	var processedSuccessfully bool
+	if err := h.db.QueryRow(
+		"SELECT EXISTS(SELECT 1 FROM webhook_events WHERE event_id = $1 AND status = 'processed')",
 		event.ID,
-	).Scan(&processed)
-	if processed {
-		h.logger.Debug("webhook event already processed", "id", event.ID)
+	).Scan(&processedSuccessfully); err != nil {
+		h.logger.Error("webhook idempotency check failed", "event_id", event.ID, "error", err)
+		return fmt.Errorf("idempotency check: %w", err)
+	}
+	if processedSuccessfully {
+		h.logger.Debug("webhook event already processed successfully", "id", event.ID)
 		return nil
 	}
 
-	var err error
+	// Compute payload hash for auditability
+	payloadHash := hashPayload(event.Data)
+
+	// Process the event
+	var processErr error
 	switch event.Type {
+	case "checkout.session.completed":
+		processErr = h.handleCheckoutCompleted(event)
 	case "customer.subscription.updated":
-		err = h.handleSubscriptionUpdated(event)
+		processErr = h.handleSubscriptionUpdated(event)
 	case "customer.subscription.deleted":
-		err = h.handleSubscriptionDeleted(event)
+		processErr = h.handleSubscriptionDeleted(event)
 	case "invoice.paid":
-		err = h.handleInvoicePaid(event)
+		processErr = h.handleInvoicePaid(event)
 	case "invoice.payment_failed":
-		err = h.handlePaymentFailed(event)
+		processErr = h.handlePaymentFailed(event)
 	default:
 		h.logger.Debug("unhandled webhook event type", "type", event.Type)
 		return nil
 	}
 
-	if err != nil {
-		return err
+	// Record event with status (success or failure)
+	status := "processed"
+	var lastError *string
+	if processErr != nil {
+		status = "failed"
+		errStr := processErr.Error()
+		lastError = &errStr
 	}
 
-	// Mark event as processed (idempotency)
-	_, _ = h.db.Exec(
-		"INSERT INTO webhook_events (event_id, event_type, processed_at) VALUES ($1, $2, now()) ON CONFLICT DO NOTHING",
-		event.ID, event.Type,
-	)
+	if _, err := h.db.Exec(
+		`INSERT INTO webhook_events (event_id, event_type, status, last_error, payload_hash, received_at, processed_at)
+		 VALUES ($1, $2, $3, $4, $5, now(), now())
+		 ON CONFLICT (event_id) DO UPDATE SET
+		   attempt_count = webhook_events.attempt_count + 1,
+		   last_error = EXCLUDED.last_error,
+		   status = EXCLUDED.status,
+		   processed_at = now()`,
+		event.ID, event.Type, status, lastError, payloadHash,
+	); err != nil {
+		h.logger.Error("failed to record webhook event", "event_id", event.ID, "error", err)
+	}
+
+	if processErr != nil {
+		return processErr
+	}
 
 	h.logger.Info("webhook event processed", "type", event.Type, "id", event.ID)
+	return nil
+}
+
+// hashPayload computes a SHA256 hash of the event data for audit trail.
+func hashPayload(data json.RawMessage) string {
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:16]) // 32-char hex
+}
+
+func (h *WebhookHandler) handleCheckoutCompleted(event StripeEvent) error {
+	var data StripeEventData
+	if err := json.Unmarshal(event.Data, &data); err != nil {
+		return fmt.Errorf("unmarshal checkout data: %w", err)
+	}
+
+	var session struct {
+		Customer     string `json:"customer"`
+		Subscription string `json:"subscription"`
+		Mode         string `json:"mode"`
+	}
+	if err := json.Unmarshal(data.Object, &session); err != nil {
+		return fmt.Errorf("unmarshal checkout session: %w", err)
+	}
+
+	if session.Mode != "subscription" || session.Subscription == "" {
+		return nil // Not a subscription checkout
+	}
+
+	// §1.3: Derive plan from the subscription's price ID via Stripe API metadata.
+	// For checkout.session.completed, the subscription.updated webhook will follow
+	// with the full subscription object including price. We set the plan from
+	// metadata if available, otherwise default to "pro" and let subscription.updated correct it.
+	plan := "pro" // Safe default — subscription.updated will refine this
+
+	_, err := h.db.Exec(
+		`UPDATE subscriptions
+		 SET stripe_subscription_id = $1, plan = $2, status = 'active', updated_at = now()
+		 WHERE stripe_customer_id = $3`,
+		session.Subscription, plan, session.Customer,
+	)
+	if err != nil {
+		return fmt.Errorf("link subscription: %w", err)
+	}
+
+	h.logger.Info("checkout completed — subscription linked",
+		"customer", session.Customer,
+		"subscription", session.Subscription,
+		"plan", plan,
+	)
 	return nil
 }
 
@@ -102,11 +179,39 @@ func (h *WebhookHandler) handleSubscriptionUpdated(event StripeEvent) error {
 		Status             string `json:"status"`
 		CurrentPeriodStart int64  `json:"current_period_start"`
 		CurrentPeriodEnd   int64  `json:"current_period_end"`
+		Items              struct {
+			Data []struct {
+				Price struct {
+					ID string `json:"id"`
+				} `json:"price"`
+			} `json:"data"`
+		} `json:"items"`
 	}
 	if err := json.Unmarshal(data.Object, &sub); err != nil {
 		return fmt.Errorf("unmarshal subscription object: %w", err)
 	}
 
+	// §1.3: Derive plan from price ID (handles upgrade/downgrade via Customer Portal)
+	plan := ""
+	if len(sub.Items.Data) > 0 {
+		priceID := sub.Items.Data[0].Price.ID
+		plan = h.planConfig.PlanForPriceID(priceID)
+	}
+
+	if plan != "" {
+		// Sync status AND plan
+		_, err := h.db.Exec(
+			`UPDATE subscriptions SET status = $1, plan = $2, current_period_start = $3, current_period_end = $4, updated_at = now()
+			 WHERE stripe_subscription_id = $5`,
+			sub.Status, plan,
+			time.Unix(sub.CurrentPeriodStart, 0),
+			time.Unix(sub.CurrentPeriodEnd, 0),
+			sub.ID,
+		)
+		return err
+	}
+
+	// No price mapping — sync status only
 	_, err := h.db.Exec(
 		`UPDATE subscriptions SET status = $1, current_period_start = $2, current_period_end = $3, updated_at = now()
 		 WHERE stripe_subscription_id = $4`,

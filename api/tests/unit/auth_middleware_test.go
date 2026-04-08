@@ -88,9 +88,8 @@ func TestAuthMiddleware(t *testing.T) {
 	t.Run("valid token + 1 tenant → auto-resolve + UserContext", func(t *testing.T) {
 		validator := &fakeTokenValidator{
 			result: &middleware.TokenValidationResult{
-				UserID:   "github-lucas",
-				Email:    "lucas@acme.dev",
-				GitHubID: 12345,
+				UserID: "github-lucas",
+				Email:  "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{
@@ -126,7 +125,7 @@ func TestAuthMiddleware(t *testing.T) {
 	t.Run("valid token + N tenants + X-LoopZero-Tenant → resolve", func(t *testing.T) {
 		validator := &fakeTokenValidator{
 			result: &middleware.TokenValidationResult{
-				UserID: "github-lucas", Email: "lucas@acme.dev", GitHubID: 12345,
+				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{
@@ -158,7 +157,7 @@ func TestAuthMiddleware(t *testing.T) {
 	t.Run("valid token + N tenants + no X-LoopZero-Tenant → 409 TENANT_REQUIRED", func(t *testing.T) {
 		validator := &fakeTokenValidator{
 			result: &middleware.TokenValidationResult{
-				UserID: "github-lucas", Email: "lucas@acme.dev", GitHubID: 12345,
+				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{
@@ -189,7 +188,7 @@ func TestAuthMiddleware(t *testing.T) {
 	t.Run("valid token + 0 tenants → 403 NO_TENANT", func(t *testing.T) {
 		validator := &fakeTokenValidator{
 			result: &middleware.TokenValidationResult{
-				UserID: "github-lucas", Email: "lucas@acme.dev", GitHubID: 12345,
+				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{memberships: nil}
@@ -215,7 +214,7 @@ func TestAuthMiddleware(t *testing.T) {
 	t.Run("X-LoopZero-Tenant with non-member tenant → 403", func(t *testing.T) {
 		validator := &fakeTokenValidator{
 			result: &middleware.TokenValidationResult{
-				UserID: "github-lucas", Email: "lucas@acme.dev", GitHubID: 12345,
+				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{
@@ -241,7 +240,7 @@ func TestAuthMiddleware(t *testing.T) {
 	t.Run("cache hit: second call with same token does not call validator again", func(t *testing.T) {
 		validator := &fakeTokenValidator{
 			result: &middleware.TokenValidationResult{
-				UserID: "github-lucas", Email: "lucas@acme.dev", GitHubID: 12345,
+				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{
@@ -272,7 +271,7 @@ func TestAuthMiddleware(t *testing.T) {
 	t.Run("cache expired: validator called again after TTL elapses", func(t *testing.T) {
 		validator := &fakeTokenValidator{
 			result: &middleware.TokenValidationResult{
-				UserID: "github-lucas", Email: "lucas@acme.dev", GitHubID: 12345,
+				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{

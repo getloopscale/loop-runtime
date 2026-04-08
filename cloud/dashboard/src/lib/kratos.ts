@@ -2,9 +2,9 @@
 // All flows go through the public Kratos API (accounts.{domain}).
 // No internal terms (Kratos, Ory) are exposed to users.
 
-// Kratos API is served under the same API gateway domain (no CORS issues).
-// MEET-2026-04-05-032 Option D: /self-service/* → ory-kratos-public via Traefik.
-const ACCOUNTS_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
+// MEET-040: Kratos is same-origin (cloud.{domain}/self-service/*). Relative URLs.
+// In local dev, VITE_API_URL points to localhost:13002.
+const ACCOUNTS_URL = import.meta.env.VITE_API_URL || '';
 
 export interface FlowNode {
   type: string;

@@ -10,8 +10,8 @@ import (
 
 // OperationCheck defines what metric to check for a given operation.
 type OperationCheck struct {
-	Metric       string // e.g. "projects", "builds_per_month"
-	CountFn      func(tenantID string) int // Returns current count for this tenant
+	Metric  string                    // e.g. "projects", "builds_per_month"
+	CountFn func(tenantID string) int // Returns current count for this tenant
 }
 
 // Middleware returns an HTTP middleware that checks plan limits.
@@ -25,6 +25,11 @@ func Middleware(
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if limiter == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			tenantID := tenantExtractor(r)
 			if tenantID == "" {
 				next.ServeHTTP(w, r)
@@ -37,11 +42,10 @@ func Middleware(
 			if !result.Allowed {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusPaymentRequired)
-				json.NewEncoder(w).Encode(FormatLimitError(result, upgradeURL))
+				_ = json.NewEncoder(w).Encode(FormatLimitError(result, upgradeURL))
 				return
 			}
 
-			// Soft limit exceeded — allow but could log/mark for overage billing
 			next.ServeHTTP(w, r)
 		})
 	}

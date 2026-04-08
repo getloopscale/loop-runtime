@@ -82,8 +82,7 @@ func (v *TokenValidator) ValidateToken(ctx context.Context, token string) (*midd
 	}
 
 	return &middleware.TokenValidationResult{
-		UserID:   "github-" + user.Login,
-		Email:    email,
-		GitHubID: user.ID,
+		UserID: "github-" + user.Login,
+		Email:  email,
 	}, nil
 }

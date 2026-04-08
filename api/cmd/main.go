@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"encoding/hex"
 	"flag"
 	"log/slog"
@@ -15,6 +16,9 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib" // pgx stdlib driver for sql.Open("pgx", ...)
+
+	"github.com/loopzero/loopzero/pkg/enforcement"
 	"github.com/loopzero/loopzero/pkg/logging"
 	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 
@@ -107,17 +111,22 @@ func main() {
 		IdleConnTimeout:     90 * time.Second,
 	}
 	// JWT-only auth — uses pkg/jwt (single source of truth).
+	// MEET-2026-04-07-039: B3+B4 — engine uses RSA-only with strict audience.
+	// No HMAC session tokens accepted. Engine holds no signing secrets.
 	jwksURL := os.Getenv("JWKS_URL")
 	jwtIssuer := os.Getenv("JWT_ISSUER")
-	rsaValidator := loopzerojwt.NewValidator(jwksURL, jwtIssuer)
+	rsaValidator := loopzerojwt.NewValidator(jwksURL, jwtIssuer, "loopzero-engine")
 
-	var sessValidator *loopzerojwt.SessionTokenIssuer
-	if secret := os.Getenv("SESSION_TOKEN_SECRET"); secret != "" {
-		sessValidator = loopzerojwt.NewSessionTokenIssuer(secret, "loopzero-cloud", 1*time.Hour)
-	}
+	// B3: Engine drops HMAC entirely — RSA-only validation.
+	// Dashboard calls to engine must use Hydra RSA tokens or proxy through cloud.
+	tokenValidator := middleware.NewJWTOnlyValidator(rsaValidator, nil)
+	logger.Info("JWT auth enabled (RSA-only)", "jwks_url", jwksURL)
 
-	tokenValidator := middleware.NewJWTOnlyValidator(rsaValidator, sessValidator)
-	logger.Info("JWT auth enabled", "jwks_url", jwksURL, "hmac", sessValidator != nil)
+	// Service-to-service auth for internal proxy calls (cloud→engine).
+	// Dashboard calls engine via cloud proxy with X-Service-Auth header.
+	// S1.2: Dual-key rotation — accepts current OR previous during rotation window.
+	middleware.ServiceAuthSecret = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
+	middleware.ServiceAuthSecretPrevious = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS")
 
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
 	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
@@ -145,6 +154,7 @@ func main() {
 	var projectStore routes.ProjectStore
 	var dbHealth routes.DBHealthChecker
 	var dbAdapter *db.PgxAdapter
+	var planLimiter *enforcement.PlanLimiter
 
 	// Sprint 2 dependencies (nil when DATABASE_URL is not set)
 	var sourceStore source.SourceStore
@@ -181,6 +191,22 @@ func main() {
 		}
 		dbAdapter = poolCfg
 		defer dbAdapter.Close()
+
+		// Plan enforcement limiter (uses stdlib sql.DB for simple queries)
+		stdDB, err := sql.Open("pgx", dbURL)
+		if err != nil {
+			logger.Warn("failed to open stdlib DB for plan enforcement — limits disabled", "error", err)
+		} else {
+			stdDB.SetMaxOpenConns(2)
+			defer func() { _ = stdDB.Close() }()
+			// Verify connection works before wiring
+			if pingErr := stdDB.Ping(); pingErr != nil {
+				logger.Warn("plan enforcement DB ping failed — limits disabled", "error", pingErr)
+			} else {
+				planLimiter = enforcement.NewPlanLimiter(stdDB, logger)
+				logger.Info("plan enforcement enabled")
+			}
+		}
 
 		// Sprint 1 stores
 		memberStore = &db.PostgresMembershipStore{DB: dbAdapter}
@@ -711,6 +737,7 @@ func main() {
 		TeamHandler:        routes.NewTeamHandler(&db.PostgresTeamStore{DB: dbAdapter}),
 		EnvironmentHandler: routes.NewEnvironmentHandler(tenantCRMgr),
 		DomainHandler:      domainHandler,
+		AuditHandler:       routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter}),
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,
@@ -723,6 +750,25 @@ func main() {
 		SSESafetyTimeout:        cfg.SSESafetyTimeout,
 		SSEMaxConcurrentStreams: int64(cfg.SSEMaxConcurrentStreams),
 		IsProduction:           cfg.IsProduction(),
+		AuditWriter: func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {
+			if dbAdapter == nil {
+				return
+			}
+			entry := db.AuditEntry{
+				TenantID:      tenantID,
+				Action:        action,
+				Actor:         actor,
+				ResourceType:  resourceType,
+				ResourceID:    resourceID,
+				CorrelationID: correlationID,
+				Metadata:      metadata,
+			}
+			if err := db.WriteAuditLog(context.Background(), dbAdapter, entry); err != nil {
+				logger.Warn("audit write failed", "error", err)
+			}
+		},
+		PlanLimiter:            planLimiter,
+		UpgradeURL:             os.Getenv("BILLING_UPGRADE_URL"),
 	}
 
 	if err := server.Run(srvCfg); err != nil {

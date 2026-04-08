@@ -15,9 +15,10 @@ import (
 )
 
 // UsageMetric represents a single usage metric with current value and limit.
+// Limit is nil when the metric is unlimited for the plan.
 type UsageMetric struct {
-	Used  int `json:"used"`
-	Limit int `json:"limit"`
+	Used  int  `json:"used"`
+	Limit *int `json:"limit"` // nil = unlimited
 }
 
 // BillingHandler handles billing-related endpoints.
@@ -84,6 +85,12 @@ func (h *BillingHandler) GetBilling(w http.ResponseWriter, r *http.Request) {
 	for metric, limit := range limits {
 		used := usage[metric]
 		usageResponse[metric] = UsageMetric{Used: used, Limit: limit}
+	}
+	// Ensure all usage metrics appear even without configured limits
+	for metric, used := range usage {
+		if _, ok := usageResponse[metric]; !ok {
+			usageResponse[metric] = UsageMetric{Used: used, Limit: nil}
+		}
 	}
 
 	resp := map[string]interface{}{
@@ -171,6 +178,7 @@ func (h *BillingHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		priceID,
 		h.returnURL+"/billing?success=true",
 		h.returnURL+"/billing?canceled=true",
+		user.TenantID,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "CHECKOUT_ERROR", "Failed to create checkout. Try again.")
@@ -212,10 +220,12 @@ func (h *BillingHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"received":true}`))
 }
 
-func (h *BillingHandler) getLimitsForPlan(r *http.Request, plan string) map[string]int {
-	defaults := map[string]int{
-		"projects": 2, "builds_per_month": 100, "environments": 1,
-		"seats": 1, "secrets_per_env": 10, "services_per_project": 3,
+// getLimitsForPlan returns limits per metric. nil value = unlimited (§1.5).
+func (h *BillingHandler) getLimitsForPlan(r *http.Request, plan string) map[string]*int {
+	v := func(n int) *int { return &n }
+	defaults := map[string]*int{
+		"projects": v(2), "builds_per_month": v(100), "environments": v(1),
+		"seats": v(1), "secrets_per_env": v(10), "services_per_project": v(3),
 	}
 	if h.db == nil {
 		return defaults
@@ -228,14 +238,19 @@ func (h *BillingHandler) getLimitsForPlan(r *http.Request, plan string) map[stri
 	}
 	defer rows.Close()
 
-	result := make(map[string]int)
+	result := make(map[string]*int)
 	for rows.Next() {
 		var metric string
-		var limit int
+		var limit sql.NullInt64
 		if err := rows.Scan(&metric, &limit); err != nil {
 			continue
 		}
-		result[metric] = limit
+		if limit.Valid {
+			val := int(limit.Int64)
+			result[metric] = &val
+		} else {
+			result[metric] = nil // NULL = unlimited
+		}
 	}
 	if len(result) == 0 {
 		return defaults

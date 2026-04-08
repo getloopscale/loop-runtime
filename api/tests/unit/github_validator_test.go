@@ -54,9 +54,6 @@ func TestGitHubTokenValidator(t *testing.T) {
 		if result.Email != "lucas@acme.dev" {
 			t.Errorf("expected Email=lucas@acme.dev, got %q", result.Email)
 		}
-		if result.GitHubID != 12345 {
-			t.Errorf("expected GitHubID=12345, got %d", result.GitHubID)
-		}
 	})
 
 	t.Run("invalid token returns ErrInvalidToken", func(t *testing.T) {

@@ -25,11 +25,11 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 
 	anyCreated := false
 
-	// 1. INSERT user (ON CONFLICT by github_id → DO NOTHING)
+	// 1. INSERT user (ON CONFLICT by id → DO NOTHING)
 	res, err := s.DB.Exec(ctx,
 		`INSERT INTO users (id, email, github_id, display_name)
 		 VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (github_id) DO NOTHING`,
+		 ON CONFLICT (id) DO NOTHING`,
 		userID,
 		fmt.Sprintf("%s@users.noreply.github.com", req.AdminLogin),
 		req.AdminGitHubID,
@@ -54,12 +54,12 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 		cellID = "cell-default"
 	}
 	res, err = s.DB.Exec(ctx,
-		`INSERT INTO tenants (id, display_name, plan, owner_id, cell_id)
+		`INSERT INTO tenants (id, display_name, slug, owner_id, cell_id)
 		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (id) DO NOTHING`,
 		tenantID,
 		displayName,
-		req.Plan,
+		req.TenantSlug, // slug is NOT NULL since migration 000017
 		userID,
 		cellID,
 	)
@@ -80,6 +80,26 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 	)
 	if err != nil {
 		return "", "", false, fmt.Errorf("bootstrap: insert tenant member: %w", err)
+	}
+	if res.RowsAffected > 0 {
+		anyCreated = true
+	}
+
+	// 4. INSERT subscription (§1.1: subscriptions is single source of truth for plan).
+	// Plan comes from BootstrapRequest.Plan (defaults to "starter").
+	plan := req.Plan
+	if plan == "" {
+		plan = "starter"
+	}
+	subID := fmt.Sprintf("sub_bootstrap_%s", tenantID)
+	res, err = s.DB.Exec(ctx,
+		`INSERT INTO subscriptions (id, tenant_id, plan, status, created_at, updated_at)
+		 VALUES ($1, $2, $3, 'active', now(), now())
+		 ON CONFLICT (tenant_id) DO NOTHING`,
+		subID, tenantID, plan,
+	)
+	if err != nil {
+		return "", "", false, fmt.Errorf("bootstrap: insert subscription: %w", err)
 	}
 	if res.RowsAffected > 0 {
 		anyCreated = true

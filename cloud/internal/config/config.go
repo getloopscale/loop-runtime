@@ -84,6 +84,16 @@ type Config struct {
 	// Used by /v1/auth/session/token to issue JWTs for dashboard users.
 	// Env: SESSION_TOKEN_SECRET (required in production, auto-generated in dev)
 	SessionTokenSecret Secret
+
+	// ServiceAuthSecret is the shared secret for cloud→engine service-to-service calls.
+	// Used by the /engine/* proxy to authenticate with the engine API.
+	// Env: LOOPZERO_SERVICE_AUTH_SECRET (must match the engine's value)
+	ServiceAuthSecret Secret
+
+	// SessionTokenSecretPrevious is the previous HMAC key for zero-downtime rotation (§2.2).
+	// Tokens signed with this key are accepted during the rotation window.
+	// Env: SESSION_TOKEN_SECRET_PREVIOUS (optional)
+	SessionTokenSecretPrevious Secret
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -105,6 +115,8 @@ func Load() Config {
 	cfg.BillingReturnURL = envOr("BILLING_RETURN_URL", "http://localhost:3000")
 	cfg.DatabaseURL = envOr("DATABASE_URL", "")
 	cfg.SessionTokenSecret = Secret(envOr("SESSION_TOKEN_SECRET", generateDevSecret()))
+	cfg.SessionTokenSecretPrevious = Secret(envOr("SESSION_TOKEN_SECRET_PREVIOUS", ""))
+	cfg.ServiceAuthSecret = Secret(envOr("LOOPZERO_SERVICE_AUTH_SECRET", generateDevSecret()))
 	return cfg
 }
 

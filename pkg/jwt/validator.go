@@ -7,6 +7,7 @@ package jwt
 
 import (
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -28,8 +29,9 @@ type Claims struct {
 	Scope    string `json:"scope,omitempty"`
 	// Hydra puts consent session claims in "ext" (access_token session).
 	Ext struct {
-		Email string `json:"email,omitempty"`
-		Name  string `json:"name,omitempty"`
+		Email    string `json:"email,omitempty"`
+		Name     string `json:"name,omitempty"`
+		TenantID string `json:"tenant_id,omitempty"`
 	} `json:"ext,omitempty"`
 }
 
@@ -46,6 +48,7 @@ type SessionClaims struct {
 type Validator struct {
 	jwksURL    string
 	issuer     string
+	audience   string
 	httpClient *http.Client
 
 	mu      sync.RWMutex
@@ -55,10 +58,13 @@ type Validator struct {
 }
 
 // NewValidator creates a JWT validator that fetches JWKS from the given URL.
-func NewValidator(jwksURL, issuer string) *Validator {
+// The audience parameter enforces strict audience validation on all tokens.
+// MEET-2026-04-07-039: B4 fix — audience is mandatory per service.
+func NewValidator(jwksURL, issuer, audience string) *Validator {
 	return &Validator{
-		jwksURL: jwksURL,
-		issuer:  issuer,
+		jwksURL:  jwksURL,
+		issuer:   issuer,
+		audience: audience,
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
@@ -90,7 +96,7 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 			}
 		}
 		return key, nil
-	}, goJWT.WithIssuer(v.issuer), goJWT.WithExpirationRequired())
+	}, goJWT.WithIssuer(v.issuer), goJWT.WithAudience(v.audience), goJWT.WithExpirationRequired())
 
 	if err != nil {
 		return nil, fmt.Errorf("token validation failed: %w", err)
@@ -104,25 +110,46 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 }
 
 // SessionTokenIssuer issues and validates HMAC-SHA256 session JWTs.
-// Used by the cloud service to issue tokens and by both services to validate.
+// §2.2: Supports kid header and dual-key rotation (current + previous secret).
 type SessionTokenIssuer struct {
-	secret   []byte
-	issuer   string
-	audience string
-	lifetime time.Duration
+	secret         []byte
+	previousSecret []byte // nil if no rotation in progress
+	kid            string // first 8 chars of SHA256(secret)
+	issuer         string
+	audience       string
+	lifetime       time.Duration
+}
+
+// computeKID generates a key ID from the first 8 chars of the secret's SHA256 hash.
+func computeKID(secret []byte) string {
+	h := sha256.Sum256(secret)
+	return fmt.Sprintf("%x", h[:4]) // 8 hex chars
 }
 
 // NewSessionTokenIssuer creates an issuer/validator for HMAC session tokens.
-func NewSessionTokenIssuer(secret, issuer string, lifetime time.Duration) *SessionTokenIssuer {
-	return &SessionTokenIssuer{
+// previousSecret can be empty string if no rotation is in progress.
+func NewSessionTokenIssuer(secret, issuer, audience string, lifetime time.Duration) *SessionTokenIssuer {
+	s := &SessionTokenIssuer{
 		secret:   []byte(secret),
+		kid:      computeKID([]byte(secret)),
 		issuer:   issuer,
-		audience: "loopzero-cloud",
+		audience: audience,
 		lifetime: lifetime,
 	}
+	return s
+}
+
+// WithPreviousSecret adds a previous secret for zero-downtime rotation.
+// Tokens signed with the previous secret are accepted during the rotation window.
+func (s *SessionTokenIssuer) WithPreviousSecret(previousSecret string) *SessionTokenIssuer {
+	if previousSecret != "" {
+		s.previousSecret = []byte(previousSecret)
+	}
+	return s
 }
 
 // Issue creates a signed HMAC JWT for a dashboard user.
+// §2.2: Includes kid header for key identification during rotation.
 func (s *SessionTokenIssuer) Issue(sub, email, name, tenantID string) (string, int64, error) {
 	now := time.Now()
 	claims := SessionClaims{
@@ -140,6 +167,7 @@ func (s *SessionTokenIssuer) Issue(sub, email, name, tenantID string) (string, i
 	}
 
 	token := goJWT.NewWithClaims(goJWT.SigningMethodHS256, claims)
+	token.Header["kid"] = s.kid // §2.2: key identification
 	signed, err := token.SignedString(s.secret)
 	if err != nil {
 		return "", 0, fmt.Errorf("sign session token: %w", err)
@@ -148,19 +176,38 @@ func (s *SessionTokenIssuer) Issue(sub, email, name, tenantID string) (string, i
 }
 
 // ValidateSession parses and validates an HMAC session token.
+// §2.2: Tries current secret first, then previous (for rotation window).
 func (s *SessionTokenIssuer) ValidateSession(tokenString string) (*SessionClaims, error) {
+	// Try current secret
+	claims, err := s.validateWithSecret(tokenString, s.secret)
+	if err == nil {
+		return claims, nil
+	}
+
+	// Try previous secret if available (rotation window)
+	if s.previousSecret != nil {
+		claims, prevErr := s.validateWithSecret(tokenString, s.previousSecret)
+		if prevErr == nil {
+			return claims, nil
+		}
+	}
+
+	return nil, fmt.Errorf("invalid session token: %w", err)
+}
+
+func (s *SessionTokenIssuer) validateWithSecret(tokenString string, secret []byte) (*SessionClaims, error) {
 	token, err := goJWT.ParseWithClaims(tokenString, &SessionClaims{}, func(token *goJWT.Token) (interface{}, error) {
 		if _, ok := token.Method.(*goJWT.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return s.secret, nil
+		return secret, nil
 	},
 		goJWT.WithIssuer(s.issuer),
 		goJWT.WithAudience(s.audience),
 		goJWT.WithExpirationRequired(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("invalid session token: %w", err)
+		return nil, err
 	}
 
 	claims, ok := token.Claims.(*SessionClaims)

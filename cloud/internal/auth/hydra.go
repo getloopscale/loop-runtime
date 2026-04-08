@@ -242,14 +242,19 @@ func (c *HydraClient) GetConsentRequest(challenge string) (*ConsentRequest, erro
 	return &req, nil
 }
 
-// AcceptConsent accepts the consent challenge, granting requested scopes.
-// tokenClaims are injected into the access token (e.g., email, name).
-func (c *HydraClient) AcceptConsent(challenge string, grantScope []string, tokenClaims map[string]interface{}) (string, error) {
+// AcceptConsent accepts the consent challenge, granting requested scopes and audiences.
+// tokenClaims are injected into the access token (e.g., email, name, tenant_id).
+// grantAudience forwards the requested audience so Hydra includes it in the token's aud claim.
+func (c *HydraClient) AcceptConsent(challenge string, grantScope, grantAudience []string, tokenClaims map[string]interface{}) (string, error) {
+	// Default audience: both cloud and engine, so CLI tokens work everywhere.
+	if len(grantAudience) == 0 {
+		grantAudience = []string{"loopzero-cloud", "loopzero-engine"}
+	}
 	payload := map[string]interface{}{
 		"grant_scope":                 grantScope,
 		"remember":                    true,
 		"remember_for":                3600,
-		"grant_access_token_audience": []string{},
+		"grant_access_token_audience": grantAudience,
 	}
 	if len(tokenClaims) > 0 {
 		payload["session"] = map[string]interface{}{

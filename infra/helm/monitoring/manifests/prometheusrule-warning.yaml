@@ -346,3 +346,14 @@ spec:
           annotations:
             summary: "Build queue depth exceeds 5"
             description: "More than 5 builds waiting in QUEUED state for over 5 minutes."
+
+        # MEET-040: Traefik error rate monitoring.
+        - alert: LoopZeroTraefikHighErrorRate
+          expr: sum(rate(traefik_service_requests_total{code=~"5.."}[5m])) / sum(rate(traefik_service_requests_total[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Traefik 5xx error rate > 5%"
+            description: "Traefik is returning 5xx errors on more than 5% of requests for 5+ minutes."
+            runbook: "Check backend service health. Review Traefik access logs. Check IngressRoute configuration for misrouted paths."

@@ -142,9 +142,12 @@ export function bootstrapMgmtCluster(
     clusterIssuer,
   );
 
-  // API Gateway — path-based routing under api.{domain}
-  // Serves loopzero-api, loopzero-cloud, and dashboard from a single domain.
+  // API Gateway — path-based routing under api.{domain} (CLI-facing)
   createAPIGatewayRoute(provider, config, traefik, clusterIssuer);
+
+  // Cloud Gateway — path-based routing under cloud.{domain} (browser-facing)
+  // Dashboard + Kratos + Hydra + cloud service — same origin, no CORS.
+  createCloudGatewayRoute(provider, config, traefik, clusterIssuer);
 
   // REVIEW-2026-03-30: Fixes HIGH-01 — NetworkPolicies for production.
   // Local dev uses helm/network-policies/loopzero-system.yaml (namespace: loopzero-system).
@@ -1203,6 +1206,8 @@ function installCloudService(
         STRIPE_WEBHOOK_SECRET: config.stripeWebhookSecret || "",
         DATABASE_URL: cloudDatabaseUrl,
         SESSION_TOKEN_SECRET: config.sessionTokenSecret || "",
+        // Cloud→Engine proxy auth (MEET-2026-04-07-039). Must match engine's value.
+        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || "dev-service-auth-secret-default",
       },
     },
     { provider, dependsOn: [ns] },
@@ -1341,8 +1346,9 @@ function installLoopZeroAPI(
         // Spaces credentials (S3-compatible) — used by S3 uploader for source bundles
         MINIO_ACCESS_KEY: config.spacesAccessKeyId,
         MINIO_SECRET_KEY: config.spacesSecretAccessKey,
-        // Session token HMAC secret — same key as cloud service for JWT validation
-        SESSION_TOKEN_SECRET: config.sessionTokenSecret || "",
+        // Cloud→Engine proxy auth (MEET-2026-04-07-039). Must match cloud's value.
+        // Engine is RSA-only — no SESSION_TOKEN_SECRET needed (HMAC dropped).
+        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || "dev-service-auth-secret-default",
       },
     },
     { provider, dependsOn: [ns] },
@@ -2143,13 +2149,9 @@ const PLATFORM_INGRESS_ROUTES = [
   { subdomain: "grafana", serviceName: "grafana", servicePort: 3000 },
   // "api" subdomain uses path-based routing (see createAPIGatewayRoute below)
   // to serve loopzero-api, loopzero-cloud, and loopzero-dashboard under one domain.
-  { subdomain: "dashboard", serviceName: "loopzero-dashboard", servicePort: 80 },
-  // OAuth2 authorization server — browser-accessible for PKCE/consent flows.
-  // User-facing URL is auth.{domain}, no internal technology names exposed.
+  // Dashboard served under cloud.{domain} via cloud-gateway IngressRoute (not standalone).
   // OAuth2 authorization server — browser-accessible for PKCE/consent flows.
   { subdomain: "auth", serviceName: "ory-hydra-public", servicePort: 4444 },
-  // Identity management — Kratos Self-Service UI (login/signup/recovery).
-  // Kratos flows are served at cloud.{domain}/self-service/* via cloud-gateway IngressRoute.
 ] as const;
 
 /**
@@ -2221,6 +2223,90 @@ function createAPIGatewayRoute(
             kind: "Rule",
             priority: 1,
             services: [{ name: "loopzero-api", port: 8080, namespace: PLATFORM_NAMESPACE }],
+          },
+        ],
+        tls: { secretName: `${certName}-secret` },
+      },
+    },
+    { provider, dependsOn: [cert, traefik] },
+  );
+}
+
+/**
+ * Cloud Gateway — browser-facing entry point under cloud.{domain}.
+ *
+ * Dashboard, Kratos, Hydra, and cloud service share this host (same-origin).
+ * No CORS needed for dashboard API calls. Kratos cookies scoped correctly.
+ *
+ * Routes:
+ *   /oauth2/*, /.well-known/*              → Hydra (P300)
+ *   /self-service/*, /sessions/*, /schemas/* → Kratos (P200)
+ *   /v1/auth/*, /v1/billing/*, /auth/*, ... → cloud service (P100)
+ *   /*                                      → dashboard SPA (P1)
+ */
+function createCloudGatewayRoute(
+  provider: k8s.Provider,
+  config: PlatformStackConfig,
+  traefik: k8s.helm.v3.Release,
+  clusterIssuer: k8s.apiextensions.CustomResource,
+): void {
+  const fqdn = `cloud.${config.domain}`;
+  const certName = "tls-cloud";
+
+  const cert = new k8s.apiextensions.CustomResource(
+    "cert-cloud",
+    {
+      apiVersion: "cert-manager.io/v1",
+      kind: "Certificate",
+      metadata: { name: certName, namespace: PLATFORM_NAMESPACE },
+      spec: {
+        secretName: `${certName}-secret`,
+        issuerRef: { name: "letsencrypt-prod", kind: "ClusterIssuer" },
+        dnsNames: [fqdn],
+      },
+    },
+    { provider, dependsOn: [clusterIssuer] },
+  );
+
+  new k8s.apiextensions.CustomResource(
+    "ingress-cloud-gateway",
+    {
+      apiVersion: "traefik.io/v1alpha1",
+      kind: "IngressRoute",
+      metadata: {
+        name: "cloud-gateway",
+        namespace: PLATFORM_NAMESPACE,
+        labels: {
+          "app.kubernetes.io/managed-by": "pulumi",
+          "app.kubernetes.io/part-of": "loopzero-platform",
+        },
+      },
+      spec: {
+        entryPoints: ["websecure"],
+        routes: [
+          {
+            match: `Host(\`${fqdn}\`) && (PathPrefix(\`/oauth2\`) || PathPrefix(\`/.well-known\`))`,
+            kind: "Rule",
+            priority: 300,
+            services: [{ name: "ory-hydra-public", port: 4444, namespace: PLATFORM_NAMESPACE }],
+          },
+          {
+            match: `Host(\`${fqdn}\`) && (PathPrefix(\`/self-service\`) || PathPrefix(\`/sessions\`) || PathPrefix(\`/schemas\`))`,
+            kind: "Rule",
+            priority: 200,
+            services: [{ name: "ory-kratos-public", port: 80, namespace: PLATFORM_NAMESPACE }],
+          },
+          {
+            match: `Host(\`${fqdn}\`) && (PathPrefix(\`/v1/auth\`) || PathPrefix(\`/v1/billing\`) || PathPrefix(\`/v1/webhooks\`) || PathPrefix(\`/auth\`) || PathPrefix(\`/engine\`) || PathPrefix(\`/metrics\`) || PathPrefix(\`/health\`))`,
+            kind: "Rule",
+            priority: 100,
+            services: [{ name: "loopzero-cloud", port: 13002, namespace: PLATFORM_NAMESPACE }],
+          },
+          {
+            match: `Host(\`${fqdn}\`)`,
+            kind: "Rule",
+            priority: 1,
+            services: [{ name: "loopzero-dashboard", port: 80, namespace: PLATFORM_NAMESPACE }],
           },
         ],
         tls: { secretName: `${certName}-secret` },

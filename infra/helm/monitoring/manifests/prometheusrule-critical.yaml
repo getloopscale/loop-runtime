@@ -120,3 +120,15 @@ spec:
             summary: "Break-glass access session active"
             description: "Emergency direct cluster access is in use. Requires post-incident review within 24 hours."
             runbook: "Verify the break-glass session is authorized. Document the incident. Schedule post-incident review."
+
+        # MEET-040: Traefik is the single entry point for all platform traffic.
+        # Down Traefik = all services unreachable.
+        - alert: LoopZeroTraefikDown
+          expr: absent(up{job=~".*traefik.*"} == 1)
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Traefik ingress controller is down"
+            description: "Traefik has been unreachable for 1+ minutes. ALL platform traffic (dashboard, API, auth, CLI) is blocked."
+            runbook: "Check Traefik pod status in platform-system namespace. Verify PDB (minAvailable: 1). Check node health. Restart deployment if needed."
