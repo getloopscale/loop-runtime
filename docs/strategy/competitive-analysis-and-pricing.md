@@ -155,31 +155,30 @@ LoopZero is the **only platform** that does ALL of these:
 ### Tier Structure
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  STARTER (Free)           │  PRO ($29/team/mo)      │  TEAM ($79/team/mo)     │
-│  ─────────────────        │  ────────────────────    │  ────────────────────   │
-│  For solo devs and        │  For small teams         │  For growing teams      │
-│  validation               │  shipping to production  │  with multiple projects │
-│                           │                          │                         │
-│  2 projects               │  10 projects             │  Unlimited projects     │
-│  1 environment            │  3 environments          │  10 environments        │
-│  100 builds/month         │  1,000 builds/month      │  Unlimited builds       │
-│  1 seat                   │  5 seats                 │  20 seats               │
-│  No preview envs          │  Preview environments    │  Preview environments   │
-│  Community support        │  Email support           │  Priority support       │
-│                           │  Custom domains          │  Custom domains         │
-│  Logs (7 days)            │  Logs (30 days)          │  Logs (90 days)         │
-│  Basic metrics            │  Full metrics + alerts   │  Full metrics + alerts  │
-│  500 MB RAM / service     │  2 GB RAM / service      │  8 GB RAM / service     │
-│  Shared build (10 min)    │  Dedicated build (30 min)│  Dedicated build (60min)│
-│                           │                          │  SSO / SAML             │
-│                           │  $29/team (up to 5)      │  $79/team (up to 20)    │
-│  Free forever             │  Includes all metrics    │  Includes all metrics   │
-│  Commercial use OK        │  No overage charges      │  No overage charges     │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│  STARTER (Free)           │  PRO ($29/mo)             │  TEAM ($79/mo)          │
+│  ─────────────────        │  ────────────────────     │  ────────────────────   │
+│  For solo devs and        │  For small teams          │  For growing teams      │
+│  validation               │  shipping to production   │  with multiple products │
+│                           │                           │                         │
+│  1 project (app)          │  3 projects (apps)        │  10 projects (apps)     │
+│  1 environment            │  3 environments           │  10 environments        │
+│  50 builds/month          │  500 builds/month         │  Unlimited builds       │
+│  3 team members           │  10 team members          │  25 team members        │
+│  No preview envs          │  Preview environments     │  Preview environments   │
+│  Community support        │  Email support            │  Priority support       │
+│                           │  Custom domains           │  Custom domains         │
+│  Logs (7 days)            │  Logs (30 days)           │  Logs (90 days)         │
+│  Basic metrics            │  Full metrics + alerts    │  Full metrics + alerts  │
+│  512 MB RAM / service     │  2 GB RAM / service       │  8 GB RAM / service     │
+│  Shared build (10 min)    │  Dedicated build (30 min) │  Dedicated build (60min)│
+│                           │                           │  SSO / SAML             │
+│  Free forever             │  No overage charges       │  No overage charges     │
+│  Commercial use OK        │  Full observability       │  Full observability     │
+└─────────────────────────────────────────────────────────────────────────┘
 
 ENTERPRISE (Custom)
-  Unlimited everything
+  Unlimited projects + environments
   BYOC (your cloud account)
   HIPAA / SOC2 compliance
   Dedicated support + SLA
@@ -187,16 +186,19 @@ ENTERPRISE (Custom)
   On-prem option
 ```
 
+**Value axis: projects (apps).** The number of apps you deploy is the primary metric.
+Not seats — teams should grow without penalty. Not builds — shipping faster should be encouraged.
+
 ### 4.1 STARTER — Free Forever
 
-**Purpose:** Adopt. Validate. Build trust.
+**Purpose:** Adopt. Validate. Build trust. Ship your first app.
 
 | Metric | Limit |
 |--------|-------|
-| Projects | 2 |
+| **Projects (apps)** | **1** |
 | Environments | 1 (production) |
-| Builds/month | 100 |
-| Seats | 1 |
+| Builds/month | 50 |
+| Team members | 3 |
 | Preview environments | No |
 | Custom domains | No |
 | RAM per service | 512 MB |
@@ -205,21 +207,25 @@ ENTERPRISE (Custom)
 | Log retention | 7 days |
 | Observability | Basic metrics (included) |
 | Support | Community (Discord/GitHub) |
-| Commercial use | Yes |
+| Commercial use | **Yes** |
+
+**Why 1 project:** Enough to validate the platform and ship a real app. The upgrade trigger is clear: need a second app → upgrade to Pro.
 
 **Why free + commercial use:** Removes the #1 barrier to adoption. Vercel's "non-commercial only" free tier forces teams to upgrade the moment they earn $1. Netlify proved that commercial-friendly free tiers drive adoption faster.
 
-### 4.2 PRO — $29/team/month
+**Why 3 team members on free:** A solo dev often has a co-founder or a designer who needs read access. Blocking at 1 member creates unnecessary friction for early-stage teams.
 
-**Purpose:** Ship to production. The plan that makes money.
+### 4.2 PRO — $29/month
+
+**Purpose:** Ship a full product. The plan where monorepo shines.
 
 | Metric | Limit |
 |--------|-------|
-| Projects | 10 |
+| **Projects (apps)** | **3** |
 | Environments | 3 (production, staging, preview) |
-| Builds/month | 1,000 |
-| Seats | 5 (included) |
-| Preview environments | Yes (per-PR) |
+| Builds/month | 500 |
+| Team members | 10 |
+| Preview environments | **Yes (per-PR, full-stack)** |
 | Custom domains | Yes |
 | RAM per service | 2 GB |
 | vCPU per service | 2 |
@@ -230,21 +236,23 @@ ENTERPRISE (Custom)
 | Rollback | Instant (`loopzero rollback`) |
 | Secrets | Cross-environment sync |
 
-**Why $29/team, not $29/seat:** A team of 5 on Vercel pays $100/month. On LoopZero, $29. This is the adoption driver. We don't penalize growth — when you add developer #6, you upgrade to Team ($79) instead of paying $29 × 6 = $174.
+**Why 3 projects:** This is the monorepo sweet spot. A typical product: `api` (Go backend) + `web` (React frontend) + `worker` (background jobs) = 3 apps in one `loopzero.yaml`. One `loopzero deploy` deploys all three. This is the exact use case LoopZero was built for.
 
-**Why preview environments at Pro:** This is LoopZero's killer feature. No other platform gives you full-stack preview environments (API + DB + secrets + DNS) at this price point. Vercel only previews frontend. Railway has no coordinated previews.
+**Why preview environments at Pro:** This is LoopZero's killer feature. No other platform gives you full-stack preview environments (API + DB + secrets + DNS) at $29. Vercel only previews frontend. Railway has no coordinated previews. One PR → complete preview environment with API, frontend, database, and secrets.
 
-### 4.3 TEAM — $79/team/month
+**Why 10 team members:** A small product team (2-3 devs + designer + PM + QA) fits comfortably. No per-seat pricing — the team grows, the bill doesn't.
 
-**Purpose:** Scale. Multiple projects, multiple environments, multiple teams.
+### 4.3 TEAM — $79/month
+
+**Purpose:** Scale. Multiple products, multiple environments.
 
 | Metric | Limit |
 |--------|-------|
-| Projects | Unlimited |
+| **Projects (apps)** | **10** |
 | Environments | 10 |
 | Builds/month | Unlimited |
-| Seats | 20 (included) |
-| Preview environments | Yes (per-PR, auto-cleanup) |
+| Team members | 25 |
+| Preview environments | **Yes (per-PR, auto-cleanup)** |
 | Custom domains | Unlimited |
 | RAM per service | 8 GB |
 | vCPU per service | 8 |
@@ -256,7 +264,9 @@ ENTERPRISE (Custom)
 | Audit log | Yes |
 | Role-based access | owner, admin, member |
 
-**Why $79 for 20 seats:** Aggressive. A team of 20 on Vercel pays $400/month (Pro). On Render, $380/month. On LoopZero, $79. The value prop is clear: "Stop paying per-head for something that should scale with your product, not your headcount."
+**Why 10 projects:** Covers a company with 2-3 products, each with API + Web + Worker. Or a single product with microservices architecture. The limit is generous enough that most teams never hit it.
+
+**Why 25 team members:** An engineering team of 25 on Vercel pays $500/month (Pro at $20/head). On LoopZero, $79. The saving is real and the message is clear: we monetize your **products**, not your **people**.
 
 ### 4.4 ENTERPRISE — Custom
 
@@ -282,22 +292,23 @@ ENTERPRISE (Custom)
 
 | Price Point | Vercel | Railway | Render | **LoopZero** |
 |-------------|--------|---------|--------|----------|
-| **$0** | Non-commercial only | $5 credits (expire) | Free (limited) | **Free + commercial use** |
-| **$29/mo** | 1.5 seats on Pro | $9/mo more than credits | 1.5 seats on Pro | **Full team of 5 + previews** |
-| **$79/mo** | 4 seats on Pro | Usage-based (varies) | 4 seats on Pro | **Full team of 20 + SSO** |
-| **$100/mo** | 5 seats, no previews | ~$80 in usage | 5 seats | **Team plan + all features** |
+| **$0** | Non-commercial only, 0 backend | $5 credits (expire in 30d) | Free (sleep after 15min) | **Free + commercial + 1 app + 3 members** |
+| **$29/mo** | 1.5 seats on Pro | $9/mo more than credits | 1.5 seats on Pro | **3 apps + preview envs + 10 members** |
+| **$79/mo** | 4 seats on Pro, no SSO | Usage-based (unpredictable) | 4 seats on Pro | **10 apps + SSO + 25 members** |
+| **$100/mo** | 5 seats, no backend previews | ~$80 in usage | 5 seats | **Team plan + all features + $21 to spare** |
 
 ### Feature Gap at Each Tier
 
-| Feature | Vercel @ $100/mo | Railway @ $20/mo | **LoopZero @ $29/mo** |
-|---------|-----------------|------------------|-------------------|
+| Feature | Vercel @ $100/mo (5 seats) | Railway @ $20/mo | **LoopZero @ $29/mo** |
+|---------|---------------------------|------------------|-------------------|
+| Projects (apps) | Unlimited (frontend only) | Unlimited | **3 (full-stack)** |
 | Full-stack preview envs | No (frontend only) | No | **Yes** |
-| Monorepo deploy | Turborepo (build) | Partial | **Native (loopzero.yaml)** |
+| Monorepo deploy | Turborepo (build only) | Partial | **Native (loopzero.yaml)** |
 | Instant rollback | No (redeploy) | No | **Yes (< 5s)** |
-| Observability | +$30/mo add-ons | Basic logs | **Included** |
+| Observability | +$30/mo add-ons | Basic logs (7d) | **Included (30d)** |
 | Backend containers | No (serverless) | Yes | **Yes** |
 | WebSockets | No | Yes | **Yes** |
-| Seats included | 5 | 1 | **5** |
+| Team members | 5 ($20/each) | 1 | **10** |
 
 ---
 
@@ -314,15 +325,17 @@ ENTERPRISE (Custom)
 
 ### Growth Mechanics
 
-1. **Starter → Pro:** Team adds 2nd member OR needs preview environments OR hits 2-project limit.
-2. **Pro → Team:** Team grows past 5 members OR needs SSO OR needs > 3 environments.
-3. **Team → Enterprise:** Compliance requirement OR BYOC need OR > 20 team members.
+The primary upgrade trigger is **projects (apps)** — the metric most correlated with value.
+
+1. **Starter → Pro:** Needs a second app (API + frontend) OR needs preview environments OR needs custom domains.
+2. **Pro → Team:** Needs 4th+ app (multiple products) OR needs SSO OR team grows past 10 members.
+3. **Team → Enterprise:** Compliance requirement (HIPAA/SOC2) OR BYOC need OR > 25 team members.
 
 ### No Overage Charges
 
 Hard limits, not soft limits. When you hit the ceiling, you see "Upgrade to unlock more." No surprise bills. This is the opposite of Vercel/Railway and is a deliberate trust signal.
 
-**Exception:** Team plan has soft limits on a few metrics (projects, services, builds) where overage is tracked for billing transparency but not blocked. This allows spikes without disruption.
+**Exception:** Team plan has soft limits on builds (tracked for billing transparency but not blocked). This allows deploy spikes without disruption.
 
 ---
 
