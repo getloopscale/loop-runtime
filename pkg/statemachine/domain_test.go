@@ -40,12 +40,35 @@ func TestDomainMachine_FailureAndRetry(t *testing.T) {
 	}
 }
 
-func TestDomainMachine_CNAMELost_TransitionsToRemoving(t *testing.T) {
+func TestDomainMachine_CNAMELost_GracePeriod(t *testing.T) {
 	m := NewDomainMachine()
 
-	state := m.Transition(DomainActive, DomainCNAMELost)
-	if state != DomainRemoving {
-		t.Fatalf("expected removing after CNAME lost, got %s", state)
+	// Active → Degrade (CNAME lost, enters grace period)
+	state := m.Transition(DomainActive, DomainDegrade)
+	if state != DomainDegraded {
+		t.Fatalf("expected degraded after CNAME lost, got %s", state)
+	}
+
+	// Grace period expired → Failed
+	state = m.Transition(state, DomainCNAMELost)
+	if state != DomainFailed {
+		t.Fatalf("expected failed after grace period, got %s", state)
+	}
+}
+
+func TestDomainMachine_CNAMERecovered_DuringGrace(t *testing.T) {
+	m := NewDomainMachine()
+
+	// Active → Degraded
+	state := m.Transition(DomainActive, DomainDegrade)
+	if state != DomainDegraded {
+		t.Fatalf("expected degraded, got %s", state)
+	}
+
+	// CNAME recovered → back to Active
+	state = m.Transition(state, DomainCNAMERecovered)
+	if state != DomainActive {
+		t.Fatalf("expected active after recovery, got %s", state)
 	}
 }
 
@@ -78,6 +101,9 @@ func TestDomainMachine_RemovingIsTerminal(t *testing.T) {
 	if IsDomainTerminal(DomainActive) {
 		t.Error("expected DomainActive to NOT be terminal")
 	}
+	if IsDomainTerminal(DomainDegraded) {
+		t.Error("expected DomainDegraded to NOT be terminal")
+	}
 }
 
 func TestDomainMachine_AllStatesCanRemove(t *testing.T) {
@@ -88,6 +114,7 @@ func TestDomainMachine_AllStatesCanRemove(t *testing.T) {
 		DomainVerified,
 		DomainProvisioning,
 		DomainActive,
+		DomainDegraded,
 		DomainFailed,
 	}
 

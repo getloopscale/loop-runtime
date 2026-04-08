@@ -1,4 +1,4 @@
--- Migration 000015: Fix ON DELETE CASCADE on custom_domains.tenant_id
+-- Migration 000025: Fix ON DELETE CASCADE on custom_domains.tenant_id
 -- CRIT-04: CASCADE deletes domain rows without triggering gitops cleanup,
 -- leaving orphaned IngressRoutes in the cluster (subdomain takeover vector).
 -- Change to RESTRICT — domains must be explicitly removed (→ "removing" status)

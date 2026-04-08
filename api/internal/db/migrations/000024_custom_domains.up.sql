@@ -1,4 +1,4 @@
--- Migration 000014: Custom domains for tenant applications
+-- Migration 000024: Custom domains for tenant applications
 -- Custom Domains feature (MEET-2026-04-05-033)
 --
 -- Allows tenants to map their own domains (e.g., api.mycompany.com)
@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS custom_domains (
                                    'verified',
                                    'provisioning',
                                    'active',
+                                   'degraded',
                                    'failed',
                                    'removing'
                                )),

@@ -276,7 +276,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			if cfg.DomainHandler != nil {
 				r.Get("/api/v1/domains", cfg.DomainHandler.List)
 				r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)
-				r.With(idempotentMiddlewares...).Post("/api/v1/domains", cfg.DomainHandler.Create)
+				r.With(append(rateLimitMiddlewares, idempotentMiddlewares...)...).Post("/api/v1/domains", cfg.DomainHandler.Create)
 				r.With(rateLimitMiddlewares...).Post("/api/v1/domains/{domain}/verify", cfg.DomainHandler.Verify)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)
 			}
