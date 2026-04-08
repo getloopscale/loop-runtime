@@ -195,9 +195,15 @@ func main() {
 		if err != nil {
 			logger.Warn("failed to open stdlib DB for plan enforcement — limits disabled", "error", err)
 		} else {
-			stdDB.SetMaxOpenConns(2) // Enforcement queries are rare and fast
+			stdDB.SetMaxOpenConns(2)
 			defer func() { _ = stdDB.Close() }()
-			planLimiter = enforcement.NewPlanLimiter(stdDB, logger)
+			// Verify connection works before wiring
+			if pingErr := stdDB.Ping(); pingErr != nil {
+				logger.Warn("plan enforcement DB ping failed — limits disabled", "error", pingErr)
+			} else {
+				planLimiter = enforcement.NewPlanLimiter(stdDB, logger)
+				logger.Info("plan enforcement enabled")
+			}
 		}
 
 		// Sprint 1 stores
