@@ -503,7 +503,17 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 
 // Verify checks DNS TXT records for domain ownership (POST /api/v1/domains/{domain}/verify).
 // Idempotent: returns 200 for already-verified domains (MEET-033).
+// Phase 8.1: Deprecated when CF Zone Management (v2) is active — domains use nameserver delegation.
 func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
+	// v2: TXT verification is deprecated — domains use nameserver delegation
+	if h.cfZone != nil {
+		writeJSON(w, http.StatusGone, map[string]string{
+			"code":    "DEPRECATED",
+			"message": "TXT verification is deprecated. Domains now use nameserver delegation. Use 'loopzero domain add' to register a new domain.",
+		})
+		return
+	}
+
 	ctx := r.Context()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
