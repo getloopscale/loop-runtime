@@ -112,6 +112,8 @@ func TestDomainMachine_AllStatesCanRemove(t *testing.T) {
 	removable := []State{
 		DomainPendingVerification,
 		DomainVerified,
+		DomainPendingNS,
+		DomainNSActive,
 		DomainProvisioning,
 		DomainActive,
 		DomainDegraded,
@@ -123,5 +125,50 @@ func TestDomainMachine_AllStatesCanRemove(t *testing.T) {
 		if state != DomainRemoving {
 			t.Errorf("expected %s + DomainRemove → removing, got %s", s, state)
 		}
+	}
+}
+
+// --- v2: CF Zone flow tests ---
+
+func TestDomainMachine_V2_HappyPath(t *testing.T) {
+	m := NewDomainMachine()
+
+	state := DomainPendingNS
+	state = m.Transition(state, DomainNSActivated)
+	if state != DomainNSActive {
+		t.Fatalf("expected ns_active, got %s", state)
+	}
+	state = m.Transition(state, DomainProvision)
+	if state != DomainProvisioning {
+		t.Fatalf("expected provisioning, got %s", state)
+	}
+	state = m.Transition(state, DomainActivate)
+	if state != DomainActive {
+		t.Fatalf("expected active, got %s", state)
+	}
+}
+
+func TestDomainMachine_V2_NSTimeout(t *testing.T) {
+	m := NewDomainMachine()
+
+	state := m.Transition(DomainPendingNS, DomainNSTimeout)
+	if state != DomainFailed {
+		t.Fatalf("expected failed after NS timeout, got %s", state)
+	}
+}
+
+func TestDomainMachine_V2_FailedRecovery(t *testing.T) {
+	m := NewDomainMachine()
+
+	// NS timeout → failed
+	state := m.Transition(DomainPendingNS, DomainNSTimeout)
+	if state != DomainFailed {
+		t.Fatalf("expected failed, got %s", state)
+	}
+
+	// NS comes back → ns_active (retry)
+	state = m.Transition(state, DomainNSActivated)
+	if state != DomainNSActive {
+		t.Fatalf("expected ns_active after NS recovery, got %s", state)
 	}
 }
