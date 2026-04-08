@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"encoding/hex"
 	"flag"
 	"log/slog"
@@ -15,6 +16,9 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib" // pgx stdlib driver for sql.Open("pgx", ...)
+
+	"github.com/loopzero/loopzero/pkg/enforcement"
 	"github.com/loopzero/loopzero/pkg/logging"
 	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 
@@ -149,6 +153,7 @@ func main() {
 	var projectStore routes.ProjectStore
 	var dbHealth routes.DBHealthChecker
 	var dbAdapter *db.PgxAdapter
+	var planLimiter *enforcement.PlanLimiter
 
 	// Sprint 2 dependencies (nil when DATABASE_URL is not set)
 	var sourceStore source.SourceStore
@@ -184,6 +189,16 @@ func main() {
 		}
 		dbAdapter = poolCfg
 		defer dbAdapter.Close()
+
+		// Plan enforcement limiter (uses stdlib sql.DB for simple queries)
+		stdDB, err := sql.Open("pgx", dbURL)
+		if err != nil {
+			logger.Warn("failed to open stdlib DB for plan enforcement — limits disabled", "error", err)
+		} else {
+			stdDB.SetMaxOpenConns(2) // Enforcement queries are rare and fast
+			defer func() { _ = stdDB.Close() }()
+			planLimiter = enforcement.NewPlanLimiter(stdDB, logger)
+		}
 
 		// Sprint 1 stores
 		memberStore = &db.PostgresMembershipStore{DB: dbAdapter}
@@ -694,6 +709,8 @@ func main() {
 		SSESafetyTimeout:        cfg.SSESafetyTimeout,
 		SSEMaxConcurrentStreams: int64(cfg.SSEMaxConcurrentStreams),
 		IsProduction:           cfg.IsProduction(),
+		PlanLimiter:            planLimiter,
+		UpgradeURL:             os.Getenv("BILLING_UPGRADE_URL"),
 	}
 
 	if err := server.Run(srvCfg); err != nil {

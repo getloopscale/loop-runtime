@@ -2,23 +2,23 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package enforcement checks plan limits before allowing mutations.
+// Shared between cloud and engine — zero external dependencies.
 package enforcement
 
 import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-
-	"github.com/loopzero/loopzero/cloud/internal/metrics"
 )
 
 // PlanLimiter checks if a tenant's operation is within their plan limits.
 type PlanLimiter struct {
-	db     *sql.DB
-	logger *slog.Logger
+	db                *sql.DB
+	logger            *slog.Logger
+	OnFallbackStarter func() // Called when subscription row is missing (for metrics)
 }
 
-// NewPlanLimiter creates a limiter backed by the plan_limits and usage tables.
+// NewPlanLimiter creates a limiter backed by the plan_limits and subscriptions tables.
 func NewPlanLimiter(db *sql.DB, logger *slog.Logger) *PlanLimiter {
 	return &PlanLimiter{db: db, logger: logger}
 }
@@ -34,32 +34,21 @@ type LimitResult struct {
 }
 
 // CheckLimit verifies if a tenant can perform an operation for the given metric.
-// Returns LimitResult indicating whether the operation is allowed.
-//
-// Logic:
-//   - Enterprise: always allowed (bypass)
-//   - Team with soft_limit: allowed but marked as overage when exceeded
-//   - Starter/Pro: blocked (402) when hard_limit exceeded
 func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) LimitResult {
-	if l.db == nil {
-		// Dev mode without DB — allow everything
+	if l == nil || l.db == nil {
 		return LimitResult{Allowed: true, Plan: "dev", Metric: metric}
 	}
 
-	// Get tenant's plan
 	plan := l.getTenantPlan(tenantID)
 	if plan == "enterprise" {
 		return LimitResult{Allowed: true, Plan: plan, Metric: metric}
 	}
 
-	// Get limits for this plan + metric
 	hardLimit, softLimit := l.getLimits(plan, metric)
 	if hardLimit < 0 {
-		// NULL = unlimited — allow
 		return LimitResult{Allowed: true, Plan: plan, Metric: metric}
 	}
 	if hardLimit == 0 {
-		// No limit configured or DB error — allow (fail-open for missing config)
 		return LimitResult{Allowed: true, Plan: plan, Metric: metric}
 	}
 
@@ -70,7 +59,6 @@ func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) Limi
 		Limit:   hardLimit,
 	}
 
-	// Check soft limit first (Team plan)
 	if softLimit > 0 && currentCount >= softLimit {
 		result.Allowed = true
 		result.SoftOver = true
@@ -81,7 +69,6 @@ func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) Limi
 		return result
 	}
 
-	// Check hard limit
 	if currentCount >= hardLimit {
 		result.Allowed = false
 		l.logger.Info("hard limit exceeded",
@@ -97,10 +84,9 @@ func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) Limi
 
 // GetBuildTimeout returns the build timeout for a tenant's plan (in seconds).
 func (l *PlanLimiter) GetBuildTimeout(tenantID string) int {
-	if l.db == nil {
-		return 1800 // 30min default for dev
+	if l == nil || l.db == nil {
+		return 1800
 	}
-
 	plan := l.getTenantPlan(tenantID)
 	hardLimit, _ := l.getLimits(plan, "build_timeout_seconds")
 	if hardLimit <= 0 {
@@ -111,10 +97,9 @@ func (l *PlanLimiter) GetBuildTimeout(tenantID string) int {
 
 // GetRateLimit returns the API rate limit for a tenant's plan (requests per minute).
 func (l *PlanLimiter) GetRateLimit(tenantID string) int {
-	if l.db == nil {
-		return 300 // Default for dev
+	if l == nil || l.db == nil {
+		return 300
 	}
-
 	plan := l.getTenantPlan(tenantID)
 	hardLimit, _ := l.getLimits(plan, "api_requests_per_min")
 	if hardLimit <= 0 {
@@ -130,22 +115,16 @@ func (l *PlanLimiter) getTenantPlan(tenantID string) string {
 		tenantID,
 	).Scan(&plan)
 	if err != nil {
-		// S1.4: Missing subscription is an observable anomaly, not just a silent default.
-		// This metric fires on every request for a tenant without a subscription row.
-		// In steady state this should be zero — any increment indicates data corruption
-		// or a provisioning bug.
 		l.logger.Warn("subscription row missing — falling back to starter plan",
 			"tenant", tenantID, "error", err)
-		metrics.IncSubscriptionFallback()
+		if l.OnFallbackStarter != nil {
+			l.OnFallbackStarter()
+		}
 		return "starter"
 	}
 	return plan
 }
 
-// getLimits returns the hard and soft limits for a plan+metric.
-// Returns (-1, -1) if no limit configured.
-// Returns (0, 0) on DB error.
-// NULL hard_limit = unlimited (returned as -1).
 func (l *PlanLimiter) getLimits(plan, metric string) (hardLimit, softLimit int) {
 	var hard sql.NullInt64
 	var soft sql.NullInt64
@@ -156,7 +135,7 @@ func (l *PlanLimiter) getLimits(plan, metric string) (hardLimit, softLimit int) 
 	if err != nil {
 		return 0, 0
 	}
-	hardVal := -1 // NULL = unlimited
+	hardVal := -1
 	if hard.Valid {
 		hardVal = int(hard.Int64)
 	}
@@ -171,7 +150,7 @@ func (l *PlanLimiter) getLimits(plan, metric string) (hardLimit, softLimit int) 
 func FormatLimitError(result LimitResult, upgradeURL string) map[string]interface{} {
 	return map[string]interface{}{
 		"code":        "PLAN_LIMIT_EXCEEDED",
-		"error":       fmt.Sprintf("Plan limit reached: %s allows %d %s (current: %d). Upgrade your plan to continue.", displayPlan(result.Plan), result.Limit, displayMetric(result.Metric), result.Current),
+		"message":     fmt.Sprintf("Plan limit reached: %s allows %d %s (current: %d). Upgrade your plan to continue.", displayPlan(result.Plan), result.Limit, displayMetric(result.Metric), result.Current),
 		"plan":        result.Plan,
 		"limit":       result.Metric,
 		"current":     result.Current,

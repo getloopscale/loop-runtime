@@ -21,6 +21,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/sse"
+	"github.com/loopzero/loopzero/pkg/enforcement"
 )
 
 // Config holds the server configuration.
@@ -91,6 +92,10 @@ type Config struct {
 	TeamHandler *routes.TeamHandler
 	// IsProduction indicates production mode — enables strict error handling.
 	IsProduction bool
+	// PlanLimiter enforces plan limits on mutation routes (Phase 1).
+	PlanLimiter *enforcement.PlanLimiter
+	// UpgradeURL is included in 402 responses when plan limits are hit.
+	UpgradeURL string
 }
 
 // NewRouter creates a chi router with middleware and routes.
@@ -159,6 +164,47 @@ func NewRouter(cfg Config) *chi.Mux {
 				idempotentMiddlewares = append(idempotentMiddlewares, middleware.Idempotency(cfg.IdempotencyStore))
 			}
 
+			// Plan enforcement middlewares (Phase 1).
+			// Each mutation route gets a middleware that checks the plan limit before proceeding.
+			// CountFn closures query the DB directly via PlanLimiter's DB connection.
+			tenantFromCtx := func(r *http.Request) string {
+				uc := middleware.GetUserContext(r.Context())
+				if uc == nil {
+					return ""
+				}
+				return uc.TenantID
+			}
+			upgradeURL := cfg.UpgradeURL
+			if upgradeURL == "" {
+				upgradeURL = "/billing"
+			}
+
+			projectEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
+				Metric: "projects",
+				CountFn: func(tenantID string) int {
+					if cfg.ProjectStore == nil {
+						return 0
+					}
+					ps, _ := cfg.ProjectStore.ListByTenant(context.Background(), tenantID)
+					return len(ps)
+				},
+			}, tenantFromCtx, upgradeURL)
+
+			buildEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
+				Metric: "builds_per_month",
+				CountFn: enforcement.CountBuildsThisMonth(cfg.PlanLimiter),
+			}, tenantFromCtx, upgradeURL)
+
+			envEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
+				Metric: "environments",
+				CountFn: enforcement.CountRows(cfg.PlanLimiter, "SELECT COUNT(*) FROM environment_targets WHERE tenant_id = $1"),
+			}, tenantFromCtx, upgradeURL)
+
+			seatEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
+				Metric: "seats",
+				CountFn: enforcement.CountRows(cfg.PlanLimiter, "SELECT COUNT(*) FROM tenant_members WHERE tenant_id = $1"),
+			}, tenantFromCtx, upgradeURL)
+
 			// Source upload — auth + rate limiting, no idempotency.
 			// Upload is a pre-build step; idempotency belongs on build submission.
 			if cfg.SourceStore != nil {
@@ -182,7 +228,7 @@ func NewRouter(cfg Config) *chi.Mux {
 				}
 				r.Get("/api/v1/projects", projects.List)
 				r.Get("/api/v1/projects/{name}", projects.Get)
-				r.With(rateLimitMiddlewares...).Post("/api/v1/projects", projects.Create)
+				r.With(append(rateLimitMiddlewares, projectEnforcement)...).Post("/api/v1/projects", projects.Create)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}", projects.Delete)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}/environments/{env}", projects.DeleteEnvironment)
 			}
@@ -227,7 +273,7 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.Get("/api/v1/builds/{id}", cfg.BuildHandler.Get)
 
 				// Mutating build routes with rate limiting + idempotency
-				r.With(idempotentMiddlewares...).Post("/api/v1/builds", cfg.BuildHandler.Create)
+				r.With(append(idempotentMiddlewares, buildEnforcement)...).Post("/api/v1/builds", cfg.BuildHandler.Create)
 				// Cancel is inherently idempotent (cancelling twice = same result).
 				// Rate-limited but no Idempotency-Key required.
 				r.With(rateLimitMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
@@ -256,7 +302,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Team routes
 			if cfg.TeamHandler != nil {
 				r.Get("/api/v1/teams/members", cfg.TeamHandler.List)
-				r.With(rateLimitMiddlewares...).Post("/api/v1/teams/members", cfg.TeamHandler.Add)
+				r.With(append(rateLimitMiddlewares, seatEnforcement)...).Post("/api/v1/teams/members", cfg.TeamHandler.Add)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/teams/members/{username}", cfg.TeamHandler.Remove)
 				r.With(rateLimitMiddlewares...).Patch("/api/v1/teams/members/{username}", cfg.TeamHandler.UpdateRole)
 			}
@@ -265,7 +311,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			if cfg.EnvironmentHandler != nil {
 				r.Get("/api/v1/environments", cfg.EnvironmentHandler.List)
 				r.Get("/api/v1/environments/{name}", cfg.EnvironmentHandler.Get)
-				r.With(rateLimitMiddlewares...).Post("/api/v1/environments", cfg.EnvironmentHandler.Create)
+				r.With(append(rateLimitMiddlewares, envEnforcement)...).Post("/api/v1/environments", cfg.EnvironmentHandler.Create)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/environments/{name}", cfg.EnvironmentHandler.Delete)
 			}
 		})
@@ -442,4 +488,10 @@ func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// firstOfMonth returns the first day of the current month (UTC).
+func firstOfMonth() time.Time {
+	now := time.Now().UTC()
+	return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 }
