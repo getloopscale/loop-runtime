@@ -44,7 +44,7 @@ import { TeamListCommand } from './commands/team-list';
 import { TeamAddCommand } from './commands/team-add';
 import { TeamRemoveCommand } from './commands/team-remove';
 import { TeamRoleCommand } from './commands/team-role';
-import { DomainAddCommand, DomainVerifyCommand, DomainStatusCommand, DomainListCommand, DomainRemoveCommand } from './commands/domain';
+import { DomainAddCommand, DomainVerifyCommand, DomainStatusCommand, DomainListCommand, DomainRemoveCommand, DomainDNSCommand } from './commands/domain';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
@@ -1545,6 +1545,29 @@ export function createProgram(): Command {
         else { writeError(err.message); }
         return 3;
       });
+    });
+
+  domainCmd
+    .command('dns <domain>')
+    .description('List DNS records for a Cloudflare-managed domain')
+    .action(async (domain: string) => {
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new DomainDNSCommand({
+        getToken: () => configStore.getToken(),
+        createDomain: async (body) => apiClient.post('/api/v1/domains', body, { 'Idempotency-Key': 'domain-' + (body as any).domain + '-' + Date.now() }),
+        verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}),
+        getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`),
+        listDomains: async () => apiClient.get('/api/v1/domains'),
+        deleteDomain: async (d) => apiClient.del(`/api/v1/domains/${encodeURIComponent(d)}`),
+        listDNSRecords: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}/dns-records`),
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute(domain, { json: program.opts().json });
     });
 
   // --- billing ---
