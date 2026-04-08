@@ -239,7 +239,9 @@ type domainStatusResponse struct {
 	Status       string                  `json:"status"`
 	TLS          *domainTLSInfo          `json:"tls,omitempty"`
 	Verification *domainVerificationInfo `json:"verification,omitempty"`
-	CNAMETarget  string                  `json:"cname_target"`
+	CNAMETarget  string                  `json:"cname_target,omitempty"`
+	Nameservers  []string                `json:"nameservers,omitempty"`  // v2: CF nameservers
+	CFManaged    bool                    `json:"cf_managed,omitempty"`   // v2: true if CF zone
 	CreatedAt    time.Time               `json:"created_at"`
 	VerifiedAt   *time.Time              `json:"verified_at,omitempty"`
 }
@@ -595,8 +597,13 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// FIND-004/SEC-009 fix: only expose verification token to owner/admin.
-	// Members can see domain status but not the raw TXT value.
+	// v2: include CF zone info
+	if d.IsCFManaged() {
+		resp.CFManaged = true
+		resp.Nameservers = d.CFNameservers
+	}
+
+	// v1: expose verification token to owner/admin for pending domains
 	if d.Status == "pending_verification" && (uc.Role == "owner" || uc.Role == "admin") {
 		resp.Verification = &domainVerificationInfo{
 			TXTName:  "_loopzero-verify." + d.Domain,
@@ -706,6 +713,112 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		OK:     true,
 		Domain: d.Domain,
 		Status: "removing",
+	})
+}
+
+// --- v2: DNS Record Management ---
+
+// ListDNSRecords returns DNS records for a CF-managed domain (GET /api/v1/domains/{domain}/dns-records).
+func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	uc := middleware.GetUserContext(ctx)
+	if uc == nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		return
+	}
+
+	domainName := chi.URLParam(r, "domain")
+	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
+	if err != nil || d == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "domain not found"})
+		return
+	}
+
+	if !d.IsCFManaged() || h.cfZone == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "DNS records management is only available for Cloudflare-managed domains.",
+			"code":  "NOT_CF_MANAGED",
+		})
+		return
+	}
+
+	records, err := h.cfZone.ListDNSRecords(ctx, *d.CFZoneID)
+	if err != nil {
+		slog.ErrorContext(ctx, "cf list dns records failed", "domain", domainName, "error", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Failed to fetch DNS records"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"domain":  domainName,
+		"records": records,
+		"total":   len(records),
+	})
+}
+
+// AddDNSRecords adds DNS records to a CF-managed domain (POST /api/v1/domains/{domain}/dns-records).
+func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	uc := middleware.GetUserContext(ctx)
+	if uc == nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		return
+	}
+
+	if uc.Role != "owner" && uc.Role != "admin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Only team owners and admins can manage DNS records.", "code": "FORBIDDEN"})
+		return
+	}
+
+	domainName := chi.URLParam(r, "domain")
+	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
+	if err != nil || d == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "domain not found"})
+		return
+	}
+
+	if !d.IsCFManaged() || h.cfZone == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "DNS management only available for Cloudflare-managed domains.", "code": "NOT_CF_MANAGED"})
+		return
+	}
+
+	var req struct {
+		Records []CFDNSRecord `json:"records"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	// Validate: reject protected record types
+	for _, rec := range req.Records {
+		upperType := strings.ToUpper(rec.Type)
+		if upperType == "NS" || upperType == "SOA" {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+				"error": fmt.Sprintf("Cannot add %s records — these are managed by the platform.", upperType),
+				"code":  "PROTECTED_RECORD",
+			})
+			return
+		}
+	}
+
+	var created []CFDNSRecord
+	for _, rec := range req.Records {
+		result, err := h.cfZone.CreateDNSRecord(ctx, *d.CFZoneID, rec)
+		if err != nil {
+			slog.ErrorContext(ctx, "cf create dns record failed", "domain", domainName, "record", rec.Name, "error", err)
+			writeJSON(w, http.StatusBadGateway, map[string]string{
+				"error": fmt.Sprintf("Failed to add record %s %s: %v", rec.Type, rec.Name, err),
+			})
+			return
+		}
+		created = append(created, *result)
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"ok":      true,
+		"created": len(created),
+		"records": created,
 	})
 }
 

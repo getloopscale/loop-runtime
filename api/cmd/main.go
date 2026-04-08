@@ -38,6 +38,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/loki"
 	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/cfkv"
+	"github.com/loopzero/loopzero/api/internal/cfzone"
 	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/metrics"
@@ -584,14 +585,22 @@ func main() {
 			60*time.Second,
 		)
 
-		// --- Custom Domains (MEET-2026-04-05-033) ---
+		// --- Custom Domains (MEET-2026-04-05-033, v2: CF Zone Management) ---
 		// domainStore declared above (line ~387) for build reconcile loop.
 		cnameTarget := "cname." + cfg.BaseDomain
 		domainValidator := domain.NewValidator(cfg.BaseDomain, nil)
 		dnsVerifier := &domain.DNSVerifier{}
 		domainHandler = routes.NewDomainHandler(domainStore, dnsVerifier, domainValidator, cnameTarget)
 
-		// Background services created but started only after HTTP-01 spike validates.
+		// v2: CF Zone Management — create zones per custom domain (model Vercel)
+		cfZoneClient := cfzone.NewClient(cfg.CFAccountID, cfg.CFAPIToken)
+		if cfg.CFZoneManagement && cfZoneClient != nil {
+			logger.Info("custom domains: CF Zone Management enabled (v2)")
+			domainHandler.WithCFZone(&cfZoneAdapter{client: cfZoneClient})
+		} else {
+			logger.Info("custom domains: TXT verification mode (v1)")
+		}
+
 		domainProvisioner := services.NewDomainProvisioner(
 			domainStore, releaseStore, buildStore, gitopsPusher, locker, logger,
 			services.DomainProvisionerConfig{
@@ -600,6 +609,9 @@ func main() {
 				RegistryURL: cfg.RegistryURL,
 			},
 		)
+		if cfg.CFZoneManagement && cfZoneClient != nil {
+			domainProvisioner.WithCFZone(&cfZoneStatusAdapter{client: cfZoneClient})
+		}
 		domainHealthChecker := services.NewDomainHealthChecker(
 			domainStore, logger, services.DomainHealthCheckerConfig{
 				CNAMETarget: cnameTarget,

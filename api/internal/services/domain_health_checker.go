@@ -172,6 +172,11 @@ func (h *DomainHealthChecker) checkCNAME(ctx context.Context) {
 			return
 		}
 
+		// v2: skip CNAME check for CF-managed domains (CF zone handles DNS)
+		if d.IsCFManaged() {
+			continue
+		}
+
 		now := time.Now().UTC()
 		ok := h.verifyCNAME(ctx, d.Domain)
 
