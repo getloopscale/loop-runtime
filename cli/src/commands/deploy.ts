@@ -10,6 +10,7 @@ import {
 } from '../config/constants';
 import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
 import { normalizeApps } from '../adapters/app-unit';
+import { validateConfig } from '../adapters/validate-config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -137,7 +138,27 @@ export class DeployCommand {
 
     const { content: config } = yamlResult;
 
-    // 4. Validate apps exist
+    // 4. Validate loopzero.yaml — run full validation BEFORE upload (instant feedback).
+    // This catches framework mismatches, missing Dockerfiles, pod limits, etc.
+    // Filesystem checks (Dockerfile existence, path existence) only when project root exists.
+    const projectRoot = path.dirname(yamlResult.path);
+    const skipFs = !fs.existsSync(projectRoot);
+    const { errors: validationErrors, warnings: validationWarnings } = validateConfig(config, projectRoot, { skipFilesystemChecks: skipFs });
+    if (validationErrors.length > 0) {
+      const errorList = validationErrors.map((e, i) => `  ${i + 1}. ${e.message}`).join('\n');
+      return this.exitWithError(
+        opts,
+        `Invalid configuration:\n\n${errorList}\n\nFix the errors above and try again.`,
+        1,
+        'INVALID_CONFIG',
+      );
+    }
+    // Show warnings but continue
+    for (const w of validationWarnings) {
+      this.deps.writeError(`Warning: ${w}`);
+    }
+
+    // 5. Validate apps exist
     const appNames = Object.keys(config.apps);
     if (appNames.length === 0) {
       return this.exitWithError(opts, 'No apps defined in loopzero.yaml. Add at least one app to deploy.', 1, 'INVALID_CONFIG');

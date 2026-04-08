@@ -69,15 +69,14 @@ export function normalizeApp(name: string, raw: LoopZeroYamlApp): AppUnit {
     dockerfile = raw.dockerfile ?? 'Dockerfile';
   }
 
-  // Resolve rendering mode (MEET-2026-03-26-009)
-  // Explicit value from loopzero.yaml takes precedence. Default: "server" (safe, backward compat).
-  let rendering: RenderMode = 'server';
-  if (raw.render === 'static' || raw.render === 'server') {
-    rendering = raw.render;
-  }
-  // Non-frontend types are always "server" — only frontends can be "static"
-  if (type !== 'frontend') {
-    rendering = 'server';
+  // Resolve rendering mode (MEET-2026-03-26-009, updated 2026-04-08)
+  // Frontends are ALWAYS static (zero pods, CDN delivery). No exceptions.
+  // Server/worker are ALWAYS "server" (container pods).
+  let rendering: RenderMode;
+  if (type === 'frontend') {
+    rendering = 'static'; // Always static — CDN delivery, zero pods
+  } else {
+    rendering = 'server'; // Always server — container pod
   }
 
   return {

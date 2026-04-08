@@ -19,8 +19,8 @@ function createMockDeps(overrides: Partial<DeployDeps> = {}): DeployDeps {
       content: {
         project: 'my-saas',
         apps: {
-          api: { path: 'apps/api', framework: 'express', port: 3000 },
-          web: { path: 'apps/web', framework: 'next', port: 3001 },
+          api: { path: 'apps/api', framework: 'express', type: 'server', port: 3000 },
+          web: { path: 'apps/web', framework: 'next', type: 'frontend' },
         },
       },
     }),
@@ -1028,7 +1028,7 @@ describe('DeployCommand', () => {
             project: 'my-saas',
             apps: {
               api: { path: 'apps/api', framework: 'express', port: 3000 },
-              web: { path: 'apps/web', framework: 'next', port: 3001 },
+              web: { path: 'apps/web', framework: 'next', type: 'frontend' },
             },
           },
         }),
@@ -1092,8 +1092,8 @@ describe('DeployCommand', () => {
           content: {
             project: 'my-saas',
             apps: {
-              api: { path: 'apps/api', framework: 'express', port: 3000, secrets: ['DATABASE_URL', 'JWT_SECRET'] },
-              worker: { path: 'apps/worker', framework: 'express', port: null, secrets: ['DATABASE_URL', 'REDIS_URL'] },
+              api: { path: 'apps/api', framework: 'express', type: 'server', port: 3000, secrets: ['DATABASE_URL', 'JWT_SECRET'] },
+              worker: { path: 'apps/worker', framework: 'express', type: 'worker', secrets: ['DATABASE_URL', 'REDIS_URL'] },
             },
           },
         }),
@@ -1136,9 +1136,9 @@ describe('DeployCommand', () => {
           content: {
             project: 'my-saas',
             apps: {
-              api: { path: 'apps/api', framework: 'express', port: 3000, secrets: ['DATABASE_URL', 'JWT_SECRET'] },
-              gateway: { path: 'apps/gateway', framework: 'express', port: 4000 },
-              worker: { path: 'apps/worker', framework: 'node', port: null, secrets: ['DATABASE_URL', 'REDIS_URL'] },
+              api: { path: 'apps/api', framework: 'express', type: 'server', port: 3000, secrets: ['DATABASE_URL', 'JWT_SECRET'] },
+              web: { path: 'apps/web', framework: 'next', type: 'frontend' },
+              worker: { path: 'apps/worker', framework: 'node', type: 'worker', secrets: ['DATABASE_URL', 'REDIS_URL'] },
             },
           },
         }),
@@ -1146,11 +1146,11 @@ describe('DeployCommand', () => {
       });
       const cmd = new DeployCommand(deps);
 
-      // Deploy only gateway (which has NO secrets) — should succeed without checking secrets
-      const exitCode = await cmd.execute({ app: ['gateway'], wait: false });
+      // Deploy only web (which has NO secrets) — should succeed without checking secrets
+      const exitCode = await cmd.execute({ app: ['web'], wait: false });
 
       expect(exitCode).toBe(0);
-      // getSecrets should NOT be called because gateway declares no secrets
+      // getSecrets should NOT be called because web declares no secrets
       expect(deps.getSecrets).not.toHaveBeenCalled();
     });
 
@@ -1161,9 +1161,9 @@ describe('DeployCommand', () => {
           content: {
             project: 'my-saas',
             apps: {
-              api: { path: 'apps/api', framework: 'express', port: 3000, secrets: ['DATABASE_URL', 'JWT_SECRET'] },
-              gateway: { path: 'apps/gateway', framework: 'express', port: 4000 },
-              worker: { path: 'apps/worker', framework: 'node', port: null, secrets: ['DATABASE_URL', 'REDIS_URL'] },
+              api: { path: 'apps/api', framework: 'express', type: 'server', port: 3000, secrets: ['DATABASE_URL', 'JWT_SECRET'] },
+              web: { path: 'apps/web', framework: 'next', type: 'frontend' },
+              worker: { path: 'apps/worker', framework: 'node', type: 'worker', secrets: ['DATABASE_URL', 'REDIS_URL'] },
             },
           },
         }),

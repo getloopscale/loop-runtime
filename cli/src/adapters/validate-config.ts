@@ -80,21 +80,55 @@ export function validateConfig(
       }
     }
 
-    if (app.build === 'buildpack' && app.framework) {
-      const knownFrameworks = [
-        'nextjs', 'vite', 'remix', 'nestjs', 'express', 'node',
-        'gin', 'go', 'fastapi', 'django', 'python', 'custom',
-      ];
-      if (!knownFrameworks.includes(app.framework) && app.framework !== 'unknown') {
-        warnings.push(`App '${name}': unknown framework '${app.framework}' — build may use generic strategy`);
+    // Framework validation — reject unknown frameworks BEFORE build (not a warning).
+    // This prevents 5-minute build failures from unrecognized frameworks.
+    const knownFrameworks = [
+      // Node.js ecosystem
+      'nextjs', 'next', 'vite', 'remix', 'nestjs', 'express', 'node',
+      'react', 'vue', 'svelte', 'astro', 'angular', 'fastify',
+      // Go
+      'gin', 'go',
+      // Python
+      'fastapi', 'django', 'python',
+      // Custom (user-provided Dockerfile)
+      'custom',
+    ];
+    const fw = app.framework ?? 'custom';
+    if (fw !== 'unknown' && !knownFrameworks.includes(fw)) {
+      errors.push({
+        field: `apps.${name}.framework`,
+        message: `App '${name}': unknown framework '${fw}'. Supported: ${knownFrameworks.filter(f => f !== 'custom').join(', ')}. Use 'framework: custom' with a Dockerfile for unsupported frameworks.`,
+      });
+    }
+
+    // Custom framework requires Dockerfile in app path
+    if (!skipFs && (fw === 'custom' || fw === 'unknown')) {
+      const dockerfileName = app.dockerfile ?? 'Dockerfile';
+      const appPathResolved = path.resolve(projectRoot, app.path);
+      const dockerfilePath = path.resolve(appPathResolved, dockerfileName);
+      if (fs.existsSync(appPathResolved) && !fs.existsSync(dockerfilePath)) {
+        errors.push({
+          field: `apps.${name}.dockerfile`,
+          message: `App '${name}': framework 'custom' requires a Dockerfile at ${app.path}/${dockerfileName}. Add a Dockerfile or set a supported framework.`,
+        });
       }
     }
 
-    // MEET-2026-03-29-016: Frontend apps MUST use render: static (zero pods, CDN delivery).
-    if (appType === 'frontend' && app.render !== 'static') {
+    // Auto-detect: if user has Dockerfile in app path but build is 'buildpack', warn
+    if (!skipFs && app.build !== 'dockerfile' && fw !== 'custom' && fw !== 'unknown') {
+      const appPathResolved = path.resolve(projectRoot, app.path);
+      const dockerfilePath = path.resolve(appPathResolved, 'Dockerfile');
+      if (fs.existsSync(dockerfilePath)) {
+        warnings.push(`App '${name}': Dockerfile found at ${app.path}/Dockerfile but build is '${app.build ?? 'buildpack'}'. Set 'build: dockerfile' in loopzero.yaml to use your custom Dockerfile, or remove it to use the auto-generated one.`);
+      }
+    }
+
+    // Frontend rendering validation — frontends are ALWAYS static (enforced in normalizeApp).
+    // This check catches loopzero.yaml files that explicitly set render: server on frontends.
+    if (appType === 'frontend' && app.render === 'server') {
       errors.push({
         field: `apps.${name}.render`,
-        message: `App '${name}': frontend apps must use static delivery. Add 'render: static' to your loopzero.yaml. LoopZero serves frontends from CDN — no server-side rendering.`,
+        message: `App '${name}': frontend apps are always static (CDN delivery, zero pods). Remove 'render: server'. If you need a server process, use 'type: server' instead.`,
       });
     }
 
@@ -113,7 +147,7 @@ export function validateConfig(
 
     // Detect unknown fields
     const knownFields = new Set([
-      'path', 'framework', 'type', 'port', 'build', 'dockerfile', 'render', 'env', 'secrets',
+      'path', 'framework', 'type', 'port', 'build', 'dockerfile', 'render', 'env', 'secrets', 'commands',
     ]);
     if (typeof app === 'object' && app !== null) {
       for (const key of Object.keys(app)) {
