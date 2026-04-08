@@ -179,6 +179,7 @@ func main() {
 	var domainHandler *routes.DomainHandler // MEET-2026-04-05-033: Custom Domains
 	var githubWebhookHandler http.Handler   // GitHub App webhook handler (Phase: GitHub Integration)
 	var repoHandler *routes.RepositoryHandler // GitHub repo↔project linking
+	var orch *services.BuildOrchestrator    // Build orchestrator (shared with auto-deploy)
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -349,7 +350,7 @@ func main() {
 			slog.Info("cloudflare KV client configured for static frontend routing")
 		}
 
-		orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+		orch = services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
 			BuildStore:        buildStore,
 			ReleaseStore:      releaseStore,
 			EnvTargetStore:    envTargetStore,
@@ -640,10 +641,21 @@ func main() {
 			repoStore := &db.PostgresRepositoryStore{DB: dbAdapter}
 
 			// Auto-deployer — handles push → download source → upload S3 → submit build
+			var buildSub github.BuildSubmitter
+			if buildOrchestrator != nil {
+				// buildOrchestrator is a routes.BuildOrchestratorService (adapter).
+				// We need the underlying services.BuildOrchestrator for direct SubmitBuild.
+				// The orch variable is scoped above — capture it here.
+				buildSub = &buildSubmitterAdapter{
+					orchestrator: orch,
+					logger:       logger,
+				}
+			}
 			autoDeployer := github.NewAutoDeployer(github.AutoDeployConfig{
-				AppClient:   ghAppClient,
-				ObjectStore: objUploader,
-				Logger:      logger,
+				AppClient:      ghAppClient,
+				ObjectStore:    objUploader,
+				BuildSubmitter: buildSub,
+				Logger:         logger,
 			})
 
 			wh := ghwebhook.NewHandler(githubWebhookSecret, logger)

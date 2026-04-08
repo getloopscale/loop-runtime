@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -118,30 +119,29 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 
 	log.Info("auto-deploy: loopzero.yaml found", "project_in_yaml", loopzeroYaml.Project, "apps", len(loopzeroYaml.Apps))
 
-	// Step 4: Push source to Gitea (reuses existing source store — same as CLI upload) (same path as CLI upload)
-	if d.cfg.SourceStore != nil {
-		if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-			return fmt.Errorf("auto-deploy: seek for source push: %w", err)
-		}
-		sourceResult, err := d.cfg.SourceStore.PushTarball(ctx, tenantID, projectName, tmpFile)
-		if err != nil {
-			return fmt.Errorf("auto-deploy: push source to gitea: %w", err)
-		}
-		log.Info("auto-deploy: source pushed to gitea", "source_id", sourceResult)
+	// Step 4: Convert tarball to git bundle (loopzero-clone CWT expects .bundle format)
+	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("auto-deploy: seek for conversion: %w", err)
 	}
+	bundlePath, err := tarballToGitBundle(tmpFile, commitSHA, commitMessage, senderLogin)
+	if err != nil {
+		return fmt.Errorf("auto-deploy: convert to git bundle: %w", err)
+	}
+	defer os.Remove(bundlePath)
+	log.Info("auto-deploy: tarball converted to git bundle")
 
-	// Step 6: Upload tarball to S3 for build cluster
+	// Step 5: Upload git bundle to S3 for build cluster
 	if d.cfg.ObjectStore != nil {
-		if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-			return fmt.Errorf("auto-deploy: seek for s3 upload: %w", err)
+		bundleFile, err := os.Open(bundlePath)
+		if err != nil {
+			return fmt.Errorf("auto-deploy: open bundle: %w", err)
 		}
+		defer bundleFile.Close()
 		objKey := fmt.Sprintf("%s/source/%s.bundle", tenantID, commitSHA)
-		if err := d.cfg.ObjectStore.Upload(ctx, "loopzero-builds", objKey, tmpFile); err != nil {
-			log.Warn("auto-deploy: S3 upload failed", "error", err)
-			// Non-fatal in dev, fatal in prod
-		} else {
-			log.Info("auto-deploy: source uploaded to S3")
+		if err := d.cfg.ObjectStore.Upload(ctx, "loopzero-builds", objKey, bundleFile); err != nil {
+			return fmt.Errorf("auto-deploy: S3 upload: %w", err)
 		}
+		log.Info("auto-deploy: git bundle uploaded to S3")
 	}
 
 	// Step 7: Submit build
@@ -189,6 +189,113 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 type loopzeroYamlMinimal struct {
 	Project string                       `yaml:"project"`
 	Apps    map[string]map[string]interface{} `yaml:"apps"`
+}
+
+// tarballToGitBundle converts a GitHub tarball (.tar.gz) into a git bundle.
+// The loopzero-clone CWT expects git bundle format, not raw tarballs.
+// Process: extract tarball → git init → git add → git commit → git bundle create.
+func tarballToGitBundle(tarball io.Reader, commitSHA, commitMessage, author string) (string, error) {
+	// Create temp dir for extraction
+	tmpDir, err := os.MkdirTemp("", "loopzero-github-bundle-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
+	}
+
+	// Extract tarball
+	gz, err := gzip.NewReader(tarball)
+	if err != nil {
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("gzip reader: %w", err)
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	var topLevelDir string
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("tar read: %w", err)
+		}
+
+		// GitHub tarballs have a top-level dir like "owner-repo-sha/"
+		// Strip it so files are at root of tmpDir
+		parts := strings.SplitN(header.Name, "/", 2)
+		if topLevelDir == "" && len(parts) > 0 {
+			topLevelDir = parts[0]
+		}
+		var relPath string
+		if len(parts) > 1 {
+			relPath = parts[1]
+		} else {
+			continue
+		}
+		if relPath == "" {
+			continue
+		}
+
+		target := filepath.Join(tmpDir, relPath)
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			os.MkdirAll(target, 0755)
+		case tar.TypeReg:
+			os.MkdirAll(filepath.Dir(target), 0755)
+			f, err := os.Create(target)
+			if err != nil {
+				continue
+			}
+			io.Copy(f, tr)
+			f.Close()
+			os.Chmod(target, os.FileMode(header.Mode))
+		}
+	}
+
+	// Create git repo and bundle
+	run := func(args ...string) error {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = tmpDir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME="+author,
+			"GIT_AUTHOR_EMAIL="+author+"@users.noreply.github.com",
+			"GIT_COMMITTER_NAME=LoopZero Platform",
+			"GIT_COMMITTER_EMAIL=noreply@loopzero.example",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%s: %s: %w", args[0], string(out), err)
+		}
+		return nil
+	}
+
+	if err := run("git", "init"); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", err
+	}
+	if err := run("git", "add", "."); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", err
+	}
+	msg := commitMessage
+	if msg == "" {
+		msg = "Auto-deploy from GitHub push"
+	}
+	if err := run("git", "commit", "-m", msg, "--allow-empty"); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", err
+	}
+
+	bundlePath := filepath.Join(os.TempDir(), fmt.Sprintf("loopzero-bundle-%s.bundle", commitSHA[:12]))
+	if err := run("git", "bundle", "create", bundlePath, "HEAD"); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", err
+	}
+
+	os.RemoveAll(tmpDir) // cleanup extracted files
+	return bundlePath, nil
 }
 
 // extractLoopZeroYaml reads loopzero.yaml from a GitHub tarball (.tar.gz).
