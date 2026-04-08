@@ -128,12 +128,40 @@ func canRemove(currentStatus string) bool {
 	return ok && result == statemachine.DomainRemoving
 }
 
+// CFZoneManager abstracts CF Zone API operations (DIP — testable without real CF).
+type CFZoneManager interface {
+	CreateZone(ctx context.Context, domain string) (*CFZoneResult, error)
+	ScanDNSRecords(ctx context.Context, zoneID string) error
+	ListDNSRecords(ctx context.Context, zoneID string) ([]CFDNSRecord, error)
+	CreateDNSRecord(ctx context.Context, zoneID string, record CFDNSRecord) (*CFDNSRecord, error)
+	DeleteDNSRecord(ctx context.Context, zoneID, recordID string) error
+	DeleteZone(ctx context.Context, zoneID string) error
+}
+
+// CFZoneResult contains the result of creating a CF zone.
+type CFZoneResult struct {
+	ZoneID      string
+	Nameservers []string
+}
+
+// CFDNSRecord mirrors cfzone.DNSRecord for DIP.
+type CFDNSRecord struct {
+	ID       string `json:"id,omitempty"`
+	Type     string `json:"type"`
+	Name     string `json:"name"`
+	Content  string `json:"content"`
+	TTL      int    `json:"ttl,omitempty"`
+	Priority *int   `json:"priority,omitempty"`
+	Proxied  *bool  `json:"proxied,omitempty"`
+}
+
 // DomainHandler provides HTTP handlers for custom domain operations.
 type DomainHandler struct {
-	store     DomainStore
-	verifier  DomainVerifier
-	validator DomainValidator
+	store       DomainStore
+	verifier    DomainVerifier
+	validator   DomainValidator
 	cnameTarget string
+	cfZone      CFZoneManager // nil = v1 mode (TXT verification), non-nil = v2 (CF Zone)
 }
 
 // NewDomainHandler creates a new DomainHandler.
@@ -144,6 +172,12 @@ func NewDomainHandler(store DomainStore, verifier DomainVerifier, validator Doma
 		validator:   validator,
 		cnameTarget: cnameTarget,
 	}
+}
+
+// WithCFZone enables CF Zone Management (v2) for this handler.
+func (h *DomainHandler) WithCFZone(cfZone CFZoneManager) *DomainHandler {
+	h.cfZone = cfZone
+	return h
 }
 
 // --- Request/Response types ---
@@ -163,8 +197,23 @@ type domainCreateResponse struct {
 	App          string                    `json:"app"`
 	Environment  string                    `json:"environment"`
 	Status       string                    `json:"status"`
-	Verification domainVerificationInfo    `json:"verification"`
-	CNAMETarget  string                    `json:"cname_target"`
+	Verification *domainVerificationInfo   `json:"verification,omitempty"`
+	CNAMETarget  string                    `json:"cname_target,omitempty"`
+}
+
+// domainCreateV2Response is returned when CF Zone Management (v2) is active.
+type domainCreateV2Response struct {
+	OK                 bool         `json:"ok"`
+	ID                 string       `json:"id"`
+	Domain             string       `json:"domain"`
+	Project            string       `json:"project"`
+	App                string       `json:"app"`
+	Environment        string       `json:"environment"`
+	Status             string       `json:"status"`
+	Nameservers        []string     `json:"nameservers"`
+	DNSRecordsImported int          `json:"dns_records_imported"`
+	DNSRecords         []CFDNSRecord `json:"dns_records,omitempty"`
+	ActionRequired     string       `json:"action_required"`
 }
 
 type domainVerificationInfo struct {
@@ -272,9 +321,13 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate verification token and attempt atomic insert.
-	// CODE-001 fix: no check-then-insert TOCTOU. The unique index on domain
-	// column handles conflict detection atomically. ErrDomainExists → 409.
+	// v2 (CF Zone Management): create zone + scan DNS + set CNAME
+	if h.cfZone != nil {
+		h.createWithCFZone(w, r, ctx, uc, req)
+		return
+	}
+
+	// v1 (TXT verification): generate token for manual DNS verification
 	token := generateVerificationToken()
 
 	domain := &CustomDomain{
@@ -302,7 +355,6 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// F-004 fix: emit metric on domain creation
 	metrics.CustomDomainsTotal.WithLabelValues(uc.TenantID, "pending_verification").Inc()
 
 	writeJSON(w, http.StatusCreated, domainCreateResponse{
@@ -313,11 +365,111 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		App:         domain.AppName,
 		Environment: domain.Environment,
 		Status:      domain.Status,
-		Verification: domainVerificationInfo{
+		Verification: &domainVerificationInfo{
 			TXTName:  "_loopzero-verify." + domain.Domain,
 			TXTValue: token,
 		},
 		CNAMETarget: h.cnameTarget,
+	})
+}
+
+// createWithCFZone implements the v2 domain creation flow:
+// 1. Create CF zone for the domain
+// 2. Scan existing DNS records (email preservation)
+// 3. Add CNAME @ → cname.dev.loopzero.example (proxied, CF flattening)
+// 4. Return nameservers for user to configure at registrar
+func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request, ctx context.Context, uc *middleware.UserContext, req domainCreateRequest) {
+	// Step 1: Create CF zone
+	zone, err := h.cfZone.CreateZone(ctx, req.Domain)
+	if err != nil {
+		slog.ErrorContext(ctx, "cf zone create failed", "domain", req.Domain, "error", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{
+			"error": "Failed to configure domain. Please try again.",
+			"code":  "CF_ZONE_ERROR",
+		})
+		return
+	}
+
+	// Step 2: Scan existing DNS records (email, DKIM, etc.)
+	if scanErr := h.cfZone.ScanDNSRecords(ctx, zone.ZoneID); scanErr != nil {
+		slog.WarnContext(ctx, "cf dns scan failed (non-fatal)", "domain", req.Domain, "error", scanErr)
+	}
+
+	// Step 3: Add routing CNAME (proxied → CF edge → tunnel → Traefik)
+	proxied := true
+	_, cnameErr := h.cfZone.CreateDNSRecord(ctx, zone.ZoneID, CFDNSRecord{
+		Type:    "CNAME",
+		Name:    req.Domain,
+		Content: h.cnameTarget,
+		TTL:     1, // auto (required when proxied)
+		Proxied: &proxied,
+	})
+	if cnameErr != nil {
+		slog.ErrorContext(ctx, "cf cname create failed", "domain", req.Domain, "error", cnameErr)
+		// Rollback: delete the zone
+		_ = h.cfZone.DeleteZone(ctx, zone.ZoneID)
+		writeJSON(w, http.StatusBadGateway, map[string]string{
+			"error": "Failed to configure domain routing. Please try again.",
+			"code":  "CF_ZONE_ERROR",
+		})
+		return
+	}
+
+	// Step 4: List imported records for response
+	var dnsRecords []CFDNSRecord
+	var recordCount int
+	if records, listErr := h.cfZone.ListDNSRecords(ctx, zone.ZoneID); listErr == nil {
+		dnsRecords = records
+		recordCount = len(records)
+	}
+
+	// Step 5: Save to DB
+	zoneID := zone.ZoneID
+	domain := &CustomDomain{
+		ID:                 GenerateDomainID(),
+		TenantID:           uc.TenantID,
+		ProjectName:        req.Project,
+		AppName:            req.App,
+		Environment:        req.Environment,
+		Domain:             req.Domain,
+		Status:             "pending_ns",
+		VerificationToken:  "", // not needed for v2
+		CFZoneID:           &zoneID,
+		CFZoneStatus:       "pending",
+		CFNameservers:      zone.Nameservers,
+		DNSRecordsImported: recordCount > 1, // >1 because CNAME always exists
+	}
+
+	if err := h.store.CreateWithCFZone(ctx, domain); err != nil {
+		if errors.Is(err, ErrDomainExists) {
+			// Rollback zone
+			_ = h.cfZone.DeleteZone(ctx, zone.ZoneID)
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "domain already registered",
+				"code":  "DOMAIN_ALREADY_EXISTS",
+			})
+			return
+		}
+		slog.ErrorContext(ctx, "domain create failed", "error", err)
+		_ = h.cfZone.DeleteZone(ctx, zone.ZoneID)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to register domain"})
+		return
+	}
+
+	metrics.CustomDomainsTotal.WithLabelValues(uc.TenantID, "pending_ns").Inc()
+
+	writeJSON(w, http.StatusCreated, domainCreateV2Response{
+		OK:                true,
+		ID:                domain.ID,
+		Domain:            domain.Domain,
+		Project:           domain.ProjectName,
+		App:               domain.AppName,
+		Environment:       domain.Environment,
+		Status:            domain.Status,
+		Nameservers:       zone.Nameservers,
+		DNSRecordsImported: recordCount,
+		DNSRecords:        dnsRecords,
+		ActionRequired:    "Change your nameservers at your DNS provider to activate this domain.",
 	})
 }
 
