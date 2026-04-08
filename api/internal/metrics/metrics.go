@@ -222,6 +222,14 @@ var (
 	}, []string{"tenant", "environment"})
 )
 
+// LoopZeroApplication CR lifecycle metrics — emitted by ensureApplicationCRs.
+var (
+	ApplicationCREnsureTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_application_cr_ensure_total",
+		Help: "Total LoopZeroApplication CR ensure attempts by result.",
+	}, []string{"tenant", "app", "result"}) // result: "success" or "failure"
+)
+
 // Cell metrics — ADR-0008 Phase 0.
 // Emitted by a periodic collector (query: SELECT cell_id, COUNT(*) FROM tenants GROUP BY cell_id).
 var (

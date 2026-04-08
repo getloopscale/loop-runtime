@@ -94,7 +94,7 @@ type BuildReconcileLoop struct {
 	orch         BuildCompletionHandler
 	locker       EnvironmentLocker
 	domainStore  CustomDomainQuerier // MEET-034: custom domains in manifests
-	appCRMgr     ApplicationCREnsurer // CHG-2026-04-08-001: creates LoopZeroApplication CRs
+	appCRMgr     ApplicationCREnsurer
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -366,9 +366,8 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		Apps:        manifestApps,
 	})
 
-	// CHG-2026-04-08-001: Ensure LoopZeroApplication CRs exist on mgmt cluster.
-	// Non-fatal: failure is logged but does not block the deploy. The CRs enable
-	// hostname assignment, ExposedRoute creation, TLS monitoring, and reachability probes.
+	// Ensure LoopZeroApplication CRs exist on mgmt cluster (non-fatal).
+	// Enables hostname assignment, ExposedRoute creation, TLS monitoring, reachability probes.
 	r.ensureApplicationCRs(ctx, build, apps)
 
 	// Construct the completion result and delegate to the orchestrator
@@ -632,9 +631,11 @@ func (r *BuildReconcileLoop) ensureApplicationCRs(ctx context.Context, build *db
 			ServicePort: port,
 		}
 		if err := r.appCRMgr.EnsureLoopZeroApplication(ctx, input); err != nil {
+			metrics.ApplicationCREnsureTotal.WithLabelValues(build.TenantID, app.Name, "failure").Inc()
 			r.logger.Warn("reconcile loop: failed to ensure LoopZeroApplication CR (non-fatal)",
 				"build_id", build.ID, "app", app.Name, "error", err)
 		} else {
+			metrics.ApplicationCREnsureTotal.WithLabelValues(build.TenantID, app.Name, "success").Inc()
 			r.logger.Info("reconcile loop: LoopZeroApplication CR ensured",
 				"build_id", build.ID, "app", app.Name,
 				"tenant", build.TenantID, "environment", build.Environment)

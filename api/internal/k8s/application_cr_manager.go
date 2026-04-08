@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -84,8 +85,12 @@ func (m *ApplicationCRManager) EnsureLoopZeroApplication(ctx context.Context, in
 	})
 }
 
+// maxK8sNameLen is the maximum length for a Kubernetes metadata.name field.
+const maxK8sNameLen = 253
+
 // loopzeroApplicationCRName computes a deterministic, collision-free name for a LoopZeroApplication CR.
 // Uses a short hash suffix to avoid ambiguity when component names contain hyphens.
+// The name is truncated to 253 chars (K8s limit) if needed, preserving the hash suffix.
 // Example: "tn-loopzero-my-project-api-production-a1b2c3d4"
 func loopzeroApplicationCRName(tenant, project, app, env string) string {
 	// The hash input uses pipe separators to guarantee uniqueness even when
@@ -93,7 +98,15 @@ func loopzeroApplicationCRName(tenant, project, app, env string) string {
 	hashInput := fmt.Sprintf("%s|%s|%s|%s", tenant, project, app, env)
 	h := sha256.Sum256([]byte(hashInput))
 	suffix := hex.EncodeToString(h[:4]) // 8 hex chars = 4 bytes, collision-resistant
-	return fmt.Sprintf("%s-%s-%s-%s-%s", tenant, project, app, env, suffix)
+
+	prefix := fmt.Sprintf("%s-%s-%s-%s", tenant, project, app, env)
+	// Truncate prefix if full name would exceed K8s limit (prefix + "-" + suffix).
+	if len(prefix)+1+len(suffix) > maxK8sNameLen {
+		prefix = prefix[:maxK8sNameLen-1-len(suffix)]
+		// Trim trailing hyphens to keep the name a valid RFC 1123 subdomain.
+		prefix = strings.TrimRight(prefix, "-")
+	}
+	return prefix + "-" + suffix
 }
 
 // buildLoopZeroApplicationCR constructs an unstructured LoopZeroApplication matching the CRD

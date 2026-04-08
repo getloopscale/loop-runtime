@@ -136,9 +136,9 @@ func main() {
 	}
 
 	// Application CR manager — creates LoopZeroApplication CRs on mgmt cluster.
-	// CHG-2026-04-08-001: Wires ApplicationController to the deploy flow.
 	// Reuses the TenantCRManager's dynamic client (same cluster, same RBAC).
-	appCRMgr := &appCRAdapter{mgr: k8s.NewApplicationCRManager(tenantCRMgr.Client, os.Getenv("TENANT_NAMESPACE"))}
+	// Empty namespace falls back to the package-level tenantNamespace (same as TenantCRManager).
+	appCRMgr := &appCRAdapter{mgr: k8s.NewApplicationCRManager(tenantCRMgr.Client, "")}
 
 	// Secret K8s manager — creates K8s Secrets on mgmt + ExternalSecret CRs on workload for ESO sync.
 	// F-01 fix: Use interface variable to avoid Go nil interface trap.
@@ -429,7 +429,7 @@ func main() {
 			orch,
 			locker,
 			domainStore, // MEET-034: custom domains in manifest rendering
-			appCRMgr,    // CHG-2026-04-08-001: creates LoopZeroApplication CRs on build completion
+			appCRMgr,    // creates LoopZeroApplication CRs on build completion
 			pgEventStore,
 			logger,
 			services.BuildReconcileLoopConfig{
@@ -784,7 +784,6 @@ func main() {
 }
 
 // appCRAdapter bridges k8s.ApplicationCRManager to services.ApplicationCREnsurer.
-// CHG-2026-04-08-001: Converts services-layer input to k8s-layer input.
 type appCRAdapter struct {
 	mgr *k8s.ApplicationCRManager
 }
