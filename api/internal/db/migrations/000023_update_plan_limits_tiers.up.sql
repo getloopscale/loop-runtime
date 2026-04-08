@@ -6,6 +6,9 @@
 -- Team ($79/mo): 10 projects, 10 envs, unlimited builds, 25 seats
 -- Enterprise: all unlimited
 
+-- Allow NULL in hard_limit (NULL = unlimited)
+ALTER TABLE plan_limits ALTER COLUMN hard_limit DROP NOT NULL;
+
 DELETE FROM plan_limits;
 
 INSERT INTO plan_limits (plan, metric, hard_limit, soft_limit) VALUES
