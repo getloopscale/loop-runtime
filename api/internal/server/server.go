@@ -94,6 +94,8 @@ type Config struct {
 	IsProduction bool
 	// AuditWriter writes mutation events to audit_log table. Nil = slog only.
 	AuditWriter middleware.AuditWriter
+	// AuditHandler handles GET /api/v1/audit (requires admin+ role).
+	AuditHandler *routes.AuditHandler
 	// PlanLimiter enforces plan limits on mutation routes (Phase 1).
 	PlanLimiter *enforcement.PlanLimiter
 	// UpgradeURL is included in 402 responses when plan limits are hit.
@@ -315,6 +317,11 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.Get("/api/v1/environments/{name}", cfg.EnvironmentHandler.Get)
 				r.With(append(rateLimitMiddlewares, envEnforcement)...).Post("/api/v1/environments", cfg.EnvironmentHandler.Create)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/environments/{name}", cfg.EnvironmentHandler.Delete)
+			}
+
+			// Audit log endpoint (requires admin+ role)
+			if cfg.AuditHandler != nil {
+				r.Get("/api/v1/audit", cfg.AuditHandler.List)
 			}
 		})
 	}

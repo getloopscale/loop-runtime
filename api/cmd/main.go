@@ -703,6 +703,7 @@ func main() {
 		BuildListHandler:   buildListHandler,
 		TeamHandler:        routes.NewTeamHandler(&db.PostgresTeamStore{DB: dbAdapter}),
 		EnvironmentHandler: routes.NewEnvironmentHandler(tenantCRMgr),
+		AuditHandler:       routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter}),
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,
