@@ -95,6 +95,8 @@ type Config struct {
 	DomainHandler *routes.DomainHandler
 	// GitHubWebhookHandler handles POST /api/v1/webhooks/github (no auth — GitHub sends events).
 	GitHubWebhookHandler http.Handler
+	// RepositoryHandler handles project↔GitHub repository linking.
+	RepositoryHandler *routes.RepositoryHandler
 	// IsProduction indicates production mode — enables strict error handling.
 	IsProduction bool
 	// AuditWriter writes mutation events to audit_log table. Nil = slog only.
@@ -336,6 +338,13 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.With(append(rateLimitMiddlewares, idempotentMiddlewares...)...).Post("/api/v1/domains", cfg.DomainHandler.Create)
 				r.With(rateLimitMiddlewares...).Post("/api/v1/domains/{domain}/verify", cfg.DomainHandler.Verify)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)
+			}
+
+			// Repository connection routes (GitHub App — auto-deploy)
+			if cfg.RepositoryHandler != nil {
+				r.Post("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Connect)
+				r.Delete("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Disconnect)
+				r.Get("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.GetConnection)
 			}
 
 			// Audit log endpoint (requires admin+ role)

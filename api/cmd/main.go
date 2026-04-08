@@ -176,6 +176,7 @@ func main() {
 	var cellStore *db.PostgresCellStore // implements both TenantCellQuerier and CellMetricsQuerier
 	var domainHandler *routes.DomainHandler // MEET-2026-04-05-033: Custom Domains
 	var githubWebhookHandler http.Handler   // GitHub App webhook handler (Phase: GitHub Integration)
+	var repoHandler *routes.RepositoryHandler // GitHub repo↔project linking
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -651,6 +652,9 @@ func main() {
 			})
 			githubWebhookHandler = wh
 			logger.Info("github webhook: handler registered", "endpoint", "/api/v1/webhooks/github")
+			// Repository store for project↔repo linking
+			repoStore := &db.PostgresRepositoryStore{DB: dbAdapter}
+			repoHandler = routes.NewRepositoryHandler(&repoStoreAdapter{store: repoStore})
 		} else {
 			logger.Info("github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled")
 		}
@@ -793,6 +797,7 @@ func main() {
 		EnvironmentHandler: routes.NewEnvironmentHandler(tenantCRMgr),
 		DomainHandler:      domainHandler,
 		GitHubWebhookHandler: githubWebhookHandler,
+		RepositoryHandler:    repoHandler,
 		AuditHandler:       routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter}),
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,

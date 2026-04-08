@@ -48,15 +48,15 @@ func generateRepoID() string {
 }
 
 // SaveInstallation upserts a GitHub App installation.
-func (s *PostgresRepositoryStore) SaveInstallation(ctx context.Context, inst *GitHubInstallation) error {
+func (s *PostgresRepositoryStore) SaveInstallation(ctx context.Context, id int64, accountLogin, accountType string, tenantID *string) error {
 	_, err := s.DB.Exec(ctx,
 		`INSERT INTO github_installations (id, account_login, account_type, tenant_id, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, now(), now())
 		 ON CONFLICT (id) DO UPDATE SET
-		   account_login = EXCLUDED.account_login,
+		   account_login = CASE WHEN EXCLUDED.account_login = '' THEN github_installations.account_login ELSE EXCLUDED.account_login END,
 		   tenant_id = COALESCE(EXCLUDED.tenant_id, github_installations.tenant_id),
 		   updated_at = now()`,
-		inst.ID, inst.AccountLogin, inst.AccountType, inst.TenantID,
+		id, accountLogin, accountType, tenantID,
 	)
 	if err != nil {
 		return fmt.Errorf("repository store: save installation: %w", err)
