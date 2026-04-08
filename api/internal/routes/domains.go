@@ -52,9 +52,9 @@ type CustomDomain struct {
 	Status                  string     `json:"status"`
 	VerificationToken       string     `json:"-"`
 	VerifiedAt              *time.Time `json:"verified_at,omitempty"`
-	TLSStatus               string     `json:"tls_status,omitempty"`
+	TLSStatus               *string    `json:"tls_status,omitempty"`
 	TLSExpiresAt            *time.Time `json:"tls_expires_at,omitempty"`
-	FailureReason           string     `json:"failure_reason,omitempty"`
+	FailureReason           *string    `json:"failure_reason,omitempty"`
 	LastCNAMECheck          *time.Time `json:"-"`
 	CNAMEConsecutiveFailures int       `json:"-"`
 	CreatedAt               time.Time  `json:"created_at"`
@@ -269,7 +269,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Domain:            req.Domain,
 		Status:            "pending_verification",
 		VerificationToken: token,
-		TLSStatus:         "pending",
+		TLSStatus:         strPtr("pending"),
 	}
 
 	if err := h.store.Create(ctx, domain); err != nil {
@@ -419,9 +419,9 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 		VerifiedAt:  d.VerifiedAt,
 	}
 
-	if d.TLSStatus != "" && d.TLSStatus != "pending" {
+	if d.TLSStatus != nil && *d.TLSStatus != "" && *d.TLSStatus != "pending" {
 		resp.TLS = &domainTLSInfo{
-			Status:    d.TLSStatus,
+			Status:    *d.TLSStatus,
 			ExpiresAt: d.TLSExpiresAt,
 		}
 	}
@@ -539,3 +539,5 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		Status: "removing",
 	})
 }
+
+func strPtr(s string) *string { return &s }
