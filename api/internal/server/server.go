@@ -90,6 +90,9 @@ type Config struct {
 	EnvironmentHandler *routes.EnvironmentHandler
 	// TeamHandler handles GET/POST/DELETE/PATCH /api/v1/teams/members.
 	TeamHandler *routes.TeamHandler
+	// DomainHandler handles custom domain CRUD + verification.
+	// MEET-2026-04-05-033: Custom Domains feature.
+	DomainHandler *routes.DomainHandler
 	// IsProduction indicates production mode — enables strict error handling.
 	IsProduction bool
 	// AuditWriter writes mutation events to audit_log table. Nil = slog only.
@@ -317,6 +320,15 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.Get("/api/v1/environments/{name}", cfg.EnvironmentHandler.Get)
 				r.With(append(rateLimitMiddlewares, envEnforcement)...).Post("/api/v1/environments", cfg.EnvironmentHandler.Create)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/environments/{name}", cfg.EnvironmentHandler.Delete)
+			}
+
+			// Custom domain routes (MEET-2026-04-05-033)
+			if cfg.DomainHandler != nil {
+				r.Get("/api/v1/domains", cfg.DomainHandler.List)
+				r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)
+				r.With(append(rateLimitMiddlewares, idempotentMiddlewares...)...).Post("/api/v1/domains", cfg.DomainHandler.Create)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/domains/{domain}/verify", cfg.DomainHandler.Verify)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)
 			}
 
 			// Audit log endpoint (requires admin+ role)

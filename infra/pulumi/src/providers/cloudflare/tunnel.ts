@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Cloudflare Tunnel provisioning (Sprint 10).
-// Creates: Tunnel, ingress config, DNS CNAME, cloudflared K8s Deployment.
+// Cloudflare Tunnel provisioning (Sprint 10, updated for Custom Domains).
+// Creates: Tunnel, ingress config, DNS CNAMEs, cloudflared K8s Deployment.
 // All runtime traffic is routed through the CF Tunnel — zero public IPs.
+// Custom domains: users CNAME their domain to cname.{baseDomain}, which resolves
+// to the tunnel. The catch-all ingress rule sends ALL traffic to Traefik,
+// which handles hostname matching via IngressRoute Host() rules.
 
 import * as pulumi from "@pulumi/pulumi";
 import * as cloudflare from "@pulumi/cloudflare";
@@ -55,7 +58,14 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     configSrc: "cloudflare",
   });
 
-  // 2. Tunnel ingress config — route wildcard to Traefik HTTPS
+  // 2. Tunnel ingress config — route ALL traffic to Traefik
+  // The catch-all rule sends every hostname to Traefik, which handles
+  // routing via IngressRoute Host() rules. This supports:
+  //   - Platform subdomains: *.{baseDomain} (auto-generated app URLs)
+  //   - Custom domains: any FQDN that CNAMEs to cname.{baseDomain}
+  // Unknown hostnames receive Traefik's default 404 — safe behavior.
+  // MEET-2026-04-05-033: Changed catch-all from http_status:404 to Traefik
+  // to enable custom domain traffic routing.
   new cloudflare.ZeroTrustTunnelCloudflaredConfig(
     "loopzero-tunnel-config",
     {
@@ -65,6 +75,7 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
       config: {
         ingresses: [
           {
+            // Platform wildcard — explicit rule for observability (shows in CF dashboard)
             hostname: `*.${config.baseDomain}`,
             service: config.traefikService,
             originRequest: {
@@ -72,8 +83,14 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
             },
           },
           {
-            // Catch-all — required by Cloudflare
-            service: "http_status:404",
+            // Catch-all — routes ALL other hostnames to Traefik.
+            // Enables custom domains: user CNAMEs api.example.com → cname.{baseDomain},
+            // traffic arrives here, Traefik matches via IngressRoute Host() rule.
+            // Required by Cloudflare (must be last rule, no hostname field).
+            service: config.traefikService,
+            originRequest: {
+              noTlsVerify: true,
+            },
           },
         ],
       },
@@ -83,10 +100,24 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     },
   );
 
-  // 3. DNS CNAME record — *.{baseDomain} → tunnel.cfargotunnel.com
+  // 3. DNS CNAME records
+  // 3a. Wildcard — platform subdomains (*.{baseDomain} → tunnel)
   new cloudflare.DnsRecord("loopzero-tunnel-dns", {
     zoneId: config.zoneId,
     name: `*.${config.baseDomain}`,
+    type: "CNAME",
+    ttl: 1, // Auto (required when proxied=true)
+    content: pulumi.interpolate`${tunnel.id}.cfargotunnel.com`,
+    proxied: true,
+  });
+
+  // 3b. Custom domain CNAME target — cname.{baseDomain} → tunnel
+  // Users configure: CNAME api.example.com → cname.{baseDomain}
+  // This is the stable endpoint decoupled from internal tunnel ID.
+  // MEET-2026-04-05-033: Custom Domains §6.3
+  new cloudflare.DnsRecord("loopzero-custom-domain-cname-target", {
+    zoneId: config.zoneId,
+    name: `cname.${config.baseDomain}`,
     type: "CNAME",
     ttl: 1, // Auto (required when proxied=true)
     content: pulumi.interpolate`${tunnel.id}.cfargotunnel.com`,

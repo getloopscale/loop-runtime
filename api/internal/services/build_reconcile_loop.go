@@ -17,7 +17,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/manifests"
 	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/pkg/naming"
+	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -65,11 +65,18 @@ type BuildReconcileLoopConfig struct {
 //
 // This loop also subsumes the StartupReconciler: on boot, it immediately catches up
 // with any workflows that completed while the API was down.
+// CustomDomainQuerier queries active custom domains for manifest rendering.
+// MEET-2026-04-06-034 Block 0: both deploy and domain provisioner must include custom domains.
+type CustomDomainQuerier interface {
+	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]routes.CustomDomain, error)
+}
+
 type BuildReconcileLoop struct {
-	buildStore db.BuildStore
-	workflow   WorkflowSubmitter
-	orch       BuildCompletionHandler
-	locker     EnvironmentLocker
+	buildStore   db.BuildStore
+	workflow     WorkflowSubmitter
+	orch         BuildCompletionHandler
+	locker       EnvironmentLocker
+	domainStore  CustomDomainQuerier // MEET-034: custom domains in manifests
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -102,6 +109,7 @@ func NewBuildReconcileLoop(
 	workflow WorkflowSubmitter,
 	orch BuildCompletionHandler,
 	locker EnvironmentLocker,
+	domainStore CustomDomainQuerier,
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	},
@@ -112,12 +120,13 @@ func NewBuildReconcileLoop(
 		cfg.MaxConcurrent = 10
 	}
 	return &BuildReconcileLoop{
-		buildStore: buildStore,
-		workflow:   workflow,
-		orch:       orch,
-		locker:     locker,
-		eventStore: eventStore,
-		logger:     logger,
+		buildStore:  buildStore,
+		workflow:    workflow,
+		orch:        orch,
+		locker:      locker,
+		domainStore: domainStore,
+		eventStore:  eventStore,
+		logger:      logger,
 		cfg:        cfg,
 		sem:        make(chan struct{}, cfg.MaxConcurrent),
 	}
@@ -301,34 +310,29 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		return
 	}
 
+	// Build AppRelease list for the build callback (URL computation, etc.)
 	for _, app := range apps {
-		// REVIEW-MOD-4: Per-app image tag: {registry}/{tenant}/{project}/{app}:{sha}
-		// Each app gets its own BuildKit build and independent image.
-		// ARCH-001 fix: single source of truth for image tag format
-		imageRef := naming.ImageTag(r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
+		buildApps = append(buildApps, BuildAppRelease(
+			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name,
+			build.CommitSHA, build.Environment, r.cfg.BaseDomain, app.Type, app.Rendering,
+		))
+	}
 
-		url := ""
-		if app.Type == "server" || app.Type == "frontend" {
-			url = fmt.Sprintf("https://%s-%s-%s-%s.%s",
-				build.TenantID, build.ProjectID, app.Name, build.Environment, r.cfg.BaseDomain)
-		}
-
-		buildApps = append(buildApps, AppRelease{
-			Name:        app.Name,
-			ImageDigest: imageRef,
-			URL:         url,
-			Type:        app.Type,
-			Rendering:   app.Rendering,
-		})
-
-		manifestApps = append(manifestApps, manifests.AppManifestInput{
-			Name:      app.Name,
-			Type:      app.Type,
-			Rendering: app.Rendering,
-			Port:      app.Port,
-			ImageRef:  imageRef,
-			Secrets:   app.Secrets,
-		})
+	// F-010: shared manifest building function (includes custom domains).
+	// CODE-002: errors are fatal — prevents silent IngressRoute erasure.
+	manifestApps, err = BuildManifestApps(ctx, BuildManifestAppsInput{
+		RegistryURL: r.cfg.RegistryURL,
+		TenantID:    build.TenantID,
+		ProjectID:   build.ProjectID,
+		Environment: build.Environment,
+		CommitSHA:   build.CommitSHA,
+		Apps:        apps,
+		DomainStore: r.domainStore,
+	})
+	if err != nil {
+		r.logger.Error("reconcile loop: manifest building failed", "build_id", build.ID, "error", err)
+		r.failBuild(ctx, build, "Failed to build manifests with custom domains")
+		return
 	}
 
 	// Generate manifests in the API (C-02 fix: control plane generates manifests)
@@ -337,7 +341,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		ProjectID:   build.ProjectID,
 		Environment: build.Environment,
 		BuildID:     build.ID,
-		ReleaseID:   "", // Will be set after release creation
+		ReleaseID:   "",
 		BaseDomain:  r.cfg.BaseDomain,
 		Apps:        manifestApps,
 	})
@@ -444,33 +448,27 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 	}
 
 	var buildApps []AppRelease
-	var manifestApps []manifests.AppManifestInput
-
 	for _, app := range apps {
-		// ARCH-001 fix: single source of truth for image tag format
-		imageRef := naming.ImageTag(r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name, build.CommitSHA)
+		buildApps = append(buildApps, BuildAppRelease(
+			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name,
+			build.CommitSHA, build.Environment, r.cfg.BaseDomain, app.Type, app.Rendering,
+		))
+	}
 
-		url := ""
-		if app.Type == "server" || app.Type == "frontend" {
-			url = fmt.Sprintf("https://%s-%s-%s-%s.%s",
-				build.TenantID, build.ProjectID, app.Name, build.Environment, r.cfg.BaseDomain)
-		}
-
-		buildApps = append(buildApps, AppRelease{
-			Name:        app.Name,
-			ImageDigest: imageRef,
-			URL:         url,
-			Type:        app.Type,
-			Rendering:   app.Rendering,
-		})
-		manifestApps = append(manifestApps, manifests.AppManifestInput{
-			Name:      app.Name,
-			Type:      app.Type,
-			Rendering: app.Rendering,
-			Port:      app.Port,
-			ImageRef:  imageRef,
-			Secrets:   app.Secrets,
-		})
+	// F-010: shared manifest building (retry path)
+	manifestApps, err := BuildManifestApps(ctx, BuildManifestAppsInput{
+		RegistryURL: r.cfg.RegistryURL,
+		TenantID:    build.TenantID,
+		ProjectID:   build.ProjectID,
+		Environment: build.Environment,
+		CommitSHA:   build.CommitSHA,
+		Apps:        apps,
+		DomainStore: r.domainStore,
+	})
+	if err != nil {
+		r.logger.Error("reconcile loop: manifest building failed on retry", "build_id", build.ID, "error", err)
+		r.failBuild(ctx, build, "Failed to build manifests with custom domains")
+		return
 	}
 
 	renderedManifests := manifests.Render(manifests.RenderInput{

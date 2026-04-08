@@ -244,6 +244,47 @@ var (
 	})
 )
 
+// Custom domain metrics — MEET-2026-04-05-033.
+// Emitted by DomainHandler, DomainProvisioner, and DomainHealthChecker.
+var (
+	CustomDomainsTotal = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "loopzero_custom_domains_total",
+		Help: "Number of custom domains by status.",
+	}, []string{"tenant", "status"})
+
+	DomainVerificationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_domain_verification_duration_seconds",
+		Help:    "Duration of DNS TXT verification checks.",
+		Buckets: []float64{0.1, 0.5, 1, 2, 5, 10},
+	}, []string{"result"})
+
+	DomainProvisioningDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_domain_provisioning_duration_seconds",
+		Help:    "Duration from domain verification to active state.",
+		Buckets: []float64{10, 30, 60, 120, 300, 600},
+	}, []string{"result"})
+
+	DomainTLSExpiryDays = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "loopzero_domain_tls_expiry_days",
+		Help: "Days until TLS certificate expires for a custom domain.",
+	}, []string{"domain", "tenant"})
+
+	DomainVerificationFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_domain_verification_failures_total",
+		Help: "Total DNS verification failures.",
+	}, []string{"tenant"})
+
+	DomainCNAMECheckFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_domain_cname_check_failures_total",
+		Help: "Total CNAME re-verification failures for active domains.",
+	}, []string{"tenant"})
+
+	DomainHealthCheckerErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_domain_health_checker_errors_total",
+		Help: "Total errors in the domain health checker by check type.",
+	}, []string{"check"})
+)
+
 // Database connection pool metrics — emitted by a periodic collector.
 var (
 	DBConnectionsActive = promauto.NewGauge(prometheus.GaugeOpts{

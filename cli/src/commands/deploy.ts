@@ -58,6 +58,7 @@ interface AppResult {
   name: string;
   status: string;
   url?: string;
+  custom_domain_urls?: string[]; // MEET-2026-04-05-033: Active custom domain URLs
   build_duration_seconds: number;
   error?: string;
 }

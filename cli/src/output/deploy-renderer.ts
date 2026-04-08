@@ -10,6 +10,7 @@ export interface AppResult {
   name: string;
   status: string;
   url?: string;
+  custom_domain_urls?: string[]; // MEET-2026-04-05-033: Active custom domain URLs
   build_duration_seconds?: number;
   error?: string;
 }
@@ -178,6 +179,12 @@ export class DeployRenderer {
         lines.push(`  \x1b[31m✗\x1b[0m ${app.name}: ${app.error ?? 'failed'}`);
       } else if (app.url) {
         lines.push(`  ${app.name} → ${app.url}`);
+        // MEET-2026-04-05-033: Show custom domain URLs alongside auto-generated URL
+        if (app.custom_domain_urls?.length) {
+          for (const cdUrl of app.custom_domain_urls) {
+            lines.push(`  ${app.name} → ${cdUrl} \x1b[2m(custom domain)\x1b[0m`);
+          }
+        }
       } else {
         lines.push(`  ${app.name} (no URL — background worker)`);
       }
@@ -200,6 +207,12 @@ export class DeployRenderer {
         lines.push(`  ${app.name}: ${app.error ?? 'failed'}`);
       } else if (app.url) {
         lines.push(`  ${app.name}: ${app.url}`);
+        // MEET-2026-04-05-033: Show custom domain URLs in CI output
+        if (app.custom_domain_urls?.length) {
+          for (const cdUrl of app.custom_domain_urls) {
+            lines.push(`  ${app.name}: ${cdUrl} (custom domain)`);
+          }
+        }
       } else {
         lines.push(`  ${app.name}: (no URL — background worker)`);
       }

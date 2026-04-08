@@ -1,0 +1,372 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Custom Domain commands: add, verify, status, list, remove.
+// MEET-2026-04-05-033: Custom Domains feature.
+
+import { ApiError } from '../api/client';
+
+// --- API Response types ---
+
+interface DomainCreateResponse {
+  id: string;
+  domain: string;
+  project: string;
+  app: string;
+  environment: string;
+  status: string;
+  verification: {
+    txt_name: string;
+    txt_value: string;
+  };
+  cname_target: string;
+}
+
+interface DomainVerifyResponse {
+  domain: string;
+  status: string;
+  verified_at?: string;
+  verification_error?: string;
+  hint?: string;
+  message?: string;
+}
+
+interface DomainStatusResponse {
+  id: string;
+  domain: string;
+  project: string;
+  app: string;
+  environment: string;
+  status: string;
+  tls?: { status: string; expires_at?: string };
+  verification?: { txt_name: string; txt_value: string };
+  cname_target: string;
+  created_at: string;
+  verified_at?: string;
+}
+
+interface DomainListResponse {
+  domains: DomainStatusResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+// --- Shared deps ---
+
+export interface DomainDeps {
+  getToken: () => string | null;
+  createDomain: (body: { domain: string; project: string; app: string; environment: string }) => Promise<DomainCreateResponse>;
+  verifyDomain: (domain: string) => Promise<DomainVerifyResponse>;
+  getDomain: (domain: string) => Promise<DomainStatusResponse>;
+  listDomains: (params: { project?: string; app?: string; environment?: string }) => Promise<DomainListResponse>;
+  deleteDomain: (domain: string) => Promise<{ ok: boolean; domain: string; status: string }>;
+  writeTo: (msg: string) => void;
+  writeError: (msg: string) => void;
+}
+
+// --- Shared helpers ---
+
+function exitWithError(
+  deps: Pick<DomainDeps, 'writeTo' | 'writeError'>,
+  json: boolean | undefined,
+  message: string,
+  exitCode: number,
+  code?: string,
+): number {
+  if (json) {
+    const payload: Record<string, unknown> = { error: message, exit_code: exitCode };
+    if (code) payload.code = code;
+    deps.writeTo(JSON.stringify(payload));
+  } else {
+    deps.writeError(message);
+  }
+  return exitCode;
+}
+
+function handleApiError(
+  deps: Pick<DomainDeps, 'writeTo' | 'writeError'>,
+  json: boolean | undefined,
+  err: unknown,
+  action: string,
+): number {
+  if (err instanceof ApiError) {
+    if (err.exitCode === 4 || err.statusCode === 401) {
+      return exitWithError(deps, json, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
+    }
+    return exitWithError(deps, json, `${action}: ${err.message}`, 3, err.code);
+  }
+  if (err instanceof Error) {
+    return exitWithError(deps, json, `${action}: ${err.message}`, 3, 'UNEXPECTED_ERROR');
+  }
+  return exitWithError(deps, json, `${action}. Try again later.`, 3, 'UNEXPECTED_ERROR');
+}
+
+// ============================================================
+// DomainAddCommand
+// ============================================================
+
+export interface DomainAddOptions {
+  project: string;
+  app: string;
+  env: string;
+  json?: boolean;
+}
+
+export class DomainAddCommand {
+  constructor(private readonly deps: DomainDeps) {}
+
+  async execute(domain: string, opts: DomainAddOptions): Promise<number> {
+    if (!this.deps.getToken()) {
+      return exitWithError(this.deps, opts.json, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
+    }
+
+    if (!domain || domain.trim() === '') {
+      return exitWithError(this.deps, opts.json, 'Domain name is required. Usage: loopzero domain add <domain> --project <p> --app <a> --env <e>', 1, 'MISSING_ARGUMENT');
+    }
+    if (!opts.project) {
+      return exitWithError(this.deps, opts.json, '--project is required', 1, 'MISSING_ARGUMENT');
+    }
+    if (!opts.app) {
+      return exitWithError(this.deps, opts.json, '--app is required', 1, 'MISSING_ARGUMENT');
+    }
+    if (!opts.env) {
+      return exitWithError(this.deps, opts.json, '--env is required', 1, 'MISSING_ARGUMENT');
+    }
+
+    try {
+      const result = await this.deps.createDomain({
+        domain: domain.toLowerCase().trim(),
+        project: opts.project,
+        app: opts.app,
+        environment: opts.env,
+      });
+
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify(result));
+        return 0;
+      }
+
+      this.deps.writeTo(`✓ Domain registered\n`);
+      this.deps.writeTo(`  To activate, add these DNS records:\n`);
+      this.deps.writeTo(`  Type   Name                                     Value`);
+      this.deps.writeTo(`  ────── ──────────────────────────────────────── ──────────────────────────`);
+      this.deps.writeTo(`  CNAME  ${domain.padEnd(40)} ${result.cname_target}`);
+      this.deps.writeTo(`  TXT    ${result.verification.txt_name.padEnd(40)} ${result.verification.txt_value}\n`);
+      this.deps.writeTo(`  Then run: loopzero domain verify ${domain}`);
+      return 0;
+    } catch (err) {
+      if (err instanceof ApiError && err.statusCode === 409) {
+        return exitWithError(this.deps, opts.json, `Domain ${domain} is already registered.`, 3, 'DOMAIN_ALREADY_EXISTS');
+      }
+      return handleApiError(this.deps, opts.json, err, 'Failed to register domain');
+    }
+  }
+}
+
+// ============================================================
+// DomainVerifyCommand
+// ============================================================
+
+export interface DomainVerifyOptions {
+  json?: boolean;
+}
+
+export class DomainVerifyCommand {
+  constructor(private readonly deps: DomainDeps) {}
+
+  async execute(domain: string, opts: DomainVerifyOptions = {}): Promise<number> {
+    if (!this.deps.getToken()) {
+      return exitWithError(this.deps, opts.json, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
+    }
+    if (!domain || domain.trim() === '') {
+      return exitWithError(this.deps, opts.json, 'Domain name is required. Usage: loopzero domain verify <domain>', 1, 'MISSING_ARGUMENT');
+    }
+
+    try {
+      const result = await this.deps.verifyDomain(domain.toLowerCase().trim());
+
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify(result));
+        return 0;
+      }
+
+      if (result.status === 'verified' || result.status === 'provisioning') {
+        this.deps.writeTo(`✓ DNS verified`);
+        this.deps.writeTo(`⟳ TLS certificate being provisioned...\n`);
+        this.deps.writeTo(`  Check progress: loopzero domain status ${domain}`);
+        return 0;
+      }
+
+      if (result.status === 'active') {
+        this.deps.writeTo(`✓ Domain active — https://${domain}`);
+        return 0;
+      }
+
+      // Still pending
+      this.deps.writeError(`✗ DNS verification pending\n`);
+      if (result.verification_error) {
+        this.deps.writeError(`  ${result.verification_error}`);
+      }
+      if (result.hint) {
+        this.deps.writeError(`  ${result.hint}`);
+      }
+      return 0; // not an error — just not ready yet
+    } catch (err) {
+      return handleApiError(this.deps, opts.json, err, 'Failed to verify domain');
+    }
+  }
+}
+
+// ============================================================
+// DomainStatusCommand
+// ============================================================
+
+export interface DomainStatusOptions {
+  json?: boolean;
+}
+
+export class DomainStatusCommand {
+  constructor(private readonly deps: DomainDeps) {}
+
+  async execute(domain: string, opts: DomainStatusOptions = {}): Promise<number> {
+    if (!this.deps.getToken()) {
+      return exitWithError(this.deps, opts.json, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
+    }
+    if (!domain || domain.trim() === '') {
+      return exitWithError(this.deps, opts.json, 'Domain name is required. Usage: loopzero domain status <domain>', 1, 'MISSING_ARGUMENT');
+    }
+
+    try {
+      const result = await this.deps.getDomain(domain.toLowerCase().trim());
+
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify(result));
+        return 0;
+      }
+
+      this.deps.writeTo(`  Domain:      ${result.domain}`);
+      this.deps.writeTo(`  Project:     ${result.project}`);
+      this.deps.writeTo(`  App:         ${result.app}`);
+      this.deps.writeTo(`  Environment: ${result.environment}`);
+      this.deps.writeTo(`  Status:      ${result.status}`);
+
+      if (result.tls) {
+        const tlsIcon = result.tls.status === 'issued' ? '✓' : '✗';
+        const expires = result.tls.expires_at ? ` (expires ${result.tls.expires_at.substring(0, 10)})` : '';
+        this.deps.writeTo(`  TLS:         ${tlsIcon} ${result.tls.status}${expires}`);
+      }
+
+      if (result.verified_at) {
+        this.deps.writeTo(`  Verified at: ${result.verified_at}`);
+      }
+
+      return 0;
+    } catch (err) {
+      if (err instanceof ApiError && err.statusCode === 404) {
+        return exitWithError(this.deps, opts.json, `Domain ${domain} not found.`, 1, 'NOT_FOUND');
+      }
+      return handleApiError(this.deps, opts.json, err, 'Failed to get domain status');
+    }
+  }
+}
+
+// ============================================================
+// DomainListCommand
+// ============================================================
+
+export interface DomainListOptions {
+  project?: string;
+  app?: string;
+  env?: string;
+  json?: boolean;
+}
+
+export class DomainListCommand {
+  constructor(private readonly deps: DomainDeps) {}
+
+  async execute(opts: DomainListOptions = {}): Promise<number> {
+    if (!this.deps.getToken()) {
+      return exitWithError(this.deps, opts.json, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
+    }
+
+    try {
+      const result = await this.deps.listDomains({
+        project: opts.project,
+        app: opts.app,
+        environment: opts.env,
+      });
+
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify(result));
+        return 0;
+      }
+
+      if (result.domains.length === 0) {
+        this.deps.writeTo('No custom domains configured.');
+        return 0;
+      }
+
+      this.deps.writeTo(`  ${'DOMAIN'.padEnd(30)} ${'APP'.padEnd(10)} ${'ENV'.padEnd(15)} ${'STATUS'.padEnd(12)} TLS`);
+      for (const d of result.domains) {
+        const tlsInfo = d.tls?.status === 'issued'
+          ? `✓ valid${d.tls.expires_at ? ` (expires ${d.tls.expires_at.substring(0, 10)})` : ''}`
+          : '✗ pending';
+        this.deps.writeTo(
+          `  ${d.domain.padEnd(30)} ${d.app.padEnd(10)} ${d.environment.padEnd(15)} ${d.status.padEnd(12)} ${tlsInfo}`
+        );
+      }
+      return 0;
+    } catch (err) {
+      return handleApiError(this.deps, opts.json, err, 'Failed to list domains');
+    }
+  }
+}
+
+// ============================================================
+// DomainRemoveCommand
+// ============================================================
+
+export interface DomainRemoveOptions {
+  confirm?: string;
+  json?: boolean;
+}
+
+export class DomainRemoveCommand {
+  constructor(private readonly deps: DomainDeps) {}
+
+  async execute(domain: string, opts: DomainRemoveOptions = {}): Promise<number> {
+    if (!this.deps.getToken()) {
+      return exitWithError(this.deps, opts.json, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
+    }
+    if (!domain || domain.trim() === '') {
+      return exitWithError(this.deps, opts.json, 'Domain name is required. Usage: loopzero domain remove <domain> --confirm <domain>', 1, 'MISSING_ARGUMENT');
+    }
+
+    // Safety: require --confirm matching the domain name
+    if (opts.confirm !== domain) {
+      return exitWithError(
+        this.deps, opts.json,
+        `To remove ${domain}, pass --confirm ${domain}`,
+        1, 'CONFIRMATION_REQUIRED',
+      );
+    }
+
+    try {
+      const result = await this.deps.deleteDomain(domain.toLowerCase().trim());
+
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify(result));
+        return 0;
+      }
+
+      this.deps.writeTo(`✓ Domain ${domain} removal in progress.`);
+      return 0;
+    } catch (err) {
+      if (err instanceof ApiError && err.statusCode === 404) {
+        return exitWithError(this.deps, opts.json, `Domain ${domain} not found.`, 1, 'NOT_FOUND');
+      }
+      return handleApiError(this.deps, opts.json, err, 'Failed to remove domain');
+    }
+  }
+}

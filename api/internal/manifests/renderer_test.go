@@ -694,3 +694,167 @@ func TestRender_BackwardCompat_DefaultsApplied(t *testing.T) {
 		t.Error("backward compat: strategy must have a default value")
 	}
 }
+
+// --- Custom Domains (MEET-2026-04-05-033) ---
+
+func TestRender_CustomDomain_AddsExtraIngressAndCert(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "api",
+			Type:     "server",
+			Port:     8080,
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			CustomDomains: []CustomDomainInput{
+				{Domain: "api.mycompany.com", ID: "dom-12345678"},
+			},
+		},
+	}
+
+	result := Render(input)
+	docs := strings.Split(result, "\n---\n")
+
+	// Base: Deployment + PDB + Service + Certificate + IngressRoute = 5
+	// Custom domain: +1 Certificate + 1 IngressRoute = 2
+	// Total: 7
+	if len(docs) != 7 {
+		t.Fatalf("expected 7 YAML documents (5 base + 2 custom domain), got %d", len(docs))
+	}
+
+	// Verify custom domain Certificate
+	found := false
+	for _, doc := range docs {
+		if strings.Contains(doc, "api.mycompany.com") && strings.Contains(doc, "Certificate") {
+			found = true
+			var cert certManagerCertificate
+			if err := sigsyaml.Unmarshal([]byte(doc), &cert); err != nil {
+				t.Fatalf("failed to parse custom domain cert: %v", err)
+			}
+			if cert.Spec.DNSNames[0] != "api.mycompany.com" {
+				t.Errorf("expected dnsNames[0] = api.mycompany.com, got %s", cert.Spec.DNSNames[0])
+			}
+			if cert.Metadata.Name != "tls-cd-api-mycompany-com" {
+				t.Errorf("expected cert name tls-cd-api-mycompany-com, got %s", cert.Metadata.Name)
+			}
+		}
+	}
+	if !found {
+		t.Error("custom domain Certificate not found in rendered manifests")
+	}
+}
+
+func TestRender_CustomDomain_IngressRouteHostMatch(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "web",
+			Type:     "server",
+			Port:     3000,
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			CustomDomains: []CustomDomainInput{
+				{Domain: "www.example.io", ID: "dom-aabbccdd"},
+			},
+		},
+	}
+
+	result := Render(input)
+
+	if !strings.Contains(result, "Host(`www.example.io`)") {
+		t.Error("custom domain IngressRoute missing Host() match for www.example.io")
+	}
+}
+
+func TestRender_CustomDomain_NamingIsDomainDerived(t *testing.T) {
+	// MEET-033: resource names must be domain-derived, not index-based
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "api",
+			Type:     "server",
+			Port:     8080,
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			CustomDomains: []CustomDomainInput{
+				{Domain: "api.mycompany.com", ID: "dom-1"},
+				{Domain: "staging.mycompany.com", ID: "dom-2"},
+			},
+		},
+	}
+
+	result := Render(input)
+
+	// Domain-derived names should be stable regardless of order
+	if !strings.Contains(result, "cd-api-mycompany-com") {
+		t.Error("expected domain-derived name cd-api-mycompany-com")
+	}
+	if !strings.Contains(result, "cd-staging-mycompany-com") {
+		t.Error("expected domain-derived name cd-staging-mycompany-com")
+	}
+	// Should NOT contain index-based names
+	if strings.Contains(result, "custom-0") || strings.Contains(result, "custom-1") {
+		t.Error("found index-based naming — must use domain-derived names (MEET-033)")
+	}
+}
+
+func TestRender_CustomDomain_NoCustomDomains_NoExtraDocs(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
+	}
+
+	result := Render(input)
+	docs := strings.Split(result, "\n---\n")
+
+	// No custom domains → 5 docs as before
+	if len(docs) != 5 {
+		t.Fatalf("expected 5 YAML documents without custom domains, got %d", len(docs))
+	}
+}
+
+func TestDomainResourceNames_Short(t *testing.T) {
+	cases := []struct {
+		domain       string
+		wantIngress  string
+		wantCert     string
+	}{
+		{"api.mycompany.com", "cd-api-mycompany-com", "tls-cd-api-mycompany-com"},
+		{"www.example.io", "cd-www-example-io", "tls-cd-www-example-io"},
+		{"A.B.C", "cd-a-b-c", "tls-cd-a-b-c"},
+	}
+	for _, tc := range cases {
+		ingress, cert := domainResourceNames(tc.domain)
+		if ingress != tc.wantIngress {
+			t.Errorf("domainResourceNames(%q) ingress = %q, want %q", tc.domain, ingress, tc.wantIngress)
+		}
+		if cert != tc.wantCert {
+			t.Errorf("domainResourceNames(%q) cert = %q, want %q", tc.domain, cert, tc.wantCert)
+		}
+	}
+}
+
+func TestDomainResourceNames_LongDomain_FitsIn63Chars(t *testing.T) {
+	// CODE-005 fix: both names must be ≤ 63 characters
+	longDomain := "very-long-subdomain-name.with-many-parts.that-exceeds-the-limit.mycompany.com"
+	ingress, cert := domainResourceNames(longDomain)
+
+	if len(ingress) > 63 {
+		t.Errorf("ingress name %q is %d chars (max 63)", ingress, len(ingress))
+	}
+	if len(cert) > 63 {
+		t.Errorf("cert name %q is %d chars (max 63)", cert, len(cert))
+	}
+	if !strings.HasPrefix(cert, "tls-") {
+		t.Errorf("cert name %q must start with tls-", cert)
+	}
+}
+
+func TestDomainResourceNames_CollisionSafety(t *testing.T) {
+	// Two domains that share the same prefix but differ after char 50 must produce different names
+	d1 := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com"
+	d2 := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.org"
+	ingress1, _ := domainResourceNames(d1)
+	ingress2, _ := domainResourceNames(d2)
+
+	if ingress1 == ingress2 {
+		t.Errorf("collision: %q and %q both produce %q", d1, d2, ingress1)
+	}
+}

@@ -32,6 +32,13 @@ import (
 
 // --- Public API (unchanged) ---
 
+// CustomDomainInput represents a verified custom domain to include in manifests.
+// MEET-2026-04-05-033: Custom Domains feature.
+type CustomDomainInput struct {
+	Domain string // FQDN (e.g., "api.mycompany.com")
+	ID     string // Domain row ID for traceability
+}
+
 // AppManifestInput contains everything needed to generate manifests for a single app.
 type AppManifestInput struct {
 	Name      string            // e.g., "api", "worker", "dashboard"
@@ -42,6 +49,10 @@ type AppManifestInput struct {
 	S3Prefix  string            // S3 path prefix for static assets (static apps only)
 	Secrets   []string          // Secret names from loopzero.yaml (injected via envFrom)
 	Env       map[string]string // Environment variables
+
+	// CustomDomains are active custom domains for this app (MEET-2026-04-05-033).
+	// Each generates an additional IngressRoute + Certificate alongside the auto-generated one.
+	CustomDomains []CustomDomainInput
 }
 
 // RenderInput contains everything needed to generate manifests for a full deployment.
@@ -790,7 +801,106 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 		},
 	}
 
-	return []string{marshalResource(cert), marshalResource(ingress)}
+	docs := []string{marshalResource(cert), marshalResource(ingress)}
+
+	// Custom domains: each gets its own IngressRoute + Certificate (MEET-2026-04-05-033).
+	// Resource names are domain-derived (not index-based) to prevent churn on add/remove.
+	for _, cd := range app.CustomDomains {
+		suffix, cdTLSName := domainResourceNames(cd.Domain)
+
+		cdCert := certManagerCertificate{
+			APIVersion: "cert-manager.io/v1",
+			Kind:       "Certificate",
+			Metadata: k8sMetadata{
+				Name:      cdTLSName,
+				Namespace: ns,
+				Labels:    labels,
+				Annotations: map[string]string{
+					"loopzero.io/custom-domain": cd.Domain,
+				},
+			},
+			Spec: certManagerCertificateSpec{
+				SecretName: cdTLSName,
+				IssuerRef: certIssuerRef{
+					Name: ri.clusterIssuerName(),
+					Kind: "ClusterIssuer",
+				},
+				DNSNames: []string{cd.Domain},
+			},
+		}
+
+		cdIngress := traefikIngressRoute{
+			APIVersion: "traefik.io/v1alpha1",
+			Kind:       "IngressRoute",
+			Metadata: k8sMetadata{
+				Name:      suffix,
+				Namespace: ns,
+				Labels:    labels,
+				Annotations: map[string]string{
+					"loopzero.io/custom-domain": cd.Domain,
+				},
+			},
+			Spec: traefikIngressRouteSpec{
+				EntryPoints: []string{"web", "websecure"},
+				Routes: []traefikRoute{
+					{
+						Match:    fmt.Sprintf("Host(`%s`)", cd.Domain),
+						Kind:     "Rule",
+						Services: []traefikRouteService{{Name: app.Name, Port: port}},
+					},
+				},
+				TLS: &traefikTLS{SecretName: cdTLSName},
+			},
+		}
+
+		docs = append(docs, marshalResource(cdCert), marshalResource(cdIngress))
+	}
+
+	return docs
+}
+
+// domainResourceNames returns stable K8s resource names for a custom domain's
+// IngressRoute and Certificate. Both names are guaranteed ≤ 63 characters.
+// For short domains: "cd-api-mycompany-com" / "tls-cd-api-mycompany-com"
+// For long domains: hash-based suffix prevents collisions after truncation.
+// MEET-2026-04-05-033: Domain-derived naming prevents resource churn.
+// CODE-005 fix: tls- prefix is accounted for in the length budget.
+func domainResourceNames(domain string) (ingressName, certName string) {
+	s := strings.ToLower(domain)
+	s = strings.ReplaceAll(s, ".", "-")
+	base := "cd-" + s
+
+	// Budget: certName = "tls-" + ingressName, so ingressName max = 59 chars
+	const maxIngressLen = 59
+
+	if len(base) <= maxIngressLen {
+		ingressName = base
+	} else {
+		// Truncate + append 8-char hash of full domain to prevent collisions
+		h := fmt.Sprintf("%x", hashDomain(domain))[:8]
+		ingressName = base[:maxIngressLen-9] + "-" + h // 50 + 1 + 8 = 59
+	}
+	ingressName = strings.TrimRight(ingressName, "-")
+
+	certName = "tls-" + ingressName
+	return ingressName, certName
+}
+
+// hashDomain returns a deterministic hash of a domain string for collision avoidance.
+func hashDomain(domain string) uint64 {
+	// FNV-1a 64-bit: fast, deterministic, no crypto needed (not a security hash).
+	var h uint64 = 14695981039346656037
+	for i := 0; i < len(domain); i++ {
+		h ^= uint64(domain[i])
+		h *= 1099511628211
+	}
+	return h
+}
+
+// domainResourceSuffix is a compatibility wrapper. Use domainResourceNames for new code.
+func domainResourceSuffix(domain string) string {
+	name, _ := domainResourceNames(domain)
+	return name
 }
 
 // --- Helpers ---
