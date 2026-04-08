@@ -639,13 +639,11 @@ func main() {
 			// Repository store for webhook lookups
 			repoStore := &db.PostgresRepositoryStore{DB: dbAdapter}
 
-			// Auto-deployer — handles push → download source → submit build
+			// Auto-deployer — handles push → download source → upload S3 → submit build
 			autoDeployer := github.NewAutoDeployer(github.AutoDeployConfig{
 				AppClient:   ghAppClient,
+				ObjectStore: objUploader,
 				Logger:      logger,
-				// BuildSubmitter: TODO — wire to BuildOrchestrator when ready
-				// ObjectStore: TODO — wire to S3 uploader
-				// SourceStore: TODO — wire to Gitea source store
 			})
 
 			wh := ghwebhook.NewHandler(githubWebhookSecret, logger)

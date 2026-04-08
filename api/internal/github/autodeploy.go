@@ -20,15 +20,15 @@ import (
 // AutoDeployConfig holds configuration for auto-deploy on push.
 type AutoDeployConfig struct {
 	AppClient    *AppClient
-	SourceStore  SourceStore
+	SourceStore  SourcePusher
 	ObjectStore  ObjectUploader
 	BuildSubmitter BuildSubmitter
 	Logger       *slog.Logger
 }
 
-// SourceStore pushes source bundles (DIP — same as source.SourceStore).
-type SourceStore interface {
-	PushTarball(ctx context.Context, tenantID, projectName string, tarball io.Reader) (commitSHA string, err error)
+// SourcePusher pushes source bundles (DIP — subset of source.SourceStore).
+type SourcePusher interface {
+	PushTarball(ctx context.Context, tenantID, projectName string, tarball io.Reader) (sourceID string, err error)
 }
 
 // ObjectUploader uploads objects to S3 (DIP — same as routes.ObjectUploader).
@@ -52,6 +52,7 @@ type WebhookBuildRequest struct {
 	Branch         string
 	CommitMessage  string
 	SenderLogin    string
+	LoopZeroYaml       *loopzeroYamlMinimal
 }
 
 // AutoDeployer handles auto-deploy on push events.
@@ -117,35 +118,51 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 
 	log.Info("auto-deploy: loopzero.yaml found", "project_in_yaml", loopzeroYaml.Project, "apps", len(loopzeroYaml.Apps))
 
-	// Step 4: Upload to MinIO/Spaces for build cluster access
+	// Step 4: Push source to Gitea (reuses existing source store — same as CLI upload) (same path as CLI upload)
+	if d.cfg.SourceStore != nil {
+		if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+			return fmt.Errorf("auto-deploy: seek for source push: %w", err)
+		}
+		sourceResult, err := d.cfg.SourceStore.PushTarball(ctx, tenantID, projectName, tmpFile)
+		if err != nil {
+			return fmt.Errorf("auto-deploy: push source to gitea: %w", err)
+		}
+		log.Info("auto-deploy: source pushed to gitea", "source_id", sourceResult)
+	}
+
+	// Step 6: Upload tarball to S3 for build cluster
 	if d.cfg.ObjectStore != nil {
 		if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-			return fmt.Errorf("auto-deploy: seek for upload: %w", err)
+			return fmt.Errorf("auto-deploy: seek for s3 upload: %w", err)
 		}
-		objKey := fmt.Sprintf("%s/source/%s.tar.gz", tenantID, commitSHA)
+		objKey := fmt.Sprintf("%s/source/%s.bundle", tenantID, commitSHA)
 		if err := d.cfg.ObjectStore.Upload(ctx, "loopzero-builds", objKey, tmpFile); err != nil {
-			log.Warn("auto-deploy: S3 upload failed (non-fatal in dev)", "error", err)
+			log.Warn("auto-deploy: S3 upload failed", "error", err)
+			// Non-fatal in dev, fatal in prod
+		} else {
+			log.Info("auto-deploy: source uploaded to S3")
 		}
 	}
 
-	// Step 5: Submit build
+	// Step 7: Submit build
 	if d.cfg.BuildSubmitter != nil {
 		if err := d.cfg.BuildSubmitter.SubmitBuildFromWebhook(ctx, WebhookBuildRequest{
 			TenantID:       tenantID,
 			ProjectName:    projectName,
-			Environment:    "production", // push to default branch = production
+			Environment:    "production",
 			CommitSHA:      commitSHA,
 			InstallationID: installationID,
 			RepoFullName:   repoFullName,
 			Branch:         branch,
 			CommitMessage:  commitMessage,
 			SenderLogin:    senderLogin,
+			LoopZeroYaml:       loopzeroYaml,
 		}); err != nil {
 			return fmt.Errorf("auto-deploy: submit build: %w", err)
 		}
-		log.Info("auto-deploy: build submitted")
+		log.Info("auto-deploy: build submitted successfully")
 	} else {
-		log.Info("auto-deploy: build submitter not configured (logging only)")
+		log.Info("auto-deploy: build submitter not configured (webhook-only mode)")
 	}
 
 	// Step 6: Set commit status to pending
