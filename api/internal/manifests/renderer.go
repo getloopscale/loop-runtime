@@ -897,12 +897,6 @@ func hashDomain(domain string) uint64 {
 	return h
 }
 
-// domainResourceSuffix is a compatibility wrapper. Use domainResourceNames for new code.
-func domainResourceSuffix(domain string) string {
-	name, _ := domainResourceNames(domain)
-	return name
-}
-
 // --- Helpers ---
 
 // appHostname returns the flat hostname for an app.

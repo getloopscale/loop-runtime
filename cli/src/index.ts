@@ -1368,7 +1368,6 @@ export function createProgram(): Command {
       });
     });
 
-<<<<<<< HEAD
   // --- domain (MEET-2026-04-05-033: Custom Domains) ---
   const domainCmd = program
     .command('domain')
