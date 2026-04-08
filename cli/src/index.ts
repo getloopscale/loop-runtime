@@ -1410,6 +1410,38 @@ export function createProgram(): Command {
       process.exitCode = await cmd.execute({ json: globalOpts.json });
     });
 
+  // --- audit ---
+  program
+    .command('audit')
+    .description('View audit log (requires admin or owner role)')
+    .option('--action <action>', 'Filter by action (e.g., project.created)')
+    .option('--since <date>', 'Filter by date (e.g., 2026-04-01)')
+    .action(async (cmdOpts: { action?: string; since?: string }) => {
+      const globalOpts = program.opts();
+      const token = configStore.getToken();
+      const apiUrl = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL: apiUrl, token: token ?? undefined, onUnauthorized: handleUnauthorized });
+
+      const { AuditCommand } = await import('./commands/audit');
+      const cmd = new AuditCommand({
+        getAudit: async (action?: string, since?: string) => {
+          const params = new URLSearchParams();
+          if (action) params.set('action', action);
+          if (since) params.set('since', since);
+          params.set('limit', '20');
+          return apiClient.get(`/api/v1/audit?${params.toString()}`);
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.run({
+        json: globalOpts.json,
+        action: cmdOpts.action,
+        since: cmdOpts.since,
+      });
+    });
+
   // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)
   // Also handles unknown commands since Commander passes them as arguments to the default action.
   program.argument('[args...]');
