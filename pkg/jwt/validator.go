@@ -29,8 +29,9 @@ type Claims struct {
 	Scope    string `json:"scope,omitempty"`
 	// Hydra puts consent session claims in "ext" (access_token session).
 	Ext struct {
-		Email string `json:"email,omitempty"`
-		Name  string `json:"name,omitempty"`
+		Email    string `json:"email,omitempty"`
+		Name     string `json:"name,omitempty"`
+		TenantID string `json:"tenant_id,omitempty"`
 	} `json:"ext,omitempty"`
 }
 
