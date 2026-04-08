@@ -135,6 +135,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Application CR manager — creates LoopZeroApplication CRs on mgmt cluster.
+	// CHG-2026-04-08-001: Wires ApplicationController to the deploy flow.
+	// Reuses the TenantCRManager's dynamic client (same cluster, same RBAC).
+	appCRMgr := &appCRAdapter{mgr: k8s.NewApplicationCRManager(tenantCRMgr.Client, os.Getenv("TENANT_NAMESPACE"))}
+
 	// Secret K8s manager — creates K8s Secrets on mgmt + ExternalSecret CRs on workload for ESO sync.
 	// F-01 fix: Use interface variable to avoid Go nil interface trap.
 	// A typed nil (*SecretK8sManager)(nil) passes `!= nil` interface checks,
@@ -424,6 +429,7 @@ func main() {
 			orch,
 			locker,
 			domainStore, // MEET-034: custom domains in manifest rendering
+			appCRMgr,    // CHG-2026-04-08-001: creates LoopZeroApplication CRs on build completion
 			pgEventStore,
 			logger,
 			services.BuildReconcileLoopConfig{
@@ -775,4 +781,21 @@ func main() {
 		logger.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// appCRAdapter bridges k8s.ApplicationCRManager to services.ApplicationCREnsurer.
+// CHG-2026-04-08-001: Converts services-layer input to k8s-layer input.
+type appCRAdapter struct {
+	mgr *k8s.ApplicationCRManager
+}
+
+func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input services.ApplicationCRInput) error {
+	return a.mgr.EnsureLoopZeroApplication(ctx, k8s.LoopZeroApplicationInput{
+		TenantID:    input.TenantID,
+		Project:     input.Project,
+		Environment: input.Environment,
+		AppName:     input.AppName,
+		ServiceName: input.ServiceName,
+		ServicePort: input.ServicePort,
+	})
 }

@@ -71,12 +71,30 @@ type CustomDomainQuerier interface {
 	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]routes.CustomDomain, error)
 }
 
+// ApplicationCREnsurer creates LoopZeroApplication CRs on the mgmt cluster.
+// CHG-2026-04-08-001: Wires ApplicationController to the deploy flow.
+type ApplicationCREnsurer interface {
+	EnsureLoopZeroApplication(ctx context.Context, input ApplicationCRInput) error
+}
+
+// ApplicationCRInput is the services-layer input for creating LoopZeroApplication CRs.
+// Decoupled from the k8s package to follow DIP.
+type ApplicationCRInput struct {
+	TenantID    string
+	Project     string
+	Environment string
+	AppName     string
+	ServiceName string
+	ServicePort int32
+}
+
 type BuildReconcileLoop struct {
 	buildStore   db.BuildStore
 	workflow     WorkflowSubmitter
 	orch         BuildCompletionHandler
 	locker       EnvironmentLocker
 	domainStore  CustomDomainQuerier // MEET-034: custom domains in manifests
+	appCRMgr     ApplicationCREnsurer // CHG-2026-04-08-001: creates LoopZeroApplication CRs
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -110,6 +128,7 @@ func NewBuildReconcileLoop(
 	orch BuildCompletionHandler,
 	locker EnvironmentLocker,
 	domainStore CustomDomainQuerier,
+	appCRMgr ApplicationCREnsurer,
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	},
@@ -125,6 +144,7 @@ func NewBuildReconcileLoop(
 		orch:        orch,
 		locker:      locker,
 		domainStore: domainStore,
+		appCRMgr:    appCRMgr,
 		eventStore:  eventStore,
 		logger:      logger,
 		cfg:        cfg,
@@ -345,6 +365,11 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		BaseDomain:  r.cfg.BaseDomain,
 		Apps:        manifestApps,
 	})
+
+	// CHG-2026-04-08-001: Ensure LoopZeroApplication CRs exist on mgmt cluster.
+	// Non-fatal: failure is logged but does not block the deploy. The CRs enable
+	// hostname assignment, ExposedRoute creation, TLS monitoring, and reachability probes.
+	r.ensureApplicationCRs(ctx, build, apps)
 
 	// Construct the completion result and delegate to the orchestrator
 	result := BuildCallbackRequest{
@@ -582,4 +607,36 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 
 	r.logger.Warn("reconcile loop: build failed",
 		"build_id", build.ID, "reason", reason)
+}
+
+// ensureApplicationCRs creates LoopZeroApplication CRs on the mgmt cluster for each app
+// in the build. This wires the ApplicationController and ExposureController to provide
+// hostname assignment, ExposedRoute creation, TLS monitoring, and reachability probes.
+// CHG-2026-04-08-001: Non-fatal — failure is logged but does not block the deploy.
+func (r *BuildReconcileLoop) ensureApplicationCRs(ctx context.Context, build *db.Build, apps []db.BuildAppSpec) {
+	if r.appCRMgr == nil {
+		return
+	}
+	for _, app := range apps {
+		port := int32(app.Port)
+		if port == 0 {
+			port = 80
+		}
+		input := ApplicationCRInput{
+			TenantID:    build.TenantID,
+			Project:     build.ProjectID,
+			Environment: build.Environment,
+			AppName:     app.Name,
+			ServiceName: app.Name,
+			ServicePort: port,
+		}
+		if err := r.appCRMgr.EnsureLoopZeroApplication(ctx, input); err != nil {
+			r.logger.Warn("reconcile loop: failed to ensure LoopZeroApplication CR (non-fatal)",
+				"build_id", build.ID, "app", app.Name, "error", err)
+		} else {
+			r.logger.Info("reconcile loop: LoopZeroApplication CR ensured",
+				"build_id", build.ID, "app", app.Name,
+				"tenant", build.TenantID, "environment", build.Environment)
+		}
+	}
 }
