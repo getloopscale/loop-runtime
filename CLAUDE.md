@@ -14,7 +14,7 @@ The authoritative specification is **`docs/technical.md`**. Every state machine,
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
-**Current status: Pre-release, Starter + Pro tiers launchable.** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-6 complete. Sprint 10 (static frontend) complete. Sprint 11 (auth + billing) complete. **Phase 1 (enforcement + audit) complete (2026-04-08):** plan limits enforced on projects/builds/environments/members, audit log writing to DB, GET /api/v1/audit endpoint, `loopzero audit` CLI command. **Auth hardened (MEET-039):** UUID tenant IDs, engine RSA-only, audience validation, secret rotation with kid+dual-key, no "default" tenant fallback. **Two-host gateway:** cloud.{domain} for browser (dashboard+Kratos+Hydra), api.{domain} for CLI (engine). **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom). 789 CLI tests + 28 Go packages passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN). **Not yet built:** preview environments (Sprint 5, Phase 2), custom domains (PR #25 in progress), `loopzero promote` (Sprint 4), SSO/SAML (Phase 3), image signing (Sprint 6). **Known issues:** AppSecret controller not implemented (secrets work via ESO directly).
+**Current status: Pre-release, Starter + Pro tiers launchable.** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-6 complete. Sprint 10 (static frontend) complete. Sprint 11 (auth + billing) complete. **Phase 1 (enforcement + audit) complete (2026-04-08):** plan limits enforced on projects/builds/environments/members, audit log writing to DB, GET /api/v1/audit endpoint, `loopzero audit` CLI command. **Custom Domains v2 complete (2026-04-08):** CF Zone Management (model Vercel) — `loopzero domain add` creates CF zone per domain, user changes nameservers, full WAF/DDoS via CF edge, zero cert-manager dependency for custom domains. E2E validated with aquim.ai (Python API + React frontend monorepo). **Auth hardened (MEET-039):** UUID tenant IDs, engine RSA-only, audience validation, secret rotation with kid+dual-key, no "default" tenant fallback. **Two-host gateway:** cloud.{domain} for browser (dashboard+Kratos+Hydra), api.{domain} for CLI (engine). **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom). 817 CLI tests + 32 Go packages passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN). **Not yet built:** preview environments (Sprint 5, Phase 2), `loopzero promote` (Sprint 4), SSO/SAML (Phase 3), image signing (Sprint 6). **Known issues:** AppSecret controller not implemented (secrets work via ESO directly).
 
 ---
 
@@ -205,6 +205,7 @@ loopzero/
 │   │   ├── argo/                      ← Argo Workflows client (submit, cancel, get status)
 │   │   ├── argocd/                    ← ArgoCD sync client (trigger, wait)
 │   │   ├── cfkv/                      ← Cloudflare Workers KV client (static frontend routing)
+│   │   ├── cfzone/                    ← Cloudflare Zone Management client (custom domains v2)
 │   │   ├── gitops/                    ← Gitea gitops pusher (manifest commit with trailers)
 │   │   ├── source/                    ← Gitea source store (bundle push)
 │   │   ├── s3/                        ← MinIO/Spaces uploader (source bundles)
@@ -545,6 +546,7 @@ Check the current sprint before starting any implementation. Only implement what
 | SLOs + Alerts | ✅ | Alertmanager + 4 rules (API down, deploy failing, latency, crash loop) |
 | `loopzero status` | ✅ | Handler wired in main.go + server.go, functional |
 | Workload security | ✅ | SecurityContext (non-root, drop ALL, readOnlyRootFilesystem), PSA restricted, NetworkPolicy mandatory |
+| Custom Domains v2 | ✅ | CF Zone Management (model Vercel). `loopzero domain add` creates CF zone, scans DNS, user changes NS. WAF/DDoS via CF edge. E2E validated with aquim.ai. Plan: `docs/plans/custom-domains-v2-cf-zones.md` |
 | Image signing | ❌ | cosign + syft not implemented (Sprint 6) |
 | Preview environments | ❌ | CRD defined, controller not implemented (Sprint 5) |
 
@@ -621,6 +623,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | Cloudflare Tunnel | c35b9d63... | All runtime traffic via CF edge (DDoS/WAF), zero public IPs |
 | CF Worker | loopzero-static-delivery | Routes static frontend requests to DO Spaces via KV lookup |
 | CF KV | loopzero-routing (28992ed1...) | Routing table: subdomain → { buildId, s3Prefix } |
+| CF Zone Management | Cloudflare for Platforms | Custom domains: per-domain zone creation, DNS scan+import, WAF/DDoS, TLS (model Vercel) |
 | DO Spaces | loopzero-static-assets + CDN | Static frontend assets (public-read, immutable per build-id) |
 | State backend | DO Spaces (S3-compatible) | s3://loopzero-infra-pulumi-state |
 
@@ -634,6 +637,8 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | "ArgoCD notifications `notifiers`" | The argo-cd Helm chart v7.x uses `notifications.notifiers` for webhook services in the ConfigMap. `notifications.services` is silently ignored. | Always use `notifiers` key in Pulumi values and helm/argocd/values.yaml |
 | "Single ArgoCD Application per tenant" | One Application manages all projects in an environment. If ANY resource is Degraded, ALL notifications are blocked. | Clean orphaned manifests immediately on delete; gitops.Remove failure is FATAL |
 | "Implemented but not documented" | Code is implemented and tested but roadmap/docs still say "TODO" or "not started". Inverse of "implemented but not wired". | Before claiming something is missing, verify in the code — roadmaps can be stale. The code is the source of truth for what exists. |
+| "Custom domains = CF Zone per domain" | Custom domains use Cloudflare Zone Management (v2). Each domain gets its own CF zone. User changes nameservers. CF handles TLS+WAF. No cert-manager Certificate for CF-managed domains. Apex domains work via CF CNAME flattening. | `cfzone` package handles CF API. DNS scan imports existing records (email preservation). State: `pending_ns → ns_active → provisioning → active`. Plan: `docs/plans/custom-domains-v2-cf-zones.md` |
+| "CF scan imports conflicting apex records" | When CF scans DNS, it imports the existing A record for the apex domain. This conflicts with the CNAME LoopZero needs to add. | The v2 create flow deletes conflicting A/AAAA/CNAME at apex BEFORE creating the routing CNAME. |
 
 ---
 
@@ -654,6 +659,8 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | `project.ID` (UUID) for build/release queries | Returns 0 results — builds use project name | Use project name from `loopzero.yaml`, not internal UUID |
 | `gitops.Remove` error treated as non-fatal | Orphaned manifests → Degraded ArgoCD → blocks all deploys | `gitops.Remove` failure is FATAL — delete must fail |
 | `GetActiveByEnvTx` without ORDER BY | Arbitrary ACTIVE release returned — may skip supersede | ORDER BY created_at ASC LIMIT 1 for supersede target |
+| cert-manager Certificate for custom domains | Stuck `Progressing` Certificate blocks ArgoCD sync → release never ACTIVE → circular dependency with domain provisioner | CF-managed domains (v2) skip Certificate CR entirely. CF handles TLS at edge. Use `CustomDomainInput.CFManaged` to control. |
+| `react`/`vue`/`svelte` framework not mapped server-side | Falls to `custom` strategy → `scriptValidateCustom` requires Dockerfile at root → build fails in monorepos | Added to `resolveLanguageStrategy()` in `build_plan.go`. All CLI-recognized frontend frameworks map to `node` strategy. |
 
 ---
 

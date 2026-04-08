@@ -42,7 +42,7 @@ No Kubernetes. No Helm. No Dockerfile required.
 
 > **Phase: Pre-release.** Infrastructure validated on production (DigitalOcean). Not yet available to external users.
 >
-> Last validation: 2026-03-29 — full destroy + recreate via GitHub Actions pipeline (10m33s).
+> Last validation: 2026-04-08 — Custom Domains v2 E2E validated with aquim.ai (Python API + React frontend monorepo, CF Zone Management, WAF/DDoS active).
 
 ### What Works (Validated on DigitalOcean)
 
@@ -62,7 +62,12 @@ No Kubernetes. No Helm. No Dockerfile required.
 | `loopzero team list/add/remove/role` | **Working** | RBAC: owner/admin/member roles |
 | `loopzero build list/inspect` | **Working** | Build history with env filter |
 | `loopzero validate` | **Working** | Local loopzero.yaml validation |
-| TLS (HTTPS) | **Working** | Let's Encrypt DNS-01 via Cloudflare |
+| `loopzero domain add/status/dns/remove` | **Working** | CF Zone Management (model Vercel) — apex + subdomain, WAF/DDoS, auto TLS. E2E validated with aquim.ai |
+| `loopzero audit` | **Working** | Audit log with action/timestamp filters |
+| Plan enforcement (Starter/Pro/Team) | **Working** | Limits on projects/builds/environments/members. 402 on quota exceeded |
+| Auth (Device Code Flow + JWT) | **Working** | Ory Hydra OIDC, GitHub/Google/email login, RSA JWT, token refresh |
+| Billing (Stripe) | **Working** | Checkout, webhooks, plan upgrades, metering |
+| TLS (HTTPS) | **Working** | CF Universal SSL for custom domains, Let's Encrypt DNS-01 for platform domains |
 | Observability | **Working** | Prometheus + Grafana + Loki + 4 SLO alert rules |
 | Concurrent deploy protection | **Working** | `pg_advisory_xact_lock` → 409 on conflict |
 | Idempotency | **Working** | Retry-safe via `Idempotency-Key` header |
@@ -82,21 +87,13 @@ No Kubernetes. No Helm. No Dockerfile required.
 | Chaos engineering tests | Sprint 8 | Not started |
 | AppSecret controller | — | CRD defined, no reconciler. Secrets work via ESO directly but lack lifecycle automation |
 
-### Known Issues
-
-| Issue | Severity | Detail |
-|-------|----------|--------|
-| 1 CLI test failing | High | `--json` output for missing required argument returns text instead of JSON (`index.test.ts:209`). Stability contract §0.3 violation. |
-| `feat/auth` branch not merged | High | 440 commits ahead of `main` with team management, security, and CI improvements. `main` is stale. |
-| Hardening roadmap stale | Low | `docs/hardening-sprints/ROADMAP.md` marks Sprint 7 (security) as TODO, but SecurityContext + PSA + NetworkPolicy are already implemented in code. |
-
 ### Test Suite
 
 | Component | Tests | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 747 | 746 passing, 1 failing |
-| API (Go) | 28 packages | All passing |
-| Shared libraries (Go) | 7 packages | All passing |
+| CLI (Jest) | 817 | All passing |
+| API (Go) | 32 packages | All passing |
+| Shared libraries (Go) | 8 packages | All passing |
 | Operators (Ginkgo + envtest) | — | Passing (requires envtest binary) |
 | Infra (Pulumi + vitest) | — | Passing |
 | CI pipeline | 4 workflows | Green (lint, test, security, manifests) |
@@ -117,9 +114,11 @@ LoopZero gives you Vercel-quality DX for everything Vercel can't deploy.
 | Multiple services per repo | — | Yes |
 | Rollback in seconds | Yes | Yes (~3s) |
 | Secrets per environment | Yes | Yes (encrypted, ESO sync) |
+| Custom domains (apex + subdomain) | Yes | Yes (CF Zone Management, WAF/DDoS) |
 | Preview environments per PR | Yes | Not yet (Sprint 5) |
 | CLI-first | Yes | Yes |
 | Team management + RBAC | Yes | Yes |
+| Billing (Stripe) | Yes | Yes |
 | Real-time build logs | Yes | Yes (Loki) |
 
 ---
@@ -227,6 +226,18 @@ That's it. TLS, health checks, ingress routing, and zero-downtime rolling update
 | `loopzero build list` | List recent builds |
 | `loopzero build inspect <id>` | Show build details |
 
+### Custom Domains
+
+| Command | Purpose |
+|---------|---------|
+| `loopzero domain add <domain>` | Register a custom domain (creates CF zone, scans DNS, returns nameservers) |
+| `loopzero domain status <domain>` | Check domain status (NS propagation, TLS, WAF) |
+| `loopzero domain dns <domain>` | List DNS records for a Cloudflare-managed domain |
+| `loopzero domain list` | List all custom domains |
+| `loopzero domain remove <domain>` | Remove domain and CF zone (requires `--confirm`) |
+
+Custom domains use the **Vercel model**: LoopZero creates a Cloudflare zone per domain, automatically imports existing DNS records (email preservation), and adds a proxied CNAME for routing. The user only changes nameservers at their registrar. Apex domains work via Cloudflare CNAME flattening. WAF/DDoS protection is automatic.
+
 ### Session
 
 | Command | Purpose |
@@ -311,7 +322,10 @@ Four-plane separation with dedicated Kubernetes clusters:
 | GitOps | ArgoCD (manual sync) + Gitea |
 | Database | PostgreSQL 16 (managed, advisory locks) |
 | Secrets | External Secrets Operator |
-| Edge | Cloudflare Tunnel + Worker + KV |
+| Edge | Cloudflare Tunnel + Worker + KV + Zone Management |
+| Custom Domains | Cloudflare for Platforms (per-domain zones, WAF/DDoS, Universal SSL) |
+| Auth | Ory Kratos (identity) + Ory Hydra (OAuth2/OIDC) + Device Code Flow |
+| Billing | Stripe (subscriptions, webhooks, metering) |
 | Static assets | DigitalOcean Spaces + CDN |
 | Monitoring | Prometheus + Grafana + Loki + Alertmanager |
 | IaC | Pulumi (TypeScript) — DigitalOcean + Cloudflare |
@@ -415,7 +429,7 @@ Exit code: 5 (partial failure)
 
 - **Database migrations** — LoopZero deploys code, not schema changes.
 - **Application data repair** — If a bug corrupted data, that's on you.
-- **Custom domains** — All URLs are on `*.loopzero.example` for now.
+- **Custom domains on non-Cloudflare DNS without nameserver change** — Users must change nameservers to Cloudflare (same model as Vercel). Alternative: CNAME for subdomains works with any provider.
 - **Multi-region** — Single-region in v1.
 - **Preview environments** — Planned for Sprint 5, not yet implemented.
 - **Image signing** — Supply chain security (cosign + syft) planned for Sprint 6.
