@@ -489,9 +489,3 @@ func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
 		})
 	}
 }
-
-// firstOfMonth returns the first day of the current month (UTC).
-func firstOfMonth() time.Time {
-	now := time.Now().UTC()
-	return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-}

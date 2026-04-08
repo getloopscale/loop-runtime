@@ -42,7 +42,7 @@ func Middleware(
 			if !result.Allowed {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusPaymentRequired)
-				json.NewEncoder(w).Encode(FormatLimitError(result, upgradeURL))
+				_ = json.NewEncoder(w).Encode(FormatLimitError(result, upgradeURL))
 				return
 			}
 
