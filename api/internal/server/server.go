@@ -93,6 +93,8 @@ type Config struct {
 	// DomainHandler handles custom domain CRUD + verification.
 	// MEET-2026-04-05-033: Custom Domains feature.
 	DomainHandler *routes.DomainHandler
+	// GitHubWebhookHandler handles POST /api/v1/webhooks/github (no auth — GitHub sends events).
+	GitHubWebhookHandler http.Handler
 	// IsProduction indicates production mode — enables strict error handling.
 	IsProduction bool
 	// AuditWriter writes mutation events to audit_log table. Nil = slog only.
@@ -145,6 +147,11 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 	if cfg.ArgoCallbackHandler != nil {
 		r.Post("/internal/argocd-callback", cfg.ArgoCallbackHandler.Handle)
+	}
+
+	// GitHub webhook (no auth — GitHub validates via HMAC signature internally)
+	if cfg.GitHubWebhookHandler != nil {
+		r.Post("/api/v1/webhooks/github", cfg.GitHubWebhookHandler.ServeHTTP)
 	}
 
 	// Protected routes (auth required)

@@ -39,6 +39,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/cfkv"
 	"github.com/loopzero/loopzero/api/internal/cfzone"
+	ghwebhook "github.com/loopzero/loopzero/api/internal/github/webhook"
 	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/metrics"
@@ -174,6 +175,7 @@ func main() {
 	var cellRouter placement.Router = placement.NewPassthroughRouter(placement.CellConfig{CellID: placement.DefaultCellID}) // fallback
 	var cellStore *db.PostgresCellStore // implements both TenantCellQuerier and CellMetricsQuerier
 	var domainHandler *routes.DomainHandler // MEET-2026-04-05-033: Custom Domains
+	var githubWebhookHandler http.Handler   // GitHub App webhook handler (Phase: GitHub Integration)
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -612,6 +614,47 @@ func main() {
 		if cfg.CFZoneManagement && cfZoneClient != nil {
 			domainProvisioner.WithCFZone(&cfZoneStatusAdapter{client: cfZoneClient})
 		}
+		// --- GitHub App Webhook (auto-deploy on push) ---
+		githubWebhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
+		if githubWebhookSecret != "" {
+			wh := ghwebhook.NewHandler(githubWebhookSecret, logger)
+			wh.OnPush(func(event ghwebhook.PushEvent) error {
+				logger.Info("github webhook: push received",
+					"repo", event.Repository.FullName,
+					"branch", event.Branch(),
+					"sha", event.After,
+					"sender", event.Sender.Login,
+					"is_default", event.IsDefaultBranch(),
+					"installation_id", event.Installation.ID,
+				)
+				// TODO: Phase 4 — auto-deploy on push to default branch
+				return nil
+			})
+			wh.OnPullRequest(func(event ghwebhook.PullRequestEvent) error {
+				logger.Info("github webhook: pull_request received",
+					"repo", event.Repository.FullName,
+					"action", event.Action,
+					"pr", event.Number,
+					"branch", event.PullRequest.Head.Ref,
+				)
+				// TODO: Phase 2 (preview environments) — deploy PR branch
+				return nil
+			})
+			wh.OnInstallation(func(event ghwebhook.InstallationEvent) error {
+				logger.Info("github webhook: installation event",
+					"action", event.Action,
+					"installation_id", event.Installation.ID,
+					"account", event.Installation.Account.Login,
+				)
+				// TODO: Phase 3 — save/remove installation in DB
+				return nil
+			})
+			githubWebhookHandler = wh
+			logger.Info("github webhook: handler registered", "endpoint", "/api/v1/webhooks/github")
+		} else {
+			logger.Info("github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled")
+		}
+
 		domainHealthChecker := services.NewDomainHealthChecker(
 			domainStore, logger, services.DomainHealthCheckerConfig{
 				CNAMETarget: cnameTarget,
@@ -749,6 +792,7 @@ func main() {
 		TeamHandler:        routes.NewTeamHandler(&db.PostgresTeamStore{DB: dbAdapter}),
 		EnvironmentHandler: routes.NewEnvironmentHandler(tenantCRMgr),
 		DomainHandler:      domainHandler,
+		GitHubWebhookHandler: githubWebhookHandler,
 		AuditHandler:       routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter}),
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
