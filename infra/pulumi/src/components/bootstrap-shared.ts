@@ -331,17 +331,33 @@ export function createClusterIssuer(
     );
   }
 
-  // DNS-01 solver when Cloudflare token is available (required behind CF Tunnel).
-  // Falls back to HTTP-01 for environments without Cloudflare.
+  // Dual solver strategy:
+  // 1. DNS-01 via Cloudflare for platform domains (*.loopzero.example) — required behind CF Tunnel
+  // 2. HTTP-01 via Traefik as catch-all for custom domains (e.g., aquim.ai on Hostinger)
+  //
+  // cert-manager selects the most specific matching solver per Certificate.
+  // DNS-01 matches only the configured dnsZone; HTTP-01 catches everything else.
+  // Without this, custom domains on non-Cloudflare DNS providers can never issue TLS.
   const solvers = config.cfApiToken
     ? [
         {
+          selector: {
+            dnsZones: [config.dnsZone],
+          },
           dns01: {
             cloudflare: {
               apiTokenSecretRef: {
                 name: "cloudflare-api-token-secret",
                 key: "api-token",
               },
+            },
+          },
+        },
+        {
+          selector: {},
+          http01: {
+            ingress: {
+              class: "traefik",
             },
           },
         },

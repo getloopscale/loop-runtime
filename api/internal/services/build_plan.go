@@ -129,7 +129,8 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 // This is the single source of truth for framework→strategy mapping.
 func resolveLanguageStrategy(framework string) string {
 	switch framework {
-	case "nextjs", "vite", "remix", "nestjs", "express", "node":
+	case "nextjs", "next", "vite", "remix", "nestjs", "express", "node",
+		"react", "vue", "svelte", "astro", "angular", "fastify":
 		return "node"
 	case "gin", "go":
 		return "go"

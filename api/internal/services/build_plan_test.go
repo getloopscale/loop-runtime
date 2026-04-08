@@ -124,6 +124,50 @@ func TestCreateBuildPlan_PythonFramework(t *testing.T) {
 	}
 }
 
+func TestResolveLanguageStrategy_AllFrameworks(t *testing.T) {
+	nodeFrameworks := []string{
+		"nextjs", "next", "vite", "remix", "nestjs", "express", "node",
+		"react", "vue", "svelte", "astro", "angular", "fastify",
+	}
+	for _, fw := range nodeFrameworks {
+		if got := resolveLanguageStrategy(fw); got != "node" {
+			t.Errorf("resolveLanguageStrategy(%q) = %q, want node", fw, got)
+		}
+	}
+
+	goFrameworks := []string{"gin", "go"}
+	for _, fw := range goFrameworks {
+		if got := resolveLanguageStrategy(fw); got != "go" {
+			t.Errorf("resolveLanguageStrategy(%q) = %q, want go", fw, got)
+		}
+	}
+
+	pythonFrameworks := []string{"fastapi", "django", "python"}
+	for _, fw := range pythonFrameworks {
+		if got := resolveLanguageStrategy(fw); got != "python" {
+			t.Errorf("resolveLanguageStrategy(%q) = %q, want python", fw, got)
+		}
+	}
+
+	if got := resolveLanguageStrategy("unknown"); got != "custom" {
+		t.Errorf("resolveLanguageStrategy(unknown) = %q, want custom", got)
+	}
+}
+
+func TestCreateBuildPlan_FrontendFramework_React(t *testing.T) {
+	units := []AppUnit{
+		{Name: "web", Type: "frontend", Path: "web", Framework: "react", Port: 80, Build: "buildpack", Rendering: "static", Env: map[string]string{}, Secrets: []string{}},
+	}
+	plan := CreateBuildPlan(units, "t", "p", "sha", "r")
+
+	if plan.Apps[0].LanguageStrategy != "node" {
+		t.Errorf("LanguageStrategy = %q, want node (react must map to node)", plan.Apps[0].LanguageStrategy)
+	}
+	if plan.Apps[0].DeliveryModel != "static" {
+		t.Errorf("DeliveryModel = %q, want static", plan.Apps[0].DeliveryModel)
+	}
+}
+
 func TestCreateBuildPlan_MixedLanguages(t *testing.T) {
 	units := []AppUnit{
 		{Name: "api", Type: "server", Path: "apps/api", Framework: "express", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
