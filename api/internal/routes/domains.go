@@ -59,6 +59,17 @@ type CustomDomain struct {
 	CNAMEConsecutiveFailures int       `json:"-"`
 	CreatedAt               time.Time  `json:"created_at"`
 	UpdatedAt               time.Time  `json:"updated_at"`
+
+	// v2: CF Zone Management fields
+	CFZoneID           *string  `json:"cf_zone_id,omitempty"`
+	CFZoneStatus       string   `json:"cf_zone_status,omitempty"`
+	CFNameservers      []string `json:"nameservers,omitempty"`
+	DNSRecordsImported bool     `json:"-"`
+}
+
+// IsCFManaged returns true if this domain uses CF Zone Management (v2).
+func (d *CustomDomain) IsCFManaged() bool {
+	return d.CFZoneID != nil && *d.CFZoneID != ""
 }
 
 // DomainStore abstracts custom domain persistence (DIP).
@@ -73,6 +84,12 @@ type DomainStore interface {
 	UpdateTLS(ctx context.Context, domain, tlsStatus string, expiresAt *time.Time) error
 	UpdateFailure(ctx context.Context, domain, status, reason string) error
 	Delete(ctx context.Context, domain string) error
+
+	// v2: CF Zone Management
+	CreateWithCFZone(ctx context.Context, d *CustomDomain) error
+	UpdateCFZoneStatus(ctx context.Context, domain, cfZoneStatus string) error
+	FindPendingNS(ctx context.Context) ([]CustomDomain, error)
+	FindNSActive(ctx context.Context) ([]CustomDomain, error)
 }
 
 // DomainListFilter holds optional filters for listing domains.

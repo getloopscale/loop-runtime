@@ -14,6 +14,13 @@ import (
 )
 
 
+// domainColumns is the canonical column list for all domain SELECT queries.
+// Must match scanDomain field order exactly.
+const domainColumns = `id, tenant_id, project_name, app_name, environment, domain, status,
+	verification_token, verified_at, tls_status, tls_expires_at,
+	failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
+	cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported`
+
 // PostgresDomainStore implements routes.DomainStore using PostgreSQL.
 type PostgresDomainStore struct {
 	DB DBTX
@@ -42,7 +49,8 @@ func (s *PostgresDomainStore) GetByDomain(ctx context.Context, domain string) (*
 	return s.scanOne(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
-		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
+		        cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported
 		 FROM custom_domains WHERE domain = $1`,
 		domain,
 	)
@@ -53,7 +61,8 @@ func (s *PostgresDomainStore) GetByDomainAndTenant(ctx context.Context, domain, 
 	return s.scanOne(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
-		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
+		        cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported
 		 FROM custom_domains WHERE domain = $1 AND tenant_id = $2`,
 		domain, tenantID,
 	)
@@ -103,7 +112,8 @@ func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string,
 	query := fmt.Sprintf(
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
-		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
+		        cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported
 		 FROM custom_domains WHERE %s
 		 ORDER BY created_at DESC
 		 LIMIT $%d OFFSET $%d`,
@@ -266,7 +276,8 @@ func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, stale
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
-		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
+		        cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported
 		 FROM custom_domains
 		 WHERE status = 'active' AND (last_cname_check IS NULL OR last_cname_check < $1)
 		 ORDER BY last_cname_check ASC NULLS FIRST
@@ -286,7 +297,8 @@ func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
-		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
+		        cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported
 		 FROM custom_domains
 		 WHERE status = 'pending_verification' AND created_at < $1
 		 ORDER BY created_at ASC
@@ -307,7 +319,8 @@ func (s *PostgresDomainStore) FindStaleProvisioning(ctx context.Context, maxAge 
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
-		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
+		        cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported
 		 FROM custom_domains
 		 WHERE status = 'provisioning' AND updated_at < $1
 		 ORDER BY updated_at ASC
@@ -327,7 +340,8 @@ func (s *PostgresDomainStore) FindActiveWithTLSExpiry(ctx context.Context, withi
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
-		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
+		        cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported
 		 FROM custom_domains
 		 WHERE status = 'active' AND tls_expires_at IS NOT NULL
 		   AND tls_expires_at < now() + make_interval(days => $1)
@@ -362,7 +376,8 @@ func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, pro
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
-		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
+		        cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported
 		 FROM custom_domains
 		 WHERE tenant_id = $1 AND project_name = $2 AND app_name = $3 AND environment = $4
 		   AND status IN ('active', 'provisioning')
@@ -395,7 +410,8 @@ func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toS
 		 )
 		 RETURNING id, tenant_id, project_name, app_name, environment, domain, status,
 		           verification_token, verified_at, tls_status, tls_expires_at,
-		           failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at`,
+		           failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
+		           cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported`,
 		fromStatus, toStatus,
 	)
 	if err != nil {
@@ -410,7 +426,8 @@ func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) (
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
-		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at
+		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
+		        cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported
 		 FROM custom_domains
 		 WHERE status = $1
 		 ORDER BY created_at ASC
@@ -442,6 +459,52 @@ func scanDomains(rows Rows) ([]routes.CustomDomain, error) {
 	return results, nil
 }
 
+// --- v2: CF Zone Management methods ---
+
+// CreateWithCFZone inserts a new custom domain with CF zone metadata.
+func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *routes.CustomDomain) error {
+	_, err := s.DB.Exec(ctx,
+		`INSERT INTO custom_domains (id, tenant_id, project_name, app_name, environment, domain, status,
+		    verification_token, tls_status, cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), now())`,
+		d.ID, d.TenantID, d.ProjectName, d.AppName, d.Environment, d.Domain, d.Status,
+		d.VerificationToken, d.TLSStatus, d.CFZoneID, d.CFZoneStatus, d.CFNameservers, d.DNSRecordsImported,
+	)
+	if err != nil {
+		var uv *UniqueViolationError
+		if errors.As(err, &uv) {
+			return routes.ErrDomainExists
+		}
+		return fmt.Errorf("domain store: create with cf zone: %w", err)
+	}
+	return nil
+}
+
+// UpdateCFZoneStatus updates the CF zone activation status.
+func (s *PostgresDomainStore) UpdateCFZoneStatus(ctx context.Context, domain, cfZoneStatus string) error {
+	result, err := s.DB.Exec(ctx,
+		`UPDATE custom_domains SET cf_zone_status = $2, updated_at = now() WHERE domain = $1`,
+		domain, cfZoneStatus,
+	)
+	if err != nil {
+		return fmt.Errorf("domain store: update cf zone status: %w", err)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("domain store: update cf zone status: domain not found")
+	}
+	return nil
+}
+
+// FindPendingNS returns CF-managed domains waiting for nameserver propagation.
+func (s *PostgresDomainStore) FindPendingNS(ctx context.Context) ([]routes.CustomDomain, error) {
+	return s.findByStatus(ctx, "pending_ns")
+}
+
+// FindNSActive returns CF-managed domains with active nameservers ready for provisioning.
+func (s *PostgresDomainStore) FindNSActive(ctx context.Context) ([]routes.CustomDomain, error) {
+	return s.findByStatus(ctx, "ns_active")
+}
+
 // --- Internal helpers ---
 
 func (s *PostgresDomainStore) scanOne(ctx context.Context, query string, args ...any) (*routes.CustomDomain, error) {
@@ -467,6 +530,7 @@ func scanDomain(rows Rows) (*routes.CustomDomain, error) {
 		&d.ID, &d.TenantID, &d.ProjectName, &d.AppName, &d.Environment, &d.Domain, &d.Status,
 		&d.VerificationToken, &d.VerifiedAt, &d.TLSStatus, &d.TLSExpiresAt,
 		&d.FailureReason, &d.LastCNAMECheck, &d.CNAMEConsecutiveFailures, &d.CreatedAt, &d.UpdatedAt,
+		&d.CFZoneID, &d.CFZoneStatus, &d.CFNameservers, &d.DNSRecordsImported,
 	); err != nil {
 		return nil, fmt.Errorf("domain store: scan: %w", err)
 	}
