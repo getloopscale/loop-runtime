@@ -4,6 +4,7 @@
 package k8s
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -25,10 +26,14 @@ func TestBuildLoopZeroApplicationCR(t *testing.T) {
 		t.Errorf("expected kind LoopZeroApplication, got %s", cr.GetKind())
 	}
 
-	// Verify deterministic name: {tenant}-{project}-{app}-{env}
-	expectedName := "tn-loopzero-my-project-api-production"
+	// Verify deterministic name includes hash suffix
+	expectedName := loopzeroApplicationCRName("tn-loopzero", "my-project", "api", "production")
 	if cr.GetName() != expectedName {
 		t.Errorf("expected name %q, got %q", expectedName, cr.GetName())
+	}
+	// Name should start with the human-readable prefix
+	if !strings.HasPrefix(cr.GetName(), "tn-loopzero-my-project-api-production-") {
+		t.Errorf("expected name to start with human-readable prefix, got %q", cr.GetName())
 	}
 
 	// Verify namespace
@@ -81,21 +86,30 @@ func TestBuildLoopZeroApplicationCR_DefaultPort(t *testing.T) {
 }
 
 func TestLoopZeroApplicationCRName(t *testing.T) {
-	tests := []struct {
-		tenant  string
-		project string
-		app     string
-		env     string
-		want    string
-	}{
-		{"tn-loopzero", "my-project", "api", "production", "tn-loopzero-my-project-api-production"},
-		{"tn-abc", "app", "web", "staging", "tn-abc-app-web-staging"},
+	// Deterministic: same input always produces same output
+	name1 := loopzeroApplicationCRName("tn-loopzero", "my-project", "api", "production")
+	name2 := loopzeroApplicationCRName("tn-loopzero", "my-project", "api", "production")
+	if name1 != name2 {
+		t.Errorf("expected deterministic names, got %q and %q", name1, name2)
 	}
-	for _, tt := range tests {
-		got := loopzeroApplicationCRName(tt.tenant, tt.project, tt.app, tt.env)
-		if got != tt.want {
-			t.Errorf("loopzeroApplicationCRName(%q,%q,%q,%q) = %q, want %q",
-				tt.tenant, tt.project, tt.app, tt.env, got, tt.want)
-		}
+
+	// Collision-free: different inputs that would collide with simple hyphen join
+	// project="my-app", app="web" vs project="my", app="app-web"
+	nameA := loopzeroApplicationCRName("tn-x", "my-app", "web", "prod")
+	nameB := loopzeroApplicationCRName("tn-x", "my", "app-web", "prod")
+	if nameA == nameB {
+		t.Errorf("expected different names for different inputs, both got %q", nameA)
+	}
+
+	// Human-readable prefix preserved
+	if !strings.HasPrefix(name1, "tn-loopzero-my-project-api-production-") {
+		t.Errorf("expected human-readable prefix, got %q", name1)
+	}
+
+	// Hash suffix is 8 hex chars
+	parts := strings.Split(name1, "-")
+	suffix := parts[len(parts)-1]
+	if len(suffix) != 8 {
+		t.Errorf("expected 8-char hash suffix, got %q (len=%d)", suffix, len(suffix))
 	}
 }

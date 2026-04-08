@@ -615,6 +615,7 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 // CHG-2026-04-08-001: Non-fatal — failure is logged but does not block the deploy.
 func (r *BuildReconcileLoop) ensureApplicationCRs(ctx context.Context, build *db.Build, apps []db.BuildAppSpec) {
 	if r.appCRMgr == nil {
+		r.logger.Debug("reconcile loop: appCRMgr not configured, skipping LoopZeroApplication CR creation")
 		return
 	}
 	for _, app := range apps {

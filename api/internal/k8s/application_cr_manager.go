@@ -5,6 +5,8 @@ package k8s
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -82,9 +84,16 @@ func (m *ApplicationCRManager) EnsureLoopZeroApplication(ctx context.Context, in
 	})
 }
 
-// loopzeroApplicationCRName computes the deterministic name for a LoopZeroApplication CR.
+// loopzeroApplicationCRName computes a deterministic, collision-free name for a LoopZeroApplication CR.
+// Uses a short hash suffix to avoid ambiguity when component names contain hyphens.
+// Example: "tn-loopzero-my-project-api-production-a1b2c3d4"
 func loopzeroApplicationCRName(tenant, project, app, env string) string {
-	return fmt.Sprintf("%s-%s-%s-%s", tenant, project, app, env)
+	// The hash input uses pipe separators to guarantee uniqueness even when
+	// components contain hyphens (e.g., project="my-app" vs project="my", app="app").
+	hashInput := fmt.Sprintf("%s|%s|%s|%s", tenant, project, app, env)
+	h := sha256.Sum256([]byte(hashInput))
+	suffix := hex.EncodeToString(h[:4]) // 8 hex chars = 4 bytes, collision-resistant
+	return fmt.Sprintf("%s-%s-%s-%s-%s", tenant, project, app, env, suffix)
 }
 
 // buildLoopZeroApplicationCR constructs an unstructured LoopZeroApplication matching the CRD
