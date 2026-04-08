@@ -19,7 +19,7 @@ COPY pkg/ ./pkg/
 COPY api/ ./api/
 
 # Build the binary
-RUN cd api && CGO_ENABLED=0 go build -o /loopzero-api ./cmd/main.go
+RUN cd api && CGO_ENABLED=0 go build -o /loopzero-api ./cmd/
 
 # Runtime image
 FROM alpine:3.21

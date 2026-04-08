@@ -397,7 +397,20 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 		slog.WarnContext(ctx, "cf dns scan failed (non-fatal)", "domain", req.Domain, "error", scanErr)
 	}
 
-	// Step 3: Add routing CNAME (proxied → CF edge → tunnel → Traefik)
+	// Step 3: Remove conflicting apex records (A/AAAA/CNAME at root)
+	// The DNS scan may import existing A records that conflict with our CNAME.
+	if scannedRecords, listErr := h.cfZone.ListDNSRecords(ctx, zone.ZoneID); listErr == nil {
+		for _, rec := range scannedRecords {
+			// Only remove apex records that conflict with our CNAME
+			if (rec.Type == "A" || rec.Type == "AAAA" || rec.Type == "CNAME") &&
+				(rec.Name == req.Domain || rec.Name == "@") {
+				slog.InfoContext(ctx, "cf removing conflicting apex record", "domain", req.Domain, "type", rec.Type, "content", rec.Content)
+				_ = h.cfZone.DeleteDNSRecord(ctx, zone.ZoneID, rec.ID)
+			}
+		}
+	}
+
+	// Step 4: Add routing CNAME (proxied → CF edge → tunnel → Traefik)
 	proxied := true
 	_, cnameErr := h.cfZone.CreateDNSRecord(ctx, zone.ZoneID, CFDNSRecord{
 		Type:    "CNAME",
@@ -417,7 +430,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// Step 4: List imported records for response
+	// Step 5: List imported records for response
 	var dnsRecords []CFDNSRecord
 	var recordCount int
 	if records, listErr := h.cfZone.ListDNSRecords(ctx, zone.ZoneID); listErr == nil {
@@ -425,7 +438,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 		recordCount = len(records)
 	}
 
-	// Step 5: Save to DB
+	// Step 6: Save to DB
 	zoneID := zone.ZoneID
 	domain := &CustomDomain{
 		ID:                 GenerateDomainID(),
