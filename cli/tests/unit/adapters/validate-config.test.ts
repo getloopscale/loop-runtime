@@ -491,6 +491,163 @@ describe('validateConfig', () => {
   // Error message quality
   // ============================================================
 
+  // ============================================================
+  // Edge cases: bypass attempts
+  // ============================================================
+
+  describe('bypass attempts', () => {
+    it('should allow type: server on a frontend framework (user wants container, not CDN)', () => {
+      // User explicitly sets type: server on a React app — they want SSR/container
+      // This is valid: user overrides detection. But render stays "server" (container).
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          web: { path: '.', framework: 'react', type: 'server', port: 3000 },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      // Should pass — user explicitly chose server type
+      const typeErrors = errors.filter(e => e.field.includes('type') || e.field.includes('render'));
+      expect(typeErrors).toHaveLength(0);
+    });
+
+    it('should count omitted type as server (default) for pod limit', () => {
+      // 3 apps without type — all default to server → exceeds limit
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: '.', framework: 'express', port: 3000 },
+          gateway: { path: '.', framework: 'express', port: 4000 },
+          admin: { path: '.', framework: 'express', port: 5000 },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors.some(e => e.message.includes('3 API services'))).toBe(true);
+    });
+
+    it('should treat empty string framework as custom', () => {
+      const dir = tmpDir();
+      fs.mkdirSync(path.join(dir, 'api'), { recursive: true });
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: 'api', framework: '' as any, type: 'server', port: 8080 },
+        },
+      };
+      const { errors } = validateConfig(config, dir);
+      // Empty framework → treated as custom → needs Dockerfile
+      expect(errors.some(e => e.message.includes('Dockerfile'))).toBe(true);
+    });
+
+    it('should treat omitted framework as custom', () => {
+      const dir = tmpDir();
+      fs.mkdirSync(path.join(dir, 'api'), { recursive: true });
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: 'api', type: 'server', port: 8080 } as any,
+        },
+      };
+      const { errors } = validateConfig(config, dir);
+      // No framework → custom → needs Dockerfile
+      expect(errors.some(e => e.message.includes('Dockerfile'))).toBe(true);
+    });
+
+    it('should reject port: 0 on server', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: '.', framework: 'express', type: 'server', port: 0 },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors.some(e => e.message.includes('requires port'))).toBe(true);
+    });
+
+    it('should reject port: -1 on server', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: '.', framework: 'express', type: 'server', port: -1 },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors.some(e => e.message.includes('requires port'))).toBe(true);
+    });
+
+    it('should allow type: frontend on Go framework (unusual but valid user choice)', () => {
+      // User wants to serve Go output as static files (e.g., WASM)
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          wasm: { path: '.', framework: 'go', type: 'frontend', port: null },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      // Should pass — user explicitly chose frontend
+      const typeErrors = errors.filter(e => e.field.includes('type'));
+      expect(typeErrors).toHaveLength(0);
+    });
+
+    it('should silently ignore render: static on server type (normalizeApp forces server)', () => {
+      // User tries to set render: static on a server app — normalizeApp ignores it
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: '.', framework: 'express', type: 'server', port: 3000, render: 'static' as any },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      // Should not error — render is ignored for server type
+      const renderErrors = errors.filter(e => e.field.includes('render'));
+      expect(renderErrors).toHaveLength(0);
+    });
+
+    it('should handle path traversal attempt (validated server-side by SEC-3)', () => {
+      // Path traversal is blocked by api/internal/validation/path.go (SEC-3), not CLI.
+      // CLI only checks if path exists. ../../etc resolves to /etc which exists.
+      // This test documents the defense-in-depth: CLI doesn't crash, server rejects.
+      const dir = tmpDir();
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: '../../etc', framework: 'express', type: 'server', port: 3000 },
+        },
+      };
+      // Should not crash — path validation is best-effort in CLI
+      const { errors } = validateConfig(config, dir);
+      expect(errors).toBeDefined(); // no crash
+    });
+
+    it('should handle app with no path (defaults to .)', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: '', framework: 'express', type: 'server', port: 3000 } as any,
+        },
+      };
+      // Empty path should not crash
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      // No crash = pass (path validation is skipped with skipFs)
+      expect(errors.filter(e => e.field.includes('path'))).toHaveLength(0);
+    });
+
+    it('should handle type: frontend + framework: express (user mismatch)', () => {
+      // User sets frontend type but uses a server framework
+      // This is allowed — user knows what they're doing (maybe serving static from express build)
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          web: { path: '.', framework: 'express', type: 'frontend', port: null },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      // No type error — user explicitly chose frontend
+      const typeErrors = errors.filter(e => e.field.includes('type'));
+      expect(typeErrors).toHaveLength(0);
+    });
+  });
+
   describe('error message quality', () => {
     it('unknown framework error should list all supported frameworks', () => {
       const config: LoopZeroYaml = {
