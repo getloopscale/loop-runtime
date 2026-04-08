@@ -7,7 +7,6 @@ import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 
 interface ProjectsResponse { projects: { name: string }[] }
-interface BuildsResponse { builds: { project: string; environment: string; status: string; created_at: string; duration_seconds?: number }[] }
 
 const container = {
   hidden: { opacity: 0 },
@@ -22,14 +21,12 @@ const item = {
 export function OverviewPage() {
   useRequireAuth();
   const { data: projectsData, loading: loadingProjects } = useEngineApi<ProjectsResponse>('/api/v1/projects');
-  const { data: buildsData, loading: loadingBuilds } = useEngineApi<BuildsResponse>('/api/v1/builds');
+  // Builds endpoint requires project context (loopzero.yaml) — not available as a global list.
+  // Overview shows project count only. Build history is per-project in the project detail view.
 
   const projectCount = projectsData?.projects?.length ?? 0;
-  const builds = buildsData?.builds ?? [];
-  const totalBuilds = builds.length;
-  const avgDuration = builds.length > 0
-    ? Math.round(builds.reduce((sum, b) => sum + (b.duration_seconds || 0), 0) / builds.length)
-    : 0;
+  const totalBuilds = 0;
+  const avgDuration = 0;
 
   const stats = [
     { label: 'Projects', value: String(projectCount), icon: Box, change: '' },
@@ -37,15 +34,9 @@ export function OverviewPage() {
     { label: 'Avg Build', value: avgDuration > 0 ? `${avgDuration}s` : '-', icon: Clock, change: '' },
   ];
 
-  const recentDeploys = builds.slice(0, 5).map(b => ({
-    project: b.project,
-    env: b.environment,
-    status: b.status === 'SUCCEEDED' ? 'live' : b.status === 'FAILED' ? 'failed' : 'building',
-    time: timeAgo(b.created_at),
-    duration: b.duration_seconds ? `${b.duration_seconds}s` : '-',
-  }));
+  const recentDeploys: { project: string; env: string; status: string; time: string; duration: string }[] = [];
 
-  const loading = loadingProjects || loadingBuilds;
+  const loading = loadingProjects;
   if (loading) {
     return <PageWrapper title="Overview"><Card><CardContent className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></CardContent></Card></PageWrapper>;
   }
@@ -82,6 +73,11 @@ export function OverviewPage() {
             <CardTitle className="text-base">Recent Deploys</CardTitle>
           </CardHeader>
           <CardContent>
+            {recentDeploys.length === 0 && (
+              <div className="py-8 text-center text-white/20 text-sm">
+                No deploys yet. Run <code className="bg-white/5 px-2 py-0.5 rounded font-mono text-xs">loopzero deploy</code> to get started.
+              </div>
+            )}
             <div className="space-y-0 -mt-2">
               {recentDeploys.map((deploy, i) => (
                 <motion.div
