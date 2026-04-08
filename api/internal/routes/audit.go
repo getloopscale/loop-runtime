@@ -96,7 +96,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"entries": entries,
 		"total":   total,
 		"limit":   filter.Limit,
@@ -107,5 +107,5 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 func jsonError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
+	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
 }
