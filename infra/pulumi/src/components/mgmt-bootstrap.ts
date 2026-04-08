@@ -142,9 +142,12 @@ export function bootstrapMgmtCluster(
     clusterIssuer,
   );
 
-  // API Gateway — SINGLE entry point under api.{domain}.
-  // One DNS for everything: CLI, dashboard, auth, billing, engine.
+  // API Gateway — path-based routing under api.{domain} (CLI-facing)
   createAPIGatewayRoute(provider, config, traefik, clusterIssuer);
+
+  // Cloud Gateway — path-based routing under cloud.{domain} (browser-facing)
+  // Dashboard + Kratos + Hydra + cloud service — same origin, no CORS.
+  createCloudGatewayRoute(provider, config, traefik, clusterIssuer);
 
   // REVIEW-2026-03-30: Fixes HIGH-01 — NetworkPolicies for production.
   // Local dev uses helm/network-policies/loopzero-system.yaml (namespace: loopzero-system).
@@ -564,7 +567,7 @@ function installOryKratos(
             // Kratos must know its public URL for CSRF, return_to validation, etc.
             serve: {
               public: {
-                base_url: `https://api.${config.domain}/`,
+                base_url: `https://cloud.${config.domain}/`,
               },
             },
             // Cookies must be accessible across subdomains (dashboard, accounts, api)
@@ -588,18 +591,18 @@ function installOryKratos(
             // MEET-2026-04-05-032: Kratos UI at accounts.{domain} (same-origin, no CORS).
             // Dashboard is a pure PKCE client — never renders Kratos flows.
             selfservice: {
-              default_browser_return_url: `https://api.${config.domain}/`,
+              default_browser_return_url: `https://cloud.${config.domain}/`,
               allowed_return_urls: [
-                `https://api.${config.domain}/`,
+                `https://cloud.${config.domain}/`,
               ],
               flows: {
-                login: { ui_url: `https://api.${config.domain}/login` },
-                registration: { ui_url: `https://api.${config.domain}/register` },
-                verification: { ui_url: `https://api.${config.domain}/verification`, enabled: true, use: 'code' },
-                recovery: { ui_url: `https://api.${config.domain}/recovery`, enabled: true },
-                settings: { ui_url: `https://api.${config.domain}/settings` },
-                error: { ui_url: `https://api.${config.domain}/error` },
-                logout: { after: { default_browser_return_url: `https://api.${config.domain}/login` } },
+                login: { ui_url: `https://cloud.${config.domain}/login` },
+                registration: { ui_url: `https://cloud.${config.domain}/register` },
+                verification: { ui_url: `https://cloud.${config.domain}/verification`, enabled: true, use: 'code' },
+                recovery: { ui_url: `https://cloud.${config.domain}/recovery`, enabled: true },
+                settings: { ui_url: `https://cloud.${config.domain}/settings` },
+                error: { ui_url: `https://cloud.${config.domain}/error` },
+                logout: { after: { default_browser_return_url: `https://cloud.${config.domain}/login` } },
               },
               // Social login providers — only included when secrets are configured.
               ...(config.githubOAuthClientId || config.googleOAuthClientId
@@ -608,7 +611,7 @@ function installOryKratos(
                       oidc: {
                         enabled: true,
                         config: {
-                          base_redirect_uri: `https://api.${config.domain}/`,
+                          base_redirect_uri: `https://cloud.${config.domain}/`,
                           providers: [
                             ...(config.githubOAuthClientId
                               ? [
@@ -772,8 +775,8 @@ function installOryHydra(
                   consent: `https://api.${authDomain}/auth/consent`,
                   logout: `https://api.${authDomain}/auth/logout`,
                   device: {
-                    verification: `https://api.${authDomain}/auth/device`,
-                    success: `https://api.${authDomain}/device-success`,
+                    verification: `https://cloud.${authDomain}/auth/device`,
+                    success: `https://cloud.${authDomain}/device-success`,
                   },
                 },
                 serve: {
@@ -781,7 +784,7 @@ function installOryHydra(
                     cors: {
                       enabled: true,
                       allowed_origins: [
-                        `https://api.${authDomain}`,
+                        `https://cloud.${authDomain}`,
                       ],
                       allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
                       allowed_headers: ["Authorization", "Content-Type", "Cookie"],
@@ -1170,16 +1173,15 @@ function installCloudService(
         CLOUD_LISTEN_ADDR: ":13002",
         LOOPZERO_ENV: config.environment || "dev",
         // Kratos public URL — served via cloud gateway (same domain as dashboard, no CORS).
-        KRATOS_PUBLIC_URL: `https://api.${config.domain || "dev.loopzero.example"}`,
-        // Hydra public URL — routed through API gateway (/oauth2/*, /.well-known/*)
-        HYDRA_PUBLIC_URL: `https://api.${config.domain || "dev.loopzero.example"}`,
+        KRATOS_PUBLIC_URL: `https://cloud.${config.domain || "dev.loopzero.example"}`,
+        HYDRA_PUBLIC_URL: `https://auth.${config.domain || "dev.loopzero.example"}`,
         // Internal URLs (server-to-server, never exposed to browser)
         KRATOS_ADMIN_URL: `http://ory-kratos-admin.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
         HYDRA_ADMIN_URL: `http://ory-hydra-admin.${PLATFORM_NAMESPACE}.svc.cluster.local:4445`,
         HYDRA_CLIENT_ID: "loopzero-cli",
         ENGINE_API_URL: `http://loopzero-api.${PLATFORM_NAMESPACE}.svc.cluster.local:8080`,
         // Dashboard URL — used for OAuth2 redirect_uri registration
-        BILLING_RETURN_URL: `https://api.${config.domain || "dev.loopzero.example"}`,
+        BILLING_RETURN_URL: `https://cloud.${config.domain || "dev.loopzero.example"}`,
         KRATOS_INTERNAL_URL: `http://ory-kratos-public.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
         // Stripe price IDs (MEET-038 Phase 6)
         STRIPE_PRICE_PRO: config.stripePriceProId || "",
@@ -1507,9 +1509,8 @@ function installLoopZeroAPI(
         GITEA_URL: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
         ARGOCD_URL: `http://argocd-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
         ARGOCD_INSECURE: "true",
-        // JWT validation — JWKS fetched from API gateway (routes to Hydra at P300)
-        JWKS_URL: `https://api.${config.domain}/.well-known/jwks.json`,
-        // JWT_ISSUER must match Hydra's configured issuer (auth.{domain})
+        // JWT validation for dashboard session tokens + CLI Hydra JWTs
+        JWKS_URL: `https://auth.${config.domain}/.well-known/jwks.json`,
         JWT_ISSUER: `https://auth.${config.domain}/`,
         ARGO_NAMESPACE: "argo",
         MGMT_KUBECONFIG: "/etc/loopzero/mgmt-kubeconfig",
@@ -2148,24 +2149,24 @@ const PLATFORM_INGRESS_ROUTES = [
   { subdomain: "grafana", serviceName: "grafana", servicePort: 3000 },
   // "api" subdomain uses path-based routing (see createAPIGatewayRoute below)
   // to serve loopzero-api, loopzero-cloud, and loopzero-dashboard under one domain.
-  // "dashboard" removed — dashboard is now served under cloud.{domain} as SPA fallback (MEET-040).
+  // Dashboard served under cloud.{domain} via cloud-gateway IngressRoute (not standalone).
   // OAuth2 authorization server — browser-accessible for PKCE/consent flows.
-  // User-facing URL is auth.{domain}, no internal technology names exposed.
   { subdomain: "auth", serviceName: "ory-hydra-public", servicePort: 4444 },
 ] as const;
 
 /**
- * API Gateway — SINGLE entry point for the entire platform under api.{domain}.
+ * API Gateway — path-based routing under api.{domain}.
  *
- * ONE DNS. ONE IngressRoute. Everything routes through here:
- *   /oauth2/*, /.well-known/*                                    → Hydra (P300)
- *   /self-service/*, /sessions/*, /schemas/*                     → Kratos (P200)
- *   /v1/auth/*, /v1/billing/*, /v1/webhooks/*, /auth/*,
- *     /engine/*, /metrics, /health                               → Cloud (P100)
- *   /api/v1/*                                                    → Engine (P50)
- *   /*                                                           → Dashboard SPA (P1)
+ * Routes:
+ *   /v1/auth/*        → loopzero-cloud:13002 (OAuth2 Device Flow, token refresh)
+ *   /v1/billing/*     → loopzero-cloud:13002 (Stripe integration)
+ *   /v1/webhooks/*    → loopzero-cloud:13002 (Stripe webhooks)
+ *   /auth/*           → loopzero-cloud:13002 (Kratos/Hydra consent handlers)
+ *   /health           → loopzero-cloud:13002 (cloud service health)
+ *   /*                → loopzero-api:8080    (default: all other API routes)
  *
- * CLI uses api.{domain} directly. Dashboard is same-origin. No CORS.
+ * This eliminates separate subdomains for cloud service — one domain,
+ * one TLS cert, no CORS, CLI only needs one URL.
  */
 function createAPIGatewayRoute(
   provider: k8s.Provider,
@@ -2176,6 +2177,7 @@ function createAPIGatewayRoute(
   const fqdn = `api.${config.domain}`;
   const certName = "tls-api";
 
+  // TLS Certificate
   const cert = new k8s.apiextensions.CustomResource(
     "cert-api",
     {
@@ -2191,6 +2193,7 @@ function createAPIGatewayRoute(
     { provider, dependsOn: [clusterIssuer] },
   );
 
+  // IngressRoute with path-based routing (priority: specific paths first)
   new k8s.apiextensions.CustomResource(
     "ingress-api-gateway",
     {
@@ -2207,35 +2210,98 @@ function createAPIGatewayRoute(
       spec: {
         entryPoints: ["websecure"],
         routes: [
-          // P300: Hydra OAuth2 — JWKS, authorization, token endpoints
+          // Cloud auth service routes (higher priority — matched first)
+          {
+            match: `Host(\`${fqdn}\`) && (PathPrefix(\`/v1/auth\`) || PathPrefix(\`/v1/billing\`) || PathPrefix(\`/v1/webhooks\`) || PathPrefix(\`/auth\`))`,
+            kind: "Rule",
+            priority: 100,
+            services: [{ name: "loopzero-cloud", port: 13002, namespace: PLATFORM_NAMESPACE }],
+          },
+          // Default: all other routes go to loopzero-api
+          {
+            match: `Host(\`${fqdn}\`)`,
+            kind: "Rule",
+            priority: 1,
+            services: [{ name: "loopzero-api", port: 8080, namespace: PLATFORM_NAMESPACE }],
+          },
+        ],
+        tls: { secretName: `${certName}-secret` },
+      },
+    },
+    { provider, dependsOn: [cert, traefik] },
+  );
+}
+
+/**
+ * Cloud Gateway — browser-facing entry point under cloud.{domain}.
+ *
+ * Dashboard, Kratos, Hydra, and cloud service share this host (same-origin).
+ * No CORS needed for dashboard API calls. Kratos cookies scoped correctly.
+ *
+ * Routes:
+ *   /oauth2/*, /.well-known/*              → Hydra (P300)
+ *   /self-service/*, /sessions/*, /schemas/* → Kratos (P200)
+ *   /v1/auth/*, /v1/billing/*, /auth/*, ... → cloud service (P100)
+ *   /*                                      → dashboard SPA (P1)
+ */
+function createCloudGatewayRoute(
+  provider: k8s.Provider,
+  config: PlatformStackConfig,
+  traefik: k8s.helm.v3.Release,
+  clusterIssuer: k8s.apiextensions.CustomResource,
+): void {
+  const fqdn = `cloud.${config.domain}`;
+  const certName = "tls-cloud";
+
+  const cert = new k8s.apiextensions.CustomResource(
+    "cert-cloud",
+    {
+      apiVersion: "cert-manager.io/v1",
+      kind: "Certificate",
+      metadata: { name: certName, namespace: PLATFORM_NAMESPACE },
+      spec: {
+        secretName: `${certName}-secret`,
+        issuerRef: { name: "letsencrypt-prod", kind: "ClusterIssuer" },
+        dnsNames: [fqdn],
+      },
+    },
+    { provider, dependsOn: [clusterIssuer] },
+  );
+
+  new k8s.apiextensions.CustomResource(
+    "ingress-cloud-gateway",
+    {
+      apiVersion: "traefik.io/v1alpha1",
+      kind: "IngressRoute",
+      metadata: {
+        name: "cloud-gateway",
+        namespace: PLATFORM_NAMESPACE,
+        labels: {
+          "app.kubernetes.io/managed-by": "pulumi",
+          "app.kubernetes.io/part-of": "loopzero-platform",
+        },
+      },
+      spec: {
+        entryPoints: ["websecure"],
+        routes: [
           {
             match: `Host(\`${fqdn}\`) && (PathPrefix(\`/oauth2\`) || PathPrefix(\`/.well-known\`))`,
             kind: "Rule",
             priority: 300,
             services: [{ name: "ory-hydra-public", port: 4444, namespace: PLATFORM_NAMESPACE }],
           },
-          // P200: Kratos identity — login, signup, recovery, session
           {
             match: `Host(\`${fqdn}\`) && (PathPrefix(\`/self-service\`) || PathPrefix(\`/sessions\`) || PathPrefix(\`/schemas\`))`,
             kind: "Rule",
             priority: 200,
             services: [{ name: "ory-kratos-public", port: 80, namespace: PLATFORM_NAMESPACE }],
           },
-          // P100: Cloud service — auth, billing, webhooks, engine proxy, metrics
           {
             match: `Host(\`${fqdn}\`) && (PathPrefix(\`/v1/auth\`) || PathPrefix(\`/v1/billing\`) || PathPrefix(\`/v1/webhooks\`) || PathPrefix(\`/auth\`) || PathPrefix(\`/engine\`) || PathPrefix(\`/metrics\`) || PathPrefix(\`/health\`))`,
             kind: "Rule",
             priority: 100,
             services: [{ name: "loopzero-cloud", port: 13002, namespace: PLATFORM_NAMESPACE }],
           },
-          // P50: Engine API — builds, deploys, projects (CLI with RSA tokens)
-          {
-            match: `Host(\`${fqdn}\`) && PathPrefix(\`/api\`)`,
-            kind: "Rule",
-            priority: 50,
-            services: [{ name: "loopzero-api", port: 8080, namespace: PLATFORM_NAMESPACE }],
-          },
-          // P1: Dashboard SPA fallback — serves React app
           {
             match: `Host(\`${fqdn}\`)`,
             kind: "Rule",

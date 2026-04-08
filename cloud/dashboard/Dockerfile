@@ -3,10 +3,11 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm install --legacy-peer-deps
 COPY . .
-# Build-time env vars for Vite (baked into the static output).
-# MEET-040: Only VITE_API_URL is used. Empty = relative URLs (same-origin in production).
-# Local dev: defaults to localhost:13002 (cloud service).
+# Build-time env vars for Vite (baked into the static output)
 ARG VITE_API_URL=http://localhost:13002
+ARG VITE_ENGINE_URL=http://localhost:13001
+ARG VITE_AUTH_URL=http://localhost:4444
+ARG VITE_ACCOUNTS_URL=http://localhost:4433
 RUN npm run build
 
 FROM nginx:alpine
