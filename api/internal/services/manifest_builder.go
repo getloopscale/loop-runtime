@@ -47,7 +47,11 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 				if d.Domain == input.ExcludeDomain {
 					continue
 				}
-				customDomains = append(customDomains, manifests.CustomDomainInput{Domain: d.Domain, ID: d.ID})
+				customDomains = append(customDomains, manifests.CustomDomainInput{
+					Domain:    d.Domain,
+					ID:        d.ID,
+					CFManaged: d.IsCFManaged(),
+				})
 			}
 		}
 

@@ -72,6 +72,15 @@ func (f *fakeDomainProvisionerStore) Delete(ctx context.Context, domain string) 
 	f.deleted = append(f.deleted, domain)
 	return nil
 }
+func (f *fakeDomainProvisionerStore) UpdateCFZoneStatus(ctx context.Context, domain, cfZoneStatus string) error {
+	return nil
+}
+func (f *fakeDomainProvisionerStore) FindPendingNS(ctx context.Context) ([]routes.CustomDomain, error) {
+	return nil, nil
+}
+func (f *fakeDomainProvisionerStore) FindNSActive(ctx context.Context) ([]routes.CustomDomain, error) {
+	return nil, nil
+}
 
 type fakeDomainReleaseReader struct {
 	release *db.Release

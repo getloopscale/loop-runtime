@@ -35,8 +35,9 @@ import (
 // CustomDomainInput represents a verified custom domain to include in manifests.
 // MEET-2026-04-05-033: Custom Domains feature.
 type CustomDomainInput struct {
-	Domain string // FQDN (e.g., "api.mycompany.com")
-	ID     string // Domain row ID for traceability
+	Domain    string // FQDN (e.g., "api.mycompany.com")
+	ID        string // Domain row ID for traceability
+	CFManaged bool   // v2: true if domain uses CF Zone (TLS at CF edge, no cert-manager Certificate needed)
 }
 
 // AppManifestInput contains everything needed to generate manifests for a single app.
@@ -808,27 +809,34 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 	for _, cd := range app.CustomDomains {
 		suffix, cdTLSName := domainResourceNames(cd.Domain)
 
-		cdCert := certManagerCertificate{
-			APIVersion: "cert-manager.io/v1",
-			Kind:       "Certificate",
-			Metadata: k8sMetadata{
-				Name:      cdTLSName,
-				Namespace: ns,
-				Labels:    labels,
-				Annotations: map[string]string{
-					"loopzero.io/custom-domain": cd.Domain,
+		// v2 (CF-managed): CF handles TLS at the edge — no cert-manager Certificate needed.
+		// Only generate IngressRoute for Traefik routing (CF Tunnel → Traefik → Pod).
+		// v1 (non-CF): Generate both Certificate + IngressRoute (cert-manager handles TLS).
+		if !cd.CFManaged {
+			cdCert := certManagerCertificate{
+				APIVersion: "cert-manager.io/v1",
+				Kind:       "Certificate",
+				Metadata: k8sMetadata{
+					Name:      cdTLSName,
+					Namespace: ns,
+					Labels:    labels,
+					Annotations: map[string]string{
+						"loopzero.io/custom-domain": cd.Domain,
+					},
 				},
-			},
-			Spec: certManagerCertificateSpec{
-				SecretName: cdTLSName,
-				IssuerRef: certIssuerRef{
-					Name: ri.clusterIssuerName(),
-					Kind: "ClusterIssuer",
+				Spec: certManagerCertificateSpec{
+					SecretName: cdTLSName,
+					IssuerRef: certIssuerRef{
+						Name: ri.clusterIssuerName(),
+						Kind: "ClusterIssuer",
+					},
+					DNSNames: []string{cd.Domain},
 				},
-				DNSNames: []string{cd.Domain},
-			},
+			}
+			docs = append(docs, marshalResource(cdCert))
 		}
 
+		// IngressRoute always needed — Traefik must match Host() for routing
 		cdIngress := traefikIngressRoute{
 			APIVersion: "traefik.io/v1alpha1",
 			Kind:       "IngressRoute",
@@ -849,11 +857,16 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 						Services: []traefikRouteService{{Name: app.Name, Port: port}},
 					},
 				},
-				TLS: &traefikTLS{SecretName: cdTLSName},
 			},
 		}
 
-		docs = append(docs, marshalResource(cdCert), marshalResource(cdIngress))
+		// v1: TLS terminates at Traefik using cert-manager secret
+		// v2: TLS terminates at CF edge — Traefik sees plain HTTP from tunnel
+		if !cd.CFManaged {
+			cdIngress.Spec.TLS = &traefikTLS{SecretName: cdTLSName}
+		}
+
+		docs = append(docs, marshalResource(cdIngress))
 	}
 
 	return docs
