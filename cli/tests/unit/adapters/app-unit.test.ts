@@ -74,6 +74,46 @@ describe('normalizeApp', () => {
     expect(unit.type).toBe('server');
     expect(unit.build).toBe('buildpack');
   });
+
+  // V2: Frontend auto-infer render: static
+  it('should auto-infer render: static for frontends (no explicit render needed)', () => {
+    const unit = normalizeApp('web', {
+      path: 'web', framework: 'vite', type: 'frontend', port: null,
+    });
+    expect(unit.type).toBe('frontend');
+    expect(unit.rendering).toBe('static');
+  });
+
+  it('should auto-infer render: static even without explicit type (detected from framework)', () => {
+    const unit = normalizeApp('web', {
+      path: 'web', framework: 'react', port: null,
+    });
+    expect(unit.type).toBe('frontend');
+    expect(unit.rendering).toBe('static');
+  });
+
+  it('should force render: server for server type regardless of user input', () => {
+    const unit = normalizeApp('api', {
+      path: '.', framework: 'express', port: 3000, type: 'server',
+    });
+    expect(unit.rendering).toBe('server');
+  });
+
+  it('should force render: server for worker type', () => {
+    const unit = normalizeApp('bg', {
+      path: '.', framework: 'node', type: 'worker', port: null,
+    });
+    expect(unit.rendering).toBe('server');
+  });
+
+  it('should detect all frontend frameworks as type: frontend', () => {
+    const frontendFrameworks = ['nextjs', 'next', 'vite', 'remix', 'react', 'vue', 'svelte', 'astro', 'angular'];
+    for (const fw of frontendFrameworks) {
+      const unit = normalizeApp('web', { path: '.', framework: fw, port: null });
+      expect(unit.type).toBe('frontend');
+      expect(unit.rendering).toBe('static');
+    }
+  });
 });
 
 describe('normalizeApps', () => {
