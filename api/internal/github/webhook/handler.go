@@ -7,6 +7,7 @@
 package webhook
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -34,10 +35,16 @@ type PullRequestHandler func(event PullRequestEvent) error
 // InstallationHandler is called when an installation event is received.
 type InstallationHandler func(event InstallationEvent) error
 
+// DeliveryDeduplicator checks if a webhook delivery has already been processed.
+type DeliveryDeduplicator interface {
+	RecordDelivery(ctx context.Context, deliveryID, eventType string) (isDuplicate bool, err error)
+}
+
 // Handler receives GitHub webhook events, validates signatures, and dispatches.
 type Handler struct {
 	secret           []byte
 	logger           *slog.Logger
+	dedup            DeliveryDeduplicator
 	onPush           PushHandler
 	onPullRequest    PullRequestHandler
 	onInstallation   InstallationHandler
@@ -49,6 +56,12 @@ func NewHandler(secret string, logger *slog.Logger) *Handler {
 		secret: []byte(secret),
 		logger: logger,
 	}
+}
+
+// WithDedup enables delivery deduplication (MEET-044 P1).
+func (h *Handler) WithDedup(dedup DeliveryDeduplicator) *Handler {
+	h.dedup = dedup
+	return h
 }
 
 // OnPush registers a handler for push events.
@@ -107,6 +120,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Info("webhook: event received", "size", len(body))
+
+	// MEET-044 P1: Dedup by delivery_id — prevent duplicate processing.
+	if h.dedup != nil && deliveryID != "" {
+		isDup, dedupErr := h.dedup.RecordDelivery(r.Context(), deliveryID, eventType)
+		if dedupErr != nil {
+			log.Warn("webhook: dedup check failed (processing anyway)", "error", dedupErr)
+		} else if isDup {
+			log.Info("webhook: duplicate delivery, skipping")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprintf(w, `{"ok":true,"duplicate":true}`)
+			return
+		}
+	}
 
 	// Dispatch event (async — return 200 immediately)
 	// Errors are logged, not returned to GitHub.

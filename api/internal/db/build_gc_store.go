@@ -58,3 +58,15 @@ func (s *PostgresBuildGCStore) DeleteOldEvents(ctx context.Context, maxAge time.
 	}
 	return result.RowsAffected, nil
 }
+
+// DeleteOldWebhookDeliveries removes webhook delivery dedup records older than maxAge.
+func (s *PostgresBuildGCStore) DeleteOldWebhookDeliveries(ctx context.Context, maxAge time.Duration) (int64, error) {
+	cutoff := time.Now().UTC().Add(-maxAge)
+	result, err := s.DB.Exec(ctx, `
+		DELETE FROM github_webhook_deliveries WHERE received_at < $1
+	`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("build gc: delete old webhook deliveries: %w", err)
+	}
+	return result.RowsAffected, nil
+}
