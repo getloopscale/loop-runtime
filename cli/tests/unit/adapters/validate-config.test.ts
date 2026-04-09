@@ -166,7 +166,7 @@ describe('validateConfig', () => {
           api: { path: 'api', framework: 'cobol', type: 'server', port: 4567 },
         },
       };
-      const { errors, warnings } = validateConfig(config, dir);
+      const { errors } = validateConfig(config, dir);
       expect(errors.some(e => e.message.includes("unknown framework 'cobol'"))).toBe(true);
       expect(errors.some(e => e.message.includes('Supported:'))).toBe(true);
       expect(errors.some(e => e.message.includes("framework: custom"))).toBe(true);
@@ -415,7 +415,7 @@ describe('validateConfig', () => {
           web: { path: 'web', framework: 'vite', type: 'frontend', port: null },
         },
       };
-      const { errors, warnings } = validateConfig(config, dir);
+      const { errors } = validateConfig(config, dir);
       expect(errors).toHaveLength(0);
     });
 
