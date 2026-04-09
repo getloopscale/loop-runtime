@@ -179,7 +179,9 @@ func main() {
 	var domainHandler *routes.DomainHandler // MEET-2026-04-05-033: Custom Domains
 	var githubWebhookHandler http.Handler   // GitHub App webhook handler (Phase: GitHub Integration)
 	var repoHandler *routes.RepositoryHandler // GitHub repo↔project linking
-	var orch *services.BuildOrchestrator    // Build orchestrator (shared with auto-deploy)
+	var orch *services.BuildOrchestrator                // Build orchestrator (shared with auto-deploy)
+	var ghAppClient *github.AppClient                   // GitHub App client (shared with status notifier)
+	var reconcileLoop *services.BuildReconcileLoop      // Build reconcile loop (shared with status callbacks)
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -425,7 +427,7 @@ func main() {
 		// C-01/C-03 fix: BuildReconcileLoop replaces both the HTTP callback
 		// and the StartupReconciler. The control plane POLLS the build cluster's
 		// Workflow CRDs instead of the build cluster calling the API.
-		reconcileLoop := services.NewBuildReconcileLoop(
+		reconcileLoop = services.NewBuildReconcileLoop(
 			buildStore,
 			workflowSubmitter,
 			orch,
@@ -624,7 +626,6 @@ func main() {
 			// GitHub App client for API calls (source download, commit status, PR comments)
 			appIDStr := os.Getenv("GITHUB_APP_ID")
 			appPrivateKey := os.Getenv("GITHUB_APP_PRIVATE_KEY")
-			var ghAppClient *github.AppClient
 			if appIDStr != "" && appPrivateKey != "" {
 				var appID int64
 				fmt.Sscanf(appIDStr, "%d", &appID)
@@ -747,6 +748,15 @@ func main() {
 			githubWebhookHandler = wh
 			repoHandler = routes.NewRepositoryHandler(&repoStoreAdapter{store: repoStore})
 			logger.Info("github webhook: handler registered", "endpoint", "/api/v1/webhooks/github")
+
+			// Register commit status callbacks on the build reconcile loop
+			if ghAppClient != nil && orch != nil {
+				statusNotifier := github.NewStatusNotifier(ghAppClient, &repoLookupAdapter{store: repoStore}, cfg.BaseDomain, logger)
+				if statusNotifier != nil {
+					reconcileLoop.WithBuildCallbacks(statusNotifier.OnBuildSucceeded, statusNotifier.OnBuildFailed)
+					logger.Info("github: commit status callbacks registered")
+				}
+			}
 		} else {
 			logger.Info("github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled")
 		}

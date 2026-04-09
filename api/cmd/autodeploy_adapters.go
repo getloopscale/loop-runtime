@@ -8,9 +8,23 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/github"
 	"github.com/loopzero/loopzero/api/internal/services"
 )
+
+// repoLookupAdapter bridges db.PostgresRepositoryStore → github.RepositoryLookup.
+type repoLookupAdapter struct {
+	store *db.PostgresRepositoryStore
+}
+
+func (a *repoLookupAdapter) GetByProject(ctx context.Context, tenantID, projectName string) (string, int64, error) {
+	r, err := a.store.GetByProject(ctx, tenantID, projectName)
+	if err != nil || r == nil {
+		return "", 0, err
+	}
+	return r.RepoFullName, r.InstallationID, nil
+}
 
 // buildSubmitterAdapter bridges github.BuildSubmitter → services.BuildOrchestrator.
 type buildSubmitterAdapter struct {
