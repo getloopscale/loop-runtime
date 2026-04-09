@@ -21,12 +21,19 @@ COPY api/ ./api/
 # Build the binary
 RUN cd api && CGO_ENABLED=0 go build -o /loopzero-api ./cmd/
 
+# Download migrate binary for init container usage
+FROM alpine:3.21 AS migrate-dl
+RUN apk add --no-cache curl && \
+    curl -L https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz && \
+    mv migrate /migrate
+
 # Runtime image
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates git
 RUN adduser -D -u 1000 loopzero
 COPY --from=builder /loopzero-api /loopzero-api
-# Include migrations for init container (golang-migrate reads from /migrations/)
+COPY --from=migrate-dl /migrate /usr/local/bin/migrate
+# Include migrations (used by both: init container mode + API reference)
 COPY --from=builder /workspace/api/internal/db/migrations/ /migrations/
 USER 1000
 EXPOSE 3001

@@ -1602,11 +1602,10 @@ function installLoopZeroAPI(
             initContainers: [
               {
                 name: "db-migrate",
-                image: "migrate/migrate:v4.18.1",
-                // Auto-recover from dirty migration state before running up.
-                // If a previous migration failed mid-run, golang-migrate marks the
-                // DB as "dirty" and refuses all future runs. This wrapper detects
-                // dirty state and forces the version clean before proceeding.
+                // Uses the SAME image as the API container — migrations are always in sync.
+                // No more ConfigMap desync: the image that runs the API also runs migrations.
+                // The migrate binary is included in the API image (Dockerfile multi-stage).
+                image: pulumi.interpolate`${infra.registryEndpoint}/loopzero-api:${config.environment}`,
                 command: ["/bin/sh", "-c"],
                 args: [
                   [
@@ -1630,13 +1629,7 @@ function installLoopZeroAPI(
                     },
                   },
                 ],
-                volumeMounts: [
-                  {
-                    name: "api-migrations",
-                    mountPath: "/migrations",
-                    readOnly: true,
-                  },
-                ],
+                // No volumeMounts needed — migrations are baked into the API image at /migrations/
                 resources: {
                   requests: { cpu: "50m", memory: "64Mi" },
                   limits: { cpu: "100m", memory: "128Mi" },

@@ -13,14 +13,6 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
-
-// domainColumns is the canonical column list for all domain SELECT queries.
-// Must match scanDomain field order exactly.
-const domainColumns = `id, tenant_id, project_name, app_name, environment, domain, status,
-	verification_token, verified_at, tls_status, tls_expires_at,
-	failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
-	cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported`
-
 // PostgresDomainStore implements routes.DomainStore using PostgreSQL.
 type PostgresDomainStore struct {
 	DB DBTX

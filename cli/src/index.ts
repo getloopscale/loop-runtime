@@ -12,6 +12,7 @@ process.on('warning', (warning) => {
 
 import { Command } from 'commander';
 import { createHash } from 'crypto';
+import * as childProcess from 'child_process';
 
 import { ConfigStore } from './config/store';
 import { getDefaultApiUrl, getCloudUrl, API_REQUEST_TIMEOUT_MS, DEPLOY_TIMEOUT_MS } from './config/constants';
@@ -1587,8 +1588,7 @@ export function createProgram(): Command {
         getToken: () => configStore.getToken(),
         getGitRemote: () => {
           try {
-            const { execSync } = require('child_process');
-            return execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
+            return childProcess.execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
           } catch { return null; }
         },
         getProjectName: () => {

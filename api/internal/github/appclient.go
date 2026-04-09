@@ -98,7 +98,7 @@ func (c *AppClient) GetInstallationToken(ctx context.Context, installationID int
 	if err != nil {
 		return "", fmt.Errorf("github app: token exchange: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
@@ -171,7 +171,7 @@ func (c *AppClient) DownloadSource(ctx context.Context, installationID int64, ow
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusFound {
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("github: download source (status %d): %s", resp.StatusCode, string(body))
 	}
 
@@ -199,7 +199,7 @@ func (c *AppClient) SetCommitStatus(ctx context.Context, installationID int64, o
 	if err != nil {
 		return fmt.Errorf("github: set commit status: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
@@ -220,7 +220,7 @@ func (c *AppClient) CommentOnPR(ctx context.Context, installationID int64, owner
 	if err != nil {
 		return fmt.Errorf("github: comment on PR: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)

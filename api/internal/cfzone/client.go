@@ -182,7 +182,7 @@ func (c *Client) doWithBase(ctx context.Context, base, method, path string, body
 	if err != nil {
 		return fmt.Errorf("http %s %s: %w", method, path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

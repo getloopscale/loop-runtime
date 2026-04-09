@@ -92,15 +92,15 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 	if err != nil {
 		return fmt.Errorf("auto-deploy: download source: %w", err)
 	}
-	defer tarballReader.Close()
+	defer func() { _ = tarballReader.Close() }()
 
 	// Step 2: Save tarball to temp file (need to read twice: parse loopzero.yaml + upload)
 	tmpFile, err := os.CreateTemp("", "loopzero-github-source-*.tar.gz")
 	if err != nil {
 		return fmt.Errorf("auto-deploy: create temp file: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	defer func() { _ = tmpFile.Close() }()
 
 	if _, err := io.Copy(tmpFile, tarballReader); err != nil {
 		return fmt.Errorf("auto-deploy: save tarball: %w", err)
@@ -127,7 +127,7 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 	if err != nil {
 		return fmt.Errorf("auto-deploy: convert to git bundle: %w", err)
 	}
-	defer os.Remove(bundlePath)
+	defer func() { _ = os.Remove(bundlePath) }()
 	log.Info("auto-deploy: tarball converted to git bundle")
 
 	// Step 5: Upload git bundle to S3 for build cluster
@@ -136,7 +136,7 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 		if err != nil {
 			return fmt.Errorf("auto-deploy: open bundle: %w", err)
 		}
-		defer bundleFile.Close()
+		defer func() { _ = bundleFile.Close() }()
 		objKey := fmt.Sprintf("%s/source/%s.bundle", tenantID, commitSHA)
 		if err := d.cfg.ObjectStore.Upload(ctx, "loopzero-builds", objKey, bundleFile); err != nil {
 			return fmt.Errorf("auto-deploy: S3 upload: %w", err)
@@ -204,10 +204,10 @@ func tarballToGitBundle(tarball io.Reader, commitSHA, commitMessage, author stri
 	// Extract tarball
 	gz, err := gzip.NewReader(tarball)
 	if err != nil {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 		return "", fmt.Errorf("gzip reader: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	var topLevelDir string
@@ -217,7 +217,7 @@ func tarballToGitBundle(tarball io.Reader, commitSHA, commitMessage, author stri
 			break
 		}
 		if err != nil {
-			os.RemoveAll(tmpDir)
+			_ = os.RemoveAll(tmpDir)
 			return "", fmt.Errorf("tar read: %w", err)
 		}
 
@@ -241,16 +241,16 @@ func tarballToGitBundle(tarball io.Reader, commitSHA, commitMessage, author stri
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			os.MkdirAll(target, 0755)
+			_ = os.MkdirAll(target, 0755)
 		case tar.TypeReg:
-			os.MkdirAll(filepath.Dir(target), 0755)
+			_ = os.MkdirAll(filepath.Dir(target), 0755)
 			f, err := os.Create(target)
 			if err != nil {
 				continue
 			}
-			io.Copy(f, tr)
-			f.Close()
-			os.Chmod(target, os.FileMode(header.Mode))
+			_, _ = io.Copy(f, tr)
+			_ = f.Close()
+			_ = os.Chmod(target, os.FileMode(header.Mode))
 		}
 	}
 
@@ -272,11 +272,11 @@ func tarballToGitBundle(tarball io.Reader, commitSHA, commitMessage, author stri
 	}
 
 	if err := run("git", "init"); err != nil {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 		return "", err
 	}
 	if err := run("git", "add", "."); err != nil {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 		return "", err
 	}
 	msg := commitMessage
@@ -284,17 +284,17 @@ func tarballToGitBundle(tarball io.Reader, commitSHA, commitMessage, author stri
 		msg = "Auto-deploy from GitHub push"
 	}
 	if err := run("git", "commit", "-m", msg, "--allow-empty"); err != nil {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 		return "", err
 	}
 
 	bundlePath := filepath.Join(os.TempDir(), fmt.Sprintf("loopzero-bundle-%s.bundle", commitSHA[:12]))
 	if err := run("git", "bundle", "create", bundlePath, "HEAD"); err != nil {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 		return "", err
 	}
 
-	os.RemoveAll(tmpDir) // cleanup extracted files
+	_ = os.RemoveAll(tmpDir)
 	return bundlePath, nil
 }
 
@@ -305,7 +305,7 @@ func extractLoopZeroYaml(r io.Reader) (*loopzeroYamlMinimal, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gzip: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	for {

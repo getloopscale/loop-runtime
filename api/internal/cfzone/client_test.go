@@ -35,12 +35,12 @@ func TestCreateZone_Success(t *testing.T) {
 		}
 
 		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body["name"] != "empresa.com" {
 			t.Errorf("expected domain empresa.com, got %v", body["name"])
 		}
 
-		json.NewEncoder(w).Encode(cfResponse[ZoneInfo]{
+		_ = json.NewEncoder(w).Encode(cfResponse[ZoneInfo]{
 			Success: true,
 			Result: ZoneInfo{
 				ID:          "zone-123",
@@ -70,7 +70,7 @@ func TestCreateZone_Success(t *testing.T) {
 
 func TestCreateZone_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(cfResponse[ZoneInfo]{
+		_ = json.NewEncoder(w).Encode(cfResponse[ZoneInfo]{
 			Success: false,
 			Errors:  []cfError{{Code: 1061, Message: "Zone already exists"}},
 		})
@@ -89,7 +89,7 @@ func TestGetZoneStatus(t *testing.T) {
 		if r.URL.Path != "/client/v4/zones/zone-123" {
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
-		json.NewEncoder(w).Encode(cfResponse[ZoneInfo]{
+		_ = json.NewEncoder(w).Encode(cfResponse[ZoneInfo]{
 			Success: true,
 			Result:  ZoneInfo{ID: "zone-123", Status: "active"},
 		})
@@ -111,7 +111,7 @@ func TestDeleteZone(t *testing.T) {
 		if r.Method != "DELETE" {
 			t.Errorf("expected DELETE, got %s", r.Method)
 		}
-		json.NewEncoder(w).Encode(cfResponse[json.RawMessage]{Success: true})
+		_ = json.NewEncoder(w).Encode(cfResponse[json.RawMessage]{Success: true})
 	}))
 	defer srv.Close()
 
@@ -126,7 +126,7 @@ func TestScanDNSRecords(t *testing.T) {
 		if r.Method != "POST" || r.URL.Path != "/client/v4/zones/zone-123/dns_records/scan" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
-		json.NewEncoder(w).Encode(cfResponse[ScanResult]{
+		_ = json.NewEncoder(w).Encode(cfResponse[ScanResult]{
 			Success: true,
 			Result:  ScanResult{TotalRecords: 5},
 		})
@@ -142,7 +142,7 @@ func TestScanDNSRecords(t *testing.T) {
 func TestListDNSRecords(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mx5 := 5
-		json.NewEncoder(w).Encode(cfListResponse[DNSRecord]{
+		_ = json.NewEncoder(w).Encode(cfListResponse[DNSRecord]{
 			Success: true,
 			Result: []DNSRecord{
 				{ID: "r1", Type: "MX", Name: "empresa.com", Content: "mx1.google.com", Priority: &mx5},
@@ -172,11 +172,11 @@ func TestCreateDNSRecord(t *testing.T) {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
 		var body DNSRecord
-		json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body.Type != "CNAME" || body.Content != "cname.dev.loopzero.example" {
 			t.Errorf("unexpected record: %+v", body)
 		}
-		json.NewEncoder(w).Encode(cfResponse[DNSRecord]{
+		_ = json.NewEncoder(w).Encode(cfResponse[DNSRecord]{
 			Success: true,
 			Result:  DNSRecord{ID: "new-1", Type: "CNAME", Name: "empresa.com", Content: "cname.dev.loopzero.example", Proxied: &proxied},
 		})
@@ -204,7 +204,7 @@ func TestDeleteDNSRecord(t *testing.T) {
 		if r.Method != "DELETE" || r.URL.Path != "/client/v4/zones/zone-123/dns_records/rec-1" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
-		json.NewEncoder(w).Encode(cfResponse[json.RawMessage]{Success: true})
+		_ = json.NewEncoder(w).Encode(cfResponse[json.RawMessage]{Success: true})
 	}))
 	defer srv.Close()
 
@@ -219,7 +219,7 @@ func TestTriggerActivationCheck(t *testing.T) {
 		if r.Method != "PUT" || r.URL.Path != "/client/v4/zones/zone-123/activation_check" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
-		json.NewEncoder(w).Encode(cfResponse[json.RawMessage]{Success: true})
+		_ = json.NewEncoder(w).Encode(cfResponse[json.RawMessage]{Success: true})
 	}))
 	defer srv.Close()
 
@@ -247,19 +247,16 @@ type testClient struct {
 	baseURL string
 }
 
-func (tc *testClient) do(ctx context.Context, method, path string, body interface{}, result interface{}) error {
-	return tc.Client.doWithBase(ctx, tc.baseURL, method, path, body, result)
-}
 
 // Proxy methods that use the test base URL
 func (tc *testClient) CreateZone(ctx context.Context, domain string) (*ZoneInfo, error) {
 	body := map[string]interface{}{
 		"name":    domain,
-		"account": map[string]string{"id": tc.Client.accountID},
+		"account": map[string]string{"id": tc.accountID},
 		"type":    "full",
 	}
 	var resp cfResponse[ZoneInfo]
-	if err := tc.Client.doWithBase(ctx, tc.baseURL, "POST", "/zones", body, &resp); err != nil {
+	if err := tc.doWithBase(ctx, tc.baseURL, "POST", "/zones", body, &resp); err != nil {
 		return nil, err
 	}
 	if !resp.Success {
@@ -270,7 +267,7 @@ func (tc *testClient) CreateZone(ctx context.Context, domain string) (*ZoneInfo,
 
 func (tc *testClient) GetZoneStatus(ctx context.Context, zoneID string) (string, error) {
 	var resp cfResponse[ZoneInfo]
-	if err := tc.Client.doWithBase(ctx, tc.baseURL, "GET", "/zones/"+zoneID, nil, &resp); err != nil {
+	if err := tc.doWithBase(ctx, tc.baseURL, "GET", "/zones/"+zoneID, nil, &resp); err != nil {
 		return "", err
 	}
 	if !resp.Success {
@@ -281,12 +278,12 @@ func (tc *testClient) GetZoneStatus(ctx context.Context, zoneID string) (string,
 
 func (tc *testClient) DeleteZone(ctx context.Context, zoneID string) error {
 	var resp cfResponse[json.RawMessage]
-	return tc.Client.doWithBase(ctx, tc.baseURL, "DELETE", "/zones/"+zoneID, nil, &resp)
+	return tc.doWithBase(ctx, tc.baseURL, "DELETE", "/zones/"+zoneID, nil, &resp)
 }
 
 func (tc *testClient) ScanDNSRecords(ctx context.Context, zoneID string) error {
 	var resp cfResponse[ScanResult]
-	if err := tc.Client.doWithBase(ctx, tc.baseURL, "POST", "/zones/"+zoneID+"/dns_records/scan", nil, &resp); err != nil {
+	if err := tc.doWithBase(ctx, tc.baseURL, "POST", "/zones/"+zoneID+"/dns_records/scan", nil, &resp); err != nil {
 		return err
 	}
 	return nil
@@ -294,7 +291,7 @@ func (tc *testClient) ScanDNSRecords(ctx context.Context, zoneID string) error {
 
 func (tc *testClient) ListDNSRecords(ctx context.Context, zoneID string) ([]DNSRecord, error) {
 	var resp cfListResponse[DNSRecord]
-	if err := tc.Client.doWithBase(ctx, tc.baseURL, "GET", "/zones/"+zoneID+"/dns_records?per_page=100", nil, &resp); err != nil {
+	if err := tc.doWithBase(ctx, tc.baseURL, "GET", "/zones/"+zoneID+"/dns_records?per_page=100", nil, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Result, nil
@@ -302,7 +299,7 @@ func (tc *testClient) ListDNSRecords(ctx context.Context, zoneID string) ([]DNSR
 
 func (tc *testClient) CreateDNSRecord(ctx context.Context, zoneID string, record DNSRecord) (*DNSRecord, error) {
 	var resp cfResponse[DNSRecord]
-	if err := tc.Client.doWithBase(ctx, tc.baseURL, "POST", "/zones/"+zoneID+"/dns_records", record, &resp); err != nil {
+	if err := tc.doWithBase(ctx, tc.baseURL, "POST", "/zones/"+zoneID+"/dns_records", record, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Result, nil
@@ -310,10 +307,10 @@ func (tc *testClient) CreateDNSRecord(ctx context.Context, zoneID string, record
 
 func (tc *testClient) DeleteDNSRecord(ctx context.Context, zoneID, recordID string) error {
 	var resp cfResponse[json.RawMessage]
-	return tc.Client.doWithBase(ctx, tc.baseURL, "DELETE", "/zones/"+zoneID+"/dns_records/"+recordID, nil, &resp)
+	return tc.doWithBase(ctx, tc.baseURL, "DELETE", "/zones/"+zoneID+"/dns_records/"+recordID, nil, &resp)
 }
 
 func (tc *testClient) TriggerActivationCheck(ctx context.Context, zoneID string) error {
 	var resp cfResponse[json.RawMessage]
-	return tc.Client.doWithBase(ctx, tc.baseURL, "PUT", "/zones/"+zoneID+"/activation_check", nil, &resp)
+	return tc.doWithBase(ctx, tc.baseURL, "PUT", "/zones/"+zoneID+"/activation_check", nil, &resp)
 }

@@ -125,3 +125,4 @@ tmp/
 
 # Reference projects for golden-harvest testing (not part of the codebase)
 referencias/
+builds/

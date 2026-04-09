@@ -558,10 +558,19 @@ func main() {
 			logger.Info("cleared stale leader lock from previous session on this connection")
 		}
 
-		if err := leaderConn.QueryRow(context.Background(),
-			"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&isLeader); err != nil {
-			logger.Error("failed to acquire leader lock", "error", err)
-			os.Exit(1)
+		// Leader election with retry — waits up to 30s for the lock to become available.
+		// Previous pod's connection may take time to be detected as dead by PG.
+		for attempt := 0; attempt < 6; attempt++ {
+			if err := leaderConn.QueryRow(context.Background(),
+				"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&isLeader); err != nil {
+				logger.Error("failed to acquire leader lock", "error", err)
+				os.Exit(1)
+			}
+			if isLeader {
+				break
+			}
+			logger.Info("leader lock held by another instance, retrying...", "attempt", attempt+1, "max", 6)
+			time.Sleep(5 * time.Second)
 		}
 
 		// MEET-2026-04-04-029 P1: Export leader status metric.
@@ -640,7 +649,7 @@ func main() {
 			appPrivateKey := os.Getenv("GITHUB_APP_PRIVATE_KEY")
 			if appIDStr != "" && appPrivateKey != "" {
 				var appID int64
-				fmt.Sscanf(appIDStr, "%d", &appID)
+				_, _ = fmt.Sscanf(appIDStr, "%d", &appID)
 				var clientErr error
 				ghAppClient, clientErr = github.NewAppClient(appID, appPrivateKey)
 				if clientErr != nil {
@@ -655,10 +664,7 @@ func main() {
 
 			// Auto-deployer — handles push → download source → upload S3 → submit build
 			var buildSub github.BuildSubmitter
-			if buildOrchestrator != nil {
-				// buildOrchestrator is a routes.BuildOrchestratorService (adapter).
-				// We need the underlying services.BuildOrchestrator for direct SubmitBuild.
-				// The orch variable is scoped above — capture it here.
+			if orch != nil {
 				buildSub = &buildSubmitterAdapter{
 					orchestrator: orch,
 					logger:       logger,
@@ -746,13 +752,12 @@ func main() {
 					"account", event.Installation.Account.Login,
 				)
 				// Save/remove installation in DB
-				if event.Action == "created" {
-					tenantID := "" // linked later via loopzero connect
+				switch event.Action {
+				case "created":
 					_ = repoStore.SaveInstallation(context.Background(),
 						event.Installation.ID, event.Installation.Account.Login,
 						event.Installation.Account.Type, nil)
-					_ = tenantID
-				} else if event.Action == "deleted" {
+				case "deleted":
 					_ = repoStore.DeleteInstallation(context.Background(), event.Installation.ID)
 				}
 				return nil

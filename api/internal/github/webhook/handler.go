@@ -113,7 +113,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go h.dispatch(eventType, body, log)
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"ok":true}`)
+	_, _ = fmt.Fprintf(w, `{"ok":true}`)
 }
 
 // validateSignature checks HMAC-SHA256 signature.
