@@ -22,11 +22,12 @@ import (
 // Used by the GitHub Status Notifier to update commit status to "success".
 // Registered once at startup via RegisterReleaseActivatedCallback().
 // Non-blocking: runs in a goroutine. Errors are logged, not propagated.
-var onReleaseActivated func(ctx context.Context, tenantID, projectName, commitSHA, environment string)
+// OnReleaseActivated callback receives buildID + environment after a release goes ACTIVE.
+// The callback is responsible for looking up the build's source commit SHA (not the gitops SHA).
+var onReleaseActivated func(ctx context.Context, tenantID, projectName, buildID, environment string)
 
 // RegisterReleaseActivatedCallback sets the global callback for release activation.
-// Called once at startup. Safe to call with nil (disables the callback).
-func RegisterReleaseActivatedCallback(fn func(ctx context.Context, tenantID, projectName, commitSHA, environment string)) {
+func RegisterReleaseActivatedCallback(fn func(ctx context.Context, tenantID, projectName, buildID, environment string)) {
 	onReleaseActivated = fn
 }
 
@@ -176,7 +177,7 @@ func ActivateReleaseKernel(
 
 	// Step 7: Notify external systems (GitHub commit status, etc.)
 	if onReleaseActivated != nil {
-		go onReleaseActivated(context.Background(), release.TenantID, release.ProjectID, release.GitCommit, release.Environment)
+		go onReleaseActivated(context.Background(), release.TenantID, release.ProjectID, release.BuildID, release.Environment)
 	}
 
 	return nil

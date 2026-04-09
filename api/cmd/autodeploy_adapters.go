@@ -13,6 +13,19 @@ import (
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
+// buildLookupAdapter bridges db.BuildStore → github.BuildLookup.
+type buildLookupAdapter struct {
+	store db.BuildStore
+}
+
+func (a *buildLookupAdapter) GetCommitSHA(ctx context.Context, buildID string) (string, error) {
+	build, err := a.store.GetByID(ctx, buildID)
+	if err != nil || build == nil {
+		return "", err
+	}
+	return build.CommitSHA, nil
+}
+
 // repoLookupAdapter bridges db.PostgresRepositoryStore → github.RepositoryLookup.
 type repoLookupAdapter struct {
 	store *db.PostgresRepositoryStore

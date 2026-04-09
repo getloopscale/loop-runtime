@@ -15,31 +15,45 @@ type RepositoryLookup interface {
 	GetByProject(ctx context.Context, tenantID, projectName string) (repoFullName string, installationID int64, err error)
 }
 
+// BuildLookup finds a build's source commit SHA (DIP).
+type BuildLookup interface {
+	GetCommitSHA(ctx context.Context, buildID string) (string, error)
+}
+
 // StatusNotifier updates GitHub commit status when builds complete.
-// Called by the build reconcile loop on SUCCEEDED/FAILED transitions.
 type StatusNotifier struct {
-	appClient *AppClient
+	appClient  *AppClient
 	repoLookup RepositoryLookup
-	logger    *slog.Logger
+	buildLookup BuildLookup
+	logger     *slog.Logger
 	baseDomain string
 }
 
 // NewStatusNotifier creates a new StatusNotifier. Returns nil if AppClient is nil.
-func NewStatusNotifier(appClient *AppClient, repoLookup RepositoryLookup, baseDomain string, logger *slog.Logger) *StatusNotifier {
+func NewStatusNotifier(appClient *AppClient, repoLookup RepositoryLookup, buildLookup BuildLookup, baseDomain string, logger *slog.Logger) *StatusNotifier {
 	if appClient == nil {
 		return nil
 	}
 	return &StatusNotifier{
-		appClient:  appClient,
-		repoLookup: repoLookup,
-		logger:     logger,
-		baseDomain: baseDomain,
+		appClient:   appClient,
+		repoLookup:  repoLookup,
+		buildLookup: buildLookup,
+		logger:      logger,
+		baseDomain:  baseDomain,
 	}
 }
 
 // OnBuildSucceeded sets commit status to "success" on GitHub.
-func (n *StatusNotifier) OnBuildSucceeded(ctx context.Context, tenantID, projectName, commitSHA, environment string) {
+// Receives buildID (not commit SHA) — looks up the source commit SHA from the build.
+func (n *StatusNotifier) OnBuildSucceeded(ctx context.Context, tenantID, projectName, buildID, environment string) {
 	if n == nil {
+		return
+	}
+
+	// Look up source commit SHA from build (not gitops SHA)
+	commitSHA, err := n.buildLookup.GetCommitSHA(ctx, buildID)
+	if err != nil || commitSHA == "" {
+		n.logger.Warn("github status: could not find commit SHA for build", "build_id", buildID, "error", err)
 		return
 	}
 

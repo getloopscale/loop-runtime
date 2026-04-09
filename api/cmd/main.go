@@ -750,7 +750,7 @@ func main() {
 
 			// Register commit status callbacks (global — covers ALL activation paths)
 			if ghAppClient != nil {
-				statusNotifier := github.NewStatusNotifier(ghAppClient, &repoLookupAdapter{store: repoStore}, cfg.BaseDomain, logger)
+				statusNotifier := github.NewStatusNotifier(ghAppClient, &repoLookupAdapter{store: repoStore}, &buildLookupAdapter{store: buildStore}, cfg.BaseDomain, logger)
 				if statusNotifier != nil {
 					services.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
 					services.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
