@@ -581,6 +581,34 @@ func main() {
 			metrics.LeaderStatus.Set(0)
 			logger.Warn("another API instance holds the leader lock — background loops will NOT start on this replica",
 				"hint", "The API can serve HTTP requests but reconcile/reaper loops are disabled. See docs/runbooks/api-scaling.md")
+
+			// MEET-2026-04-09-043 P1: Periodic re-election for non-leader pods.
+			// If PG failover kills the leader's connection, this pod can take over
+			// instead of staying non-leader forever until manually restarted.
+			go func() {
+				ticker := time.NewTicker(60 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-shutdownCtx.Done():
+						return
+					case <-ticker.C:
+						var acquired bool
+						reelCtx, reelCancel := context.WithTimeout(context.Background(), 5*time.Second)
+						if err := leaderConn.QueryRow(reelCtx,
+							"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&acquired); err != nil {
+							reelCancel()
+							continue // PG error — retry next tick
+						}
+						reelCancel()
+						if acquired {
+							logger.Info("non-leader pod acquired leader lock — restarting to enable background loops")
+							metrics.LeaderStatus.Set(1)
+							os.Exit(0) // Kubernetes restarts the pod, which starts as leader
+						}
+					}
+				}
+			}()
 		}
 
 		// T1-7: Drain-on-Shutdown — WaitGroup tracks all background goroutines.
@@ -812,12 +840,18 @@ func main() {
 						return
 					case <-ticker.C:
 						var stillLeader bool
-						if err := leaderConn.QueryRow(context.Background(),
+						// MEET-043 P0: 10s timeout prevents indefinite hang on zombie PG connection.
+						// Without this, a silent PG failover causes the heartbeat to block forever,
+						// and ALL background loops silently stop functioning.
+						heartbeatCtx, heartbeatCancel := context.WithTimeout(context.Background(), 10*time.Second)
+						if err := leaderConn.QueryRow(heartbeatCtx,
 							"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&stillLeader); err != nil {
+							heartbeatCancel()
 							logger.Error("leader heartbeat: lock check failed — exiting", "error", err)
 							metrics.LeaderStatus.Set(0)
 							os.Exit(1)
 						}
+						heartbeatCancel()
 						if !stillLeader {
 							logger.Error("leader heartbeat: lock LOST — exiting for re-election")
 							metrics.LeaderStatus.Set(0)
