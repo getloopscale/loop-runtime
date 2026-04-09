@@ -5,6 +5,8 @@
 // Owns: Prometheus + Grafana installation on management cluster.
 
 import * as k8s from "@pulumi/kubernetes";
+import * as fs from "fs";
+import * as path from "path";
 import { PlatformStackConfig } from "../config/stack";
 import { PLATFORM_NAMESPACE, HELM_VERSIONS } from "./bootstrap-shared";
 
@@ -158,6 +160,22 @@ export function installGrafana(
             ],
           },
         },
+        sidecar: {
+          dashboards: {
+            enabled: true,
+            label: "grafana_dashboard",
+            labelValue: "1",
+            folder: "/var/lib/grafana/dashboards/sidecar",
+            provider: {
+              name: "sidecar",
+              orgId: 1,
+              folder: "LoopZero",
+              type: "file",
+              disableDeletion: false,
+              editable: true,
+            },
+          },
+        },
         dashboardProviders: {
           "dashboardproviders.yaml": {
             apiVersion: 1,
@@ -202,6 +220,51 @@ export function installGrafana(
     },
     { provider, dependsOn: [ns] },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Grafana Dashboard ConfigMaps — auto-provisioned via sidecar
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates ConfigMaps for all LoopZero dashboard JSON files.
+ * The Grafana sidecar container watches for ConfigMaps with label
+ * `grafana_dashboard=1` and auto-loads them into the "LoopZero" folder.
+ * This ensures dashboards survive `pulumi up` and pod restarts.
+ */
+export function provisionGrafanaDashboards(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  grafana: k8s.helm.v3.Release,
+): void {
+  const dashboardDir = path.resolve(__dirname, "../../helm/monitoring/dashboards");
+
+  if (!fs.existsSync(dashboardDir)) {
+    return; // dashboards dir not found — skip (CI without infra checkout)
+  }
+
+  const files = fs.readdirSync(dashboardDir).filter((f) => f.endsWith(".json"));
+
+  for (const file of files) {
+    const name = `grafana-dash-${file.replace(".json", "")}`;
+    const content = fs.readFileSync(path.join(dashboardDir, file), "utf-8");
+
+    new k8s.core.v1.ConfigMap(
+      name,
+      {
+        metadata: {
+          name,
+          namespace: PLATFORM_NAMESPACE,
+          labels: {
+            grafana_dashboard: "1",
+            "app.kubernetes.io/managed-by": "pulumi",
+          },
+        },
+        data: { [file]: content },
+      },
+      { provider, dependsOn: [ns, grafana] },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
