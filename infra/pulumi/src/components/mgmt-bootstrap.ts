@@ -1332,9 +1332,13 @@ function installLoopZeroAPI(
   // MEET-2026-03-31-024: When loopzeroApiDbPassword is set, the API connects as loopzero_api role
   // (DML only, no DDL). Migrations continue using the admin user.
   // When not set, falls back to admin user (acceptable for dev only).
+  // PG keepalive parameters: detect dead connections in ~90s (MEET-042 P0).
+  // Default tcp_keepalives_idle on DO managed PG is 7200s (2 hours).
+  // This causes stale advisory locks after pod kills, blocking leader election.
+  const pgKeepalive = "tcp_keepalives_idle=60&tcp_keepalives_interval=10&tcp_keepalives_count=3";
   const databaseUrl = config.loopzeroApiDbPassword
-    ? pulumi.interpolate`postgres://loopzero_api:${config.loopzeroApiDbPassword}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`
-    : pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require`;
+    ? pulumi.interpolate`postgres://loopzero_api:${config.loopzeroApiDbPassword}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require&${pgKeepalive}`
+    : pulumi.interpolate`postgres://${infra.database.user}:${infra.database.password}@${infra.database.privateHost}:${infra.database.port}/loopzero?sslmode=require&${pgKeepalive}`;
 
   const secret = new k8s.core.v1.Secret(
     "loopzero-api-secrets",
@@ -1342,7 +1346,9 @@ function installLoopZeroAPI(
       metadata: { name: "loopzero-api-secrets", namespace: PLATFORM_NAMESPACE },
       stringData: {
         DATABASE_URL: databaseUrl,
-        LOOPZERO_ARGO_CALLBACK_SECRET: "cb-loopzero-dev-2026",
+        // MEET-042 P0: Generated per-deployment instead of hardcoded.
+        // Used by ArgoCD notification webhook to authenticate callbacks.
+        LOOPZERO_ARGO_CALLBACK_SECRET: pulumi.interpolate`cb-${config.environment}-${Date.now().toString(36)}`,
         // Spaces credentials (S3-compatible) — used by S3 uploader for source bundles
         MINIO_ACCESS_KEY: config.spacesAccessKeyId,
         MINIO_SECRET_KEY: config.spacesSecretAccessKey,
@@ -1664,6 +1670,16 @@ function installLoopZeroAPI(
                   // Cloudflare KV credentials for static frontend routing (Sprint 10).
                   // Optional: secret only exists when CF config is set.
                   ...(config.cfApiToken ? [{ secretRef: { name: "loopzero-cf-credentials" } }] : []),
+                  // GitHub App credentials for auto-deploy on push (MEET-042 P0).
+                  // Optional: secret only exists when GitHub App is configured.
+                  { secretRef: { name: "loopzero-github-app", optional: true } },
+                ],
+                env: [
+                  // CF Zone Management for custom domains v2 (MEET-042 P0).
+                  ...(config.cfApiToken ? [{
+                    name: "CF_ZONE_MANAGEMENT",
+                    value: "true",
+                  }] : []),
                 ],
                 volumeMounts: [
                   {

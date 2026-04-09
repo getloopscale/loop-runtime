@@ -64,6 +64,13 @@ func NewGiteaGitOpsPusher(cfg GiteaGitOpsPusherConfig) *GiteaGitOpsPusher {
 // The operation is idempotent: pushing the same manifests twice is safe (git
 // will detect "nothing to commit" and we return the current HEAD SHA).
 func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpts) (string, error) {
+	// MEET-2026-04-09-042 P1: Manifest validation gate.
+	// Reject known-problematic resource types that can block ArgoCD sync.
+	// Certificate CRs caused a production incident (50+ min blocked sync).
+	if err := validateManifests(opts.Manifests); err != nil {
+		return "", fmt.Errorf("gitops push: manifest validation failed: %w", err)
+	}
+
 	// MEET-2026-03-31-023 T1-8: Measure GitOps push duration.
 	pushStart := time.Now()
 	defer func() {
