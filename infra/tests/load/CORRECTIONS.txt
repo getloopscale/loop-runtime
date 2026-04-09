@@ -1,6 +1,37 @@
 Load Test Corrections & Learnings — 2026-04-09
 ================================================
 
+## Manual Interventions (bypassed pipeline for speed)
+
+### A. API image built+pushed locally (skip pipeline)
+- docker build -f api/Dockerfile → push to DO registry → rollout restart
+- Reason: Pipeline takes ~15min. Direct push is ~2min.
+- Pipeline will overwrite with next successful CI run.
+
+### B. schema_migrations fixed directly in PG
+- Problem: `migrate force 0` (from earlier seed attempt) corrupted the
+  version in schema_migrations table to 0. Init container migration
+  fails because version 0 doesn't exist.
+- Fix: UPDATE schema_migrations SET version = 28, dirty = false;
+- Definitive fix: NEVER run `migrate force` on production DB from
+  inside a pod. Use psql for ad-hoc SQL, not the migrate tool.
+
+### D. startupProbe added to loopzero-api Deployment
+- Problem: Leader election takes 60s for non-leaders (12 × 5s). Liveness
+  probe kills the pod after 45s (initialDelay=15s + 3×10s). Pod never
+  starts as non-leader.
+- Manual fix: kubectl patch to add startupProbe (5s + 12×10s = 125s).
+  Liveness/readiness only start AFTER startup probe passes.
+- Definitive fix: Add startupProbe in Pulumi mgmt-bootstrap.ts loopzero-api
+  Deployment spec. Also consider starting HTTP server BEFORE leader
+  election so health endpoint responds immediately.
+
+### C. Local IP added to PG firewall (doctl databases firewalls append)
+- IP: 209.38.205.78 added for direct psql access
+- TODO: Remove after load test session ends
+
+---
+
 ## Corrections Applied Manually (need definitive fix later)
 
 ### 1. Manifest Gate — Certificate CR Blocked (FIXED in ec12233)
@@ -51,6 +82,28 @@ Load Test Corrections & Learnings — 2026-04-09
   bypass for load testing. No GitHub OAuth needed.
 - Requires: users + tenants + memberships seeded in DB first.
 - Projects MUST be created via API (triggers EnsureTenant → Tenant CR).
+
+### E. GitOps push produces empty repo (RELEASING but no commit)
+- Problem: Build reaches RELEASING state (manifest gate passed), but the
+  gitops repo remains empty (only Initial commit). The manifests are
+  generated but never pushed to Gitea.
+- Hypothesis: The Gitea API credentials used by the gitops pusher may
+  not have write access to the loadtest tenant's repo. The bootstrap
+  Job creates repo creds for the platform, but new tenants created via
+  API may not have the ArgoCD repo-creds configured.
+- Status: INVESTIGATING — this blocks all L1+ load tests.
+- Definitive fix: Verify that EnsureTenant creates all necessary Gitea
+  permissions and ArgoCD repo credentials for new tenants.
+
+### F. Liveness probe kills non-leader pods during election
+- Same as D above, but documenting the root cause chain:
+  Leader election = 60s → HTTP server not started → liveness probe
+  fails at 45s → pod killed → restart → election again → infinite loop.
+- This means: with current config, you can NEVER have more than 1 API
+  replica with the new image (12-attempt election).
+- Definitive fix: Start HTTP server BEFORE leader election. The health
+  endpoint should respond immediately. Background loops start only
+  after election completes.
 
 ## Learnings
 
