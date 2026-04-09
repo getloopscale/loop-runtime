@@ -237,7 +237,7 @@ export function provisionGrafanaDashboards(
   ns: k8s.core.v1.Namespace,
   grafana: k8s.helm.v3.Release,
 ): void {
-  const dashboardDir = path.resolve(__dirname, "../../helm/monitoring/dashboards");
+  const dashboardDir = path.resolve(__dirname, "../../../helm/monitoring/dashboards");
 
   if (!fs.existsSync(dashboardDir)) {
     return; // dashboards dir not found — skip (CI without infra checkout)
@@ -329,5 +329,112 @@ export function installTempo(
       },
     },
     { provider, dependsOn: [ns] },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OpenTelemetry Collector — centralized trace pipeline
+// ---------------------------------------------------------------------------
+
+/**
+ * Installs the OTEL Collector as a centralized trace pipeline.
+ * Services send OTLP to the collector, which samples, batches, and
+ * forwards to Tempo. Also exposes Prometheus metrics for collector health.
+ *
+ * Config from infra/helm/otel/values.yaml:
+ * - Receivers: OTLP gRPC (4317) + HTTP (4318)
+ * - Processors: probabilistic_sampler (100%, tunable) + batch (5s/1024)
+ * - Exporters: Tempo (OTLP) + Prometheus (collector metrics)
+ */
+export function installOtelCollector(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  tempo: k8s.helm.v3.Release,
+): k8s.helm.v3.Release {
+  return new k8s.helm.v3.Release(
+    "otel-collector",
+    {
+      name: "otel-collector",
+      chart: "opentelemetry-collector",
+      version: HELM_VERSIONS.otelCollector,
+      repositoryOpts: {
+        repo: "https://open-telemetry.github.io/opentelemetry-helm-charts",
+      },
+      namespace: PLATFORM_NAMESPACE,
+      createNamespace: false,
+      values: {
+        fullnameOverride: "otel-collector",
+        image: {
+          repository: "otel/opentelemetry-collector-contrib",
+          tag: HELM_VERSIONS.otelCollector,
+        },
+        mode: "deployment",
+        securityContext: { runAsNonRoot: true },
+        resources: {
+          requests: { cpu: "50m", memory: "128Mi" },
+          limits: { cpu: "200m", memory: "256Mi" },
+        },
+        livenessProbe: {
+          httpGet: { path: "/", port: 13133 },
+          initialDelaySeconds: 10,
+          periodSeconds: 15,
+        },
+        readinessProbe: {
+          httpGet: { path: "/", port: 13133 },
+          initialDelaySeconds: 10,
+          periodSeconds: 15,
+        },
+        config: {
+          extensions: {
+            health_check: { endpoint: "0.0.0.0:13133" },
+          },
+          receivers: {
+            otlp: {
+              protocols: {
+                grpc: { endpoint: "0.0.0.0:4317" },
+                http: { endpoint: "0.0.0.0:4318" },
+              },
+            },
+          },
+          processors: {
+            batch: { timeout: "5s", send_batch_size: 1024 },
+            probabilistic_sampler: { sampling_percentage: 100 },
+          },
+          exporters: {
+            debug: { verbosity: "basic" },
+            prometheus: { endpoint: "0.0.0.0:8889" },
+            "otlp/tempo": {
+              endpoint: `tempo.${PLATFORM_NAMESPACE}.svc:4317`,
+              tls: { insecure: true },
+            },
+          },
+          service: {
+            extensions: ["health_check"],
+            pipelines: {
+              traces: {
+                receivers: ["otlp"],
+                processors: ["probabilistic_sampler", "batch"],
+                exporters: ["otlp/tempo"],
+              },
+              metrics: {
+                receivers: ["otlp"],
+                processors: ["batch"],
+                exporters: ["prometheus"],
+              },
+            },
+          },
+        },
+        command: {
+          extraArgs: ["--set=service.telemetry.metrics.address=0.0.0.0:8890"],
+        },
+        ports: {
+          metrics: { enabled: true, containerPort: 8890, servicePort: 8890, protocol: "TCP" },
+          otlp: { enabled: true, containerPort: 4317, servicePort: 4317, protocol: "TCP" },
+          "otlp-http": { enabled: true, containerPort: 4318, servicePort: 4318, protocol: "TCP" },
+          prometheus: { enabled: true, containerPort: 8889, servicePort: 8889, protocol: "TCP" },
+        },
+      },
+    },
+    { provider, dependsOn: [ns, tempo] },
   );
 }
