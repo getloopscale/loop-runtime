@@ -1683,6 +1683,12 @@ function installLoopZeroAPI(
                     name: "CF_ZONE_MANAGEMENT",
                     value: "true",
                   }] : []),
+                  // OpenTelemetry: send traces directly to Tempo (no OTEL Collector needed).
+                  // Tempo exposes OTLP gRPC on port 4317.
+                  {
+                    name: "OTEL_EXPORTER_OTLP_ENDPOINT",
+                    value: `tempo.${PLATFORM_NAMESPACE}.svc:4317`,
+                  },
                 ],
                 volumeMounts: [
                   {
