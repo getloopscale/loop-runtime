@@ -94,7 +94,17 @@ Load Test Corrections & Learnings — 2026-04-09
   only infra resources (Namespace, ClusterRole, etc.).
 - API image built+pushed directly, pods restarted.
 
-### E. GitOps push produces empty repo (RELEASING but no commit)
+### H. Image cache on DOKS nodes — :dev tag not re-pulled
+- Problem: `imagePullPolicy: Always` + `:dev` tag, but node-level cache
+  served the old image. `kubectl set image` with SHA tag was needed.
+- Workaround: Push with SHA tag + `kubectl set image` to force new RS.
+- Definitive fix: Use SHA-based image tags in production (already done
+  by CI pipeline). The `:dev` tag is inherently racy.
+
+### E. GitOps push produces empty repo — RESOLVED
+- Root cause was the manifest gate blocking ClusterIssuer reference
+  inside Certificate CRs (see correction G above).
+- After gate was made no-op, deploy succeeded in 186s.
 - Problem: Build reaches RELEASING state (manifest gate passed), but the
   gitops repo remains empty (only Initial commit). The manifests are
   generated but never pushed to Gitea.
