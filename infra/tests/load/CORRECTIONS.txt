@@ -140,7 +140,15 @@ Load Test Corrections & Learnings — 2026-04-09
    - Subdirectory app with proper path in loopzero.yaml
    - port field required for server apps
 
-4. The TenantController provisioning is fast (~30s for 10 tenants):
+4. L1 Results (10 tenants, concurrent):
+   - 8/10 SUCCEEDED (80%)
+   - 2/10 FAILED in generate-dockerfile (app fixture issue, not infra)
+   - 0 infra failures with correct image
+   - Latency: 186s (L0 single) to 275-331s (L1 concurrent)
+   - 9 simultaneous builds on 2-node build cluster = OK
+   - Zero PG lock conflicts, zero circuit breaker trips
+
+5. The TenantController provisioning is fast (~30s for 10 tenants):
    - Gitea repos created
    - ArgoCD apps created
    - Build/runtime namespaces created
