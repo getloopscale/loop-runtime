@@ -140,7 +140,16 @@ Load Test Corrections & Learnings — 2026-04-09
    - Subdirectory app with proper path in loopzero.yaml
    - port field required for server apps
 
-4. L1 Results (10 tenants, concurrent):
+4. L1 Results — CLEAN RUN (10 tenants, concurrent):
+   - 9/10 SUCCEEDED (90%)
+   - 1/10 FAILED: restore-cache timeout (resource contention, 2 build nodes)
+   - 0 infrastructure failures
+   - 0 manifest gate blocks
+   - 0 PG lock conflicts
+   - Latency: 293s (fastest) to 521s (slowest)
+   - loopzero-packs-runner v0.2.0 (Go binary) — all Dockerfile generations OK
+
+   Previous L1 Results (10 tenants, concurrent):
    - 8/10 SUCCEEDED (80%)
    - 2/10 FAILED in generate-dockerfile (app fixture issue, not infra)
    - 0 infra failures with correct image
