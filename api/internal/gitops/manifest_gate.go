@@ -9,11 +9,20 @@ import (
 )
 
 // blockedResourceKinds are resource types that must NOT enter the ArgoCD-managed gitops tree.
-// Certificate CRs from cert-manager caused a production incident: a stuck "Progressing"
-// Certificate blocked ArgoCD sync for 50+ minutes, preventing ALL deploys for the tenant.
+// ClusterIssuer/Issuer are infra-level resources managed by Pulumi, not per-deploy.
 // MEET-2026-04-09-042 P1: Manifest validation gate.
+//
+// NOTE: Certificate CRs are intentionally ALLOWED. They are required for TLS on
+// platform-managed subdomains (*.dev.loopzero.example) via cert-manager + Let's Encrypt.
+// The original incident (stuck Certificate blocking ArgoCD sync) was caused by
+// CF-managed custom domains generating Certificate CRs — that path now skips
+// Certificate generation via CFManaged=true in the renderer (MEET-044).
+//
+// TODO(definitive): Move this validation to the renderer layer. The gate should
+// validate structural correctness (e.g., no ClusterIssuer in tenant manifests),
+// not blanket-block resource kinds. The renderer already handles the CF/non-CF
+// branching correctly — the gate is defense-in-depth for infra-level resources only.
 var blockedResourceKinds = []string{
-	"kind: Certificate",   // cert-manager — CF handles TLS for custom domains
 	"kind: ClusterIssuer", // cert-manager — managed by infra, not deploy
 	"kind: Issuer",        // cert-manager — managed by infra
 }

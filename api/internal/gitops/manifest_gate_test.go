@@ -5,21 +5,21 @@ package gitops
 
 import "testing"
 
-func TestValidateManifests_RejectsCertificate(t *testing.T) {
+func TestValidateManifests_AllowsCertificate(t *testing.T) {
+	// Certificate CRs are allowed — they're required for platform-managed subdomains
+	// (*.dev.loopzero.example) where cert-manager handles TLS via Let's Encrypt.
+	// The original incident (CF-managed domain) is now prevented by the renderer
+	// skipping Certificate generation when CFManaged=true.
 	manifests := `apiVersion: v1
 kind: Service
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: tls-cd-example-com
+  name: tls-api
 `
-	err := validateManifests(manifests)
-	if err == nil {
-		t.Fatal("expected error for Certificate CR in manifests")
-	}
-	if err.Error() == "" {
-		t.Fatal("error message should not be empty")
+	if err := validateManifests(manifests); err != nil {
+		t.Fatalf("Certificate CRs should be allowed for platform-managed TLS, got: %v", err)
 	}
 }
 
