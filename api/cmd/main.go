@@ -197,6 +197,12 @@ func main() {
 		dbAdapter = poolCfg
 		defer dbAdapter.Close()
 
+		// PG pool stats collector — exports connection metrics every 15s.
+		// Feeds LoopZeroDBPoolNearExhaustion/LoopZeroDBPoolExhaustion alerts.
+		poolCollector := metrics.NewPoolStatsCollector(dbAdapter.Pool, logger)
+		poolCollector.Start(context.Background(), 15*time.Second)
+		defer poolCollector.Stop()
+
 		// Plan enforcement limiter (uses stdlib sql.DB for simple queries)
 		stdDB, err := sql.Open("pgx", dbURL)
 		if err != nil {
