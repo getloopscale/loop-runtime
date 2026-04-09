@@ -20,8 +20,9 @@ import (
 
 // AutoDeployConfig holds configuration for auto-deploy on push.
 type AutoDeployConfig struct {
-	AppClient    *AppClient
-	SourceStore  SourcePusher
+	AppClient      *AppClient
+	SourceStore    SourcePusher
+	BuildCanceller BuildCanceller
 	ObjectStore  ObjectUploader
 	BuildSubmitter BuildSubmitter
 	Logger       *slog.Logger
@@ -40,6 +41,12 @@ type ObjectUploader interface {
 // BuildSubmitter submits builds (DIP — subset of BuildOrchestrator).
 type BuildSubmitter interface {
 	SubmitBuildFromWebhook(ctx context.Context, req WebhookBuildRequest) error
+}
+
+// BuildCanceller cancels queued builds for an environment (DIP).
+// Used to implement superseded-push: newer push cancels older QUEUED builds.
+type BuildCanceller interface {
+	CancelQueuedBuilds(ctx context.Context, tenantID, projectID, environment string) (int, error)
 }
 
 // WebhookBuildRequest contains everything needed to submit a build from a webhook push.
@@ -142,6 +149,19 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 			return fmt.Errorf("auto-deploy: S3 upload: %w", err)
 		}
 		log.Info("auto-deploy: git bundle uploaded to S3")
+	}
+
+	// Step 6: Cancel superseded QUEUED builds (MEET-044 P0).
+	// When a newer push arrives, older QUEUED builds for the same environment
+	// are cancelled. This ensures the LATEST push deploys, not the first.
+	// Without this, rapid pushes deploy the older (possibly broken) commit.
+	if d.cfg.BuildCanceller != nil {
+		cancelled, cancelErr := d.cfg.BuildCanceller.CancelQueuedBuilds(ctx, tenantID, projectName, "production")
+		if cancelErr != nil {
+			log.Warn("auto-deploy: cancel queued builds failed (non-fatal)", "error", cancelErr)
+		} else if cancelled > 0 {
+			log.Info("auto-deploy: cancelled superseded builds", "count", cancelled)
+		}
 	}
 
 	// Step 7: Submit build

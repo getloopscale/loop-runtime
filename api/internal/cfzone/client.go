@@ -156,7 +156,28 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}, 
 			return fmt.Errorf("cf rate limit wait: %w", err)
 		}
 	}
-	return c.doWithBase(ctx, cfAPIBase, method, path, body, result)
+
+	// MEET-044 P0: Per-call timeout (8s) + retry (3 attempts) with backoff.
+	// CF API calls without timeout can hang indefinitely during CF outages,
+	// blocking domain provisioning threads.
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		callCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		lastErr = c.doWithBase(callCtx, cfAPIBase, method, path, body, result)
+		cancel()
+		if lastErr == nil {
+			return nil
+		}
+		// Don't retry on context cancellation (parent cancelled)
+		if ctx.Err() != nil {
+			return lastErr
+		}
+		// Backoff: 500ms, 1s
+		if attempt < 2 {
+			time.Sleep(time.Duration(500*(attempt+1)) * time.Millisecond)
+		}
+	}
+	return lastErr
 }
 
 func (c *Client) doWithBase(ctx context.Context, base, method, path string, body interface{}, result interface{}) error {

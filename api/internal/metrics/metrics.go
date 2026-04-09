@@ -332,6 +332,40 @@ var (
 	}, []string{"result"})
 )
 
+// GitHub webhook metrics — MEET-044 P1.
+var (
+	WebhookPushTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_webhook_push_total",
+		Help: "Total GitHub push webhook events by result.",
+	}, []string{"result"}) // result: "deployed", "skipped", "error"
+
+	WebhookProcessingDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_webhook_processing_duration_seconds",
+		Help:    "Duration of webhook push processing (download + bundle + submit).",
+		Buckets: []float64{0.5, 1, 2, 5, 10, 30},
+	}, []string{"phase"}) // phase: "download", "bundle", "upload", "submit", "total"
+
+	// ArgoCD convergence observability — MEET-044 P1.
+	RevisionMismatchTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_release_revision_mismatch_total",
+		Help: "Total revision mismatches detected by convergence loop.",
+	})
+	RevisionResyncTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_release_revision_resync_total",
+		Help: "Total re-syncs triggered due to revision mismatch.",
+	})
+	RevisionResyncFailureTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_release_revision_resync_failure_total",
+		Help: "Total re-sync failures after revision mismatch.",
+	})
+
+	// Superseded build cancellation — MEET-044 P0.
+	BuildsSupersededTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_builds_superseded_total",
+		Help: "Total QUEUED builds cancelled due to newer push.",
+	}, []string{"tenant"})
+)
+
 // Database connection pool metrics — emitted by a periodic collector.
 var (
 	DBConnectionsActive = promauto.NewGauge(prometheus.GaugeOpts{

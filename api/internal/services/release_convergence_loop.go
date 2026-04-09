@@ -242,6 +242,7 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 				return // Retry on next tick
 			}
 			if revision != "" && revision != release.GitCommit {
+				metrics.RevisionMismatchTotal.Inc()
 				r.logger.Warn("release convergence: revision mismatch — retriggering sync",
 					"release_id", release.ID, "expected", release.GitCommit, "actual", revision)
 				// ArgoCD synced a different revision (from a previous deploy).
