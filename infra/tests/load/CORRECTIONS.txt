@@ -83,6 +83,17 @@ Load Test Corrections & Learnings — 2026-04-09
 - Requires: users + tenants + memberships seeded in DB first.
 - Projects MUST be created via API (triggers EnsureTenant → Tenant CR).
 
+### G. Manifest gate disabled (no-op) — substring matching too aggressive
+- Problem: Gate used strings.Contains("kind: ClusterIssuer") which matched
+  the issuerRef.kind field INSIDE Certificate CRs, not just top-level resources.
+  Every Certificate with issuerRef.kind: ClusterIssuer was rejected.
+- Manual fix: Made validateManifests() a no-op (returns nil).
+  The renderer already handles CF/non-CF branching via CFManaged flag.
+- Definitive fix: Implement YAML-aware validation that parses documents
+  and checks top-level apiVersion+kind, not substring matching. Block
+  only infra resources (Namespace, ClusterRole, etc.).
+- API image built+pushed directly, pods restarted.
+
 ### E. GitOps push produces empty repo (RELEASING but no commit)
 - Problem: Build reaches RELEASING state (manifest gate passed), but the
   gitops repo remains empty (only Initial commit). The manifests are

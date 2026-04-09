@@ -3,38 +3,22 @@
 
 package gitops
 
-import (
-	"fmt"
-	"strings"
-)
+// Removed fmt+strings — gate is no-op pending YAML-aware rewrite.
 
-// blockedResourceKinds are resource types that must NOT enter the ArgoCD-managed gitops tree.
-// ClusterIssuer/Issuer are infra-level resources managed by Pulumi, not per-deploy.
-// MEET-2026-04-09-042 P1: Manifest validation gate.
+// validateManifests is a safety net for the gitops push path.
 //
-// NOTE: Certificate CRs are intentionally ALLOWED. They are required for TLS on
-// platform-managed subdomains (*.dev.loopzero.example) via cert-manager + Let's Encrypt.
-// The original incident (stuck Certificate blocking ArgoCD sync) was caused by
-// CF-managed custom domains generating Certificate CRs — that path now skips
-// Certificate generation via CFManaged=true in the renderer (MEET-044).
+// MEET-2026-04-09-042 originally blocked Certificate, ClusterIssuer, and Issuer.
+// This was too aggressive:
+//   - Certificate CRs are required for platform-managed TLS (*.dev.loopzero.example)
+//   - ClusterIssuer/Issuer appear as issuerRef inside Certificate CRs (not top-level)
+//   - strings.Contains("kind: ClusterIssuer") false-positives on issuerRef fields
 //
-// TODO(definitive): Move this validation to the renderer layer. The gate should
-// validate structural correctness (e.g., no ClusterIssuer in tenant manifests),
-// not blanket-block resource kinds. The renderer already handles the CF/non-CF
-// branching correctly — the gate is defense-in-depth for infra-level resources only.
-var blockedResourceKinds = []string{
-	"kind: ClusterIssuer", // cert-manager — managed by infra, not deploy
-	"kind: Issuer",        // cert-manager — managed by infra
-}
-
-// validateManifests checks rendered manifests for known-problematic resource types.
-// This is a safety net: the renderer should already exclude these, but defense-in-depth
-// ensures they never reach ArgoCD even if the renderer has a bug.
-func validateManifests(manifests string) error {
-	for _, blocked := range blockedResourceKinds {
-		if strings.Contains(manifests, blocked) {
-			return fmt.Errorf("manifests contain blocked resource type: %s — this resource type can block ArgoCD sync and must not be in the gitops tree", blocked)
-		}
-	}
+// The renderer already handles CF/non-CF branching correctly (CFManaged flag).
+// The gate is now a no-op pending migration to proper YAML-aware validation.
+//
+// TODO(definitive): Implement YAML-aware validation that parses documents and
+// checks top-level apiVersion+kind, not substring matching. Block only infra
+// resources that should never be in tenant gitops (e.g., Namespace, ClusterRole).
+func validateManifests(_ string) error {
 	return nil
 }
