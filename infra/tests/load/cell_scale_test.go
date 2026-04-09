@@ -82,9 +82,13 @@ type LoadTestResult struct {
 // ---------------------------------------------------------------------------
 
 type DeploySimulator struct {
-	apiURL    string
-	authToken string
-	client    *http.Client
+	apiURL      string
+	authToken   string // Bearer token (GitHub)
+	serviceAuth string // X-Service-Auth (internal bypass)
+	userID      string // For service auth identity
+	tenantID    string // For service auth identity
+	email       string // For service auth identity
+	client      *http.Client
 }
 
 func NewDeploySimulator(apiURL, authToken string) *DeploySimulator {
@@ -94,6 +98,33 @@ func NewDeploySimulator(apiURL, authToken string) *DeploySimulator {
 		client: &http.Client{
 			Timeout: 180 * time.Second,
 		},
+	}
+}
+
+// NewServiceAuthSimulator creates a simulator using X-Service-Auth bypass.
+// This is the recommended approach for load testing — no GitHub OAuth needed.
+func NewServiceAuthSimulator(apiURL, serviceAuth, userID, tenantID, email string) *DeploySimulator {
+	return &DeploySimulator{
+		apiURL:      apiURL,
+		serviceAuth: serviceAuth,
+		userID:      userID,
+		tenantID:    tenantID,
+		email:       email,
+		client: &http.Client{
+			Timeout: 180 * time.Second,
+		},
+	}
+}
+
+// setAuth applies auth headers to the request.
+func (s *DeploySimulator) setAuth(req *http.Request) {
+	if s.serviceAuth != "" {
+		req.Header.Set("X-Service-Auth", s.serviceAuth)
+		req.Header.Set("X-LoopZero-User-ID", s.userID)
+		req.Header.Set("X-LoopZero-Tenant", s.tenantID)
+		req.Header.Set("X-LoopZero-Email", s.email)
+	} else {
+		s.setAuth(req)
 	}
 }
 
@@ -107,7 +138,7 @@ func (s *DeploySimulator) CreateProject(ctx context.Context, name string) error 
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+s.authToken)
+	s.setAuth(req)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(req)
@@ -170,7 +201,7 @@ apps:
 	if err != nil {
 		return "", 0, err
 	}
-	req.Header.Set("Authorization", "Bearer "+s.authToken)
+	s.setAuth(req)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	resp, err := s.client.Do(req)
@@ -207,7 +238,7 @@ func (s *DeploySimulator) CreateBuild(ctx context.Context, projectName, env, com
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Authorization", "Bearer "+s.authToken)
+	s.setAuth(req)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", fmt.Sprintf("load-test-%s-%s-%d", projectName, env, time.Now().UnixNano()))
 
@@ -249,7 +280,7 @@ func (s *DeploySimulator) WaitForBuild(ctx context.Context, buildID string) (str
 			if err != nil {
 				continue
 			}
-			req.Header.Set("Authorization", "Bearer "+s.authToken)
+			s.setAuth(req)
 
 			resp, err := s.client.Do(req)
 			if err != nil {
@@ -357,7 +388,11 @@ func printReport(t *testing.T, result *LoadTestResult) {
 // Test functions
 // ---------------------------------------------------------------------------
 
-func requireLoadTestEnv(t *testing.T) (string, string) {
+// requireLoadTestEnv returns API URL and a configured DeploySimulator.
+// Supports two auth modes:
+//   - LOOPZERO_AUTH_TOKEN: Bearer token (GitHub OAuth)
+//   - LOOPZERO_SERVICE_AUTH: X-Service-Auth bypass (recommended for load tests)
+func requireLoadTestEnv(t *testing.T) (string, *DeploySimulator) {
 	t.Helper()
 	if os.Getenv("LOOPZERO_LOAD_TEST") != "1" {
 		t.Skip("skipping load test: set LOOPZERO_LOAD_TEST=1 to run")
@@ -366,24 +401,36 @@ func requireLoadTestEnv(t *testing.T) (string, string) {
 	if apiURL == "" {
 		t.Fatal("LOOPZERO_API_URL required")
 	}
+
+	// Prefer service auth (no GitHub token needed)
+	if serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH"); serviceAuth != "" {
+		tenantID := os.Getenv("LOOPZERO_LOAD_TENANT")
+		if tenantID == "" {
+			tenantID = "loadtest-tn-0"
+		}
+		t.Logf("Using X-Service-Auth (tenant=%s)", tenantID)
+		return apiURL, NewServiceAuthSimulator(apiURL, serviceAuth,
+			"loadtest-user-0", tenantID, "loadtest-0@loadtest.loopzero.dev")
+	}
+
+	// Fallback to Bearer token
 	authToken := os.Getenv("LOOPZERO_AUTH_TOKEN")
 	if authToken == "" {
-		t.Fatal("LOOPZERO_AUTH_TOKEN required")
+		t.Fatal("LOOPZERO_AUTH_TOKEN or LOOPZERO_SERVICE_AUTH required")
 	}
-	return apiURL, authToken
+	return apiURL, NewDeploySimulator(apiURL, authToken)
 }
 
 // TestL0_Baseline measures a single deploy against an existing project.
 // No synthetic tenants created — uses whatever exists.
 func TestL0_Baseline(t *testing.T) {
-	apiURL, authToken := requireLoadTestEnv(t)
+	_, sim := requireLoadTestEnv(t)
 
 	projectName := os.Getenv("LOOPZERO_LOAD_PROJECT")
 	if projectName == "" {
 		projectName = "aquim-ai" // Default to known project
 	}
 
-	sim := NewDeploySimulator(apiURL, authToken)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
@@ -403,10 +450,9 @@ func TestL0_Baseline(t *testing.T) {
 
 // TestL1_10Tenants creates 10 synthetic projects and deploys concurrently.
 func TestL1_10Tenants(t *testing.T) {
-	apiURL, authToken := requireLoadTestEnv(t)
+	_, sim := requireLoadTestEnv(t)
 
 	const tenantCount = 10
-	sim := NewDeploySimulator(apiURL, authToken)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
@@ -487,9 +533,8 @@ func TestL1_10Tenants(t *testing.T) {
 
 // TestL1_WebhookBurst simulates 10 push events in 1 second.
 func TestL1_WebhookBurst(t *testing.T) {
-	apiURL, authToken := requireLoadTestEnv(t)
+	_, sim := requireLoadTestEnv(t)
 
-	sim := NewDeploySimulator(apiURL, authToken)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -529,11 +574,10 @@ func TestL1_WebhookBurst(t *testing.T) {
 
 // TestL2_50Tenants runs sustained load with 50 tenants.
 func TestL2_50Tenants(t *testing.T) {
-	apiURL, authToken := requireLoadTestEnv(t)
+	_, sim := requireLoadTestEnv(t)
 
 	const tenantCount = 50
 	const deploysPerMinute = 5
-	sim := NewDeploySimulator(apiURL, authToken)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
 	defer cancel()
 
