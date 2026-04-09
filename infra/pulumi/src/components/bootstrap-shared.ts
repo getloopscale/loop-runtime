@@ -31,6 +31,7 @@ export const HELM_VERSIONS = {
   loki: "6.24.0",
   promtail: "6.16.6",
   tempo: "1.14.0",
+  otelCollector: "0.96.0",
   oryKratos: "0.61.0",
   oryHydra: "0.61.0",
 } as const;

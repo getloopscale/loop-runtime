@@ -331,3 +331,48 @@ export function installTempo(
     { provider, dependsOn: [ns] },
   );
 }
+
+// ---------------------------------------------------------------------------
+// OpenTelemetry Collector — centralized trace pipeline
+// ---------------------------------------------------------------------------
+
+/**
+ * Installs the OTEL Collector as a centralized trace pipeline.
+ * Services send OTLP to the collector, which samples, batches, and
+ * forwards to Tempo. Also exposes Prometheus metrics for collector health.
+ *
+ * Config from infra/helm/otel/values.yaml:
+ * - Receivers: OTLP gRPC (4317) + HTTP (4318)
+ * - Processors: probabilistic_sampler (100%, tunable) + batch (5s/1024)
+ * - Exporters: Tempo (OTLP) + Prometheus (collector metrics)
+ */
+export function installOtelCollector(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  tempo: k8s.helm.v3.Release,
+): k8s.helm.v3.Release {
+  const yaml = require("js-yaml");
+  const valuesPath = path.resolve(__dirname, "../../helm/otel/values.yaml");
+  const values = fs.existsSync(valuesPath)
+    ? yaml.load(fs.readFileSync(valuesPath, "utf-8"))
+    : {};
+
+  return new k8s.helm.v3.Release(
+    "otel-collector",
+    {
+      name: "otel-collector",
+      chart: "opentelemetry-collector",
+      version: HELM_VERSIONS.otelCollector,
+      repositoryOpts: {
+        repo: "https://open-telemetry.github.io/opentelemetry-helm-charts",
+      },
+      namespace: PLATFORM_NAMESPACE,
+      createNamespace: false,
+      values: {
+        fullnameOverride: "otel-collector",
+        ...values,
+      },
+    },
+    { provider, dependsOn: [ns, tempo] },
+  );
+}

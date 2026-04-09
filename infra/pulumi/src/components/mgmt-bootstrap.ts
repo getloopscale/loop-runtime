@@ -8,7 +8,7 @@ import * as path from "path";
 import { InfraOutputs, ClusterOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
 import { InfraError } from "../core/errors";
-import { installPrometheus, installGrafana, installTempo, provisionGrafanaDashboards } from "./mgmt-observability";
+import { installPrometheus, installGrafana, installTempo, installOtelCollector, provisionGrafanaDashboards } from "./mgmt-observability";
 import {
   PLATFORM_NAMESPACE,
   HELM_VERSIONS,
@@ -104,6 +104,10 @@ export function bootstrapMgmtCluster(
 
   // Tempo — distributed trace backend (MEET-2026-03-30-020)
   const tempo = installTempo(provider, ns, config);
+
+  // OTEL Collector — centralized trace pipeline (sampling, batching, export to Tempo)
+  const otelCollector = installOtelCollector(provider, ns, tempo);
+  void otelCollector; // Used implicitly — API sends traces to otel-collector service
 
   // Gitea bootstrap — creates admin token, orgs, and stores credentials in K8s Secret.
   // The Job runs after Gitea is ready and is idempotent (safe to re-run).
@@ -1683,11 +1687,12 @@ function installLoopZeroAPI(
                     name: "CF_ZONE_MANAGEMENT",
                     value: "true",
                   }] : []),
-                  // OpenTelemetry: send traces directly to Tempo (no OTEL Collector needed).
-                  // Tempo exposes OTLP gRPC on port 4317.
+                  // OpenTelemetry: send traces to OTEL Collector for sampling + batching.
+                  // Collector forwards to Tempo. If collector is down, API degrades gracefully
+                  // (traces dropped, no impact on deploy flow).
                   {
                     name: "OTEL_EXPORTER_OTLP_ENDPOINT",
-                    value: `tempo.${PLATFORM_NAMESPACE}.svc:4317`,
+                    value: `otel-collector.${PLATFORM_NAMESPACE}.svc:4317`,
                   },
                 ],
                 volumeMounts: [
