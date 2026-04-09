@@ -120,6 +120,7 @@ export function installGrafana(
       name: "grafana",
       chart: "grafana",
       timeout: 600, // 10 min — Grafana can be slow on first deploy (PVC provisioning)
+      forceUpdate: true, // MEET-045: recover from failed Helm releases (3 consecutive failures)
       version: HELM_VERSIONS.grafana,
       repositoryOpts: {
         repo: "https://grafana.github.io/helm-charts",
