@@ -1050,7 +1050,7 @@ if kubectl get secret argocd-initial-admin-secret -n "$NS" -o jsonpath='{.data.p
   for attempt in $(seq 1 30); do
     ADMIN_SESSION=$(curl -sf "$ARGOCD_URL/api/v1/session" \
       -d "{\\"username\\":\\"admin\\",\\"password\\":\\"$ARGOCD_PASS\\"}" 2>/dev/null | \
-      python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || true)
+      sed -n 's/.*"token":"\\([^"]*\\)".*/\\1/p' 2>/dev/null || true)
     if [ -n "$ADMIN_SESSION" ]; then
       echo "ArgoCD admin session obtained"
       break
@@ -1064,7 +1064,7 @@ if kubectl get secret argocd-initial-admin-secret -n "$NS" -o jsonpath='{.data.p
     ARGOCD_TOKEN=$(curl -sf "$ARGOCD_URL/api/v1/account/loopzero-api/token" \
       -H "Authorization: Bearer $ADMIN_SESSION" \
       -d '{"name":"platform-deploy"}' 2>/dev/null | \
-      python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || true)
+      sed -n 's/.*"token":"\\([^"]*\\)".*/\\1/p' 2>/dev/null || true)
 
     if [ -n "$ARGOCD_TOKEN" ]; then
       echo "ArgoCD apiKey token generated for loopzero-api (JWT, non-expiring)"
