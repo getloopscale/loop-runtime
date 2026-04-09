@@ -8,7 +8,7 @@ config:
   # Management cluster
   loopzero-infra:mgmtK8sVersion: "1.32.13-do.2"
   loopzero-infra:mgmtNodeClass: small
-  loopzero-infra:mgmtMinNodes: "2"
+  loopzero-infra:mgmtMinNodes: "3"
   loopzero-infra:mgmtMaxNodes: "3"
   # Runtime cluster
   loopzero-infra:runtimeK8sVersion: "1.32.13-do.2"
