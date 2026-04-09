@@ -82,8 +82,6 @@ type BuildReconcileLoop struct {
 	}
 	logger *slog.Logger
 	cfg    BuildReconcileLoopConfig
-	onBuildCompleted func(ctx context.Context, tenantID, projectName, commitSHA, environment string) // optional: GitHub commit status
-	onBuildFailed    func(ctx context.Context, tenantID, projectName, commitSHA, buildID string)     // optional: GitHub commit status
 
 	// sem bounds concurrent build reconciliations. Initialized once in constructor.
 	// REVIEW-MOD-2: moved from per-reconcile allocation to struct field so
@@ -132,16 +130,6 @@ func NewBuildReconcileLoop(
 		cfg:        cfg,
 		sem:        make(chan struct{}, cfg.MaxConcurrent),
 	}
-}
-
-// WithBuildCallbacks registers optional callbacks for build completion/failure.
-// Used by GitHub Status Notifier to update commit status.
-func (r *BuildReconcileLoop) WithBuildCallbacks(
-	onCompleted func(ctx context.Context, tenantID, projectName, commitSHA, environment string),
-	onFailed func(ctx context.Context, tenantID, projectName, commitSHA, buildID string),
-) {
-	r.onBuildCompleted = onCompleted
-	r.onBuildFailed = onFailed
 }
 
 // Start runs the reconcile loop until the context is cancelled.
@@ -525,8 +513,6 @@ func (r *BuildReconcileLoop) completeBuild(ctx context.Context, build *db.Build)
 	if err != nil {
 		r.logger.Error("reconcile loop: failed to complete RELEASING build",
 			"build_id", build.ID, "error", err)
-	} else if r.onBuildCompleted != nil {
-		go r.onBuildCompleted(context.Background(), build.TenantID, build.ProjectID, build.CommitSHA, build.Environment)
 	}
 }
 
@@ -597,7 +583,7 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 	r.logger.Warn("reconcile loop: build failed",
 		"build_id", build.ID, "reason", reason)
 
-	if r.onBuildFailed != nil {
-		go r.onBuildFailed(context.Background(), build.TenantID, build.ProjectID, build.CommitSHA, build.ID)
+	if onBuildFailed != nil {
+		go onBuildFailed(context.Background(), build.TenantID, build.ProjectID, build.CommitSHA, build.ID)
 	}
 }

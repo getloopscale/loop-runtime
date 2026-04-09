@@ -18,6 +18,27 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
+// OnReleaseActivated is an optional callback invoked AFTER a release transitions to ACTIVE.
+// Used by the GitHub Status Notifier to update commit status to "success".
+// Registered once at startup via RegisterReleaseActivatedCallback().
+// Non-blocking: runs in a goroutine. Errors are logged, not propagated.
+var onReleaseActivated func(ctx context.Context, tenantID, projectName, commitSHA, environment string)
+
+// RegisterReleaseActivatedCallback sets the global callback for release activation.
+// Called once at startup. Safe to call with nil (disables the callback).
+func RegisterReleaseActivatedCallback(fn func(ctx context.Context, tenantID, projectName, commitSHA, environment string)) {
+	onReleaseActivated = fn
+}
+
+// OnBuildFailed is an optional callback invoked when a build transitions to FAILED.
+// Used by the GitHub Status Notifier to update commit status to "failure".
+var onBuildFailed func(ctx context.Context, tenantID, projectName, commitSHA, buildID string)
+
+// RegisterBuildFailedCallback sets the global callback for build failure.
+func RegisterBuildFailedCallback(fn func(ctx context.Context, tenantID, projectName, commitSHA, buildID string)) {
+	onBuildFailed = fn
+}
+
 // emitActivationFailure emits a deploy.sync_failed SSE event when release activation
 // fails after a successful build. This ensures the CLI gets notified instead of
 // waiting for a timeout.
@@ -151,6 +172,11 @@ func ActivateReleaseKernel(
 	})
 	if _, err := eventStore.Append(ctx, release.BuildID, "deploy.completed", completedData); err != nil {
 		logger.Error("activate release: failed to emit deploy.completed", "release_id", release.ID, "error", err)
+	}
+
+	// Step 7: Notify external systems (GitHub commit status, etc.)
+	if onReleaseActivated != nil {
+		go onReleaseActivated(context.Background(), release.TenantID, release.ProjectID, release.GitCommit, release.Environment)
 	}
 
 	return nil

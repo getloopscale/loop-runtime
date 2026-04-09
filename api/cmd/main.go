@@ -181,7 +181,6 @@ func main() {
 	var repoHandler *routes.RepositoryHandler // GitHub repo↔project linking
 	var orch *services.BuildOrchestrator                // Build orchestrator (shared with auto-deploy)
 	var ghAppClient *github.AppClient                   // GitHub App client (shared with status notifier)
-	var reconcileLoop *services.BuildReconcileLoop      // Build reconcile loop (shared with status callbacks)
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
@@ -427,7 +426,7 @@ func main() {
 		// C-01/C-03 fix: BuildReconcileLoop replaces both the HTTP callback
 		// and the StartupReconciler. The control plane POLLS the build cluster's
 		// Workflow CRDs instead of the build cluster calling the API.
-		reconcileLoop = services.NewBuildReconcileLoop(
+		reconcileLoop := services.NewBuildReconcileLoop(
 			buildStore,
 			workflowSubmitter,
 			orch,
@@ -749,12 +748,13 @@ func main() {
 			repoHandler = routes.NewRepositoryHandler(&repoStoreAdapter{store: repoStore})
 			logger.Info("github webhook: handler registered", "endpoint", "/api/v1/webhooks/github")
 
-			// Register commit status callbacks on the build reconcile loop
-			if ghAppClient != nil && orch != nil {
+			// Register commit status callbacks (global — covers ALL activation paths)
+			if ghAppClient != nil {
 				statusNotifier := github.NewStatusNotifier(ghAppClient, &repoLookupAdapter{store: repoStore}, cfg.BaseDomain, logger)
 				if statusNotifier != nil {
-					reconcileLoop.WithBuildCallbacks(statusNotifier.OnBuildSucceeded, statusNotifier.OnBuildFailed)
-					logger.Info("github: commit status callbacks registered")
+					services.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
+					services.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
+					logger.Info("github: commit status callbacks registered (global)")
 				}
 			}
 		} else {
