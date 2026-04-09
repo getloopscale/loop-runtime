@@ -1,0 +1,73 @@
+Load Test Corrections & Learnings — 2026-04-09
+================================================
+
+## Corrections Applied Manually (need definitive fix later)
+
+### 1. Manifest Gate — Certificate CR Blocked (FIXED in ec12233)
+- Problem: manifest_gate.go blocked ALL Certificate CRs, including those
+  required for platform-managed subdomains (*.dev.loopzero.example).
+- Root cause: Gate was designed to prevent CF-managed domain Certificate CRs
+  (which get stuck "Progressing"), but was applied universally.
+- Manual fix: Removed "kind: Certificate" from blockedResourceKinds.
+  ClusterIssuer/Issuer remain blocked (infra-level).
+- Definitive fix TODO: Move validation to renderer layer. Gate should check
+  structural correctness (no ClusterIssuer in tenant manifests), not
+  blanket-block resource kinds. The renderer already handles the CF/non-CF
+  branching correctly via CFManaged flag.
+- Impact: ALL new tenant deploys were broken. Only pre-existing tenants
+  (deployed before the gate) worked.
+
+### 2. seed.go renamed to seed_test.go
+- Problem: Go only runs test functions from *_test.go files. The seed
+  functions (TestSeed_CreateTenants, etc.) were in seed.go and invisible.
+- Fix: Renamed to seed_test.go.
+- go.mod: pgx/v5 promoted from indirect to direct dependency.
+
+### 3. DB Firewall — PG only accessible from K8s clusters
+- Problem: Load test scripts can't connect to DO Managed PG from local
+  machine (firewall only allows K8s cluster IPs).
+- Workaround: Added local IP to firewall via doctl.
+- Definitive fix: Load tests should run as K8s Jobs in the mgmt cluster
+  (same VPC, no firewall issues). Or use a Taskfile task that handles
+  the firewall add/remove automatically.
+
+### 4. LoopZero.yaml version field — must be int, not string
+- Problem: `version: "2"` (string) fails validation. Must be `version: 2` (int).
+- Impact: Load test fixture YAML was rejected with 422.
+- Fix: Use unquoted integer.
+
+### 5. App must have port or type
+- Problem: App definition without `port` and without `type: worker/frontend`
+  fails validation.
+- Fix: Add `port: 8080` to fixture app definition.
+
+### 6. Root package.json + lockfile required
+- Problem: validate-workspace step requires package.json and lockfile at
+  workspace root, not just in subdirectory.
+- Fix: Added root package.json + package-lock.json to fixture.
+
+### 7. Service Auth works for load testing
+- The X-Service-Auth header (cloud→engine internal auth) is the correct
+  bypass for load testing. No GitHub OAuth needed.
+- Requires: users + tenants + memberships seeded in DB first.
+- Projects MUST be created via API (triggers EnsureTenant → Tenant CR).
+
+## Learnings
+
+1. Load testing exposes bugs that never appear in normal operation:
+   - The manifest gate bug only affects NEW tenants, not existing ones.
+   - Would have been a showstopper for first external user signup.
+
+2. DB seed should be auth-only (users/tenants/members). Everything else
+   through the real API to trigger the full provisioning chain.
+
+3. The fixture bundle must match production structure exactly:
+   - Root package.json + lockfile
+   - Subdirectory app with proper path in loopzero.yaml
+   - port field required for server apps
+
+4. The TenantController provisioning is fast (~30s for 10 tenants):
+   - Gitea repos created
+   - ArgoCD apps created
+   - Build/runtime namespaces created
+   - All automated via Tenant CR reconciliation
