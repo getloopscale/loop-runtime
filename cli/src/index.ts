@@ -45,6 +45,7 @@ import { TeamAddCommand } from './commands/team-add';
 import { TeamRemoveCommand } from './commands/team-remove';
 import { TeamRoleCommand } from './commands/team-role';
 import { DomainAddCommand, DomainVerifyCommand, DomainStatusCommand, DomainListCommand, DomainRemoveCommand, DomainDNSCommand } from './commands/domain';
+import { ConnectCommand, DisconnectCommand } from './commands/connect';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
@@ -1568,6 +1569,70 @@ export function createProgram(): Command {
       });
 
       process.exitCode = await cmd.execute(domain, { json: program.opts().json });
+    });
+
+  // --- connect (GitHub App auto-deploy) ---
+  program
+    .command('connect')
+    .description('Connect a GitHub repository for auto-deploy on push')
+    .option('--repo <owner/repo>', 'GitHub repository (auto-detected from git remote)')
+    .option('--branch <branch>', 'Default branch for production deploys', 'main')
+    .option('--installation-id <id>', 'GitHub App installation ID')
+    .action(async (opts: { repo?: string; branch?: string; installationId?: string }) => {
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new ConnectCommand({
+        getToken: () => configStore.getToken(),
+        getGitRemote: () => {
+          try {
+            const { execSync } = require('child_process');
+            return execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
+          } catch { return null; }
+        },
+        getProjectName: () => {
+          const yamlResult = findLoopZeroYaml(process.cwd(), process.cwd());
+          return yamlResult?.content?.project ?? null;
+        },
+        connectRepo: async (project, body) => apiClient.post(`/api/v1/projects/${encodeURIComponent(project)}/connect`, body),
+        disconnectRepo: async (project) => apiClient.del(`/api/v1/projects/${encodeURIComponent(project)}/connect`),
+        getConnection: async (project) => apiClient.get<any>(`/api/v1/projects/${encodeURIComponent(project)}/connect`).catch(() => null),
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute({
+        repo: opts.repo,
+        branch: opts.branch,
+        installationId: opts.installationId ? parseInt(opts.installationId, 10) : undefined,
+        json: program.opts().json,
+      });
+    });
+
+  program
+    .command('disconnect')
+    .description('Disconnect GitHub repository (stop auto-deploy)')
+    .action(async () => {
+      const token = configStore.getToken();
+      const baseURL = getDefaultApiUrl();
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+
+      const cmd = new DisconnectCommand({
+        getToken: () => configStore.getToken(),
+        getGitRemote: () => null,
+        getProjectName: () => {
+          const yamlResult = findLoopZeroYaml(process.cwd(), process.cwd());
+          return yamlResult?.content?.project ?? null;
+        },
+        connectRepo: async () => { throw new Error('not used'); },
+        disconnectRepo: async (project) => apiClient.del(`/api/v1/projects/${encodeURIComponent(project)}/connect`),
+        getConnection: async () => null,
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await cmd.execute({ json: program.opts().json });
     });
 
   // --- billing ---

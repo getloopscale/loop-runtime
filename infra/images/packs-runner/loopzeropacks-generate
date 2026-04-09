@@ -64,6 +64,14 @@ elif [ -f "$FULL_PATH/go.mod" ]; then
   FRAMEWORK="go"
 elif [ -f "$FULL_PATH/requirements.txt" ] || [ -f "$FULL_PATH/pyproject.toml" ]; then
   FRAMEWORK="python"
+elif [ -f "$FULL_PATH/Gemfile" ]; then
+  FRAMEWORK="ruby"
+elif [ -f "$FULL_PATH/pom.xml" ] || [ -f "$FULL_PATH/build.gradle" ] || [ -f "$FULL_PATH/build.gradle.kts" ]; then
+  FRAMEWORK="java"
+elif [ -f "$FULL_PATH/composer.json" ]; then
+  FRAMEWORK="php"
+elif [ -f "$FULL_PATH/Cargo.toml" ]; then
+  FRAMEWORK="rust"
 else
   FRAMEWORK="unknown"
 fi
@@ -190,6 +198,81 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+DOCKERFILE
+      ;;
+    ruby)
+      cat > "$OUTPUT" <<DOCKERFILE
+FROM ruby:3.3-slim
+RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY Gemfile Gemfile.lock* ./
+RUN bundle install --without development test
+COPY . .
+EXPOSE 4567
+CMD ["bundle", "exec", "ruby", "app.rb"]
+DOCKERFILE
+      ;;
+    java)
+      if [ -f "$FULL_PATH/pom.xml" ]; then
+        cat > "$OUTPUT" <<DOCKERFILE
+FROM maven:3.9-eclipse-temurin-21 AS builder
+WORKDIR /app
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+COPY src ./src
+RUN mvn package -DskipTests -B
+FROM eclipse-temurin:21-jre-alpine
+RUN adduser -D -u 1000 loopzero
+COPY --from=builder /app/target/*.jar /app.jar
+USER 1000
+EXPOSE 8080
+CMD ["java", "-jar", "/app.jar"]
+DOCKERFILE
+      else
+        cat > "$OUTPUT" <<DOCKERFILE
+FROM gradle:8-jdk21 AS builder
+WORKDIR /app
+COPY build.gradle* settings.gradle* ./
+COPY gradle ./gradle
+RUN gradle dependencies --no-daemon || true
+COPY src ./src
+RUN gradle bootJar --no-daemon -x test
+FROM eclipse-temurin:21-jre-alpine
+RUN adduser -D -u 1000 loopzero
+COPY --from=builder /app/build/libs/*.jar /app.jar
+USER 1000
+EXPOSE 8080
+CMD ["java", "-jar", "/app.jar"]
+DOCKERFILE
+      fi
+      ;;
+    php)
+      cat > "$OUTPUT" <<DOCKERFILE
+FROM php:8.3-cli-alpine
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+WORKDIR /app
+COPY composer.json composer.lock* ./
+RUN composer install --no-dev --optimize-autoloader --no-interaction
+COPY . .
+EXPOSE 8000
+CMD ["php", "-S", "0.0.0.0:8000", "-t", "public"]
+DOCKERFILE
+      ;;
+    rust)
+      cat > "$OUTPUT" <<DOCKERFILE
+FROM rust:1.80-alpine AS builder
+RUN apk add --no-cache musl-dev
+WORKDIR /app
+COPY Cargo.toml Cargo.lock* ./
+RUN mkdir src && echo 'fn main(){}' > src/main.rs && cargo build --release && rm -rf src
+COPY src ./src
+RUN cargo build --release
+FROM alpine:3.21
+RUN adduser -D -u 1000 loopzero
+COPY --from=builder /app/target/release/$(basename \$(pwd)) /server
+USER 1000
+EXPOSE 8080
+CMD ["/server"]
 DOCKERFILE
       ;;
     *)

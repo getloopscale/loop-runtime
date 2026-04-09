@@ -13,6 +13,7 @@ const (
 	imageGolang   = "golang:1.22-alpine"
 	imagePython   = "python:3.12-alpine"
 	imageAlpine   = "alpine:3.19.1"
+	imageRuby     = "ruby:3.3-alpine"
 	imageBuildKit = "moby/buildkit:v0.18.2-rootless"
 	imageAWSCLI   = "amazon/aws-cli:2.22.35"
 

@@ -323,6 +323,77 @@ done
 	return script
 }
 
+// scriptValidateFile generates a validate step checking a single file at each app path.
+func scriptValidateFile(apps []services.AppSpec, filename string) string {
+	paths := appPaths(apps)
+	script := `set -euo pipefail
+cd /workspace
+echo "Validating workspace..."
+ERRORS=""
+`
+	for _, p := range paths {
+		script += fmt.Sprintf(`if [ ! -f "%s/%s" ]; then
+  ERRORS="${ERRORS}No %s found at %s/%s. "
+fi
+`, p, filename, filename, p, filename)
+	}
+	return script + `if [ -n "$ERRORS" ]; then
+  echo "ERROR: $ERRORS"
+  mkdir -p /tmp/manifests
+  echo "validate-workspace: $ERRORS" > /tmp/manifests/build-error.txt
+  exit 1
+fi
+echo "Workspace validation passed"
+`
+}
+
+// scriptValidateFileAny generates a validate step checking any of multiple files.
+func scriptValidateFileAny(apps []services.AppSpec, filenames ...string) string {
+	paths := appPaths(apps)
+	script := `set -euo pipefail
+cd /workspace
+echo "Validating workspace..."
+HAS_FILE=false
+`
+	for _, p := range paths {
+		for _, f := range filenames {
+			script += fmt.Sprintf(`[ -f "%s/%s" ] && HAS_FILE=true
+`, p, f)
+		}
+	}
+	files := ""
+	for i, f := range filenames {
+		if i > 0 {
+			files += " or "
+		}
+		files += f
+	}
+	return script + fmt.Sprintf(`if [ "$HAS_FILE" = "false" ]; then
+  echo "ERROR: No %s found"
+  mkdir -p /tmp/manifests
+  echo "validate-workspace: No %s found" > /tmp/manifests/build-error.txt
+  exit 1
+fi
+echo "Workspace validation passed"
+`, files, files)
+}
+
+// scriptInstallRuby generates shell to install Ruby dependencies.
+func scriptInstallRuby(apps []services.AppSpec) string {
+	paths := appPaths(apps)
+	script := "set -euo pipefail\ncd /workspace\n"
+	for _, p := range paths {
+		script += fmt.Sprintf(`echo "Installing deps in %s..."
+cd "/workspace/%s"
+if [ -f Gemfile ]; then
+  bundle install --without development test --path vendor/bundle
+fi
+echo "Dependencies installed in %s"
+`, p, p, p)
+	}
+	return script
+}
+
 // validatePythonDeps generates shell to check Python dependency files.
 func validatePythonDeps(paths []string) string {
 	script := ""

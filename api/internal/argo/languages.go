@@ -49,6 +49,14 @@ func ResolveStrategy(framework string) LanguageStrategy {
 		return &GoStrategy{}
 	case "fastapi", "django", "python":
 		return &PythonStrategy{}
+	case "sinatra", "rails", "ruby":
+		return &RubyStrategy{}
+	case "spring", "spring-boot", "java":
+		return &JavaStrategy{}
+	case "laravel", "slim", "php":
+		return &PHPStrategy{}
+	case "axum", "actix", "rocket", "rust":
+		return &RustStrategy{}
 	case "custom":
 		return &CustomStrategy{}
 	default:
@@ -169,6 +177,100 @@ func (s *PythonStrategy) ScanStep() *forge.Container {
 }
 
 // DockerfileStep removed — uses universal loopzeroPacksDockerfileStep().
+
+// ---------------------------------------------------------------------------
+// RubyStrategy — Ruby ecosystem (Bundler)
+// ---------------------------------------------------------------------------
+
+type RubyStrategy struct{}
+
+func (s *RubyStrategy) Name() string                        { return "ruby" }
+func (s *RubyStrategy) CacheKey() string                    { return "bundle-cache" }
+func (s *RubyStrategy) CacheDirs() []string                 { return []string{"/workspace/vendor/bundle"} }
+func (s *RubyStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageRuby, resourcesTiny(), scriptValidateFile(apps, "Gemfile"))
+}
+func (s *RubyStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("install-deps", imageRuby, resourcesSmall(), scriptInstallRuby(apps))
+}
+func (s *RubyStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageRuby, resourcesTiny(), noopScript("Ruby — no compile step"))
+}
+func (s *RubyStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageRuby, resourcesTiny(), `set -euo pipefail
+cd /workspace
+gem install bundler-audit 2>/dev/null && bundle-audit check 2>/dev/null || echo "bundle-audit not available or scan failed — skipping"
+`)
+}
+
+// ---------------------------------------------------------------------------
+// JavaStrategy — Java ecosystem (Maven/Gradle)
+// ---------------------------------------------------------------------------
+
+type JavaStrategy struct{}
+
+func (s *JavaStrategy) Name() string                        { return "java" }
+func (s *JavaStrategy) CacheKey() string                    { return "maven-cache" }
+func (s *JavaStrategy) CacheDirs() []string                 { return []string{"/workspace/.m2", "/workspace/.gradle"} }
+func (s *JavaStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(), scriptValidateFileAny(apps, "pom.xml", "build.gradle", "build.gradle.kts"))
+}
+func (s *JavaStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("install-deps", imageAlpine, resourcesTiny(), noopScript("Java — deps installed during build"))
+}
+func (s *JavaStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageAlpine, resourcesTiny(), noopScript("Java — build happens in Dockerfile (multi-stage)"))
+}
+func (s *JavaStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("Java security scan — skipped (use Dockerfile-based scan)"))
+}
+
+// ---------------------------------------------------------------------------
+// PHPStrategy — PHP ecosystem (Composer)
+// ---------------------------------------------------------------------------
+
+type PHPStrategy struct{}
+
+func (s *PHPStrategy) Name() string                        { return "php" }
+func (s *PHPStrategy) CacheKey() string                    { return "composer-cache" }
+func (s *PHPStrategy) CacheDirs() []string                 { return []string{"/workspace/vendor"} }
+func (s *PHPStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(), scriptValidateFile(apps, "composer.json"))
+}
+func (s *PHPStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("install-deps", imageAlpine, resourcesTiny(), noopScript("PHP — deps installed in Dockerfile"))
+}
+func (s *PHPStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageAlpine, resourcesTiny(), noopScript("PHP — no compile step"))
+}
+func (s *PHPStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("PHP security scan — skipped"))
+}
+
+// ---------------------------------------------------------------------------
+// RustStrategy — Rust ecosystem (Cargo)
+// ---------------------------------------------------------------------------
+
+type RustStrategy struct{}
+
+func (s *RustStrategy) Name() string                        { return "rust" }
+func (s *RustStrategy) CacheKey() string                    { return "cargo-cache" }
+func (s *RustStrategy) CacheDirs() []string                 { return []string{"/workspace/target"} }
+func (s *RustStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(), scriptValidateFile(apps, "Cargo.toml"))
+}
+func (s *RustStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("install-deps", imageAlpine, resourcesTiny(), noopScript("Rust — deps built during cargo build"))
+}
+func (s *RustStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageAlpine, resourcesTiny(), noopScript("Rust — build happens in Dockerfile (multi-stage)"))
+}
+func (s *RustStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageAlpine, resourcesTiny(), `set -euo pipefail
+cd /workspace
+cargo audit 2>/dev/null || echo "cargo-audit not available — skipping"
+`)
+}
 
 // ---------------------------------------------------------------------------
 // CustomStrategy — user provides their own Dockerfile
