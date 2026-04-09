@@ -107,8 +107,6 @@ export function bootstrapRuntimeCluster(
         name: "promtail",
         chart: "promtail",
         version: HELM_VERSIONS.promtail,
-        forceUpdate: true,
-        skipAwait: true,
         repositoryOpts: {
           repo: "https://grafana.github.io/helm-charts",
         },
