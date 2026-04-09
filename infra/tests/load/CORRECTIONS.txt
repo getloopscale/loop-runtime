@@ -94,6 +94,26 @@ Load Test Corrections & Learnings — 2026-04-09
   only infra resources (Namespace, ClusterRole, etc.).
 - API image built+pushed directly, pods restarted.
 
+### I. PVC Multi-Attach failure — workflow steps on different nodes
+- Problem: VolumeClaimTemplates create RWO PVCs. When Argo schedules
+  steps on different nodes, the PVC can't attach to the second node.
+  This caused 1/10 build failure in L1 clean run.
+- Root cause: DO Block Storage is RWO only. K8s scheduler may split
+  steps across nodes when under resource pressure.
+- Manual fix: None applied — 9/10 success rate is acceptable for L1.
+- Definitive fix: Add nodeAffinity or podAffinity in loopzero-forge
+  Workflow spec to pin all steps to the same node. Or switch to
+  ReadWriteMany storage (NFS/DO Spaces FUSE mount).
+  loopzero-forge is external: github.com/getloopscale/loopzero-forge
+
+### J. loopzero-packs-runner v0.1.0 → v0.2.0 (bash → Go binary)
+- Problem: v0.1.0 used bash script with syntax error on line 272
+  (Rust Dockerfile template — malformed parenthesis). Caused 6/10
+  failures in generate-dockerfile step.
+- Fix: Rebuilt from loopzero-packs/Dockerfile.generate which compiles
+  the Go binary. Pushed as v0.2.0.
+- API updated: constants.go imageLoopZeroPacks → v0.2.0
+
 ### H. Image cache on DOKS nodes — :dev tag not re-pulled
 - Problem: `imagePullPolicy: Always` + `:dev` tag, but node-level cache
   served the old image. `kubectl set image` with SHA tag was needed.
