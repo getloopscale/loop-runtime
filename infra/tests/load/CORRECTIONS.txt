@@ -114,6 +114,22 @@ Load Test Corrections & Learnings — 2026-04-09
   the Go binary. Pushed as v0.2.0.
 - API updated: constants.go imageLoopZeroPacks → v0.2.0
 
+### K. Build cluster scaled: small→medium + autoscale 2→5
+- Change: buildNodeClass small→medium, buildMaxNodes 3→5
+- Reason: s-4vcpu-8gb fits ~4-5 builds per node, reducing PVC
+  Multi-Attach probability (~70% less splits). Autoscale to 5 for
+  burst capacity (20-25 concurrent builds).
+- Cost: +$24/mo base. Extra nodes ~$0.036/hr (temporary).
+- Definitive fix for Multi-Attach: still needs nodeAffinity in
+  loopzero-forge. Medium nodes are mitigation, not elimination.
+
+### L. Fixture must be flat (no subdirectory path)
+- Problem: fixture with path: api generated Dockerfile with COPY from
+  api/ subdirectory, but CMD ran node server.js from /app/ root.
+  Result: runtime pod CrashLoopBackOff with MODULE_NOT_FOUND.
+- Fix: Flat fixture with server.js + package.json at root. No path
+  field in loopzero.yaml apps section.
+
 ### H. Image cache on DOKS nodes — :dev tag not re-pulled
 - Problem: `imagePullPolicy: Always` + `:dev` tag, but node-level cache
   served the old image. `kubectl set image` with SHA tag was needed.
