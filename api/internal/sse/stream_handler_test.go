@@ -248,6 +248,9 @@ func TestStreamHappyPath(t *testing.T) {
 	if conn := resp.Header.Get("Connection"); conn != "keep-alive" {
 		t.Errorf("expected Connection keep-alive, got %q", conn)
 	}
+	if xab := resp.Header.Get("X-Accel-Buffering"); xab != "no" {
+		t.Errorf("expected X-Accel-Buffering no, got %q", xab)
+	}
 
 	body := readFullBody(resp)
 	events := parseSSEEvents(body)

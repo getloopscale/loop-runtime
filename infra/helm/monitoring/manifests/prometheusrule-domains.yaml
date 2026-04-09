@@ -60,3 +60,25 @@ spec:
             summary: "Domain health checker producing errors"
             description: "Domain health checker has 5+ errors in {{ $labels.check }} check in the last 30 minutes."
             runbook: "Check API leader pod logs for DomainHealthChecker errors. Verify database connectivity."
+
+    - name: loopzero.certificates
+      rules:
+        - alert: LoopZeroCertificateIssuanceFailed
+          expr: certmanager_certificate_ready_status == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "TLS certificate issuance failed"
+            description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} has not been issued for 10+ minutes."
+            runbook: "Check cert-manager logs and the Certificate CR status. For HTTP-01: verify CNAME resolves through CF Tunnel. For DNS-01: verify Cloudflare API token. Run: kubectl describe certificate {{ $labels.name }} -n {{ $labels.namespace }}"
+
+        - alert: LoopZeroCertificateExpiryUrgent
+          expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < 7 * 24 * 3600
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "TLS certificate expires in less than 7 days"
+            description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} expires in {{ $value | humanizeDuration }}."
+            runbook: "cert-manager should auto-renew 30 days before expiry. If this fires, renewal is broken. Check cert-manager logs, ClusterIssuer status, and DNS reachability. Escalate immediately."

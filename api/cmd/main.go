@@ -139,6 +139,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Application CR manager — creates LoopZeroApplication CRs on mgmt cluster.
+	// Reuses the TenantCRManager's dynamic client (same cluster, same RBAC).
+	// Empty namespace falls back to the package-level tenantNamespace (same as TenantCRManager).
+	appCRMgr := &appCRAdapter{mgr: k8s.NewApplicationCRManager(tenantCRMgr.Client, "")}
+
 	// Secret K8s manager — creates K8s Secrets on mgmt + ExternalSecret CRs on workload for ESO sync.
 	// F-01 fix: Use interface variable to avoid Go nil interface trap.
 	// A typed nil (*SecretK8sManager)(nil) passes `!= nil` interface checks,
@@ -199,6 +204,12 @@ func main() {
 		}
 		dbAdapter = poolCfg
 		defer dbAdapter.Close()
+
+		// PG pool stats collector — exports connection metrics every 15s.
+		// Feeds LoopZeroDBPoolNearExhaustion/LoopZeroDBPoolExhaustion alerts.
+		poolCollector := metrics.NewPoolStatsCollector(dbAdapter.Pool, logger)
+		poolCollector.Start(context.Background(), 15*time.Second)
+		defer poolCollector.Stop()
 
 		// Plan enforcement limiter (uses stdlib sql.DB for simple queries)
 		stdDB, err := sql.Open("pgx", dbURL)
@@ -432,12 +443,14 @@ func main() {
 			orch,
 			locker,
 			domainStore, // MEET-034: custom domains in manifest rendering
+			appCRMgr,    // creates LoopZeroApplication CRs on build completion
 			pgEventStore,
 			logger,
 			services.BuildReconcileLoopConfig{
-				Interval:    cfg.ReconcileInterval,
-				RegistryURL: cfg.RegistryURL,
-				BaseDomain:  cfg.BaseDomain,
+				Interval:           cfg.ReconcileInterval,
+				RegistryURL:        cfg.RegistryURL,
+				BaseDomain:         cfg.BaseDomain,
+				MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 			},
 		)
 
@@ -938,4 +951,20 @@ func main() {
 		logger.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// appCRAdapter bridges k8s.ApplicationCRManager to services.ApplicationCREnsurer.
+type appCRAdapter struct {
+	mgr *k8s.ApplicationCRManager
+}
+
+func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input services.ApplicationCRInput) error {
+	return a.mgr.EnsureLoopZeroApplication(ctx, k8s.LoopZeroApplicationInput{
+		TenantID:    input.TenantID,
+		Project:     input.Project,
+		Environment: input.Environment,
+		AppName:     input.AppName,
+		ServiceName: input.ServiceName,
+		ServicePort: input.ServicePort,
+	})
 }

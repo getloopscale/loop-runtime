@@ -127,6 +127,10 @@ func ActivateReleaseKernel(
 	convergenceDuration := time.Since(release.CreatedAt).Seconds()
 	metrics.ReleaseConvergenceDuration.WithLabelValues(release.TenantID, release.Environment).Observe(convergenceDuration)
 
+	// End-to-end deploy duration: build creation → release ACTIVE.
+	// durationSecs is computed by callers as time.Since(build.CreatedAt).
+	metrics.DeployDuration.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
+
 	// Step 3: Emit deploy.live SSE event.
 	liveData, _ := json.Marshal(map[string]interface{}{
 		"deploy_id": deriveDeployID(release.ID),

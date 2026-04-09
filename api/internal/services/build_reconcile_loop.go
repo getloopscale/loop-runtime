@@ -47,6 +47,10 @@ type BuildReconcileLoopConfig struct {
 	// Bounds pressure on the Kubernetes API and Argo Workflow queries.
 	// Default: 10.
 	MaxConcurrent int
+	// MaxBuildsPerTenant limits how many builds a single tenant can have
+	// processing simultaneously. Prevents one busy tenant from starving others.
+	// Default: 3. Override via MAX_BUILDS_PER_TENANT env var.
+	MaxBuildsPerTenant int
 }
 
 // BuildReconcileLoop continuously reconciles non-terminal builds against
@@ -71,12 +75,30 @@ type CustomDomainQuerier interface {
 	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]routes.CustomDomain, error)
 }
 
+// ApplicationCREnsurer creates LoopZeroApplication CRs on the mgmt cluster.
+// CHG-2026-04-08-001: Wires ApplicationController to the deploy flow.
+type ApplicationCREnsurer interface {
+	EnsureLoopZeroApplication(ctx context.Context, input ApplicationCRInput) error
+}
+
+// ApplicationCRInput is the services-layer input for creating LoopZeroApplication CRs.
+// Decoupled from the k8s package to follow DIP.
+type ApplicationCRInput struct {
+	TenantID    string
+	Project     string
+	Environment string
+	AppName     string
+	ServiceName string
+	ServicePort int32
+}
+
 type BuildReconcileLoop struct {
 	buildStore   db.BuildStore
 	workflow     WorkflowSubmitter
 	orch         BuildCompletionHandler
 	locker       EnvironmentLocker
 	domainStore  CustomDomainQuerier // MEET-034: custom domains in manifests
+	appCRMgr     ApplicationCREnsurer
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -110,6 +132,7 @@ func NewBuildReconcileLoop(
 	orch BuildCompletionHandler,
 	locker EnvironmentLocker,
 	domainStore CustomDomainQuerier,
+	appCRMgr ApplicationCREnsurer,
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	},
@@ -119,12 +142,16 @@ func NewBuildReconcileLoop(
 	if cfg.MaxConcurrent <= 0 {
 		cfg.MaxConcurrent = 10
 	}
+	if cfg.MaxBuildsPerTenant <= 0 {
+		cfg.MaxBuildsPerTenant = 3
+	}
 	return &BuildReconcileLoop{
 		buildStore:  buildStore,
 		workflow:    workflow,
 		orch:        orch,
 		locker:      locker,
 		domainStore: domainStore,
+		appCRMgr:    appCRMgr,
 		eventStore:  eventStore,
 		logger:      logger,
 		cfg:        cfg,
@@ -187,11 +214,31 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 		return
 	}
 
+	// Count active builds per tenant for backpressure.
+	tenantActive := make(map[string]int)
+	r.active.Range(func(_, value interface{}) bool {
+		if tid, ok := value.(string); ok {
+			tenantActive[tid]++
+		}
+		return true
+	})
+
 	for _, build := range builds {
 		// Skip builds already being processed (MOD-6: avoid reaper competition)
-		if _, loaded := r.active.LoadOrStore(build.ID, struct{}{}); loaded {
+		if _, loaded := r.active.LoadOrStore(build.ID, build.TenantID); loaded {
 			continue
 		}
+
+		// Per-tenant backpressure: skip if this tenant has too many active builds.
+		if tenantActive[build.TenantID] >= r.cfg.MaxBuildsPerTenant {
+			r.active.Delete(build.ID)
+			metrics.BuildTenantBackpressure.WithLabelValues(build.TenantID).Inc()
+			r.logger.Debug("reconcile loop: tenant at build limit, deferring",
+				"build_id", build.ID, "tenant", build.TenantID,
+				"active", tenantActive[build.TenantID], "limit", r.cfg.MaxBuildsPerTenant)
+			continue
+		}
+		tenantActive[build.TenantID]++
 
 		b := build // capture loop variable
 
@@ -345,6 +392,10 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		BaseDomain:  r.cfg.BaseDomain,
 		Apps:        manifestApps,
 	})
+
+	// Ensure LoopZeroApplication CRs exist on mgmt cluster (non-fatal).
+	// Enables hostname assignment, ExposedRoute creation, TLS monitoring, reachability probes.
+	r.ensureApplicationCRs(ctx, build, apps)
 
 	// Construct the completion result and delegate to the orchestrator
 	result := BuildCallbackRequest{
@@ -585,5 +636,40 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 
 	if onBuildFailed != nil {
 		go onBuildFailed(context.Background(), build.TenantID, build.ProjectID, build.CommitSHA, build.ID)
+	}
+}
+
+// ensureApplicationCRs creates LoopZeroApplication CRs on the mgmt cluster for each app
+// in the build. This wires the ApplicationController and ExposureController to provide
+// hostname assignment, ExposedRoute creation, TLS monitoring, and reachability probes.
+// CHG-2026-04-08-001: Non-fatal — failure is logged but does not block the deploy.
+func (r *BuildReconcileLoop) ensureApplicationCRs(ctx context.Context, build *db.Build, apps []db.BuildAppSpec) {
+	if r.appCRMgr == nil {
+		r.logger.Debug("reconcile loop: appCRMgr not configured, skipping LoopZeroApplication CR creation")
+		return
+	}
+	for _, app := range apps {
+		port := int32(app.Port)
+		if port == 0 {
+			port = 80
+		}
+		input := ApplicationCRInput{
+			TenantID:    build.TenantID,
+			Project:     build.ProjectID,
+			Environment: build.Environment,
+			AppName:     app.Name,
+			ServiceName: app.Name,
+			ServicePort: port,
+		}
+		if err := r.appCRMgr.EnsureLoopZeroApplication(ctx, input); err != nil {
+			metrics.ApplicationCREnsureTotal.WithLabelValues(build.TenantID, app.Name, "failure").Inc()
+			r.logger.Warn("reconcile loop: failed to ensure LoopZeroApplication CR (non-fatal)",
+				"build_id", build.ID, "app", app.Name, "error", err)
+		} else {
+			metrics.ApplicationCREnsureTotal.WithLabelValues(build.TenantID, app.Name, "success").Inc()
+			r.logger.Info("reconcile loop: LoopZeroApplication CR ensured",
+				"build_id", build.ID, "app", app.Name,
+				"tenant", build.TenantID, "environment", build.Environment)
+		}
 	}
 }
