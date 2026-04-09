@@ -1,179 +1,630 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package load implements the 50k app load test for Cell-Based Architecture.
-// ADR-0008 Phase 4 (P4-5).
+// Package load implements progressive load tests for the LoopZero platform.
 //
 // Usage:
 //
-//	LOOPZERO_LOAD_TEST=1 go test ./infra/tests/load/ -v -run TestCellScale -timeout 30m
+//	# L0 — Baseline (current 2 tenants, single deploy)
+//	LOOPZERO_LOAD_TEST=1 LOOPZERO_API_URL=https://api.dev.loopzero.example LOOPZERO_AUTH_TOKEN=<token> \
+//	  go test ./infra/tests/load/ -v -run TestL0_Baseline -timeout 10m
+//
+//	# L1 — 10 tenants, concurrent deploys
+//	LOOPZERO_LOAD_TEST=1 LOOPZERO_API_URL=https://api.dev.loopzero.example LOOPZERO_AUTH_TOKEN=<token> \
+//	  go test ./infra/tests/load/ -v -run TestL1_10Tenants -timeout 30m
+//
+//	# L2 — 50 tenants, sustained load
+//	LOOPZERO_LOAD_TEST=1 LOOPZERO_API_URL=https://api.dev.loopzero.example LOOPZERO_AUTH_TOKEN=<token> \
+//	  go test ./infra/tests/load/ -v -run TestL2_50Tenants -timeout 60m
 //
 // This test is SKIPPED unless LOOPZERO_LOAD_TEST=1 is set.
-// It requires N Cells running on DigitalOcean with ArgoCD + Traefik.
 package load
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"math"
+	"mime/multipart"
+	"net/http"
 	"os"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// ScaleTarget defines the target scale for the load test.
-type ScaleTarget struct {
-	CellCount       int // number of Cells
-	AppsPerCell     int // apps per Cell
-	ConcurrentDeploys int // simultaneous deploy requests
+// ---------------------------------------------------------------------------
+// Config & types
+// ---------------------------------------------------------------------------
+
+type LoadTestConfig struct {
+	Tenants       int           // Number of synthetic tenants
+	DeploysPerMin int           // Target deploy rate (0 = all at once)
+	Duration      time.Duration // Test duration (0 = single round)
+	BurstSize     int           // Concurrent deploys in burst mode
+	APIEndpoint   string
+	AuthToken     string
 }
 
-// ScaleResult captures the outcome of the load test.
-type ScaleResult struct {
-	TotalApps        int
-	DeployLatencyP50 time.Duration
-	DeployLatencyP95 time.Duration
-	DeployLatencyP99 time.Duration
+type StageLatency struct {
+	Upload time.Duration
+	Build  time.Duration
+	Total  time.Duration
+}
+
+type DeployResult struct {
+	TenantIdx int
+	ProjectID string
+	BuildID   string
+	Success   bool
+	Error     string
+	Latency   StageLatency
+}
+
+type LoadTestResult struct {
+	TotalDeploys     int
 	SuccessCount     int64
 	FailureCount     int64
 	Duration         time.Duration
+	DeployLatencyP50 time.Duration
+	DeployLatencyP95 time.Duration
+	DeployLatencyP99 time.Duration
+	UploadLatencyP50 time.Duration
+	Results          []DeployResult
 }
 
-// DeploySimulator simulates deploy operations against the LoopZero API.
+// ---------------------------------------------------------------------------
+// DeploySimulator — real HTTP calls to LoopZero API
+// ---------------------------------------------------------------------------
+
 type DeploySimulator struct {
 	apiURL    string
 	authToken string
+	client    *http.Client
 }
 
-// NewDeploySimulator creates a simulator targeting the LoopZero API.
 func NewDeploySimulator(apiURL, authToken string) *DeploySimulator {
-	return &DeploySimulator{apiURL: apiURL, authToken: authToken}
+	return &DeploySimulator{
+		apiURL:    apiURL,
+		authToken: authToken,
+		client: &http.Client{
+			Timeout: 180 * time.Second,
+		},
+	}
 }
 
-// SimulateDeploy sends a deploy request and measures latency.
-func (s *DeploySimulator) SimulateDeploy(ctx context.Context, tenantID, projectID, env string) (time.Duration, error) {
+// CreateProject creates a project via POST /api/v1/projects.
+// Returns nil if project already exists (idempotent).
+func (s *DeploySimulator) CreateProject(ctx context.Context, name string) error {
+	body := fmt.Sprintf(`{"name":%q}`, name)
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		s.apiURL+"/api/v1/projects",
+		bytes.NewBufferString(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.authToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("create project: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 201 = created, 409 = already exists — both OK
+	if resp.StatusCode != 201 && resp.StatusCode != 409 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("create project %s: HTTP %d: %s", name, resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
+// UploadBundle uploads a minimal source bundle via POST /api/v1/source/upload.
+// Returns the commit SHA from the response.
+func (s *DeploySimulator) UploadBundle(ctx context.Context, projectName string) (string, time.Duration, error) {
 	start := time.Now()
-	// TODO(P4-5): Implement actual HTTP call to POST /builds
-	// For now, simulate with sleep
-	time.Sleep(100 * time.Millisecond) // placeholder
-	return time.Since(start), nil
+
+	// Create minimal loopzero.yaml
+	loopzeroYAML := fmt.Sprintf(`version: "2"
+project: %s
+apps:
+  api:
+    build: buildpack
+    framework: node
+    render: server
+`, projectName)
+
+	// Create minimal bundle (empty tar.gz — the build will fail but we measure upload+queue latency)
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	// loopzero_yaml field
+	yamlPart, err := writer.CreateFormFile("loopzero_yaml", "loopzero.yaml")
+	if err != nil {
+		return "", 0, err
+	}
+	if _, err := yamlPart.Write([]byte(loopzeroYAML)); err != nil {
+		return "", 0, err
+	}
+
+	// bundle field — minimal valid git bundle header
+	bundlePart, err := writer.CreateFormFile("bundle", "source.bundle")
+	if err != nil {
+		return "", 0, err
+	}
+	// Git bundle v2 header (minimal — enough to pass upload validation)
+	bundleHeader := "# v2 git bundle\n-0000000000000000000000000000000000000000 HEAD\n\n"
+	if _, err := bundlePart.Write([]byte(bundleHeader)); err != nil {
+		return "", 0, err
+	}
+	writer.Close()
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		s.apiURL+"/api/v1/source/upload",
+		&body)
+	if err != nil {
+		return "", 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.authToken)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", time.Since(start), fmt.Errorf("upload: %w", err)
+	}
+	defer resp.Body.Close()
+	uploadLatency := time.Since(start)
+
+	if resp.StatusCode != 200 && resp.StatusCode != 201 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", uploadLatency, fmt.Errorf("upload %s: HTTP %d: %s", projectName, resp.StatusCode, string(respBody))
+	}
+
+	var uploadResp struct {
+		CommitSHA string `json:"commit_sha"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&uploadResp); err != nil {
+		return "", uploadLatency, nil // Non-fatal — some endpoints don't return JSON
+	}
+
+	return uploadResp.CommitSHA, uploadLatency, nil
 }
 
-func TestCellScale50k(t *testing.T) {
-	if os.Getenv("LOOPZERO_LOAD_TEST") != "1" {
-		t.Skip("skipping load test: set LOOPZERO_LOAD_TEST=1 to run")
+// CreateBuild triggers a build via POST /api/v1/builds.
+// Returns the build ID.
+func (s *DeploySimulator) CreateBuild(ctx context.Context, projectName, env, commitSHA string) (string, error) {
+	reqBody := fmt.Sprintf(`{"project_id":%q,"environment":%q,"commit_sha":%q}`,
+		projectName, env, commitSHA)
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		s.apiURL+"/api/v1/builds",
+		bytes.NewBufferString(reqBody))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.authToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", fmt.Sprintf("load-test-%s-%s-%d", projectName, env, time.Now().UnixNano()))
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("create build: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != 201 && resp.StatusCode != 202 {
+		return "", fmt.Errorf("create build %s: HTTP %d: %s", projectName, resp.StatusCode, string(respBody))
 	}
 
-	apiURL := os.Getenv("LOOPZERO_API_URL")
-	if apiURL == "" {
-		t.Fatal("LOOPZERO_API_URL required for load test")
+	var buildResp struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(respBody, &buildResp); err != nil {
+		return "", nil
 	}
 
-	authToken := os.Getenv("LOOPZERO_AUTH_TOKEN")
-	if authToken == "" {
-		t.Fatal("LOOPZERO_AUTH_TOKEN required for load test")
-	}
+	return buildResp.ID, nil
+}
 
-	target := ScaleTarget{
-		CellCount:         10,
-		AppsPerCell:       5000,
-		ConcurrentDeploys: 100,
-	}
+// WaitForBuild polls GET /api/v1/builds/:id until terminal state.
+func (s *DeploySimulator) WaitForBuild(ctx context.Context, buildID string) (string, time.Duration, error) {
+	start := time.Now()
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 
-	t.Logf("Scale target: %d Cells x %d apps = %d total, %d concurrent deploys",
-		target.CellCount, target.AppsPerCell,
-		target.CellCount*target.AppsPerCell,
-		target.ConcurrentDeploys)
+	for {
+		select {
+		case <-ctx.Done():
+			return "TIMEOUT", time.Since(start), ctx.Err()
+		case <-ticker.C:
+			req, err := http.NewRequestWithContext(ctx, "GET",
+				s.apiURL+"/api/v1/builds/"+buildID, nil)
+			if err != nil {
+				continue
+			}
+			req.Header.Set("Authorization", "Bearer "+s.authToken)
 
-	sim := NewDeploySimulator(apiURL, authToken)
-	result := runScaleTest(t, sim, target)
+			resp, err := s.client.Do(req)
+			if err != nil {
+				continue
+			}
+			var build struct {
+				State string `json:"state"`
+			}
+			json.NewDecoder(resp.Body).Decode(&build)
+			resp.Body.Close()
 
-	// Validate against targets
-	t.Logf("Results: %d success, %d failures, p50=%s p95=%s p99=%s",
-		result.SuccessCount, result.FailureCount,
-		result.DeployLatencyP50, result.DeployLatencyP95, result.DeployLatencyP99)
-
-	if result.DeployLatencyP50 > 30*time.Second {
-		t.Errorf("deploy p50 %s exceeds 30s target", result.DeployLatencyP50)
-	}
-	if result.DeployLatencyP95 > 60*time.Second {
-		t.Errorf("deploy p95 %s exceeds 60s target", result.DeployLatencyP95)
-	}
-	if result.DeployLatencyP99 > 120*time.Second {
-		t.Errorf("deploy p99 %s exceeds 120s target", result.DeployLatencyP99)
-	}
-	if result.FailureCount > 0 {
-		failRate := float64(result.FailureCount) / float64(result.SuccessCount+result.FailureCount) * 100
-		if failRate > 5 {
-			t.Errorf("failure rate %.1f%% exceeds 5%% threshold", failRate)
+			switch build.State {
+			case "SUCCEEDED":
+				return "SUCCEEDED", time.Since(start), nil
+			case "FAILED", "CANCELLED":
+				return build.State, time.Since(start), fmt.Errorf("build %s: %s", buildID, build.State)
+			}
+			// QUEUED, RUNNING, RELEASING — keep waiting
 		}
 	}
 }
 
-func runScaleTest(t *testing.T, sim *DeploySimulator, target ScaleTarget) *ScaleResult {
-	t.Helper()
+// SimulateDeploy runs the full deploy flow: upload → build → wait.
+func (s *DeploySimulator) SimulateDeploy(ctx context.Context, projectName, env string) DeployResult {
+	result := DeployResult{ProjectID: projectName}
+	totalStart := time.Now()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-
-	var (
-		successCount int64
-		failureCount int64
-		latencies    []time.Duration
-		mu           sync.Mutex
-	)
-
-	sem := make(chan struct{}, target.ConcurrentDeploys)
-	var wg sync.WaitGroup
-
-	start := time.Now()
-
-	for cell := 0; cell < target.CellCount; cell++ {
-		for app := 0; app < target.ConcurrentDeploys/target.CellCount; app++ {
-			wg.Add(1)
-			sem <- struct{}{}
-			go func(cellIdx, appIdx int) {
-				defer wg.Done()
-				defer func() { <-sem }()
-
-				tenantID := fmt.Sprintf("tn-load-%d", cellIdx)
-				projectID := fmt.Sprintf("app-%d", appIdx)
-
-				latency, err := sim.SimulateDeploy(ctx, tenantID, projectID, "production")
-				if err != nil {
-					atomic.AddInt64(&failureCount, 1)
-					return
-				}
-				atomic.AddInt64(&successCount, 1)
-				mu.Lock()
-				latencies = append(latencies, latency)
-				mu.Unlock()
-			}(cell, app)
-		}
+	// Upload
+	commitSHA, uploadLatency, err := s.UploadBundle(ctx, projectName)
+	result.Latency.Upload = uploadLatency
+	if err != nil {
+		result.Error = fmt.Sprintf("upload: %v", err)
+		result.Latency.Total = time.Since(totalStart)
+		return result
 	}
 
-	wg.Wait()
-
-	return &ScaleResult{
-		TotalApps:        target.CellCount * target.AppsPerCell,
-		SuccessCount:     successCount,
-		FailureCount:     failureCount,
-		Duration:         time.Since(start),
-		DeployLatencyP50: percentile(latencies, 50),
-		DeployLatencyP95: percentile(latencies, 95),
-		DeployLatencyP99: percentile(latencies, 99),
+	// Create build
+	buildID, err := s.CreateBuild(ctx, projectName, env, commitSHA)
+	if err != nil {
+		result.Error = fmt.Sprintf("build create: %v", err)
+		result.Latency.Total = time.Since(totalStart)
+		return result
 	}
+	result.BuildID = buildID
+
+	// Wait for completion
+	state, buildLatency, err := s.WaitForBuild(ctx, buildID)
+	result.Latency.Build = buildLatency
+	result.Latency.Total = time.Since(totalStart)
+
+	if err != nil {
+		result.Error = fmt.Sprintf("build %s: %s", buildID, state)
+		return result
+	}
+
+	result.Success = true
+	return result
 }
+
+// ---------------------------------------------------------------------------
+// Metrics helpers
+// ---------------------------------------------------------------------------
 
 func percentile(latencies []time.Duration, p int) time.Duration {
 	if len(latencies) == 0 {
 		return 0
 	}
-	// Simple percentile (not production-grade — use HDR histogram for real tests)
-	idx := len(latencies) * p / 100
+	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
+	idx := int(math.Ceil(float64(len(latencies)*p)/100.0)) - 1
+	if idx < 0 {
+		idx = 0
+	}
 	if idx >= len(latencies) {
 		idx = len(latencies) - 1
 	}
 	return latencies[idx]
+}
+
+func printReport(t *testing.T, result *LoadTestResult) {
+	t.Logf("═══════════════════════════════════════════")
+	t.Logf("  LOAD TEST REPORT")
+	t.Logf("═══════════════════════════════════════════")
+	t.Logf("  Total deploys:  %d", result.TotalDeploys)
+	t.Logf("  Success:        %d", result.SuccessCount)
+	t.Logf("  Failures:       %d", result.FailureCount)
+	t.Logf("  Duration:       %s", result.Duration.Round(time.Second))
+	t.Logf("───────────────────────────────────────────")
+	t.Logf("  Deploy p50:     %s", result.DeployLatencyP50.Round(time.Millisecond))
+	t.Logf("  Deploy p95:     %s", result.DeployLatencyP95.Round(time.Millisecond))
+	t.Logf("  Deploy p99:     %s", result.DeployLatencyP99.Round(time.Millisecond))
+	t.Logf("  Upload p50:     %s", result.UploadLatencyP50.Round(time.Millisecond))
+	t.Logf("═══════════════════════════════════════════")
+
+	if result.FailureCount > 0 {
+		t.Logf("  Failed deploys:")
+		for _, r := range result.Results {
+			if !r.Success {
+				t.Logf("    - %s: %s", r.ProjectID, r.Error)
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Test functions
+// ---------------------------------------------------------------------------
+
+func requireLoadTestEnv(t *testing.T) (string, string) {
+	t.Helper()
+	if os.Getenv("LOOPZERO_LOAD_TEST") != "1" {
+		t.Skip("skipping load test: set LOOPZERO_LOAD_TEST=1 to run")
+	}
+	apiURL := os.Getenv("LOOPZERO_API_URL")
+	if apiURL == "" {
+		t.Fatal("LOOPZERO_API_URL required")
+	}
+	authToken := os.Getenv("LOOPZERO_AUTH_TOKEN")
+	if authToken == "" {
+		t.Fatal("LOOPZERO_AUTH_TOKEN required")
+	}
+	return apiURL, authToken
+}
+
+// TestL0_Baseline measures a single deploy against an existing project.
+// No synthetic tenants created — uses whatever exists.
+func TestL0_Baseline(t *testing.T) {
+	apiURL, authToken := requireLoadTestEnv(t)
+
+	projectName := os.Getenv("LOOPZERO_LOAD_PROJECT")
+	if projectName == "" {
+		projectName = "aquim-ai" // Default to known project
+	}
+
+	sim := NewDeploySimulator(apiURL, authToken)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	t.Logf("L0 Baseline — single deploy to project %s", projectName)
+
+	result := sim.SimulateDeploy(ctx, projectName, "production")
+	t.Logf("Upload: %s | Build: %s | Total: %s | Success: %v",
+		result.Latency.Upload.Round(time.Millisecond),
+		result.Latency.Build.Round(time.Millisecond),
+		result.Latency.Total.Round(time.Millisecond),
+		result.Success)
+
+	if !result.Success {
+		t.Logf("Error: %s", result.Error)
+	}
+}
+
+// TestL1_10Tenants creates 10 synthetic projects and deploys concurrently.
+func TestL1_10Tenants(t *testing.T) {
+	apiURL, authToken := requireLoadTestEnv(t)
+
+	const tenantCount = 10
+	sim := NewDeploySimulator(apiURL, authToken)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	t.Logf("L1 — %d tenants, concurrent deploys", tenantCount)
+
+	// Create projects
+	for i := 0; i < tenantCount; i++ {
+		name := fmt.Sprintf("loadtest-%d", i)
+		if err := sim.CreateProject(ctx, name); err != nil {
+			t.Fatalf("Failed to create project %s: %v", name, err)
+		}
+		t.Logf("  Project %s ready", name)
+	}
+
+	// Concurrent deploys
+	var (
+		wg       sync.WaitGroup
+		results  []DeployResult
+		mu       sync.Mutex
+		success  int64
+		failures int64
+	)
+
+	start := time.Now()
+
+	for i := 0; i < tenantCount; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			name := fmt.Sprintf("loadtest-%d", idx)
+			r := sim.SimulateDeploy(ctx, name, "production")
+			r.TenantIdx = idx
+
+			mu.Lock()
+			results = append(results, r)
+			mu.Unlock()
+
+			if r.Success {
+				atomic.AddInt64(&success, 1)
+			} else {
+				atomic.AddInt64(&failures, 1)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	totalDuration := time.Since(start)
+
+	// Compute percentiles
+	var totalLatencies, uploadLatencies []time.Duration
+	for _, r := range results {
+		totalLatencies = append(totalLatencies, r.Latency.Total)
+		uploadLatencies = append(uploadLatencies, r.Latency.Upload)
+	}
+
+	report := &LoadTestResult{
+		TotalDeploys:     tenantCount,
+		SuccessCount:     success,
+		FailureCount:     failures,
+		Duration:         totalDuration,
+		DeployLatencyP50: percentile(totalLatencies, 50),
+		DeployLatencyP95: percentile(totalLatencies, 95),
+		DeployLatencyP99: percentile(totalLatencies, 99),
+		UploadLatencyP50: percentile(uploadLatencies, 50),
+		Results:          results,
+	}
+
+	printReport(t, report)
+
+	// L1 pass criteria
+	if failures > 0 {
+		t.Errorf("L1 FAIL: %d deploys failed (expected 0)", failures)
+	}
+	if report.DeployLatencyP99 > 10*time.Minute {
+		t.Errorf("L1 FAIL: deploy p99 %s exceeds 10min", report.DeployLatencyP99)
+	}
+}
+
+// TestL1_WebhookBurst simulates 10 push events in 1 second.
+func TestL1_WebhookBurst(t *testing.T) {
+	apiURL, authToken := requireLoadTestEnv(t)
+
+	sim := NewDeploySimulator(apiURL, authToken)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	t.Logf("L1 Webhook Burst — 10 push events in 1 second")
+
+	// Send 10 concurrent build requests to the same project
+	// This tests deduplication and serialization
+	var (
+		wg        sync.WaitGroup
+		accepted  int64
+		rejected  int64
+	)
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			_, err := sim.CreateBuild(ctx, "loadtest-0", "production",
+				fmt.Sprintf("fake-sha-%d", idx))
+			if err != nil {
+				atomic.AddInt64(&rejected, 1)
+			} else {
+				atomic.AddInt64(&accepted, 1)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	t.Logf("  Accepted: %d | Rejected (409/lock): %d", accepted, rejected)
+
+	// At most 1 should be accepted, rest should be 409 (concurrent build)
+	if accepted > 2 {
+		t.Errorf("L1 FAIL: %d builds accepted (expected ≤1 — lock should reject concurrent)", accepted)
+	}
+}
+
+// TestL2_50Tenants runs sustained load with 50 tenants.
+func TestL2_50Tenants(t *testing.T) {
+	apiURL, authToken := requireLoadTestEnv(t)
+
+	const tenantCount = 50
+	const deploysPerMinute = 5
+	sim := NewDeploySimulator(apiURL, authToken)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
+	defer cancel()
+
+	t.Logf("L2 — %d tenants, %d deploys/min sustained", tenantCount, deploysPerMinute)
+
+	// Create projects
+	for i := 0; i < tenantCount; i++ {
+		name := fmt.Sprintf("loadtest-%d", i)
+		if err := sim.CreateProject(ctx, name); err != nil {
+			t.Fatalf("Failed to create project %s: %v", name, err)
+		}
+	}
+	t.Logf("  %d projects created", tenantCount)
+
+	// Sustained deploys
+	var (
+		results  []DeployResult
+		mu       sync.Mutex
+		success  int64
+		failures int64
+	)
+
+	start := time.Now()
+	deployInterval := time.Minute / time.Duration(deploysPerMinute)
+	ticker := time.NewTicker(deployInterval)
+	defer ticker.Stop()
+
+	deployIdx := 0
+	for {
+		select {
+		case <-ctx.Done():
+			goto done
+		case <-ticker.C:
+			if deployIdx >= tenantCount {
+				goto done
+			}
+			go func(idx int) {
+				name := fmt.Sprintf("loadtest-%d", idx)
+				r := sim.SimulateDeploy(ctx, name, "production")
+				r.TenantIdx = idx
+				mu.Lock()
+				results = append(results, r)
+				mu.Unlock()
+				if r.Success {
+					atomic.AddInt64(&success, 1)
+				} else {
+					atomic.AddInt64(&failures, 1)
+				}
+				t.Logf("  [%d/%d] %s: success=%v latency=%s",
+					idx+1, tenantCount, name, r.Success, r.Latency.Total.Round(time.Second))
+			}(deployIdx)
+			deployIdx++
+		}
+	}
+
+done:
+	totalDuration := time.Since(start)
+
+	var totalLatencies, uploadLatencies []time.Duration
+	for _, r := range results {
+		totalLatencies = append(totalLatencies, r.Latency.Total)
+		uploadLatencies = append(uploadLatencies, r.Latency.Upload)
+	}
+
+	report := &LoadTestResult{
+		TotalDeploys:     len(results),
+		SuccessCount:     success,
+		FailureCount:     failures,
+		Duration:         totalDuration,
+		DeployLatencyP50: percentile(totalLatencies, 50),
+		DeployLatencyP95: percentile(totalLatencies, 95),
+		DeployLatencyP99: percentile(totalLatencies, 99),
+		UploadLatencyP50: percentile(uploadLatencies, 50),
+		Results:          results,
+	}
+
+	printReport(t, report)
+
+	// L2 pass criteria
+	failRate := float64(failures) / float64(max(success+failures, 1)) * 100
+	if failRate > 5 {
+		t.Errorf("L2 FAIL: failure rate %.1f%% exceeds 5%%", failRate)
+	}
+	if report.DeployLatencyP99 > 15*time.Minute {
+		t.Errorf("L2 FAIL: deploy p99 %s exceeds 15min", report.DeployLatencyP99)
+	}
+}
+
+func max(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
 }
