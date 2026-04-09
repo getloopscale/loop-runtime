@@ -439,9 +439,10 @@ func main() {
 			pgEventStore,
 			logger,
 			services.BuildReconcileLoopConfig{
-				Interval:    cfg.ReconcileInterval,
-				RegistryURL: cfg.RegistryURL,
-				BaseDomain:  cfg.BaseDomain,
+				Interval:           cfg.ReconcileInterval,
+				RegistryURL:        cfg.RegistryURL,
+				BaseDomain:         cfg.BaseDomain,
+				MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 			},
 		)
 

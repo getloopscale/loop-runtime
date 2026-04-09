@@ -111,7 +111,8 @@ type Config struct {
 	ReleaseReaperInterval time.Duration
 
 	// Build Reconcile Loop (C-01 fix)
-	ReconcileInterval time.Duration
+	ReconcileInterval  time.Duration
+	MaxBuildsPerTenant int
 
 	// Loki (build log aggregation)
 	LokiURL string
@@ -231,7 +232,8 @@ func Load() Config {
 		ReleaseReaperInterval: envDuration("RELEASE_REAPER_INTERVAL", 30*time.Second),
 
 		// Build Reconcile Loop (C-01 fix): polls Argo Workflow CRDs every 5s
-		ReconcileInterval: envDuration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
+		ReconcileInterval:  envDuration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
+		MaxBuildsPerTenant: envInt("MAX_BUILDS_PER_TENANT", 3),
 
 		// Loki (build log aggregation)
 		LokiURL: envOr("LOKI_URL", "http://loki.monitoring:3100"),

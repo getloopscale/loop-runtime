@@ -47,6 +47,10 @@ type BuildReconcileLoopConfig struct {
 	// Bounds pressure on the Kubernetes API and Argo Workflow queries.
 	// Default: 10.
 	MaxConcurrent int
+	// MaxBuildsPerTenant limits how many builds a single tenant can have
+	// processing simultaneously. Prevents one busy tenant from starving others.
+	// Default: 3. Override via MAX_BUILDS_PER_TENANT env var.
+	MaxBuildsPerTenant int
 }
 
 // BuildReconcileLoop continuously reconciles non-terminal builds against
@@ -138,6 +142,9 @@ func NewBuildReconcileLoop(
 	if cfg.MaxConcurrent <= 0 {
 		cfg.MaxConcurrent = 10
 	}
+	if cfg.MaxBuildsPerTenant <= 0 {
+		cfg.MaxBuildsPerTenant = 3
+	}
 	return &BuildReconcileLoop{
 		buildStore:  buildStore,
 		workflow:    workflow,
@@ -207,11 +214,31 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 		return
 	}
 
+	// Count active builds per tenant for backpressure.
+	tenantActive := make(map[string]int)
+	r.active.Range(func(_, value interface{}) bool {
+		if tid, ok := value.(string); ok {
+			tenantActive[tid]++
+		}
+		return true
+	})
+
 	for _, build := range builds {
 		// Skip builds already being processed (MOD-6: avoid reaper competition)
-		if _, loaded := r.active.LoadOrStore(build.ID, struct{}{}); loaded {
+		if _, loaded := r.active.LoadOrStore(build.ID, build.TenantID); loaded {
 			continue
 		}
+
+		// Per-tenant backpressure: skip if this tenant has too many active builds.
+		if tenantActive[build.TenantID] >= r.cfg.MaxBuildsPerTenant {
+			r.active.Delete(build.ID)
+			metrics.BuildTenantBackpressure.WithLabelValues(build.TenantID).Inc()
+			r.logger.Debug("reconcile loop: tenant at build limit, deferring",
+				"build_id", build.ID, "tenant", build.TenantID,
+				"active", tenantActive[build.TenantID], "limit", r.cfg.MaxBuildsPerTenant)
+			continue
+		}
+		tenantActive[build.TenantID]++
 
 		b := build // capture loop variable
 

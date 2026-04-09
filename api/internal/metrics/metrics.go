@@ -222,6 +222,33 @@ var (
 	}, []string{"tenant", "environment"})
 )
 
+// Cloudflare KV metrics — emitted by cfkv.Client on every Put/Delete.
+var (
+	CFKVOperationsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_cfkv_operations_total",
+		Help: "Total Cloudflare KV operations by type and result.",
+	}, []string{"op", "result"}) // op: "put"/"delete", result: "success"/"failure"
+
+	CFKVOperationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_cfkv_operation_duration_seconds",
+		Help:    "Duration of Cloudflare KV operations.",
+		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2, 5},
+	}, []string{"op"})
+
+	CFKVDriftDetected = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_cfkv_drift_detected",
+		Help: "Set to 1 when KV state diverges from database state. 0 when reconciled.",
+	})
+)
+
+// Build backpressure metrics — emitted by BuildReconcileLoop per-tenant limiting.
+var (
+	BuildTenantBackpressure = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_build_tenant_backpressure_total",
+		Help: "Builds deferred because tenant exceeded concurrent build limit.",
+	}, []string{"tenant"})
+)
+
 // LoopZeroApplication CR lifecycle metrics — emitted by ensureApplicationCRs.
 var (
 	ApplicationCREnsureTotal = promauto.NewCounterVec(prometheus.CounterOpts{
