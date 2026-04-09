@@ -396,6 +396,7 @@ Use these in Claude Code to trigger structured workflows:
 | `/schema-check <command>` | Validate CLI `--json` output against spec §0.3 schema |
 | `/state-machine <name>` | Inspect implementation vs spec §5 |
 | `/dogfood <scope>` | Dogfooding audit: test product as real user, generate actionable report |
+| `/sre-guardian <scope>` | SRE Guardian: infrastructure observability watchdog — metrics, alerts, pods, drift, DB health |
 | `/pipeline-review <scope>` | Helena Duarte reviews pipelines: determinism, build/release separation, scale, observability, recovery |
 | `/meeting <topic>` | Conduct FAANG-level technical meeting with specialist agents for critical decisions |
 | `/start-loop <prompt>` | Start an iterative self-referential loop (Ralph Wiggum technique) |
