@@ -4,7 +4,7 @@ config:
   loopzero-infra:region: sfo3
   loopzero-infra:domain: dev.loopzero.example
   loopzero-infra:dnsZone: loopzero.example
-  loopzero-infra:infraVersion: v1
+  loopzero-infra:infraVersion: v2
   # Management cluster
   loopzero-infra:mgmtK8sVersion: "1.32.13-do.2"
   loopzero-infra:mgmtNodeClass: small
