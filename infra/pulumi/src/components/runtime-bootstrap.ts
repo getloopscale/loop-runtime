@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 import { InfraOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
 import {
   PLATFORM_NAMESPACE,
+  HELM_VERSIONS,
   ClusterBootstrapOutputs,
   createPlatformNamespace,
   installCertManager,
@@ -85,6 +85,84 @@ export function bootstrapRuntimeCluster(
     },
     { provider, dependsOn: [esoWriterRole] },
   );
+
+  // Promtail — ships user application logs from runtime cluster to Loki in build cluster.
+  // Loki runs in the build cluster with a NodePort service (30100).
+  // This enables `loopzero logs` to show application logs alongside build logs.
+  // Only installed when lokiPushUrl is configured (cross-cluster push requires explicit URL).
+  if (config.lokiPushUrl) {
+    const monitoringNs = new k8s.core.v1.Namespace(
+      "runtime-monitoring",
+      { metadata: { name: "monitoring" } },
+      { provider },
+    );
+
+    new k8s.helm.v3.Release(
+      "runtime-promtail",
+      {
+        name: "promtail",
+        chart: "promtail",
+        version: HELM_VERSIONS.promtail,
+        forceUpdate: true,
+        skipAwait: true,
+        repositoryOpts: {
+          repo: "https://grafana.github.io/helm-charts",
+        },
+        namespace: "monitoring",
+        createNamespace: false,
+        values: {
+          config: {
+            clients: [
+              {
+                // Cross-cluster: Promtail on runtime sends to Loki on build cluster
+                // via NodePort service (build node private IP + port 30100).
+                // Set via: pulumi config set lokiPushUrl http://<build-node-ip>:30100
+                url: `${config.lokiPushUrl}/loki/api/v1/push`,
+                batchwait: "5s",
+                batchsize: 1048576,
+                backoff_config: {
+                  max_retries: 20,
+                  min_period: "500ms",
+                  max_period: "5m",
+                },
+              },
+            ],
+            snippets: {
+              scrapeConfigs: `
+- job_name: tenant-app-pods
+  kubernetes_sd_configs:
+    - role: pod
+  relabel_configs:
+    # Only collect logs from tenant namespaces (loopzero-*)
+    - source_labels: [__meta_kubernetes_namespace]
+      action: keep
+      regex: loopzero-.*
+    # Set __path__ for log file tailing
+    - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+      target_label: __path__
+      separator: /
+      replacement: /var/log/pods/*$1/$2/*.log
+    # Standard K8s metadata labels
+    - source_labels: [__meta_kubernetes_namespace]
+      target_label: namespace
+    - source_labels: [__meta_kubernetes_pod_name]
+      target_label: pod
+    - source_labels: [__meta_kubernetes_pod_container_name]
+      target_label: container
+    # App name from loopzero label
+    - source_labels: [__meta_kubernetes_pod_label_app]
+      target_label: app`,
+            },
+          },
+          resources: {
+            requests: { cpu: "50m", memory: "64Mi" },
+            limits: { cpu: "200m", memory: "128Mi" },
+          },
+        },
+      },
+      { provider, dependsOn: [monitoringNs] },
+    );
+  }
 
   return {
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),

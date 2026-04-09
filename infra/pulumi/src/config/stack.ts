@@ -104,6 +104,12 @@ export interface PlatformStackConfig {
   readonly googleOAuthClientId?: pulumi.Output<string>;
   readonly googleOAuthClientSecret?: pulumi.Output<string>;
 
+  // Cross-cluster observability — Loki push URL for Promtail on runtime cluster.
+  // Points to Loki NodePort on build cluster (e.g. http://10.20.0.6:30100).
+  // Required when runtime cluster ships app logs to centralized Loki.
+  // Set via: pulumi config set lokiPushUrl http://<build-node-ip>:30100
+  readonly lokiPushUrl?: string;
+
 }
 
 /**
@@ -210,5 +216,8 @@ export function loadStackConfig(): PlatformStackConfig {
     googleOAuthClientSecret: process.env.LOOPZERO_GOOGLE_CLIENT_SECRET
       ? pulumi.output(process.env.LOOPZERO_GOOGLE_CLIENT_SECRET)
       : config.getSecret("googleOAuthClientSecret") ?? undefined,
+
+    // Cross-cluster observability — Loki push URL for runtime Promtail
+    lokiPushUrl: config.get("lokiPushUrl") ?? undefined,
   };
 }
