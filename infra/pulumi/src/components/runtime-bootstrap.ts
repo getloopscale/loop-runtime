@@ -13,6 +13,7 @@ import {
   installTraefik,
   lookupLoadBalancerEndpoint,
   createClusterIssuer,
+  installMetricsServer,
 } from "./bootstrap-shared";
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,9 @@ export function bootstrapRuntimeCluster(
   });
 
   const ns = createPlatformNamespace("runtime", config, provider);
+
+  // MEET-2026-04-09-045: metrics-server for kubectl top + HPA
+  installMetricsServer("runtime", provider);
 
   // cert-manager — needed for Let's Encrypt TLS on tenant app IngressRoutes
   const certManager = installCertManager("runtime", provider, ns);

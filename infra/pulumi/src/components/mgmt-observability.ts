@@ -200,6 +200,10 @@ export function installGrafana(
           },
         },
         persistence: { enabled: true, size: "5Gi" },
+        // MEET-2026-04-09-045: RWO PVC requires Recreate strategy.
+        // RollingUpdate (default) causes multi-attach deadlock — new pod can't
+        // mount the volume while old pod still holds it.
+        strategy: { type: "Recreate" },
         adminUser: "admin",
         "grafana.ini": {
           server: {

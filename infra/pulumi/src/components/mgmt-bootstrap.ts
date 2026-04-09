@@ -3,6 +3,7 @@
 
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
+import * as random from "@pulumi/random";
 import * as fs from "fs";
 import * as path from "path";
 import { InfraOutputs, ClusterOutputs } from "./infra";
@@ -19,6 +20,7 @@ import {
   lookupLoadBalancerEndpoint,
   createClusterIssuer,
   parseKubeconfig,
+  installMetricsServer,
 } from "./bootstrap-shared";
 
 // ---------------------------------------------------------------------------
@@ -58,8 +60,20 @@ export function bootstrapMgmtCluster(
   // cert-manager first — ArgoCD and Traefik may need TLS CRDs
   const certManager = installCertManager("mgmt", provider, ns);
 
+  // MEET-2026-04-09-045: metrics-server for kubectl top + HPA
+  installMetricsServer("mgmt", provider);
+
+  // ArgoCD callback token — single source of truth for ArgoCD→API webhook auth.
+  // Generated once by Pulumi, persisted in state, referenced by both ArgoCD
+  // notifications ConfigMap and API Secret. MEET-2026-04-09-045: Security
+  // vetoed hardcoded constants; RandomPassword ensures no token in source code.
+  const callbackToken = new random.RandomPassword("argocd-callback-token", {
+    length: 32,
+    special: false,
+  });
+
   // ArgoCD — GitOps engine, manages runtime cluster
-  const argocd = installArgoCD(provider, ns, certManager);
+  const argocd = installArgoCD(provider, ns, certManager, callbackToken.result);
 
   // Gitea — internal git server for desired state (ArgoCD reads from here)
   const gitea = installGitea(provider, ns, infra, config);
@@ -117,7 +131,7 @@ export function bootstrapMgmtCluster(
   createArgoCDRepoCredentials(provider, ns, argocd, gitea);
 
   // LoopZero API — platform HTTP server (connects to DB, Gitea, ArgoCD, Argo Workflows)
-  const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config, lokiEndpoint);
+  const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config, lokiEndpoint, callbackToken);
 
   // Cloud Auth Service — OAuth2 (Hydra), identity (Kratos), billing (Stripe), dashboard
   installCloudService(provider, ns, infra, config);
@@ -187,6 +201,7 @@ function installArgoCD(
   provider: k8s.Provider,
   ns: k8s.core.v1.Namespace,
   certManager: k8s.helm.v3.Release,
+  callbackToken: pulumi.Output<string>,
 ): k8s.helm.v3.Release {
   return new k8s.helm.v3.Release(
     "argocd",
@@ -277,14 +292,14 @@ return hs`,
           // IMPORTANT: the argo-cd Helm chart v7.x uses "notifiers" (not "services")
           // for the notifications ConfigMap. "services" is silently ignored.
           notifiers: {
-            // MEET-2026-04-04-029 P0: Authorization header must match LOOPZERO_ARGO_CALLBACK_SECRET.
-            // TODO (Sprint 6): inject from Kubernetes Secret instead of hardcode.
-            "service.webhook.loopzero-api": `url: http://loopzero-api.${PLATFORM_NAMESPACE}.svc.cluster.local:8080/internal/argocd-callback
+            // MEET-2026-04-09-045: Token from RandomPassword — single source of truth.
+            // Same token is set in API Secret (LOOPZERO_ARGO_CALLBACK_SECRET).
+            "service.webhook.loopzero-api": pulumi.interpolate`url: http://loopzero-api.${PLATFORM_NAMESPACE}.svc.cluster.local:8080/internal/argocd-callback
 headers:
 - name: Content-Type
   value: application/json
 - name: Authorization
-  value: "Bearer cb-loopzero-dev-2026"`,
+  value: "Bearer ${callbackToken}"`,
           },
           templates: {
             "template.sync-completed": `webhook:
@@ -1004,6 +1019,25 @@ echo "=== Step 5: Generate ArgoCD apiKey token for loopzero-api account ==="
 # MEET-2026-03-28-013: generate a proper apiKey JWT, NOT store the admin password.
 # The loopzero-api account is configured in ArgoCD Helm values with capability: apiKey.
 # This token has RBAC limited to sync+get on applications (least privilege).
+
+# MEET-2026-04-09-045: Wait for ArgoCD to create admin secret.
+# The Helm Release is "deployed" before all subresources are ready.
+# Bounded wait: 60 attempts × 5s = 5min max. Exit non-zero on timeout.
+echo "Waiting for ArgoCD admin secret..."
+ARGOCD_SECRET_READY=false
+for wait_attempt in $(seq 1 60); do
+  if kubectl get secret argocd-initial-admin-secret -n "$NS" >/dev/null 2>&1; then
+    ARGOCD_SECRET_READY=true
+    echo "ArgoCD admin secret found (attempt $wait_attempt)"
+    break
+  fi
+  sleep 5
+done
+if [ "$ARGOCD_SECRET_READY" = "false" ]; then
+  echo "ERROR: ArgoCD admin secret not found after 5 minutes — ArgoCD may not be healthy"
+  exit 1
+fi
+
 ARGOCD_PASS=""
 ARGOCD_TOKEN=""
 if kubectl get secret argocd-initial-admin-secret -n "$NS" -o jsonpath='{.data.password}' 2>/dev/null | base64 -d > /tmp/argocd_pass 2>/dev/null; then
@@ -1334,6 +1368,7 @@ function installLoopZeroAPI(
   infra: InfraOutputs,
   config: PlatformStackConfig,
   lokiEndpoint: pulumi.Output<string>,
+  callbackToken: random.RandomPassword,
 ): k8s.apps.v1.Deployment {
   // Database connection string for the `loopzero` database (created in Phase 1).
   // MEET-2026-03-31-024: When loopzeroApiDbPassword is set, the API connects as loopzero_api role
@@ -1353,9 +1388,9 @@ function installLoopZeroAPI(
       metadata: { name: "loopzero-api-secrets", namespace: PLATFORM_NAMESPACE },
       stringData: {
         DATABASE_URL: databaseUrl,
-        // MEET-042 P0: Generated per-deployment instead of hardcoded.
-        // Used by ArgoCD notification webhook to authenticate callbacks.
-        LOOPZERO_ARGO_CALLBACK_SECRET: pulumi.interpolate`cb-${config.environment}-${Date.now().toString(36)}`,
+        // MEET-2026-04-09-045: Same RandomPassword used in ArgoCD notifications ConfigMap.
+        // Single source of truth — no drift between ArgoCD and API.
+        LOOPZERO_ARGO_CALLBACK_SECRET: callbackToken.result,
         // Spaces credentials (S3-compatible) — used by S3 uploader for source bundles
         MINIO_ACCESS_KEY: config.spacesAccessKeyId,
         MINIO_SECRET_KEY: config.spacesSecretAccessKey,

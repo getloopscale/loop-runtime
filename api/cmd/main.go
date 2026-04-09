@@ -546,21 +546,17 @@ func main() {
 		}
 		defer leaderConn.Release() // Released on process shutdown (after bgWg.Wait)
 
-		// MEET-2026-04-04-029 P1: Stale lock detection.
-		// If a previous pod died without releasing its connection (pgx pool reuse),
-		// the advisory lock may still be held on this connection. Attempt to unlock
-		// any stale lock first, then acquire fresh.
-		var unlocked bool
-		if err := leaderConn.QueryRow(context.Background(),
-			"SELECT pg_advisory_unlock($1)", leaderLockID).Scan(&unlocked); err != nil {
-			logger.Warn("stale lock cleanup failed (non-fatal)", "error", err)
-		} else if unlocked {
-			logger.Info("cleared stale leader lock from previous session on this connection")
-		}
+		// MEET-2026-04-09-045: Removed pg_advisory_unlock stale-lock cleanup.
+		// DistSys review: if pod B starts on a PG connection previously used by pod A
+		// (connection pool reuse across restarts), the unlock releases pod A's ACTIVE
+		// lock — creating a window where NEITHER pod holds leadership.
+		// PG cleans dead sessions automatically via TCP keepalive (15s × 3 = 45s).
 
-		// Leader election with retry — waits up to 30s for the lock to become available.
-		// Previous pod's connection may take time to be detected as dead by PG.
-		for attempt := 0; attempt < 6; attempt++ {
+		// Leader election with retry — waits up to 60s for the lock to become available.
+		// MEET-2026-04-09-045: Increased from 6→12 attempts (60s total) to cover
+		// worst-case TCP keepalive detection window on DO Managed PG (45-90s).
+		logger.Info("starting leader election", "lockID", leaderLockID, "maxAttempts", 12)
+		for attempt := 0; attempt < 12; attempt++ {
 			if err := leaderConn.QueryRow(context.Background(),
 				"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&isLeader); err != nil {
 				logger.Error("failed to acquire leader lock", "error", err)
@@ -569,7 +565,7 @@ func main() {
 			if isLeader {
 				break
 			}
-			logger.Info("leader lock held by another instance, retrying...", "attempt", attempt+1, "max", 6)
+			logger.Info("leader lock held by another instance, retrying...", "attempt", attempt+1, "max", 12)
 			time.Sleep(5 * time.Second)
 		}
 
