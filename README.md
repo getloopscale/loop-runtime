@@ -14,27 +14,29 @@
 
 ---
 
-Three commands. Your monorepo is live.
+Three commands to start. Then just `git push`.
 
 ```bash
 loopzero login
-loopzero init
-loopzero deploy
+loopzero init        # detect monorepo, generate loopzero.yaml
+loopzero connect     # link GitHub repo (one-time)
+git push         # every push deploys automatically
 ```
 
 ```
+$ git push origin main
+
+# LoopZero deploys automatically:
 ✓ Building api...    [24s]
 ✓ Building web...    [18s]
-✓ Building worker... [12s]
 ✓ Deploying...       [15s]
 
 Live:
   api    → https://acme-my-saas-api-production.loopzero.example
   web    → https://acme-my-saas-web-production.loopzero.example (CDN)
-  worker → (background)
 ```
 
-No Kubernetes. No Helm. No Dockerfile required.
+No Kubernetes. No Helm. No Dockerfile required. Just push.
 
 ---
 
@@ -42,7 +44,7 @@ No Kubernetes. No Helm. No Dockerfile required.
 
 > **Phase: Pre-release.** Infrastructure validated on production (DigitalOcean). Not yet available to external users.
 >
-> Last validation: 2026-04-08 — Custom Domains v2 E2E validated with aquim.ai (Python API + React frontend monorepo, CF Zone Management, WAF/DDoS active).
+> Last validation: 2026-04-08 — Auto-deploy on push validated E2E. `git push` to GitHub → build + deploy in ~4min → app live at aquim.ai. Custom Domains v2 with Cloudflare WAF/DDoS.
 
 ### What Works (Validated on DigitalOcean)
 
@@ -62,6 +64,7 @@ No Kubernetes. No Helm. No Dockerfile required.
 | `loopzero team list/add/remove/role` | **Working** | RBAC: owner/admin/member roles |
 | `loopzero build list/inspect` | **Working** | Build history with env filter |
 | `loopzero validate` | **Working** | Local loopzero.yaml validation |
+| Auto-deploy on `git push` | **Working** | GitHub App "LoopZero Platform" — push to main → build + deploy automatically (~4min). Model Vercel. |
 | `loopzero domain add/status/dns/remove` | **Working** | CF Zone Management (model Vercel) — apex + subdomain, WAF/DDoS, auto TLS. E2E validated with aquim.ai |
 | `loopzero audit` | **Working** | Audit log with action/timestamp filters |
 | Plan enforcement (Starter/Pro/Team) | **Working** | Limits on projects/builds/environments/members. 402 on quota exceeded |
@@ -91,8 +94,8 @@ No Kubernetes. No Helm. No Dockerfile required.
 
 | Component | Tests | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 817 | All passing |
-| API (Go) | 32 packages | All passing |
+| CLI (Jest) | 857 | All passing |
+| API (Go) | 33 packages | All passing |
 | Shared libraries (Go) | 8 packages | All passing |
 | Operators (Ginkgo + envtest) | — | Passing (requires envtest binary) |
 | Infra (Pulumi + vitest) | — | Passing |
@@ -108,8 +111,9 @@ LoopZero gives you Vercel-quality DX for everything Vercel can't deploy.
 
 | | Vercel | LoopZero |
 |---|:---:|:---:|
+| Auto-deploy on `git push` | Yes | Yes (~4min, GitHub App) |
 | Static frontends (React, Vite, Next.js) | Yes | Yes (CDN) |
-| API servers (Express, NestJS, Go, Python) | Serverless only | Any framework |
+| API servers (Express, NestJS, Go, Python) | Serverless only | Any framework (30 supported) |
 | Background workers | — | Yes |
 | Multiple services per repo | — | Yes |
 | Rollback in seconds | Yes | Yes (~3s) |
@@ -262,11 +266,17 @@ Every command supports `--json` for CI/CD integration. JSON output is a **stabil
 
 ## How It Works
 
-From the developer's perspective: `loopzero deploy` → URL. Everything below is invisible.
+From the developer's perspective: `git push` → URL. Everything below is invisible.
 
 ```
                     ┌──────────────────────────────────────────┐
-  loopzero deploy ───►  │  LoopZero API                                │
+  git push ────────►│  GitHub (webhook)                        │
+                    │  • Push event → LoopZero API                 │
+                    └────────────┬─────────────────────────────┘
+                                 │
+                    ┌────────────▼─────────────────────────────┐
+  (or loopzero deploy)─►│  LoopZero API                                │
+                    │  • Download source from GitHub            │
                     │  • Lock environment (advisory lock)       │
                     │  • Submit build to Argo Workflows         │
                     └────────────┬─────────────────────────────┘
@@ -322,6 +332,7 @@ Four-plane separation with dedicated Kubernetes clusters:
 | GitOps | ArgoCD (manual sync) + Gitea |
 | Database | PostgreSQL 16 (managed, advisory locks) |
 | Secrets | External Secrets Operator |
+| Git integration | GitHub App (auto-deploy on push, webhook events, commit status) |
 | Edge | Cloudflare Tunnel + Worker + KV + Zone Management |
 | Custom Domains | Cloudflare for Platforms (per-domain zones, WAF/DDoS, Universal SSL) |
 | Auth | Ory Kratos (identity) + Ory Hydra (OAuth2/OIDC) + Device Code Flow |

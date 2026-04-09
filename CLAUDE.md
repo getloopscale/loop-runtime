@@ -14,7 +14,7 @@ The authoritative specification is **`docs/technical.md`**. Every state machine,
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
-**Current status: Pre-release, Starter + Pro tiers launchable.** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-6 complete. Sprint 10 (static frontend) complete. Sprint 11 (auth + billing) complete. **Phase 1 (enforcement + audit) complete (2026-04-08):** plan limits enforced on projects/builds/environments/members, audit log writing to DB, GET /api/v1/audit endpoint, `loopzero audit` CLI command. **Custom Domains v2 complete (2026-04-08):** CF Zone Management (model Vercel) — `loopzero domain add` creates CF zone per domain, user changes nameservers, full WAF/DDoS via CF edge, zero cert-manager dependency for custom domains. E2E validated with aquim.ai (Python API + React frontend monorepo). **Auth hardened (MEET-039):** UUID tenant IDs, engine RSA-only, audience validation, secret rotation with kid+dual-key, no "default" tenant fallback. **Two-host gateway:** cloud.{domain} for browser (dashboard+Kratos+Hydra), api.{domain} for CLI (engine). **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom). 817 CLI tests + 32 Go packages passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN). **Not yet built:** preview environments (Sprint 5, Phase 2), `loopzero promote` (Sprint 4), SSO/SAML (Phase 3), image signing (Sprint 6). **Known issues:** AppSecret controller not implemented (secrets work via ESO directly).
+**Current status: Pre-release, Starter + Pro tiers launchable.** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-6 complete. Sprint 10 (static frontend) complete. Sprint 11 (auth + billing) complete. **Phase 1 (enforcement + audit) complete (2026-04-08):** plan limits enforced on projects/builds/environments/members, audit log writing to DB, GET /api/v1/audit endpoint, `loopzero audit` CLI command. **Custom Domains v2 complete (2026-04-08):** CF Zone Management (model Vercel) — `loopzero domain add` creates CF zone per domain, user changes nameservers, full WAF/DDoS via CF edge, zero cert-manager dependency for custom domains. E2E validated with aquim.ai. **GitHub App auto-deploy complete (2026-04-08):** `git push` → automatic deploy (model Vercel). GitHub App "LoopZero Platform" (ID 3319955), webhook handler with HMAC-SHA256, source download via installation token, tarball→git bundle conversion, S3 upload, build submission. E2E validated: push to getloopscale/loopzero-repotest → build SUCCEEDED → app live at aquim.ai in ~4min. **Monorepo validator (2026-04-08):** frontend auto-infer static, framework validation (30 frameworks), max 2 pods, Dockerfile detection, path traversal protection. Runs before upload (instant feedback). 857 CLI tests. **Auth hardened (MEET-039):** UUID tenant IDs, engine RSA-only, audience validation, secret rotation with kid+dual-key, no "default" tenant fallback. **Two-host gateway:** cloud.{domain} for browser (dashboard+Kratos+Hydra), api.{domain} for CLI (engine). **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom). 857 CLI tests + 33 Go packages passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN). **Not yet built:** preview environments (Sprint 5, Phase 2), `loopzero promote` (Sprint 4), SSO/SAML (Phase 3), image signing (Sprint 6), CLI `loopzero connect` command. **Known issues:** AppSecret controller not implemented (secrets work via ESO directly). GitHub commit status returns 403 (App needs `statuses:write` permission update).
 
 ---
 
@@ -206,6 +206,9 @@ loopzero/
 │   │   ├── argocd/                    ← ArgoCD sync client (trigger, wait)
 │   │   ├── cfkv/                      ← Cloudflare Workers KV client (static frontend routing)
 │   │   ├── cfzone/                    ← Cloudflare Zone Management client (custom domains v2)
+│   │   ├── github/webhook/           ← GitHub App webhook handler (HMAC, push/PR/install events)
+│   │   ├── github/appclient.go       ← GitHub App JWT auth + installation tokens + API calls
+│   │   ├── github/autodeploy.go      ← Auto-deploy on push (download→bundle→S3→build)
 │   │   ├── gitops/                    ← Gitea gitops pusher (manifest commit with trailers)
 │   │   ├── source/                    ← Gitea source store (bundle push)
 │   │   ├── s3/                        ← MinIO/Spaces uploader (source bundles)
@@ -547,8 +550,10 @@ Check the current sprint before starting any implementation. Only implement what
 | `loopzero status` | ✅ | Handler wired in main.go + server.go, functional |
 | Workload security | ✅ | SecurityContext (non-root, drop ALL, readOnlyRootFilesystem), PSA restricted, NetworkPolicy mandatory |
 | Custom Domains v2 | ✅ | CF Zone Management (model Vercel). `loopzero domain add` creates CF zone, scans DNS, user changes NS. WAF/DDoS via CF edge. E2E validated with aquim.ai. Plan: `docs/plans/custom-domains-v2-cf-zones.md` |
+| GitHub App auto-deploy | ✅ | `git push` → automatic deploy. GitHub App "LoopZero Platform", webhook HMAC-SHA256, source download via installation token, tarball→bundle→S3→build. E2E: push → SUCCEEDED → live in ~4min. Plan: `docs/plans/github-app-integration.md` |
+| Monorepo validator | ✅ | Pre-upload validation: 30 frameworks, frontend=static auto-infer, max 2 pods, Dockerfile detection, path traversal (SEC-10). 857 CLI tests. Plan: `docs/plans/monorepo-validator.md` |
 | Image signing | ❌ | cosign + syft not implemented (Sprint 6) |
-| Preview environments | ❌ | CRD defined, controller not implemented (Sprint 5) |
+| Preview environments | ❌ | CRD defined, controller not implemented (Sprint 5). GitHub App receives PR events (foundation ready). |
 
 ---
 
@@ -624,6 +629,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | CF Worker | loopzero-static-delivery | Routes static frontend requests to DO Spaces via KV lookup |
 | CF KV | loopzero-routing (28992ed1...) | Routing table: subdomain → { buildId, s3Prefix } |
 | CF Zone Management | Cloudflare for Platforms | Custom domains: per-domain zone creation, DNS scan+import, WAF/DDoS, TLS (model Vercel) |
+| GitHub App | LoopZero Platform (ID 3319955) | Auto-deploy on push, webhook events, installation tokens, source download |
 | DO Spaces | loopzero-static-assets + CDN | Static frontend assets (public-read, immutable per build-id) |
 | State backend | DO Spaces (S3-compatible) | s3://loopzero-infra-pulumi-state |
 
@@ -639,6 +645,8 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | "Implemented but not documented" | Code is implemented and tested but roadmap/docs still say "TODO" or "not started". Inverse of "implemented but not wired". | Before claiming something is missing, verify in the code — roadmaps can be stale. The code is the source of truth for what exists. |
 | "Custom domains = CF Zone per domain" | Custom domains use Cloudflare Zone Management (v2). Each domain gets its own CF zone. User changes nameservers. CF handles TLS+WAF. No cert-manager Certificate for CF-managed domains. Apex domains work via CF CNAME flattening. | `cfzone` package handles CF API. DNS scan imports existing records (email preservation). State: `pending_ns → ns_active → provisioning → active`. Plan: `docs/plans/custom-domains-v2-cf-zones.md` |
 | "CF scan imports conflicting apex records" | When CF scans DNS, it imports the existing A record for the apex domain. This conflicts with the CNAME LoopZero needs to add. | The v2 create flow deletes conflicting A/AAAA/CNAME at apex BEFORE creating the routing CNAME. |
+| "GitHub tarball ≠ git bundle" | GitHub API returns .tar.gz source archives. The loopzero-clone CWT expects git bundles. Uploading a tarball directly to S3 causes `does not look like a v2 or v3 bundle file`. | autodeploy.go converts tarball to git bundle: extract → git init → git add → git commit → git bundle create → upload .bundle to S3 |
+| "Auto-deploy source = commit SHA" | When auto-deploy downloads source from GitHub, the S3 key is `{tenant}/source/{commitSHA}.bundle`. This is the same key the CLI uses. The build pipeline (loopzero-clone CWT) downloads by this key. | CommitSHA from webhook push event must match exactly. The build uses `inputs.parameters.build-id` which maps to the commit SHA. |
 
 ---
 
