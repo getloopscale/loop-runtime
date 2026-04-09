@@ -120,7 +120,7 @@ export function installGrafana(
       name: "grafana",
       chart: "grafana",
       timeout: 600, // 10 min — Grafana can be slow on first deploy (PVC provisioning)
-      forceUpdate: true, // MEET-045: recover from failed Helm releases (3 consecutive failures)
+      cleanupOnFail: true, // Remove failed release resources to prevent accumulation
       version: HELM_VERSIONS.grafana,
       repositoryOpts: {
         repo: "https://grafana.github.io/helm-charts",
@@ -200,7 +200,7 @@ export function installGrafana(
             "k8s-pods": { gnetId: 6417, revision: 1, datasource: "Prometheus" },
           },
         },
-        persistence: { enabled: true, size: "5Gi" },
+        persistence: { enabled: true, size: "5Gi", storageClassName: "do-block-storage" },
         // MEET-2026-04-09-045: RWO PVC requires Recreate strategy.
         // RollingUpdate (default) causes multi-attach deadlock — new pod can't
         // mount the volume while old pod still holds it.
