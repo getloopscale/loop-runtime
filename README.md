@@ -44,7 +44,7 @@ No Kubernetes. No Helm. No Dockerfile required. Just push.
 
 > **Phase: Pre-release.** Infrastructure validated on production (DigitalOcean). Not yet available to external users.
 >
-> Last validation: 2026-04-08 — Auto-deploy on push validated E2E. `git push` to GitHub → build + deploy in ~4min → app live at aquim.ai. Custom Domains v2 with Cloudflare WAF/DDoS.
+> Last validation: 2026-04-09 — Production failure mode analysis (8 scenarios). Auto-deploy on push with commit status (pending→success). 30 language frameworks. Manifest validation gate. Build GC. TCP keepalive for PG failover. 871 CLI tests, CI green.
 
 ### What Works (Validated on DigitalOcean)
 
@@ -94,7 +94,7 @@ No Kubernetes. No Helm. No Dockerfile required. Just push.
 
 | Component | Tests | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 857 | All passing |
+| CLI (Jest) | 871 | All passing |
 | API (Go) | 33 packages | All passing |
 | Shared libraries (Go) | 8 packages | All passing |
 | Operators (Ginkgo + envtest) | — | Passing (requires envtest binary) |

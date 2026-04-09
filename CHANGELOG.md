@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-04-09
+
+### Added
+- **GitHub App auto-deploy** — `git push` triggers automatic deploy (model Vercel)
+  - GitHub App "LoopZero Platform" (ID 3319955) with HMAC-SHA256 webhook validation
+  - Source download via GitHub API installation tokens
+  - Tarball→git bundle conversion for build pipeline compatibility
+  - S3 upload + build submission from webhook handler
+  - Commit status lifecycle: pending on push, success/failure on build complete
+  - `loopzero connect` / `loopzero disconnect` CLI commands (14 tests)
+  - Repository linking API: POST/DELETE/GET `/api/v1/projects/{name}/connect`
+  - DB: `github_installations` + `project_repositories` tables (migration 027)
+- **Custom Domains v2** — Cloudflare Zone Management (model Vercel)
+  - `loopzero domain add` creates CF zone per domain, scans DNS, imports records
+  - User only changes nameservers — CF handles TLS + WAF/DDoS
+  - Apex domains via CF CNAME flattening (no A record workaround needed)
+  - `loopzero domain dns` command for DNS record management
+  - DB: `cf_zone_id`, `cf_zone_status`, `cf_nameservers` columns (migration 026)
+  - State machine: `pending_ns` → `ns_active` → `provisioning` → `active`
+  - E2E validated with aquim.ai (Python API + React frontend monorepo)
+- **Monorepo Validator** — instant pre-upload validation
+  - 30 framework recognition (Node, Go, Python, Ruby, Java, PHP, Rust)
+  - Frontend auto-infers `render: static` (no explicit declaration needed)
+  - Max 2 pods per project (frontends don't count)
+  - Dockerfile detection for custom frameworks
+  - Path traversal protection (SEC-10)
+  - Validation runs in `loopzero deploy` before upload (<1s feedback)
+  - 40 new tests covering all scenarios + bypass edge cases
+- **Build/Release Garbage Collection** — prevents unbounded DB growth
+  - Retain last 10 builds per project, delete older than 30 days
+  - Hourly cleanup of builds table + events table
+- **Manifest Validation Gate** — defense-in-depth for ArgoCD
+  - Rejects Certificate/ClusterIssuer/Issuer CRs in gitops push path
+  - Prevents ArgoCD sync blockage from stuck cert-manager resources
+  - 4 unit tests
+
+### Changed
+- **Language support expanded** — 30 frameworks (was 18)
+  - Added: `react`, `vue`, `svelte`, `astro`, `angular`, `fastify` (Node)
+  - Added: `sinatra`, `rails`, `ruby` (Ruby)
+  - Added: `spring`, `spring-boot`, `java` (Java)
+  - Added: `laravel`, `slim`, `php` (PHP)
+  - Added: `axum`, `actix`, `rocket`, `rust` (Rust)
+  - loopzero-packs generates Dockerfiles for all new languages
+  - Language strategies in argo/languages.go for build pipeline
+- **Init container migration** — uses API image (not separate migrate image)
+  - Migrations always in sync with running code (no ConfigMap desync)
+  - `migrate` binary included in API Dockerfile (multi-stage)
+- **Leader election** — retry loop (6 attempts, 30s) instead of single try
+- **ClusterIssuer** — dual solver: DNS-01 for platform zone, HTTP-01 for custom domains
+- **Dockerfile** — `go build ./cmd/` instead of `./cmd/main.go` (includes adapter files)
+
+### Fixed
+- **PG failover detection** — TCP keepalive on pgx pool (KeepAlive=15s)
+  - Detects dead connections in ~90s (was 2h Linux default)
+  - Critical for leader election and advisory lock release
+- **Leader heartbeat timeout** — 10s context instead of `context.Background()`
+  - Prevents indefinite hang on zombie PG connection
+- **Non-leader re-election** — periodic retry (60s) for advisory lock
+  - Pods no longer stay non-leader forever after PG recovery
+- **Commit status SHA** — uses `build.CommitSHA` (source) not `release.GitCommit` (gitops)
+  - Was returning 422 "No commit found" because gitops SHA doesn't exist on GitHub
+- **ArgoCD revision mismatch** — retrigger sync instead of silent skip
+  - Convergence loop now forces re-sync when revision doesn't match
+- **Framework mapping gap** — CLI recognized 17 frameworks, server only 11
+  - All CLI-recognized frameworks now mapped server-side
+- **CI pipeline** — fixed 33 Go lint issues, 2 CLI lint errors, go mod tidy
+- **loopzero-stacks templates** — all 19 templates fixed (removed `commands`, `render: server`, worker ports)
+
+### Security
+- **Manifest validation gate** — Certificate CRs blocked from gitops tree
+- **Path traversal protection** — SEC-10 in CLI validator
+- **GitHub webhook HMAC-SHA256** — validates all incoming events
+- **Commit status permissions** — `statuses:write` on GitHub App installation
+
+## [0.12.0] — 2026-04-08
+
+### Added
+- **Plan Enforcement** — Starter/Pro/Team limits enforced on projects/builds/environments/members
+- **Audit Log** — mutation events written to DB, GET /api/v1/audit endpoint, `loopzero audit` CLI command
+
 ## [0.11.0] — 2026-04-06
 
 ### Added
