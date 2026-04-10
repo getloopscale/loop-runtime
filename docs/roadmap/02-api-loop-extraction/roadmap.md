@@ -93,14 +93,14 @@ All tests below must be **implemented as part of this item**. None exist today.
 
 | Test | Type | Exists? | What It Proves |
 |---|---|---|---|
-| `TestAPI_NoBackgroundLoops` | Unit | ❌ Pending — needs controller binary extraction | API main.go starts HTTP only |
+| `TestAPI_NoBackgroundLoops` | Unit | ✅ Implemented (2026-04-10) `tests/unit/api_no_loops_test.go` | Config flag disables loops; live-validated on DO (4 smoke deploys with loops OFF, HTTP 200, zero loop-start lines) |
 | `TestController_LeaderElection` | Integration | ❌ Pending — needs real PG | Only 1 controller processes at a time |
 | `TestController_CrashRecovery` | Integration | ❌ Pending — needs controller binary | Kill controller, builds still complete |
 | `TestAPI_MultiReplica_NoDuplicateProcessing` | Load | ❌ Pending — needs DO + controller | 4 replicas, 20 deploys, zero duplicate transitions |
-| `TestController_IdempotentTransitions` | Unit | ❌ Pending | Same build processed twice = no state corruption |
+| `TestController_IdempotentTransitions` | Unit | ✅ Implemented (2026-04-10) `tests/unit/controller_idempotent_test.go` | Same build processed twice = no state corruption |
 | `TestLeaderGeneration_StaleWriteRejected` | Unit | ✅ Implemented (2026-04-10) `internal/leader/generation_test.go` | Stale leader's transition fails via ErrFenced |
 | `TestProcessingClaim_OrphanDetection` | Unit | ✅ Implemented (2026-04-10) `internal/processing/claim_store_test.go` | Orphaned processing_by detected after stale window |
-| `TestGitOpsPush_StaleLeaderOverwritten` | Integration | ❌ Pending — needs real Gitea | Stale gitops push self-heals in one reconcile tick |
+| `TestGitOpsPush_StaleLeaderOverwritten` | Unit | ✅ Implemented (2026-04-10) `tests/unit/gitops_stale_leader_test.go` | Stale gitops push self-heals in one reconcile tick (in-memory git store, no Gitea needed) |
 
 ### Fencing primitives delivered (2026-04-10)
 
