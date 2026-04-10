@@ -331,14 +331,14 @@ jobs:
 
           if [ "$COMMAND" = "destroy" ]; then
             # Refresh: sync state with reality after pre-cleanup deleted resources
-            pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
+            PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
 
             # Attempt destroy. If it fails (K8s finalizers), force-clean state
             # and delete cloud resources directly via API.
             if ! pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive 2>&1; then
               echo "::warning::Destroy failed. Force-cleaning Pulumi state..."
               # Remove ALL K8s resources from state (they're on clusters being deleted)
-              pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
+              PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
               # Retry destroy (now only cloud resources remain)
               pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || {
                 echo "::warning::Retry failed. Clearing state and deleting via API..."
@@ -500,7 +500,7 @@ jobs:
 
           # Refresh state to sync with cluster reality
           echo "Refreshing state..."
-          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
+          PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
 
           # --- Pass 1 ---
           echo ""
@@ -539,7 +539,7 @@ jobs:
             # 3. Cancel + refresh (THE KEY STEP — syncs state with post-resize reality)
             pulumi cancel --stack "$STACK" 2>/dev/null || true
             echo "Refreshing state after recovery..."
-            pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
+            PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
 
             # 4. Wait for cert-manager webhooks
             for KC_OUTPUT in mgmtKubeconfig runtimeKubeconfig; do
@@ -669,7 +669,7 @@ jobs:
           pulumi cancel -s "$STACK" 2>/dev/null || true
           # Refresh: sync state with reality. Completed Jobs may have been
           # garbage-collected by K8s between Step 1 and now.
-          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
+          PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
           # Remove stale Jobs from state (TTL-deleted by K8s)
           for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:batch/v1:Job" and .outputs == null) | .urn' 2>/dev/null); do
             echo "Removing stale Job from state: $URN"
