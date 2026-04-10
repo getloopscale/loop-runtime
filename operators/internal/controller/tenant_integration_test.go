@@ -300,13 +300,15 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 				g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
 			}, timeout, interval).Should(Succeed())
 
-			// Upgrade to growth
-			var t loopzerov1.Tenant
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: tenantName, Namespace: "default",
-			}, &t)).To(Succeed())
-			t.Spec.Plan = loopzerov1.PlanGrowth
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			// Upgrade to growth — retry on conflict (reconciler may update status concurrently)
+			Eventually(func(g Gomega) {
+				var t loopzerov1.Tenant
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName, Namespace: "default",
+				}, &t)).To(Succeed())
+				t.Spec.Plan = loopzerov1.PlanGrowth
+				g.Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			}, "10s", "500ms").Should(Succeed())
 
 			// Verify Role now includes secrets
 			nsName := "loopzero-" + tenantName + "-production"
