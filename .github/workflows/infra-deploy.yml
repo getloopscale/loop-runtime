@@ -498,19 +498,26 @@ jobs:
             pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
           done
 
-          # Remove resources that crash the K8s provider with gRPC errors.
-          # The pulumi-kubernetes 4.27.0 provider crashes during operations on
-          # remote clusters (runtime, build) when nodes are being resized.
-          # Remove these from state so pulumi up can recreate them cleanly.
-          for PATTERN in promtail loki-nodeport runtime-monitoring; do
-            for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r ".deployment.resources[]? | select(.urn | contains(\"$PATTERN\")) | .urn" 2>/dev/null); do
-              echo "Removing from state: $URN"
+          # Remove resources with pending operations that crash the K8s provider.
+          # The pulumi-kubernetes 4.27.0 provider crashes with gRPC errors during
+          # delete/replace operations. Remove ANY resource with pending ops from state.
+          pulumi cancel --stack "$STACK" 2>/dev/null || true
+          pulumi stack export --stack "$STACK" 2>/dev/null | \
+            jq -r '.deployment.resources[]? | select(.pendingReplacement == true or (.outputs.status.status? == "failed")) | .urn' 2>/dev/null | \
+            while read URN; do
+              echo "Removing resource with pending ops: $URN"
               pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
             done
-          done
 
-          # Cancel any pending operations in the state
-          pulumi cancel --stack "$STACK" 2>/dev/null || true
+          # Also remove specific resources known to crash the provider
+          for KEYWORD in promtail loki-nodeport runtime-monitoring argo-wf-metrics; do
+            pulumi stack export --stack "$STACK" 2>/dev/null | \
+              jq -r --arg kw "$KEYWORD" '.deployment.resources[]? | select(.urn | test($kw)) | .urn' 2>/dev/null | \
+              while read URN; do
+                [ -n "$URN" ] && echo "Removing $KEYWORD from state: $URN" && \
+                  pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
+              done
+          done
 
           echo "Running pulumi up (attempt 1)..."
           if ! pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1; then
