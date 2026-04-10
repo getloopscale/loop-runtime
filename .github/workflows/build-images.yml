@@ -107,14 +107,9 @@ jobs:
             echo "$CHANGED" | grep -qE "^operators/|^pkg/|^go\.work" && BUILD_OP="true"
             echo "$CHANGED" | grep -qE "^cloud/" && BUILD_CLOUD="true"
 
-            # If no app code changed (e.g., only infra/docs), skip all builds
+            # If no app code changed, skip builds. Images already exist in registry.
             if [[ "$BUILD_API" == "false" && "$BUILD_OP" == "false" && "$BUILD_CLOUD" == "false" ]]; then
               echo "::notice::No app code changed — skipping all image builds"
-              # Still set true for at least API to ensure images exist for deploy
-              # On first push after a gap, images must be available
-              BUILD_API="true"
-              BUILD_OP="true"
-              BUILD_CLOUD="true"
             fi
           fi
 
@@ -147,7 +142,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -157,33 +152,25 @@ jobs:
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 3600
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
       - name: Build and push loopzero-api
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
-          docker build -f api/Dockerfile \
+          docker buildx build -f api/Dockerfile \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-api:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-api:cache,mode=max \
             -t ${{ env.REGISTRY }}/loopzero-api:${TAG} \
             -t ${{ env.REGISTRY }}/loopzero-api:${SHA} \
-            .
-
-          docker push ${{ env.REGISTRY }}/loopzero-api:${TAG}
-          docker push ${{ env.REGISTRY }}/loopzero-api:${SHA}
-
-          # Push environment-specific tag (e.g., :prod) for Pulumi stack references.
-          # INFRA-001: Pulumi uses IMAGE_TAG=config.environment which resolves to
-          # "prod" for the production stack. Without this tag, production deploys
-          # fail with ImagePullBackOff.
-          if [[ -n "$ENV_TAG" && "$ENV_TAG" != "$TAG" ]]; then
-            docker tag ${{ env.REGISTRY }}/loopzero-api:${TAG} ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}
-            docker push ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}
-            echo "- \`${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
-          fi
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}") \
+            --push .
 
           echo "### loopzero-api" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/loopzero-api:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.REGISTRY }}/loopzero-api:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # BUILD OPERATOR
@@ -198,7 +185,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -208,26 +195,22 @@ jobs:
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 3600
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
       - name: Build and push tenant-controller
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
-          docker build -f operators/Dockerfile \
+          docker buildx build -f operators/Dockerfile \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/tenant-controller:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/tenant-controller:cache,mode=max \
             -t ${{ env.REGISTRY }}/tenant-controller:${TAG} \
             -t ${{ env.REGISTRY }}/tenant-controller:${SHA} \
-            .
-
-          docker push ${{ env.REGISTRY }}/tenant-controller:${TAG}
-          docker push ${{ env.REGISTRY }}/tenant-controller:${SHA}
-
-          # Push environment-specific tag for Pulumi stack references (INFRA-001).
-          if [[ -n "$ENV_TAG" && "$ENV_TAG" != "$TAG" ]]; then
-            docker tag ${{ env.REGISTRY }}/tenant-controller:${TAG} ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}
-            docker push ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}
-            echo "- \`${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
-          fi
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}") \
+            --push .
 
           echo "### tenant-controller" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/tenant-controller:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
@@ -246,7 +229,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -256,29 +239,24 @@ jobs:
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 3600
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
       - name: Build and push cloud-api
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
-          docker build -f cloud/Dockerfile \
+          docker buildx build -f cloud/Dockerfile \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-cloud:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-cloud:cache,mode=max \
             -t ${{ env.REGISTRY }}/loopzero-cloud:${TAG} \
             -t ${{ env.REGISTRY }}/loopzero-cloud:${SHA} \
-            .
-
-          docker push ${{ env.REGISTRY }}/loopzero-cloud:${TAG}
-          docker push ${{ env.REGISTRY }}/loopzero-cloud:${SHA}
-
-          if [[ -n "$ENV_TAG" && "$ENV_TAG" != "$TAG" ]]; then
-            docker tag ${{ env.REGISTRY }}/loopzero-cloud:${TAG} ${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG}
-            docker push ${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG}
-            echo "- \`${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
-          fi
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG}") \
+            --push .
 
           echo "### cloud-api" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.REGISTRY }}/loopzero-cloud:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.REGISTRY }}/loopzero-cloud:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # BUILD DASHBOARD
@@ -293,7 +271,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -303,31 +281,28 @@ jobs:
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 3600
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
       - name: Build and push dashboard
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
-          docker build \
+          docker buildx build \
             --build-arg VITE_API_URL=https://cloud.dev.loopzero.example \
             --build-arg VITE_ENGINE_URL=https://api.dev.loopzero.example \
             --build-arg VITE_AUTH_URL=https://auth.dev.loopzero.example \
             --build-arg VITE_ACCOUNTS_URL=https://cloud.dev.loopzero.example \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-dashboard:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-dashboard:cache,mode=max \
             -t ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} \
             -t ${{ env.REGISTRY }}/loopzero-dashboard:${SHA} \
-            cloud/dashboard/
-
-          docker push ${{ env.REGISTRY }}/loopzero-dashboard:${TAG}
-          docker push ${{ env.REGISTRY }}/loopzero-dashboard:${SHA}
-
-          if [[ -n "$ENV_TAG" && "$ENV_TAG" != "$TAG" ]]; then
-            docker tag ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG}
-            docker push ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG}
-          fi
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG}") \
+            --push cloud/dashboard/
 
           echo "### dashboard" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.REGISTRY }}/loopzero-dashboard:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # POST-BUILD — integrate registry with DOKS clusters
@@ -374,7 +349,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
