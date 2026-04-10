@@ -35,4 +35,25 @@ var _ = Describe("Chaos Engineering", func() {
 	Context("50 concurrent deploys", func() {
 		PIt("should process all without data corruption")
 	})
+
+	// Roadmap 08 — progressive load validation chaos scenarios.
+	// These are the 6 scenarios the DoD requires.
+	Context("Roadmap 08: PG connection storm", func() {
+		PIt("circuit breaker fires at 90% pool saturation, reads continue")
+	})
+	Context("Roadmap 08: Cell ArgoCD crash", func() {
+		PIt("other cell's tenants are unaffected when one cell's ArgoCD crashes")
+	})
+	Context("Roadmap 08: Build cluster node failure", func() {
+		PIt("running workflows reschedule to surviving nodes via Argo retry")
+	})
+	Context("Roadmap 08: Cell network partition", func() {
+		PIt("blast radius contained to failed cell, other cells operate normally")
+	})
+	Context("Roadmap 08: Controller leader failover", func() {
+		PIt("new controller acquires lease within 30s, no builds stuck")
+	})
+	Context("Roadmap 08: Gitea unavailable", func() {
+		PIt("builds fail gracefully with clear error, no silent data loss")
+	})
 })

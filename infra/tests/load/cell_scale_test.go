@@ -832,6 +832,37 @@ func TestL4_LockStress(t *testing.T) {
 	}
 }
 
+// TestL4_500Tenants_MultiCell runs 500 tenants across 2 cells.
+// Roadmap 08 DoD: >99% success rate.
+// Requires: Item 05 (2nd cell provisioned), Item 06 (placement routing).
+func TestL4_500Tenants_MultiCell(t *testing.T) {
+	if os.Getenv("LOOPZERO_LOAD_TEST") != "1" {
+		t.Skip("skipping load test: set LOOPZERO_LOAD_TEST=1 to run")
+	}
+	if os.Getenv("LOOPZERO_MULTI_CELL") != "1" {
+		t.Skip("skipping multi-cell test: set LOOPZERO_MULTI_CELL=1 (requires 2nd cell)")
+	}
+	t.Log("L4 — 500 tenants across 2 cells")
+	t.Log("TODO: implement when Item 05 (cell provisioning) is complete")
+	t.Skip("not yet implemented — blocked on Item 05")
+}
+
+// TestL5_1000Tenants_FullScale runs 1000 tenants across multiple cells.
+// Roadmap 08 DoD: >99% success rate.
+// This is the trajectory-to-100k proof: 1000 tenants × 2 pods = 2000 pods
+// across 2+ cells, proving linear scalability.
+func TestL5_1000Tenants_FullScale(t *testing.T) {
+	if os.Getenv("LOOPZERO_LOAD_TEST") != "1" {
+		t.Skip("skipping load test: set LOOPZERO_LOAD_TEST=1 to run")
+	}
+	if os.Getenv("LOOPZERO_MULTI_CELL") != "1" {
+		t.Skip("skipping multi-cell test: set LOOPZERO_MULTI_CELL=1")
+	}
+	t.Log("L5 — 1000 tenants, multi-cell, full scale")
+	t.Log("TODO: implement when Items 05+06+07+08 are complete")
+	t.Skip("not yet implemented — blocked on Items 05, 06, 07")
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsImpl(s, substr))
 }
