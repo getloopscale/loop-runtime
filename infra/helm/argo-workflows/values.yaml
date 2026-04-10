@@ -71,6 +71,10 @@ workflowDefaults:
     podGC:
       strategy: OnWorkflowCompletion
       deleteDelayDuration: 4h
+    # P1-6: Auto-delete PVCs from completed/failed workflows.
+    # Without this, workspace PVCs accumulate from failed builds (audit: 4x 20Gi orphaned).
+    volumeClaimGC:
+      strategy: OnWorkflowCompletion
 
 server:
   securityContext:

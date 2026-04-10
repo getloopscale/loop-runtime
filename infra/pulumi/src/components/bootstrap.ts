@@ -6,7 +6,7 @@ import { PlatformStackConfig } from "../config/stack";
 import { bootstrapMgmtCluster } from "./mgmt-bootstrap";
 import { bootstrapBuildCluster } from "./build-bootstrap";
 import { bootstrapRuntimeCluster } from "./runtime-bootstrap";
-import { BootstrapOutputs } from "./bootstrap-shared";
+import { BootstrapOutputs, CloudflareOutputs } from "./bootstrap-shared";
 
 // Re-export all shared types, constants, and utilities so existing consumers
 // (expose.ts, index.ts) continue to import from "./bootstrap" unchanged.
@@ -17,6 +17,7 @@ export {
   MgmtBootstrapOutputs,
   BuildBootstrapOutputs,
   BootstrapOutputs,
+  CloudflareOutputs,
   createPlatformNamespace,
   installCertManager,
   installTraefik,
@@ -48,10 +49,11 @@ export {
 export function bootstrapCluster(
   infra: InfraOutputs,
   config: PlatformStackConfig,
+  cf?: CloudflareOutputs,
 ): BootstrapOutputs {
   // Build cluster bootstrapped first — exports lokiEndpoint + argoMetricsEndpoint for mgmt
   const build = bootstrapBuildCluster(infra, config);
-  const mgmt = bootstrapMgmtCluster(infra, config, build.lokiEndpoint, build.argoMetricsEndpoint);
+  const mgmt = bootstrapMgmtCluster(infra, config, build.lokiEndpoint, build.argoMetricsEndpoint, cf);
   const runtime = bootstrapRuntimeCluster(infra, config);
 
   return { mgmt, build, runtime };

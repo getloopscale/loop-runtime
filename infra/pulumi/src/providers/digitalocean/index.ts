@@ -39,6 +39,8 @@ export class DigitalOceanProviderFactory implements CloudProviderFactory {
   createNetwork = this.network.createNetwork.bind(this.network);
   createKubernetesCluster = this.kubernetes.createKubernetesCluster.bind(this.kubernetes);
   createObjectStorage = this.storage.createObjectStorage.bind(this.storage);
+  createCdn = this.storage.createCdn.bind(this.storage);
+  getStorageEndpoint = this.storage.getStorageEndpoint.bind(this.storage);
   createDnsRecord = (spec: import("../../contracts/dns").DnsRecordSpec) => this.dns.createDnsRecord(spec);
   createDatabaseCluster = this.database.createDatabaseCluster.bind(this.database);
   createContainerRegistry = this.registry.createContainerRegistry.bind(this.registry);

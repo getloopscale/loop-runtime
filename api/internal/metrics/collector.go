@@ -56,4 +56,9 @@ func (c *PoolStatsCollector) collect() {
 	DBConnectionsActive.Set(float64(stats.AcquiredConns()))
 	DBConnectionsIdle.Set(float64(stats.IdleConns()))
 	DBConnectionsTotal.Set(float64(stats.TotalConns()))
+	// P2-9: Additional pool metrics for saturation/contention visibility.
+	DBPoolMaxConns.Set(float64(stats.MaxConns()))
+	DBPoolAcquireCount.Add(float64(stats.AcquireCount()))
+	DBPoolAcquireDuration.Observe(stats.AcquireDuration().Seconds())
+	DBPoolEmptyAcquireCount.Add(float64(stats.EmptyAcquireCount()))
 }

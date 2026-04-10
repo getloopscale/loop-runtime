@@ -2,7 +2,6 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import * as pulumi from "@pulumi/pulumi";
-import * as digitalocean from "@pulumi/digitalocean";
 import { resourceName, bucketName } from "../core/naming";
 import { standardTags } from "../core/tags";
 import { InfraError } from "../core/errors";
@@ -42,11 +41,13 @@ export interface InfraOutputs {
   readonly bucketName: pulumi.Output<string>;
   readonly bucketEndpoint: pulumi.Output<string>;
   readonly buildsBucketName: pulumi.Output<string>;
+  readonly logsBucketName: pulumi.Output<string>;
   readonly staticBucketName: pulumi.Output<string>;
+  readonly staticBucketEndpoint: pulumi.Output<string>;
   readonly staticCdnEndpoint: pulumi.Output<string>;
-  // REVIEW-2026-03-30: Fixes MED-10 — centralized S3/Spaces endpoint.
-  // Was constructed inline in 5 locations with 2 different patterns.
+  // Provider-agnostic storage endpoints (eliminates hardcoded digitaloceanspaces.com).
   readonly spacesEndpoint: pulumi.Output<string>;
+  readonly s3Endpoint: pulumi.Output<string>;
 
   // Container Registry
   readonly registryEndpoint: pulumi.Output<string>;
@@ -191,7 +192,7 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
   // Builds bucket — API uploads source bundles here (S3-compatible).
   // CWTs on the build cluster download from this bucket during clone step.
   const buildsBucket = factory.createObjectStorage({
-    name: "loopzero-builds",
+    name: bucketName({ project: config.project, env: config.environment, region: config.region, suffix: "builds" }),
     region: config.region,
     versioning: false,
     tags,
@@ -199,8 +200,8 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
 
   // Loki logs bucket — stores build logs from Argo Workflows via Loki S3 backend.
   // Without this bucket, Loki pod crashes on startup with "bucket not found".
-  factory.createObjectStorage({
-    name: "loopzero-logs",
+  const logsBucket = factory.createObjectStorage({
+    name: bucketName({ project: config.project, env: config.environment, region: config.region, suffix: "logs" }),
     region: config.region,
     versioning: false,
     tags,
@@ -208,23 +209,22 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
 
   // Static assets bucket — stores built frontend assets uploaded by Argo Workflows.
   // CF Worker (or nginx-s3-gateway fallback) serves these to browsers.
-  // Created directly (not via factory) to support import of existing bucket.
-  // Use factory.createObjectStorage to match the same region string format
-  // as other buckets (avoids enum vs string mismatch triggering replacement).
   const staticBucket = factory.createObjectStorage({
-    name: "loopzero-static-assets",
+    name: bucketName({ project: config.project, env: config.environment, region: config.region, suffix: "static-assets" }),
     region: config.region,
     versioning: false,
     tags,
   });
 
   // Enable CDN on static assets bucket for edge caching.
-  // The CDN endpoint (*.cdn.digitaloceanspaces.com) provides DO-managed caching.
   // CF Worker uses the direct endpoint; CDN is an additional optimization layer.
-  const staticCdn = new digitalocean.Cdn(`${baseName}-static-cdn`, {
-    origin: pulumi.interpolate`${staticBucket.bucketName}.${config.region}.digitaloceanspaces.com`,
+  const staticCdn = factory.createCdn({
+    origin: staticBucket.endpoint,
     ttl: 3600, // 1 hour edge cache
   });
+
+  // Storage endpoint — provider-specific S3-compatible endpoint for SDKs and Loki.
+  const storageEndpoints = factory.getStorageEndpoint({ region: config.region });
 
   // --- Container registry ---
   // REVIEW-2026-03-30: Fixes MED-01 — now uses factory instead of direct DO import.
@@ -261,9 +261,12 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     bucketName: storage.bucketName,
     bucketEndpoint: storage.endpoint,
     buildsBucketName: buildsBucket.bucketName,
+    logsBucketName: logsBucket.bucketName,
     staticBucketName: staticBucket.bucketName,
-    staticCdnEndpoint: staticCdn.endpoint,
-    spacesEndpoint: pulumi.output(`https://${config.region}.digitaloceanspaces.com`),
+    staticBucketEndpoint: staticBucket.endpoint,
+    staticCdnEndpoint: staticCdn.cdnEndpoint,
+    spacesEndpoint: storageEndpoints.endpoint,
+    s3Endpoint: storageEndpoints.s3Endpoint,
     registryEndpoint: registry.endpoint,
     registryName: registry.name,
   };

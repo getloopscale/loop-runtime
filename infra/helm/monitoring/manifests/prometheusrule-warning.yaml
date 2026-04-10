@@ -377,3 +377,24 @@ spec:
             summary: "Cloudflare KV state diverges from database"
             description: "KV routing table has entries that don't match the expected state from the database for 10+ minutes."
             runbook: "Check API leader pod logs for 'kv reconciler: drift detected'. Missing entries mean static apps aren't routable. Extra entries mean stale routes still serving old content. Manual fix: re-deploy affected static apps or clean stale KV entries via CF dashboard."
+
+        # P2-9: DB pool saturation — early warning before connection exhaustion
+        - alert: LoopZeroDBPoolSaturation
+          expr: (loopzero_postgres_connections_active / loopzero_postgres_pool_max_conns) > 0.8
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PostgreSQL connection pool >80% utilized"
+            description: "{{ $value | humanizePercentage }} of pool connections are active for 5+ minutes. Approaching exhaustion."
+            runbook: "Check loopzero_postgres_pool_acquire_duration_seconds for increased wait times. If sustained, increase DB_MAX_CONNS or investigate slow queries via pg_stat_statements."
+
+        - alert: LoopZeroDBPoolAcquireLatency
+          expr: histogram_quantile(0.95, rate(loopzero_postgres_pool_acquire_duration_seconds_bucket[5m])) > 0.1
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PostgreSQL pool acquire p95 >100ms"
+            description: "Connection pool acquire latency p95 is {{ $value | humanizeDuration }}. Clients are waiting for connections."
+            runbook: "Check loopzero_postgres_pool_empty_acquire_total for saturation events. Increase DB_MAX_CONNS or add read replica for read-heavy queries."

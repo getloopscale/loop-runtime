@@ -17,6 +17,8 @@ export interface StaticDeliveryConfig {
   readonly accountId: string;
   /** Cloudflare zone ID for the domain (e.g., loopzero.example) */
   readonly zoneId: string;
+  /** Environment name (dev, staging, prod) — used to namespace CF resources */
+  readonly environment: string;
   /** Base domain for app hostnames (e.g., "dev.loopzero.example") */
   readonly baseDomain: string;
   /** DO Spaces endpoint for static assets (e.g., "https://loopzero-static-assets.sfo3.digitaloceanspaces.com") */
@@ -40,9 +42,10 @@ export function createStaticDelivery(
   config: StaticDeliveryConfig,
 ): StaticDeliveryOutput {
   // 1. KV namespace — routing table read by the Worker on every request
-  const kvNamespace = new cloudflare.WorkersKvNamespace("loopzero-routing", {
+  const kvTitle = `loopzero-routing-${config.environment}`;
+  const kvNamespace = new cloudflare.WorkersKvNamespace(`loopzero-routing-${config.environment}`, {
     accountId: config.accountId,
-    title: "loopzero-routing",
+    title: kvTitle,
   });
 
   // 2. Worker script — read template and inject config values
@@ -66,7 +69,7 @@ export function createStaticDelivery(
         );
     });
 
-  const scriptName = "loopzero-static-delivery";
+  const scriptName = `loopzero-static-delivery-${config.environment}`;
 
   const workerScript = new cloudflare.WorkersScript(scriptName, {
     accountId: config.accountId,
@@ -90,7 +93,7 @@ export function createStaticDelivery(
 
   // 3. Worker route — intercept all requests on *.{baseDomain}/*
   new cloudflare.WorkersRoute(
-    "loopzero-static-delivery-route",
+    `loopzero-static-delivery-route-${config.environment}`,
     {
       zoneId: config.zoneId,
       pattern: `*.${config.baseDomain}/*`,

@@ -140,6 +140,15 @@ export interface BootstrapOutputs {
   readonly runtime: ClusterBootstrapOutputs;
 }
 
+/**
+ * Cloudflare resource outputs produced BEFORE bootstrap (Phase 1.5).
+ * Passed into bootstrap so mgmt-bootstrap can wire secrets from real outputs
+ * instead of reading stale config values (fixes dual source of truth).
+ */
+export interface CloudflareOutputs {
+  readonly kvNamespaceId?: pulumi.Output<string>;
+}
+
 // ---------------------------------------------------------------------------
 // Shared utilities — used by mgmt, build, and runtime bootstrap modules
 // ---------------------------------------------------------------------------
@@ -160,6 +169,11 @@ export function createPlatformNamespace(
           "loopzero.io/environment": config.environment,
           "loopzero.io/project": config.project,
           "loopzero.io/cluster-role": role,
+          // PSA enforcement: baseline allows common workloads (non-root not required
+          // for all platform services like Gitea, MinIO). Warn on restricted violations.
+          "pod-security.kubernetes.io/enforce": "baseline",
+          "pod-security.kubernetes.io/warn": "restricted",
+          "pod-security.kubernetes.io/audit": "restricted",
         },
       },
     },
@@ -259,6 +273,31 @@ export function installTraefik(
         resources: {
           requests: { cpu: "100m", memory: "128Mi" },
           limits: { cpu: "500m", memory: "512Mi" },
+        },
+        // HA: 2 replicas with PDB and topology spread (P0-2 audit fix)
+        deployment: {
+          replicas: 2,
+        },
+        podDisruptionBudget: {
+          enabled: true,
+          minAvailable: 1,
+        },
+        topologySpreadConstraints: [
+          {
+            maxSkew: 1,
+            topologyKey: "kubernetes.io/hostname",
+            whenUnsatisfiable: "ScheduleAnyway",
+            labelSelector: {
+              matchLabels: {
+                "app.kubernetes.io/name": "traefik",
+              },
+            },
+          },
+        ],
+        // Structured JSON logging for log aggregation (Loki/Promtail)
+        logs: {
+          general: { format: "json" },
+          access: { enabled: true, format: "json" },
         },
       },
     },

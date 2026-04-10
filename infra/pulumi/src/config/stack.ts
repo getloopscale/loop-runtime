@@ -50,7 +50,6 @@ export interface PlatformStackConfig {
   // When absent, static apps fall back to nginx-s3-gateway in cluster.
   readonly cfApiToken?: pulumi.Output<string>;
   readonly cfAccountId?: string;
-  readonly cfKvNamespaceId?: string;
   /** Cloudflare Zone ID for the DNS zone (dnsZone). Required when NS is Cloudflare. */
   readonly cfZoneId?: string;
 
@@ -162,7 +161,6 @@ export function loadStackConfig(): PlatformStackConfig {
     // Cloudflare — optional, enables static frontend delivery via CF Worker
     cfApiToken: config.getSecret("cfApiToken") ?? undefined,
     cfAccountId: config.get("cfAccountId") ?? undefined,
-    cfKvNamespaceId: config.get("cfKvNamespaceId") ?? undefined,
     cfZoneId: config.get("cfZoneId") ?? undefined,
 
     // Service passwords — optional, override Helm defaults for production.
