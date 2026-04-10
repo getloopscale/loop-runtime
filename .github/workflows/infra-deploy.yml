@@ -592,6 +592,32 @@ jobs:
               fi
             done
 
+            # Wait for ALL cluster nodes to be Ready before retry.
+            # Node pool resize (e.g., small→medium) triggers surge upgrade:
+            # new nodes are provisioned, old ones drained. During this window,
+            # the K8s API may be unstable — causing gRPC provider crashes.
+            echo "Waiting for cluster nodes to be Ready..."
+            for KC_OUTPUT in mgmtKubeconfig buildKubeconfig runtimeKubeconfig; do
+              KC=$(pulumi stack output "$KC_OUTPUT" --show-secrets --stack "$STACK" 2>/dev/null || true)
+              if [ -n "$KC" ] && [ "$KC" != "undefined" ]; then
+                echo "$KC" > /tmp/node-wait-kc.yaml
+                echo "  Checking $KC_OUTPUT nodes..."
+                for attempt in $(seq 1 24); do
+                  NOT_READY=$(kubectl --kubeconfig=/tmp/node-wait-kc.yaml get nodes --no-headers 2>/dev/null | grep -cv " Ready " || true)
+                  if [ "$NOT_READY" = "0" ]; then
+                    echo "  All nodes Ready"
+                    break
+                  fi
+                  echo "  $NOT_READY nodes not Ready (attempt $attempt/24)..."
+                  sleep 10
+                done
+                rm -f /tmp/node-wait-kc.yaml
+              fi
+            done
+
+            # Cancel any pending operations left from failed attempt 1
+            pulumi cancel --stack "$STACK" 2>/dev/null || true
+
             echo "Running pulumi up (attempt 2 — retry after cleanup)..."
             pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
           fi
