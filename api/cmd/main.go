@@ -811,7 +811,20 @@ func main() {
 			},
 		)
 
-		if isLeader {
+		// Roadmap 02 — API Loop Extraction feature flag.
+		// When LOOPZERO_DISABLE_LEGACY_LOOPS=true, the API does NOT start any
+		// background loops even if it won the leader election. The controller
+		// binary (cmd/controller) is expected to run them against the same
+		// database. HTTP serving is unaffected. Default (flag unset) keeps
+		// the pre-extraction behavior so every existing deployment is
+		// unchanged. This is the documented rollback path: flip the env var
+		// back to "false"/unset and restart the API Deployment.
+		if isLeader && cfg.DisableLegacyLoops {
+			logger.Info("LOOPZERO_DISABLE_LEGACY_LOOPS=true — API won leader election but loops will not run here; controller binary owns them")
+			metrics.LeaderStatus.Set(0) // Report non-leader so Grafana/alerts treat controller as the leader
+		}
+
+		if isLeader && !cfg.DisableLegacyLoops {
 			bgWg.Add(10) // 6 leader loops + 1 cell metrics + 1 leader heartbeat + 2 domain services
 			go func() { defer bgWg.Done(); reconcileLoop.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); reaper.Start(shutdownCtx) }()

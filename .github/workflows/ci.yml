@@ -322,6 +322,112 @@ jobs:
         run: kubeconform --strict --skip ServiceMonitor,PrometheusRule infra/helm/monitoring/manifests/
 
   # ─────────────────────────────────────────────
+  # MIGRATION SAFETY (Roadmap 01 Correction B + forward-only rule)
+  # ─────────────────────────────────────────────
+  #
+  # Two gates:
+  #   1. No code, CI file, or shell script may invoke `migrate force` — on a
+  #      production DB this silently corrupts schema_migrations and is the
+  #      root cause of Correction B (schema_migrations fixed directly in PG).
+  #      Forward-only migrations are a hard rule (CLAUDE.md Rule 9 family).
+  #   2. Every .up.sql must not contain DROP TABLE / DROP COLUMN unless the
+  #      migration file name includes the word `rebuild` (explicit opt-in).
+  #      Forward-only means additive: ALTER ADD, CREATE INDEX, UPDATE, never
+  #      destructive changes that can't be rolled forward.
+  #
+  # The job runs on ALL PRs and pushes that touch the migrations directory
+  # or this workflow itself — it is cheap and fails fast.
+
+  migration-safety:
+    name: Migration safety (forward-only + no force)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    needs: [changes]
+    if: needs.changes.outputs.go-api == 'true' || github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject `migrate force` invocations
+        run: |
+          set -e
+          echo "Scanning for forbidden 'migrate force' invocations..."
+          # The invocation must look like an actual command — `migrate` immediately
+          # followed by optional flags and then `force <version>`. Random prose
+          # mentioning the two words is not matched because we require a trailing
+          # version number (digits) or end of line.
+          #
+          # We exclude this workflow file itself because it necessarily contains
+          # the pattern in documentation / error messages.
+          matches=$(grep -rnE '(^|[[:space:]`"''])migrate([[:space:]]+-[^[:space:]]+)*[[:space:]]+force([[:space:]]+[0-9]+|$)' \
+              --include='*.sh' --include='*.yml' --include='*.yaml' \
+              --include='*.go' --include='*.ts' --include='*.tsx' \
+              --include='Taskfile.yml' --include='Tiltfile' \
+              --exclude-dir=node_modules --exclude-dir=.git \
+              --exclude-dir=docs \
+              --exclude='ci.yml' \
+              . || true)
+          # Allow lines prefixed with NEVER as a warning comment.
+          offending=$(echo "$matches" | grep -vE '(^|[[:space:]])(#|//)\s*NEVER' || true)
+          offending=$(echo "$offending" | grep -vE '^\s*$' || true)
+          if [ -n "$offending" ]; then
+            echo "ERROR: 'migrate force' invocation found. This corrupts production migrations."
+            echo "$offending"
+            echo ""
+            echo "If you must document the danger in a comment, prefix it with 'NEVER' (e.g. '# NEVER run migrate force on production')."
+            exit 1
+          fi
+          echo "OK — no forbidden 'migrate force' invocations."
+      - name: Forward-only .up.sql (reject DROP TABLE / DROP COLUMN)
+        run: |
+          set -e
+          echo "Scanning migration files for destructive DDL..."
+          # DROP TABLE / DROP COLUMN in a forward-only .up.sql is a bug unless
+          # the migration file EXPLICITLY opts in via either:
+          #   a) filename containing `_rebuild_`, or
+          #   b) a top-of-file comment `-- ALLOW-DESTRUCTIVE: <reason>`.
+          # Note: DROP NOT NULL / DROP DEFAULT / DROP CONSTRAINT / DROP INDEX
+          # are NOT matched — they are non-destructive to row data.
+          viol=$(grep -rlnE '^\s*(ALTER\s+TABLE\s+\w+\s+)?DROP\s+(TABLE|COLUMN)' \
+              api/internal/db/migrations/ \
+              --include='*.up.sql' 2>/dev/null || true)
+          offending=""
+          for f in $viol; do
+            case "$(basename "$f")" in
+              *rebuild*) continue ;; # filename opt-in
+            esac
+            if head -20 "$f" | grep -qE '^\s*--\s*ALLOW-DESTRUCTIVE'; then
+              continue # inline opt-in with reason comment
+            fi
+            offending="$offending $f"
+          done
+          if [ -n "$offending" ]; then
+            echo "ERROR: forward-only migration rule violated. Destructive DDL in:"
+            for f in $offending; do echo "  - $f"; done
+            echo ""
+            echo "Forward-only migrations are additive (ALTER ADD, CREATE INDEX, UPDATE)."
+            echo "If a destructive change is unavoidable, opt in via either:"
+            echo "  1. Name the file with '_rebuild_' (e.g. 000042_plan_rebuild_tiers.up.sql), or"
+            echo "  2. Add '-- ALLOW-DESTRUCTIVE: <reason>' as a comment in the first 20 lines."
+            echo "Either way, document the backup + rollback procedure in the migration header."
+            exit 1
+          fi
+          echo "OK — all migrations are forward-only."
+      - name: Migration filenames are sequential
+        run: |
+          set -e
+          echo "Checking migration file numbering..."
+          cd api/internal/db/migrations
+          expected=1
+          for f in $(ls *.up.sql | sort); do
+            n=$(echo "$f" | sed -E 's/^0*([0-9]+)_.*/\1/')
+            if [ "$n" != "$expected" ]; then
+              echo "ERROR: migration numbering gap — expected $expected, found $f"
+              exit 1
+            fi
+            expected=$((expected + 1))
+          done
+          echo "OK — $((expected - 1)) migrations numbered 1..$((expected - 1))."
+
+  # ─────────────────────────────────────────────
   # SECURITY — runs on PRs only (not every push)
   # ─────────────────────────────────────────────
 
@@ -417,6 +523,7 @@ jobs:
       - test-cli
       - test-pulumi
       - validate-manifests
+      - migration-safety
       - security
     steps:
       - name: Check all jobs passed
@@ -433,6 +540,7 @@ jobs:
           echo "  test-cli:           ${{ needs.test-cli.result }}"
           echo "  test-pulumi:        ${{ needs.test-pulumi.result }}"
           echo "  validate-manifests: ${{ needs.validate-manifests.result }}"
+          echo "  migration-safety:   ${{ needs.migration-safety.result }}"
           echo "  security:           ${{ needs.security.result }}"
 
           # "skipped" is OK (means path filter excluded it)

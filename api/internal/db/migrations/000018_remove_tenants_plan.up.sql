@@ -1,5 +1,7 @@
 -- Migration 000018: Remove tenants.plan — subscriptions is the single source of truth
 -- PLAN-auth-billing-hardening §1.1
+-- ALLOW-DESTRUCTIVE: deduplication — plan lives in subscriptions; before-drop
+-- INSERT below ensures every tenant has a subscription row so no data is lost.
 --
 -- Problem: tenants.plan, subscriptions.plan, and plan_limits.plan create three
 -- potential answers to "what plan is this tenant on?"

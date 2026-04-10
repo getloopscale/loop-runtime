@@ -4,9 +4,49 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 )
+
+// Roadmap 02 — API Loop Extraction feature flag.
+//
+// DisableLegacyLoops is the switch that tells the API process not to run
+// its background reconciliation goroutines. The default (unset / "false")
+// must preserve pre-extraction behavior. Any value except the exact
+// literal "true" must also default to OFF to avoid accidental activation
+// via a typo (e.g. "True", "yes", "1").
+
+func TestLoad_DisableLegacyLoops_DefaultsFalse(t *testing.T) {
+	_ = os.Unsetenv("LOOPZERO_DISABLE_LEGACY_LOOPS")
+	cfg := Load()
+	if cfg.DisableLegacyLoops {
+		t.Error("DisableLegacyLoops must default to false when env is unset")
+	}
+}
+
+func TestLoad_DisableLegacyLoops_TrueActivates(t *testing.T) {
+	t.Setenv("LOOPZERO_DISABLE_LEGACY_LOOPS", "true")
+	cfg := Load()
+	if !cfg.DisableLegacyLoops {
+		t.Error(`DisableLegacyLoops must be true when env = "true"`)
+	}
+}
+
+func TestLoad_DisableLegacyLoops_NonTrueRejected(t *testing.T) {
+	// Anything other than the exact literal "true" is treated as false —
+	// conservative default to avoid accidental loop disable via typo.
+	cases := []string{"True", "TRUE", "1", "yes", "on", "false", "0", "off"}
+	for _, v := range cases {
+		t.Run(v, func(t *testing.T) {
+			t.Setenv("LOOPZERO_DISABLE_LEGACY_LOOPS", v)
+			cfg := Load()
+			if cfg.DisableLegacyLoops {
+				t.Errorf("value %q must not enable DisableLegacyLoops (only exact %q does)", v, "true")
+			}
+		})
+	}
+}
 
 func TestValidate_RejectsMaxConnsLessThanMinConns(t *testing.T) {
 	cfg := Config{

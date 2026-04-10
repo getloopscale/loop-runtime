@@ -131,6 +131,23 @@ type Config struct {
 	// JWTIssuer is the expected issuer in JWT tokens (must match Hydra config).
 	// Env: JWT_ISSUER (e.g., "http://ory-hydra-public.loopzero-system:4444/")
 	JWTIssuer string
+
+	// Roadmap 02 — API Loop Extraction feature flag.
+	//
+	// When DisableLegacyLoops is true, the API process skips leader election
+	// and does NOT start ANY of the background loops (build reconcile, build
+	// reaper, release reaper, release convergence, idempotency cleaner, SSE
+	// event pruner, domain provisioner, domain health checker, cell metrics).
+	// The API continues to serve HTTP requests; the controller binary
+	// (cmd/controller/) is expected to run the loops instead.
+	//
+	// Default: false (loops run in the API, matching pre-extraction behavior).
+	// When the controller binary is fully rolled out, this flag defaults to
+	// true on the API Deployment and the controller Deployment runs the loops.
+	// Setting it back to false is the documented rollback path.
+	//
+	// Env: LOOPZERO_DISABLE_LEGACY_LOOPS ("true" to disable loops in the API).
+	DisableLegacyLoops bool
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -248,6 +265,10 @@ func Load() Config {
 		// JWT Authentication (Sprint 11 — when set, enables dual JWT + PAT validation)
 		JWKSEndpoint: os.Getenv("JWKS_ENDPOINT"),
 		JWTIssuer:    os.Getenv("JWT_ISSUER"),
+
+		// Roadmap 02 — API Loop Extraction. When true, the API does not run
+		// any background loops (controller binary runs them instead).
+		DisableLegacyLoops: os.Getenv("LOOPZERO_DISABLE_LEGACY_LOOPS") == "true",
 	}
 }
 
