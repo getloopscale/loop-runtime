@@ -510,11 +510,25 @@ jobs:
             done
 
           # Also remove specific resources known to crash the provider
-          for KEYWORD in promtail loki-nodeport runtime-monitoring argo-wf-metrics; do
+          # Remove ALL K8s resources on build and runtime clusters from state.
+          # The Pulumi K8s provider crashes with gRPC errors when node pools
+          # have been modified outside of Pulumi (e.g., manual resize via doctl).
+          # Removing from state lets pulumi up recreate them cleanly on the new nodes.
+          # This is safe because these resources are fully declarative (Helm + Services).
+          for PROVIDER_KEYWORD in build-k8s runtime-k8s; do
             pulumi stack export --stack "$STACK" 2>/dev/null | \
-              jq -r --arg kw "$KEYWORD" '.deployment.resources[]? | select(.urn | test($kw)) | .urn' 2>/dev/null | \
+              jq -r --arg pk "$PROVIDER_KEYWORD" '.deployment.resources[]? | select(.provider? // "" | test($pk)) | .urn' 2>/dev/null | \
               while read URN; do
-                [ -n "$URN" ] && echo "Removing $KEYWORD from state: $URN" && \
+                [ -n "$URN" ] && echo "Removing $PROVIDER_KEYWORD resource: $URN" && \
+                  pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
+              done
+          done
+          # Also remove the provider entries themselves
+          for PK in build-k8s runtime-k8s; do
+            pulumi stack export --stack "$STACK" 2>/dev/null | \
+              jq -r --arg pk "$PK" '.deployment.resources[]? | select(.urn | test($pk)) | select(.type == "pulumi:providers:kubernetes") | .urn' 2>/dev/null | \
+              while read URN; do
+                [ -n "$URN" ] && echo "Removing provider: $URN" && \
                   pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
               done
           done
