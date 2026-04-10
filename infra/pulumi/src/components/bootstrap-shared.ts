@@ -130,6 +130,7 @@ export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
 export interface BuildBootstrapOutputs {
   readonly argoWorkflowsReady: pulumi.Output<boolean>;
   readonly lokiEndpoint: pulumi.Output<string>;
+  readonly argoMetricsEndpoint: pulumi.Output<string>;
 }
 
 export interface BootstrapOutputs {

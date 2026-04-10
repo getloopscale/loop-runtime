@@ -5,6 +5,7 @@
 // Owns: Prometheus + Grafana installation on management cluster.
 
 import * as k8s from "@pulumi/kubernetes";
+import * as pulumi from "@pulumi/pulumi";
 import * as fs from "fs";
 import * as path from "path";
 import { PlatformStackConfig } from "../config/stack";
@@ -13,6 +14,7 @@ import { PLATFORM_NAMESPACE, HELM_VERSIONS } from "./bootstrap-shared";
 export function installPrometheus(
   provider: k8s.Provider,
   ns: k8s.core.v1.Namespace,
+  argoMetricsEndpoint: pulumi.Output<string>,
 ): k8s.helm.v3.Release {
   return new k8s.helm.v3.Release(
     "prometheus",
@@ -35,6 +37,18 @@ export function installPrometheus(
           },
         },
         "prometheus-pushgateway": { enabled: false },
+        extraScrapeConfigs: argoMetricsEndpoint.apply((target) => `
+- job_name: argo-workflows
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  metrics_path: /metrics
+  static_configs:
+    - targets:
+        - "${target}"
+      labels:
+        cluster: build
+        component: argo-workflows
+`),
         serverFiles: {
           "alerting_rules.yml": {
             groups: [

@@ -387,6 +387,39 @@ export function bootstrapBuildCluster(
     },
   );
 
+  // NodePort Service for Argo Workflows controller metrics — enables
+  // cross-cluster Prometheus scrape from mgmt cluster.
+  // Port 30090 mirrors the pattern used for Loki (30100).
+  new k8s.core.v1.Service(
+    "argo-wf-metrics-nodeport",
+    {
+      metadata: {
+        name: "argo-wf-metrics-nodeport",
+        namespace: "argo",
+        labels: {
+          "app.kubernetes.io/name": "argo-workflows-workflow-controller",
+          "app.kubernetes.io/component": "nodeport-metrics",
+        },
+      },
+      spec: {
+        type: "NodePort",
+        ports: [
+          {
+            port: 9090,
+            targetPort: 9090,
+            nodePort: 30090,
+            protocol: "TCP",
+            name: "metrics",
+          },
+        ],
+        selector: {
+          "app.kubernetes.io/name": "argo-workflows-workflow-controller",
+        },
+      },
+    },
+    { provider, dependsOn: [argoWorkflows, ns] },
+  );
+
   // Loki endpoint for cross-cluster access from mgmt API.
   // Resolve build cluster node InternalIP via kubectl — the NodePort 30100
   // is accessible at any node's private IP within the VPC.
@@ -404,10 +437,16 @@ export function bootstrapBuildCluster(
     (ip) => ip.trim() ? `http://${ip.trim()}:30100` : "http://pending-loki-ip:30100",
   );
 
+  // Argo Workflows metrics endpoint for cross-cluster Prometheus scrape.
+  const argoMetricsEndpoint = buildNodeIp.stdout.apply(
+    (ip) => ip.trim() ? `${ip.trim()}:30090` : "pending-argo-metrics-ip:30090",
+  );
+
   return {
     argoWorkflowsReady: argoWorkflows.status.apply(
       (s) => s.status === "deployed",
     ),
     lokiEndpoint,
+    argoMetricsEndpoint,
   };
 }

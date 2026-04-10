@@ -49,9 +49,9 @@ export function bootstrapCluster(
   infra: InfraOutputs,
   config: PlatformStackConfig,
 ): BootstrapOutputs {
-  // Build cluster bootstrapped first — exports lokiEndpoint for mgmt API config
+  // Build cluster bootstrapped first — exports lokiEndpoint + argoMetricsEndpoint for mgmt
   const build = bootstrapBuildCluster(infra, config);
-  const mgmt = bootstrapMgmtCluster(infra, config, build.lokiEndpoint);
+  const mgmt = bootstrapMgmtCluster(infra, config, build.lokiEndpoint, build.argoMetricsEndpoint);
   const runtime = bootstrapRuntimeCluster(infra, config);
 
   return { mgmt, build, runtime };
