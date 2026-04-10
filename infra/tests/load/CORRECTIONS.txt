@@ -123,6 +123,29 @@ Load Test Corrections & Learnings — 2026-04-09
 - Definitive fix for Multi-Attach: still needs nodeAffinity in
   loopzero-forge. Medium nodes are mitigation, not elimination.
 
+### N. Manual node pool change breaks scoped kubeconfigs
+- Problem: Changing the build cluster node pool via doctl (adding pool
+  "build-medium", deleting old pool) invalidates the scoped SA tokens
+  stored in the tenant-controller-kubeconfig Secret. The controller
+  can't authenticate to the build cluster.
+- Root cause: The scoped kubeconfigs are created by Pulumi via
+  createScopedKubeconfig() which creates a SA + ClusterRole + token
+  on the build/runtime clusters. When the old node pool is deleted,
+  the SA token may become invalid.
+- Impact: TenantController can't create build namespaces → tenants
+  stay in <none> phase → load tests can't run
+- Fix needed: Re-run Pulumi to regenerate scoped kubeconfigs, OR
+  manually recreate the SA + token on the new build cluster nodes.
+- Lesson: NEVER change node pools manually. All infra changes must
+  go through Pulumi to maintain consistency of cross-cluster credentials.
+
+### O. Pipeline orphan SA cleanup deletes Pulumi-managed SAs
+- Problem: Pipeline cleanup step deletes SAs without Helm annotations.
+  But tenant-controller and loopzero-api SAs are created by Pulumi (no Helm
+  annotations). Deleting them breaks the controller and API pods.
+- Fix needed: Exclude SAs with names matching known Pulumi resources
+  from the orphan cleanup, OR remove the orphan SA cleanup entirely.
+
 ### M. Promtail removed from Pulumi — gRPC provider crash
 - Problem: Pulumi K8s provider crashes with "grpc: client connection
   is closing" when managing Helm releases on runtime cluster during

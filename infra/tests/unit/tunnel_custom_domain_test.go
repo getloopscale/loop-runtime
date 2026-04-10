@@ -47,9 +47,11 @@ func TestTunnelCatchAllRoutesToTraefik(t *testing.T) {
 }
 
 // TestTunnelHasCnameDnsRecord verifies that the tunnel creates a
-// cname.{baseDomain} DNS record for custom domain users.
-// MEET-2026-04-05-033 Blocker B1: stable CNAME target for custom domains.
-func TestTunnelHasCnameDnsRecord(t *testing.T) {
+// Wildcard DNS record covers all subdomains including cname.{baseDomain}.
+// Custom domain users CNAME to cname.{baseDomain} which resolves via wildcard.
+// A separate explicit cname record was removed because CF rejects creating
+// an explicit CNAME when a wildcard already covers the same host.
+func TestTunnelHasWildcardDnsRecord(t *testing.T) {
 	tunnelPath := filepath.Join(pulumiSrcDir(), "providers", "cloudflare", "tunnel.ts")
 	data, err := os.ReadFile(tunnelPath)
 	if err != nil {
@@ -57,16 +59,15 @@ func TestTunnelHasCnameDnsRecord(t *testing.T) {
 	}
 	content := string(data)
 
-	// Must create a DNS record for cname.{baseDomain}
-	if !strings.Contains(content, "cname.${config.baseDomain}") {
-		t.Error("tunnel.ts missing cname.{baseDomain} DNS record.\n" +
-			"Custom domain users CNAME their domain to cname.{baseDomain}.\n" +
-			"See: MEET-2026-04-05-033, docs/plans/custom-domains-design.md §6.3")
+	// Must have wildcard *.{baseDomain} CNAME
+	if !strings.Contains(content, "*.${config.baseDomain}") {
+		t.Error("tunnel.ts missing wildcard *.{baseDomain} DNS record.\n" +
+			"This covers all subdomains including cname.{baseDomain} for custom domains.")
 	}
 
-	// The cname record must be a CNAME pointing to the tunnel
-	if !strings.Contains(content, `"loopzero-custom-domain-cname-target"`) {
-		t.Error("tunnel.ts missing loopzero-custom-domain-cname-target DNS record resource")
+	// The wildcard record must be named loopzero-tunnel-dns
+	if !strings.Contains(content, `"loopzero-tunnel-dns"`) {
+		t.Error("tunnel.ts missing loopzero-tunnel-dns DNS record resource")
 	}
 }
 

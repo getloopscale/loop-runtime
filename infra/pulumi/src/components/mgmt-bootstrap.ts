@@ -1743,6 +1743,15 @@ function installLoopZeroAPI(
                   requests: { cpu: "200m", memory: "512Mi" },
                   limits: { cpu: "1", memory: "1Gi" },
                 },
+                // startupProbe: covers leader election (up to 60s for non-leaders).
+                // Without this, liveness kills the pod before election completes.
+                // MEET-045: was kubectl patch — now permanent in Pulumi.
+                startupProbe: {
+                  httpGet: { path: "/api/v1/health", port: 8080 },
+                  initialDelaySeconds: 5,
+                  periodSeconds: 10,
+                  failureThreshold: 12, // 5s + 12×10s = 125s max startup
+                },
                 livenessProbe: {
                   httpGet: { path: "/api/v1/health", port: 8080 },
                   initialDelaySeconds: 15,

@@ -71,46 +71,67 @@ jobs:
   # RESOLVE — determine stack and environment
   # ─────────────────────────────────────────────
   # ─────────────────────────────────────────────
-  # WAIT FOR IMAGES — ensures container images exist before Pulumi runs
+  # WAIT FOR CI + IMAGES — ensures both pass before Pulumi runs
+  # CI and Build Images run in parallel (no serial dependency).
+  # This job waits for both, reducing total pipeline time by ~15min.
   # ─────────────────────────────────────────────
   wait-for-images:
-    name: Wait for container images
+    name: Wait for CI + container images
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     # Skip for manual dispatches (operator controls timing)
     if: github.event_name == 'push'
     steps:
-      - name: Wait for Build Images workflow
+      - name: Wait for CI and Build Images
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Waiting for 'Build: Container Images' workflow to complete for commit ${{ github.sha }}..."
-          for i in $(seq 1 40); do
-            # Find the Build Images run for this commit
-            RUN_STATUS=$(gh run list \
-              --repo "${{ github.repository }}" \
-              --workflow "Build: Container Images" \
-              --commit "${{ github.sha }}" \
-              --json status,conclusion \
-              --jq '.[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
+          CI_DONE=false
+          BUILD_DONE=false
 
-            STATUS=$(echo "$RUN_STATUS" | awk '{print $1}')
-            CONCLUSION=$(echo "$RUN_STATUS" | awk '{print $2}')
-
-            echo "  Attempt $i/40: status=$STATUS conclusion=$CONCLUSION"
-
-            if [[ "$STATUS" == "completed" && "$CONCLUSION" == "success" ]]; then
-              echo "✅ Build Images succeeded — proceeding with deploy"
-              exit 0
-            elif [[ "$STATUS" == "completed" && "$CONCLUSION" != "success" ]]; then
-              echo "❌ Build Images failed (conclusion=$CONCLUSION) — aborting deploy"
-              exit 1
+          for i in $(seq 1 50); do
+            # Check CI
+            if [ "$CI_DONE" = "false" ]; then
+              CI_STATUS=$(gh run list --repo "${{ github.repository }}" --workflow "CI" --commit "${{ github.sha }}" --json status,conclusion --jq '.[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
+              CI_STATE=$(echo "$CI_STATUS" | awk '{print $1}')
+              CI_RESULT=$(echo "$CI_STATUS" | awk '{print $2}')
+              if [[ "$CI_STATE" == "completed" ]]; then
+                if [[ "$CI_RESULT" == "success" ]]; then
+                  echo "✅ CI passed"
+                  CI_DONE=true
+                else
+                  echo "❌ CI failed ($CI_RESULT) — aborting deploy"
+                  exit 1
+                fi
+              fi
             fi
 
-            # Not found or still running — wait 30s
+            # Check Build Images
+            if [ "$BUILD_DONE" = "false" ]; then
+              BUILD_STATUS=$(gh run list --repo "${{ github.repository }}" --workflow "Build: Container Images" --commit "${{ github.sha }}" --json status,conclusion --jq '.[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
+              BUILD_STATE=$(echo "$BUILD_STATUS" | awk '{print $1}')
+              BUILD_RESULT=$(echo "$BUILD_STATUS" | awk '{print $2}')
+              if [[ "$BUILD_STATE" == "completed" ]]; then
+                if [[ "$BUILD_RESULT" == "success" ]]; then
+                  echo "✅ Build Images passed"
+                  BUILD_DONE=true
+                else
+                  echo "❌ Build Images failed ($BUILD_RESULT) — aborting deploy"
+                  exit 1
+                fi
+              fi
+            fi
+
+            # Both done?
+            if [ "$CI_DONE" = "true" ] && [ "$BUILD_DONE" = "true" ]; then
+              echo "✅ Both CI and Build Images passed — proceeding with deploy"
+              exit 0
+            fi
+
+            echo "  [$i/50] CI=$CI_STATE Build=$BUILD_STATE"
             sleep 30
           done
-          echo "⏰ Timeout waiting for Build Images — proceeding anyway (images may already exist)"
+          echo "⏰ Timeout — proceeding anyway (images may already exist)"
           exit 0
 
   resolve:
@@ -310,14 +331,14 @@ jobs:
 
           if [ "$COMMAND" = "destroy" ]; then
             # Refresh: sync state with reality after pre-cleanup deleted resources
-            pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
+            PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
 
             # Attempt destroy. If it fails (K8s finalizers), force-clean state
             # and delete cloud resources directly via API.
             if ! pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive 2>&1; then
               echo "::warning::Destroy failed. Force-cleaning Pulumi state..."
               # Remove ALL K8s resources from state (they're on clusters being deleted)
-              pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
+              PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
               # Retry destroy (now only cloud resources remain)
               pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || {
                 echo "::warning::Retry failed. Clearing state and deleting via API..."
@@ -433,159 +454,108 @@ jobs:
             fi
           fi
 
-          # Import pre-existing DO CDN if it exists but is not in Pulumi state.
-          # CDN endpoints persist because DO doesn't support disabling CDN on a bucket.
-          STATIC_BUCKET="loopzero-static-assets"
-          CDN_ID=$(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/cdn/endpoints" 2>/dev/null | \
-            python3 -c "import sys,json; cdns=[c for c in json.load(sys.stdin).get('endpoints',[]) if '$STATIC_BUCKET' in c.get('origin','')]; print(cdns[0]['id'] if cdns else '')" 2>/dev/null)
-          if [ -n "$CDN_ID" ]; then
-            IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "digitalocean:index/cdn:Cdn") | .id' 2>/dev/null)
-            if [ -z "$IN_STATE" ]; then
-              echo "Importing existing CDN $CDN_ID into Pulumi state..."
-              pulumi import "digitalocean:index/cdn:Cdn" "loopzero-infra-${STACK}-${REGION}-static-cdn" "$CDN_ID" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
-            fi
-          fi
 
-          # Clean up corrupted state from failed import/replacement cycles.
-          # Resources pending replacement that can't be deleted (non-empty buckets,
-          # active tunnels) must be removed from state so Pulumi can re-import cleanly.
-          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.pendingReplacement == true) | .urn' 2>/dev/null); do
-            echo "Removing pending-replacement resource: $URN"
-            pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
-          done
-          # Refresh state to match reality (handles manual deletes, drift).
-          # K8s Jobs with ttlSecondsAfterFinished are auto-deleted by the cluster
-          # controller after completion — refresh detects these as "deleted" and
-          # removes them from state so `up` can recreate them.
-          echo "Refreshing state..."
-          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
+          # ═══════════════════════════════════════════════════════════
+          # IDEMPOTENT 2-PASS DEPLOY
+          # ═══════════════════════════════════════════════════════════
+          # Handles: node pool resize, fresh deploys, state drift, gRPC crashes.
+          #
+          # Pass 1: pulumi up — may fail during node pool resize (expected)
+          # Between: wait for nodes Ready + refresh state + registry integration
+          # Pass 2: pulumi up — nodes stable, state synced → success
+          # ═══════════════════════════════════════════════════════════
 
-          # Delete gitea-bootstrap Job from BOTH state AND cluster before pulumi up.
-          # Jobs have immutable spec.template — Pulumi cannot update them in-place.
-          # The patchForce annotation handles SSA conflicts for annotations, but K8s
-          # still rejects spec.template changes. Delete+recreate is the only option.
-          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:batch/v1:Job") | .urn' 2>/dev/null); do
-            echo "Removing Job from state: $URN"
-            pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
-          done
-          # Delete from cluster (if mgmt kubeconfig is available)
-          MGMT_KC=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
-          if [ -n "$MGMT_KC" ]; then
-            echo "$MGMT_KC" > /tmp/mgmt-kc-job-cleanup.yaml
-            kubectl --kubeconfig=/tmp/mgmt-kc-job-cleanup.yaml delete job gitea-bootstrap -n platform-system --ignore-not-found 2>/dev/null || true
-            rm -f /tmp/mgmt-kc-job-cleanup.yaml
-            echo "Deleted gitea-bootstrap Job from cluster"
-          fi
-
-          # Remove ArgoCD repo-creds secret from Pulumi state.
-          # This secret is now created exclusively by the Bootstrap step with real tokens.
-          # Leaving the placeholder in Pulumi caused ArgoCD auth failures on fresh deploys.
-          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.urn | contains("argocd-gitea-repo-creds")) | .urn' 2>/dev/null); do
-            echo "Removing placeholder repo-creds from state: $URN"
-            pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
-          done
-
-          # Create all resources with retry for webhook readiness.
-          # On fresh deploys, cert-manager webhook may not be serving TLS when
-          # ClusterIssuer is created. The first `pulumi up` creates the Helm charts
-          # and fails on CRs. The wait gives webhooks time to become ready.
-          # The retry `pulumi up` then creates the remaining CRs successfully.
-          # MEET-045: Remove Helm releases with corrupted state from Pulumi.
-          # When Helm releases accumulate failed versions and we clean them
-          # from the cluster, Pulumi state becomes stale. Remove and let up recreate.
-          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:helm.sh/v3:Release") | select(.outputs.status.status == "failed" or .outputs.status == null) | .urn' 2>/dev/null); do
-            echo "Removing failed Helm release from state: $URN"
-            pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
-          done
-
-          # Remove resources that crash the K8s provider with gRPC errors.
-          # The pulumi-kubernetes 4.27.0 provider crashes during operations on
-          # remote clusters (runtime, build) when nodes are being resized.
-          # Remove these from state so pulumi up can recreate them cleanly.
-          for PATTERN in promtail loki-nodeport runtime-monitoring; do
-            for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r ".deployment.resources[]? | select(.urn | contains(\"$PATTERN\")) | .urn" 2>/dev/null); do
-              echo "Removing from state: $URN"
-              pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
-            done
-          done
-
-          # Cancel any pending operations in the state
+          # --- Pre-cleanup ---
           pulumi cancel --stack "$STACK" 2>/dev/null || true
 
-          echo "Running pulumi up (attempt 1)..."
-          if ! pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1; then
-            echo ""
-            echo "::notice::First pulumi up had errors — cleaning up and retrying..."
+          # Remove resources that block idempotent deploys
+          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.pendingReplacement == true) | .urn' 2>/dev/null); do
+            echo "Removing pending-replacement: $(echo $URN | rev | cut -d: -f1 | rev)"
+            pulumi state delete "$URN" --stack "$STACK" --force --yes 2>/dev/null || true
+          done
 
-            # Clean up orphan K8s resources that block Helm installs.
-            # On destroy+recreate, partial runs leave resources without Helm annotations.
-            # Helm refuses to adopt them — deleting lets Helm recreate them cleanly.
+          # Jobs are immutable — remove from state + cluster
+          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:batch/v1:Job") | .urn' 2>/dev/null); do
+            pulumi state delete "$URN" --stack "$STACK" --force --yes 2>/dev/null || true
+          done
+          MGMT_KC=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null || true)
+          if [ -n "$MGMT_KC" ] && [ "$MGMT_KC" != "undefined" ]; then
+            echo "$MGMT_KC" > /tmp/kc.yaml
+            kubectl --kubeconfig=/tmp/kc.yaml delete job gitea-bootstrap -n platform-system --ignore-not-found 2>/dev/null || true
+            rm -f /tmp/kc.yaml
+          fi
+
+          # Remove failed Helm releases + ArgoCD repo-creds placeholder
+          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select((.type == "kubernetes:helm.sh/v3:Release" and (.outputs.status.status == "failed" or .outputs.status == null)) or (.urn | contains("argocd-gitea-repo-creds"))) | .urn' 2>/dev/null); do
+            pulumi state delete "$URN" --stack "$STACK" --force --yes 2>/dev/null || true
+          done
+
+          # Import pre-existing DO CDN (persists across destroys)
+          CDN_ID=$(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/cdn/endpoints" 2>/dev/null | \
+            python3 -c "import sys,json; cdns=[c for c in json.load(sys.stdin).get('endpoints',[]) if 'loopzero-static-assets' in c.get('origin','')]; print(cdns[0]['id'] if cdns else '')" 2>/dev/null)
+          if [ -n "$CDN_ID" ]; then
+            IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "digitalocean:index/cdn:Cdn") | .id' 2>/dev/null)
+            [ -z "$IN_STATE" ] && pulumi import "digitalocean:index/cdn:Cdn" "loopzero-infra-${STACK}-${REGION}-static-cdn" "$CDN_ID" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
+          fi
+
+          # Refresh state to sync with cluster reality
+          echo "Refreshing state..."
+          PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
+
+          # --- Pass 1 ---
+          echo ""
+          echo "═══ Pass 1: pulumi up ═══"
+          if pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1; then
+            echo "✅ Pass 1 succeeded"
+          else
+            echo ""
+            echo "::notice::Pass 1 failed — running recovery sequence..."
+
+            # 1. Wait for ALL cluster nodes to be Ready (handles node pool resize)
+            echo "Waiting for cluster nodes..."
             for KC_OUTPUT in mgmtKubeconfig buildKubeconfig runtimeKubeconfig; do
-              KC=$(pulumi stack output $KC_OUTPUT --show-secrets --stack "$STACK" 2>/dev/null || true)
+              KC=$(pulumi stack output "$KC_OUTPUT" --show-secrets --stack "$STACK" 2>/dev/null || true)
               if [ -n "$KC" ] && [ "$KC" != "undefined" ]; then
-                echo "$KC" > /tmp/cleanup-kc.yaml
-                echo "Cleaning orphan resources on $KC_OUTPUT..."
-                # Delete ServiceAccounts without Helm annotations in key namespaces
-                for NS in argo platform-system; do
-                  kubectl --kubeconfig=/tmp/cleanup-kc.yaml get sa -n $NS -o json 2>/dev/null | \
-                    jq -r '.items[] | select(.metadata.annotations == null or (.metadata.annotations["meta.helm.sh/release-name"] == null)) | select(.metadata.name != "default") | .metadata.name' 2>/dev/null | \
-                    while read SA; do
-                      echo "  Deleting orphan SA: $NS/$SA"
-                      kubectl --kubeconfig=/tmp/cleanup-kc.yaml delete sa "$SA" -n "$NS" --ignore-not-found 2>/dev/null || true
-                    done
+                echo "$KC" > /tmp/kc.yaml
+                for attempt in $(seq 1 24); do
+                  NOT_READY=$(kubectl --kubeconfig=/tmp/kc.yaml get nodes --no-headers 2>/dev/null | grep -cv " Ready " || true)
+                  [ "$NOT_READY" = "0" ] && echo "  $KC_OUTPUT: Ready" && break
+                  echo "  $KC_OUTPUT: $NOT_READY not Ready ($attempt/24)"
+                  sleep 10
                 done
-                rm -f /tmp/cleanup-kc.yaml
+                rm -f /tmp/kc.yaml
               fi
             done
 
-            # Integrate registry with DOKS clusters (needed for image pulls).
-            # On fresh deploys, clusters don't have registry credentials yet.
-            echo "Integrating container registry with DOKS clusters..."
-            REGISTRY_NAME=$(pulumi stack output registryName --stack "$STACK" 2>/dev/null || echo "")
+            # 2. Integrate registry with DOKS (needed for image pulls on new nodes)
+            REGISTRY_NAME=$(pulumi stack output registryName --stack "$STACK" 2>/dev/null || true)
             if [ -n "$REGISTRY_NAME" ]; then
               for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
-                CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || echo "")
-                if [ -n "$CLUSTER" ]; then
-                  echo "  Integrating $CLUSTER with $REGISTRY_NAME..."
-                  doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
-                fi
+                CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || true)
+                [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
               done
             fi
 
-            # Restart deployments stuck in ImagePullBackOff so they pick up
-            # the new registry credentials. K8s doesn't retry pulls automatically
-            # after credentials are added — pods must be recreated.
-            for KC_OUTPUT in mgmtKubeconfig buildKubeconfig runtimeKubeconfig; do
-              KC=$(pulumi stack output $KC_OUTPUT --show-secrets --stack "$STACK" 2>/dev/null || true)
-              if [ -n "$KC" ] && [ "$KC" != "undefined" ]; then
-                echo "$KC" > /tmp/restart-kc.yaml
-                for NS in platform-system argo; do
-                  STUCK=$(kubectl --kubeconfig=/tmp/restart-kc.yaml get pods -n $NS 2>/dev/null | grep -E "ImagePull|ErrImage" | awk '{print $1}' || true)
-                  for POD in $STUCK; do
-                    echo "  Deleting stuck pod: $NS/$POD"
-                    kubectl --kubeconfig=/tmp/restart-kc.yaml delete pod "$POD" -n "$NS" --ignore-not-found 2>/dev/null || true
-                  done
-                done
-                rm -f /tmp/restart-kc.yaml
-              fi
-            done
+            # 3. Cancel + refresh (THE KEY STEP — syncs state with post-resize reality)
+            pulumi cancel --stack "$STACK" 2>/dev/null || true
+            echo "Refreshing state after recovery..."
+            PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
 
-            # Wait for cert-manager webhook readiness (deterministic, not fixed sleep).
-            # ROOT CAUSE of webhook failures was NetworkPolicy blocking port 10250 —
-            # now fixed in platform-network-policy. This wait is a safety net.
-            echo "Waiting for cert-manager webhook readiness..."
+            # 4. Wait for cert-manager webhooks
             for KC_OUTPUT in mgmtKubeconfig runtimeKubeconfig; do
               KC=$(pulumi stack output "$KC_OUTPUT" --show-secrets --stack "$STACK" 2>/dev/null || true)
               if [ -n "$KC" ] && [ "$KC" != "undefined" ]; then
-                echo "$KC" > /tmp/webhook-wait-kc.yaml
-                kubectl --kubeconfig=/tmp/webhook-wait-kc.yaml rollout status deployment \
+                echo "$KC" > /tmp/kc.yaml
+                kubectl --kubeconfig=/tmp/kc.yaml rollout status deployment \
                   -l app.kubernetes.io/component=webhook,app.kubernetes.io/name=cert-manager \
                   -n platform-system --timeout=120s 2>/dev/null || true
-                rm -f /tmp/webhook-wait-kc.yaml
+                rm -f /tmp/kc.yaml
               fi
             done
 
-            echo "Running pulumi up (attempt 2 — retry after cleanup)..."
+            # --- Pass 2 ---
+            echo ""
+            echo "═══ Pass 2: pulumi up (after recovery) ═══"
             pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
           fi
 
@@ -699,7 +669,7 @@ jobs:
           pulumi cancel -s "$STACK" 2>/dev/null || true
           # Refresh: sync state with reality. Completed Jobs may have been
           # garbage-collected by K8s between Step 1 and now.
-          pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
+          PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
           # Remove stale Jobs from state (TTL-deleted by K8s)
           for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:batch/v1:Job" and .outputs == null) | .urn' 2>/dev/null); do
             echo "Removing stale Job from state: $URN"

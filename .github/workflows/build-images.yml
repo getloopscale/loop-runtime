@@ -45,52 +45,15 @@ concurrency:
 
 jobs:
   # ─────────────────────────────────────────────
-  # WAIT FOR CI — ensures tests pass before building images
+  # RESOLVE — determine what to build based on changed files
   # ─────────────────────────────────────────────
-  wait-for-ci:
-    name: Wait for CI
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    if: github.event_name == 'push'
-    steps:
-      - name: Wait for CI workflow
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "Waiting for CI workflow to complete for commit ${{ github.sha }}..."
-          for i in $(seq 1 30); do
-            RUN_STATUS=$(gh run list \
-              --repo "${{ github.repository }}" \
-              --workflow "CI" \
-              --commit "${{ github.sha }}" \
-              --json status,conclusion \
-              --jq '.[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
-
-            STATUS=$(echo "$RUN_STATUS" | awk '{print $1}')
-            CONCLUSION=$(echo "$RUN_STATUS" | awk '{print $2}')
-            echo "  Attempt $i/30: status=$STATUS conclusion=$CONCLUSION"
-
-            if [[ "$STATUS" == "completed" && "$CONCLUSION" == "success" ]]; then
-              echo "✅ CI passed — proceeding with image build"
-              exit 0
-            elif [[ "$STATUS" == "completed" && "$CONCLUSION" != "success" ]]; then
-              echo "❌ CI failed — aborting image build"
-              exit 1
-            fi
-            sleep 30
-          done
-          echo "⏰ Timeout waiting for CI"
-          exit 1
-
-  # ─────────────────────────────────────────────
-  # RESOLVE — determine what to build and how to tag
-  # ─────────────────────────────────────────────
+  # NOTE: CI check removed from Build Images. The Infra Deploy workflow
+  # gates on BOTH CI and Build Images — if CI fails, deploy is blocked.
+  # This makes Build Images ~15min faster (no serial wait-for-ci polling).
   resolve:
-    needs: [wait-for-ci]
-    if: always() && (needs.wait-for-ci.result == 'success' || needs.wait-for-ci.result == 'skipped')
     name: Resolve build targets
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 2
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       sha_tag: ${{ steps.resolve.outputs.sha_tag }}
@@ -99,6 +62,9 @@ jobs:
       build_operator: ${{ steps.resolve.outputs.build_operator }}
       build_cloud: ${{ steps.resolve.outputs.build_cloud }}
     steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2  # Need previous commit for diff
       - name: Resolve tags and targets
         id: resolve
         run: |
@@ -132,10 +98,19 @@ jobs:
               cloud)    BUILD_API="false"; BUILD_OP="false"; BUILD_CLOUD="true" ;;
             esac
           else
-            # On push: build everything (path filter already limits triggers)
-            BUILD_API="true"
-            BUILD_OP="true"
-            BUILD_CLOUD="true"
+            # Path-based detection: only build components with changed files.
+            # Shared code (pkg/, go.work) triggers all Go builds.
+            CHANGED=$(git diff --name-only ${{ github.event.before || 'HEAD~1' }} ${{ github.sha }} 2>/dev/null || echo "")
+            BUILD_API="false"; BUILD_OP="false"; BUILD_CLOUD="false"
+
+            echo "$CHANGED" | grep -qE "^api/|^pkg/|^go\.work" && BUILD_API="true"
+            echo "$CHANGED" | grep -qE "^operators/|^pkg/|^go\.work" && BUILD_OP="true"
+            echo "$CHANGED" | grep -qE "^cloud/" && BUILD_CLOUD="true"
+
+            # If no app code changed, skip builds. Images already exist in registry.
+            if [[ "$BUILD_API" == "false" && "$BUILD_OP" == "false" && "$BUILD_CLOUD" == "false" ]]; then
+              echo "::notice::No app code changed — skipping all image builds"
+            fi
           fi
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -167,7 +142,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -177,33 +152,25 @@ jobs:
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 3600
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
       - name: Build and push loopzero-api
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
-          docker build -f api/Dockerfile \
+          docker buildx build -f api/Dockerfile \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-api:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-api:cache,mode=max \
             -t ${{ env.REGISTRY }}/loopzero-api:${TAG} \
             -t ${{ env.REGISTRY }}/loopzero-api:${SHA} \
-            .
-
-          docker push ${{ env.REGISTRY }}/loopzero-api:${TAG}
-          docker push ${{ env.REGISTRY }}/loopzero-api:${SHA}
-
-          # Push environment-specific tag (e.g., :prod) for Pulumi stack references.
-          # INFRA-001: Pulumi uses IMAGE_TAG=config.environment which resolves to
-          # "prod" for the production stack. Without this tag, production deploys
-          # fail with ImagePullBackOff.
-          if [[ -n "$ENV_TAG" && "$ENV_TAG" != "$TAG" ]]; then
-            docker tag ${{ env.REGISTRY }}/loopzero-api:${TAG} ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}
-            docker push ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}
-            echo "- \`${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
-          fi
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}") \
+            --push .
 
           echo "### loopzero-api" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/loopzero-api:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.REGISTRY }}/loopzero-api:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # BUILD OPERATOR
@@ -218,7 +185,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -228,26 +195,22 @@ jobs:
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 3600
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
       - name: Build and push tenant-controller
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
-          docker build -f operators/Dockerfile \
+          docker buildx build -f operators/Dockerfile \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/tenant-controller:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/tenant-controller:cache,mode=max \
             -t ${{ env.REGISTRY }}/tenant-controller:${TAG} \
             -t ${{ env.REGISTRY }}/tenant-controller:${SHA} \
-            .
-
-          docker push ${{ env.REGISTRY }}/tenant-controller:${TAG}
-          docker push ${{ env.REGISTRY }}/tenant-controller:${SHA}
-
-          # Push environment-specific tag for Pulumi stack references (INFRA-001).
-          if [[ -n "$ENV_TAG" && "$ENV_TAG" != "$TAG" ]]; then
-            docker tag ${{ env.REGISTRY }}/tenant-controller:${TAG} ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}
-            docker push ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}
-            echo "- \`${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
-          fi
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}") \
+            --push .
 
           echo "### tenant-controller" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/tenant-controller:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
@@ -266,7 +229,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -276,29 +239,24 @@ jobs:
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 3600
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
       - name: Build and push cloud-api
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
-          docker build -f cloud/Dockerfile \
+          docker buildx build -f cloud/Dockerfile \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-cloud:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-cloud:cache,mode=max \
             -t ${{ env.REGISTRY }}/loopzero-cloud:${TAG} \
             -t ${{ env.REGISTRY }}/loopzero-cloud:${SHA} \
-            .
-
-          docker push ${{ env.REGISTRY }}/loopzero-cloud:${TAG}
-          docker push ${{ env.REGISTRY }}/loopzero-cloud:${SHA}
-
-          if [[ -n "$ENV_TAG" && "$ENV_TAG" != "$TAG" ]]; then
-            docker tag ${{ env.REGISTRY }}/loopzero-cloud:${TAG} ${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG}
-            docker push ${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG}
-            echo "- \`${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
-          fi
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG}") \
+            --push .
 
           echo "### cloud-api" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.REGISTRY }}/loopzero-cloud:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.REGISTRY }}/loopzero-cloud:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # BUILD DASHBOARD
@@ -313,7 +271,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -323,31 +281,28 @@ jobs:
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 3600
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
       - name: Build and push dashboard
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
-          docker build \
+          docker buildx build \
             --build-arg VITE_API_URL=https://cloud.dev.loopzero.example \
             --build-arg VITE_ENGINE_URL=https://api.dev.loopzero.example \
             --build-arg VITE_AUTH_URL=https://auth.dev.loopzero.example \
             --build-arg VITE_ACCOUNTS_URL=https://cloud.dev.loopzero.example \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-dashboard:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-dashboard:cache,mode=max \
             -t ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} \
             -t ${{ env.REGISTRY }}/loopzero-dashboard:${SHA} \
-            cloud/dashboard/
-
-          docker push ${{ env.REGISTRY }}/loopzero-dashboard:${TAG}
-          docker push ${{ env.REGISTRY }}/loopzero-dashboard:${SHA}
-
-          if [[ -n "$ENV_TAG" && "$ENV_TAG" != "$TAG" ]]; then
-            docker tag ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG}
-            docker push ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG}
-          fi
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG}") \
+            --push cloud/dashboard/
 
           echo "### dashboard" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.REGISTRY }}/loopzero-dashboard:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # POST-BUILD — integrate registry with DOKS clusters
@@ -394,7 +349,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -421,22 +376,27 @@ jobs:
           # Extract the kubectl context name from the saved kubeconfig
           BUILD_CONTEXT=$(kubectl config get-contexts -o name 2>/dev/null | grep "$BUILD_CLUSTER" | head -1)
 
+          # Ensure argo namespace exists (may not if infra deploy hasn't run yet)
+          kubectl --context "$BUILD_CONTEXT" get ns argo >/dev/null 2>&1 || {
+            echo "::warning::Namespace 'argo' not found — skipping CWT update (infra deploy will create it)"
+            exit 0
+          }
+
           # Render and apply CWT templates from the local Helm chart.
-          # This ensures CWTs always match the latest code, even if the
-          # Pulumi Helm release version hasn't changed.
           helm template loopzero-build-cwts infra/helm/argo-workflows \
             --set minio.insecure=true | \
-            kubectl apply --context "$BUILD_CONTEXT" -f -
+            kubectl apply --context "$BUILD_CONTEXT" -f - || {
+            echo "::warning::CWT apply failed — will be applied by infra deploy"
+            exit 0
+          }
 
           # Ensure buildkit-registry-config secret exists for image push.
-          # BuildKit needs Docker config.json to push to DO Container Registry.
-          # Without this, build-image pods hang in PodInitializing (AUDIT-2026-03-28).
           RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 2592000)
           kubectl create secret generic buildkit-registry-config \
             --context "$BUILD_CONTEXT" \
             --namespace argo \
             --from-literal=config.json="$RW_CONFIG" \
-            --dry-run=client -o yaml | kubectl apply --context "$BUILD_CONTEXT" -f -
+            --dry-run=client -o yaml | kubectl apply --context "$BUILD_CONTEXT" -f - || true
 
           echo "### CWT Update" >> "$GITHUB_STEP_SUMMARY"
           echo "- CWTs updated on $BUILD_CLUSTER" >> "$GITHUB_STEP_SUMMARY"

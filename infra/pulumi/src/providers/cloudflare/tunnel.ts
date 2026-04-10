@@ -100,26 +100,16 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     },
   );
 
-  // 3. DNS CNAME records
-  // 3a. Wildcard — platform subdomains (*.{baseDomain} → tunnel)
+  // 3. DNS — wildcard CNAME for all platform subdomains
+  // The wildcard *.{baseDomain} covers ALL subdomains including cname.{baseDomain}.
+  // No separate cname.{baseDomain} record needed — CF rejects explicit CNAME
+  // when a wildcard already exists for the same host.
+  // Custom domains: users CNAME to cname.{baseDomain} which resolves via wildcard.
   new cloudflare.DnsRecord("loopzero-tunnel-dns", {
     zoneId: config.zoneId,
     name: `*.${config.baseDomain}`,
     type: "CNAME",
-    ttl: 1, // Auto (required when proxied=true)
-    content: pulumi.interpolate`${tunnel.id}.cfargotunnel.com`,
-    proxied: true,
-  });
-
-  // 3b. Custom domain CNAME target — cname.{baseDomain} → tunnel
-  // Users configure: CNAME api.example.com → cname.{baseDomain}
-  // This is the stable endpoint decoupled from internal tunnel ID.
-  // MEET-2026-04-05-033: Custom Domains §6.3
-  new cloudflare.DnsRecord("loopzero-custom-domain-cname-target", {
-    zoneId: config.zoneId,
-    name: `cname.${config.baseDomain}`,
-    type: "CNAME",
-    ttl: 1, // Auto (required when proxied=true)
+    ttl: 1,
     content: pulumi.interpolate`${tunnel.id}.cfargotunnel.com`,
     proxied: true,
   });
