@@ -17,8 +17,32 @@
 // loopzero-infra outputs (consumed by loopzero-platform + loopzero-control-plane + CI)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Cluster registry — multi-cluster primary contract
+// ---------------------------------------------------------------------------
+
+export interface ClusterRegistryEntry {
+  readonly clusterId: string;
+  readonly clusterName: string;
+  readonly role: "mgmt" | "build" | "runtime";
+  readonly cellId?: string;
+  readonly region: string;
+  readonly kubeconfig: string; // secret
+  readonly endpoint: string;
+  readonly labels: Record<string, string>;
+}
+
+export type ClusterRegistry = Record<string, ClusterRegistryEntry>;
+
+// ---------------------------------------------------------------------------
+// loopzero-infra outputs
+// ---------------------------------------------------------------------------
+
 export interface InfraStackOutputs {
-  // Clusters
+  // Multi-cluster registry (primary contract for downstream consumers)
+  readonly clusterRegistry: ClusterRegistry;
+
+  // Legacy singleton outputs (deprecated — use clusterRegistry instead)
   readonly mgmtClusterName: string;
   readonly mgmtClusterEndpoint: string;
   readonly mgmtKubeconfig: string; // pulumi.secret

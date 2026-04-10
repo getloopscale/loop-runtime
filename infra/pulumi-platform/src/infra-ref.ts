@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import * as pulumi from "@pulumi/pulumi";
-import type { InfraStackOutputs } from "./contracts";
+import type { InfraStackOutputs, ClusterRegistry, ClusterRegistryEntry } from "./contracts";
 
 /**
  * Resolves loopzero-infra StackReference outputs.
@@ -10,8 +10,6 @@ import type { InfraStackOutputs } from "./contracts";
  * The reference target is parametrized via config key `infraStackRef`.
  * Default: `loopzero-infra/{currentStack}`.
  * Override per-stack: `pulumi config set infraStackRef org/loopzero-infra/dev`
- *
- * This supports: different orgs, per-developer stacks, renames.
  */
 
 const cfg = new pulumi.Config();
@@ -26,11 +24,20 @@ function secret<K extends keyof InfraStackOutputs>(key: K): pulumi.Output<InfraS
   return infraRef.requireOutput(key) as pulumi.Output<InfraStackOutputs[K]>;
 }
 
-/**
- * Infra outputs consumed by platform services.
- * Only fields actually used by bootstrap functions are exposed.
- * No invented values — every field comes from a real StackReference output.
- */
+// --- Multi-cluster: ClusterRegistry ---
+// Primary contract — iterate by role to bootstrap all clusters of a kind.
+export const clusterRegistry: pulumi.Output<ClusterRegistry> =
+  infraRef.requireOutput("clusterRegistry") as pulumi.Output<ClusterRegistry>;
+
+/** Get all clusters of a given role from the registry. */
+export function clustersByRole(
+  registry: ClusterRegistry,
+  role: "mgmt" | "build" | "runtime",
+): ClusterRegistryEntry[] {
+  return Object.values(registry).filter((c) => c.role === role);
+}
+
+// --- Legacy singleton outputs (for gradual migration) ---
 export const infra = {
   mgmtKubeconfig: secret("mgmtKubeconfig"),
   buildKubeconfig: secret("buildKubeconfig"),

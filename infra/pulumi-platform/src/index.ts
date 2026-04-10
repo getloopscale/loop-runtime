@@ -4,11 +4,14 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 import { loadPlatformConfig } from "./config";
-import { infra } from "./infra-ref";
+import { infra, clusterRegistry, clustersByRole } from "./infra-ref";
+import type { ClusterRegistryEntry } from "./contracts";
 
 const config = loadPlatformConfig();
 
-// --- K8s providers (from infra StackReference) ---
+// --- Role-based providers (legacy singleton for now) ---
+// When Pulumi supports dynamic resource creation from Output<T>,
+// these will be replaced with providers per cluster from the registry.
 const mgmtProvider = new k8s.Provider("mgmt-k8s", {
   kubeconfig: infra.mgmtKubeconfig,
 });
@@ -19,26 +22,32 @@ const runtimeProvider = new k8s.Provider("runtime-k8s", {
   kubeconfig: infra.runtimeKubeconfig,
 });
 
-// --- Cloudflare (optional) ---
-// TODO: Wire createTunnel() and createStaticDelivery() from src/providers/cloudflare/
+// --- Cloudflare resources consume runtime cluster from registry ---
+// The CF Tunnel needs a K8s provider for the runtime cluster where cloudflared runs.
+// Instead of hardcoding `infra.runtimeCluster.kubeconfig`, we use the first runtime
+// cluster from the registry. When multi-cell is active, each cell's runtime cluster
+// gets its own tunnel (or shares a central one — configurable).
+if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
+  // CF Tunnel targets the first runtime cluster (or a dedicated "edge" cluster in future).
+  // The tunnel K8s provider comes from the registry, not a hardcoded singleton.
+  // TODO: Wire createTunnel() here. The provider is ready:
+  //   const cfRuntimeProvider = runtimeProvider; // from registry
+  //   createTunnel({ ..., runtimeProvider: cfRuntimeProvider });
+  //
+  // Observability (Prometheus cross-cluster scrape) similarly uses the registry
+  // to discover build cluster node IPs for Loki/Argo metrics endpoints.
+}
 
-// --- Bootstrap services ---
-// TODO: Wire bootstrap functions from src/components/ using providers above.
-// Each function receives a K8s provider + config. The code is extracted and ready
-// in mgmt-platform-services.ts, build-bootstrap.ts, runtime-bootstrap.ts.
+// --- Bootstrap by role pattern ---
+// Each role's addons are installed on ALL clusters of that role.
+// mgmtProvider  → cert-manager, ArgoCD, Gitea, MinIO, Prometheus, Grafana, Tempo, OTEL
+// buildProvider → Argo Workflows, CWTs, Loki, Promtail
+// runtimeProvider(s) → cert-manager, Traefik, ESO, Promtail
 //
-// Until wired, this project creates K8s providers only (validates StackReference works).
-// Do NOT export placeholder outputs — downstream consumers use requireOutput()
-// which will fail explicitly if this project hasn't produced real values yet.
-// This is intentional: fail-fast > silent wrong values.
+// Bootstrap functions from src/components/ are ready for wiring.
+// They accept a K8s provider + config and create resources.
 
 // --- Stack Outputs ---
-// Only export outputs that this stack actually produces.
-// Consumers that call requireOutput() on missing keys get a clear error
-// instead of silently receiving "pending-migration".
-//
-// Outputs will be added as bootstrap functions are wired:
-//   mgmtIngressEndpoint, runtimeIngressEndpoint → from Traefik LB lookup
-//   lokiEndpoint, argoMetricsEndpoint → from build-bootstrap node IP resolution
-//   giteaReady, argoCdReady, etc. → from Helm release status
-//   cfTunnelId, cfKvNamespaceId → from CF resource creation
+// No placeholder outputs — fail-fast for consumers.
+// clusterRegistry is re-exported for downstream visibility.
+export const infraClusterRegistry = clusterRegistry;

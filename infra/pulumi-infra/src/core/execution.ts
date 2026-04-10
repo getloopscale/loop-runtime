@@ -9,35 +9,17 @@ import * as pulumi from "@pulumi/pulumi";
  * Tracks per-phase and per-component readiness derived from actual
  * Pulumi Outputs — not from program control flow.
  *
+ * Multi-cluster: components are derived dynamically from the cluster registry,
+ * not from a fixed enum. This supports N clusters per role.
+ *
  * Query: `pulumi stack output execution --json`
  */
 
 export type PhaseName = "infra" | "bootstrap" | "expose";
-export type ComponentName =
-  | "network"
-  | "mgmtCluster"
-  | "buildCluster"
-  | "runtimeCluster"
-  | "database"
-  | "storage"
-  | "registry"
-  | "mgmtIngress"
-  | "mgmtCertManager"
-  | "mgmtArgocd"
-  | "mgmtGitea"
-  | "mgmtPrometheus"
-  | "mgmtGrafana"
-  | "mgmtLoopZeroApi"
-  | "mgmtTenantController"
-  | "mgmtTls"
-  | "buildArgoWorkflows"
-  | "runtimeIngress"
-  | "mgmtDns"
-  | "runtimeDns";
 export type PhaseStatus = "completed" | "pending";
 
 export interface ComponentRecord {
-  readonly component: ComponentName;
+  readonly component: string;
   readonly status: PhaseStatus;
 }
 
@@ -53,25 +35,32 @@ export interface ExecutionState {
   readonly environment: string;
   readonly provider: string;
   readonly infraVersion: string;
+  readonly clusterCount: number;
   readonly phases: PhaseRecord[];
 }
 
 /**
- * Builds execution state from component readiness signals.
+ * Builds execution state from dynamic component readiness signals.
  *
- * A phase is "completed" when ALL its components are "completed".
- * Each component's status is derived from a real Pulumi Output<boolean>.
+ * Components are passed as a string-keyed record (not a fixed enum),
+ * allowing N clusters per role. Phase assignment is derived from
+ * component name prefix:
+ *   - "cluster:" prefix → infra phase
+ *   - "bootstrap:" prefix → bootstrap phase
+ *   - "expose:" prefix → expose phase
+ *   - no prefix → infra phase (legacy compatibility)
  */
 export function buildExecutionState(args: {
   environment: string;
   provider: string;
   infraVersion: string;
-  components: Record<ComponentName, pulumi.Output<boolean>>;
+  clusterCount: number;
+  components: Record<string, pulumi.Output<boolean>>;
 }): pulumi.Output<ExecutionState> {
   const stack = pulumi.getStack();
   const installationId = `${stack}-${args.infraVersion}`;
 
-  const componentNames = Object.keys(args.components) as ComponentName[];
+  const componentNames = Object.keys(args.components);
   const componentOutputs = componentNames.map((name) => args.components[name]);
 
   return pulumi.all(componentOutputs).apply((values) => {
@@ -80,44 +69,28 @@ export function buildExecutionState(args: {
       componentMap[name] = values[i];
     });
 
-    const infraComponents: ComponentName[] = [
-      "network",
-      "mgmtCluster",
-      "buildCluster",
-      "runtimeCluster",
-      "database",
-      "storage",
-      "registry",
-    ];
-    const bootstrapComponents: ComponentName[] = [
-      "mgmtIngress",
-      "mgmtCertManager",
-      "mgmtArgocd",
-      "mgmtGitea",
-      "mgmtPrometheus",
-      "mgmtGrafana",
-      "mgmtLoopZeroApi",
-      "mgmtTenantController",
-      "mgmtTls",
-      "buildArgoWorkflows",
-      "runtimeIngress",
-    ];
-    const exposeComponents: ComponentName[] = ["mgmtDns", "runtimeDns"];
+    // Classify components into phases by prefix
+    const infraNames: string[] = [];
+    const bootstrapNames: string[] = [];
+    const exposeNames: string[] = [];
 
-    function buildPhase(
-      phase: PhaseName,
-      names: ComponentName[],
-    ): PhaseRecord {
+    for (const name of componentNames) {
+      if (name.startsWith("bootstrap:")) {
+        bootstrapNames.push(name);
+      } else if (name.startsWith("expose:")) {
+        exposeNames.push(name);
+      } else {
+        infraNames.push(name); // cluster:*, database, storage, registry, network
+      }
+    }
+
+    function buildPhase(phase: PhaseName, names: string[]): PhaseRecord {
       const components = names.map((name) => ({
         component: name,
         status: toStatus(componentMap[name] ?? false),
       }));
-      const allCompleted = components.every((c) => c.status === "completed");
-      return {
-        phase,
-        status: toStatus(allCompleted),
-        components,
-      };
+      const allCompleted = components.length > 0 && components.every((c) => c.status === "completed");
+      return { phase, status: toStatus(allCompleted), components };
     }
 
     return {
@@ -126,10 +99,11 @@ export function buildExecutionState(args: {
       environment: args.environment,
       provider: args.provider,
       infraVersion: args.infraVersion,
+      clusterCount: args.clusterCount,
       phases: [
-        buildPhase("infra", infraComponents),
-        buildPhase("bootstrap", bootstrapComponents),
-        buildPhase("expose", exposeComponents),
+        buildPhase("infra", infraNames),
+        buildPhase("bootstrap", bootstrapNames),
+        buildPhase("expose", exposeNames),
       ],
     };
   });

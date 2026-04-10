@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Declarative multi-cluster topology** (`pulumi-infra/src/topology/`): Config-driven N clusters per role. TopologyConfig schema, parser+validator, generic provisioner keyed by stable `clusterId`, ClusterRegistry output for StackReference. Cell factory (`createCell/createCells`) associates cellId→runtime cluster. 10 topology test cases. Legacy fallback from singleton config.
+- **Distributed work queue** (`api/internal/workqueue/`): PG-backed queue with `SELECT ... FOR UPDATE SKIP LOCKED`. Enables non-leader pods to process background work. Queue/Consumer abstraction for all 6 reconcile loops.
+- **Dynamic cell router** (`api/internal/placement/dynamic_router.go`): Periodically refreshes cell list from CellStore. K8sCellStore reads ClusterCredential CRDs for multi-cell Phase 2 routing.
+- **Load test L3/L4**: L3 (100 tenants concurrent), L4 (50 concurrent lock stress on same project). CI workflow for scheduled/manual load test execution.
+- **DB pool saturation metrics**: `loopzero_postgres_pool_acquire_duration_seconds`, `loopzero_postgres_pool_empty_acquire_total`, `loopzero_postgres_pool_max_conns` for contention visibility.
+- **DB pool alerts**: `LoopZeroDBPoolSaturation` (>80% utilization, 5m), `LoopZeroDBPoolAcquireLatency` (p95 >100ms, 3m).
+- **pg_stat_statements** enabled via migration 000029 for slow query visibility.
 - **Leader-generation fencing primitive** (Roadmap 02). New package
   `api/internal/leader/` providing `Acquirer` with `Acquire`, `Heartbeat`,
   `Validate`, and `Release`. Every successfully acquired `Lease` carries a
