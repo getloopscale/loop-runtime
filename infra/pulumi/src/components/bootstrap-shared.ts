@@ -34,6 +34,7 @@ export const HELM_VERSIONS = {
   otelCollector: "0.96.0",
   oryKratos: "0.61.0",
   oryHydra: "0.61.0",
+  metricsServer: "3.12.1",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -411,5 +412,40 @@ export function createClusterIssuer(
       dependsOn: [certManager],
       customTimeouts: { create: "5m", update: "2m" },
     },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// metrics-server — MEET-2026-04-09-045: enables kubectl top + HPA
+// ---------------------------------------------------------------------------
+
+/**
+ * Installs metrics-server on a cluster. DOKS does not always pre-install it.
+ * Required for `kubectl top`, HPA, and resource pressure visibility.
+ */
+export function installMetricsServer(
+  role: string,
+  provider: k8s.Provider,
+): k8s.helm.v3.Release {
+  return new k8s.helm.v3.Release(
+    `${role}-metrics-server`,
+    {
+      name: "metrics-server",
+      chart: "metrics-server",
+      version: HELM_VERSIONS.metricsServer,
+      repositoryOpts: {
+        repo: "https://kubernetes-sigs.github.io/metrics-server/",
+      },
+      namespace: "kube-system",
+      createNamespace: false,
+      values: {
+        args: ["--kubelet-insecure-tls"], // DOKS uses self-signed kubelet certs
+        resources: {
+          requests: { cpu: "50m", memory: "64Mi" },
+          limits: { cpu: "100m", memory: "128Mi" },
+        },
+      },
+    },
+    { provider },
   );
 }

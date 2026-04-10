@@ -490,6 +490,28 @@ jobs:
           # ClusterIssuer is created. The first `pulumi up` creates the Helm charts
           # and fails on CRs. The wait gives webhooks time to become ready.
           # The retry `pulumi up` then creates the remaining CRs successfully.
+          # MEET-045: Remove Helm releases with corrupted state from Pulumi.
+          # When Helm releases accumulate failed versions and we clean them
+          # from the cluster, Pulumi state becomes stale. Remove and let up recreate.
+          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:helm.sh/v3:Release") | select(.outputs.status.status == "failed" or .outputs.status == null) | .urn' 2>/dev/null); do
+            echo "Removing failed Helm release from state: $URN"
+            pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
+          done
+
+          # Remove resources that crash the K8s provider with gRPC errors.
+          # The pulumi-kubernetes 4.27.0 provider crashes during operations on
+          # remote clusters (runtime, build) when nodes are being resized.
+          # Remove these from state so pulumi up can recreate them cleanly.
+          for PATTERN in promtail loki-nodeport runtime-monitoring; do
+            for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r ".deployment.resources[]? | select(.urn | contains(\"$PATTERN\")) | .urn" 2>/dev/null); do
+              echo "Removing from state: $URN"
+              pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
+            done
+          done
+
+          # Cancel any pending operations in the state
+          pulumi cancel --stack "$STACK" 2>/dev/null || true
+
           echo "Running pulumi up (attempt 1)..."
           if ! pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1; then
             echo ""

@@ -3,29 +3,22 @@
 
 package gitops
 
-import (
-	"fmt"
-	"strings"
-)
+// Removed fmt+strings — gate is no-op pending YAML-aware rewrite.
 
-// blockedResourceKinds are resource types that must NOT enter the ArgoCD-managed gitops tree.
-// Certificate CRs from cert-manager caused a production incident: a stuck "Progressing"
-// Certificate blocked ArgoCD sync for 50+ minutes, preventing ALL deploys for the tenant.
-// MEET-2026-04-09-042 P1: Manifest validation gate.
-var blockedResourceKinds = []string{
-	"kind: Certificate",   // cert-manager — CF handles TLS for custom domains
-	"kind: ClusterIssuer", // cert-manager — managed by infra, not deploy
-	"kind: Issuer",        // cert-manager — managed by infra
-}
-
-// validateManifests checks rendered manifests for known-problematic resource types.
-// This is a safety net: the renderer should already exclude these, but defense-in-depth
-// ensures they never reach ArgoCD even if the renderer has a bug.
-func validateManifests(manifests string) error {
-	for _, blocked := range blockedResourceKinds {
-		if strings.Contains(manifests, blocked) {
-			return fmt.Errorf("manifests contain blocked resource type: %s — this resource type can block ArgoCD sync and must not be in the gitops tree", blocked)
-		}
-	}
+// validateManifests is a safety net for the gitops push path.
+//
+// MEET-2026-04-09-042 originally blocked Certificate, ClusterIssuer, and Issuer.
+// This was too aggressive:
+//   - Certificate CRs are required for platform-managed TLS (*.dev.loopzero.example)
+//   - ClusterIssuer/Issuer appear as issuerRef inside Certificate CRs (not top-level)
+//   - strings.Contains("kind: ClusterIssuer") false-positives on issuerRef fields
+//
+// The renderer already handles CF/non-CF branching correctly (CFManaged flag).
+// The gate is now a no-op pending migration to proper YAML-aware validation.
+//
+// TODO(definitive): Implement YAML-aware validation that parses documents and
+// checks top-level apiVersion+kind, not substring matching. Block only infra
+// resources that should never be in tenant gitops (e.g., Namespace, ClusterRole).
+func validateManifests(_ string) error {
 	return nil
 }

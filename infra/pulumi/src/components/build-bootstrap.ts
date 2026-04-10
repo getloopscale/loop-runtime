@@ -7,7 +7,7 @@ import * as command from "@pulumi/command";
 import * as path from "path";
 import { InfraOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
-import { HELM_VERSIONS, BuildBootstrapOutputs } from "./bootstrap-shared";
+import { HELM_VERSIONS, BuildBootstrapOutputs, installMetricsServer } from "./bootstrap-shared";
 
 // ---------------------------------------------------------------------------
 // Build cluster bootstrap
@@ -20,6 +20,9 @@ export function bootstrapBuildCluster(
   const provider = new k8s.Provider("build-k8s", {
     kubeconfig: infra.buildCluster.kubeconfig,
   });
+
+  // MEET-2026-04-09-045: metrics-server for kubectl top + HPA
+  installMetricsServer("build", provider);
 
   const ns = new k8s.core.v1.Namespace(
     "build-argo",

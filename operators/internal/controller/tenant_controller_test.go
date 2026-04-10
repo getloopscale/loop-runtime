@@ -1820,15 +1820,19 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			Expect(ownedCount).To(Equal(3), "should have 3 Environment CRs before removal")
 
 			// Act: remove "dev" from spec.environments[]
-			var t loopzerov1.Tenant
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: tenantName, Namespace: "default",
-			}, &t)).To(Succeed())
-			t.Spec.Environments = []loopzerov1.TenantEnvironmentEntry{
-				{Name: "production", Cluster: "workload"},
-				{Name: "staging", Cluster: "workload"},
-			}
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			// Retry on conflict — the reconciler may update the Tenant status
+			// between our Get and Update, causing a 409 Conflict.
+			Eventually(func(g Gomega) {
+				var t loopzerov1.Tenant
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName, Namespace: "default",
+				}, &t)).To(Succeed())
+				t.Spec.Environments = []loopzerov1.TenantEnvironmentEntry{
+					{Name: "production", Cluster: "workload"},
+					{Name: "staging", Cluster: "workload"},
+				}
+				g.Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			}, "10s", "500ms").Should(Succeed())
 
 			// Wait for TenantController to issue Delete on the orphan Environment CR.
 			// Accept two outcomes: CR exists with DeletionTimestamp (finalizer holding it),

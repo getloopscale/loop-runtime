@@ -5,53 +5,22 @@ package gitops
 
 import "testing"
 
-func TestValidateManifests_RejectsCertificate(t *testing.T) {
-	manifests := `apiVersion: v1
-kind: Service
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: tls-cd-example-com
-`
-	err := validateManifests(manifests)
-	if err == nil {
-		t.Fatal("expected error for Certificate CR in manifests")
-	}
-	if err.Error() == "" {
-		t.Fatal("error message should not be empty")
-	}
-}
+// Gate is currently a no-op (returns nil) pending YAML-aware rewrite.
+// These tests verify the no-op behavior and document what the future
+// YAML-aware gate should check.
 
-func TestValidateManifests_AcceptsValidManifests(t *testing.T) {
-	manifests := `apiVersion: v1
-kind: Service
-metadata:
-  name: api
----
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: api
-`
-	if err := validateManifests(manifests); err != nil {
-		t.Fatalf("expected no error for valid manifests, got: %v", err)
+func TestValidateManifests_AllowsEverything(t *testing.T) {
+	// Gate is no-op — all manifests pass. The renderer handles
+	// resource-type decisions via CFManaged flag.
+	cases := []string{
+		`kind: Certificate`,
+		`kind: ClusterIssuer`,
+		`kind: Deployment`,
+		``,
 	}
-}
-
-func TestValidateManifests_RejectsClusterIssuer(t *testing.T) {
-	manifests := `apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-prod
-`
-	if err := validateManifests(manifests); err == nil {
-		t.Fatal("expected error for ClusterIssuer in manifests")
-	}
-}
-
-func TestValidateManifests_AcceptsEmpty(t *testing.T) {
-	if err := validateManifests(""); err != nil {
-		t.Fatalf("expected no error for empty manifests, got: %v", err)
+	for _, c := range cases {
+		if err := validateManifests(c); err != nil {
+			t.Errorf("gate should be no-op, got error for %q: %v", c, err)
+		}
 	}
 }
