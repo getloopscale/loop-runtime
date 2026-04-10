@@ -148,6 +148,21 @@ type Config struct {
 	//
 	// Env: LOOPZERO_DISABLE_LEGACY_LOOPS ("true" to disable loops in the API).
 	DisableLegacyLoops bool
+
+	// Roadmap 07 — Backpressure and Admission Control feature flag.
+	//
+	// When AdmissionControl is true, the API consults the build admission
+	// gate (`api/internal/admission`) before accepting POST /api/v1/builds
+	// and consults the pg-pool circuit breaker before issuing mutating DB
+	// operations. At capacity the API returns HTTP 429 (build gate) or
+	// HTTP 503 (pg breaker) with a Retry-After header.
+	//
+	// Default: false — preserves the pre-roadmap-07 behavior so existing
+	// dev / staging deployments are unchanged until the flag is flipped.
+	// Only the exact literal "true" activates it (typo-safe).
+	//
+	// Env: LOOPZERO_ADMISSION_CONTROL
+	AdmissionControl bool
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -269,6 +284,11 @@ func Load() Config {
 		// Roadmap 02 — API Loop Extraction. When true, the API does not run
 		// any background loops (controller binary runs them instead).
 		DisableLegacyLoops: os.Getenv("LOOPZERO_DISABLE_LEGACY_LOOPS") == "true",
+
+		// Roadmap 07 — Backpressure and Admission Control. When true, the
+		// build handler checks the admission gate and the pg-pool breaker
+		// before accepting work. Only the exact literal "true" activates it.
+		AdmissionControl: os.Getenv("LOOPZERO_ADMISSION_CONTROL") == "true",
 	}
 }
 

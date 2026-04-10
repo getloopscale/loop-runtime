@@ -24,6 +24,7 @@ import (
 	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 
 	"github.com/loopzero/loopzero/api/internal/adapters"
+	"github.com/loopzero/loopzero/api/internal/admission"
 	"github.com/loopzero/loopzero/api/internal/tracing"
 	"github.com/loopzero/loopzero/api/internal/config"
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -909,6 +910,40 @@ func main() {
 	var buildHandler *routes.BuildHandler
 	if buildOrchestrator != nil {
 		buildHandler = routes.NewBuildHandler(buildOrchestrator, logger)
+
+		// Roadmap 07 — wire the build admission gate + pg pool circuit
+		// breaker. Both respect LOOPZERO_ADMISSION_CONTROL (default off).
+		if dbAdapter != nil {
+			buildStoreForAdmission := db.NewPostgresBuildStore(dbAdapter)
+			querier := &buildStoreAdmissionQuerier{store: buildStoreForAdmission}
+			gate := admission.NewBuildGate(querier, admission.DefaultConfig(), cfg.AdmissionControl)
+			buildHandler = buildHandler.WithAdmission(
+				admission.NewRouteAdapter(gate),
+				placement.DefaultCellID, // single-cell for now; roadmap 06 routing picks the cell per tenant
+			)
+			if cfg.AdmissionControl {
+				logger.Info("build admission gate enabled",
+					"max_per_cell", admission.DefaultConfig().MaxConcurrentPerCell,
+					"max_per_tenant", admission.DefaultConfig().MaxConcurrentPerTenant,
+				)
+			}
+
+			// PG pool circuit breaker — trips at 90% pool saturation.
+			// Exports its state via metrics.LeaderStatus-style atomic bool;
+			// future iterations will attach it to mutation middlewares.
+			breaker := admission.NewPGPoolBreaker(
+				dbAdapter.Pool,
+				admission.DefaultBreakerConfig(cfg.DBMaxConns),
+				logger,
+			)
+			breaker.Start(shutdownCtx)
+			defer breaker.Stop()
+			if cfg.AdmissionControl {
+				logger.Info("pg pool circuit breaker enabled",
+					"high_water", 0.90, "low_water", 0.75, "max_conns", cfg.DBMaxConns,
+				)
+			}
+		}
 	}
 
 	// MEET-2026-03-27-012 Phase 1.3: Deep health checks for all critical dependencies.
@@ -1006,6 +1041,27 @@ func main() {
 		logger.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// buildStoreAdmissionQuerier bridges *db.PostgresBuildStore to the
+// admission gate's ActiveBuildsQuerier contract. Roadmap 07.
+type buildStoreAdmissionQuerier struct {
+	store *db.PostgresBuildStore
+}
+
+func (q *buildStoreAdmissionQuerier) ActiveBuilds(ctx context.Context, cellID string) (admission.ActiveBuildsSnapshot, error) {
+	rows, err := q.store.FindActiveBuilds(ctx, cellID)
+	if err != nil {
+		return admission.ActiveBuildsSnapshot{}, err
+	}
+	byTenant := make(map[string]int, len(rows))
+	for _, b := range rows {
+		byTenant[b.TenantID]++
+	}
+	return admission.ActiveBuildsSnapshot{
+		Total:    len(rows),
+		ByTenant: byTenant,
+	}, nil
 }
 
 // appCRAdapter bridges k8s.ApplicationCRManager to services.ApplicationCREnsurer.

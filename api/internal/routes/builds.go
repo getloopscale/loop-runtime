@@ -106,14 +106,31 @@ type BuildStatusResponse struct {
 	Apps            []BuildAppInfo `json:"apps,omitempty"`
 }
 
+// AdmissionChecker is the minimal contract the build handler needs from
+// the admission gate. Implemented by *admission.BuildGate. Defined in
+// this package to keep routes free of cross-package imports for pure
+// interfaces (DIP).
+//
+// A `nil` AdmissionChecker is legal and means "no admission control" —
+// the handler will skip the check entirely, which is the current
+// production default until LOOPZERO_ADMISSION_CONTROL is flipped.
+type AdmissionChecker interface {
+	// Check returns (admitted, retryAfter, code, message). admitted=true
+	// means the build can proceed. When false, the handler returns a
+	// 429 with the given code + message + Retry-After header.
+	Check(ctx context.Context, cellID, tenantID string) (admitted bool, retryAfter time.Duration, code, message string, err error)
+}
+
 // BuildHandler provides HTTP handlers for build operations.
 //
 // C-01 fix: The callback handler has been removed. Build completion is now
 // detected by the BuildReconcileLoop which polls Argo Workflow CRDs from the
 // control plane. The build cluster no longer calls the API.
 type BuildHandler struct {
-	orch   BuildOrchestratorService
-	logger *slog.Logger
+	orch      BuildOrchestratorService
+	logger    *slog.Logger
+	admission AdmissionChecker // nil = disabled, no-op
+	cellID    string           // the cell this API replica is scoped to
 }
 
 // NewBuildHandler creates a new BuildHandler.
@@ -122,6 +139,15 @@ func NewBuildHandler(orch BuildOrchestratorService, logger *slog.Logger) *BuildH
 		orch:   orch,
 		logger: logger,
 	}
+}
+
+// WithAdmission attaches a build admission gate + cell id. Returns the
+// handler so callers can chain: `NewBuildHandler(...).WithAdmission(gate,
+// cellID)`. Passing nil disables the gate (same as not calling this).
+func (h *BuildHandler) WithAdmission(a AdmissionChecker, cellID string) *BuildHandler {
+	h.admission = a
+	h.cellID = cellID
+	return h
 }
 
 // createBuildRequest is the JSON request body for POST /api/v1/builds.
@@ -212,6 +238,33 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 				fmt.Sprintf("App '%s': framework '%s' requires 'build: dockerfile'. Set build to 'dockerfile' and provide a Dockerfile, or use a supported framework.", app.Name, app.Framework),
 				422,
 			))
+			return
+		}
+	}
+
+	// Roadmap 07 — admission gate. Only consulted when configured
+	// (WithAdmission + LOOPZERO_ADMISSION_CONTROL=true). A nil checker
+	// means the feature is off, which is the pre-roadmap default.
+	if h.admission != nil {
+		admitted, retryAfter, code, message, adErr := h.admission.Check(ctx, h.cellID, uc.TenantID)
+		if adErr != nil {
+			// Fail-open: the gate is advisory, a query error must not
+			// penalize users by blocking builds. Log and continue.
+			if h.logger != nil {
+				h.logger.Warn("admission gate query failed — failing open",
+					"error", adErr,
+					"tenant_id", uc.TenantID,
+					"cell_id", h.cellID,
+				)
+			}
+		} else if !admitted {
+			// Roadmap 07 DoD: 429 with Retry-After header.
+			secs := int(retryAfter.Round(time.Second).Seconds())
+			if secs < 1 {
+				secs = 1
+			}
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", secs))
+			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(code, message, 429))
 			return
 		}
 	}
