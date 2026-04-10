@@ -4,7 +4,7 @@ config:
   loopzero-platform:region: nyc3
   loopzero-platform:dnsZone: loopzero.example
   # StackReference — points to loopzero-infra homolog stack
-  loopzero-platform:infraStackRef: loopzero-infra/homolog
+  loopzero-platform:infraStackRef: organization/loopzero-infra/homolog
   # Cloudflare
   loopzero-platform:cfAccountId: "362767409c4de7fda7990c10103efdd9"
   loopzero-platform:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
@@ -18,9 +18,9 @@ config:
   # loopzero-platform:minioRootPassword
 
   loopzero-platform:spacesAccessKeyId:
-    secure: v1:i7O4a8R+gxf78lvr:f2losW0KVu8dJ4C9C08bbq0ikIbojA1aL/6SgE7SG1qVAMI4
+    secure: v1:GbD7ug2Vv7rBhXGu:ZuTVcNoptcgD0NAa/O5wEPFBge/QX8R0pvDkgb1CniejCvkz
   loopzero-platform:spacesSecretAccessKey:
-    secure: v1:0s5d4QEWsaw1jt1D:gpjkVdhTu3XdpuGUvYP5V4pcFPjB9JpSkUQrI4ToGcOw2j00hLFAtSNq3jw8JeG7QyaKRsvmnXybd9w=
+    secure: v1:6/ZmlkJjLRaWSXTL:d2XTTpHMLaxz2zUqGK1VkMRil4sUrvwYD0Cxu6CrhYIvziK6E0m6maA7022Xb1HHjmEiemlEUe7RgHI=
   loopzero-platform:cfApiToken:
     secure: v1:cgh/USz+Ho6PmWLa:d24jVWHikAYpik98qijQkUSbgQh38E4eyh13UMO4MomwMTVmY+H3Gx0AAG/WeC3VNHrKbte5q8xukbP/PsvAaD4SQcxC
 encryptionsalt: v1:VIy6q585KL8=:v1:qz3ZBIh4Kbe0kDnw:6m3/FG5cc3ZDoPohUYje9tEeWyefZQ==

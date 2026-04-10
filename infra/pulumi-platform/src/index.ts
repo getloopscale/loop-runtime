@@ -1,53 +1,160 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+/**
+ * loopzero-platform — infrastructure services on K8s clusters.
+ *
+ * Architecture: ComponentResources with explicit dependencies.
+ * Each service declares what it needs (inputs) and what it produces (outputs).
+ * No `type = any`, no invented values, no adapters.
+ *
+ * Dependency chain:
+ *   cert-manager → Traefik (needs CRDs)
+ *   cert-manager → ArgoCD (needs CRDs)
+ *   ArgoCD + Gitea → Gitea Bootstrap Job
+ *   Loki + Promtail (build cluster, independent)
+ *   ESO (runtime cluster, independent)
+ *
+ * All infra values come from StackReference (fail-fast via requireOutput).
+ */
+
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
+import * as random from "@pulumi/random";
 import { loadPlatformConfig } from "./config";
-import { infra, clusterRegistry, clustersByRole } from "./infra-ref";
-import type { ClusterRegistryEntry } from "./contracts";
+import * as refs from "./refs";
+import { CertManager } from "./services/cert-manager";
+import { Traefik } from "./services/traefik";
+import { ArgoCD } from "./services/argocd";
+import { Gitea } from "./services/gitea";
+import { Loki } from "./services/loki";
 
 const config = loadPlatformConfig();
+const NAMESPACE = "platform-system";
 
-// --- Role-based providers (legacy singleton for now) ---
-// When Pulumi supports dynamic resource creation from Output<T>,
-// these will be replaced with providers per cluster from the registry.
-const mgmtProvider = new k8s.Provider("mgmt-k8s", {
-  kubeconfig: infra.mgmtKubeconfig,
+// --- K8s Providers (one per cluster, from StackReference) ---
+const mgmtProvider = new k8s.Provider("mgmt-k8s", { kubeconfig: refs.mgmtKubeconfig });
+const buildProvider = new k8s.Provider("build-k8s", { kubeconfig: refs.buildKubeconfig });
+const runtimeProvider = new k8s.Provider("runtime-k8s", { kubeconfig: refs.runtimeKubeconfig });
+
+// --- Platform namespace (mgmt cluster) ---
+const mgmtNs = new k8s.core.v1.Namespace("mgmt-platform-system", {
+  metadata: {
+    name: NAMESPACE,
+    labels: {
+      "app.kubernetes.io/managed-by": "pulumi",
+      "app.kubernetes.io/part-of": "loopzero-platform",
+      "pod-security.kubernetes.io/enforce": "baseline",
+      "pod-security.kubernetes.io/warn": "restricted",
+      "pod-security.kubernetes.io/audit": "restricted",
+    },
+  },
+}, { provider: mgmtProvider });
+
+// --- Platform namespace (runtime cluster) ---
+const runtimeNs = new k8s.core.v1.Namespace("runtime-platform-system", {
+  metadata: {
+    name: NAMESPACE,
+    labels: {
+      "app.kubernetes.io/managed-by": "pulumi",
+      "app.kubernetes.io/part-of": "loopzero-platform",
+      "pod-security.kubernetes.io/enforce": "baseline",
+      "pod-security.kubernetes.io/warn": "restricted",
+      "pod-security.kubernetes.io/audit": "restricted",
+    },
+  },
+}, { provider: runtimeProvider });
+
+// --- Docker registry credentials (from loopzero-infra, for imagePullSecrets) ---
+new k8s.core.v1.Secret("mgmt-registry-creds", {
+  metadata: { name: "loopzero-registry", namespace: NAMESPACE },
+  type: "kubernetes.io/dockerconfigjson",
+  stringData: { ".dockerconfigjson": refs.dockerConfigJson },
+}, { provider: mgmtProvider, dependsOn: [mgmtNs] });
+
+// ═══════════════════════════════════════════════
+// MGMT CLUSTER — platform control services
+// ═══════════════════════════════════════════════
+
+// 1. cert-manager (first — other services depend on CRDs)
+const mgmtCertManager = new CertManager("mgmt-cert-manager", {
+  provider: mgmtProvider,
+  namespace: NAMESPACE,
+  role: "mgmt",
+}, { dependsOn: [mgmtNs] });
+
+// 2. Traefik (depends on cert-manager for TLS)
+const mgmtTraefik = new Traefik("mgmt-traefik", {
+  provider: mgmtProvider,
+  namespace: NAMESPACE,
+  role: "mgmt",
+  certManager: mgmtCertManager,
+}, { dependsOn: [mgmtNs] });
+
+// 3. ArgoCD callback token (generated once, stored in Pulumi state)
+const callbackToken = new random.RandomPassword("argocd-callback-token", {
+  length: 32,
+  special: false,
 });
-const buildProvider = new k8s.Provider("build-k8s", {
-  kubeconfig: infra.buildKubeconfig,
+
+// 4. ArgoCD (depends on cert-manager)
+const argocd = new ArgoCD("argocd", {
+  provider: mgmtProvider,
+  namespace: NAMESPACE,
+  callbackToken: callbackToken.result,
+  certManager: mgmtCertManager,
+}, { dependsOn: [mgmtNs] });
+
+// 5. Gitea (internal git server) — uses role-separated DB user
+const giteaPassword = config.giteaAdminPassword ?? pulumi.output("loopzero-gitea-dev-2026");
+const gitea = new Gitea("gitea", {
+  provider: mgmtProvider,
+  namespace: NAMESPACE,
+  domain: config.domain,
+  dbHost: refs.dbHost,
+  dbPort: refs.dbPort,
+  dbUser: refs.dbGiteaUser,
+  dbPassword: refs.dbGiteaPassword,
+  adminPassword: giteaPassword,
+}, { dependsOn: [mgmtNs] });
+
+// ═══════════════════════════════════════════════
+// BUILD CLUSTER — build pipeline services
+// ═══════════════════════════════════════════════
+
+// Loki + Promtail (build log aggregation)
+const loki = new Loki("build-loki", {
+  provider: buildProvider,
+  namespace: "monitoring",
+  s3Endpoint: refs.s3Endpoint,
+  logsBucketName: refs.logsBucketName,
+  accessKeyId: config.spacesAccessKeyId,
+  secretAccessKey: config.spacesSecretAccessKey,
 });
-const runtimeProvider = new k8s.Provider("runtime-k8s", {
-  kubeconfig: infra.runtimeKubeconfig,
-});
 
-// --- Cloudflare resources consume runtime cluster from registry ---
-// The CF Tunnel needs a K8s provider for the runtime cluster where cloudflared runs.
-// Instead of hardcoding `infra.runtimeCluster.kubeconfig`, we use the first runtime
-// cluster from the registry. When multi-cell is active, each cell's runtime cluster
-// gets its own tunnel (or shares a central one — configurable).
-if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
-  // CF Tunnel targets the first runtime cluster (or a dedicated "edge" cluster in future).
-  // The tunnel K8s provider comes from the registry, not a hardcoded singleton.
-  // TODO: Wire createTunnel() here. The provider is ready:
-  //   const cfRuntimeProvider = runtimeProvider; // from registry
-  //   createTunnel({ ..., runtimeProvider: cfRuntimeProvider });
-  //
-  // Observability (Prometheus cross-cluster scrape) similarly uses the registry
-  // to discover build cluster node IPs for Loki/Argo metrics endpoints.
-}
+// ═══════════════════════════════════════════════
+// RUNTIME CLUSTER — tenant-facing services
+// ═══════════════════════════════════════════════
 
-// --- Bootstrap by role pattern ---
-// Each role's addons are installed on ALL clusters of that role.
-// mgmtProvider  → cert-manager, ArgoCD, Gitea, MinIO, Prometheus, Grafana, Tempo, OTEL
-// buildProvider → Argo Workflows, CWTs, Loki, Promtail
-// runtimeProvider(s) → cert-manager, Traefik, ESO, Promtail
-//
-// Bootstrap functions from src/components/ are ready for wiring.
-// They accept a K8s provider + config and create resources.
+const runtimeCertManager = new CertManager("runtime-cert-manager", {
+  provider: runtimeProvider,
+  namespace: NAMESPACE,
+  role: "runtime",
+}, { dependsOn: [runtimeNs] });
 
-// --- Stack Outputs ---
-// No placeholder outputs — fail-fast for consumers.
-// clusterRegistry is re-exported for downstream visibility.
-export const infraClusterRegistry = clusterRegistry;
+const runtimeTraefik = new Traefik("runtime-traefik", {
+  provider: runtimeProvider,
+  namespace: NAMESPACE,
+  role: "runtime",
+  certManager: runtimeCertManager,
+}, { dependsOn: [runtimeNs] });
+
+// ═══════════════════════════════════════════════
+// STACK OUTPUTS — consumed by loopzero-control-plane
+// ═══════════════════════════════════════════════
+
+export const mgmtIngressEndpoint = mgmtTraefik.ingressEndpoint;
+export const runtimeIngressEndpoint = runtimeTraefik.ingressEndpoint;
+export const lokiEndpoint = loki.lokiEndpoint;
+export const giteaReady = gitea.ready;
+export const argoCdReady = argocd.ready;
