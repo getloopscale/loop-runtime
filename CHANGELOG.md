@@ -45,6 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `stale_checker_cell_scope_test.go`) — all green with zero impact on existing
   tests. Prerequisite for ADR-0008 cell isolation and the future PG partition-
   by-cell_id migration tracked as escalation risk.
+- IaC: split em 3 projetos Pulumi (`pulumi-infra`, `pulumi-platform`, `pulumi-control-plane`) com StackReference e contratos tipados
+- IaC: `pulumi-shared/stack-outputs.ts` como single source of truth para contratos entre projetos
+- IaC: StackReference parametrizado via config (`infraStackRef`, `platformStackRef`) — suporta per-developer stacks
+- IaC: ADR-001 documentando boundaries, contratos e estratégia de migração
+- IaC: baseline document com inventário de 160+ recursos, 19 outputs, 33 configs, 6 CRITICAL resources
+
+### Changed
+- IaC: admission policy `vap-require-resource-limits` de `Audit` para `Deny` — enforcement real em tenant namespaces
+- IaC: Traefik com 2 réplicas, PDB (minAvailable: 1), topologySpreadConstraints e JSON logging
+- IaC: PSA `enforce: baseline` + `warn: restricted` em todos os namespaces gerenciados (platform-system, argo, monitoring, external-secrets)
+- IaC: Argo Workflows com `volumeClaimGC: OnWorkflowCompletion` — auto-delete PVCs de builds completados/falhos
 
 ### Fixed
 - **Manifest gate is YAML-document-aware** (Roadmap 01, Correction G). Previously a
@@ -55,6 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Namespace`, `ClusterRole`, `ClusterRoleBinding`, `ClusterIssuer`, and
   `CustomResourceDefinition` are rejected. Malformed YAML fails closed. 9 unit tests.
   Files: `api/internal/gitops/manifest_gate.go`, `manifest_gate_test.go`.
+- IaC: `cfKvNamespaceId` agora vem do output real do `createStaticDelivery`, não de config estática — elimina dual source of truth que quebrava bootstrap em stack nova
+- IaC: recursos Cloudflare (tunnel, KV, Worker) parametrizados com environment — evita colisão entre stacks na mesma conta CF
+- IaC: bucket names (`builds`, `logs`, `static-assets`) parametrizados com `bucketName()` por env/region — evita corrupção cruzada entre stacks
+- IaC: CDN movido para `CloudProviderFactory` — elimina `digitalocean.Cdn` direto em `infra.ts` e `spacesEndpoint` hardcoded
+- IaC: `execution.declaredAt` removido — substituído por `infraVersion` determinístico, elimina diff artificial em todo `pulumi up`
+- IaC: Promtail no runtime cluster reintegrado ao Pulumi — elimina step manual e garante reprodutibilidade em disaster recovery
+- IaC: Loki S3 endpoint e bucket name agora consomem outputs tipados da fase de infra em vez de strings hardcoded
+- IaC: Tempo storage endpoint agora vem do provider em vez de hardcoded `digitaloceanspaces.com`
 
 ## [0.13.0] — 2026-04-09
 
