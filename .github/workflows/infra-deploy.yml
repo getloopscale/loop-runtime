@@ -71,46 +71,67 @@ jobs:
   # RESOLVE — determine stack and environment
   # ─────────────────────────────────────────────
   # ─────────────────────────────────────────────
-  # WAIT FOR IMAGES — ensures container images exist before Pulumi runs
+  # WAIT FOR CI + IMAGES — ensures both pass before Pulumi runs
+  # CI and Build Images run in parallel (no serial dependency).
+  # This job waits for both, reducing total pipeline time by ~15min.
   # ─────────────────────────────────────────────
   wait-for-images:
-    name: Wait for container images
+    name: Wait for CI + container images
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     # Skip for manual dispatches (operator controls timing)
     if: github.event_name == 'push'
     steps:
-      - name: Wait for Build Images workflow
+      - name: Wait for CI and Build Images
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Waiting for 'Build: Container Images' workflow to complete for commit ${{ github.sha }}..."
-          for i in $(seq 1 40); do
-            # Find the Build Images run for this commit
-            RUN_STATUS=$(gh run list \
-              --repo "${{ github.repository }}" \
-              --workflow "Build: Container Images" \
-              --commit "${{ github.sha }}" \
-              --json status,conclusion \
-              --jq '.[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
+          CI_DONE=false
+          BUILD_DONE=false
 
-            STATUS=$(echo "$RUN_STATUS" | awk '{print $1}')
-            CONCLUSION=$(echo "$RUN_STATUS" | awk '{print $2}')
-
-            echo "  Attempt $i/40: status=$STATUS conclusion=$CONCLUSION"
-
-            if [[ "$STATUS" == "completed" && "$CONCLUSION" == "success" ]]; then
-              echo "✅ Build Images succeeded — proceeding with deploy"
-              exit 0
-            elif [[ "$STATUS" == "completed" && "$CONCLUSION" != "success" ]]; then
-              echo "❌ Build Images failed (conclusion=$CONCLUSION) — aborting deploy"
-              exit 1
+          for i in $(seq 1 50); do
+            # Check CI
+            if [ "$CI_DONE" = "false" ]; then
+              CI_STATUS=$(gh run list --repo "${{ github.repository }}" --workflow "CI" --commit "${{ github.sha }}" --json status,conclusion --jq '.[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
+              CI_STATE=$(echo "$CI_STATUS" | awk '{print $1}')
+              CI_RESULT=$(echo "$CI_STATUS" | awk '{print $2}')
+              if [[ "$CI_STATE" == "completed" ]]; then
+                if [[ "$CI_RESULT" == "success" ]]; then
+                  echo "✅ CI passed"
+                  CI_DONE=true
+                else
+                  echo "❌ CI failed ($CI_RESULT) — aborting deploy"
+                  exit 1
+                fi
+              fi
             fi
 
-            # Not found or still running — wait 30s
+            # Check Build Images
+            if [ "$BUILD_DONE" = "false" ]; then
+              BUILD_STATUS=$(gh run list --repo "${{ github.repository }}" --workflow "Build: Container Images" --commit "${{ github.sha }}" --json status,conclusion --jq '.[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
+              BUILD_STATE=$(echo "$BUILD_STATUS" | awk '{print $1}')
+              BUILD_RESULT=$(echo "$BUILD_STATUS" | awk '{print $2}')
+              if [[ "$BUILD_STATE" == "completed" ]]; then
+                if [[ "$BUILD_RESULT" == "success" ]]; then
+                  echo "✅ Build Images passed"
+                  BUILD_DONE=true
+                else
+                  echo "❌ Build Images failed ($BUILD_RESULT) — aborting deploy"
+                  exit 1
+                fi
+              fi
+            fi
+
+            # Both done?
+            if [ "$CI_DONE" = "true" ] && [ "$BUILD_DONE" = "true" ]; then
+              echo "✅ Both CI and Build Images passed — proceeding with deploy"
+              exit 0
+            fi
+
+            echo "  [$i/50] CI=$CI_STATE Build=$BUILD_STATE"
             sleep 30
           done
-          echo "⏰ Timeout waiting for Build Images — proceeding anyway (images may already exist)"
+          echo "⏰ Timeout — proceeding anyway (images may already exist)"
           exit 0
 
   resolve:
