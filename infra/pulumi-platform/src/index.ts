@@ -105,7 +105,11 @@ const argocd = new ArgoCD("argocd", {
   certManager: mgmtCertManager,
 }, { dependsOn: [mgmtNs] });
 
-// 5. Gitea (internal git server) — uses role-separated DB user
+// 5. Gitea (internal git server).
+// Uses doadmin credentials because DO managed PG15+ restricts schema permissions
+// on the `public` schema — custom users can't CREATE tables without GRANT.
+// The doadmin user has full privileges, which is required for Gitea's migrations.
+// Role separation for Gitea is documented as follow-up (requires GRANT job).
 const giteaPassword = config.giteaAdminPassword ?? pulumi.output("loopzero-gitea-dev-2026");
 const gitea = new Gitea("gitea", {
   provider: mgmtProvider,
@@ -113,8 +117,8 @@ const gitea = new Gitea("gitea", {
   domain: config.domain,
   dbHost: refs.dbHost,
   dbPort: refs.dbPort,
-  dbUser: refs.dbGiteaUser,
-  dbPassword: refs.dbGiteaPassword,
+  dbUser: pulumi.output("doadmin"),
+  dbPassword: refs.dbPassword,
   adminPassword: giteaPassword,
 }, { dependsOn: [mgmtNs] });
 

@@ -7,29 +7,6 @@ config:
   loopzero-infra:infraVersion: v3
   # VPC CIDR — must not overlap with dev (10.20.0.0/16 in sfo3)
   loopzero-infra:vpcCidr: "10.30.0.0/16"
-  # Topology — 2 clusters only (DO account limit: 5, dev uses 3)
-  # mgmt+build share one cluster. Runtime is separate.
-  # The provisioner deduplicates entries with the same id.
-  loopzero-infra:topology:
-    mgmt:
-      - id: combo-mgmt-build
-        region: nyc3
-        nodeClass: small
-        minNodes: 2
-        maxNodes: 3
-    build:
-      - id: combo-mgmt-build
-        region: nyc3
-        nodeClass: small
-        minNodes: 2
-        maxNodes: 3
-    runtime:
-      - id: runtime-nyc3
-        cellId: cell-default
-        region: nyc3
-        nodeClass: small
-        minNodes: 2
-        maxNodes: 2
   # Database — minimal
   loopzero-infra:dbNodeClass: small
   loopzero-infra:dbVersion: "16"

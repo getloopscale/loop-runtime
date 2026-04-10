@@ -69,6 +69,12 @@ export class Gitea extends pulumi.ComponentResource {
                 PASSWD: args.dbPassword,
                 SSL_MODE: "require",
               },
+              // In-memory cache (no Redis dependency)
+              cache: { ADAPTER: "memory" },
+              // Memory-based session store
+              session: { PROVIDER: "memory" },
+              // Memory-based queue
+              queue: { TYPE: "level" },
             },
           },
           service: { http: { type: "ClusterIP", port: 3000 } },
@@ -80,9 +86,11 @@ export class Gitea extends pulumi.ComponentResource {
           // Disable embedded DB — using managed PostgreSQL
           postgresql: { enabled: false },
           "postgresql-ha": { enabled: false },
-          // Disable embedded Valkey/Redis — reduces resource usage
+          // Disable embedded Valkey/Redis — using in-memory cache/session/queue
           "valkey-cluster": { enabled: false },
           valkey: { enabled: false },
+          redis: { enabled: false },
+          "redis-cluster": { enabled: false },
         },
       },
       { provider: args.provider, parent: this },
