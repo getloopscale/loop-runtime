@@ -949,7 +949,14 @@ func main() {
 		SecretK8sSync:      secretK8sSync,
 		BootstrapStore:     bootstrapStore,
 		BootstrapSecret:    cfg.BootstrapSecret,
-		CellPlacement:      placement.NewRoundRobinEngine(cellRouter, cellStore, 500), // ADR-0008: bin-packing
+		// ADR-0008 bin-packing placement engine, serialized via a Postgres
+		// advisory lock so concurrent tenant creations across API replicas
+		// cannot both observe the same tenant counts and hot-spot a single
+		// cell (roadmap 06 TOCTOU fix). When the pool is nil (local dev
+		// without a DB) NewAdvisoryLockSerializer returns nil and the
+		// engine falls back to its unserialized path.
+		CellPlacement: placement.NewRoundRobinEngine(cellRouter, cellStore, 500).
+			WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool)),
 		BuildHandler:        buildHandler,
 		ArgoCallbackHandler: argoCallbackHandler,
 		LogsHandler:        logsHandler,
