@@ -1,0 +1,46 @@
+# Chaos Experiment: kill loopzero-controller pod
+#
+# Roadmap 02 DoD: TestController_CrashRecovery
+#
+# Hypothesis: killing the controller pod does NOT lose in-flight builds.
+# The leader_generations table preserves the generation counter, so the
+# next controller start bumps the generation and picks up where the
+# dead one left off. Running builds continue on the build cluster
+# (Argo Workflows are independent of the controller) and the new
+# controller's reconcile loop detects them on its first tick.
+#
+# Steady-state SLO (enforced by Prometheus rule):
+#   - loopzero_build_reconcile_loop_last_success seconds-since < 60
+#   - loopzero_leader_status{name="loopzero-controller"} == 1 within 30s of kill
+#   - NO build transitions from RUNNING to FAILED during the window
+#
+# Experiment window: 120s. The controller is killed every 60s twice
+# so we observe recovery + re-recovery.
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kill-loopzero-controller
+  namespace: platform-system
+  annotations:
+    loopzero.io/roadmap: "02"
+    loopzero.io/dod-test: "TestController_CrashRecovery"
+    loopzero.io/hypothesis: "Controller kill does not lose in-flight builds; new leader resumes within 30s"
+    loopzero.io/slo-query: |
+      # Alert fires if the leader status metric stays 0 for more than 60s
+      # OR if builds transition backwards (RUNNING → FAILED during kill window).
+      max_over_time(loopzero_leader_status{name="loopzero-controller"}[2m]) > 0
+      and
+      increase(loopzero_builds_total{status="failed",reason="controller_crash"}[2m]) == 0
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - platform-system
+    labelSelectors:
+      "app": "loopzero-controller"
+  # Kill every 60s, twice, so we see recovery twice.
+  scheduler:
+    cron: "@every 60s"
+  duration: "120s"

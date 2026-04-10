@@ -1,0 +1,57 @@
+# Chaos Experiment: inject 500ms latency on all PG traffic
+#
+# Roadmap 04 cell-budget.md: verify API stays within SLO under degraded
+# DB latency. 500ms per round-trip quadruples every PG query — if the
+# API's timeout strategy is correct, queries time out with clean errors
+# (typed LoopZeroError, not goroutine leaks) and user-facing latency degrades
+# gracefully (p99 bumps into yellow but not red).
+#
+# Hypothesis:
+#   - API p99 HTTP latency stays below 30s (the request deadline)
+#   - Build reconcile loop's ticker keeps firing (no deadlock)
+#   - PG circuit breaker does NOT trip (latency ≠ pool saturation)
+#   - Zero 500 errors from the handler (only typed LoopZeroError paths)
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: pg-network-latency
+  namespace: platform-system
+  annotations:
+    loopzero.io/roadmap: "04"
+    loopzero.io/hypothesis: "500ms PG latency degrades gracefully, no 500s, no deadlocks"
+    loopzero.io/slo-query: |
+      # p99 HTTP latency stays < 30s AND no 500 errors
+      histogram_quantile(0.99,
+        sum by (le) (rate(loopzero_http_request_duration_seconds_bucket[2m]))
+      ) < 30
+      and
+      sum(rate(loopzero_http_requests_total{code=~"5.."}[2m])) == 0
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+      - platform-system
+    labelSelectors:
+      "app": "loopzero-api"
+  delay:
+    latency: "500ms"
+    correlation: "0"
+    jitter: "100ms"
+  # Target PG destination (managed DO PG endpoint). Chaos Mesh uses
+  # iptables OWNER match + tc netem to delay egress traffic from the
+  # selected pods to the given IP/port.
+  target:
+    mode: all
+    selector:
+      namespaces:
+        - platform-system
+      labelSelectors:
+        "app": "loopzero-api"
+  direction: to
+  externalTargets:
+    # DO Managed PG private endpoint. Replace with actual hostname
+    # at apply time via envsubst.
+    - "${PG_PRIVATE_HOST}"
+  duration: "180s"

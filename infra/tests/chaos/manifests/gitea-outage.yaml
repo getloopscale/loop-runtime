@@ -1,0 +1,46 @@
+# Chaos Experiment: Gitea unavailable
+#
+# Roadmap 08: Gitea unavailable → builds fail fast with clear error,
+# no silent data loss.
+#
+# Hypothesis: when Gitea is unreachable, source uploads and gitops
+# pushes fail immediately with typed LoopZeroError (not goroutine hangs),
+# the API returns actionable 5xx errors to the CLI, and NO partial
+# state is written to PG.
+#
+# Steady-state SLO:
+#   - No builds stuck in READY state longer than 5 min (ReleaseReadyTimeout)
+#   - All failures have a typed error code, not "Something went wrong"
+#   - PG remains writable (no deadlock on the environment lock)
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: gitea-outage
+  namespace: platform-system
+  annotations:
+    loopzero.io/roadmap: "08"
+    loopzero.io/hypothesis: "Gitea outage = fast-fail builds, typed errors, no stuck state, no deadlocks"
+    loopzero.io/slo-query: |
+      # No builds stuck in READY (reaper works)
+      max_over_time(loopzero_releases_ready_over_timeout[5m]) == 0
+      and
+      # All error responses have a code (not "internal error")
+      rate(loopzero_http_requests_total{code="500",reason="untyped"}[2m]) == 0
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - platform-system
+    labelSelectors:
+      "app": "loopzero-api"
+  direction: to
+  target:
+    mode: all
+    selector:
+      namespaces:
+        - platform-system
+      labelSelectors:
+        "app.kubernetes.io/name": "gitea"
+  duration: "120s"

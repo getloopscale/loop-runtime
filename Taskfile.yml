@@ -1333,6 +1333,78 @@ tasks:
     cmds:
       - cd infra/tests && go test ./e2e/... -v -run "Chaos" -timeout 15m
 
+  # ─────────────────────────────────────────────
+  # k6 Load Testing (Grafana k6, industry standard)
+  # Replaces the previous shell-script smoke runners.
+  # See infra/tests/k6/README.md for details.
+  # ─────────────────────────────────────────────
+
+  test:load:l1:
+    desc: k6 load test — 10 tenants smoke (L1, ~15 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l1-10-tenants.js l1 10
+
+  test:load:l2:
+    desc: k6 load test — 50 tenants sustained (L2, ~35 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l2-50-tenants.js l2 50
+
+  test:load:l3:
+    desc: k6 load test — 100 tenants sustained (L3, ~65 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l3-100-tenants.js l3 100
+
+  test:load:stress:
+    desc: k6 stress test — ramp to break point (~15 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/stress-break-point.js stress 50
+
+  # ─────────────────────────────────────────────
+  # Chaos Engineering (Chaos Mesh, CNCF incubating)
+  # Replaces the previous Ginkgo PIt stubs with real fault injection.
+  # See infra/tests/chaos/manifests/README.md for details.
+  # ─────────────────────────────────────────────
+
+  test:chaos:controller-kill:
+    desc: Chaos — kill loopzero-controller pod, verify recovery (~2 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pod-kill-controller.yaml
+
+  test:chaos:api-leader-kill:
+    desc: Chaos — kill loopzero-api leader, verify failover (~1 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pod-kill-api-leader.yaml
+
+  test:chaos:pg-latency:
+    desc: Chaos — 500ms PG latency, verify graceful degradation (~3 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pg-network-latency.yaml
+
+  test:chaos:pg-saturation:
+    desc: Chaos — saturate PG pool, verify circuit breaker (~2 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pg-connection-storm.yaml
+
+  test:chaos:argocd-crash:
+    desc: Chaos — kill ArgoCD server, verify blast radius (~1.5 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh argocd-crash.yaml
+
+  test:chaos:gitea-outage:
+    desc: Chaos — drop Gitea traffic, verify fast-fail (~2 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh gitea-outage.yaml
+
+  test:chaos:all:
+    desc: Run all Chaos Mesh experiments sequentially (~12 min)
+    cmds:
+      - task: test:chaos:api-leader-kill
+      - task: test:chaos:controller-kill
+      - task: test:chaos:pg-latency
+      - task: test:chaos:pg-saturation
+      - task: test:chaos:argocd-crash
+      - task: test:chaos:gitea-outage
+
   lint:
     desc: Lint all components
     cmds:
