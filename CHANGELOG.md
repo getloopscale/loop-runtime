@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **DO PostgreSQL tuning** (`DatabasePostgresqlConfig`): pg_stat_statements=all, slow query logging >1s, idle transaction timeout 10min, shared_buffers 25%
+- **DO Database role separation** (`DatabaseUser` + `DatabaseConnectionPool`): API connects as `loopzero_api` (DML only) through managed PGBouncer pool (transaction mode, 20 conns)
+- **DO UptimeCheck**: External health monitoring of API from 3 regions (us_east, us_west, eu_west)
+- **DO Project**: Groups all environment resources in DO dashboard
+- **DO Registry credentials**: `ContainerRegistryDockerCredentials` generates docker config.json automatically (eliminates manual `doctl registry add`)
+- **CF WAF**: Managed OWASP + Cloudflare rulesets at edge (`security.ts`)
+- **CF Rate Limiting**: Auth 20/min, API 300/min, global 1000/min per IP
+- **CF Zero Trust Access**: ArgoCD, Grafana, Gitea behind CF Access auth (email domain policy)
+- **CF Logpush**: HTTP request + firewall event logs exported to DO Spaces
 - **Build admission gate** (Roadmap 07): Cell-level and per-tenant concurrent build limits. Rejects with HTTP 429 when cell at capacity (`MAX_CONCURRENT_BUILDS_PER_CELL=20`) or tenant at capacity (`MAX_CONCURRENT_BUILDS_PER_TENANT=3`). 4 unit tests including `TestBuildAdmission_CellCapacityReject` and `TestBuildAdmission_TenantFairness`.
 - **PG pool circuit breaker** (Roadmap 07): HTTP middleware that rejects mutation requests (POST/PUT/DELETE) with 503 + Retry-After when PG pool utilization exceeds threshold (`PG_CIRCUIT_BREAKER_THRESHOLD_PCT=90`). Read requests always pass through. 3 unit tests.
 - **Cell capacity budget** (Roadmap 04): Published at `docs/capacity/cell-budget.md` with concrete numbers for tenants, builds, PG connections, ArgoCD apps per cell. Includes saturation thresholds (Yellow 70%, Red 90%) and graceful degradation behavior.
