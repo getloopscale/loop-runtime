@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **CI/CD pipeline optimization**: Build Images only triggers on app code changes (`api/`, `operators/`, `cloud/`, `pkg/`). Infra Deploy only triggers on infra changes (`infra/`). New images trigger lightweight pod restart (~2min) instead of full `pulumi up` (~15min). Eliminates 25min polling loop.
+
 ### Added
 - **Declarative multi-cluster topology** (`pulumi-infra/src/topology/`): Config-driven N clusters per role. TopologyConfig schema, parser+validator, generic provisioner keyed by stable `clusterId`, ClusterRegistry output for StackReference. Cell factory (`createCell/createCells`) associates cellId→runtime cluster. 10 topology test cases. Legacy fallback from singleton config.
 - **Distributed work queue** (`api/internal/workqueue/`): PG-backed queue with `SELECT ... FOR UPDATE SKIP LOCKED`. Enables non-leader pods to process background work. Queue/Consumer abstraction for all 6 reconcile loops.

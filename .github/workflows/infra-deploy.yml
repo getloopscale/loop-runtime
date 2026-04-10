@@ -31,6 +31,18 @@ name: "Infra: Deploy"
 on:
   push:
     branches: [develop, homolog, main]
+    paths:
+      # Only trigger when infrastructure or deployment config changes.
+      # Application code changes trigger Build Images, which then triggers
+      # a separate restart workflow (not a full infra deploy).
+      - 'infra/**'
+      - '.github/workflows/infra-deploy.yml'
+
+  # Triggered after Build Images completes — restarts pods to pull new images.
+  workflow_run:
+    workflows: ["Build: Container Images"]
+    types: [completed]
+    branches: [develop, homolog, main]
 
   workflow_dispatch:
     inputs:
@@ -68,77 +80,37 @@ env:
 
 jobs:
   # ─────────────────────────────────────────────
-  # RESOLVE — determine stack and environment
+  # GATE — skip deploy if Build Images failed (workflow_run trigger)
   # ─────────────────────────────────────────────
-  # ─────────────────────────────────────────────
-  # WAIT FOR CI + IMAGES — ensures both pass before Pulumi runs
-  # CI and Build Images run in parallel (no serial dependency).
-  # This job waits for both, reducing total pipeline time by ~15min.
-  # ─────────────────────────────────────────────
-  wait-for-images:
-    name: Wait for CI + container images
+  gate:
+    name: Validate trigger
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    # Skip for manual dispatches (operator controls timing)
-    if: github.event_name == 'push'
+    timeout-minutes: 1
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
     steps:
-      - name: Wait for CI and Build Images
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Determine deploy mode
+        id: mode
         run: |
-          CI_DONE=false
-          BUILD_DONE=false
-
-          for i in $(seq 1 50); do
-            # Check CI
-            if [ "$CI_DONE" = "false" ]; then
-              CI_STATUS=$(gh run list --repo "${{ github.repository }}" --workflow "CI" --commit "${{ github.sha }}" --json status,conclusion --jq '.[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
-              CI_STATE=$(echo "$CI_STATUS" | awk '{print $1}')
-              CI_RESULT=$(echo "$CI_STATUS" | awk '{print $2}')
-              if [[ "$CI_STATE" == "completed" ]]; then
-                if [[ "$CI_RESULT" == "success" ]]; then
-                  echo "✅ CI passed"
-                  CI_DONE=true
-                else
-                  echo "❌ CI failed ($CI_RESULT) — aborting deploy"
-                  exit 1
-                fi
-              fi
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            # Triggered by Build Images completion
+            if [[ "${{ github.event.workflow_run.conclusion }}" != "success" ]]; then
+              echo "❌ Build Images failed — skipping deploy"
+              exit 1
             fi
-
-            # Check Build Images
-            if [ "$BUILD_DONE" = "false" ]; then
-              BUILD_STATUS=$(gh run list --repo "${{ github.repository }}" --workflow "Build: Container Images" --commit "${{ github.sha }}" --json status,conclusion --jq '.[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
-              BUILD_STATE=$(echo "$BUILD_STATUS" | awk '{print $1}')
-              BUILD_RESULT=$(echo "$BUILD_STATUS" | awk '{print $2}')
-              if [[ "$BUILD_STATE" == "completed" ]]; then
-                if [[ "$BUILD_RESULT" == "success" ]]; then
-                  echo "✅ Build Images passed"
-                  BUILD_DONE=true
-                else
-                  echo "❌ Build Images failed ($BUILD_RESULT) — aborting deploy"
-                  exit 1
-                fi
-              fi
-            fi
-
-            # Both done?
-            if [ "$CI_DONE" = "true" ] && [ "$BUILD_DONE" = "true" ]; then
-              echo "✅ Both CI and Build Images passed — proceeding with deploy"
-              exit 0
-            fi
-
-            echo "  [$i/50] CI=$CI_STATE Build=$BUILD_STATE"
-            sleep 30
-          done
-          echo "⏰ Timeout — proceeding anyway (images may already exist)"
-          exit 0
+            echo "mode=restart-only" >> "$GITHUB_OUTPUT"
+            echo "### Deploy Mode: restart-only (new images)" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "mode=manual" >> "$GITHUB_OUTPUT"
+            echo "### Deploy Mode: manual (${{ inputs.command }})" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+            echo "### Deploy Mode: full (infra changed)" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   resolve:
     name: Resolve deployment target
-    needs: [wait-for-images]
-    # Run after wait-for-images succeeds, OR immediately for workflow_dispatch
-    if: always() && (needs.wait-for-images.result == 'success' || needs.wait-for-images.result == 'skipped')
+    needs: [gate]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     outputs:
@@ -153,11 +125,13 @@ jobs:
             STACK="${{ inputs.stack }}"
             COMMAND="${{ inputs.command }}"
           else
-            case "${{ github.ref_name }}" in
+            # Resolve branch — workflow_run uses head_branch, push uses ref_name
+            BRANCH="${{ github.event.workflow_run.head_branch || github.ref_name }}"
+            case "$BRANCH" in
               develop) STACK="dev" ;;
               homolog) STACK="staging" ;;
               main)    STACK="prod" ;;
-              *)       echo "::error::Unexpected branch: ${{ github.ref_name }}" && exit 1 ;;
+              *)       echo "::error::Unexpected branch: $BRANCH" && exit 1 ;;
             esac
             COMMAND="up"
           fi
@@ -189,6 +163,8 @@ jobs:
     name: Validate Pulumi code
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    needs: [gate]
+    if: needs.gate.outputs.mode != 'restart-only'
     steps:
       - uses: actions/checkout@v4
 
@@ -211,13 +187,68 @@ jobs:
         run: npm test
 
   # ─────────────────────────────────────────────
-  # DEPLOY — execute Pulumi command
+  # RESTART-ONLY — triggered by new container images (no infra changes)
+  # Skips Pulumi entirely. Just restarts pods to pull new images.
+  # ~2min instead of ~15min full deploy.
+  # ─────────────────────────────────────────────
+  restart-only:
+    name: "restart pods → ${{ needs.resolve.outputs.stack }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [gate, resolve]
+    if: needs.gate.outputs.mode == 'restart-only'
+    environment: ${{ needs.resolve.outputs.environment }}
+    env:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+    steps:
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Restart workloads
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+
+          # Discover mgmt cluster name from DO API
+          MGMT_CLUSTER=$(doctl kubernetes cluster list --format Name --no-header | grep "loopzero.*${STACK}.*mgmt" | head -1)
+          if [ -z "$MGMT_CLUSTER" ]; then
+            echo "::warning::No mgmt cluster found for stack $STACK — skipping restart"
+            exit 0
+          fi
+
+          # Get kubeconfig
+          doctl kubernetes cluster kubeconfig save "$MGMT_CLUSTER" --set-current-context
+
+          NAMESPACE="platform-system"
+          echo "Restarting workloads in $NAMESPACE on $MGMT_CLUSTER..."
+
+          # Restart API and controllers to pick up new images
+          kubectl -n $NAMESPACE rollout restart deployment loopzero-api 2>/dev/null || true
+          kubectl -n $NAMESPACE delete pod -l app=tenant-controller 2>/dev/null || true
+          kubectl -n $NAMESPACE rollout restart deployment cloud-service 2>/dev/null || true
+          kubectl -n $NAMESPACE rollout restart deployment cloud-dashboard 2>/dev/null || true
+
+          # Wait for API to be ready
+          kubectl -n $NAMESPACE rollout status deployment loopzero-api --timeout=120s 2>/dev/null || true
+
+          echo "### Restart Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster | $MGMT_CLUSTER |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Workloads | loopzero-api, tenant-controller, cloud-service, cloud-dashboard |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # DEPLOY — execute Pulumi command (full infra deploy)
+  # Skipped when mode is restart-only (no infra changes).
   # ─────────────────────────────────────────────
   deploy:
     name: "${{ needs.resolve.outputs.command }} → ${{ needs.resolve.outputs.stack }}"
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: [resolve, validate]
+    needs: [gate, resolve, validate]
+    if: needs.gate.outputs.mode != 'restart-only'
     environment: ${{ needs.resolve.outputs.environment }}
 
     # CRITICAL: never cancel a running deploy — creates orphaned resources

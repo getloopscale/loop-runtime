@@ -41,9 +41,11 @@ const tags = standardTags(project, environment);
 const baseName = resourceName({ project, env: environment, region });
 
 // --- Network (shared by all clusters) ---
+const vpcCidr = cfg.get("vpcCidr") ?? undefined; // Override CIDR to avoid overlap with other environments
 const network = factory.createNetwork({
   name: `${baseName}-net`,
   region,
+  cidr: vpcCidr,
   tags,
 });
 
