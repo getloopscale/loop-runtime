@@ -224,36 +224,38 @@ If 100 tenants with shared Application cause:
 ### Architectural Changes Required
 
 ```
-                    ┌─────────────────────┐
-                    │   Global Router      │
-                    │  (CF Worker + KV)    │
-                    └──────┬──────────────┘
-                           │
-              ┌────────────┼────────────────┐
-              │            │                │
-         ┌────▼────┐  ┌───▼─────┐  ┌──────▼──────┐
-         │ Cell A   │  │ Cell B   │  │ Cell C       │
-         │ mgmt     │  │ mgmt     │  │ mgmt         │
-         │ build    │  │ build    │  │ build         │
-         │ runtime  │  │ runtime  │  │ runtime       │
-         │ PG       │  │ PG       │  │ PG            │
-         └─────────┘  └─────────┘  └──────────────┘
+              ┌─────────────────────────────────────────────┐
+              │         SHARED CONTROL PLANE                 │
+              │  Global Router (CF Worker + KV)              │
+              │  PostgreSQL (partitioned by cell_id)         │
+              │  Gitea (shared)    Argo Workflows (shared)  │
+              └──────┬──────────────┬──────────────┬────────┘
+                     │              │              │
+         ┌───────▼──────┐  ┌──────▼──────┐  ┌───▼────────────┐
+         │ Cell A        │  │ Cell B       │  │ Cell C          │
+         │ K8s runtime   │  │ K8s runtime  │  │ K8s runtime     │
+         │ ArgoCD        │  │ ArgoCD       │  │ ArgoCD          │
+         │ Traefik       │  │ Traefik      │  │ Traefik         │
+         │ Prom agent    │  │ Prom agent   │  │ Prom agent      │
+         └──────────────┘  └─────────────┘  └────────────────┘
 ```
 
 ### Per-Cell Capacity Target
 - 500 tenants per cell (validated at Level 4)
-- Independent PG, Gitea, ArgoCD, Build cluster
-- Shared: CF DNS, GitHub App, Container Registry, Billing DB
+- **Per cell:** ArgoCD, Traefik, cert-manager, Prometheus agent, K8s workload cluster
+- **Shared (control plane):** PostgreSQL (partitioned by cell_id per ADR-0008), Gitea, Argo Workflows, Container Registry, CF DNS, GitHub App
+- **Note:** Earlier drafts of this plan listed "Independent PG per cell." Per ADR-0008 and the scaling roadmap (`docs/roadmap/05-cell-provisioning/roadmap.md`), PG is shared on the control plane with table partitioning by cell_id. PG per cell is a future option evaluated only if L5+ data shows shared PG as bottleneck (requires T3 meeting).
 
 ### Infrastructure Per Cell
-| Component | Spec |
-|-----------|------|
-| Mgmt | 4 × medium nodes (4vCPU/8GB) |
-| Build | 4 × medium nodes + autoscale to 8 |
-| Runtime | 4 × medium nodes + autoscale to 16 |
-| PG | HA (primary + 2 replicas) |
-| Gitea | Single instance (500 repos max) |
-| ArgoCD | Sharded controller (2 replicas) |
+| Component | Spec | Shared? |
+|-----------|------|---------|
+| Runtime cluster | 4 × medium nodes + autoscale to 16 | No — per cell |
+| ArgoCD | Sharded controller (2 replicas) | No — per cell |
+| Traefik | 2 replicas | No — per cell |
+| Prometheus agent | 1 replica (remote-write to central) | No — per cell |
+| PostgreSQL | HA (primary + 2 replicas) | **Yes — shared, partitioned by cell_id** |
+| Gitea | Single instance (500 repos max per cell's tenants) | **Yes — shared** |
+| Build cluster | 4 × medium nodes + autoscale to 8 | **Yes — shared** |
 
 ### Test Scenarios
 
