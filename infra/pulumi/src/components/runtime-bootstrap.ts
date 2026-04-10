@@ -90,18 +90,69 @@ export function bootstrapRuntimeCluster(
     { provider, dependsOn: [esoWriterRole] },
   );
 
-  // Promtail — installed manually via Helm (not Pulumi).
-  // The Pulumi Kubernetes provider crashes with gRPC connection closing
-  // when managing Helm releases on the runtime cluster during node pool
-  // resize operations. Promtail is already running on the runtime cluster
-  // (installed in earlier deploys) and doesn't need Pulumi management.
-  //
-  // Manual install:
-  //   helm install promtail grafana/promtail -n monitoring --create-namespace \
-  //     --set config.clients[0].url=http://10.20.0.6:30100/loki/api/v1/push
-  //
-  // TODO: Re-add to Pulumi when provider bug is fixed or when migrating
-  // to a newer pulumi-kubernetes version.
+  // Promtail — ships runtime pod logs to centralized Loki on build cluster.
+  // Uses lokiPushUrl (NodePort on build cluster) for cross-cluster log shipping.
+  // skipAwait + customTimeouts mitigate Pulumi K8s provider gRPC issues
+  // during node pool resize operations.
+  if (config.lokiPushUrl) {
+    const runtimeMonitoringNs = new k8s.core.v1.Namespace(
+      "runtime-monitoring",
+      {
+        metadata: {
+          name: "monitoring",
+          labels: {
+            "app.kubernetes.io/managed-by": "pulumi",
+            "app.kubernetes.io/part-of": "loopzero-platform",
+            "pod-security.kubernetes.io/enforce": "baseline",
+            "pod-security.kubernetes.io/warn": "restricted",
+            "pod-security.kubernetes.io/audit": "restricted",
+          },
+        },
+      },
+      { provider },
+    );
+
+    new k8s.helm.v3.Release(
+      "runtime-promtail",
+      {
+        name: "promtail",
+        chart: "promtail",
+        version: HELM_VERSIONS.promtail,
+        forceUpdate: true,
+        skipAwait: true,
+        repositoryOpts: {
+          repo: "https://grafana.github.io/helm-charts",
+        },
+        namespace: "monitoring",
+        createNamespace: false,
+        values: {
+          config: {
+            clients: [
+              {
+                url: `${config.lokiPushUrl}/loki/api/v1/push`,
+                batchwait: "5s",
+                batchsize: 1048576,
+                backoff_config: {
+                  max_retries: 20,
+                  min_period: "500ms",
+                  max_period: "5m",
+                },
+              },
+            ],
+          },
+          resources: {
+            requests: { cpu: "50m", memory: "64Mi" },
+            limits: { cpu: "200m", memory: "128Mi" },
+          },
+        },
+      },
+      {
+        provider,
+        dependsOn: [runtimeMonitoringNs],
+        customTimeouts: { create: "10m", update: "10m" },
+      },
+    );
+  }
 
   return {
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
@@ -126,6 +177,9 @@ function installESO(
         labels: {
           "app.kubernetes.io/managed-by": "pulumi",
           "app.kubernetes.io/part-of": "loopzero-platform",
+          "pod-security.kubernetes.io/enforce": "baseline",
+          "pod-security.kubernetes.io/warn": "restricted",
+          "pod-security.kubernetes.io/audit": "restricted",
         },
       },
     },

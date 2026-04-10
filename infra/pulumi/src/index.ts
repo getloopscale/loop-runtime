@@ -5,7 +5,7 @@ import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 import { loadStackConfig } from "./config/stack";
 import { createInfra, resolveProvider } from "./components/infra";
-import { bootstrapCluster } from "./components/bootstrap";
+import { bootstrapCluster, CloudflareOutputs } from "./components/bootstrap";
 import { exposePlatform } from "./components/expose";
 import { buildExecutionState } from "./core/execution";
 import { createStaticDelivery, StaticDeliveryOutput } from "./providers/cloudflare/static-delivery";
@@ -18,51 +18,57 @@ const factory = resolveProvider(config.provider, config);
 // --- Phase 1: Base Infrastructure ---
 const infra = createInfra(config);
 
+// --- Phase 1.5: Cloudflare Resources (must exist BEFORE bootstrap) ---
+// CF resources are provisioned when cfAccountId + cfApiToken + cfZoneId are configured.
+// When absent (local dev), CF resources are skipped — cluster operates without tunnel.
+// These are created before bootstrap so that bootstrap can wire CF secrets
+// from real Pulumi outputs (single source of truth), not stale config values.
+let staticDelivery: StaticDeliveryOutput | undefined;
+let tunnelOutput: TunnelOutput | undefined;
+let cfOutputs: CloudflareOutputs | undefined;
+
+if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
+  // 1. CF Tunnel — all runtime traffic via Cloudflare edge (DDoS/WAF, zero public IPs)
+  const cfRuntimeProvider = new k8s.Provider("cf-runtime-k8s", {
+    kubeconfig: infra.runtimeCluster.kubeconfig,
+  });
+
+  tunnelOutput = createTunnel({
+    accountId: config.cfAccountId,
+    zoneId: config.cfZoneId,
+    environment: config.environment,
+    baseDomain: config.domain,
+    runtimeProvider: cfRuntimeProvider,
+    namespace: "platform-system",
+    traefikService: "https://runtime-traefik.platform-system.svc:443",
+  });
+
+  // 2. CF Worker + KV — static frontend routing (DO Spaces via edge)
+  staticDelivery = createStaticDelivery({
+    accountId: config.cfAccountId,
+    zoneId: config.cfZoneId,
+    environment: config.environment,
+    baseDomain: config.domain,
+    s3Endpoint: pulumi.interpolate`https://${infra.staticBucketEndpoint}`,
+  });
+
+  // Pass CF outputs to bootstrap for secret wiring
+  cfOutputs = {
+    kvNamespaceId: staticDelivery.kvNamespaceId,
+  };
+}
+
 // --- Phase 2: Bootstrap Clusters ---
-const bootstrap = bootstrapCluster(infra, config);
+const bootstrap = bootstrapCluster(infra, config, cfOutputs);
 
 // --- Phase 3: Expose Platform ---
 const expose = exposePlatform(bootstrap, infra, config, factory);
-
-// --- Cloudflare (Sprint 10) ---
-// All CF resources are provisioned when cfAccountId + cfApiToken are configured.
-// When absent (local dev), CF resources are skipped — cluster operates without tunnel.
-let staticDelivery: StaticDeliveryOutput | undefined;
-let tunnelOutput: TunnelOutput | undefined;
-
-if (config.cfAccountId && config.cfApiToken) {
-  const cfConfig = new pulumi.Config();
-  const cfZoneId = cfConfig.get("cfZoneId");
-
-  if (cfZoneId) {
-    // 1. CF Tunnel — all runtime traffic via Cloudflare edge (DDoS/WAF, zero public IPs)
-    const cfRuntimeProvider = new k8s.Provider("cf-runtime-k8s", {
-      kubeconfig: infra.runtimeCluster.kubeconfig,
-    });
-
-    tunnelOutput = createTunnel({
-      accountId: config.cfAccountId,
-      zoneId: cfZoneId,
-      baseDomain: config.domain,
-      runtimeProvider: cfRuntimeProvider,
-      namespace: "platform-system",
-      traefikService: "https://runtime-traefik.platform-system.svc:443",
-    });
-
-    // 2. CF Worker + KV — static frontend routing (DO Spaces via edge)
-    staticDelivery = createStaticDelivery({
-      accountId: config.cfAccountId,
-      zoneId: cfZoneId,
-      baseDomain: config.domain,
-      s3Endpoint: pulumi.interpolate`https://${infra.staticBucketName}.${config.region}.digitaloceanspaces.com`,
-    });
-  }
-}
 
 // --- Execution state (operational tracking) ---
 export const execution = buildExecutionState({
   environment: config.environment,
   provider: config.provider,
+  infraVersion: config.infraVersion,
   components: {
     // Phase 1
     network: infra.vpcId.apply((id) => !!id),

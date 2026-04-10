@@ -8,6 +8,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { InfraOutputs, ClusterOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
+import { CloudflareOutputs } from "./bootstrap-shared";
 import { InfraError } from "../core/errors";
 import { installPrometheus, installGrafana, installTempo, installOtelCollector, provisionGrafanaDashboards } from "./mgmt-observability";
 import {
@@ -32,6 +33,7 @@ export function bootstrapMgmtCluster(
   config: PlatformStackConfig,
   lokiEndpoint: pulumi.Output<string>,
   argoMetricsEndpoint: pulumi.Output<string>,
+  cf?: CloudflareOutputs,
 ): MgmtBootstrapOutputs {
   // REVIEW-2026-03-30: Fixes CRIT-01 — fail-fast if production deploys without
   // explicit passwords. Dev defaults are acceptable only for non-prod environments.
@@ -119,7 +121,7 @@ export function bootstrapMgmtCluster(
   provisionGrafanaDashboards(provider, ns, grafana);
 
   // Tempo — distributed trace backend (MEET-2026-03-30-020)
-  const tempo = installTempo(provider, ns, config);
+  const tempo = installTempo(provider, ns, config, infra.spacesEndpoint);
 
   // OTEL Collector — centralized trace pipeline (sampling, batching, export to Tempo)
   const otelCollector = installOtelCollector(provider, ns, tempo);
@@ -133,7 +135,7 @@ export function bootstrapMgmtCluster(
   createArgoCDRepoCredentials(provider, ns, argocd, gitea);
 
   // LoopZero API — platform HTTP server (connects to DB, Gitea, ArgoCD, Argo Workflows)
-  const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config, lokiEndpoint, callbackToken);
+  const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config, lokiEndpoint, callbackToken, cf);
 
   // LoopZero Controller — background reconciliation loops (roadmap 02).
   // Runs: build reconcile, build/release reapers, release convergence,
@@ -1379,6 +1381,7 @@ function installLoopZeroAPI(
   config: PlatformStackConfig,
   lokiEndpoint: pulumi.Output<string>,
   callbackToken: random.RandomPassword,
+  cf?: CloudflareOutputs,
 ): k8s.apps.v1.Deployment {
   // Database connection string for the `loopzero` database (created in Phase 1).
   // MEET-2026-03-31-024: When loopzeroApiDbPassword is set, the API connects as loopzero_api role
@@ -1413,8 +1416,10 @@ function installLoopZeroAPI(
   );
 
   // Cloudflare credentials for static frontend delivery (Sprint 10).
-  // Only created when CF config values are provided.
-  if (config.cfApiToken && config.cfAccountId && config.cfKvNamespaceId) {
+  // Only created when CF config values are provided AND KV namespace exists.
+  // cfKvNamespaceId comes from createStaticDelivery output (single source of truth),
+  // NOT from Pulumi config — eliminates dual source of truth bug.
+  if (config.cfApiToken && config.cfAccountId && cf?.kvNamespaceId) {
     new k8s.core.v1.Secret(
       "loopzero-cf-credentials",
       {
@@ -1422,7 +1427,7 @@ function installLoopZeroAPI(
         stringData: {
           CF_API_TOKEN: config.cfApiToken,
           CF_ACCOUNT_ID: config.cfAccountId,
-          CF_KV_NAMESPACE_ID: config.cfKvNamespaceId,
+          CF_KV_NAMESPACE_ID: cf.kvNamespaceId,
         },
       },
       { provider, dependsOn: [ns] },

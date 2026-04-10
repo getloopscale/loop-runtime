@@ -16,3 +16,29 @@ export interface ObjectStorageOutput {
   readonly endpoint: pulumi.Output<string>;
   readonly region: pulumi.Output<string>;
 }
+
+export interface CdnSpec {
+  /** Origin: bucket domain name (e.g., "loopzero-static-assets.sfo3.digitaloceanspaces.com") */
+  readonly origin: pulumi.Input<string>;
+  /** Edge cache TTL in seconds */
+  readonly ttl: number;
+}
+
+export interface CdnOutput {
+  readonly cdnEndpoint: pulumi.Output<string>;
+}
+
+/**
+ * S3-compatible storage endpoint for the provider's region.
+ * Eliminates hardcoded endpoint strings like "sfo3.digitaloceanspaces.com".
+ */
+export interface StorageEndpointSpec {
+  readonly region: string;
+}
+
+export interface StorageEndpointOutput {
+  /** Full HTTPS endpoint (e.g., "https://sfo3.digitaloceanspaces.com") */
+  readonly endpoint: pulumi.Output<string>;
+  /** S3-compatible endpoint for SDKs (e.g., "https://s3.sfo3.digitaloceanspaces.com") */
+  readonly s3Endpoint: pulumi.Output<string>;
+}

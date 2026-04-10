@@ -1,0 +1,17 @@
+config:
+  loopzero-control-plane:environment: dev
+  loopzero-control-plane:domain: dev.loopzero.example
+  # Stripe Billing
+  loopzero-control-plane:stripePriceProId: "price_1TJGIuA0ZwssSKrVEMKZsiMj"
+  loopzero-control-plane:stripePriceTeamId: "price_1TJGJ5A0ZwssSKrVy3mjsal6"
+  # Cloudflare (for API CF credentials)
+  loopzero-control-plane:cfAccountId: "362767409c4de7fda7990c10103efdd9"
+  # Secrets — set via: pulumi config set --secret <key> <value>
+  # loopzero-control-plane:spacesAccessKeyId
+  # loopzero-control-plane:spacesSecretAccessKey
+  # loopzero-control-plane:cfApiToken
+  # loopzero-control-plane:stripeApiKey
+  # loopzero-control-plane:stripeWebhookSecret
+  # loopzero-control-plane:sessionTokenSecret
+  # loopzero-control-plane:serviceAuthSecret
+  # loopzero-control-plane:loopzeroApiDbPassword

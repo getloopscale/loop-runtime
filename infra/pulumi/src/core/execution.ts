@@ -52,7 +52,7 @@ export interface ExecutionState {
   readonly stack: string;
   readonly environment: string;
   readonly provider: string;
-  readonly declaredAt: string;
+  readonly infraVersion: string;
   readonly phases: PhaseRecord[];
 }
 
@@ -65,11 +65,11 @@ export interface ExecutionState {
 export function buildExecutionState(args: {
   environment: string;
   provider: string;
+  infraVersion: string;
   components: Record<ComponentName, pulumi.Output<boolean>>;
 }): pulumi.Output<ExecutionState> {
-  const declaredAt = new Date().toISOString();
   const stack = pulumi.getStack();
-  const installationId = `${stack}-${declaredAt.replace(/[:.]/g, "-")}`;
+  const installationId = `${stack}-${args.infraVersion}`;
 
   const componentNames = Object.keys(args.components) as ComponentName[];
   const componentOutputs = componentNames.map((name) => args.components[name]);
@@ -125,7 +125,7 @@ export function buildExecutionState(args: {
       stack,
       environment: args.environment,
       provider: args.provider,
-      declaredAt,
+      infraVersion: args.infraVersion,
       phases: [
         buildPhase("infra", infraComponents),
         buildPhase("bootstrap", bootstrapComponents),

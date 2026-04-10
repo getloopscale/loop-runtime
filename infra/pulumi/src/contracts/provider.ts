@@ -3,7 +3,7 @@
 
 import { NetworkSpec, NetworkOutput } from "./network";
 import { KubernetesClusterSpec, KubernetesClusterOutput } from "./kubernetes";
-import { ObjectStorageSpec, ObjectStorageOutput } from "./storage";
+import { ObjectStorageSpec, ObjectStorageOutput, CdnSpec, CdnOutput, StorageEndpointSpec, StorageEndpointOutput } from "./storage";
 import { DnsRecordSpec, DnsRecordOutput } from "./dns";
 import { DatabaseClusterSpec, DatabaseClusterOutput } from "./database";
 import { ContainerRegistrySpec, ContainerRegistryOutput } from "./registry";
@@ -29,6 +29,8 @@ export interface IProviderKubernetes {
 
 export interface IProviderStorage {
   createObjectStorage(spec: ObjectStorageSpec): ObjectStorageOutput;
+  createCdn(spec: CdnSpec): CdnOutput;
+  getStorageEndpoint(spec: StorageEndpointSpec): StorageEndpointOutput;
 }
 
 export interface IProviderDns {

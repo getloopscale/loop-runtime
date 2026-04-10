@@ -1,0 +1,6 @@
+name: loopzero-control-plane
+runtime: nodejs
+description: >
+  LoopZero application services — API, Tenant Controller, Cloud Service, Dashboard,
+  Ory Kratos/Hydra, IngressRoutes, NetworkPolicies, CRDs.
+  Consumes loopzero-infra + loopzero-platform outputs via StackReference.

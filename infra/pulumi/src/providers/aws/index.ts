@@ -4,7 +4,7 @@
 import { CloudProviderFactory } from "../../contracts/provider";
 import { NetworkSpec, NetworkOutput } from "../../contracts/network";
 import { KubernetesClusterSpec, KubernetesClusterOutput } from "../../contracts/kubernetes";
-import { ObjectStorageSpec, ObjectStorageOutput } from "../../contracts/storage";
+import { ObjectStorageSpec, ObjectStorageOutput, CdnSpec, CdnOutput, StorageEndpointSpec, StorageEndpointOutput } from "../../contracts/storage";
 import { DnsRecordSpec, DnsRecordOutput } from "../../contracts/dns";
 import { DatabaseClusterSpec, DatabaseClusterOutput } from "../../contracts/database";
 import { ContainerRegistrySpec, ContainerRegistryOutput } from "../../contracts/registry";
@@ -46,6 +46,14 @@ export class AwsProviderFactory implements CloudProviderFactory {
 
   createContainerRegistry(_spec: ContainerRegistrySpec): ContainerRegistryOutput {
     throw this.notImplemented("registry");
+  }
+
+  createCdn(_spec: CdnSpec): CdnOutput {
+    throw this.notImplemented("cdn");
+  }
+
+  getStorageEndpoint(_spec: StorageEndpointSpec): StorageEndpointOutput {
+    throw this.notImplemented("storageEndpoint");
   }
 
   private notImplemented(resource: string): InfraError {

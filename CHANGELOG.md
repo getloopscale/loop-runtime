@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Declarative multi-cluster topology** (`pulumi-infra/src/topology/`): Config-driven N clusters per role. TopologyConfig schema, parser+validator, generic provisioner keyed by stable `clusterId`, ClusterRegistry output for StackReference. Cell factory (`createCell/createCells`) associates cellId→runtime cluster. 10 topology test cases. Legacy fallback from singleton config.
+- **Distributed work queue** (`api/internal/workqueue/`): PG-backed queue with `SELECT ... FOR UPDATE SKIP LOCKED`. Enables non-leader pods to process background work. Queue/Consumer abstraction for all 6 reconcile loops.
+- **Dynamic cell router** (`api/internal/placement/dynamic_router.go`): Periodically refreshes cell list from CellStore. K8sCellStore reads ClusterCredential CRDs for multi-cell Phase 2 routing.
+- **Load test L3/L4**: L3 (100 tenants concurrent), L4 (50 concurrent lock stress on same project). CI workflow for scheduled/manual load test execution.
+- **DB pool saturation metrics**: `loopzero_postgres_pool_acquire_duration_seconds`, `loopzero_postgres_pool_empty_acquire_total`, `loopzero_postgres_pool_max_conns` for contention visibility.
+- **DB pool alerts**: `LoopZeroDBPoolSaturation` (>80% utilization, 5m), `LoopZeroDBPoolAcquireLatency` (p95 >100ms, 3m).
+- **pg_stat_statements** enabled via migration 000029 for slow query visibility.
 - **Leader-generation fencing primitive** (Roadmap 02). New package
   `api/internal/leader/` providing `Acquirer` with `Acquire`, `Heartbeat`,
   `Validate`, and `Release`. Every successfully acquired `Lease` carries a
@@ -45,6 +52,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `stale_checker_cell_scope_test.go`) — all green with zero impact on existing
   tests. Prerequisite for ADR-0008 cell isolation and the future PG partition-
   by-cell_id migration tracked as escalation risk.
+- IaC: split em 3 projetos Pulumi (`pulumi-infra`, `pulumi-platform`, `pulumi-control-plane`) com StackReference e contratos tipados
+- IaC: `pulumi-shared/stack-outputs.ts` como single source of truth para contratos entre projetos
+- IaC: StackReference parametrizado via config (`infraStackRef`, `platformStackRef`) — suporta per-developer stacks
+- IaC: ADR-001 documentando boundaries, contratos e estratégia de migração
+- IaC: baseline document com inventário de 160+ recursos, 19 outputs, 33 configs, 6 CRITICAL resources
+
+### Changed
+- IaC: admission policy `vap-require-resource-limits` de `Audit` para `Deny` — enforcement real em tenant namespaces
+- IaC: Traefik com 2 réplicas, PDB (minAvailable: 1), topologySpreadConstraints e JSON logging
+- IaC: PSA `enforce: baseline` + `warn: restricted` em todos os namespaces gerenciados (platform-system, argo, monitoring, external-secrets)
+- IaC: Argo Workflows com `volumeClaimGC: OnWorkflowCompletion` — auto-delete PVCs de builds completados/falhos
 
 ### Fixed
 - **Manifest gate is YAML-document-aware** (Roadmap 01, Correction G). Previously a
@@ -55,6 +73,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Namespace`, `ClusterRole`, `ClusterRoleBinding`, `ClusterIssuer`, and
   `CustomResourceDefinition` are rejected. Malformed YAML fails closed. 9 unit tests.
   Files: `api/internal/gitops/manifest_gate.go`, `manifest_gate_test.go`.
+- IaC: `cfKvNamespaceId` agora vem do output real do `createStaticDelivery`, não de config estática — elimina dual source of truth que quebrava bootstrap em stack nova
+- IaC: recursos Cloudflare (tunnel, KV, Worker) parametrizados com environment — evita colisão entre stacks na mesma conta CF
+- IaC: bucket names (`builds`, `logs`, `static-assets`) parametrizados com `bucketName()` por env/region — evita corrupção cruzada entre stacks
+- IaC: CDN movido para `CloudProviderFactory` — elimina `digitalocean.Cdn` direto em `infra.ts` e `spacesEndpoint` hardcoded
+- IaC: `execution.declaredAt` removido — substituído por `infraVersion` determinístico, elimina diff artificial em todo `pulumi up`
+- IaC: Promtail no runtime cluster reintegrado ao Pulumi — elimina step manual e garante reprodutibilidade em disaster recovery
+- IaC: Loki S3 endpoint e bucket name agora consomem outputs tipados da fase de infra em vez de strings hardcoded
+- IaC: Tempo storage endpoint agora vem do provider em vez de hardcoded `digitaloceanspaces.com`
 
 ## [0.13.0] — 2026-04-09
 

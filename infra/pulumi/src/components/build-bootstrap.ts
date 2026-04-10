@@ -33,6 +33,9 @@ export function bootstrapBuildCluster(
           "app.kubernetes.io/managed-by": "pulumi",
           "app.kubernetes.io/part-of": "loopzero-platform",
           "loopzero.io/cluster-role": "build",
+          "pod-security.kubernetes.io/enforce": "baseline",
+          "pod-security.kubernetes.io/warn": "restricted",
+          "pod-security.kubernetes.io/audit": "restricted",
         },
       },
     },
@@ -185,6 +188,9 @@ export function bootstrapBuildCluster(
         labels: {
           "app.kubernetes.io/managed-by": "pulumi",
           "app.kubernetes.io/part-of": "loopzero-platform",
+          "pod-security.kubernetes.io/enforce": "baseline",
+          "pod-security.kubernetes.io/warn": "restricted",
+          "pod-security.kubernetes.io/audit": "restricted",
         },
       },
     },
@@ -216,13 +222,13 @@ export function bootstrapBuildCluster(
             type: "s3",
             // Required by Loki chart v6.24+ commonStorageConfig helper template
             bucketNames: {
-              chunks: "loopzero-logs",
-              ruler: "loopzero-logs",
-              admin: "loopzero-logs",
+              chunks: infra.logsBucketName,
+              ruler: infra.logsBucketName,
+              admin: infra.logsBucketName,
             },
             s3: {
-              endpoint: `https://s3.${config.region}.digitaloceanspaces.com`,
-              bucketnames: "loopzero-logs",
+              endpoint: infra.s3Endpoint,
+              bucketnames: infra.logsBucketName,
               access_key_id: config.spacesAccessKeyId,
               secret_access_key: config.spacesSecretAccessKey,
               s3ForcePathStyle: true,

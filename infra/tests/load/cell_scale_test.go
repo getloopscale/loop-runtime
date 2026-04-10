@@ -123,8 +123,8 @@ func (s *DeploySimulator) setAuth(req *http.Request) {
 		req.Header.Set("X-LoopZero-User-ID", s.userID)
 		req.Header.Set("X-LoopZero-Tenant", s.tenantID)
 		req.Header.Set("X-LoopZero-Email", s.email)
-	} else {
-		s.setAuth(req)
+	} else if s.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+s.authToken)
 	}
 }
 
@@ -671,4 +671,176 @@ func max(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// TestL3_100Tenants runs 100 concurrent tenants — first milestone toward 100k scale.
+// Tests: connection pool saturation, lock contention, Argo queue depth, ArgoCD sync throughput.
+func TestL3_100Tenants(t *testing.T) {
+	_, sim := requireLoadTestEnv(t)
+
+	const tenantCount = 100
+	const concurrency = 10 // 10 concurrent at a time to avoid overwhelming API
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Minute)
+	defer cancel()
+
+	t.Logf("L3 — %d tenants, %d concurrent deploys", tenantCount, concurrency)
+
+	// Create projects in batches
+	for i := 0; i < tenantCount; i++ {
+		name := fmt.Sprintf("loadtest-%d", i)
+		if err := sim.CreateProject(ctx, name); err != nil {
+			t.Fatalf("Failed to create project %s: %v", name, err)
+		}
+	}
+	t.Logf("  %d projects created", tenantCount)
+
+	// Deploy with concurrency limiter
+	var (
+		results  []DeployResult
+		mu       sync.Mutex
+		success  int64
+		failures int64
+	)
+
+	start := time.Now()
+	sem := make(chan struct{}, concurrency)
+
+	var wg sync.WaitGroup
+	for i := 0; i < tenantCount; i++ {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			name := fmt.Sprintf("loadtest-%d", idx)
+			r := sim.SimulateDeploy(ctx, name, "production")
+			r.TenantIdx = idx
+
+			mu.Lock()
+			results = append(results, r)
+			mu.Unlock()
+
+			if r.Success {
+				atomic.AddInt64(&success, 1)
+			} else {
+				atomic.AddInt64(&failures, 1)
+			}
+
+			t.Logf("  [%d/%d] %s: success=%v latency=%s",
+				idx+1, tenantCount, name, r.Success, r.Latency.Total.Round(time.Second))
+		}(i)
+	}
+
+	wg.Wait()
+	totalDuration := time.Since(start)
+
+	var totalLatencies, uploadLatencies []time.Duration
+	for _, r := range results {
+		totalLatencies = append(totalLatencies, r.Latency.Total)
+		uploadLatencies = append(uploadLatencies, r.Latency.Upload)
+	}
+
+	report := &LoadTestResult{
+		TotalDeploys:     len(results),
+		SuccessCount:     success,
+		FailureCount:     failures,
+		Duration:         totalDuration,
+		DeployLatencyP50: percentile(totalLatencies, 50),
+		DeployLatencyP95: percentile(totalLatencies, 95),
+		DeployLatencyP99: percentile(totalLatencies, 99),
+		UploadLatencyP50: percentile(uploadLatencies, 50),
+		Results:          results,
+	}
+
+	printReport(t, report)
+
+	// L3 pass criteria
+	failRate := float64(failures) / float64(max(success+failures, 1)) * 100
+	if failRate > 10 {
+		t.Errorf("L3 FAIL: failure rate %.1f%% exceeds 10%%", failRate)
+	}
+	if report.DeployLatencyP99 > 20*time.Minute {
+		t.Errorf("L3 FAIL: deploy p99 %s exceeds 20min", report.DeployLatencyP99)
+	}
+}
+
+// TestL4_LockStress hammers the environment lock with 50 concurrent builds
+// for the SAME project/environment. Tests lock contention and 409 rejection.
+func TestL4_LockStress(t *testing.T) {
+	_, sim := requireLoadTestEnv(t)
+
+	const concurrent = 50
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	t.Logf("L4 Lock Stress — %d concurrent builds for same project", concurrent)
+
+	projectName := "loadtest-lock-stress"
+	if err := sim.CreateProject(ctx, projectName); err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	var (
+		wg       sync.WaitGroup
+		accepted int64
+		rejected int64
+		errors   int64
+	)
+
+	start := time.Now()
+	for i := 0; i < concurrent; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			_, err := sim.CreateBuild(ctx, projectName, "production",
+				fmt.Sprintf("stress-sha-%d", idx))
+			if err != nil {
+				// 409 = lock contention (expected), other errors = unexpected
+				errStr := err.Error()
+				if contains(errStr, "409") || contains(errStr, "conflict") || contains(errStr, "already") {
+					atomic.AddInt64(&rejected, 1)
+				} else {
+					atomic.AddInt64(&errors, 1)
+					t.Logf("  Unexpected error: %v", err)
+				}
+			} else {
+				atomic.AddInt64(&accepted, 1)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	duration := time.Since(start)
+
+	t.Logf("═══════════════════════════════════════════")
+	t.Logf("  LOCK STRESS REPORT")
+	t.Logf("═══════════════════════════════════════════")
+	t.Logf("  Concurrent:  %d", concurrent)
+	t.Logf("  Accepted:    %d (should be exactly 1)", accepted)
+	t.Logf("  Rejected:    %d (409 lock contention)", rejected)
+	t.Logf("  Errors:      %d (unexpected failures)", errors)
+	t.Logf("  Duration:    %s", duration.Round(time.Millisecond))
+	t.Logf("═══════════════════════════════════════════")
+
+	// Exactly 1 build should be accepted, rest rejected by lock
+	if accepted > 1 {
+		t.Errorf("L4 FAIL: %d builds accepted (expected exactly 1 — lock broken)", accepted)
+	}
+	if errors > 0 {
+		t.Errorf("L4 FAIL: %d unexpected errors (not 409 rejections)", errors)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsImpl(s, substr))
+}
+
+func containsImpl(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

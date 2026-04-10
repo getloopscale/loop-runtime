@@ -294,6 +294,7 @@ export function installTempo(
   provider: k8s.Provider,
   ns: k8s.core.v1.Namespace,
   config: PlatformStackConfig,
+  storageEndpoint?: pulumi.Output<string>,
 ): k8s.helm.v3.Release {
   // Storage config: local filesystem for dev, S3 (DO Spaces) for prod.
   const useS3 = !!config.tempoStorageBucket;
@@ -302,11 +303,12 @@ export function installTempo(
       backend: useS3 ? "s3" : "local",
       local: { path: "/var/tempo/traces" },
       wal: { path: "/var/tempo/wal" },
-      ...(useS3
+      ...(useS3 && storageEndpoint
         ? {
             s3: {
               bucket: config.tempoStorageBucket,
-              endpoint: `${config.region}.digitaloceanspaces.com`,
+              // Tempo S3 client expects endpoint without https:// prefix
+              endpoint: storageEndpoint.apply(e => e.replace("https://", "")),
               forcepathstyle: true,
             },
           }

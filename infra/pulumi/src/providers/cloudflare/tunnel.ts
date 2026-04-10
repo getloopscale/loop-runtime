@@ -17,6 +17,8 @@ export interface TunnelConfig {
   readonly accountId: string;
   /** Cloudflare zone ID for the domain */
   readonly zoneId: string;
+  /** Environment name (dev, staging, prod) — used to namespace CF resources */
+  readonly environment: string;
   /** Base domain (e.g., "dev.loopzero.example") — wildcard CNAME points to tunnel */
   readonly baseDomain: string;
   /** K8s provider for the runtime cluster (where cloudflared runs) */
@@ -51,9 +53,10 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
   const cfConfig = new pulumi.Config();
   const tunnelSecret = cfConfig.requireSecret("tunnelSecret");
 
-  const tunnel = new cloudflare.ZeroTrustTunnelCloudflared("loopzero-tunnel", {
+  const tunnelName = `loopzero-${config.environment}`;
+  const tunnel = new cloudflare.ZeroTrustTunnelCloudflared(`loopzero-tunnel-${config.environment}`, {
     accountId: config.accountId,
-    name: "loopzero-dev",
+    name: tunnelName,
     tunnelSecret: tunnelSecret,
     configSrc: "cloudflare",
   });

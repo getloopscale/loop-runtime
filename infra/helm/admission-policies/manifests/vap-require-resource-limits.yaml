@@ -37,7 +37,7 @@ metadata:
 spec:
   policyName: loopzero-require-resource-limits
   validationActions:
-    - Audit
+    - Deny
   matchResources:
     namespaceSelector:
       matchLabels:
