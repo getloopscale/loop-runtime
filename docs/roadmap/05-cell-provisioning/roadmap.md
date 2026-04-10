@@ -6,6 +6,13 @@
 **Unblocks:** Multi-cell existence, L4+
 **Cost delta:** +$300/mo per cell during testing
 **Governance:** Pre-approved (MEET-046). No T2/T3 gate. Implement immediately via TDD. Validate on DigitalOcean. Infra cost authorized — destroy cells after validation to control spend.
+**Status (2026-04-10 iter 11):** `createCell()` implemented with real
+DigitalOcean resources — DOKS cluster, cert-manager, Traefik, ArgoCD,
+repo-creds, metrics-server, DB firewall allowlisting. `tsc --noEmit`
+passes. New `CellInfraRefs` interface carries VPC/DB/Gitea/CF refs from
+the infra phase so cells integrate with the shared control plane.
+**NOT YET RUN:** `pulumi up` required to provision the actual cluster
+(~$300/mo cost). Ready for user-authorized execution.
 
 ---
 

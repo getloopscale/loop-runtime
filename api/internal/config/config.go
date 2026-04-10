@@ -149,22 +149,23 @@ type Config struct {
 	// Env: LOOPZERO_DISABLE_LEGACY_LOOPS ("true" to disable loops in the API).
 	DisableLegacyLoops bool
 
-	// Roadmap 07 — Backpressure & Admission Control.
+	// Roadmap 07 — Backpressure and Admission Control.
 	//
-	// MaxConcurrentBuildsPerCell is the maximum number of concurrent builds
-	// allowed across all tenants in a single cell. When reached, new build
-	// submissions receive HTTP 429 with Retry-After.
+	// When AdmissionControl is true, the API consults the build admission
+	// gate and pg-pool circuit breaker. At capacity returns HTTP 429 or 503.
+	// Default: false — preserves pre-roadmap-07 behavior.
+	// Env: LOOPZERO_ADMISSION_CONTROL
+	AdmissionControl bool
+
+	// MaxConcurrentBuildsPerCell: cell-level concurrent build limit.
 	// Env: MAX_CONCURRENT_BUILDS_PER_CELL (default: 20)
 	MaxConcurrentBuildsPerCell int
 
-	// MaxConcurrentBuildsPerTenant is the maximum number of concurrent builds
-	// a single tenant can have running simultaneously. Prevents a noisy
-	// neighbor from consuming all cell capacity.
+	// MaxConcurrentBuildsPerTenant: per-tenant concurrent build limit.
 	// Env: MAX_CONCURRENT_BUILDS_PER_TENANT (default: 3)
 	MaxConcurrentBuildsPerTenant int
 
-	// PGCircuitBreakerThresholdPct is the pool utilization percentage (0-100)
-	// above which mutation requests are rejected with HTTP 503. Reads continue.
+	// PGCircuitBreakerThresholdPct: pool utilization % above which mutations are rejected.
 	// Env: PG_CIRCUIT_BREAKER_THRESHOLD_PCT (default: 90)
 	PGCircuitBreakerThresholdPct int
 }
@@ -290,6 +291,7 @@ func Load() Config {
 		DisableLegacyLoops: os.Getenv("LOOPZERO_DISABLE_LEGACY_LOOPS") == "true",
 
 		// Roadmap 07 — Backpressure & Admission Control.
+		AdmissionControl:             os.Getenv("LOOPZERO_ADMISSION_CONTROL") == "true",
 		MaxConcurrentBuildsPerCell:   envInt("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
 		MaxConcurrentBuildsPerTenant: envInt("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
 		PGCircuitBreakerThresholdPct: envInt("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),

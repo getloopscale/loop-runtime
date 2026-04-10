@@ -33,6 +33,38 @@ func TestLoad_DisableLegacyLoops_TrueActivates(t *testing.T) {
 	}
 }
 
+func TestLoad_AdmissionControl_DefaultsFalse(t *testing.T) {
+	_ = os.Unsetenv("LOOPZERO_ADMISSION_CONTROL")
+	cfg := Load()
+	if cfg.AdmissionControl {
+		t.Error("AdmissionControl must default to false when env is unset")
+	}
+}
+
+func TestLoad_AdmissionControl_TrueActivates(t *testing.T) {
+	t.Setenv("LOOPZERO_ADMISSION_CONTROL", "true")
+	cfg := Load()
+	if !cfg.AdmissionControl {
+		t.Error(`AdmissionControl must be true when env = "true"`)
+	}
+}
+
+func TestLoad_AdmissionControl_TypoRejected(t *testing.T) {
+	// Same typo-safety contract as DisableLegacyLoops: only the exact
+	// literal "true" activates the flag. Anything else (including "TRUE",
+	// "1", "yes") is treated as off.
+	cases := []string{"TRUE", "True", "1", "yes", "on"}
+	for _, v := range cases {
+		t.Run(v, func(t *testing.T) {
+			t.Setenv("LOOPZERO_ADMISSION_CONTROL", v)
+			cfg := Load()
+			if cfg.AdmissionControl {
+				t.Errorf("value %q must not enable AdmissionControl", v)
+			}
+		})
+	}
+}
+
 func TestLoad_DisableLegacyLoops_NonTrueRejected(t *testing.T) {
 	// Anything other than the exact literal "true" is treated as false —
 	// conservative default to avoid accidental loop disable via typo.

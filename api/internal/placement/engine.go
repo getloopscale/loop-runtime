@@ -74,6 +74,28 @@ type TenantCellQuerier interface {
 	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
 }
 
+// Serializer wraps a callback in a critical section so concurrent callers
+// cannot both read the same tenant count and both assign to the same cell.
+// In production the wrapper acquires a process-wide `pg_advisory_xact_lock`
+// on a well-known id so even multi-replica API deployments serialize their
+// placement decisions through Postgres. In tests a simple `sync.Mutex.Lock`
+// wrapper is enough.
+//
+// The callback must be called exactly once and its error returned verbatim.
+// The Serializer must NOT swallow the callback error.
+//
+// Roadmap 06 — fixes the Read-Count → Decide → (race) → Insert TOCTOU in
+// AssignCell that hot-spots all concurrent tenant creates into the same
+// cell before any of them persist.
+type Serializer func(ctx context.Context, fn func(ctx context.Context) error) error
+
+// PlacementLockID is the Postgres advisory lock id used by production
+// Serializer implementations. Chosen from the user-reserved lock space so
+// it never collides with built-in Postgres locks or with LoopZero's environment
+// lock family (which uses hashes of (tenant, project, env)).
+// "plcmtlck" in hex.
+const PlacementLockID int64 = 0x706C636D746C636B
+
 // RoundRobinEngine assigns new tenants to the Cell with fewest tenants.
 // Existing tenants keep their cell_id (sticky assignment).
 // ADR-0008 Phase 1.
@@ -81,6 +103,7 @@ type RoundRobinEngine struct {
 	router     Router
 	querier    TenantCellQuerier
 	maxPerCell int
+	serialize  Serializer // optional — nil means no serialization (single-writer safe only)
 }
 
 // NewRoundRobinEngine creates a placement engine that distributes tenants
@@ -97,9 +120,57 @@ func NewRoundRobinEngine(router Router, querier TenantCellQuerier, maxPerCell in
 	}
 }
 
+// WithSerializer returns a shallow copy of the engine that runs every
+// AssignCell call inside the given serializer. Use this in production with
+// a pg_advisory_xact_lock wrapper so concurrent tenant creations cannot
+// both observe the same counts and both pick the same cell (TOCTOU).
+//
+// The method returns a pointer to the new engine so call sites can chain:
+//
+//	engine := placement.NewRoundRobinEngine(router, querier, 500).
+//	    WithSerializer(advisoryLockSerializer(pool))
+//
+// The original engine is not mutated — callers may continue to use it if
+// they need an unserialized variant (e.g. tests that assert the race).
+func (e *RoundRobinEngine) WithSerializer(s Serializer) *RoundRobinEngine {
+	cp := *e
+	cp.serialize = s
+	return &cp
+}
+
 // AssignCell returns the cell_id of the Cell with fewest tenants (bin-packing).
 // Returns error if all Cells are at capacity.
+//
+// When a Serializer was attached via WithSerializer, the entire
+// count-and-pick operation runs inside the serialized critical section so
+// concurrent AssignCell calls execute sequentially from the database's
+// perspective and cannot both pick the same cell.
 func (e *RoundRobinEngine) AssignCell(ctx context.Context) (string, error) {
+	var cellID string
+	run := func(ctx context.Context) error {
+		picked, err := e.assignLocked(ctx)
+		if err != nil {
+			return err
+		}
+		cellID = picked
+		return nil
+	}
+	if e.serialize != nil {
+		if err := e.serialize(ctx, run); err != nil {
+			return "", err
+		}
+		return cellID, nil
+	}
+	if err := run(ctx); err != nil {
+		return "", err
+	}
+	return cellID, nil
+}
+
+// assignLocked performs the actual count-and-pick. It does NOT acquire any
+// lock on its own — the caller is responsible for serialization if the
+// engine is used from multiple goroutines / replicas.
+func (e *RoundRobinEngine) assignLocked(ctx context.Context) (string, error) {
 	cells, err := e.router.ListCells(ctx)
 	if err != nil {
 		return "", fmt.Errorf("placement: list cells: %w", err)

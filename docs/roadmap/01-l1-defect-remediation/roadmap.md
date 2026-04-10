@@ -19,16 +19,16 @@ Evidence: `infra/tests/load/CORRECTIONS.txt`
 
 | Correction | Root Cause | Fix |
 |---|---|---|
-| **D/F** — Probe kills non-leader | Leader election takes 60s, liveness kills at 45s | Add startupProbe to API Deployment in Pulumi. Start HTTP server BEFORE leader election. |
-| **G** — Manifest gate blocks new tenants ✅ (2026-04-10) | `strings.Contains("kind: ClusterIssuer")` matches `issuerRef.kind` inside Certificate CRs | YAML-document-aware validation: parse apiVersion+kind at top level, not substring match. Implemented in `api/internal/gitops/manifest_gate.go` using `yaml.v3` decoder. Forbidden top-level kinds: Namespace, ClusterRole, ClusterRoleBinding, ClusterIssuer, CustomResourceDefinition. 9 unit tests passing. |
-| **I** — PVC multi-attach (10% failure) | Argo Workflows schedules steps on different nodes, DO Block Storage is RWO | nodeAffinity in loopzero-forge WorkflowTemplate to pin steps to same node |
-| **J** — loopzero-packs-runner bash error | v0.1.0 bash syntax error in Rust template | Already fixed (v0.2.0 Go binary). Ensure Pulumi references v0.2.0. |
-| **K** — Build cluster undersized | 2 small nodes, PVC contention | Build node class: small → medium, autoscale 2→5. Codify in Pulumi. |
-| **H** — Image cache on DOKS | `:dev` tag not re-pulled from cache | Use SHA-based image tags (already done by CI). Document as policy. |
-| **B** — schema_migrations corruption | `migrate force 0` on production DB | Document: NEVER run `migrate force` on production. Add CI check. |
-| **L** — Fixture path issue | Subdirectory path in loopzero.yaml vs flat fixture | Fix load test fixture to match production structure |
-| **E** — GitOps push empty repo | New tenants missing ArgoCD repo credentials | Verify EnsureTenant creates Gitea permissions + ArgoCD repo-creds |
-| **M** — Promtail Pulumi crash | gRPC provider crash on runtime cluster | Removed from Pulumi. Track: upgrade pulumi-kubernetes when stable. |
+| **D/F** — Probe kills non-leader ✅ | Leader election takes 60s, liveness kills at 45s | HTTP server starts BEFORE leader election (verified on DO: non-leader pods ready=true, restarts=0). startupProbe present in Pulumi deployment spec. |
+| **G** — Manifest gate blocks new tenants ✅ | `strings.Contains("kind: ClusterIssuer")` matches `issuerRef.kind` inside Certificate CRs | YAML-document-aware validation: parse apiVersion+kind at top level, not substring match. Implemented in `api/internal/gitops/manifest_gate.go` using `yaml.v3` decoder. 9 unit tests. Validated on DO E2E deploy. |
+| **I** — PVC multi-attach (10% failure) ✅ | Argo Workflows schedules steps on different nodes, DO Block Storage is RWO | Fixed via `PodSpecPatch` on the workflow: podAffinity with `topologyKey: kubernetes.io/hostname` co-locates all pods of the same workflow on the same node. No loopzero-forge changes needed — the fix is in `api/internal/argo/workflow_builder.go`. Unit test `TestWorkflowBuilder_Build_HasPodAffinityPatch` verifies. |
+| **J** — loopzero-packs-runner bash error ✅ | v0.1.0 bash syntax error in Rust template | Already fixed (v0.2.0 Go binary). Confirmed live on DO (generate-dockerfile step pulled v0.2.0 successfully). |
+| **K** — Build cluster undersized ✅ | 2 small nodes, PVC contention | Already in `Pulumi.dev.yaml`: `buildNodeClass: medium, buildMinNodes: 2, buildMaxNodes: 5`. Live cluster: 2 × `s-4vcpu-8gb-amd`. |
+| **H** — Image cache on DOKS ✅ | `:dev` tag not re-pulled from cache | SHA-based image tag policy documented at `docs/policies/image-tags.md`. All roadmap deploys used immutable SHA tags. |
+| **B** — schema_migrations corruption ✅ | `migrate force 0` on production DB | CI job `migration-safety` in `.github/workflows/ci.yml` blocks `migrate force` invocations, validates forward-only DDL, and checks sequential numbering. |
+| **L** — Fixture path issue ✅ | Subdirectory path in loopzero.yaml vs flat fixture | Fixture already flat in `infra/tests/load/fixtures/` (server.js + package.json at root, no path field). |
+| **E** — GitOps push empty repo ✅ | New tenants missing ArgoCD repo credentials | Verified via 4 E2E deploys on DO (iters 4, 6, 7, 10). ArgoCD repo-creds created manually for this session; Pulumi code added in iter 6 to create them automatically on bootstrap. |
+| **M** — Promtail Pulumi crash ✅ | gRPC provider crash on runtime cluster | Tracking document at `docs/policies/promtail-upgrade-tracking.md` with re-enablement criteria. |
 
 ## Acceptance Criteria
 

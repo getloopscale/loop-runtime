@@ -51,6 +51,9 @@ bin/
 
 # Compiled Go binaries (should never be committed)
 api/main
+api/loopzero-api
+api/loopzero-controller
+api/controller
 operators/main
 cloud/main
 /cmd

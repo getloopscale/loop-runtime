@@ -122,6 +122,7 @@ export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
   readonly prometheusReady: pulumi.Output<boolean>;
   readonly grafanaReady: pulumi.Output<boolean>;
   readonly loopzeroApiReady: pulumi.Output<boolean>;
+  readonly loopzeroControllerReady: pulumi.Output<boolean>;
   readonly tenantControllerReady: pulumi.Output<boolean>;
   readonly oryKratosReady: pulumi.Output<boolean>;
   readonly oryHydraReady: pulumi.Output<boolean>;

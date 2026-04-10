@@ -270,6 +270,26 @@ var (
 		Message:    "another sync operation is already in progress",
 		HTTPStatus: 409,
 	}
+
+	// ErrCellAtCapacity is returned when the cell's concurrent build budget
+	// is full. Roadmap 07: the build admission gate returns 429 so clients
+	// know to retry after a bounded wait. The response MUST include a
+	// `Retry-After` header with a sensible duration.
+	ErrCellAtCapacity = &LoopZeroError{
+		Code:       "CELL_AT_CAPACITY",
+		Message:    "the platform is currently busy — retry in a few seconds",
+		HTTPStatus: 429,
+	}
+
+	// ErrTenantBuildQuota is returned when a single tenant already has the
+	// maximum allowed concurrent builds in flight. Enforces per-tenant
+	// fairness so one noisy tenant cannot starve others even when the cell
+	// has free capacity. Same Retry-After semantics as ErrCellAtCapacity.
+	ErrTenantBuildQuota = &LoopZeroError{
+		Code:       "TENANT_BUILD_QUOTA",
+		Message:    "your team has too many builds in progress — wait for one to finish",
+		HTTPStatus: 429,
+	}
 )
 
 // NewLockTimeout creates a LOCK_TIMEOUT error with optional detail.

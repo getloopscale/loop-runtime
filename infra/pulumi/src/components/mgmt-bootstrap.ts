@@ -137,6 +137,13 @@ export function bootstrapMgmtCluster(
   // LoopZero API — platform HTTP server (connects to DB, Gitea, ArgoCD, Argo Workflows)
   const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config, lokiEndpoint, callbackToken, cf);
 
+  // LoopZero Controller — background reconciliation loops (roadmap 02).
+  // Runs: build reconcile, build/release reapers, release convergence,
+  // idempotency cleaner, SSE event pruner. Uses the cell-scoped leader
+  // lease from api/internal/leader so only one replica at a time owns the
+  // work even across cluster partitions.
+  const loopzeroController = installLoopZeroController(provider, loopzeroApi, config, infra, lokiEndpoint);
+
   // Cloud Auth Service — OAuth2 (Hydra), identity (Kratos), billing (Stripe), dashboard
   installCloudService(provider, ns, infra, config);
 
@@ -187,6 +194,7 @@ export function bootstrapMgmtCluster(
     prometheusReady: prometheus.status.apply((s) => s.status === "deployed"),
     grafanaReady: grafana.status.apply((s) => s.status === "deployed"),
     loopzeroApiReady: loopzeroApi.metadata.name.apply((n) => !!n),
+    loopzeroControllerReady: loopzeroController.metadata.name.apply((n) => !!n),
     tenantControllerReady: tenantController.metadata.name.apply((n) => !!n),
     oryKratosReady: oryKratos.status.apply((s) => s.status === "deployed"),
     oryHydraReady: oryHydra.status.apply((s) => s.status === "deployed"),
@@ -1774,6 +1782,160 @@ function installLoopZeroAPI(
       },
     },
     { provider, dependsOn: [ns, secret, kubeconfigSecret, migrationsConfigMap, configMap, svc, apiSA] },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LoopZero Controller (roadmap 02 — API Loop Extraction)
+// ---------------------------------------------------------------------------
+//
+// The controller binary runs the background reconciliation loops (build
+// reconcile, reapers, release convergence, idempotency cleaner, SSE event
+// pruner) in a dedicated Deployment. This decouples HTTP serving from
+// reconciliation so the loopzero-api Deployment can scale horizontally while
+// exactly one controller replica owns the loops via the generation-based
+// leader lease in api/internal/leader.
+//
+// The controller reuses the loopzero-api image (same binary package, different
+// entrypoint: /loopzero-controller) and every secret loopzero-api already has
+// (loopzero-api-secrets, loopzero-platform-tokens, loopzero-cf-credentials, loopzero-api-
+// kubeconfig). It uses the loopzero-api ServiceAccount because the RBAC is
+// identical — the controller creates LoopZeroApplication CRs the same way the
+// API did when it owned reconciliation.
+//
+// Deployment shape:
+//   - replicas: 1 (strict — the generation counter enforces single-leader,
+//     but starting two replicas doubles the PG load for no benefit).
+//   - strategy: Recreate (Rolling creates a double-acquire window where
+//     two controllers briefly race on the lease and then fence each other).
+//   - command: ["/loopzero-controller"] — the same image as loopzero-api.
+//   - /healthz (liveness), /readyz (readiness checks lease), /metrics on :9091.
+
+function installLoopZeroController(
+  provider: k8s.Provider,
+  apiDeployment: k8s.apps.v1.Deployment,
+  config: PlatformStackConfig,
+  infra: InfraOutputs,
+  lokiEndpoint: pulumi.Output<string>,
+): k8s.apps.v1.Deployment {
+  // The controller depends on loopzero-api's secrets + SA existing. Using the
+  // Deployment output as a dependency is the simplest way to express that
+  // — the API deployment is created after all its prerequisites.
+  return new k8s.apps.v1.Deployment(
+    "loopzero-controller",
+    {
+      metadata: {
+        name: "loopzero-controller",
+        namespace: PLATFORM_NAMESPACE,
+        labels: {
+          app: "loopzero-controller",
+          "app.kubernetes.io/name": "loopzero-controller",
+          "app.kubernetes.io/part-of": "loopzero",
+          "loopzero.io/roadmap": "02",
+        },
+        annotations: { "pulumi.com/skipAwait": "true" },
+      },
+      spec: {
+        replicas: 1,
+        strategy: { type: "Recreate" },
+        selector: { matchLabels: { app: "loopzero-controller" } },
+        template: {
+          metadata: { labels: { app: "loopzero-controller" } },
+          spec: {
+            serviceAccountName: "loopzero-api",
+            securityContext: {
+              runAsNonRoot: true,
+              runAsUser: 1000,
+              runAsGroup: 1000,
+              fsGroup: 1000,
+            },
+            containers: [
+              {
+                name: "controller",
+                image: apiDeployment.spec.template.spec.containers[0].image,
+                imagePullPolicy: "IfNotPresent",
+                command: ["/loopzero-controller"],
+                ports: [{ containerPort: 9091, name: "health" }],
+                env: [
+                  { name: "LOOPZERO_CELL_ID", value: "cell-default" },
+                  { name: "REGISTRY_URL", value: infra.registryEndpoint },
+                  { name: "REGISTRY_INSECURE", value: "false" },
+                  { name: "BASE_DOMAIN", value: config.domain },
+                  { name: "BUILD_KUBECONFIG", value: "/etc/loopzero/build-kubeconfig" },
+                  { name: "BUILD_KUBE_CONTEXT", value: "build" },
+                  { name: "MGMT_KUBECONFIG", value: "/etc/loopzero/mgmt-kubeconfig" },
+                  {
+                    name: "MGMT_KUBE_CONTEXT",
+                    value: pulumi.interpolate`do-${config.region}-${infra.mgmtCluster.clusterName}`,
+                  },
+                  { name: "RUNTIME_KUBECONFIG", value: "/etc/loopzero/runtime-kubeconfig" },
+                  { name: "RUNTIME_KUBE_CONTEXT", value: "runtime" },
+                  {
+                    name: "ARGOCD_URL",
+                    value: `http://argocd-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
+                  },
+                  { name: "ARGOCD_INSECURE", value: "true" },
+                  {
+                    name: "GITEA_URL",
+                    value: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
+                  },
+                  { name: "MINIO_ENDPOINT", value: infra.spacesEndpoint },
+                  { name: "LOKI_URL", value: lokiEndpoint },
+                  {
+                    name: "OTEL_EXPORTER_OTLP_ENDPOINT",
+                    value: `otel-collector.${PLATFORM_NAMESPACE}.svc:4317`,
+                  },
+                  {
+                    name: "HOSTNAME",
+                    valueFrom: { fieldRef: { fieldPath: "metadata.name" } },
+                  },
+                ],
+                envFrom: [
+                  { secretRef: { name: "loopzero-api-secrets" } },
+                  { secretRef: { name: "loopzero-platform-tokens" } },
+                  { secretRef: { name: "loopzero-cf-credentials", optional: true } },
+                ],
+                volumeMounts: [
+                  { name: "kubeconfigs", mountPath: "/etc/loopzero", readOnly: true },
+                ],
+                livenessProbe: {
+                  httpGet: { path: "/healthz", port: 9091 },
+                  initialDelaySeconds: 15,
+                  periodSeconds: 20,
+                  timeoutSeconds: 3,
+                  failureThreshold: 3,
+                },
+                readinessProbe: {
+                  httpGet: { path: "/readyz", port: 9091 },
+                  initialDelaySeconds: 5,
+                  periodSeconds: 10,
+                  timeoutSeconds: 3,
+                  failureThreshold: 3,
+                },
+                resources: {
+                  requests: { cpu: "100m", memory: "128Mi" },
+                  limits: { memory: "512Mi" },
+                },
+              },
+            ],
+            volumes: [
+              {
+                name: "kubeconfigs",
+                secret: {
+                  secretName: "loopzero-api-kubeconfig",
+                  items: [
+                    { key: "mgmt-kubeconfig", path: "mgmt-kubeconfig" },
+                    { key: "build-kubeconfig", path: "build-kubeconfig" },
+                    { key: "runtime-kubeconfig", path: "runtime-kubeconfig" },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [apiDeployment] },
   );
 }
 

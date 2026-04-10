@@ -6,6 +6,12 @@
 **Unblocks:** L4-L5 (multi-cell operation)
 **Cost delta:** $0 (code changes only)
 **Governance:** Pre-approved (MEET-046). No T2/T3 gate. Implement immediately via TDD. Validate on DigitalOcean.
+**Status (2026-04-10 iter 7):** Code-level DoDs complete. RoundRobinEngine
+and StaticRouter wired in `api/cmd/main.go`. TOCTOU fixed via new
+`placement.Serializer` abstraction + `NewAdvisoryLockSerializer` wrapper
+around `pg_advisory_xact_lock`. 3 new unit tests (concurrent 20-placement
+balance, unserialized control, cell-default backward compat). Remaining:
+deploy-to-non-default-cell E2E test — blocked on Item 05 (second cell).
 
 ---
 
@@ -43,11 +49,13 @@ All tests below must be **implemented as part of this item**.
 
 | Test | Type | Exists? | What It Proves |
 |---|---|---|---|
-| `TestPlacement_RoundRobin_EvenDistribution` | Unit | **Yes — exists** in `placement_test.go` | 10 tenants across 2 cells → ~5 each |
-| `TestPlacement_ConcurrentCreation_NoTOCTOU` | Integration | **No — implement** | 10 simultaneous creates → no hot-spotting |
-| `TestRouting_DeployToCorrectCell` | Integration | **No — implement** | Tenant in cell-B deploys to cell-B ArgoCD |
-| `TestRouting_CellDefault_BackwardCompat` | Unit | **No — implement** | Existing tenants still work |
-| `TestStaticRouter_RejectsUnknownCell` | Unit | **Yes — exists** in `placement_test.go` (as `TestStaticRouter_UnknownCell`) | Unknown cell_id → error |
+| `TestPlacement_RoundRobin_EvenDistribution` | Unit | ✅ Existing (`TestRoundRobinEngine_BalancedDistribution`) | 10 tenants across 2 cells → ~5 each |
+| `TestPlacement_ConcurrentCreation_NoTOCTOU` | Unit | ✅ Implemented (2026-04-10 iter 7) | 20 concurrent placements → off-by-one balance with Serializer |
+| `TestPlacement_ConcurrentCreation_WithoutSerializerHotSpots` | Unit | ✅ Implemented (2026-04-10 iter 7) | Negative control proving the Serializer is the thing that fixes the race |
+| `TestRoundRobinEngine_WithSerializer_PropagatesError` | Unit | ✅ Implemented (2026-04-10 iter 7) | Serializer contract: errors surface verbatim |
+| `TestRouting_CellDefault_BackwardCompat` | Unit | ✅ Implemented (2026-04-10 iter 7) | cell-default in a multi-cell StaticRouter resolves correctly |
+| `TestRouting_DeployToCorrectCell` | Integration | ⏸ Pending — blocked on Item 05 (needs second cell) | Tenant in cell-B deploys to cell-B ArgoCD |
+| `TestStaticRouter_RejectsUnknownCell` | Unit | ✅ Existing (`TestStaticRouter_UnknownCellReturnsError`) | Unknown cell_id → error |
 
 ## SLO Targets
 

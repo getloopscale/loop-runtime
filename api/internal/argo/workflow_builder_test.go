@@ -111,6 +111,43 @@ func TestWorkflowBuilder_Build_HasSharedPVCVolume(t *testing.T) {
 	}
 }
 
+// Roadmap 01 Correction I — PVC multi-attach fix.
+// The PodSpecPatch must inject podAffinity so all workflow pods land on the
+// same node, preventing DO Block Storage RWO multi-attach failures.
+func TestWorkflowBuilder_Build_HasPodAffinityPatch(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	wf, err := builder.Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	if wf.PodSpecPatch == "" {
+		t.Fatal("PodSpecPatch must be set (Correction I: podAffinity for PVC co-location)")
+	}
+	// The patch must reference the Argo-managed workflow label and
+	// use kubernetes.io/hostname as the topology key so all pods in
+	// the same workflow land on the same physical node.
+	if !containsAll(wf.PodSpecPatch, "podAffinity", "kubernetes.io/hostname", "workflows.argoproj.io/workflow") {
+		t.Errorf("PodSpecPatch missing required affinity fields:\n%s", wf.PodSpecPatch)
+	}
+}
+
+func containsAll(s string, subs ...string) bool {
+	for _, sub := range subs {
+		found := false
+		for i := 0; i+len(sub) <= len(s); i++ {
+			if s[i:i+len(sub)] == sub {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
 // ---------------------------------------------------------------------------
 // DAG structure
 // ---------------------------------------------------------------------------

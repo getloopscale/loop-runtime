@@ -6,6 +6,18 @@
 **Unblocks:** L2, L3
 **Cost delta:** +$450/mo for L2-L3 infra
 **Governance:** Pre-approved (MEET-046). No T2/T3 gate. Implement immediately via TDD. Validate on DigitalOcean. Infra cost authorized.
+**Status (2026-04-10 iter 8):** Cell capacity budget shipped at
+`docs/capacity/cell-budget.md` with MEASURED values from the dev stack
+(mgmt already 74% memory at idle — documented as the L3 scaling trigger,
+PG max_connections=50 with loopzeroretical pool ceiling 75 — documented as the
+hardest constraint today). Grafana `cell-saturation` dashboard shipped as
+`infra/helm/monitoring/dashboards/cell-saturation.json` (8 panels: PG pool,
+build queue depth, active builds, tenants in cell, API p99, Gitea push p99,
+runtime node memory, leader status). Validated on live Grafana:
+`GET /api/dashboards/uid/cell-saturation` returns 200 with all panels.
+Remaining: L2 50-tenant load run + per-subsystem tuning (ArgoCD
+statusProcessors, PG pool sizing, build pool +1 node). Blocked on Items
+07 (admission) and 08 (progressive load).
 
 ---
 
