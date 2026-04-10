@@ -9,8 +9,8 @@ describe("resolveNodeSize", () => {
     expect(resolveNodeSize("small")).toBe("s-2vcpu-4gb");
   });
 
-  it("maps medium to s-4vcpu-8gb", () => {
-    expect(resolveNodeSize("medium")).toBe("s-4vcpu-8gb");
+  it("maps medium to s-4vcpu-8gb-amd", () => {
+    expect(resolveNodeSize("medium")).toBe("s-4vcpu-8gb-amd");
   });
 
   it("maps large to s-8vcpu-16gb", () => {

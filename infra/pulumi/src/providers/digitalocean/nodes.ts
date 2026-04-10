@@ -13,7 +13,7 @@ import { InfraError } from "../../core/errors";
  */
 const DO_NODE_MAP: Record<NodeClass, string> = {
   small: "s-2vcpu-4gb",
-  medium: "s-4vcpu-8gb",
+  medium: "s-4vcpu-8gb-amd", // AMD variant — s-4vcpu-8gb unavailable in SFO3
   large: "s-8vcpu-16gb",
   xlarge: "s-16vcpu-32gb",
 };
