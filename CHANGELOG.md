@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Leader-generation fencing primitive** (Roadmap 02). New package
+  `api/internal/leader/` providing `Acquirer` with `Acquire`, `Heartbeat`,
+  `Validate`, and `Release`. Every successfully acquired `Lease` carries a
+  monotonic `GenerationID` that must be bound into every side-effecting SQL
+  write; a stale leader's writes match zero rows and no-op. Heartbeat and
+  Validate return `ErrFenced` when another holder has taken over, signaling
+  the caller to exit. Backed by migration `000030_leader_generations.up.sql`
+  (cell-scoped per-loop counter table). 16 unit tests including the
+  explicit `TestLeaderGeneration_StaleWriteRejected` from the DoD.
+- **PG-backed processing claims** (Roadmap 02). New package
+  `api/internal/processing/` providing `ClaimStore.Claim`,
+  `ClaimStore.Release`, and `ClaimStore.FindOrphanedClaims` over the
+  `builds` and `releases` tables. Replaces the in-process `sync.Map`
+  dedup used by `BuildReconcileLoop` and `ReleaseConvergenceLoop` so two
+  controller replicas can never concurrently process the same build /
+  release. Orphaned claims (worker crashed mid-processing) are
+  automatically reclaimable after a 2-minute stale window via the CAS
+  predicate. Backed by migration `000031_build_release_processing_claim.up.sql`
+  adding `processing_by` / `processing_since` columns and partial indexes.
+  12 unit tests including the DoD-required
+  `TestProcessingClaim_OrphanDetection`.
+- **Cell-scoped reconciliation queries** (Roadmap 03). Every `Find*` store method
+  that backs a reconciliation loop now accepts an explicit `cellID` parameter and
+  emits `WHERE cell_id = $N` at the SQL level. Migration 000029 denormalizes
+  `cell_id` onto `builds` and `releases` (populated from `tenants.cell_id` via a
+  `BEFORE INSERT` trigger), adds composite indexes
+  `idx_builds_cell_status_created` and `idx_releases_cell_status_created`, and
+  backfills existing rows. Custom domains stay JOIN-scoped because the cardinality
+  is low. Signatures updated: `FindActiveBuilds`, `FindPendingReleases`,
+  `FindActiveReleases`, `FindStaleBuilds`, `FindStaleReleases`,
+  `FindPendingForAutoVerify`. Config structs `BuildReconcileLoopConfig`,
+  `BuildReaperConfig`, `ReleaseReaperConfig`, `ReleaseConvergenceLoopConfig`,
+  `DomainHealthCheckerConfig` gained a `CellID` field (defaults to `cell-default`
+  for backward compatibility). 10 new unit tests (`cell_scoped_queries_test.go`,
+  `stale_checker_cell_scope_test.go`) — all green with zero impact on existing
+  tests. Prerequisite for ADR-0008 cell isolation and the future PG partition-
+  by-cell_id migration tracked as escalation risk.
+
+### Fixed
+- **Manifest gate is YAML-document-aware** (Roadmap 01, Correction G). Previously a
+  no-op after MEET-2026-04-09-042 reverted the substring-matching gate that blocked
+  all new tenant deploys (Certificate CRs with `issuerRef.kind: ClusterIssuer` matched
+  the forbidden substring). The gate now parses each YAML document and inspects only
+  the top-level `apiVersion`+`kind`, so Certificate resources pass while top-level
+  `Namespace`, `ClusterRole`, `ClusterRoleBinding`, `ClusterIssuer`, and
+  `CustomResourceDefinition` are rejected. Malformed YAML fails closed. 9 unit tests.
+  Files: `api/internal/gitops/manifest_gate.go`, `manifest_gate_test.go`.
+
 ## [0.13.0] — 2026-04-09
 
 ### Added

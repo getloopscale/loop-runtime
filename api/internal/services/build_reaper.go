@@ -27,6 +27,9 @@ type BuildReaperConfig struct {
 	CancelTimeout time.Duration
 	// Interval is how often the reaper runs.
 	Interval time.Duration
+	// CellID scopes the reaper to a single cell (roadmap 03). Empty or
+	// "cell-default" means single-cell / backward-compatible behavior.
+	CellID string
 }
 
 // DefaultBuildReaperConfig returns the spec-defined timeouts.
@@ -49,7 +52,10 @@ type StaleBuild struct {
 
 // BuildStaleChecker finds builds that have exceeded their state timeout.
 type BuildStaleChecker interface {
-	FindStaleBuilds(ctx context.Context, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error)
+	// FindStaleBuilds returns builds whose state has exceeded the given
+	// timeout, scoped to the given cell. Roadmap 03: pass db.CellDefault for
+	// single-cell / backward-compatible behavior.
+	FindStaleBuilds(ctx context.Context, cellID string, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error)
 }
 
 // BuildReconcileChecker allows the reaper to check if a build is being reconciled.
@@ -137,7 +143,11 @@ func reaperReason(event statemachine.Event) string {
 }
 
 func (r *BuildReaper) reap(ctx context.Context) int {
-	stale, err := r.checker.FindStaleBuilds(ctx, r.cfg.QueueTimeout, r.cfg.RunningTimeout, r.cfg.ReleasingTimeout, r.cfg.CancelTimeout)
+	cellID := r.cfg.CellID
+	if cellID == "" {
+		cellID = db.CellDefault
+	}
+	stale, err := r.checker.FindStaleBuilds(ctx, cellID, r.cfg.QueueTimeout, r.cfg.RunningTimeout, r.cfg.ReleasingTimeout, r.cfg.CancelTimeout)
 	if err != nil {
 		r.logger.Error("build reaper: failed to find stale builds", "error", err)
 		return 0
@@ -236,16 +246,23 @@ type PostgresStaleBuildChecker struct {
 	DB db.DBTX
 }
 
-// FindStaleBuilds queries for builds that have exceeded their state timeout.
-func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error) {
+// FindStaleBuilds queries for builds that have exceeded their state timeout,
+// scoped to the given cell (roadmap 03). Pass db.CellDefault for backward
+// compatibility with single-cell deployments.
+func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, cellID string, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error) {
+	if cellID == "" {
+		cellID = db.CellDefault
+	}
 	// MEET-2026-03-26-008: RELEASING added — builds stuck in release activation
 	// are reaped after 10min (default) to prevent infinite retry.
+	// cell_id filter (migration 000029) uses idx_builds_cell_status_created.
 	query := `
 		SELECT id, status FROM builds
-		WHERE (status = 'QUEUED' AND created_at < $1)
-		   OR (status = 'RUNNING' AND started_at < $2)
-		   OR (status = 'RELEASING' AND started_at < $3)
-		   OR (status = 'CANCELLING' AND started_at < $4)
+		WHERE cell_id = $5
+		  AND ((status = 'QUEUED' AND created_at < $1)
+		    OR (status = 'RUNNING' AND started_at < $2)
+		    OR (status = 'RELEASING' AND started_at < $3)
+		    OR (status = 'CANCELLING' AND started_at < $4))
 		ORDER BY created_at ASC
 		LIMIT 100
 	`
@@ -256,6 +273,7 @@ func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, queueTi
 		now.Add(-runningTimeout),
 		now.Add(-releasingTimeout),
 		now.Add(-cancelTimeout),
+		cellID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find stale builds: %w", err)

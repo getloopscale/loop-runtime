@@ -21,7 +21,7 @@ type fakeStaleChecker struct {
 	err    error
 }
 
-func (f *fakeStaleChecker) FindStaleBuilds(_ context.Context, _, _, _, _ time.Duration) ([]services.StaleBuild, error) {
+func (f *fakeStaleChecker) FindStaleBuilds(_ context.Context, _ string, _, _, _, _ time.Duration) ([]services.StaleBuild, error) {
 	return f.builds, f.err
 }
 

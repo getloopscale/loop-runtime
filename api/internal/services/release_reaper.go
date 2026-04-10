@@ -25,6 +25,9 @@ type ReleaseReaperConfig struct {
 	PendingTimeout time.Duration
 	// Interval is how often the reaper runs.
 	Interval time.Duration
+	// CellID scopes the reaper to a single cell (roadmap 03). Empty or
+	// "cell-default" means single-cell / backward-compatible behavior.
+	CellID string
 }
 
 // DefaultReleaseReaperConfig returns the spec-defined timeouts.
@@ -49,7 +52,10 @@ type StaleRelease struct {
 
 // ReleaseStaleChecker finds releases that have exceeded their state timeout.
 type ReleaseStaleChecker interface {
-	FindStaleReleases(ctx context.Context, readyTimeout, pendingTimeout time.Duration) ([]StaleRelease, error)
+	// FindStaleReleases returns stale releases belonging to the given cell.
+	// Roadmap 03: pass db.CellDefault for single-cell / backward-compatible
+	// behavior.
+	FindStaleReleases(ctx context.Context, cellID string, readyTimeout, pendingTimeout time.Duration) ([]StaleRelease, error)
 }
 
 // ReleaseReaper periodically checks for stale releases and transitions them to failure states.
@@ -131,7 +137,11 @@ func releaseReaperReason(event statemachine.Event) string {
 }
 
 func (r *ReleaseReaper) reap(ctx context.Context) int {
-	stale, err := r.checker.FindStaleReleases(ctx, r.cfg.ReadyTimeout, r.cfg.PendingTimeout)
+	cellID := r.cfg.CellID
+	if cellID == "" {
+		cellID = db.CellDefault
+	}
+	stale, err := r.checker.FindStaleReleases(ctx, cellID, r.cfg.ReadyTimeout, r.cfg.PendingTimeout)
 	if err != nil {
 		r.logger.Error("release reaper: failed to find stale releases", "error", err)
 		return 0
@@ -222,12 +232,19 @@ type PostgresStaleReleaseChecker struct {
 	DB db.DBTX
 }
 
-// FindStaleReleases queries for releases that have exceeded their state timeout.
-func (c *PostgresStaleReleaseChecker) FindStaleReleases(ctx context.Context, readyTimeout, pendingTimeout time.Duration) ([]StaleRelease, error) {
+// FindStaleReleases queries for releases that have exceeded their state timeout,
+// scoped to the given cell (roadmap 03). Pass db.CellDefault for backward
+// compatibility with single-cell deployments.
+func (c *PostgresStaleReleaseChecker) FindStaleReleases(ctx context.Context, cellID string, readyTimeout, pendingTimeout time.Duration) ([]StaleRelease, error) {
+	if cellID == "" {
+		cellID = db.CellDefault
+	}
+	// cell_id filter uses idx_releases_cell_status_created (migration 000029).
 	query := `
 		SELECT id, status, tenant_id, project_id, environment, build_id FROM releases
-		WHERE (status = 'READY' AND created_at < $1)
-		   OR (status = 'PENDING' AND created_at < $2)
+		WHERE cell_id = $3
+		  AND ((status = 'READY' AND created_at < $1)
+		    OR (status = 'PENDING' AND created_at < $2))
 		ORDER BY created_at ASC
 		LIMIT 100
 	`
@@ -236,6 +253,7 @@ func (c *PostgresStaleReleaseChecker) FindStaleReleases(ctx context.Context, rea
 	rows, err := c.DB.Query(ctx, query,
 		now.Add(-readyTimeout),
 		now.Add(-pendingTimeout),
+		cellID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find stale releases: %w", err)

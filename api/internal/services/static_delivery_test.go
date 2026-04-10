@@ -78,11 +78,11 @@ func (f *fakeReleaseStoreStatic) GetLatestByBuildID(_ context.Context, _ string)
 	return nil, nil
 }
 
-func (f *fakeReleaseStoreStatic) FindPendingReleases(_ context.Context) ([]db.Release, error) {
+func (f *fakeReleaseStoreStatic) FindPendingReleases(_ context.Context, _ string) ([]db.Release, error) {
 	return nil, nil
 }
 
-func (f *fakeReleaseStoreStatic) FindActiveReleases(_ context.Context) ([]db.Release, error) {
+func (f *fakeReleaseStoreStatic) FindActiveReleases(_ context.Context, _ string) ([]db.Release, error) {
 	return nil, nil
 }
 

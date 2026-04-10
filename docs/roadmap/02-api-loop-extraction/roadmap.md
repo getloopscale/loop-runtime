@@ -6,6 +6,9 @@
 **Unblocks:** Multi-replica API, L2+
 **Cost delta:** $0 (reuses existing mgmt cluster)
 **Governance:** Pre-approved (MEET-046). No T2/T3 gate. Implement immediately via TDD. Validate on DigitalOcean.
+**Status (2026-04-10):** Fencing primitives complete (leader generation package
++ PG-backed processing claims). Controller binary extraction, Helm chart, and
+integration tests against real PG still pending.
 
 ---
 
@@ -90,14 +93,37 @@ All tests below must be **implemented as part of this item**. None exist today.
 
 | Test | Type | Exists? | What It Proves |
 |---|---|---|---|
-| `TestAPI_NoBackgroundLoops` | Unit | **No — implement** | API main.go starts HTTP only |
-| `TestController_LeaderElection` | Integration | **No — implement** | Only 1 controller processes at a time |
-| `TestController_CrashRecovery` | Integration | **No — implement** | Kill controller, builds still complete |
-| `TestAPI_MultiReplica_NoDuplicateProcessing` | Load | **No — implement** | 4 replicas, 20 deploys, zero duplicate transitions |
-| `TestController_IdempotentTransitions` | Unit | **No — implement** | Same build processed twice = no state corruption |
-| `TestLeaderGeneration_StaleWriteRejected` | Unit | **No — implement** | Stale leader's transition fails WHERE clause |
-| `TestProcessingClaim_OrphanDetection` | Unit | **No — implement** | Orphaned processing_by detected after timeout |
-| `TestGitOpsPush_StaleLeaderOverwritten` | Integration | **No — implement** | Stale gitops push self-heals in one reconcile tick |
+| `TestAPI_NoBackgroundLoops` | Unit | ❌ Pending — needs controller binary extraction | API main.go starts HTTP only |
+| `TestController_LeaderElection` | Integration | ❌ Pending — needs real PG | Only 1 controller processes at a time |
+| `TestController_CrashRecovery` | Integration | ❌ Pending — needs controller binary | Kill controller, builds still complete |
+| `TestAPI_MultiReplica_NoDuplicateProcessing` | Load | ❌ Pending — needs DO + controller | 4 replicas, 20 deploys, zero duplicate transitions |
+| `TestController_IdempotentTransitions` | Unit | ❌ Pending | Same build processed twice = no state corruption |
+| `TestLeaderGeneration_StaleWriteRejected` | Unit | ✅ Implemented (2026-04-10) `internal/leader/generation_test.go` | Stale leader's transition fails via ErrFenced |
+| `TestProcessingClaim_OrphanDetection` | Unit | ✅ Implemented (2026-04-10) `internal/processing/claim_store_test.go` | Orphaned processing_by detected after stale window |
+| `TestGitOpsPush_StaleLeaderOverwritten` | Integration | ❌ Pending — needs real Gitea | Stale gitops push self-heals in one reconcile tick |
+
+### Fencing primitives delivered (2026-04-10)
+
+The leader-generation and PG-backed-claim primitives described in the design
+sections above are now in the tree. The extracted controller binary will
+compose them; until the binary exists, the API process can also adopt them
+incrementally behind a feature flag.
+
+**`api/internal/leader/generation.go`** — `Acquirer` with `Acquire`,
+`Heartbeat`, `Validate`, `Release`. Lease includes `GenerationID` which must
+be bound into every side-effecting write. 16 unit tests covering new
+acquisition, live-peer rejection, stale-heartbeat takeover, fenced
+heartbeat, fenced validate, wrong-holder release, default config, SQL
+arg-order, and driver-error wrapping.
+
+**`api/internal/processing/claim_store.go`** — `ClaimStore` with `Claim`,
+`Release`, `FindOrphanedClaims` against the `builds` / `releases` tables.
+Replaces `sync.Map` dedup with a PG-level CAS on `processing_by` /
+`processing_since`. 12 unit tests.
+
+**Migrations:**
+- `000030_leader_generations.up.sql` — cell-scoped per-loop generation counter table
+- `000031_build_release_processing_claim.up.sql` — processing_by/processing_since columns + partial indexes on builds and releases
 
 ## SLO Targets
 

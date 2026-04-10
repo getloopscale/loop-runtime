@@ -258,9 +258,33 @@ func (s *PostgresDomainStore) FindRemoving(ctx context.Context) ([]routes.Custom
 	return s.ClaimByStatus(ctx, "removing", "removing")
 }
 
-// FindPendingForAutoVerify returns pending_verification domains (for background auto-verify).
-func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context) ([]routes.CustomDomain, error) {
-	return s.findByStatus(ctx, "pending_verification")
+// FindPendingForAutoVerify returns pending_verification domains (for background
+// auto-verify), scoped to the given cell (roadmap 03). The filter joins to the
+// tenants table because custom_domains is a small, low-frequency read; a JOIN
+// at this cardinality is cheaper than denormalizing another column. Pass
+// "cell-default" or "" for single-cell / backward-compatible behavior.
+func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context, cellID string) ([]routes.CustomDomain, error) {
+	if cellID == "" {
+		cellID = CellDefault
+	}
+	rows, err := s.DB.Query(ctx,
+		`SELECT cd.id, cd.tenant_id, cd.project_name, cd.app_name, cd.environment, cd.domain, cd.status,
+		        cd.verification_token, cd.verified_at, cd.tls_status, cd.tls_expires_at,
+		        cd.failure_reason, cd.last_cname_check, cd.cname_consecutive_failures, cd.created_at, cd.updated_at,
+		        cd.cf_zone_id, cd.cf_zone_status, cd.cf_nameservers, cd.dns_records_imported
+		 FROM custom_domains cd
+		 JOIN tenants t ON cd.tenant_id = t.id
+		 WHERE cd.status = 'pending_verification'
+		   AND t.cell_id = $1
+		 ORDER BY cd.created_at ASC
+		 LIMIT 50`,
+		cellID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("domain store: find pending for auto-verify (cell=%s): %w", cellID, err)
+	}
+	defer rows.Close()
+	return scanDomains(rows)
 }
 
 // FindActiveForCNAMECheck returns active domains due for weekly CNAME re-verification.

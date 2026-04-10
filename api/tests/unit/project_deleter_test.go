@@ -67,7 +67,7 @@ func (f *fakeDeleteBuildStore) ListByProject(context.Context, string, string, in
 func (f *fakeDeleteBuildStore) ListByProjectAndEnv(context.Context, string, string, string, int, int) ([]db.Build, int, error) {
 	return nil, 0, nil
 }
-func (f *fakeDeleteBuildStore) FindActiveBuilds(context.Context) ([]db.Build, error) {
+func (f *fakeDeleteBuildStore) FindActiveBuilds(context.Context, string) ([]db.Build, error) {
 	return nil, nil
 }
 

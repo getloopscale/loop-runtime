@@ -79,8 +79,14 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 	if finder, ok := a.releaseStore.(PendingReleaseByTenantEnvFinder); ok {
 		releases, err = finder.FindPendingReleasesByTenantEnv(ctx, tenantID, env)
 	} else {
+		// Fallback path: scan PENDING releases in the default cell.
+		// Real production always hits the efficient tenant+env path above;
+		// this branch only fires in tests with simple store fakes. We pass
+		// db.CellDefault because the callback itself does not carry cell
+		// information — if a caller needs cross-cell callback routing, the
+		// efficient finder must be implemented on the store.
 		var allReleases []db.Release
-		allReleases, err = a.releaseStore.FindPendingReleases(ctx)
+		allReleases, err = a.releaseStore.FindPendingReleases(ctx, db.CellDefault)
 		if err == nil {
 			for _, r := range allReleases {
 				if r.TenantID == tenantID && r.Environment == env {

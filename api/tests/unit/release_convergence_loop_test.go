@@ -40,11 +40,11 @@ func (f *fakeConvergenceReleaseStore) getStatus(id string) string {
 	return f.statuses[id]
 }
 
-func (f *fakeConvergenceReleaseStore) FindPendingReleases(_ context.Context) ([]db.Release, error) {
+func (f *fakeConvergenceReleaseStore) FindPendingReleases(_ context.Context, _ string) ([]db.Release, error) {
 	return f.pending, nil
 }
 
-func (f *fakeConvergenceReleaseStore) FindActiveReleases(_ context.Context) ([]db.Release, error) {
+func (f *fakeConvergenceReleaseStore) FindActiveReleases(_ context.Context, _ string) ([]db.Release, error) {
 	return f.activeList, nil
 }
 

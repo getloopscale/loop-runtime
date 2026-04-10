@@ -28,14 +28,19 @@ type ReleaseConvergenceLoopConfig struct {
 	SyncTimeout time.Duration
 	// MaxConcurrent bounds parallel release verifications.
 	MaxConcurrent int
+	// CellID scopes the loop to a single cell (roadmap 03). Empty or
+	// "cell-default" means single-cell / backward-compatible behavior.
+	CellID string
 }
 
 // ReleaseConvergenceStore defines the release store methods needed by the loop.
 type ReleaseConvergenceStore interface {
-	FindPendingReleases(ctx context.Context) ([]db.Release, error)
-	// FindActiveReleases returns releases in ACTIVE state for post-activation health monitoring.
+	// FindPendingReleases is scoped to the loop's cell (roadmap 03).
+	FindPendingReleases(ctx context.Context, cellID string) ([]db.Release, error)
+	// FindActiveReleases returns releases in ACTIVE state for post-activation health monitoring,
+	// scoped to the loop's cell (roadmap 03).
 	// MEET-2026-03-31-023 T1-4: Used by the health check ticker to detect divergence.
-	FindActiveReleases(ctx context.Context) ([]db.Release, error)
+	FindActiveReleases(ctx context.Context, cellID string) ([]db.Release, error)
 	UpdateStatus(ctx context.Context, tx db.DBTX, id string, event string) (*db.Release, error)
 	GetActiveByEnvTx(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (*db.Release, error)
 	GetByIDTx(ctx context.Context, tx db.DBTX, id string) (*db.Release, error)
@@ -135,11 +140,18 @@ func (r *ReleaseConvergenceLoop) Start(ctx context.Context) {
 	}
 }
 
+func (r *ReleaseConvergenceLoop) cellID() string {
+	if r.cfg.CellID == "" {
+		return db.CellDefault
+	}
+	return r.cfg.CellID
+}
+
 func (r *ReleaseConvergenceLoop) tick(ctx context.Context) {
 	// MEET-2026-03-31-023 T1-8: Record successful tick timestamp and pending count.
 	metrics.ReconcileLoopLastSuccess.WithLabelValues("release").SetToCurrentTime()
 
-	releases, err := r.releaseStore.FindPendingReleases(ctx)
+	releases, err := r.releaseStore.FindPendingReleases(ctx, r.cellID())
 	if err != nil {
 		r.logger.Error("release convergence: failed to find pending releases", "error", err)
 		return
@@ -362,7 +374,7 @@ func (r *ReleaseConvergenceLoop) retriggerSyncIfNeeded(ctx context.Context, rele
 // metrics (ReleaseStateDivergence, DriftDetected) so Prometheus alerts can
 // fire when an ACTIVE release becomes unhealthy in ArgoCD.
 func (r *ReleaseConvergenceLoop) healthCheckActiveReleases(ctx context.Context) {
-	releases, err := r.releaseStore.FindActiveReleases(ctx)
+	releases, err := r.releaseStore.FindActiveReleases(ctx, r.cellID())
 	if err != nil {
 		r.logger.Error("health check: failed to find active releases", "error", err)
 		return

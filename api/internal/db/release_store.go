@@ -51,12 +51,16 @@ type ReleaseStore interface {
 	ListByEnv(ctx context.Context, tenantID, projectID, env string, limit int) ([]Release, error)
 	// GetLatestByBuildID returns the most recent release for a build, or nil if none exists.
 	GetLatestByBuildID(ctx context.Context, buildID string) (*Release, error)
-	// FindPendingReleases returns releases in PENDING state (awaiting ArgoCD sync verification).
-	// Used by the Release Convergence Loop (MEET-2026-03-27-012 Phase 1.1).
-	FindPendingReleases(ctx context.Context) ([]Release, error)
-	// FindActiveReleases returns releases in ACTIVE state for post-activation health monitoring.
-	// MEET-2026-03-31-023 T1-4: Used by the health check ticker to detect divergence.
-	FindActiveReleases(ctx context.Context) ([]Release, error)
+	// FindPendingReleases returns releases in PENDING state (awaiting ArgoCD sync
+	// verification) for the given cell. Used by the Release Convergence Loop
+	// (MEET-2026-03-27-012 Phase 1.1). Roadmap 03 adds the cell_id filter so
+	// multi-cell controllers stay isolated. Pass CellDefault for single-cell
+	// backward compatibility.
+	FindPendingReleases(ctx context.Context, cellID string) ([]Release, error)
+	// FindActiveReleases returns releases in ACTIVE state for the given cell,
+	// used by the health check ticker (MEET-2026-03-31-023 T1-4) to detect
+	// post-activation ArgoCD divergence.
+	FindActiveReleases(ctx context.Context, cellID string) ([]Release, error)
 	// GetByIDTx retrieves a release by ID within a transaction.
 	// MEET-2026-03-31-023 T0-1: Used by ActivateReleaseKernel idempotency guard.
 	GetByIDTx(ctx context.Context, tx DBTX, id string) (*Release, error)
@@ -332,20 +336,27 @@ func (s *PostgresReleaseStore) GetLatestByBuildID(ctx context.Context, buildID s
 	return r, nil
 }
 
-// FindPendingReleases returns releases in PENDING state, limited to 100 rows
-// to prevent unbounded result sets under load (CODE-001 fix).
-// These are releases where GitOps push succeeded but ArgoCD sync verification
-// has not yet completed. The Release Convergence Loop processes these.
-func (s *PostgresReleaseStore) FindPendingReleases(ctx context.Context) ([]Release, error) {
+// FindPendingReleases returns releases in PENDING state belonging to the
+// given cell, limited to 100 rows to prevent unbounded result sets under
+// load (CODE-001 fix). These are releases where GitOps push succeeded but
+// ArgoCD sync verification has not yet completed; the Release Convergence
+// Loop processes them. The cell_id filter (roadmap 03, migration 000029)
+// ensures each controller only processes its own cell's work.
+func (s *PostgresReleaseStore) FindPendingReleases(ctx context.Context, cellID string) ([]Release, error) {
+	if cellID == "" {
+		cellID = CellDefault
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
 		        COALESCE(side_effects, 'null'::jsonb)
 		 FROM releases
-		 WHERE status = 'PENDING'
+		 WHERE cell_id = $1
+		   AND status = 'PENDING'
 		 ORDER BY created_at ASC
 		 LIMIT 100`,
+		cellID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("release store: find pending releases: %w", err)
@@ -371,11 +382,15 @@ func (s *PostgresReleaseStore) FindPendingReleases(ctx context.Context) ([]Relea
 	return releases, nil
 }
 
-// FindActiveReleases returns releases in ACTIVE state, limited to 100 rows.
-// MEET-2026-03-31-023 T1-4: Used by the convergence loop health ticker to check
-// post-activation ArgoCD health. Returns one ACTIVE release per (tenant, project, env)
-// combination (the most recent one).
-func (s *PostgresReleaseStore) FindActiveReleases(ctx context.Context) ([]Release, error) {
+// FindActiveReleases returns releases in ACTIVE state for the given cell,
+// limited to 100 rows. MEET-2026-03-31-023 T1-4: used by the convergence
+// loop health ticker to check post-activation ArgoCD health. Returns one
+// ACTIVE release per (tenant, project, env) combination (the most recent one).
+// Roadmap 03 adds the cell_id filter for multi-cell isolation.
+func (s *PostgresReleaseStore) FindActiveReleases(ctx context.Context, cellID string) ([]Release, error) {
+	if cellID == "" {
+		cellID = CellDefault
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT DISTINCT ON (tenant_id, project_id, environment)
 		        id, build_id, tenant_id, project_id, environment, status, correlation_id,
@@ -383,9 +398,11 @@ func (s *PostgresReleaseStore) FindActiveReleases(ctx context.Context) ([]Releas
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
 		        COALESCE(side_effects, 'null'::jsonb)
 		 FROM releases
-		 WHERE status = 'ACTIVE'
+		 WHERE cell_id = $1
+		   AND status = 'ACTIVE'
 		 ORDER BY tenant_id, project_id, environment, created_at DESC
 		 LIMIT 100`,
+		cellID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("release store: find active releases: %w", err)

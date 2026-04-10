@@ -20,6 +20,12 @@ import (
 // Used to validate all status transitions.
 var buildMachine = statemachine.NewBuildMachine()
 
+// CellDefault is the cell identifier used by single-cell deployments and as
+// the default for any row created without an explicit cell assignment.
+// Kept as a local constant to avoid a db→placement package dependency;
+// placement.DefaultCellID is the authoritative value and must match.
+const CellDefault = "cell-default"
+
 // Build represents a build record in the database.
 type Build struct {
 	ID              string          `json:"id"`
@@ -61,7 +67,10 @@ type BuildStore interface {
 	GetBuildApps(ctx context.Context, buildID string) ([]BuildAppSpec, error)
 	ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error)
 	ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]Build, int, error)
-	FindActiveBuilds(ctx context.Context) ([]Build, error)
+	// FindActiveBuilds returns QUEUED/RUNNING/RELEASING builds belonging to the
+	// given cell (roadmap 03). Pass CellDefault for single-cell / backward
+	// compatible behavior.
+	FindActiveBuilds(ctx context.Context, cellID string) ([]Build, error)
 	CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, []string, error)
 }
 
@@ -400,19 +409,29 @@ func (s *PostgresBuildStore) ListByProjectAndEnv(ctx context.Context, tenantID, 
 	return builds, total, nil
 }
 
-// FindActiveBuilds returns all builds in QUEUED or RUNNING state.
-// Used by the startup reconciler to find orphaned builds on boot.
-func (s *PostgresBuildStore) FindActiveBuilds(ctx context.Context) ([]Build, error) {
+// FindActiveBuilds returns all builds in QUEUED, RUNNING, or RELEASING state
+// belonging to the given cell. Roadmap 03 adds the cell_id filter so that in
+// a multi-cell deployment, each cell's reconciler only sees its own work.
+// Pass CellDefault ("cell-default") for single-cell / backward-compatible
+// behavior — existing data and any rows inserted without an explicit cell_id
+// default to 'cell-default' via migration 000029.
+func (s *PostgresBuildStore) FindActiveBuilds(ctx context.Context, cellID string) ([]Build, error) {
+	if cellID == "" {
+		cellID = CellDefault
+	}
 	rows, err := s.db.Query(ctx,
 		// RELEASING included per MEET-2026-03-26-008: builds with completed images
 		// that need release activation (Phase 2) to be retried after crash/failure.
+		// cell_id filter uses idx_builds_cell_status_created (migration 000029).
 		`SELECT id, tenant_id, project_id, environment, status, COALESCE(commit_sha, ''),
 		        correlation_id, created_by, created_at, started_at, finished_at,
 		        COALESCE(error_message, ''), duration_seconds, COALESCE(workflow_id, '')
 		 FROM builds
-		 WHERE status IN ('QUEUED', 'RUNNING', 'RELEASING')
+		 WHERE cell_id = $1
+		   AND status IN ('QUEUED', 'RUNNING', 'RELEASING')
 		 ORDER BY created_at ASC
 		 LIMIT 100`,
+		cellID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build store: find active builds: %w", err)

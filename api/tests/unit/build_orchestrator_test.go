@@ -106,7 +106,7 @@ func (f *fakeBuildStoreOrch) ListByProject(ctx context.Context, tenantID, projec
 	return []db.Build{}, nil
 }
 
-func (f *fakeBuildStoreOrch) FindActiveBuilds(ctx context.Context) ([]db.Build, error) {
+func (f *fakeBuildStoreOrch) FindActiveBuilds(ctx context.Context, _ string) ([]db.Build, error) {
 	var active []db.Build
 	for _, b := range f.builds {
 		if b.Status == string(statemachine.BuildQueued) || b.Status == string(statemachine.BuildRunning) {
@@ -267,7 +267,7 @@ func (f *fakeReleaseStoreOrch) GetLatestByBuildID(_ context.Context, buildID str
 	return nil, nil
 }
 
-func (f *fakeReleaseStoreOrch) FindPendingReleases(_ context.Context) ([]db.Release, error) {
+func (f *fakeReleaseStoreOrch) FindPendingReleases(_ context.Context, _ string) ([]db.Release, error) {
 	var pending []db.Release
 	for _, r := range f.releases {
 		if r.Status == "PENDING" {
@@ -277,7 +277,7 @@ func (f *fakeReleaseStoreOrch) FindPendingReleases(_ context.Context) ([]db.Rele
 	return pending, nil
 }
 
-func (f *fakeReleaseStoreOrch) FindActiveReleases(_ context.Context) ([]db.Release, error) {
+func (f *fakeReleaseStoreOrch) FindActiveReleases(_ context.Context, _ string) ([]db.Release, error) {
 	var active []db.Release
 	for _, r := range f.releases {
 		if r.Status == "ACTIVE" {

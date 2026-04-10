@@ -52,7 +52,7 @@ func newFakeSyncReleaseStore() *fakeSyncReleaseStore {
 	}
 }
 
-func (f *fakeSyncReleaseStore) FindPendingReleases(_ context.Context) ([]db.Release, error) {
+func (f *fakeSyncReleaseStore) FindPendingReleases(_ context.Context, _ string) ([]db.Release, error) {
 	// Return only releases whose current status is still PENDING.
 	// This mirrors how the real store works — once activated, they disappear.
 	var result []db.Release
@@ -87,7 +87,7 @@ func (f *fakeSyncReleaseStore) GetActiveByEnvTx(_ context.Context, _ db.DBTX, te
 	return f.active[key], nil
 }
 
-func (f *fakeSyncReleaseStore) FindActiveReleases(_ context.Context) ([]db.Release, error) {
+func (f *fakeSyncReleaseStore) FindActiveReleases(_ context.Context, _ string) ([]db.Release, error) {
 	return nil, nil
 }
 

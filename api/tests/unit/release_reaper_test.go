@@ -21,7 +21,7 @@ type fakeStaleReleaseChecker struct {
 	err      error
 }
 
-func (f *fakeStaleReleaseChecker) FindStaleReleases(_ context.Context, _, _ time.Duration) ([]services.StaleRelease, error) {
+func (f *fakeStaleReleaseChecker) FindStaleReleases(_ context.Context, _ string, _, _ time.Duration) ([]services.StaleRelease, error) {
 	return f.releases, f.err
 }
 

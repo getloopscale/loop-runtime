@@ -6,6 +6,9 @@
 **Unblocks:** Multi-cell without cross-cell data contamination
 **Cost delta:** $0
 **Governance:** Pre-approved (MEET-046). No T2/T3 gate. Implement immediately via TDD. Validate on DigitalOcean.
+**Status (2026-04-10):** Code + unit tests complete. Migration 000029 applied
+locally. Pending: integration test with real PG (`TestFindPendingReleases_ExplainShowsIndexScan`)
+and DigitalOcean migration run.
 
 ---
 
@@ -46,12 +49,16 @@ All tests below must be **implemented as part of this item**. None exist today.
 
 | Test | Type | Exists? | What It Proves |
 |---|---|---|---|
-| `TestFindActiveBuilds_CellScoped` | Unit | **No — implement** | Only returns builds for target cell |
-| `TestFindPendingReleases_CellScoped` | Unit | **No — implement** | Only returns releases for target cell |
-| `TestFindStaleBuilds_CellScoped` | Unit | **No — implement** | Reaper only reaps builds in its cell |
-| `TestCrossCell_NoContamination` | Integration | **No — implement** | Cell-A controller cannot touch Cell-B data |
-| `TestCellDefault_BackwardCompatible` | Unit | **No — implement** | cell-default returns all existing data |
-| `TestFindPendingReleases_ExplainShowsIndexScan` | Integration | **No — implement** | Query plan uses index, not seq scan |
+| `TestFindActiveBuilds_CellScoped_PassesCellIDToWhere` | Unit | ✅ Implemented (2026-04-10) | Only returns builds for target cell |
+| `TestFindActiveBuilds_EmptyCellIDDefaultsToCellDefault` | Unit | ✅ Implemented (2026-04-10) | Empty cellID → cell-default |
+| `TestFindPendingReleases_CellScoped_PassesCellIDToWhere` | Unit | ✅ Implemented (2026-04-10) | Only returns releases for target cell |
+| `TestFindActiveReleases_CellScoped_PassesCellIDToWhere` | Unit | ✅ Implemented (2026-04-10) | Only returns active releases for target cell |
+| `TestFindPendingForAutoVerify_CellScoped_JoinsTenants` | Unit | ✅ Implemented (2026-04-10) | Domain store JOINs tenants for cell filter |
+| `TestPostgresStaleBuildChecker_FindStaleBuilds_ScopedByCellID` | Unit | ✅ Implemented (2026-04-10) | Reaper only reaps builds in its cell |
+| `TestPostgresStaleReleaseChecker_FindStaleReleases_ScopedByCellID` | Unit | ✅ Implemented (2026-04-10) | Release reaper only reaps releases in its cell |
+| `TestFindActiveBuilds_CrossCell_NoContamination` | Unit | ✅ Implemented (2026-04-10) | Cell-A query returns zero cell-B rows |
+| `TestCellDefault_BackwardCompatible` | Unit | ✅ Implemented (2026-04-10) | cell-default returns all existing data |
+| `TestFindPendingReleases_ExplainShowsIndexScan` | Integration | ⏸ Pending — requires real PG with LOOPZERO_TEST_DB_URL | Query plan uses idx_releases_cell_status_created |
 
 ## SLO Targets
 

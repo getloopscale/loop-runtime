@@ -51,6 +51,9 @@ type BuildReconcileLoopConfig struct {
 	// processing simultaneously. Prevents one busy tenant from starving others.
 	// Default: 3. Override via MAX_BUILDS_PER_TENANT env var.
 	MaxBuildsPerTenant int
+	// CellID scopes the loop to a single cell (roadmap 03). Empty or
+	// "cell-default" means single-cell / backward-compatible behavior.
+	CellID string
 }
 
 // BuildReconcileLoop continuously reconciles non-terminal builds against
@@ -201,7 +204,11 @@ func (r *BuildReconcileLoop) Start(ctx context.Context) {
 // MOD-6 fix: Each build is tracked in r.active while being processed.
 // BuildReaper checks this to avoid competing on the same build.
 func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
-	builds, err := r.buildStore.FindActiveBuilds(ctx)
+	cellID := r.cfg.CellID
+	if cellID == "" {
+		cellID = db.CellDefault
+	}
+	builds, err := r.buildStore.FindActiveBuilds(ctx, cellID)
 	if err != nil {
 		r.logger.Error("reconcile loop: failed to find active builds", "error", err)
 		return

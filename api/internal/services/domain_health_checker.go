@@ -17,7 +17,10 @@ import (
 
 // DomainHealthStore abstracts persistence needed by the health checker.
 type DomainHealthStore interface {
-	FindPendingForAutoVerify(ctx context.Context) ([]routes.CustomDomain, error)
+	// FindPendingForAutoVerify returns pending_verification domains owned by
+	// tenants belonging to the given cell (roadmap 03). Pass "cell-default"
+	// or "" for single-cell / backward-compatible behavior.
+	FindPendingForAutoVerify(ctx context.Context, cellID string) ([]routes.CustomDomain, error)
 	FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]routes.CustomDomain, error)
 	FindStalePending(ctx context.Context, maxAge time.Duration) ([]routes.CustomDomain, error)
 	FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]routes.CustomDomain, error)
@@ -39,12 +42,13 @@ type DomainHealthStore interface {
 //
 // MEET-2026-04-05-033: Background health checker.
 type DomainHealthChecker struct {
-	store          DomainHealthStore
-	cnameTarget    string // e.g., "cname.dev.loopzero.example"
-	graceDays      int    // CNAME failure grace period (default: 14)
-	staleDays      int    // pending cleanup threshold (default: 7)
-	logger         *slog.Logger
-	interval       time.Duration
+	store       DomainHealthStore
+	cnameTarget string // e.g., "cname.dev.loopzero.example"
+	graceDays   int    // CNAME failure grace period (default: 14)
+	staleDays   int    // pending cleanup threshold (default: 7)
+	logger      *slog.Logger
+	interval    time.Duration
+	cellID      string // roadmap 03: cell scope for FindPendingForAutoVerify
 }
 
 // DomainHealthCheckerConfig holds configuration.
@@ -53,6 +57,9 @@ type DomainHealthCheckerConfig struct {
 	CNAMETarget string        // e.g., "cname.dev.loopzero.example"
 	GraceDays   int           // CNAME failure grace (default: 14, configurable via DOMAIN_CNAME_GRACE_DAYS)
 	StaleDays   int           // Pending cleanup threshold (default: 7)
+	// CellID scopes the checker to a single cell (roadmap 03). Empty or
+	// "cell-default" means single-cell / backward-compatible behavior.
+	CellID string
 }
 
 // DefaultDomainHealthCheckerConfig returns sensible defaults.
@@ -82,6 +89,10 @@ func NewDomainHealthChecker(
 	if staleDays == 0 {
 		staleDays = 7
 	}
+	cellID := cfg.CellID
+	if cellID == "" {
+		cellID = "cell-default"
+	}
 	return &DomainHealthChecker{
 		store:       store,
 		cnameTarget: cfg.CNAMETarget,
@@ -89,6 +100,7 @@ func NewDomainHealthChecker(
 		staleDays:   staleDays,
 		logger:      logger,
 		interval:    interval,
+		cellID:      cellID,
 	}
 }
 
@@ -124,7 +136,7 @@ func (h *DomainHealthChecker) runChecks(ctx context.Context) {
 
 // autoVerifyPending checks pending domains for TXT record (convenience feature).
 func (h *DomainHealthChecker) autoVerifyPending(ctx context.Context) {
-	domains, err := h.store.FindPendingForAutoVerify(ctx)
+	domains, err := h.store.FindPendingForAutoVerify(ctx, h.cellID)
 	if err != nil {
 		h.logger.Error("domain health: find pending failed", "error", err)
 		return

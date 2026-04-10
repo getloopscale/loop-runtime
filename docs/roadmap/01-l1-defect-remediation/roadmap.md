@@ -20,7 +20,7 @@ Evidence: `infra/tests/load/CORRECTIONS.txt`
 | Correction | Root Cause | Fix |
 |---|---|---|
 | **D/F** — Probe kills non-leader | Leader election takes 60s, liveness kills at 45s | Add startupProbe to API Deployment in Pulumi. Start HTTP server BEFORE leader election. |
-| **G** — Manifest gate blocks new tenants | `strings.Contains("kind: ClusterIssuer")` matches `issuerRef.kind` inside Certificate CRs | YAML-document-aware validation: parse apiVersion+kind at top level, not substring match |
+| **G** — Manifest gate blocks new tenants ✅ (2026-04-10) | `strings.Contains("kind: ClusterIssuer")` matches `issuerRef.kind` inside Certificate CRs | YAML-document-aware validation: parse apiVersion+kind at top level, not substring match. Implemented in `api/internal/gitops/manifest_gate.go` using `yaml.v3` decoder. Forbidden top-level kinds: Namespace, ClusterRole, ClusterRoleBinding, ClusterIssuer, CustomResourceDefinition. 9 unit tests passing. |
 | **I** — PVC multi-attach (10% failure) | Argo Workflows schedules steps on different nodes, DO Block Storage is RWO | nodeAffinity in loopzero-forge WorkflowTemplate to pin steps to same node |
 | **J** — loopzero-packs-runner bash error | v0.1.0 bash syntax error in Rust template | Already fixed (v0.2.0 Go binary). Ensure Pulumi references v0.2.0. |
 | **K** — Build cluster undersized | 2 small nodes, PVC contention | Build node class: small → medium, autoscale 2→5. Codify in Pulumi. |
@@ -42,8 +42,14 @@ Evidence: `infra/tests/load/CORRECTIONS.txt`
 
 | Test | Type | Exists? | Location |
 |---|---|---|---|
-| `TestManifestGate_AllowsCertificateWithClusterIssuerRef` | Unit | **No — implement** | `api/internal/services/manifest_gate_test.go` |
-| `TestManifestGate_BlocksTopLevelClusterIssuer` | Unit | **No — implement** | same |
+| `TestManifestGate_AllowsCertificateWithClusterIssuerRef` | Unit | ✅ Implemented (2026-04-10) | `api/internal/gitops/manifest_gate_test.go` |
+| `TestManifestGate_BlocksTopLevelClusterIssuer` | Unit | ✅ Implemented (2026-04-10) | same |
+| `TestManifestGate_AllowsCommonTenantResources` | Unit | ✅ Implemented (2026-04-10) | same |
+| `TestManifestGate_BlocksTopLevelNamespace` | Unit | ✅ Implemented (2026-04-10) | same |
+| `TestManifestGate_BlocksTopLevelClusterRole` | Unit | ✅ Implemented (2026-04-10) | same |
+| `TestManifestGate_BlocksMixedWithForbidden` | Unit | ✅ Implemented (2026-04-10) | same |
+| `TestManifestGate_TolerantOfEmptyDocuments` | Unit | ✅ Implemented (2026-04-10) | same |
+| `TestManifestGate_RejectsMalformedYAML` | Unit | ✅ Implemented (2026-04-10) | same |
 | `TestL1_10Tenants` (re-run) | Load | **Yes — exists** | `infra/tests/load/cell_scale_test.go` |
 | `TestL1_WebhookBurst` | Load | **Yes — exists** | same |
 
