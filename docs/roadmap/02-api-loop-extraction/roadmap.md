@@ -95,8 +95,8 @@ All tests below must be **implemented as part of this item**. None exist today.
 |---|---|---|---|
 | `TestAPI_NoBackgroundLoops` | Unit | ✅ Implemented (2026-04-10) `tests/unit/api_no_loops_test.go` | Config flag disables loops; live-validated on DO (4 smoke deploys with loops OFF, HTTP 200, zero loop-start lines) |
 | `TestController_LeaderElection` | Unit + Integration | ✅ Unit implemented (2026-04-10) `internal/leader/election_test.go` — 10 concurrent Acquire calls, exactly 1 winner. Full integration still needs real PG + 2 controller pods. | Only 1 controller processes at a time |
-| `TestController_CrashRecovery` | Integration | ❌ Pending — needs controller binary | Kill controller, builds still complete |
-| `TestAPI_MultiReplica_NoDuplicateProcessing` | Load | ❌ Pending — needs DO + controller | 4 replicas, 20 deploys, zero duplicate transitions |
+| `TestController_CrashRecovery` | Unit + Integration | ✅ Unit implemented (2026-04-10) — `TestAPI_MultiReplica_OrphanedClaim_Reclaimable` proves a crashed replica's claim is reclaimable by a peer after the stale window. `TestClaim_OrphanedClaim_Reclaimable` also covers the base case. Full integration runs via `task test:chaos:controller-kill` (Chaos Mesh). | Kill controller, builds still complete |
+| `TestAPI_MultiReplica_NoDuplicateProcessing` | Unit + Load | ✅ Unit implemented (2026-04-10) `internal/processing/multi_replica_test.go` — 4 replicas × 20 builds, zero duplicates proven via stateful DBTX fake. Full load version runs via `task test:load:l2` + `task test:chaos:controller-kill`. | 4 replicas, 20 deploys, zero duplicate transitions |
 | `TestController_IdempotentTransitions` | Unit | ✅ Implemented (2026-04-10) `tests/unit/controller_idempotent_test.go` | Same build processed twice = no state corruption |
 | `TestLeaderGeneration_StaleWriteRejected` | Unit | ✅ Implemented (2026-04-10) `internal/leader/generation_test.go` | Stale leader's transition fails via ErrFenced |
 | `TestProcessingClaim_OrphanDetection` | Unit | ✅ Implemented (2026-04-10) `internal/processing/claim_store_test.go` | Orphaned processing_by detected after stale window |
