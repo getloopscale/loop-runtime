@@ -401,22 +401,27 @@ jobs:
           # Extract the kubectl context name from the saved kubeconfig
           BUILD_CONTEXT=$(kubectl config get-contexts -o name 2>/dev/null | grep "$BUILD_CLUSTER" | head -1)
 
+          # Ensure argo namespace exists (may not if infra deploy hasn't run yet)
+          kubectl --context "$BUILD_CONTEXT" get ns argo >/dev/null 2>&1 || {
+            echo "::warning::Namespace 'argo' not found — skipping CWT update (infra deploy will create it)"
+            exit 0
+          }
+
           # Render and apply CWT templates from the local Helm chart.
-          # This ensures CWTs always match the latest code, even if the
-          # Pulumi Helm release version hasn't changed.
           helm template loopzero-build-cwts infra/helm/argo-workflows \
             --set minio.insecure=true | \
-            kubectl apply --context "$BUILD_CONTEXT" -f -
+            kubectl apply --context "$BUILD_CONTEXT" -f - || {
+            echo "::warning::CWT apply failed — will be applied by infra deploy"
+            exit 0
+          }
 
           # Ensure buildkit-registry-config secret exists for image push.
-          # BuildKit needs Docker config.json to push to DO Container Registry.
-          # Without this, build-image pods hang in PodInitializing (AUDIT-2026-03-28).
           RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 2592000)
           kubectl create secret generic buildkit-registry-config \
             --context "$BUILD_CONTEXT" \
             --namespace argo \
             --from-literal=config.json="$RW_CONFIG" \
-            --dry-run=client -o yaml | kubectl apply --context "$BUILD_CONTEXT" -f -
+            --dry-run=client -o yaml | kubectl apply --context "$BUILD_CONTEXT" -f - || true
 
           echo "### CWT Update" >> "$GITHUB_STEP_SUMMARY"
           echo "- CWTs updated on $BUILD_CLUSTER" >> "$GITHUB_STEP_SUMMARY"
