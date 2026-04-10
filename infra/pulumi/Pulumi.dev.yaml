@@ -15,9 +15,11 @@ config:
   loopzero-infra:runtimeNodeClass: small
   loopzero-infra:runtimeMinNodes: "2"
   loopzero-infra:runtimeMaxNodes: "3"
-  # Build cluster — medium nodes reduce PVC Multi-Attach (more pods per node)
+  # Build cluster — resize to medium via doctl after pipeline stabilizes
+  # Pulumi K8s provider crashes during node pool resize (gRPC connection closing).
+  # Keep small in Pulumi, resize manually: doctl kubernetes cluster node-pool update
   loopzero-infra:buildK8sVersion: "1.32.13-do.2"
-  loopzero-infra:buildNodeClass: medium
+  loopzero-infra:buildNodeClass: small
   loopzero-infra:buildMinNodes: "2"
   loopzero-infra:buildMaxNodes: "5"
   # Database
