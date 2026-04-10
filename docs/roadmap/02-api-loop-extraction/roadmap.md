@@ -94,7 +94,7 @@ All tests below must be **implemented as part of this item**. None exist today.
 | Test | Type | Exists? | What It Proves |
 |---|---|---|---|
 | `TestAPI_NoBackgroundLoops` | Unit | ✅ Implemented (2026-04-10) `tests/unit/api_no_loops_test.go` | Config flag disables loops; live-validated on DO (4 smoke deploys with loops OFF, HTTP 200, zero loop-start lines) |
-| `TestController_LeaderElection` | Integration | ❌ Pending — needs real PG | Only 1 controller processes at a time |
+| `TestController_LeaderElection` | Unit + Integration | ✅ Unit implemented (2026-04-10) `internal/leader/election_test.go` — 10 concurrent Acquire calls, exactly 1 winner. Full integration still needs real PG + 2 controller pods. | Only 1 controller processes at a time |
 | `TestController_CrashRecovery` | Integration | ❌ Pending — needs controller binary | Kill controller, builds still complete |
 | `TestAPI_MultiReplica_NoDuplicateProcessing` | Load | ❌ Pending — needs DO + controller | 4 replicas, 20 deploys, zero duplicate transitions |
 | `TestController_IdempotentTransitions` | Unit | ✅ Implemented (2026-04-10) `tests/unit/controller_idempotent_test.go` | Same build processed twice = no state corruption |
