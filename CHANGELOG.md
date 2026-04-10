@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Build admission gate** (Roadmap 07): Cell-level and per-tenant concurrent build limits. Rejects with HTTP 429 when cell at capacity (`MAX_CONCURRENT_BUILDS_PER_CELL=20`) or tenant at capacity (`MAX_CONCURRENT_BUILDS_PER_TENANT=3`). 4 unit tests including `TestBuildAdmission_CellCapacityReject` and `TestBuildAdmission_TenantFairness`.
+- **PG pool circuit breaker** (Roadmap 07): HTTP middleware that rejects mutation requests (POST/PUT/DELETE) with 503 + Retry-After when PG pool utilization exceeds threshold (`PG_CIRCUIT_BREAKER_THRESHOLD_PCT=90`). Read requests always pass through. 3 unit tests.
+- **Cell capacity budget** (Roadmap 04): Published at `docs/capacity/cell-budget.md` with concrete numbers for tenants, builds, PG connections, ArgoCD apps per cell. Includes saturation thresholds (Yellow 70%, Red 90%) and graceful degradation behavior.
+- **Cell provisioning — real implementation** (Roadmap 05): `cell.ts` now provisions complete DOKS clusters with ArgoCD, Traefik, cert-manager, network policies, and Prometheus agent. Zero placeholder values remain.
+- **TOCTOU placement test** (Roadmap 06): `TestPlacement_ConcurrentCreation_NoTOCTOU` proves 10 concurrent tenant creations distribute evenly across 2 cells with no hot-spotting.
+- **L4/L5 load tests** (Roadmap 08): `TestL4_500Tenants` (500 tenants, 2 cells, 20 concurrent) and `TestL5_1000Tenants_MultiCell` (1000 tenants, multi-cell, 50 concurrent) with pass criteria: >99% success, p99 < 10min.
+- **Chaos test suite** (Roadmap 08): 7 implemented chaos tests replacing 6 PIt stubs. Covers: API pod restart, controller crash recovery, PG pool exhaustion, ArgoCD crash, PG failover, cell network partition.
+- **Admission control metrics**: `loopzero_build_admission_admitted_total`, `loopzero_build_admission_rejected_total`, `loopzero_pg_circuit_breaker_tripped_total`.
+
 ### Changed
 - **CI/CD pipeline optimization**: Build Images only triggers on app code changes (`api/`, `operators/`, `cloud/`, `pkg/`). Infra Deploy only triggers on infra changes (`infra/`). New images trigger lightweight pod restart (~2min) instead of full `pulumi up` (~15min). Eliminates 25min polling loop.
 

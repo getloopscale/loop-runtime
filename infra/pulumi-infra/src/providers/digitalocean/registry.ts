@@ -27,7 +27,7 @@ export class DigitalOceanRegistryProvider implements IProviderRegistry {
       // retainOnDelete + protect: destroying a stack never deletes the shared registry.
       retainOnDelete: true,
       protect: true,
-      ignoreChanges: ["subscriptionTierSlug"],
+      ignoreChanges: ["subscriptionTierSlug", "region"],
     });
 
     // Construct the endpoint deterministically: registry.digitalocean.com/{name}

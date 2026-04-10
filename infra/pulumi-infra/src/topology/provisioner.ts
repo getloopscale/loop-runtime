@@ -53,6 +53,12 @@ export function provisionClusters(
   const allClusterIds: pulumi.Output<string>[] = [];
 
   for (const spec of allSpecs) {
+    // Deduplicate: if a cluster with this id was already created, reuse it.
+    // This supports shared clusters (e.g., mgmt+build on same physical cluster).
+    if (registry[spec.id]) {
+      continue;
+    }
+
     // Use clusterId as Pulumi resource name — stable identity
     const clusterName = resourceName({
       project: cfg.project,

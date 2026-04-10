@@ -7,30 +7,25 @@ config:
   loopzero-infra:infraVersion: v3
   # VPC CIDR — must not overlap with dev (10.20.0.0/16 in sfo3)
   loopzero-infra:vpcCidr: "10.30.0.0/16"
-  # Topology — minimal sizing for validation
+  # Topology — 2 clusters only (DO account limit: 5, dev uses 3)
+  # mgmt+build share one cluster. Runtime is separate.
+  # The provisioner deduplicates entries with the same id.
   loopzero-infra:topology:
     mgmt:
-      - id: mgmt-default
+      - id: combo-mgmt-build
         region: nyc3
         nodeClass: small
         minNodes: 2
-        maxNodes: 2
+        maxNodes: 3
     build:
-      - id: build-default
+      - id: combo-mgmt-build
         region: nyc3
         nodeClass: small
         minNodes: 2
         maxNodes: 3
     runtime:
-      - id: runtime-default
+      - id: runtime-nyc3
         cellId: cell-default
-        region: nyc3
-        nodeClass: small
-        minNodes: 2
-        maxNodes: 2
-      # Second runtime — validates multi-cell topology
-      - id: runtime-nyc3-02
-        cellId: cell-nyc3-02
         region: nyc3
         nodeClass: small
         minNodes: 2
@@ -41,15 +36,10 @@ config:
   loopzero-infra:dbNodeCount: "1"
   # Cloudflare DNS zone
   loopzero-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
-  # Secrets — set via: pulumi config set --secret <key> <value> --stack homolog
-  # loopzero-infra:spacesAccessKeyId
-  # loopzero-infra:spacesSecretAccessKey
-  # loopzero-infra:digitaloceanToken
-
   loopzero-infra:spacesAccessKeyId:
-    secure: v1:TXnWzbACmwh5oBy5:8qWc7JaYA6n90lM04z4VE4alFoWdEgiYlm5A3FWgWjL84Irt
+    secure: v1:r4lfPQJPwn5w5A9d:FGY0RoaBh3VtWCZYzdq4e9R1PK3JjPflZqzT3AtHXmWKNony
   loopzero-infra:spacesSecretAccessKey:
-    secure: v1:HZr0NQm5pnqwPw3G:M3NUuFxonYsvmSWfgtGUNwZqmu4ZDkWKKQXrrCMT9Nv0myk85FT9oN7zEJHuUctDgyJmm7K3QW474ZQ=
+    secure: v1:PHLA+XnnDrkosK06:pAWBor/MMXk4gf92z/YNWCrtI4smnKHRpUZ1FnLj57MNz7VMQWt/3JxD//oII8myzI6t8duMI8qP8RE=
   loopzero-infra:digitaloceanToken:
-    secure: v1:sBmgHu+lwqtiBxmf:/iE9ZY5+glEgBrcjyXqISd36O9S0BwOziqtdUoKXh1iuFQEmXugTr8sHOlfDvznX6ikgfF6/N2h3gIHph1JUgWdSUwVzdaEpYWy9lTkzs2bP3hM7IkVk
-encryptionsalt: v1:ebRqSRTK814=:v1:pyGZ1K/j24ahZZsw:/cJ4Kc/atCr9VdtbvwahsMgM3ePmpg==
+    secure: v1:pdierZpOYqQ8dEsy:QvTZpZZIM5B1WZs6XRK637kjfBnT6H6Ko1GctPlRONq+zWe47tHnvF/c3PXUoGcIHGcdBIjMY75KuDs7gu8+8BgEt16dPg0wavXTcYw6iTWn5snevNgr
+encryptionsalt: v1:EMy3Tx0UFnE=:v1:HMgAvOY1LdhhgWyc:tZcI2cYFpPNSxkIC/KhUzeGPqxv2Mg==

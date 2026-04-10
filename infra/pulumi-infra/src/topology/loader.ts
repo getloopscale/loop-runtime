@@ -99,15 +99,15 @@ function parsePlane(raw: any, role: "mgmt" | "build" | "runtime"): ClusterSpec[]
 }
 
 function validate(topology: TopologyConfig): void {
-  const allClusters = [...topology.mgmt, ...topology.build, ...topology.runtime];
-
-  // Check globally unique IDs
-  const ids = new Set<string>();
-  for (const cluster of allClusters) {
-    if (ids.has(cluster.id)) {
-      throw new TopologyValidationError(`duplicate cluster id: '${cluster.id}'`);
+  // Check unique IDs within each role (duplicates across roles = shared cluster, allowed)
+  for (const [role, clusters] of [["mgmt", topology.mgmt], ["build", topology.build], ["runtime", topology.runtime]] as const) {
+    const ids = new Set<string>();
+    for (const cluster of clusters) {
+      if (ids.has(cluster.id)) {
+        throw new TopologyValidationError(`duplicate cluster id within ${role}: '${cluster.id}'`);
+      }
+      ids.add(cluster.id);
     }
-    ids.add(cluster.id);
   }
 
   // Check unique cellIds for runtime clusters

@@ -68,6 +68,44 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
       });
     }
 
+    // PostgreSQL config tuning — enables pg_stat_statements, sets safe timeouts.
+    // These settings are applied at the cluster level, not per-database.
+    new digitalocean.DatabasePostgresqlConfig(`${spec.name}-pgconfig`, {
+      clusterId: cluster.id,
+      // pg_stat_statements: track all queries for slow query analysis
+      pgStatStatementsTrack: "all",
+      // Log queries slower than 1 second
+      logMinDurationStatement: 1000,
+      // Kill idle transactions after 10 minutes (prevents connection leaks)
+      idleInTransactionSessionTimeout: 600000,
+      // Shared buffers at 25% of RAM (DO default, explicit for clarity)
+      sharedBuffersPercentage: 25,
+      // Work memory per query operation (4MB, good for sorting/hashing)
+      workMem: 4,
+    });
+
+    // Separate database user for API (DML only, no DDL).
+    // Migrations run as doadmin (full privileges).
+    // API connects as loopzero_api (restricted — cannot DROP tables).
+    // MEET-2026-03-31-024: Database role separation.
+    const apiUser = new digitalocean.DatabaseUser(`${spec.name}-api-user`, {
+      clusterId: cluster.id,
+      name: "loopzero_api",
+    });
+
+    // PGBouncer connection pool — managed by DO, not the application.
+    // Eliminates the need for pgx pool tuning in the API (DB_MAX_CONNS).
+    // Transaction mode: connections returned to pool after each transaction.
+    // Size 20: enough for 2 API replicas × 10 concurrent requests.
+    new digitalocean.DatabaseConnectionPool(`${spec.name}-api-pool`, {
+      clusterId: cluster.id,
+      name: "loopzero-api-pool",
+      mode: "transaction",
+      size: 20,
+      dbName: "loopzero",
+      user: apiUser.name,
+    });
+
     return {
       clusterId: cluster.id,
       host: cluster.host,
@@ -77,6 +115,9 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
       user: cluster.user,
       password: cluster.password,
       uri: cluster.uri,
+      // Additional outputs for downstream consumers
+      apiUser: apiUser.name,
+      apiUserPassword: apiUser.password,
     };
   }
 }

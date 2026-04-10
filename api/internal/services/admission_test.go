@@ -19,8 +19,9 @@ func TestBuildAdmission_CellCapacityReject(t *testing.T) {
 	})
 
 	// Fill to capacity with different tenants.
+	tenants := []string{"tenant-a", "tenant-b", "tenant-c"}
 	for i := 0; i < 3; i++ {
-		if err := gate.Admit(context.Background(), "tenant-x", "cell-default"); err != nil {
+		if err := gate.Admit(context.Background(), tenants[i], "cell-default"); err != nil {
 			t.Fatalf("admit %d: unexpected error: %v", i, err)
 		}
 	}

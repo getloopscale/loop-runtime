@@ -148,6 +148,25 @@ type Config struct {
 	//
 	// Env: LOOPZERO_DISABLE_LEGACY_LOOPS ("true" to disable loops in the API).
 	DisableLegacyLoops bool
+
+	// Roadmap 07 — Backpressure & Admission Control.
+	//
+	// MaxConcurrentBuildsPerCell is the maximum number of concurrent builds
+	// allowed across all tenants in a single cell. When reached, new build
+	// submissions receive HTTP 429 with Retry-After.
+	// Env: MAX_CONCURRENT_BUILDS_PER_CELL (default: 20)
+	MaxConcurrentBuildsPerCell int
+
+	// MaxConcurrentBuildsPerTenant is the maximum number of concurrent builds
+	// a single tenant can have running simultaneously. Prevents a noisy
+	// neighbor from consuming all cell capacity.
+	// Env: MAX_CONCURRENT_BUILDS_PER_TENANT (default: 3)
+	MaxConcurrentBuildsPerTenant int
+
+	// PGCircuitBreakerThresholdPct is the pool utilization percentage (0-100)
+	// above which mutation requests are rejected with HTTP 503. Reads continue.
+	// Env: PG_CIRCUIT_BREAKER_THRESHOLD_PCT (default: 90)
+	PGCircuitBreakerThresholdPct int
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -269,6 +288,11 @@ func Load() Config {
 		// Roadmap 02 — API Loop Extraction. When true, the API does not run
 		// any background loops (controller binary runs them instead).
 		DisableLegacyLoops: os.Getenv("LOOPZERO_DISABLE_LEGACY_LOOPS") == "true",
+
+		// Roadmap 07 — Backpressure & Admission Control.
+		MaxConcurrentBuildsPerCell:   envInt("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
+		MaxConcurrentBuildsPerTenant: envInt("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
+		PGCircuitBreakerThresholdPct: envInt("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
 	}
 }
 
