@@ -15,9 +15,12 @@ config:
   loopzero-infra:runtimeNodeClass: small
   loopzero-infra:runtimeMinNodes: "2"
   loopzero-infra:runtimeMaxNodes: "3"
-  # Build cluster — medium nodes for concurrent builds
+  # Build cluster — medium nodes managed via doctl (not Pulumi resize).
+  # Pulumi K8s provider crashes during node pool resize. Pool "build-medium"
+  # created manually: s-4vcpu-8gb-amd, min=2, max=5, autoscale=true.
+  # Keep "small" here so Pulumi doesn't try to resize/recreate the pool.
   loopzero-infra:buildK8sVersion: "1.32.13-do.2"
-  loopzero-infra:buildNodeClass: medium
+  loopzero-infra:buildNodeClass: small
   loopzero-infra:buildMinNodes: "2"
   loopzero-infra:buildMaxNodes: "5"
   # Database
