@@ -149,20 +149,25 @@ type Config struct {
 	// Env: LOOPZERO_DISABLE_LEGACY_LOOPS ("true" to disable loops in the API).
 	DisableLegacyLoops bool
 
-	// Roadmap 07 — Backpressure and Admission Control feature flag.
+	// Roadmap 07 — Backpressure and Admission Control.
 	//
 	// When AdmissionControl is true, the API consults the build admission
-	// gate (`api/internal/admission`) before accepting POST /api/v1/builds
-	// and consults the pg-pool circuit breaker before issuing mutating DB
-	// operations. At capacity the API returns HTTP 429 (build gate) or
-	// HTTP 503 (pg breaker) with a Retry-After header.
-	//
-	// Default: false — preserves the pre-roadmap-07 behavior so existing
-	// dev / staging deployments are unchanged until the flag is flipped.
-	// Only the exact literal "true" activates it (typo-safe).
-	//
+	// gate and pg-pool circuit breaker. At capacity returns HTTP 429 or 503.
+	// Default: false — preserves pre-roadmap-07 behavior.
 	// Env: LOOPZERO_ADMISSION_CONTROL
 	AdmissionControl bool
+
+	// MaxConcurrentBuildsPerCell: cell-level concurrent build limit.
+	// Env: MAX_CONCURRENT_BUILDS_PER_CELL (default: 20)
+	MaxConcurrentBuildsPerCell int
+
+	// MaxConcurrentBuildsPerTenant: per-tenant concurrent build limit.
+	// Env: MAX_CONCURRENT_BUILDS_PER_TENANT (default: 3)
+	MaxConcurrentBuildsPerTenant int
+
+	// PGCircuitBreakerThresholdPct: pool utilization % above which mutations are rejected.
+	// Env: PG_CIRCUIT_BREAKER_THRESHOLD_PCT (default: 90)
+	PGCircuitBreakerThresholdPct int
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -285,10 +290,11 @@ func Load() Config {
 		// any background loops (controller binary runs them instead).
 		DisableLegacyLoops: os.Getenv("LOOPZERO_DISABLE_LEGACY_LOOPS") == "true",
 
-		// Roadmap 07 — Backpressure and Admission Control. When true, the
-		// build handler checks the admission gate and the pg-pool breaker
-		// before accepting work. Only the exact literal "true" activates it.
-		AdmissionControl: os.Getenv("LOOPZERO_ADMISSION_CONTROL") == "true",
+		// Roadmap 07 — Backpressure & Admission Control.
+		AdmissionControl:             os.Getenv("LOOPZERO_ADMISSION_CONTROL") == "true",
+		MaxConcurrentBuildsPerCell:   envInt("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
+		MaxConcurrentBuildsPerTenant: envInt("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
+		PGCircuitBreakerThresholdPct: envInt("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
 	}
 }
 

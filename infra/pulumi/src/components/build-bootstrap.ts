@@ -62,18 +62,27 @@ export function bootstrapBuildCluster(
     { provider, dependsOn: [ns] },
   );
 
-  // BuildKit registry credentials — needed by build-image step to push images.
-  // This secret is mounted as /home/user/.docker/config.json inside the build container.
-  // It is populated by the CI pipeline (build-images.yml) when integrating the DO registry
-  // with the cluster via `doctl kubernetes cluster registry add`. The Pulumi code here
-  // creates an empty placeholder; the CI pipeline updates it with real credentials.
-  // If the secret already exists (from CI), this is a no-op.
-  //
-  // Manual creation (if CI hasn't run yet):
-  //   kubectl create secret generic buildkit-registry-config --namespace argo \
-  //     --from-literal=config.json='{"auths":{"registry.digitalocean.com":{"auth":"<base64>"}}}'
-  //
-  // See MEET-2026-03-27-012: without this secret, build-image pods stay in PodInitializing.
+  // BuildKit registry credentials — needed by build-image step to PUSH images.
+  // The DO token provides read+write access to the container registry.
+  // Previously this was an empty placeholder populated by CI — now Pulumi
+  // creates it with real credentials on every deploy (zero manual intervention).
+  // Format: docker config.json with base64-encoded "token:<DO_TOKEN>" auth.
+  const registryAuth = config.digitaloceanToken.apply(
+    (token: string) => Buffer.from(`${token}:${token}`).toString("base64"),
+  );
+  new k8s.core.v1.Secret(
+    "buildkit-registry-config",
+    {
+      metadata: {
+        name: "buildkit-registry-config",
+        namespace: "argo",
+      },
+      stringData: {
+        "config.json": pulumi.interpolate`{"auths":{"registry.digitalocean.com":{"auth":"${registryAuth}"}}}`,
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
 
   // Pre-create the workflow ServiceAccount with Helm annotations.
   // This prevents the "invalid ownership metadata" error on destroy+recreate:

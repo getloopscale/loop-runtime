@@ -15,10 +15,17 @@
 name: "Build: Container Images"
 
 on:
-  # NOTE: workflow_run requires the file to exist on the default branch (main).
-  # Until develop is merged to main, we use push + wait-for-ci polling instead.
   push:
     branches: [develop, homolog, main]
+    paths:
+      # Only trigger when application code changes — not for infra/docs/config changes.
+      - 'api/**'
+      - 'operators/**'
+      - 'cloud/**'
+      - 'pkg/**'
+      - 'go.work'
+      - 'go.work.sum'
+      - '**/Dockerfile'
 
   workflow_dispatch:
     inputs:

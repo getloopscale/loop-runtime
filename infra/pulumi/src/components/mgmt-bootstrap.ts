@@ -1103,10 +1103,21 @@ kubectl create secret generic loopzero-platform-tokens \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo "=== Step 7: Update ArgoCD repo credentials ==="
+# Internal URL — used by ArgoCD for in-cluster cloning (faster, no TLS overhead)
 kubectl create secret generic gitea-repo-creds \
   --namespace="$NS" \
   --from-literal="type=git" \
   --from-literal="url=http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000" \
+  --from-literal="username=$GITEA_USER" \
+  --from-literal="password=$GITEA_TOKEN" \
+  --dry-run=client -o yaml | kubectl label -f - --dry-run=client -o yaml --local "argocd.argoproj.io/secret-type=repo-creds" | kubectl apply -f -
+
+# Public URL — ArgoCD Applications may reference https://git.{domain}.
+# Without this, ArgoCD fails with "authentication required" for public URLs.
+kubectl create secret generic gitea-repo-creds-public \
+  --namespace="$NS" \
+  --from-literal="type=git" \
+  --from-literal="url=https://git.${config.domain}" \
   --from-literal="username=$GITEA_USER" \
   --from-literal="password=$GITEA_TOKEN" \
   --dry-run=client -o yaml | kubectl label -f - --dry-run=client -o yaml --local "argocd.argoproj.io/secret-type=repo-creds" | kubectl apply -f -
@@ -1519,8 +1530,10 @@ function installLoopZeroAPI(
     { provider, dependsOn: [ns] },
   );
 
-  // ClusterRole for loopzero-api — minimal RBAC for Tenant CR operations.
-  // Only get/create/update/patch — no delete (tenant deletion goes through operator).
+  // ClusterRole for loopzero-api — RBAC for all LoopZero CRD operations.
+  // API needs: Tenants (create/manage), LoopZeroApplications + ExposedRoutes (reconcile loop
+  // reads status), Environments (create on deploy). Without these, reconcile loop logs
+  // "forbidden: cannot get loopzeroapplications".
   const apiClusterRole = new k8s.rbac.v1.ClusterRole(
     "loopzero-api",
     {
@@ -1530,6 +1543,11 @@ function installLoopZeroAPI(
           apiGroups: ["loopzero.io"],
           resources: ["tenants"],
           verbs: ["get", "list", "create", "update", "patch"],
+        },
+        {
+          apiGroups: ["loopzero.io"],
+          resources: ["loopzeroapplications", "exposedroutes", "environments"],
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"],
         },
       ],
     },

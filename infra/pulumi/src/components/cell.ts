@@ -12,11 +12,12 @@
 // runtime cluster created by infra.ts + bootstrapped by runtime-bootstrap.ts.
 // This function creates ADDITIONAL cells only.
 
-import * as digitalocean from "@pulumi/digitalocean";
-import * as k8s from "@pulumi/kubernetes";
 import * as pulumi from "@pulumi/pulumi";
-
+import * as k8s from "@pulumi/kubernetes";
+import * as digitalocean from "@pulumi/digitalocean";
 import {
+  HELM_VERSIONS,
+  PLATFORM_NAMESPACE,
   installCertManager,
   installTraefik,
   createPlatformNamespace,
@@ -36,7 +37,7 @@ export interface CellConfig {
   readonly cellId: string;
   /** Cloud provider region (e.g., "sfo3", "nyc3") */
   readonly region: string;
-  /** Worker node size (e.g., "s-2vcpu-4gb") */
+  /** Worker node size (e.g., "s-2vcpu-4gb", "s-4vcpu-8gb") */
   readonly nodeSize: string;
   /** Number of worker nodes */
   readonly nodeCount: number;
@@ -83,10 +84,11 @@ export interface CellOutput {
   readonly clusterId: pulumi.Output<string>;
   /** Cell identifier (passthrough from config) */
   readonly cellId: string;
+  /** K8s provider for further resource creation on this cell */
+  readonly provider: k8s.Provider;
 }
 
-// Platform namespace used inside every cell.
-const PLATFORM_NAMESPACE = "platform-system";
+// PLATFORM_NAMESPACE imported from bootstrap-shared
 
 // ---------------------------------------------------------------------------
 // Cell provisioning — Phase 2 (roadmap 05)
@@ -272,6 +274,7 @@ export function createCell(
     ),
     argocdUrl,
     ingressIp,
+    provider: cellProvider,
   };
 }
 

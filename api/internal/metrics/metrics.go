@@ -405,3 +405,21 @@ var (
 		Help: "Number of times all connections were in use when acquire was called (pool saturation signal).",
 	})
 )
+
+// Build admission control metrics — Roadmap 07 (Backpressure & Admission).
+var (
+	BuildAdmissionAdmitted = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_build_admission_admitted_total",
+		Help: "Builds admitted by the admission gate.",
+	}, []string{"cell_id"})
+
+	BuildAdmissionRejected = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_build_admission_rejected_total",
+		Help: "Builds rejected by the admission gate.",
+	}, []string{"cell_id", "reason"})
+
+	PGCircuitBreakerTripped = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_pg_circuit_breaker_tripped_total",
+		Help: "Mutation requests rejected due to PG pool saturation.",
+	}, []string{"method"})
+)

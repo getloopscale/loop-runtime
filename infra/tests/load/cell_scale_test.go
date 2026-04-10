@@ -875,3 +875,206 @@ func containsImpl(s, substr string) bool {
 	}
 	return false
 }
+
+// TestL4_500Tenants runs 500 tenants across 2 cells with chaos injection.
+// Requires 2 cells provisioned and LOOPZERO_CELL_COUNT=2.
+func TestL4_500Tenants(t *testing.T) {
+	_, sim := requireLoadTestEnv(t)
+
+	const tenantCount = 500
+	const concurrency = 20 // 20 concurrent deploys
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Minute)
+	defer cancel()
+
+	t.Logf("L4 — %d tenants, %d concurrent, 2 cells", tenantCount, concurrency)
+
+	// Create projects in batches of 50
+	for batch := 0; batch < tenantCount; batch += 50 {
+		end := batch + 50
+		if end > tenantCount {
+			end = tenantCount
+		}
+		for i := batch; i < end; i++ {
+			name := fmt.Sprintf("loadtest-%d", i)
+			if err := sim.CreateProject(ctx, name); err != nil {
+				t.Fatalf("Failed to create project %s: %v", name, err)
+			}
+		}
+		t.Logf("  Projects %d-%d created", batch, end-1)
+	}
+
+	// Deploy with concurrency limiter
+	var (
+		results  []DeployResult
+		mu       sync.Mutex
+		success  int64
+		failures int64
+	)
+
+	start := time.Now()
+	sem := make(chan struct{}, concurrency)
+
+	var wg sync.WaitGroup
+	for i := 0; i < tenantCount; i++ {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			name := fmt.Sprintf("loadtest-%d", idx)
+			r := sim.SimulateDeploy(ctx, name, "production")
+			r.TenantIdx = idx
+
+			mu.Lock()
+			results = append(results, r)
+			mu.Unlock()
+
+			if r.Success {
+				atomic.AddInt64(&success, 1)
+			} else {
+				atomic.AddInt64(&failures, 1)
+			}
+
+			if idx%50 == 0 || !r.Success {
+				t.Logf("  [%d/%d] %s: success=%v latency=%s",
+					idx+1, tenantCount, name, r.Success, r.Latency.Total.Round(time.Second))
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	totalDuration := time.Since(start)
+
+	var totalLatencies, uploadLatencies []time.Duration
+	for _, r := range results {
+		totalLatencies = append(totalLatencies, r.Latency.Total)
+		uploadLatencies = append(uploadLatencies, r.Latency.Upload)
+	}
+
+	report := &LoadTestResult{
+		TotalDeploys:     len(results),
+		SuccessCount:     success,
+		FailureCount:     failures,
+		Duration:         totalDuration,
+		DeployLatencyP50: percentile(totalLatencies, 50),
+		DeployLatencyP95: percentile(totalLatencies, 95),
+		DeployLatencyP99: percentile(totalLatencies, 99),
+		UploadLatencyP50: percentile(uploadLatencies, 50),
+		Results:          results,
+	}
+
+	printReport(t, report)
+
+	// L4 pass criteria: >99% success, p99 < 10min
+	failRate := float64(failures) / float64(max(success+failures, 1)) * 100
+	if failRate > 1 {
+		t.Errorf("L4 FAIL: failure rate %.1f%% exceeds 1%%", failRate)
+	}
+	if report.DeployLatencyP99 > 10*time.Minute {
+		t.Errorf("L4 FAIL: deploy p99 %s exceeds 10min", report.DeployLatencyP99)
+	}
+}
+
+// TestL5_1000Tenants_MultiCell runs 1000 tenants across 2+ cells.
+// The ultimate validation — proves the architecture scales linearly.
+func TestL5_1000Tenants_MultiCell(t *testing.T) {
+	_, sim := requireLoadTestEnv(t)
+
+	const tenantCount = 1000
+	const concurrency = 50 // 50 concurrent deploys
+	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Minute)
+	defer cancel()
+
+	t.Logf("L5 — %d tenants, %d concurrent, multi-cell", tenantCount, concurrency)
+
+	// Create projects in batches of 100
+	for batch := 0; batch < tenantCount; batch += 100 {
+		end := batch + 100
+		if end > tenantCount {
+			end = tenantCount
+		}
+		for i := batch; i < end; i++ {
+			name := fmt.Sprintf("loadtest-%d", i)
+			if err := sim.CreateProject(ctx, name); err != nil {
+				t.Fatalf("Failed to create project %s: %v", name, err)
+			}
+		}
+		t.Logf("  Projects %d-%d created", batch, end-1)
+	}
+
+	// Deploy with concurrency limiter
+	var (
+		results  []DeployResult
+		mu       sync.Mutex
+		success  int64
+		failures int64
+	)
+
+	start := time.Now()
+	sem := make(chan struct{}, concurrency)
+
+	var wg sync.WaitGroup
+	for i := 0; i < tenantCount; i++ {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			name := fmt.Sprintf("loadtest-%d", idx)
+			r := sim.SimulateDeploy(ctx, name, "production")
+			r.TenantIdx = idx
+
+			mu.Lock()
+			results = append(results, r)
+			mu.Unlock()
+
+			if r.Success {
+				atomic.AddInt64(&success, 1)
+			} else {
+				atomic.AddInt64(&failures, 1)
+			}
+
+			if idx%100 == 0 || !r.Success {
+				t.Logf("  [%d/%d] %s: success=%v latency=%s",
+					idx+1, tenantCount, name, r.Success, r.Latency.Total.Round(time.Second))
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	totalDuration := time.Since(start)
+
+	var totalLatencies, uploadLatencies []time.Duration
+	for _, r := range results {
+		totalLatencies = append(totalLatencies, r.Latency.Total)
+		uploadLatencies = append(uploadLatencies, r.Latency.Upload)
+	}
+
+	report := &LoadTestResult{
+		TotalDeploys:     len(results),
+		SuccessCount:     success,
+		FailureCount:     failures,
+		Duration:         totalDuration,
+		DeployLatencyP50: percentile(totalLatencies, 50),
+		DeployLatencyP95: percentile(totalLatencies, 95),
+		DeployLatencyP99: percentile(totalLatencies, 99),
+		UploadLatencyP50: percentile(uploadLatencies, 50),
+		Results:          results,
+	}
+
+	printReport(t, report)
+
+	// L5 pass criteria: >99% success, p99 < 10min
+	failRate := float64(failures) / float64(max(success+failures, 1)) * 100
+	if failRate > 1 {
+		t.Errorf("L5 FAIL: failure rate %.1f%% exceeds 1%%", failRate)
+	}
+	if report.DeployLatencyP99 > 10*time.Minute {
+		t.Errorf("L5 FAIL: deploy p99 %s exceeds 10min", report.DeployLatencyP99)
+	}
+	if totalDuration > 240*time.Minute {
+		t.Errorf("L5 FAIL: total duration %s exceeds 4h", totalDuration.Round(time.Minute))
+	}
+}

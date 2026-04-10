@@ -37,4 +37,7 @@ export interface DatabaseClusterOutput {
   readonly user: pulumi.Output<string>;
   readonly password: pulumi.Output<string>;
   readonly uri: pulumi.Output<string>;
+  // Role-separated user for API (DML only, no DDL)
+  readonly apiUser?: pulumi.Output<string>;
+  readonly apiUserPassword?: pulumi.Output<string>;
 }
