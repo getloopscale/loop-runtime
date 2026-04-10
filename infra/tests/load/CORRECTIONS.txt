@@ -123,6 +123,18 @@ Load Test Corrections & Learnings — 2026-04-09
 - Definitive fix for Multi-Attach: still needs nodeAffinity in
   loopzero-forge. Medium nodes are mitigation, not elimination.
 
+### M. Promtail removed from Pulumi — gRPC provider crash
+- Problem: Pulumi K8s provider crashes with "grpc: client connection
+  is closing" when managing Helm releases on runtime cluster during
+  node pool resize. Both attempt 1 and retry fail with same error.
+- Root cause: Provider binary (pulumi-resource-kubernetes) exits
+  prematurely during long operations on the runtime cluster. May be
+  related to the 4.27.0 version we pinned to avoid the 4.28.0 crash.
+- Manual fix: Removed Promtail from Pulumi management. Pipeline
+  cleanup removes it from state. Promtail remains running (Helm).
+- Definitive fix: Upgrade pulumi-kubernetes when a stable version
+  without these provider crashes is available.
+
 ### L. Fixture must be flat (no subdirectory path)
 - Problem: fixture with path: api generated Dockerfile with COPY from
   api/ subdirectory, but CMD ran node server.js from /app/ root.
