@@ -101,28 +101,33 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
   );
 
   // 3. DNS CNAME records
-  // 3a. Wildcard — platform subdomains (*.{baseDomain} → tunnel)
-  new cloudflare.DnsRecord("loopzero-tunnel-dns", {
+  // ORDERING: cname.{baseDomain} MUST be created BEFORE *.{baseDomain}.
+  // Cloudflare rejects creating an explicit CNAME when a wildcard already
+  // covers the same host. Creating the explicit record first works because
+  // CF allows adding a wildcard that overlaps existing explicit records.
+
+  // 3a. Custom domain CNAME target — cname.{baseDomain} → tunnel (FIRST)
+  // Users configure: CNAME api.example.com → cname.{baseDomain}
+  // This is the stable endpoint decoupled from internal tunnel ID.
+  // MEET-2026-04-05-033: Custom Domains §6.3
+  const cnameTarget = new cloudflare.DnsRecord("loopzero-custom-domain-cname-target", {
     zoneId: config.zoneId,
-    name: `*.${config.baseDomain}`,
+    name: `cname.${config.baseDomain}`,
     type: "CNAME",
-    ttl: 1, // Auto (required when proxied=true)
+    ttl: 1,
     content: pulumi.interpolate`${tunnel.id}.cfargotunnel.com`,
     proxied: true,
   });
 
-  // 3b. Custom domain CNAME target — cname.{baseDomain} → tunnel
-  // Users configure: CNAME api.example.com → cname.{baseDomain}
-  // This is the stable endpoint decoupled from internal tunnel ID.
-  // MEET-2026-04-05-033: Custom Domains §6.3
-  new cloudflare.DnsRecord("loopzero-custom-domain-cname-target", {
+  // 3b. Wildcard — platform subdomains (*.{baseDomain} → tunnel) (AFTER cname)
+  new cloudflare.DnsRecord("loopzero-tunnel-dns", {
     zoneId: config.zoneId,
-    name: `cname.${config.baseDomain}`,
+    name: `*.${config.baseDomain}`,
     type: "CNAME",
-    ttl: 1, // Auto (required when proxied=true)
+    ttl: 1,
     content: pulumi.interpolate`${tunnel.id}.cfargotunnel.com`,
     proxied: true,
-  });
+  }, { dependsOn: [cnameTarget] });
 
   // 4. Build the tunnel token (base64 JSON with account_id, tunnel_id, tunnel_secret).
   // This is the format cloudflared expects with `tunnel run --token`.
