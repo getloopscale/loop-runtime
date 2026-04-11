@@ -7,6 +7,9 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,6 +36,14 @@ type ApplicationReconciler struct {
 
 // Reconcile handles the reconciliation loop for LoopZeroApplication resources.
 func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("loopzero-operator").Start(ctx, "loopzero.operator.application.reconcile",
+		trace.WithAttributes(
+			attribute.String("k8s.object.name", req.Name),
+			attribute.String("k8s.namespace", req.Namespace),
+		),
+	)
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 
 	var app loopzerov1.LoopZeroApplication

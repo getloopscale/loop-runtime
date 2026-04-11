@@ -11,6 +11,7 @@ import (
 	"github.com/getloopscale/loopzero-forge/model"
 
 	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // InfraParams holds infrastructure-level parameters that are injected into every workflow.
@@ -127,17 +128,21 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		)
 	}
 	// Per-app delivery templates: BuildKit for containers, S3 upload for static.
+	// Sprint 6: Each container build is followed by a cosign signing step.
 	if spec.Plan != nil {
 		for _, appPlan := range spec.Plan.Apps {
 			if appPlan.DeliveryModel == "static" {
 				inlineTemplates = append(inlineTemplates, b.uploadAssetsTemplate(spec, appPlan))
 			} else {
 				inlineTemplates = append(inlineTemplates, b.buildkitTemplateFromPlan(spec, appPlan))
+				inlineTemplates = append(inlineTemplates, cosignSignTemplate(appPlan.AppName, appPlan.ImageTag))
 			}
 		}
 	} else {
 		for _, app := range spec.Apps {
 			inlineTemplates = append(inlineTemplates, b.buildkitTemplateForApp(spec, app))
+			imageTag := naming.ImageTag(b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
+			inlineTemplates = append(inlineTemplates, cosignSignTemplate(app.Name, imageTag))
 		}
 	}
 
@@ -290,6 +295,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 
 	// Per-app delivery — BuildKit for containers, upload for static.
 	// Depends on its language group's dockerfile step (containers) or build step (static).
+	// Sprint 6: Each container build is followed by a cosign signing step.
 	if spec.Plan != nil && len(spec.Plan.Apps) > 0 {
 		for _, appPlan := range spec.Plan.Apps {
 			suffix := suffixForStrategy(groups, appPlan.LanguageStrategy)
@@ -297,15 +303,19 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 				taskName := fmt.Sprintf("deliver-artifact-%s", appPlan.AppName)
 				tasks = append(tasks, inlineTask(taskName, taskName, []string{"build-apps" + suffix}))
 			} else {
-				taskName := fmt.Sprintf("build-image-%s", appPlan.AppName)
-				tasks = append(tasks, inlineTask(taskName, taskName, []string{"generate-dockerfile" + suffix}))
+				buildTaskName := fmt.Sprintf("build-image-%s", appPlan.AppName)
+				tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{"generate-dockerfile" + suffix}))
+				signTaskName := fmt.Sprintf("sign-image-%s", appPlan.AppName)
+				tasks = append(tasks, inlineTask(signTaskName, signTaskName, []string{buildTaskName}))
 			}
 		}
 	} else {
 		for _, app := range spec.Apps {
 			suffix := suffixForStrategy(groups, ResolveStrategy(app.Framework).Name())
-			taskName := fmt.Sprintf("build-image-%s", app.Name)
-			tasks = append(tasks, inlineTask(taskName, taskName, []string{"generate-dockerfile" + suffix}))
+			buildTaskName := fmt.Sprintf("build-image-%s", app.Name)
+			tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{"generate-dockerfile" + suffix}))
+			signTaskName := fmt.Sprintf("sign-image-%s", app.Name)
+			tasks = append(tasks, inlineTask(signTaskName, signTaskName, []string{buildTaskName}))
 		}
 	}
 
@@ -350,6 +360,8 @@ func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
 	return []forge.VolumeBuilder{
 		// Registry credentials for BuildKit push — mounted at /home/user/.docker/ in each build container.
 		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: secretRegistryConfig}, SecretName: secretRegistryConfig},
+		// Sprint 6: cosign signing key for image signing after build.
+		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: secretCosignKey}, SecretName: secretCosignKey},
 	}
 }
 

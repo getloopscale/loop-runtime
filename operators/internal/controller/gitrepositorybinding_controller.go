@@ -9,6 +9,9 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,6 +40,14 @@ type GitRepositoryBindingReconciler struct {
 
 // Reconcile handles the reconciliation loop for GitRepositoryBinding resources.
 func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("loopzero-operator").Start(ctx, "loopzero.operator.gitrepobinding.reconcile",
+		trace.WithAttributes(
+			attribute.String("k8s.object.name", req.Name),
+			attribute.String("k8s.namespace", req.Namespace),
+		),
+	)
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 
 	var binding loopzerov1.GitRepositoryBinding

@@ -16,6 +16,7 @@ const (
 	imageRuby     = "ruby:3.3-alpine"
 	imageBuildKit = "moby/buildkit:v0.18.2-rootless"
 	imageAWSCLI   = "amazon/aws-cli:2.22.35"
+	imageCosign   = "gcr.io/projectsigstore/cosign:v2.4.1"
 
 	// loopzero-packs-runner generates optimized Dockerfiles by analyzing source code.
 	// Replaces hardcoded bash Dockerfile templates (MEET-2026-03-29-017).
@@ -55,8 +56,10 @@ const (
 	workspacePVCSize     = "5Gi"
 	workspaceMountPath   = "/workspace"
 	secretRegistryConfig = "buildkit-registry-config"
-	secretMinIOCreds     = "loopzero-minio-credentials"
-	s3BucketStaticAssets = "loopzero-static-assets"
+	secretMinIOCreds      = "loopzero-minio-credentials"
+	secretCosignKey       = "cosign-signing-key"
+	cosignKeyMountPath    = "/cosign"
+	s3BucketStaticAssets  = "loopzero-static-assets"
 )
 
 // ---------------------------------------------------------------------------

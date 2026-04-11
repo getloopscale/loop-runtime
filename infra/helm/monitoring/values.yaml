@@ -57,6 +57,18 @@ grafana:
       url: http://loki.monitoring:3100
       access: proxy
       isDefault: false
+      jsonData:
+        derivedFields:
+          - datasourceUid: tempo
+            matcherRegex: '"trace_id":"([a-f0-9]+)"'
+            name: TraceID
+            url: "$${__value.raw}"
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.platform-system:3200
+      access: proxy
+      isDefault: false
   sidecar:
     dashboards:
       enabled: true
