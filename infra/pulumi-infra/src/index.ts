@@ -2,6 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import * as pulumi from "@pulumi/pulumi";
+import * as digitalocean from "@pulumi/digitalocean";
 import { resolveProvider } from "./components/infra";
 import { resourceName, bucketName as makeBucketName } from "./core/naming";
 import { standardTags } from "./core/tags";
