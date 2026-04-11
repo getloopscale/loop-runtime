@@ -249,6 +249,8 @@ jobs:
           pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
           pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
           pulumi config set --secret digitaloceanToken "$DIGITALOCEAN_TOKEN" -s "$STACK"
+          # Refresh: sync state with reality (clears pending operations from interrupted runs)
+          pulumi refresh --yes --skip-preview -s "$STACK" 2>/dev/null || true
           pulumi up --yes --skip-preview -s "$STACK"
           echo "### Phase 1: loopzero-infra ✅" >> "$GITHUB_STEP_SUMMARY"
 
