@@ -210,7 +210,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [gate, resolve]
-    if: needs.gate.outputs.mode == 'full' && needs.resolve.outputs.is_split == 'true'
+    if: (needs.gate.outputs.mode == 'full' || needs.gate.outputs.mode == 'manual') && needs.resolve.outputs.is_split == 'true'
     environment: ${{ needs.resolve.outputs.environment }}
     concurrency:
       group: infra-deploy-${{ needs.resolve.outputs.stack }}
