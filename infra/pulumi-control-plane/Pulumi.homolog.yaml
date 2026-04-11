@@ -1,7 +1,0 @@
-config:
-  loopzero-control-plane:environment: homolog
-  loopzero-control-plane:domain: homolog.loopzero.example
-  loopzero-control-plane:infraStackRef: organization/loopzero-infra/homolog
-  loopzero-control-plane:platformStackRef: organization/loopzero-platform/homolog
-  loopzero-control-plane:cfAccountId: "362767409c4de7fda7990c10103efdd9"
-  # Secrets set by CI via env vars (not stored in YAML).
