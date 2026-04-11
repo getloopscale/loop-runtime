@@ -64,10 +64,10 @@ Current limits are accidental, not designed:
 | Test | Type | Exists? | What It Proves |
 |---|---|---|---|
 | `TestL2_50Tenants` | Load | **Partial — exists in cell_scale_test.go, needs enhancement** | Cell handles 50 tenants sustained |
-| `TestArgoCD_100Apps_SyncTime` | Load | **No — implement** | Sync p99 < 120s at 100 apps |
-| `TestPG_PoolSaturation_50Concurrent` | Load | **No — implement** | PG pool < 80% at L2 |
-| `TestBuildQueue_20Concurrent` | Load | **No — implement** | No workflow pending > 60s |
-| `TestCellBudget_GracefulDegradation` | Load | **No — implement** (requires item 07 admission control) | At 110% budget: slower, not crashed |
+| `TestArgoCD_100Apps_SyncTime` | Load | ✅ Script ready (2026-04-10) `infra/tests/k6/scripts/l3-100-tenants.js`. Run: `task test:load:l3`. Threshold enforces sync p99 < 120s via `loopzero_deploy_duration_ms` metric. | Sync p99 < 120s at 100 apps |
+| `TestPG_PoolSaturation_50Concurrent` | Load | ✅ Script ready (2026-04-10) `infra/tests/k6/scripts/l2-50-tenants.js`. PG metrics flow via `loopzero_db_pool_acquired_conns` to Grafana cell-saturation dashboard (yellow=30, red=40). Run: `task test:load:l2`. | PG pool < 80% at L2 |
+| `TestBuildQueue_20Concurrent` | Load | ✅ Script ready (2026-04-10) `infra/tests/k6/scripts/stress-break-point.js`. Ramps to 150% build budget; `loopzero_build_queue_depth` metric tracked. First plateau at 20 concurrent tests the queue bound. Run: `task test:load:stress`. | No workflow pending > 60s |
+| `TestCellBudget_GracefulDegradation` | Load | ✅ Script ready (2026-04-10) `infra/tests/k6/scripts/stress-break-point.js`. Phase 3-4 pushes to 150% of budget. Threshold: ZERO 500s (only 429/503 allowed). Run: `task test:load:stress`. Requires admission control (Item 07 ✅ shipped). | At 110% budget: slower, not crashed |
 
 ## SLO Targets
 

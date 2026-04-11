@@ -38,25 +38,28 @@ Execute load tests L2 through L5, with **failure injection at every level**. Eac
 
 ### Chaos Tests (implement 6 pending + new)
 
-All chaos tests below must be **implemented as part of this item**. The chaos suite (`infra/tests/chaos/chaos_test.go`) currently has 6 `PIt` (pending) tests with 0 implementations.
+Chaos tests now have **two layers** (updated 2026-04-10):
+1. **Ginkgo specs** in `infra/tests/chaos/chaos_test.go` — real `It()` blocks that `kubectl delete` pods and validate recovery via logs/probes.
+2. **Chaos Mesh CRD manifests** in `infra/tests/chaos/manifests/` — declarative fault injection with steady-state PromQL hypotheses. Run via `task test:chaos:<name>`.
 
-| Scenario | Exists? | What It Proves |
-|---|---|---|
-| Kill API pod during deploy | **PIt — implement** | System self-heals, deploy completes |
-| Kill controller mid-reconcile | **PIt — implement** | Builds reach terminal state after failover |
-| PG connection storm | **No — implement** | Circuit breaker fires, reads continue |
-| Cell ArgoCD crash | **No — implement** | Other cell's tenants unaffected |
-| PG failover under load | **PIt — implement** | Recovery < 2min, zero lost builds |
-| Cell network partition | **No — implement** | Blast radius contained to failed cell |
+| Scenario | Ginkgo | Chaos Mesh | Run | What It Proves |
+|---|---|---|---|---|
+| Kill API pod during deploy | ✅ `It()` | ✅ `pod-kill-api-leader.yaml` | `task test:chaos:api-leader-kill` | Non-leader takes over < 90s, 0 restarts |
+| Kill controller mid-reconcile | ✅ `It()` | ✅ `pod-kill-controller.yaml` | `task test:chaos:controller-kill` | Leader lease re-acquired, builds complete |
+| PG connection storm | ✅ `It()` (metric check) | ✅ `pg-connection-storm.yaml` | `task test:chaos:pg-saturation` | Circuit breaker fires at 90%, reads continue |
+| Cell ArgoCD crash | ✅ `It()` | ✅ `argocd-crash.yaml` | `task test:chaos:argocd-crash` | Running workloads unaffected |
+| PG failover under load | ✅ `It()` (health check) | ⏸ Manual trigger via DO console | n/a | Recovery < 2min, zero lost builds |
+| Cell network partition | ✅ `It()` (health check) | ⏸ Needs 2nd cell (Item 05) | n/a | Blast radius contained |
+| Gitea outage | — | ✅ `gitea-outage.yaml` | `task test:chaos:gitea-outage` | Fast-fail, typed errors, no stuck state |
 
 ### Load Tests
 
-| Test | Exists? | Level |
-|---|---|---|
-| `TestL2_50Tenants` | **Partial — exists in cell_scale_test.go, needs enhancement for chaos** | L2 |
-| `TestL3_100Tenants` | **No — implement** | L3 |
-| `TestL4_500Tenants` | **No — implement** | L4 |
-| `TestL5_1000Tenants_MultiCell` | **No — implement** | L5 |
+| Test | Status | k6 Script | Run | Level |
+|---|---|---|---|---|
+| `TestL2_50Tenants` | ✅ k6 script ready | `l2-50-tenants.js` | `task test:load:l2` | L2 |
+| `TestL3_100Tenants` | ✅ k6 script ready | `l3-100-tenants.js` | `task test:load:l3` | L3 |
+| `TestL4_500Tenants_MultiCell` | ✅ Go skeleton + k6 TODO | `cell_scale_test.go` | `LOOPZERO_MULTI_CELL=1` | L4 |
+| `TestL5_1000Tenants_FullScale` | ✅ Go skeleton + k6 TODO | `cell_scale_test.go` | `LOOPZERO_MULTI_CELL=1` | L5 |
 
 ## Acceptance Criteria (Per Level)
 
