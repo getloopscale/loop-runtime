@@ -240,7 +240,12 @@ jobs:
           cd infra/pulumi-infra
           npm ci
           pulumi login "$BACKEND"
+          pulumi stack init "$STACK" 2>/dev/null || true
           pulumi stack select "$STACK"
+          # Set secrets from env (idempotent)
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK" 2>/dev/null || true
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK" 2>/dev/null || true
+          pulumi config set --secret digitaloceanToken "$DIGITALOCEAN_TOKEN" -s "$STACK" 2>/dev/null || true
           pulumi up --yes --skip-preview -s "$STACK"
           echo "### Phase 1: loopzero-infra ✅" >> "$GITHUB_STEP_SUMMARY"
 
@@ -251,7 +256,13 @@ jobs:
           cd infra/pulumi-platform
           npm ci
           pulumi login "$BACKEND"
+          pulumi stack init "$STACK" 2>/dev/null || true
           pulumi stack select "$STACK"
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK" 2>/dev/null || true
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK" 2>/dev/null || true
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" -s "$STACK" 2>/dev/null || true
+          fi
           pulumi up --yes --skip-preview -s "$STACK"
           echo "### Phase 2: loopzero-platform ✅" >> "$GITHUB_STEP_SUMMARY"
 
@@ -262,7 +273,10 @@ jobs:
           cd infra/pulumi-control-plane
           npm ci
           pulumi login "$BACKEND"
+          pulumi stack init "$STACK" 2>/dev/null || true
           pulumi stack select "$STACK"
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK" 2>/dev/null || true
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK" 2>/dev/null || true
           pulumi up --yes --skip-preview -s "$STACK"
           echo "### Phase 3: loopzero-control-plane ✅" >> "$GITHUB_STEP_SUMMARY"
 
