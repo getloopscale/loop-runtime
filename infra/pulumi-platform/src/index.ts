@@ -28,6 +28,9 @@ import { Traefik } from "./services/traefik";
 import { ArgoCD } from "./services/argocd";
 import { Gitea } from "./services/gitea";
 import { Loki } from "./services/loki";
+import { Prometheus } from "./services/prometheus";
+import { Grafana } from "./services/grafana";
+import { Tempo, OtelCollector } from "./services/tempo";
 
 const config = loadPlatformConfig();
 const NAMESPACE = "platform-system";
@@ -122,6 +125,34 @@ const gitea = new Gitea("gitea", {
   adminPassword: giteaPassword,
 }, { dependsOn: [mgmtNs] });
 
+// 6. Prometheus (metrics collection + alerting)
+const prometheus = new Prometheus("prometheus", {
+  provider: mgmtProvider,
+  namespace: NAMESPACE,
+}, { dependsOn: [mgmtNs] });
+
+// 7. Grafana (dashboards + visualization) — depends on Prometheus for datasource
+const grafana = new Grafana("grafana", {
+  provider: mgmtProvider,
+  namespace: NAMESPACE,
+  domain: config.domain,
+  environment: config.environment,
+  prometheus,
+}, { dependsOn: [mgmtNs] });
+
+// 8. Tempo (distributed tracing backend)
+const tempo = new Tempo("tempo", {
+  provider: mgmtProvider,
+  namespace: NAMESPACE,
+}, { dependsOn: [mgmtNs] });
+
+// 9. OTEL Collector (trace pipeline: API → Collector → Tempo)
+const otelCollector = new OtelCollector("otel-collector", {
+  provider: mgmtProvider,
+  namespace: NAMESPACE,
+  tempo,
+}, { dependsOn: [mgmtNs] });
+
 // ═══════════════════════════════════════════════
 // BUILD CLUSTER — build pipeline services
 // ═══════════════════════════════════════════════
@@ -162,3 +193,5 @@ export const runtimeIngressEndpoint = runtimeTraefik.ingressEndpoint;
 export const lokiEndpoint = loki.lokiEndpoint;
 export const giteaReady = gitea.ready;
 export const argoCdReady = argocd.ready;
+export const prometheusReady = prometheus.ready;
+export const grafanaReady = grafana.ready;
