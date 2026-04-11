@@ -1,9 +1,0 @@
-config:
-  loopzero-platform:environment: homolog
-  loopzero-platform:domain: homolog.loopzero.example
-  loopzero-platform:region: nyc3
-  loopzero-platform:dnsZone: loopzero.example
-  loopzero-platform:infraStackRef: organization/loopzero-infra/homolog
-  loopzero-platform:cfAccountId: "362767409c4de7fda7990c10103efdd9"
-  loopzero-platform:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
-  # Secrets set by CI via env vars (not stored in YAML).
