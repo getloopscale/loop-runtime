@@ -204,13 +204,16 @@ export const mgmtClusterName = mgmt.clusterName;
 export const mgmtClusterEndpoint = mgmt.endpoint;
 export const mgmtKubeconfig = pulumi.secret(mgmt.kubeconfig);
 
-// First build + runtime clusters (legacy compatibility)
-const buildEntries = Object.values(clusters.registry).filter((c) => c.spec.role === "build");
+// First build + runtime clusters (legacy compatibility).
+// When mgmt and build share the same cluster ID (combo mode), the registry
+// only has the mgmt entry. Resolve build from topology spec → registry lookup.
+const buildSpec = topology.build[0];
+const buildCluster = buildSpec ? clusters.registry[buildSpec.id] : undefined;
 const runtimeEntries = Object.values(clusters.registry).filter((c) => c.spec.role === "runtime");
 
-export const buildClusterName = buildEntries[0]?.clusterName ?? pulumi.output("none");
-export const buildClusterEndpoint = buildEntries[0]?.endpoint ?? pulumi.output("none");
-export const buildKubeconfig = pulumi.secret(buildEntries[0]?.kubeconfig ?? pulumi.output("none"));
+export const buildClusterName = buildCluster?.clusterName ?? pulumi.output("none");
+export const buildClusterEndpoint = buildCluster?.endpoint ?? pulumi.output("none");
+export const buildKubeconfig = pulumi.secret(buildCluster?.kubeconfig ?? pulumi.output("none"));
 
 export const runtimeClusterName = runtimeEntries[0]?.clusterName ?? pulumi.output("none");
 export const runtimeClusterEndpoint = runtimeEntries[0]?.endpoint ?? pulumi.output("none");
@@ -221,6 +224,14 @@ export const dbHost = database.privateHost;
 export const dbPort = database.port;
 export const dbUri = pulumi.secret(database.uri);
 export const dbPassword = pulumi.secret(database.password);
+
+// Per-service DB users (for secret separation)
+export const dbGiteaUser = database.giteaUser;
+export const dbGiteaPassword = database.giteaUserPassword ? pulumi.secret(database.giteaUserPassword) : undefined;
+export const dbKratosUser = database.kratosUser;
+export const dbKratosPassword = database.kratosUserPassword ? pulumi.secret(database.kratosUserPassword) : undefined;
+export const dbHydraUser = database.hydraUser;
+export const dbHydraPassword = database.hydraUserPassword ? pulumi.secret(database.hydraUserPassword) : undefined;
 
 // Storage
 export const bucketName = storageBucket.bucketName;

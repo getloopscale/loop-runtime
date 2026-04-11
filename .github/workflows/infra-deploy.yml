@@ -52,7 +52,7 @@ on:
         type: choice
         options:
           - dev
-          - staging
+          - homolog
           - prod
       command:
         description: "Pulumi command"
@@ -75,8 +75,11 @@ permissions:
 env:
   NODE_VERSION: "20"
   DOCTL_VERSION: "1.104.0"
+  # Default: monolith (dev/prod). Homolog uses 3-project split with separate backend.
   PULUMI_WORKING_DIR: infra/pulumi
   PULUMI_BACKEND_URL: "s3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
+  # Homolog backend (separate state, separate region)
+  PULUMI_HOMOLOG_BACKEND_URL: "s3://loopzero-homolog-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
 
 jobs:
   # ─────────────────────────────────────────────
@@ -117,6 +120,8 @@ jobs:
       stack: ${{ steps.resolve.outputs.stack }}
       environment: ${{ steps.resolve.outputs.environment }}
       command: ${{ steps.resolve.outputs.command }}
+      is_split: ${{ steps.resolve.outputs.is_split }}
+      backend_url: ${{ steps.resolve.outputs.backend_url }}
     steps:
       - name: Resolve from trigger
         id: resolve
@@ -129,7 +134,7 @@ jobs:
             BRANCH="${{ github.event.workflow_run.head_branch || github.ref_name }}"
             case "$BRANCH" in
               develop) STACK="dev" ;;
-              homolog) STACK="staging" ;;
+              homolog) STACK="homolog" ;;
               main)    STACK="prod" ;;
               *)       echo "::error::Unexpected branch: $BRANCH" && exit 1 ;;
             esac
@@ -137,14 +142,24 @@ jobs:
           fi
 
           case "$STACK" in
-            dev)     ENV="infra-dev" ;;
-            staging) ENV="infra-staging" ;;
-            prod)    ENV="infra-prod" ;;
+            dev)      ENV="infra-dev" ;;
+            homolog)  ENV="infra-homolog" ;;
+            prod)     ENV="infra-prod" ;;
           esac
+
+          # Homolog uses 3-project split; dev/prod use monolith (until migrated)
+          IS_SPLIT="false"
+          BACKEND_URL="${{ env.PULUMI_BACKEND_URL }}"
+          if [ "$STACK" = "homolog" ]; then
+            IS_SPLIT="true"
+            BACKEND_URL="${{ env.PULUMI_HOMOLOG_BACKEND_URL }}"
+          fi
 
           echo "stack=$STACK" >> "$GITHUB_OUTPUT"
           echo "environment=$ENV" >> "$GITHUB_OUTPUT"
           echo "command=$COMMAND" >> "$GITHUB_OUTPUT"
+          echo "is_split=$IS_SPLIT" >> "$GITHUB_OUTPUT"
+          echo "backend_url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
 
           echo "### Deployment Target" >> "$GITHUB_STEP_SUMMARY"
           echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
@@ -152,9 +167,10 @@ jobs:
           echo "| Stack | \`$STACK\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Command | \`$COMMAND\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Environment | \`$ENV\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Split mode | \`$IS_SPLIT\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Backend | \`$BACKEND_URL\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Trigger | \`${{ github.event_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| State backend | S3 (DigitalOcean Spaces) |" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # VALIDATE — typecheck + tests (gate before deploy)
@@ -185,6 +201,86 @@ jobs:
       - name: Run tests
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: npm test
+
+  # ─────────────────────────────────────────────
+  # DEPLOY-SPLIT — 3-project deploy for homolog (infra → platform → control-plane)
+  # ─────────────────────────────────────────────
+  deploy-split:
+    name: "split deploy → ${{ needs.resolve.outputs.stack }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [gate, resolve]
+    if: (needs.gate.outputs.mode == 'full' || needs.gate.outputs.mode == 'manual') && needs.resolve.outputs.is_split == 'true'
+    environment: ${{ needs.resolve.outputs.environment }}
+    concurrency:
+      group: infra-deploy-${{ needs.resolve.outputs.stack }}
+      cancel-in-progress: false
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Pulumi CLI
+        run: curl -fsSL https://get.pulumi.com | sh && echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
+
+      - name: "Phase 1: Deploy loopzero-infra"
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          BACKEND="${{ needs.resolve.outputs.backend_url }}"
+          cd infra/pulumi-infra
+          npm ci
+          pulumi login "$BACKEND"
+          # Select existing stack (created locally with matching encryption salt).
+          # If stack doesn't exist yet, init creates it with a fresh salt —
+          # but secrets in Pulumi.homolog.yaml must match this salt.
+          pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
+          pulumi cancel -s "$STACK" 2>/dev/null || true
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
+          pulumi config set --secret digitaloceanToken "$DIGITALOCEAN_TOKEN" -s "$STACK"
+          pulumi up --yes --skip-preview -s "$STACK"
+          echo "### Phase 1: loopzero-infra ✅" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Phase 2: Deploy loopzero-platform"
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          BACKEND="${{ needs.resolve.outputs.backend_url }}"
+          cd infra/pulumi-platform
+          npm ci
+          pulumi login "$BACKEND"
+          pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
+          pulumi cancel -s "$STACK" 2>/dev/null || true
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" -s "$STACK"
+          fi
+          pulumi up --yes --skip-preview -s "$STACK"
+          echo "### Phase 2: loopzero-platform ✅" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Phase 3: Deploy loopzero-control-plane"
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          BACKEND="${{ needs.resolve.outputs.backend_url }}"
+          cd infra/pulumi-control-plane
+          npm ci
+          pulumi login "$BACKEND"
+          pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
+          pulumi cancel -s "$STACK" 2>/dev/null || true
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
+          pulumi up --yes --skip-preview -s "$STACK"
+          echo "### Phase 3: loopzero-control-plane ✅" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # RESTART-ONLY — triggered by new container images (no infra changes)
@@ -248,7 +344,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [gate, resolve, validate]
-    if: needs.gate.outputs.mode != 'restart-only'
+    if: needs.gate.outputs.mode != 'restart-only' && needs.resolve.outputs.is_split != 'true'
     environment: ${{ needs.resolve.outputs.environment }}
 
     # CRITICAL: never cancel a running deploy — creates orphaned resources

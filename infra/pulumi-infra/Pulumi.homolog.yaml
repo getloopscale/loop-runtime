@@ -5,11 +5,12 @@ config:
   loopzero-infra:domain: homolog.loopzero.example
   loopzero-infra:dnsZone: loopzero.example
   loopzero-infra:infraVersion: v3
-  # VPC CIDR — must not overlap with dev (10.20.0.0/16 in sfo3)
   loopzero-infra:vpcCidr: "10.30.0.0/16"
-  # Topology — 2 clusters only (DO account limit: 5, dev uses 3)
-  # mgmt+build share one cluster. Runtime is separate.
-  # The provisioner deduplicates entries with the same id.
+  loopzero-infra:dbNodeClass: small
+  loopzero-infra:dbVersion: "16"
+  loopzero-infra:dbNodeCount: "1"
+  loopzero-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
+  # Topology: 2 clusters (mgmt+build combo + 1 runtime)
   loopzero-infra:topology:
     mgmt:
       - id: combo-mgmt-build
@@ -30,16 +31,5 @@ config:
         nodeClass: small
         minNodes: 2
         maxNodes: 2
-  # Database — minimal
-  loopzero-infra:dbNodeClass: small
-  loopzero-infra:dbVersion: "16"
-  loopzero-infra:dbNodeCount: "1"
-  # Cloudflare DNS zone
-  loopzero-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
-  loopzero-infra:spacesAccessKeyId:
-    secure: v1:QIJb1LsaGW3hYe4N:QJm0yEH6KdUoT889eCLQKdufBMl041RRvEzdO53Iusno7CZL
-  loopzero-infra:spacesSecretAccessKey:
-    secure: v1:nFriUxoGl6XbXawF:54xpiDMfk0ivomxjOnZgwGuszpG7IOBX720VXl1M1jUH7XWkcj1e01p+JhrAD9TaMPUjnDQqinVJ4b8=
-  loopzero-infra:digitaloceanToken:
-    secure: v1:A6bVE7FD5J1EL+JU:h/QtIHXbW/hAvguqAnlv3qMWWhPOfRpszj94tIISE2Fcvu4HcDBCxIcVP5J/y/aeyVysJKvjabinvsR6okUyLTRrQ7dfUlw0LpOkrMXW/hCFjsRHAXH5
-encryptionsalt: v1:EMy3Tx0UFnE=:v1:HMgAvOY1LdhhgWyc:tZcI2cYFpPNSxkIC/KhUzeGPqxv2Mg==
+  # Secrets are set by CI via env vars (not stored in YAML).
+  # For local dev: pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID"
