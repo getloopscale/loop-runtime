@@ -1,19 +1,7 @@
 config:
   loopzero-control-plane:environment: homolog
   loopzero-control-plane:domain: homolog.loopzero.example
-  # StackReferences — points to infra + platform homolog stacks
-  # S3 backend requires format: organization/project/stack
   loopzero-control-plane:infraStackRef: organization/loopzero-infra/homolog
   loopzero-control-plane:platformStackRef: organization/loopzero-platform/homolog
-  # Cloudflare (for API CF credentials)
   loopzero-control-plane:cfAccountId: "362767409c4de7fda7990c10103efdd9"
-  # Secrets — set via: pulumi config set --secret <key> <value> --stack homolog
-  # loopzero-control-plane:spacesAccessKeyId
-  # loopzero-control-plane:spacesSecretAccessKey
-  # loopzero-control-plane:cfApiToken
-
-  loopzero-control-plane:spacesAccessKeyId:
-    secure: v1:tymtqqlYLr5iGP8x:iCpYh1rS4i9wmhx0YbAN0svsXWUX3riPMULe3DrEUJHkrjOx
-  loopzero-control-plane:spacesSecretAccessKey:
-    secure: v1:R07UBeHZ6ZTrVjMw:WKzJGTmi+FF5/dW/3is+ddOjxOd58D0cOX8QoTTy2yIM9M25DOnjV4K5FnvMEjOBt+mb8wkZMuzYoSQ=
-encryptionsalt: v1:+yoEvRFl3qU=:v1:wkg4wagmWiy0g6pY:2Mk+/VAJscuQjyigwbX64xfjAVqwTQ==
+  # Secrets set by CI via env vars (not stored in YAML).
