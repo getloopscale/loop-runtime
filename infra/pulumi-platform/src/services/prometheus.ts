@@ -127,7 +127,9 @@ export class Prometheus extends pulumi.ComponentResource {
             },
           },
           "kube-state-metrics": { fullnameOverride: "kube-state-metrics" },
-          "prometheus-node-exporter": { fullnameOverride: "node-exporter" },
+          // node-exporter needs hostNetwork/hostPID/hostPath — incompatible with PSA baseline.
+          // Disabled in platform-system namespace. Deploy separately in kube-system if needed.
+          "prometheus-node-exporter": { enabled: false },
         },
       },
       { provider: args.provider, parent: this },

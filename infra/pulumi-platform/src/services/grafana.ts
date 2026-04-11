@@ -143,7 +143,7 @@ export class Grafana extends pulumi.ComponentResource {
    * Grafana sidecar watches for `grafana_dashboard=1` and auto-loads them.
    */
   private provisionDashboards(provider: k8s.Provider, namespace: string): void {
-    const dashboardDir = path.resolve(__dirname, "../../../../helm/monitoring/dashboards");
+    const dashboardDir = path.resolve(__dirname, "../../../helm/monitoring/dashboards");
 
     if (!fs.existsSync(dashboardDir)) {
       return; // CI without infra checkout

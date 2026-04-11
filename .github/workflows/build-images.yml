@@ -81,18 +81,17 @@ jobs:
 
           case "$BRANCH" in
             develop) TAG="dev" ;;
-            homolog) TAG="staging" ;;
+            homolog) TAG="homolog" ;;
             main)    TAG="latest" ;;
             *)       TAG="dev" ;;
           esac
 
           # Also tag as the environment name for Pulumi stack references.
-          # Pulumi stacks use IMAGE_TAG=config.environment (dev/staging/prod).
-          # "main" maps to both :latest and :prod for production deploy.
+          # Pulumi stacks use IMAGE_TAG=config.environment (dev/homolog/prod).
           ENV_TAG=""
           case "$BRANCH" in
             develop) ENV_TAG="dev" ;;
-            homolog) ENV_TAG="staging" ;;
+            homolog) ENV_TAG="homolog" ;;
             main)    ENV_TAG="prod" ;;
           esac
 

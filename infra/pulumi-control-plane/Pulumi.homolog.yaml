@@ -2,8 +2,9 @@ config:
   loopzero-control-plane:environment: homolog
   loopzero-control-plane:domain: homolog.loopzero.example
   # StackReferences — points to infra + platform homolog stacks
-  loopzero-control-plane:infraStackRef: loopzero-infra/homolog
-  loopzero-control-plane:platformStackRef: loopzero-platform/homolog
+  # S3 backend requires format: organization/project/stack
+  loopzero-control-plane:infraStackRef: organization/loopzero-infra/homolog
+  loopzero-control-plane:platformStackRef: organization/loopzero-platform/homolog
   # Cloudflare (for API CF credentials)
   loopzero-control-plane:cfAccountId: "362767409c4de7fda7990c10103efdd9"
   # Secrets — set via: pulumi config set --secret <key> <value> --stack homolog

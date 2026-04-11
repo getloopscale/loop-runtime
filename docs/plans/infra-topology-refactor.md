@@ -421,7 +421,7 @@ Implementar primeiro `shared-build`, mas modelar desde já a topologia para acei
 - [x] `createCell()` não retorna placeholders (returns real kubeconfig, endpoint, labels from provisioned cluster)
 - [x] nova cell provisionada por config (add entry to `topology.runtime[]` in Pulumi.dev.yaml)
 - [x] `ClusterCredential` aparece conectado (homolog: 2 clusters running, kubeconfigs functional)
-- [ ] observabilidade por cell no Grafana/Prometheus (requires loopzero-platform wiring)
+- [x] observabilidade por cell no Grafana/Prometheus (13 dashboards provisioned, Prometheus + kube-state-metrics running)
 - [x] `createCell()` não duplica addons (only produces metadata + labels; bootstrap is loopzero-platform's job)
 
 ---
@@ -450,7 +450,7 @@ Implementar primeiro `shared-build`, mas modelar desde já a topologia para acei
 - [ ] destroy seletivo preserva clusters não-alvo (requires `pulumi up` validation on real infra)
 - [x] `pulumi preview` com 2 runtimes mostra +3 to create (validated on homolog stack)
 - [x] `pulumi up` com 2 clusters publica kubeconfigs acessíveis (homolog: kubectl get nodes OK on both)
-- [ ] observabilidade dos 2 clusters no Grafana/Prometheus (requires platform wiring)
+- [x] observabilidade dos 2 clusters no Grafana/Prometheus (Prometheus on mgmt scraping both clusters, Grafana with 13 dashboards + 3 community dashboards)
 - [x] rollback para topologia anterior validado (reverted 2-runtime config to 1-runtime, preview clean)
 
 ---
