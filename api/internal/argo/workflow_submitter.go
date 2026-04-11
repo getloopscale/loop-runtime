@@ -109,6 +109,17 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 
 	wf.Namespace = spec.Namespace
 
+	// Sprint 6 B3: Propagate trace context to the Argo Workflow via annotations.
+	// This allows the build reconcile loop to link the completed workflow back
+	// to the originating deploy trace, creating end-to-end trace visibility.
+	if spanCtx := trace.SpanFromContext(ctx).SpanContext(); spanCtx.IsValid() {
+		if wf.Annotations == nil {
+			wf.Annotations = make(map[string]string)
+		}
+		wf.Annotations["loopzero.io/trace-id"] = spanCtx.TraceID().String()
+		wf.Annotations["loopzero.io/span-id"] = spanCtx.SpanID().String()
+	}
+
 	wfObject, err := wf.ToDict()
 	if err != nil {
 		return "", fmt.Errorf("argo: serialize workflow: %w", err)

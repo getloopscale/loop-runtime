@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -29,6 +30,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 	"github.com/loopzero/loopzero/operators/internal/httpclient"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
+	"github.com/loopzero/loopzero/operators/internal/tracing"
 )
 
 var scheme = runtime.NewScheme()
@@ -85,6 +87,12 @@ func main() {
 	opts := zap.Options{Development: false}
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
+
+	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loopzero-operator")
+	if tracingErr != nil {
+		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
+	}
+	defer tracingShutdown(context.Background())
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,

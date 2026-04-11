@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,6 +47,14 @@ type ExposureReconciler struct {
 
 // Reconcile handles the reconciliation loop for ExposedRoute resources.
 func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("loopzero-operator").Start(ctx, "loopzero.operator.exposure.reconcile",
+		trace.WithAttributes(
+			attribute.String("k8s.object.name", req.Name),
+			attribute.String("k8s.namespace", req.Namespace),
+		),
+	)
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 
 	var route loopzerov1.ExposedRoute

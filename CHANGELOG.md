@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Supply chain security — image signing** (Sprint 6): cosign sign + syft SBOM + cosign attest for all 4 platform images in CI pipeline. New `sign-and-attest` job with matrix strategy in `build-images.yml`. Trivy post-build scan on final images. SBOM artifacts retained 90 days.
+- **Supply chain security — user image signing** (Sprint 6): Argo Workflow DAG now includes `sign-image-{app}` step after each `build-image-{app}`. Uses `gcr.io/projectsigstore/cosign:v2.4.1` with key mounted from `cosign-signing-key` K8s Secret.
+- **Image signature admission policy** (Sprint 6): `vap-require-image-signature` ValidatingAdmissionPolicy requires digest references (`@sha256:`) for all container images in tenant namespaces. Starts in Audit mode.
+- **Build attestation endpoint** (Sprint 6): `GET /api/v1/builds/:id/attestation` returns image digest, signature reference, and signing timestamp.
+- **DB migration 000034**: Adds `image_digest`, `image_signature`, `image_signed_at` columns to `releases` table for supply chain tracking.
+- **Distributed tracing — Grafana Tempo datasource** (Sprint 6): Tempo added as Grafana datasource with Loki derived fields linking `trace_id` to traces.
+- **Distributed tracing — PG query tracing** (Sprint 6): `otelpgx` tracer hooks into pgx pool, creating spans for every database query with statement and duration.
+- **Distributed tracing — operator instrumentation** (Sprint 6): OTel SDK added to operators with spans on all 7 controller reconcile loops (`loopzero.operator.{name}.reconcile`).
+- **Cross-plane trace propagation** (Sprint 6): Argo Workflow annotations carry `loopzero.io/trace-id` and `loopzero.io/span-id` for end-to-end deploy trace correlation.
+
+### Changed
+- **Registry token expiry** reduced from 3600s to 600s in CI pipeline (SEC-002 compliance).
+- **Registry admission policy** `vap-restrict-registries` migrated from Audit to Deny+Audit mode — pods with images from unauthorized registries are now rejected.
+
+### Added
 - **DO PostgreSQL tuning** (`DatabasePostgresqlConfig`): pg_stat_statements=all, slow query logging >1s, idle transaction timeout 10min, shared_buffers 25%
 - **DO Database role separation** (`DatabaseUser` + `DatabaseConnectionPool`): API connects as `loopzero_api` (DML only) through managed PGBouncer pool (transaction mode, 20 conns)
 - **DO UptimeCheck**: External health monitoring of API from 3 regions (us_east, us_west, eu_west)

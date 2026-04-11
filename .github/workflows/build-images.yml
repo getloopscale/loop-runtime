@@ -42,6 +42,9 @@ on:
 permissions:
   contents: read
   actions: read
+  # Required for cosign to sign images and attach SBOM attestations.
+  id-token: write
+  packages: write
 
 env:
   REGISTRY: registry.digitalocean.com/loopzero-infra-registry
@@ -146,6 +149,9 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.build_api == 'true'
     environment: infra-dev
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -157,12 +163,13 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
       - name: Login to DO Container Registry
-        run: doctl registry login --expiry-seconds 3600
+        run: doctl registry login --expiry-seconds 600
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Build and push loopzero-api
+        id: build
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
@@ -176,8 +183,14 @@ jobs:
             $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}") \
             --push .
 
+          # Capture the digest for signing and attestation.
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-api:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/loopzero-api" >> "$GITHUB_OUTPUT"
+
           echo "### loopzero-api" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/loopzero-api:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # BUILD OPERATOR
@@ -189,6 +202,9 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.build_operator == 'true'
     environment: infra-dev
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -200,12 +216,13 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
       - name: Login to DO Container Registry
-        run: doctl registry login --expiry-seconds 3600
+        run: doctl registry login --expiry-seconds 600
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Build and push tenant-controller
+        id: build
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
@@ -219,9 +236,13 @@ jobs:
             $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}") \
             --push .
 
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/tenant-controller:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/tenant-controller" >> "$GITHUB_OUTPUT"
+
           echo "### tenant-controller" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/tenant-controller:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.REGISTRY }}/tenant-controller:${SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # BUILD CLOUD AUTH SERVICE
@@ -233,6 +254,9 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.build_cloud == 'true'
     environment: infra-dev
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -244,12 +268,13 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
       - name: Login to DO Container Registry
-        run: doctl registry login --expiry-seconds 3600
+        run: doctl registry login --expiry-seconds 600
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Build and push cloud-api
+        id: build
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
@@ -263,7 +288,12 @@ jobs:
             $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG}") \
             --push .
 
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-cloud:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/loopzero-cloud" >> "$GITHUB_OUTPUT"
+
           echo "### cloud-api" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # BUILD DASHBOARD
@@ -275,6 +305,9 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.build_cloud == 'true'
     environment: infra-dev
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -286,12 +319,13 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
       - name: Login to DO Container Registry
-        run: doctl registry login --expiry-seconds 3600
+        run: doctl registry login --expiry-seconds 600
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Build and push dashboard
+        id: build
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
@@ -309,7 +343,149 @@ jobs:
             $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG}") \
             --push cloud/dashboard/
 
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-dashboard:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/loopzero-dashboard" >> "$GITHUB_OUTPUT"
+
           echo "### dashboard" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # SIGN + ATTEST — cosign sign, syft SBOM, cosign attest, Trivy scan
+  # Sprint 6: Supply chain security (SEC-002 remediation)
+  # ─────────────────────────────────────────────
+  sign-and-attest:
+    name: "Sign & attest: ${{ matrix.component }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [resolve, build-api, build-operator, build-cloud, build-dashboard]
+    if: always()
+    environment: infra-dev
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: loopzero-api
+            build_job: build-api
+            result: ${{ needs.build-api.result }}
+            image: ${{ needs.build-api.outputs.image || '' }}
+            digest: ${{ needs.build-api.outputs.digest || '' }}
+          - component: tenant-controller
+            build_job: build-operator
+            result: ${{ needs.build-operator.result }}
+            image: ${{ needs.build-operator.outputs.image || '' }}
+            digest: ${{ needs.build-operator.outputs.digest || '' }}
+          - component: loopzero-cloud
+            build_job: build-cloud
+            result: ${{ needs.build-cloud.result }}
+            image: ${{ needs.build-cloud.outputs.image || '' }}
+            digest: ${{ needs.build-cloud.outputs.digest || '' }}
+          - component: loopzero-dashboard
+            build_job: build-dashboard
+            result: ${{ needs.build-dashboard.result }}
+            image: ${{ needs.build-dashboard.outputs.image || '' }}
+            digest: ${{ needs.build-dashboard.outputs.digest || '' }}
+    steps:
+      - name: Skip if build did not run
+        if: matrix.result != 'success' || matrix.digest == ''
+        run: |
+          echo "::notice::Skipping ${{ matrix.component }} — build did not produce a digest"
+          exit 0
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        if: matrix.result == 'success' && matrix.digest != ''
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install doctl
+        if: matrix.result == 'success' && matrix.digest != ''
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        if: matrix.result == 'success' && matrix.digest != ''
+        run: doctl registry login --expiry-seconds 600
+
+      - name: Install cosign
+        if: matrix.result == 'success' && matrix.digest != ''
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+
+      - name: Install syft
+        if: matrix.result == 'success' && matrix.digest != ''
+        uses: anchore/sbom-action/download-syft@fc46e51fd3cb168ffb36c6d1915723c47db58571 # v0.17.7
+
+      - name: Install Trivy
+        if: matrix.result == 'success' && matrix.digest != ''
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: "${{ matrix.image }}@${{ matrix.digest }}"
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          format: table
+        env:
+          TRIVY_USERNAME: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          TRIVY_PASSWORD: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Generate SBOM with syft
+        if: matrix.result == 'success' && matrix.digest != ''
+        run: |
+          syft "${{ matrix.image }}@${{ matrix.digest }}" \
+            --output spdx-json=sbom-${{ matrix.component }}.spdx.json
+
+          echo "### SBOM: ${{ matrix.component }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Format: SPDX-JSON" >> "$GITHUB_STEP_SUMMARY"
+          PKGS=$(jq '.packages | length' sbom-${{ matrix.component }}.spdx.json 2>/dev/null || echo "?")
+          echo "- Packages: ${PKGS}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sign image with cosign
+        if: matrix.result == 'success' && matrix.digest != ''
+        run: |
+          cosign sign --yes --key env://COSIGN_KEY \
+            -a "repo=${{ github.repository }}" \
+            -a "sha=${{ github.sha }}" \
+            -a "ref=${{ github.ref_name }}" \
+            -a "workflow=${{ github.workflow }}" \
+            -a "run_id=${{ github.run_id }}" \
+            "${{ matrix.image }}@${{ matrix.digest }}"
+
+          echo "### Signature: ${{ matrix.component }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✅ Signed with cosign" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+
+      - name: Attest SBOM with cosign
+        if: matrix.result == 'success' && matrix.digest != ''
+        run: |
+          cosign attest --yes --key env://COSIGN_KEY \
+            --predicate sbom-${{ matrix.component }}.spdx.json \
+            --type spdxjson \
+            "${{ matrix.image }}@${{ matrix.digest }}"
+
+          echo "- ✅ SBOM attestation attached" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+
+      - name: Verify signature (smoke test)
+        if: matrix.result == 'success' && matrix.digest != ''
+        run: |
+          cosign verify --key env://COSIGN_PUB \
+            "${{ matrix.image }}@${{ matrix.digest }}" | head -20
+
+          echo "- ✅ Signature verified" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          COSIGN_PUB: ${{ secrets.COSIGN_PUB }}
+
+      - name: Upload SBOM artifact
+        if: matrix.result == 'success' && matrix.digest != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.component }}
+          path: sbom-${{ matrix.component }}.spdx.json
+          retention-days: 90
 
   # ─────────────────────────────────────────────
   # POST-BUILD — integrate registry with DOKS clusters
@@ -318,7 +494,7 @@ jobs:
     name: Integrate registry with DOKS
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [build-api, build-operator, build-cloud, build-dashboard]
+    needs: [build-api, build-operator, build-cloud, build-dashboard, sign-and-attest]
     if: always() && (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success')
     environment: infra-dev
     steps:
@@ -350,7 +526,7 @@ jobs:
     name: Update CWTs on build cluster
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [build-api, build-operator, build-cloud, build-dashboard]
+    needs: [build-api, build-operator, build-cloud, build-dashboard, sign-and-attest]
     if: always() && (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success')
     environment: infra-dev
     steps:

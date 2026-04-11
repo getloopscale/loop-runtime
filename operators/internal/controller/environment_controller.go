@@ -9,6 +9,9 @@ import (
 	"os"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -49,6 +52,14 @@ type EnvironmentReconciler struct {
 
 // Reconcile handles the reconciliation loop for Environment resources.
 func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("loopzero-operator").Start(ctx, "loopzero.operator.environment.reconcile",
+		trace.WithAttributes(
+			attribute.String("k8s.object.name", req.Name),
+			attribute.String("k8s.namespace", req.Namespace),
+		),
+	)
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 
 	var env loopzerov1.Environment
