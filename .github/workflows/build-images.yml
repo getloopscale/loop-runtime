@@ -495,7 +495,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [build-api, build-operator, build-cloud, build-dashboard, sign-and-attest]
-    if: always() && (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success')
+    if: >-
+      always() &&
+      needs.sign-and-attest.result != 'failure' &&
+      (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success')
     environment: infra-dev
     steps:
       - name: Install doctl
@@ -527,7 +530,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [build-api, build-operator, build-cloud, build-dashboard, sign-and-attest]
-    if: always() && (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success')
+    if: >-
+      always() &&
+      needs.sign-and-attest.result != 'failure' &&
+      (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success')
     environment: infra-dev
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
