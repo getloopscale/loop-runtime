@@ -10,6 +10,7 @@ import { CloudProviderFactory } from "../contracts/provider";
 import { DatabaseClusterOutput } from "../contracts/database";
 import { DigitalOceanProviderFactory } from "../providers/digitalocean";
 import { AwsProviderFactory } from "../providers/aws";
+import { HarborRegistryProvider } from "../providers/harbor";
 import { CloudflareDnsProvider } from "../providers/cloudflare/dns";
 import { PlatformStackConfig } from "../config/stack";
 
@@ -48,6 +49,10 @@ export interface InfraOutputs {
   // Provider-agnostic storage endpoints (eliminates hardcoded digitaloceanspaces.com).
   readonly spacesEndpoint: pulumi.Output<string>;
   readonly s3Endpoint: pulumi.Output<string>;
+
+  // Container images S3 backend — used by Harbor for blob/manifest storage.
+  // Only created when registryType is "harbor".
+  readonly containerImagesBucketName?: pulumi.Output<string>;
 
   // Container Registry
   readonly registryEndpoint: pulumi.Output<string>;
@@ -226,15 +231,54 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
   // Storage endpoint — provider-specific S3-compatible endpoint for SDKs and Loki.
   const storageEndpoints = factory.getStorageEndpoint({ region: config.region });
 
+  // --- Container images bucket (Harbor S3 backend) ---
+  // Only created when registryType is "harbor". Harbor stores image blobs
+  // and manifests here via S3-compatible API (DO Spaces).
+  let containerImagesBucketName: pulumi.Output<string> | undefined;
+  if (config.registryType === "harbor") {
+    const containerImagesBucket = factory.createObjectStorage({
+      name: bucketName({ project: config.project, env: config.environment, region: config.region, suffix: "container-images" }),
+      region: config.region,
+      versioning: false,
+      tags,
+    });
+    containerImagesBucketName = containerImagesBucket.bucketName;
+  }
+
   // --- Container registry ---
-  // REVIEW-2026-03-30: Fixes MED-01 — now uses factory instead of direct DO import.
-  // DigitalOcean has one registry per account (global, not per-region).
-  // Professional tier: unlimited repos, 100GB storage.
-  const registry = factory.createContainerRegistry({
-    name: `${config.project}-registry`,
-    tier: "professional",
-    region: config.region,
-  });
+  // Conditional: DOCR (legacy, cloud-managed) or Harbor (self-hosted on mgmt cluster).
+  // Defaults to DOCR for backward compatibility. Harbor is deployed via Helm in
+  // the bootstrap phase; this section only provides the endpoint for Pulumi outputs.
+  let registryEndpoint: pulumi.Output<string>;
+  let registryName: pulumi.Output<string>;
+
+  if (config.registryType === "harbor") {
+    if (!config.harborExternalUrl) {
+      throw new InfraError({
+        message: "harborExternalUrl is required when registryType is 'harbor'",
+        code: "INVALID_CONFIG",
+        context: { registryType: config.registryType },
+      });
+    }
+    const harborProvider = new HarborRegistryProvider(config.harborExternalUrl);
+    const registry = harborProvider.createContainerRegistry({
+      name: `${config.project}-harbor`,
+      tier: "self-hosted",
+      region: config.region,
+    });
+    registryEndpoint = registry.endpoint;
+    registryName = registry.name;
+  } else {
+    // DOCR — DigitalOcean has one registry per account (global, not per-region).
+    // Professional tier: unlimited repos, 100GB storage.
+    const registry = factory.createContainerRegistry({
+      name: `${config.project}-registry`,
+      tier: "professional",
+      region: config.region,
+    });
+    registryEndpoint = registry.endpoint;
+    registryName = registry.name;
+  }
 
   return {
     networkId: network.networkId,
@@ -267,7 +311,8 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     staticCdnEndpoint: staticCdn.cdnEndpoint,
     spacesEndpoint: storageEndpoints.endpoint,
     s3Endpoint: storageEndpoints.s3Endpoint,
-    registryEndpoint: registry.endpoint,
-    registryName: registry.name,
+    containerImagesBucketName,
+    registryEndpoint,
+    registryName,
   };
 }

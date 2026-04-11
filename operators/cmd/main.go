@@ -28,6 +28,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/controller"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
+	"github.com/loopzero/loopzero/operators/internal/harbor"
 	"github.com/loopzero/loopzero/operators/internal/httpclient"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/operators/internal/tracing"
@@ -227,10 +228,34 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Harbor registry integration (optional — nil disables, backward compatible with DOCR).
+	// Only enabled when HARBOR_URL is set. All 3 env vars are required when enabled.
+	var harborClient *harbor.Client
+	var harborRegistryHost string
+	if harborURL := os.Getenv("HARBOR_URL"); harborURL != "" {
+		harborUser := os.Getenv("HARBOR_ADMIN_USERNAME")
+		harborPass := os.Getenv("HARBOR_ADMIN_PASSWORD")
+		if harborUser == "" || harborPass == "" {
+			setupLog.Error(nil, "HARBOR_ADMIN_USERNAME and HARBOR_ADMIN_PASSWORD are required when HARBOR_URL is set")
+			os.Exit(1)
+		}
+		harborClient = harbor.NewClient(harborURL, harborUser, harborPass)
+		harborRegistryHost = os.Getenv("HARBOR_REGISTRY_HOST")
+		if harborRegistryHost == "" {
+			// Derive from HARBOR_URL by stripping the scheme.
+			harborRegistryHost = strings.TrimPrefix(strings.TrimPrefix(harborURL, "https://"), "http://")
+		}
+		setupLog.Info("harbor integration enabled", "url", harborURL, "registryHost", harborRegistryHost)
+	} else {
+		setupLog.Info("harbor integration disabled — HARBOR_URL not set")
+	}
+
 	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, controller.TenantControllerConfig{
 		GiteaURL:           giteaURL,
 		WorkloadClusterURL: workloadClusterURL,
 		MinIOProvisioner:   minIOProvisioner,
+		HarborClient:       harborClient,
+		HarborRegistryHost: harborRegistryHost,
 		RegistryCIDRs:      registryCIDRs,
 		Credentials: controller.BuildCredentials{
 			MinIOEndpoint:        minIOEndpoint,

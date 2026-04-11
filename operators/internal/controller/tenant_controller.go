@@ -24,6 +24,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
+	"github.com/loopzero/loopzero/operators/internal/harbor"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
@@ -50,6 +51,7 @@ var tenantSM = statemachine.NewTenantMachine()
 //   - tenant_gitops.go:     Client, GitProvisioner, ArgoCDProvisioner, GiteaURL, WorkloadClusterURL
 //   - tenant_credentials.go: BuildClient, Credentials (DOToken, RegistryDockerConfig)
 //   - tenant_priority.go:   RuntimeClient
+//   - tenant_harbor.go:     HarborClient, HarborRegistryHost, BuildClient, RuntimeClient
 type TenantReconciler struct {
 	client.Client
 	Scheme             *runtime.Scheme
@@ -58,6 +60,8 @@ type TenantReconciler struct {
 	GitProvisioner     gitea.GitRepoProvisioner
 	ArgoCDProvisioner  argocd.Provisioner
 	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
+	HarborClient       *harbor.Client              // nil disables Harbor integration (backward compat with DOCR)
+	HarborRegistryHost string                       // e.g. "harbor.dev.loopzero.example" — used in Docker config.json
 	GiteaURL           string
 	WorkloadClusterURL string           // URL of the workload cluster API server
 	Credentials        BuildCredentials // storage + registry credentials for build namespace secrets
@@ -69,6 +73,8 @@ type TenantControllerConfig struct {
 	GiteaURL           string
 	WorkloadClusterURL string
 	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
+	HarborClient       *harbor.Client              // nil disables Harbor integration
+	HarborRegistryHost string                       // e.g. "harbor.dev.loopzero.example"
 	Credentials        BuildCredentials             // storage + registry credentials
 	RegistryCIDRs      []string                     // CIDR ranges for container registry (RISK-007)
 }
@@ -124,6 +130,8 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		{conditions.TypeArgoCDAppReady, func() error { return r.reconcileArgoCDApp(ctx, &tenant) }},
 		{conditions.TypeBuildNamespaceReady, func() error { return r.reconcileBuildNamespace(ctx, &tenant) }},
 		{conditions.TypePriorityClassReady, func() error { return r.reconcilePriorityClass(ctx, &tenant) }},
+		{conditions.TypeHarborProjectReady, func() error { return r.ensureHarborProject(ctx, &tenant) }},
+		{"", func() error { return r.ensureHarborRobotAccounts(ctx, &tenant) }},
 		{"", func() error { return r.reconcileEnvironmentCRs(ctx, &tenant) }},
 	}
 	if err := r.runSteps(ctx, req, &tenant, steps); err != nil {
@@ -276,6 +284,12 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	// Track cleanup failures — finalizer is only removed when all steps succeed or
 	// resources are confirmed gone. This prevents orphaning ArgoCD apps and Gitea repos.
 	var cleanupErrors []string
+
+	// Delete Harbor project for this tenant (idempotent — no-op if HarborClient is nil)
+	if err := r.deleteHarborProject(ctx, tenant); err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("harbor-cleanup: %v", err))
+		logger.Error(err, "cleanup failure", "step", "harbor-cleanup", "tenant", tenant.Name)
+	}
 
 	// Delete ArgoCD Applications for this tenant
 	if err := r.ArgoCDProvisioner.DeleteApplications(ctx, tenant.Name); err != nil {
@@ -452,6 +466,8 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 			GitProvisioner:     gitProvisioner,
 			ArgoCDProvisioner:  argoCDProvisioner,
 			MinIOProvisioner:   cfg.MinIOProvisioner,
+			HarborClient:       cfg.HarborClient,
+			HarborRegistryHost: cfg.HarborRegistryHost,
 			GiteaURL:           giteaURL,
 			WorkloadClusterURL: workloadClusterURL,
 			Credentials:        cfg.Credentials,

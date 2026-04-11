@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# PodDisruptionBudget for Harbor core — ensures at least 1 core pod during disruptions.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: harbor-core
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: harbor
+    app.kubernetes.io/component: core
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: harbor
+      component: core

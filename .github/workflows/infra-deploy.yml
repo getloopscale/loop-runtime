@@ -20,6 +20,8 @@
 #   SPACES_ACCESS_KEY_ID       — DO Spaces access key (for state backend)
 #   SPACES_SECRET_ACCESS_KEY   — DO Spaces secret key (for state backend)
 #   PULUMI_CONFIG_PASSPHRASE   — Passphrase for secrets encryption in state
+#   HARBOR_ROBOT_USERNAME      — Harbor robot account username (MEET-048, optional during transition)
+#   HARBOR_ROBOT_PASSWORD      — Harbor robot account password (MEET-048, optional during transition)
 #
 # Required GitHub Environments:
 #   infra-dev      — no protection rules (auto-deploy on develop)
@@ -375,6 +377,10 @@ jobs:
       LOOPZERO_STRIPE_WEBHOOK_SECRET: ${{ secrets.LOOPZERO_STRIPE_WEBHOOK_SECRET }}
       # Session token HMAC secret (dashboard JWT issuance)
       LOOPZERO_SESSION_TOKEN_SECRET: ${{ secrets.LOOPZERO_SESSION_TOKEN_SECRET }}
+      # MEET-048: Harbor registry (dual-push transition period)
+      HARBOR_REGISTRY: harbor.dev.loopzero.example
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
@@ -701,6 +707,11 @@ jobs:
           doctl auth init --access-token "$DIGITALOCEAN_TOKEN"
           doctl registry login --expiry-seconds 600
 
+          # MEET-048: Harbor dual-push login during transition.
+          if [ -n "$HARBOR_ROBOT_PASSWORD" ]; then
+            echo "$HARBOR_ROBOT_PASSWORD" | docker login "$HARBOR_REGISTRY" -u "$HARBOR_ROBOT_USERNAME" --password-stdin
+          fi
+
           # Read registry endpoint from Pulumi output (avoids hardcoded constant drift)
           REGISTRY=$(pulumi stack output registryEndpoint --stack "$STACK" 2>/dev/null || echo "registry.digitalocean.com/loopzero-infra-registry")
           echo "Registry: $REGISTRY"
@@ -735,14 +746,50 @@ jobs:
             infra/images/packs-runner/
           docker push "$REGISTRY/loopzero-packs-runner:v0.1.0"
 
-          # Integrate registry with all DOKS clusters (idempotent).
+          # MEET-048: Dual-push all images to Harbor during transition.
+          # TODO(MEET-048): After migration, build directly against Harbor and remove DOCR pushes.
+          if [ -n "$HARBOR_ROBOT_PASSWORD" ] && [ -n "$HARBOR_REGISTRY" ]; then
+            echo "Dual-pushing images to Harbor..."
+            for IMAGE in loopzero-api tenant-controller; do
+              docker tag "$REGISTRY/$IMAGE:$TAG" "$HARBOR_REGISTRY/loopzero-platform/$IMAGE:$TAG"
+              docker push "$HARBOR_REGISTRY/loopzero-platform/$IMAGE:$TAG"
+            done
+            docker tag "$REGISTRY/loopzero-clone-runner:v0.1.0" "$HARBOR_REGISTRY/loopzero-platform/loopzero-clone-runner:v0.1.0"
+            docker push "$HARBOR_REGISTRY/loopzero-platform/loopzero-clone-runner:v0.1.0"
+            docker tag "$REGISTRY/loopzero-packs-runner:v0.1.0" "$HARBOR_REGISTRY/loopzero-platform/loopzero-packs-runner:v0.1.0"
+            docker push "$HARBOR_REGISTRY/loopzero-platform/loopzero-packs-runner:v0.1.0"
+            echo "Harbor dual-push complete"
+          fi
+
+          # Integrate DOCR registry with all DOKS clusters (idempotent).
           # This creates the imagePullSecret in each cluster's default namespace
           # and patches the default SA. Must run BEFORE Step 3 convergence.
+          # TODO(MEET-048): After migration, replace with Harbor imagePullSecret provisioning.
           cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}"
           for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
             CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || echo "")
             [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
           done
+
+          # MEET-048: Harbor imagePullSecret for all DOKS clusters.
+          if [ -n "$HARBOR_ROBOT_PASSWORD" ] && [ -n "$HARBOR_REGISTRY" ]; then
+            for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
+              CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || echo "")
+              [ -z "$CLUSTER" ] && continue
+              doctl kubernetes cluster kubeconfig save "$CLUSTER" 2>/dev/null || continue
+              CTX=$(kubectl config get-contexts -o name 2>/dev/null | grep "$CLUSTER" | head -1)
+              [ -z "$CTX" ] && continue
+
+              for NS in default platform-system; do
+                kubectl --context "$CTX" create secret docker-registry harbor-registry \
+                  --docker-server="$HARBOR_REGISTRY" \
+                  --docker-username="$HARBOR_ROBOT_USERNAME" \
+                  --docker-password="$HARBOR_ROBOT_PASSWORD" \
+                  --namespace "$NS" \
+                  --dry-run=client -o yaml | kubectl --context "$CTX" apply -f - 2>/dev/null || true
+              done
+            done
+          fi
 
           # Copy registry secret to platform-system namespace on mgmt cluster.
           # doctl only creates the secret in the default namespace.
@@ -774,13 +821,24 @@ jobs:
                 --set minio.insecure=true | \
                 kubectl apply --context "$BUILD_CTX" -f - 2>/dev/null || true
 
-              # BuildKit registry credentials — needed for image push in build workflows.
-              RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 2592000)
+              # BuildKit registry credentials — needed for image push in build workflows (DOCR).
+              # SEC-003: Reduced token expiry from 2592000s (30d) to 600s (10min) for CI context.
+              RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 600)
               kubectl create secret generic buildkit-registry-config \
                 --context "$BUILD_CTX" --namespace argo \
                 --from-literal=config.json="$RW_CONFIG" \
                 --dry-run=client -o yaml | kubectl apply --context "$BUILD_CTX" -f - 2>/dev/null || true
               echo "CWTs and BuildKit credentials updated on $BUILD_CLUSTER"
+
+              # MEET-048: Harbor BuildKit credentials for build cluster.
+              if [ -n "$HARBOR_ROBOT_PASSWORD" ] && [ -n "$HARBOR_REGISTRY" ]; then
+                HARBOR_CONFIG="{\"auths\":{\"$HARBOR_REGISTRY\":{\"username\":\"$HARBOR_ROBOT_USERNAME\",\"password\":\"$HARBOR_ROBOT_PASSWORD\"}}}"
+                kubectl create secret generic buildkit-harbor-registry-config \
+                  --context "$BUILD_CTX" --namespace argo \
+                  --from-literal=config.json="$HARBOR_CONFIG" \
+                  --dry-run=client -o yaml | kubectl apply --context "$BUILD_CTX" -f - 2>/dev/null || true
+                echo "Harbor BuildKit credentials ensured on $BUILD_CLUSTER"
+              fi
             fi
           fi
 

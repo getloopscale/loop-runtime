@@ -16,6 +16,7 @@ const (
 	TypeBuildNamespaceReady = "BuildNamespaceReady"
 	TypePriorityClassReady  = "PriorityClassReady"
 	TypeArgoCDAppReady      = "ArgoCDAppReady"
+	TypeHarborProjectReady  = "HarborProjectReady"
 )
 
 // --- PlatformBootstrap conditions ---

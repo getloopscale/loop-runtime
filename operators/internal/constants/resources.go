@@ -37,6 +37,18 @@ const (
 	KeyMinIOEndpoint       = "MINIO_ENDPOINT"
 )
 
+// --- Harbor Secret Names ---
+
+const (
+	// SecretHarborRegistryConfig is the Docker config.json for Harbor registry auth
+	// in build namespaces. Same name as the existing buildkit-registry-config to
+	// maintain compatibility with the build pipeline (CWTs reference this name).
+	SecretHarborRegistryConfig = "buildkit-registry-config"
+
+	// SecretHarborPullCredentials is the imagePullSecret for Harbor in workload namespaces.
+	SecretHarborPullCredentials = "harbor-pull-credentials"
+)
+
 // --- ServiceAccount Names ---
 
 const (

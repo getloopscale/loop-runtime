@@ -1,4 +1,8 @@
-# Build and push container images to DigitalOcean Container Registry.
+# Build and push container images to DigitalOcean Container Registry + Harbor.
+#
+# MEET-048: Dual-push strategy — images are pushed to BOTH DOCR and Harbor
+# during the migration period. Harbor steps are conditional on secrets being set.
+# TODO(MEET-048): After migration completes, remove all DOCR steps and keep only Harbor.
 #
 # Trigger map:
 #   push to develop → build + push with :dev tag + :sha tag
@@ -10,7 +14,9 @@
 # via `doctl kubernetes cluster registry add` (done in infra-deploy post-step).
 #
 # Required secrets (set per GitHub Environment):
-#   DIGITALOCEAN_TOKEN — DO API token (registry login + push)
+#   DIGITALOCEAN_TOKEN       — DO API token (registry login + push)
+#   HARBOR_ROBOT_USERNAME    — Harbor robot account username (MEET-048)
+#   HARBOR_ROBOT_PASSWORD    — Harbor robot account password (MEET-048)
 
 name: "Build: Container Images"
 
@@ -47,7 +53,8 @@ permissions:
   packages: write
 
 env:
-  REGISTRY: registry.digitalocean.com/loopzero-infra-registry
+  REGISTRY: registry.digitalocean.com/loopzero-infra-registry  # Legacy DOCR (remove after Harbor migration — MEET-048)
+  HARBOR_REGISTRY: harbor.dev.loopzero.example  # New Harbor registry (MEET-048)
 
 concurrency:
   group: build-images-${{ github.ref }}
@@ -164,6 +171,12 @@ jobs:
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 600
 
+      # MEET-048: Harbor dual-push — login to Harbor registry during transition.
+      - name: Login to Harbor
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
@@ -191,6 +204,27 @@ jobs:
           echo "- \`${{ env.REGISTRY }}/loopzero-api:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
+      # MEET-048: Dual-push to Harbor (remove after migration completes).
+      - name: Push loopzero-api to Harbor (dual-push)
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker tag ${{ env.REGISTRY }}/loopzero-api:${TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${TAG}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${TAG}
+
+          docker tag ${{ env.REGISTRY }}/loopzero-api:${SHA} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${SHA}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${SHA}
+
+          if [ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ]; then
+            docker tag ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${ENV_TAG}
+            docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${ENV_TAG}
+          fi
+
+          echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+
   # ─────────────────────────────────────────────
   # BUILD OPERATOR
   # ─────────────────────────────────────────────
@@ -216,6 +250,12 @@ jobs:
 
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 600
+
+      # MEET-048: Harbor dual-push — login to Harbor registry during transition.
+      - name: Login to Harbor
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
@@ -243,6 +283,27 @@ jobs:
           echo "- \`${{ env.REGISTRY }}/tenant-controller:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
+      # MEET-048: Dual-push to Harbor (remove after migration completes).
+      - name: Push tenant-controller to Harbor (dual-push)
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker tag ${{ env.REGISTRY }}/tenant-controller:${TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${TAG}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${TAG}
+
+          docker tag ${{ env.REGISTRY }}/tenant-controller:${SHA} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${SHA}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${SHA}
+
+          if [ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ]; then
+            docker tag ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${ENV_TAG}
+            docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${ENV_TAG}
+          fi
+
+          echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+
   # ─────────────────────────────────────────────
   # BUILD CLOUD AUTH SERVICE
   # ─────────────────────────────────────────────
@@ -269,6 +330,12 @@ jobs:
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 600
 
+      # MEET-048: Harbor dual-push — login to Harbor registry during transition.
+      - name: Login to Harbor
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
@@ -293,6 +360,27 @@ jobs:
 
           echo "### cloud-api" >> "$GITHUB_STEP_SUMMARY"
           echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # MEET-048: Dual-push to Harbor (remove after migration completes).
+      - name: Push cloud-api to Harbor (dual-push)
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker tag ${{ env.REGISTRY }}/loopzero-cloud:${TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${TAG}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${TAG}
+
+          docker tag ${{ env.REGISTRY }}/loopzero-cloud:${SHA} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${SHA}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${SHA}
+
+          if [ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ]; then
+            docker tag ${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${ENV_TAG}
+            docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${ENV_TAG}
+          fi
+
+          echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # BUILD DASHBOARD
@@ -319,6 +407,12 @@ jobs:
 
       - name: Login to DO Container Registry
         run: doctl registry login --expiry-seconds 600
+
+      # MEET-048: Harbor dual-push — login to Harbor registry during transition.
+      - name: Login to Harbor
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
@@ -348,6 +442,27 @@ jobs:
 
           echo "### dashboard" >> "$GITHUB_STEP_SUMMARY"
           echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # MEET-048: Dual-push to Harbor (remove after migration completes).
+      - name: Push dashboard to Harbor (dual-push)
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker tag ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${TAG}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${TAG}
+
+          docker tag ${{ env.REGISTRY }}/loopzero-dashboard:${SHA} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${SHA}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${SHA}
+
+          if [ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ]; then
+            docker tag ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${ENV_TAG}
+            docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${ENV_TAG}
+          fi
+
+          echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # SIGN + ATTEST — cosign sign, syft SBOM, cosign attest, Trivy scan
@@ -405,6 +520,12 @@ jobs:
       - name: Login to DO Container Registry
         if: matrix.result == 'success' && matrix.digest != ''
         run: doctl registry login --expiry-seconds 600
+
+      # MEET-048: Harbor login for sign-and-attest (future: sign Harbor images too).
+      - name: Login to Harbor
+        if: matrix.result == 'success' && matrix.digest != '' && env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
 
       - name: Install cosign
         if: matrix.result == 'success' && matrix.digest != ''
@@ -505,7 +626,7 @@ jobs:
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
-      - name: Add registry to DOKS clusters
+      - name: Add DOCR registry to DOKS clusters
         run: |
           # Discover cluster names dynamically — avoids hardcoding region.
           # doctl returns all DOKS clusters; we filter for loopzero-infra ones.
@@ -515,10 +636,39 @@ jobs:
             exit 0
           fi
 
-          echo "### Registry Integration" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Registry Integration (DOCR)" >> "$GITHUB_STEP_SUMMARY"
           for CLUSTER in $CLUSTERS; do
             doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
             echo "- ✅ $CLUSTER" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      # MEET-048: Harbor imagePullSecret provisioning.
+      # TODO(MEET-048): After migration, replace DOCR integration above with Harbor-only.
+      # Harbor uses standard K8s docker-registry secrets instead of doctl integration.
+      - name: Add Harbor imagePullSecret to DOKS clusters
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          CLUSTERS=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra" || true)
+          if [ -z "$CLUSTERS" ]; then
+            exit 0
+          fi
+
+          echo "### Registry Integration (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+          for CLUSTER in $CLUSTERS; do
+            doctl kubernetes cluster kubeconfig save "$CLUSTER" 2>/dev/null || continue
+            CTX=$(kubectl config get-contexts -o name 2>/dev/null | grep "$CLUSTER" | head -1)
+            [ -z "$CTX" ] && continue
+
+            # Create Harbor imagePullSecret in default and platform-system namespaces
+            for NS in default platform-system; do
+              kubectl --context "$CTX" create secret docker-registry harbor-registry \
+                --docker-server="${{ env.HARBOR_REGISTRY }}" \
+                --docker-username="${{ secrets.HARBOR_ROBOT_USERNAME }}" \
+                --docker-password="${{ secrets.HARBOR_ROBOT_PASSWORD }}" \
+                --namespace "$NS" \
+                --dry-run=client -o yaml | kubectl --context "$CTX" apply -f - 2>/dev/null || true
+            done
+            echo "- ✅ $CLUSTER (Harbor)" >> "$GITHUB_STEP_SUMMARY"
           done
 
   # ─────────────────────────────────────────────
@@ -578,7 +728,9 @@ jobs:
             exit 0
           }
 
-          # Ensure buildkit-registry-config secret exists for image push.
+          # Ensure buildkit-registry-config secret exists for image push (DOCR).
+          # Note: 30-day expiry required — BuildKit uses this credential for async user builds
+          # between CI runs. Short-lived tokens would break user deploys.
           RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 2592000)
           kubectl create secret generic buildkit-registry-config \
             --context "$BUILD_CONTEXT" \
@@ -588,4 +740,30 @@ jobs:
 
           echo "### CWT Update" >> "$GITHUB_STEP_SUMMARY"
           echo "- CWTs updated on $BUILD_CLUSTER" >> "$GITHUB_STEP_SUMMARY"
-          echo "- buildkit-registry-config secret ensured" >> "$GITHUB_STEP_SUMMARY"
+          echo "- buildkit-registry-config secret ensured (DOCR)" >> "$GITHUB_STEP_SUMMARY"
+
+      # MEET-048: Harbor BuildKit credentials for build cluster.
+      # TODO(MEET-048): After migration, merge DOCR and Harbor configs into a single
+      # buildkit-registry-config secret, then remove DOCR config entirely.
+      - name: Ensure Harbor BuildKit credentials
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          BUILD_CLUSTER=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra.*-build$" | head -1)
+          if [ -z "$BUILD_CLUSTER" ]; then
+            exit 0
+          fi
+
+          doctl kubernetes cluster kubeconfig save "$BUILD_CLUSTER"
+          BUILD_CONTEXT=$(kubectl config get-contexts -o name 2>/dev/null | grep "$BUILD_CLUSTER" | head -1)
+
+          kubectl --context "$BUILD_CONTEXT" get ns argo >/dev/null 2>&1 || exit 0
+
+          # Create Harbor docker-config JSON for BuildKit
+          HARBOR_CONFIG=$(echo -n '{"auths":{"${{ env.HARBOR_REGISTRY }}":{"username":"${{ secrets.HARBOR_ROBOT_USERNAME }}","password":"${{ secrets.HARBOR_ROBOT_PASSWORD }}"}}}')
+          kubectl create secret generic buildkit-harbor-registry-config \
+            --context "$BUILD_CONTEXT" \
+            --namespace argo \
+            --from-literal=config.json="$HARBOR_CONFIG" \
+            --dry-run=client -o yaml | kubectl apply --context "$BUILD_CONTEXT" -f - || true
+
+          echo "- buildkit-harbor-registry-config secret ensured (Harbor)" >> "$GITHUB_STEP_SUMMARY"
