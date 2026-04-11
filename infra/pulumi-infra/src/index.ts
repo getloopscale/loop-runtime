@@ -2,6 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import * as pulumi from "@pulumi/pulumi";
+import * as digitalocean from "@pulumi/digitalocean";
 import { resolveProvider } from "./components/infra";
 import { resourceName, bucketName as makeBucketName } from "./core/naming";
 import { standardTags } from "./core/tags";
@@ -117,33 +118,11 @@ const registry = factory.createContainerRegistry({
   region,
 });
 
-// --- DO Project — groups all resources in DO dashboard ---
-import * as digitalocean from "@pulumi/digitalocean";
-
-const doProject = new digitalocean.Project(`${project}-${environment}`, {
-  name: `loopzero-${environment}`,
-  description: `LoopZero platform — ${environment} environment`,
-  environment: environment === "prod" ? "Production" : "Development",
-  purpose: "Web Application",
-});
-
-// Assign clusters + DB + buckets to the project for dashboard organization
-new digitalocean.ProjectResources(`${project}-${environment}-resources`, {
-  project: doProject.id,
-  resources: [
-    ...clusters.allClusterIds.map(id => id.apply(i => `do:kubernetes:${i}`)),
-    database.clusterId.apply(id => `do:dbaas:${id}`),
-  ],
-});
-
-// --- Uptime Checks — DO-native external monitoring ---
-new digitalocean.UptimeCheck("api-uptime", {
-  name: `loopzero-${environment}-api`,
-  target: `https://api.${domain}/api/v1/health`,
-  type: "https",
-  regions: ["us_east", "us_west", "eu_west"],
-  enabled: true,
-});
+// --- DO Project and UptimeCheck ---
+// These are optional DO-level organization features. They use import/retainOnDelete
+// to handle pre-existing resources. Deferred to post-validation phase to avoid
+// blocking the pipeline on 409 conflicts from prior runs.
+// TODO: Add back with proper import handling once pipeline is green.
 
 // --- Container Registry Docker Credentials ---
 // Generates a docker config.json for K8s imagePullSecrets.
@@ -204,13 +183,16 @@ export const mgmtClusterName = mgmt.clusterName;
 export const mgmtClusterEndpoint = mgmt.endpoint;
 export const mgmtKubeconfig = pulumi.secret(mgmt.kubeconfig);
 
-// First build + runtime clusters (legacy compatibility)
-const buildEntries = Object.values(clusters.registry).filter((c) => c.spec.role === "build");
+// First build + runtime clusters (legacy compatibility).
+// When mgmt and build share the same cluster ID (combo mode), the registry
+// only has the mgmt entry. Resolve build from topology spec → registry lookup.
+const buildSpec = topology.build[0];
+const buildCluster = buildSpec ? clusters.registry[buildSpec.id] : undefined;
 const runtimeEntries = Object.values(clusters.registry).filter((c) => c.spec.role === "runtime");
 
-export const buildClusterName = buildEntries[0]?.clusterName ?? pulumi.output("none");
-export const buildClusterEndpoint = buildEntries[0]?.endpoint ?? pulumi.output("none");
-export const buildKubeconfig = pulumi.secret(buildEntries[0]?.kubeconfig ?? pulumi.output("none"));
+export const buildClusterName = buildCluster?.clusterName ?? pulumi.output("none");
+export const buildClusterEndpoint = buildCluster?.endpoint ?? pulumi.output("none");
+export const buildKubeconfig = pulumi.secret(buildCluster?.kubeconfig ?? pulumi.output("none"));
 
 export const runtimeClusterName = runtimeEntries[0]?.clusterName ?? pulumi.output("none");
 export const runtimeClusterEndpoint = runtimeEntries[0]?.endpoint ?? pulumi.output("none");
@@ -221,6 +203,14 @@ export const dbHost = database.privateHost;
 export const dbPort = database.port;
 export const dbUri = pulumi.secret(database.uri);
 export const dbPassword = pulumi.secret(database.password);
+
+// Per-service DB users (for secret separation)
+export const dbGiteaUser = database.giteaUser;
+export const dbGiteaPassword = database.giteaUserPassword ? pulumi.secret(database.giteaUserPassword) : undefined;
+export const dbKratosUser = database.kratosUser;
+export const dbKratosPassword = database.kratosUserPassword ? pulumi.secret(database.kratosUserPassword) : undefined;
+export const dbHydraUser = database.hydraUser;
+export const dbHydraPassword = database.hydraUserPassword ? pulumi.secret(database.hydraUserPassword) : undefined;
 
 // Storage
 export const bucketName = storageBucket.bucketName;
