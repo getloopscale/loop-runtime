@@ -249,7 +249,12 @@ jobs:
           pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
           pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
           pulumi config set --secret digitaloceanToken "$DIGITALOCEAN_TOKEN" -s "$STACK"
-          # Refresh: sync state with reality (clears pending operations from interrupted runs)
+          # Clear pending operations from interrupted runs (non-interactive safe).
+          # pulumi refresh --yes doesn't clear pending CREATEs without interaction.
+          # Instead: export state, remove pending ops, reimport, then refresh.
+          pulumi stack export -s "$STACK" 2>/dev/null | \
+            python3 -c "import sys,json; s=json.load(sys.stdin); s['deployment']['pending_operations']=[]; json.dump(s,sys.stdout)" 2>/dev/null | \
+            pulumi stack import -s "$STACK" 2>/dev/null || true
           pulumi refresh --yes --skip-preview -s "$STACK" 2>/dev/null || true
           pulumi up --yes --skip-preview -s "$STACK"
           echo "### Phase 1: loopzero-infra ✅" >> "$GITHUB_STEP_SUMMARY"
