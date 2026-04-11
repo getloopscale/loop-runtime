@@ -1,0 +1,52 @@
+# Redis for Gitea HA — sessions, cache, queues, global_lock
+#
+# Bitnami Redis chart (standalone mode, NOT cluster).
+# Standalone is correct for Gitea HA because Gitea does not use
+# Redis Cluster commands (MULTI/EXEC suffice). Sentinel can be
+# added later for HA Redis itself, but for L3 a single Redis pod
+# with persistence is fine — Gitea gracefully degrades to in-memory
+# if Redis is temporarily down (sessions are re-created on next
+# request, queues replay from DB).
+#
+# Chart: oci://registry-1.docker.io/bitnamicharts/redis
+# Version: 20.x (pin in Pulumi)
+#
+# Install:
+#   helm install redis oci://registry-1.docker.io/bitnamicharts/redis \
+#     -n platform-system -f values.yaml
+#
+# Cost: ~0 (runs as a pod on existing mgmt cluster node, <128Mi RAM)
+
+architecture: standalone
+
+auth:
+  enabled: false  # Internal-only, no external exposure. Simplifies config.
+
+master:
+  persistence:
+    enabled: true
+    size: 1Gi
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  podSecurityContext:
+    runAsNonRoot: true
+
+  containerSecurityContext:
+    runAsNonRoot: true
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false  # Enable when Prometheus ServiceMonitor CRD is available
+
+# No replicas — standalone mode. Gitea handles Redis downtime
+# gracefully (sessions regenerate, cache rebuilds, queues replay).
+replica:
+  replicaCount: 0
