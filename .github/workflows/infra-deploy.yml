@@ -231,9 +231,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Pulumi CLI
-        uses: pulumi/actions@v6
-        with:
-          command: version
+        run: curl -fsSL https://get.pulumi.com | sh && echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
 
       - name: "Phase 1: Deploy loopzero-infra"
         run: |
