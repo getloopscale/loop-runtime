@@ -240,10 +240,11 @@ jobs:
           cd infra/pulumi-infra
           npm ci
           pulumi login "$BACKEND"
-          # Select existing stack (created locally with matching encryption salt).
-          # If stack doesn't exist yet, init creates it with a fresh salt —
-          # but secrets in Pulumi.homolog.yaml must match this salt.
+          # Backup YAML config (stack init overwrites it with just encryptionsalt)
+          cp "Pulumi.${STACK}.yaml" "/tmp/Pulumi.${STACK}.yaml.bak" 2>/dev/null || true
           pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
+          # Restore YAML config (stack init may have overwritten it)
+          cp "/tmp/Pulumi.${STACK}.yaml.bak" "Pulumi.${STACK}.yaml" 2>/dev/null || true
           pulumi cancel -s "$STACK" 2>/dev/null || true
           pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
           pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
@@ -258,7 +259,9 @@ jobs:
           cd infra/pulumi-platform
           npm ci
           pulumi login "$BACKEND"
+          cp "Pulumi.${STACK}.yaml" "/tmp/Pulumi.${STACK}.yaml.platform.bak" 2>/dev/null || true
           pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
+          cp "/tmp/Pulumi.${STACK}.yaml.platform.bak" "Pulumi.${STACK}.yaml" 2>/dev/null || true
           pulumi cancel -s "$STACK" 2>/dev/null || true
           pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
           pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
@@ -275,7 +278,9 @@ jobs:
           cd infra/pulumi-control-plane
           npm ci
           pulumi login "$BACKEND"
+          cp "Pulumi.${STACK}.yaml" "/tmp/Pulumi.${STACK}.yaml.cp.bak" 2>/dev/null || true
           pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
+          cp "/tmp/Pulumi.${STACK}.yaml.cp.bak" "Pulumi.${STACK}.yaml" 2>/dev/null || true
           pulumi cancel -s "$STACK" 2>/dev/null || true
           pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
           pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
