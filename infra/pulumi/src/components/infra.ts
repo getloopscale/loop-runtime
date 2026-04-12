@@ -122,6 +122,7 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
   const network = factory.createNetwork({
     name: `${baseName}-net`,
     region: config.region,
+    cidr: config.vpcCidr,
     tags,
   });
 
@@ -232,10 +233,11 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
   const storageEndpoints = factory.getStorageEndpoint({ region: config.region });
 
   // --- Container images bucket (Harbor S3 backend) ---
-  // Only created when registryType is "harbor". Harbor stores image blobs
+  // Created when harborExternalUrl is set. Harbor stores tenant image blobs
   // and manifests here via S3-compatible API (DO Spaces).
+  // DOCR remains the registry for platform images.
   let containerImagesBucketName: pulumi.Output<string> | undefined;
-  if (config.registryType === "harbor") {
+  if (config.harborExternalUrl) {
     const containerImagesBucket = factory.createObjectStorage({
       name: bucketName({ project: config.project, env: config.environment, region: config.region, suffix: "container-images" }),
       region: config.region,
@@ -245,40 +247,16 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     containerImagesBucketName = containerImagesBucket.bucketName;
   }
 
-  // --- Container registry ---
-  // Conditional: DOCR (legacy, cloud-managed) or Harbor (self-hosted on mgmt cluster).
-  // Defaults to DOCR for backward compatibility. Harbor is deployed via Helm in
-  // the bootstrap phase; this section only provides the endpoint for Pulumi outputs.
-  let registryEndpoint: pulumi.Output<string>;
-  let registryName: pulumi.Output<string>;
-
-  if (config.registryType === "harbor") {
-    if (!config.harborExternalUrl) {
-      throw new InfraError({
-        message: "harborExternalUrl is required when registryType is 'harbor'",
-        code: "INVALID_CONFIG",
-        context: { registryType: config.registryType },
-      });
-    }
-    const harborProvider = new HarborRegistryProvider(config.harborExternalUrl);
-    const registry = harborProvider.createContainerRegistry({
-      name: `${config.project}-harbor`,
-      tier: "self-hosted",
-      region: config.region,
-    });
-    registryEndpoint = registry.endpoint;
-    registryName = registry.name;
-  } else {
-    // DOCR — DigitalOcean has one registry per account (global, not per-region).
-    // Professional tier: unlimited repos, 100GB storage.
-    const registry = factory.createContainerRegistry({
-      name: `${config.project}-registry`,
-      tier: "professional",
-      region: config.region,
-    });
-    registryEndpoint = registry.endpoint;
-    registryName = registry.name;
-  }
+  // --- Container registry (platform images = DOCR) ---
+  // DOCR for platform images (loopzero-api, tenant-controller, etc.)
+  // Harbor for tenant images — deployed separately in bootstrap phase.
+  const registry = factory.createContainerRegistry({
+    name: `${config.project}-registry`,
+    tier: "professional",
+    region: config.region,
+  });
+  const registryEndpoint = registry.endpoint;
+  const registryName = registry.name;
 
   return {
     networkId: network.networkId,

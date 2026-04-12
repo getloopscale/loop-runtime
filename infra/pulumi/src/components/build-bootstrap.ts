@@ -7,7 +7,7 @@ import * as command from "@pulumi/command";
 import * as path from "path";
 import { InfraOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
-import { HELM_VERSIONS, BuildBootstrapOutputs, installMetricsServer } from "./bootstrap-shared";
+import { HELM_VERSIONS, BuildBootstrapOutputs, installMetricsServer, createDockerRegistryPullSecret } from "./bootstrap-shared";
 
 // ---------------------------------------------------------------------------
 // Build cluster bootstrap
@@ -84,16 +84,25 @@ export function bootstrapBuildCluster(
     { provider, dependsOn: [ns] },
   );
 
+  // DOCR pull secret — replaces manual `doctl kubernetes cluster registry add`.
+  // Workflow pods (loopzero-clone-runner, loopzero-packs-runner, etc.) need to pull
+  // private images from DOCR; without this they get 401 Unauthorized.
+  // Write=true because BuildKit in the same namespace pushes built user images.
+  const buildRegistryPullSecret = createDockerRegistryPullSecret(
+    "build-docr-pull-secret",
+    infra.registryName,
+    "argo",
+    provider,
+    { write: true, dependsOn: [ns] },
+  );
+
   // Pre-create the workflow ServiceAccount with Helm annotations.
   // This prevents the "invalid ownership metadata" error on destroy+recreate:
   // Helm requires resources to have release annotations, but partial first runs
   // create the SA without them. By creating via Pulumi with the correct
   // annotations, Helm recognizes it as owned and skips creation.
-  // Registry credentials secret — created by `doctl kubernetes cluster registry add`
-  // on the default SA. Workflow pods use loopzero-build-sa, so we must also reference it here.
-  // Without this, workflow pods get 401 Unauthorized when pulling private images
-  // (loopzero-clone-runner, loopzero-packs-runner) from the DO container registry.
   const registrySecretName = "loopzero-infra-registry";
+  void buildRegistryPullSecret; // Referenced by name in imagePullSecrets below.
 
   const buildSA = new k8s.core.v1.ServiceAccount(
     "loopzero-build-sa",

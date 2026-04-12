@@ -11,11 +11,13 @@ import { PlatformStackConfig } from "../config/stack";
 import { CloudflareOutputs } from "./bootstrap-shared";
 import { InfraError } from "../core/errors";
 import { installPrometheus, installGrafana, installTempo, installOtelCollector, provisionGrafanaDashboards } from "./mgmt-observability";
+import { installHarbor } from "./harbor-bootstrap";
 import {
   PLATFORM_NAMESPACE,
   HELM_VERSIONS,
   MgmtBootstrapOutputs,
   createPlatformNamespace,
+  createDockerRegistryPullSecret,
   installCertManager,
   installTraefik,
   lookupLoadBalancerEndpoint,
@@ -59,6 +61,17 @@ export function bootstrapMgmtCluster(
   });
 
   const ns = createPlatformNamespace("mgmt", config, provider);
+
+  // DOCR pull secret — replaces manual `doctl kubernetes cluster registry add`.
+  // Without this, every Deployment that pulls from registry.digitalocean.com
+  // hits 401 Unauthorized. Read-only credentials, long-lived (~50 years).
+  const mgmtRegistryPullSecret = createDockerRegistryPullSecret(
+    "mgmt-docr-pull-secret",
+    infra.registryName,
+    PLATFORM_NAMESPACE,
+    provider,
+    { dependsOn: [ns] },
+  );
 
   // cert-manager first — ArgoCD and Traefik may need TLS CRDs
   const certManager = installCertManager("mgmt", provider, ns);
@@ -186,6 +199,12 @@ export function bootstrapMgmtCluster(
   // Production uses platform-system namespace — these Pulumi resources ensure
   // network isolation is applied correctly.
   createPlatformNetworkPolicies(provider, ns);
+
+  // MEET-2026-04-11-048: Harbor — tenant image registry.
+  // Platform images stay in DOCR; tenant builds push to Harbor.
+  // Depends on cert-manager (TLS cert via Let's Encrypt) and Traefik (IngressRoute).
+  // Only installs when harborExternalUrl is set in stack config.
+  installHarbor(provider, ns, infra, config, certManager, traefik);
 
   return {
     certManagerReady: certManager.status.apply((s) => s.status === "deployed"),

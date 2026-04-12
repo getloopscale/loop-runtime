@@ -3,6 +3,7 @@
 
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
+import * as digitalocean from "@pulumi/digitalocean";
 import { PlatformStackConfig } from "../config/stack";
 
 // ---------------------------------------------------------------------------
@@ -487,5 +488,63 @@ export function installMetricsServer(
       },
     },
     { provider },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Container registry pull secret
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates a `kubernetes.io/dockerconfigjson` Secret authorizing pulls from
+ * DigitalOcean Container Registry (DOCR).
+ *
+ * Problem this solves:
+ *   Previously the platform relied on `doctl kubernetes cluster registry add`
+ *   being run manually to seed pull credentials on each cluster. That left
+ *   homolog / any fresh cluster with 401 Unauthorized on every Deployment that
+ *   pulls from registry.digitalocean.com/loopzero-infra-registry — a silent manual
+ *   step that breaks "Local equals production" and `feedback_never_manual`.
+ *
+ * This helper uses `digitalocean.getContainerRegistryDockerCredentials` to
+ * issue long-lived read credentials (default expiry ≈ 50 years) and persists
+ * them as a dockerconfigjson Secret in the target namespace. Pods / SAs
+ * reference it via `imagePullSecrets: [{ name: "loopzero-infra-registry" }]`.
+ *
+ * Use `write: true` only for namespaces whose pods need to *push* images
+ * (e.g. Argo Workflows build pods using BuildKit). Everything else — platform
+ * Deployments, runtime workloads — should use read-only credentials.
+ */
+export function createDockerRegistryPullSecret(
+  resourceName: string,
+  registryName: pulumi.Input<string>,
+  namespace: pulumi.Input<string>,
+  provider: k8s.Provider,
+  opts: { write?: boolean; dependsOn?: pulumi.Resource[] } = {},
+): k8s.core.v1.Secret {
+  // DigitalOcean Container Registry — long-lived docker credentials.
+  // expirySeconds = 0 means the credentials never expire.
+  const creds = new digitalocean.ContainerRegistryDockerCredentials(
+    `${resourceName}-creds`,
+    {
+      registryName,
+      write: opts.write ?? false,
+      expirySeconds: 0,
+    },
+  );
+
+  return new k8s.core.v1.Secret(
+    resourceName,
+    {
+      metadata: {
+        name: "loopzero-infra-registry",
+        namespace,
+      },
+      type: "kubernetes.io/dockerconfigjson",
+      stringData: {
+        ".dockerconfigjson": creds.dockerCredentials,
+      },
+    },
+    { provider, dependsOn: opts.dependsOn },
   );
 }

@@ -26,6 +26,10 @@ export function installPrometheus(
         repo: "https://prometheus-community.github.io/helm-charts",
       },
       namespace: PLATFORM_NAMESPACE,
+      // Upgrades reload the full scrape config + PVC re-mount + readiness,
+      // which frequently exceeds the 300s default timeout on small DOKS nodes.
+      // 900s gives room for PVC provisioning and multi-container pod startup.
+      timeout: 900,
       createNamespace: false,
       values: {
         fullnameOverride: "prometheus",
@@ -48,6 +52,20 @@ export function installPrometheus(
       labels:
         cluster: build
         component: argo-workflows
+
+# Harbor container registry — scraped via harbor-exporter service.
+# ServiceMonitor CR is not used because the platform runs standalone Prometheus
+# (no Prometheus Operator / monitoring.coreos.com CRDs). See harbor-bootstrap.ts.
+- job_name: harbor
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  metrics_path: /metrics
+  static_configs:
+    - targets:
+        - "harbor-exporter.platform-system.svc.cluster.local:8001"
+      labels:
+        cluster: mgmt
+        component: harbor
 `),
         serverFiles: {
           "alerting_rules.yml": {
@@ -114,8 +132,15 @@ export function installPrometheus(
         "kube-state-metrics": {
           fullnameOverride: "kube-state-metrics",
         },
+        // node-exporter DaemonSet requires hostNetwork/hostPID/hostPath/hostPort,
+        // which violate the `baseline` Pod Security Admission profile applied to
+        // platform-system. On DOKS we already get node-level metrics (CPU, memory,
+        // filesystem, network) from the kubelet/cAdvisor exporter that Prometheus
+        // scrapes via `kubernetes-nodes-cadvisor` job. If raw node-exporter metrics
+        // are needed in the future, install the DaemonSet in a dedicated
+        // `monitoring-system` namespace labelled `pod-security.kubernetes.io/enforce=privileged`.
         "prometheus-node-exporter": {
-          fullnameOverride: "node-exporter",
+          enabled: false,
         },
       },
     },
