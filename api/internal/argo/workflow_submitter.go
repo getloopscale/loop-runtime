@@ -6,9 +6,13 @@ package argo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
+
+	forge "github.com/getloopscale/loopzero-forge"
+	"github.com/getloopscale/loopzero-forge/model"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -164,9 +168,15 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 
 // Cancel stops a running workflow by setting its shutdown strategy.
 func (s *WorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID string) error {
-	patch := []byte(`{"spec":{"shutdown":"Stop"}}`)
-	_, err := s.client.Resource(workflowGVR).Namespace(namespace).Patch(
-		ctx, workflowID, "application/merge-patch+json", patch, metav1.PatchOptions{},
+	shutdownPatch := model.WorkflowModel{
+		Spec: model.WorkflowSpec{Shutdown: "Stop"},
+	}
+	patchBytes, err := json.Marshal(shutdownPatch)
+	if err != nil {
+		return fmt.Errorf("argo: marshal shutdown patch: %w", err)
+	}
+	_, err = s.client.Resource(workflowGVR).Namespace(namespace).Patch(
+		ctx, workflowID, "application/merge-patch+json", patchBytes, metav1.PatchOptions{},
 	)
 	if err != nil {
 		return fmt.Errorf("argo: cancel workflow %s: %w", workflowID, err)
@@ -210,45 +220,25 @@ func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID
 		return nil, fmt.Errorf("argo: get workflow %s/%s: %w", namespace, workflowID, err)
 	}
 
-	phase, _, _ := unstructured.NestedString(wf.Object, "status", "phase")
+	status, err := forge.ParseWorkflowStatusFromUnstructured(wf.Object)
+	if err != nil {
+		return nil, fmt.Errorf("argo: parse workflow status %s/%s: %w", namespace, workflowID, err)
+	}
+	if status == nil {
+		return &services.WorkflowStatus{}, nil
+	}
+
+	phase := string(status.Phase)
 
 	// Defensive check: if Argo reports "Failed" but all pod main containers exited with 0,
 	// override to "Succeeded". Originally needed for sidecar false-failures (MEET-2026-03-26-007).
 	// Retained as defense-in-depth against Argo phase-reporting edge cases (node eviction,
 	// CRI timeout, etc.). Should fire zero times with single-container BuildKit pattern.
-	if phase == "Failed" && allMainContainersSucceeded(wf.Object) {
+	if phase == "Failed" && forge.AllPodNodesExitedZero(status) {
 		slog.Warn("workflow phase overridden: all main containers exited 0 but Argo reported Failed",
 			"workflow_id", workflowID, "namespace", namespace)
 		phase = "Succeeded"
 	}
 
 	return &services.WorkflowStatus{Phase: phase}, nil
-}
-
-// allMainContainersSucceeded checks if every Pod-type node in the workflow has
-// exitCode "0" in its outputs. This detects false failures caused by daemon
-// sidecar termination (BuildKit sidecar pattern).
-func allMainContainersSucceeded(obj map[string]interface{}) bool {
-	nodes, found, err := unstructured.NestedMap(obj, "status", "nodes")
-	if err != nil || !found || len(nodes) == 0 {
-		return false
-	}
-
-	podCount := 0
-	for _, nodeVal := range nodes {
-		node, ok := nodeVal.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		nodeType, _, _ := unstructured.NestedString(node, "type")
-		if nodeType != "Pod" {
-			continue
-		}
-		podCount++
-		exitCode, _, _ := unstructured.NestedString(node, "outputs", "exitCode")
-		if exitCode != "0" {
-			return false
-		}
-	}
-	return podCount > 0
 }

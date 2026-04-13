@@ -119,10 +119,6 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 		buildctlArgs = append(buildctlArgs, "--allow", "security.insecure")
 	}
 
-	// seccomp Unconfined on the main container (Argo names it "main" in the pod).
-	// Required for rootlesskit to create user namespaces on managed Kubernetes.
-	podSpecPatch := `{"containers":[{"name":"main","securityContext":{"seccompProfile":{"type":"Unconfined"}}}]}`
-
 	return &forge.Container{
 		Name:  fmt.Sprintf("build-image-%s", p.AppName),
 		Image: imageBuildKit,
@@ -148,13 +144,15 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 			RunAsUser:    ptr(rootlessUID),
 			RunAsGroup:   ptr(rootlessUID),
 			RunAsNonRoot: ptr(true),
+			// Seccomp Unconfined required for rootlesskit to create user namespaces
+			// on managed Kubernetes (DOKS, EKS, GKE).
+			SeccompProfile: &model.SeccompProfile{Type: "Unconfined"},
 		},
 		// AppArmor unconfined on the main container — required for rootless BuildKit
 		// mount operations inside user namespaces on managed Kubernetes with AppArmor.
 		Annotations: map[string]string{
 			"container.apparmor.security.beta.kubernetes.io/main": "unconfined",
 		},
-		PodSpecPatch:  podSpecPatch,
 		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
 	}
 }

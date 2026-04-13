@@ -46,8 +46,9 @@ func scriptInstallNode(apps []services.AppSpec) string {
 	paths := appPaths(apps)
 	script := "set -euo pipefail\ncd /workspace\n"
 	for _, p := range paths {
+		dir := "/workspace/" + p
 		script += fmt.Sprintf(`echo "Installing deps in %s..."
-cd "/workspace/%s"
+cd %q
 if [ -f pnpm-lock.yaml ]; then
   corepack enable
   pnpm install --frozen-lockfile
@@ -61,7 +62,7 @@ else
   npm install
 fi
 echo "Dependencies installed in %s"
-`, p, p, p, p)
+`, p, dir, p, p)
 	}
 	return script
 }
@@ -70,11 +71,12 @@ func scriptBuildNode(apps []services.AppSpec) string {
 	paths := appPaths(apps)
 	script := "set -euo pipefail\ncd /workspace\n"
 	for _, p := range paths {
+		dir := "/workspace/" + p
 		script += fmt.Sprintf(`echo "Building %s..."
-cd "/workspace/%s"
+cd %q
 npm run build --if-present
 echo "Build completed for %s"
-`, p, p, p)
+`, p, dir, p)
 	}
 	return script
 }
@@ -124,11 +126,12 @@ func scriptInstallGo(apps []services.AppSpec) string {
 	// CODE-005 fix: set GOCACHE to writable path (container runs as uid 1000, not root)
 	script := "set -euo pipefail\nexport GOCACHE=/workspace/.cache/go-build\nmkdir -p $GOCACHE\ncd /workspace\n"
 	for _, p := range paths {
+		dir := "/workspace/" + p
 		script += fmt.Sprintf(`echo "Downloading Go modules in %s..."
-cd "/workspace/%s"
+cd %q
 go mod download
 echo "Modules downloaded in %s"
-`, p, p, p)
+`, p, dir, p)
 	}
 	return script
 }
@@ -137,11 +140,12 @@ func scriptBuildGo(apps []services.AppSpec) string {
 	paths := appPaths(apps)
 	script := "set -euo pipefail\ncd /workspace\nmkdir -p /workspace/bin\n"
 	for _, p := range paths {
+		dir := "/workspace/" + p
 		script += fmt.Sprintf(`echo "Building %s..."
-cd "/workspace/%s"
+cd %q
 CGO_ENABLED=0 go build -o /workspace/bin/%s ./...
 echo "Build completed for %s"
-`, p, p, sanitizeBinName(p), p)
+`, p, dir, sanitizeBinName(p), p)
 	}
 	return script
 }
@@ -192,15 +196,16 @@ func scriptInstallPython(apps []services.AppSpec) string {
 	// CODE-005 fix: set PIP_CACHE_DIR to writable path (container runs as uid 1000, not root)
 	script := "set -euo pipefail\nexport PIP_CACHE_DIR=/workspace/.cache/pip\nmkdir -p $PIP_CACHE_DIR\ncd /workspace\n"
 	for _, p := range paths {
+		dir := "/workspace/" + p
 		script += fmt.Sprintf(`echo "Installing deps in %s..."
-cd "/workspace/%s"
+cd %q
 if [ -f requirements.txt ]; then
   pip install --no-cache-dir -r requirements.txt
 elif [ -f pyproject.toml ]; then
   pip install --no-cache-dir .
 fi
 echo "Dependencies installed in %s"
-`, p, p, p)
+`, p, dir, p)
 	}
 	return script
 }
@@ -209,13 +214,14 @@ func scriptBuildPython(apps []services.AppSpec) string {
 	paths := appPaths(apps)
 	script := "set -euo pipefail\ncd /workspace\n"
 	for _, p := range paths {
+		dir := "/workspace/" + p
 		script += fmt.Sprintf(`echo "Building %s..."
-cd "/workspace/%s"
+cd %q
 if [ -f pyproject.toml ]; then
   python -m build 2>/dev/null || echo "python -m build not available — skipping"
 fi
 echo "Build step completed for %s"
-`, p, p, p)
+`, p, dir, p)
 	}
 	return script
 }
@@ -303,10 +309,11 @@ func sanitizeBinName(path string) string {
 func validatePathsScript(paths []string, filename string) string {
 	script := ""
 	for _, p := range paths {
-		script += fmt.Sprintf(`if [ ! -f "%s/%s" ]; then
+		filePath := p + "/" + filename
+		script += fmt.Sprintf(`if [ ! -f %q ]; then
   ERRORS="${ERRORS}No %s found at %s/%s. "
 fi
-`, p, filename, filename, p, filename)
+`, filePath, filename, p, filename)
 	}
 	return script
 }
@@ -316,7 +323,7 @@ func checkAppLockfiles(paths []string) string {
 	script := ""
 	for _, p := range paths {
 		script += fmt.Sprintf(`for f in $LOCKFILES; do
-  [ -f "%s/$f" ] && HAS_LOCK=true
+  [ -f %q"/$f" ] && HAS_LOCK=true
 done
 `, p)
 	}
@@ -332,10 +339,11 @@ echo "Validating workspace..."
 ERRORS=""
 `
 	for _, p := range paths {
-		script += fmt.Sprintf(`if [ ! -f "%s/%s" ]; then
+		filePath := p + "/" + filename
+		script += fmt.Sprintf(`if [ ! -f %q ]; then
   ERRORS="${ERRORS}No %s found at %s/%s. "
 fi
-`, p, filename, filename, p, filename)
+`, filePath, filename, p, filename)
 	}
 	return script + `if [ -n "$ERRORS" ]; then
   echo "ERROR: $ERRORS"
@@ -357,8 +365,9 @@ HAS_FILE=false
 `
 	for _, p := range paths {
 		for _, f := range filenames {
-			script += fmt.Sprintf(`[ -f "%s/%s" ] && HAS_FILE=true
-`, p, f)
+			filePath := p + "/" + f
+			script += fmt.Sprintf(`[ -f %q ] && HAS_FILE=true
+`, filePath)
 		}
 	}
 	files := ""
@@ -383,13 +392,14 @@ func scriptInstallRuby(apps []services.AppSpec) string {
 	paths := appPaths(apps)
 	script := "set -euo pipefail\ncd /workspace\n"
 	for _, p := range paths {
+		dir := "/workspace/" + p
 		script += fmt.Sprintf(`echo "Installing deps in %s..."
-cd "/workspace/%s"
+cd %q
 if [ -f Gemfile ]; then
   bundle install --without development test --path vendor/bundle
 fi
 echo "Dependencies installed in %s"
-`, p, p, p)
+`, p, dir, p)
 	}
 	return script
 }
@@ -398,10 +408,12 @@ echo "Dependencies installed in %s"
 func validatePythonDeps(paths []string) string {
 	script := ""
 	for _, p := range paths {
-		script += fmt.Sprintf(`if [ -f "%s/requirements.txt" ] || [ -f "%s/pyproject.toml" ]; then
+		reqPath := p + "/requirements.txt"
+		pyprojectPath := p + "/pyproject.toml"
+		script += fmt.Sprintf(`if [ -f %q ] || [ -f %q ]; then
   HAS_DEPS=true
 fi
-`, p, p)
+`, reqPath, pyprojectPath)
 	}
 	return script
 }

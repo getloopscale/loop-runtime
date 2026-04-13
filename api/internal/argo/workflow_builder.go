@@ -226,7 +226,11 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		// node's resources. At 2 build nodes × ~4 concurrent builds, this is
 		// acceptable. At L4+ with 50 concurrent builds, the build pool must
 		// be scaled (Correction K: autoscale 2→5 nodes already configured).
-		PodSpecPatch: `{"affinity":{"podAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":[{"labelSelector":{"matchLabels":{"workflows.argoproj.io/workflow":"{{workflow.name}}"}},"topologyKey":"kubernetes.io/hostname"}]}}}`,
+		Affinity: forge.ColocateByLabel(
+			"workflows.argoproj.io/workflow",
+			"{{workflow.name}}",
+			"kubernetes.io/hostname",
+		),
 	}
 
 	return wf, nil
