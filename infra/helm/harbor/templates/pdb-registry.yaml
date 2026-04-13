@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# PodDisruptionBudget for Harbor registry — ensures at least 1 registry pod during disruptions.
+# PodDisruptionBudget for Harbor registry — only active when replicas > 1.
+# With a single replica, minAvailable: 1 blocks node drain during cluster upgrades.
+{{- if gt (int .Values.harbor.registry.replicas) 1 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -15,3 +17,4 @@ spec:
     matchLabels:
       app: harbor
       component: registry
+{{- end }}

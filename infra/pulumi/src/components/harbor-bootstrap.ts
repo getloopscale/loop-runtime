@@ -171,6 +171,25 @@ export function installHarbor(
             schedule: "0 2 * * *",
             deleteUntagged: true,
           },
+          // Canary CronJob — MEET-048 monitoring gate.
+          canary: {
+            enabled: true,
+            image: "curlimages/curl:8.7.1",
+            credentialSecretRef: {
+              name: "harbor-admin-credentials",
+            },
+          },
+          // Post-install init Job — configures Harbor after deployment.
+          // Requires harbor-init image built by build-images.yml workflow.
+          // Password comes from K8s Secret synced by ESO.
+          init: {
+            enabled: true,
+            image: `registry.digitalocean.com/loopzero-infra-registry/harbor-init:latest`,
+            passwordSecretRef: {
+              name: "harbor-admin-credentials",
+              key: "harbor-admin-password",
+            },
+          },
         },
       },
     },

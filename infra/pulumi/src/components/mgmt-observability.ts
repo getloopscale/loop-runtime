@@ -131,6 +131,67 @@ export function installPrometheus(
                       description: "{{ $labels.namespace }}/{{ $labels.pod }} is restarting frequently.",
                     },
                   },
+                  // --- Harbor registry alerts (MEET-048 mandatory gate) ---
+                  {
+                    alert: "HarborDown",
+                    expr: 'up{job="harbor"} == 0',
+                    for: "5m",
+                    labels: { severity: "critical" },
+                    annotations: {
+                      summary: "Harbor registry is unreachable",
+                      description: "Harbor exporter has been unreachable for more than 5 minutes. Tenant builds cannot push images.",
+                    },
+                  },
+                  {
+                    alert: "HarborStorageQuotaHigh",
+                    expr: '(harbor_project_quota_usage_byte / harbor_project_quota_byte) > 0.8 and harbor_project_quota_byte > 0',
+                    for: "10m",
+                    labels: { severity: "warning" },
+                    annotations: {
+                      summary: "Harbor project storage > 80% quota",
+                      description: "Project {{ $labels.project_name }} is using {{ $value | humanizePercentage }} of its storage quota.",
+                    },
+                  },
+                  {
+                    alert: "HarborGCFailing",
+                    expr: 'harbor_jobservice_job_total{status="error",job_type="GARBAGE_COLLECTION"} > 0',
+                    for: "24h",
+                    labels: { severity: "warning" },
+                    annotations: {
+                      summary: "Harbor garbage collection has errors",
+                      description: "Harbor GC job has been failing for more than 24 hours. Untagged images are not being cleaned up.",
+                    },
+                  },
+                  {
+                    alert: "HarborPGPoolExhaustion",
+                    expr: 'count(pg_stat_activity{datname="harbor_db"}) > 8',
+                    for: "5m",
+                    labels: { severity: "critical" },
+                    annotations: {
+                      summary: "Harbor PG connections near cap (>8 of 10)",
+                      description: "Harbor is using {{ $value }} PostgreSQL connections out of the 10-connection pool cap. If exhausted, LoopZero deploys will fail (pg_advisory_xact_lock timeout).",
+                    },
+                  },
+                  {
+                    alert: "HarborPushFailures",
+                    expr: 'rate(harbor_core_http_request_total{code=~"5.."}[5m]) > 0',
+                    for: "5m",
+                    labels: { severity: "warning" },
+                    annotations: {
+                      summary: "Harbor registry returning 5xx errors",
+                      description: "Harbor core is returning server errors at {{ $value | humanize }} req/s. Image push/pull operations may be failing.",
+                    },
+                  },
+                  {
+                    alert: "HarborCanaryFailing",
+                    expr: 'kube_job_status_failed{namespace="platform-system",job_name=~"harbor-canary.*"} > 0',
+                    for: "10m",
+                    labels: { severity: "critical" },
+                    annotations: {
+                      summary: "Harbor canary test is failing",
+                      description: "The Harbor canary CronJob has failed jobs for 10+ minutes. Registry may be unreachable for tenant builds.",
+                    },
+                  },
                 ],
               },
             ],

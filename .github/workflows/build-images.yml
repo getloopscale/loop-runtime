@@ -383,6 +383,65 @@ jobs:
           echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
+  # BUILD HARBOR-INIT — post-deploy configuration script
+  # Always built when operator or infra code changes (shares Go workspace).
+  # ─────────────────────────────────────────────
+  build-harbor-init:
+    name: Build harbor-init
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: resolve
+    if: needs.resolve.outputs.build_operator == 'true'
+    environment: infra-dev
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        run: doctl registry login --expiry-seconds 600
+
+      - name: Login to Harbor
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Build and push harbor-init
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+
+          docker buildx build -f infra/scripts/harbor-init/Dockerfile \
+            -t ${{ env.REGISTRY }}/harbor-init:${TAG} \
+            -t ${{ env.REGISTRY }}/harbor-init:${SHA} \
+            -t ${{ env.REGISTRY }}/harbor-init:latest \
+            --push .
+
+          echo "### harbor-init" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/harbor-init:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push harbor-init to Harbor (dual-push)
+        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+
+          docker tag ${{ env.REGISTRY }}/harbor-init:${TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${TAG}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${TAG}
+
+          docker tag ${{ env.REGISTRY }}/harbor-init:latest ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:latest
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:latest
+
+          echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
   # BUILD DASHBOARD
   # ─────────────────────────────────────────────
   build-dashboard:

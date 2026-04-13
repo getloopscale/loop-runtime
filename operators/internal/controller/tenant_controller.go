@@ -139,7 +139,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// S1.7: Phase transition — Active when all conditions are True (via state machine)
-	if conditions.AllConditionsTrue(tenant.Status.Conditions, requiredProvisioningConditions...) && tenant.Status.Phase == loopzerov1.TenantPhaseProvisioning {
+	if conditions.AllConditionsTrue(tenant.Status.Conditions, r.requiredProvisioningConditions()...) && tenant.Status.Phase == loopzerov1.TenantPhaseProvisioning {
 		tenant.Status.Phase = loopzerov1.TenantPhase(
 			tenantSM.Transition(statemachine.TenantProvisioning, statemachine.TenantAllReady),
 		)
@@ -199,15 +199,22 @@ func (r *TenantReconciler) runSteps(ctx context.Context, req ctrl.Request, tenan
 	return nil
 }
 
-// requiredProvisioningConditions lists all conditions that must be True
+// requiredProvisioningConditions returns the conditions that must be True
 // for a tenant to transition from PROVISIONING to ACTIVE.
-// Add new conditions here when adding new reconciliation steps.
-var requiredProvisioningConditions = []string{
-	conditions.TypeGitRepoReady,
-	conditions.TypeArgoCDAppReady,
-	conditions.TypeBuildNamespaceReady,
-	conditions.TypeQuotaEnforced,
-	conditions.TypePriorityClassReady,
+// When HarborClient is configured, HarborProjectReady is required.
+// When HarborClient is nil (DOCR mode), Harbor conditions are skipped.
+func (r *TenantReconciler) requiredProvisioningConditions() []string {
+	required := []string{
+		conditions.TypeGitRepoReady,
+		conditions.TypeArgoCDAppReady,
+		conditions.TypeBuildNamespaceReady,
+		conditions.TypeQuotaEnforced,
+		conditions.TypePriorityClassReady,
+	}
+	if r.HarborClient != nil {
+		required = append(required, conditions.TypeHarborProjectReady)
+	}
+	return required
 }
 
 

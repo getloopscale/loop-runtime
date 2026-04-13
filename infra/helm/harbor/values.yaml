@@ -40,10 +40,11 @@ harbor:
     replicas: 0
 
   # ---------------------------------------------------------------------------
-  # Core — 2 replicas, anti-affinity
+  # Core — dev: 1 replica (matches Pulumi harbor-bootstrap.ts).
+  # Prod override: set replicas: 2 via Pulumi stack config (Pulumi.prod.yaml).
   # ---------------------------------------------------------------------------
   core:
-    replicas: 2
+    replicas: 1
     resources:
       requests:
         cpu: 100m
@@ -69,10 +70,11 @@ harbor:
     robotTokenDuration: 1440
 
   # ---------------------------------------------------------------------------
-  # Registry — 2 replicas, anti-affinity
+  # Registry — dev: 1 replica (matches Pulumi harbor-bootstrap.ts).
+  # Prod override: set replicas: 2 via Pulumi stack config (Pulumi.prod.yaml).
   # ---------------------------------------------------------------------------
   registry:
-    replicas: 2
+    replicas: 1
     resources:
       requests:
         cpu: 100m
@@ -213,6 +215,29 @@ harbor:
         - ALL
     seccompProfile:
       type: RuntimeDefault
+
+  # ---------------------------------------------------------------------------
+  # Canary CronJob — runs every 5min, checks Harbor health + API access.
+  # Failure detected via kube-state-metrics + HarborCanaryFailing alert.
+  # MEET-048 mandatory gate: must run >24h without failure before migration.
+  # ---------------------------------------------------------------------------
+  canary:
+    enabled: false
+    image: "curlimages/curl:8.7.1"
+    credentialSecretRef:
+      name: ""
+
+  # ---------------------------------------------------------------------------
+  # Post-install init Job — configures Harbor after deployment.
+  # Runs harbor-init: password change, loopzero-platform project, system config, CI robot.
+  # Set via Pulumi: image reference + password secret.
+  # ---------------------------------------------------------------------------
+  init:
+    enabled: false
+    image: ""
+    passwordSecretRef:
+      name: ""
+      key: "harbor-admin-password"
 
   updateStrategy:
     type: RollingUpdate

@@ -2003,6 +2003,8 @@ function installLoopZeroAPI(
         MINIO_ENDPOINT: infra.spacesEndpoint,
         REGISTRY_URL: infra.registryEndpoint,
         REGISTRY_INSECURE: "false",
+        // MEET-048: Harbor dual-push for tenant builds. Empty = disabled.
+        ...(config.harborExternalUrl ? { HARBOR_REGISTRY_URL: config.harborExternalUrl } : {}),
         ARGOCD_NAMESPACE: PLATFORM_NAMESPACE,
         // Release reaper PENDING timeout must exceed ArgoCD sync time.
         // On DO, sync can take 3-5 min (image pull + pod scheduling).

@@ -6,12 +6,15 @@ package controller
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
@@ -50,6 +53,10 @@ func (r *TenantReconciler) ensureHarborProject(ctx context.Context, tenant *loop
 //   - build robot (push+pull) stored as buildkit-registry-config in build namespace
 //   - pull robot (pull-only) stored as imagePullSecret in workload namespaces
 //
+// Self-healing: if a K8s Secret was deleted but the robot still has valid TTL,
+// the robot is force-recreated to obtain a new secret. This prevents a 22-hour
+// blind window where builds fail because the secret is missing.
+//
 // No-op when HarborClient is nil.
 func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	if r.HarborClient == nil {
@@ -61,9 +68,18 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 		return fmt.Errorf("invalid build namespace for tenant %s: %w", tenant.Name, err)
 	}
 
+	buildRobotName := "build-" + tenant.Name
+
+	// Self-healing: if the K8s Secret is missing, force-recreate the robot to get a new secret.
+	if !r.secretExists(ctx, r.BuildClient, buildNs, k.SecretHarborRegistryConfig) {
+		slog.Info("harbor build secret missing, forcing robot recreation",
+			"tenant", tenant.Name, "namespace", buildNs, "secret", k.SecretHarborRegistryConfig)
+		_ = r.HarborClient.DeleteRobotAccount(ctx, tenant.Name, buildRobotName)
+	}
+
 	// Build robot — push+pull access for BuildKit.
 	buildCreds, err := r.HarborClient.EnsureRobotAccount(ctx, tenant.Name, harbor.RobotAccountOpts{
-		Name:       "build-" + tenant.Name,
+		Name:       buildRobotName,
 		TTL:        k.HarborRobotAccountTTL,
 		PushAccess: true,
 	})
@@ -71,7 +87,7 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 		return fmt.Errorf("harbor build robot for %s: %w", tenant.Name, err)
 	}
 
-	// Only write the secret when we have a fresh secret (non-empty).
+	// Write the secret when we have a fresh secret (non-empty).
 	// Harbor does not return the secret for existing robots that are still valid.
 	if buildCreds.Secret != "" {
 		if err := r.ensureHarborRegistrySecret(ctx, buildNs, tenant.Name, buildCreds); err != nil {
@@ -81,9 +97,29 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 			"tenant", tenant.Name, "namespace", buildNs, "robot", buildCreds.Username)
 	}
 
+	pullRobotName := "pull-" + tenant.Name
+
+	// Self-healing for pull secrets: check each workload namespace.
+	pullSecretMissing := false
+	for _, env := range tenant.Spec.Environments {
+		envNs, nsErr := naming.EnvironmentNamespace(tenant.Name, env.Name)
+		if nsErr != nil {
+			return fmt.Errorf("invalid namespace for env %s: %w", env.Name, nsErr)
+		}
+		if !r.secretExists(ctx, r.RuntimeClient, envNs, k.SecretHarborPullCredentials) {
+			slog.Info("harbor pull secret missing, forcing robot recreation",
+				"tenant", tenant.Name, "namespace", envNs, "secret", k.SecretHarborPullCredentials)
+			pullSecretMissing = true
+			break
+		}
+	}
+	if pullSecretMissing {
+		_ = r.HarborClient.DeleteRobotAccount(ctx, tenant.Name, pullRobotName)
+	}
+
 	// Pull robot — read-only access for workload pods.
 	pullCreds, err := r.HarborClient.EnsureRobotAccount(ctx, tenant.Name, harbor.RobotAccountOpts{
-		Name:       "pull-" + tenant.Name,
+		Name:       pullRobotName,
 		TTL:        k.HarborRobotAccountTTL,
 		PushAccess: false,
 	})
@@ -107,6 +143,21 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 	}
 
 	return nil
+}
+
+// secretExists checks if a K8s Secret exists in the given namespace using the specified client.
+func (r *TenantReconciler) secretExists(ctx context.Context, cl client.Client, namespace, name string) bool {
+	var secret corev1.Secret
+	err := cl.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &secret)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false
+		}
+		// On transient errors, assume the secret exists to avoid unnecessary churn.
+		slog.Warn("harbor secret check failed, assuming exists", "namespace", namespace, "name", name, "error", err)
+		return true
+	}
+	return true
 }
 
 // deleteHarborProject removes the Harbor project during tenant deletion.
@@ -177,19 +228,39 @@ func (r *TenantReconciler) ensureHarborPullSecret(ctx context.Context, namespace
 	return err
 }
 
-// buildDockerConfigJSON builds a Docker config.json string for registry authentication.
-func buildDockerConfigJSON(registryHost, username, password string) string {
-	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	// Use explicit quoting to avoid JSON injection from special characters in credentials.
-	return fmt.Sprintf(`{"auths":{%s:{"username":%s,"password":%s,"auth":%s}}}`,
-		quote(registryHost), quote(username), quote(password), quote(auth))
+// harborDockerConfig represents a Docker config.json for Harbor registry authentication.
+// This is distinct from dockerConfigJSON in tenant_credentials.go because Harbor
+// requires username+password fields in addition to the base64 auth token.
+type harborDockerConfig struct {
+	Auths map[string]harborDockerAuth `json:"auths"`
 }
 
-// quote wraps a string in JSON-safe double quotes.
-func quote(s string) string {
-	// Use strings.NewReplacer for JSON string escaping of the most critical characters.
-	replacer := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
-	return `"` + replacer.Replace(s) + `"`
+// harborDockerAuth holds Harbor registry authentication with full credentials.
+type harborDockerAuth struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Auth     string `json:"auth"`
+}
+
+// buildDockerConfigJSON builds a Docker config.json string for registry authentication.
+// Uses json.Marshal for correct escaping of all JSON special characters.
+func buildDockerConfigJSON(registryHost, username, password string) string {
+	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+	cfg := harborDockerConfig{
+		Auths: map[string]harborDockerAuth{
+			registryHost: {
+				Username: username,
+				Password: password,
+				Auth:     auth,
+			},
+		},
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		// This should never happen with string fields, but fail loud if it does.
+		panic(fmt.Sprintf("harbor: marshal docker config: %v", err))
+	}
+	return string(data)
 }
 
 // harborQuotaForPlan returns the Harbor storage quota in bytes for a given plan tier.
