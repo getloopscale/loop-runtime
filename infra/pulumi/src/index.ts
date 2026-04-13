@@ -10,13 +10,42 @@ import { exposePlatform } from "./components/expose";
 import { buildExecutionState } from "./core/execution";
 import { createStaticDelivery, StaticDeliveryOutput } from "./providers/cloudflare/static-delivery";
 import { createTunnel, TunnelOutput } from "./providers/cloudflare/tunnel";
+import { resolveOrphans, OrphanLookupResult } from "./core/adopt-or-create";
+import { resourceName } from "./core/naming";
 
 // --- Configuration ---
 const config = loadStackConfig();
 const factory = resolveProvider(config.provider, config);
 
+// --- Pre-flight: Adopt-or-create lookups ---
+// Detects pre-existing resources (orphans from partial destroy) and returns
+// import IDs so Pulumi can adopt them instead of failing on create conflict.
+// This makes `pulumi destroy && pulumi up` fully idempotent.
+const baseName = resourceName({
+  project: config.project,
+  env: config.environment,
+  region: config.region,
+});
+let orphans: OrphanLookupResult = {};
+if (config.cfAccountId && config.cfZoneId) {
+  orphans = resolveOrphans({
+    vpcName: `${baseName}-net`,
+    tunnelName: `loopzero-${config.environment}`,
+    kvTitle: `loopzero-routing-${config.environment}`,
+    dnsWildcard: `*.${config.domain}`,
+    workerScriptName: `loopzero-static-delivery-${config.environment}`,
+    workerRoutePattern: `*.${config.domain}/*`,
+    cfAccountId: config.cfAccountId,
+    cfZoneId: config.cfZoneId,
+  });
+} else {
+  // No CF config — only check VPC
+  const { lookupExistingVpc } = require("./core/adopt-or-create");
+  orphans = { vpcId: lookupExistingVpc(`${baseName}-net`) };
+}
+
 // --- Phase 1: Base Infrastructure ---
-const infra = createInfra(config);
+const infra = createInfra(config, orphans);
 
 // --- Phase 1.5: Cloudflare Resources (must exist BEFORE bootstrap) ---
 // CF resources are provisioned when cfAccountId + cfApiToken + cfZoneId are configured.
@@ -41,6 +70,10 @@ if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
     runtimeProvider: cfRuntimeProvider,
     namespace: "platform-system",
     traefikService: "https://runtime-traefik.platform-system.svc:443",
+    importIds: {
+      tunnel: orphans.tunnelImportId,
+      dnsRecord: orphans.dnsRecordImportId,
+    },
   });
 
   // 2. CF Worker + KV — static frontend routing (DO Spaces via edge)
@@ -50,6 +83,11 @@ if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
     environment: config.environment,
     baseDomain: config.domain,
     s3Endpoint: pulumi.interpolate`https://${infra.staticBucketEndpoint}`,
+    importIds: {
+      kvNamespace: orphans.kvNamespaceImportId,
+      workerScript: orphans.workerScriptImportId,
+      workerRoute: orphans.workerRouteImportId,
+    },
   });
 
   // Pass CF outputs to bootstrap for secret wiring

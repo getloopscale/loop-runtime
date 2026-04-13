@@ -27,6 +27,11 @@ export interface TunnelConfig {
   readonly namespace: string;
   /** Traefik service address inside the runtime cluster */
   readonly traefikService: string;
+  /** Import IDs for adopt-or-create pattern (orphan resolution). */
+  readonly importIds?: {
+    tunnel?: string;
+    dnsRecord?: string;
+  };
 }
 
 export interface TunnelOutput {
@@ -59,7 +64,7 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     name: tunnelName,
     tunnelSecret: tunnelSecret,
     configSrc: "cloudflare",
-  });
+  }, config.importIds?.tunnel ? { import: config.importIds.tunnel } : undefined);
 
   // 2. Tunnel ingress config — route ALL traffic to Traefik
   // The catch-all rule sends every hostname to Traefik, which handles
@@ -115,7 +120,7 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     ttl: 1,
     content: pulumi.interpolate`${tunnel.id}.cfargotunnel.com`,
     proxied: true,
-  });
+  }, config.importIds?.dnsRecord ? { import: config.importIds.dnsRecord } : undefined);
 
   // 4. Build the tunnel token (base64 JSON with account_id, tunnel_id, tunnel_secret).
   // This is the format cloudflared expects with `tunnel run --token`.

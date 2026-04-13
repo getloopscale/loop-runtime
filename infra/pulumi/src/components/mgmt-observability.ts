@@ -66,6 +66,24 @@ export function installPrometheus(
       labels:
         cluster: mgmt
         component: harbor
+
+# Gitea internal git server — repository operations, webhook delivery,
+# queue depth, and HTTP request metrics.
+- job_name: gitea
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  metrics_path: /metrics
+  static_configs:
+    - targets:
+        - "gitea-http.platform-system.svc.cluster.local:3000"
+      labels:
+        cluster: mgmt
+        component: gitea
+
+# Gitea Redis — uses official redis:7-alpine image without metrics exporter.
+# Redis metrics are available indirectly via Gitea's own /metrics endpoint
+# (reports cache hit/miss rates). Dedicated redis-exporter can be added
+# later if deeper Redis observability is needed.
 `),
         serverFiles: {
           "alerting_rules.yml": {

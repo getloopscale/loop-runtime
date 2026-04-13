@@ -108,7 +108,7 @@ export function resolveProvider(provider: CloudProvider, config?: PlatformStackC
  *   Network → everything else (all resources inside VPC)
  *   Clusters, DB, Storage are independent of each other
  */
-export function createInfra(config: PlatformStackConfig): InfraOutputs {
+export function createInfra(config: PlatformStackConfig, orphans?: import("../core/adopt-or-create").OrphanLookupResult): InfraOutputs {
   const factory = resolveProvider(config.provider, config);
   const tags = standardTags(config.project, config.environment);
 
@@ -124,6 +124,7 @@ export function createInfra(config: PlatformStackConfig): InfraOutputs {
     region: config.region,
     cidr: config.vpcCidr,
     tags,
+    importId: orphans?.vpcId,
   });
 
   // --- Management cluster ---
