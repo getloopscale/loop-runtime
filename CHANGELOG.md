@@ -18,9 +18,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Distributed tracing — operator instrumentation** (Sprint 6): OTel SDK added to operators with spans on all 7 controller reconcile loops (`loopzero.operator.{name}.reconcile`).
 - **Cross-plane trace propagation** (Sprint 6): Argo Workflow annotations carry `loopzero.io/trace-id` and `loopzero.io/span-id` for end-to-end deploy trace correlation.
 
+### Added
+- **Harbor container registry** (MEET-048): Minimal deployment (core×2, registry×2, jobservice×1, Redis×1) with Helm chart, PDB, NetworkPolicy. Trivy/Notary/Portal disabled.
+- **Harbor Pulumi provider** (MEET-048): `HarborRegistryProvider` implements `IProviderRegistry` ISP contract. Conditional `registryType` config (docr/harbor) with backward compatibility.
+- **Container images bucket** (MEET-048): DO Spaces bucket `loopzero-*-container-images` provisioned via Pulumi for Harbor S3 storage backend.
+- **Harbor API client** (MEET-048): `operators/internal/harbor/client.go` — project CRUD, robot account lifecycle, health check. 15 unit tests with httptest.
+- **Per-tenant Harbor projects** (MEET-048): TenantController creates Harbor project per tenant with plan-based quotas (Starter=5GB, Growth=50GB, Enterprise=unlimited), immutable tags, robot accounts (build push+pull, workload pull-only, TTL ≤ 24h).
+- **Registry health monitoring** (MEET-048): Canary probe metrics, 6 PrometheusRule alerts (LoopZeroRegistryHealthFailed critical, push/pull latency, storage, GC, PG connections), Grafana dashboard.
+- **Harbor init script** (MEET-048): Idempotent Go script for post-deploy configuration — admin password, system config, `loopzero-platform` project, CI robot account.
+- **Image mirror script** (MEET-048): Go script using `crane` for parallel DOCR→Harbor image migration with digest verification.
+- **ADR-002** (MEET-048): Registry migration decision record documenting Harbor + DO Spaces choice, alternatives, trade-offs, dissent.
+- **Harbor dual-push for tenant builds** (MEET-048): `HARBOR_REGISTRY_URL` env var enables crane-based mirror step in Argo Workflow DAG. Best-effort (continueOn.failed=true). DOCR remains primary.
+- **Harbor init automation** (MEET-048): Dockerfile + Helm post-install Job (`harbor-init`) + CI build step. Zero manual intervention after `pulumi up`.
+- **Harbor canary CronJob** (MEET-048): Runs every 5min, checks health + API access. Failure detected via kube-state-metrics alert.
+
 ### Changed
+- **Harbor values.yaml aligned with Pulumi** (MEET-048): Replicas now 1 for dev (matches `harbor-bootstrap.ts`). PDB conditional on `replicas > 1`.
+- **Harbor HarborProjectReady is now required** (MEET-048): Tenant cannot transition to Active without HarborProjectReady=True when HarborClient is configured. Backward compatible with DOCR mode.
+- **Harbor robot secret self-healing** (MEET-048): If K8s Secret is manually deleted, next reconcile forces robot recreation to obtain new credentials. Prevents 22-hour blind window.
+- **Harbor Docker config.json uses json.Marshal** (MEET-048): Replaced manual `quote()` with `json.Marshal` for correct escaping of all JSON special characters.
+
+### Fixed
+- **Harbor PDB blocking node drain** (MEET-048): PDB with `minAvailable: 1` on single replica blocked `kubectl drain`. Now conditional on `replicas > 1`.
+
+### Changed
+- **Git operations centralized in `internal/gitclient`**: Eliminates duplicated gitCmd/sanitize/ensureRepo across source, gitops, and github packages. Single GitRunner with exec.CommandContext + token sanitization.
+- **Build scripts generated via type-safe `internal/shellgen`**: All 15 script functions in argo/scripts.go migrated to ScriptBuilder. User-supplied paths escaped via ShellQuote (POSIX single-quote). Zero fmt.Sprintf for shell in scripts.go.
+- **BuildKit entrypoint uses ShellQuote**: socketPath escaped via ShellQuote, registryURL validated before TOML injection.
+- **Source store go-git implementation**: `source/gogit_store.go` mirrors gitops/gogit_pusher pattern. GitRunner only for `git bundle create`.
+
+### Security
+- **Fixed unsafe tar extraction in GitHub auto-deploy**: Added symlink rejection, path traversal protection, and decompression size limits via SafeExtractTarGz. Previously extracted tarballs without any validation.
+- **Shell script generation uses POSIX-safe quoting**: All interpolated values in build container scripts quoted via ShellQuote, preventing injection via crafted loopzero.yaml paths.
+- **autodeploy.go uses exec.CommandContext**: Git commands in tarballToGitBundle now respect context cancellation (previously used exec.Command without context).
+
+### Changed
+- **CI dual-push** (MEET-048): `build-images.yml` and `infra-deploy.yml` push platform images to both DOCR and Harbor during transition period. Harbor steps conditional on `HARBOR_ROBOT_PASSWORD` secret.
+- **Registry admission policy** (MEET-048): `vap-restrict-registries` updated to allow both DOCR and Harbor prefixes during dual-push transition.
 - **Registry token expiry** reduced from 3600s to 600s in CI pipeline (SEC-002 compliance).
-- **Registry admission policy** `vap-restrict-registries` migrated from Audit to Deny+Audit mode — pods with images from unauthorized registries are now rejected.
+
+### Security
+- **Per-tenant image isolation** (MEET-048): Harbor robot accounts scoped per-project prevent cross-tenant image access. Previously only naming convention.
+- **Harbor admin API restricted** (MEET-048): NetworkPolicy limits Harbor core access to Traefik ingress and loopzero-system namespace.
 
 ### Added
 - **DO PostgreSQL tuning** (`DatabasePostgresqlConfig`): pg_stat_statements=all, slow query logging >1s, idle transaction timeout 10min, shared_buffers 25%

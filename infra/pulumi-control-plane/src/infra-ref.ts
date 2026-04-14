@@ -16,8 +16,9 @@ import type { InfraStackOutputs, PlatformStackOutputs } from "./contracts";
 
 const cfg = new pulumi.Config();
 const currentStack = pulumi.getStack();
-const infraRef = new pulumi.StackReference(cfg.get("infraStackRef") ?? `loopzero-infra/${currentStack}`);
-const platformRef = new pulumi.StackReference(cfg.get("platformStackRef") ?? `loopzero-platform/${currentStack}`);
+// S3 backend requires format: organization/project/stack
+const infraRef = new pulumi.StackReference(cfg.get("infraStackRef") ?? `organization/loopzero-infra/${currentStack}`);
+const platformRef = new pulumi.StackReference(cfg.get("platformStackRef") ?? `organization/loopzero-platform/${currentStack}`);
 
 function infraGet<K extends keyof InfraStackOutputs>(key: K): pulumi.Output<InfraStackOutputs[K]> {
   return infraRef.getOutput(key) as pulumi.Output<InfraStackOutputs[K]>;

@@ -20,6 +20,8 @@
 #   SPACES_ACCESS_KEY_ID       — DO Spaces access key (for state backend)
 #   SPACES_SECRET_ACCESS_KEY   — DO Spaces secret key (for state backend)
 #   PULUMI_CONFIG_PASSPHRASE   — Passphrase for secrets encryption in state
+#   HARBOR_ROBOT_USERNAME      — Harbor robot account username (MEET-048, optional during transition)
+#   HARBOR_ROBOT_PASSWORD      — Harbor robot account password (MEET-048, optional during transition)
 #
 # Required GitHub Environments:
 #   infra-dev      — no protection rules (auto-deploy on develop)
@@ -52,7 +54,7 @@ on:
         type: choice
         options:
           - dev
-          - staging
+          - homolog
           - prod
       command:
         description: "Pulumi command"
@@ -75,8 +77,11 @@ permissions:
 env:
   NODE_VERSION: "20"
   DOCTL_VERSION: "1.104.0"
+  # Default: monolith (dev/prod). Homolog uses 3-project split with separate backend.
   PULUMI_WORKING_DIR: infra/pulumi
   PULUMI_BACKEND_URL: "s3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
+  # Homolog backend (separate state, separate region)
+  PULUMI_HOMOLOG_BACKEND_URL: "s3://loopzero-homolog-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
 
 jobs:
   # ─────────────────────────────────────────────
@@ -117,6 +122,8 @@ jobs:
       stack: ${{ steps.resolve.outputs.stack }}
       environment: ${{ steps.resolve.outputs.environment }}
       command: ${{ steps.resolve.outputs.command }}
+      is_split: ${{ steps.resolve.outputs.is_split }}
+      backend_url: ${{ steps.resolve.outputs.backend_url }}
     steps:
       - name: Resolve from trigger
         id: resolve
@@ -129,7 +136,7 @@ jobs:
             BRANCH="${{ github.event.workflow_run.head_branch || github.ref_name }}"
             case "$BRANCH" in
               develop) STACK="dev" ;;
-              homolog) STACK="staging" ;;
+              homolog) STACK="homolog" ;;
               main)    STACK="prod" ;;
               *)       echo "::error::Unexpected branch: $BRANCH" && exit 1 ;;
             esac
@@ -137,14 +144,24 @@ jobs:
           fi
 
           case "$STACK" in
-            dev)     ENV="infra-dev" ;;
-            staging) ENV="infra-staging" ;;
-            prod)    ENV="infra-prod" ;;
+            dev)      ENV="infra-dev" ;;
+            homolog)  ENV="infra-homolog" ;;
+            prod)     ENV="infra-prod" ;;
           esac
+
+          # Homolog uses 3-project split; dev/prod use monolith (until migrated)
+          IS_SPLIT="false"
+          BACKEND_URL="${{ env.PULUMI_BACKEND_URL }}"
+          if [ "$STACK" = "homolog" ]; then
+            IS_SPLIT="true"
+            BACKEND_URL="${{ env.PULUMI_HOMOLOG_BACKEND_URL }}"
+          fi
 
           echo "stack=$STACK" >> "$GITHUB_OUTPUT"
           echo "environment=$ENV" >> "$GITHUB_OUTPUT"
           echo "command=$COMMAND" >> "$GITHUB_OUTPUT"
+          echo "is_split=$IS_SPLIT" >> "$GITHUB_OUTPUT"
+          echo "backend_url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
 
           echo "### Deployment Target" >> "$GITHUB_STEP_SUMMARY"
           echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
@@ -152,9 +169,10 @@ jobs:
           echo "| Stack | \`$STACK\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Command | \`$COMMAND\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Environment | \`$ENV\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Split mode | \`$IS_SPLIT\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Backend | \`$BACKEND_URL\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Trigger | \`${{ github.event_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| State backend | S3 (DigitalOcean Spaces) |" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # VALIDATE — typecheck + tests (gate before deploy)
@@ -185,6 +203,98 @@ jobs:
       - name: Run tests
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: npm test
+
+  # ─────────────────────────────────────────────
+  # DEPLOY-SPLIT — 3-project deploy for homolog (infra → platform → control-plane)
+  # ─────────────────────────────────────────────
+  deploy-split:
+    name: "split deploy → ${{ needs.resolve.outputs.stack }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [gate, resolve]
+    if: (needs.gate.outputs.mode == 'full' || needs.gate.outputs.mode == 'manual') && needs.resolve.outputs.is_split == 'true'
+    environment: ${{ needs.resolve.outputs.environment }}
+    concurrency:
+      group: infra-deploy-${{ needs.resolve.outputs.stack }}
+      cancel-in-progress: false
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Pulumi CLI
+        run: curl -fsSL https://get.pulumi.com | sh && echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
+
+      - name: "Phase 1: Deploy loopzero-infra"
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          BACKEND="${{ needs.resolve.outputs.backend_url }}"
+          cd infra/pulumi-infra
+          npm ci
+          pulumi login "$BACKEND"
+          # Backup YAML config (stack init overwrites it with just encryptionsalt)
+          cp "Pulumi.${STACK}.yaml" "/tmp/Pulumi.${STACK}.yaml.bak" 2>/dev/null || true
+          pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
+          # Restore YAML config (stack init may have overwritten it)
+          cp "/tmp/Pulumi.${STACK}.yaml.bak" "Pulumi.${STACK}.yaml" 2>/dev/null || true
+          pulumi cancel -s "$STACK" 2>/dev/null || true
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
+          pulumi config set --secret digitaloceanToken "$DIGITALOCEAN_TOKEN" -s "$STACK"
+          # Clear pending operations from interrupted runs (non-interactive safe).
+          # pulumi refresh --yes doesn't clear pending CREATEs without interaction.
+          # Instead: export state, remove pending ops, reimport, then refresh.
+          pulumi stack export -s "$STACK" 2>/dev/null | \
+            python3 -c "import sys,json; s=json.load(sys.stdin); s['deployment']['pending_operations']=[]; json.dump(s,sys.stdout)" 2>/dev/null | \
+            pulumi stack import -s "$STACK" 2>/dev/null || true
+          pulumi refresh --yes --skip-preview -s "$STACK" 2>/dev/null || true
+          pulumi up --yes --skip-preview -s "$STACK"
+          echo "### Phase 1: loopzero-infra ✅" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Phase 2: Deploy loopzero-platform"
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          BACKEND="${{ needs.resolve.outputs.backend_url }}"
+          cd infra/pulumi-platform
+          npm ci
+          pulumi login "$BACKEND"
+          cp "Pulumi.${STACK}.yaml" "/tmp/Pulumi.${STACK}.yaml.platform.bak" 2>/dev/null || true
+          pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
+          cp "/tmp/Pulumi.${STACK}.yaml.platform.bak" "Pulumi.${STACK}.yaml" 2>/dev/null || true
+          pulumi cancel -s "$STACK" 2>/dev/null || true
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" -s "$STACK"
+          fi
+          pulumi up --yes --skip-preview -s "$STACK"
+          echo "### Phase 2: loopzero-platform ✅" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Phase 3: Deploy loopzero-control-plane"
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          BACKEND="${{ needs.resolve.outputs.backend_url }}"
+          cd infra/pulumi-control-plane
+          npm ci
+          pulumi login "$BACKEND"
+          cp "Pulumi.${STACK}.yaml" "/tmp/Pulumi.${STACK}.yaml.cp.bak" 2>/dev/null || true
+          pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
+          cp "/tmp/Pulumi.${STACK}.yaml.cp.bak" "Pulumi.${STACK}.yaml" 2>/dev/null || true
+          pulumi cancel -s "$STACK" 2>/dev/null || true
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
+          pulumi up --yes --skip-preview -s "$STACK"
+          echo "### Phase 3: loopzero-control-plane ✅" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────
   # RESTART-ONLY — triggered by new container images (no infra changes)
@@ -248,7 +358,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [gate, resolve, validate]
-    if: needs.gate.outputs.mode != 'restart-only'
+    if: needs.gate.outputs.mode != 'restart-only' && needs.resolve.outputs.is_split != 'true'
     environment: ${{ needs.resolve.outputs.environment }}
 
     # CRITICAL: never cancel a running deploy — creates orphaned resources
@@ -279,6 +389,10 @@ jobs:
       LOOPZERO_STRIPE_WEBHOOK_SECRET: ${{ secrets.LOOPZERO_STRIPE_WEBHOOK_SECRET }}
       # Session token HMAC secret (dashboard JWT issuance)
       LOOPZERO_SESSION_TOKEN_SECRET: ${{ secrets.LOOPZERO_SESSION_TOKEN_SECRET }}
+      # MEET-048: Harbor registry (dual-push transition period)
+      HARBOR_REGISTRY: harbor.dev.loopzero.example
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
@@ -605,6 +719,11 @@ jobs:
           doctl auth init --access-token "$DIGITALOCEAN_TOKEN"
           doctl registry login --expiry-seconds 600
 
+          # MEET-048: Harbor dual-push login during transition.
+          if [ -n "$HARBOR_ROBOT_PASSWORD" ]; then
+            echo "$HARBOR_ROBOT_PASSWORD" | docker login "$HARBOR_REGISTRY" -u "$HARBOR_ROBOT_USERNAME" --password-stdin
+          fi
+
           # Read registry endpoint from Pulumi output (avoids hardcoded constant drift)
           REGISTRY=$(pulumi stack output registryEndpoint --stack "$STACK" 2>/dev/null || echo "registry.digitalocean.com/loopzero-infra-registry")
           echo "Registry: $REGISTRY"
@@ -639,14 +758,50 @@ jobs:
             infra/images/packs-runner/
           docker push "$REGISTRY/loopzero-packs-runner:v0.1.0"
 
-          # Integrate registry with all DOKS clusters (idempotent).
+          # MEET-048: Dual-push all images to Harbor during transition.
+          # TODO(MEET-048): After migration, build directly against Harbor and remove DOCR pushes.
+          if [ -n "$HARBOR_ROBOT_PASSWORD" ] && [ -n "$HARBOR_REGISTRY" ]; then
+            echo "Dual-pushing images to Harbor..."
+            for IMAGE in loopzero-api tenant-controller; do
+              docker tag "$REGISTRY/$IMAGE:$TAG" "$HARBOR_REGISTRY/loopzero-platform/$IMAGE:$TAG"
+              docker push "$HARBOR_REGISTRY/loopzero-platform/$IMAGE:$TAG"
+            done
+            docker tag "$REGISTRY/loopzero-clone-runner:v0.1.0" "$HARBOR_REGISTRY/loopzero-platform/loopzero-clone-runner:v0.1.0"
+            docker push "$HARBOR_REGISTRY/loopzero-platform/loopzero-clone-runner:v0.1.0"
+            docker tag "$REGISTRY/loopzero-packs-runner:v0.1.0" "$HARBOR_REGISTRY/loopzero-platform/loopzero-packs-runner:v0.1.0"
+            docker push "$HARBOR_REGISTRY/loopzero-platform/loopzero-packs-runner:v0.1.0"
+            echo "Harbor dual-push complete"
+          fi
+
+          # Integrate DOCR registry with all DOKS clusters (idempotent).
           # This creates the imagePullSecret in each cluster's default namespace
           # and patches the default SA. Must run BEFORE Step 3 convergence.
+          # TODO(MEET-048): After migration, replace with Harbor imagePullSecret provisioning.
           cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}"
           for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
             CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || echo "")
             [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
           done
+
+          # MEET-048: Harbor imagePullSecret for all DOKS clusters.
+          if [ -n "$HARBOR_ROBOT_PASSWORD" ] && [ -n "$HARBOR_REGISTRY" ]; then
+            for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
+              CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || echo "")
+              [ -z "$CLUSTER" ] && continue
+              doctl kubernetes cluster kubeconfig save "$CLUSTER" 2>/dev/null || continue
+              CTX=$(kubectl config get-contexts -o name 2>/dev/null | grep "$CLUSTER" | head -1)
+              [ -z "$CTX" ] && continue
+
+              for NS in default platform-system; do
+                kubectl --context "$CTX" create secret docker-registry harbor-registry \
+                  --docker-server="$HARBOR_REGISTRY" \
+                  --docker-username="$HARBOR_ROBOT_USERNAME" \
+                  --docker-password="$HARBOR_ROBOT_PASSWORD" \
+                  --namespace "$NS" \
+                  --dry-run=client -o yaml | kubectl --context "$CTX" apply -f - 2>/dev/null || true
+              done
+            done
+          fi
 
           # Copy registry secret to platform-system namespace on mgmt cluster.
           # doctl only creates the secret in the default namespace.
@@ -678,13 +833,24 @@ jobs:
                 --set minio.insecure=true | \
                 kubectl apply --context "$BUILD_CTX" -f - 2>/dev/null || true
 
-              # BuildKit registry credentials — needed for image push in build workflows.
-              RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 2592000)
+              # BuildKit registry credentials — needed for image push in build workflows (DOCR).
+              # SEC-003: Reduced token expiry from 2592000s (30d) to 600s (10min) for CI context.
+              RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 600)
               kubectl create secret generic buildkit-registry-config \
                 --context "$BUILD_CTX" --namespace argo \
                 --from-literal=config.json="$RW_CONFIG" \
                 --dry-run=client -o yaml | kubectl apply --context "$BUILD_CTX" -f - 2>/dev/null || true
               echo "CWTs and BuildKit credentials updated on $BUILD_CLUSTER"
+
+              # MEET-048: Harbor BuildKit credentials for build cluster.
+              if [ -n "$HARBOR_ROBOT_PASSWORD" ] && [ -n "$HARBOR_REGISTRY" ]; then
+                HARBOR_CONFIG="{\"auths\":{\"$HARBOR_REGISTRY\":{\"username\":\"$HARBOR_ROBOT_USERNAME\",\"password\":\"$HARBOR_ROBOT_PASSWORD\"}}}"
+                kubectl create secret generic buildkit-harbor-registry-config \
+                  --context "$BUILD_CTX" --namespace argo \
+                  --from-literal=config.json="$HARBOR_CONFIG" \
+                  --dry-run=client -o yaml | kubectl apply --context "$BUILD_CTX" -f - 2>/dev/null || true
+                echo "Harbor BuildKit credentials ensured on $BUILD_CLUSTER"
+              fi
             fi
           fi
 

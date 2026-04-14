@@ -34,9 +34,10 @@ import (
 // Note: MinIO credentials are injected via K8s Secret (envFrom) in the CWT,
 // not as workflow parameters. See loopzero-minio-credentials secret in build cluster.
 type InfraParams struct {
-	RegistryURL      string
-	RegistryInsecure bool   // true for local dev registries without TLS
-	BaseDomain       string // Base domain for app hostnames (e.g., "loopzero.local")
+	RegistryURL       string
+	RegistryInsecure  bool   // true for local dev registries without TLS
+	BaseDomain        string // Base domain for app hostnames (e.g., "loopzero.local")
+	HarborRegistryURL string // MEET-048: secondary registry for dual-push. Empty = disabled.
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs
@@ -129,6 +130,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 	}
 	// Per-app delivery templates: BuildKit for containers, S3 upload for static.
 	// Sprint 6: Each container build is followed by a cosign signing step.
+	// MEET-048: When HarborRegistryURL is set, add a mirror template per container app.
 	if spec.Plan != nil {
 		for _, appPlan := range spec.Plan.Apps {
 			if appPlan.DeliveryModel == "static" {
@@ -136,6 +138,10 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			} else {
 				inlineTemplates = append(inlineTemplates, b.buildkitTemplateFromPlan(spec, appPlan))
 				inlineTemplates = append(inlineTemplates, cosignSignTemplate(appPlan.AppName, appPlan.ImageTag))
+				if b.infraParams.HarborRegistryURL != "" {
+					harborTag := naming.ImageTag(b.infraParams.HarborRegistryURL, spec.TenantID, spec.ProjectID, appPlan.AppName, spec.CommitSHA)
+					inlineTemplates = append(inlineTemplates, harborMirrorTemplate(appPlan.AppName, appPlan.ImageTag, harborTag))
+				}
 			}
 		}
 	} else {
@@ -143,6 +149,10 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			inlineTemplates = append(inlineTemplates, b.buildkitTemplateForApp(spec, app))
 			imageTag := naming.ImageTag(b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
 			inlineTemplates = append(inlineTemplates, cosignSignTemplate(app.Name, imageTag))
+			if b.infraParams.HarborRegistryURL != "" {
+				harborTag := naming.ImageTag(b.infraParams.HarborRegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
+				inlineTemplates = append(inlineTemplates, harborMirrorTemplate(app.Name, imageTag, harborTag))
+			}
 		}
 	}
 
@@ -226,7 +236,11 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		// node's resources. At 2 build nodes × ~4 concurrent builds, this is
 		// acceptable. At L4+ with 50 concurrent builds, the build pool must
 		// be scaled (Correction K: autoscale 2→5 nodes already configured).
-		PodSpecPatch: `{"affinity":{"podAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":[{"labelSelector":{"matchLabels":{"workflows.argoproj.io/workflow":"{{workflow.name}}"}},"topologyKey":"kubernetes.io/hostname"}]}}}`,
+		Affinity: forge.ColocateByLabel(
+			"workflows.argoproj.io/workflow",
+			"{{workflow.name}}",
+			"kubernetes.io/hostname",
+		),
 	}
 
 	return wf, nil
@@ -296,6 +310,8 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 	// Per-app delivery — BuildKit for containers, upload for static.
 	// Depends on its language group's dockerfile step (containers) or build step (static).
 	// Sprint 6: Each container build is followed by a cosign signing step.
+	// MEET-048: When HarborRegistryURL is configured, add a mirror step (crane copy)
+	// after build-image. Mirror is best-effort (continueOn.failed=true).
 	if spec.Plan != nil && len(spec.Plan.Apps) > 0 {
 		for _, appPlan := range spec.Plan.Apps {
 			suffix := suffixForStrategy(groups, appPlan.LanguageStrategy)
@@ -307,6 +323,13 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 				tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{"generate-dockerfile" + suffix}))
 				signTaskName := fmt.Sprintf("sign-image-%s", appPlan.AppName)
 				tasks = append(tasks, inlineTask(signTaskName, signTaskName, []string{buildTaskName}))
+				// MEET-048: dual-push mirror to Harbor (best-effort)
+				if b.infraParams.HarborRegistryURL != "" {
+					mirrorTaskName := fmt.Sprintf("mirror-harbor-%s", appPlan.AppName)
+					mirrorTask := inlineTask(mirrorTaskName, mirrorTaskName, []string{buildTaskName})
+					mirrorTask.ContinueOn = &model.ContinueOn{Failed: true}
+					tasks = append(tasks, mirrorTask)
+				}
 			}
 		}
 	} else {
@@ -316,6 +339,13 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 			tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{"generate-dockerfile" + suffix}))
 			signTaskName := fmt.Sprintf("sign-image-%s", app.Name)
 			tasks = append(tasks, inlineTask(signTaskName, signTaskName, []string{buildTaskName}))
+			// MEET-048: dual-push mirror to Harbor (best-effort)
+			if b.infraParams.HarborRegistryURL != "" {
+				mirrorTaskName := fmt.Sprintf("mirror-harbor-%s", app.Name)
+				mirrorTask := inlineTask(mirrorTaskName, mirrorTaskName, []string{buildTaskName})
+				mirrorTask.ContinueOn = &model.ContinueOn{Failed: true}
+				tasks = append(tasks, mirrorTask)
+			}
 		}
 	}
 

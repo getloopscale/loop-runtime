@@ -109,6 +109,23 @@ export interface PlatformStackConfig {
   // Set via: pulumi config set lokiPushUrl http://<build-node-ip>:30100
   readonly lokiPushUrl?: string;
 
+  // VPC CIDR — override to avoid overlap between environments in the same account.
+  // Default: 10.20.0.0/16. Set different CIDRs per environment (e.g., 10.30.0.0/16 for homolog).
+  readonly vpcCidr?: string;
+
+  // Container registry backend — "docr" (DigitalOcean Container Registry) or "harbor".
+  // Defaults to "docr" for backward compatibility. When set to "harbor", the infra
+  // phase creates a DO Spaces bucket for image storage and returns Harbor endpoints
+  // instead of DOCR endpoints. Harbor itself is deployed via Helm in the bootstrap phase.
+  // Set via: pulumi config set registryType harbor
+  readonly registryType: "docr" | "harbor";
+
+  // Harbor external URL — the hostname where Harbor is reachable from build and
+  // workload clusters (e.g. "harbor.dev.loopzero.example"). Required when registryType
+  // is "harbor". The Helm chart configures ingress to match this hostname.
+  // Set via: pulumi config set harborExternalUrl harbor.dev.loopzero.example
+  readonly harborExternalUrl?: string;
+
 }
 
 /**
@@ -217,5 +234,10 @@ export function loadStackConfig(): PlatformStackConfig {
 
     // Cross-cluster observability — Loki push URL for runtime Promtail
     lokiPushUrl: config.get("lokiPushUrl") ?? undefined,
+    vpcCidr: config.get("vpcCidr") ?? undefined,
+
+    // Container registry backend — defaults to "docr" for backward compatibility.
+    registryType: (config.get("registryType") ?? "docr") as "docr" | "harbor",
+    harborExternalUrl: config.get("harborExternalUrl") ?? undefined,
   };
 }

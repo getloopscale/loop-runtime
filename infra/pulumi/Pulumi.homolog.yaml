@@ -1,0 +1,29 @@
+encryptionsalt: v1:cvMxQipD2Kk=:v1:Y9Nn/tb89JstYu0N:Ed7xSsHnLikhb3CJQBSKTd9LyNiXyA==
+config:
+  loopzero-infra:environment: homolog
+  loopzero-infra:provider: digitalocean
+  loopzero-infra:region: nyc3
+  loopzero-infra:domain: homolog.loopzero.example
+  loopzero-infra:dnsZone: loopzero.example
+  loopzero-infra:infraVersion: v3
+  loopzero-infra:mgmtNodeClass: small
+  loopzero-infra:mgmtMinNodes: "3"
+  loopzero-infra:runtimeNodeClass: small
+  loopzero-infra:runtimeMinNodes: "2"
+  loopzero-infra:buildNodeClass: small
+  loopzero-infra:buildMinNodes: "2"
+  loopzero-infra:registryType: docr
+  loopzero-infra:harborExternalUrl: harbor.homolog.loopzero.example
+  loopzero-infra:cfZoneId: 9f9a41bef0bcb7adf15969c81c303bef
+  loopzero-infra:spacesAccessKeyId:
+    secure: v1:eijLuBsorf5u9rds:PCuE3PXPZg5z/B6OoTPWh5e9+erd/bp5QewPpAAoq0GriR1R
+  loopzero-infra:spacesSecretAccessKey:
+    secure: v1:hBOe8uLnLgX5G2jQ:B8JCwzR0kkhm7BkTDenmeuBjQHrTexCgnD7p86TN1n/ZJYCOuAV+B5fvgsfEq6HWUP/8lE2rdMP7H50=
+  loopzero-infra:digitaloceanToken:
+    secure: v1:wQy+eStXNXzKBvgG:LcyFhccjVg68Hmk01oUsDguHW53UxS7NNzMORHiWwruMAYx41zV2cpZL9a55gD6rLk1a18Yb3loSUDvz10Ov2ic/A2Ud8Whn/Jia5kdQPRQE3raA7jmF
+  loopzero-infra:cfApiToken:
+    secure: v1:y5n4FYjomH2x8uKg:gISZdj73Eod0M0dLho2dIGJ90XFL8js1qo4xy895VS8PGMo1uXQ5YswfohK7R2uFbP4kClK2LxTdnwf3T75xyUcj1Cqu
+  loopzero-infra:tunnelSecret:
+    secure: v1:Z281MI5Kmp+uxK53:cDSshatKyfBLwbAWAGkVA2R2mcRTQ6C58NcJqKeEnyUGb5NdDr/1mpP15qRA/EUvn6AsYNPO9Y6GoIRn
+  loopzero-infra:vpcCidr: 10.30.0.0/16
+  loopzero-infra:cfAccountId: 362767409c4de7fda7990c10103efdd9

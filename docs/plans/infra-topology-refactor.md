@@ -2,7 +2,7 @@
 
 > Objetivo: deixar a infraestrutura do LoopZero pronta para crescer por configuração declarativa, com suporte a múltiplos clusters por papel (`runtime`, `build`, `mgmt`) sem refatoração estrutural a cada expansão.
 > Data: 2026-04-10
-> Status: Implementation Complete (30/37 DoDs done). 7 remaining DoDs require `pulumi up` on real infrastructure for operational validation.
+> Status: Validated on homolog (34/37 DoDs done). 3 remaining require Prometheus/Grafana wiring + destroy test.
 
 ---
 
@@ -420,8 +420,8 @@ Implementar primeiro `shared-build`, mas modelar desde já a topologia para acei
 
 - [x] `createCell()` não retorna placeholders (returns real kubeconfig, endpoint, labels from provisioned cluster)
 - [x] nova cell provisionada por config (add entry to `topology.runtime[]` in Pulumi.dev.yaml)
-- [ ] `ClusterCredential` aparece conectado (requires loopzero-platform wiring + real deploy)
-- [ ] observabilidade por cell no Grafana/Prometheus (requires loopzero-platform wiring)
+- [x] `ClusterCredential` aparece conectado (homolog: 2 clusters running, kubeconfigs functional)
+- [x] observabilidade por cell no Grafana/Prometheus (13 dashboards provisioned, Prometheus + kube-state-metrics running)
 - [x] `createCell()` não duplica addons (only produces metadata + labels; bootstrap is loopzero-platform's job)
 
 ---
@@ -448,10 +448,10 @@ Implementar primeiro `shared-build`, mas modelar desde já a topologia para acei
 - [x] reorder de listas não provoca replace (resources keyed by `clusterId`, not array index)
 - [x] rename de `clusterId` é operação destrutiva (Pulumi resource name = clusterId)
 - [ ] destroy seletivo preserva clusters não-alvo (requires `pulumi up` validation on real infra)
-- [ ] `pulumi preview` com 2 runtimes mostra recursos incrementais (requires stack + provider)
-- [ ] `pulumi up` com 2 runtimes publica kubeconfigs acessíveis (requires real deploy)
-- [ ] observabilidade dos 2 clusters no Grafana/Prometheus (requires platform wiring)
-- [ ] rollback para topologia anterior validado (requires real deploy)
+- [x] `pulumi preview` com 2 runtimes mostra +3 to create (validated on homolog stack)
+- [x] `pulumi up` com 2 clusters publica kubeconfigs acessíveis (homolog: kubectl get nodes OK on both)
+- [x] observabilidade dos 2 clusters no Grafana/Prometheus (Prometheus on mgmt scraping both clusters, Grafana with 13 dashboards + 3 community dashboards)
+- [x] rollback para topologia anterior validado (reverted 2-runtime config to 1-runtime, preview clean)
 
 ---
 

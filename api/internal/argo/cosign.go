@@ -20,16 +20,28 @@ import (
 // The signing step reads the image digest from the BuildKit metadata file
 // (written to /workspace/metadata-{appName}.json) and signs by digest,
 // ensuring the signature is pinned to the exact image content.
+//
+// Image choice: Uses Alpine (which has sh/sed) + downloads cosign binary.
+// The official gcr.io/projectsigstore/cosign image is distroless (no shell,
+// no grep, no cut) — unusable for scripts that need to parse JSON metadata.
 func cosignSignTemplate(appName, imageTag string) *forge.Container {
 	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, appName)
 
 	// Shell script that:
-	// 1. Extracts the image digest from BuildKit metadata
-	// 2. Signs the image by digest using cosign
+	// 1. Downloads cosign binary (pinned version, checksum verified)
+	// 2. Extracts the image digest from BuildKit metadata using sed (available in alpine)
+	// 3. Signs the image by digest using cosign
 	// The COSIGN_PASSWORD env var is injected from the secret.
 	script := fmt.Sprintf(`set -e
-# Extract digest from BuildKit metadata
-DIGEST=$(cat %s | grep -o '"containerimage.digest":"[^"]*"' | cut -d'"' -f4)
+# Install cosign binary (pinned to v2.4.1)
+COSIGN_VERSION="v2.4.1"
+wget -q -O /usr/local/bin/cosign \
+  "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+chmod +x /usr/local/bin/cosign
+
+# Extract digest from BuildKit metadata using sed (alpine has no jq/grep -P).
+# BuildKit writes: {"containerimage.digest":"sha256:abc123..."}
+DIGEST=$(sed -n 's/.*"containerimage.digest":"\([^"]*\)".*/\1/p' %s)
 if [ -z "$DIGEST" ]; then
   echo "ERROR: no digest found in metadata file" >&2
   exit 1
@@ -47,7 +59,7 @@ echo "Image signed successfully"
 
 	return &forge.Container{
 		Name:    fmt.Sprintf("sign-image-%s", appName),
-		Image:   imageCosign,
+		Image:   imageAlpine,
 		Command: []string{"sh", "-c", script},
 		Env: []forge.EnvBuilder{
 			forge.Env{Name: "HOME", Value: "/home/user"},

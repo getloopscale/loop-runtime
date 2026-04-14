@@ -287,11 +287,12 @@ func main() {
 		// The workflow no longer calls the API. Build completion is detected
 		// by the BuildReconcileLoop polling Argo Workflow CRDs.
 		rawWorkflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-			Kubeconfig:       cfg.BuildKubeconfig,
-			Context:          cfg.BuildKubeContext,
-			RegistryURL:      cfg.RegistryURL,
-			RegistryInsecure: cfg.RegistryInsecure,
-			BaseDomain:       cfg.BaseDomain,
+			Kubeconfig:        cfg.BuildKubeconfig,
+			Context:           cfg.BuildKubeContext,
+			RegistryURL:       cfg.RegistryURL,
+			RegistryInsecure:  cfg.RegistryInsecure,
+			BaseDomain:        cfg.BaseDomain,
+			HarborRegistryURL: cfg.HarborRegistryURL,
 		})
 		if err != nil {
 			logger.Error("failed to create workflow submitter", "error", err)
