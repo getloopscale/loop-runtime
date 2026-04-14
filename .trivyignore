@@ -9,3 +9,8 @@ KSV-0041
 
 # ClusterRole 'tenant-controller' needs broad resource access for namespace management
 KSV-0056
+
+# Container image CVE suppressions.
+# Add CVE IDs here to suppress known false positives or accepted risks.
+# Format: one CVE per line, optionally followed by a comment.
+# Example: CVE-2024-12345  # accepted risk: not exploitable in our context

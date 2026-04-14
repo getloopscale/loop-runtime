@@ -457,10 +457,17 @@ func (r *TenantReconciler) reconcileBuildNetworkPolicy(ctx context.Context, name
 			PodSelector: metav1.LabelSelector{},
 			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
 			Egress: []networkingv1.NetworkPolicyEgressRule{
-				{Ports: []networkingv1.NetworkPolicyPort{
-					{Protocol: &protoUDP, Port: &dnsPort},
-					{Protocol: &protoTCP, Port: &dnsPort},
-				}},
+				{
+					To: []networkingv1.NetworkPolicyPeer{{
+						NamespaceSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"kubernetes.io/metadata.name": "kube-system"},
+						},
+					}},
+					Ports: []networkingv1.NetworkPolicyPort{
+						{Protocol: &protoUDP, Port: &dnsPort},
+						{Protocol: &protoTCP, Port: &dnsPort},
+					},
+				},
 				{Ports: []networkingv1.NetworkPolicyPort{
 					{Protocol: &protoTCP, Port: &minioPort},
 				}},

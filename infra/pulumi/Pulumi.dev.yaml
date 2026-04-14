@@ -4,7 +4,7 @@ config:
   loopzero-infra:region: sfo3
   loopzero-infra:domain: dev.loopzero.example
   loopzero-infra:dnsZone: loopzero.example
-  loopzero-infra:infraVersion: v2
+  loopzero-infra:infraVersion: v3
   # Management cluster
   loopzero-infra:mgmtK8sVersion: "1.32.13-do.2"
   loopzero-infra:mgmtNodeClass: small
@@ -39,4 +39,10 @@ config:
   loopzero-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
   # Cross-cluster observability — Loki push URL (build cluster NodePort)
   loopzero-infra:lokiPushUrl: "http://10.20.0.6:30100"
+  loopzero-infra:harborExternalUrl: harbor.dev.loopzero.example
+  loopzero-infra:vpcCidr: 10.20.0.0/16
+  loopzero-infra:cfApiToken:
+    secure: v1:w+Mbr+SN35lZDCzd:nJi90/ewMuDR3q4XkSc46bNSSO27bli8TRm8nzSg85aJ8x7w0Jbg6mXpQpNeJ/2N+kCTIfNmQJvjeigPSQGhT9ru7lbz
+  loopzero-infra:tunnelSecret:
+    secure: v1:2YYApJSYd3ECuuMw:K2D6Fp7IzYhxSb7nGjIra0+rLvhMNNdTSfHh+PXarJpWEw7ymLJ4OBQZZupdeNCGHz6kBNK/1YFMyPZs
 encryptionsalt: v1:j93WRa9itPU=:v1:5tiFr51FInRCcoEU:p2jAoOqdhiX9DXQ9eY5Zj5OFmC4RtA==

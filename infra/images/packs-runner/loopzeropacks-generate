@@ -96,12 +96,14 @@ if [ "$IS_MONOREPO" = "true" ]; then
   case "$FRAMEWORK" in
     nextjs)
       cat > "$OUTPUT" <<DOCKERFILE
+# syntax=docker/dockerfile:1
 FROM node:20-alpine AS deps
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY ${APP_PATH}/package.json ./${APP_PATH}/
 COPY packages/ ./packages/
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 FROM node:20-alpine AS builder
 WORKDIR /app
@@ -119,20 +121,26 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=builder /app/${APP_PATH}/.next/standalone/ /app/
 COPY --from=builder /app/${APP_PATH}/.next/static /app/${APP_PATH}/.next/static
 COPY --from=builder /app/${APP_PATH}/public /app/${APP_PATH}/public 2>/dev/null || true
+RUN adduser -D -u 1000 loopzero
+USER 1000
 EXPOSE 3000
 CMD ["node", "${APP_PATH}/server.js"]
 DOCKERFILE
       ;;
     express|fastify|node)
       cat > "$OUTPUT" <<DOCKERFILE
+# syntax=docker/dockerfile:1
 FROM node:20-alpine
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY ${APP_PATH}/package.json ./${APP_PATH}/
 COPY packages/ ./packages/
-RUN npm ci --omit=dev 2>/dev/null || npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev 2>/dev/null || npm ci
 COPY ${APP_PATH}/ ./${APP_PATH}/
 COPY packages/ ./packages/
+RUN adduser -D -u 1000 loopzero
+USER 1000
 CMD ["node", "${APP_PATH}/${START_FILE}"]
 DOCKERFILE
       ;;
@@ -146,10 +154,12 @@ else
   case "$FRAMEWORK" in
     nextjs)
       cat > "$OUTPUT" <<DOCKERFILE
+# syntax=docker/dockerfile:1
 FROM node:20-alpine AS builder
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npx next build
@@ -159,28 +169,36 @@ ENV NODE_ENV=production
 COPY --from=builder /app/.next/standalone/ /app/
 COPY --from=builder /app/.next/static /app/.next/static
 COPY --from=builder /app/public /app/public 2>/dev/null || true
+RUN adduser -D -u 1000 loopzero
+USER 1000
 EXPOSE 3000
 CMD ["node", "server.js"]
 DOCKERFILE
       ;;
     express|fastify|node)
       cat > "$OUTPUT" <<DOCKERFILE
+# syntax=docker/dockerfile:1
 FROM node:20-alpine
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev 2>/dev/null || npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev 2>/dev/null || npm ci
 COPY . .
+RUN adduser -D -u 1000 loopzero
+USER 1000
 CMD ["node", "${START_FILE}"]
 DOCKERFILE
       ;;
     go)
       cat > "$OUTPUT" <<DOCKERFILE
+# syntax=docker/dockerfile:1
 FROM golang:1.25-alpine AS builder
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 WORKDIR /app
 COPY go.* ./
-RUN go mod download
+RUN --mount=type=cache,target=/root/go/pkg/mod go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /server .
+RUN --mount=type=cache,target=/root/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /server .
 FROM alpine:3.21
 RUN adduser -D -u 1000 loopzero
 COPY --from=builder /server /server
@@ -191,23 +209,31 @@ DOCKERFILE
       ;;
     python)
       cat > "$OUTPUT" <<DOCKERFILE
+# syntax=docker/dockerfile:1
 FROM python:3.12-slim
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 WORKDIR /app
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip pip install --no-cache-dir -r requirements.txt
 COPY . .
+RUN useradd -r -u 1000 -m loopzero
+USER 1000
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 DOCKERFILE
       ;;
     ruby)
       cat > "$OUTPUT" <<DOCKERFILE
-FROM ruby:3.3-slim
-RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
+# syntax=docker/dockerfile:1
+FROM ruby:3.3-alpine
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
+RUN apk add --no-cache build-base
 WORKDIR /app
 COPY Gemfile Gemfile.lock* ./
-RUN bundle install --without development test
+RUN --mount=type=cache,target=/usr/local/bundle bundle install --without development test
 COPY . .
+RUN adduser -D -u 1000 loopzero
+USER 1000
 EXPOSE 4567
 CMD ["bundle", "exec", "ruby", "app.rb"]
 DOCKERFILE
@@ -215,12 +241,14 @@ DOCKERFILE
     java)
       if [ -f "$FULL_PATH/pom.xml" ]; then
         cat > "$OUTPUT" <<DOCKERFILE
+# syntax=docker/dockerfile:1
 FROM maven:3.9-eclipse-temurin-21 AS builder
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 WORKDIR /app
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline -B
 COPY src ./src
-RUN mvn package -DskipTests -B
+RUN --mount=type=cache,target=/root/.m2 mvn package -DskipTests -B
 FROM eclipse-temurin:21-jre-alpine
 RUN adduser -D -u 1000 loopzero
 COPY --from=builder /app/target/*.jar /app.jar
@@ -230,13 +258,15 @@ CMD ["java", "-jar", "/app.jar"]
 DOCKERFILE
       else
         cat > "$OUTPUT" <<DOCKERFILE
+# syntax=docker/dockerfile:1
 FROM gradle:8-jdk21 AS builder
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 WORKDIR /app
 COPY build.gradle* settings.gradle* ./
 COPY gradle ./gradle
-RUN gradle dependencies --no-daemon || true
+RUN --mount=type=cache,target=/root/.gradle gradle dependencies --no-daemon || true
 COPY src ./src
-RUN gradle bootJar --no-daemon -x test
+RUN --mount=type=cache,target=/root/.gradle gradle bootJar --no-daemon -x test
 FROM eclipse-temurin:21-jre-alpine
 RUN adduser -D -u 1000 loopzero
 COPY --from=builder /app/build/libs/*.jar /app.jar
@@ -248,28 +278,37 @@ DOCKERFILE
       ;;
     php)
       cat > "$OUTPUT" <<DOCKERFILE
+# syntax=docker/dockerfile:1
+FROM composer:2.8 AS composer
 FROM php:8.3-cli-alpine
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
+COPY --from=composer /usr/bin/composer /usr/bin/composer
 WORKDIR /app
 COPY composer.json composer.lock* ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+RUN --mount=type=cache,target=/tmp/composer-cache composer install --no-dev --optimize-autoloader --no-interaction
 COPY . .
+RUN adduser -D -u 1000 loopzero
+USER 1000
 EXPOSE 8000
 CMD ["php", "-S", "0.0.0.0:8000", "-t", "public"]
 DOCKERFILE
       ;;
     rust)
       cat > "$OUTPUT" <<DOCKERFILE
+# syntax=docker/dockerfile:1
 FROM rust:1.80-alpine AS builder
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
+ARG APP_NAME=server
 RUN apk add --no-cache musl-dev
 WORKDIR /app
 COPY Cargo.toml Cargo.lock* ./
 RUN mkdir src && echo 'fn main(){}' > src/main.rs && cargo build --release && rm -rf src
 COPY src ./src
-RUN cargo build --release
+RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/app/target cargo build --release
 FROM alpine:3.21
+ARG APP_NAME=server
 RUN adduser -D -u 1000 loopzero
-COPY --from=builder /app/target/release/$(basename \$(pwd)) /server
+COPY --from=builder /app/target/release/\${APP_NAME} /server
 USER 1000
 EXPOSE 8080
 CMD ["/server"]

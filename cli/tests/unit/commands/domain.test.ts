@@ -266,26 +266,26 @@ describe('DomainRemoveCommand', () => {
   it('returns exit 4 when not authenticated', async () => {
     const deps = makeDeps({ getToken: () => null });
     const cmd = new DomainRemoveCommand(deps);
-    expect(await cmd.execute('x.com', { confirm: 'x.com' })).toBe(4);
+    expect(await cmd.execute('x.com', { yes: true })).toBe(4);
   });
 
-  it('returns exit 1 without --confirm', async () => {
+  it('returns exit 1 without --yes', async () => {
     const deps = makeDeps();
     const cmd = new DomainRemoveCommand(deps);
     expect(await cmd.execute('api.example.com')).toBe(1);
-    expect(getErrors(deps).some(line => line.includes('--confirm'))).toBe(true);
+    expect(getErrors(deps).some(line => line.includes('--yes'))).toBe(true);
   });
 
-  it('returns exit 1 when --confirm does not match', async () => {
+  it('returns exit 1 when --yes is not passed', async () => {
     const deps = makeDeps();
     const cmd = new DomainRemoveCommand(deps);
-    expect(await cmd.execute('api.example.com', { confirm: 'wrong' })).toBe(1);
+    expect(await cmd.execute('api.example.com', { yes: false })).toBe(1);
   });
 
   it('returns exit 0 on successful removal', async () => {
     const deps = makeDeps();
     const cmd = new DomainRemoveCommand(deps);
-    expect(await cmd.execute('api.mycompany.com', { confirm: 'api.mycompany.com' })).toBe(0);
+    expect(await cmd.execute('api.mycompany.com', { yes: true })).toBe(0);
     expect(getOutput(deps).some(line => line.includes('removal in progress'))).toBe(true);
   });
 
@@ -294,10 +294,10 @@ describe('DomainRemoveCommand', () => {
       deleteDomain: jest.fn().mockRejectedValue(new ApiError('not found', 1, 404, 'NOT_FOUND')),
     });
     const cmd = new DomainRemoveCommand(deps);
-    expect(await cmd.execute('gone.com', { confirm: 'gone.com' })).toBe(1);
+    expect(await cmd.execute('gone.com', { yes: true })).toBe(1);
   });
 
-  it('JSON error shape on missing --confirm', async () => {
+  it('JSON error shape on missing --yes', async () => {
     const deps = makeDeps();
     const cmd = new DomainRemoveCommand(deps);
     await cmd.execute('api.example.com', { json: true });

@@ -11,11 +11,13 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/loopzero/loopzero/api/internal/archive"
+	"github.com/loopzero/loopzero/api/internal/gitclient"
 )
 
 // AutoDeployConfig holds configuration for auto-deploy on push.
@@ -130,7 +132,7 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("auto-deploy: seek for conversion: %w", err)
 	}
-	bundlePath, err := tarballToGitBundle(tmpFile, commitSHA, commitMessage, senderLogin)
+	bundlePath, err := tarballToGitBundle(ctx, tmpFile, commitSHA, commitMessage, senderLogin)
 	if err != nil {
 		return fmt.Errorf("auto-deploy: convert to git bundle: %w", err)
 	}
@@ -213,105 +215,77 @@ type loopzeroYamlMinimal struct {
 
 // tarballToGitBundle converts a GitHub tarball (.tar.gz) into a git bundle.
 // The loopzero-clone CWT expects git bundle format, not raw tarballs.
-// Process: extract tarball → git init → git add → git commit → git bundle create.
-func tarballToGitBundle(tarball io.Reader, commitSHA, commitMessage, author string) (string, error) {
-	// Create temp dir for extraction
+// Process: safe extract tarball (StripComponents=1) → git init → git add → git commit → git bundle create.
+//
+// SEC: Uses archive.SafeExtractTarGz with symlink rejection, path traversal
+// protection, and decompression size limits. Uses gitclient.GitRunner with
+// context propagation for cancellation support.
+func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commitMessage, author string) (string, error) {
 	tmpDir, err := os.MkdirTemp("", "loopzero-github-bundle-*")
 	if err != nil {
 		return "", fmt.Errorf("create temp dir: %w", err)
 	}
 
-	// Extract tarball
-	gz, err := gzip.NewReader(tarball)
+	// Write tarball to disk for SafeExtractTarGz (needs seekable file).
+	tarPath := filepath.Join(tmpDir, "source.tar.gz")
+	tarFile, err := os.Create(tarPath)
 	if err != nil {
 		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("gzip reader: %w", err)
+		return "", fmt.Errorf("create tar file: %w", err)
 	}
-	defer func() { _ = gz.Close() }()
-
-	tr := tar.NewReader(gz)
-	var topLevelDir string
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			_ = os.RemoveAll(tmpDir)
-			return "", fmt.Errorf("tar read: %w", err)
-		}
-
-		// GitHub tarballs have a top-level dir like "owner-repo-sha/"
-		// Strip it so files are at root of tmpDir
-		parts := strings.SplitN(header.Name, "/", 2)
-		if topLevelDir == "" && len(parts) > 0 {
-			topLevelDir = parts[0]
-		}
-		var relPath string
-		if len(parts) > 1 {
-			relPath = parts[1]
-		} else {
-			continue
-		}
-		if relPath == "" {
-			continue
-		}
-
-		target := filepath.Join(tmpDir, relPath)
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			_ = os.MkdirAll(target, 0755)
-		case tar.TypeReg:
-			_ = os.MkdirAll(filepath.Dir(target), 0755)
-			f, err := os.Create(target)
-			if err != nil {
-				continue
-			}
-			_, _ = io.Copy(f, tr)
-			_ = f.Close()
-			_ = os.Chmod(target, os.FileMode(header.Mode))
-		}
-	}
-
-	// Create git repo and bundle
-	run := func(args ...string) error {
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = tmpDir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME="+author,
-			"GIT_AUTHOR_EMAIL="+author+"@users.noreply.github.com",
-			"GIT_COMMITTER_NAME=LoopZero Platform",
-			"GIT_COMMITTER_EMAIL=noreply@loopzero.example",
-		)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("%s: %s: %w", args[0], string(out), err)
-		}
-		return nil
-	}
-
-	if err := run("git", "init"); err != nil {
+	if _, err := io.Copy(tarFile, tarball); err != nil {
+		_ = tarFile.Close()
 		_ = os.RemoveAll(tmpDir)
-		return "", err
+		return "", fmt.Errorf("write tar file: %w", err)
 	}
-	if err := run("git", "add", "."); err != nil {
+	_ = tarFile.Close()
+
+	// SEC: Safe extraction with all protections + StripComponents=1
+	// to remove the GitHub "owner-repo-sha/" prefix directory.
+	repoDir := filepath.Join(tmpDir, "repo")
+	if err := os.MkdirAll(repoDir, 0755); err != nil {
 		_ = os.RemoveAll(tmpDir)
-		return "", err
+		return "", fmt.Errorf("mkdir repo: %w", err)
 	}
+	if _, err := archive.SafeExtractTarGz(tarPath, repoDir, &archive.ExtractOpts{StripComponents: 1}); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("extract tarball: %w", err)
+	}
+
+	// Create git repo and bundle using GitRunner (with context for cancellation).
+	git := gitclient.NewGitRunner("", gitclient.WithEnv(
+		"GIT_AUTHOR_NAME="+author,
+		"GIT_AUTHOR_EMAIL="+author+"@users.noreply.github.com",
+		"GIT_COMMITTER_NAME=LoopZero Platform",
+		"GIT_COMMITTER_EMAIL=noreply@loopzero.example",
+	))
+
+	if err := git.Run(ctx, repoDir, "init"); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("git init: %w", err)
+	}
+	if err := git.Run(ctx, repoDir, "add", "."); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("git add: %w", err)
+	}
+
 	msg := commitMessage
 	if msg == "" {
 		msg = "Auto-deploy from GitHub push"
 	}
-	if err := run("git", "commit", "-m", msg, "--allow-empty"); err != nil {
+	if err := git.Run(ctx, repoDir, "commit", "-m", msg, "--allow-empty"); err != nil {
 		_ = os.RemoveAll(tmpDir)
-		return "", err
+		return "", fmt.Errorf("git commit: %w", err)
 	}
 
-	bundlePath := filepath.Join(os.TempDir(), fmt.Sprintf("loopzero-bundle-%s.bundle", commitSHA[:12]))
-	if err := run("git", "bundle", "create", bundlePath, "HEAD"); err != nil {
+	shaPrefix := commitSHA
+	if len(shaPrefix) > 12 {
+		shaPrefix = shaPrefix[:12]
+	}
+	bundlePath := filepath.Join(os.TempDir(), fmt.Sprintf("loopzero-bundle-%s.bundle", shaPrefix))
+	if err := git.Run(ctx, repoDir, "bundle", "create", bundlePath, "HEAD"); err != nil {
 		_ = os.RemoveAll(tmpDir)
-		return "", err
+		return "", fmt.Errorf("git bundle create: %w", err)
 	}
 
 	_ = os.RemoveAll(tmpDir)

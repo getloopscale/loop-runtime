@@ -7,12 +7,12 @@ import { IProviderNetwork } from "../../contracts/provider";
 import { tagsToStringArray } from "../../core/tags";
 
 export class DigitalOceanNetworkProvider implements IProviderNetwork {
-  createNetwork(spec: NetworkSpec): NetworkOutput {
+  createNetwork(spec: NetworkSpec & { importId?: string }): NetworkOutput {
     const vpc = new digitalocean.Vpc(spec.name, {
       name: spec.name,
       region: spec.region,
       ipRange: spec.cidr ?? "10.20.0.0/16",
-    });
+    }, spec.importId ? { import: spec.importId } : undefined);
 
     // DO VPCs don't support tags directly, but we tag dependent resources.
     // We store tags here for propagation to child resources.

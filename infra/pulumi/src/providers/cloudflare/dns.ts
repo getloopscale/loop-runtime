@@ -5,6 +5,7 @@ import * as cloudflare from "@pulumi/cloudflare";
 import * as pulumi from "@pulumi/pulumi";
 import { DnsRecordSpec, DnsRecordOutput, DnsRecordType } from "../../contracts/dns";
 import { IProviderDns } from "../../contracts/provider";
+import { lookupExistingDnsRecord } from "../../core/adopt-or-create";
 
 function detectRecordType(target: string): DnsRecordType {
   if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(target)) {
@@ -33,6 +34,16 @@ export class CloudflareDnsProvider implements IProviderDns {
       ? pulumi.output(spec.recordType)
       : pulumi.output(spec.target).apply(detectRecordType);
 
+    // Adopt-or-create: check if this DNS record already exists (orphan from
+    // partial destroy). If so, import it instead of failing with 81058
+    // "An identical record already exists".
+    const fqdn = `${spec.recordName}.${spec.zone}`;
+    const existingId = lookupExistingDnsRecord(
+      this.zoneId as string,
+      fqdn,
+      "A", // Platform records are always A (IP targets)
+    );
+
     const record = new cloudflare.DnsRecord(
       `cf-${spec.recordName}.${spec.zone}`,
       {
@@ -46,6 +57,7 @@ export class CloudflareDnsProvider implements IProviderDns {
         // Traefik's Let's Encrypt certs are used end-to-end.
         proxied: false,
       },
+      existingId ? { import: existingId } : undefined,
     );
 
     return {

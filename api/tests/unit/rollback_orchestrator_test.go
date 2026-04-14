@@ -42,6 +42,12 @@ func (f *fakeRollbackReleaseStore) GetByIDForTenant(_ context.Context, _, releas
 	if !ok {
 		return nil, fmt.Errorf("release not found")
 	}
+	// Return a copy with the latest status from statuses map (updated by UpdateStatus)
+	if status, ok := f.statuses[releaseID]; ok {
+		copy := *r
+		copy.Status = status
+		return &copy, nil
+	}
 	return r, nil
 }
 
@@ -102,16 +108,19 @@ func (f *fakeRollbackSyncClient) TriggerSync(_ context.Context, _ string) error 
 
 func TestRollbackOrchestrator_SyncFailureReturnsError(t *testing.T) {
 	// Arrange: rollback with ArgoCD sync failure (MEET-2026-03-27-012 Phase 1.4)
+	activeRel := &db.Release{
+		ID: "rel-active", TenantID: "acme", ProjectID: "my-app",
+		Environment: "production", Status: "ACTIVE",
+	}
 	releaseStore := &fakeRollbackReleaseStore{
-		active: &db.Release{
-			ID: "rel-active", TenantID: "acme", ProjectID: "my-app",
-			Environment: "production", Status: "ACTIVE",
-		},
+		active: activeRel,
 		previous: &db.Release{
 			ID: "rel-target", TenantID: "acme", ProjectID: "my-app",
 			Environment: "production", Status: "SUPERSEDED", GitCommit: "abc123",
 		},
-		byID: map[string]*db.Release{},
+		byID: map[string]*db.Release{
+			"rel-active": activeRel,
+		},
 		statuses: map[string]string{
 			"rel-active": "ACTIVE",
 			"rel-target": "SUPERSEDED",
@@ -156,16 +165,19 @@ func TestRollbackOrchestrator_SyncFailureReturnsError(t *testing.T) {
 
 func TestRollbackOrchestrator_SyncSuccessCompletes(t *testing.T) {
 	// Arrange: rollback with successful sync
+	activeRel := &db.Release{
+		ID: "rel-active", TenantID: "acme", ProjectID: "my-app",
+		Environment: "production", Status: "ACTIVE",
+	}
 	releaseStore := &fakeRollbackReleaseStore{
-		active: &db.Release{
-			ID: "rel-active", TenantID: "acme", ProjectID: "my-app",
-			Environment: "production", Status: "ACTIVE",
-		},
+		active: activeRel,
 		previous: &db.Release{
 			ID: "rel-target", TenantID: "acme", ProjectID: "my-app",
 			Environment: "production", Status: "SUPERSEDED", GitCommit: "abc123",
 		},
-		byID: map[string]*db.Release{},
+		byID: map[string]*db.Release{
+			"rel-active": activeRel,
+		},
 		statuses: map[string]string{
 			"rel-active": "ACTIVE",
 			"rel-target": "SUPERSEDED",

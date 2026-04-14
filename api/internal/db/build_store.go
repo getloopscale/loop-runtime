@@ -464,6 +464,11 @@ func (s *PostgresBuildStore) FindActiveBuilds(ctx context.Context, cellID string
 // CancelActiveBuilds cancels all QUEUED or RUNNING builds for a (tenant, project, env).
 // Returns the number of builds cancelled and their workflow IDs (for Argo cancellation).
 // This method runs inside an advisory lock transaction.
+//
+// NOTE: This intentionally bypasses the state machine (direct SQL UPDATE to CANCELLED)
+// for batch operations during project deletion. For RUNNING builds this skips the
+// CANCELLING intermediate state — Argo workflow cancellation is handled separately
+// via the returned workflow IDs. Do not reuse this for single-build cancellation.
 func (s *PostgresBuildStore) CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, []string, error) {
 	executor := tx
 	if executor == nil {

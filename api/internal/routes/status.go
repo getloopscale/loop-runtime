@@ -114,7 +114,8 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	env := r.URL.Query().Get("env")
 	if env == "" {
-		env = "production"
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
+		return
 	}
 
 	// Look up project by name to get projectID

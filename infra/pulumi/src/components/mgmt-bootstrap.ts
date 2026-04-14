@@ -11,11 +11,13 @@ import { PlatformStackConfig } from "../config/stack";
 import { CloudflareOutputs } from "./bootstrap-shared";
 import { InfraError } from "../core/errors";
 import { installPrometheus, installGrafana, installTempo, installOtelCollector, provisionGrafanaDashboards } from "./mgmt-observability";
+import { installHarbor } from "./harbor-bootstrap";
 import {
   PLATFORM_NAMESPACE,
   HELM_VERSIONS,
   MgmtBootstrapOutputs,
   createPlatformNamespace,
+  createDockerRegistryPullSecret,
   installCertManager,
   installTraefik,
   lookupLoadBalancerEndpoint,
@@ -60,6 +62,17 @@ export function bootstrapMgmtCluster(
 
   const ns = createPlatformNamespace("mgmt", config, provider);
 
+  // DOCR pull secret — replaces manual `doctl kubernetes cluster registry add`.
+  // Without this, every Deployment that pulls from registry.digitalocean.com
+  // hits 401 Unauthorized. Read-only credentials, long-lived (~50 years).
+  const mgmtRegistryPullSecret = createDockerRegistryPullSecret(
+    "mgmt-docr-pull-secret",
+    infra.registryName,
+    PLATFORM_NAMESPACE,
+    provider,
+    { dependsOn: [ns] },
+  );
+
   // cert-manager first — ArgoCD and Traefik may need TLS CRDs
   const certManager = installCertManager("mgmt", provider, ns);
 
@@ -75,11 +88,41 @@ export function bootstrapMgmtCluster(
     special: false,
   });
 
+  // H12-fix: Service auth secret auto-generated when not provided via config.
+  // Shared between Cloud service and Engine API — must be the same value.
+  const serviceAuthSecret = new random.RandomPassword("service-auth-secret", {
+    length: 48,
+    special: false,
+  });
+
+  // C1-fix: Cookie secret for Kratos UI — no more hardcoded strings.
+  const cookieSecret = new random.RandomPassword("kratos-ui-cookie-secret", {
+    length: 32,
+    special: false,
+  });
+
   // ArgoCD — GitOps engine, manages runtime cluster
   const argocd = installArgoCD(provider, ns, certManager, callbackToken.result);
 
+  // NFS provisioner — provides ReadWriteMany (RWX) StorageClass for Gitea HA.
+  // DOKS only supports RWO (block storage). Git repos need POSIX filesystem with
+  // concurrent read/write from multiple pods. NFS-Ganesha runs a single NFS server
+  // backed by DO Block Storage and exposes an `nfs` StorageClass for RWX PVCs.
+  // Single NFS pod is a SPOF, but data lives on persistent DO Block Storage (survives
+  // pod reschedule), and Gitea repos are derivable from GitHub source anyway.
+  const nfsProvisioner = installNfsProvisioner(provider, ns);
+
+  // Gitea Redis — dedicated instance for session, cache, and queue.
+  // Separate from ArgoCD Redis and Harbor Redis to avoid cross-contamination.
+  // Lightweight standalone mode (~64MB), no persistence needed (cache data is ephemeral).
+  const giteaRedis = installGiteaRedis(provider, ns);
+
   // Gitea — internal git server for desired state (ArgoCD reads from here)
-  const gitea = installGitea(provider, ns, infra, config);
+  const gitea = installGitea(provider, ns, infra, config, giteaRedis, nfsProvisioner);
+
+  // Gitea backup — daily dump to DO Spaces (retain 7 days).
+  // Runs `gitea dump` from the same NFS volume and uploads to S3.
+  createGiteaBackupCronJob(provider, ns, infra, config, gitea);
 
   // MinIO — S3-compatible artifact storage (source bundles, build cache)
   const minio = installMinIO(provider, ns, config);
@@ -186,6 +229,12 @@ export function bootstrapMgmtCluster(
   // Production uses platform-system namespace — these Pulumi resources ensure
   // network isolation is applied correctly.
   createPlatformNetworkPolicies(provider, ns);
+
+  // MEET-2026-04-11-048: Harbor — tenant image registry.
+  // Platform images stay in DOCR; tenant builds push to Harbor.
+  // Depends on cert-manager (TLS cert via Let's Encrypt) and Traefik (IngressRoute).
+  // Only installs when harborExternalUrl is set in stack config.
+  installHarbor(provider, ns, infra, config, certManager, traefik);
 
   return {
     certManagerReady: certManager.status.apply((s) => s.status === "deployed"),
@@ -385,18 +434,192 @@ headers:
  * Uses the managed PostgreSQL as database backend.
  * ArgoCD reads from Gitea to reconcile cluster state.
  *
+ * HA configuration:
+ *   - Session, cache, queue → dedicated Redis (gitea-redis)
+ *   - Non-git storage (attachments, LFS, avatars) → S3 (DO Spaces)
+ *   - Git repos → NFS shared volume (ReadWriteMany) when replicas > 1
+ *   - Prometheus metrics enabled at /metrics (token-protected)
+ *   - Database → external managed PostgreSQL (SSL required)
+ *
  * The Helm chart creates:
- *   - StatefulSet with 1 replica
- *   - PVC (10Gi default) for /data
+ *   - Deployment with configurable replicas
+ *   - PVC for /data (git repos — RWX when HA, RWO when single)
  *   - Service "gitea-http" on port 3000
  *   - Service "gitea-ssh" on port 22 (for git push via SSH)
  */
+
+// ---------------------------------------------------------------------------
+// Gitea Redis — dedicated lightweight instance for session/cache/queue
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// NFS Server Provisioner — RWX StorageClass for Gitea HA
+// ---------------------------------------------------------------------------
+
+function installNfsProvisioner(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+): k8s.helm.v3.Release {
+  // NFS server needs DAC_READ_SEARCH + SYS_RESOURCE capabilities which violate
+  // the `baseline` PSA profile on platform-system. Deploy in a dedicated namespace
+  // with `privileged` PSA — the StorageClass is cluster-wide, so any namespace
+  // (including platform-system) can create NFS-backed RWX PVCs.
+  const nfsNs = new k8s.core.v1.Namespace(
+    "nfs-system",
+    {
+      metadata: {
+        name: "nfs-system",
+        labels: {
+          "app.kubernetes.io/managed-by": "pulumi",
+          "app.kubernetes.io/part-of": "loopzero-platform",
+          "pod-security.kubernetes.io/enforce": "privileged",
+          "pod-security.kubernetes.io/warn": "privileged",
+          "pod-security.kubernetes.io/audit": "privileged",
+        },
+      },
+    },
+    { provider },
+  );
+
+  return new k8s.helm.v3.Release(
+    "nfs-server-provisioner",
+    {
+      name: "nfs-server-provisioner",
+      chart: "nfs-server-provisioner",
+      version: "1.8.0",
+      repositoryOpts: {
+        repo: "https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/",
+      },
+      namespace: "nfs-system",
+      createNamespace: false,
+      values: {
+        fullnameOverride: "nfs-provisioner",
+        persistence: {
+          enabled: true,
+          size: "20Gi",
+          storageClass: "do-block-storage",
+        },
+        storageClass: {
+          name: "nfs",
+          defaultClass: false,
+          reclaimPolicy: "Retain",
+          allowVolumeExpansion: true,
+        },
+        resources: {
+          requests: { cpu: "50m", memory: "128Mi" },
+          limits: { cpu: "200m", memory: "256Mi" },
+        },
+      },
+    },
+    { provider, dependsOn: [nfsNs] },
+  );
+}
+
+function installGiteaRedis(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+): k8s.apps.v1.Deployment {
+  // Using official Redis image (redis:7-alpine) instead of Bitnami chart.
+  // Bitnami chart tags get unpublished from Docker Hub, causing ImagePullBackOff.
+  // Official Redis images are stable and long-lived.
+  const deploy = new k8s.apps.v1.Deployment(
+    "gitea-redis",
+    {
+      metadata: {
+        name: "gitea-redis",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { app: "gitea-redis" },
+      },
+      spec: {
+        replicas: 1,
+        selector: { matchLabels: { app: "gitea-redis" } },
+        template: {
+          metadata: { labels: { app: "gitea-redis" } },
+          spec: {
+            securityContext: {
+              runAsNonRoot: true,
+              runAsUser: 999,
+              runAsGroup: 999,
+              fsGroup: 999,
+            },
+            containers: [
+              {
+                name: "redis",
+                image: "redis:7-alpine",
+                args: [
+                  "redis-server",
+                  "--maxmemory", "100mb",
+                  "--maxmemory-policy", "allkeys-lru",
+                  "--save", "", // No persistence — cache data is ephemeral
+                ],
+                ports: [{ containerPort: 6379, name: "redis" }],
+                resources: {
+                  requests: { cpu: "20m", memory: "64Mi" },
+                  limits: { cpu: "200m", memory: "128Mi" },
+                },
+                readinessProbe: {
+                  exec: { command: ["redis-cli", "ping"] },
+                  initialDelaySeconds: 5,
+                  periodSeconds: 10,
+                },
+                livenessProbe: {
+                  exec: { command: ["redis-cli", "ping"] },
+                  initialDelaySeconds: 10,
+                  periodSeconds: 15,
+                },
+                securityContext: {
+                  allowPrivilegeEscalation: false,
+                  readOnlyRootFilesystem: true,
+                  capabilities: { drop: ["ALL"] },
+                },
+                volumeMounts: [
+                  { name: "data", mountPath: "/data" },
+                ],
+              },
+            ],
+            volumes: [
+              { name: "data", emptyDir: {} },
+            ],
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  new k8s.core.v1.Service(
+    "gitea-redis-svc",
+    {
+      metadata: {
+        name: "gitea-redis",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { app: "gitea-redis" },
+      },
+      spec: {
+        selector: { app: "gitea-redis" },
+        ports: [{ port: 6379, targetPort: 6379, name: "redis" }],
+      },
+    },
+    { provider, dependsOn: [deploy] },
+  );
+
+  return deploy;
+}
+
+// ---------------------------------------------------------------------------
+// Gitea — Internal Git server
+// ---------------------------------------------------------------------------
+
 function installGitea(
   provider: k8s.Provider,
   ns: k8s.core.v1.Namespace,
   infra: InfraOutputs,
   config: PlatformStackConfig,
+  giteaRedis: k8s.apps.v1.Deployment,
+  nfsProvisioner: k8s.helm.v3.Release,
 ): k8s.helm.v3.Release {
+  const redisUrl = `redis://gitea-redis.${PLATFORM_NAMESPACE}.svc.cluster.local:6379`;
+
   return new k8s.helm.v3.Release(
     "gitea",
     {
@@ -410,11 +633,11 @@ function installGitea(
       createNamespace: false,
       values: {
         // Deterministic Service names so IngressRoutes can reference them.
-        // Without this, Pulumi's Helm provider adds a hash suffix to the release name.
         fullnameOverride: "gitea",
         // Use managed PostgreSQL — no embedded database
         postgresql: { enabled: false },
         "postgresql-ha": { enabled: false },
+        // Disable bundled Redis — we deploy our own (gitea-redis)
         redis: { enabled: false },
         "redis-cluster": { enabled: false },
         gitea: {
@@ -436,26 +659,76 @@ function installGitea(
               DOMAIN: `git.${config.domain}`,
               ROOT_URL: `https://git.${config.domain}/`,
               HTTP_PORT: "3000",
+              LFS_START_SERVER: "true",
             },
             service: {
               DISABLE_REGISTRATION: true,
             },
-            // In-memory cache instead of Redis — sufficient for internal use
-            cache: {
-              ADAPTER: "memory",
-            },
+            // --- HA-ready: externalized state ---
+            // Session → Redis (survives pod restart, shared across replicas)
             session: {
-              PROVIDER: "memory",
+              PROVIDER: "redis",
+              PROVIDER_CONFIG: `${redisUrl}/0?pool_size=100&idle_timeout=120s`,
             },
+            // Cache → Redis (shared across replicas, no stale local caches)
+            cache: {
+              ADAPTER: "redis",
+              HOST: `${redisUrl}/1?pool_size=100&idle_timeout=120s`,
+            },
+            // Queue → Redis (task queue shared across replicas)
             queue: {
-              TYPE: "level",
+              TYPE: "redis",
+              CONN_STR: `${redisUrl}/2?pool_size=50&idle_timeout=120s`,
+            },
+            // --- S3 storage for non-git data ---
+            // Attachments, LFS objects, avatars, packages → DO Spaces.
+            // Git repos stay on local PVC (POSIX required for git operations).
+            // This allows the PVC to be small (just repos) and makes
+            // non-git data accessible to all replicas without shared filesystem.
+            storage: {
+              STORAGE_TYPE: "minio",
+              MINIO_ENDPOINT: infra.spacesEndpoint.apply((ep: string) => ep.replace("https://", "")),
+              MINIO_BUCKET: infra.bucketName, // artifacts bucket, /gitea prefix
+              MINIO_LOCATION: config.region,
+              MINIO_BASE_PATH: "gitea",
+              MINIO_USE_SSL: "true",
+              MINIO_ACCESS_KEY_ID: config.spacesAccessKeyId,
+              MINIO_SECRET_ACCESS_KEY: config.spacesSecretAccessKey,
+            },
+            // LFS → S3. Must provide FULL config — Gitea does NOT inherit
+            // MINIO_ENDPOINT from [storage] for subsections. Helm merge also
+            // persists previous values on upgrade, so explicit override is required.
+            lfs: {
+              STORAGE_TYPE: "minio",
+              MINIO_ENDPOINT: infra.spacesEndpoint.apply((ep: string) => ep.replace("https://", "")),
+              MINIO_BUCKET: infra.bucketName,
+              MINIO_LOCATION: config.region,
+              MINIO_BASE_PATH: "gitea/lfs",
+              MINIO_USE_SSL: "true",
+              MINIO_ACCESS_KEY_ID: config.spacesAccessKeyId,
+              MINIO_SECRET_ACCESS_KEY: config.spacesSecretAccessKey,
+            },
+            // --- Prometheus metrics ---
+            metrics: {
+              ENABLED: "true",
+              ENABLED_ISSUE_BY_LABEL: "false",
+              ENABLED_ISSUE_BY_REPOSITORY: "false",
+            },
+            // --- Indexer ---
+            indexer: {
+              ISSUE_INDEXER_TYPE: "db", // No Elasticsearch needed for internal use
             },
           },
         },
+        // HA: 2 replicas with shared NFS volume for git repos.
+        // Session/cache/queue are on Redis, so both replicas are stateless
+        // except for the git repos on the shared NFS PVC.
+        replicaCount: 2,
         persistence: {
           enabled: true,
           size: "10Gi",
-          accessModes: ["ReadWriteOnce"],
+          storageClass: "nfs",
+          accessModes: ["ReadWriteMany"],
         },
         resources: {
           requests: { cpu: "100m", memory: "256Mi" },
@@ -463,7 +736,145 @@ function installGitea(
         },
       },
     },
-    { provider, dependsOn: [ns] },
+    { provider, dependsOn: [ns, giteaRedis, nfsProvisioner] },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Gitea Backup CronJob — daily dump to DO Spaces
+// ---------------------------------------------------------------------------
+
+function createGiteaBackupCronJob(
+  provider: k8s.Provider,
+  ns: k8s.core.v1.Namespace,
+  infra: InfraOutputs,
+  config: PlatformStackConfig,
+  gitea: k8s.helm.v3.Release,
+): void {
+  // Backup script: gitea dump → upload to S3 → prune old backups (retain 7).
+  // Uses the Gitea container image (has `gitea` binary) + aws-cli for S3 upload.
+  const backupBucket = infra.bucketName;
+  const backupPrefix = "gitea-backups";
+  const retainDays = 7;
+
+  new k8s.batch.v1.CronJob(
+    "gitea-backup",
+    {
+      metadata: {
+        name: "gitea-backup",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { app: "gitea-backup", "app.kubernetes.io/part-of": "loopzero-platform" },
+      },
+      spec: {
+        schedule: "0 3 * * *", // Daily at 3 AM UTC
+        concurrencyPolicy: "Forbid",
+        successfulJobsHistoryLimit: 3,
+        failedJobsHistoryLimit: 3,
+        jobTemplate: {
+          spec: {
+            activeDeadlineSeconds: 600, // 10 min max
+            backoffLimit: 2,
+            template: {
+              spec: {
+                restartPolicy: "OnFailure",
+                securityContext: {
+                  runAsNonRoot: true,
+                  runAsUser: 1000,
+                  runAsGroup: 1000,
+                  fsGroup: 1000,
+                },
+                containers: [
+                  {
+                    name: "backup",
+                    image: "gitea/gitea:1.22.3",
+                    command: ["/bin/sh", "-c"],
+                    args: [pulumi.interpolate`
+set -e
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+DUMP_DIR=/tmp/gitea-dump
+mkdir -p $DUMP_DIR
+
+echo "Starting Gitea backup $TIMESTAMP..."
+cd $DUMP_DIR
+gitea dump --config /data/gitea/conf/app.ini --type tar.gz --file gitea-dump-$TIMESTAMP.tar.gz 2>&1 || true
+
+if [ -f "$DUMP_DIR/gitea-dump-$TIMESTAMP.tar.gz" ]; then
+  echo "Uploading to S3..."
+  # Install aws-cli (lightweight approach via python)
+  pip3 install --quiet awscli 2>/dev/null || apk add --no-cache aws-cli 2>/dev/null || true
+
+  export AWS_ACCESS_KEY_ID="$SPACES_KEY"
+  export AWS_SECRET_ACCESS_KEY="$SPACES_SECRET"
+
+  aws s3 cp "$DUMP_DIR/gitea-dump-$TIMESTAMP.tar.gz" \
+    "s3://${backupBucket}/${backupPrefix}/gitea-dump-$TIMESTAMP.tar.gz" \
+    --endpoint-url "https://${infra.spacesEndpoint}" 2>&1
+
+  echo "Pruning backups older than ${retainDays} days..."
+  aws s3 ls "s3://${backupBucket}/${backupPrefix}/" \
+    --endpoint-url "https://${infra.spacesEndpoint}" 2>&1 | \
+    while read -r line; do
+      FILE_DATE=$(echo "$line" | awk '{print $1}')
+      FILE_NAME=$(echo "$line" | awk '{print $4}')
+      if [ -n "$FILE_DATE" ] && [ -n "$FILE_NAME" ]; then
+        FILE_AGE=$(( ($(date +%s) - $(date -d "$FILE_DATE" +%s 2>/dev/null || echo 0)) / 86400 ))
+        if [ "$FILE_AGE" -gt "${retainDays}" ]; then
+          echo "Deleting old backup: $FILE_NAME (age: $FILE_AGE days)"
+          aws s3 rm "s3://${backupBucket}/${backupPrefix}/$FILE_NAME" \
+            --endpoint-url "https://${infra.spacesEndpoint}" 2>&1
+        fi
+      fi
+    done
+
+  echo "Backup complete: gitea-dump-$TIMESTAMP.tar.gz"
+else
+  echo "ERROR: gitea dump failed, no archive produced"
+  exit 1
+fi
+`],
+                    env: [
+                      {
+                        name: "SPACES_KEY",
+                        value: config.spacesAccessKeyId,
+                      },
+                      {
+                        name: "SPACES_SECRET",
+                        value: config.spacesSecretAccessKey,
+                      },
+                    ],
+                    volumeMounts: [
+                      {
+                        name: "gitea-data",
+                        mountPath: "/data",
+                        readOnly: true,
+                      },
+                    ],
+                    resources: {
+                      requests: { cpu: "50m", memory: "128Mi" },
+                      limits: { cpu: "500m", memory: "512Mi" },
+                    },
+                    securityContext: {
+                      allowPrivilegeEscalation: false,
+                      capabilities: { drop: ["ALL"] },
+                    },
+                  },
+                ],
+                volumes: [
+                  {
+                    name: "gitea-data",
+                    persistentVolumeClaim: {
+                      claimName: "gitea-shared-storage",
+                      readOnly: true,
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [ns, gitea] },
   );
 }
 
@@ -731,7 +1142,7 @@ function installOryKratos(
                 { name: "KRATOS_BROWSER_URL", value: `https://accounts.${config.domain}` },
                 { name: "PORT", value: "3000" },
                 { name: "SECURITY_MODE", value: "" },
-                { name: "COOKIE_SECRET", value: "loopzero-kratos-ui-cookie-secret-32chars!" },
+                { name: "COOKIE_SECRET", value: cookieSecret.result },
                 { name: "CSRF_COOKIE_NAME", value: "loopzero_csrf" },
               ],
               resources: {
@@ -1271,7 +1682,7 @@ function installCloudService(
         DATABASE_URL: cloudDatabaseUrl,
         SESSION_TOKEN_SECRET: config.sessionTokenSecret || "",
         // Cloud→Engine proxy auth (MEET-2026-04-07-039). Must match engine's value.
-        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || "dev-service-auth-secret-default",
+        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || serviceAuthSecret.result,
       },
     },
     { provider, dependsOn: [ns] },
@@ -1420,7 +1831,7 @@ function installLoopZeroAPI(
         MINIO_SECRET_KEY: config.spacesSecretAccessKey,
         // Cloud→Engine proxy auth (MEET-2026-04-07-039). Must match cloud's value.
         // Engine is RSA-only — no SESSION_TOKEN_SECRET needed (HMAC dropped).
-        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || "dev-service-auth-secret-default",
+        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || serviceAuthSecret.result,
       },
     },
     { provider, dependsOn: [ns] },
@@ -1605,6 +2016,8 @@ function installLoopZeroAPI(
         MINIO_ENDPOINT: infra.spacesEndpoint,
         REGISTRY_URL: infra.registryEndpoint,
         REGISTRY_INSECURE: "false",
+        // MEET-048: Harbor dual-push for tenant builds. Empty = disabled.
+        ...(config.harborExternalUrl ? { HARBOR_REGISTRY_URL: config.harborExternalUrl } : {}),
         ARGOCD_NAMESPACE: PLATFORM_NAMESPACE,
         // Release reaper PENDING timeout must exceed ArgoCD sync time.
         // On DO, sync can take 3-5 min (image pull + pod scheduling).
@@ -1996,19 +2409,31 @@ function installTenantController(
     {
       metadata: { name: "tenant-controller" },
       rules: [
-        // LoopZero CRDs — all custom resources managed by the operator.
-        // Uses wildcard to cover all current and future loopzero.io resources:
-        // tenants, environments, loopzeroapplications,
-        // exposedroutes, platformbootstraps, gitrepositorybindings,
-        // clustercredentials, appsecrets, previewenvironments, reconciliationreports
+        // LoopZero CRDs — explicitly enumerated for least-privilege.
+        // When adding a new CRD, add it here and review access requirements.
         {
           apiGroups: ["loopzero.io"],
-          resources: ["*"],
+          resources: [
+            "tenants", "environments", "loopzeroapplications",
+            "exposedroutes", "platformbootstraps", "gitrepositorybindings",
+            "clustercredentials", "appsecrets", "previewenvironments", "reconciliationreports",
+          ],
           verbs: ["get", "list", "watch", "create", "update", "patch", "delete"],
         },
         {
           apiGroups: ["loopzero.io"],
-          resources: ["*/status", "*/finalizers"],
+          resources: [
+            "tenants/status", "tenants/finalizers",
+            "environments/status", "environments/finalizers",
+            "loopzeroapplications/status", "loopzeroapplications/finalizers",
+            "exposedroutes/status", "exposedroutes/finalizers",
+            "platformbootstraps/status", "platformbootstraps/finalizers",
+            "gitrepositorybindings/status", "gitrepositorybindings/finalizers",
+            "clustercredentials/status", "clustercredentials/finalizers",
+            "appsecrets/status", "appsecrets/finalizers",
+            "previewenvironments/status", "previewenvironments/finalizers",
+            "reconciliationreports/status", "reconciliationreports/finalizers",
+          ],
           verbs: ["get", "update", "patch"],
         },
         // Namespace lifecycle
@@ -2033,7 +2458,7 @@ function installTenantController(
         {
           apiGroups: ["rbac.authorization.k8s.io"],
           resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"],
-          verbs: ["get", "list", "watch", "create", "update", "patch", "bind", "escalate"],
+          verbs: ["get", "list", "watch", "create", "update", "patch", "bind"],
         },
         // ArgoCD resources (AppProjects + Applications per tenant)
         {
@@ -2090,7 +2515,7 @@ function installTenantController(
       // Must match runtime cluster RBAC (below) — both clusters need the same resource access.
       { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "create", "update", "patch"] },
       { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
-      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind", "escalate"] },
+      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind"] },
     ],
   );
   const controllerRuntimeKubeconfig = createScopedKubeconfig(
@@ -2100,7 +2525,7 @@ function installTenantController(
     [
       { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "watch", "create", "update", "patch"] },
       { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
-      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind", "escalate"] },
+      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind"] },
       // PriorityClasses are cluster-scoped. Tenant controller creates per-plan classes
       // (loopzero-tenant-starter, loopzero-tenant-growth, loopzero-tenant-enterprise) on the runtime cluster.
       { apiGroups: ["scheduling.k8s.io"], resources: ["priorityclasses"], verbs: ["get", "list", "create", "update", "patch"] },

@@ -219,7 +219,7 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 		// MOD-5: Emit SSE build.failed so the CLI gets notified immediately
 		// instead of waiting for the deploy timeout (10 minutes).
 		if r.eventStore != nil {
-			eventData, _ := json.Marshal(map[string]string{
+			eventData := safeJSONMarshal(map[string]string{
 				"build_id": s.ID,
 				"status":   "failed",
 				"error":    reason,

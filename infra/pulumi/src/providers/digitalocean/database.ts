@@ -30,6 +30,12 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
       nodeCount: spec.nodeCount,
       privateNetworkUuid: spec.network.vpcId,
       tags: tagsToStringArray(spec.tags),
+    }, {
+      // C3-fix: Prevent accidental deletion of the database cluster.
+      // A `pulumi destroy` will skip this resource. To truly delete, first
+      // run `pulumi state unprotect <urn>` then destroy.
+      protect: true,
+      retainOnDelete: true,
     });
 
     // Managed PostgreSQL only creates "defaultdb". Platform services need their own databases.
@@ -53,6 +59,14 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
     new digitalocean.DatabaseDb(`${spec.name}-hydra`, {
       clusterId: cluster.id,
       name: "hydra",
+    });
+
+    // Harbor container registry — used when Harbor is deployed as the tenant
+    // image registry (see harbor-bootstrap.ts). Harbor hardcodes the name
+    // "harbor_db" in its configuration.
+    new digitalocean.DatabaseDb(`${spec.name}-harbor`, {
+      clusterId: cluster.id,
+      name: "harbor_db",
     });
 
     // Firewall: allow only specified K8s clusters to connect.

@@ -23,6 +23,12 @@ export interface StaticDeliveryConfig {
   readonly baseDomain: string;
   /** DO Spaces endpoint for static assets (e.g., "https://loopzero-static-assets.sfo3.digitaloceanspaces.com") */
   readonly s3Endpoint: pulumi.Input<string>;
+  /** Import IDs for adopt-or-create pattern (orphan resolution). */
+  readonly importIds?: {
+    kvNamespace?: string;
+    workerScript?: string;
+    workerRoute?: string;
+  };
 }
 
 export interface StaticDeliveryOutput {
@@ -46,7 +52,7 @@ export function createStaticDelivery(
   const kvNamespace = new cloudflare.WorkersKvNamespace(`loopzero-routing-${config.environment}`, {
     accountId: config.accountId,
     title: kvTitle,
-  });
+  }, config.importIds?.kvNamespace ? { import: config.importIds.kvNamespace } : undefined);
 
   // 2. Worker script — read template and inject config values
   const workerTemplate = fs.readFileSync(
@@ -89,6 +95,7 @@ export function createStaticDelivery(
     // the worker.mjs file and deployed via CF API in the bootstrap step.
     // Pulumi owns the resource for state tracking only.
     ignoreChanges: ["content", "bindings", "compatibilityDate"],
+    ...(config.importIds?.workerScript ? { import: config.importIds.workerScript } : {}),
   });
 
   // 3. Worker route — intercept all requests on *.{baseDomain}/*
@@ -101,6 +108,7 @@ export function createStaticDelivery(
     },
     {
       dependsOn: [workerScript],
+      ...(config.importIds?.workerRoute ? { import: config.importIds.workerRoute } : {}),
     },
   );
 

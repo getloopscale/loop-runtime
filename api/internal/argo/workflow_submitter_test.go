@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	forge "github.com/getloopscale/loopzero-forge"
+
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -210,12 +212,15 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// allMainContainersSucceeded — sidecar false-failure detection
+// Typed status parsing — sidecar false-failure detection via forge helpers
+// Tests now use forge.ParseWorkflowStatusFromUnstructured and
+// forge.AllPodNodesExitedZero (typed API replaces raw unstructured access).
 // ---------------------------------------------------------------------------
 
-func TestAllMainContainersSucceeded_AllExitZero(t *testing.T) {
+func TestParseStatusAndAllPodNodesExitedZero_AllExitZero(t *testing.T) {
 	obj := map[string]interface{}{
 		"status": map[string]interface{}{
+			"phase": "Failed",
 			"nodes": map[string]interface{}{
 				"dag-node": map[string]interface{}{
 					"type": "DAG",
@@ -231,14 +236,19 @@ func TestAllMainContainersSucceeded_AllExitZero(t *testing.T) {
 			},
 		},
 	}
-	if !allMainContainersSucceeded(obj) {
+	status, err := forge.ParseWorkflowStatusFromUnstructured(obj)
+	if err != nil {
+		t.Fatalf("ParseWorkflowStatusFromUnstructured: %v", err)
+	}
+	if !forge.AllPodNodesExitedZero(status) {
 		t.Error("expected true when all pods have exitCode 0")
 	}
 }
 
-func TestAllMainContainersSucceeded_OnePodFailed(t *testing.T) {
+func TestParseStatusAndAllPodNodesExitedZero_OnePodFailed(t *testing.T) {
 	obj := map[string]interface{}{
 		"status": map[string]interface{}{
+			"phase": "Failed",
 			"nodes": map[string]interface{}{
 				"pod-1": map[string]interface{}{
 					"type":    "Pod",
@@ -251,23 +261,30 @@ func TestAllMainContainersSucceeded_OnePodFailed(t *testing.T) {
 			},
 		},
 	}
-	if allMainContainersSucceeded(obj) {
+	status, err := forge.ParseWorkflowStatusFromUnstructured(obj)
+	if err != nil {
+		t.Fatalf("ParseWorkflowStatusFromUnstructured: %v", err)
+	}
+	if forge.AllPodNodesExitedZero(status) {
 		t.Error("expected false when a pod has exitCode 1")
 	}
 }
 
-func TestAllMainContainersSucceeded_NoNodes(t *testing.T) {
-	obj := map[string]interface{}{
-		"status": map[string]interface{}{},
+func TestParseStatusAndAllPodNodesExitedZero_NoStatus(t *testing.T) {
+	obj := map[string]interface{}{}
+	status, err := forge.ParseWorkflowStatusFromUnstructured(obj)
+	if err != nil {
+		t.Fatalf("ParseWorkflowStatusFromUnstructured: %v", err)
 	}
-	if allMainContainersSucceeded(obj) {
-		t.Error("expected false when no nodes exist")
+	if forge.AllPodNodesExitedZero(status) {
+		t.Error("expected false when no status exists")
 	}
 }
 
-func TestAllMainContainersSucceeded_NoPods(t *testing.T) {
+func TestParseStatusAndAllPodNodesExitedZero_NoPods(t *testing.T) {
 	obj := map[string]interface{}{
 		"status": map[string]interface{}{
+			"phase": "Failed",
 			"nodes": map[string]interface{}{
 				"dag-node": map[string]interface{}{
 					"type": "DAG",
@@ -275,7 +292,11 @@ func TestAllMainContainersSucceeded_NoPods(t *testing.T) {
 			},
 		},
 	}
-	if allMainContainersSucceeded(obj) {
+	status, err := forge.ParseWorkflowStatusFromUnstructured(obj)
+	if err != nil {
+		t.Fatalf("ParseWorkflowStatusFromUnstructured: %v", err)
+	}
+	if forge.AllPodNodesExitedZero(status) {
 		t.Error("expected false when no Pod-type nodes exist")
 	}
 }

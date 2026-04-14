@@ -49,7 +49,18 @@ export class ProjectCreateCommand {
       return this.exitWithError(opts, 'Project name is required. Usage: loopzero project create <name>', 1, 'MISSING_ARGUMENT');
     }
 
-    // 3. Call API
+    // 3. RFC 1123 name validation
+    if (name.length > 63) {
+      return this.exitWithError(opts, `Project name must be 63 characters or fewer (got ${name.length}). Choose a shorter name.`, 1, 'INVALID_NAME');
+    }
+    if (!/^[a-z][a-z0-9-]*$/.test(name)) {
+      return this.exitWithError(opts, 'Project name must start with a lowercase letter and contain only lowercase letters, digits, and hyphens. Example: my-api', 1, 'INVALID_NAME');
+    }
+    if (name.endsWith('-')) {
+      return this.exitWithError(opts, 'Project name must not end with a hyphen. Example: my-api', 1, 'INVALID_NAME');
+    }
+
+    // 4. Call API
     try {
       const result = await this.deps.createProject(name);
 

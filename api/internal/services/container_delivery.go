@@ -125,7 +125,7 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Bui
 	}
 
 	// Emit deploy.verifying to show async verification started
-	verifyingData, _ := json.Marshal(map[string]interface{}{
+	verifyingData := safeJSONMarshal(map[string]interface{}{
 		"deploy_id": deriveDeployID(release.ID),
 		"status":    "verifying",
 		"app":       argoAppName,
@@ -250,7 +250,7 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 				return fmt.Errorf("activate release: transition to GIT_MIRROR_FAILED: %w", err)
 			}
 
-			failedData, _ := json.Marshal(map[string]interface{}{
+			failedData := safeJSONMarshal(map[string]interface{}{
 				"deploy_id": deriveDeployID(release.ID),
 				"status":    "delivery_failed",
 				"error":     pushErr.Error(),
@@ -278,7 +278,7 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 		}
 
 		// SSE: deploy.delivering (delivery-agnostic name)
-		pendingData, _ := json.Marshal(map[string]string{
+		pendingData := safeJSONMarshal(map[string]string{
 			"deploy_id": deriveDeployID(release.ID),
 			"status":    "delivering",
 		})
@@ -307,7 +307,7 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *
 			}
 
 			// MEET-2026-04-04-029 P6: Use product language, not internal terms.
-			failedData, _ := json.Marshal(map[string]interface{}{
+			failedData := safeJSONMarshal(map[string]interface{}{
 				"deploy_id": deriveDeployID(release.ID),
 				"status":    "failed",
 				"reason":    "Deploy verification failed. The service did not become healthy after sync. Run `loopzero logs` to check application errors.",

@@ -406,7 +406,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 	for i, a := range req.Apps {
 		appNames[i] = a.Name
 	}
-	eventData, _ := json.Marshal(map[string]interface{}{
+	eventData := safeJSONMarshal(map[string]interface{}{
 		"build_id": buildID,
 		"status":   "running",
 		"apps":     appNames,
@@ -443,7 +443,7 @@ func (o *BuildOrchestrator) failQueuedBuild(ctx context.Context, buildID string,
 	}
 
 	// Emit SSE build.failed so CLI gets notified
-	eventData, _ := json.Marshal(map[string]string{
+	eventData := safeJSONMarshal(map[string]string{
 		"build_id": buildID,
 		"status":   "failed",
 		"error":    reason,
@@ -557,7 +557,7 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 		}
 
 		// Step 8: emit SSE build.cancelled
-		eventData, _ := json.Marshal(map[string]string{
+		eventData := safeJSONMarshal(map[string]string{
 			"build_id": buildID,
 			"status":   "cancelled",
 		})
@@ -648,7 +648,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 			if result.Error != "" {
 				failedPayload["error"] = result.Error
 			}
-			eventData, _ := json.Marshal(failedPayload)
+			eventData := safeJSONMarshal(failedPayload)
 			if _, err := o.eventStore.Append(ctx, buildID, "build.failed", eventData); err != nil {
 				return fmt.Errorf("on build completed: emit build.failed: %w", err)
 			}
@@ -662,7 +662,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		}
 
 		// Emit SSE build.succeeded
-		eventData, _ := json.Marshal(map[string]string{
+		eventData := safeJSONMarshal(map[string]string{
 			"build_id": buildID,
 			"status":   "succeeded",
 		})

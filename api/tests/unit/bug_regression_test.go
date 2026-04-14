@@ -57,7 +57,7 @@ func TestBUG03_SetGitCommitFailurePreventsWrongVersionActivation(t *testing.T) {
 	eventStore := &fakeConvergenceEventStore{}
 
 	activator := services.NewSyncCallbackActivator(
-		releaseStore, envTargetStore, locker, eventStore, testLogger,
+		releaseStore, envTargetStore, locker, eventStore, "test.local", testLogger,
 	)
 
 	// Act: callback arrives with a revision, but release has empty GitCommit
@@ -97,7 +97,7 @@ func TestBUG04_SyncRetriggersCleanedUpOnActivation(t *testing.T) {
 
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", testLogger, services.ReleaseConvergenceLoopConfig{
 			Interval: 50 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -149,7 +149,7 @@ func TestBUG04_SyncRetriggersCleanedUpOnFailure(t *testing.T) {
 
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", testLogger, services.ReleaseConvergenceLoopConfig{
 			Interval: 50 * time.Millisecond, SyncTimeout: 1 * time.Second, MaxConcurrent: 2,
 		},
 	)

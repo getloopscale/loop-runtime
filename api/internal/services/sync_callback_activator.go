@@ -27,7 +27,8 @@ type SyncCallbackActivator struct {
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	logger *slog.Logger
+	baseDomain string
+	logger     *slog.Logger
 }
 
 // NewSyncCallbackActivator creates a new SyncCallbackActivator.
@@ -38,6 +39,7 @@ func NewSyncCallbackActivator(
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	},
+	baseDomain string,
 	logger *slog.Logger,
 ) *SyncCallbackActivator {
 	return &SyncCallbackActivator{
@@ -45,6 +47,7 @@ func NewSyncCallbackActivator(
 		envTargetStore: envTargetStore,
 		locker:         locker,
 		eventStore:     eventStore,
+		baseDomain:     baseDomain,
 		logger:         logger,
 	}
 }
@@ -136,7 +139,7 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 
 func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db.Release) error {
 	return a.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
-		apps := releaseAppsToActivationApps(release)
+		apps := releaseAppsToActivationApps(release, a.baseDomain)
 		duration := int(time.Since(release.CreatedAt).Seconds())
 		return ActivateReleaseKernel(ctx, tx, release, a.releaseStore, a.envTargetStore, a.eventStore, apps, duration, a.logger)
 	})

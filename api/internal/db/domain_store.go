@@ -36,18 +36,6 @@ func (s *PostgresDomainStore) Create(ctx context.Context, d *routes.CustomDomain
 	return nil
 }
 
-// GetByDomain retrieves a domain by its FQDN (globally unique).
-func (s *PostgresDomainStore) GetByDomain(ctx context.Context, domain string) (*routes.CustomDomain, error) {
-	return s.scanOne(ctx,
-		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
-		        verification_token, verified_at, tls_status, tls_expires_at,
-		        failure_reason, last_cname_check, cname_consecutive_failures, created_at, updated_at,
-		        cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported
-		 FROM custom_domains WHERE domain = $1`,
-		domain,
-	)
-}
-
 // GetByDomainAndTenant retrieves a domain by FQDN filtered by tenant (tenant isolation).
 func (s *PostgresDomainStore) GetByDomainAndTenant(ctx context.Context, domain, tenantID string) (*routes.CustomDomain, error) {
 	return s.scanOne(ctx,

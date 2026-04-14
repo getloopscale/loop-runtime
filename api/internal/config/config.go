@@ -60,6 +60,7 @@ type Config struct {
 	MinIOCrossClusterEndpoint string // Used by build cluster workflows to reach MinIO
 	RegistryURL          string
 	RegistryInsecure     bool   // true for local dev registries without TLS
+	HarborRegistryURL    string // MEET-048: secondary registry for dual-push during migration. Empty = disabled.
 	WorkloadIngressURL   string
 	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
 
@@ -219,6 +220,7 @@ func Load() Config {
 		MinIOCrossClusterEndpoint: envOr("MINIO_CROSS_CLUSTER_ENDPOINT", ""),
 		RegistryURL:          envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
 		RegistryInsecure:     os.Getenv("REGISTRY_INSECURE") == "true",
+		HarborRegistryURL:    os.Getenv("HARBOR_REGISTRY_URL"), // MEET-048: empty = disabled
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
 		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
 

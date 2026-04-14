@@ -242,9 +242,22 @@ func (r *ApplicationReconciler) reconcileDelete(ctx context.Context, app *loopze
 }
 
 // computePhase determines the ApplicationPhase based on current state.
+// Uses all defined phases: Progressing → Serving → Reachable, Degraded, Down.
 func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication) loopzerov1.ApplicationPhase {
 	if app.Status.Reachable {
 		return loopzerov1.ApplicationPhaseReachable
+	}
+	if app.Status.EndpointsReady {
+		return loopzerov1.ApplicationPhaseServing
+	}
+	// Check conditions for degraded/down states
+	for _, c := range app.Status.Conditions {
+		if c.Type == "RouteReachable" && c.Status == "False" {
+			if c.Reason == "Failed" {
+				return loopzerov1.ApplicationPhaseDown
+			}
+			return loopzerov1.ApplicationPhaseDegraded
+		}
 	}
 	return loopzerov1.ApplicationPhaseProgressing
 }

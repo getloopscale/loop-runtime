@@ -55,6 +55,55 @@ describe('ProjectCreateCommand', () => {
       expect(code).toBe(1);
     });
 
+    it('returns 1 when name starts with a digit', async () => {
+      const cmd = new ProjectCreateCommand(makeDeps());
+      const code = await cmd.execute('1bad-name');
+      expect(code).toBe(1);
+      expect(errors[0]).toContain('lowercase letter');
+    });
+
+    it('returns 1 when name contains uppercase letters', async () => {
+      const cmd = new ProjectCreateCommand(makeDeps());
+      const code = await cmd.execute('MyProject');
+      expect(code).toBe(1);
+      expect(errors[0]).toContain('lowercase');
+    });
+
+    it('returns 1 when name ends with a hyphen', async () => {
+      const cmd = new ProjectCreateCommand(makeDeps());
+      const code = await cmd.execute('my-api-');
+      expect(code).toBe(1);
+      expect(errors[0]).toContain('hyphen');
+    });
+
+    it('returns 1 when name exceeds 63 characters', async () => {
+      const cmd = new ProjectCreateCommand(makeDeps());
+      const code = await cmd.execute('a' + 'b'.repeat(63));
+      expect(code).toBe(1);
+      expect(errors[0]).toContain('63 characters');
+    });
+
+    it('returns 1 when name contains underscores', async () => {
+      const cmd = new ProjectCreateCommand(makeDeps());
+      const code = await cmd.execute('my_project');
+      expect(code).toBe(1);
+    });
+
+    it('accepts valid RFC 1123 names', async () => {
+      const cmd = new ProjectCreateCommand(makeDeps());
+      expect(await cmd.execute('my-api')).toBe(0);
+      expect(await cmd.execute('a')).toBe(0);
+      expect(await cmd.execute('web123')).toBe(0);
+    });
+
+    it('returns INVALID_NAME code in JSON for bad name', async () => {
+      const cmd = new ProjectCreateCommand(makeDeps());
+      const code = await cmd.execute('BAD', { json: true });
+      expect(code).toBe(1);
+      const parsed = JSON.parse(output[0]);
+      expect(parsed.code).toBe('INVALID_NAME');
+    });
+
     it('returns 4 on 401 from API', async () => {
       const { ApiError } = await import('../../../src/api/client');
       const cmd = new ProjectCreateCommand(makeDeps({

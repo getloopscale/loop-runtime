@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -44,7 +43,7 @@ func RegisterBuildFailedCallback(fn func(ctx context.Context, tenantID, projectN
 // fails after a successful build. This ensures the CLI gets notified instead of
 // waiting for a timeout.
 func (o *BuildOrchestrator) emitActivationFailure(ctx context.Context, buildID string, activationErr error) {
-	failedData, _ := json.Marshal(map[string]interface{}{
+	failedData := safeJSONMarshal(map[string]interface{}{
 		"status": "sync_failed",
 		"reason": "ACTIVATION_FAILED",
 		"error":  activationErr.Error(),
@@ -132,7 +131,7 @@ func ActivateReleaseKernel(
 	metrics.DeployDuration.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
 
 	// Step 3: Emit deploy.live SSE event.
-	liveData, _ := json.Marshal(map[string]interface{}{
+	liveData := safeJSONMarshal(map[string]interface{}{
 		"deploy_id": deriveDeployID(release.ID),
 		"status":    "live",
 	})
@@ -169,7 +168,7 @@ func ActivateReleaseKernel(
 		}
 		appResults = append(appResults, entry)
 	}
-	completedData, _ := json.Marshal(map[string]interface{}{
+	completedData := safeJSONMarshal(map[string]interface{}{
 		"deploy_id":        deployID,
 		"status":           "success",
 		"duration_seconds": durationSecs,
@@ -181,7 +180,11 @@ func ActivateReleaseKernel(
 
 	// Step 7: Notify external systems (GitHub commit status, etc.)
 	if onReleaseActivated != nil {
-		go onReleaseActivated(context.Background(), release.TenantID, release.ProjectID, release.BuildID, release.Environment)
+		go func() {
+			cbCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			onReleaseActivated(cbCtx, release.TenantID, release.ProjectID, release.BuildID, release.Environment)
+		}()
 	}
 
 	return nil
@@ -190,11 +193,7 @@ func ActivateReleaseKernel(
 // releaseAppsToActivationApps converts the JSON-encoded apps from a release
 // into ActivationAppInfo structs for the activation kernel.
 // F-03 fix: computes URL for server/frontend apps so deploy.completed SSE event includes it.
-func releaseAppsToActivationApps(release *db.Release) []ActivationAppInfo {
-	// F-03 fix: compute URL for server/frontend apps using baseDomain from env.
-	// The async activation paths (convergence loop, callback activator) emit
-	// deploy.completed events that need URLs for the CLI to display.
-	baseDomain := os.Getenv("BASE_DOMAIN")
+func releaseAppsToActivationApps(release *db.Release, baseDomain string) []ActivationAppInfo {
 	var specs []db.BuildAppSpec
 	if release.Apps != nil {
 		if err := json.Unmarshal(release.Apps, &specs); err != nil {
@@ -212,6 +211,17 @@ func releaseAppsToActivationApps(release *db.Release) []ActivationAppInfo {
 		apps = append(apps, ActivationAppInfo{Name: s.Name, Status: "deployed", URL: url})
 	}
 	return apps
+}
+
+// safeJSONMarshal marshals v to JSON. If marshalling fails, it logs the error
+// and returns a fallback empty JSON object so SSE events are still emitted.
+func safeJSONMarshal(v interface{}) json.RawMessage {
+	data, err := json.Marshal(v)
+	if err != nil {
+		slog.Error("json.Marshal failed for SSE event payload", "error", err)
+		return json.RawMessage("{}")
+	}
+	return data
 }
 
 // deriveDeployID creates a deploy_id in the format d-{8hex} from a release ID.

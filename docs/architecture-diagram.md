@@ -1,575 +1,413 @@
-# LoopZero Platform — Architecture Diagram (DigitalOcean Production)
+# LoopZero Platform — Complete Architecture Diagram
 
-> Generated: 2026-04-08 | Region: SFO3 (dev) / NYC3 (prod)
-
----
-
-## High-Level Overview
-
-```
-                          INTERNET
-                             |
-                    +--------+--------+
-                    |   CLOUDFLARE    |
-                    |   (DDoS/WAF)   |
-                    +---+--------+---+
-                        |        |
-              +---------+        +-----------+
-              |                              |
-     CF Worker (KV)                   CF Tunnel
-     loopzero-static-delivery             loopzero-tunnel
-     (static frontends)               (all other traffic)
-              |                              |
-              v                              v
-     DO Spaces CDN                    +--------------+
-     loopzero-static-assets               | RUNTIME      |
-                                      | CLUSTER      |
-                                      | (user apps)  |
-                                      +--------------+
-
-     +------------------+     +------------------+     +------------------+
-     |   MANAGEMENT     |     |     BUILD        |     |    RUNTIME       |
-     |   CLUSTER        |     |     CLUSTER      |     |    CLUSTER       |
-     |                  |     |                  |     |                  |
-     | LoopZero API         |     | Argo Workflows   |     | User Apps        |
-     | Operators (7)    |     | BuildKit         |     | Traefik Ingress  |
-     | ArgoCD           |     | Loki (logs)      |     | cert-manager     |
-     | Gitea            |     |                  |     | ESO              |
-     | PostgreSQL       |     |                  |     | cloudflared (2x) |
-     | MinIO            |     |                  |     |                  |
-     | Traefik          |     |                  |     |                  |
-     | Prometheus       |     |                  |     |                  |
-     | Grafana          |     |                  |     |                  |
-     | Ory Kratos       |     |                  |     |                  |
-     | Ory Hydra        |     |                  |     |                  |
-     | cert-manager     |     |                  |     |                  |
-     | OTel Collector   |     |                  |     |                  |
-     +--------+---------+     +--------+---------+     +--------+---------+
-              |                        |                        |
-              +------------------------+------------------------+
-                                       |
-                              +--------+--------+
-                              |  DO Managed PG  |
-                              |  PostgreSQL 16  |
-                              |  (VPC-only)     |
-                              +-----------------+
-                              DBs: loopzero, gitea,
-                                   kratos, hydra
-```
+> Generated: 2026-04-12 | Environment: dev | Region: SFO3 | VPC: 10.20.0.0/16
 
 ---
 
-## Cluster Detail: MANAGEMENT
+## System Overview
 
 ```
-+====================================================================+
-|  MANAGEMENT CLUSTER  (loopzero-infra-{env}-{region}-mgmt)              |
-|  Dev: 2-3x s-2vcpu-4gb | Prod: 3-5x s-4vcpu-8gb                  |
-+====================================================================+
-|                                                                    |
-|  namespace: platform-system                                        |
-|  +--------------------------------------------------------------+  |
-|  |                                                              |  |
-|  |  +------------------+    +------------------+                |  |
-|  |  | LOOPZERO API (Go)    |    | TENANT OPERATOR  |                |  |
-|  |  | chi + pgx        |    | (kubebuilder)    |                |  |
-|  |  |                  |    |                  |                |  |
-|  |  | Services:        |    | Controllers:     |                |  |
-|  |  | - BuildReconcile |    | - Tenant         |                |  |
-|  |  | - BuildReaper    |    | - Environment    |                |  |
-|  |  | - ReleaseReaper  |    | - Application    |                |  |
-|  |  | - Convergence    |    | - Exposure       |                |  |
-|  |  | - CircuitBreaker |    | - Bootstrap      |                |  |
-|  |  | - StaticDelivery |    | - GitRepoBind    |                |  |
-|  |  | - DomainProv     |    | - ClusterCred    |                |  |
-|  |  | - DomainHealth   |    |                  |                |  |
-|  |  | - IdempClean     |    +------------------+                |  |
-|  |  | - RollbackOrch   |                                        |  |
-|  |  +------------------+                                        |  |
-|  |                                                              |  |
-|  |  +-----------+ +-----------+ +-----------+ +-----------+     |  |
-|  |  | Gitea     | | ArgoCD    | | MinIO     | | Traefik   |     |  |
-|  |  | v1.22.6   | | v2.13.3   | | v5.4.0    | | v28.3.0   |     |  |
-|  |  | (git)     | | (gitops)  | | (S3)      | | (ingress) |     |  |
-|  |  +-----------+ +-----------+ +-----------+ +-----------+     |  |
-|  |                                                              |  |
-|  |  +-----------+ +-----------+ +-----------+ +-----------+     |  |
-|  |  | Kratos    | | Hydra     | | cert-mgr  | | OTel      |     |  |
-|  |  | v0.61.0   | | v0.61.0   | | v1.14.5   | | v0.96.0   |     |  |
-|  |  | (authn)   | | (oauth2)  | | (TLS)     | | (traces)  |     |  |
-|  |  +-----------+ +-----------+ +-----------+ +-----------+     |  |
-|  |                                                              |  |
-|  |  +-----------+ +-----------+ +-----------+ +-----------+     |  |
-|  |  |Prometheus | | Grafana   | | Loki      | | Promtail  |     |  |
-|  |  | v25.27.0  | | v8.5.2    | | v6.24.0   | | v6.16.6   |     |  |
-|  |  | (metrics) | | (dash)    | | (logs)    | | (ship)    |     |  |
-|  |  +-----------+ +-----------+ +-----------+ +-----------+     |  |
-|  +--------------------------------------------------------------+  |
-|                                                                    |
-|  CRDs managed here (all in platform-system namespace):             |
-|  - Tenant, Environment, LoopZeroApplication, ExposedRoute              |
-|  - PlatformBootstrap, GitRepositoryBinding, ClusterCredential      |
-|  - AppSecret (CRD only, no controller)                             |
-|  - PreviewEnvironment (CRD only, no controller)                    |
-|  - ReconciliationReport (placeholder)                              |
-+====================================================================+
-```
-
----
-
-## Cluster Detail: BUILD
-
-```
-+====================================================================+
-|  BUILD CLUSTER  (loopzero-infra-{env}-{region}-build)                  |
-|  Dev: 2-3x s-2vcpu-4gb | Prod: 2-4x s-4vcpu-8gb                  |
-+====================================================================+
-|                                                                    |
-|  namespace: argo                                                   |
-|  +--------------------------------------------------------------+  |
-|  |  Argo Workflows (v1.0.5 custom CWT wrapper)                 |  |
-|  |                                                              |  |
-|  |  ClusterWorkflowTemplates (CWTs):                            |  |
-|  |  +-------------+ +----------------+ +--------------+         |  |
-|  |  | clone-repo  | | cache-restore  | | install-deps |         |  |
-|  |  | (git clone  | | (best-effort   | | (lang-spec   |         |  |
-|  |  |  from MinIO)| |  from S3)      | |  npm/go/pip) |         |  |
-|  |  +-------------+ +----------------+ +--------------+         |  |
-|  |                                                              |  |
-|  |  +-------------+ +----------------+ +--------------+         |  |
-|  |  | build-image | | upload-assets  | | cache-save   |         |  |
-|  |  | (BuildKit   | | (static→S3    | | (best-effort |         |  |
-|  |  |  rootless)  | |  DO Spaces)    | |  to S3)      |         |  |
-|  |  +-------------+ +----------------+ +--------------+         |  |
-|  |                                                              |  |
-|  |  +-------------+                                             |  |
-|  |  | summary     |  ResourceQuota: 8 CPU / 16Gi req            |  |
-|  |  | (exit hook) |  LimitRange: 1 CPU / 2Gi per container      |  |
-|  |  +-------------+  Max pods: 50                               |  |
-|  +--------------------------------------------------------------+  |
-|                                                                    |
-|  namespace: build-{tenant-id} (per-tenant isolation)               |
-|  +--------------------------------------------------------------+  |
-|  |  Build workflows run here with:                              |  |
-|  |  - NetworkPolicy: deny-all + allow (DNS, MinIO, registry)    |  |
-|  |  - SecurityContext: non-root (uid 1000), drop ALL caps       |  |
-|  |  - BuildKit: moby/buildkit:v0.18.2-rootless (single-container)|  |
-|  |  - Registry auth: docker config.json mounted read-only       |  |
-|  +--------------------------------------------------------------+  |
-|                                                                    |
-|  Loki (log aggregation for build logs, queried by API via LogQL)   |
-+====================================================================+
-```
-
----
-
-## Cluster Detail: RUNTIME
-
-```
-+====================================================================+
-|  RUNTIME CLUSTER  (loopzero-infra-{env}-{region}-runtime)              |
-|  Dev: 2-3x s-2vcpu-4gb | Prod: 3-6x s-4vcpu-8gb                  |
-+====================================================================+
-|                                                                    |
-|  namespace: platform-system                                        |
-|  +--------------------------------------------------------------+  |
-|  |  +--------------+ +--------------+ +--------------+          |  |
-|  |  | Traefik      | | cert-manager | | ESO          |          |  |
-|  |  | v28.3.0      | | v1.14.5      | | v0.14.3      |          |  |
-|  |  | (2 replicas) | | (TLS certs)  | | (secret sync)|          |  |
-|  |  | PDB, HA      | | Dual solver: | | ClusterStore |          |  |
-|  |  +--------------+ | DNS-01 (CF)  | +--------------+          |  |
-|  |                   | HTTP-01 (any)| +------------------+      |  |
-|  |  +--------------+ +--------------+ | cloudflared      |      |  |
-|  |  | Admission    |                  | v2024.12.2       |      |  |
-|  |  | Policies     |                  | (2 replicas)     |      |  |
-|  |  | (VAP)        |                  | CF Tunnel ingress|      |  |
-|  |  +--------------+                  +------------------+      |  |
-|  +--------------------------------------------------------------+  |
-|                                                                    |
-|  namespace: {tenant-id}-{environment} (per-tenant, per-env)        |
-|  +--------------------------------------------------------------+  |
-|  |  USER APPLICATIONS (managed by ArgoCD from mgmt cluster)     |  |
-|  |                                                              |  |
-|  |  +-----------+  +-----------+  +-----------+                 |  |
-|  |  | Deployment|  | Service   |  | Ingress   |                 |  |
-|  |  | (app pods)|  | (ClusterIP|  | Route     |                 |  |
-|  |  |           |  |  :port)   |  | (Traefik) |                 |  |
-|  |  +-----------+  +-----------+  +-----------+                 |  |
-|  |                                                              |  |
-|  |  NetworkPolicy: deny-all + allow from platform               |  |
-|  |  ResourceQuota: per-plan limits                              |  |
-|  |  PSA: restricted (non-root, drop ALL, readOnlyRootFilesystem)|  |
-|  +--------------------------------------------------------------+  |
-+====================================================================+
-```
-
----
-
-## CRD Map — All 10 Types
-
-```
-+===========================================================================+
-|                        CRD HIERARCHY & OWNERSHIP                          |
-+===========================================================================+
-|                                                                           |
-|  Tenant (TenantController)                                                |
-|  ├── spec: displayName, plan, environments[], gitops, cellID              |
-|  ├── status: phase (Provisioning→Active→Suspended→Deleting)               |
-|  ├── CREATES: Environment CRs, Gitea org+repos, RBAC, namespaces         |
-|  │                                                                        |
-|  ├── Environment (EnvironmentController)                                  |
-|  │   ├── spec: tenantRef, environment, namespace, resourceQuota, plan     |
-|  │   ├── status: phase (Pending→Active→Deleting→Failed)                   |
-|  │   └── CREATES: Namespace, RoleBindings, ResourceQuota, NetworkPolicy   |
-|  │                                                                        |
-|  ├── LoopZeroApplication (ApplicationController)                              |
-|  │   ├── spec: tenantRef, project, environment, serviceName, servicePort  |
-|  │   ├── status: phase (Progressing→Serving→Reachable→Degraded→Down)      |
-|  │   ├── CREATED BY: API (ensureApplicationCRs on build success)          |
-|  │   └── CREATES: ExposedRoute CRs                                       |
-|  │       │                                                                |
-|  │       └── ExposedRoute (ExposureController)                            |
-|  │           ├── spec: applicationRef, hostname, serviceRef, tls          |
-|  │           ├── status: phase (Pending→CertIssued→Reachable→Failed)      |
-|  │           └── CREATES: IngressRoute (Traefik), Certificate (cert-mgr)  |
-|  │                                                                        |
-|  └── PreviewEnvironment (NO CONTROLLER — Sprint 5)                        |
-|      ├── spec: tenantID, projectID, prNumber, branch, expiresAt           |
-|      └── status: phase (Creating→Active→Expiring→Deleted)                 |
-|                                                                           |
-|  PlatformBootstrap (PlatformBootstrapController)                          |
-|  ├── spec: gitea config, argocd config, api config, timeouts              |
-|  ├── status: phase (Pending→ConfiguringGitea→ConfiguringArgoCD→Complete)  |
-|  └── CONFIGURES: Gitea admin, ArgoCD JWT, API seed (idempotent)           |
-|                                                                           |
-|  ClusterCredential (ClusterCredentialController)                          |
-|  ├── spec: clusterName, apiServer, secretRef, scope (argocd/operators)    |
-|  ├── status: connected, lastCheckedAt                                     |
-|  └── CREATES: ArgoCD Cluster Secret (kubeconfig distribution)             |
-|                                                                           |
-|  GitRepositoryBinding (GitRepositoryBindingController)                    |
-|  ├── spec: repoURL, credentialSecretRef, consumer (type=argocd)           |
-|  ├── status: credentialHash (rotation detection)                          |
-|  └── CREATES: ArgoCD Repository Secret (git credentials sync)            |
-|                                                                           |
-|  AppSecret (NO CONTROLLER — secrets work via ESO directly)                |
-|  ├── spec: tenantID, projectID, environment, secretRef, rotation          |
-|  └── status: syncedAt, hashMatch                                          |
-|                                                                           |
-|  ReconciliationReport (PLACEHOLDER — drift detection, deferred)           |
-|  ├── spec: tenantID, checkInterval, driftThreshold                        |
-|  └── status: driftDetails[]                                               |
-+===========================================================================+
+                                    INTERNET
+                                       │
+                         ┌─────────────┴──────────────────┐
+                         │    CLOUDFLARE EDGE (WAF/DDoS)   │
+                         │                                  │
+                         │  Zone: loopzero.example               │
+                         │  Account: 362767409c...          │
+                         │                                  │
+                         │  ┌──────────────────────┐       │
+                         │  │ CF Tunnel: loopzero-dev   │       │
+                         │  │ ID: e8e49a0f-2549...  │       │
+                         │  │ Status: healthy        │       │
+                         │  └──────────┬───────────┘       │
+                         │             │                    │
+                         │  ┌──────────┴───────────┐       │
+                         │  │ CF Worker             │       │
+                         │  │ loopzero-static-delivery  │       │
+                         │  │ -dev                  │       │
+                         │  │                       │       │
+                         │  │ KV: loopzero-routing-dev  │       │
+                         │  │ ID: fcafd0d755a5      │       │
+                         │  └──────────┬───────────┘       │
+                         │             │                    │
+                         │  DNS Records:                    │
+                         │  *.dev.loopzero.example → CNAME       │
+                         │    → e8e49a0f...cfargotunnel.com │
+                         │  api.dev.loopzero.example  → A 134... │
+                         │  git.dev.loopzero.example  → A 134... │
+                         │  grafana.dev...       → A 134... │
+                         │  argocd.dev...        → A 134... │
+                         │  auth.dev...          → A 134... │
+                         │  cloud.dev...         → A 134... │
+                         └─────────────┬──────────────────┘
+                                       │
+          ┌────────────────────────────┼────────────────────────────┐
+          │             DIGITALOCEAN — SFO3 REGION                  │
+          │             VPC: loopzero-infra-dev-sfo3-net                │
+          │             CIDR: 10.20.0.0/16                          │
+          │                                                         │
+          │  ┌──────────────────────────────────────────────────┐   │
+          │  │          MANAGEMENT CLUSTER (mgmt)               │   │
+          │  │          loopzero-infra-dev-sfo3-mgmt                │   │
+          │  │          3 nodes × small (2 vCPU / 4 GB)         │   │
+          │  │          10.20.0.16, 10.20.0.17, 10.20.0.18      │   │
+          │  │                                                   │   │
+          │  │   ┌─── LoadBalancer ──────────────────────────┐   │   │
+          │  │   │ mgmt-traefik (HA, 2 replicas)             │   │   │
+          │  │   │ 134.199.142.85:80,443                     │   │   │
+          │  │   │                                            │   │   │
+          │  │   │ IngressRoutes:                             │   │   │
+          │  │   │   api.dev.loopzero.example    → loopzero-api:8080   │   │   │
+          │  │   │   git.dev.loopzero.example    → gitea:3000      │   │   │
+          │  │   │   argocd.dev.loopzero.example → argocd:443      │   │   │
+          │  │   │   grafana.dev.loopzero.example→ grafana:3000    │   │   │
+          │  │   │   auth.dev.loopzero.example   → kratos:80       │   │   │
+          │  │   │   cloud.dev.loopzero.example  → loopzero-cloud:3000 │   │   │
+          │  │   │   harbor.dev.loopzero.example → harbor-core:80  │   │   │
+          │  │   └────────────────────────────────────────────┘   │   │
+          │  │                                                   │   │
+          │  │   Namespace: platform-system (37 pods)            │   │
+          │  │                                                   │   │
+          │  │   ┌─── Platform Services ──────────────────────┐  │   │
+          │  │   │ loopzero-api        ×2  (Go, chi, pgx)         │  │   │
+          │  │   │ loopzero-controller ×1  (reconcile loops)      │  │   │
+          │  │   │ loopzero-cloud      ×1  (OAuth2, dashboard)    │  │   │
+          │  │   │ loopzero-dashboard  ×1  (React frontend)       │  │   │
+          │  │   │ tenant-controller×1 (K8s operator)         │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  │                                                   │   │
+          │  │   ┌─── GitOps + Build ─────────────────────────┐  │   │
+          │  │   │ ArgoCD 2.11.7    (7 pods, manual sync)     │  │   │
+          │  │   │ Gitea 1.22.3     (1 pod, internal git)     │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  │                                                   │   │
+          │  │   ┌─── Auth ───────────────────────────────────┐  │   │
+          │  │   │ Ory Kratos 26.2  (identity, signup/login)  │  │   │
+          │  │   │ Ory Hydra 26.2   (OAuth2, JWT, PKCE)       │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  │                                                   │   │
+          │  │   ┌─── Container Registry ─────────────────────┐  │   │
+          │  │   │ Harbor 2.12.0 (tenant images)              │  │   │
+          │  │   │   core ×1, registry ×1, jobservice ×1      │  │   │
+          │  │   │   exporter ×1 (metrics:8001), redis ×1     │  │   │
+          │  │   │   portal ×1                                │  │   │
+          │  │   │   Storage: S3 → container-images bucket    │  │   │
+          │  │   │   DB: harbor_db on managed PG              │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  │                                                   │   │
+          │  │   ┌─── Storage ────────────────────────────────┐  │   │
+          │  │   │ MinIO 2024.12   (1 pod, S3-compatible)     │  │   │
+          │  │   │   Buckets: loopzero-artifacts, loopzero-builds     │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  │                                                   │   │
+          │  │   ┌─── Observability ──────────────────────────┐  │   │
+          │  │   │ Prometheus 2.54  (server + alertmanager)   │  │   │
+          │  │   │   Scrape: platform pods, kube-state,       │  │   │
+          │  │   │           harbor-exporter:8001,            │  │   │
+          │  │   │           argo-workflows (cross-cluster)   │  │   │
+          │  │   │   PVC: 10Gi (retention: 15d)               │  │   │
+          │  │   │   Alerts: LoopZeroAPIDown, DeployFailing,      │  │   │
+          │  │   │           HighAPILatency, PodCrashLooping  │  │   │
+          │  │   │                                            │  │   │
+          │  │   │ Grafana 11.2    (dashboards + datasources) │  │   │
+          │  │   │   DS: Prometheus, Loki, Tempo              │  │   │
+          │  │   │                                            │  │   │
+          │  │   │ Tempo 2.6       (distributed tracing)      │  │   │
+          │  │   │ OTEL Collector 0.103 (trace pipeline)      │  │   │
+          │  │   │ kube-state-metrics                         │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  │                                                   │   │
+          │  │   ┌─── TLS ────────────────────────────────────┐  │   │
+          │  │   │ cert-manager 1.14.5                        │  │   │
+          │  │   │   ClusterIssuer: Let's Encrypt (HTTP-01)   │  │   │
+          │  │   │   Certificates: api, git, argocd, grafana, │  │   │
+          │  │   │                 auth, cloud, harbor         │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  └───────────────────────────────────────────────────┘   │
+          │                                                         │
+          │  ┌──────────────────────────────────────────────────┐   │
+          │  │            BUILD CLUSTER                          │   │
+          │  │            loopzero-infra-dev-sfo3-build              │   │
+          │  │            2 nodes × medium (4 vCPU / 8 GB)       │   │
+          │  │            10.20.0.14, 10.20.0.15                 │   │
+          │  │                                                   │   │
+          │  │   Namespace: argo (24 pods)                       │   │
+          │  │   ┌─── Build Pipeline ─────────────────────────┐  │   │
+          │  │   │ Argo Workflows 1.0.5                       │  │   │
+          │  │   │   CWTs: loopzero-clone, cache-restore,         │  │   │
+          │  │   │         cache-save, summary, resource-quota │  │   │
+          │  │   │   BuildKit: rootless, single-container     │  │   │
+          │  │   │   SA: loopzero-build-sa (DOCR push creds)      │  │   │
+          │  │   │   Registry: buildkit-registry-config       │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  │                                                   │   │
+          │  │   Namespace: monitoring                           │   │
+          │  │   ┌─── Log Aggregation ────────────────────────┐  │   │
+          │  │   │ Loki 6.24.0     (build log storage)        │  │   │
+          │  │   │   Queried by loopzero-api via LogQL             │  │   │
+          │  │   │ Promtail 6.16.6 (log shipper → Loki)       │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  └───────────────────────────────────────────────────┘   │
+          │                                                         │
+          │  ┌──────────────────────────────────────────────────┐   │
+          │  │           RUNTIME CLUSTER                         │   │
+          │  │           loopzero-infra-dev-sfo3-runtime              │   │
+          │  │           2 nodes × small (2 vCPU / 4 GB)         │   │
+          │  │           10.20.0.19, 10.20.0.20                  │   │
+          │  │                                                   │   │
+          │  │   ┌─── LoadBalancer ──────────────────────────┐   │   │
+          │  │   │ runtime-traefik (HA, 2 replicas)          │   │   │
+          │  │   │ 129.212.164.100:80,443                    │   │   │
+          │  │   │                                            │   │   │
+          │  │   │ CF Tunnel → cloudflared ×2 → Traefik      │   │   │
+          │  │   │   (all *.dev.loopzero.example user app traffic) │   │   │
+          │  │   └────────────────────────────────────────────┘   │   │
+          │  │                                                   │   │
+          │  │   Namespace: platform-system (29 pods)            │   │
+          │  │   ┌─── Ingress + TLS ──────────────────────────┐  │   │
+          │  │   │ Traefik 28.3.0  (HA, 2 replicas)           │  │   │
+          │  │   │ cert-manager 1.14.5                        │  │   │
+          │  │   │ cloudflared ×2  (CF Tunnel agent)          │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  │                                                   │   │
+          │  │   Namespace: external-secrets                     │   │
+          │  │   ┌─── Secret Sync ────────────────────────────┐  │   │
+          │  │   │ External Secrets Operator 0.14.3           │  │   │
+          │  │   │   ClusterSecretStore → mgmt PG             │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  │                                                   │   │
+          │  │   Namespace: monitoring                           │   │
+          │  │   ┌─── Log Collection ─────────────────────────┐  │   │
+          │  │   │ Promtail 6.16.6 (log shipper → build Loki) │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  │                                                   │   │
+          │  │   Namespace: loopzero-{tenant}-{env}  (per-tenant)   │   │
+          │  │   ┌─── User Applications ──────────────────────┐  │   │
+          │  │   │ Managed by ArgoCD (manual sync from mgmt)  │  │   │
+          │  │   │ Deployed after: loopzero deploy → build →      │  │   │
+          │  │   │   gitops push → ArgoCD sync                │  │   │
+          │  │   └────────────────────────────────────────────┘  │   │
+          │  └───────────────────────────────────────────────────┘   │
+          │                                                         │
+          │  ┌──────────────────────────────────────────────────┐   │
+          │  │          MANAGED POSTGRESQL 16 (HA)              │   │
+          │  │          loopzero-infra-dev-sfo3-db                   │   │
+          │  │          2 nodes × db-s-1vcpu-2gb                 │   │
+          │  │          Port: 25060 (SSL required)               │   │
+          │  │          Host: private-loopzero-infra-dev-sfo3-db-... │   │
+          │  │                                                   │   │
+          │  │   ┌─────────────┬──────────────────────────────┐  │   │
+          │  │   │ loopzero        │ Platform state, builds,      │  │   │
+          │  │   │             │ releases, tenants, pg_locks   │  │   │
+          │  │   ├─────────────┼──────────────────────────────┤  │   │
+          │  │   │ gitea       │ Git repository metadata      │  │   │
+          │  │   ├─────────────┼──────────────────────────────┤  │   │
+          │  │   │ kratos      │ Identity mgmt (users, flows) │  │   │
+          │  │   ├─────────────┼──────────────────────────────┤  │   │
+          │  │   │ hydra       │ OAuth2 grants, tokens, keys  │  │   │
+          │  │   ├─────────────┼──────────────────────────────┤  │   │
+          │  │   │ harbor_db   │ Container registry metadata  │  │   │
+          │  │   └─────────────┴──────────────────────────────┘  │   │
+          │  │                                                   │   │
+          │  │   Firewall: allow only DOKS cluster VPC IPs       │   │
+          │  └───────────────────────────────────────────────────┘   │
+          │                                                         │
+          │  ┌──────────────────────────────────────────────────┐   │
+          │  │          DO SPACES (S3-compatible, sfo3)          │   │
+          │  │                                                   │   │
+          │  │   loopzero-infra-dev-sfo3-artifacts    (source tarballs)│  │
+          │  │   loopzero-infra-dev-sfo3-builds       (build cache)  │  │
+          │  │   loopzero-infra-dev-sfo3-logs          (build logs)  │  │
+          │  │   loopzero-infra-dev-sfo3-static-assets (frontend JS) │  │
+          │  │   loopzero-infra-dev-sfo3-container-images (Harbor)   │  │
+          │  └───────────────────────────────────────────────────┘   │
+          │                                                         │
+          │  ┌──────────────────────────────────────────────────┐   │
+          │  │          DO CONTAINER REGISTRY (DOCR)             │   │
+          │  │          loopzero-infra-registry (Professional)       │   │
+          │  │          registry.digitalocean.com/               │   │
+          │  │            loopzero-infra-registry                    │   │
+          │  │                                                   │   │
+          │  │   Platform images:                                │   │
+          │  │     loopzero-api:dev, loopzero-cloud:dev,                 │   │
+          │  │     loopzero-dashboard:dev, tenant-controller:dev     │   │
+          │  │                                                   │   │
+          │  │   Shared across all environments                  │   │
+          │  │   (protect: true, retainOnDelete: true)           │   │
+          │  └───────────────────────────────────────────────────┘   │
+          └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Deploy Flow — End to End
+## Deploy Flow: `loopzero deploy`
 
 ```
-DEVELOPER                     MANAGEMENT CLUSTER                BUILD CLUSTER               RUNTIME CLUSTER
-    |                               |                               |                           |
-    |  loopzero deploy                  |                               |                           |
-    |------------------------------>|                               |                           |
-    |  1. Upload source bundle      |                               |                           |
-    |  POST /api/v1/source/upload   |                               |                           |
-    |         |                     |                               |                           |
-    |  2. Submit build              |                               |                           |
-    |  POST /api/v1/builds          |                               |                           |
-    |         |                     |                               |                           |
-    |         |  pg_advisory_xact_lock(tenant:project:env)          |                           |
-    |         |  Check concurrent build (INSIDE lock)               |                           |
-    |         |  Create Build record (QUEUED)                       |                           |
-    |         |  Commit (release lock)                              |                           |
-    |         |                     |                               |                           |
-    |         |  Submit Argo Workflow ------------------------------>|                           |
-    |         |  QUEUED → RUNNING   |                               |                           |
-    |         |                     |                               |                           |
-    |  3. SSE stream                |                               |                           |
-    |  GET /api/v1/builds/{id}/stream                               |                           |
-    |<- - - - - - - - - - - - - - -|                               |                           |
-    |  build.started                |                               |                           |
-    |         |                     |    +---------------------+    |                           |
-    |         |                     |    | clone-repo          |    |                           |
-    |         |                     |    | cache-restore       |    |                           |
-    |         |                     |    | install-deps        |    |                           |
-    |         |                     |    | build (framework)   |    |                           |
-    |         |                     |    | build-image         |----+---> DO Container Registry |
-    |         |                     |    | upload-assets       |----+---> DO Spaces (static)    |
-    |         |                     |    | cache-save (onExit) |    |                           |
-    |         |                     |    +---------------------+    |                           |
-    |         |                     |                               |                           |
-    |         |  BuildReconcileLoop (polls every 30s)               |                           |
-    |         |  detects Workflow Succeeded                         |                           |
-    |         |                     |                               |                           |
-    |         |  4. onWorkflowSucceeded:                            |                           |
-    |         |     a. Generate K8s manifests                       |                           |
-    |         |     b. ensureApplicationCRs (LoopZeroApplication CR)    |                           |
-    |         |     c. Push manifests to Gitea (gitops)             |                           |
-    |         |     d. Create Release (READY→PENDING)               |                           |
-    |         |     e. Trigger ArgoCD sync  ---------------------------------------->           |
-    |         |     f. RUNNING→RELEASING                            |            |              |
-    |         |                     |                               |  ArgoCD    |              |
-    |<- - - - - - - - - - - - - - -|                               |  syncs     |              |
-    |  deploy.verifying             |                               |  manifests |              |
-    |         |                     |                               |            v              |
-    |         |  5. ArgoCD confirms sync                            |     +-------------+      |
-    |         |     Release: PENDING→ACTIVE                         |     | Deployment  |      |
-    |         |     Build: RELEASING→SUCCEEDED                      |     | Service     |      |
-    |         |     Supersede previous ACTIVE release               |     | IngressRoute|      |
-    |         |                     |                               |     +-------------+      |
-    |<- - - - - - - - - - - - - - -|                               |                           |
-    |  deploy.completed             |                               |                           |
-    |  (URL: app.env.tenant.loopzero.example)                            |                           |
-    |                               |                               |                           |
-    |  6. ApplicationController reconciles LoopZeroApplication CR       |                           |
-    |         |  → computes hostname                                |                           |
-    |         |  → creates ExposedRoute CR                          |                           |
-    |         |                     |                               |                           |
-    |  7. ExposureController reconciles ExposedRoute CR             |                           |
-    |         |  → creates cert-manager Certificate                 |                           |
-    |         |  → runs reachability probes                         |                           |
-    |         |  → phase: Pending→CertIssued→Reachable              |                           |
+  Developer
+     │
+     ▼
+  loopzero deploy ──► CLI validates loopzero.yaml + monorepo detection
+     │              (30 frameworks, path traversal protection)
+     ▼
+  Upload source ──► loopzero-api (mgmt, port 8080)
+     │               │
+     │               ├─► pg_advisory_xact_lock(tenant, project, env)
+     │               ├─► Store build record in `loopzero` DB
+     │               ├─► Upload bundle to Spaces (artifacts bucket)
+     │               └─► Submit Argo Workflow → build cluster
+     │
+     ▼
+  Argo Workflow (build cluster)
+     │
+     ├─► loopzero-clone CWT: download source from Spaces
+     ├─► cache-restore CWT: restore build cache layers
+     ├─► BuildKit: build container image (rootless)
+     │     ├─► Push to DOCR (platform) or Harbor (tenant)
+     │     └─► Push cache layers to Spaces (builds bucket)
+     ├─► cache-save CWT: persist cache manifest
+     └─► Callback to loopzero-api: build SUCCEEDED/FAILED
+           │
+           ▼
+  loopzero-api receives callback
+     │
+     ├─► Generate K8s manifests (Deployment, Service, Ingress)
+     ├─► Push manifests to Gitea (gitops repo)
+     ├─► Trigger ArgoCD sync (manual sync policy)
+     └─► SSE event → CLI shows progress
+           │
+           ▼
+  ArgoCD (mgmt) ──► syncs manifests to runtime cluster
+     │
+     ▼
+  Runtime cluster
+     │
+     ├─► Pod starts with image from DOCR/Harbor
+     ├─► Traefik IngressRoute routes traffic
+     └─► CF Tunnel (cloudflared) exposes via CF edge
+           │
+           ▼
+  App live at: https://{app}.dev.loopzero.example
+     (Static apps: CF Worker serves from Spaces CDN)
 ```
 
 ---
 
-## Cloudflare Edge Layer
+## Network Topology
 
 ```
-+===========================================================================+
-|  CLOUDFLARE EDGE                                                          |
-+===========================================================================+
-|                                                                           |
-|  DNS Records:                                                             |
-|  +-----------------------------------------------------------------+     |
-|  | *.dev.loopzero.example  CNAME → {tunnelId}.cfargotunnel.com (proxied)|     |
-|  | cname.dev.loopzero.example CNAME → {tunnelId}.cfargotunnel.com       |     |
-|  | api.dev.loopzero.example   → mgmt Traefik (LoopZero API)                 |     |
-|  | cloud.dev.loopzero.example → mgmt Traefik (Dashboard+Kratos+Hydra)   |     |
-|  +-----------------------------------------------------------------+     |
-|                                                                           |
-|  CF Worker: loopzero-static-delivery                                          |
-|  Route: *.dev.loopzero.example/*                                               |
-|  +-------------------------------------------------------------------+   |
-|  | 1. Request arrives at edge                                        |   |
-|  | 2. Check KV: loopzero-routing[subdomain] → {buildId, s3Prefix}       |   |
-|  |    YES → Proxy to DO Spaces CDN (static frontend)                 |   |
-|  |    NO  → Check KV: loopzero-routing[cell:{tenant}] → {cellId, ip}    |   |
-|  |           YES → Proxy to cell Traefik (multi-cell routing)        |   |
-|  |           NO  → Proxy through CF Tunnel (default)                 |   |
-|  +-------------------------------------------------------------------+   |
-|                                                                           |
-|  CF Tunnel: loopzero-tunnel                                                   |
-|  +-------------------------------------------------------------------+   |
-|  | cloudflared (2 replicas) on runtime cluster                       |   |
-|  | Ingress: *.{baseDomain} → runtime Traefik :443                    |   |
-|  | Zero public IPs — all traffic through CF edge (DDoS/WAF)          |   |
-|  +-------------------------------------------------------------------+   |
-|                                                                           |
-|  KV Namespace: loopzero-routing                                               |
-|  +-------------------------------------------------------------------+   |
-|  | Static routes:  key=subdomain    val={buildId, s3Prefix}          |   |
-|  | Cell routes:    key=cell:{tenant} val={cellId, ingressIp}         |   |
-|  | Written by: StaticDelivery (API) and CellService (API)            |   |
-|  +-------------------------------------------------------------------+   |
-+===========================================================================+
+  ┌─────────────────────────────────────────────────────┐
+  │                 VPC: 10.20.0.0/16                    │
+  │                                                      │
+  │  mgmt nodes:    10.20.0.16-18  ──┐                   │
+  │  build nodes:   10.20.0.14-15  ──┼── private network │
+  │  runtime nodes: 10.20.0.19-20  ──┤   (inter-cluster) │
+  │  DB (private):  10.20.x.x      ──┘                   │
+  │                                                      │
+  │  Public IPs (LoadBalancers only):                     │
+  │    mgmt-traefik:    134.199.142.85  (platform admin) │
+  │    runtime-traefik: 129.212.164.100 (user apps)      │
+  │                                                      │
+  │  Traffic routing:                                     │
+  │    User apps  → CF Tunnel → cloudflared → rt-traefik │
+  │    Admin UIs  → CF DNS A → mgmt-traefik              │
+  │    Build logs → loopzero-api → Loki (build:30100)        │
+  │    Metrics    → Prometheus scrape (cross-cluster)     │
+  └─────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Database Schema (PostgreSQL 16)
+## Resource Count Summary
+
+| Category           | Count | Details                                         |
+|--------------------|-------|-------------------------------------------------|
+| DOKS Clusters      | 3     | mgmt (3n), build (2n), runtime (2n) = 7 nodes   |
+| PostgreSQL         | 1     | 2-node HA, 5 databases, SSL required             |
+| Spaces Buckets     | 5     | artifacts, builds, logs, static-assets, container-images |
+| Container Registry | 1     | DOCR Professional (shared, protected)            |
+| Load Balancers     | 2     | mgmt-traefik, runtime-traefik                    |
+| CF Tunnel          | 1     | loopzero-dev (healthy)                               |
+| CF KV Namespace    | 1     | loopzero-routing-dev (static frontend routing)       |
+| CF Workers         | 1     | loopzero-static-delivery-dev                         |
+| CF DNS Records     | 6+    | A records (platform) + CNAME (wildcard+tunnel)   |
+| Helm Releases      | 23    | mgmt:13 + build:5 + runtime:5                   |
+| Running Pods       | 90    | mgmt:37 + build:24 + runtime:29                  |
+| Pulumi Resources   | 191   | Total managed by Pulumi state                    |
+
+---
+
+## Helm Chart Inventory
+
+| Chart                 | Version | Cluster  | Namespace        |
+|-----------------------|---------|----------|------------------|
+| argo-cd               | 7.3.11  | mgmt     | platform-system  |
+| gitea                 | 10.6.0  | mgmt     | platform-system  |
+| grafana               | 8.5.2   | mgmt     | platform-system  |
+| loopzero-harbor           | 0.1.0   | mgmt     | platform-system  |
+| cert-manager          | 1.14.5  | mgmt     | platform-system  |
+| traefik               | 28.3.0  | mgmt     | platform-system  |
+| minio                 | 5.4.0   | mgmt     | platform-system  |
+| hydra                 | 0.61.0  | mgmt     | platform-system  |
+| kratos                | 0.61.0  | mgmt     | platform-system  |
+| otel-collector        | 0.96.0  | mgmt     | platform-system  |
+| prometheus            | 25.27.0 | mgmt     | platform-system  |
+| tempo                 | 1.14.0  | mgmt     | platform-system  |
+| metrics-server        | 3.12.1  | all (×3) | kube-system      |
+| argo-workflows        | 1.0.5   | build    | argo             |
+| loopzero-build-cwts       | 0.1.0   | build    | argo             |
+| loki                  | 6.24.0  | build    | monitoring       |
+| promtail              | 6.16.6  | build    | monitoring       |
+| promtail              | 6.16.6  | runtime  | monitoring       |
+| external-secrets      | 0.14.3  | runtime  | external-secrets |
+| traefik               | 28.3.0  | runtime  | platform-system  |
+| cert-manager          | 1.14.5  | runtime  | platform-system  |
+
+---
+
+## Registry Architecture
 
 ```
-+===========================================================================+
-|  DO Managed PostgreSQL — loopzero-infra-{env}-{region}-db                     |
-|  Dev: 2 nodes db-s-1vcpu-2gb | Prod: 3 nodes db-s-2vcpu-4gb (HA)        |
-|  VPC-only (no public access) | Firewall: K8s cluster IDs only            |
-+===========================================================================+
-|                                                                           |
-|  Database: loopzero                                                           |
-|  +-------------------------------------------------------------------+   |
-|  | builds            | Build records (state machine: QUEUED→...→SUCC)|   |
-|  | build_apps        | Per-app specs within a build                  |   |
-|  | releases          | Release records (READY→PENDING→ACTIVE)        |   |
-|  | projects          | Project metadata (UUID PK, name unique/tenant)|   |
-|  | environment_targets| Desired vs active release per env            |   |
-|  | audit_log         | Audit events (action, actor, resource)        |   |
-|  | idempotency_keys  | Request dedup (key, hash, response, TTL)      |   |
-|  | sse_events        | SSE event journal (NOTIFY/LISTEN)             |   |
-|  | custom_domains    | Custom domain records (status, TLS, CNAME)    |   |
-|  | secrets           | Encrypted secret storage                      |   |
-|  | users             | User accounts (GitHub/Google/email)            |   |
-|  | tenant_members    | Tenant membership (FK→users)                  |   |
-|  | subscriptions     | Stripe billing subscriptions                  |   |
-|  +-------------------------------------------------------------------+   |
-|  | Serialization: pg_advisory_xact_lock(tenant:project:env)          |   |
-|  | Isolation: READ COMMITTED + partial unique indexes                |   |
-|  | Migrations: 25 forward-only (.up.sql), golang-migrate             |   |
-|  +-------------------------------------------------------------------+   |
-|                                                                           |
-|  Database: gitea     (Gitea internal state)                               |
-|  Database: kratos    (Ory Kratos identity store)                          |
-|  Database: hydra     (Ory Hydra OAuth2 grants)                            |
-+===========================================================================+
+  ┌─────────────────────┐           ┌──────────────────────┐
+  │ DOCR                │           │ Harbor               │
+  │ loopzero-infra-registry │           │ harbor.dev.loopzero.  │
+  │ (Professional)      │           │ dev                  │
+  ├─────────────────────┤           ├──────────────────────┤
+  │ loopzero-api:dev        │           │ tenants/{id}/{app}   │
+  │ loopzero-cloud:dev      │           │   (user-built        │
+  │ loopzero-dashboard:dev  │           │    container images)  │
+  │ tenant-controller   │           │                      │
+  │   :dev              │           │ Storage:             │
+  │                     │           │   S3 → container-    │
+  │ Pull: DOCR secret   │           │   images bucket      │
+  │ Push: CI pipeline   │           │ DB: harbor_db        │
+  └─────────────────────┘           └──────────────────────┘
+   Platform images                    Tenant build images
+   (shared, protected)                (per-environment)
 ```
 
 ---
 
-## Component Connection Map
+## Pulumi IaC Pipeline
 
 ```
-+===========================================================================+
-|  WHO TALKS TO WHOM                                                        |
-+===========================================================================+
-|                                                                           |
-|  CLI (TypeScript)                                                         |
-|   ├──→ API (Go)           HTTPS via api.{domain}                          |
-|   └──→ Kratos/Hydra       HTTPS via cloud.{domain} (device code flow)     |
-|                                                                           |
-|  Dashboard (React)                                                        |
-|   ├──→ Kratos              Session auth via cloud.{domain}                |
-|   ├──→ Hydra               BFF token exchange                             |
-|   └──→ API                 JWT bearer via api.{domain}                    |
-|                                                                           |
-|  API (Go, mgmt cluster)                                                   |
-|   ├──→ PostgreSQL          pgx connection pool (VPC)                      |
-|   ├──→ Gitea               HTTP :3000 (cluster-internal) — gitops push    |
-|   ├──→ ArgoCD              HTTPS (cluster-internal) — sync trigger        |
-|   ├──→ Argo Workflows      K8s API (build cluster) — submit/status        |
-|   ├──→ MinIO / DO Spaces   S3 API — source bundles, build cache           |
-|   ├──→ Cloudflare KV       CF API — static routing table writes           |
-|   ├──→ DO Spaces CDN       S3 API — static asset upload                   |
-|   ├──→ K8s API (mgmt)      dynamic client — Tenant CR, LoopZeroApplication CR |
-|   └──→ Stripe              HTTPS — billing webhooks, checkout             |
-|                                                                           |
-|  Operators (Go, mgmt cluster)                                             |
-|   ├──→ Gitea               HTTP :3000 — org/repo provisioning             |
-|   ├──→ ArgoCD              K8s API — Cluster Secret, Repo Secret          |
-|   ├──→ MinIO               S3 API — per-tenant credentials + policies     |
-|   └──→ K8s API (mgmt)      CRD reconciliation (all 7 controllers)        |
-|                                                                           |
-|  ArgoCD (mgmt cluster)                                                    |
-|   ├──→ Gitea               Git clone (gitops repos)                       |
-|   └──→ K8s API (runtime)   Apply manifests (user app deployments)         |
-|                                                                           |
-|  Argo Workflows (build cluster)                                           |
-|   ├──→ MinIO / DO Spaces   S3 — clone source, cache restore/save         |
-|   ├──→ DO Registry         Docker push (built images)                     |
-|   └──→ DO Spaces CDN       S3 — upload static assets                     |
-|                                                                           |
-|  Cloudflare Worker                                                        |
-|   ├──→ CF KV               Read routing table                             |
-|   ├──→ DO Spaces CDN       Proxy static frontend assets                   |
-|   └──→ CF Tunnel           Proxy dynamic requests to runtime              |
-|                                                                           |
-|  ESO (runtime cluster)                                                    |
-|   └──→ K8s API (mgmt)      ClusterSecretStore — sync secrets cross-cluster|
-+===========================================================================+
-```
-
----
-
-## State Machines (7 total, pkg/statemachine/)
-
-```
-BUILD                           RELEASE                      TENANT
-=====                           =======                      ======
-QUEUED ──→ RUNNING              READY ──→ PENDING            Provisioning
-  │          │ │                   │        │                     │
-  │          │ ├──→ RELEASING     │        ├──→ ACTIVE          ├──→ Active
-  │          │ │      │           │        │      │              │      │
-  │          │ │      ├──→ SUCC   │        │      └──→ SUPERSEDED│      ├──→ Suspended
-  │          │ │      └──→ FAIL   │        └──→ CANCELLED        │      │      │
-  │          │ └──→ FAILED        └──→ ROLLED_BACK               │      └──→ Deleting
-  │          └──→ CANCELLED                                      └──→ Deleting
-  └──→ (timeout: 5m)
-
-PREVIEW                         PROMOTION                    ROLLBACK
-=======                         =========                    ========
-Creating ──→ Active             Validating ──→ Committing    Validating ──→ Reverting
-               │                                │                            │
-               ├──→ Expiring    Committing ──→ Syncing       Reverting ──→ Syncing
-               │      │                         │                            │
-               └──→ Deleting    Syncing ──→ Completed        Syncing ──→ Completed
-                      │                    └──→ Failed                  └──→ Failed
-                      └──→ Deleted
-
-BOOTSTRAP
-=========
-Pending ──→ ConfiguringGitea ──→ ConfiguringArgoCD ──→ WaitingForAPI ──→ Complete
-   └──→ Failed     └──→ Failed       └──→ Failed          └──→ Failed
-```
-
----
-
-## Observability Stack
-
-```
-+===========================================================================+
-|  OBSERVABILITY                                                            |
-+===========================================================================+
-|                                                                           |
-|  Prometheus (mgmt) ←── ServiceMonitor ←── loopzero-api, traefik, argocd      |
-|       │                                                                   |
-|       ├── Alertmanager (4 rules):                                         |
-|       │   - LoopZeroAPIDown (API pods < 1 for 2m)                             |
-|       │   - LoopZeroDeployFailing (deploy fail rate > 50% for 5m)             |
-|       │   - LoopZeroHighLatency (p99 > 5s for 5m)                             |
-|       │   - LoopZeroCrashLoop (restart count > 3 in 10m)                      |
-|       │                                                                   |
-|       ├── Key metrics:                                                    |
-|       │   loopzero_builds_total, loopzero_build_duration_seconds                  |
-|       │   loopzero_deploys_total, loopzero_deploy_duration_seconds                |
-|       │   loopzero_application_cr_ensure_total (NEW)                          |
-|       │   loopzero_lock_acquired_total, loopzero_lock_conflicts_total             |
-|       │   loopzero_argocd_circuit_state, loopzero_drift_detected                  |
-|       │   loopzero_custom_domains_total, loopzero_domain_tls_expiry_days          |
-|       │                                                                   |
-|       └──→ Grafana (dashboards: API, builds, deploys, ArgoCD, locks)      |
-|                                                                           |
-|  Loki (build cluster) ←── Promtail ←── build workflow pod logs            |
-|       └── Queried by API via LogQL (loopzero logs command)                    |
-|                                                                           |
-|  OTel Collector (mgmt) ←── loopzero-api traces (context propagation)          |
-|       └──→ Tempo (distributed tracing storage)                            |
-+===========================================================================+
-```
-
----
-
-## Admission & Security Policies
-
-```
-+===========================================================================+
-|  SECURITY LAYERS                                                          |
-+===========================================================================+
-|                                                                           |
-|  ValidatingAdmissionPolicies (runtime cluster):                           |
-|  ├── vap-disallow-latest-tag         (Audit mode)                         |
-|  ├── vap-require-resource-limits     (Audit mode)                         |
-|  ├── vap-restrict-image-registries   (Audit mode)                         |
-|  └── vap-protect-platform-networkpolicies (DENY — strict)                 |
-|                                                                           |
-|  Pod Security Admission (PSA):                                            |
-|  └── restricted profile on tenant namespaces                              |
-|      (non-root, drop ALL caps, readOnlyRootFilesystem)                    |
-|                                                                           |
-|  NetworkPolicy:                                                           |
-|  ├── Default deny-all on every tenant namespace                           |
-|  ├── Allow ingress from platform-system (Traefik)                         |
-|  ├── Allow egress to DNS (53), HTTPS (443)                                |
-|  └── Build cluster: allow egress to MinIO, registry, HTTP/S only          |
-|                                                                           |
-|  Auth:                                                                    |
-|  ├── CLI: Device Code Flow (Hydra OIDC) → JWT                            |
-|  ├── Dashboard: Kratos session → BFF token exchange → JWT                 |
-|  ├── API: JWT validation (RSA-only, audience check, kid+dual-key)         |
-|  └── No PAT, no "default" tenant fallback (MEET-039)                     |
-|                                                                           |
-|  Two-host gateway:                                                        |
-|  ├── cloud.{domain} → Kratos + Hydra + Dashboard (browser)               |
-|  └── api.{domain}   → LoopZero API engine (CLI)                              |
-+===========================================================================+
+  pulumi destroy --yes    (12m39s)
+         │
+         ├── Deletes: Helm releases → K8s resources → DB → clusters → VPC
+         ├── Retains: DOCR (protect+retainOnDelete)
+         └── Orphans handled by adopt-or-create on next up
+         │
+         ▼
+  pulumi up --yes         (18m06s)
+         │
+         ├── Phase 1: Adopt-or-create lookups (VPC, CF Tunnel, CF KV, CF DNS)
+         ├── Phase 2: Base infra (VPC → 3 DOKS + DB + Spaces) — 5 min
+         ├── Phase 3: Cloudflare (Tunnel + Worker + KV + DNS) — 30 sec
+         ├── Phase 4: Bootstrap mgmt (13 Helm + Deployments) — 8 min
+         ├── Phase 5: Bootstrap build (5 Helm) — 3 min
+         ├── Phase 6: Bootstrap runtime (5 Helm + cloudflared) — 3 min
+         └── Phase 7: Expose (DNS records, IngressRoutes, TLS) — 1 min
+         │
+         ▼
+  191 resources, 90 pods, 0 errors
+  Total: ~31 minutes destroy+up
 ```

@@ -6,6 +6,7 @@ package argocd
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,12 +73,13 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 			"server":    destServer,
 		})
 	}
-	// Fallback: if no specific namespaces provided, allow tenant-prefixed namespaces.
+	// SEC-007: No glob fallback. If no namespaces are provided, the AppProject
+	// will have an empty destinations list, blocking all deployments until the
+	// EnvironmentController creates the namespaces and the next reconcile
+	// populates this list. This is fail-closed by design.
 	if len(destinations) == 0 {
-		destinations = append(destinations, map[string]interface{}{
-			"namespace": fmt.Sprintf("loopzero-%s-*", spec.TenantID),
-			"server":    destServer,
-		})
+		slog.Warn("argocd provisioner: no destination namespaces for tenant, AppProject will block deploys until environments are reconciled",
+			"tenant", spec.TenantID, "project", spec.Name)
 	}
 
 	proj := &unstructured.Unstructured{

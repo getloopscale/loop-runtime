@@ -9,6 +9,8 @@ export interface NetworkSpec {
   readonly region: pulumi.Input<string>;
   readonly cidr?: string;
   readonly tags: BaseLabels;
+  /** If set, Pulumi imports the existing resource instead of creating it. */
+  readonly importId?: string;
 }
 
 export interface NetworkOutput {

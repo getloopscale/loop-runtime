@@ -20,23 +20,27 @@ import (
 // The signing step reads the image digest from the BuildKit metadata file
 // (written to /workspace/metadata-{appName}.json) and signs by digest,
 // ensuring the signature is pinned to the exact image content.
+//
+// Image choice: Uses pre-built loopzero-cosign-signer image with cosign baked in.
+// SEC-006: No runtime binary downloads — cosign is checksum-verified at image build time.
 func cosignSignTemplate(appName, imageTag string) *forge.Container {
 	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, appName)
 
 	// Shell script that:
-	// 1. Extracts the image digest from BuildKit metadata
-	// 2. Signs the image by digest using cosign
+	// 1. Extracts the image digest from BuildKit metadata using sed
+	// 2. Signs the image by digest using the pre-installed cosign binary
 	// The COSIGN_PASSWORD env var is injected from the secret.
 	script := fmt.Sprintf(`set -e
-# Extract digest from BuildKit metadata
-DIGEST=$(cat %s | grep -o '"containerimage.digest":"[^"]*"' | cut -d'"' -f4)
+# Extract digest from BuildKit metadata using sed.
+# BuildKit writes: {"containerimage.digest":"sha256:abc123..."}
+DIGEST=$(sed -n 's/.*"containerimage.digest":"\([^"]*\)".*/\1/p' %s)
 if [ -z "$DIGEST" ]; then
   echo "ERROR: no digest found in metadata file" >&2
   exit 1
 fi
 echo "Signing image: %s@${DIGEST}"
 
-# Sign with cosign (key-based)
+# Sign with cosign (key-based — cluster does not have OIDC provider for keyless)
 cosign sign --yes --key %s/cosign.key \
   -a "build-system=loopzero" \
   -a "app=%s" \
@@ -47,7 +51,7 @@ echo "Image signed successfully"
 
 	return &forge.Container{
 		Name:    fmt.Sprintf("sign-image-%s", appName),
-		Image:   imageCosign,
+		Image:   imageCosignSigner,
 		Command: []string{"sh", "-c", script},
 		Env: []forge.EnvBuilder{
 			forge.Env{Name: "HOME", Value: "/home/user"},

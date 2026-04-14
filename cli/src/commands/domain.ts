@@ -392,7 +392,7 @@ export class DomainListCommand {
 // ============================================================
 
 export interface DomainRemoveOptions {
-  confirm?: string;
+  yes?: boolean;
   json?: boolean;
 }
 
@@ -404,14 +404,14 @@ export class DomainRemoveCommand {
       return exitWithError(this.deps, opts.json, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
     if (!domain || domain.trim() === '') {
-      return exitWithError(this.deps, opts.json, 'Domain name is required. Usage: loopzero domain remove <domain> --confirm <domain>', 1, 'MISSING_ARGUMENT');
+      return exitWithError(this.deps, opts.json, 'Domain name is required. Usage: loopzero domain remove <domain> --yes', 1, 'MISSING_ARGUMENT');
     }
 
-    // Safety: require --confirm matching the domain name
-    if (opts.confirm !== domain) {
+    // Safety: require --yes to confirm destructive action
+    if (!opts.yes) {
       return exitWithError(
         this.deps, opts.json,
-        `To remove ${domain}, pass --confirm ${domain}`,
+        `To remove ${domain}, pass --yes to confirm.`,
         1, 'CONFIRMATION_REQUIRED',
       );
     }

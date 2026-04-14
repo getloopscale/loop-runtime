@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- **COOKIE_SECRET rotated to RandomPassword** (C1): Kratos UI cookie secret replaced from hardcoded string to Pulumi-managed `RandomPassword`. Eliminates session cookie forgery risk from source code access.
+- **LOOPZERO_SERVICE_AUTH_SECRET auto-generated** (H12): Service-to-service auth secret now auto-generates via `RandomPassword` when not explicitly configured. Removes `dev-service-auth-secret-default` fallback.
+- **Database and DOKS clusters protected** (C3): Added `protect: true` and `retainOnDelete: true` to PostgreSQL cluster and `protect: true` to all DOKS clusters. Prevents accidental `pulumi destroy` data loss.
+- **RBAC escalate verb removed** (H15): Removed `escalate` verb from tenant controller ClusterRole on `clusterroles`/`clusterrolebindings`. Prevents privilege escalation from compromised controller pod.
+- **RBAC loopzero.io wildcard replaced** (M42): Replaced `resources: ["*"]` with explicit CRD enumeration in tenant controller ClusterRole. New CRDs require explicit RBAC review.
+
+### Fixed
+- **Environment state machine: Failed state added** (H8): `EnvironmentFailed` state now reachable via `ProvisionFailed` event from `Pending`, with `Retry` path back to `Pending` and `DeleteRequested` exit.
+- **Release state machine: cancel paths added** (M35): `GIT_MIRROR_FAILED`, `SYNC_FAILED`, `DRIFT_ALERT`, `ROLLBACK_FAILED` states now have `ReleaseCancelled` exit path.
+- **Domain state machine: v2 degraded from provisioning** (M36): Added `DomainDegrade` transition from `DomainProvisioning` to `DomainDegraded` for CNAME loss during v2 setup.
+- **Application computePhase uses all phases** (M28): `Serving`, `Degraded`, and `Down` phases now produced based on endpoint readiness and route conditions.
+- **ExposedRoute probe response bodies drained** (M29): Added `io.Copy(io.Discard, resp.Body)` before close to allow HTTP connection reuse.
+- **Rollback Phase 5 re-verifies release state** (M2): Re-fetches release inside lock to guard against concurrent deploy between Phase 1 and Phase 5.
+- **Convergence loop semaphore fix** (M5): Semaphore acquired before goroutine spawn to prevent unbounded goroutine accumulation.
+- **Harbor robot delete errors logged** (M34): `DeleteRobotAccount` errors now logged with context instead of silently discarded.
+- **Enforcement limiter: hardLimit==0 denies** (M37): Missing plan limit rows now fail closed (deny) instead of silently allowing unlimited access.
+- **Auto-deploy goroutine uses shutdown context** (H4): Auto-deploy goroutine now uses `shutdownCtx` with 5-minute timeout instead of `context.Background()`.
+- **Callback goroutines have timeout** (H5): `onReleaseActivated` and `onBuildFailed` goroutines now use 30-second timeout context.
+- **Tenant deletion sets condition on env delete failure** (H9): Failed Environment CR deletion now sets `EnvironmentCleanup` condition on Tenant status for visibility.
+- **Domain handlers have request timeouts** (M7): All 6 domain endpoints now use `context.WithTimeout` (30s read, 60s write).
+- **DNS records per-request limit** (M11): `AddDNSRecords` now rejects requests with more than 50 records.
+- **Removed ungated GetByDomain** (M12): Removed `GetByDomain` (no tenant filter) — only `GetByDomainAndTenant` remains.
+- **CancelActiveBuilds bypass documented** (M3): Added documentation explaining intentional state machine bypass for batch operations.
+- **Service auth rejects invalid headers immediately** (M39): `X-Service-Auth` with wrong value now returns 401 instead of falling through to Bearer auth.
+- **Auto-deploy commitSHA safe slice** (LOW): `commitSHA[:12]` replaced with bounds-checked slice to prevent panic on short SHAs.
+- **Environment name max-length enforced in CLI** (LOW): `loopzero env create` now validates max 63 chars, matching deploy command validation.
+- **Reserved names no longer leak Kubernetes** (LOW): `kube-system` removed from `RESERVED_NAMES` — replaced with generic `system`/`internal`.
+- **PlatformBootstrap finalizer added** (M31): Cleanup of `platform-tokens` secret on PlatformBootstrap CR deletion.
+- **Build namespace DNS egress scoped to kube-system** (LOW): DNS egress rule restricted to `kube-system` namespace, preventing DNS tunneling from build pods.
+- **ArgoCD AppProject namespace glob removed** (M32): Glob fallback `loopzero-{tenant}-*` replaced with fail-closed empty destinations list. Deploys blocked until EnvironmentController provides explicit namespaces.
+- **ArgoCD cluster secret scope reduced** (M33): Full kubeconfig no longer stored in ArgoCD cluster secret. Only bearer token + CA certificate extracted and stored in `config` field.
+
+### Changed
+- **Image build optimization** (Sprint 6+): Comprehensive build pipeline modernization:
+  - All Dockerfiles use `--mount=type=cache` for Go modules and build cache (~30-50% faster rebuilds)
+  - All Go builds use `-trimpath -ldflags="-s -w"` (smaller binaries, no path metadata)
+  - All platform Dockerfiles have `HEALTHCHECK`, OCI labels, consolidated layers
+  - Clone-runner `mc` binary verified with SHA256 checksum (supply chain hardening)
+  - Cosign signing uses pre-built `loopzero-cosign-signer` image (no runtime binary downloads)
+  - Dashboard runs as non-root via `nginxinc/nginx-unprivileged` on port 8080
+  - `.dockerignore` expanded to exclude Pulumi node_modules, dist, build, coverage
+  - Generated Dockerfiles (loopzeropacks) add `--mount=type=cache`, non-root USER, OCI labels for all 7 languages
+  - PHP uses multi-stage `FROM composer:2.8` instead of `curl | php` installer
+  - Rust binary name fixed (was evaluating in generator, not Docker build)
+  - SLSA provenance attestation (`--provenance=max`) on user-built images via BuildKit
+  - CI: keyless cosign signing (Sigstore/Fulcio OIDC), harbor-init signed + scanned
+  - CI: `SOURCE_DATE_EPOCH` for reproducible builds, `--provenance=true --sbom=true` on all platform images
+  - CI: `docker-bake.hcl` for declarative multi-image builds
+  - CI: Trivy `--ignore-unfixed` + `.trivyignore` for false positive management
+  - Semver release workflow (`.github/workflows/release.yml`)
+  - ADR-0003 updated: Kaniko → BuildKit (reflects actual architecture)
+
 ### Added
 - **Supply chain security — image signing** (Sprint 6): cosign sign + syft SBOM + cosign attest for all 4 platform images in CI pipeline. New `sign-and-attest` job with matrix strategy in `build-images.yml`. Trivy post-build scan on final images. SBOM artifacts retained 90 days.
 - **Supply chain security — user image signing** (Sprint 6): Argo Workflow DAG now includes `sign-image-{app}` step after each `build-image-{app}`. Uses `gcr.io/projectsigstore/cosign:v2.4.1` with key mounted from `cosign-signing-key` K8s Secret.
@@ -18,9 +71,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Distributed tracing — operator instrumentation** (Sprint 6): OTel SDK added to operators with spans on all 7 controller reconcile loops (`loopzero.operator.{name}.reconcile`).
 - **Cross-plane trace propagation** (Sprint 6): Argo Workflow annotations carry `loopzero.io/trace-id` and `loopzero.io/span-id` for end-to-end deploy trace correlation.
 
+### Added
+- **Harbor container registry** (MEET-048): Minimal deployment (core×2, registry×2, jobservice×1, Redis×1) with Helm chart, PDB, NetworkPolicy. Trivy/Notary/Portal disabled.
+- **Harbor Pulumi provider** (MEET-048): `HarborRegistryProvider` implements `IProviderRegistry` ISP contract. Conditional `registryType` config (docr/harbor) with backward compatibility.
+- **Container images bucket** (MEET-048): DO Spaces bucket `loopzero-*-container-images` provisioned via Pulumi for Harbor S3 storage backend.
+- **Harbor API client** (MEET-048): `operators/internal/harbor/client.go` — project CRUD, robot account lifecycle, health check. 15 unit tests with httptest.
+- **Per-tenant Harbor projects** (MEET-048): TenantController creates Harbor project per tenant with plan-based quotas (Starter=5GB, Growth=50GB, Enterprise=unlimited), immutable tags, robot accounts (build push+pull, workload pull-only, TTL ≤ 24h).
+- **Registry health monitoring** (MEET-048): Canary probe metrics, 6 PrometheusRule alerts (LoopZeroRegistryHealthFailed critical, push/pull latency, storage, GC, PG connections), Grafana dashboard.
+- **Harbor init script** (MEET-048): Idempotent Go script for post-deploy configuration — admin password, system config, `loopzero-platform` project, CI robot account.
+- **Image mirror script** (MEET-048): Go script using `crane` for parallel DOCR→Harbor image migration with digest verification.
+- **ADR-002** (MEET-048): Registry migration decision record documenting Harbor + DO Spaces choice, alternatives, trade-offs, dissent.
+- **Harbor dual-push for tenant builds** (MEET-048): `HARBOR_REGISTRY_URL` env var enables crane-based mirror step in Argo Workflow DAG. Best-effort (continueOn.failed=true). DOCR remains primary.
+- **Harbor init automation** (MEET-048): Dockerfile + Helm post-install Job (`harbor-init`) + CI build step. Zero manual intervention after `pulumi up`.
+- **Harbor canary CronJob** (MEET-048): Runs every 5min, checks health + API access. Failure detected via kube-state-metrics alert.
+
 ### Changed
+- **Harbor values.yaml aligned with Pulumi** (MEET-048): Replicas now 1 for dev (matches `harbor-bootstrap.ts`). PDB conditional on `replicas > 1`.
+- **Harbor HarborProjectReady is now required** (MEET-048): Tenant cannot transition to Active without HarborProjectReady=True when HarborClient is configured. Backward compatible with DOCR mode.
+- **Harbor robot secret self-healing** (MEET-048): If K8s Secret is manually deleted, next reconcile forces robot recreation to obtain new credentials. Prevents 22-hour blind window.
+- **Harbor Docker config.json uses json.Marshal** (MEET-048): Replaced manual `quote()` with `json.Marshal` for correct escaping of all JSON special characters.
+
+### Fixed
+- **Harbor PDB blocking node drain** (MEET-048): PDB with `minAvailable: 1` on single replica blocked `kubectl drain`. Now conditional on `replicas > 1`.
+
+### Changed
+- **Git operations centralized in `internal/gitclient`**: Eliminates duplicated gitCmd/sanitize/ensureRepo across source, gitops, and github packages. Single GitRunner with exec.CommandContext + token sanitization.
+- **Build scripts generated via type-safe `internal/shellgen`**: All 15 script functions in argo/scripts.go migrated to ScriptBuilder. User-supplied paths escaped via ShellQuote (POSIX single-quote). Zero fmt.Sprintf for shell in scripts.go.
+- **BuildKit entrypoint uses ShellQuote**: socketPath escaped via ShellQuote, registryURL validated before TOML injection.
+- **Source store go-git implementation**: `source/gogit_store.go` mirrors gitops/gogit_pusher pattern. GitRunner only for `git bundle create`.
+
+### Security
+- **Fixed unsafe tar extraction in GitHub auto-deploy**: Added symlink rejection, path traversal protection, and decompression size limits via SafeExtractTarGz. Previously extracted tarballs without any validation.
+- **Shell script generation uses POSIX-safe quoting**: All interpolated values in build container scripts quoted via ShellQuote, preventing injection via crafted loopzero.yaml paths.
+- **autodeploy.go uses exec.CommandContext**: Git commands in tarballToGitBundle now respect context cancellation (previously used exec.Command without context).
+
+### Changed
+- **CI dual-push** (MEET-048): `build-images.yml` and `infra-deploy.yml` push platform images to both DOCR and Harbor during transition period. Harbor steps conditional on `HARBOR_ROBOT_PASSWORD` secret.
+- **Registry admission policy** (MEET-048): `vap-restrict-registries` updated to allow both DOCR and Harbor prefixes during dual-push transition.
 - **Registry token expiry** reduced from 3600s to 600s in CI pipeline (SEC-002 compliance).
-- **Registry admission policy** `vap-restrict-registries` migrated from Audit to Deny+Audit mode — pods with images from unauthorized registries are now rejected.
+
+### Security
+- **Per-tenant image isolation** (MEET-048): Harbor robot accounts scoped per-project prevent cross-tenant image access. Previously only naming convention.
+- **Harbor admin API restricted** (MEET-048): NetworkPolicy limits Harbor core access to Traefik ingress and loopzero-system namespace.
 
 ### Added
 - **DO PostgreSQL tuning** (`DatabasePostgresqlConfig`): pg_stat_statements=all, slow query logging >1s, idle transaction timeout 10min, shared_buffers 25%

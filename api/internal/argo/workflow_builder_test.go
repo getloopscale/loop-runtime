@@ -112,23 +112,31 @@ func TestWorkflowBuilder_Build_HasSharedPVCVolume(t *testing.T) {
 }
 
 // Roadmap 01 Correction I — PVC multi-attach fix.
-// The PodSpecPatch must inject podAffinity so all workflow pods land on the
-// same node, preventing DO Block Storage RWO multi-attach failures.
-func TestWorkflowBuilder_Build_HasPodAffinityPatch(t *testing.T) {
+// The Affinity must co-locate all workflow pods on the same node,
+// preventing DO Block Storage RWO multi-attach failures.
+func TestWorkflowBuilder_Build_HasPodAffinity(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
 
-	if wf.PodSpecPatch == "" {
-		t.Fatal("PodSpecPatch must be set (Correction I: podAffinity for PVC co-location)")
+	if wf.Affinity == nil {
+		t.Fatal("Affinity must be set (Correction I: podAffinity for PVC co-location)")
 	}
-	// The patch must reference the Argo-managed workflow label and
-	// use kubernetes.io/hostname as the topology key so all pods in
-	// the same workflow land on the same physical node.
-	if !containsAll(wf.PodSpecPatch, "podAffinity", "kubernetes.io/hostname", "workflows.argoproj.io/workflow") {
-		t.Errorf("PodSpecPatch missing required affinity fields:\n%s", wf.PodSpecPatch)
+	if wf.Affinity.PodAffinity == nil {
+		t.Fatal("PodAffinity must be set")
+	}
+	terms := wf.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+	if len(terms) != 1 {
+		t.Fatalf("expected 1 RequiredDuringScheduling term, got %d", len(terms))
+	}
+	term := terms[0]
+	if term.TopologyKey != "kubernetes.io/hostname" {
+		t.Errorf("TopologyKey = %q, want kubernetes.io/hostname", term.TopologyKey)
+	}
+	if term.LabelSelector == nil || term.LabelSelector.MatchLabels["workflows.argoproj.io/workflow"] != "{{workflow.name}}" {
+		t.Errorf("LabelSelector not matching expected workflow label")
 	}
 }
 
@@ -1059,7 +1067,7 @@ func TestWorkflowBuilder_BuildKit_RootlesskitEntrypoint(t *testing.T) {
 	assertStringContains(t, script, "--oci-worker-no-process-sandbox")
 }
 
-func TestWorkflowBuilder_BuildKit_PodSpecPatch_SeccompUnconfined(t *testing.T) {
+func TestWorkflowBuilder_BuildKit_SeccompUnconfined(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
@@ -1067,12 +1075,15 @@ func TestWorkflowBuilder_BuildKit_PodSpecPatch_SeccompUnconfined(t *testing.T) {
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c.PodSpecPatch == "" {
-		t.Fatal("PodSpecPatch should not be empty — needs seccompProfile: Unconfined")
+	if c.SecurityContext == nil {
+		t.Fatal("SecurityContext should not be nil")
 	}
-	assertStringContains(t, c.PodSpecPatch, "Unconfined")
-	// Single container: seccomp targets "main" (Argo's name for the main container)
-	assertStringContains(t, c.PodSpecPatch, `"main"`)
+	if c.SecurityContext.SeccompProfile == nil {
+		t.Fatal("SeccompProfile should not be nil — required for rootless BuildKit")
+	}
+	if c.SecurityContext.SeccompProfile.Type != "Unconfined" {
+		t.Errorf("SeccompProfile.Type = %q, want Unconfined", c.SecurityContext.SeccompProfile.Type)
+	}
 }
 
 func TestWorkflowBuilder_BuildKit_AppArmorAnnotation(t *testing.T) {

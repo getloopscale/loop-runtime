@@ -194,7 +194,7 @@ func (r *ReleaseReaper) reap(ctx context.Context) int {
 				sseEventType = "deploy.failed"
 			}
 
-			eventData, _ := json.Marshal(map[string]string{
+			eventData := safeJSONMarshal(map[string]string{
 				"deploy_id":  deriveDeployIDFromRelease(s.ID),
 				"release_id": s.ID,
 				"status":     "failed",

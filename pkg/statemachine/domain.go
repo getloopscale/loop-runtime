@@ -97,9 +97,12 @@ func NewDomainMachine() *Machine {
 			{From: DomainDegraded, Event: DomainRemove, To: DomainRemoving},
 
 			// --- Shared: Failed recovery ---
-			{From: DomainFailed, Event: DomainRetry, To: DomainVerified},   // v1 retry
+			{From: DomainFailed, Event: DomainRetry, To: DomainVerified},      // v1 retry (TXT flow)
 			{From: DomainFailed, Event: DomainNSActivated, To: DomainNSActive}, // v2 retry (NS came back)
 			{From: DomainFailed, Event: DomainRemove, To: DomainRemoving},
+
+			// --- v2: Degraded from provisioning (CNAME lost during setup) ---
+			{From: DomainProvisioning, Event: DomainDegrade, To: DomainDegraded},
 		},
 		Terminal: []State{DomainRemoving},
 	})

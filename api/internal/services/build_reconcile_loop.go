@@ -628,7 +628,7 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 	}
 
 	// Emit SSE build.failed event so the CLI gets notified
-	eventData, _ := json.Marshal(map[string]string{
+	eventData := safeJSONMarshal(map[string]string{
 		"build_id": build.ID,
 		"status":   "failed",
 		"error":    reason,
@@ -642,7 +642,11 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 		"build_id", build.ID, "reason", reason)
 
 	if onBuildFailed != nil {
-		go onBuildFailed(context.Background(), build.TenantID, build.ProjectID, build.CommitSHA, build.ID)
+		go func() {
+			cbCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			onBuildFailed(cbCtx, build.TenantID, build.ProjectID, build.CommitSHA, build.ID)
+		}()
 	}
 }
 

@@ -153,7 +153,9 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 						return
 					}
 				}
-				// Invalid service auth — fall through to normal Bearer auth
+				// Invalid service auth — reject immediately, do not fall through
+				writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid service authentication")
+				return
 			}
 
 			// Extract token

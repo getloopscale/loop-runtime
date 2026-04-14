@@ -37,6 +37,7 @@ metadata:
 spec:
   policyName: loopzero-disallow-latest-tag
   validationActions:
+    - Deny
     - Audit
   matchResources:
     namespaceSelector:
