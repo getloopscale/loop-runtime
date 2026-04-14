@@ -148,7 +148,7 @@ export function bootstrapMgmtCluster(
   );
 
   // Ory Kratos — identity management (signup, login, recovery)
-  const oryKratos = installOryKratos(provider, ns, infra, config);
+  const oryKratos = installOryKratos(provider, ns, infra, config, cookieSecret);
 
   // Ory Hydra — OAuth2 server (JWT tokens, Device Code Flow, PKCE)
   const oryHydra = installOryHydra(provider, ns, infra, config, oryKratos);
@@ -178,7 +178,7 @@ export function bootstrapMgmtCluster(
   createArgoCDRepoCredentials(provider, ns, argocd, gitea);
 
   // LoopZero API — platform HTTP server (connects to DB, Gitea, ArgoCD, Argo Workflows)
-  const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config, lokiEndpoint, callbackToken, cf);
+  const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config, lokiEndpoint, callbackToken, cf, serviceAuthSecret);
 
   // LoopZero Controller — background reconciliation loops (roadmap 02).
   // Runs: build reconcile, build/release reapers, release convergence,
@@ -188,7 +188,7 @@ export function bootstrapMgmtCluster(
   const loopzeroController = installLoopZeroController(provider, loopzeroApi, config, infra, lokiEndpoint);
 
   // Cloud Auth Service — OAuth2 (Hydra), identity (Kratos), billing (Stripe), dashboard
-  installCloudService(provider, ns, infra, config);
+  installCloudService(provider, ns, infra, config, serviceAuthSecret);
 
   // TenantController — K8s operator for tenant lifecycle (namespaces, RBAC, quotas)
   const tenantController = installTenantController(provider, ns, infra, config);
@@ -955,6 +955,7 @@ function installOryKratos(
   ns: k8s.core.v1.Namespace,
   infra: InfraOutputs,
   config: PlatformStackConfig,
+  cookieSecret: random.RandomPassword,
 ): k8s.helm.v3.Release {
   const kratosValuesPath = path.resolve(
     __dirname,
@@ -1635,6 +1636,7 @@ function installCloudService(
   ns: k8s.core.v1.Namespace,
   infra: InfraOutputs,
   config: PlatformStackConfig,
+  serviceAuthSecret: random.RandomPassword,
 ): void {
   const registrySecretName = "loopzero-infra-registry";
   const imageTag = config.environment || "dev";
@@ -1803,7 +1805,8 @@ function installLoopZeroAPI(
   config: PlatformStackConfig,
   lokiEndpoint: pulumi.Output<string>,
   callbackToken: random.RandomPassword,
-  cf?: CloudflareOutputs,
+  cf: CloudflareOutputs | undefined,
+  serviceAuthSecret: random.RandomPassword,
 ): k8s.apps.v1.Deployment {
   // Database connection string for the `loopzero` database (created in Phase 1).
   // MEET-2026-03-31-024: When loopzeroApiDbPassword is set, the API connects as loopzero_api role

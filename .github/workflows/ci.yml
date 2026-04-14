@@ -474,7 +474,7 @@ jobs:
 
       # Trivy — always on PRs (filesystem + IaC + Dockerfiles)
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -483,7 +483,7 @@ jobs:
           format: table
           skip-dirs: infra/tests/e2e/fixtures,examples,loopzero-packs,loopzero-forge
       - name: Trivy Dockerfile scan (api)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: config
           scan-ref: api
@@ -491,7 +491,7 @@ jobs:
           exit-code: 1
           format: table
       - name: Trivy Dockerfile scan (operators)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: config
           scan-ref: operators
@@ -501,7 +501,7 @@ jobs:
 
       # TruffleHog secret detection
       - name: TruffleHog secret scan
-        uses: trufflesecurity/trufflehog@v3.88.0
+        uses: trufflesecurity/trufflehog@v3.94.3
         with:
           extra_args: --only-verified --results=verified,unknown
 

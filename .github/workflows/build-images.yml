@@ -654,15 +654,15 @@ jobs:
 
       - name: Install cosign
         if: matrix.result == 'success' && matrix.digest != ''
-        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+        uses: sigstore/cosign-installer@v4.1.1
 
       - name: Install syft
         if: matrix.result == 'success' && matrix.digest != ''
-        uses: anchore/sbom-action/download-syft@fc46e51fd3cb168ffb36c6d1915723c47db58571 # v0.17.7
+        uses: anchore/sbom-action/download-syft@v0.24.0
 
       - name: Scan image with Trivy
         if: matrix.result == 'success' && matrix.digest != ''
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: image
           image-ref: "${{ matrix.image }}@${{ matrix.digest }}"
