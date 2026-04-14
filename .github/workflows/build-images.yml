@@ -55,9 +55,6 @@ permissions:
 env:
   REGISTRY: registry.digitalocean.com/loopzero-infra-registry  # Legacy DOCR (remove after Harbor migration — MEET-048)
   HARBOR_REGISTRY: harbor.dev.loopzero.example  # New Harbor registry (MEET-048)
-  # Mapped from secrets for use in step `if:` expressions (secrets.* not allowed in if:).
-  HARBOR_ROBOT_USERNAME: ${{ env.HARBOR_ROBOT_USERNAME }}
-  HARBOR_ROBOT_PASSWORD: ${{ env.HARBOR_ROBOT_PASSWORD }}
 
 concurrency:
   group: build-images-${{ github.ref }}
@@ -158,6 +155,9 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.build_api == 'true'
     environment: infra-dev
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
     outputs:
       digest: ${{ steps.build.outputs.digest }}
       image: ${{ steps.build.outputs.image }}
@@ -243,6 +243,9 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.build_operator == 'true'
     environment: infra-dev
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
     outputs:
       digest: ${{ steps.build.outputs.digest }}
       image: ${{ steps.build.outputs.image }}
@@ -327,6 +330,9 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.build_cloud == 'true'
     environment: infra-dev
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
     outputs:
       digest: ${{ steps.build.outputs.digest }}
       image: ${{ steps.build.outputs.image }}
@@ -411,6 +417,9 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.build_operator == 'true'
     environment: infra-dev
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
     outputs:
       digest: ${{ steps.build.outputs.digest }}
       image: ${{ steps.build.outputs.image }}
@@ -485,6 +494,9 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.build_cloud == 'true'
     environment: infra-dev
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
     outputs:
       digest: ${{ steps.build.outputs.digest }}
       image: ${{ steps.build.outputs.image }}
@@ -598,6 +610,9 @@ jobs:
     needs: [resolve, build-api, build-operator, build-cloud, build-dashboard, build-harbor-init]
     if: always()
     environment: infra-dev
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
     strategy:
       fail-fast: false
       matrix:
@@ -744,6 +759,9 @@ jobs:
       needs.sign-and-attest.result != 'failure' &&
       (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success' || needs.build-harbor-init.result == 'success')
     environment: infra-dev
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
     steps:
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -808,6 +826,9 @@ jobs:
       needs.sign-and-attest.result != 'failure' &&
       (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success' || needs.build-harbor-init.result == 'success')
     environment: infra-dev
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
