@@ -88,6 +88,15 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	app.Status.ObservedGeneration = app.Generation
 
+	// Re-fetch before status update to get the latest ResourceVersion.
+	// Between spec updates (finalizer, hostname) and this point, the object's
+	// ResourceVersion may have changed — envtest's etcd rejects stale versions.
+	statusPatch := app.DeepCopy()
+	if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
+		return ctrl.Result{}, fmt.Errorf("re-fetching application before status update: %w", err)
+	}
+	app.Status = statusPatch.Status
+
 	if err := r.Status().Update(ctx, &app); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating application status: %w", err)
 	}
