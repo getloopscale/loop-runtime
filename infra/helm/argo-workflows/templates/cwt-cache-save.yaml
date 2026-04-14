@@ -24,7 +24,7 @@ spec:
             description: "Comma-separated directories to tar (e.g., node_modules)"
       container:
         # MOD-4 fix: Replaced amazon/aws-cli (~200MB) with minio/mc (~30MB).
-        image: minio/mc:RELEASE.2024-01-16T16-06-34Z
+        image: minio/mc:RELEASE.2025-04-08T15-05-49Z
         # Credentials injected from K8s Secret via envFrom — never as workflow parameters.
         # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
         env:

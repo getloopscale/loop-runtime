@@ -116,6 +116,10 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 	}
 	buildctlArgs = append(buildctlArgs, "--metadata-file", fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, p.AppName))
 
+	// Task 3.1: SLSA provenance attestation on user-built images.
+	// BuildKit 0.11+ embeds provenance metadata in the image manifest.
+	buildctlArgs = append(buildctlArgs, "--opt", "attest:provenance=mode=max")
+
 	if b.infraParams.RegistryInsecure {
 		buildctlArgs = append(buildctlArgs, "--allow", "security.insecure")
 	}

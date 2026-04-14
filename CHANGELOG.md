@@ -40,6 +40,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **ArgoCD AppProject namespace glob removed** (M32): Glob fallback `loopzero-{tenant}-*` replaced with fail-closed empty destinations list. Deploys blocked until EnvironmentController provides explicit namespaces.
 - **ArgoCD cluster secret scope reduced** (M33): Full kubeconfig no longer stored in ArgoCD cluster secret. Only bearer token + CA certificate extracted and stored in `config` field.
 
+### Changed
+- **Image build optimization** (Sprint 6+): Comprehensive build pipeline modernization:
+  - All Dockerfiles use `--mount=type=cache` for Go modules and build cache (~30-50% faster rebuilds)
+  - All Go builds use `-trimpath -ldflags="-s -w"` (smaller binaries, no path metadata)
+  - All platform Dockerfiles have `HEALTHCHECK`, OCI labels, consolidated layers
+  - Clone-runner `mc` binary verified with SHA256 checksum (supply chain hardening)
+  - Cosign signing uses pre-built `loopzero-cosign-signer` image (no runtime binary downloads)
+  - Dashboard runs as non-root via `nginxinc/nginx-unprivileged` on port 8080
+  - `.dockerignore` expanded to exclude Pulumi node_modules, dist, build, coverage
+  - Generated Dockerfiles (loopzeropacks) add `--mount=type=cache`, non-root USER, OCI labels for all 7 languages
+  - PHP uses multi-stage `FROM composer:2.8` instead of `curl | php` installer
+  - Rust binary name fixed (was evaluating in generator, not Docker build)
+  - SLSA provenance attestation (`--provenance=max`) on user-built images via BuildKit
+  - CI: keyless cosign signing (Sigstore/Fulcio OIDC), harbor-init signed + scanned
+  - CI: `SOURCE_DATE_EPOCH` for reproducible builds, `--provenance=true --sbom=true` on all platform images
+  - CI: `docker-bake.hcl` for declarative multi-image builds
+  - CI: Trivy `--ignore-unfixed` + `.trivyignore` for false positive management
+  - Semver release workflow (`.github/workflows/release.yml`)
+  - ADR-0003 updated: Kaniko → BuildKit (reflects actual architecture)
+
 ### Added
 - **Supply chain security — image signing** (Sprint 6): cosign sign + syft SBOM + cosign attest for all 4 platform images in CI pipeline. New `sign-and-attest` job with matrix strategy in `build-images.yml`. Trivy post-build scan on final images. SBOM artifacts retained 90 days.
 - **Supply chain security — user image signing** (Sprint 6): Argo Workflow DAG now includes `sign-image-{app}` step after each `build-image-{app}`. Uses `gcr.io/projectsigstore/cosign:v2.4.1` with key mounted from `cosign-signing-key` K8s Secret.

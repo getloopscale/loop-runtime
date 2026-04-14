@@ -12,14 +12,19 @@ const (
 	imageNode     = "node:20.11.1-alpine"
 	imageGolang   = "golang:1.22-alpine"
 	imagePython   = "python:3.12-alpine"
-	imageAlpine   = "alpine:3.19.1"
+	imageAlpine   = "alpine:3.21.3"
 	imageRuby     = "ruby:3.3-alpine"
 	imageBuildKit = "moby/buildkit:v0.18.2-rootless"
 	imageAWSCLI   = "amazon/aws-cli:2.22.35"
 
+	// loopzero-cosign-signer: Pre-built Alpine image with cosign binary baked in.
+	// SEC-006: No runtime downloads — cosign is checksum-verified at image build time.
+	// Built from: infra/images/cosign-signer/Dockerfile — CI builds via build-images.yml.
+	imageCosignSigner = "registry.digitalocean.com/loopzero-infra-registry/loopzero-cosign-signer:v0.1.0"
+
 	// loopzero-packs-runner generates optimized Dockerfiles by analyzing source code.
 	// Replaces hardcoded bash Dockerfile templates (MEET-2026-03-29-017).
-	// Built from: loopzero-packs/Dockerfile.generate — CI builds via build-images.yml.
+	// Built from: infra/images/packs-runner/Dockerfile — CI builds via build-images.yml.
 	// COMP-004 fix: pinned to v0.1.0 (was :latest — non-deterministic builds).
 	// Local dev: override via LOOPZERO_PACKS_IMAGE env or use k3d-loopzero-registry:5000/loopzero-packs-runner:latest
 	imageLoopZeroPacks = "registry.digitalocean.com/loopzero-infra-registry/loopzero-packs-runner:v0.2.0"

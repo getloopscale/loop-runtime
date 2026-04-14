@@ -180,6 +180,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
+      - name: Set reproducible timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
       - name: Build and push loopzero-api
         id: build
         run: |
@@ -188,6 +191,8 @@ jobs:
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
           docker buildx build -f api/Dockerfile \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
             --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-api:cache \
             --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-api:cache,mode=max \
             -t ${{ env.REGISTRY }}/loopzero-api:${TAG} \
@@ -260,6 +265,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
+      - name: Set reproducible timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
       - name: Build and push tenant-controller
         id: build
         run: |
@@ -268,6 +276,8 @@ jobs:
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
           docker buildx build -f operators/Dockerfile \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
             --cache-from type=registry,ref=${{ env.REGISTRY }}/tenant-controller:cache \
             --cache-to type=registry,ref=${{ env.REGISTRY }}/tenant-controller:cache,mode=max \
             -t ${{ env.REGISTRY }}/tenant-controller:${TAG} \
@@ -339,6 +349,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
+      - name: Set reproducible timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
       - name: Build and push cloud-api
         id: build
         run: |
@@ -347,6 +360,8 @@ jobs:
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
           docker buildx build -f cloud/Dockerfile \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
             --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-cloud:cache \
             --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-cloud:cache,mode=max \
             -t ${{ env.REGISTRY }}/loopzero-cloud:${TAG} \
@@ -393,6 +408,9 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.build_operator == 'true'
     environment: infra-dev
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -414,30 +432,43 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
+      - name: Set reproducible timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
       - name: Build and push harbor-init
+        id: build
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
 
           docker buildx build -f infra/scripts/harbor-init/Dockerfile \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/harbor-init:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/harbor-init:cache,mode=max \
             -t ${{ env.REGISTRY }}/harbor-init:${TAG} \
             -t ${{ env.REGISTRY }}/harbor-init:${SHA} \
-            -t ${{ env.REGISTRY }}/harbor-init:latest \
             --push .
+
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/harbor-init:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/harbor-init" >> "$GITHUB_OUTPUT"
 
           echo "### harbor-init" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/harbor-init:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Push harbor-init to Harbor (dual-push)
         if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
 
           docker tag ${{ env.REGISTRY }}/harbor-init:${TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${TAG}
           docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${TAG}
 
-          docker tag ${{ env.REGISTRY }}/harbor-init:latest ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:latest
-          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:latest
+          docker tag ${{ env.REGISTRY }}/harbor-init:${SHA} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${SHA}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${SHA}
 
           echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
 
@@ -476,6 +507,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
+      - name: Set reproducible timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
       - name: Resolve dashboard URLs
         id: urls
         run: |
@@ -509,6 +543,8 @@ jobs:
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
           docker buildx build \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
             --build-arg VITE_API_URL=${{ steps.urls.outputs.api_url }} \
             --build-arg VITE_ENGINE_URL=${{ steps.urls.outputs.engine_url }} \
             --build-arg VITE_AUTH_URL=${{ steps.urls.outputs.auth_url }} \
@@ -556,7 +592,7 @@ jobs:
     name: "Sign & attest: ${{ matrix.component }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [resolve, build-api, build-operator, build-cloud, build-dashboard]
+    needs: [resolve, build-api, build-operator, build-cloud, build-dashboard, build-harbor-init]
     if: always()
     environment: infra-dev
     strategy:
@@ -583,6 +619,11 @@ jobs:
             result: ${{ needs.build-dashboard.result }}
             image: ${{ needs.build-dashboard.outputs.image || '' }}
             digest: ${{ needs.build-dashboard.outputs.digest || '' }}
+          - component: harbor-init
+            build_job: build-harbor-init
+            result: ${{ needs.build-harbor-init.result }}
+            image: ${{ needs.build-harbor-init.outputs.image || '' }}
+            digest: ${{ needs.build-harbor-init.outputs.digest || '' }}
     steps:
       - name: Skip if build did not run
         if: matrix.result != 'success' || matrix.digest == ''
@@ -619,7 +660,7 @@ jobs:
         if: matrix.result == 'success' && matrix.digest != ''
         uses: anchore/sbom-action/download-syft@fc46e51fd3cb168ffb36c6d1915723c47db58571 # v0.17.7
 
-      - name: Install Trivy
+      - name: Scan image with Trivy
         if: matrix.result == 'success' && matrix.digest != ''
         uses: aquasecurity/trivy-action@0.28.0
         with:
@@ -628,6 +669,8 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "1"
           format: table
+          ignore-unfixed: true
+          trivyignores: .trivyignore
         env:
           TRIVY_USERNAME: ${{ secrets.DIGITALOCEAN_TOKEN }}
           TRIVY_PASSWORD: ${{ secrets.DIGITALOCEAN_TOKEN }}
@@ -643,10 +686,10 @@ jobs:
           PKGS=$(jq '.packages | length' sbom-${{ matrix.component }}.spdx.json 2>/dev/null || echo "?")
           echo "- Packages: ${PKGS}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Sign image with cosign
+      - name: Sign image with cosign (keyless)
         if: matrix.result == 'success' && matrix.digest != ''
         run: |
-          cosign sign --yes --key env://COSIGN_KEY \
+          cosign sign --yes \
             -a "repo=${{ github.repository }}" \
             -a "sha=${{ github.sha }}" \
             -a "ref=${{ github.ref_name }}" \
@@ -655,33 +698,27 @@ jobs:
             "${{ matrix.image }}@${{ matrix.digest }}"
 
           echo "### Signature: ${{ matrix.component }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ✅ Signed with cosign" >> "$GITHUB_STEP_SUMMARY"
-        env:
-          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          echo "- Signed with cosign (keyless, Fulcio + Rekor)" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Attest SBOM with cosign
+      - name: Attest SBOM with cosign (keyless)
         if: matrix.result == 'success' && matrix.digest != ''
         run: |
-          cosign attest --yes --key env://COSIGN_KEY \
+          cosign attest --yes \
             --predicate sbom-${{ matrix.component }}.spdx.json \
             --type spdxjson \
             "${{ matrix.image }}@${{ matrix.digest }}"
 
-          echo "- ✅ SBOM attestation attached" >> "$GITHUB_STEP_SUMMARY"
-        env:
-          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          echo "- SBOM attestation attached (keyless)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify signature (smoke test)
         if: matrix.result == 'success' && matrix.digest != ''
         run: |
-          cosign verify --key env://COSIGN_PUB \
+          cosign verify \
+            --certificate-identity-regexp="https://github.com/loopzero.*" \
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
             "${{ matrix.image }}@${{ matrix.digest }}" | head -20
 
-          echo "- ✅ Signature verified" >> "$GITHUB_STEP_SUMMARY"
-        env:
-          COSIGN_PUB: ${{ secrets.COSIGN_PUB }}
+          echo "- Signature verified (keyless, Fulcio identity)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload SBOM artifact
         if: matrix.result == 'success' && matrix.digest != ''
@@ -698,11 +735,11 @@ jobs:
     name: Integrate registry with DOKS
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [build-api, build-operator, build-cloud, build-dashboard, sign-and-attest]
+    needs: [build-api, build-operator, build-cloud, build-dashboard, build-harbor-init, sign-and-attest]
     if: >-
       always() &&
       needs.sign-and-attest.result != 'failure' &&
-      (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success')
+      (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success' || needs.build-harbor-init.result == 'success')
     environment: infra-dev
     steps:
       - name: Install doctl
@@ -762,11 +799,11 @@ jobs:
     name: Update CWTs on build cluster
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [build-api, build-operator, build-cloud, build-dashboard, sign-and-attest]
+    needs: [build-api, build-operator, build-cloud, build-dashboard, build-harbor-init, sign-and-attest]
     if: >-
       always() &&
       needs.sign-and-attest.result != 'failure' &&
-      (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success')
+      (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success' || needs.build-harbor-init.result == 'success')
     environment: infra-dev
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

@@ -21,25 +21,17 @@ import (
 // (written to /workspace/metadata-{appName}.json) and signs by digest,
 // ensuring the signature is pinned to the exact image content.
 //
-// Image choice: Uses Alpine (which has sh/sed) + downloads cosign binary.
-// The official gcr.io/projectsigstore/cosign image is distroless (no shell,
-// no grep, no cut) — unusable for scripts that need to parse JSON metadata.
+// Image choice: Uses pre-built loopzero-cosign-signer image with cosign baked in.
+// SEC-006: No runtime binary downloads — cosign is checksum-verified at image build time.
 func cosignSignTemplate(appName, imageTag string) *forge.Container {
 	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, appName)
 
 	// Shell script that:
-	// 1. Downloads cosign binary (pinned version, checksum verified)
-	// 2. Extracts the image digest from BuildKit metadata using sed (available in alpine)
-	// 3. Signs the image by digest using cosign
+	// 1. Extracts the image digest from BuildKit metadata using sed
+	// 2. Signs the image by digest using the pre-installed cosign binary
 	// The COSIGN_PASSWORD env var is injected from the secret.
 	script := fmt.Sprintf(`set -e
-# Install cosign binary (pinned to v2.4.1)
-COSIGN_VERSION="v2.4.1"
-wget -q -O /usr/local/bin/cosign \
-  "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
-chmod +x /usr/local/bin/cosign
-
-# Extract digest from BuildKit metadata using sed (alpine has no jq/grep -P).
+# Extract digest from BuildKit metadata using sed.
 # BuildKit writes: {"containerimage.digest":"sha256:abc123..."}
 DIGEST=$(sed -n 's/.*"containerimage.digest":"\([^"]*\)".*/\1/p' %s)
 if [ -z "$DIGEST" ]; then
@@ -48,7 +40,7 @@ if [ -z "$DIGEST" ]; then
 fi
 echo "Signing image: %s@${DIGEST}"
 
-# Sign with cosign (key-based)
+# Sign with cosign (key-based — cluster does not have OIDC provider for keyless)
 cosign sign --yes --key %s/cosign.key \
   -a "build-system=loopzero" \
   -a "app=%s" \
@@ -59,7 +51,7 @@ echo "Image signed successfully"
 
 	return &forge.Container{
 		Name:    fmt.Sprintf("sign-image-%s", appName),
-		Image:   imageAlpine,
+		Image:   imageCosignSigner,
 		Command: []string{"sh", "-c", script},
 		Env: []forge.EnvBuilder{
 			forge.Env{Name: "HOME", Value: "/home/user"},
