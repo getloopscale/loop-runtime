@@ -55,6 +55,9 @@ permissions:
 env:
   REGISTRY: registry.digitalocean.com/loopzero-infra-registry  # Legacy DOCR (remove after Harbor migration — MEET-048)
   HARBOR_REGISTRY: harbor.dev.loopzero.example  # New Harbor registry (MEET-048)
+  # Mapped from secrets for use in step `if:` expressions (secrets.* not allowed in if:).
+  HARBOR_ROBOT_USERNAME: ${{ env.HARBOR_ROBOT_USERNAME }}
+  HARBOR_ROBOT_PASSWORD: ${{ env.HARBOR_ROBOT_PASSWORD }}
 
 concurrency:
   group: build-images-${{ github.ref }}
@@ -173,9 +176,9 @@ jobs:
 
       # MEET-048: Harbor dual-push — login to Harbor registry during transition.
       - name: Login to Harbor
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
-          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
@@ -211,7 +214,7 @@ jobs:
 
       # MEET-048: Dual-push to Harbor (remove after migration completes).
       - name: Push loopzero-api to Harbor (dual-push)
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
@@ -258,9 +261,9 @@ jobs:
 
       # MEET-048: Harbor dual-push — login to Harbor registry during transition.
       - name: Login to Harbor
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
-          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
@@ -295,7 +298,7 @@ jobs:
 
       # MEET-048: Dual-push to Harbor (remove after migration completes).
       - name: Push tenant-controller to Harbor (dual-push)
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
@@ -342,9 +345,9 @@ jobs:
 
       # MEET-048: Harbor dual-push — login to Harbor registry during transition.
       - name: Login to Harbor
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
-          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
@@ -378,7 +381,7 @@ jobs:
 
       # MEET-048: Dual-push to Harbor (remove after migration completes).
       - name: Push cloud-api to Harbor (dual-push)
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
@@ -425,9 +428,9 @@ jobs:
         run: doctl registry login --expiry-seconds 600
 
       - name: Login to Harbor
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
-          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
@@ -459,7 +462,7 @@ jobs:
           echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Push harbor-init to Harbor (dual-push)
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
@@ -500,9 +503,9 @@ jobs:
 
       # MEET-048: Harbor dual-push — login to Harbor registry during transition.
       - name: Login to Harbor
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
-          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
@@ -565,7 +568,7 @@ jobs:
 
       # MEET-048: Dual-push to Harbor (remove after migration completes).
       - name: Push dashboard to Harbor (dual-push)
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
@@ -648,9 +651,9 @@ jobs:
 
       # MEET-048: Harbor login for sign-and-attest (future: sign Harbor images too).
       - name: Login to Harbor
-        if: matrix.result == 'success' && matrix.digest != '' && env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: matrix.result == 'success' && matrix.digest != '' && env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
-          echo "${{ secrets.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ secrets.HARBOR_ROBOT_USERNAME }}" --password-stdin
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
 
       - name: Install cosign
         if: matrix.result == 'success' && matrix.digest != ''
@@ -767,7 +770,7 @@ jobs:
       # TODO(MEET-048): After migration, replace DOCR integration above with Harbor-only.
       # Harbor uses standard K8s docker-registry secrets instead of doctl integration.
       - name: Add Harbor imagePullSecret to DOKS clusters
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
           CLUSTERS=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra" || true)
           if [ -z "$CLUSTERS" ]; then
@@ -784,8 +787,8 @@ jobs:
             for NS in default platform-system; do
               kubectl --context "$CTX" create secret docker-registry harbor-registry \
                 --docker-server="${{ env.HARBOR_REGISTRY }}" \
-                --docker-username="${{ secrets.HARBOR_ROBOT_USERNAME }}" \
-                --docker-password="${{ secrets.HARBOR_ROBOT_PASSWORD }}" \
+                --docker-username="${{ env.HARBOR_ROBOT_USERNAME }}" \
+                --docker-password="${{ env.HARBOR_ROBOT_PASSWORD }}" \
                 --namespace "$NS" \
                 --dry-run=client -o yaml | kubectl --context "$CTX" apply -f - 2>/dev/null || true
             done
@@ -867,7 +870,7 @@ jobs:
       # TODO(MEET-048): After migration, merge DOCR and Harbor configs into a single
       # buildkit-registry-config secret, then remove DOCR config entirely.
       - name: Ensure Harbor BuildKit credentials
-        if: env.HARBOR_REGISTRY != '' && secrets.HARBOR_ROBOT_PASSWORD != ''
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
         run: |
           BUILD_CLUSTER=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra.*-build$" | head -1)
           if [ -z "$BUILD_CLUSTER" ]; then
@@ -880,7 +883,7 @@ jobs:
           kubectl --context "$BUILD_CONTEXT" get ns argo >/dev/null 2>&1 || exit 0
 
           # Create Harbor docker-config JSON for BuildKit
-          HARBOR_CONFIG=$(echo -n '{"auths":{"${{ env.HARBOR_REGISTRY }}":{"username":"${{ secrets.HARBOR_ROBOT_USERNAME }}","password":"${{ secrets.HARBOR_ROBOT_PASSWORD }}"}}}')
+          HARBOR_CONFIG=$(echo -n '{"auths":{"${{ env.HARBOR_REGISTRY }}":{"username":"${{ env.HARBOR_ROBOT_USERNAME }}","password":"${{ env.HARBOR_ROBOT_PASSWORD }}"}}}')
           kubectl create secret generic buildkit-harbor-registry-config \
             --context "$BUILD_CONTEXT" \
             --namespace argo \
