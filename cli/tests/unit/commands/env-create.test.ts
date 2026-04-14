@@ -125,16 +125,16 @@ describe('EnvCreateCommand', () => {
       expect(errors[0]).toContain('reserved');
     });
 
-    it('rejects "kube-system"', async () => {
+    it('rejects "system"', async () => {
       const cmd = new EnvCreateCommand(makeDeps());
-      const code = await cmd.execute('kube-system');
+      const code = await cmd.execute('system');
       expect(code).toBe(1);
       expect(errors[0]).toContain('reserved');
     });
 
-    it('rejects "loopzero-system"', async () => {
+    it('rejects "internal"', async () => {
       const cmd = new EnvCreateCommand(makeDeps());
-      const code = await cmd.execute('loopzero-system');
+      const code = await cmd.execute('internal');
       expect(code).toBe(1);
       expect(errors[0]).toContain('reserved');
     });

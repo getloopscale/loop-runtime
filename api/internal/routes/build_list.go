@@ -55,7 +55,10 @@ type buildListResponse struct {
 // List handles GET /api/v1/projects/{name}/builds.
 // Query params: env (optional), limit (default 20, max 50), offset (default 0).
 func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -67,7 +70,7 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit := parseIntParam(r.URL.Query().Get("limit"), 20)
 	offset := parseIntParam(r.URL.Query().Get("offset"), 0)
 
-	builds, total, err := h.builds.ListByProjectAndEnv(r.Context(), uc.TenantID, name, env, limit, offset)
+	builds, total, err := h.builds.ListByProjectAndEnv(ctx, uc.TenantID, name, env, limit, offset)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return

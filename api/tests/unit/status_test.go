@@ -192,7 +192,7 @@ func TestStatusRoute(t *testing.T) {
 		}
 	})
 
-	t.Run("GET /api/v1/projects/{name}/status → defaults env to production when not specified", func(t *testing.T) {
+	t.Run("GET /api/v1/projects/{name}/status → returns 400 when env not specified", func(t *testing.T) {
 		// Arrange
 		projects := &fakeStatusProjectStore{
 			project: &routes.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
@@ -217,18 +217,9 @@ func TestStatusRoute(t *testing.T) {
 		// Act
 		handler.Get(rec, req)
 
-		// Assert
-		if rec.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-		}
-
-		var resp map[string]interface{}
-		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-			t.Fatalf("failed to decode response: %v", err)
-		}
-
-		if resp["environment"] != "production" {
-			t.Errorf("expected environment 'production' as default, got '%v'", resp["environment"])
+		// Assert: empty environment returns 400
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 		}
 	})
 

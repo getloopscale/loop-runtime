@@ -428,7 +428,7 @@ jobs:
           echo "OK — $((expected - 1)) migrations numbered 1..$((expected - 1))."
 
   # ─────────────────────────────────────────────
-  # SECURITY — runs on PRs only (not every push)
+  # SECURITY — runs on all triggers (push + PR)
   # ─────────────────────────────────────────────
 
   security:
@@ -436,7 +436,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [changes]
-    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
         with:

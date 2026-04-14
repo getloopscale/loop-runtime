@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 
 	"go.opentelemetry.io/otel"
@@ -133,7 +134,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	route.Status.LastProbeResult = probeResult
 
 	if probeErr == nil && probeResult >= 200 && probeResult < 400 {
-		// Probe succeeded
+		// Probe succeeded — reset failures and recover from Failed state
 		route.Status.ConsecutiveFailures = 0
 		route.Status.Phase = loopzerov1.ExposedRoutePhaseReachable
 		conditions.SetCondition(&route.Status.Conditions, conditions.TypeRouteReachable,
@@ -231,7 +232,10 @@ func (r *ExposureReconciler) performProbe(ctx context.Context, url string) (int3
 	if err != nil {
 		return 0, fmt.Errorf("probing %s: %w", url, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	return int32(resp.StatusCode), nil
 }

@@ -74,7 +74,10 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 	if !r.secretExists(ctx, r.BuildClient, buildNs, k.SecretHarborRegistryConfig) {
 		slog.Info("harbor build secret missing, forcing robot recreation",
 			"tenant", tenant.Name, "namespace", buildNs, "secret", k.SecretHarborRegistryConfig)
-		_ = r.HarborClient.DeleteRobotAccount(ctx, tenant.Name, buildRobotName)
+		if delErr := r.HarborClient.DeleteRobotAccount(ctx, tenant.Name, buildRobotName); delErr != nil {
+			slog.Warn("harbor build robot delete failed (will attempt recreate anyway)",
+				"tenant", tenant.Name, "robot", buildRobotName, "error", delErr)
+		}
 	}
 
 	// Build robot — push+pull access for BuildKit.
@@ -114,7 +117,10 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 		}
 	}
 	if pullSecretMissing {
-		_ = r.HarborClient.DeleteRobotAccount(ctx, tenant.Name, pullRobotName)
+		if delErr := r.HarborClient.DeleteRobotAccount(ctx, tenant.Name, pullRobotName); delErr != nil {
+			slog.Warn("harbor pull robot delete failed (will attempt recreate anyway)",
+				"tenant", tenant.Name, "robot", pullRobotName, "error", delErr)
+		}
 	}
 
 	// Pull robot — read-only access for workload pods.

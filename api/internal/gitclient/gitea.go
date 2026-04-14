@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -55,7 +56,8 @@ func (m *GiteaRepoManager) EnsureRepo(ctx context.Context, repoName string, auto
 	if err != nil {
 		return fmt.Errorf("check repo: %w", err)
 	}
-	_ = resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
 		return nil // repo exists
@@ -84,7 +86,8 @@ func (m *GiteaRepoManager) EnsureRepo(ctx context.Context, repoName string, auto
 	if err != nil {
 		return fmt.Errorf("create repo: %w", err)
 	}
-	_ = resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
 		return fmt.Errorf("create repo: status %d", resp.StatusCode)

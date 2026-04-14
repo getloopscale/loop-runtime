@@ -62,8 +62,9 @@ type ReleaseConvergenceLoop struct {
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	logger *slog.Logger
-	cfg    ReleaseConvergenceLoopConfig
+	baseDomain string
+	logger     *slog.Logger
+	cfg        ReleaseConvergenceLoopConfig
 
 	sem    chan struct{}
 	active sync.Map
@@ -82,6 +83,7 @@ func NewReleaseConvergenceLoop(
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	},
+	baseDomain string,
 	logger *slog.Logger,
 	cfg ReleaseConvergenceLoopConfig,
 ) *ReleaseConvergenceLoop {
@@ -103,6 +105,7 @@ func NewReleaseConvergenceLoop(
 		sync_:          syncClient,
 		locker:         locker,
 		eventStore:     eventStore,
+		baseDomain:     baseDomain,
 		logger:         logger,
 		cfg:            cfg,
 		sem:            make(chan struct{}, cfg.MaxConcurrent),
@@ -165,14 +168,21 @@ func (r *ReleaseConvergenceLoop) tick(ctx context.Context) {
 		}
 
 		release := rel
-		go func() {
-			r.sem <- struct{}{}
-			defer func() {
-				<-r.sem
-				r.active.Delete(release.ID)
+		// Acquire semaphore BEFORE spawning goroutine to prevent unbounded
+		// goroutine accumulation when all slots are busy.
+		select {
+		case r.sem <- struct{}{}:
+			go func() {
+				defer func() {
+					<-r.sem
+					r.active.Delete(release.ID)
+				}()
+				r.verifyRelease(ctx, &release)
 			}()
-			r.verifyRelease(ctx, &release)
-		}()
+		default:
+			// All semaphore slots busy — skip this release, next tick will retry.
+			r.active.Delete(release.ID)
+		}
 	}
 }
 
@@ -293,7 +303,7 @@ func (r *ReleaseConvergenceLoop) checkSync(ctx context.Context, appName string, 
 
 func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *db.Release) {
 	err := r.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
-		apps := releaseAppsToActivationApps(release)
+		apps := releaseAppsToActivationApps(release, r.baseDomain)
 		duration := int(time.Since(release.CreatedAt).Seconds())
 		return ActivateReleaseKernel(ctx, tx, release, r.releaseStore, r.envTargetStore, r.eventStore, apps, duration, r.logger)
 	})
@@ -325,7 +335,7 @@ func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Re
 		"release_id", release.ID, "reason", reason)
 
 	// Emit SSE event
-	failedData, _ := json.Marshal(map[string]interface{}{
+	failedData := safeJSONMarshal(map[string]interface{}{
 		"status": "failed",
 		"reason": reason,
 	})

@@ -199,7 +199,7 @@ func (s *StaticDeliveryActivator) phaseCRecordResult(ctx context.Context, build 
 			if _, err := s.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseGitMirrorFailed_)); err != nil {
 				return fmt.Errorf("static activate: transition to GIT_MIRROR_FAILED: %w", err)
 			}
-			failedData, _ := json.Marshal(map[string]interface{}{
+			failedData := safeJSONMarshal(map[string]interface{}{
 				"deploy_id": deriveDeployID(release.ID),
 				"status":    "delivery_failed",
 				"error":     deliveryErr.Error(),
@@ -216,7 +216,7 @@ func (s *StaticDeliveryActivator) phaseCRecordResult(ctx context.Context, build 
 			return fmt.Errorf("static activate: transition to PENDING: %w", err)
 		}
 
-		pendingData, _ := json.Marshal(map[string]string{
+		pendingData := safeJSONMarshal(map[string]string{
 			"deploy_id": deriveDeployID(release.ID),
 			"status":    "delivering",
 		})
@@ -235,7 +235,7 @@ func (s *StaticDeliveryActivator) phaseDVerify(ctx context.Context, build *db.Bu
 	// For CF Worker delivery, verification is simpler:
 	// The KV write is synchronous and the Worker reads it immediately.
 	// We emit verifying event for SSE consistency.
-	verifyingData, _ := json.Marshal(map[string]string{
+	verifyingData := safeJSONMarshal(map[string]string{
 		"deploy_id": deriveDeployID(release.ID),
 		"status":    "verifying",
 	})
@@ -259,7 +259,7 @@ func (s *StaticDeliveryActivator) phaseEFinalize(ctx context.Context, build *db.
 			if _, err := s.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncFailed_)); err != nil {
 				return fmt.Errorf("static activate: transition to SYNC_FAILED: %w", err)
 			}
-			failedData, _ := json.Marshal(map[string]interface{}{
+			failedData := safeJSONMarshal(map[string]interface{}{
 				"deploy_id": deriveDeployID(release.ID),
 				"status":    "sync_failed",
 				"reason":    "VERIFICATION_FAILED",
@@ -284,7 +284,7 @@ func (s *StaticDeliveryActivator) phaseEFinalize(ctx context.Context, build *db.
 		}
 
 		// SSE: deploy.live
-		activeData, _ := json.Marshal(map[string]string{
+		activeData := safeJSONMarshal(map[string]string{
 			"deploy_id": deriveDeployID(release.ID),
 			"status":    "live",
 		})
@@ -318,7 +318,7 @@ func (s *StaticDeliveryActivator) phaseEFinalize(ctx context.Context, build *db.
 			deployApps = append(deployApps, entry)
 		}
 
-		deployData, _ := json.Marshal(map[string]interface{}{
+		deployData := safeJSONMarshal(map[string]interface{}{
 			"deploy_id":        deployID,
 			"status":           "success",
 			"duration_seconds": durationSecs,

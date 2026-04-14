@@ -87,6 +87,7 @@ func NewReleaseMachine() *Machine {
 			{From: ReleaseReady, Event: ReleaseGitMirrorFailed_, To: ReleaseGitMirrorFailed},
 			{From: ReleaseReady, Event: ReleaseGitPushTimeout, To: ReleaseGitMirrorFailed},
 			{From: ReleaseGitMirrorFailed, Event: ReleaseGitMirrorRetried, To: ReleasePending},
+			{From: ReleaseGitMirrorFailed, Event: ReleaseCancelledEvent, To: ReleaseCancelled},
 
 			// Sync failures and retry
 			{From: ReleasePending, Event: ReleaseSyncFailed_, To: ReleaseSyncFailed},
@@ -94,6 +95,7 @@ func NewReleaseMachine() *Machine {
 			{From: ReleasePending, Event: ReleaseCancelledEvent, To: ReleaseCancelled},
 			{From: ReleaseSyncFailed, Event: ReleaseSyncRetry, To: ReleasePending},
 			{From: ReleaseSyncFailed, Event: ReleaseSyncExhausted, To: ReleaseDriftAlert},
+			{From: ReleaseSyncFailed, Event: ReleaseCancelledEvent, To: ReleaseCancelled},
 
 			// Active state transitions
 			{From: ReleaseActive, Event: ReleaseNewActivated, To: ReleaseSuperseded},
@@ -106,7 +108,9 @@ func NewReleaseMachine() *Machine {
 
 			// Manual intervention recovery (spec §5.2 — sink state exits)
 			{From: ReleaseDriftAlert, Event: ReleaseManualResolve, To: ReleaseActive},
+			{From: ReleaseDriftAlert, Event: ReleaseCancelledEvent, To: ReleaseCancelled},
 			{From: ReleaseRollbackFailed, Event: ReleaseManualResolve, To: ReleaseActive},
+			{From: ReleaseRollbackFailed, Event: ReleaseCancelledEvent, To: ReleaseCancelled},
 
 			// Rollback reactivation — reverts a SUPERSEDED or ROLLED_BACK release back to ACTIVE
 			{From: ReleaseSuperseded, Event: ReleaseReactivated, To: ReleaseActive},

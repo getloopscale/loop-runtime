@@ -37,7 +37,7 @@ spec:
           - sh
           - -c
           - |
-            set -uo pipefail
+            set -euo pipefail
             cd /workspace 2>&1 || { echo "No workspace — skipping cache save"; exit 0; }
 
             # Configure mc alias for MinIO
@@ -108,5 +108,8 @@ spec:
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
       # Cache save is best-effort — prevent indefinite hangs if MinIO is slow
       activeDeadlineSeconds: 120

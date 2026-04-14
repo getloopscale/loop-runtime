@@ -18,6 +18,7 @@ export interface AuditResponse {
 }
 
 export interface AuditDeps {
+  getToken: () => string | null;
   getAudit: (action?: string, since?: string) => Promise<AuditResponse | null>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
@@ -37,6 +38,16 @@ export class AuditCommand {
   }
 
   async run(opts: AuditOptions): Promise<number> {
+    // Auth guard
+    if (!this.deps.getToken()) {
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({ error: 'Not authenticated. Run: loopzero login', exit_code: 4, code: 'AUTH_REQUIRED' }));
+      } else {
+        this.deps.writeError('Not authenticated. Run: loopzero login');
+      }
+      return 4;
+    }
+
     const data = await this.deps.getAudit(opts.action, opts.since);
     if (!data) {
       this.deps.writeError('Failed to fetch audit log. You may not have permission (requires admin or owner role).');

@@ -278,7 +278,11 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 		return "", fmt.Errorf("git commit: %w", err)
 	}
 
-	bundlePath := filepath.Join(os.TempDir(), fmt.Sprintf("loopzero-bundle-%s.bundle", commitSHA[:12]))
+	shaPrefix := commitSHA
+	if len(shaPrefix) > 12 {
+		shaPrefix = shaPrefix[:12]
+	}
+	bundlePath := filepath.Join(os.TempDir(), fmt.Sprintf("loopzero-bundle-%s.bundle", shaPrefix))
 	if err := git.Run(ctx, repoDir, "bundle", "create", bundlePath, "HEAD"); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return "", fmt.Errorf("git bundle create: %w", err)

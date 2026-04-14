@@ -51,6 +51,7 @@ metadata:
 spec:
   policyName: loopzero-require-image-signature
   validationActions:
+    - Deny
     - Audit
   matchResources:
     namespaceSelector:

@@ -277,6 +277,10 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		if env.DeletionTimestamp.IsZero() {
 			if err := r.Delete(ctx, env); err != nil {
 				logger.Error(err, "failed to delete child Environment CR", "environment", env.Name)
+				conditions.SetCondition(&tenant.Status.Conditions, "EnvironmentCleanup",
+					metav1.ConditionFalse, "DeleteFailed",
+					fmt.Sprintf("failed to delete environment %s: %v", env.Name, err),
+					tenant.Generation)
 			} else {
 				logger.Info("deleted child Environment CR", "environment", env.Name)
 			}

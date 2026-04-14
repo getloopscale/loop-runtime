@@ -9,6 +9,7 @@ const (
 	EnvironmentEmpty    State = ""
 	EnvironmentPending  State = "Pending"
 	EnvironmentActive   State = "Active"
+	EnvironmentFailed   State = "Failed"
 	EnvironmentDeleting State = "Deleting"
 )
 
@@ -16,6 +17,8 @@ const (
 const (
 	EnvironmentCreate          Event = "Create"
 	EnvironmentProvisioned     Event = "Provisioned"
+	EnvironmentProvisionFailed Event = "ProvisionFailed"
+	EnvironmentRetry           Event = "Retry"
 	EnvironmentDeleteRequested Event = "DeleteRequested"
 )
 
@@ -35,7 +38,10 @@ func NewEnvironmentMachine() *Machine {
 		Transitions: []transition{
 			{From: EnvironmentEmpty, Event: EnvironmentCreate, To: EnvironmentPending},
 			{From: EnvironmentPending, Event: EnvironmentProvisioned, To: EnvironmentActive},
+			{From: EnvironmentPending, Event: EnvironmentProvisionFailed, To: EnvironmentFailed},
 			{From: EnvironmentPending, Event: EnvironmentDeleteRequested, To: EnvironmentDeleting},
+			{From: EnvironmentFailed, Event: EnvironmentRetry, To: EnvironmentPending},
+			{From: EnvironmentFailed, Event: EnvironmentDeleteRequested, To: EnvironmentDeleting},
 			{From: EnvironmentActive, Event: EnvironmentDeleteRequested, To: EnvironmentDeleting},
 		},
 		Terminal: []State{EnvironmentDeleting},

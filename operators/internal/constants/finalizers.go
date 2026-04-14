@@ -12,5 +12,6 @@ const (
 	FinalizerApplication         = "loopzero.io/app-cleanup"
 	FinalizerExposedRoute        = "loopzero.io/route-cleanup"
 	FinalizerClusterCredential   = "loopzero.io/clustercredential-cleanup"
-	FinalizerGitRepositoryBinding = "platform.loopzero.io/repo-binding-cleanup"
+	FinalizerGitRepositoryBinding  = "platform.loopzero.io/repo-binding-cleanup"
+	FinalizerPlatformBootstrap     = "loopzero.io/bootstrap-cleanup"
 )

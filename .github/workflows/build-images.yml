@@ -476,6 +476,31 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
+      - name: Resolve dashboard URLs
+        id: urls
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          case "$BRANCH" in
+            main)
+              echo "api_url=https://cloud.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "engine_url=https://api.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "auth_url=https://auth.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "accounts_url=https://cloud.loopzero.example" >> "$GITHUB_OUTPUT"
+              ;;
+            homolog)
+              echo "api_url=https://cloud.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "engine_url=https://api.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "auth_url=https://auth.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "accounts_url=https://cloud.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "api_url=https://cloud.dev.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "engine_url=https://api.dev.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "auth_url=https://auth.dev.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "accounts_url=https://cloud.dev.loopzero.example" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
       - name: Build and push dashboard
         id: build
         run: |
@@ -484,10 +509,10 @@ jobs:
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
 
           docker buildx build \
-            --build-arg VITE_API_URL=https://cloud.dev.loopzero.example \
-            --build-arg VITE_ENGINE_URL=https://api.dev.loopzero.example \
-            --build-arg VITE_AUTH_URL=https://auth.dev.loopzero.example \
-            --build-arg VITE_ACCOUNTS_URL=https://cloud.dev.loopzero.example \
+            --build-arg VITE_API_URL=${{ steps.urls.outputs.api_url }} \
+            --build-arg VITE_ENGINE_URL=${{ steps.urls.outputs.engine_url }} \
+            --build-arg VITE_AUTH_URL=${{ steps.urls.outputs.auth_url }} \
+            --build-arg VITE_ACCOUNTS_URL=${{ steps.urls.outputs.accounts_url }} \
             --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-dashboard:cache \
             --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-dashboard:cache,mode=max \
             -t ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} \
@@ -596,7 +621,7 @@ jobs:
 
       - name: Install Trivy
         if: matrix.result == 'success' && matrix.digest != ''
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: image
           image-ref: "${{ matrix.image }}@${{ matrix.digest }}"
@@ -781,7 +806,7 @@ jobs:
 
           # Render and apply CWT templates from the local Helm chart.
           helm template loopzero-build-cwts infra/helm/argo-workflows \
-            --set minio.insecure=true | \
+            --set minio.insecure=${{ github.ref != 'refs/heads/main' }} | \
             kubectl apply --context "$BUILD_CONTEXT" -f - || {
             echo "::warning::CWT apply failed — will be applied by infra deploy"
             exit 0

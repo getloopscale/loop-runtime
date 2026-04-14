@@ -830,7 +830,7 @@ jobs:
             if [ -n "$BUILD_CTX" ]; then
               # Render and apply CWT templates
               helm template loopzero-build-cwts "$GITHUB_WORKSPACE/infra/helm/argo-workflows" \
-                --set minio.insecure=true | \
+                --set minio.insecure=${{ needs.resolve.outputs.stack == 'dev' }} | \
                 kubectl apply --context "$BUILD_CTX" -f - 2>/dev/null || true
 
               # BuildKit registry credentials — needed for image push in build workflows (DOCR).

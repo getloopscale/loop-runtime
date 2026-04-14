@@ -68,7 +68,12 @@ export class StatusCommand {
       return this.handleError(opts, err);
     }
 
-    // 4. Display result
+    // 4. Map internal sync_status to product language
+    if (status.sync_status) {
+      status = { ...status, sync_status: StatusCommand.mapSyncStatus(status.sync_status) };
+    }
+
+    // 5. Display result
     if (opts.json) {
       this.deps.writeTo(JSON.stringify(status));
       return 0;
@@ -97,6 +102,17 @@ export class StatusCommand {
     }
 
     return 0;
+  }
+
+  private static readonly SYNC_STATUS_MAP: Record<string, string> = {
+    'Synced': 'Up to date',
+    'OutOfSync': 'Update pending',
+    'Progressing': 'Deploying',
+    'Unknown': 'Unknown',
+  };
+
+  static mapSyncStatus(raw: string): string {
+    return StatusCommand.SYNC_STATUS_MAP[raw] ?? raw;
   }
 
   private formatTime(isoDate: string): string {

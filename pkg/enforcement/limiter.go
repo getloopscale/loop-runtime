@@ -49,7 +49,19 @@ func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) Limi
 		return LimitResult{Allowed: true, Plan: plan, Metric: metric}
 	}
 	if hardLimit == 0 {
-		return LimitResult{Allowed: true, Plan: plan, Metric: metric}
+		// hardLimit==0 means no limit row found — fail closed for safety.
+		// Enterprise plans are already handled above. A missing row for
+		// a non-enterprise plan should deny, not silently allow.
+		l.logger.Warn("no limit configured (denying by default)",
+			"tenant", tenantID, "plan", plan, "metric", metric,
+		)
+		return LimitResult{
+			Allowed: false,
+			Plan:    plan,
+			Metric:  metric,
+			Current: currentCount,
+			Limit:   0,
+		}
 	}
 
 	result := LimitResult{

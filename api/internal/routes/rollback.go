@@ -101,7 +101,8 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	env := req.Environment
 	if env == "" {
-		env = "production"
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
+		return
 	}
 
 	// Look up project

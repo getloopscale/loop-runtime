@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -211,21 +212,33 @@ func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr 
 }
 
 // argoCDClusterConfig is the JSON structure ArgoCD expects in the cluster secret's "config" field.
+// Contains bearer token for auth and TLS config. The full kubeconfig is NOT stored —
+// only the minimal credentials ArgoCD needs.
 type argoCDClusterConfig struct {
+	BearerToken     string          `json:"bearerToken,omitempty"`
 	TLSClientConfig argoCDTLSConfig `json:"tlsClientConfig"`
 }
 
 type argoCDTLSConfig struct {
-	Insecure bool `json:"insecure"`
+	Insecure bool   `json:"insecure"`
+	CAData   string `json:"caData,omitempty"`
 }
 
 // reconcileArgoCDClusterSecret creates or updates the ArgoCD cluster secret.
+// Stores only the bearer token + CA certificate in the "config" field (ArgoCD's
+// preferred auth method). The raw kubeconfig is NOT stored to minimize credential
+// exposure — a compromised ArgoCD namespace only leaks a scoped bearer token.
 func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.Context, cr *loopzerov1.ClusterCredential, kubeconfigData []byte) error {
 	secretName := constants.ArgoCDClusterSecretName(cr.Spec.ClusterName)
 
+	// Extract bearer token and CA from kubeconfig for ArgoCD's config field.
+	token, caData := extractCredentialsFromKubeconfig(string(kubeconfigData))
+
 	argoConfig := argoCDClusterConfig{
+		BearerToken: token,
 		TLSClientConfig: argoCDTLSConfig{
 			Insecure: cr.Spec.TLS.Insecure,
+			CAData:   caData,
 		},
 	}
 	configJSON, err := json.Marshal(argoConfig)
@@ -249,10 +262,9 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 		argoSecret.Labels[constants.LabelClusterCredential] = cr.Name
 
 		argoSecret.StringData = map[string]string{
-			"name":                  cr.Spec.ClusterName,
-			"server":                cr.Spec.APIServer,
-			"config":                string(configJSON),
-			constants.KeyKubeconfig: string(kubeconfigData),
+			"name":   cr.Spec.ClusterName,
+			"server": cr.Spec.APIServer,
+			"config": string(configJSON),
 		}
 		return nil
 	})
@@ -261,6 +273,22 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 	}
 
 	return nil
+}
+
+// extractCredentialsFromKubeconfig parses a DOKS kubeconfig YAML and extracts
+// the bearer token and CA certificate data. These are the minimal credentials
+// ArgoCD needs — the full kubeconfig is not stored in the cluster secret.
+func extractCredentialsFromKubeconfig(raw string) (token, caData string) {
+	for _, line := range strings.Split(raw, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "token:") {
+			token = strings.TrimSpace(strings.TrimPrefix(trimmed, "token:"))
+		}
+		if strings.HasPrefix(trimmed, "certificate-authority-data:") {
+			caData = strings.TrimSpace(strings.TrimPrefix(trimmed, "certificate-authority-data:"))
+		}
+	}
+	return token, caData
 }
 
 // reconcileDelete handles cleanup when a ClusterCredential is being deleted.

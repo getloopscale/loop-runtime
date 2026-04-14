@@ -53,6 +53,14 @@ function parseKubeconfig(raw: string): { token: string; certificateAuthorityData
   return { token, certificateAuthorityData, server };
 }
 
+// H12-fix: Service auth secret auto-generated when not provided via config.
+// Shared between Cloud service and Engine API — must be the same value.
+// Persisted in Pulumi state, stable across deployments.
+const serviceAuthSecret = new random.RandomPassword("service-auth-secret", {
+  length: 48,
+  special: false,
+});
+
 // --- Control Plane Services ---
 
 /**
@@ -64,6 +72,13 @@ export function installOryKratos(
   infra: InfraOutputs,
   config: PlatformStackConfig,
 ): k8s.helm.v3.Release {
+  // C1-fix: Generate cookie secret dynamically instead of hardcoded string.
+  // Persisted in Pulumi state, rotated only on explicit `pulumi destroy` + recreate.
+  const cookieSecret = new random.RandomPassword("kratos-ui-cookie-secret", {
+    length: 32,
+    special: false,
+  });
+
   const kratosValuesPath = path.resolve(
     __dirname,
     "../../../helm/ory-kratos/values.yaml",
@@ -250,7 +265,7 @@ export function installOryKratos(
                 { name: "KRATOS_BROWSER_URL", value: `https://accounts.${config.domain}` },
                 { name: "PORT", value: "3000" },
                 { name: "SECURITY_MODE", value: "" },
-                { name: "COOKIE_SECRET", value: "loopzero-kratos-ui-cookie-secret-32chars!" },
+                { name: "COOKIE_SECRET", value: cookieSecret.result },
                 { name: "CSRF_COOKIE_NAME", value: "loopzero_csrf" },
               ],
               resources: {
@@ -412,7 +427,7 @@ export function installCloudService(
         DATABASE_URL: cloudDatabaseUrl,
         SESSION_TOKEN_SECRET: config.sessionTokenSecret || "",
         // Cloud→Engine proxy auth (MEET-2026-04-07-039). Must match engine's value.
-        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || "dev-service-auth-secret-default",
+        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || serviceAuthSecret.result,
       },
     },
     { provider, dependsOn: [ns] },
@@ -561,7 +576,7 @@ export function installLoopZeroAPI(
         MINIO_SECRET_KEY: config.spacesSecretAccessKey,
         // Cloud→Engine proxy auth (MEET-2026-04-07-039). Must match cloud's value.
         // Engine is RSA-only — no SESSION_TOKEN_SECRET needed (HMAC dropped).
-        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || "dev-service-auth-secret-default",
+        LOOPZERO_SERVICE_AUTH_SECRET: config.serviceAuthSecret || serviceAuthSecret.result,
       },
     },
     { provider, dependsOn: [ns] },
@@ -976,19 +991,31 @@ export function installTenantController(
     {
       metadata: { name: "tenant-controller" },
       rules: [
-        // LoopZero CRDs — all custom resources managed by the operator.
-        // Uses wildcard to cover all current and future loopzero.io resources:
-        // tenants, environments, loopzeroapplications,
-        // exposedroutes, platformbootstraps, gitrepositorybindings,
-        // clustercredentials, appsecrets, previewenvironments, reconciliationreports
+        // LoopZero CRDs — explicitly enumerated for least-privilege.
+        // When adding a new CRD, add it here and review access requirements.
         {
           apiGroups: ["loopzero.io"],
-          resources: ["*"],
+          resources: [
+            "tenants", "environments", "loopzeroapplications",
+            "exposedroutes", "platformbootstraps", "gitrepositorybindings",
+            "clustercredentials", "appsecrets", "previewenvironments", "reconciliationreports",
+          ],
           verbs: ["get", "list", "watch", "create", "update", "patch", "delete"],
         },
         {
           apiGroups: ["loopzero.io"],
-          resources: ["*/status", "*/finalizers"],
+          resources: [
+            "tenants/status", "tenants/finalizers",
+            "environments/status", "environments/finalizers",
+            "loopzeroapplications/status", "loopzeroapplications/finalizers",
+            "exposedroutes/status", "exposedroutes/finalizers",
+            "platformbootstraps/status", "platformbootstraps/finalizers",
+            "gitrepositorybindings/status", "gitrepositorybindings/finalizers",
+            "clustercredentials/status", "clustercredentials/finalizers",
+            "appsecrets/status", "appsecrets/finalizers",
+            "previewenvironments/status", "previewenvironments/finalizers",
+            "reconciliationreports/status", "reconciliationreports/finalizers",
+          ],
           verbs: ["get", "update", "patch"],
         },
         // Namespace lifecycle
@@ -1013,7 +1040,7 @@ export function installTenantController(
         {
           apiGroups: ["rbac.authorization.k8s.io"],
           resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"],
-          verbs: ["get", "list", "watch", "create", "update", "patch", "bind", "escalate"],
+          verbs: ["get", "list", "watch", "create", "update", "patch", "bind"],
         },
         // ArgoCD resources (AppProjects + Applications per tenant)
         {
@@ -1070,7 +1097,7 @@ export function installTenantController(
       // Must match runtime cluster RBAC (below) — both clusters need the same resource access.
       { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "create", "update", "patch"] },
       { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
-      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind", "escalate"] },
+      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind"] },
     ],
   );
   const controllerRuntimeKubeconfig = createScopedKubeconfig(
@@ -1080,7 +1107,7 @@ export function installTenantController(
     [
       { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "watch", "create", "update", "patch"] },
       { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
-      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind", "escalate"] },
+      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind"] },
       // PriorityClasses are cluster-scoped. Tenant controller creates per-plan classes
       // (loopzero-tenant-starter, loopzero-tenant-growth, loopzero-tenant-enterprise) on the runtime cluster.
       { apiGroups: ["scheduling.k8s.io"], resources: ["priorityclasses"], verbs: ["get", "list", "create", "update", "patch"] },

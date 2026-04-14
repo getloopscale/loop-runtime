@@ -77,6 +77,58 @@ describe('StatusCommand', () => {
     });
   });
 
+  describe('sync_status mapping', () => {
+    it('should map Synced to "Up to date" in human output', async () => {
+      const deps = createMockDeps();
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({});
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Up to date');
+      expect(output).not.toContain('Synced');
+    });
+
+    it('should map OutOfSync to "Update pending"', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { build_id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-03-25T12:30:00Z' },
+          sync_status: 'OutOfSync',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({});
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Update pending');
+    });
+
+    it('should map Progressing to "Deploying"', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { build_id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-03-25T12:30:00Z' },
+          sync_status: 'Progressing',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({});
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Deploying');
+    });
+
+    it('should map sync_status in JSON output too', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          sync_status: 'Synced',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({ json: true });
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.sync_status).toBe('Up to date');
+    });
+  });
+
   describe('--json flag', () => {
     it('should output raw API response as JSON', async () => {
       const apiResponse = {

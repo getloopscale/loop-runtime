@@ -268,7 +268,8 @@ type domainDeleteResponse struct {
 
 // Create registers a new custom domain (POST /api/v1/domains).
 func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
@@ -594,7 +595,8 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 
 // Get returns details for a specific domain (GET /api/v1/domains/{domain}).
 func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
@@ -652,7 +654,8 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // List returns all domains for the current tenant (GET /api/v1/domains).
 func (h *DomainHandler) List(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
@@ -697,7 +700,8 @@ func (h *DomainHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // Delete removes a custom domain (DELETE /api/v1/domains/{domain}).
 func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
@@ -756,7 +760,8 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // ListDNSRecords returns DNS records for a CF-managed domain (GET /api/v1/domains/{domain}/dns-records).
 func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
@@ -794,7 +799,8 @@ func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
 
 // AddDNSRecords adds DNS records to a CF-managed domain (POST /api/v1/domains/{domain}/dns-records).
 func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
@@ -823,6 +829,15 @@ func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	const maxDNSRecordsPerRequest = 50
+	if len(req.Records) > maxDNSRecordsPerRequest {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("Too many records (max %d per request).", maxDNSRecordsPerRequest),
+			"code":  "TOO_MANY_RECORDS",
+		})
 		return
 	}
 

@@ -648,6 +648,77 @@ describe('validateConfig', () => {
     });
   });
 
+  describe('app name RFC 1123 validation', () => {
+    it('should error on app name starting with a digit', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          '1api': { path: '.', framework: 'express', type: 'server', port: 3000 },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors.some(e => e.field === 'apps.1api' && e.message.includes('invalid'))).toBe(true);
+    });
+
+    it('should error on app name with uppercase letters', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          MyApp: { path: '.', framework: 'express', type: 'server', port: 3000 },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors.some(e => e.field === 'apps.MyApp' && e.message.includes('invalid'))).toBe(true);
+    });
+
+    it('should error on app name ending with a hyphen', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          'api-': { path: '.', framework: 'express', type: 'server', port: 3000 },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors.some(e => e.field === 'apps.api-' && e.message.includes('invalid'))).toBe(true);
+    });
+
+    it('should error on app name with underscores', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          my_app: { path: '.', framework: 'express', type: 'server', port: 3000 },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors.some(e => e.field === 'apps.my_app' && e.message.includes('invalid'))).toBe(true);
+    });
+
+    it('should accept valid app names', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: '.', framework: 'express', type: 'server', port: 3000 },
+          web: { path: '.', framework: 'vite', type: 'frontend', port: null },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const nameErrors = errors.filter(e => e.message.includes('invalid'));
+      expect(nameErrors).toHaveLength(0);
+    });
+
+    it('should error on app name exceeding 63 characters', () => {
+      const longName = 'a' + 'b'.repeat(63);
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          [longName]: { path: '.', framework: 'express', type: 'server', port: 3000 },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors.some(e => e.field === `apps.${longName}` && e.message.includes('invalid'))).toBe(true);
+    });
+  });
+
   describe('error message quality', () => {
     it('unknown framework error should list all supported frameworks', () => {
       const config: LoopZeroYaml = {

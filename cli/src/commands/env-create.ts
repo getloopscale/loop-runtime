@@ -19,12 +19,14 @@ export interface EnvCreateOptions {
   json?: boolean;
 }
 
-/** Reserved names that cannot be used as environment names. */
-const RESERVED_NAMES = ['default', 'kube-system', 'loopzero-system'];
+const MAX_ENVIRONMENT_NAME_LENGTH = 63;
 
-/** Validates environment name format: lowercase alphanumeric + hyphens, no leading hyphen. */
+/** Reserved names that cannot be used as environment names. */
+const RESERVED_NAMES = ['default', 'system', 'internal'];
+
+/** Validates environment name format: lowercase alphanumeric + hyphens, no leading hyphen, max 63 chars. */
 function isValidEnvName(name: string): boolean {
-  return /^[a-z][a-z0-9-]*$/.test(name);
+  return /^[a-z][a-z0-9-]*$/.test(name) && name.length <= MAX_ENVIRONMENT_NAME_LENGTH;
 }
 
 /**

@@ -189,8 +189,21 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		}
 	}
 
-	// Phase 5 (INSIDE lock): finalize — mark current as ROLLED_BACK, reactivate target
+	// Phase 5 (INSIDE lock): finalize — mark current as ROLLED_BACK, reactivate target.
+	// Re-verify state inside lock to guard against concurrent deploys between Phase 1 and 5.
 	err = o.deps.Locker.WithLock(ctx, req.TenantID, req.ProjectID, req.Environment, func(tx db.DBTX) error {
+		// Re-fetch current release inside lock to verify it's still ROLLING_BACK.
+		// A concurrent deploy that started between Phase 1 and Phase 5 could have
+		// superseded this release, making the transition invalid.
+		fresh, fetchErr := o.deps.Releases.GetByIDForTenant(ctx, req.TenantID, currentRelease.ID)
+		if fetchErr != nil {
+			return fmt.Errorf("rollback: re-fetch current release: %w", fetchErr)
+		}
+		if fresh == nil || fresh.Status != string(statemachine.ReleaseRollingBack) {
+			return fmt.Errorf("rollback: release %s is no longer in ROLLING_BACK state (current: %s), aborting",
+				currentRelease.ID, fresh.Status)
+		}
+
 		// Transition current: ROLLING_BACK → ROLLED_BACK
 		_, err := o.deps.Releases.UpdateStatus(ctx, tx, currentRelease.ID, string(statemachine.ReleaseRollbackCompleted))
 		if err != nil {

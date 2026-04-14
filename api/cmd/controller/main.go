@@ -316,6 +316,7 @@ func main() {
 		syncClient,
 		locker,
 		pgEventStore,
+		cfg.BaseDomain,
 		logger,
 		services.ReleaseConvergenceLoopConfig{
 			Interval:      10 * time.Second,

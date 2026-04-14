@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
@@ -69,6 +70,34 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion — clean up platform-tokens secret if present.
+	if !pb.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(&pb, constants.FinalizerPlatformBootstrap) {
+			logger := log.FromContext(ctx)
+			logger.Info("cleaning up PlatformBootstrap resources")
+			// Delete the platform-tokens secret that holds Gitea/ArgoCD credentials.
+			tokenSecret := &corev1.Secret{}
+			tokenSecret.Name = "platform-tokens"
+			tokenSecret.Namespace = pb.Namespace
+			if err := r.Delete(ctx, tokenSecret); err != nil && !errors.IsNotFound(err) {
+				logger.Error(err, "failed to delete platform-tokens secret during cleanup")
+			}
+			controllerutil.RemoveFinalizer(&pb, constants.FinalizerPlatformBootstrap)
+			if err := r.Update(ctx, &pb); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer if not present
+	if !controllerutil.ContainsFinalizer(&pb, constants.FinalizerPlatformBootstrap) {
+		controllerutil.AddFinalizer(&pb, constants.FinalizerPlatformBootstrap)
+		if err := r.Update(ctx, &pb); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Terminal phases: do not requeue.

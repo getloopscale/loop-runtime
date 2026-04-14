@@ -58,7 +58,7 @@ func TestSyncCallbackActivator_ActivatesPendingRelease(t *testing.T) {
 	eventStore := &fakeConvergenceEventStore{}
 
 	activator := services.NewSyncCallbackActivator(
-		releaseStore, envTargetStore, locker, eventStore, testLogger,
+		releaseStore, envTargetStore, locker, eventStore, "test.local", testLogger,
 	)
 
 	// Act: simulate ArgoCD callback for tn-loopzero-production
@@ -90,7 +90,7 @@ func TestSyncCallbackActivator_SkipsMismatchedRevision(t *testing.T) {
 	eventStore := &fakeConvergenceEventStore{}
 
 	activator := services.NewSyncCallbackActivator(
-		releaseStore, envTargetStore, locker, eventStore, testLogger,
+		releaseStore, envTargetStore, locker, eventStore, "test.local", testLogger,
 	)
 
 	// Act: callback with WRONG revision
@@ -119,7 +119,7 @@ func TestSyncCallbackActivator_IgnoresOtherTenants(t *testing.T) {
 	eventStore := &fakeConvergenceEventStore{}
 
 	activator := services.NewSyncCallbackActivator(
-		releaseStore, envTargetStore, locker, eventStore, testLogger,
+		releaseStore, envTargetStore, locker, eventStore, "test.local", testLogger,
 	)
 
 	// Act: callback for DIFFERENT tenant

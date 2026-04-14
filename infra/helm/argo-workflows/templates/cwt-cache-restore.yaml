@@ -99,5 +99,8 @@ spec:
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
       # Cache restore is best-effort — failure should not block the build
       activeDeadlineSeconds: 120

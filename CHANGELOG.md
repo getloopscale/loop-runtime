@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- **COOKIE_SECRET rotated to RandomPassword** (C1): Kratos UI cookie secret replaced from hardcoded string to Pulumi-managed `RandomPassword`. Eliminates session cookie forgery risk from source code access.
+- **LOOPZERO_SERVICE_AUTH_SECRET auto-generated** (H12): Service-to-service auth secret now auto-generates via `RandomPassword` when not explicitly configured. Removes `dev-service-auth-secret-default` fallback.
+- **Database and DOKS clusters protected** (C3): Added `protect: true` and `retainOnDelete: true` to PostgreSQL cluster and `protect: true` to all DOKS clusters. Prevents accidental `pulumi destroy` data loss.
+- **RBAC escalate verb removed** (H15): Removed `escalate` verb from tenant controller ClusterRole on `clusterroles`/`clusterrolebindings`. Prevents privilege escalation from compromised controller pod.
+- **RBAC loopzero.io wildcard replaced** (M42): Replaced `resources: ["*"]` with explicit CRD enumeration in tenant controller ClusterRole. New CRDs require explicit RBAC review.
+
+### Fixed
+- **Environment state machine: Failed state added** (H8): `EnvironmentFailed` state now reachable via `ProvisionFailed` event from `Pending`, with `Retry` path back to `Pending` and `DeleteRequested` exit.
+- **Release state machine: cancel paths added** (M35): `GIT_MIRROR_FAILED`, `SYNC_FAILED`, `DRIFT_ALERT`, `ROLLBACK_FAILED` states now have `ReleaseCancelled` exit path.
+- **Domain state machine: v2 degraded from provisioning** (M36): Added `DomainDegrade` transition from `DomainProvisioning` to `DomainDegraded` for CNAME loss during v2 setup.
+- **Application computePhase uses all phases** (M28): `Serving`, `Degraded`, and `Down` phases now produced based on endpoint readiness and route conditions.
+- **ExposedRoute probe response bodies drained** (M29): Added `io.Copy(io.Discard, resp.Body)` before close to allow HTTP connection reuse.
+- **Rollback Phase 5 re-verifies release state** (M2): Re-fetches release inside lock to guard against concurrent deploy between Phase 1 and Phase 5.
+- **Convergence loop semaphore fix** (M5): Semaphore acquired before goroutine spawn to prevent unbounded goroutine accumulation.
+- **Harbor robot delete errors logged** (M34): `DeleteRobotAccount` errors now logged with context instead of silently discarded.
+- **Enforcement limiter: hardLimit==0 denies** (M37): Missing plan limit rows now fail closed (deny) instead of silently allowing unlimited access.
+- **Auto-deploy goroutine uses shutdown context** (H4): Auto-deploy goroutine now uses `shutdownCtx` with 5-minute timeout instead of `context.Background()`.
+- **Callback goroutines have timeout** (H5): `onReleaseActivated` and `onBuildFailed` goroutines now use 30-second timeout context.
+- **Tenant deletion sets condition on env delete failure** (H9): Failed Environment CR deletion now sets `EnvironmentCleanup` condition on Tenant status for visibility.
+- **Domain handlers have request timeouts** (M7): All 6 domain endpoints now use `context.WithTimeout` (30s read, 60s write).
+- **DNS records per-request limit** (M11): `AddDNSRecords` now rejects requests with more than 50 records.
+- **Removed ungated GetByDomain** (M12): Removed `GetByDomain` (no tenant filter) — only `GetByDomainAndTenant` remains.
+- **CancelActiveBuilds bypass documented** (M3): Added documentation explaining intentional state machine bypass for batch operations.
+- **Service auth rejects invalid headers immediately** (M39): `X-Service-Auth` with wrong value now returns 401 instead of falling through to Bearer auth.
+- **Auto-deploy commitSHA safe slice** (LOW): `commitSHA[:12]` replaced with bounds-checked slice to prevent panic on short SHAs.
+- **Environment name max-length enforced in CLI** (LOW): `loopzero env create` now validates max 63 chars, matching deploy command validation.
+- **Reserved names no longer leak Kubernetes** (LOW): `kube-system` removed from `RESERVED_NAMES` — replaced with generic `system`/`internal`.
+- **PlatformBootstrap finalizer added** (M31): Cleanup of `platform-tokens` secret on PlatformBootstrap CR deletion.
+- **Build namespace DNS egress scoped to kube-system** (LOW): DNS egress rule restricted to `kube-system` namespace, preventing DNS tunneling from build pods.
+- **ArgoCD AppProject namespace glob removed** (M32): Glob fallback `loopzero-{tenant}-*` replaced with fail-closed empty destinations list. Deploys blocked until EnvironmentController provides explicit namespaces.
+- **ArgoCD cluster secret scope reduced** (M33): Full kubeconfig no longer stored in ArgoCD cluster secret. Only bearer token + CA certificate extracted and stored in `config` field.
+
 ### Added
 - **Supply chain security — image signing** (Sprint 6): cosign sign + syft SBOM + cosign attest for all 4 platform images in CI pipeline. New `sign-and-attest` job with matrix strategy in `build-images.yml`. Trivy post-build scan on final images. SBOM artifacts retained 90 days.
 - **Supply chain security — user image signing** (Sprint 6): Argo Workflow DAG now includes `sign-image-{app}` step after each `build-image-{app}`. Uses `gcr.io/projectsigstore/cosign:v2.4.1` with key mounted from `cosign-signing-key` K8s Secret.

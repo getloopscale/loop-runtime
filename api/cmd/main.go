@@ -10,10 +10,10 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"flag"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -499,6 +499,7 @@ func main() {
 			syncClient,
 			locker,
 			eventStore,
+			cfg.BaseDomain,
 			logger,
 			services.ReleaseConvergenceLoopConfig{
 				Interval: 10 * time.Second,
@@ -674,8 +675,11 @@ func main() {
 			appIDStr := os.Getenv("GITHUB_APP_ID")
 			appPrivateKey := os.Getenv("GITHUB_APP_PRIVATE_KEY")
 			if appIDStr != "" && appPrivateKey != "" {
-				var appID int64
-				_, _ = fmt.Sscanf(appIDStr, "%d", &appID)
+				appID, parseErr := strconv.ParseInt(appIDStr, 10, 64)
+				if parseErr != nil {
+					logger.Error("GITHUB_APP_ID is set but invalid", "value", appIDStr, "error", parseErr)
+					os.Exit(1)
+				}
 				var clientErr error
 				ghAppClient, clientErr = github.NewAppClient(appID, appPrivateKey)
 				if clientErr != nil {
@@ -749,7 +753,10 @@ func main() {
 					commitMsg = event.HeadCommit.Message
 				}
 				go func() {
-					deployCtx := context.Background()
+					// Use shutdownCtx-derived context so auto-deploy is cancelled on server shutdown.
+					// 5-minute timeout prevents indefinite hangs on slow GitHub/S3 operations.
+					deployCtx, cancel := context.WithTimeout(shutdownCtx, 5*time.Minute)
+					defer cancel()
 					if err := autoDeployer.HandlePush(deployCtx,
 						event.Repository.FullName, event.Branch(), event.After,
 						event.Installation.ID, linked.TenantID, linked.ProjectName,
@@ -780,11 +787,19 @@ func main() {
 				// Save/remove installation in DB
 				switch event.Action {
 				case "created":
-					_ = repoStore.SaveInstallation(context.Background(),
+					if err := repoStore.SaveInstallation(context.Background(),
 						event.Installation.ID, event.Installation.Account.Login,
-						event.Installation.Account.Type, nil)
+						event.Installation.Account.Type, nil); err != nil {
+						logger.Error("github webhook: failed to save installation",
+							"installation_id", event.Installation.ID,
+							"action", event.Action, "error", err)
+					}
 				case "deleted":
-					_ = repoStore.DeleteInstallation(context.Background(), event.Installation.ID)
+					if err := repoStore.DeleteInstallation(context.Background(), event.Installation.ID); err != nil {
+						logger.Error("github webhook: failed to delete installation",
+							"installation_id", event.Installation.ID,
+							"action", event.Action, "error", err)
+					}
 				}
 				return nil
 			})
@@ -892,7 +907,7 @@ func main() {
 		// ArgoCD sync callback activator — processes webhook from ArgoCD Notifications.
 		// Push-based activation: ArgoCD notifies when sync completes instead of API polling.
 		syncCallbackActivator := services.NewSyncCallbackActivator(
-			releaseStore, envTargetStore, locker, eventStore, logger,
+			releaseStore, envTargetStore, locker, eventStore, cfg.BaseDomain, logger,
 		)
 		argoCallbackHandler = routes.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 

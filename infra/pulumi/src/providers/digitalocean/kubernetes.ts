@@ -31,6 +31,9 @@ export class DigitalOceanKubernetesProvider implements IProviderKubernetes {
         maxNodes: spec.autoScale ? (spec.maxNodes ?? spec.minNodes) : undefined,
         tags,
       },
+    }, {
+      // C3-fix: Prevent accidental deletion of production clusters.
+      protect: true,
     });
 
     return {

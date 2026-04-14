@@ -16,7 +16,8 @@ const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 
 /** CLI version for User-Agent header. */
-const CLI_VERSION = '0.1.0';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { version: CLI_VERSION } = require('../../package.json');
 
 export interface ApiClientOptions {
   baseURL?: string;

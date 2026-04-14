@@ -100,9 +100,12 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, message: string):
 export function createProgram(): Command {
   const program = new Command();
 
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { version: cliVersion } = require('../package.json');
+
   program
     .name('loopzero')
-    .version('0.1.0')
+    .version(cliVersion)
     .description('CLI-first Kubernetes PaaS for monorepo deployments')
     .option('--json', 'Output in JSON format');
 
@@ -697,7 +700,15 @@ export function createProgram(): Command {
         writeError,
       });
 
-      const exitCode = await cancelCmd.execute(buildId, { json: globalOpts.json });
+      const exitCode = await withTimeout(
+        cancelCmd.execute(buildId, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Cancel timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'CANCEL_TIMEOUT', error: err.message, exit_code: 3 })); }
+        else { writeError(err.message); }
+        return 3;
+      });
       process.exitCode = exitCode;
     });
 
@@ -1520,8 +1531,8 @@ export function createProgram(): Command {
   domainCmd
     .command('remove <domain>')
     .description('Remove a custom domain')
-    .option('--confirm <domain>', 'Confirm domain removal')
-    .action(async (domain: string, opts: { confirm?: string }) => {
+    .option('--yes', 'Skip confirmation prompt')
+    .action(async (domain: string, opts: { yes?: boolean }) => {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
@@ -1569,7 +1580,16 @@ export function createProgram(): Command {
         writeError,
       });
 
-      process.exitCode = await cmd.execute(domain, { json: program.opts().json });
+      process.exitCode = await withTimeout(
+        cmd.execute(domain, { json: program.opts().json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Domain DNS lookup timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        const globalOpts = program.opts();
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'DOMAIN_DNS_TIMEOUT', error: err.message, exit_code: 3 })); }
+        else { writeError(err.message); }
+        return 3;
+      });
     });
 
   // --- connect (GitHub App auto-deploy) ---
@@ -1657,7 +1677,15 @@ export function createProgram(): Command {
         writeError,
       });
 
-      process.exitCode = await cmd.execute({ json: globalOpts.json, subcommand: 'portal' });
+      process.exitCode = await withTimeout(
+        cmd.execute({ json: globalOpts.json, subcommand: 'portal' }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Billing portal request timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_TIMEOUT', error: err.message, exit_code: 3 })); }
+        else { writeError(err.message); }
+        return 3;
+      });
     });
 
   billingCmd
@@ -1675,7 +1703,15 @@ export function createProgram(): Command {
         writeError,
       });
 
-      process.exitCode = await cmd.execute({ json: globalOpts.json });
+      process.exitCode = await withTimeout(
+        cmd.execute({ json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Billing request timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_TIMEOUT', error: err.message, exit_code: 3 })); }
+        else { writeError(err.message); }
+        return 3;
+      });
     });
 
   // --- audit ---
@@ -1692,6 +1728,7 @@ export function createProgram(): Command {
 
       const { AuditCommand } = await import('./commands/audit');
       const cmd = new AuditCommand({
+        getToken: () => configStore.getToken(),
         getAudit: async (action?: string, since?: string) => {
           const params = new URLSearchParams();
           if (action) params.set('action', action);
@@ -1703,10 +1740,18 @@ export function createProgram(): Command {
         writeError,
       });
 
-      process.exitCode = await cmd.run({
-        json: globalOpts.json,
-        action: cmdOpts.action,
-        since: cmdOpts.since,
+      process.exitCode = await withTimeout(
+        cmd.run({
+          json: globalOpts.json,
+          action: cmdOpts.action,
+          since: cmdOpts.since,
+        }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Audit log request timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'AUDIT_TIMEOUT', error: err.message, exit_code: 3 })); }
+        else { writeError(err.message); }
+        return 3;
       });
     });
 
