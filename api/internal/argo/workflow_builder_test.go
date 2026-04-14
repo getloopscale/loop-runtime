@@ -972,13 +972,7 @@ func TestWorkflowBuilder_BuildKit_MultiApp_IndependentContainers(t *testing.T) {
 
 	apiContainer := findContainer(t, wf, "build-image-api")
 	workerContainer := findContainer(t, wf, "build-image-worker")
-
-	if apiContainer == nil {
-		t.Fatal("build-image-api not found")
-	}
-	if workerContainer == nil {
-		t.Fatal("build-image-worker not found")
-	}
+	// findContainer fatals if not found — no nil checks needed
 
 	// Each app: single container, no sidecars, rootless image
 	if len(apiContainer.Sidecars) != 0 {

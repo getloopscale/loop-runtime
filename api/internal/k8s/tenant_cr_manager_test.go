@@ -376,6 +376,7 @@ func TestTenantCRManager_GetEnvironmentDetail(t *testing.T) {
 	}
 	if detail == nil {
 		t.Fatal("expected detail for 'production', got nil")
+		return // unreachable — helps staticcheck
 	}
 	if detail.Name != "production" {
 		t.Errorf("expected name 'production', got %q", detail.Name)
