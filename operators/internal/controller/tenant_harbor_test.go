@@ -4,6 +4,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"testing"
@@ -96,7 +97,7 @@ func TestEnsureHarborProject_NilClient(t *testing.T) {
 	r := &TenantReconciler{HarborClient: nil}
 	tenant := &loopzerov1.Tenant{}
 	tenant.Name = "test-tenant"
-	if err := r.ensureHarborProject(nil, tenant); err != nil {
+	if err := r.ensureHarborProject(context.TODO(), tenant); err != nil {
 		t.Errorf("expected nil error for nil HarborClient, got: %v", err)
 	}
 }
@@ -105,7 +106,7 @@ func TestEnsureHarborRobotAccounts_NilClient(t *testing.T) {
 	r := &TenantReconciler{HarborClient: nil}
 	tenant := &loopzerov1.Tenant{}
 	tenant.Name = "test-tenant"
-	if err := r.ensureHarborRobotAccounts(nil, tenant); err != nil {
+	if err := r.ensureHarborRobotAccounts(context.TODO(), tenant); err != nil {
 		t.Errorf("expected nil error for nil HarborClient, got: %v", err)
 	}
 }
@@ -116,7 +117,7 @@ func TestSecretExists_NilClient_NoOp(t *testing.T) {
 	r := &TenantReconciler{HarborClient: nil}
 	tenant := &loopzerov1.Tenant{}
 	tenant.Name = "test-tenant"
-	if err := r.ensureHarborRobotAccounts(nil, tenant); err != nil {
+	if err := r.ensureHarborRobotAccounts(context.TODO(), tenant); err != nil {
 		t.Errorf("expected nil error for nil HarborClient, got: %v", err)
 	}
 }
@@ -125,7 +126,7 @@ func TestDeleteHarborProject_NilClient(t *testing.T) {
 	r := &TenantReconciler{HarborClient: nil}
 	tenant := &loopzerov1.Tenant{}
 	tenant.Name = "test-tenant"
-	if err := r.deleteHarborProject(nil, tenant); err != nil {
+	if err := r.deleteHarborProject(context.TODO(), tenant); err != nil {
 		t.Errorf("expected nil error for nil HarborClient, got: %v", err)
 	}
 }

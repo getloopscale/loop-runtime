@@ -140,22 +140,6 @@ func TestWorkflowBuilder_Build_HasPodAffinity(t *testing.T) {
 	}
 }
 
-func containsAll(s string, subs ...string) bool {
-	for _, sub := range subs {
-		found := false
-		for i := 0; i+len(sub) <= len(s); i++ {
-			if s[i:i+len(sub)] == sub {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
-}
-
 // ---------------------------------------------------------------------------
 // DAG structure
 // ---------------------------------------------------------------------------

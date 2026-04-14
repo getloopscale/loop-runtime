@@ -93,7 +93,7 @@ func main() {
 	if tracingErr != nil {
 		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
 	}
-	defer tracingShutdown(context.Background())
+	defer func() { _ = tracingShutdown(context.Background()) }()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,

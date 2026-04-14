@@ -14,6 +14,10 @@ env:
   NODE_VERSION: '20'
   KUBECONFORM_VERSION: 'v0.6.7'
   ENVTEST_K8S_VERSION: '1.31.0'
+  # Private Go modules — skip sum.golang.org verification for getloopscale org.
+  # Without this, `go mod tidy` and `go test` fail with checksum errors for loopzero-forge.
+  GOPRIVATE: 'github.com/getloopscale/*'
+  GONOSUMCHECK: 'github.com/getloopscale/*'
 
 # Cancel in-progress runs for the same branch/PR
 concurrency:
@@ -258,7 +262,7 @@ jobs:
         working-directory: cli
         run: npm test -- --ci --coverage
       - name: Upload coverage
-        if: success()
+        if: success() && !env.ACT
         uses: actions/upload-artifact@v4
         with:
           name: cli-coverage

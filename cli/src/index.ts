@@ -100,7 +100,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, message: string):
 export function createProgram(): Command {
   const program = new Command();
 
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { version: cliVersion } = require('../package.json');
 
   program

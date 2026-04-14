@@ -56,8 +56,8 @@ func (m *GiteaRepoManager) EnsureRepo(ctx context.Context, repoName string, auto
 	if err != nil {
 		return fmt.Errorf("check repo: %w", err)
 	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
 		return nil // repo exists
@@ -86,8 +86,8 @@ func (m *GiteaRepoManager) EnsureRepo(ctx context.Context, repoName string, auto
 	if err != nil {
 		return fmt.Errorf("create repo: %w", err)
 	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
 		return fmt.Errorf("create repo: status %d", resp.StatusCode)

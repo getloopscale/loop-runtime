@@ -38,7 +38,7 @@ func scriptValidateNode(apps []services.AppSpec) string {
 	b.Raw(`done`)
 
 	for _, p := range paths {
-		b.Raw(fmt.Sprintf(`for f in $LOCKFILES; do`))
+		b.Raw(`for f in $LOCKFILES; do`)
 		b.Raw(fmt.Sprintf(`  [ -f %s"/$f" ] && HAS_LOCK=true`, shellgen.ShellQuote(p)))
 		b.Raw(`done`)
 	}
