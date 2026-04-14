@@ -9,11 +9,9 @@ package gitops
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/loopzero/loopzero/api/internal/gitclient"
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/services"
 )
@@ -41,22 +40,27 @@ type GiteaGitOpsPusherConfig struct {
 // File path: {environment}/{projectID}/manifests.yaml
 // Git trailers: Release-ID, Correlation-ID, Build-ID (spec §17.5)
 type GiteaGitOpsPusher struct {
-	baseURL string
-	token   string
-	orgName string
-	client  *http.Client
+	git    *gitclient.GitRunner
+	repo   *gitclient.GiteaRepoManager
+	token  string   // kept for GetManifestsAtCommit (HTTP API, not git)
+	baseURL string  // kept for GetManifestsAtCommit
+	orgName string  // kept for GetManifestsAtCommit
+	client *http.Client
 }
 
 // NewGiteaGitOpsPusher creates a new GiteaGitOpsPusher.
 func NewGiteaGitOpsPusher(cfg GiteaGitOpsPusherConfig) *GiteaGitOpsPusher {
+	httpClient := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
 	return &GiteaGitOpsPusher{
-		baseURL: cfg.BaseURL,
+		git:     gitclient.NewGitRunner(cfg.Token),
+		repo:    gitclient.NewGiteaRepoManager(cfg.BaseURL, cfg.Token, cfg.OrgName, httpClient),
 		token:   cfg.Token,
+		baseURL: cfg.BaseURL,
 		orgName: cfg.OrgName,
-		client: &http.Client{
-			Timeout:   15 * time.Second,
-			Transport: otelhttp.NewTransport(http.DefaultTransport),
-		},
+		client:  httpClient,
 	}
 }
 
@@ -90,10 +94,10 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	}
 
 	repoName := fmt.Sprintf("%s-gitops", opts.TenantID)
-	remoteURL := p.repoURL(repoName)
+	remoteURL := p.repo.RepoURL(repoName)
 
 	// Ensure repo exists in Gitea
-	if err := p.ensureRepo(ctx, repoName); err != nil {
+	if err := p.repo.EnsureRepo(ctx, repoName, true); err != nil {
 		return "", fmt.Errorf("gitops push: ensure repo: %w", err)
 	}
 
@@ -108,21 +112,21 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 
 	// Clone existing repo (or init fresh if empty)
 	// SEC-1: Auth via http.extraHeader, not embedded in URL.
-	if err := p.gitCmdWithAuth(ctx, tmpDir, "clone", "--depth", "5", remoteURL, repoDir); err != nil {
+	if err := p.git.RunWithAuth(ctx, tmpDir, "clone", "--depth", "5", remoteURL, repoDir); err != nil {
 		// Clone failed (empty repo or first push) — init fresh
-		if err := p.gitCmd(ctx, tmpDir, "git", "init", repoDir); err != nil {
+		if err := p.git.Run(ctx, tmpDir, "init", repoDir); err != nil {
 			return "", fmt.Errorf("gitops push: git init: %w", err)
 		}
-		if err := p.gitCmd(ctx, repoDir, "git", "remote", "add", "origin", remoteURL); err != nil {
+		if err := p.git.Run(ctx, repoDir, "remote", "add", "origin", remoteURL); err != nil {
 			return "", fmt.Errorf("gitops push: git remote add: %w", err)
 		}
 	}
 
 	// Set git identity
-	if err := p.gitCmd(ctx, repoDir, "git", "config", "user.email", "loopzero-api@loopzero.io"); err != nil {
+	if err := p.git.Run(ctx, repoDir, "config", "user.email", "loopzero-api@loopzero.io"); err != nil {
 		return "", fmt.Errorf("gitops push: git config user.email: %w", err)
 	}
-	if err := p.gitCmd(ctx, repoDir, "git", "config", "user.name", "LoopZero API"); err != nil {
+	if err := p.git.Run(ctx, repoDir, "config", "user.name", "LoopZero API"); err != nil {
 		return "", fmt.Errorf("gitops push: git config user.name: %w", err)
 	}
 
@@ -139,7 +143,7 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 
 	// Stage changes
 	relPath := filepath.Join(opts.Environment, opts.ProjectID)
-	if err := p.gitCmd(ctx, repoDir, "git", "add", relPath+"/"); err != nil {
+	if err := p.git.Run(ctx, repoDir, "add", relPath+"/"); err != nil {
 		return "", fmt.Errorf("gitops push: git add: %w", err)
 	}
 
@@ -150,11 +154,11 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	)
 
 	// git commit — if nothing changed, this is idempotent (no error)
-	commitErr := p.gitCmd(ctx, repoDir, "git", "commit", "-m", commitMsg)
+	commitErr := p.git.Run(ctx, repoDir, "commit", "-m", commitMsg)
 	if commitErr != nil {
 		// "nothing to commit" is not an error for idempotency
 		if strings.Contains(commitErr.Error(), "nothing to commit") {
-			sha, err := p.gitOutput(ctx, repoDir, "git", "rev-parse", "HEAD")
+			sha, err := p.git.Output(ctx, repoDir, "rev-parse", "HEAD")
 			if err != nil {
 				return "", fmt.Errorf("gitops push: get HEAD after no-op commit: %w", err)
 			}
@@ -166,23 +170,23 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	// Push with fetch-rebase-push on conflict (up to 3 attempts)
 	// SEC-1: Network git commands use gitCmdWithAuth (http.extraHeader).
 	for attempt := 0; attempt < 3; attempt++ {
-		if err := p.gitCmdWithAuth(ctx, repoDir, "push", "origin", "HEAD:refs/heads/main"); err == nil {
+		if err := p.git.RunWithAuth(ctx, repoDir, "push", "origin", "HEAD:refs/heads/main"); err == nil {
 			break
 		}
 		if attempt == 2 {
 			return "", fmt.Errorf("gitops push: failed after 3 push attempts")
 		}
 		// Fetch and rebase on conflict
-		if err := p.gitCmdWithAuth(ctx, repoDir, "fetch", "origin"); err != nil {
+		if err := p.git.RunWithAuth(ctx, repoDir, "fetch", "origin"); err != nil {
 			return "", fmt.Errorf("gitops push: fetch failed: %w", err)
 		}
-		if err := p.gitCmd(ctx, repoDir, "git", "rebase", "origin/main"); err != nil {
+		if err := p.git.Run(ctx, repoDir, "rebase", "origin/main"); err != nil {
 			return "", fmt.Errorf("gitops push: rebase failed: %w", err)
 		}
 	}
 
 	// Return the commit SHA
-	sha, err := p.gitOutput(ctx, repoDir, "git", "rev-parse", "HEAD")
+	sha, err := p.git.Output(ctx, repoDir, "rev-parse", "HEAD")
 	if err != nil {
 		return "", fmt.Errorf("gitops push: get commit SHA: %w", err)
 	}
@@ -202,10 +206,10 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 	}()
 
 	repoName := fmt.Sprintf("%s-gitops", opts.TenantID)
-	remoteURL := p.repoURL(repoName)
+	remoteURL := p.repo.RepoURL(repoName)
 
 	// Ensure repo exists (it should, but be safe)
-	if err := p.ensureRepo(ctx, repoName); err != nil {
+	if err := p.repo.EnsureRepo(ctx, repoName, true); err != nil {
 		return "", fmt.Errorf("gitops remove: ensure repo: %w", err)
 	}
 
@@ -220,16 +224,16 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 
 	// Clone repo
 	// SEC-1: Auth via http.extraHeader, not embedded in URL.
-	if err := p.gitCmdWithAuth(ctx, tmpDir, "clone", "--depth", "5", remoteURL, repoDir); err != nil {
+	if err := p.git.RunWithAuth(ctx, tmpDir, "clone", "--depth", "5", remoteURL, repoDir); err != nil {
 		// If repo is empty/doesn't exist, nothing to remove
 		return "", nil
 	}
 
 	// Set git identity
-	if err := p.gitCmd(ctx, repoDir, "git", "config", "user.email", "loopzero-api@loopzero.io"); err != nil {
+	if err := p.git.Run(ctx, repoDir, "config", "user.email", "loopzero-api@loopzero.io"); err != nil {
 		return "", fmt.Errorf("gitops remove: git config user.email: %w", err)
 	}
-	if err := p.gitCmd(ctx, repoDir, "git", "config", "user.name", "LoopZero API"); err != nil {
+	if err := p.git.Run(ctx, repoDir, "config", "user.name", "LoopZero API"); err != nil {
 		return "", fmt.Errorf("gitops remove: git config user.name: %w", err)
 	}
 
@@ -237,7 +241,7 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 	targetDir := filepath.Join(repoDir, opts.Environment, opts.ProjectID)
 	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
 		// Directory doesn't exist — idempotent success
-		sha, err := p.gitOutput(ctx, repoDir, "git", "rev-parse", "HEAD")
+		sha, err := p.git.Output(ctx, repoDir, "rev-parse", "HEAD")
 		if err != nil {
 			return "", nil
 		}
@@ -246,7 +250,7 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 
 	// git rm -r {env}/{projectID}/
 	relPath := filepath.Join(opts.Environment, opts.ProjectID)
-	if err := p.gitCmd(ctx, repoDir, "git", "rm", "-r", relPath); err != nil {
+	if err := p.git.Run(ctx, repoDir, "rm", "-r", relPath); err != nil {
 		return "", fmt.Errorf("gitops remove: git rm: %w", err)
 	}
 
@@ -262,7 +266,7 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 	if err := os.WriteFile(gitkeep, []byte(""), 0644); err != nil {
 		return "", fmt.Errorf("gitops remove: write .gitkeep: %w", err)
 	}
-	if err := p.gitCmd(ctx, repoDir, "git", "add", filepath.Join(opts.Environment, ".gitkeep")); err != nil {
+	if err := p.git.Run(ctx, repoDir, "add", filepath.Join(opts.Environment, ".gitkeep")); err != nil {
 		return "", fmt.Errorf("gitops remove: git add .gitkeep: %w", err)
 	}
 
@@ -270,10 +274,10 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 	commitMsg := fmt.Sprintf("Remove %s from %s\n\nCorrelation-ID: %s",
 		opts.ProjectID, opts.Environment, opts.CorrelationID,
 	)
-	commitErr := p.gitCmd(ctx, repoDir, "git", "commit", "-m", commitMsg)
+	commitErr := p.git.Run(ctx, repoDir, "commit", "-m", commitMsg)
 	if commitErr != nil {
 		if strings.Contains(commitErr.Error(), "nothing to commit") {
-			sha, err := p.gitOutput(ctx, repoDir, "git", "rev-parse", "HEAD")
+			sha, err := p.git.Output(ctx, repoDir, "rev-parse", "HEAD")
 			if err != nil {
 				return "", fmt.Errorf("gitops remove: get HEAD after no-op: %w", err)
 			}
@@ -285,21 +289,21 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 	// Push with retry (3 attempts with fetch-rebase-push on conflict)
 	// SEC-1: Network git commands use gitCmdWithAuth (http.extraHeader).
 	for attempt := 0; attempt < 3; attempt++ {
-		if err := p.gitCmdWithAuth(ctx, repoDir, "push", "origin", "HEAD:refs/heads/main"); err == nil {
+		if err := p.git.RunWithAuth(ctx, repoDir, "push", "origin", "HEAD:refs/heads/main"); err == nil {
 			break
 		}
 		if attempt == 2 {
 			return "", fmt.Errorf("gitops remove: failed after 3 push attempts")
 		}
-		if err := p.gitCmdWithAuth(ctx, repoDir, "fetch", "origin"); err != nil {
+		if err := p.git.RunWithAuth(ctx, repoDir, "fetch", "origin"); err != nil {
 			return "", fmt.Errorf("gitops remove: fetch failed: %w", err)
 		}
-		if err := p.gitCmd(ctx, repoDir, "git", "rebase", "origin/main"); err != nil {
+		if err := p.git.Run(ctx, repoDir, "rebase", "origin/main"); err != nil {
 			return "", fmt.Errorf("gitops remove: rebase failed: %w", err)
 		}
 	}
 
-	sha, err := p.gitOutput(ctx, repoDir, "git", "rev-parse", "HEAD")
+	sha, err := p.git.Output(ctx, repoDir, "rev-parse", "HEAD")
 	if err != nil {
 		return "", fmt.Errorf("gitops remove: get commit SHA: %w", err)
 	}
@@ -307,138 +311,6 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 	return sha, nil
 }
 
-// createRepoRequest is the JSON body for Gitea's create-repo API.
-// SEC-4: Using json.Marshal prevents JSON injection via repo names.
-type createRepoRequest struct {
-	Name          string `json:"name"`
-	AutoInit      bool   `json:"auto_init"`
-	DefaultBranch string `json:"default_branch"`
-	Private       bool   `json:"private"`
-}
-
-// ensureRepo creates the repo under the org via Gitea API if it doesn't exist.
-// MOD-2: Uses p.client (with timeout) instead of http.DefaultClient.
-func (p *GiteaGitOpsPusher) ensureRepo(ctx context.Context, repoName string) error {
-	checkURL := fmt.Sprintf("%s/api/v1/repos/%s/%s", p.baseURL, p.orgName, repoName)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checkURL, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "token "+p.token)
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("check repo: %w", err)
-	}
-	_ = resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		return nil
-	}
-
-	// Create repo under org
-	createURL := fmt.Sprintf("%s/api/v1/orgs/%s/repos", p.baseURL, p.orgName)
-	bodyBytes, err := json.Marshal(createRepoRequest{
-		Name:          repoName,
-		AutoInit:      true,
-		DefaultBranch: "main",
-		Private:       true,
-	})
-	if err != nil {
-		return fmt.Errorf("marshal create repo body: %w", err)
-	}
-
-	req, err = http.NewRequestWithContext(ctx, http.MethodPost, createURL, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "token "+p.token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err = p.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("create repo: %w", err)
-	}
-	_ = resp.Body.Close()
-
-	if resp.StatusCode != 201 && resp.StatusCode != 409 {
-		return fmt.Errorf("create repo: status %d", resp.StatusCode)
-	}
-
-	return nil
-}
-
-// repoURL returns the plain Gitea repo URL without embedded credentials.
-// SEC-1: Credentials are injected via http.extraHeader in gitCmdWithAuth,
-// preventing token exposure in /proc/PID/cmdline.
-func (p *GiteaGitOpsPusher) repoURL(repoName string) string {
-	return fmt.Sprintf("%s/%s/%s.git", p.baseURL, p.orgName, repoName)
-}
-
-// gitAuthArgs returns git config args that inject the auth token via HTTP header.
-// SEC-1: This replaces embedding the token in the git remote URL.
-func (p *GiteaGitOpsPusher) gitAuthArgs() []string {
-	return []string{
-		"-c", fmt.Sprintf("http.extraHeader=Authorization: token %s", p.token),
-	}
-}
-
-// gitCmdWithAuth runs a git command with auth headers for network operations
-// (clone, push, fetch). SEC-1: Credentials are passed via http.extraHeader
-// instead of embedded in the URL, preventing token exposure in /proc/PID/cmdline.
-func (p *GiteaGitOpsPusher) gitCmdWithAuth(ctx context.Context, dir string, gitArgs ...string) error {
-	authArgs := p.gitAuthArgs()
-	fullArgs := append([]string{"git"}, authArgs...)
-	fullArgs = append(fullArgs, gitArgs...)
-	return p.gitCmd(ctx, dir, fullArgs...)
-}
-
-// gitCmd runs a git command in the specified directory.
-// SEC-3: Output is sanitized to prevent token leakage in logs.
-func (p *GiteaGitOpsPusher) gitCmd(ctx context.Context, dir string, args ...string) error {
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		sanitized := p.sanitizeOutput(string(output))
-		safeArgs := p.sanitizeArgs(args)
-		return fmt.Errorf("%s: %w (output: %s)", strings.Join(safeArgs, " "), err, strings.TrimSpace(sanitized))
-	}
-	return nil
-}
-
-// sanitizeOutput removes the Gitea token from git command output to prevent leakage in logs.
-func (p *GiteaGitOpsPusher) sanitizeOutput(output string) string {
-	if p.token == "" {
-		return output
-	}
-	return strings.ReplaceAll(output, p.token, "***")
-}
-
-// sanitizeArgs removes credentials from git command arguments for safe logging.
-func (p *GiteaGitOpsPusher) sanitizeArgs(args []string) []string {
-	if p.token == "" {
-		return args
-	}
-	safe := make([]string, len(args))
-	for i, arg := range args {
-		safe[i] = strings.ReplaceAll(arg, p.token, "***")
-	}
-	return safe
-}
-
-// gitOutput runs a git command and returns stdout trimmed.
-func (p *GiteaGitOpsPusher) gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", strings.Join(args, " "), err)
-	}
-	return strings.TrimSpace(string(output)), nil
-}
 
 // GetManifestsAtCommit retrieves the manifest content from a specific git commit.
 // Uses the Gitea raw content API: GET /api/v1/repos/{owner}/{repo}/raw/{filepath}?ref={commit}

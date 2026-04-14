@@ -4,9 +4,7 @@
 package gitops
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -25,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/loopzero/loopzero/api/internal/gitclient"
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/services"
 )
@@ -41,18 +40,21 @@ type GoGitGitOpsPusher struct {
 	token   string
 	orgName string
 	client  *http.Client
+	repoMgr *gitclient.GiteaRepoManager
 }
 
 // NewGoGitGitOpsPusher creates a new GoGitGitOpsPusher.
 func NewGoGitGitOpsPusher(cfg GiteaGitOpsPusherConfig) *GoGitGitOpsPusher {
+	httpClient := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
 	return &GoGitGitOpsPusher{
 		baseURL: cfg.BaseURL,
 		token:   cfg.Token,
 		orgName: cfg.OrgName,
-		client: &http.Client{
-			Timeout:   15 * time.Second,
-			Transport: otelhttp.NewTransport(http.DefaultTransport),
-		},
+		client:  httpClient,
+		repoMgr: gitclient.NewGiteaRepoManager(cfg.BaseURL, cfg.Token, cfg.OrgName, httpClient),
 	}
 }
 
@@ -107,7 +109,7 @@ func (p *GoGitGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 
 	// Ensure repo exists in Gitea (skip for local repos)
 	if !isLocalURL(p.baseURL) {
-		if err := p.ensureRepo(ctx, repoName); err != nil {
+		if err := p.repoMgr.EnsureRepo(ctx, repoName, true); err != nil {
 			return "", fmt.Errorf("gitops push: ensure repo: %w", err)
 		}
 	}
@@ -203,7 +205,7 @@ func (p *GoGitGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 
 	// Ensure repo exists (skip for local repos)
 	if !isLocalURL(p.baseURL) {
-		if err := p.ensureRepo(ctx, repoName); err != nil {
+		if err := p.repoMgr.EnsureRepo(ctx, repoName, true); err != nil {
 			return "", fmt.Errorf("gitops remove: ensure repo: %w", err)
 		}
 	}
@@ -431,53 +433,3 @@ func (p *GoGitGitOpsPusher) removeDir(wt *gogit.Worktree, repoDir, relPath strin
 	return nil
 }
 
-// ensureRepo creates the repo under the org via Gitea API if it doesn't exist.
-func (p *GoGitGitOpsPusher) ensureRepo(ctx context.Context, repoName string) error {
-	checkURL := fmt.Sprintf("%s/api/v1/repos/%s/%s", p.baseURL, p.orgName, repoName)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checkURL, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "token "+p.token)
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("check repo: %w", err)
-	}
-	_ = resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		return nil
-	}
-
-	// Create repo under org
-	createURL := fmt.Sprintf("%s/api/v1/orgs/%s/repos", p.baseURL, p.orgName)
-	bodyBytes, err := json.Marshal(createRepoRequest{
-		Name:          repoName,
-		AutoInit:      true,
-		DefaultBranch: "main",
-		Private:       true,
-	})
-	if err != nil {
-		return fmt.Errorf("marshal create repo body: %w", err)
-	}
-
-	req, err = http.NewRequestWithContext(ctx, http.MethodPost, createURL, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "token "+p.token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err = p.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("create repo: %w", err)
-	}
-	_ = resp.Body.Close()
-
-	if resp.StatusCode != 201 && resp.StatusCode != 409 {
-		return fmt.Errorf("create repo: status %d", resp.StatusCode)
-	}
-
-	return nil
-}

@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero-forge/model"
 
 	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/loopzero/loopzero/api/internal/shellgen"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
 
@@ -204,53 +205,64 @@ func dockerfileName(dockerfilePath string) string {
 //  4. Kill buildkitd on exit (trap ensures cleanup even on failure)
 //  5. Exit with buildctl's exit code
 func buildkitEntrypointScript(socketPath string, insecure bool, registryURL string) string {
-	buildkitdArgs := fmt.Sprintf("--oci-worker-no-process-sandbox --addr '%s'", socketPath)
-	configSetup := ""
+	b := shellgen.New().Raw("set -e")
+
+	quotedSocket := shellgen.ShellQuote(socketPath)
+	buildkitdArgs := "--oci-worker-no-process-sandbox --addr " + quotedSocket
+
 	if insecure {
+		// Validate registryURL before TOML injection — reject characters that
+		// could break the TOML structure or inject arbitrary content.
+		for _, ch := range registryURL {
+			if ch == '"' || ch == '\n' || ch == '\r' || ch == '\\' {
+				// This is a programming error — registryURL should be a clean hostname:port.
+				panic(fmt.Sprintf("buildkit: registryURL contains invalid character %q", string(ch)))
+			}
+		}
+
 		buildkitdArgs += " --oci-worker-snapshotter native"
 		buildkitdArgs += " --allow-insecure-entitlement security.insecure"
-		// Configure buildkitd to use HTTP for the insecure registry.
-		// Without this, buildkitd attempts HTTPS and fails with
-		// "http: server gave HTTP response to HTTPS client".
-		configSetup = fmt.Sprintf(`
-# Configure insecure registry (HTTP) for local dev
-mkdir -p /tmp/buildkit
-cat > /tmp/buildkit/buildkitd.toml <<TOML
+
+		b.Blank().
+			Comment("Configure insecure registry (HTTP) for local dev").
+			MkdirP("/tmp/buildkit").
+			Raw(fmt.Sprintf(`cat > /tmp/buildkit/buildkitd.toml <<TOML
 [registry."%s"]
   http = true
   insecure = true
-TOML
-`, registryURL)
+TOML`, registryURL))
+
 		buildkitdArgs += " --config /tmp/buildkit/buildkitd.toml"
 	}
-	return fmt.Sprintf(`set -e
-%s
-# Start buildkitd daemon in background (inside rootlesskit user namespace)
-buildkitd %s &
-DAEMON_PID=$!`, configSetup, buildkitdArgs) + fmt.Sprintf(`
 
-# Wait for daemon to accept gRPC connections
-timeout=%d; i=0
-while ! buildctl --addr '%s' debug workers >/dev/null 2>&1; do
-  i=$((i+1))
-  if [ "$i" -ge "$timeout" ]; then
-    echo "buildkitd not ready after ${timeout}s" >&2
-    kill $DAEMON_PID 2>/dev/null || true
-    exit 1
-  fi
-  sleep 1
-done
+	b.Blank().
+		Comment("Start buildkitd daemon in background (inside rootlesskit user namespace)").
+		Raw(fmt.Sprintf("buildkitd %s &", buildkitdArgs)).
+		Raw("DAEMON_PID=$!").
+		Blank().
+		Comment("Wait for daemon to accept gRPC connections").
+		Raw(fmt.Sprintf("timeout=%d; i=0", buildkitDaemonTimeout)).
+		Raw(fmt.Sprintf("while ! buildctl --addr %s debug workers >/dev/null 2>&1; do", quotedSocket)).
+		Raw(`  i=$((i+1))`).
+		Raw(`  if [ "$i" -ge "$timeout" ]; then`).
+		Raw(`    echo "buildkitd not ready after ${timeout}s" >&2`).
+		Raw(`    kill $DAEMON_PID 2>/dev/null || true`).
+		Raw(`    exit 1`).
+		Raw(`  fi`).
+		Raw(`  sleep 1`).
+		Raw(`done`).
+		Blank().
+		Comment("Run the build — \"$@\" preserves all args from Argo container spec.").
+		Comment("Capture exit code BEFORE killing daemon.").
+		Raw(`"$@"`).
+		Raw(`BUILD_EXIT=$?`).
+		Blank().
+		Comment("Graceful daemon shutdown — exit code is already captured").
+		Raw(`kill $DAEMON_PID 2>/dev/null || true`).
+		Raw(`wait $DAEMON_PID 2>/dev/null || true`).
+		Raw(`exit $BUILD_EXIT`)
 
-# Run the build — "$@" preserves all args from Argo container spec.
-# Capture exit code BEFORE killing daemon, so the container exits
-# with buildctl's code (the real build result), not buildkitd's.
-"$@"
-BUILD_EXIT=$?
-
-# Graceful daemon shutdown — exit code is already captured
-kill $DAEMON_PID 2>/dev/null || true
-wait $DAEMON_PID 2>/dev/null || true
-exit $BUILD_EXIT`, buildkitDaemonTimeout, socketPath)
+	return b.String()
 }
 
 // ---------------------------------------------------------------------------

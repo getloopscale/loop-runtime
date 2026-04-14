@@ -1,6 +1,6 @@
 # API Shell Hardening — Eliminar Scripts Inline Frageis
 
-> **Status:** PLANNED
+> **Status:** IMPLEMENTED (2026-04-13)
 > **Classificacao:** T1 (refactor local, sem mudanca de contratos)
 > **Data:** 2026-04-13
 > **Autor:** paulohenriquevn
