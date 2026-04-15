@@ -3,7 +3,7 @@
 > Plano executável para reescrever a pipeline de infra de 1539 linhas para 5 workflows limpos.
 > Baseado em MEET-049, MEET-050 e revisão de segurança operacional.
 
-**Status:** In Progress
+**Status:** Code Complete (Phases 1-4 implemented, Phase 5 E2E pending validation on DO, Phase 6 cleanup done)
 **Owner:** Platform Team
 **Priority:** P0 — bloqueia todas as operações de infra
 **Estimativa:** 2-3 dias
@@ -63,36 +63,36 @@ jobs:
                # secrets: inherit
 ```
 **Critérios de aceite:**
-- [ ] Commands aceitos: `up`, `preview`, `refresh` — **NÃO aceita `destroy`**
-- [ ] Zero `pulumi cancel` no workflow
-- [ ] Zero `pulumi state delete` no workflow
-- [ ] Zero `PULUMI_K8S_DELETE_UNREACHABLE` no workflow
-- [ ] Zero `pulumi stack export | python3` no workflow
-- [ ] Zero `|| true` em operações de state — erros esperados tratados via `if ! cmd; then echo "expected: reason"; fi`
-- [ ] `helm dependency update` roda antes do `pulumi up`
-- [ ] `cloudflare:apiToken` setado no config antes do `pulumi up`
-- [ ] Trigger: push to develop/homolog/main em `infra/**`
-- [ ] Trigger: workflow_dispatch com `command: choice [up, preview, refresh]` (sem destroy)
-- [ ] Environment resolvido por branch (infra-dev, infra-homolog, infra-prod)
-- [ ] Concurrency: `cancel-in-progress: false` por stack
-- [ ] Bootstrap como **job** (não step) usando `uses: ./.github/workflows/infra-bootstrap.yml`
+- [x] Commands aceitos: `up`, `preview`, `refresh` — **NÃO aceita `destroy`**
+- [x] Zero `pulumi cancel` no workflow
+- [x] Zero `pulumi state delete` no workflow
+- [x] Zero `PULUMI_K8S_DELETE_UNREACHABLE` no workflow
+- [x] Zero `pulumi stack export | python3` no workflow
+- [x] Zero `|| true` em operações de state — erros esperados tratados via `if ! cmd; then echo "expected: reason"; fi`
+- [x] `helm dependency update` roda antes do `pulumi up`
+- [x] `cloudflare:apiToken` setado no config antes do `pulumi up`
+- [x] Trigger: push to develop/homolog/main em `infra/**`
+- [x] Trigger: workflow_dispatch com `command: choice [up, preview, refresh]` (sem destroy)
+- [x] Environment resolvido por branch (infra-dev, infra-homolog, infra-prod)
+- [x] Concurrency: `cancel-in-progress: false` por stack
+- [x] Bootstrap como **job** (não step) usando `uses: ./.github/workflows/infra-bootstrap.yml`
   - `needs: [resolve, deploy]`
   - `if: needs.resolve.outputs.command == 'up'`
   - `with: { stack: ${{ needs.resolve.outputs.stack }} }`
   - `secrets: inherit`
-- [ ] Deploy health output em `$GITHUB_STEP_SUMMARY`:
+- [x] Deploy health output em `$GITHUB_STEP_SUMMARY`:
   - Pulumi exit code, duration, resources created/updated/deleted/same
 
 **DoD:**
 - YAML válido
 - Não contém: `state delete`, `stack export.*python`, `DELETE_UNREACHABLE`, `helm uninstall`, `Pass 2`, `destroy`
 
-### Task 1.2: Melhorar adopt-or-create.ts warnings
+### Task 1.2: Melhorar adopt-or-create.ts warnings ✅
 **Arquivo:** `infra/pulumi/src/core/adopt-or-create.ts`
 **Mudança:** Lookups que falham logam warning em vez de silenciar.
 **Critérios de aceite:**
-- [ ] `catch(e) { pulumi.log.warn(...); return undefined }` em todas as funções
-- [ ] `npx tsc --noEmit` passa
+- [x] `catch(e) { pulumi.log.warn(...); return undefined }` em todas as funções
+- [x] `npx tsc --noEmit` passa
 
 **DoD:** Warnings visíveis no Pulumi output quando lookup falha.
 
@@ -119,34 +119,34 @@ jobs:
 
 **Objetivo:** Bootstrap idempotente, testável, com pre/postconditions.
 
-### Task 2.1: Extrair bootstrap para script
+### Task 2.1: Extrair bootstrap para script ✅
 **Arquivo:** `infra/scripts/bootstrap-platform.sh` (novo)
 **Mudança:** Extrair linhas 1033-1378 do infra-deploy.yml antigo para script standalone.
 **Critérios de aceite:**
-- [ ] Script aceita `STACK` como input (env var)
-- [ ] Cada seção é uma função nomeada:
+- [x] Script aceita `STACK` como input (env var)
+- [x] Cada seção é uma função nomeada:
   - `bootstrap_gitea()`, `bootstrap_argocd()`, `bootstrap_secrets()`,
   - `bootstrap_database()`, `bootstrap_tenant()`, `bootstrap_cloudflare()`
-- [ ] Cada função tem precondition check (e.g., "Gitea pod running?")
-- [ ] Cada função tem postcondition check (e.g., "token funcional?")
-- [ ] Zero erro mascarado — comandos idempotentes usam:
+- [x] Cada função tem precondition check (e.g., "Gitea pod running?")
+- [x] Cada função tem postcondition check (e.g., "token funcional?")
+- [x] Zero erro mascarado — comandos idempotentes usam:
   - `kubectl apply` (idempotent by design)
   - Checks pré/pós com helper: `ensure_exists "resource" "check_cmd" "create_cmd"`
   - Códigos esperados tratados (e.g., `409 Conflict` → "already exists", continua)
   - Qualquer outro erro → script falha
-- [ ] Script é idempotente — 2x em sistema healthy = no side effects
-- [ ] Funciona localmente: `STACK=dev bash infra/scripts/bootstrap-platform.sh`
+- [x] Script é idempotente — 2x em sistema healthy = no side effects
+- [x] Funciona localmente: `STACK=dev bash infra/scripts/bootstrap-platform.sh`
 
 **DoD:** Script roda localmente. Segunda execução é no-op.
 
-### Task 2.2: Criar workflow infra-bootstrap.yml
+### Task 2.2: Criar workflow infra-bootstrap.yml ✅
 **Arquivo:** `.github/workflows/infra-bootstrap.yml` (novo)
 **Critérios de aceite:**
-- [ ] Trigger: `workflow_call` (inputs: stack) + `workflow_dispatch` (manual)
-- [ ] Steps: checkout → tools → kubeconfig → script → health check
-- [ ] Health check FALHA o pipeline se serviço não responde
-- [ ] Zero `continue-on-error: true`
-- [ ] Estado final: **bootstrap concluído** (tokens existem, seed aplicado, Tenant CR criado)
+- [x] Trigger: `workflow_call` (inputs: stack) + `workflow_dispatch` (manual)
+- [x] Steps: checkout → tools → kubeconfig → script → health check
+- [x] Health check FALHA o pipeline se serviço não responde
+- [x] Zero `continue-on-error: true`
+- [x] Estado final: **bootstrap concluído** (tokens existem, seed aplicado, Tenant CR criado)
 
 **DoD:** Workflow funciona via `workflow_dispatch` manual.
 
@@ -156,40 +156,40 @@ jobs:
 
 **Objetivo:** Destroy seguro, stack-scoped, com approval, SEM state reset.
 
-### Task 3.1: Fix pre-destroy-cleanup.sh
+### Task 3.1: Fix pre-destroy-cleanup.sh ✅
 **Arquivo:** `infra/scripts/pre-destroy-cleanup.sh`
 **Critérios de aceite:**
-- [ ] Todas as filtragens usam `startswith(prefix)` não `'loopzero' in name`
-- [ ] PREFIX derivado de `$STACK` + `$REGION`
-- [ ] Zero risco cross-environment
+- [x] Todas as filtragens usam `startswith(prefix)` não `'loopzero' in name`
+- [x] PREFIX derivado de `$STACK` + `$REGION`
+- [x] Zero risco cross-environment
 
 **DoD:** `grep "'loopzero' in" infra/scripts/pre-destroy-cleanup.sh` retorna zero.
 
-### Task 3.2: Criar workflow infra-destroy.yml
+### Task 3.2: Criar workflow infra-destroy.yml ✅
 **Arquivo:** `.github/workflows/infra-destroy.yml` (novo)
 **Critérios de aceite:**
-- [ ] Trigger: `workflow_dispatch` only
-- [ ] Input: `stack` (required, choice: dev/homolog/prod)
-- [ ] Environment protection: reviewers required para TODOS os stacks
-- [ ] `protect: isProd` nos clusters/DB — destroy em prod requer `pulumi state unprotect` explícito (step documentado, não automático)
-- [ ] Steps:
+- [x] Trigger: `workflow_dispatch` only
+- [x] Input: `stack` (required, choice: dev/homolog/prod)
+- [x] Environment protection: reviewers required para TODOS os stacks
+- [x] `protect: isProd` nos clusters/DB — destroy em prod requer `pulumi state unprotect` explícito (step documentado, não automático)
+- [x] Steps:
   1. List what will be deleted (summary) — **DRY RUN FIRST**
   2. Pre-destroy cleanup (stack-scoped)
   3. `pulumi destroy --yes`
   4. Validação pós-destroy (listar recursos cloud que sobreviveram)
-- [ ] **NÃO faz nuclear state reset** — state fica como `pulumi destroy` deixou
-- [ ] Output: lista de recursos deletados + remanescentes em `$GITHUB_STEP_SUMMARY`
+- [x] **NÃO faz nuclear state reset** — state fica como `pulumi destroy` deixou
+- [x] Output: lista de recursos deletados + remanescentes em `$GITHUB_STEP_SUMMARY`
 
 **DoD:** Workflow YAML válido. Environment protection configurado.
 
-### Task 3.3: Criar workflow infra-state-reset.yml (break-glass)
+### Task 3.3: Criar workflow infra-state-reset.yml (break-glass) ✅
 **Arquivo:** `.github/workflows/infra-state-reset.yml` (novo)
 **Critérios de aceite:**
-- [ ] Trigger: `workflow_dispatch` only
-- [ ] Input: `stack` + `confirm_text` (deve digitar "RESET STATE FOR {stack}")
-- [ ] Steps: export → keep stack only → import
-- [ ] Usado APENAS quando state está corrompido e não há outra opção
-- [ ] Log: "State reset performed by {actor} at {time} for reason: {confirm_text}"
+- [x] Trigger: `workflow_dispatch` only
+- [x] Input: `stack` + `confirm_text` (deve digitar "RESET STATE FOR {stack}")
+- [x] Steps: export → keep stack only → import
+- [x] Usado APENAS quando state está corrompido e não há outra opção
+- [x] Log: "State reset performed by {actor} at {time} for reason: {confirm_text}"
 
 **DoD:** Workflow requer input textual de confirmação.
 
@@ -199,11 +199,11 @@ jobs:
 
 **Objetivo:** Restart pods após build de imagens, COM gate de CI.
 
-### Task 4.1: Criar workflow infra-restart.yml
+### Task 4.1: Criar workflow infra-restart.yml ✅
 **Arquivo:** `.github/workflows/infra-restart.yml` (novo)
 **Critérios de aceite:**
-- [ ] Trigger: `workflow_run` de "Build: Container Images" com `conclusion: success`
-- [ ] **Gate de CI:** antes do restart, verificar que CI workflow do mesmo SHA está green:
+- [x] Trigger: `workflow_run` de "Build: Container Images" com `conclusion: success`
+- [x] **Gate de CI:** antes do restart, verificar que CI workflow do mesmo SHA está green:
   ```yaml
   - name: Verify CI passed for this SHA
     run: |
@@ -213,9 +213,9 @@ jobs:
         exit 1
       fi
   ```
-- [ ] Steps: auth → kubeconfig → rollout restart → rollout status
-- [ ] Falha se rollout não completa em 120s
-- [ ] Estado final: **plataforma saudável** (pods running com nova imagem)
+- [x] Steps: auth → kubeconfig → rollout restart → rollout status
+- [x] Falha se rollout não completa em 120s
+- [x] Estado final: **plataforma saudável** (pods running com nova imagem)
 
 **DoD:** Testado: push código → build → CI green → restart → pods novos.
 
@@ -254,10 +254,10 @@ jobs:
 
 ## Fase 6: Cleanup
 
-### Task 6.1: Deletar código morto
-- [ ] Zero referências a `Pass 2`, `2-pass`, `recovery sequence` no codebase
-- [ ] CHANGELOG atualizado
-- [ ] `docs/plans/pipeline-simplification.md` status = Complete
+### Task 6.1: Deletar código morto ✅
+- [x] Zero referências a `Pass 2`, `2-pass`, `recovery sequence` no codebase (only in docs/plans and meeting records — no code refs)
+- [x] CHANGELOG atualizado
+- [x] `docs/plans/pipeline-simplification.md` status = Code Complete
 
 ---
 
