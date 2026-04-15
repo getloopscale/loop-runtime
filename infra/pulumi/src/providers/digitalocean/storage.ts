@@ -21,6 +21,9 @@ export class DigitalOceanStorageProvider implements IProviderStorage {
       versioning: {
         enabled: spec.versioning ?? false,
       },
+      // forceDestroy: allow `pulumi destroy` to delete buckets with objects.
+      // Without this, destroy fails with "BucketNotEmpty" (409).
+      forceDestroy: true,
     }, importId ? { import: importId } : undefined);
 
     return {
