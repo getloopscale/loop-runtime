@@ -1704,10 +1704,15 @@ function installCloudService(
   );
 
   // Deployment
+  // skipAwait: on fresh deploys, images don't exist yet (built separately).
   new k8s.apps.v1.Deployment(
     "loopzero-cloud",
     {
-      metadata: { name: "loopzero-cloud", namespace: PLATFORM_NAMESPACE },
+      metadata: {
+        name: "loopzero-cloud",
+        namespace: PLATFORM_NAMESPACE,
+        annotations: { "pulumi.com/skipAwait": "true" },
+      },
       spec: {
         replicas: 1,
         selector: { matchLabels: { app: "loopzero-cloud" } },
@@ -1760,10 +1765,16 @@ function installCloudService(
     { provider, dependsOn: [ns] },
   );
 
+  // skipAwait: on fresh deploys, images don't exist yet (built separately).
+  // Restart workflow converges pods after images are pushed.
   new k8s.apps.v1.Deployment(
     "loopzero-dashboard",
     {
-      metadata: { name: "loopzero-dashboard", namespace: PLATFORM_NAMESPACE },
+      metadata: {
+        name: "loopzero-dashboard",
+        namespace: PLATFORM_NAMESPACE,
+        annotations: { "pulumi.com/skipAwait": "true" },
+      },
       spec: {
         replicas: 1,
         selector: { matchLabels: { app: "loopzero-dashboard" } },
