@@ -2,7 +2,7 @@
 # Multi-stage build for harbor-init — idempotent post-deploy configuration.
 # Produces a minimal distroless image (~5 MB).
 
-FROM golang:1.25.3-bookworm AS builder
+FROM golang:1.25.9-bookworm AS builder
 WORKDIR /src
 
 COPY infra/scripts/go.mod infra/scripts/go.sum* ./infra/scripts/
