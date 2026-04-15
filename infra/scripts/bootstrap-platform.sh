@@ -58,7 +58,7 @@ bootstrap_gitea() {
     fi
     fail "Gitea token generation failed unexpectedly: $TOKEN_OUTPUT"
   }
-  TOKEN=$(echo "$TOKEN_OUTPUT" | grep -oP 'Access token was successfully created\.\.\. \K.*')
+  TOKEN=$(echo "$TOKEN_OUTPUT" | grep -oP '(?:Access token was successfully created[:.]+\s*)\K\S+')
 
   if [ -z "$TOKEN" ]; then
     warn "Could not parse Gitea token from output — skipping"
@@ -97,8 +97,8 @@ bootstrap_argocd() {
   fi
 
   log "ArgoCD: generating apiKey token (requires port-forward)..."
-  # Port-forward to ArgoCD server
-  kubectl port-forward svc/argocd-server -n "$NAMESPACE" 8443:443 &
+  # Port-forward to ArgoCD server (HTTP on port 80 — server runs with --insecure)
+  kubectl port-forward svc/argocd-server -n "$NAMESPACE" 8443:80 &
   PF_PID=$!
   sleep 3
 
@@ -110,15 +110,16 @@ bootstrap_argocd() {
     return
   fi
 
-  # Login and generate apiKey
-  ARGOCD_TOKEN=$(curl -sk "https://localhost:8443/api/v1/session" \
+  # Login and generate apiKey (HTTP — ArgoCD runs behind Traefik for TLS)
+  ARGOCD_TOKEN=$(curl -s -H "Content-Type: application/json" "http://localhost:8443/api/v1/session" \
     -d "{\"username\":\"admin\",\"password\":\"$ARGOCD_PASS\"}" | \
     python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
 
   if [ -n "$ARGOCD_TOKEN" ]; then
     # Create loopzero-api account if not exists
-    ACCOUNT_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/api/v1/account" \
+    ACCOUNT_HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8443/api/v1/account" \
       -H "Authorization: Bearer $ARGOCD_TOKEN" \
+      -H "Content-Type: application/json" \
       -d '{"name":"loopzero-api","enabled":true}')
     case "$ACCOUNT_HTTP" in
       200|201) log "ArgoCD: loopzero-api account created" ;;
@@ -127,8 +128,9 @@ bootstrap_argocd() {
     esac
 
     # Generate apiKey for loopzero-api
-    API_KEY=$(curl -sk -X POST "https://localhost:8443/api/v1/account/loopzero-api/token" \
+    API_KEY=$(curl -s -X POST "http://localhost:8443/api/v1/account/loopzero-api/token" \
       -H "Authorization: Bearer $ARGOCD_TOKEN" \
+      -H "Content-Type: application/json" \
       -d "{\"name\":\"loopzero-api-$(date +%s)\"}" | \
       python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
 
@@ -199,9 +201,23 @@ metadata:
   namespace: default
 spec:
   displayName: LoopZero Platform
-  slug: loopzero
-  plan: pro
-  ownerEmail: admin@loopzero.example
+  plan: growth
+  environments:
+    - name: production
+      cluster: runtime
+    - name: staging
+      cluster: runtime
+  gitops:
+    repoName: tn-loopzero
+    branch: main
+  limits:
+    maxBuildConcurrency: 3
+    maxCPU: \"4\"
+    maxMemory: 8Gi
+    maxStorage: 20Gi
+  preview:
+    maxEnvironments: 5
+    ttlHours: 72
 TENANT_EOF"
 }
 
