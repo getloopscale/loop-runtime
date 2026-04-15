@@ -407,6 +407,18 @@ jobs:
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: npm ci
 
+      - name: Build Helm chart dependencies
+        run: |
+          # Harbor chart has a dependency on goharbor/harbor that must be
+          # downloaded before Pulumi can install the Helm release.
+          # The .tgz is excluded from git (infra/helm/**/charts/ in .gitignore).
+          for chart_dir in infra/helm/*/; do
+            if [ -f "$chart_dir/Chart.yaml" ] && grep -q "dependencies:" "$chart_dir/Chart.yaml"; then
+              echo "Building deps for $chart_dir..."
+              helm dependency update "$chart_dir" 2>&1
+            fi
+          done
+
       - name: Validate state backend credentials
         run: |
           if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
