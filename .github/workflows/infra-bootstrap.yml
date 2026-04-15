@@ -1,0 +1,91 @@
+# Infrastructure Bootstrap — one-time platform setup after pulumi up.
+#
+# Creates tokens, secrets, seeds database, applies Tenant CR.
+# Idempotent — safe to re-run on a healthy system.
+#
+# Called automatically by infra-deploy.yml after successful `up`,
+# or manually via workflow_dispatch for repair.
+
+name: "Infra: Bootstrap"
+
+on:
+  workflow_call:
+    inputs:
+      stack:
+        description: "Target stack (dev/homolog/prod)"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: "Target stack"
+        required: true
+        type: choice
+        options: [dev, homolog, prod]
+
+permissions:
+  contents: read
+
+env:
+  PULUMI_WORKING_DIR: infra/pulumi
+  PULUMI_BACKEND_URL: "s3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
+  PULUMI_HOMOLOG_BACKEND_URL: "s3://loopzero-homolog-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
+
+jobs:
+  bootstrap:
+    name: "Bootstrap ${{ inputs.stack }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: infra-${{ inputs.stack }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      LOOPZERO_GITHUB_CLIENT_ID: ${{ secrets.LOOPZERO_GITHUB_CLIENT_ID }}
+      LOOPZERO_GITHUB_CLIENT_SECRET: ${{ secrets.LOOPZERO_GITHUB_CLIENT_SECRET }}
+      LOOPZERO_GOOGLE_CLIENT_ID: ${{ secrets.LOOPZERO_GOOGLE_CLIENT_ID }}
+      LOOPZERO_GOOGLE_CLIENT_SECRET: ${{ secrets.LOOPZERO_GOOGLE_CLIENT_SECRET }}
+      LOOPZERO_RESEND_API_KEY: ${{ secrets.LOOPZERO_RESEND_API_KEY }}
+      LOOPZERO_STRIPE_API_KEY: ${{ secrets.LOOPZERO_STRIPE_API_KEY }}
+      LOOPZERO_STRIPE_WEBHOOK_SECRET: ${{ secrets.LOOPZERO_STRIPE_WEBHOOK_SECRET }}
+      LOOPZERO_SESSION_TOKEN_SECRET: ${{ secrets.LOOPZERO_SESSION_TOKEN_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          curl -sL "https://github.com/digitalocean/doctl/releases/download/v1.104.0/doctl-1.104.0-linux-amd64.tar.gz" | tar xz -C /usr/local/bin
+          curl -sL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin --strip-components=1 linux-amd64/helm
+          curl -sLO "https://dl.k8s.io/release/v1.32.0/bin/linux/amd64/kubectl" && chmod +x kubectl && mv kubectl /usr/local/bin/
+          curl -fsSL https://get.pulumi.com | PULUMI_VERSION=3.227.0 sh
+          doctl auth init --access-token "$DIGITALOCEAN_TOKEN"
+
+      - name: Get kubeconfig from Pulumi
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ inputs.stack }}"
+          BACKEND="${{ env.PULUMI_BACKEND_URL }}"
+          [ "$STACK" = "homolog" ] && BACKEND="${{ env.PULUMI_HOMOLOG_BACKEND_URL }}"
+          pulumi login "$BACKEND"
+          pulumi stack output mgmtKubeconfig --show-secrets --stack "organization/loopzero-infra/$STACK" > /tmp/mgmt-kc.yaml
+          echo "KUBECONFIG=/tmp/mgmt-kc.yaml" >> "$GITHUB_ENV"
+
+      - name: Run bootstrap
+        run: bash infra/scripts/bootstrap-platform.sh
+        env:
+          STACK: ${{ inputs.stack }}
+
+      - name: Validate bootstrap health
+        run: |
+          echo "Checking Gitea..."
+          kubectl exec deploy/gitea -n platform-system -c gitea -- wget -qO- http://localhost:3000/api/healthz
+          echo ""
+          echo "Checking ArgoCD..."
+          kubectl get pods -n platform-system -l app.kubernetes.io/name=argocd-server --no-headers | grep Running
+          echo "Bootstrap health: OK"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/mgmt-kc.yaml

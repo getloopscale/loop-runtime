@@ -23,7 +23,11 @@ function httpGet(url: string, token: string): any {
       { encoding: "utf-8", timeout: 10000, stdio: ["pipe", "pipe", "pipe"] },
     );
     return JSON.parse(result);
-  } catch {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // Log warning instead of silently returning undefined.
+    // This helps diagnose adopt-or-create failures during pulumi up.
+    console.error(`[adopt-or-create] lookup failed: ${url.split("?")[0]} — ${msg.split("\n")[0]}`);
     return undefined;
   }
 }
