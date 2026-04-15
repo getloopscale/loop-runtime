@@ -710,6 +710,37 @@ jobs:
               fi
             done
 
+            # 5. Clean Helm releases that exist in K8s but not in Pulumi state.
+            #    Prevents "cannot re-use a name that is still in use" on create.
+            #    Also removes failed releases that block Helm upgrades.
+            echo "Cleaning stale Helm releases..."
+            PULUMI_RELEASES=$(pulumi stack --stack "$STACK" export 2>/dev/null | \
+              python3 -c "import sys,json; [print(r.get('id','').split('/')[-1]) for r in json.load(sys.stdin).get('deployment',{}).get('resources',[]) if 'helm.sh/v3:Release' in r.get('type','')]" 2>/dev/null || true)
+
+            for KC_OUTPUT in mgmtKubeconfig buildKubeconfig runtimeKubeconfig; do
+              KC=$(pulumi stack output "$KC_OUTPUT" --show-secrets --stack "$STACK" 2>/dev/null || true)
+              if [ -n "$KC" ] && [ "$KC" != "undefined" ]; then
+                echo "$KC" > /tmp/kc.yaml
+                for ns in platform-system nfs-system argo monitoring external-secrets; do
+                  # Remove failed releases (always safe)
+                  FAILED=$(helm --kubeconfig=/tmp/kc.yaml list -n "$ns" --failed --short 2>/dev/null || true)
+                  for release in $FAILED; do
+                    echo "  Removing failed release: $release ($ns)"
+                    helm --kubeconfig=/tmp/kc.yaml uninstall "$release" -n "$ns" --wait=false 2>/dev/null || true
+                  done
+                  # Remove releases not tracked by Pulumi (orphaned from partial deploy)
+                  ALL_RELEASES=$(helm --kubeconfig=/tmp/kc.yaml list -n "$ns" --short 2>/dev/null || true)
+                  for release in $ALL_RELEASES; do
+                    if ! echo "$PULUMI_RELEASES" | grep -qw "$release"; then
+                      echo "  Removing orphaned release: $release ($ns) — not in Pulumi state"
+                      helm --kubeconfig=/tmp/kc.yaml uninstall "$release" -n "$ns" --wait=false 2>/dev/null || true
+                    fi
+                  done
+                done
+                rm -f /tmp/kc.yaml
+              fi
+            done
+
             # --- Pass 2 ---
             echo ""
             echo "═══ Pass 2: pulumi up (after recovery) ═══"

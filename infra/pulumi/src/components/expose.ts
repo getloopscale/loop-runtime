@@ -69,11 +69,15 @@ export function exposePlatform(
     prefix ? `${sub}.${prefix}` : sub;
 
   // --- Management cluster DNS ---
+  // Explicit recordType: "A" — the target is always an IPv4 LB IP.
+  // Without this, the async detectRecordType may receive empty string
+  // (LB not yet provisioned) and default to "CNAME", causing CF error 9000.
   const mgmtRecords = MGMT_SUBDOMAINS.map((sub) =>
     factory.createDnsRecord({
       zone,
       recordName: recordName(sub),
       target: bootstrap.mgmt.ingressEndpoint,
+      recordType: "A",
       ttl: 300,
     }),
   );
