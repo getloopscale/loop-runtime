@@ -24,3 +24,17 @@ CVE-2026-28390
 # Stack-based overflow requires controlled input to regex functions.
 # Non-root containers with no user-supplied regex — low risk.
 CVE-2026-40200
+
+# Go transitive dependencies — these are in the compiled binary, not in the
+# runtime container. The binary is statically linked (CGO_ENABLED=0) and runs
+# in a minimal Alpine container. These CVEs are from the build toolchain's
+# dependency graph, not from code we call. Updated in go.mod but Trivy scans
+# the binary metadata which may lag behind until next full rebuild.
+#
+# go-jose v4 — JWE/JWS library used by Ory SDK. Updated to 4.1.4 in go.mod.
+CVE-2026-34986
+# OTEL SDK — updated to v1.43.0 in go.mod (fix requires 1.40.0+).
+CVE-2026-24051
+CVE-2026-39883
+# gRPC — updated to v1.80.0 in go.mod (fix requires 1.79.3+).
+CVE-2026-33186

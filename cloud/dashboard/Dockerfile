@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:20-alpine3.21 AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
@@ -10,7 +10,7 @@ ARG VITE_AUTH_URL=""
 ARG VITE_ACCOUNTS_URL=""
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.28-alpine3.21
 LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 LABEL org.opencontainers.image.title="loopzero-dashboard"
 COPY --from=builder /app/dist /usr/share/nginx/html
