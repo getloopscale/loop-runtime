@@ -1759,7 +1759,7 @@ function installCloudService(
       metadata: { name: "loopzero-dashboard", namespace: PLATFORM_NAMESPACE },
       spec: {
         selector: { app: "loopzero-dashboard" },
-        ports: [{ name: "http", port: 80, targetPort: 80 }],
+        ports: [{ name: "http", port: 80, targetPort: 8080 }],
       },
     },
     { provider, dependsOn: [ns] },
@@ -1786,13 +1786,13 @@ function installCloudService(
               name: "dashboard",
               image: `registry.digitalocean.com/loopzero-infra-registry/loopzero-dashboard:${imageTag}`,
               imagePullPolicy: "Always",
-              ports: [{ containerPort: 80 }],
+              ports: [{ containerPort: 8080 }],
               resources: {
                 requests: { cpu: "10m", memory: "16Mi" },
                 limits: { cpu: "100m", memory: "64Mi" },
               },
               readinessProbe: {
-                httpGet: { path: "/", port: 80 },
+                httpGet: { path: "/", port: 8080 },
                 initialDelaySeconds: 2,
                 periodSeconds: 10,
               },
