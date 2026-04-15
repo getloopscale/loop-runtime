@@ -6,17 +6,17 @@ config:
   loopzero-infra:dnsZone: loopzero.example
   loopzero-infra:infraVersion: v3
   # Management cluster
-  loopzero-infra:mgmtK8sVersion: "1.32.13-do.2"
+  loopzero-infra:mgmtK8sVersion: "1.33.9-do.2"
   loopzero-infra:mgmtNodeClass: small
   loopzero-infra:mgmtMinNodes: "3"
   loopzero-infra:mgmtMaxNodes: "3"
   # Runtime cluster
-  loopzero-infra:runtimeK8sVersion: "1.32.13-do.2"
+  loopzero-infra:runtimeK8sVersion: "1.33.9-do.2"
   loopzero-infra:runtimeNodeClass: small
   loopzero-infra:runtimeMinNodes: "2"
   loopzero-infra:runtimeMaxNodes: "3"
   # Build cluster
-  loopzero-infra:buildK8sVersion: "1.32.13-do.2"
+  loopzero-infra:buildK8sVersion: "1.33.9-do.2"
   loopzero-infra:buildNodeClass: medium
   loopzero-infra:buildMinNodes: "2"
   loopzero-infra:buildMaxNodes: "5"
