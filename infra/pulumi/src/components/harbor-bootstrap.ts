@@ -50,7 +50,12 @@ export function installHarbor(
       chart: path.resolve(__dirname, "../../../../infra/helm/harbor"),
       namespace: PLATFORM_NAMESPACE,
       createNamespace: false,
-      timeout: 600,
+      timeout: 900,
+      // Skip waiting for post-install hooks (harbor-init Job).
+      // The init Job configures Harbor projects/robots and may take 3-5 min
+      // on cold start while Harbor core initializes the DB. Waiting causes
+      // Helm DeadlineExceeded. The Job is idempotent and runs independently.
+      skipAwait: true,
       values: {
         harbor: {
           externalURL: `https://${harborUrl}`,
