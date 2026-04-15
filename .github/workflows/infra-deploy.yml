@@ -443,6 +443,10 @@ jobs:
           # Cancel stale locks before config set (may fail if no lock exists)
           pulumi cancel -s "$STACK" 2>/dev/null || true
           # Set cfApiToken as secret in Pulumi config (required for K8s secret creation)
+          # Set the CF provider auth token. The provider reads cloudflare:apiToken
+          # from Pulumi config OR CLOUDFLARE_API_TOKEN env var. Setting both ensures
+          # auth works regardless of provider version.
+          pulumi config set --secret cloudflare:apiToken "$CLOUDFLARE_API_TOKEN" --stack "$STACK" 2>/dev/null || true
           if ! pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" --stack "$STACK" 2>&1; then
             echo "::warning::Failed to set cfApiToken via pulumi config. Falling back to YAML patch."
             # Fallback: the Pulumi code handles missing cfApiToken gracefully (conditional secret creation).
