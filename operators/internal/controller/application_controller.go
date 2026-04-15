@@ -86,19 +86,19 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	r.reconcileRouteStatus(ctx, &app)
 	r.reconcileHealthCondition(&app)
 
-	app.Status.ObservedGeneration = app.Generation
+	// Save computed status, then re-fetch to get latest ResourceVersion,
+	// then apply status via Patch (avoids UID precondition failures from Update).
+	computedStatus := app.Status.DeepCopy()
+	computedStatus.ObservedGeneration = app.Generation
 
-	// Re-fetch before status update to get the latest ResourceVersion.
-	// Between spec updates (finalizer, hostname) and this point, the object's
-	// ResourceVersion may have changed — envtest's etcd rejects stale versions.
-	statusPatch := app.DeepCopy()
 	if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
-		return ctrl.Result{}, fmt.Errorf("re-fetching application before status update: %w", err)
+		return ctrl.Result{}, fmt.Errorf("re-fetching application: %w", err)
 	}
-	app.Status = statusPatch.Status
-
-	if err := r.Status().Update(ctx, &app); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating application status: %w", err)
+	// MergeFrom captures the clean base; then we mutate status and patch.
+	patch := client.MergeFrom(app.DeepCopy())
+	app.Status = *computedStatus
+	if err := r.Status().Patch(ctx, &app, patch); err != nil {
+		return ctrl.Result{}, fmt.Errorf("patching application status: %w", err)
 	}
 
 	logger.Info("reconciled application",

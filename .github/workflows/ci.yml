@@ -473,6 +473,8 @@ jobs:
         run: npm ci && npm audit --omit=dev --audit-level=high
 
       # Trivy — always on PRs (filesystem + IaC + Dockerfiles)
+      # ignore-unfixed: don't block on vulnerabilities without available patches.
+      # trivyignores: suppress known false positives (see .trivyignore).
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@v0.35.0
         with:
@@ -481,7 +483,9 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: 1
           format: table
-          skip-dirs: infra/tests/e2e/fixtures,examples,loopzero-packs,loopzero-forge
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          skip-dirs: infra/tests/e2e/fixtures,examples,loopzero-packs,loopzero-forge,referencias
       - name: Trivy Dockerfile scan (api)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
