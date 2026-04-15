@@ -14,3 +14,8 @@ KSV-0056
 # Add CVE IDs here to suppress known false positives or accepted risks.
 # Format: one CVE per line, optionally followed by a comment.
 # Example: CVE-2024-12345  # accepted risk: not exploitable in our context
+
+# Alpine 3.21.6 ships openssl 3.3.6-r0. Fix requires 3.3.7-r0 which is only
+# in Alpine 3.22+. Our images run as non-root with no CMS processing — low risk.
+# Will be resolved when we bump to Alpine 3.22 in the next release cycle.
+CVE-2026-28390
