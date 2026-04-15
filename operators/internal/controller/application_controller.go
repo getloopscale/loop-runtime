@@ -259,13 +259,19 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 	if app.Status.EndpointsReady {
 		return loopzerov1.ApplicationPhaseServing
 	}
-	// Check conditions for degraded/down states
+	// Check conditions for degraded/down states.
+	// "Waiting" is normal progression (not yet reachable), "Failed" is degraded.
 	for _, c := range app.Status.Conditions {
 		if c.Type == "RouteReachable" && c.Status == "False" {
-			if c.Reason == "Failed" {
+			switch c.Reason {
+			case "Failed":
 				return loopzerov1.ApplicationPhaseDown
+			case "Degraded":
+				return loopzerov1.ApplicationPhaseDegraded
+			default:
+				// "Waiting" or any other reason — still progressing
+				return loopzerov1.ApplicationPhaseProgressing
 			}
-			return loopzerov1.ApplicationPhaseDegraded
 		}
 	}
 	return loopzerov1.ApplicationPhaseProgressing
