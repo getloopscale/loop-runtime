@@ -51,11 +51,6 @@ export function installHarbor(
       namespace: PLATFORM_NAMESPACE,
       createNamespace: false,
       timeout: 900,
-      // Skip waiting for post-install hooks (harbor-init Job).
-      // The init Job configures Harbor projects/robots and may take 3-5 min
-      // on cold start while Harbor core initializes the DB. Waiting causes
-      // Helm DeadlineExceeded. The Job is idempotent and runs independently.
-      skipAwait: true,
       values: {
         harbor: {
           externalURL: `https://${harborUrl}`,
@@ -187,13 +182,13 @@ export function installHarbor(
           // Post-install init Job — configures Harbor after deployment.
           // Requires harbor-init image built by build-images.yml workflow.
           // Password comes from K8s Secret synced by ESO.
+          // Harbor init hook is disabled during initial provisioning.
+          // The post-install Job requires the harbor-init image which may not
+          // exist yet on first deploy, causing Helm DeadlineExceeded. The init
+          // runs as a separate step in the CI pipeline (Step 3: Deploy apps)
+          // after images are built.
           init: {
-            enabled: true,
-            image: `registry.digitalocean.com/loopzero-infra-registry/harbor-init:latest`,
-            passwordSecretRef: {
-              name: "harbor-admin-credentials",
-              key: "harbor-admin-password",
-            },
+            enabled: false,
           },
         },
       },
