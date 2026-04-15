@@ -44,6 +44,15 @@ export function lookupExistingVpc(name: string): string | undefined {
   return vpc?.id;
 }
 
+/** Lookup an existing CDN by origin domain. Returns CDN ID or undefined. */
+export function lookupExistingCdn(originDomain: string): string | undefined {
+  const token = process.env.DIGITALOCEAN_TOKEN;
+  if (!token) return undefined;
+  const data = httpGet("https://api.digitalocean.com/v2/cdn/endpoints?per_page=50", token);
+  const cdn = data?.endpoints?.find((c: any) => c.origin?.includes(originDomain));
+  return cdn?.id;
+}
+
 /** Lookup an existing Spaces bucket by name. Returns bucket name if exists, undefined otherwise. */
 export function lookupExistingBucket(
   name: string,

@@ -5,7 +5,7 @@ import * as digitalocean from "@pulumi/digitalocean";
 import * as pulumi from "@pulumi/pulumi";
 import { ObjectStorageSpec, ObjectStorageOutput, CdnSpec, CdnOutput, StorageEndpointSpec, StorageEndpointOutput } from "../../contracts/storage";
 import { IProviderStorage } from "../../contracts/provider";
-import { lookupExistingBucket } from "../../core/adopt-or-create";
+import { lookupExistingBucket, lookupExistingCdn } from "../../core/adopt-or-create";
 
 export class DigitalOceanStorageProvider implements IProviderStorage {
   createObjectStorage(spec: ObjectStorageSpec): ObjectStorageOutput {
@@ -31,10 +31,12 @@ export class DigitalOceanStorageProvider implements IProviderStorage {
   }
 
   createCdn(spec: CdnSpec): CdnOutput {
+    // Adopt existing CDN if it persists from a previous deploy
+    const existingId = lookupExistingCdn(spec.origin as string);
     const cdn = new digitalocean.Cdn("static-cdn", {
       origin: spec.origin,
       ttl: spec.ttl,
-    });
+    }, existingId ? { import: existingId } : undefined);
 
     return {
       cdnEndpoint: cdn.endpoint,
