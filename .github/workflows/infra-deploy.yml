@@ -659,6 +659,55 @@ jobs:
           echo "Refreshing state..."
           PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
 
+          # Pre-deploy: clean Helm releases that exist in K8s but not Pulumi state.
+          # Prevents "cannot re-use a name that is still in use" when Pulumi tries
+          # to create a release that already exists from a partial previous deploy.
+          echo "Pre-deploy: cleaning orphaned Helm releases..."
+          PULUMI_RELEASES=$(pulumi stack --stack "$STACK" export 2>/dev/null | \
+            python3 -c "import sys,json; [print(r.get('id','').split('/')[-1]) for r in json.load(sys.stdin).get('deployment',{}).get('resources',[]) if 'helm.sh/v3:Release' in r.get('type','')]" 2>/dev/null || true)
+
+          for KC_OUTPUT in mgmtKubeconfig buildKubeconfig runtimeKubeconfig; do
+            KC=$(pulumi stack output "$KC_OUTPUT" --show-secrets --stack "$STACK" 2>/dev/null || true)
+            if [ -n "$KC" ] && [ "$KC" != "undefined" ]; then
+              echo "$KC" > /tmp/kc.yaml
+              for ns in platform-system nfs-system argo monitoring external-secrets; do
+                FAILED=$(helm --kubeconfig=/tmp/kc.yaml list -n "$ns" --failed --short 2>/dev/null || true)
+                for release in $FAILED; do
+                  echo "  Removing failed release: $release ($ns)"
+                  helm --kubeconfig=/tmp/kc.yaml uninstall "$release" -n "$ns" --wait=false 2>/dev/null || true
+                done
+                ALL=$(helm --kubeconfig=/tmp/kc.yaml list -n "$ns" --short 2>/dev/null || true)
+                for release in $ALL; do
+                  if ! echo "$PULUMI_RELEASES" | grep -qw "$release"; then
+                    echo "  Removing orphaned release: $release ($ns)"
+                    helm --kubeconfig=/tmp/kc.yaml uninstall "$release" -n "$ns" --wait=false 2>/dev/null || true
+                  fi
+                done
+              done
+              rm -f /tmp/kc.yaml
+            fi
+          done
+
+          # Also clean orphaned DNS A records for dev (prevents CF 9000/81058)
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            DOMAIN=$(pulumi config get domain --stack "$STACK" 2>/dev/null || true)
+            ZONE_ID=$(pulumi config get cfZoneId --stack "$STACK" 2>/dev/null || true)
+            if [ -n "$DOMAIN" ] && [ -n "$ZONE_ID" ]; then
+              for sub in api argocd git grafana auth cloud; do
+                FQDN="${sub}.${DOMAIN}"
+                RID=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=$FQDN&type=A" | \
+                  python3 -c "import sys,json; r=json.load(sys.stdin).get('result',[]); print(r[0]['id'] if r else '')" 2>/dev/null)
+                IN_STATE=$(echo "$PULUMI_RELEASES" | grep -c "cf-${sub}" || true)
+                if [ -n "$RID" ] && [ "$IN_STATE" = "0" ]; then
+                  echo "  Deleting orphaned DNS A record: $FQDN"
+                  curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                    "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RID" > /dev/null
+                fi
+              done
+            fi
+          fi
+
           # --- Pass 1 ---
           echo ""
           echo "═══ Pass 1: pulumi up ═══"
