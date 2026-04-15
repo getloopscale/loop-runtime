@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Pipeline simplification** (MEET-049, MEET-050): Rewrote infra pipeline from 1 monolithic workflow (1539 lines) to 5 focused workflows (~470 lines total). `infra-deploy.yml` (Pulumi up only), `infra-bootstrap.yml` (idempotent tokens/secrets/seed), `infra-destroy.yml` (stack-scoped with approval), `infra-restart.yml` (CI-gated pod restart), `infra-state-reset.yml` (break-glass emergency). Zero `pulumi cancel`/`state delete` in deploy path. Stack-scoped destroy prevents cross-environment deletion.
+
 ### Security
 - **COOKIE_SECRET rotated to RandomPassword** (C1): Kratos UI cookie secret replaced from hardcoded string to Pulumi-managed `RandomPassword`. Eliminates session cookie forgery risk from source code access.
 - **LOOPZERO_SERVICE_AUTH_SECRET auto-generated** (H12): Service-to-service auth secret now auto-generates via `RandomPassword` when not explicitly configured. Removes `dev-service-auth-secret-default` fallback.

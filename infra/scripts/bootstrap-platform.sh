@@ -48,18 +48,33 @@ bootstrap_gitea() {
 
   # Generate token via API
   GITEA_URL="http://$(kubectl get svc gitea-http -n "$NAMESPACE" -o jsonpath='{.spec.clusterIP}'):3000"
-  TOKEN=$(kubectl exec deploy/gitea -n "$NAMESPACE" -c gitea -- \
-    gitea admin user generate-access-token --username gitea_admin --token-name "loopzero-platform-$(date +%s)" --scopes "all" 2>/dev/null | grep -oP 'Access token was successfully created\.\.\. \K.*' || true)
+  TOKEN=""
+  TOKEN_OUTPUT=$(kubectl exec deploy/gitea -n "$NAMESPACE" -c gitea -- \
+    gitea admin user generate-access-token --username gitea_admin --token-name "loopzero-platform-$(date +%s)" --scopes "all" 2>&1) || {
+    # Expected: "token already exists" or similar — not a real failure
+    if echo "$TOKEN_OUTPUT" | grep -qi "already exist\|duplicate"; then
+      warn "Gitea token already exists with different name — skipping generation"
+      return
+    fi
+    fail "Gitea token generation failed unexpectedly: $TOKEN_OUTPUT"
+  }
+  TOKEN=$(echo "$TOKEN_OUTPUT" | grep -oP 'Access token was successfully created\.\.\. \K.*')
 
   if [ -z "$TOKEN" ]; then
-    warn "Could not generate Gitea token (may already exist with different name)"
+    warn "Could not parse Gitea token from output — skipping"
     return
   fi
 
-  # Create orgs
+  # Create orgs — idempotent: org creation fails with "already exists" if re-run
   for org in loopzero loopzero-platform; do
-    kubectl exec deploy/gitea -n "$NAMESPACE" -c gitea -- \
-      gitea admin org create --name "$org" 2>/dev/null || true  # Expected: org may already exist
+    ORG_OUTPUT=$(kubectl exec deploy/gitea -n "$NAMESPACE" -c gitea -- \
+      gitea admin org create --name "$org" 2>&1) || {
+      if echo "$ORG_OUTPUT" | grep -qi "already exist"; then
+        log "Org $org: already exists — skipping"
+      else
+        fail "Gitea org '$org' creation failed: $ORG_OUTPUT"
+      fi
+    }
   done
 
   log "Gitea: token generated, orgs created"
@@ -102,9 +117,14 @@ bootstrap_argocd() {
 
   if [ -n "$ARGOCD_TOKEN" ]; then
     # Create loopzero-api account if not exists
-    curl -sk -X POST "https://localhost:8443/api/v1/account" \
+    ACCOUNT_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/api/v1/account" \
       -H "Authorization: Bearer $ARGOCD_TOKEN" \
-      -d '{"name":"loopzero-api","enabled":true}' 2>/dev/null || true  # Expected: may already exist
+      -d '{"name":"loopzero-api","enabled":true}')
+    case "$ACCOUNT_HTTP" in
+      200|201) log "ArgoCD: loopzero-api account created" ;;
+      409)     log "ArgoCD: loopzero-api account already exists" ;;
+      *)       warn "ArgoCD: account creation returned HTTP $ACCOUNT_HTTP" ;;
+    esac
 
     # Generate apiKey for loopzero-api
     API_KEY=$(curl -sk -X POST "https://localhost:8443/api/v1/account/loopzero-api/token" \
