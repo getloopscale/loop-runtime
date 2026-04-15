@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.25.9'
   NODE_VERSION: '20'
   KUBECONFORM_VERSION: 'v0.6.7'
   ENVTEST_K8S_VERSION: '1.31.0'

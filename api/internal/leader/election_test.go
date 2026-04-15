@@ -166,6 +166,7 @@ func TestController_LeaderElection_OnlyOneWinner(t *testing.T) {
 	}
 	if winner == nil {
 		t.Fatal("no winning lease captured")
+		return // unreachable — helps staticcheck
 	}
 	if winner.GenerationID != 1 {
 		t.Errorf("winner generation = %d, want 1", winner.GenerationID)
