@@ -31,8 +31,12 @@ export class DigitalOceanStorageProvider implements IProviderStorage {
   }
 
   createCdn(spec: CdnSpec): CdnOutput {
-    // Adopt existing CDN if it persists from a previous deploy
-    const existingId = lookupExistingCdn(spec.origin as string);
+    // Adopt existing CDN: lookup by bucket name (sync, not Output)
+    // spec.origin is an Output<string> that can't be resolved synchronously.
+    // bucketName is the plain string known at compile time.
+    const existingId = spec.bucketName
+      ? lookupExistingCdn(spec.bucketName)
+      : undefined;
     const cdn = new digitalocean.Cdn("static-cdn", {
       origin: spec.origin,
       ttl: spec.ttl,

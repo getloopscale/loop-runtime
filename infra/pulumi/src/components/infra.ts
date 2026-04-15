@@ -231,9 +231,11 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
 
   // Enable CDN on static assets bucket for edge caching.
   // CF Worker uses the direct endpoint; CDN is an additional optimization layer.
+  const staticBucketName = bucketName({ project: config.project, env: config.environment, region: config.region, suffix: "static-assets" });
   const staticCdn = factory.createCdn({
     origin: staticBucket.endpoint,
     ttl: 3600, // 1 hour edge cache
+    bucketName: staticBucketName, // Plain string for CDN adopt-or-create lookup
   });
 
   // Storage endpoint — provider-specific S3-compatible endpoint for SDKs and Loki.
