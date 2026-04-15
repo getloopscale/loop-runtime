@@ -31,11 +31,10 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
       privateNetworkUuid: spec.network.vpcId,
       tags: tagsToStringArray(spec.tags),
     }, {
-      // C3-fix: Prevent accidental deletion of the database cluster.
-      // A `pulumi destroy` will skip this resource. To truly delete, first
-      // run `pulumi state unprotect <urn>` then destroy.
-      protect: true,
-      retainOnDelete: true,
+      // Protect prod databases from accidental deletion. Dev/ephemeral
+      // environments use protect=false to enable clean destroy+up cycles.
+      protect: spec.protect ?? false,
+      retainOnDelete: spec.protect ?? false,
     });
 
     // Managed PostgreSQL only creates "defaultdb". Platform services need their own databases.

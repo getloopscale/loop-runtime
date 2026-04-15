@@ -502,15 +502,25 @@ jobs:
                 # Nuclear: clear state — keep only the Stack resource
                 pulumi stack export -s "$STACK" | python3 -c "import sys,json; s=json.load(sys.stdin); s['deployment']['resources']=[r for r in s['deployment']['resources'] if r.get('type')=='pulumi:pulumi:Stack']; json.dump(s,sys.stdout)" | pulumi stack import -s "$STACK" 2>/dev/null
 
-                # Delete cloud resources via DO API
-                curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/registry" 2>/dev/null || true
-                for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/kubernetes/clusters" | python3 -c "import sys,json; [print(c['id']) for c in json.load(sys.stdin)['kubernetes_clusters'] if 'loopzero' in c['name']]" 2>/dev/null); do
+                # Delete cloud resources via DO API — FILTERED BY STACK NAME.
+                # CRITICAL: only delete resources whose name contains the exact
+                # stack prefix (e.g. "loopzero-infra-dev-sfo3") to avoid cross-environment
+                # destruction. Never delete the shared container registry.
+                REGION=$(pulumi config get region --stack "$STACK" 2>/dev/null || echo "sfo3")
+                PREFIX="loopzero-infra-${STACK}-${REGION}"
+                echo "Destroying resources matching prefix: $PREFIX"
+
+                for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/kubernetes/clusters" | \
+                  python3 -c "import sys,json; [print(c['id']) for c in json.load(sys.stdin)['kubernetes_clusters'] if c['name'].startswith('$PREFIX')]" 2>/dev/null); do
+                  echo "  Deleting cluster: $ID"
                   curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/kubernetes/clusters/$ID?dangerous=true" 2>/dev/null || true
                 done
-                for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/databases" | python3 -c "import sys,json; [print(d['id']) for d in json.load(sys.stdin)['databases'] if 'loopzero' in d['name']]" 2>/dev/null); do
+                for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/databases" | \
+                  python3 -c "import sys,json; [print(d['id']) for d in json.load(sys.stdin)['databases'] if d['name'].startswith('$PREFIX')]" 2>/dev/null); do
+                  echo "  Deleting database: $ID"
                   curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/databases/$ID" 2>/dev/null || true
                 done
-                echo "Cloud resources deleted via API. State cleared."
+                echo "Stack-scoped cloud resources deleted. State cleared."
               }
             fi
           else

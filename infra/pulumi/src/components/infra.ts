@@ -128,6 +128,7 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
   });
 
   // --- Management cluster ---
+  const isProd = config.environment === "prod";
   const mgmtCluster = factory.createKubernetesCluster({
     name: `${baseName}-mgmt`,
     region: config.region,
@@ -138,6 +139,7 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     autoScale: config.mgmtMaxNodes !== undefined,
     network: { vpcId: network.vpcId },
     tags,
+    protect: isProd,
   });
 
   // --- Runtime cluster ---
@@ -151,6 +153,7 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     autoScale: config.runtimeMaxNodes !== undefined,
     network: { vpcId: network.vpcId },
     tags,
+    protect: isProd,
   });
 
   // --- Build cluster ---
@@ -166,6 +169,7 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     autoScale: config.buildMaxNodes !== undefined,
     network: { vpcId: network.vpcId },
     tags,
+    protect: isProd,
   });
 
   // --- Managed PostgreSQL ---
@@ -181,6 +185,8 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     // Allow all 3 DOKS clusters to connect — critical for pipeline idempotency.
     // Without this, destroy+recreate leaves DB unreachable (no trusted sources).
     trustedK8sClusters: [mgmtCluster.clusterId, buildCluster.clusterId, runtimeCluster.clusterId],
+    // Only protect prod databases — dev/ephemeral need clean destroy+up cycles.
+    protect: config.environment === "prod",
   });
 
   // --- Object storage ---

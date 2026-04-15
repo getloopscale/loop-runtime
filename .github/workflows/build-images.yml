@@ -75,6 +75,7 @@ jobs:
       tag: ${{ steps.resolve.outputs.tag }}
       sha_tag: ${{ steps.resolve.outputs.sha_tag }}
       env_tag: ${{ steps.resolve.outputs.env_tag }}
+      environment: ${{ steps.resolve.outputs.environment }}
       build_api: ${{ steps.resolve.outputs.build_api }}
       build_operator: ${{ steps.resolve.outputs.build_operator }}
       build_cloud: ${{ steps.resolve.outputs.build_cloud }}
@@ -129,9 +130,20 @@ jobs:
             fi
           fi
 
+          # Resolve GitHub environment for secrets scoping.
+          # Each environment (infra-dev, infra-homolog, infra-prod) has its own
+          # DIGITALOCEAN_TOKEN, HARBOR_ROBOT_*, etc. — prevents cross-env credential leaks.
+          case "$BRANCH" in
+            develop) ENVIRONMENT="infra-dev" ;;
+            homolog) ENVIRONMENT="infra-homolog" ;;
+            main)    ENVIRONMENT="infra-prod" ;;
+            *)       ENVIRONMENT="infra-dev" ;;
+          esac
+
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "sha_tag=$SHA_SHORT" >> "$GITHUB_OUTPUT"
           echo "env_tag=$ENV_TAG" >> "$GITHUB_OUTPUT"
+          echo "environment=$ENVIRONMENT" >> "$GITHUB_OUTPUT"
           echo "build_api=$BUILD_API" >> "$GITHUB_OUTPUT"
           echo "build_operator=$BUILD_OP" >> "$GITHUB_OUTPUT"
           echo "build_cloud=$BUILD_CLOUD" >> "$GITHUB_OUTPUT"
@@ -154,7 +166,7 @@ jobs:
     timeout-minutes: 15
     needs: resolve
     if: needs.resolve.outputs.build_api == 'true'
-    environment: infra-dev
+    environment: ${{ needs.resolve.outputs.environment }}
     env:
       HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
       HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
@@ -242,7 +254,7 @@ jobs:
     timeout-minutes: 15
     needs: resolve
     if: needs.resolve.outputs.build_operator == 'true'
-    environment: infra-dev
+    environment: ${{ needs.resolve.outputs.environment }}
     env:
       HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
       HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
@@ -329,7 +341,7 @@ jobs:
     timeout-minutes: 15
     needs: resolve
     if: needs.resolve.outputs.build_cloud == 'true'
-    environment: infra-dev
+    environment: ${{ needs.resolve.outputs.environment }}
     env:
       HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
       HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
@@ -416,7 +428,7 @@ jobs:
     timeout-minutes: 10
     needs: resolve
     if: needs.resolve.outputs.build_operator == 'true'
-    environment: infra-dev
+    environment: ${{ needs.resolve.outputs.environment }}
     env:
       HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
       HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
@@ -493,7 +505,7 @@ jobs:
     timeout-minutes: 10
     needs: resolve
     if: needs.resolve.outputs.build_cloud == 'true'
-    environment: infra-dev
+    environment: ${{ needs.resolve.outputs.environment }}
     env:
       HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
       HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
@@ -609,7 +621,7 @@ jobs:
     timeout-minutes: 10
     needs: [resolve, build-api, build-operator, build-cloud, build-dashboard, build-harbor-init]
     if: always()
-    environment: infra-dev
+    environment: ${{ needs.resolve.outputs.environment }}
     env:
       HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
       HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
@@ -753,12 +765,12 @@ jobs:
     name: Integrate registry with DOKS
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [build-api, build-operator, build-cloud, build-dashboard, build-harbor-init, sign-and-attest]
+    needs: [resolve, build-api, build-operator, build-cloud, build-dashboard, build-harbor-init, sign-and-attest]
     if: >-
       always() &&
       needs.sign-and-attest.result != 'failure' &&
       (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success' || needs.build-harbor-init.result == 'success')
-    environment: infra-dev
+    environment: ${{ needs.resolve.outputs.environment }}
     env:
       HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
       HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
@@ -820,12 +832,12 @@ jobs:
     name: Update CWTs on build cluster
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [build-api, build-operator, build-cloud, build-dashboard, build-harbor-init, sign-and-attest]
+    needs: [resolve, build-api, build-operator, build-cloud, build-dashboard, build-harbor-init, sign-and-attest]
     if: >-
       always() &&
       needs.sign-and-attest.result != 'failure' &&
       (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success' || needs.build-harbor-init.result == 'success')
-    environment: infra-dev
+    environment: ${{ needs.resolve.outputs.environment }}
     env:
       HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
       HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}

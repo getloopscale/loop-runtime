@@ -26,6 +26,8 @@ export interface DatabaseClusterSpec {
   readonly tags: BaseLabels;
   /** K8s cluster IDs allowed to connect to the database (firewall trusted sources). */
   readonly trustedK8sClusters?: pulumi.Input<string>[];
+  /** Enable protect + retainOnDelete (recommended for prod, disabled for dev/ephemeral). */
+  readonly protect?: boolean;
 }
 
 export interface DatabaseClusterOutput {
