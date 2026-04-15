@@ -64,7 +64,14 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     name: tunnelName,
     tunnelSecret: tunnelSecret,
     configSrc: "cloudflare",
-  }, config.importIds?.tunnel ? { import: config.importIds.tunnel } : undefined);
+  }, {
+    // Ignore tunnelSecret changes — the provider detects drift when
+    // cloudflare:apiToken is added/changed, triggering a replace that
+    // fails because the tunnel has active cloudflared connections.
+    // The secret is stable (set once via pulumi config) and never changes.
+    ignoreChanges: ["tunnelSecret"],
+    ...(config.importIds?.tunnel ? { import: config.importIds.tunnel } : {}),
+  });
 
   // 2. Tunnel ingress config — route ALL traffic to Traefik
   // The catch-all rule sends every hostname to Traefik, which handles
