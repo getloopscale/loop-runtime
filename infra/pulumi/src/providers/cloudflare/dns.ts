@@ -44,6 +44,13 @@ export class CloudflareDnsProvider implements IProviderDns {
       "A", // Platform records are always A (IP targets)
     );
 
+    // Debug: log the actual values being sent to CF API.
+    // This helps diagnose error 9000 ("DNS name is invalid") which may be
+    // caused by empty content or incorrect type resolution.
+    pulumi.all([resolvedType, spec.target]).apply(([t, c]) => {
+      pulumi.log.info(`DNS: ${spec.recordName}.${spec.zone} type=${t} content=${c} import=${existingId ?? "none"}`);
+    });
+
     const record = new cloudflare.DnsRecord(
       `cf-${spec.recordName}.${spec.zone}`,
       {
