@@ -23,6 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"go.opentelemetry.io/otel/trace"
+
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/argocd"
 	"github.com/loopzero/loopzero/operators/internal/constants"
@@ -32,6 +34,10 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/httpclient"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/operators/internal/tracing"
+	"github.com/loopzero/loopzero/pkg/logging"
+
+	// Register metrics package so prometheus.MustRegister runs at init.
+	_ "github.com/loopzero/loopzero/operators/internal/metrics"
 )
 
 var scheme = runtime.NewScheme()
@@ -94,6 +100,15 @@ func main() {
 		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
 	}
 	defer func() { _ = tracingShutdown(context.Background()) }()
+
+	// Register OTel trace extractor so structured logs include trace_id/span_id.
+	logging.RegisterTraceExtractor(func(ctx context.Context) (string, string) {
+		sc := trace.SpanContextFromContext(ctx)
+		if !sc.IsValid() {
+			return "", ""
+		}
+		return sc.TraceID().String(), sc.SpanID().String()
+	})
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,

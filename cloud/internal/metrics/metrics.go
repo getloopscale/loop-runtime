@@ -1,169 +1,163 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package metrics provides lightweight observability counters for the cloud service.
+// Package metrics provides Prometheus-native observability for the cloud service.
 // §4.1 + §4.2: Auth and billing metrics exposed via /metrics endpoint.
 //
-// Uses sync/atomic counters (no external dependency). Prometheus scrapes via /metrics
-// endpoint that emits text format. When the cloud service adds prometheus/client_golang
-// as a dependency, these can be migrated to promauto.NewCounter.
+// Migrated from manual sync/atomic counters to prometheus/client_golang.
+// The public API (Inc*, Observe* functions) is preserved for all call sites.
 package metrics
 
 import (
-	"fmt"
 	"net/http"
-	"sync/atomic"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// Auth metrics (§4.1)
 var (
-	TokenExchangeSuccess int64
-	TokenExchangeError   int64
-	DeviceFlowSuccess    int64
-	DeviceFlowError      int64
-	TenantProvSuccess    int64
-	TenantProvError      int64
-	TenantProvDurationMs int64 // cumulative for average calculation
-	TenantProvCount      int64
-	AuthRejectExpired    int64
-	AuthRejectInvalid    int64
-	AuthRejectNoTenant   int64
+	// Auth metrics (§4.1)
+	tokenExchanges = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_auth_token_exchanges_total",
+		Help: "Token exchanges by result.",
+	}, []string{"result"})
+
+	deviceFlows = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_auth_device_flow_total",
+		Help: "Device flow completions.",
+	}, []string{"result"})
+
+	tenantProvisioning = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_tenant_provisioning_total",
+		Help: "Tenant provisioning operations.",
+	}, []string{"result"})
+
+	tenantProvisioningDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "loopzero_tenant_provisioning_duration_seconds",
+		Help:    "Tenant provisioning duration in seconds.",
+		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0},
+	})
+
+	authRejections = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_auth_rejections_total",
+		Help: "Auth rejections by reason.",
+	}, []string{"reason"})
+
+	// Billing metrics (§4.2)
+	webhookEvents = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_webhook_events_total",
+		Help: "Webhook events by status.",
+	}, []string{"status"})
+
+	checkoutOps = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_billing_checkout_total",
+		Help: "Checkout operations.",
+	}, []string{"result"})
+
+	usageDrift = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_usage_drift_detected_total",
+		Help: "Usage drift detection events.",
+	})
+
+	subscriptionFallback = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_subscription_fallback_total",
+		Help: "Subscription missing -- defaulted to starter.",
+	})
+
+	// HTTP metrics (added with OTel instrumentation)
+	httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_cloud_http_request_duration_seconds",
+		Help:    "HTTP request duration in seconds.",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"method", "path", "status_code"})
 )
 
-// Billing metrics (§4.2)
-var (
-	WebhookProcessed      int64
-	WebhookFailed         int64
-	CheckoutStarted       int64
-	CheckoutError         int64
-	UsageDriftCount       int64
-	SubscriptionFallback  int64 // S1.4: missing subscription row → starter fallback
-)
+func init() {
+	prometheus.MustRegister(
+		tokenExchanges,
+		deviceFlows,
+		tenantProvisioning,
+		tenantProvisioningDuration,
+		authRejections,
+		webhookEvents,
+		checkoutOps,
+		usageDrift,
+		subscriptionFallback,
+		httpRequestDuration,
+	)
+}
 
 // IncTokenExchange increments token exchange counter.
 func IncTokenExchange(success bool) {
 	if success {
-		atomic.AddInt64(&TokenExchangeSuccess, 1)
+		tokenExchanges.WithLabelValues("success").Inc()
 	} else {
-		atomic.AddInt64(&TokenExchangeError, 1)
+		tokenExchanges.WithLabelValues("error").Inc()
 	}
 }
 
 // IncDeviceFlow increments device flow counter.
 func IncDeviceFlow(success bool) {
 	if success {
-		atomic.AddInt64(&DeviceFlowSuccess, 1)
+		deviceFlows.WithLabelValues("success").Inc()
 	} else {
-		atomic.AddInt64(&DeviceFlowError, 1)
+		deviceFlows.WithLabelValues("error").Inc()
 	}
 }
 
 // ObserveTenantProvisioning records a tenant provisioning operation.
 func ObserveTenantProvisioning(success bool, duration time.Duration) {
-	atomic.AddInt64(&TenantProvCount, 1)
-	atomic.AddInt64(&TenantProvDurationMs, duration.Milliseconds())
+	tenantProvisioningDuration.Observe(duration.Seconds())
 	if success {
-		atomic.AddInt64(&TenantProvSuccess, 1)
+		tenantProvisioning.WithLabelValues("success").Inc()
 	} else {
-		atomic.AddInt64(&TenantProvError, 1)
+		tenantProvisioning.WithLabelValues("error").Inc()
 	}
 }
 
 // IncAuthRejection increments auth rejection counter by reason.
 func IncAuthRejection(reason string) {
-	switch reason {
-	case "expired":
-		atomic.AddInt64(&AuthRejectExpired, 1)
-	case "invalid":
-		atomic.AddInt64(&AuthRejectInvalid, 1)
-	case "no_tenant":
-		atomic.AddInt64(&AuthRejectNoTenant, 1)
-	}
+	authRejections.WithLabelValues(reason).Inc()
 }
 
 // IncWebhook increments webhook counter.
 func IncWebhook(success bool) {
 	if success {
-		atomic.AddInt64(&WebhookProcessed, 1)
+		webhookEvents.WithLabelValues("processed").Inc()
 	} else {
-		atomic.AddInt64(&WebhookFailed, 1)
+		webhookEvents.WithLabelValues("failed").Inc()
 	}
 }
 
 // IncCheckout increments checkout counter.
 func IncCheckout(success bool) {
 	if success {
-		atomic.AddInt64(&CheckoutStarted, 1)
+		checkoutOps.WithLabelValues("started").Inc()
 	} else {
-		atomic.AddInt64(&CheckoutError, 1)
+		checkoutOps.WithLabelValues("error").Inc()
 	}
 }
 
 // IncUsageDrift increments usage drift counter.
 func IncUsageDrift() {
-	atomic.AddInt64(&UsageDriftCount, 1)
+	usageDrift.Inc()
 }
 
 // IncSubscriptionFallback increments when plan resolution falls back to starter (S1.4).
 func IncSubscriptionFallback() {
-	atomic.AddInt64(&SubscriptionFallback, 1)
+	subscriptionFallback.Inc()
 }
 
-// Handler returns an HTTP handler that emits metrics in Prometheus text format.
+// ObserveHTTPRequest records an HTTP request duration.
+func ObserveHTTPRequest(method, path, statusCode string, duration time.Duration) {
+	httpRequestDuration.WithLabelValues(method, path, statusCode).Observe(duration.Seconds())
+}
+
+// Handler returns an HTTP handler that emits metrics in Prometheus exposition format.
 func Handler() http.HandlerFunc {
+	h := promhttp.Handler()
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-
-		// Auth metrics
-		fmt.Fprintf(w, "# HELP loopzero_auth_token_exchanges_total Token exchanges by result.\n")
-		fmt.Fprintf(w, "# TYPE loopzero_auth_token_exchanges_total counter\n")
-		fmt.Fprintf(w, "loopzero_auth_token_exchanges_total{result=\"success\"} %d\n", atomic.LoadInt64(&TokenExchangeSuccess))
-		fmt.Fprintf(w, "loopzero_auth_token_exchanges_total{result=\"error\"} %d\n", atomic.LoadInt64(&TokenExchangeError))
-
-		fmt.Fprintf(w, "# HELP loopzero_auth_device_flow_total Device flow completions.\n")
-		fmt.Fprintf(w, "# TYPE loopzero_auth_device_flow_total counter\n")
-		fmt.Fprintf(w, "loopzero_auth_device_flow_total{result=\"success\"} %d\n", atomic.LoadInt64(&DeviceFlowSuccess))
-		fmt.Fprintf(w, "loopzero_auth_device_flow_total{result=\"error\"} %d\n", atomic.LoadInt64(&DeviceFlowError))
-
-		fmt.Fprintf(w, "# HELP loopzero_tenant_provisioning_total Tenant provisioning operations.\n")
-		fmt.Fprintf(w, "# TYPE loopzero_tenant_provisioning_total counter\n")
-		fmt.Fprintf(w, "loopzero_tenant_provisioning_total{result=\"success\"} %d\n", atomic.LoadInt64(&TenantProvSuccess))
-		fmt.Fprintf(w, "loopzero_tenant_provisioning_total{result=\"error\"} %d\n", atomic.LoadInt64(&TenantProvError))
-
-		count := atomic.LoadInt64(&TenantProvCount)
-		durationMs := atomic.LoadInt64(&TenantProvDurationMs)
-		avgMs := int64(0)
-		if count > 0 {
-			avgMs = durationMs / count
-		}
-		fmt.Fprintf(w, "# HELP loopzero_tenant_provisioning_duration_ms_avg Average provisioning duration in ms.\n")
-		fmt.Fprintf(w, "# TYPE loopzero_tenant_provisioning_duration_ms_avg gauge\n")
-		fmt.Fprintf(w, "loopzero_tenant_provisioning_duration_ms_avg %d\n", avgMs)
-
-		fmt.Fprintf(w, "# HELP loopzero_auth_rejections_total Auth rejections by reason.\n")
-		fmt.Fprintf(w, "# TYPE loopzero_auth_rejections_total counter\n")
-		fmt.Fprintf(w, "loopzero_auth_rejections_total{reason=\"expired\"} %d\n", atomic.LoadInt64(&AuthRejectExpired))
-		fmt.Fprintf(w, "loopzero_auth_rejections_total{reason=\"invalid\"} %d\n", atomic.LoadInt64(&AuthRejectInvalid))
-		fmt.Fprintf(w, "loopzero_auth_rejections_total{reason=\"no_tenant\"} %d\n", atomic.LoadInt64(&AuthRejectNoTenant))
-
-		// Billing metrics
-		fmt.Fprintf(w, "# HELP loopzero_webhook_events_total Webhook events by status.\n")
-		fmt.Fprintf(w, "# TYPE loopzero_webhook_events_total counter\n")
-		fmt.Fprintf(w, "loopzero_webhook_events_total{status=\"processed\"} %d\n", atomic.LoadInt64(&WebhookProcessed))
-		fmt.Fprintf(w, "loopzero_webhook_events_total{status=\"failed\"} %d\n", atomic.LoadInt64(&WebhookFailed))
-
-		fmt.Fprintf(w, "# HELP loopzero_billing_checkout_total Checkout operations.\n")
-		fmt.Fprintf(w, "# TYPE loopzero_billing_checkout_total counter\n")
-		fmt.Fprintf(w, "loopzero_billing_checkout_total{result=\"started\"} %d\n", atomic.LoadInt64(&CheckoutStarted))
-		fmt.Fprintf(w, "loopzero_billing_checkout_total{result=\"error\"} %d\n", atomic.LoadInt64(&CheckoutError))
-
-		fmt.Fprintf(w, "# HELP loopzero_usage_drift_detected_total Usage drift detection events.\n")
-		fmt.Fprintf(w, "# TYPE loopzero_usage_drift_detected_total counter\n")
-		fmt.Fprintf(w, "loopzero_usage_drift_detected_total %d\n", atomic.LoadInt64(&UsageDriftCount))
-
-		fmt.Fprintf(w, "# HELP loopzero_subscription_fallback_total Subscription missing — defaulted to starter.\n")
-		fmt.Fprintf(w, "# TYPE loopzero_subscription_fallback_total counter\n")
-		fmt.Fprintf(w, "loopzero_subscription_fallback_total %d\n", atomic.LoadInt64(&SubscriptionFallback))
+		h.ServeHTTP(w, r)
 	}
 }

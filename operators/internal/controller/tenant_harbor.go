@@ -32,12 +32,16 @@ func (r *TenantReconciler) ensureHarborProject(ctx context.Context, tenant *loop
 		return nil
 	}
 
+	ctx, span := startChildSpan(ctx, "tenant.harbor.ensure")
+	defer span.End()
+
 	quota := harborQuotaForPlan(tenant.Spec.Plan)
 
 	if err := r.HarborClient.EnsureProject(ctx, tenant.Name, harbor.ProjectOpts{
 		StorageQuota: quota,
 		Immutable:    true,
 	}); err != nil {
+		recordError(span, err)
 		conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeHarborProjectReady,
 			metav1.ConditionFalse, "EnsureProjectFailed", err.Error(), tenant.Generation)
 		return fmt.Errorf("harbor project %s: %w", tenant.Name, err)

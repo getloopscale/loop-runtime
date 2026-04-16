@@ -8,10 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,14 +46,18 @@ type ExposureReconciler struct {
 }
 
 // Reconcile handles the reconciliation loop for ExposedRoute resources.
-func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx, span := otel.Tracer("loopzero-operator").Start(ctx, "loopzero.operator.exposure.reconcile",
-		trace.WithAttributes(
-			attribute.String("k8s.object.name", req.Name),
-			attribute.String("k8s.namespace", req.Namespace),
-		),
-	)
+func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+	ctx, span := startReconcileSpan(ctx, "exposure", req.Name, req.Namespace)
 	defer span.End()
+	start := time.Now()
+	defer func() {
+		if retErr != nil {
+			recordError(span, retErr)
+		} else {
+			setSuccess(span)
+		}
+		reconcileOutcome("exposure", start, retErr)
+	}()
 
 	logger := log.FromContext(ctx)
 
@@ -127,7 +130,13 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// Step 3: Perform reachability probe
 	probeURL := r.resolveProbeURL(&route)
-	probeResult, probeErr := r.performProbe(ctx, probeURL)
+	probeCtx, probeSpan := startChildSpan(ctx, "exposure.probe",
+		attribute.String("probe.url", probeURL))
+	probeResult, probeErr := r.performProbe(probeCtx, probeURL)
+	if probeErr != nil {
+		recordError(probeSpan, probeErr)
+	}
+	probeSpan.End()
 
 	now := metav1.Now()
 	route.Status.LastProbeTime = &now
