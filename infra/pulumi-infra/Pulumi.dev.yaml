@@ -11,10 +11,16 @@ config:
   loopzero-infra:mgmtMinNodes: "3"
   loopzero-infra:mgmtMaxNodes: "3"
   # Runtime cluster
+  # Sizing notes (2026-04-16, L2 validation):
+  #   - s-2vcpu-4gb × 3 nodes = ~4.8 vCPU usable after system reserves.
+  #   - L2 (50 tenants, hello-server) needs ~5 vCPU for 50 pods simultaneous.
+  #   - Previous maxNodes=3 → 9 pods Pending with NotTriggerScaleUp.
+  #   - Bumped to 6 so autoscaler can reach ~9.6 vCPU for L2 headroom.
+  # For L3+ (100+ tenants) this must be re-sized. See docs/plans/scale-50k-plan.md.
   loopzero-infra:runtimeK8sVersion: "1.32.13-do.2"
   loopzero-infra:runtimeNodeClass: small
   loopzero-infra:runtimeMinNodes: "2"
-  loopzero-infra:runtimeMaxNodes: "3"
+  loopzero-infra:runtimeMaxNodes: "6"
   # Build cluster
   loopzero-infra:buildK8sVersion: "1.32.13-do.2"
   loopzero-infra:buildNodeClass: medium
