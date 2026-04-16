@@ -466,10 +466,11 @@ func main() {
 			eventStore,
 			logger,
 			services.BuildReaperConfig{
-				QueueTimeout:   cfg.BuildQueueTimeout,
-				RunningTimeout: cfg.BuildRunningTimeout,
-				CancelTimeout:  cfg.BuildCancelTimeout,
-				Interval:       cfg.BuildReaperInterval,
+				QueueTimeout:     cfg.BuildQueueTimeout,
+				RunningTimeout:   cfg.BuildRunningTimeout,
+				ReleasingTimeout: cfg.BuildReleasingTimeout,
+				CancelTimeout:    cfg.BuildCancelTimeout,
+				Interval:         cfg.BuildReaperInterval,
 			},
 			reconcileLoop,
 		)

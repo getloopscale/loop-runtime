@@ -108,6 +108,7 @@ func (r *BuildReaper) Start(ctx context.Context) {
 	r.logger.Info("build reaper started",
 		"queue_timeout", r.cfg.QueueTimeout,
 		"running_timeout", r.cfg.RunningTimeout,
+		"releasing_timeout", r.cfg.ReleasingTimeout,
 		"cancel_timeout", r.cfg.CancelTimeout,
 		"interval", r.cfg.Interval)
 

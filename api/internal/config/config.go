@@ -101,10 +101,11 @@ type Config struct {
 	MultipartMaxMemory   int64
 
 	// Build Reaper
-	BuildQueueTimeout   time.Duration
-	BuildRunningTimeout time.Duration
-	BuildCancelTimeout  time.Duration
-	BuildReaperInterval time.Duration
+	BuildQueueTimeout     time.Duration
+	BuildRunningTimeout   time.Duration
+	BuildReleasingTimeout time.Duration
+	BuildCancelTimeout    time.Duration
+	BuildReaperInterval   time.Duration
 
 	// Release Reaper (spec §5.2)
 	ReleaseReadyTimeout   time.Duration
@@ -274,10 +275,11 @@ func Load() Config {
 		MultipartMaxMemory: int64(envInt("SOURCE_MULTIPART_MAX_MEMORY", 32<<20)),
 
 		// Build Reaper (spec §5.1)
-		BuildQueueTimeout:   envDuration("BUILD_QUEUE_TIMEOUT", 5*time.Minute),
-		BuildRunningTimeout: envDuration("BUILD_RUNNING_TIMEOUT", 30*time.Minute),
-		BuildCancelTimeout:  envDuration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
-		BuildReaperInterval: envDuration("BUILD_REAPER_INTERVAL", 30*time.Second),
+		BuildQueueTimeout:     envDuration("BUILD_QUEUE_TIMEOUT", 5*time.Minute),
+		BuildRunningTimeout:   envDuration("BUILD_RUNNING_TIMEOUT", 30*time.Minute),
+		BuildReleasingTimeout: envDuration("BUILD_RELEASING_TIMEOUT", 10*time.Minute),
+		BuildCancelTimeout:    envDuration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
+		BuildReaperInterval:   envDuration("BUILD_REAPER_INTERVAL", 30*time.Second),
 
 		// Release Reaper (spec §5.2)
 		ReleaseReadyTimeout:   envDuration("RELEASE_READY_TIMEOUT", 5*time.Minute),
