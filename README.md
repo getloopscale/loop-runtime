@@ -44,9 +44,11 @@ No Kubernetes. No Helm. No Dockerfile required. Just push.
 
 > **Phase: Pre-release → Scale Validation.** Infrastructure validated on production (DigitalOcean). Entering scale validation phase targeting 50,000 fullstack applications.
 >
+> **🏆 Milestone 2026-04-16: L1 DoD achieved — 10/10 apps deployed and verified LIVE (HTTP 200) on DO real infrastructure.** End-to-end validation of the full pipeline: bundle → BuildKit → cosign sign → DO Registry → GitOps → ArgoCD sync → pod → HTTP 200. Avg deploy: 3m26s, best: 2m43s. 15 production bugs discovered and fixed. See [scale-50k-day1-learnings.md](docs/plans/scale-50k-day1-learnings.md).
+>
 > Last validation: 2026-04-16 — Supply chain security (cosign + syft + SLSA provenance). Harbor container registry. Distributed tracing (Tempo). Pipeline simplification (11 workflows). Leader-generation fencing. PG-backed processing claims. Distributed work queue. Build admission gate. PG circuit breaker. 852 CLI tests, 44 Go test packages, CI green.
 
-### Scale Readiness (3.5 / 5)
+### Scale Readiness (4 / 5)
 
 The platform has all building blocks for large-scale operation. Current focus is wiring and validating them end-to-end.
 
@@ -56,7 +58,7 @@ The platform has all building blocks for large-scale operation. Current focus is
 | Cell isolation | 3/5 | All components exist (DynamicRouter, K8sCellStore, PlacementEngine, cell.ts), not yet wired as default |
 | Backpressure / admission | 4.5/5 | Build gate, PG circuit breaker, rate limiter, SSE limits — all wired and tested |
 | Consistency model | 4/5 | Leader fencing, PG claims, work queue — implemented and tested, loops not yet migrated |
-| Scale contracts | 3.5/5 | Cell budget published, L0-L4 load tests run, L5 multi-cell tests scaffolded |
+| Scale contracts | 4.5/5 | Cell budget published, **L1 10/10 live validated on DO (2026-04-16)**, L2-L5 tests scaffolded |
 | **Target** | **5/5** | **50,000 fullstack apps across multiple cells — see [Scale Plan](docs/plans/scale-50k-plan.md)** |
 
 ### What Works (Validated on DigitalOcean)

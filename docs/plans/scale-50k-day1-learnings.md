@@ -1,6 +1,7 @@
 # Scale 50k — Day 1 Execution Learnings (2026-04-16)
 
 **Companion document to:** [`scale-50k-plan.md`](scale-50k-plan.md)
+**Follow-up:** [`scale-50k-day2-learnings.md`](scale-50k-day2-learnings.md) — L1 DoD fechado 10/10 (continuação da sessão)
 **Scope:** Aprendizados, correções, e descobertas durante a primeira sessão de execução do plano — focada em Phase 0 (wiring) e validação inicial de L1 real em infra DigitalOcean.
 **Status:** L1 parcialmente validado — pipeline ponta-a-ponta funcional, 6/10 apps com HTTP 200 verificado.
 
