@@ -69,6 +69,10 @@ type ReleaseConvergenceLoop struct {
 	sem    chan struct{}
 	active sync.Map
 
+	// pgDedup is the optional PG-backed dedup layer (Phase 0.2,
+	// scale-50k-plan). Same pattern as BuildReconcileLoop.
+	pgDedup *PGClaimDedup
+
 	// MEET-2026-03-31-023 T1-5: track sync retrigger attempts per release.
 	// Prevents infinite retry loops (max 3 retriggers per release).
 	syncRetriggers sync.Map // releaseID → int
@@ -110,6 +114,12 @@ func NewReleaseConvergenceLoop(
 		cfg:            cfg,
 		sem:            make(chan struct{}, cfg.MaxConcurrent),
 	}
+}
+
+// WithPGClaims attaches PG-backed dedup to the convergence loop.
+// Same pattern as BuildReconcileLoop.WithPGClaims.
+func (r *ReleaseConvergenceLoop) WithPGClaims(dedup *PGClaimDedup) {
+	r.pgDedup = dedup
 }
 
 // Start runs the convergence loop until context is cancelled.
@@ -167,6 +177,12 @@ func (r *ReleaseConvergenceLoop) tick(ctx context.Context) {
 			continue
 		}
 
+		// Phase 0.2: cross-replica dedup via PG claims.
+		if r.pgDedup != nil && !r.pgDedup.TryClaim(ctx, "releases", rel.ID) {
+			r.active.Delete(rel.ID)
+			continue
+		}
+
 		release := rel
 		// Acquire semaphore BEFORE spawning goroutine to prevent unbounded
 		// goroutine accumulation when all slots are busy.
@@ -176,6 +192,9 @@ func (r *ReleaseConvergenceLoop) tick(ctx context.Context) {
 				defer func() {
 					<-r.sem
 					r.active.Delete(release.ID)
+					if r.pgDedup != nil {
+						r.pgDedup.Release(ctx, "releases", release.ID)
+					}
 				}()
 				r.verifyRelease(ctx, &release)
 			}()

@@ -617,21 +617,53 @@ func main() {
 		var bgWg sync.WaitGroup
 
 		// ADR-0008: Cell Router — resolves cell_id to cluster connection details.
-		// Phase 0/1: StaticRouter with single Cell (backward compat).
-		// Phase 2+: populated from ClusterCredential CRDs or Pulumi outputs.
-		staticRouter, err := placement.NewStaticRouter([]placement.CellConfig{{
-			CellID:        placement.DefaultCellID,
-			KubeConfig:    cfg.RuntimeKubeconfig,
-			KubeContext:   cfg.RuntimeKubeContext,
-			ArgocdURL:     cfg.ArgocdURL,
-			ArgocdToken:   cfg.ArgocdToken,
-			IngressDomain: cfg.BaseDomain,
-		}})
-		if err != nil {
-			logger.Error("failed to create cell router", "error", err)
-			os.Exit(1)
+		//
+		// Phase 0.3 (scale-50k-plan): try DynamicRouter first (reads from
+		// K8sCellStore / ClusterCredential CRDs). If no CRDs are found
+		// (single-cell / dev), fall back to StaticRouter with cell-default.
+		// This makes the API automatically discover new cells as they are
+		// provisioned via Pulumi without any code changes.
+		var useDynamicRouter bool
+		if os.Getenv("LOOPZERO_DYNAMIC_ROUTER") == "true" {
+			k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, cfg.MgmtKubeconfig)
+			if k8sErr == nil {
+				dynRouter := placement.NewDynamicRouter(k8sCellStore, 60*time.Second, logger)
+				// Try initial load — if it finds cells, use DynamicRouter.
+				if cells, loadErr := k8sCellStore.LoadCells(context.Background()); loadErr == nil && len(cells) > 0 {
+					cellRouter = dynRouter
+					useDynamicRouter = true
+					bgWg.Add(1)
+					go func() {
+						defer bgWg.Done()
+						dynRouter.Start(shutdownCtx)
+					}()
+					logger.Info("cell router: DynamicRouter active",
+						"cells_discovered", len(cells))
+				} else {
+					logger.Info("cell router: no ClusterCredentials found, falling back to StaticRouter",
+						"load_err", loadErr, "cells_found", len(cells))
+				}
+			} else {
+				logger.Warn("cell router: K8sCellStore init failed, falling back to StaticRouter",
+					"error", k8sErr)
+			}
 		}
-		cellRouter = staticRouter
+		if !useDynamicRouter {
+			staticRouter, err := placement.NewStaticRouter([]placement.CellConfig{{
+				CellID:        placement.DefaultCellID,
+				KubeConfig:    cfg.RuntimeKubeconfig,
+				KubeContext:   cfg.RuntimeKubeContext,
+				ArgocdURL:     cfg.ArgocdURL,
+				ArgocdToken:   cfg.ArgocdToken,
+				IngressDomain: cfg.BaseDomain,
+			}})
+			if err != nil {
+				logger.Error("failed to create cell router", "error", err)
+				os.Exit(1)
+			}
+			cellRouter = staticRouter
+			logger.Info("cell router: StaticRouter with cell-default (single cell)")
+		}
 
 		// ADR-0008: Cell metrics collector (leader-only to avoid N identical PG queries).
 		cellStore = &db.PostgresCellStore{DB: dbAdapter}
