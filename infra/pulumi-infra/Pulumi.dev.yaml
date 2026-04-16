@@ -30,3 +30,13 @@ config:
   # loopzero-infra:spacesAccessKeyId
   # loopzero-infra:spacesSecretAccessKey
   # loopzero-infra:digitaloceanToken
+
+  loopzero-infra:spacesAccessKeyId:
+    secure: v1:4e0tzPc5wYsLbaJR:lzHZldHAEa1KrnuQrBde+irPDOM8dOH+BTxu7fgrEKgkArL+
+  loopzero-infra:spacesSecretAccessKey:
+    secure: v1:824DDwLvLKLQTbNP:mKAG0UauASVH4vgL7GJxqeWxspG0wiy8xHv6oj2beKJqPMHJaoOicaDxfJEF5p9j66oPs7g3eZW2aKQ=
+  loopzero-infra:digitaloceanToken:
+    secure: v1:r5Z4EkPgYik8w8H1:9BaShlnRPe28gInymBvKRLjBEUZp9ZdH+5deNdAYis2C7eHm+nLg7vz8zb2N7XfLwhIi8hzp755vL5o7KO4WGNQ4H4ch0oDJqJbUQN+ZA64DxfJHvSQZ
+  loopzero-infra:cloudflareApiToken:
+    secure: v1:J0XkAq6B7OQK5Z00:lFA6NVKAHji0Qa54Xdv4/sWVGxLlwA8tWsHygqCfw4STHYGcIZMOWb3JITgzbRpdNDMebbWmqO+z78lpI6HI6HEtzReO
+encryptionsalt: v1:F2R4BliFPX8=:v1:5AbmeX2GyEr2wYNt:HRSZ6WSPPsUwFe6uz9SNaCPoZklqyw==

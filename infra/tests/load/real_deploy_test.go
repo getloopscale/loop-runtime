@@ -188,6 +188,8 @@ func TestRealDeploy_L1_10Tenants(t *testing.T) {
 }
 
 // TestRealDeploy_L2_50Tenants runs 50 real deploys with sustained arrival rate.
+// scale-50k-plan Phase 1.3: validates sustained throughput at 50 tenants.
+// Deploys 5 at a time (arrival rate) over ~30 minutes.
 // Gated on LOOPZERO_REAL_DEPLOY=1 + LOOPZERO_LOAD_LEVEL=l2.
 func TestRealDeploy_L2_50Tenants(t *testing.T) {
 	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
@@ -196,11 +198,129 @@ func TestRealDeploy_L2_50Tenants(t *testing.T) {
 	if os.Getenv("LOOPZERO_LOAD_LEVEL") != "l2" && os.Getenv("LOOPZERO_LOAD_LEVEL") != "all" {
 		t.Skip("skipping L2: set LOOPZERO_LOAD_LEVEL=l2 or LOOPZERO_LOAD_LEVEL=all")
 	}
-	t.Log("L2 — 50 tenants sustained (real deploy harness)")
-	t.Skip("TODO: implement when L1 passes on real infra")
+
+	apiURL := os.Getenv("LOOPZERO_API_URL")
+	if apiURL == "" {
+		t.Fatal("LOOPZERO_API_URL required")
+	}
+	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
+	if appDomain == "" {
+		t.Fatal("LOOPZERO_APP_DOMAIN required")
+	}
+	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	if serviceAuth == "" {
+		t.Fatal("LOOPZERO_SERVICE_AUTH required")
+	}
+
+	const tenantCount = 50
+	const concurrency = 5 // sustained arrival: 5 concurrent deploys
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+	defer cancel()
+
+	harness, err := NewRealDeployHarness(RealDeployConfig{
+		APIURL:      apiURL,
+		AppDomain:   appDomain,
+		ServiceAuth: serviceAuth,
+		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/hello-server"),
+	})
+	if err != nil {
+		t.Fatalf("harness: %v", err)
+	}
+
+	t.Logf("=== REAL DEPLOY L2 — %d tenants, concurrency %d ===", tenantCount, concurrency)
+
+	// Phase 1: Provision all tenants
+	identities := make([]TenantIdentity, tenantCount)
+	for i := 0; i < tenantCount; i++ {
+		identities[i] = NewTenantIdentity("l2", i)
+	}
+
+	t.Log("--- Provisioning tenants ---")
+	provSem := make(chan struct{}, 5)
+	var provWg sync.WaitGroup
+	for i, id := range identities {
+		provWg.Add(1)
+		go func(idx int, tenant TenantIdentity) {
+			defer provWg.Done()
+			provSem <- struct{}{}
+			defer func() { <-provSem }()
+			dur, err := harness.ProvisionTenant(ctx, tenant)
+			if err != nil {
+				t.Logf("  tn-%d provision: %v", idx, err)
+			} else {
+				t.Logf("  tn-%d provisioned in %s", idx, dur.Round(time.Second))
+			}
+		}(i, id)
+	}
+	provWg.Wait()
+
+	// Phase 2: Deploy with sustained concurrency
+	t.Log("--- Deploying (sustained arrival rate) ---")
+	results := make([]FullDeployResult, tenantCount)
+	var (
+		wg         sync.WaitGroup
+		successCnt int64
+		failCnt    int64
+		liveCnt    int64
+	)
+
+	sem := make(chan struct{}, concurrency)
+	for i, id := range identities {
+		wg.Add(1)
+		go func(idx int, tenant TenantIdentity) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			r := harness.RealDeploy(ctx, tenant)
+			results[idx] = r
+			if r.Success {
+				atomic.AddInt64(&successCnt, 1)
+			} else {
+				atomic.AddInt64(&failCnt, 1)
+			}
+			if r.AppLive {
+				atomic.AddInt64(&liveCnt, 1)
+			}
+			t.Logf("  tn-%d: success=%v live=%v time=%s", idx, r.Success, r.AppLive, r.TotalTime.Round(time.Second))
+		}(i, id)
+		// Stagger starts by 30s to simulate sustained arrival (not burst)
+		if i < tenantCount-1 {
+			time.Sleep(30 * time.Second)
+		}
+	}
+	wg.Wait()
+
+	// Phase 3: Report
+	t.Log("")
+	t.Log("═══════════════════════════════════════════════════════")
+	t.Logf("  REAL DEPLOY L2 — %d TENANTS — RESULTS", tenantCount)
+	t.Log("═══════════════════════════════════════════════════════")
+	t.Logf("  Succeeded:     %d / %d", successCnt, tenantCount)
+	t.Logf("  Apps Live:     %d / %d (HTTP 200 verified)", liveCnt, tenantCount)
+	t.Logf("  Failed:        %d", failCnt)
+	t.Log("═══════════════════════════════════════════════════════")
+
+	// Assertions per scale-50k-plan
+	if failCnt > 0 {
+		t.Errorf("L2 FAIL: %d/%d deployments failed (target: 0%%)", failCnt, tenantCount)
+	}
+	if liveCnt < int64(tenantCount) {
+		t.Errorf("L2 FAIL: only %d/%d apps verified live (target: 100%%)", liveCnt, tenantCount)
+	}
+
+	// Phase 4: Cleanup
+	t.Log("--- Cleanup ---")
+	for i, id := range identities {
+		if err := harness.CleanupTenant(ctx, id); err != nil {
+			t.Logf("  tn-%d cleanup: %v", i, err)
+		}
+	}
 }
 
-// TestRealDeploy_L3_100Tenants runs 100 real deploys.
+// TestRealDeploy_L3_100Tenants runs 100 real deploys with noisy neighbor.
+// scale-50k-plan Phase 2.1: validates cell capacity under contention.
+// Includes a noisy neighbor scenario (1 tenant doing 10 rapid deploys).
+// Gated on LOOPZERO_REAL_DEPLOY=1 + LOOPZERO_LOAD_LEVEL=l3.
 func TestRealDeploy_L3_100Tenants(t *testing.T) {
 	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
 		t.Skip("skipping real deploy test: set LOOPZERO_REAL_DEPLOY=1")
@@ -208,8 +328,253 @@ func TestRealDeploy_L3_100Tenants(t *testing.T) {
 	if os.Getenv("LOOPZERO_LOAD_LEVEL") != "l3" && os.Getenv("LOOPZERO_LOAD_LEVEL") != "all" {
 		t.Skip("skipping L3: set LOOPZERO_LOAD_LEVEL=l3 or LOOPZERO_LOAD_LEVEL=all")
 	}
-	t.Log("L3 — 100 tenants sustained (real deploy harness)")
-	t.Skip("TODO: implement when L2 passes")
+
+	apiURL := os.Getenv("LOOPZERO_API_URL")
+	if apiURL == "" {
+		t.Fatal("LOOPZERO_API_URL required")
+	}
+	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
+	if appDomain == "" {
+		t.Fatal("LOOPZERO_APP_DOMAIN required")
+	}
+	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	if serviceAuth == "" {
+		t.Fatal("LOOPZERO_SERVICE_AUTH required")
+	}
+
+	const tenantCount = 100
+	const concurrency = 10
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Hour)
+	defer cancel()
+
+	harness, err := NewRealDeployHarness(RealDeployConfig{
+		APIURL:      apiURL,
+		AppDomain:   appDomain,
+		ServiceAuth: serviceAuth,
+		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/hello-server"),
+	})
+	if err != nil {
+		t.Fatalf("harness: %v", err)
+	}
+
+	t.Logf("=== REAL DEPLOY L3 — %d tenants, concurrency %d ===", tenantCount, concurrency)
+
+	// Phase 1: Provision
+	identities := make([]TenantIdentity, tenantCount)
+	for i := 0; i < tenantCount; i++ {
+		identities[i] = NewTenantIdentity("l3", i)
+	}
+
+	t.Log("--- Provisioning tenants ---")
+	provSem := make(chan struct{}, 10)
+	var provWg sync.WaitGroup
+	for i, id := range identities {
+		provWg.Add(1)
+		go func(idx int, tenant TenantIdentity) {
+			defer provWg.Done()
+			provSem <- struct{}{}
+			defer func() { <-provSem }()
+			harness.ProvisionTenant(ctx, tenant)
+		}(i, id)
+	}
+	provWg.Wait()
+	t.Log("  All tenants provisioned")
+
+	// Phase 2: Deploy all tenants + noisy neighbor on tn-0
+	t.Log("--- Deploying (concurrent + noisy neighbor on tn-0) ---")
+
+	var (
+		successCnt int64
+		liveCnt    int64
+	)
+
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
+	// Normal tenants: 1 deploy each
+	for i, id := range identities {
+		wg.Add(1)
+		go func(idx int, tenant TenantIdentity) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			r := harness.RealDeploy(ctx, tenant)
+			if r.Success {
+				atomic.AddInt64(&successCnt, 1)
+			}
+			if r.AppLive {
+				atomic.AddInt64(&liveCnt, 1)
+			}
+			if !r.Success {
+				t.Logf("  tn-%d: FAILED %s", idx, r.Error)
+			}
+		}(i, id)
+	}
+
+	// Noisy neighbor: tn-0 does 10 rapid re-deploys (tests per-tenant
+	// admission quota and build supersede behavior).
+	for j := 0; j < 10; j++ {
+		wg.Add(1)
+		go func(attempt int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			// Small stagger to simulate rapid pushes
+			time.Sleep(time.Duration(attempt) * 5 * time.Second)
+			r := harness.RealDeploy(ctx, identities[0])
+			// We expect some of these to be superseded (409) — that's correct behavior.
+			if r.Success {
+				t.Logf("  noisy-neighbor attempt %d: succeeded", attempt)
+			} else {
+				t.Logf("  noisy-neighbor attempt %d: %s (expected: some fail with 409)", attempt, r.Error)
+			}
+		}(j)
+	}
+	wg.Wait()
+
+	// Phase 3: Report
+	t.Log("")
+	t.Log("═══════════════════════════════════════════════════════")
+	t.Logf("  REAL DEPLOY L3 — %d TENANTS — RESULTS", tenantCount)
+	t.Log("═══════════════════════════════════════════════════════")
+	t.Logf("  Succeeded:     %d / %d", successCnt, tenantCount)
+	t.Logf("  Apps Live:     %d / %d (HTTP 200 verified)", liveCnt, tenantCount)
+	t.Log("═══════════════════════════════════════════════════════")
+
+	// L3 allows < 0.5% failure rate per scale plan
+	maxFailures := int64(tenantCount) / 200 // 0.5% of 100 = 0
+	if int64(tenantCount)-successCnt > maxFailures {
+		t.Errorf("L3 FAIL: %d/%d succeeded (target: >= 99.5%%)", successCnt, tenantCount)
+	}
+
+	// Cleanup
+	t.Log("--- Cleanup ---")
+	for _, id := range identities {
+		harness.CleanupTenant(ctx, id)
+	}
+}
+
+// TestRealDeploy_L4_500Tenants runs 500 real deploys — pushes one cell
+// to its validated limit. scale-50k-plan Phase 2.2.
+// Gated on LOOPZERO_REAL_DEPLOY=1 + LOOPZERO_LOAD_LEVEL=l4.
+func TestRealDeploy_L4_500Tenants(t *testing.T) {
+	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
+		t.Skip("skipping real deploy test: set LOOPZERO_REAL_DEPLOY=1")
+	}
+	if os.Getenv("LOOPZERO_LOAD_LEVEL") != "l4" && os.Getenv("LOOPZERO_LOAD_LEVEL") != "all" {
+		t.Skip("skipping L4: set LOOPZERO_LOAD_LEVEL=l4 or LOOPZERO_LOAD_LEVEL=all")
+	}
+
+	apiURL := os.Getenv("LOOPZERO_API_URL")
+	if apiURL == "" {
+		t.Fatal("LOOPZERO_API_URL required")
+	}
+	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
+	if appDomain == "" {
+		t.Fatal("LOOPZERO_APP_DOMAIN required")
+	}
+	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	if serviceAuth == "" {
+		t.Fatal("LOOPZERO_SERVICE_AUTH required")
+	}
+
+	const tenantCount = 500
+	const concurrency = 20
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
+	defer cancel()
+
+	harness, err := NewRealDeployHarness(RealDeployConfig{
+		APIURL:      apiURL,
+		AppDomain:   appDomain,
+		ServiceAuth: serviceAuth,
+		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/hello-server"),
+	})
+	if err != nil {
+		t.Fatalf("harness: %v", err)
+	}
+
+	t.Logf("=== REAL DEPLOY L4 — %d tenants, concurrency %d ===", tenantCount, concurrency)
+
+	// Phase 1: Provision in batches of 50
+	identities := make([]TenantIdentity, tenantCount)
+	for i := 0; i < tenantCount; i++ {
+		identities[i] = NewTenantIdentity("l4", i)
+	}
+
+	t.Log("--- Provisioning tenants (batches of 50) ---")
+	batchSize := 50
+	for batch := 0; batch < tenantCount; batch += batchSize {
+		end := batch + batchSize
+		if end > tenantCount {
+			end = tenantCount
+		}
+		var batchWg sync.WaitGroup
+		batchSem := make(chan struct{}, 10)
+		for i := batch; i < end; i++ {
+			batchWg.Add(1)
+			go func(idx int) {
+				defer batchWg.Done()
+				batchSem <- struct{}{}
+				defer func() { <-batchSem }()
+				harness.ProvisionTenant(ctx, identities[idx])
+			}(i)
+		}
+		batchWg.Wait()
+		t.Logf("  Batch %d-%d provisioned", batch, end-1)
+	}
+
+	// Phase 2: Deploy with sustained concurrency
+	t.Log("--- Deploying (sustained) ---")
+	results := make([]FullDeployResult, tenantCount)
+	var (
+		wg         sync.WaitGroup
+		successCnt int64
+		liveCnt    int64
+	)
+
+	sem := make(chan struct{}, concurrency)
+	for i, id := range identities {
+		wg.Add(1)
+		go func(idx int, tenant TenantIdentity) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			r := harness.RealDeploy(ctx, tenant)
+			results[idx] = r
+			if r.Success {
+				atomic.AddInt64(&successCnt, 1)
+			}
+			if r.AppLive {
+				atomic.AddInt64(&liveCnt, 1)
+			}
+			// Log failures and every 50th success for progress
+			if !r.Success || idx%50 == 0 {
+				t.Logf("  tn-%d: success=%v live=%v time=%s", idx, r.Success, r.AppLive, r.TotalTime.Round(time.Second))
+			}
+		}(i, id)
+	}
+	wg.Wait()
+
+	// Phase 3: Report
+	t.Log("")
+	t.Log("═══════════════════════════════════════════════════════")
+	t.Logf("  REAL DEPLOY L4 — %d TENANTS — RESULTS", tenantCount)
+	t.Log("═══════════════════════════════════════════════════════")
+	t.Logf("  Succeeded:     %d / %d", successCnt, tenantCount)
+	t.Logf("  Apps Live:     %d / %d (HTTP 200 verified)", liveCnt, tenantCount)
+	t.Log("═══════════════════════════════════════════════════════")
+
+	// L4 allows < 1% failure rate per scale plan
+	maxFailures := int64(tenantCount) / 100 // 1% of 500 = 5
+	if int64(tenantCount)-successCnt > maxFailures {
+		t.Errorf("L4 FAIL: %d/%d succeeded (target: >= 99%%)", successCnt, tenantCount)
+	}
+
+	// Cleanup
+	t.Log("--- Cleanup ---")
+	for _, id := range identities {
+		harness.CleanupTenant(ctx, id)
+	}
 }
 
 // TestPrepareFixtureBundle_HelloServer verifies the bundle builder works

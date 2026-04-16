@@ -1,0 +1,39 @@
+# Chaos Experiment: Network partition between build cluster and mgmt cluster
+#
+# scale-50k-plan L3-L4: "Build cluster node failure → builds reschedule"
+#
+# This experiment drops network traffic between the build cluster's Argo
+# Workflows controller and the mgmt cluster. Active workflows should
+# stall (not crash), and when the partition heals, they resume.
+#
+# Hypothesis:
+#   - Active workflows enter a retry/stalled state (not failed)
+#   - Argo Workflow controller does not crash
+#   - After partition heals, builds resume automatically
+#   - No data loss in PG or Gitea
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: build-cluster-network-partition
+  namespace: argo
+  annotations:
+    loopzero.io/roadmap: "08"
+    loopzero.io/dod-test: "TestChaos_BuildClusterPartition"
+    loopzero.io/hypothesis: "Build workflows stall during partition, resume after healing"
+    loopzero.io/slo-query: |
+      # Argo controller should not crash during partition
+      kube_pod_container_status_restarts_total{
+        namespace="argo",
+        container="controller"
+      } == 0
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - argo
+    labelSelectors:
+      "app.kubernetes.io/name": "argo-workflows-controller"
+  direction: both
+  duration: "60s"

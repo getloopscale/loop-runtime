@@ -1,0 +1,9 @@
+project: e2e-static
+
+apps:
+  web:
+    type: static
+    framework: react
+    build:
+      command: "npm run build"
+      output: "dist"

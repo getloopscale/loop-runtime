@@ -22,8 +22,14 @@ type GiteaRepoManager struct {
 	client  *http.Client
 }
 
-// NewGiteaRepoManager creates a GiteaRepoManager.
+// NewGiteaRepoManager creates a GiteaRepoManager. When client is nil,
+// http.DefaultClient is used — passing nil previously caused a nil pointer
+// panic on the first request path (source/gitea_store.go, source/gogit_store.go
+// both pass nil intentionally because they don't share a client).
 func NewGiteaRepoManager(baseURL, token, orgName string, client *http.Client) *GiteaRepoManager {
+	if client == nil {
+		client = http.DefaultClient
+	}
 	return &GiteaRepoManager{
 		baseURL: baseURL,
 		token:   token,
