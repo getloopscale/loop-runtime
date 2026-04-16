@@ -26,6 +26,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: infra-bootstrap-${{ inputs.stack }}
+  cancel-in-progress: false
+
 env:
   PULUMI_WORKING_DIR: infra/pulumi
   PULUMI_BACKEND_URL: "s3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"

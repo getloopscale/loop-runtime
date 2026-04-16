@@ -2,6 +2,7 @@
 #
 # Triggered automatically after Build Images succeeds.
 # Verifies CI passed for the same SHA before restarting.
+# Resolves environment dynamically from the source branch.
 
 name: "Infra: Restart Pods"
 
@@ -15,16 +16,42 @@ permissions:
   contents: read
   checks: read
 
+concurrency:
+  group: infra-restart-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
 env:
   DOCTL_VERSION: "1.104.0"
 
 jobs:
-  restart:
-    name: Restart platform pods
+  resolve:
+    name: Resolve target
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      environment: ${{ steps.r.outputs.environment }}
+      pattern: ${{ steps.r.outputs.pattern }}
+    steps:
+      - name: Resolve
+        id: r
+        run: |
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          case "$BRANCH" in
+            develop) ENV="infra-dev";     PATTERN="loopzero-infra-dev" ;;
+            homolog) ENV="infra-homolog"; PATTERN="loopzero-infra-homolog" ;;
+            main)    ENV="infra-prod";    PATTERN="loopzero-infra-prod" ;;
+            *)       echo "::error::Unknown branch: $BRANCH" && exit 1 ;;
+          esac
+          echo "environment=$ENV" >> "$GITHUB_OUTPUT"
+          echo "pattern=$PATTERN" >> "$GITHUB_OUTPUT"
+
+  restart:
+    name: "Restart (${{ needs.resolve.outputs.environment }})"
+    needs: [resolve]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: infra-dev
+    environment: ${{ needs.resolve.outputs.environment }}
     env:
       DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
     steps:
@@ -36,7 +63,7 @@ jobs:
           REPO="${{ github.repository }}"
           echo "Checking CI status for SHA: $SHA"
 
-          # Poll for CI completion (max 5 min)
+          # Check CI status (max 5 min wait)
           for attempt in $(seq 1 30); do
             RESULT=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=1" \
               --jq '.workflow_runs[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
@@ -71,15 +98,7 @@ jobs:
 
       - name: Restart deployments
         run: |
-          # Discover mgmt cluster for the branch
-          BRANCH="${{ github.event.workflow_run.head_branch }}"
-          case "$BRANCH" in
-            develop) PATTERN="loopzero-infra-dev" ;;
-            homolog) PATTERN="loopzero-infra-homolog" ;;
-            main)    PATTERN="loopzero-infra-prod" ;;  # TODO: resolve actual name
-            *)       echo "::error::Unknown branch: $BRANCH" && exit 1 ;;
-          esac
-
+          PATTERN="${{ needs.resolve.outputs.pattern }}"
           CLUSTER=$(doctl kubernetes cluster list --no-header --format Name | grep "${PATTERN}.*mgmt" | head -1)
           if [ -z "$CLUSTER" ]; then
             echo "::error::No mgmt cluster found matching $PATTERN"
@@ -88,6 +107,7 @@ jobs:
 
           doctl kubernetes cluster kubeconfig save "$CLUSTER"
 
+          START=$(date +%s)
           for deploy in loopzero-api loopzero-controller tenant-controller loopzero-cloud loopzero-dashboard; do
             if kubectl get deploy "$deploy" -n platform-system >/dev/null 2>&1; then
               kubectl rollout restart deploy "$deploy" -n platform-system
@@ -99,4 +119,13 @@ jobs:
           for deploy in loopzero-api loopzero-controller tenant-controller; do
             kubectl rollout status deploy "$deploy" -n platform-system --timeout=120s
           done
-          echo "All rollouts complete"
+          DURATION=$(( $(date +%s) - START ))
+
+          echo "### Restart Result" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | ${{ needs.resolve.outputs.environment }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster | $CLUSTER |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Duration | ${DURATION}s |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SHA | ${{ github.event.workflow_run.head_sha }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "All rollouts complete (${DURATION}s)"

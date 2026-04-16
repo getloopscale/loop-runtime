@@ -74,3 +74,11 @@ jobs:
           echo "| Stack | $STACK |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Actor | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Time | $(date -u) |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Backup pre-reset state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-backup-${{ inputs.stack }}-${{ github.run_id }}
+          path: /tmp/state.json
+          retention-days: 30

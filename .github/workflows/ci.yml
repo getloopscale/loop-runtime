@@ -217,7 +217,7 @@ jobs:
           cache-dependency-path: operators/go.sum
       - name: Install envtest binaries
         run: |
-          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.21.0
           echo "KUBEBUILDER_ASSETS=$(setup-envtest use ${{ env.ENVTEST_K8S_VERSION }} -p path)" >> $GITHUB_ENV
       - name: Run operator tests
         working-directory: operators
@@ -457,7 +457,7 @@ jobs:
       - name: govulncheck (pkg)
         if: needs.changes.outputs.go-pkg == 'true'
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           cd pkg && govulncheck ./...
       - name: govulncheck (api)
         if: needs.changes.outputs.go-api == 'true'

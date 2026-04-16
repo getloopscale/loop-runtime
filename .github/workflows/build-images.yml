@@ -93,7 +93,7 @@ jobs:
           case "$BRANCH" in
             develop) TAG="dev" ;;
             homolog) TAG="homolog" ;;
-            main)    TAG="latest" ;;
+            main)    TAG="prod" ;;
             *)       TAG="dev" ;;
           esac
 
@@ -179,7 +179,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -267,7 +267,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -354,7 +354,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -441,7 +441,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -518,7 +518,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -668,7 +668,7 @@ jobs:
 
       - name: Install doctl
         if: matrix.result == 'success' && matrix.digest != ''
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -776,7 +776,7 @@ jobs:
       HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
     steps:
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -847,7 +847,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 

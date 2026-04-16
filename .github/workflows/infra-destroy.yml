@@ -79,8 +79,13 @@ jobs:
             python3 -c "import sys,json; resources=json.load(sys.stdin)['deployment']['resources']; print(f'Total: {len(resources)} resources'); [print(f'  - {r[\"type\"].split(\"::\")[-1]}') for r in resources if r.get('type') != 'pulumi:pulumi:Stack']" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null
 
       - name: Pre-destroy cleanup
+        id: cleanup
         run: STACK="${{ inputs.stack }}" bash infra/scripts/pre-destroy-cleanup.sh
         continue-on-error: true
+
+      - name: Report cleanup result
+        if: steps.cleanup.outcome == 'failure'
+        run: echo "::warning::Pre-destroy cleanup failed — proceeding with destroy anyway. Check cleanup logs above."
 
       - name: Pulumi destroy
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
@@ -101,3 +106,7 @@ jobs:
           echo "| Clusters | $CLUSTERS |" >> "$GITHUB_STEP_SUMMARY"
           DBS=$(doctl databases list --no-header --format Name 2>/dev/null | grep "^$PREFIX" || echo "(none)")
           echo "| Databases | $DBS |" >> "$GITHUB_STEP_SUMMARY"
+          BUCKETS=$(AWS_ACCESS_KEY_ID="${SPACES_ACCESS_KEY_ID}" AWS_SECRET_ACCESS_KEY="${SPACES_SECRET_ACCESS_KEY}" \
+            aws s3 ls --endpoint-url "https://${REGION}.digitaloceanspaces.com" --region us-east-1 2>/dev/null | \
+            awk '{print $3}' | grep "^$PREFIX" | tr '\n' ', ' || echo "(none)")
+          echo "| Buckets | ${BUCKETS:-(none)} |" >> "$GITHUB_STEP_SUMMARY"
