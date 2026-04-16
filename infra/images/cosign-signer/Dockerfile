@@ -14,8 +14,8 @@ LABEL org.opencontainers.image.description="Cosign image signer for LoopZero bui
 
 # cosign version and checksum — update both when upgrading.
 # Get checksum: wget -q <url> -O cosign && sha256sum cosign
-ARG COSIGN_VERSION=v2.4.1
-ARG COSIGN_SHA256=3e4cdd62e0f4ac498e2e3b01bab38e8faf498f498d85c02c52fcb38e7caa7e53
+ARG COSIGN_VERSION=v3.0.6
+ARG COSIGN_SHA256=c956e5dfcac53d52bcf058360d579472f0c1d2d9b69f55209e256fe7783f4c74
 
 RUN apk add --no-cache ca-certificates \
     && wget -q "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" \

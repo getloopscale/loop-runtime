@@ -33,7 +33,7 @@ func cosignSignTemplate(appName, imageTag string) *forge.Container {
 	script := fmt.Sprintf(`set -e
 # Extract digest from BuildKit metadata using sed.
 # BuildKit writes: {"containerimage.digest":"sha256:abc123..."}
-DIGEST=$(sed -n 's/.*"containerimage.digest":"\([^"]*\)".*/\1/p' %s)
+DIGEST=$(sed -n 's/.*"containerimage.digest":[[:space:]]*"\([^"]*\)".*/\1/p' %s)
 if [ -z "$DIGEST" ]; then
   echo "ERROR: no digest found in metadata file" >&2
   exit 1

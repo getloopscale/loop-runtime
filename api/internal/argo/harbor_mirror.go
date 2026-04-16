@@ -12,7 +12,7 @@ import (
 
 // imageCrane is the crane image for registry operations.
 // crane is a lightweight Go tool for interacting with remote container registries.
-const imageCrane = "gcr.io/go-containerregistry/crane:v0.20.2"
+const imageCrane = "gcr.io/go-containerregistry/crane:v0.21.5"
 
 // harborMirrorTemplate generates an inline container template that copies an image
 // from the primary registry (DOCR) to Harbor using crane copy.
@@ -21,20 +21,28 @@ const imageCrane = "gcr.io/go-containerregistry/crane:v0.20.2"
 // The DAG task uses ContinueOn{Failed: true} so a mirror failure does not block the build.
 // Harbor credentials are mounted from buildkit-harbor-registry-config secret.
 func harborMirrorTemplate(appName, sourceTag, harborTag string) *forge.Container {
+	// crane v0.21+ is a distroless image with no /bin/sh. Call the binary
+	// directly via Command + Args instead of wrapping in `sh -c`.
+	// Entrypoint in the distroless image is /ko-app/crane (standard ko build).
+	//
+	// Registry auth: crane reads credentials from $DOCKER_CONFIG/config.json.
+	// We mount the secret in /tmp/.docker (accessible by nonroot user 65534,
+	// unlike /root/.docker which requires root permission) and point
+	// DOCKER_CONFIG at it.
 	return &forge.Container{
-		Name:  fmt.Sprintf("mirror-harbor-%s", appName),
-		Image: imageCrane,
-		Command: []string{"sh", "-c"},
-		Args: []string{
-			fmt.Sprintf(
-				`echo "Mirroring %s → %s" && crane copy "%s" "%s" && echo "Mirror OK"`,
-				sourceTag, harborTag, sourceTag, harborTag,
-			),
+		Name:    fmt.Sprintf("mirror-harbor-%s", appName),
+		Image:   imageCrane,
+		Command: []string{"/ko-app/crane"},
+		Args:    []string{"copy", sourceTag, harborTag},
+		Env: []forge.EnvBuilder{
+			forge.Env{Name: "DOCKER_CONFIG", Value: "/tmp/.docker"},
+			forge.Env{Name: "HOME", Value: "/tmp"},
 		},
 		VolumeMounts: []forge.VolumeBuilder{
-			// Mount both registry credential secrets for crane auth.
+			// Mount the registry credentials secret at /tmp/.docker so user 65534
+			// can read config.json (registry.digitalocean.com + harbor auth).
 			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
-				Name: secretRegistryConfig, MountPath: "/root/.docker", ReadOnly: true,
+				Name: secretRegistryConfig, MountPath: "/tmp/.docker", ReadOnly: true,
 			}, SecretName: secretRegistryConfig},
 		},
 		Resources: &forge.ResourceRequirements{

@@ -77,7 +77,9 @@ spec:
             EXISTING_DIRS=""
             IFS=',' read -ra DIR_ARRAY <<< "$DIRS"
             for d in "${DIR_ARRAY[@]}"; do
-              d=$(echo "$d" | xargs)  # trim whitespace
+              # Trim whitespace (portable — xargs not available in minio/mc 2025-08+)
+              d="${d#"${d%%[![:space:]]*}"}"
+              d="${d%"${d##*[![:space:]]}"}"
               if [ -d "$d" ]; then
                 EXISTING_DIRS="$EXISTING_DIRS $d/"
               fi

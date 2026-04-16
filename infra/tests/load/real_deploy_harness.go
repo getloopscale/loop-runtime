@@ -209,12 +209,15 @@ func (h *RealDeployHarness) ProvisionTenant(ctx context.Context, t TenantIdentit
 	// has the prefixed values, so we strip them for the bootstrap call.
 	slug := strings.TrimPrefix(t.TenantID, "tn-")
 	login := strings.TrimPrefix(t.UserID, "github-")
+	// Use enterprise plan for load tests: starter allows only 1 project,
+	// but tenants may have leftover projects from previous runs. Enterprise
+	// has NULL limits on projects/environments/builds/services.
 	bootstrapBody := fmt.Sprintf(`{
 		"admin_github_id": "%d",
 		"admin_login": %q,
 		"tenant_slug": %q,
 		"tenant_display_name": "Load Test %s",
-		"plan": "starter"
+		"plan": "enterprise"
 	}`, 9900000+hashTenantIndex(t.TenantID), login, slug, slug)
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
