@@ -42,9 +42,22 @@ No Kubernetes. No Helm. No Dockerfile required. Just push.
 
 ## Project Status
 
-> **Phase: Pre-release.** Infrastructure validated on production (DigitalOcean). Not yet available to external users.
+> **Phase: Pre-release → Scale Validation.** Infrastructure validated on production (DigitalOcean). Entering scale validation phase targeting 50,000 fullstack applications.
 >
-> Last validation: 2026-04-16 — Supply chain security (cosign + syft + SLSA provenance). Harbor container registry. Distributed tracing (Tempo). Pipeline simplification (11 workflows). Multi-cell topology. Chaos tests. 852 CLI tests, 44 Go test packages, CI green.
+> Last validation: 2026-04-16 — Supply chain security (cosign + syft + SLSA provenance). Harbor container registry. Distributed tracing (Tempo). Pipeline simplification (11 workflows). Leader-generation fencing. PG-backed processing claims. Distributed work queue. Build admission gate. PG circuit breaker. 852 CLI tests, 44 Go test packages, CI green.
+
+### Scale Readiness (3.5 / 5)
+
+The platform has all building blocks for large-scale operation. Current focus is wiring and validating them end-to-end.
+
+| Domain | Score | Status |
+|--------|:-----:|--------|
+| Control plane decoupling | 3.5/5 | Controller binary ready, generation fencing implemented, loops still run in API by default |
+| Cell isolation | 3/5 | All components exist (DynamicRouter, K8sCellStore, PlacementEngine, cell.ts), not yet wired as default |
+| Backpressure / admission | 4.5/5 | Build gate, PG circuit breaker, rate limiter, SSE limits — all wired and tested |
+| Consistency model | 4/5 | Leader fencing, PG claims, work queue — implemented and tested, loops not yet migrated |
+| Scale contracts | 3.5/5 | Cell budget published, L0-L4 load tests run, L5 multi-cell tests scaffolded |
+| **Target** | **5/5** | **50,000 fullstack apps across multiple cells — see [Scale Plan](docs/plans/scale-50k-plan.md)** |
 
 ### What Works (Validated on DigitalOcean)
 
@@ -84,8 +97,11 @@ No Kubernetes. No Helm. No Dockerfile required. Just push.
 | NetworkPolicy | **Working** | Mandatory deny-all + allow-ingress + allow-egress |
 | Build admission gate | **Working** | Cell-level + per-tenant concurrent build limits (429 on capacity) |
 | PG pool circuit breaker | **Working** | 503 + Retry-After on pool saturation |
-| Leader-generation fencing | **Working** | Stale leader writes no-op via monotonic generation ID |
-| Multi-cell topology | **Working** | Config-driven N clusters per role, dynamic cell router |
+| Leader-generation fencing | **Working** | Stale leader writes no-op via monotonic generation ID. 18 tests |
+| PG-backed processing claims | **Working** | CAS dedup for multi-replica safety. 14 tests + 2 stress |
+| Distributed work queue | **Working** | PG-backed SELECT FOR UPDATE SKIP LOCKED. 6 queue types |
+| Controller binary (extracted) | **Ready** | Separate binary with generation fencing. Behind `LOOPZERO_DISABLE_LEGACY_LOOPS` flag |
+| Multi-cell components | **Ready** | DynamicRouter, K8sCellStore, PlacementEngine (RoundRobin), CrossCellAggregator, cell.ts provisioner. Not yet wired as default |
 | IaC destroy + recreate | **Working** | Full pipeline via GitHub Actions |
 | CF edge security | **Working** | WAF (OWASP + CF managed), rate limiting, Zero Trust Access |
 
@@ -511,6 +527,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Every PR starts with a failing test.
 ## Links
 
 - [System Design](docs/technical.md) — authoritative specification
+- [Scale Plan: 50k Apps](docs/plans/scale-50k-plan.md) — active plan to validate 50,000 fullstack applications
+- [Load Test Plan](docs/plans/load-test-plan.md) — L0-L7 progressive load test scenarios
+- [Cell Capacity Budget](docs/capacity/cell-budget.md) — measured capacity limits per cell
 - [Sprint Roadmap](docs/sprints/ROADMAP.md)
 - [Changelog](CHANGELOG.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
