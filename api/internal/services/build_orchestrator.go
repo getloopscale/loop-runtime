@@ -25,7 +25,8 @@ import (
 
 // WorkflowStatus represents the external state of a build workflow.
 type WorkflowStatus struct {
-	Phase string // "Succeeded", "Failed", "Running", "Pending", ""
+	Phase      string // "Succeeded", "Failed", "Running", "Pending", ""
+	FinishedAt string // RFC3339 timestamp when workflow reached terminal state; empty while in-flight.
 }
 
 // WorkflowSubmitter abstracts Argo Workflows submission (DIP — no direct coupling).

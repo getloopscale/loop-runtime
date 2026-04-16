@@ -367,6 +367,17 @@ func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build
 	case "Succeeded":
 		r.onWorkflowSucceeded(ctx, build)
 	case "Failed", "Error":
+		// Only treat Failed/Error as terminal when the workflow has actually
+		// finished (FinishedAt set). Argo Workflows can transiently report
+		// Failed for a workflow whose DAG still has onExit steps or
+		// ContinueOn tasks in flight — those eventually resolve to Succeeded.
+		// Reconciling too early marked builds FAILED even when the pipeline
+		// went on to succeed (observed on mirror-harbor ContinueOn).
+		if status.FinishedAt == "" {
+			r.logger.Debug("reconcile loop: workflow reports Failed but not yet finished (likely transient — onExit or ContinueOn pending)",
+				"build_id", build.ID, "workflow_id", build.WorkflowID, "phase", status.Phase)
+			return
+		}
 		r.failBuild(ctx, build, fmt.Sprintf("Build %s", strings.ToLower(status.Phase)))
 	case "Running", "Pending":
 		// Workflow is still active — nothing to do
