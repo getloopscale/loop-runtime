@@ -175,6 +175,24 @@ jobs:
           DURATION=$(( $(date +%s) - START ))
           echo "duration=$DURATION" >> "$GITHUB_OUTPUT"
 
+      - name: State integrity check
+        if: always()
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          pulumi stack --stack "$STACK" export 2>/dev/null | python3 -c "
+          import sys, json
+          from collections import Counter
+          state = json.load(sys.stdin)
+          urns = [r['urn'] for r in state['deployment']['resources']]
+          dupes = {u:c for u,c in Counter(urns).items() if c > 1}
+          if dupes:
+              for u,c in dupes.items():
+                  print(f'::warning::Duplicate URN ({c}x): {u.split(\"::\")[-1]}')
+          else:
+              print(f'State OK: {len(urns)} unique resources')
+          " || echo "::warning::Could not validate state"
+
       - name: Deploy summary
         if: always()
         run: |

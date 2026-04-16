@@ -1577,8 +1577,10 @@ echo "=== Bootstrap complete ==="
       retainOnDelete: true,
       deleteBeforeReplace: true,
       // Jobs have immutable spec.template — any change must be delete+recreate.
-      // metadata.annotations changes (run-id) also force replacement to re-run the bootstrap.
-      replaceOnChanges: ["metadata.annotations", "spec"],
+      // Only replace when infraVersion changes (encoded in run-id annotation).
+      replaceOnChanges: ["spec"],
+      // Ignore status and completion fields that K8s adds after Job runs.
+      ignoreChanges: ["status", "metadata.labels", "metadata.managedFields"],
     },
   );
 
