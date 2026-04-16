@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package unit
 
 import (
@@ -13,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/source"
 )
 
 // fakeSourceStore is a test-only SourceStore that stores bundles in memory.
@@ -30,16 +34,16 @@ func newFakeSourceStore(commitSHA string) *fakeSourceStore {
 	}
 }
 
-func (f *fakeSourceStore) PushBundle(_ context.Context, tenantID, projectID string, bundle io.Reader) (string, error) {
+func (f *fakeSourceStore) PushBundle(_ context.Context, tenantID, projectID string, bundle io.Reader) (source.PushResult, error) {
 	if f.Error != nil {
-		return "", f.Error
+		return source.PushResult{}, f.Error
 	}
 	data, err := io.ReadAll(bundle)
 	if err != nil {
-		return "", fmt.Errorf("reading bundle: %w", err)
+		return source.PushResult{}, fmt.Errorf("reading bundle: %w", err)
 	}
 	f.Bundles[tenantID+":"+projectID] = data
-	return f.CommitSHA, nil
+	return source.PushResult{SourceID: f.CommitSHA}, nil
 }
 
 // newMultipartRequest creates a multipart/form-data request with optional bundle and loopzero_yaml fields.

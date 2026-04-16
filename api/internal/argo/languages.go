@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package argo provides real Argo Workflows integration for build pipeline execution.
 //
 // languages.go defines the LanguageStrategy interface and per-language implementations.
@@ -7,24 +10,27 @@ package argo
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
+
+	forge "github.com/getloopscale/loopzero-forge"
+	"github.com/getloopscale/loopzero-forge/model"
 
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
 // LanguageStrategy defines language-specific build steps.
-// Each method returns an Argo Workflows inline template as unstructured map.
-// The WorkflowBuilder calls these to compose the full DAG.
+// Each method returns a forge.Container template that the WorkflowBuilder
+// adds to the Workflow's template list.
 type LanguageStrategy interface {
 	// ValidateStep returns a template that validates the workspace (e.g., package.json exists).
-	ValidateStep(apps []services.AppSpec) map[string]interface{}
+	ValidateStep(apps []services.AppSpec) *forge.Container
 	// InstallStep returns a template that installs dependencies.
-	InstallStep(apps []services.AppSpec) map[string]interface{}
+	InstallStep(apps []services.AppSpec) *forge.Container
 	// BuildStep returns a template that builds the application.
-	BuildStep(apps []services.AppSpec) map[string]interface{}
+	BuildStep(apps []services.AppSpec) *forge.Container
 	// ScanStep returns a template that runs security scanning.
-	ScanStep() map[string]interface{}
-	// DockerfileStep returns a template that generates a Dockerfile if missing.
-	DockerfileStep(apps []services.AppSpec) map[string]interface{}
+	ScanStep() *forge.Container
 	// CacheKey returns the cache key suffix for this language (e.g., "node-modules").
 	CacheKey() string
 	// CacheDirs returns directories to cache (e.g., ["node_modules"]).
@@ -43,14 +49,23 @@ func ResolveStrategy(framework string) LanguageStrategy {
 		return &GoStrategy{}
 	case "fastapi", "django", "python":
 		return &PythonStrategy{}
+	case "sinatra", "rails", "ruby":
+		return &RubyStrategy{}
+	case "spring", "spring-boot", "java":
+		return &JavaStrategy{}
+	case "laravel", "slim", "php":
+		return &PHPStrategy{}
+	case "axum", "actix", "rocket", "rust":
+		return &RustStrategy{}
 	case "custom":
 		return &CustomStrategy{}
 	default:
-		// Empty or unrecognized framework defaults to Node.js for backwards compatibility.
-		// This matches the current monolithic pipeline behavior.
+		// Empty framework defaults to Node.js for backwards compatibility.
 		if framework == "" {
 			return &NodeStrategy{}
 		}
+		slog.Warn("unrecognized framework, falling back to custom strategy",
+			"framework", framework)
 		return &CustomStrategy{}
 	}
 }
@@ -68,27 +83,26 @@ func (s *NodeStrategy) CacheKey() string { return "node-modules" }
 
 func (s *NodeStrategy) CacheDirs() []string { return []string{"node_modules"} }
 
-func (s *NodeStrategy) ValidateStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("validate-workspace", "node:20.11.1-alpine", resourcesTiny(), scriptValidateNode(apps))
+func (s *NodeStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageNode, resourcesTiny(), scriptValidateNode(apps))
 }
 
-func (s *NodeStrategy) InstallStep(apps []services.AppSpec) map[string]interface{} {
-	tmpl := inlineContainer("install-deps", "node:20.11.1-alpine", resourcesMedium(), scriptInstallNode(apps))
-	tmpl["retryStrategy"] = retryStrategy(3, "5s", "2", "60s")
-	return tmpl
+func (s *NodeStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
+	c := buildContainer("install-deps", imageNode, resourcesMedium(), scriptInstallNode(apps))
+	c.RetryStrategy = retryStrategy(3, "5s", "2", "60s")
+	return c
 }
 
-func (s *NodeStrategy) BuildStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("build-apps", "node:20.11.1-alpine", resourcesMedium(), scriptBuildNode(apps))
+func (s *NodeStrategy) BuildStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageNode, resourcesMedium(), scriptBuildNode(apps))
 }
 
-func (s *NodeStrategy) ScanStep() map[string]interface{} {
-	return inlineContainer("security-scan", "node:20.11.1-alpine", resourcesSmall(), scriptScanNode())
+func (s *NodeStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageNode, resourcesSmall(), scriptScanNode())
 }
 
-func (s *NodeStrategy) DockerfileStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("generate-dockerfile", "node:20.11.1-alpine", resourcesSmall(), scriptDockerfileNode(apps))
-}
+// DockerfileStep removed (MEET-2026-03-29-017) — replaced by universal
+// loopzeroPacksDockerfileStep() using loopzero-packs-runner container image.
 
 // ---------------------------------------------------------------------------
 // GoStrategy — Go ecosystem
@@ -101,29 +115,31 @@ func (s *GoStrategy) Name() string { return "go" }
 
 func (s *GoStrategy) CacheKey() string { return "go-modules" }
 
-func (s *GoStrategy) CacheDirs() []string { return []string{"/go/pkg/mod", "/root/.cache/go-build"} }
-
-func (s *GoStrategy) ValidateStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("validate-workspace", "golang:1.22-alpine", resourcesTiny(), scriptValidateGo(apps))
+// CODE-005 fix: containers run as uid 1000 — /root/.cache is inaccessible.
+// Use /workspace/.cache which is writable by the build user.
+func (s *GoStrategy) CacheDirs() []string {
+	return []string{"/go/pkg/mod", "/workspace/.cache/go-build"}
 }
 
-func (s *GoStrategy) InstallStep(apps []services.AppSpec) map[string]interface{} {
-	tmpl := inlineContainer("install-deps", "golang:1.22-alpine", resourcesMedium(), scriptInstallGo(apps))
-	tmpl["retryStrategy"] = retryStrategy(3, "5s", "2", "60s")
-	return tmpl
+func (s *GoStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageGolang, resourcesTiny(), scriptValidateGo(apps))
 }
 
-func (s *GoStrategy) BuildStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("build-apps", "golang:1.22-alpine", resourcesMedium(), scriptBuildGo(apps))
+func (s *GoStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
+	c := buildContainer("install-deps", imageGolang, resourcesMedium(), scriptInstallGo(apps))
+	c.RetryStrategy = retryStrategy(3, "5s", "2", "60s")
+	return c
 }
 
-func (s *GoStrategy) ScanStep() map[string]interface{} {
-	return inlineContainer("security-scan", "golang:1.22-alpine", resourcesSmall(), scriptScanGo())
+func (s *GoStrategy) BuildStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageGolang, resourcesMedium(), scriptBuildGo(apps))
 }
 
-func (s *GoStrategy) DockerfileStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("generate-dockerfile", "golang:1.22-alpine", resourcesSmall(), scriptDockerfileGo(apps))
+func (s *GoStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageGolang, resourcesSmall(), scriptScanGo())
 }
+
+// DockerfileStep removed — uses universal loopzeroPacksDockerfileStep().
 
 // ---------------------------------------------------------------------------
 // PythonStrategy — Python ecosystem
@@ -136,28 +152,124 @@ func (s *PythonStrategy) Name() string { return "python" }
 
 func (s *PythonStrategy) CacheKey() string { return "pip-cache" }
 
-func (s *PythonStrategy) CacheDirs() []string { return []string{"/root/.cache/pip"} }
+// CODE-005 fix: containers run as uid 1000 — /root/.cache is inaccessible.
+func (s *PythonStrategy) CacheDirs() []string { return []string{"/workspace/.cache/pip"} }
 
-func (s *PythonStrategy) ValidateStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("validate-workspace", "python:3.12-alpine", resourcesTiny(), scriptValidatePython(apps))
+func (s *PythonStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imagePython, resourcesTiny(), scriptValidatePython(apps))
 }
 
-func (s *PythonStrategy) InstallStep(apps []services.AppSpec) map[string]interface{} {
-	tmpl := inlineContainer("install-deps", "python:3.12-alpine", resourcesMedium(), scriptInstallPython(apps))
-	tmpl["retryStrategy"] = retryStrategy(3, "5s", "2", "60s")
-	return tmpl
+func (s *PythonStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
+	c := buildContainer("install-deps", imagePython, resourcesMedium(), scriptInstallPython(apps))
+	c.RetryStrategy = retryStrategy(3, "5s", "2", "60s")
+	return c
 }
 
-func (s *PythonStrategy) BuildStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("build-apps", "python:3.12-alpine", resourcesSmall(), scriptBuildPython(apps))
+func (s *PythonStrategy) BuildStep(apps []services.AppSpec) *forge.Container {
+	// REVIEW-LEVE-1: Python build step needs resourcesMedium (2Gi) like Node/Go.
+	// Python projects with C extensions (numpy, pandas, tensorflow) compile from
+	// source on Alpine and OOMKill at 256Mi.
+	return buildContainer("build-apps", imagePython, resourcesMedium(), scriptBuildPython(apps))
 }
 
-func (s *PythonStrategy) ScanStep() map[string]interface{} {
-	return inlineContainer("security-scan", "python:3.12-alpine", resourcesSmall(), scriptScanPython())
+func (s *PythonStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imagePython, resourcesSmall(), scriptScanPython())
 }
 
-func (s *PythonStrategy) DockerfileStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("generate-dockerfile", "python:3.12-alpine", resourcesSmall(), scriptDockerfilePython(apps))
+// DockerfileStep removed — uses universal loopzeroPacksDockerfileStep().
+
+// ---------------------------------------------------------------------------
+// RubyStrategy — Ruby ecosystem (Bundler)
+// ---------------------------------------------------------------------------
+
+type RubyStrategy struct{}
+
+func (s *RubyStrategy) Name() string                        { return "ruby" }
+func (s *RubyStrategy) CacheKey() string                    { return "bundle-cache" }
+func (s *RubyStrategy) CacheDirs() []string                 { return []string{"/workspace/vendor/bundle"} }
+func (s *RubyStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageRuby, resourcesTiny(), scriptValidateFile(apps, "Gemfile"))
+}
+func (s *RubyStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("install-deps", imageRuby, resourcesSmall(), scriptInstallRuby(apps))
+}
+func (s *RubyStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageRuby, resourcesTiny(), noopScript("Ruby — no compile step"))
+}
+func (s *RubyStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageRuby, resourcesTiny(), `set -euo pipefail
+cd /workspace
+gem install bundler-audit 2>/dev/null && bundle-audit check 2>/dev/null || echo "bundle-audit not available or scan failed — skipping"
+`)
+}
+
+// ---------------------------------------------------------------------------
+// JavaStrategy — Java ecosystem (Maven/Gradle)
+// ---------------------------------------------------------------------------
+
+type JavaStrategy struct{}
+
+func (s *JavaStrategy) Name() string                        { return "java" }
+func (s *JavaStrategy) CacheKey() string                    { return "maven-cache" }
+func (s *JavaStrategy) CacheDirs() []string                 { return []string{"/workspace/.m2", "/workspace/.gradle"} }
+func (s *JavaStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(), scriptValidateFileAny(apps, "pom.xml", "build.gradle", "build.gradle.kts"))
+}
+func (s *JavaStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("install-deps", imageAlpine, resourcesTiny(), noopScript("Java — deps installed during build"))
+}
+func (s *JavaStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageAlpine, resourcesTiny(), noopScript("Java — build happens in Dockerfile (multi-stage)"))
+}
+func (s *JavaStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("Java security scan — skipped (use Dockerfile-based scan)"))
+}
+
+// ---------------------------------------------------------------------------
+// PHPStrategy — PHP ecosystem (Composer)
+// ---------------------------------------------------------------------------
+
+type PHPStrategy struct{}
+
+func (s *PHPStrategy) Name() string                        { return "php" }
+func (s *PHPStrategy) CacheKey() string                    { return "composer-cache" }
+func (s *PHPStrategy) CacheDirs() []string                 { return []string{"/workspace/vendor"} }
+func (s *PHPStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(), scriptValidateFile(apps, "composer.json"))
+}
+func (s *PHPStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("install-deps", imageAlpine, resourcesTiny(), noopScript("PHP — deps installed in Dockerfile"))
+}
+func (s *PHPStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageAlpine, resourcesTiny(), noopScript("PHP — no compile step"))
+}
+func (s *PHPStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("PHP security scan — skipped"))
+}
+
+// ---------------------------------------------------------------------------
+// RustStrategy — Rust ecosystem (Cargo)
+// ---------------------------------------------------------------------------
+
+type RustStrategy struct{}
+
+func (s *RustStrategy) Name() string                        { return "rust" }
+func (s *RustStrategy) CacheKey() string                    { return "cargo-cache" }
+func (s *RustStrategy) CacheDirs() []string                 { return []string{"/workspace/target"} }
+func (s *RustStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(), scriptValidateFile(apps, "Cargo.toml"))
+}
+func (s *RustStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("install-deps", imageAlpine, resourcesTiny(), noopScript("Rust — deps built during cargo build"))
+}
+func (s *RustStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageAlpine, resourcesTiny(), noopScript("Rust — build happens in Dockerfile (multi-stage)"))
+}
+func (s *RustStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageAlpine, resourcesTiny(), `set -euo pipefail
+cd /workspace
+cargo audit 2>/dev/null || echo "cargo-audit not available — skipping"
+`)
 }
 
 // ---------------------------------------------------------------------------
@@ -173,478 +285,127 @@ func (s *CustomStrategy) CacheKey() string { return "" }
 
 func (s *CustomStrategy) CacheDirs() []string { return nil }
 
-func (s *CustomStrategy) ValidateStep(apps []services.AppSpec) map[string]interface{} {
-	return inlineContainer("validate-workspace", "alpine:3.19.1", resourcesTiny(), scriptValidateCustom())
+func (s *CustomStrategy) ValidateStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(), scriptValidateCustom())
 }
 
-func (s *CustomStrategy) InstallStep(_ []services.AppSpec) map[string]interface{} {
-	return inlineContainer("install-deps", "alpine:3.19.1", resourcesTiny(), noopScript("No install step for custom framework — user manages dependencies in Dockerfile"))
+func (s *CustomStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("install-deps", imageAlpine, resourcesTiny(), noopScript("No install step for custom framework — user manages dependencies in Dockerfile"))
 }
 
-func (s *CustomStrategy) BuildStep(_ []services.AppSpec) map[string]interface{} {
-	return inlineContainer("build-apps", "alpine:3.19.1", resourcesTiny(), noopScript("No build step for custom framework — build happens in Dockerfile"))
+func (s *CustomStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageAlpine, resourcesTiny(), noopScript("No build step for custom framework — build happens in Dockerfile"))
 }
 
-func (s *CustomStrategy) ScanStep() map[string]interface{} {
-	return inlineContainer("security-scan", "alpine:3.19.1", resourcesTiny(), noopScript("No security scan for custom framework"))
+func (s *CustomStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("No security scan for custom framework"))
 }
 
-func (s *CustomStrategy) DockerfileStep(_ []services.AppSpec) map[string]interface{} {
-	return inlineContainer("generate-dockerfile", "alpine:3.19.1", resourcesTiny(), scriptValidateCustom())
+// CustomStrategy still validates Dockerfile exists (no loopzero-packs needed).
+// The DockerfileStep is only called from the universal step which skips
+// generation when a user-provided Dockerfile exists.
+
+// ---------------------------------------------------------------------------
+// Universal Dockerfile generation via loopzero-packs (MEET-2026-03-29-017)
+// ---------------------------------------------------------------------------
+
+// loopzeroPacksDockerfileStep returns a container template that runs the
+// loopzero-packs-runner image to analyze source code and generate an optimized
+// Dockerfile. This replaces all per-language DockerfileStep implementations.
+//
+// For each app, it runs: loopzeropacks-generate --source /workspace --app-path <path>
+//   --app-name <name> --output /workspace/Dockerfile.<name>
+//
+// If a user-provided Dockerfile exists, loopzeropacks-generate skips generation.
+// loopzeroPacksDockerfileStep generates Dockerfiles for apps in a language group.
+// totalApps is the count across ALL groups (for consistent naming with BuildKit consumer).
+func loopzeroPacksDockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
+	script := "set -e\n"
+	for _, app := range apps {
+		appPath := app.Path
+		if appPath == "" {
+			appPath = "."
+		}
+		// Use shared naming function (MEET-2026-03-29-018).
+		output := dockerfilePathForApp(app.Name, totalApps)
+		// CODE-001 defense-in-depth: use %q for shell quoting of user-derived values.
+		// Primary defense is ValidateAppName at the API boundary (builds.go).
+		script += fmt.Sprintf(
+			"loopzeropacks-generate --source %q --app-path %q --app-name %q --output %q\n",
+			workspaceMountPath, appPath, app.Name, output,
+		)
+	}
+	return buildContainer("generate-dockerfile", loopzeroPacks(), resourcesSmall(), script)
+}
+
+// loopzeroPacks returns the loopzero-packs-runner image, allowing override via env var.
+// Local dev sets LOOPZERO_PACKS_IMAGE to use the k3d registry image.
+func loopzeroPacks() string {
+	if v := os.Getenv("LOOPZERO_PACKS_IMAGE"); v != "" {
+		return v
+	}
+	return imageLoopZeroPacks
 }
 
 // ---------------------------------------------------------------------------
-// Helper: inline container template builder
+// Helper: forge container builder
 // ---------------------------------------------------------------------------
 
-func inlineContainer(name, image string, resources map[string]interface{}, script string) map[string]interface{} {
-	return map[string]interface{}{
-		"name": name,
-		"container": map[string]interface{}{
-			"image":   image,
-			"command": []interface{}{"sh", "-c"},
-			"args":    []interface{}{script},
-			"volumeMounts": []interface{}{
-				map[string]interface{}{"name": "workspace", "mountPath": "/workspace"},
-				map[string]interface{}{"name": "manifests", "mountPath": "/manifests"},
-			},
-			"resources":       resources,
-			"securityContext": nonRootSecurity(),
+func buildContainer(name, image string, resources *forge.ResourceRequirements, script string) *forge.Container {
+	return &forge.Container{
+		Name:    name,
+		Image:   image,
+		Command: []string{"sh", "-c"},
+		Args:    []string{script},
+		// REVIEW-LEVE-3: manifests mount removed — manifest generation moved to API (C-02).
+		VolumeMounts: []forge.VolumeBuilder{
+			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: volumeWorkspace, MountPath: workspaceMountPath}},
+		},
+		Resources: resources,
+		SecurityContext: &model.SecurityContext{
+			RunAsNonRoot: ptr(true),
+			RunAsUser:    ptr(rootlessUID),
 		},
 	}
 }
 
-func nonRootSecurity() map[string]interface{} {
-	return map[string]interface{}{
-		"runAsNonRoot": true,
-		"runAsUser":    int64(1000),
-	}
-}
-
-func retryStrategy(limit int, duration, factor, maxDuration string) map[string]interface{} {
-	return map[string]interface{}{
-		"limit":       fmt.Sprintf("%d", limit),
-		"retryPolicy": "OnFailure",
-		"backoff": map[string]interface{}{
-			"duration":    duration,
-			"factor":      factor,
-			"maxDuration": maxDuration,
+func retryStrategy(limit int, duration, factor, maxDuration string) *forge.RetryStrategy {
+	return &forge.RetryStrategy{
+		Limit:       ptr(limit),
+		RetryPolicy: forge.RetryPolicy("OnFailure"),
+		Backoff: &forge.Backoff{
+			Duration:    duration,
+			Factor:      factor,
+			MaxDuration: maxDuration,
 		},
+		// Skip retry on OOM kill (exit 137) — retrying will fail again with same memory limits.
+		// Exit code 1 remains retryable (transient DNS/npm/registry failures).
+		// MEET-2026-03-30-021 F3-C2: only exit 137 is irrecoverable.
+		Expression: `asInt(lastRetry.exitCode) != 137`,
 	}
 }
 
-func resourcesTiny() map[string]interface{} {
-	return map[string]interface{}{
-		"requests": map[string]interface{}{"cpu": "50m", "memory": "32Mi"},
-		"limits":   map[string]interface{}{"cpu": "100m", "memory": "64Mi"},
+func resourcesTiny() *forge.ResourceRequirements {
+	return &forge.ResourceRequirements{
+		Requests: forge.ResourceList{CPU: "50m", Memory: "32Mi"},
+		Limits:   forge.ResourceList{CPU: "100m", Memory: "64Mi"},
 	}
 }
 
-func resourcesSmall() map[string]interface{} {
-	return map[string]interface{}{
-		"requests": map[string]interface{}{"cpu": "100m", "memory": "128Mi"},
-		"limits":   map[string]interface{}{"cpu": "500m", "memory": "256Mi"},
+func resourcesSmall() *forge.ResourceRequirements {
+	return &forge.ResourceRequirements{
+		Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
+		Limits:   forge.ResourceList{CPU: "500m", Memory: "256Mi"},
 	}
 }
 
-func resourcesMedium() map[string]interface{} {
-	return map[string]interface{}{
-		"requests": map[string]interface{}{"cpu": "500m", "memory": "512Mi"},
-		"limits":   map[string]interface{}{"cpu": "2000m", "memory": "2Gi"},
+func resourcesMedium() *forge.ResourceRequirements {
+	return &forge.ResourceRequirements{
+		Requests: forge.ResourceList{CPU: "500m", Memory: "512Mi"},
+		Limits:   forge.ResourceList{CPU: "2000m", Memory: "2Gi"},
 	}
 }
 
 func noopScript(msg string) string {
 	return fmt.Sprintf("echo %q", msg)
-}
-
-// ---------------------------------------------------------------------------
-// Node.js scripts (extracted from monolithic YAML)
-// ---------------------------------------------------------------------------
-
-func scriptValidateNode(apps []services.AppSpec) string {
-	// Injects app paths at build time so the shell script doesn't need Node.js to parse JSON.
-	paths := appPaths(apps)
-	return `set -euo pipefail
-cd /workspace
-echo "Validating workspace..."
-ERRORS=""
-` + validatePathsScript(paths, "package.json") + `
-# Check lockfile at root OR at any app path
-LOCKFILES="package-lock.json yarn.lock pnpm-lock.yaml"
-HAS_LOCK=false
-for f in $LOCKFILES; do
-  [ -f "$f" ] && HAS_LOCK=true
-done
-` + checkAppLockfiles(paths) + `
-if [ "$HAS_LOCK" = "false" ]; then
-  ERRORS="${ERRORS}No lockfile found. Run npm install and commit the lockfile. "
-fi
-if [ -n "$ERRORS" ]; then
-  echo "ERROR: $ERRORS"
-  mkdir -p /manifests
-  echo "validate-workspace: $ERRORS" > /manifests/build-error.txt
-  exit 1
-fi
-echo "Workspace validation passed"
-`
-}
-
-func scriptInstallNode(apps []services.AppSpec) string {
-	paths := appPaths(apps)
-	script := "set -euo pipefail\ncd /workspace\n"
-	for _, p := range paths {
-		script += fmt.Sprintf(`echo "Installing deps in %s..."
-cd "/workspace/%s"
-if [ -f pnpm-lock.yaml ]; then
-  corepack enable
-  pnpm install --frozen-lockfile
-elif [ -f yarn.lock ]; then
-  corepack enable
-  yarn install --frozen-lockfile
-elif [ -f package-lock.json ]; then
-  npm ci
-else
-  echo "WARNING: No lockfile in %s — running npm install"
-  npm install
-fi
-echo "Dependencies installed in %s"
-`, p, p, p, p)
-	}
-	return script
-}
-
-func scriptBuildNode(apps []services.AppSpec) string {
-	paths := appPaths(apps)
-	script := "set -euo pipefail\ncd /workspace\n"
-	for _, p := range paths {
-		script += fmt.Sprintf(`echo "Building %s..."
-cd "/workspace/%s"
-npm run build --if-present
-echo "Build completed for %s"
-`, p, p, p)
-	}
-	return script
-}
-
-func scriptScanNode() string {
-	return `set -uo pipefail
-cd /workspace
-if [ -f package-lock.json ]; then
-  npm audit --audit-level=high 2>&1 || {
-    echo "WARNING: npm audit found high-severity vulnerabilities"
-    echo "This is a warning only for v1 — build continues"
-  }
-else
-  echo "No package-lock.json found — skipping npm audit"
-fi
-`
-}
-
-func scriptDockerfileNode(apps []services.AppSpec) string {
-	port := defaultPort(apps, 3000)
-	return fmt.Sprintf(`set -euo pipefail
-cd /workspace
-if [ -f Dockerfile ]; then
-  echo "User-provided Dockerfile found — skipping generation"
-  cat Dockerfile
-  exit 0
-fi
-echo "No Dockerfile found — generating for Node.js"
-cat > Dockerfile << 'DEOF'
-FROM node:20-alpine
-WORKDIR /app
-COPY . .
-RUN npm ci --omit=dev 2>/dev/null || npm install --production
-EXPOSE %d
-CMD ["npm", "start"]
-DEOF
-echo "Generated Dockerfile:"
-cat Dockerfile
-`, port)
-}
-
-// ---------------------------------------------------------------------------
-// Go scripts
-// ---------------------------------------------------------------------------
-
-func scriptValidateGo(apps []services.AppSpec) string {
-	paths := appPaths(apps)
-	return `set -euo pipefail
-cd /workspace
-echo "Validating workspace..."
-ERRORS=""
-` + validatePathsScript(paths, "go.mod") + `
-# Check go.sum exists
-` + validatePathsScript(paths, "go.sum") + `
-if [ -n "$ERRORS" ]; then
-  echo "ERROR: $ERRORS"
-  mkdir -p /manifests
-  echo "validate-workspace: $ERRORS" > /manifests/build-error.txt
-  exit 1
-fi
-echo "Workspace validation passed"
-`
-}
-
-func scriptInstallGo(apps []services.AppSpec) string {
-	paths := appPaths(apps)
-	script := "set -euo pipefail\ncd /workspace\n"
-	for _, p := range paths {
-		script += fmt.Sprintf(`echo "Downloading Go modules in %s..."
-cd "/workspace/%s"
-go mod download
-echo "Modules downloaded in %s"
-`, p, p, p)
-	}
-	return script
-}
-
-func scriptBuildGo(apps []services.AppSpec) string {
-	paths := appPaths(apps)
-	script := "set -euo pipefail\ncd /workspace\nmkdir -p /workspace/bin\n"
-	for _, p := range paths {
-		script += fmt.Sprintf(`echo "Building %s..."
-cd "/workspace/%s"
-CGO_ENABLED=0 go build -o /workspace/bin/%s ./...
-echo "Build completed for %s"
-`, p, p, sanitizeBinName(p), p)
-	}
-	return script
-}
-
-func scriptScanGo() string {
-	return `set -uo pipefail
-cd /workspace
-if command -v govulncheck >/dev/null 2>&1; then
-  govulncheck ./... 2>&1 || {
-    echo "WARNING: govulncheck found vulnerabilities"
-    echo "This is a warning only for v1 — build continues"
-  }
-else
-  echo "govulncheck not available — skipping vulnerability scan"
-fi
-`
-}
-
-func scriptDockerfileGo(apps []services.AppSpec) string {
-	port := defaultPort(apps, 8080)
-	return fmt.Sprintf(`set -euo pipefail
-cd /workspace
-if [ -f Dockerfile ]; then
-  echo "User-provided Dockerfile found — skipping generation"
-  cat Dockerfile
-  exit 0
-fi
-echo "No Dockerfile found — generating for Go"
-cat > Dockerfile << 'DEOF'
-FROM golang:1.22-alpine AS builder
-WORKDIR /src
-COPY . .
-RUN CGO_ENABLED=0 go build -o /app ./...
-
-FROM alpine:3.19
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app /app
-EXPOSE %d
-ENTRYPOINT ["/app"]
-DEOF
-echo "Generated Dockerfile:"
-cat Dockerfile
-`, port)
-}
-
-// ---------------------------------------------------------------------------
-// Python scripts
-// ---------------------------------------------------------------------------
-
-func scriptValidatePython(apps []services.AppSpec) string {
-	paths := appPaths(apps)
-	return `set -euo pipefail
-cd /workspace
-echo "Validating workspace..."
-ERRORS=""
-HAS_DEPS=false
-` + validatePythonDeps(paths) + `
-if [ "$HAS_DEPS" = "false" ]; then
-  ERRORS="${ERRORS}No requirements.txt or pyproject.toml found. "
-fi
-if [ -n "$ERRORS" ]; then
-  echo "ERROR: $ERRORS"
-  mkdir -p /manifests
-  echo "validate-workspace: $ERRORS" > /manifests/build-error.txt
-  exit 1
-fi
-echo "Workspace validation passed"
-`
-}
-
-func scriptInstallPython(apps []services.AppSpec) string {
-	paths := appPaths(apps)
-	script := "set -euo pipefail\ncd /workspace\n"
-	for _, p := range paths {
-		script += fmt.Sprintf(`echo "Installing deps in %s..."
-cd "/workspace/%s"
-if [ -f requirements.txt ]; then
-  pip install --no-cache-dir -r requirements.txt
-elif [ -f pyproject.toml ]; then
-  pip install --no-cache-dir .
-fi
-echo "Dependencies installed in %s"
-`, p, p, p)
-	}
-	return script
-}
-
-func scriptBuildPython(apps []services.AppSpec) string {
-	paths := appPaths(apps)
-	script := "set -euo pipefail\ncd /workspace\n"
-	for _, p := range paths {
-		script += fmt.Sprintf(`echo "Building %s..."
-cd "/workspace/%s"
-if [ -f pyproject.toml ]; then
-  python -m build 2>/dev/null || echo "python -m build not available — skipping"
-fi
-echo "Build step completed for %s"
-`, p, p, p)
-	}
-	return script
-}
-
-func scriptScanPython() string {
-	return `set -uo pipefail
-cd /workspace
-if command -v pip-audit >/dev/null 2>&1; then
-  pip-audit 2>&1 || {
-    echo "WARNING: pip-audit found vulnerabilities"
-    echo "This is a warning only for v1 — build continues"
-  }
-else
-  pip install pip-audit 2>/dev/null && pip-audit 2>&1 || {
-    echo "pip-audit not available or scan failed — skipping"
-  }
-fi
-`
-}
-
-func scriptDockerfilePython(apps []services.AppSpec) string {
-	port := defaultPort(apps, 8000)
-	return fmt.Sprintf(`set -euo pipefail
-cd /workspace
-if [ -f Dockerfile ]; then
-  echo "User-provided Dockerfile found — skipping generation"
-  cat Dockerfile
-  exit 0
-fi
-echo "No Dockerfile found — generating for Python"
-cat > Dockerfile << 'DEOF'
-FROM python:3.12-slim
-WORKDIR /app
-COPY . .
-RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || pip install --no-cache-dir .
-EXPOSE %d
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "%d"]
-DEOF
-echo "Generated Dockerfile:"
-cat Dockerfile
-`, port, port)
-}
-
-// ---------------------------------------------------------------------------
-// Custom scripts
-// ---------------------------------------------------------------------------
-
-func scriptValidateCustom() string {
-	return `set -euo pipefail
-cd /workspace
-if [ ! -f Dockerfile ]; then
-  echo "ERROR: Custom framework requires a Dockerfile in the project root"
-  mkdir -p /manifests
-  echo "validate-workspace: Custom framework requires a Dockerfile" > /manifests/build-error.txt
-  exit 1
-fi
-echo "Dockerfile found — custom build validated"
-`
-}
-
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
-
-// appPaths extracts the workspace-relative paths from app specs.
-// Missing paths fall back to "." for backwards compatibility with
-// clients that omit app.path in build requests.
-func appPaths(apps []services.AppSpec) []string {
-	if len(apps) == 0 {
-		return []string{"."}
-	}
-	paths := make([]string, len(apps))
-	for i, a := range apps {
-		if a.Path != "" {
-			paths[i] = a.Path
-		} else {
-			paths[i] = "."
-		}
-	}
-	return paths
-}
-
-// defaultPort extracts the first non-zero port from apps, or returns fallback.
-func defaultPort(apps []services.AppSpec, fallback int) int {
-	for _, a := range apps {
-		if a.Port > 0 {
-			return a.Port
-		}
-	}
-	return fallback
-}
-
-// sanitizeBinName converts a path to a safe binary name.
-func sanitizeBinName(path string) string {
-	if path == "" || path == "." {
-		return "app"
-	}
-	// Use the last path component
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '/' {
-			return path[i+1:]
-		}
-	}
-	return path
-}
-
-// validatePathsScript generates shell code to check a file exists at each path.
-func validatePathsScript(paths []string, filename string) string {
-	script := ""
-	for _, p := range paths {
-		script += fmt.Sprintf(`if [ ! -f "%s/%s" ]; then
-  ERRORS="${ERRORS}No %s found at %s/%s. "
-fi
-`, p, filename, filename, p, filename)
-	}
-	return script
-}
-
-// checkAppLockfiles generates shell to check lockfiles at app paths.
-func checkAppLockfiles(paths []string) string {
-	script := ""
-	for _, p := range paths {
-		script += fmt.Sprintf(`for f in $LOCKFILES; do
-  [ -f "%s/$f" ] && HAS_LOCK=true
-done
-`, p)
-	}
-	return script
-}
-
-// validatePythonDeps generates shell to check Python dependency files.
-func validatePythonDeps(paths []string) string {
-	script := ""
-	for _, p := range paths {
-		script += fmt.Sprintf(`if [ -f "%s/requirements.txt" ] || [ -f "%s/pyproject.toml" ]; then
-  HAS_DEPS=true
-fi
-`, p, p)
-	}
-	return script
 }

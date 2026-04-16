@@ -1,0 +1,82 @@
+# Grafana Loki — log aggregation for build logs
+# Chart: grafana/loki
+# Purpose: Stores build output from Argo Workflows pods, queried by loopzero API
+# Storage: MinIO (S3-compatible) — bucket loopzero-logs
+#
+# PRODUCTION: Override S3 credentials via secretKeyRef or Pulumi config.
+# Default values are for local development only.
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: s3
+    # Required by Loki chart v6.24+ commonStorageConfig helper
+    bucketNames:
+      chunks: loopzero-logs
+      ruler: loopzero-logs
+      admin: loopzero-logs
+    s3:
+      endpoint: minio.platform-system:9000
+      bucketnames: loopzero-logs
+      access_key_id: loopzero-admin
+      secret_access_key: loopzero-dev-password   # LOCAL DEV ONLY — override for production
+      s3ForcePathStyle: true
+      insecure: true                         # LOCAL DEV ONLY — MinIO without TLS
+  limits_config:
+    retention_period: 168h                   # 7 days
+    max_query_series: 500
+    max_query_length: 721h
+  schemaConfig:
+    configs:
+      - from: "2026-01-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+# Single binary mode — sufficient for LoopZero's scale (<100 builds/day)
+deploymentMode: SingleBinary
+singleBinary:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Explicitly disable SimpleScalable components (required by chart v6.24+)
+# Without this, the chart validation fails: "more than zero replicas for both
+# single binary and simple scalable targets"
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Gateway not needed — API queries Loki directly via ClusterIP
+gateway:
+  enabled: false
+
+# Disable self-monitoring to reduce resource usage in dev
+monitoring:
+  selfMonitoring:
+    enabled: false
+  lokiCanary:
+    enabled: false
+
+# Disable test pod
+test:
+  enabled: false
+
+# Chunk cache — in-memory, small footprint for dev
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false

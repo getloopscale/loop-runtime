@@ -1,0 +1,926 @@
+# Build and push container images to DigitalOcean Container Registry + Harbor.
+#
+# MEET-048: Dual-push strategy — images are pushed to BOTH DOCR and Harbor
+# during the migration period. Harbor steps are conditional on secrets being set.
+# TODO(MEET-048): After migration completes, remove all DOCR steps and keep only Harbor.
+#
+# Trigger map:
+#   push to develop → build + push with :dev tag + :sha tag
+#   push to homolog → build + push with :staging tag + :sha tag
+#   push to main    → build + push with :latest tag + :sha tag
+#   workflow_dispatch → manual build for any component
+#
+# DOKS clusters pull from the registry automatically when integrated
+# via `doctl kubernetes cluster registry add` (done in infra-deploy post-step).
+#
+# Required secrets (set per GitHub Environment):
+#   DIGITALOCEAN_TOKEN       — DO API token (registry login + push)
+#   HARBOR_ROBOT_USERNAME    — Harbor robot account username (MEET-048)
+#   HARBOR_ROBOT_PASSWORD    — Harbor robot account password (MEET-048)
+
+name: "Build: Container Images"
+
+on:
+  push:
+    branches: [develop, homolog, main]
+    paths:
+      # Only trigger when application code changes — not for infra/docs/config changes.
+      - 'api/**'
+      - 'operators/**'
+      - 'cloud/**'
+      - 'pkg/**'
+      - 'go.work'
+      - 'go.work.sum'
+      - '**/Dockerfile'
+
+  workflow_dispatch:
+    inputs:
+      component:
+        description: "Component to build"
+        required: true
+        type: choice
+        options:
+          - all
+          - api
+          - operator
+          - cloud
+
+permissions:
+  contents: read
+  actions: read
+  # Required for cosign to sign images and attach SBOM attestations.
+  id-token: write
+  packages: write
+
+env:
+  REGISTRY: registry.digitalocean.com/loopzero-infra-registry  # Legacy DOCR (remove after Harbor migration — MEET-048)
+  HARBOR_REGISTRY: harbor.dev.loopzero.example  # New Harbor registry (MEET-048)
+
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────
+  # RESOLVE — determine what to build based on changed files
+  # ─────────────────────────────────────────────
+  # NOTE: CI check removed from Build Images. The Infra Deploy workflow
+  # gates on BOTH CI and Build Images — if CI fails, deploy is blocked.
+  # This makes Build Images ~15min faster (no serial wait-for-ci polling).
+  resolve:
+    name: Resolve build targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      sha_tag: ${{ steps.resolve.outputs.sha_tag }}
+      env_tag: ${{ steps.resolve.outputs.env_tag }}
+      environment: ${{ steps.resolve.outputs.environment }}
+      build_api: ${{ steps.resolve.outputs.build_api }}
+      build_operator: ${{ steps.resolve.outputs.build_operator }}
+      build_cloud: ${{ steps.resolve.outputs.build_cloud }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2  # Need previous commit for diff
+      - name: Resolve tags and targets
+        id: resolve
+        run: |
+          SHA_SHORT="${{ github.sha }}"
+          BRANCH="${{ github.ref_name }}"
+          SHA_SHORT="${SHA_SHORT:0:7}"
+
+          case "$BRANCH" in
+            develop) TAG="dev" ;;
+            homolog) TAG="homolog" ;;
+            main)    TAG="latest" ;;
+            *)       TAG="dev" ;;
+          esac
+
+          # Also tag as the environment name for Pulumi stack references.
+          # Pulumi stacks use IMAGE_TAG=config.environment (dev/homolog/prod).
+          ENV_TAG=""
+          case "$BRANCH" in
+            develop) ENV_TAG="dev" ;;
+            homolog) ENV_TAG="homolog" ;;
+            main)    ENV_TAG="prod" ;;
+          esac
+
+          # Determine which components to build
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            case "${{ inputs.component }}" in
+              all)      BUILD_API="true"; BUILD_OP="true"; BUILD_CLOUD="true" ;;
+              api)      BUILD_API="true"; BUILD_OP="false"; BUILD_CLOUD="false" ;;
+              operator) BUILD_API="false"; BUILD_OP="true"; BUILD_CLOUD="false" ;;
+              cloud)    BUILD_API="false"; BUILD_OP="false"; BUILD_CLOUD="true" ;;
+            esac
+          else
+            # Path-based detection: only build components with changed files.
+            # Shared code (pkg/, go.work) triggers all Go builds.
+            CHANGED=$(git diff --name-only ${{ github.event.before || 'HEAD~1' }} ${{ github.sha }} 2>/dev/null || echo "")
+            BUILD_API="false"; BUILD_OP="false"; BUILD_CLOUD="false"
+
+            echo "$CHANGED" | grep -qE "^api/|^pkg/|^go\.work" && BUILD_API="true"
+            echo "$CHANGED" | grep -qE "^operators/|^pkg/|^go\.work" && BUILD_OP="true"
+            echo "$CHANGED" | grep -qE "^cloud/" && BUILD_CLOUD="true"
+
+            # If no app code changed, skip builds. Images already exist in registry.
+            if [[ "$BUILD_API" == "false" && "$BUILD_OP" == "false" && "$BUILD_CLOUD" == "false" ]]; then
+              echo "::notice::No app code changed — skipping all image builds"
+            fi
+          fi
+
+          # Resolve GitHub environment for secrets scoping.
+          # Each environment (infra-dev, infra-homolog, infra-prod) has its own
+          # DIGITALOCEAN_TOKEN, HARBOR_ROBOT_*, etc. — prevents cross-env credential leaks.
+          case "$BRANCH" in
+            develop) ENVIRONMENT="infra-dev" ;;
+            homolog) ENVIRONMENT="infra-homolog" ;;
+            main)    ENVIRONMENT="infra-prod" ;;
+            *)       ENVIRONMENT="infra-dev" ;;
+          esac
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=$SHA_SHORT" >> "$GITHUB_OUTPUT"
+          echo "env_tag=$ENV_TAG" >> "$GITHUB_OUTPUT"
+          echo "environment=$ENVIRONMENT" >> "$GITHUB_OUTPUT"
+          echo "build_api=$BUILD_API" >> "$GITHUB_OUTPUT"
+          echo "build_operator=$BUILD_OP" >> "$GITHUB_OUTPUT"
+          echo "build_cloud=$BUILD_CLOUD" >> "$GITHUB_OUTPUT"
+
+          echo "### Build Targets" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tag | \`$TAG\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SHA | \`$SHA_SHORT\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| API | $BUILD_API |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Operator | $BUILD_OP |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cloud | $BUILD_CLOUD |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # BUILD API
+  # ─────────────────────────────────────────────
+  build-api:
+    name: Build loopzero-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: resolve
+    if: needs.resolve.outputs.build_api == 'true'
+    environment: ${{ needs.resolve.outputs.environment }}
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        run: doctl registry login --expiry-seconds 600
+
+      # MEET-048: Harbor dual-push — login to Harbor registry during transition.
+      - name: Login to Harbor
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Set reproducible timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
+      - name: Build and push loopzero-api
+        id: build
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker buildx build -f api/Dockerfile \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-api:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-api:cache,mode=max \
+            -t ${{ env.REGISTRY }}/loopzero-api:${TAG} \
+            -t ${{ env.REGISTRY }}/loopzero-api:${SHA} \
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG}") \
+            --push .
+
+          # Capture the digest for signing and attestation.
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-api:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/loopzero-api" >> "$GITHUB_OUTPUT"
+
+          echo "### loopzero-api" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-api:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # MEET-048: Dual-push to Harbor (remove after migration completes).
+      - name: Push loopzero-api to Harbor (dual-push)
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker tag ${{ env.REGISTRY }}/loopzero-api:${TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${TAG}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${TAG}
+
+          docker tag ${{ env.REGISTRY }}/loopzero-api:${SHA} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${SHA}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${SHA}
+
+          if [ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ]; then
+            docker tag ${{ env.REGISTRY }}/loopzero-api:${ENV_TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${ENV_TAG}
+            docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${ENV_TAG}
+          fi
+
+          echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-api:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # BUILD OPERATOR
+  # ─────────────────────────────────────────────
+  build-operator:
+    name: Build tenant-controller
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: resolve
+    if: needs.resolve.outputs.build_operator == 'true'
+    environment: ${{ needs.resolve.outputs.environment }}
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        run: doctl registry login --expiry-seconds 600
+
+      # MEET-048: Harbor dual-push — login to Harbor registry during transition.
+      - name: Login to Harbor
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Set reproducible timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
+      - name: Build and push tenant-controller
+        id: build
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker buildx build -f operators/Dockerfile \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/tenant-controller:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/tenant-controller:cache,mode=max \
+            -t ${{ env.REGISTRY }}/tenant-controller:${TAG} \
+            -t ${{ env.REGISTRY }}/tenant-controller:${SHA} \
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG}") \
+            --push .
+
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/tenant-controller:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/tenant-controller" >> "$GITHUB_OUTPUT"
+
+          echo "### tenant-controller" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/tenant-controller:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # MEET-048: Dual-push to Harbor (remove after migration completes).
+      - name: Push tenant-controller to Harbor (dual-push)
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker tag ${{ env.REGISTRY }}/tenant-controller:${TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${TAG}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${TAG}
+
+          docker tag ${{ env.REGISTRY }}/tenant-controller:${SHA} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${SHA}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${SHA}
+
+          if [ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ]; then
+            docker tag ${{ env.REGISTRY }}/tenant-controller:${ENV_TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${ENV_TAG}
+            docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${ENV_TAG}
+          fi
+
+          echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/tenant-controller:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # BUILD CLOUD AUTH SERVICE
+  # ─────────────────────────────────────────────
+  build-cloud:
+    name: Build cloud-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: resolve
+    if: needs.resolve.outputs.build_cloud == 'true'
+    environment: ${{ needs.resolve.outputs.environment }}
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        run: doctl registry login --expiry-seconds 600
+
+      # MEET-048: Harbor dual-push — login to Harbor registry during transition.
+      - name: Login to Harbor
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Set reproducible timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
+      - name: Build and push cloud-api
+        id: build
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker buildx build -f cloud/Dockerfile \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-cloud:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-cloud:cache,mode=max \
+            -t ${{ env.REGISTRY }}/loopzero-cloud:${TAG} \
+            -t ${{ env.REGISTRY }}/loopzero-cloud:${SHA} \
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG}") \
+            --push .
+
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-cloud:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/loopzero-cloud" >> "$GITHUB_OUTPUT"
+
+          echo "### cloud-api" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # MEET-048: Dual-push to Harbor (remove after migration completes).
+      - name: Push cloud-api to Harbor (dual-push)
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker tag ${{ env.REGISTRY }}/loopzero-cloud:${TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${TAG}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${TAG}
+
+          docker tag ${{ env.REGISTRY }}/loopzero-cloud:${SHA} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${SHA}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${SHA}
+
+          if [ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ]; then
+            docker tag ${{ env.REGISTRY }}/loopzero-cloud:${ENV_TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${ENV_TAG}
+            docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${ENV_TAG}
+          fi
+
+          echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-cloud:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # BUILD HARBOR-INIT — post-deploy configuration script
+  # Always built when operator or infra code changes (shares Go workspace).
+  # ─────────────────────────────────────────────
+  build-harbor-init:
+    name: Build harbor-init
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: resolve
+    if: needs.resolve.outputs.build_operator == 'true'
+    environment: ${{ needs.resolve.outputs.environment }}
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        run: doctl registry login --expiry-seconds 600
+
+      - name: Login to Harbor
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Set reproducible timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
+      - name: Build and push harbor-init
+        id: build
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+
+          docker buildx build -f infra/scripts/harbor-init/Dockerfile \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/harbor-init:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/harbor-init:cache,mode=max \
+            -t ${{ env.REGISTRY }}/harbor-init:${TAG} \
+            -t ${{ env.REGISTRY }}/harbor-init:${SHA} \
+            --push .
+
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/harbor-init:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/harbor-init" >> "$GITHUB_OUTPUT"
+
+          echo "### harbor-init" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/harbor-init:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push harbor-init to Harbor (dual-push)
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+
+          docker tag ${{ env.REGISTRY }}/harbor-init:${TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${TAG}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${TAG}
+
+          docker tag ${{ env.REGISTRY }}/harbor-init:${SHA} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${SHA}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${SHA}
+
+          echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/harbor-init:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # BUILD DASHBOARD
+  # ─────────────────────────────────────────────
+  build-dashboard:
+    name: Build dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: resolve
+    if: needs.resolve.outputs.build_cloud == 'true'
+    environment: ${{ needs.resolve.outputs.environment }}
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        run: doctl registry login --expiry-seconds 600
+
+      # MEET-048: Harbor dual-push — login to Harbor registry during transition.
+      - name: Login to Harbor
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Set reproducible timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
+      - name: Resolve dashboard URLs
+        id: urls
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          case "$BRANCH" in
+            main)
+              echo "api_url=https://cloud.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "engine_url=https://api.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "auth_url=https://auth.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "accounts_url=https://cloud.loopzero.example" >> "$GITHUB_OUTPUT"
+              ;;
+            homolog)
+              echo "api_url=https://cloud.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "engine_url=https://api.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "auth_url=https://auth.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "accounts_url=https://cloud.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "api_url=https://cloud.dev.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "engine_url=https://api.dev.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "auth_url=https://auth.dev.loopzero.example" >> "$GITHUB_OUTPUT"
+              echo "accounts_url=https://cloud.dev.loopzero.example" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Build and push dashboard
+        id: build
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker buildx build \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
+            --build-arg VITE_API_URL=${{ steps.urls.outputs.api_url }} \
+            --build-arg VITE_ENGINE_URL=${{ steps.urls.outputs.engine_url }} \
+            --build-arg VITE_AUTH_URL=${{ steps.urls.outputs.auth_url }} \
+            --build-arg VITE_ACCOUNTS_URL=${{ steps.urls.outputs.accounts_url }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-dashboard:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-dashboard:cache,mode=max \
+            -t ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} \
+            -t ${{ env.REGISTRY }}/loopzero-dashboard:${SHA} \
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG}") \
+            --push cloud/dashboard/
+
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-dashboard:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/loopzero-dashboard" >> "$GITHUB_OUTPUT"
+
+          echo "### dashboard" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # MEET-048: Dual-push to Harbor (remove after migration completes).
+      - name: Push dashboard to Harbor (dual-push)
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+
+          docker tag ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${TAG}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${TAG}
+
+          docker tag ${{ env.REGISTRY }}/loopzero-dashboard:${SHA} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${SHA}
+          docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${SHA}
+
+          if [ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ]; then
+            docker tag ${{ env.REGISTRY }}/loopzero-dashboard:${ENV_TAG} ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${ENV_TAG}
+            docker push ${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${ENV_TAG}
+          fi
+
+          echo "- \`${{ env.HARBOR_REGISTRY }}/loopzero-platform/loopzero-dashboard:${TAG}\` (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # SIGN + ATTEST — cosign sign, syft SBOM, cosign attest, Trivy scan
+  # Sprint 6: Supply chain security (SEC-002 remediation)
+  # ─────────────────────────────────────────────
+  sign-and-attest:
+    name: "Sign & attest: ${{ matrix.component }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [resolve, build-api, build-operator, build-cloud, build-dashboard, build-harbor-init]
+    if: always()
+    environment: ${{ needs.resolve.outputs.environment }}
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: loopzero-api
+            build_job: build-api
+            result: ${{ needs.build-api.result }}
+            image: ${{ needs.build-api.outputs.image || '' }}
+            digest: ${{ needs.build-api.outputs.digest || '' }}
+          - component: tenant-controller
+            build_job: build-operator
+            result: ${{ needs.build-operator.result }}
+            image: ${{ needs.build-operator.outputs.image || '' }}
+            digest: ${{ needs.build-operator.outputs.digest || '' }}
+          - component: loopzero-cloud
+            build_job: build-cloud
+            result: ${{ needs.build-cloud.result }}
+            image: ${{ needs.build-cloud.outputs.image || '' }}
+            digest: ${{ needs.build-cloud.outputs.digest || '' }}
+          - component: loopzero-dashboard
+            build_job: build-dashboard
+            result: ${{ needs.build-dashboard.result }}
+            image: ${{ needs.build-dashboard.outputs.image || '' }}
+            digest: ${{ needs.build-dashboard.outputs.digest || '' }}
+          - component: harbor-init
+            build_job: build-harbor-init
+            result: ${{ needs.build-harbor-init.result }}
+            image: ${{ needs.build-harbor-init.outputs.image || '' }}
+            digest: ${{ needs.build-harbor-init.outputs.digest || '' }}
+    steps:
+      - name: Skip if build did not run
+        if: matrix.result != 'success' || matrix.digest == ''
+        run: |
+          echo "::notice::Skipping ${{ matrix.component }} — build did not produce a digest"
+          exit 0
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        if: matrix.result == 'success' && matrix.digest != ''
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install doctl
+        if: matrix.result == 'success' && matrix.digest != ''
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Login to DO Container Registry
+        if: matrix.result == 'success' && matrix.digest != ''
+        run: doctl registry login --expiry-seconds 600
+
+      # MEET-048: Harbor login for sign-and-attest (future: sign Harbor images too).
+      - name: Login to Harbor
+        if: matrix.result == 'success' && matrix.digest != '' && env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          echo "${{ env.HARBOR_ROBOT_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} -u "${{ env.HARBOR_ROBOT_USERNAME }}" --password-stdin
+
+      - name: Install cosign
+        if: matrix.result == 'success' && matrix.digest != ''
+        uses: sigstore/cosign-installer@v4.1.1
+
+      - name: Install syft
+        if: matrix.result == 'success' && matrix.digest != ''
+        uses: anchore/sbom-action/download-syft@v0.24.0
+
+      - name: Scan image with Trivy
+        if: matrix.result == 'success' && matrix.digest != ''
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: image
+          image-ref: "${{ matrix.image }}@${{ matrix.digest }}"
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          format: table
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+        env:
+          TRIVY_USERNAME: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          TRIVY_PASSWORD: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Generate SBOM with syft
+        if: matrix.result == 'success' && matrix.digest != ''
+        run: |
+          syft "${{ matrix.image }}@${{ matrix.digest }}" \
+            --output spdx-json=sbom-${{ matrix.component }}.spdx.json
+
+          echo "### SBOM: ${{ matrix.component }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Format: SPDX-JSON" >> "$GITHUB_STEP_SUMMARY"
+          PKGS=$(jq '.packages | length' sbom-${{ matrix.component }}.spdx.json 2>/dev/null || echo "?")
+          echo "- Packages: ${PKGS}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sign image with cosign (keyless)
+        if: matrix.result == 'success' && matrix.digest != ''
+        run: |
+          cosign sign --yes \
+            -a "repo=${{ github.repository }}" \
+            -a "sha=${{ github.sha }}" \
+            -a "ref=${{ github.ref_name }}" \
+            -a "workflow=${{ github.workflow }}" \
+            -a "run_id=${{ github.run_id }}" \
+            "${{ matrix.image }}@${{ matrix.digest }}"
+
+          echo "### Signature: ${{ matrix.component }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Signed with cosign (keyless, Fulcio + Rekor)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attest SBOM with cosign (keyless)
+        if: matrix.result == 'success' && matrix.digest != ''
+        run: |
+          cosign attest --yes \
+            --predicate sbom-${{ matrix.component }}.spdx.json \
+            --type spdxjson \
+            "${{ matrix.image }}@${{ matrix.digest }}"
+
+          echo "- SBOM attestation attached (keyless)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify signature (smoke test)
+        if: matrix.result == 'success' && matrix.digest != ''
+        run: |
+          cosign verify \
+            --certificate-identity-regexp="https://github.com/loopzero.*" \
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+            "${{ matrix.image }}@${{ matrix.digest }}" | head -20
+
+          echo "- Signature verified (keyless, Fulcio identity)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload SBOM artifact
+        if: matrix.result == 'success' && matrix.digest != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.component }}
+          path: sbom-${{ matrix.component }}.spdx.json
+          retention-days: 90
+
+  # ─────────────────────────────────────────────
+  # POST-BUILD — integrate registry with DOKS clusters
+  # ─────────────────────────────────────────────
+  integrate-registry:
+    name: Integrate registry with DOKS
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [resolve, build-api, build-operator, build-cloud, build-dashboard, build-harbor-init, sign-and-attest]
+    if: >-
+      always() &&
+      needs.sign-and-attest.result != 'failure' &&
+      (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success' || needs.build-harbor-init.result == 'success')
+    environment: ${{ needs.resolve.outputs.environment }}
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
+    steps:
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Add DOCR registry to DOKS clusters
+        run: |
+          # Discover cluster names dynamically — avoids hardcoding region.
+          # doctl returns all DOKS clusters; we filter for loopzero-infra ones.
+          CLUSTERS=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra" || true)
+          if [ -z "$CLUSTERS" ]; then
+            echo "::warning::No loopzero-infra DOKS clusters found"
+            exit 0
+          fi
+
+          echo "### Registry Integration (DOCR)" >> "$GITHUB_STEP_SUMMARY"
+          for CLUSTER in $CLUSTERS; do
+            doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
+            echo "- ✅ $CLUSTER" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      # MEET-048: Harbor imagePullSecret provisioning.
+      # TODO(MEET-048): After migration, replace DOCR integration above with Harbor-only.
+      # Harbor uses standard K8s docker-registry secrets instead of doctl integration.
+      - name: Add Harbor imagePullSecret to DOKS clusters
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          CLUSTERS=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra" || true)
+          if [ -z "$CLUSTERS" ]; then
+            exit 0
+          fi
+
+          echo "### Registry Integration (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+          for CLUSTER in $CLUSTERS; do
+            doctl kubernetes cluster kubeconfig save "$CLUSTER" 2>/dev/null || continue
+            CTX=$(kubectl config get-contexts -o name 2>/dev/null | grep "$CLUSTER" | head -1)
+            [ -z "$CTX" ] && continue
+
+            # Create Harbor imagePullSecret in default and platform-system namespaces
+            for NS in default platform-system; do
+              kubectl --context "$CTX" create secret docker-registry harbor-registry \
+                --docker-server="${{ env.HARBOR_REGISTRY }}" \
+                --docker-username="${{ env.HARBOR_ROBOT_USERNAME }}" \
+                --docker-password="${{ env.HARBOR_ROBOT_PASSWORD }}" \
+                --namespace "$NS" \
+                --dry-run=client -o yaml | kubectl --context "$CTX" apply -f - 2>/dev/null || true
+            done
+            echo "- ✅ $CLUSTER (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  # ─────────────────────────────────────────────
+  # POST-BUILD — update CWTs on build cluster
+  # ─────────────────────────────────────────────
+  update-cwts:
+    name: Update CWTs on build cluster
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [resolve, build-api, build-operator, build-cloud, build-dashboard, build-harbor-init, sign-and-attest]
+    if: >-
+      always() &&
+      needs.sign-and-attest.result != 'failure' &&
+      (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success' || needs.build-harbor-init.result == 'success')
+    environment: ${{ needs.resolve.outputs.environment }}
+    env:
+      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
+      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+        with:
+          version: v3.14.0
+
+      - name: Update CWTs on build cluster
+        run: |
+          # Discover build cluster name dynamically — avoids hardcoding region.
+          BUILD_CLUSTER=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra.*-build$" | head -1)
+          if [ -z "$BUILD_CLUSTER" ]; then
+            echo "::warning::Build cluster not found"
+            exit 0
+          fi
+
+          # Get kubeconfig for the build cluster
+          doctl kubernetes cluster kubeconfig save "$BUILD_CLUSTER"
+
+          # Extract the kubectl context name from the saved kubeconfig
+          BUILD_CONTEXT=$(kubectl config get-contexts -o name 2>/dev/null | grep "$BUILD_CLUSTER" | head -1)
+
+          # Ensure argo namespace exists (may not if infra deploy hasn't run yet)
+          kubectl --context "$BUILD_CONTEXT" get ns argo >/dev/null 2>&1 || {
+            echo "::warning::Namespace 'argo' not found — skipping CWT update (infra deploy will create it)"
+            exit 0
+          }
+
+          # Render and apply CWT templates from the local Helm chart.
+          helm template loopzero-build-cwts infra/helm/argo-workflows \
+            --set minio.insecure=${{ github.ref != 'refs/heads/main' }} | \
+            kubectl apply --context "$BUILD_CONTEXT" -f - || {
+            echo "::warning::CWT apply failed — will be applied by infra deploy"
+            exit 0
+          }
+
+          # Ensure buildkit-registry-config secret exists for image push (DOCR).
+          # Note: 30-day expiry required — BuildKit uses this credential for async user builds
+          # between CI runs. Short-lived tokens would break user deploys.
+          RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 2592000)
+          kubectl create secret generic buildkit-registry-config \
+            --context "$BUILD_CONTEXT" \
+            --namespace argo \
+            --from-literal=config.json="$RW_CONFIG" \
+            --dry-run=client -o yaml | kubectl apply --context "$BUILD_CONTEXT" -f - || true
+
+          echo "### CWT Update" >> "$GITHUB_STEP_SUMMARY"
+          echo "- CWTs updated on $BUILD_CLUSTER" >> "$GITHUB_STEP_SUMMARY"
+          echo "- buildkit-registry-config secret ensured (DOCR)" >> "$GITHUB_STEP_SUMMARY"
+
+      # MEET-048: Harbor BuildKit credentials for build cluster.
+      # TODO(MEET-048): After migration, merge DOCR and Harbor configs into a single
+      # buildkit-registry-config secret, then remove DOCR config entirely.
+      - name: Ensure Harbor BuildKit credentials
+        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
+        run: |
+          BUILD_CLUSTER=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra.*-build$" | head -1)
+          if [ -z "$BUILD_CLUSTER" ]; then
+            exit 0
+          fi
+
+          doctl kubernetes cluster kubeconfig save "$BUILD_CLUSTER"
+          BUILD_CONTEXT=$(kubectl config get-contexts -o name 2>/dev/null | grep "$BUILD_CLUSTER" | head -1)
+
+          kubectl --context "$BUILD_CONTEXT" get ns argo >/dev/null 2>&1 || exit 0
+
+          # Create Harbor docker-config JSON for BuildKit
+          HARBOR_CONFIG=$(echo -n '{"auths":{"${{ env.HARBOR_REGISTRY }}":{"username":"${{ env.HARBOR_ROBOT_USERNAME }}","password":"${{ env.HARBOR_ROBOT_PASSWORD }}"}}}')
+          kubectl create secret generic buildkit-harbor-registry-config \
+            --context "$BUILD_CONTEXT" \
+            --namespace argo \
+            --from-literal=config.json="$HARBOR_CONFIG" \
+            --dry-run=client -o yaml | kubectl apply --context "$BUILD_CONTEXT" -f - || true
+
+          echo "- buildkit-harbor-registry-config secret ensured (Harbor)" >> "$GITHUB_STEP_SUMMARY"

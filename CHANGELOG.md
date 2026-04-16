@@ -7,6 +7,884 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Platform hardening v2 — E2E workflow** (hardening-v2): Weekly scheduled `infra-e2e.yml` validates full destroy→up→bootstrap→health cycle. `health-check.sh` validates 30+ deployments, services, tunnel, nodes, external endpoints.
+- **OTel instrumentation — operators/** (hardening-v2): Custom Prometheus metrics (reconcile_duration, reconcile_errors, provisioner_duration). Child spans on all 7 controllers for provisioner calls (Gitea, ArgoCD, Harbor, MinIO). Error recording on spans. TraceExtractor for pkg/logging.
+- **OTel instrumentation — cloud/** (hardening-v2): TracerProvider + OTLP exporter. otelhttp on all HTTP clients (Hydra, Kratos, Stripe). Prometheus metrics replacing atomic counters. trace_id in slog.
+- **pkg/logging context propagation** (hardening-v2): `TraceExtractor` interface + `FromContext()` for trace_id/span_id injection without OTel dependency.
+- **State integrity check** (hardening-v2): Post-deploy step in `infra-deploy.yml` detects duplicate URNs in Pulumi state.
+- **Infra pre-merge checklist** (hardening-v2): `docs/checklists/infra-pre-merge.md` with 15 validation items.
+
+### Changed
+- **Pipeline simplification** (MEET-049, MEET-050): Rewrote infra pipeline from 1 monolithic workflow (1539 lines) to 5 focused workflows (~470 lines total). `infra-deploy.yml` (Pulumi up only), `infra-bootstrap.yml` (idempotent tokens/secrets/seed), `infra-destroy.yml` (stack-scoped with approval), `infra-restart.yml` (CI-gated pod restart), `infra-state-reset.yml` (break-glass emergency). Zero `pulumi cancel`/`state delete` in deploy path. Stack-scoped destroy prevents cross-environment deletion.
+- **Pulumi idempotency** (hardening-v2): `resolve-build-node-ip` trigger changed from `Date.now()` to cluster endpoint. `gitea-bootstrap` Job: `ignoreChanges` on status/labels.
+
+### Security
+- **COOKIE_SECRET rotated to RandomPassword** (C1): Kratos UI cookie secret replaced from hardcoded string to Pulumi-managed `RandomPassword`. Eliminates session cookie forgery risk from source code access.
+- **LOOPZERO_SERVICE_AUTH_SECRET auto-generated** (H12): Service-to-service auth secret now auto-generates via `RandomPassword` when not explicitly configured. Removes `dev-service-auth-secret-default` fallback.
+- **Database and DOKS clusters protected** (C3): Added `protect: true` and `retainOnDelete: true` to PostgreSQL cluster and `protect: true` to all DOKS clusters. Prevents accidental `pulumi destroy` data loss.
+- **RBAC escalate verb removed** (H15): Removed `escalate` verb from tenant controller ClusterRole on `clusterroles`/`clusterrolebindings`. Prevents privilege escalation from compromised controller pod.
+- **RBAC loopzero.io wildcard replaced** (M42): Replaced `resources: ["*"]` with explicit CRD enumeration in tenant controller ClusterRole. New CRDs require explicit RBAC review.
+
+### Fixed
+- **Environment state machine: Failed state added** (H8): `EnvironmentFailed` state now reachable via `ProvisionFailed` event from `Pending`, with `Retry` path back to `Pending` and `DeleteRequested` exit.
+- **Release state machine: cancel paths added** (M35): `GIT_MIRROR_FAILED`, `SYNC_FAILED`, `DRIFT_ALERT`, `ROLLBACK_FAILED` states now have `ReleaseCancelled` exit path.
+- **Domain state machine: v2 degraded from provisioning** (M36): Added `DomainDegrade` transition from `DomainProvisioning` to `DomainDegraded` for CNAME loss during v2 setup.
+- **Application computePhase uses all phases** (M28): `Serving`, `Degraded`, and `Down` phases now produced based on endpoint readiness and route conditions.
+- **ExposedRoute probe response bodies drained** (M29): Added `io.Copy(io.Discard, resp.Body)` before close to allow HTTP connection reuse.
+- **Rollback Phase 5 re-verifies release state** (M2): Re-fetches release inside lock to guard against concurrent deploy between Phase 1 and Phase 5.
+- **Convergence loop semaphore fix** (M5): Semaphore acquired before goroutine spawn to prevent unbounded goroutine accumulation.
+- **Harbor robot delete errors logged** (M34): `DeleteRobotAccount` errors now logged with context instead of silently discarded.
+- **Enforcement limiter: hardLimit==0 denies** (M37): Missing plan limit rows now fail closed (deny) instead of silently allowing unlimited access.
+- **Auto-deploy goroutine uses shutdown context** (H4): Auto-deploy goroutine now uses `shutdownCtx` with 5-minute timeout instead of `context.Background()`.
+- **Callback goroutines have timeout** (H5): `onReleaseActivated` and `onBuildFailed` goroutines now use 30-second timeout context.
+- **Tenant deletion sets condition on env delete failure** (H9): Failed Environment CR deletion now sets `EnvironmentCleanup` condition on Tenant status for visibility.
+- **Domain handlers have request timeouts** (M7): All 6 domain endpoints now use `context.WithTimeout` (30s read, 60s write).
+- **DNS records per-request limit** (M11): `AddDNSRecords` now rejects requests with more than 50 records.
+- **Removed ungated GetByDomain** (M12): Removed `GetByDomain` (no tenant filter) — only `GetByDomainAndTenant` remains.
+- **CancelActiveBuilds bypass documented** (M3): Added documentation explaining intentional state machine bypass for batch operations.
+- **Service auth rejects invalid headers immediately** (M39): `X-Service-Auth` with wrong value now returns 401 instead of falling through to Bearer auth.
+- **Auto-deploy commitSHA safe slice** (LOW): `commitSHA[:12]` replaced with bounds-checked slice to prevent panic on short SHAs.
+- **Environment name max-length enforced in CLI** (LOW): `loopzero env create` now validates max 63 chars, matching deploy command validation.
+- **Reserved names no longer leak Kubernetes** (LOW): `kube-system` removed from `RESERVED_NAMES` — replaced with generic `system`/`internal`.
+- **PlatformBootstrap finalizer added** (M31): Cleanup of `platform-tokens` secret on PlatformBootstrap CR deletion.
+- **Build namespace DNS egress scoped to kube-system** (LOW): DNS egress rule restricted to `kube-system` namespace, preventing DNS tunneling from build pods.
+- **ArgoCD AppProject namespace glob removed** (M32): Glob fallback `loopzero-{tenant}-*` replaced with fail-closed empty destinations list. Deploys blocked until EnvironmentController provides explicit namespaces.
+- **ArgoCD cluster secret scope reduced** (M33): Full kubeconfig no longer stored in ArgoCD cluster secret. Only bearer token + CA certificate extracted and stored in `config` field.
+
+### Changed
+- **Image build optimization** (Sprint 6+): Comprehensive build pipeline modernization:
+  - All Dockerfiles use `--mount=type=cache` for Go modules and build cache (~30-50% faster rebuilds)
+  - All Go builds use `-trimpath -ldflags="-s -w"` (smaller binaries, no path metadata)
+  - All platform Dockerfiles have `HEALTHCHECK`, OCI labels, consolidated layers
+  - Clone-runner `mc` binary verified with SHA256 checksum (supply chain hardening)
+  - Cosign signing uses pre-built `loopzero-cosign-signer` image (no runtime binary downloads)
+  - Dashboard runs as non-root via `nginxinc/nginx-unprivileged` on port 8080
+  - `.dockerignore` expanded to exclude Pulumi node_modules, dist, build, coverage
+  - Generated Dockerfiles (loopzeropacks) add `--mount=type=cache`, non-root USER, OCI labels for all 7 languages
+  - PHP uses multi-stage `FROM composer:2.8` instead of `curl | php` installer
+  - Rust binary name fixed (was evaluating in generator, not Docker build)
+  - SLSA provenance attestation (`--provenance=max`) on user-built images via BuildKit
+  - CI: keyless cosign signing (Sigstore/Fulcio OIDC), harbor-init signed + scanned
+  - CI: `SOURCE_DATE_EPOCH` for reproducible builds, `--provenance=true --sbom=true` on all platform images
+  - CI: `docker-bake.hcl` for declarative multi-image builds
+  - CI: Trivy `--ignore-unfixed` + `.trivyignore` for false positive management
+  - Semver release workflow (`.github/workflows/release.yml`)
+  - ADR-0003 updated: Kaniko → BuildKit (reflects actual architecture)
+
+### Added
+- **Supply chain security — image signing** (Sprint 6): cosign sign + syft SBOM + cosign attest for all 4 platform images in CI pipeline. New `sign-and-attest` job with matrix strategy in `build-images.yml`. Trivy post-build scan on final images. SBOM artifacts retained 90 days.
+- **Supply chain security — user image signing** (Sprint 6): Argo Workflow DAG now includes `sign-image-{app}` step after each `build-image-{app}`. Uses `gcr.io/projectsigstore/cosign:v2.4.1` with key mounted from `cosign-signing-key` K8s Secret.
+- **Image signature admission policy** (Sprint 6): `vap-require-image-signature` ValidatingAdmissionPolicy requires digest references (`@sha256:`) for all container images in tenant namespaces. Starts in Audit mode.
+- **Build attestation endpoint** (Sprint 6): `GET /api/v1/builds/:id/attestation` returns image digest, signature reference, and signing timestamp.
+- **DB migration 000034**: Adds `image_digest`, `image_signature`, `image_signed_at` columns to `releases` table for supply chain tracking.
+- **Distributed tracing — Grafana Tempo datasource** (Sprint 6): Tempo added as Grafana datasource with Loki derived fields linking `trace_id` to traces.
+- **Distributed tracing — PG query tracing** (Sprint 6): `otelpgx` tracer hooks into pgx pool, creating spans for every database query with statement and duration.
+- **Distributed tracing — operator instrumentation** (Sprint 6): OTel SDK added to operators with spans on all 7 controller reconcile loops (`loopzero.operator.{name}.reconcile`).
+- **Cross-plane trace propagation** (Sprint 6): Argo Workflow annotations carry `loopzero.io/trace-id` and `loopzero.io/span-id` for end-to-end deploy trace correlation.
+
+### Added
+- **Harbor container registry** (MEET-048): Minimal deployment (core×2, registry×2, jobservice×1, Redis×1) with Helm chart, PDB, NetworkPolicy. Trivy/Notary/Portal disabled.
+- **Harbor Pulumi provider** (MEET-048): `HarborRegistryProvider` implements `IProviderRegistry` ISP contract. Conditional `registryType` config (docr/harbor) with backward compatibility.
+- **Container images bucket** (MEET-048): DO Spaces bucket `loopzero-*-container-images` provisioned via Pulumi for Harbor S3 storage backend.
+- **Harbor API client** (MEET-048): `operators/internal/harbor/client.go` — project CRUD, robot account lifecycle, health check. 15 unit tests with httptest.
+- **Per-tenant Harbor projects** (MEET-048): TenantController creates Harbor project per tenant with plan-based quotas (Starter=5GB, Growth=50GB, Enterprise=unlimited), immutable tags, robot accounts (build push+pull, workload pull-only, TTL ≤ 24h).
+- **Registry health monitoring** (MEET-048): Canary probe metrics, 6 PrometheusRule alerts (LoopZeroRegistryHealthFailed critical, push/pull latency, storage, GC, PG connections), Grafana dashboard.
+- **Harbor init script** (MEET-048): Idempotent Go script for post-deploy configuration — admin password, system config, `loopzero-platform` project, CI robot account.
+- **Image mirror script** (MEET-048): Go script using `crane` for parallel DOCR→Harbor image migration with digest verification.
+- **ADR-002** (MEET-048): Registry migration decision record documenting Harbor + DO Spaces choice, alternatives, trade-offs, dissent.
+- **Harbor dual-push for tenant builds** (MEET-048): `HARBOR_REGISTRY_URL` env var enables crane-based mirror step in Argo Workflow DAG. Best-effort (continueOn.failed=true). DOCR remains primary.
+- **Harbor init automation** (MEET-048): Dockerfile + Helm post-install Job (`harbor-init`) + CI build step. Zero manual intervention after `pulumi up`.
+- **Harbor canary CronJob** (MEET-048): Runs every 5min, checks health + API access. Failure detected via kube-state-metrics alert.
+
+### Changed
+- **Harbor values.yaml aligned with Pulumi** (MEET-048): Replicas now 1 for dev (matches `harbor-bootstrap.ts`). PDB conditional on `replicas > 1`.
+- **Harbor HarborProjectReady is now required** (MEET-048): Tenant cannot transition to Active without HarborProjectReady=True when HarborClient is configured. Backward compatible with DOCR mode.
+- **Harbor robot secret self-healing** (MEET-048): If K8s Secret is manually deleted, next reconcile forces robot recreation to obtain new credentials. Prevents 22-hour blind window.
+- **Harbor Docker config.json uses json.Marshal** (MEET-048): Replaced manual `quote()` with `json.Marshal` for correct escaping of all JSON special characters.
+
+### Fixed
+- **Harbor PDB blocking node drain** (MEET-048): PDB with `minAvailable: 1` on single replica blocked `kubectl drain`. Now conditional on `replicas > 1`.
+
+### Changed
+- **Git operations centralized in `internal/gitclient`**: Eliminates duplicated gitCmd/sanitize/ensureRepo across source, gitops, and github packages. Single GitRunner with exec.CommandContext + token sanitization.
+- **Build scripts generated via type-safe `internal/shellgen`**: All 15 script functions in argo/scripts.go migrated to ScriptBuilder. User-supplied paths escaped via ShellQuote (POSIX single-quote). Zero fmt.Sprintf for shell in scripts.go.
+- **BuildKit entrypoint uses ShellQuote**: socketPath escaped via ShellQuote, registryURL validated before TOML injection.
+- **Source store go-git implementation**: `source/gogit_store.go` mirrors gitops/gogit_pusher pattern. GitRunner only for `git bundle create`.
+
+### Security
+- **Fixed unsafe tar extraction in GitHub auto-deploy**: Added symlink rejection, path traversal protection, and decompression size limits via SafeExtractTarGz. Previously extracted tarballs without any validation.
+- **Shell script generation uses POSIX-safe quoting**: All interpolated values in build container scripts quoted via ShellQuote, preventing injection via crafted loopzero.yaml paths.
+- **autodeploy.go uses exec.CommandContext**: Git commands in tarballToGitBundle now respect context cancellation (previously used exec.Command without context).
+
+### Changed
+- **CI dual-push** (MEET-048): `build-images.yml` and `infra-deploy.yml` push platform images to both DOCR and Harbor during transition period. Harbor steps conditional on `HARBOR_ROBOT_PASSWORD` secret.
+- **Registry admission policy** (MEET-048): `vap-restrict-registries` updated to allow both DOCR and Harbor prefixes during dual-push transition.
+- **Registry token expiry** reduced from 3600s to 600s in CI pipeline (SEC-002 compliance).
+
+### Security
+- **Per-tenant image isolation** (MEET-048): Harbor robot accounts scoped per-project prevent cross-tenant image access. Previously only naming convention.
+- **Harbor admin API restricted** (MEET-048): NetworkPolicy limits Harbor core access to Traefik ingress and loopzero-system namespace.
+
+### Added
+- **DO PostgreSQL tuning** (`DatabasePostgresqlConfig`): pg_stat_statements=all, slow query logging >1s, idle transaction timeout 10min, shared_buffers 25%
+- **DO Database role separation** (`DatabaseUser` + `DatabaseConnectionPool`): API connects as `loopzero_api` (DML only) through managed PGBouncer pool (transaction mode, 20 conns)
+- **DO UptimeCheck**: External health monitoring of API from 3 regions (us_east, us_west, eu_west)
+- **DO Project**: Groups all environment resources in DO dashboard
+- **DO Registry credentials**: `ContainerRegistryDockerCredentials` generates docker config.json automatically (eliminates manual `doctl registry add`)
+- **CF WAF**: Managed OWASP + Cloudflare rulesets at edge (`security.ts`)
+- **CF Rate Limiting**: Auth 20/min, API 300/min, global 1000/min per IP
+- **CF Zero Trust Access**: ArgoCD, Grafana, Gitea behind CF Access auth (email domain policy)
+- **CF Logpush**: HTTP request + firewall event logs exported to DO Spaces
+- **Build admission gate** (Roadmap 07): Cell-level and per-tenant concurrent build limits. Rejects with HTTP 429 when cell at capacity (`MAX_CONCURRENT_BUILDS_PER_CELL=20`) or tenant at capacity (`MAX_CONCURRENT_BUILDS_PER_TENANT=3`). 4 unit tests including `TestBuildAdmission_CellCapacityReject` and `TestBuildAdmission_TenantFairness`.
+- **PG pool circuit breaker** (Roadmap 07): HTTP middleware that rejects mutation requests (POST/PUT/DELETE) with 503 + Retry-After when PG pool utilization exceeds threshold (`PG_CIRCUIT_BREAKER_THRESHOLD_PCT=90`). Read requests always pass through. 3 unit tests.
+- **Cell capacity budget** (Roadmap 04): Published at `docs/capacity/cell-budget.md` with concrete numbers for tenants, builds, PG connections, ArgoCD apps per cell. Includes saturation thresholds (Yellow 70%, Red 90%) and graceful degradation behavior.
+- **Cell provisioning — real implementation** (Roadmap 05): `cell.ts` now provisions complete DOKS clusters with ArgoCD, Traefik, cert-manager, network policies, and Prometheus agent. Zero placeholder values remain.
+- **TOCTOU placement test** (Roadmap 06): `TestPlacement_ConcurrentCreation_NoTOCTOU` proves 10 concurrent tenant creations distribute evenly across 2 cells with no hot-spotting.
+- **L4/L5 load tests** (Roadmap 08): `TestL4_500Tenants` (500 tenants, 2 cells, 20 concurrent) and `TestL5_1000Tenants_MultiCell` (1000 tenants, multi-cell, 50 concurrent) with pass criteria: >99% success, p99 < 10min.
+- **Chaos test suite** (Roadmap 08): 7 implemented chaos tests replacing 6 PIt stubs. Covers: API pod restart, controller crash recovery, PG pool exhaustion, ArgoCD crash, PG failover, cell network partition.
+- **Admission control metrics**: `loopzero_build_admission_admitted_total`, `loopzero_build_admission_rejected_total`, `loopzero_pg_circuit_breaker_tripped_total`.
+
+### Changed
+- **CI/CD pipeline optimization**: Build Images only triggers on app code changes (`api/`, `operators/`, `cloud/`, `pkg/`). Infra Deploy only triggers on infra changes (`infra/`). New images trigger lightweight pod restart (~2min) instead of full `pulumi up` (~15min). Eliminates 25min polling loop.
+
+### Added
+- **Declarative multi-cluster topology** (`pulumi-infra/src/topology/`): Config-driven N clusters per role. TopologyConfig schema, parser+validator, generic provisioner keyed by stable `clusterId`, ClusterRegistry output for StackReference. Cell factory (`createCell/createCells`) associates cellId→runtime cluster. 10 topology test cases. Legacy fallback from singleton config.
+- **Distributed work queue** (`api/internal/workqueue/`): PG-backed queue with `SELECT ... FOR UPDATE SKIP LOCKED`. Enables non-leader pods to process background work. Queue/Consumer abstraction for all 6 reconcile loops.
+- **Dynamic cell router** (`api/internal/placement/dynamic_router.go`): Periodically refreshes cell list from CellStore. K8sCellStore reads ClusterCredential CRDs for multi-cell Phase 2 routing.
+- **Load test L3/L4**: L3 (100 tenants concurrent), L4 (50 concurrent lock stress on same project). CI workflow for scheduled/manual load test execution.
+- **DB pool saturation metrics**: `loopzero_postgres_pool_acquire_duration_seconds`, `loopzero_postgres_pool_empty_acquire_total`, `loopzero_postgres_pool_max_conns` for contention visibility.
+- **DB pool alerts**: `LoopZeroDBPoolSaturation` (>80% utilization, 5m), `LoopZeroDBPoolAcquireLatency` (p95 >100ms, 3m).
+- **pg_stat_statements** enabled via migration 000029 for slow query visibility.
+- **Leader-generation fencing primitive** (Roadmap 02). New package
+  `api/internal/leader/` providing `Acquirer` with `Acquire`, `Heartbeat`,
+  `Validate`, and `Release`. Every successfully acquired `Lease` carries a
+  monotonic `GenerationID` that must be bound into every side-effecting SQL
+  write; a stale leader's writes match zero rows and no-op. Heartbeat and
+  Validate return `ErrFenced` when another holder has taken over, signaling
+  the caller to exit. Backed by migration `000030_leader_generations.up.sql`
+  (cell-scoped per-loop counter table). 16 unit tests including the
+  explicit `TestLeaderGeneration_StaleWriteRejected` from the DoD.
+- **PG-backed processing claims** (Roadmap 02). New package
+  `api/internal/processing/` providing `ClaimStore.Claim`,
+  `ClaimStore.Release`, and `ClaimStore.FindOrphanedClaims` over the
+  `builds` and `releases` tables. Replaces the in-process `sync.Map`
+  dedup used by `BuildReconcileLoop` and `ReleaseConvergenceLoop` so two
+  controller replicas can never concurrently process the same build /
+  release. Orphaned claims (worker crashed mid-processing) are
+  automatically reclaimable after a 2-minute stale window via the CAS
+  predicate. Backed by migration `000031_build_release_processing_claim.up.sql`
+  adding `processing_by` / `processing_since` columns and partial indexes.
+  12 unit tests including the DoD-required
+  `TestProcessingClaim_OrphanDetection`.
+- **Cell-scoped reconciliation queries** (Roadmap 03). Every `Find*` store method
+  that backs a reconciliation loop now accepts an explicit `cellID` parameter and
+  emits `WHERE cell_id = $N` at the SQL level. Migration 000029 denormalizes
+  `cell_id` onto `builds` and `releases` (populated from `tenants.cell_id` via a
+  `BEFORE INSERT` trigger), adds composite indexes
+  `idx_builds_cell_status_created` and `idx_releases_cell_status_created`, and
+  backfills existing rows. Custom domains stay JOIN-scoped because the cardinality
+  is low. Signatures updated: `FindActiveBuilds`, `FindPendingReleases`,
+  `FindActiveReleases`, `FindStaleBuilds`, `FindStaleReleases`,
+  `FindPendingForAutoVerify`. Config structs `BuildReconcileLoopConfig`,
+  `BuildReaperConfig`, `ReleaseReaperConfig`, `ReleaseConvergenceLoopConfig`,
+  `DomainHealthCheckerConfig` gained a `CellID` field (defaults to `cell-default`
+  for backward compatibility). 10 new unit tests (`cell_scoped_queries_test.go`,
+  `stale_checker_cell_scope_test.go`) — all green with zero impact on existing
+  tests. Prerequisite for ADR-0008 cell isolation and the future PG partition-
+  by-cell_id migration tracked as escalation risk.
+- IaC: split em 3 projetos Pulumi (`pulumi-infra`, `pulumi-platform`, `pulumi-control-plane`) com StackReference e contratos tipados
+- IaC: `pulumi-shared/stack-outputs.ts` como single source of truth para contratos entre projetos
+- IaC: StackReference parametrizado via config (`infraStackRef`, `platformStackRef`) — suporta per-developer stacks
+- IaC: ADR-001 documentando boundaries, contratos e estratégia de migração
+- IaC: baseline document com inventário de 160+ recursos, 19 outputs, 33 configs, 6 CRITICAL resources
+
+### Changed
+- IaC: admission policy `vap-require-resource-limits` de `Audit` para `Deny` — enforcement real em tenant namespaces
+- IaC: Traefik com 2 réplicas, PDB (minAvailable: 1), topologySpreadConstraints e JSON logging
+- IaC: PSA `enforce: baseline` + `warn: restricted` em todos os namespaces gerenciados (platform-system, argo, monitoring, external-secrets)
+- IaC: Argo Workflows com `volumeClaimGC: OnWorkflowCompletion` — auto-delete PVCs de builds completados/falhos
+
+### Fixed
+- **Manifest gate is YAML-document-aware** (Roadmap 01, Correction G). Previously a
+  no-op after MEET-2026-04-09-042 reverted the substring-matching gate that blocked
+  all new tenant deploys (Certificate CRs with `issuerRef.kind: ClusterIssuer` matched
+  the forbidden substring). The gate now parses each YAML document and inspects only
+  the top-level `apiVersion`+`kind`, so Certificate resources pass while top-level
+  `Namespace`, `ClusterRole`, `ClusterRoleBinding`, `ClusterIssuer`, and
+  `CustomResourceDefinition` are rejected. Malformed YAML fails closed. 9 unit tests.
+  Files: `api/internal/gitops/manifest_gate.go`, `manifest_gate_test.go`.
+- IaC: `cfKvNamespaceId` agora vem do output real do `createStaticDelivery`, não de config estática — elimina dual source of truth que quebrava bootstrap em stack nova
+- IaC: recursos Cloudflare (tunnel, KV, Worker) parametrizados com environment — evita colisão entre stacks na mesma conta CF
+- IaC: bucket names (`builds`, `logs`, `static-assets`) parametrizados com `bucketName()` por env/region — evita corrupção cruzada entre stacks
+- IaC: CDN movido para `CloudProviderFactory` — elimina `digitalocean.Cdn` direto em `infra.ts` e `spacesEndpoint` hardcoded
+- IaC: `execution.declaredAt` removido — substituído por `infraVersion` determinístico, elimina diff artificial em todo `pulumi up`
+- IaC: Promtail no runtime cluster reintegrado ao Pulumi — elimina step manual e garante reprodutibilidade em disaster recovery
+- IaC: Loki S3 endpoint e bucket name agora consomem outputs tipados da fase de infra em vez de strings hardcoded
+- IaC: Tempo storage endpoint agora vem do provider em vez de hardcoded `digitaloceanspaces.com`
+
+## [0.13.0] — 2026-04-09
+
+### Added
+- **GitHub App auto-deploy** — `git push` triggers automatic deploy (model Vercel)
+  - GitHub App "LoopZero Platform" (ID 3319955) with HMAC-SHA256 webhook validation
+  - Source download via GitHub API installation tokens
+  - Tarball→git bundle conversion for build pipeline compatibility
+  - S3 upload + build submission from webhook handler
+  - Commit status lifecycle: pending on push, success/failure on build complete
+  - `loopzero connect` / `loopzero disconnect` CLI commands (14 tests)
+  - Repository linking API: POST/DELETE/GET `/api/v1/projects/{name}/connect`
+  - DB: `github_installations` + `project_repositories` tables (migration 027)
+- **Custom Domains v2** — Cloudflare Zone Management (model Vercel)
+  - `loopzero domain add` creates CF zone per domain, scans DNS, imports records
+  - User only changes nameservers — CF handles TLS + WAF/DDoS
+  - Apex domains via CF CNAME flattening (no A record workaround needed)
+  - `loopzero domain dns` command for DNS record management
+  - DB: `cf_zone_id`, `cf_zone_status`, `cf_nameservers` columns (migration 026)
+  - State machine: `pending_ns` → `ns_active` → `provisioning` → `active`
+  - E2E validated with aquim.ai (Python API + React frontend monorepo)
+- **Monorepo Validator** — instant pre-upload validation
+  - 30 framework recognition (Node, Go, Python, Ruby, Java, PHP, Rust)
+  - Frontend auto-infers `render: static` (no explicit declaration needed)
+  - Max 2 pods per project (frontends don't count)
+  - Dockerfile detection for custom frameworks
+  - Path traversal protection (SEC-10)
+  - Validation runs in `loopzero deploy` before upload (<1s feedback)
+  - 40 new tests covering all scenarios + bypass edge cases
+- **Build/Release Garbage Collection** — prevents unbounded DB growth
+  - Retain last 10 builds per project, delete older than 30 days
+  - Hourly cleanup of builds table + events table
+- **Manifest Validation Gate** — defense-in-depth for ArgoCD
+  - Rejects Certificate/ClusterIssuer/Issuer CRs in gitops push path
+  - Prevents ArgoCD sync blockage from stuck cert-manager resources
+  - 4 unit tests
+
+### Changed
+- **Language support expanded** — 30 frameworks (was 18)
+  - Added: `react`, `vue`, `svelte`, `astro`, `angular`, `fastify` (Node)
+  - Added: `sinatra`, `rails`, `ruby` (Ruby)
+  - Added: `spring`, `spring-boot`, `java` (Java)
+  - Added: `laravel`, `slim`, `php` (PHP)
+  - Added: `axum`, `actix`, `rocket`, `rust` (Rust)
+  - loopzero-packs generates Dockerfiles for all new languages
+  - Language strategies in argo/languages.go for build pipeline
+- **Init container migration** — uses API image (not separate migrate image)
+  - Migrations always in sync with running code (no ConfigMap desync)
+  - `migrate` binary included in API Dockerfile (multi-stage)
+- **Leader election** — retry loop (6 attempts, 30s) instead of single try
+- **ClusterIssuer** — dual solver: DNS-01 for platform zone, HTTP-01 for custom domains
+- **Dockerfile** — `go build ./cmd/` instead of `./cmd/main.go` (includes adapter files)
+
+### Fixed
+- **PG failover detection** — TCP keepalive on pgx pool (KeepAlive=15s)
+  - Detects dead connections in ~90s (was 2h Linux default)
+  - Critical for leader election and advisory lock release
+- **Leader heartbeat timeout** — 10s context instead of `context.Background()`
+  - Prevents indefinite hang on zombie PG connection
+- **Non-leader re-election** — periodic retry (60s) for advisory lock
+  - Pods no longer stay non-leader forever after PG recovery
+- **Commit status SHA** — uses `build.CommitSHA` (source) not `release.GitCommit` (gitops)
+  - Was returning 422 "No commit found" because gitops SHA doesn't exist on GitHub
+- **ArgoCD revision mismatch** — retrigger sync instead of silent skip
+  - Convergence loop now forces re-sync when revision doesn't match
+- **Framework mapping gap** — CLI recognized 17 frameworks, server only 11
+  - All CLI-recognized frameworks now mapped server-side
+- **CI pipeline** — fixed 33 Go lint issues, 2 CLI lint errors, go mod tidy
+- **loopzero-stacks templates** — all 19 templates fixed (removed `commands`, `render: server`, worker ports)
+
+### Security
+- **Manifest validation gate** — Certificate CRs blocked from gitops tree
+- **Path traversal protection** — SEC-10 in CLI validator
+- **GitHub webhook HMAC-SHA256** — validates all incoming events
+- **Commit status permissions** — `statuses:write` on GitHub App installation
+
+## [0.12.0] — 2026-04-08
+
+### Added
+- **Plan Enforcement** — Starter/Pro/Team limits enforced on projects/builds/environments/members
+- **Audit Log** — mutation events written to DB, GET /api/v1/audit endpoint, `loopzero audit` CLI command
+
+## [0.11.0] — 2026-04-06
+
+### Added
+- **Cloud Auth System** — full authentication deployed on DigitalOcean
+  - Login via GitHub, Google (OIDC), and email/password
+  - User registration with email verification (6-digit code via Resend)
+  - Ory Kratos session-based auth (cookie, no tokens in browser)
+  - Ory Hydra for CLI Device Code Flow (RFC 8628)
+  - Dashboard at `cloud.dev.loopzero.example` with profile, logout, verification banner
+  - Verification page auto-submits code from email link
+- **Cloud Service** (`cloud/`) — Go service for OAuth2 consent, billing, metering
+  - Device Code Flow endpoints (`/v1/auth/device/*`)
+  - User info endpoint (`/v1/auth/me`) with JWT claims from Kratos identity
+  - Stripe billing integration (webhook, subscriptions, plan limits)
+  - Consent handler for Hydra login/consent flows
+- **Dashboard** (`cloud/dashboard/`) — React SPA (Vite + Tailwind)
+  - Login, register, verification, profile pages
+  - Overview, projects, environments, team, billing, settings pages
+  - Session-based auth guard (redirects to login when unauthenticated)
+  - Verification banner for unverified email users
+- **Email delivery via Resend HTTP API** — Kratos HTTP courier
+  - DigitalOcean blocks SMTP ports; uses `delivery_strategy: http`
+  - Jsonnet template maps `ctx.recipient/subject/html_body` to Resend API
+  - Requires `--watch-courier` flag on Kratos
+- **Security hardening** (MEET-033)
+  - Password: min 10 chars + HaveIBeenPwned breach check
+  - Cloudflare WAF rate-limiting: 10 login/min, 5 register/min per IP
+  - Account enumeration mitigation (`security.account_enumeration.mitigate: true`)
+- **Content hash deploy** — deploy without git (MEET-028)
+  - Safe tar extraction (Go `archive/tar`, no path traversal/symlinks)
+  - 30 new tests for content hash functions
+- **ArgoCD SYNC_FAILED fix** — 7 root causes resolved (MEET-029)
+  - Callback auth header, leader election hardening, timeout hierarchy
+  - TriggerSync 404 recovery, convergence loop revision check
+- **CI/CD pipeline chain** — push → CI → Build Images → Infra Deploy
+  - Wait-for-CI polling in Build Images
+  - Wait-for-images polling in Infra Deploy
+  - cloud-api + dashboard added to build pipeline
+- **API Gateway** — Traefik path-based routing under `cloud.dev.loopzero.example`
+  - `/self-service/*` → Kratos, `/oauth2/*` → Hydra, `/auth/*` → cloud service
+  - CORS middleware on loopzero-api for cross-origin dashboard calls
+
+### Changed
+- `COMMIT` → `VERSION` in CLI build list/inspect output
+- Deploy error messages use product language (no internal terms)
+- `ReleasePendingTimeout`: 5min → 10min (reaper/convergence race fix)
+
+### Fixed
+- Content hash: `.git` prefix bug excluded `.github/`, `.gitignore`
+- `SourceStore` collapsed from 2 methods to 1 (`PushResult`)
+- `getGitRoot()` stderr leak in non-git directories
+- Dashboard auth: in-memory tokens → sessionStorage → Kratos sessions
+- Kratos `login.after` hooks removed (invalid in v26, caused CrashLoopBackOff)
+
+### Security
+- Safe tar extraction: rejects symlinks, hardlinks, path traversal, decompression bombs
+- Sensitive file detection for non-git projects
+- ArgoCD callback Authorization header (was missing — 401 on every callback)
+- Leader election: stale lock detection + 60s heartbeat + FATAL on loss
+- `loopzero_api_leader_status` Prometheus gauge metric
+
+### Infrastructure
+- Cloudflare Pro plan for WAF rate-limiting
+- DNS A records: `cloud.dev.loopzero.example`, `auth.dev.loopzero.example`
+- Ory Kratos + Hydra deployed on mgmt cluster
+- Resend SMTP secret in GitHub Actions (`LOOPZERO_RESEND_API_KEY`)
+- OAuth secrets: `LOOPZERO_GITHUB_CLIENT_ID/SECRET`, `LOOPZERO_GOOGLE_CLIENT_ID/SECRET`
+
+### Meetings
+- MEET-028: Content hash security rework
+- MEET-029: ArgoCD SYNC_FAILED definitive fix (7 root causes)
+- MEET-030: Production readiness final push plan
+- MEET-031: Email flows implementation
+- MEET-032: Login redirect loop architecture fix
+- MEET-033: Password hardening + Cloudflare WAF
+- MEET-034: Kratos URL consistency fix
+- MEET-035: SMTP NetworkPolicy (superseded by MEET-036)
+- MEET-036: Resend HTTP API for email delivery
+
+### Added
+- CLI command `loopzero team list` to list team members with roles (#cmd-team)
+  - New API routes `GET/POST/DELETE/PATCH /api/v1/teams/members`
+  - TeamStore with ListMembers, AddMember, RemoveMember, UpdateMemberRole, GetUserByUsername
+  - Authorization: owner/admin can add/remove, owner-only for role changes, owner cannot be removed
+  - GitHub username resolution (strips `github-` prefix in all output)
+- CLI command `loopzero team add <username> [--role]` to invite team members (#cmd-team)
+- CLI command `loopzero team remove <username>` with owner protection (#cmd-team)
+- CLI command `loopzero team role <username> <role>` for owner-only role changes (#cmd-team)
+- CLI command `loopzero env list` to list environments for the current team (#cmd-env)
+  - New API route `GET /api/v1/environments` with tenant isolation
+  - New API route `POST /api/v1/environments` to create environments (patches Tenant CRD)
+  - New API route `GET /api/v1/environments/{name}` for environment details
+  - New API route `DELETE /api/v1/environments/{name}` with production protection (403)
+- CLI command `loopzero env create <name>` with reserved name validation (#cmd-env)
+- CLI command `loopzero env delete <name> --confirm <name>` with safety guards (#cmd-env)
+- CLI command `loopzero env inspect <name>` showing active releases per project (#cmd-env)
+- CLI command `loopzero project list` to list all projects in the current team (#cmd-project)
+  - New API route `GET /api/v1/projects` with tenant isolation
+  - New DB query `ListByTenant` returning projects ordered by name
+- CLI command `loopzero project create <name>` to create a project manually (#cmd-project)
+  - Handles 409 (already exists) as idempotent success
+- CLI command `loopzero project inspect <name>` to show project details (#cmd-project)
+  - New API route `GET /api/v1/projects/{name}` with 404 handling
+- CLI command `loopzero build list [--env] [--limit]` to list recent builds for a project (#cmd-build)
+  - New API route `GET /api/v1/projects/{name}/builds` with env filter and pagination
+  - New DB query `ListByProjectAndEnv` with total count
+  - Expanded `BuildStatusResponse` with timestamps, duration, error, apps
+- CLI command `loopzero build inspect <build-id>` to show detailed build info (#cmd-build)
+- CLI command `loopzero cancel <build-id>` to cancel running or queued builds (#cmd-cancel)
+  - Exit codes: 0 success, 1 usage, 3 cancel failed, 4 auth
+  - `--json` output: `{ ok, build_id, status }` on success, `{ code, error, exit_code }` on error
+  - Rule 3 compliant: zero internal terms in any output
+  - 13 unit tests covering all error cases + Rule 3 compliance
+- Cell-Based Architecture Phase 0 implementation (#ADR-0008)
+  - Migration 000011: `cell_id` column on tenants table (DEFAULT 'cell-default', indexed)
+  - `CellID` field added to Tenant CRD spec (+kubebuilder:default="cell-default")
+  - PlacementEngine interface + DefaultEngine (returns "cell-default" for all tenants)
+  - CellRouter interface + PassthroughRouter (resolves any cell_id to current cluster config)
+  - BootstrapHandler wired with PlacementEngine for cell assignment on tenant creation
+  - CellMetricsCollector emits `loopzero_cell_tenant_count` gauge per cell_id (60s interval)
+  - PostgresCellStore with `CellTenantCounts()` query
+  - 9 unit tests for placement package (Engine + Router + interface compliance)
+  - ADR-0008 approved with 5-phase roadmap (Phase 0-4, overview + per-phase plans)
+  - Supersedes ADR-0007 (ArgoCD Application model)
+- Cell Architecture Phase 1 — multi-cell foundation code (#ADR-0008)
+  - ClientManager: lazy-init cached K8s clients per Cell (api/internal/cellmgr/)
+  - SyncClientFactory: per-cell ArgoCD sync client resolution (api/internal/argocd/)
+  - StaticRouter: resolves cell_id from configured CellConfig list
+  - RoundRobinEngine: bin-packing placement with maxPerCell capacity (500 default)
+  - TenantCellQuerier interface + CountByCell/GetTenantCellID in PostgresCellStore
+  - ClusterCredential CRD CellID field (+kubebuilder:validation:Pattern)
+  - ApplicationSpec.CellID passed from TenantController to ArgoCD provisioner
+  - CF KV PutCellRouting/DeleteCellRouting for multi-cell DNS routing
+  - Cell Provisioner Pulumi interfaces (CellConfig/CellOutput/createCell scaffold)
+  - Cell Health Grafana dashboard (6 panels: tenant count, capacity, pods, sync latency, failures, convergence)
+  - 28 new unit tests across placement, cellmgr, argocd packages
+- Database Hardening Phase 1 — MEET-2026-03-31-024 (#MEET-024)
+  - Migration 000009: Role separation (loopzero_api, loopzero_migrate, loopzero_readonly)
+  - Migration 000009: Row-Level Security on all tenant-scoped tables (builds, releases,
+    secrets, projects, environment_targets, tenant_members, audit_log, idempotency_keys)
+  - Migration 000009: CHECK constraints on builds.status and releases.status columns
+  - Migration 000009: Missing indexes (idx_releases_build_id, idx_releases_pending)
+  - Migration 000009: Deferred audit triggers on secrets and tenant_members (COMMIT-time)
+  - Migration 000009: Append-only enforcement trigger on audit_log table
+  - Migration 000010: Pre-written emergency RLS disable (no-op, uncomment if needed)
+  - SET LOCAL app.tenant_id via set_config() inside WithEnvironmentLock for RLS enforcement
+  - Application-level audit logging (AuditLogger interface + AuditAdapter for secret/project ops)
+  - Database health PrometheusRules (pool exhaustion, slow queries, long transactions, RLS denial)
+  - Database Health Grafana dashboard
+  - Runbooks: pool-exhaustion, slow-queries, rls-disable, credential-rotation
+
+### Fixed
+- SetGitCommit failure in container_delivery now fatal — prevents wrong-version activation
+  when SyncCallbackActivator revision guard is bypassed by empty GitCommit (#MEET-024 BUG-03)
+- syncRetriggers memory leak in ReleaseConvergenceLoop — cleanup on activate and fail (#MEET-024 BUG-04)
+- Idempotency key lookup now scoped by tenant_id — prevents cross-tenant response replay (#MEET-024 BUG-01)
+- Secret store Set() race condition: replaced SELECT+INSERT with atomic UPSERT using xmax (#MEET-024 BUG-02)
+- DSN builder default sslmode changed from "disable" to "require" (#MEET-024 H3)
+
+### Security
+- Row-Level Security enforces tenant isolation at database level — defense-in-depth (#MEET-024 C2)
+- Role separation: API connects as loopzero_api (DML only), no DDL access (#MEET-024 C1)
+- Redundant idempotency_keys index dropped (key is already PK) (#MEET-024 DB-05)
+
+- Cross-validation remediation plan and implementation (#MEET-023)
+  - Meeting record with 6 specialist agents (Architect, DistSys, SRE, GitOps, API Domain, Verification)
+  - Executable plan at docs/plans/cross-validation-remediation.md
+  - ADR-0007: ArgoCD Application model evaluation (per-project vs notification scoping)
+  - Leader election guard via pg_try_advisory_lock — prevents duplicate background loops on multi-replica
+  - API scaling runbook at docs/runbooks/api-scaling.md
+  - 7 new Prometheus metrics: drift_detected, release_state_divergence, releases_pending,
+    reconcile_loop_last_success_timestamp, gitops_operation_duration, release_convergence_duration,
+    releasing_builds (was registered, now has PrometheusRule)
+  - 3 new PrometheusRules: LoopZeroOrphanBuild, LoopZeroReleasesPendingStuck, LoopZeroReconcileLoopStale
+  - Post-activation health monitoring for ACTIVE releases (convergence loop extension)
+  - Config cross-field validation: DBMaxConns >= DBMinConns, timeout coherence checks
+  - GoGitGitOpsPusher: alternative GitOps pusher using go-git library (no git CLI subprocess),
+    with exponential backoff, SEC-1 credential handling, and 7 unit tests (#MEET-023 T2-12)
+
+### Fixed
+- Idempotency guard in ActivateReleaseKernel prevents panic when SyncCallbackActivator and
+  ReleaseConvergenceLoop race on the same release (#MEET-023 T0-1)
+- Phantom alert LoopZeroDriftDetected: metric loopzero_drift_detected was referenced in PrometheusRule
+  but never emitted — now registered and wired to health monitor (#MEET-023 T0-2)
+- Convergence loop now retriggers TriggerSync for PENDING releases stuck > 30s with no active
+  ArgoCD sync operation — prevents silent timeout with manual sync policy (#MEET-023 T1-5)
+- Drain-on-shutdown: WaitGroup tracks all 6 background goroutines, waits up to 30s before
+  closing DB pool on SIGTERM (#MEET-023 T1-7)
+
+- Workload protection Phase 1 + Phase 2: defense against broken/unhealthy container images (#MEET-021)
+  - Startup probe on all server/frontend apps (150s max startup, 5s period, 3s timeout)
+  - Readiness probe with thresholds (10s period, 3 failures before removal from Service)
+  - Liveness probe with thresholds (15s period, 5 failures — more tolerant than readiness)
+  - progressDeadlineSeconds: 210s (fail-fast broken deploys, 40s margin over startup)
+  - minReadySeconds: 10s (stabilization window for quick crashes)
+  - Rolling update strategy: maxUnavailable=0, maxSurge=1 (zero-downtime deploys)
+  - PodDisruptionBudget for ALL tenant workloads (server + worker + frontend)
+  - unhealthyPodEvictionPolicy: AlwaysAllow (broken pods never block node drain)
+  - terminationGracePeriodSeconds: 30s (explicit graceful shutdown contract)
+  - 6 new PrometheusRules: CrashLoop (5m), ImagePullFailed, ReplicaMismatch (5m),
+    HighRestartRate, DeployStuck (ProgressDeadlineExceeded), CrashLoopCritical (30m)
+  - 4 ValidatingAdmissionPolicies (K8s native, no Kyverno): restrict registries,
+    disallow :latest, require resource limits, protect platform NetworkPolicies
+  - Build retry skips OOM (exit 137) via retryStrategy.expression (Argo Workflows native)
+- Distributed tracing with Grafana Tempo + OpenTelemetry SDK for deploy flow troubleshooting (#MEET-020)
+  - Grafana Tempo as trace backend (standalone, 7d retention, S3 in prod)
+  - OTel Collector reconfigured: traces exported to Tempo (was debug/discard)
+  - API instrumented with 6 sync span points: build.submit, source.upload, source.push_git, build.workflow_submit, lock.acquire, gitops.push_manifests
+  - HTTP middleware auto-spans with otelhttp (trace context propagation)
+  - Grafana Tempo datasource with trace-to-log correlation
+  - PrometheusRules: LoopZeroTempoDown, LoopZeroTempoStorageHigh, LoopZeroOTelCollectorDown, LoopZeroCollectorExportErrors
+  - ServiceMonitor for Tempo metrics scraping
+  - Feature flag `LOOPZERO_TRACING_ENABLED` (default true dev, false prod)
+  - Graceful degradation: API works without Collector (export timeout 1s, bounded queue)
+
+### Security
+- Replace full admin kubeconfigs with scoped ServiceAccount tokens — API and controller now get minimal RBAC per cluster instead of cluster-admin (#CRIT-02)
+- Replace ESO admin token with scoped ServiceAccount — read-only access to Secrets in platform-system only (#HIGH-04)
+- Fix CF Tunnel secret non-deterministic — was using `crypto.randomBytes()` at program time, causing tunnel recreation on every `pulumi up`. Now reads from Pulumi config (#CRIT-03)
+- Fix hardcoded passwords fail-fast — production deploy now fails immediately if `giteaAdminPassword` or `minioRootPassword` not set (#CRIT-01)
+- Fix tunnel token exposed in pod args — moved to K8s Secret with env var injection (#HIGH-03)
+- Fix Gitea token scope from `all` to minimal `write:repository,write:organization,read:user` (#HIGH-05)
+- Fix ArgoCD placeholder token was literal admin password — changed to invalid placeholder (#HIGH-09)
+- Fix cloudflared Deployment missing securityContext, probes, and non-root enforcement (#MED-11)
+- Fix PostgreSQL NetworkPolicy allowing all egress — restricted to metrics and replication ports (#MED-09)
+- Disable Grafana anonymous Viewer access in production (#MED-08)
+- Fix parseKubeconfig returning empty strings silently — now throws on missing fields (#MED-04)
+- Fix ArgoCD token generation failure was WARN-only — bootstrap Job now fails on token errors (#MED-05)
+- Fix shell injection via `app.Name` in `loopzeroPacksDockerfileStep` — added `ValidateAppName` with RFC-1123 allowlist + `%q` shell quoting as defense-in-depth (#CODE-001)
+- Fix unvalidated build-arg keys flowing into `buildctl --opt` — validates env key format, skips invalid keys (#SEC-002)
+
+### Fixed
+- Fix `GetStatus` swallowing all K8s API errors — now distinguishes `IsNotFound` from transient errors; prevents mass build failures on K8s API blips (#BRC-006)
+- Add panic recovery to reconcile loop goroutines — prevents single corrupted build from crashing entire API process (#BRC-004)
+- Fix `NormalizeApp` failure leaving build QUEUED for 5 minutes — now calls `failQueuedBuild` immediately (#BRC-001)
+- Fix Go/Python cache dirs pointing to `/root/.cache` while containers run as uid 1000 — caches now use `/workspace/.cache/` (#CODE-005)
+- Fix static asset manifest truncated at 100 files — removed `head -100` limit (#CODE-003)
+- Fix asset manifest JSON corruption on filenames with special characters — proper escaping (#CODE-006)
+- Pin `imageLoopZeroPacks` from `:latest` to `v0.1.0` — deterministic builds (#COMP-004)
+
+### Removed
+- Remove dead compute provider (`IProviderCompute`, `DigitalOceanComputeProvider`, `contracts/compute.ts`) — zero call sites (#MED-02)
+
+### Changed
+- E2E failure scenario tests and chaos tests changed from Skip() to Pending (PIt) — shows yellow instead of false green (#HIGH-07)
+- Container registry creation uses factory abstraction instead of direct DO import (#MED-01)
+- API and controller image references use `infra.registryEndpoint` instead of hardcoded constant (#HIGH-08)
+- Traefik Helm release name uses `${role}-traefik` instead of hardcoded `mgmt-traefik` (#MED-06)
+- Bootstrap Job run-id uses deterministic `env-version` instead of `Date.toISOString()` (#MED-07)
+- `provision-api-tokens.sh` Gitea username aligned to `gitea_admin` and namespace parameterized (#HIGH-06, #MED-12)
+- Centralize DO Spaces endpoint in `InfraOutputs.spacesEndpoint` — replaces 5 inline constructions (#MED-10)
+- Pipeline Step 2 reads REGISTRY from Pulumi output instead of hardcoded constant (#PIPELINE-01)
+- CF Worker deploy step now fails the pipeline on error instead of silently continuing (#PIPELINE-02)
+
+### Added
+- PodDisruptionBudget for LoopZero API (`minAvailable: 1`) — prevents both pods being evicted during drain (#HIGH-02)
+- NetworkPolicies for production (platform-system namespace) — default deny ingress + per-component rules (#HIGH-01)
+- Auto-generate `tunnelSecret` in Pulumi config on first deploy — no manual pre-setup needed (#PIPELINE-03)
+- Create `loopzero-logs` Spaces bucket via Pulumi — Loki log storage bucket was missing (#PIPELINE-04)
+- Import `loopzero-logs` bucket in pipeline pre-step (survives destroy cycles) (#PIPELINE-04)
+- Build `loopzero-packs-runner` image in infra-deploy Step 2 — was only in build-images.yml, missing from destroy+recreate (#PIPELINE-05)
+- Update CWTs + BuildKit registry credentials in infra-deploy Step 2 — fully self-contained pipeline (#PIPELINE-06)
+- Security scan is now a build gate — generate-dockerfile depends on security-scan completion (#CODE-008)
+- Python security scan now runs after install-deps, not in parallel — pip-audit scans installed packages (#CODE-002)
+- cwt-clone.yaml uses minio/mc base image instead of runtime wget — eliminates supply chain risk (#SEC-004)
+- Extract `naming.ImageTag()` — single source of truth for image tag format, replaces 4 duplicate sites (#ARCH-001)
+- Add `DispatchingDeliveryActivator` — selects container vs static delivery based on app type (#ARCH-009)
+- Add activation retry limit (max 3 attempts) — fails build immediately instead of 10-minute reaper wait (#BRC-003)
+- Fix duplicate `deploy.sync_failed` SSE events — `ErrActivationAlreadyHandled` sentinel prevents double emit (#BRC-002)
+- ArgoCD sync client supports CA cert file for proper TLS verification — `CACertPath` config replaces `InsecureSkipVerify` (#SEC-T02b)
+
+### Added
+- CI build job for loopzero-packs-runner — was missing, absence breaks all deploys (#COMP-003)
+- Build pod NetworkPolicy — default-deny egress with allowlist for DNS, MinIO, registry, packages (#SEC-009)
+- Document ParseArgoAppName limitation for hyphenated env names, TODO for Sprint 5 labels (#ARCH-002)
+- Unit tests for StaticDeliveryActivator — 3 tests covering nil KV client, release creation, SSE events (#COMP-007)
+
+### Removed
+- Remove 3 deprecated `scriptDockerfile*` functions — dead code with `//nolint:unused` (#COMP-005)
+- Remove `cwt-summary.yaml` — ClusterWorkflowTemplate deployed but never called by WorkflowBuilder (#COMP-006)
+
+### Previously Fixed
+- ArgoCD notifications config moved from `configs:` to root level in Helm values — was being silently ignored by argo-cd chart (#MEET-015-IaC)
+- Pulumi `installArgoCD()` now includes full config: RBAC, accounts, notifications, metrics, security contexts — was deploying with minimal inline values (#MEET-015-IaC)
+- Gitea bootstrap Job uses `deleteBeforeReplace` + `replaceOnChanges` — fixes `pulumi up` failure when TTL garbage-collects completed Job (#MEET-015-IaC)
+- Bootstrap Job image pinned from `bitnami/kubectl:latest` to `bitnami/kubectl:1.31` — deterministic builds (#MEET-015-IaC)
+- Loki cross-cluster URL resolved by Pulumi via `@pulumi/command` — eliminates post-deploy `kubectl patch` on ConfigMap (#MEET-015-IaC)
+- `project delete` now removes GitOps manifests even when no `environment_targets` rows exist — prevents orphaned pods after delete (#F-03)
+- Cloudflare API token secret created on ALL clusters with cert-manager, not just mgmt — fixes TLS certificate issuance on runtime cluster (#F-04)
+
+### Added
+- Orphan resource protection Phase 1: ArgoCD `controller.operation.processing.timeout: 300`, `SyncClient.TerminateOperation()`, `ErrSyncOperationInProgress` typed error, circuit breaker 409 exclusion, `triggerSyncWithRetry` terminates stuck ops, convergence loop terminates on timeout (#MEET-019)
+- Meeting record MEET-2026-03-27-012: ArgoCD deploy reliability architecture decision (#MEET-012)
+- Dogfood fix roadmap: 12 tasks across 4 sprints to resolve all findings from 2026-03-27 audit (#DF-ROADMAP)
+- `ProjectDeleter` now cancels running Argo Workflows during project deletion via `WorkflowCanceller` (#DF-2.1)
+- `CancelActiveBuilds` returns workflow IDs via `RETURNING` clause for Argo cancellation (#DF-2.1)
+- CLI deploy renderer handles `deploy.delivering`, `deploy.verifying`, `deploy.live` SSE events — eliminates 5-10 min feedback black hole (#MEET-012-1.5)
+- Release Convergence Loop: async verification of PENDING releases via ArgoCD polling, decouples Phase D from build reconcile loop (#MEET-012-1.1)
+- `FindPendingReleases` on `ReleaseStore` for convergence loop queries (#MEET-012-1.1)
+- Deep health check: `/api/v1/health/deep` now verifies ArgoCD + Gitea connectivity (not just PostgreSQL) (#MEET-012-1.3)
+- `HTTPServiceChecker` and `ServiceHealthChecker` interface for pluggable health probes (#MEET-012-1.3)
+- `GetSyncRevision` on `SyncClient` returns the git revision ArgoCD synced — prevents silent wrong-version activation (#MEET-012-1.2)
+- `CircuitBreakerSyncClient` now delegates `GetAppStatus` and `GetSyncRevision` to inner client — fixes silent skip of health/revision checks in production (#AUDIT-2026-03-28)
+- `buildkit-registry-config` secret provisioned by CI pipeline (`build-images.yml`) — fixes build-image pods stuck in PodInitializing on DO (#AUDIT-2026-03-28)
+- Wire `StatusHandler` into API server — `GET /api/v1/projects/{name}/status` now available (#DOGFOOD-F05)
+- `StatusBuildStoreAdapter` and `StatusReleaseStoreAdapter` in adapters to bridge DB stores to status handler (#DOGFOOD-F05)
+- Build cluster secrets patching in `update-cross-cluster-ips.sh` — `loopzero-gitea-credentials` and `loopzero-minio-credentials` now auto-updated (#DOGFOOD-F01)
+- Wire `ProjectDeleter` into API server — `DELETE /api/v1/projects/{name}` now functional with full orchestration (#DOGFOOD-F03)
+
+### Fixed
+- ArgoCD sync policy contradiction: operator provisioner changed from `selfHeal: true` (auto-sync) to `automated: null` (manual sync), matching spec, Helm template, and tests (#MEET-012-0.1)
+- Rollback ArgoCD app name: changed from `ProjectName` to `TenantID`, fixing silent rollback failure on every call (#MEET-012-0.2)
+- Rollback sync failure no longer swallowed: returns error instead of logging warning, preventing false success reports (#MEET-012-1.4)
+- Rollback legacy path uses `TenantID` instead of `ProjectName` for ArgoCD app name (#MEET-012-1.4)
+- Commit SHA verification after ArgoCD sync: `phaseDVerify` checks `status.sync.revision` matches expected commit (#MEET-012-1.2)
+- Container image path flattened from 3-level (`{tenant}/{project}/{app}`) to 2-level (`{tenant}/{project}-{app}`) — DO Container Registry rejects nested repos beyond 2 levels (#AUDIT-2026-03-28)
+- Build cluster MinIO credentials changed from local endpoint to DO Spaces endpoint in Pulumi bootstrap (#AUDIT-2026-03-28)
+- Stale Cloudflare DNS A record (24.144.69.42) for api.dev.loopzero.example removed — was causing intermittent connectivity (#AUDIT-2026-03-28)
+- `failRollback` used State constant (`ROLLBACK_FAILED`) instead of Event constant (`RollbackFailed`) — would panic on real PostgreSQL store (#AUDIT-2026-03-28)
+- BuildKit insecure registry: generate `buildkitd.toml` with `http = true` for local dev registry, fixing HTTPS→HTTP push error (#DF-1.1b)
+- BuildKit entitlement: add `--allow-insecure-entitlement security.insecure` to buildkitd daemon when `RegistryInsecure=true` — unblocks all local builds (#DF-1.1)
+- `loopzero logs --build <id>` no longer requires loopzero.yaml — build ID is globally unique and sufficient (#DF-3.1)
+- `loopzero logs` error message now suggests where to find the build ID (#DF-3.3)
+- Commander.js validation errors (missing args/options) now respect `--json` flag via `exitOverride()` (#DF-3.2)
+- Operator crash on DO: graceful fallback when MinIO admin credentials absent — DO Spaces uses SPACES_ACCESS_KEY_ID (#DOGFOOD-DO-01)
+- Missing `BASE_DOMAIN` env var in Pulumi tenant-controller deployment (#DOGFOOD-DO-02)
+- Build logs endpoint returns 200 with empty entries when Loki is unavailable instead of 500 (#DOGFOOD-F04)
+- CLI deploy build failure now includes `build_id` and `suggestion` in JSON error response (#DOGFOOD-F02)
+- CLI deploy `--no-wait` human mode now shows `Track with: loopzero logs --build <id>` (#DOGFOOD-F10)
+- CLI deploy avoids "Build failed: Build failed" message duplication when API error already contains prefix (#DOGFOOD-F02)
+- CLI init `exitWithError` now includes typed `code` field in JSON responses: `AUTH_REQUIRED`, `NOT_GIT_REPO`, `CI_REQUIRES_YES`, `FILE_EXISTS` (#DOGFOOD-F09)
+
+### Changed
+- ArgoCD `RealProvisioner.EnsureAppProject` and `EnsureApplication` now distinguish NotFound from transient errors (#OPERATORS-REVIEW)
+- `TenantReconciler.runSteps` re-fetches resource before status update to avoid stale resourceVersion conflicts (#OPERATORS-REVIEW)
+- `EnvironmentReconciler` step runner applies same re-fetch pattern on error path (#OPERATORS-REVIEW)
+- MinIO `EnsureTenantCredentials` checks if user exists before generating new secret key, preventing credential rotation on every reconcile (#OPERATORS-REVIEW)
+- `ExposureController` uses 5-minute probe interval when route is Reachable (was 30s always), reducing reconcile load by ~10x (#OPERATORS-REVIEW)
+- Internal HTTP clients (ArgoCD, Gitea, API) now include `InsecureSkipVerify` for in-cluster self-signed TLS (#OPERATORS-REVIEW)
+- `ensureRepoCredentialSecret` uses `CreateOrUpdate` instead of Get+Create, enabling credential rotation (#OPERATORS-REVIEW)
+- Extracted `BuildCredentials` struct from `TenantReconciler` — credential management separated from reconciliation logic (#OPERATORS-REVIEW)
+- Docker config.json from DO API now validated for `auths` + `auth` field structure (#OPERATORS-REVIEW)
+- Extract image version constants (`imageNode`, `imageGolang`, `imagePython`, `imageAlpine`, `imageBuildKit`) — single source of truth for build images (#FORGE-REVIEW)
+- Replace manual `dockerfileDir`/`dockerfileName` with `filepath.Dir`/`filepath.Base` from stdlib (#FORGE-REVIEW)
+- Eliminate 90% code duplication between `buildkitTemplateForApp` and `buildkitTemplateFromPlan` via shared `buildkitContainer` function (#FORGE-REVIEW)
+- Sort map iteration in `paramsToForge` and BuildKit `buildArgs` for deterministic workflow YAML (#FORGE-REVIEW)
+- Add `slog.Warn` when `ResolveStrategy` falls back to custom strategy for unrecognized frameworks (#FORGE-REVIEW)
+
+### Removed
+- Dead condition types: `TypeNamespacesReady`, `TypeRBACReady`, `TypeNetworkPolicyReady`, `TypePlatformSecretsReady` (#OPERATORS-REVIEW)
+- Dead reason constants: `ReasonTimeout`, `ReasonInProgress`, `ReasonCreated`, `ReasonDeleting` (#OPERATORS-REVIEW)
+- `internal/naming/` proxy package — controllers import `pkg/naming` directly (#OPERATORS-REVIEW)
+- Condition re-exports from `api/v1/groupversion_info.go` (`ConditionX` constants and `SetCondition` var) (#OPERATORS-REVIEW)
+- `giteaBootstrapClient` type alias — replaced with direct `gitea.BootstrapClient` usage (#OPERATORS-REVIEW)
+- Package-level `doHTTPClient` global — replaced by `BuildCredentials.HTTPClient` field (#OPERATORS-REVIEW)
+
+### Added
+- Cloudflare Worker for static frontend delivery — serves assets from DO Spaces via CF edge, zero pods for static apps (#SPRINT-10)
+- `cfkv` package — Cloudflare Workers KV client for routing table writes (#SPRINT-10)
+- Automatic KV routing entry write on build completion for `render: static` apps (#SPRINT-10)
+- DO Spaces CDN endpoint + public-read ACL for static assets (#SPRINT-10)
+- Security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) in CF Worker responses (#SPRINT-10)
+- SPA fallback routing in CF Worker — deep links serve index.html (#SPRINT-10)
+- `CF_API_TOKEN`, `CF_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID` config vars for API (#SPRINT-10)
+- BuildKit build engine as alternative to Kaniko — sidecar pattern with rootless `buildkitd` + `buildctl`, OCI registry cache (`--import-cache`/`--export-cache mode=max`), digest via `--metadata-file` JSON parsing (#BUILDKIT-MIGRATION)
+- `UseKaniko` feature flag (`USE_KANIKO` env var, default `true`) — allows gradual migration and instant rollback to Kaniko during transition (#BUILDKIT-MIGRATION)
+- `buildkit-registry-config` Secret in TenantController — registry credentials for BuildKit push, coexists with Kaniko's `docker-config` during migration (#BUILDKIT-MIGRATION)
+- `ParseBuildKitDigest()` — deterministic digest extraction from BuildKit metadata JSON with strict `sha256:` prefix validation (#BUILDKIT-MIGRATION)
+- `loopzero deploy --no-cache` flag — forces full rebuild without BuildKit layer cache, useful for debugging stale cache issues (#BUILDKIT-MIGRATION)
+- 24 unit tests covering BuildKit template generation, sidecar pattern, security context, resource limits, cache flags, no-cache, multi-app isolation, digest parsing, DOKS compatibility (seccomp, apparmor, rootlesskit) (#BUILDKIT-MIGRATION)
+
+### Removed
+- Kaniko build engine — completely replaced by BuildKit with rootless sidecar pattern (#BUILDKIT-MIGRATION)
+- `kanikoTemplateForApp()` function and all Kaniko container template generation code (#BUILDKIT-MIGRATION)
+- `UseKaniko` feature flag from `InfraParams`, `Config`, `WorkflowSubmitterConfig`, and `USE_KANIKO` env var (#BUILDKIT-MIGRATION)
+- `docker-config` Secret from TenantController — replaced by `buildkit-registry-config` (#BUILDKIT-MIGRATION)
+- `docker-config` volume from Workflow CR — replaced by `buildkit-registry-config` + `buildkit-socket` volumes (#BUILDKIT-MIGRATION)
+- `kaniko:` configuration section from Helm values.yaml (#BUILDKIT-MIGRATION)
+- Apache License 2.0 — LICENSE file, SPDX headers on all 295 source files (.go + .ts), license field in package.json (#CNCF-PREP)
+- SECURITY.md — vulnerability disclosure policy with severity-based response timelines (#CNCF-PREP)
+- CONTRIBUTING.md — development setup, PR checklist, coding standards, DCO sign-off (#CNCF-PREP)
+- CODE_OF_CONDUCT.md — adopted CNCF Code of Conduct v1.3 (#CNCF-PREP)
+- GOVERNANCE.md — roles (contributor/reviewer/maintainer), decision process, dispute resolution (#CNCF-PREP)
+- MAINTAINERS.md — maintainer list with organizational affiliation (#CNCF-PREP)
+- RELEASES.md — release process, versioning strategy, artifact list, support policy (#CNCF-PREP)
+- .github/CODEOWNERS — automated review assignment per component (#CNCF-PREP)
+- Grafana Loki + Promtail infrastructure for build log aggregation — Loki (single binary, MinIO S3 backend) on mgmt cluster, Promtail (DaemonSet) on build cluster collecting Argo Workflows pod logs (#SPRINT-6A)
+- `GET /api/v1/builds/{id}/logs` endpoint — queries Loki via LogQL with `?tail=N` and `?step=<name>` filtering, tenant isolation enforced (#SPRINT-6A)
+- `loopzero logs --build <id>` CLI command — displays build output with step-prefixed lines, `--json` output, `--tail`, `--step`, `--follow` flags (#SPRINT-6A)
+- Pod retention policy (4h) on Argo Workflows — gives Promtail time to ship logs before pod GC (#SPRINT-6A)
+- Loki data source auto-configured in Grafana — build logs queryable via Grafana Explore (#SPRINT-6A)
+- `POST /api/v1/projects/{name}/rollback` endpoint — rollback orchestrator with environment lock, release state machine reactivation, gitops manifest restore from git history (#SPRINT-6B)
+- `loopzero rollback` CLI command — reverts to previous release with `--to <id>`, `--env`, `--json`, `--yes` flags, migration warning displayed (#SPRINT-6B)
+- Release state machine: SUPERSEDED/ROLLED_BACK → ACTIVE reactivation via `Reactivated` event (#SPRINT-6B)
+- ReleaseStore: GetPreviousRelease, GetByIDForTenant, ListByEnv methods for rollback target resolution (#SPRINT-6B)
+- GitOps reader: GetManifestsAtCommit fetches manifest YAML from Gitea git history at specific commit (#SPRINT-6B)
+- `POST /api/v1/secrets` endpoint — create/update secrets with name validation (uppercase), value never in response (#SPRINT-6C)
+- `DELETE /api/v1/secrets/{name}` endpoint — remove secrets with tenant isolation (#SPRINT-6C)
+- `loopzero secret set/list/delete` CLI commands — manage secrets via CLI, value never visible in output (#SPRINT-6C)
+
+### Removed
+- LoopZeroBuild CRD and BuildReconciler — build state owned exclusively by PostgreSQL (ADR-0006)
+- LoopZeroRelease CRD and ReleaseReconciler — release state owned exclusively by PostgreSQL (ADR-0006)
+
+### Fixed
+- Tenant CRD creation now fails loudly with HTTP 503 instead of silent log — prevents deploys without infrastructure (ADR-0006)
+
+### Added
+- LoopZeroApplication CRD + ApplicationController — auto-assigns hostname via `naming.Hostname()`, creates ExposedRoute CR with ownerReference, tracks phase (Progressing/Serving/Reachable/Degraded/Down), sets conditions (ServiceResolved, IngressReady, CertificateIssued, RouteReachable, ApplicationHealthy) (#MEET-2026-03-24-004)
+- ExposedRoute CRD + ExposureController — manages DNS/TLS exposure with cert-manager secret detection, HTTP reachability probes (30s cadence), consecutive failure tracking (Failed after 5), phase lifecycle (Pending/CertIssued/Reachable/Failed) (#MEET-2026-03-24-004)
+- Internal `POST /internal/bootstrap` endpoint — seeds admin user, system tenant, and membership records for platform bootstrap. Idempotent via ON CONFLICT DO NOTHING (#MEET-2026-03-24-001)
+- Per-tenant MinIO credential isolation — TenantController now provisions scoped MinIO users with bucket policies restricting access to `loopzero-builds/{tenantID}/*` only (#MULTI-CLUSTER-MINIO)
+- Phase 3 (exposePlatform) — creates DNS records for management subdomains (api, argocd, grafana) and runtime wildcard (*.{domain}) (#PULUMI-PHASE3)
+- DNS record type auto-detection (A for IPv4, AAAA for IPv6, CNAME for hostnames) in DigitalOcean provider (#PULUMI-DNS-FIX)
+- TLS via Let's Encrypt — ClusterIssuer (ACME HTTP-01) + Certificate + IngressRoute for ArgoCD, Gitea, Grafana, API on mgmt cluster. Auto-provisioned in Phase 2 bootstrap (#PULUMI-TLS)
+- Gitea moved from dedicated VM to mgmt cluster — StatefulSet + PVC (10Gi) + managed PostgreSQL backend. Removes Droplet, adds Helm chart in Phase 2. Accessible at git.{domain} (#PULUMI-GITEA-K8S)
+- Unit test suite for infra/pulumi — 32 tests covering naming, tags, errors, node resolution, and DNS detection (#PULUMI-TESTS)
+- GitHub Actions pipeline for Pulumi infrastructure: `infra-preview.yml` (PR preview with comment), `infra-deploy.yml` (develop→dev auto, main→prod with approval gate), workflow_dispatch for manual operations (#PULUMI-PIPELINE)
+- `test-pulumi` job in CI gate — typecheck + vitest on every push (#PULUMI-PIPELINE)
+- Prometheus + Grafana on mgmt cluster — Prometheus (server + kube-state-metrics + node-exporter, 15d retention), Grafana with pre-configured Prometheus datasource, K8s cluster/node/pod dashboards, anonymous viewer access, and execution state tracking (#PULUMI-OBSERVABILITY)
+- DigitalOcean Container Registry provisioned via Pulumi (starter tier, 500MB) with execution state tracking and wiring output (#DEPLOY-REGISTRY)
+- GitHub Actions workflow `build-images.yml` — builds and pushes loopzero-api and tenant-controller images to DO registry on develop/main push, with automatic DOKS-registry integration (#DEPLOY-IMAGES-CI)
+
+### Changed
+- Pulumi state backend changed from Pulumi Cloud to DigitalOcean Spaces (S3-compatible) — eliminates vendor lock-in, keeps state under our control, uses infrastructure we already pay for (#PULUMI-S3-BACKEND)
+
+### Fixed
+- TenantController multi-cluster test compilation — suite_test.go and operatortest/setup.go updated to pass buildClient and runtimeClient to SetupTenantController after signature expansion (#MULTI-CLUSTER-TEST-FIX)
+- MinIOProvisioner and MinIOEndpoint not propagated in SetupTenantController — fields were declared on TenantReconciler but never wired from config (#MULTI-CLUSTER-MINIO)
+- DNS record for `git` subdomain pointing to runtime cluster instead of management cluster — added `git` to `MGMT_SUBDOMAINS` so it resolves to mgmt ingress where Gitea runs (#PULUMI-GIT-DNS)
+- Gitea CrashLoopBackOff caused by missing `gitea` database — managed PostgreSQL only creates `defaultdb`, now explicitly provisions `gitea` via `digitalocean.DatabaseDb` (#PULUMI-GITEA-DB)
+- ArgoCD and Gitea services unreachable via IngressRoute (HTTP 404) — Pulumi Helm provider adds hash suffix to release names, causing Service name mismatch. Added `fullnameOverride` for deterministic names matching IngressRoute references (#PULUMI-HELM-NAMES)
+- DigitalOcean DNS provider hardcoded CNAME type — fails when LB returns IP (common on DO). Now auto-detects A vs CNAME (#PULUMI-DNS-FIX)
+- Traefik Service lookup may fail due to Helm chart naming template — added fullnameOverride for deterministic K8s Service names (#PULUMI-TRAEFIK-FIX)
+
+### Changed
+- **BREAKING**: `SubmitBuild` workflow submission moved OUTSIDE the advisory lock — lock now only covers build record creation (QUEUED). Workflow submit, status transition to RUNNING, and SSE emission happen after lock release. Reduces lock hold time from ~7s (Argo retry) to <100ms (#REVIEW-BLOCKER-1)
+- Build state machine: added `QUEUED + BuildFailed → FAILED` transition — allows immediate failure on workflow submit error instead of waiting 5min queue timeout (#REVIEW-BLOCKER-1)
+- `BuildReconcileLoop.reconcile()` changed from blocking `wg.Wait()` to fire-and-forget with non-blocking semaphore — next ticker tick can dispatch new builds even while previous ones wait on ArgoCD sync. Reduces P99 activation latency from 125s to ~5s (#REVIEW-MOD-2)
+- **BREAKING**: CWT `loopzero-clone` image changed from `alpine/git:2.43.0` to `minio/mc:RELEASE.2024-01-16T16-06-34Z` — source bundle download now uses authenticated S3 protocol (`mc cp`) instead of unauthenticated HTTP (`wget`). MinIO bucket no longer needs to be public-read. Git installed via apk for bundle unpack (#REVIEW-SEC-MINIO, #REVIEW-MOD-3)
+- Python `BuildStep` resources increased from `resourcesSmall` (256Mi limit) to `resourcesMedium` (2Gi limit) — prevents OOMKill when compiling C extensions (numpy, pandas, tensorflow) (#REVIEW-LEVE-1)
+- Removed unused `manifests` emptyDir volume (256Mi) from workflow spec and `buildContainer()` mount list — vestige of C-02 migration where manifest generation moved to API (#REVIEW-LEVE-3)
+- Argo Workflows controller resources increased from 500m/256Mi to 2CPU/1Gi — sized for 32 workflowWorkers with 50+ concurrent builds generating ~400 pods (#REVIEW-MOD-1)
+- Argo Server service changed from NodePort (30081) to ClusterIP — UI gives full admin access, no longer externally reachable; use `kubectl port-forward` (#REVIEW-SEC-ARGO)
+- Workflow TTL after success increased from 1h to 4h — enables post-deploy debugging without losing the Workflow CR. Failure TTL unchanged at 24h (#REVIEW-LEVE-2)
+- **BREAKING**: Kaniko image destination changed from `{registry}/{tenant}/{project}:{sha}` to `{registry}/{tenant}/{project}/{app}:{sha}` — each app in a monorepo gets its own independent image build via per-app Kaniko DAG tasks. Multi-app Dockerfiles use `Dockerfile.{app}` naming (#REVIEW-MOD-4)
+- Per-tenant MinIO credential provisioning via `AdminProvisioner` — TenantController creates MinIO users with S3 policies scoped to `loopzero-builds/{tenantID}/*` only. Eliminates shared credentials between tenants (spec §17.2, §17.4) (#REVIEW-BLOCKER-3)
+- **BREAKING**: Mixed-language monorepos now supported — apps are grouped by framework, each language group gets independent validate/install/build/scan/dockerfile DAG steps with language suffix (e.g., `install-deps-node`, `install-deps-go`). Replaces single-strategy `resolveStrategyFromApps` (#REVIEW-AP-3)
+
+### Added
+- `operators/internal/minio/provisioner.go` — `CredentialProvisioner` interface + `AdminProvisioner` implementation using MinIO Admin API. Creates per-tenant users with scoped bucket policies. Credentials stored as K8s Secrets in `build-{tenant}` namespace (#REVIEW-BLOCKER-3)
+- `CircuitBreakerWorkflowSubmitter` — wraps `WorkflowSubmitter` with circuit breaker for `Submit` operations. Opens after 3 consecutive Argo API failures, closes after 2 recovery probes. `Cancel` and `GetStatus` bypass the breaker (best-effort/read-only). Prevents 70s of wasted retries when build cluster is down (#REVIEW-MOD-5)
+- `failQueuedBuild()` method on `BuildOrchestrator` — immediately transitions QUEUED builds to FAILED when workflow submission fails outside the lock, emits SSE `build.failed` event (#REVIEW-BLOCKER-1)
+- `build-egress-restrict` NetworkPolicy on per-tenant build namespaces — restricts egress to DNS (53), MinIO (9000), container registry (5000/443), and K8s API (6443). Prevents source code exfiltration via malicious Dockerfiles (spec §17.1 threat model) (#REVIEW-BLOCKER-NETPOL)
+- `ReleaseReaper` background goroutine — finds releases stuck in READY (>5min) or PENDING (>ArgoCD timeout) and transitions them to GIT_MIRROR_FAILED or SYNC_FAILED with SSE notification (#PIPELINE-RELEASE-REAPER)
+- `ValidateAppPath` function in `api/internal/validation/` — rejects path traversal, absolute paths, and shell metacharacters in app.path from build requests (#PIPELINE-SEC-3)
+- `minio.insecure` value in Argo Workflows Helm chart — parametrizes TLS verification for MinIO connections in cache and clone CWTs (#PIPELINE-MOD-6)
+- `loopzero project delete <name>` CLI command with `--env`, `--yes`, `--json` flags — removes project resources from K8s via ArgoCD pruning (#PROJECT-DELETE)
+- `DELETE /api/v1/projects/{name}` and `DELETE /api/v1/projects/{name}/environments/{env}` API endpoints (#PROJECT-DELETE)
+- `ProjectDeleter` service orchestrating project deletion: lock-scoped build cancellation + target deletion, then GitOps removal outside lock (BLOCKER-2 pattern) (#PROJECT-DELETE)
+- `GitOpsPusher.Remove` method for idempotent removal of project manifests from tenant GitOps repo (#PROJECT-DELETE)
+- `ErrProjectNotFound` typed error with `PROJECT_NOT_FOUND` code (HTTP 404) (#PROJECT-DELETE)
+- `ProjectStore.GetByName` and `ProjectStore.DeleteProject` for project lookup and removal (#PROJECT-DELETE)
+- `BuildStore.CancelActiveBuilds` for bulk-cancelling QUEUED/RUNNING builds during project deletion (#PROJECT-DELETE)
+- `EnvironmentTargetStore.ListByProject` and `DeleteTarget` for environment lifecycle management (#PROJECT-DELETE)
+
+### Fixed
+- `ReleaseReaper` implemented but not wired in `main.go` — releases stuck in READY/PENDING past timeout accumulated indefinitely; now started as background goroutine with configurable timeouts via `RELEASE_READY_TIMEOUT`, `RELEASE_PENDING_TIMEOUT`, `RELEASE_REAPER_INTERVAL` env vars (#WIRING-RELEASE-REAPER)
+- WorkflowSubmitter integration tests failed when build cluster namespace `build-acme` didn't exist — `skipIfNoBuildCluster` now verifies cluster connectivity with 3s timeout and `ensureNamespace` helper creates per-tenant namespaces before test runs (#TEST-WORKFLOW-NS)
+- Build pipeline clone step depended on Gitea (cross-cluster) — replaced with MinIO source bundle download, eliminating Gitea as SPOF for builds (#PIPELINE-BLOCKER-1)
+- Workflow `VolumeClaimTemplates` created PVCs that leaked storage under load — replaced with `emptyDir` volumes with `sizeLimit`, auto-cleaned on pod termination (#PIPELINE-BLOCKER-2)
+- Dead CWTs (`loopzero-notify`, `loopzero-kaniko`, `loopzero-manifests-generate`, `loopzero-manifests-validate`) still deployed in build cluster — removed (#PIPELINE-BLOCKER-3)
+- All tenants shared the `argo` namespace for builds — `WorkflowSubmitter` now uses `build-{tenantID}` namespace, making per-tenant ResourceQuotas effective (#PIPELINE-MOD-2)
+- Cache CWTs used `amazon/aws-cli` (~200MB) for MinIO operations — replaced with `minio/mc` (~30MB) for faster image pull on cache hit path (#PIPELINE-MOD-4)
+- Cache CWTs had `--no-verify-ssl` hardcoded — now parametrized via `minio.insecure` Helm value (#PIPELINE-MOD-6)
+- Failed workflow TTL was 6h — increased to 24h for production debugging (#PIPELINE-LEVE-3)
+- `app.Path` from build requests was not validated — path traversal and shell injection now rejected at API boundary (#PIPELINE-SEC-3)
+- `loopzero init --name "My Project!@#"` accepted names with special chars that break K8s namespace (RFC 1123) — now ALWAYS sanitizes project name to lowercase/hyphens/max 63 chars, with `sanitized_from` in JSON output (#DOGFOOD-F01)
+- `loopzero login` auth failure message gave no guidance on how to get a new token — now includes actionable next step ("Generate a new token at your account settings") (#DOGFOOD-F02)
+- CWTs corrected in repo but not applied to running build cluster — applied via `kubectl apply` (#DOGFOOD-F04)
+- Old deployments from previous dogfood projects remain in CrashLoopBackOff — confirmed per-Deployment health check correctly ignores degraded apps from other projects; ArgoCD "Degraded" is cosmetic, not blocking. Cleanup requires future `loopzero project delete` feature (#DOGFOOD-F03)
+- Kaniko CWT had `--insecure` and `--skip-tls-verify` hardcoded — flags are now conditionally added by WorkflowBuilder only when `RegistryInsecure=true`; CWT is secure by default (#BUILD-BLOCKER-1)
+- Gitea token visible in plaintext in Workflow CR parameters — moved to K8s Secret `loopzero-gitea-credentials` via `envFrom`; token no longer appears in `kubectl get wf -o yaml` (#BUILD-BLOCKER-2)
+- BuildReconcileLoop processed builds serially — one slow ArgoCD sync (120s) blocked all other builds; now processes up to 10 builds concurrently via semaphore pattern (#BUILD-BLOCKER-3)
+- Manifest renderer used `fmt.Sprintf` string concatenation — special chars in values corrupted YAML; rewritten with typed Go structs + `sigs.k8s.io/yaml` serialization (#BUILD-MOD-1)
+- Manifest renderer produced non-deterministic YAML from `map[string]string` iteration — `sigs.k8s.io/yaml.Marshal` sorts map keys, eliminating unnecessary GitOps diffs (#BUILD-MOD-5)
+- Cache CWTs used `python2.7` (EOL since 2020) for tar operations — replaced with standard `tar` command (#BUILD-MOD-2)
+- BuildReaper and ReconcileLoop competed on the same builds — reaper now checks `IsProcessing()` to skip builds under active reconciliation (#BUILD-MOD-6)
+- Go Dockerfile generator used generic `go build ./...` — now targets `./cmd/...` or app-specific path (#BUILD-LEVE-1)
+- Node.js Dockerfile had insecure fallback `npm install --production` when `npm ci` failed — removed fallback to enforce lockfile integrity (#BUILD-SEC-4)
+- IngressRoute used `certResolver: letsencrypt` but infra uses self-signed CA — changed to `tls: {}` to reference default TLSStore (#BUILD-LEVE-2)
+- Security scans (npm audit, govulncheck, pip-audit) were warning-only — now exit non-zero on vulnerabilities (#BUILD-LEVE-3)
+- Workspace PVC was 2Gi — increased to 5Gi to accommodate large monorepos with node_modules (#BUILD-LEVE-4)
+- Clone CWT had no retry strategy — added retry (2 attempts, exponential backoff) for transient network failures (#BUILD-CLONE-RETRY)
+
+### Added
+- `loopzero-gitea-credentials` Secret template in Argo Workflows Helm chart — Gitea credentials injected via `envFrom` instead of workflow parameters (#BUILD-BLOCKER-2)
+- `gitea.url` and `gitea.token` values in Argo Workflows Helm chart (#BUILD-BLOCKER-2)
+- `MaxConcurrent` config for BuildReconcileLoop — bounds concurrent Kubernetes API calls (default 10) (#BUILD-BLOCKER-3)
+- `BuildReconcileChecker` interface — allows BuildReaper to coordinate with ReconcileLoop (#BUILD-MOD-6)
+- `IsProcessing()` method on BuildReconcileLoop — exposes active build tracking for coordination (#BUILD-MOD-6)
+- `RegistryInsecure` field on `WorkflowSubmitterConfig` — controls whether Kaniko uses insecure flags (#BUILD-BLOCKER-1)
+- Renderer tests: MOD-1 special chars, MOD-5 determinism, LEVE-2 TLS, sorted env vars, multi-app (#BUILD-MOD-1)
+- WorkflowBuilder tests: Kaniko inline verification, insecure flag conditional tests, gitea-token prohibition (#BUILD-BLOCKER-1)
+
+### Changed
+- **BREAKING**: Clone CWT now downloads source bundle from MinIO instead of cloning from Gitea — parameters changed from `tenant-id`+`project-id` to `tenant-id`+`build-id` (#PIPELINE-BLOCKER-1)
+- **BREAKING**: `WorkflowSubmitter.Cancel()` and `GetStatus()` now accept a `namespace` parameter for per-tenant isolation (#PIPELINE-MOD-2)
+- **BREAKING**: Kaniko build step changed from CWT ref (`loopzero-kaniko`) to inline template — WorkflowBuilder now generates container spec with conditional insecure flags (#BUILD-BLOCKER-1)
+- **BREAKING**: Clone CWT no longer accepts `gitea-url` and `gitea-token` parameters — credentials come from K8s Secret `loopzero-gitea-credentials` (#BUILD-BLOCKER-2)
+- Workflow volumes changed from `VolumeClaimTemplates` (PVC) to `emptyDir` with `sizeLimit` — eliminates storage provisioner dependency and PVC leak (#PIPELINE-BLOCKER-2)
+- Cache CWT image changed from `amazon/aws-cli:2.15.17` to `minio/mc:RELEASE.2024-01-16T16-06-34Z` (#PIPELINE-MOD-4)
+- `InfraParams` struct: removed `GiteaURL` and `GiteaToken` fields (#BUILD-BLOCKER-2)
+- `WorkflowSubmitterConfig` struct: removed `GiteaURL`, `GiteaToken`, and `Namespace`; added `RegistryInsecure` (#BUILD-BLOCKER-1, #BUILD-BLOCKER-2, #PIPELINE-MOD-2)
+
+### Removed
+- `cwt-summary.yaml` — `emit-summary` step removed from onExit DAG. The CWT only echoed build metadata to step logs with no consumer. BuildReconcileLoop reads status from Workflow CRD labels, not step outputs (#REVIEW-LEVE-4)
+- `secret-gitea-credentials.yaml` — Gitea credentials no longer needed in build cluster; source comes from MinIO (#PIPELINE-BLOCKER-1)
+- `cwt-notify.yaml` — HTTP callback replaced by BuildReconcileLoop polling (#PIPELINE-BLOCKER-3)
+- `cwt-kaniko.yaml` — replaced by inline Kaniko template in WorkflowBuilder (#PIPELINE-BLOCKER-3)
+- `cwt-manifests-generate.yaml` and `cwt-manifests-validate.yaml` — manifest generation moved to API control plane (#PIPELINE-BLOCKER-3)
+- `gitea.url` and `gitea.token` from Argo Workflows Helm values — no longer used (#PIPELINE-BLOCKER-1)
+
+### Security
+- `Config.Validate()` now rejects `REGISTRY_INSECURE=true` in production — prevents MITM attacks on container registry where Kaniko pushes images over HTTP, rendering supply chain security (cosign, SBOM) useless (#REVIEW-BLOCKER-2)
+- Build namespace egress restricted via NetworkPolicy — prevents source code exfiltration, malware download, and internal network scanning from build pods (including Kaniko running as root) (#REVIEW-BLOCKER-NETPOL)
+- CWT `loopzero-clone` source bundle download now uses authenticated S3 protocol (`mc cp`) instead of unauthenticated HTTP — MinIO bucket no longer needs to be public-read; any pod without credentials cannot read tenant source code (#REVIEW-SEC-MINIO)
+- Per-tenant MinIO credentials with scoped S3 policies — each tenant's build user can only access `loopzero-builds/{tenantID}/*`, preventing cross-tenant source code access and cache poisoning (spec §17.2, §17.4) (#REVIEW-BLOCKER-3)
+- App path injection vector closed — `ValidateAppPath` rejects `..`, absolute paths, shell metacharacters at API boundary before they reach workflow shell scripts (#PIPELINE-SEC-3)
+- Build cluster no longer needs Gitea credentials — source comes from MinIO, reducing blast radius of credential compromise (#PIPELINE-BLOCKER-1)
+- Per-tenant build namespaces enforce ResourceQuota isolation — one tenant cannot exhaust build resources of another (#PIPELINE-MOD-2)
+- Gitea admin token no longer exposed in Workflow CR objects — moved to K8s Secret with `envFrom` (#BUILD-SEC-1)
+- Kaniko insecure registry flags no longer hardcoded — conditional based on `RegistryInsecure` config; `Config.Validate()` enforces `RegistryInsecure=false` in production (#BUILD-SEC-KANIKO)
+- Node.js Dockerfile enforces `npm ci` without insecure fallback — prevents dependency confusion via `npm install` (#BUILD-SEC-4)
+- Security vulnerability scans now fail the build on detection — prevents deploying known-vulnerable code (#BUILD-SEC-SCAN)
+
+### Fixed
+- `loopzero init` did not detect apps in conventional monorepo directories (`apps/`, `services/`, `microservices/`) without workspace config — now scans nested subdirs for project markers (#dogfood-full2-F01)
+- `loopzero init` generated `framework: custom` with no port for projects without a recognized framework — now defaults to port 3000 for server-type apps (#dogfood-full2-F06)
+- `loopzero deploy --no-wait` suggested re-deploying as tracking command — message now states deploy is running in background (#dogfood-full2-F03)
+- Lockfile warning shown even when lockfile exists in app subdirectory — now checks app paths from loopzero.yaml in addition to project root (#dogfood-full2-F04)
+- Build failure error message exposed internal term "Workflow Failed in build cluster" — replaced with product language "Build failed" (#dogfood-full2-F02)
+- Startup reconciler exposed internal terms "Workflow" and "build cluster" in error messages — all user-facing messages now use product language (#dogfood-full2-F02b)
+- ArgoCD health check was per-Application (shared across all apps in tenant/environment) — one degraded app blocked all deploys. Now checks per-Deployment health for only the apps being deployed (#dogfood-full2-retest-F01)
+- Kaniko CWT used `script` template with `/bin/sh` but Kaniko image is distroless — reverted to `container` spec with direct executor args (#dogfood-full3-F01)
+- Kaniko CWT retry `maxDuration` was 60s — insufficient for cold-start builds. Increased to 300s with 10s initial backoff (#dogfood-full3-F01)
+- Node.js Dockerfile generator set `WORKDIR /app` for all projects — monorepo apps with path `apps/api` couldn't find `package.json`. Now sets `WORKDIR` to the app's subdirectory (#dogfood-full3-F02)
+- `loopzero whoami` read from local config without validating token against API — showed "Authenticated" even with invalid/expired tokens. Now calls `/api/v1/auth/whoami` to verify, returns exit 4 if token is rejected (#dogfood-edge-F01)
+
+### Changed
+- CLI `scanSubdirectories` now recurses into conventional app directories (`apps/`, `services/`, `microservices/`) to discover nested apps (#dogfood-full2-F01)
+- Monorepo flat detection threshold lowered from 2 to 1 workspace — a single app inside `apps/` is correctly identified (#dogfood-full2-F01)
+- Build error sanitization added to CLI deploy command — strips internal infrastructure terms from API error messages (#dogfood-full2-F02)
+- ArgoCD cluster secret stale IP after k3d recreate — `update-cross-cluster-ips.sh` now patches operator WORKLOAD_CLUSTER_URL, ArgoCD cluster-workload secret, ArgoCD Application destinations, and configures insecure TLS for local dev (#dogfood3-F01)
+- ArgoCD cannot clone Gitea repos — NetworkPolicy `allow-gitea` was missing ArgoCD repo-server as allowed ingress source; added cross-namespace selector for `argocd` namespace (#dogfood3-F01b)
+- API ERROR logs emitted as plain text instead of structured JSON — `slog.SetDefault()` now sets the JSON handler as global default so all `slog.Error()`/`slog.Warn()` calls produce JSON output (#dogfood3-F04)
+- klog (k8s.io/client-go) emitting plain text logs — silenced via `klog.InitFlags()` with `stderrthreshold=FATAL` in API main.go (#dogfood3-F04b)
+- TenantController RBAC insufficient — ClusterRole missing permissions for `deployments`, `services`, `configmaps` that `rbacRulesForPlan` grants; Kubernetes RBAC escalation prevention blocked Role creation (#dogfood2-F02)
+- TenantController RBAC rules split by API group — `rbacRulesForPlan` used combined `APIGroups: ["", "apps"]` causing cartesian product expansion; split into separate rules per API group (#dogfood2-F02)
+- Tenant CR never created — `EnsureTenant` error silently discarded with `_ =`; now logged at ERROR level for observability (#dogfood2-F01)
+- API ServiceAccount missing — API pod ran as `default` SA without Tenant CR permissions; added dedicated `loopzero-api` SA with `loopzero.io/tenants` RBAC (#dogfood2-F09)
+- API returns generic 500 without logging cause — `mapBuildError` fallback now logs actual error at ERROR level with type info (#dogfood2-F03)
+- CLI exit code 0 for unknown commands — now returns exit code 1 with helpful error message (#dogfood2-F04)
+- Argo Workflow missing MinIO parameters — `minio-endpoint`, `minio-access-key`, `minio-secret-key` not passed to cache CWT templates (#dogfood2-WF01)
+- Argo Workflow missing `manifests` volume — inline templates reference `/manifests` mount but volume not declared in workflow spec (#dogfood2-WF02)
+- Cross-cluster IPs stale after cluster recreate — updated mgmt LB and workload LB IPs in api-deployment.yaml (#dogfood2-INFRA01)
+- Image path mismatch between Kaniko and manifest generator — reconcile loop used `{registry}/{tenant}/{project}/{app}:{sha}` but Kaniko pushes to `{registry}/{tenant}/{project}:{sha}`; aligned to match (#dogfood2-WF03)
+- Source upload intermittent 422 — `openAsBlob()` streaming Blob had unstable file handle during fetch; replaced with synchronous `readFileSync` (#dogfood2-F07)
+- ArgoCD repo credential missing Gitea auth — added username/password to repo-creds Secret (#dogfood2-INFRA02)
+- ArgoCD Application pointing to mgmt cluster instead of workload — registered workload cluster and fixed destination server (#dogfood2-INFRA03)
+
+### Added
+- `task cli:link` — symlinks `loopzero` to PATH for global access (#dogfood2-F08)
+- `task cli:build` — builds CLI from TypeScript source (#dogfood2-F08)
+
+### Changed
+- WorkflowBuilder migrated from raw `map[string]interface{}` to loopzero-forge SDK typed structs — eliminates ~200 lines of type assertions and gains compile-time safety (#forge-migration)
+- LanguageStrategy interface methods now return `*forge.Container` instead of `map[string]interface{}`
+- Error message for internal server errors changed from generic "internal server error" to actionable guidance with next steps (#dogfood2-F05)
+- TenantController ClusterRole expanded with ArgoCD Application/AppProject permissions (#dogfood2-F02)
+
 ### Fixed
 - Source upload rejected `loopzero.yaml` sent as file upload (how CLI sends it via FormData) — API now accepts both text field (`FormValue`) and file upload (`FormFile`) (#dogfood-full-F01)
 - `loopzero init` without `--name` generated ugly project names from temp directories (e.g., `tmp.DbFESo52xo`) — auto-detected names now sanitized to lowercase with hyphens (#dogfood-full-F02)

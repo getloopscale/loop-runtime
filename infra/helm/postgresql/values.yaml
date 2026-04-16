@@ -1,6 +1,14 @@
 # PRODUCTION WARNING: Override ALL passwords before deploying to production.
 # Default values are for local development only.
 # Use --set auth.password=<secure-value> or a values override file.
+# NOTE: Bitnami removes old tags aggressively. Don't pin to a specific tag
+# unless you've verified it exists on Docker Hub. Production uses managed DO PG 16.
+# Local dev uses whatever the chart default provides (currently PG 18.x).
+image:
+  registry: docker.io
+  repository: bitnami/postgresql
+  # tag: defaults to chart appVersion (verified available on Docker Hub)
+
 auth:
   username: loopzero
   password: loopzero-dev-password  # LOCAL DEV ONLY — override for production

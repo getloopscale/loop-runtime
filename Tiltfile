@@ -152,8 +152,8 @@ local_resource(
         VALUES ('github-paulohenriquevn', 'paulohenriquevn@gmail.com', 6766298, 'paulohenriquevn')
         ON CONFLICT (id) DO NOTHING;
 
-        INSERT INTO tenants (id, display_name, plan, owner_id)
-        VALUES ('acme', 'acme', 'starter', 'github-paulohenriquevn')
+        INSERT INTO tenants (id, display_name, slug, owner_id)
+        VALUES ('acme', 'acme', 'acme', 'github-paulohenriquevn')
         ON CONFLICT (id) DO NOTHING;
 
         INSERT INTO tenant_members (tenant_id, user_id, role)

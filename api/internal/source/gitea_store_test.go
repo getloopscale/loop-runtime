@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package source
 
 import (
@@ -102,17 +105,17 @@ func TestGiteaSourceStore_PushRealBundle(t *testing.T) {
 		"loopzero.yaml":    "project: test\napps:\n  api:\n    port: 3000\n",
 	})
 
-	sha, err := store.PushBundle(ctx, "acme", "push-test", bytes.NewReader(bundle))
+	result, err := store.PushBundle(ctx, "acme", "push-test", bytes.NewReader(bundle))
 	if err != nil {
 		t.Fatalf("PushBundle failed: %v", err)
 	}
-	if sha == "" {
+	if result.SourceID == "" {
 		t.Fatal("expected non-empty commit SHA")
 	}
-	if len(sha) != 40 {
-		t.Errorf("expected 40-char SHA, got %d: %s", len(sha), sha)
+	if len(result.SourceID) != 40 {
+		t.Errorf("expected 40-char SHA, got %d: %s", len(result.SourceID), result.SourceID)
 	}
-	t.Logf("pushed commit: %s", sha)
+	t.Logf("pushed commit: %s", result.SourceID)
 }
 
 func TestGiteaSourceStore_PushEmptyBundle(t *testing.T) {
@@ -121,7 +124,7 @@ func TestGiteaSourceStore_PushEmptyBundle(t *testing.T) {
 
 	_, err := store.PushBundle(ctx, "acme", "empty-test", bytes.NewReader([]byte{}))
 	if err == nil {
-		t.Fatal("expected error for empty bundle")
+		t.Fatal("expected error for empty bundle, got nil")
 	}
 }
 
@@ -132,7 +135,7 @@ func TestGiteaSourceStore_PushTwiceDifferentContent(t *testing.T) {
 	bundle1 := createTestBundle(t, map[string]string{
 		"index.js": `console.log("v1");`,
 	})
-	sha1, err := store.PushBundle(ctx, "acme", "update-test", bytes.NewReader(bundle1))
+	r1, err := store.PushBundle(ctx, "acme", "update-test", bytes.NewReader(bundle1))
 	if err != nil {
 		t.Fatalf("first push failed: %v", err)
 	}
@@ -140,15 +143,15 @@ func TestGiteaSourceStore_PushTwiceDifferentContent(t *testing.T) {
 	bundle2 := createTestBundle(t, map[string]string{
 		"index.js": `console.log("v2");`,
 	})
-	sha2, err := store.PushBundle(ctx, "acme", "update-test", bytes.NewReader(bundle2))
+	r2, err := store.PushBundle(ctx, "acme", "update-test", bytes.NewReader(bundle2))
 	if err != nil {
 		t.Fatalf("second push failed: %v", err)
 	}
 
-	if sha1 == sha2 {
+	if r1.SourceID == r2.SourceID {
 		t.Error("expected different SHAs for different content")
 	}
-	t.Logf("v1: %s, v2: %s", sha1, sha2)
+	t.Logf("v1: %s, v2: %s", r1.SourceID, r2.SourceID)
 }
 
 func TestGiteaSourceStore_ClonableAfterPush(t *testing.T) {
@@ -161,8 +164,7 @@ func TestGiteaSourceStore_ClonableAfterPush(t *testing.T) {
 		"package.json": `{"name":"clone-test"}`,
 	})
 
-	_, err := store.PushBundle(ctx, "acme", "clone-test", bytes.NewReader(bundle))
-	if err != nil {
+	if _, err := store.PushBundle(ctx, "acme", "clone-test", bytes.NewReader(bundle)); err != nil {
 		t.Fatalf("PushBundle failed: %v", err)
 	}
 

@@ -1,10 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package db
 
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -43,6 +48,28 @@ func NewPool(ctx context.Context, databaseURL string, poolCfg PoolConfig) (*PgxA
 	cfg.HealthCheckPeriod = poolCfg.HealthCheckPeriod
 	cfg.ConnConfig.ConnectTimeout = poolCfg.ConnectTimeout
 	cfg.ConnConfig.RuntimeParams["statement_timeout"] = poolCfg.StatementTimeout
+
+	// Sprint 6: Distributed tracing for database queries.
+	// otelpgx hooks into pgx to create spans for every query, batch, and prepare.
+	// Spans include db.statement, db.operation, and timing. Zero-overhead when
+	// the global TracerProvider is a no-op (LOOPZERO_TRACING_ENABLED=false).
+	cfg.ConnConfig.Tracer = otelpgx.NewTracer(
+		otelpgx.WithTrimSQLInSpanName(),
+	)
+
+	// MEET-2026-04-09-043 P0: TCP keepalive for PG failover detection.
+	// Without keepalive, a silent PG failover (managed DB, firewall timeout)
+	// leaves zombie connections undetected for up to 2 hours (Linux default).
+	// With KeepAlive=15s, dead connections are detected in ~90s (3 probes).
+	// This is critical for the leader election: the dedicated leader connection
+	// must detect PG death quickly to trigger os.Exit and re-election.
+	cfg.ConnConfig.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		d := &net.Dialer{
+			Timeout:   poolCfg.ConnectTimeout,
+			KeepAlive: 15 * time.Second, // OS sends keepalive probes every 15s
+		}
+		return d.DialContext(ctx, network, addr)
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

@@ -1,32 +1,34 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25.9-alpine3.22 AS builder
 WORKDIR /workspace
 
-# Copy Go workspace definition
-COPY go.work go.work.sum ./
+ENV GOWORK=off
 
-# Copy all module definitions for dependency resolution
 COPY pkg/go.mod ./pkg/go.mod
-COPY api/go.mod api/go.sum ./api/
 COPY operators/go.mod operators/go.sum ./operators/
-COPY infra/tests/go.mod infra/tests/go.sum ./infra/tests/
-COPY infra/scripts/go.mod ./infra/scripts/
 
-# Download dependencies (cached unless go.mod/go.sum change)
-RUN cd operators && go mod download
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    cd operators && go mod download
 
-# Copy source code
 COPY pkg/ ./pkg/
 COPY operators/ ./operators/
 
-# Build the binary
-RUN cd operators && CGO_ENABLED=0 go build -o /tenant-controller ./cmd/main.go
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd operators && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tenant-controller ./cmd/main.go
 
-# Runtime image
-FROM alpine:3.21
-RUN apk add --no-cache ca-certificates
-RUN adduser -D -u 1000 loopzero
+FROM alpine:3.21.6
+
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
+LABEL org.opencontainers.image.title="loopzero-operator"
+LABEL org.opencontainers.image.description="LoopZero PaaS Kubernetes operator"
+
+RUN apk add --no-cache ca-certificates && adduser -D -u 1000 loopzero
 USER 1000
-COPY --from=builder /tenant-controller /tenant-controller
-EXPOSE 8081
-ENTRYPOINT ["/tenant-controller"]
+COPY --from=builder /tenant-controller /usr/local/bin/tenant-controller
+EXPOSE 8080 8081
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:8081/healthz || exit 1
+
+ENTRYPOINT ["tenant-controller"]
 CMD ["--leader-elect=true"]

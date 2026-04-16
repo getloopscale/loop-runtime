@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package v1
 
 import (
@@ -5,6 +8,8 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 func TestClusterSyncState_Values(t *testing.T) {
@@ -241,7 +246,7 @@ func TestReconciliationReport_DriftDetails_WithoutCause(t *testing.T) {
 func TestReconciliationReport_StatusConditions(t *testing.T) {
 	rr := ReconciliationReport{}
 
-	SetCondition(&rr.Status.Conditions, "InSync", metav1.ConditionTrue, "AllSynced", "git and cluster are in sync", 1)
+	conditions.SetCondition(&rr.Status.Conditions, "InSync", metav1.ConditionTrue, "AllSynced", "git and cluster are in sync", 1)
 
 	if len(rr.Status.Conditions) != 1 {
 		t.Fatalf("expected 1 condition, got %d", len(rr.Status.Conditions))

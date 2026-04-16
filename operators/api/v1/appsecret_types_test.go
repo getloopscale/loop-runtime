@@ -1,9 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package v1
 
 import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 func TestAppSecret_SpecFields(t *testing.T) {
@@ -144,8 +149,8 @@ func TestAppSecret_HashMismatch(t *testing.T) {
 func TestAppSecret_StatusConditions(t *testing.T) {
 	as := AppSecret{}
 
-	SetCondition(&as.Status.Conditions, "Synced", metav1.ConditionTrue, "Synchronized", "secret synced to workload cluster", 1)
-	SetCondition(&as.Status.Conditions, "RotationCurrent", metav1.ConditionTrue, "WithinPolicy", "rotation not yet due", 1)
+	conditions.SetCondition(&as.Status.Conditions, "Synced", metav1.ConditionTrue, "Synchronized", "secret synced to workload cluster", 1)
+	conditions.SetCondition(&as.Status.Conditions, "RotationCurrent", metav1.ConditionTrue, "WithinPolicy", "rotation not yet due", 1)
 
 	if len(as.Status.Conditions) != 2 {
 		t.Fatalf("expected 2 conditions, got %d", len(as.Status.Conditions))

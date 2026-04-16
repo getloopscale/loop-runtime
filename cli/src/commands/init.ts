@@ -1,6 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import * as fs from 'fs';
 import * as path from 'path';
 import { ApiError } from '../api/client';
+import { FRONTEND_FRAMEWORKS } from '../adapters/app-unit';
 
 interface MonorepoResult {
   tool: string;
@@ -54,11 +58,10 @@ interface DetectedInfo {
   apps: DetectedAppInfo[];
 }
 
-// RFC 1123 label: lowercase, starts with letter, letters/digits/hyphens, max 63 chars
-const PROJECT_NAME_REGEX = /^[a-z][a-z0-9-]{0,62}$/;
-
 // Frameworks that are frontends — they serve static assets, not APIs
-const FRONTEND_FRAMEWORKS = ['nextjs', 'vite', 'remix'];
+// MEET-2026-03-29-016: Frontends are ALWAYS static delivery (zero pods).
+// Remix is SSR-first — classified as server, not frontend.
+// FRONTEND_FRAMEWORKS imported from adapters/app-unit.ts (single source of truth)
 
 // Well-known directory names for shared packages (not deployable)
 const PACKAGE_DIR_PATTERNS = ['packages/', 'libs/', 'shared/', 'common/', 'config/'];
@@ -80,32 +83,46 @@ export class InitCommand {
   async execute(opts: InitOptions): Promise<number> {
     // Auth check
     if (!this.deps.getToken()) {
-      return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4);
+      return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
 
-    // Git repo check — loopzero requires a git repository
-    if (this.deps.hasGitRepo && !this.deps.hasGitRepo()) {
-      return this.exitWithError(opts, 'Not a git repository. Run: git init', 1);
-    }
+    // Git repo check — warn if not a git repository
+    const noGitWarning = (this.deps.hasGitRepo && !this.deps.hasGitRepo())
+      ? 'No git repository detected. Deploys will track file changes instead of commits. Run `git init` to enable git-based versioning.'
+      : undefined;
 
     // CI mode requires --yes
     if (this.deps.isCI && !opts.yes) {
-      return this.exitWithError(opts, 'CI mode requires --yes flag. Run: loopzero init --yes', 1);
+      return this.exitWithError(opts, 'CI mode requires --yes flag. Run: loopzero init --yes', 1, 'CI_REQUIRES_YES');
     }
 
     // Check if loopzero.yaml already exists
     const yamlPath = path.join(this.deps.cwd, 'loopzero.yaml');
     if (fs.existsSync(yamlPath) && !opts.force) {
-      return this.exitWithError(opts, 'loopzero.yaml already exists. Use --force to overwrite.', 1);
+      return this.exitWithError(opts, 'loopzero.yaml already exists. Use --force to overwrite.', 1, 'FILE_EXISTS');
     }
 
     // Detect monorepo and frameworks
     const monorepo = this.deps.detectMonorepo(this.deps.cwd);
     let projectName = opts.name || path.basename(this.deps.cwd);
 
-    // Sanitize auto-detected name early so it's clean before use in app specs
-    if (!opts.name && (!this.deps.promptText || opts.yes)) {
-      projectName = this.sanitizeProjectName(projectName);
+    // F-01 fix: ALWAYS sanitize project name — whether auto-detected or user-provided.
+    // RFC 1123 compliance is mandatory for K8s namespaces. Unsanitized names cause
+    // downstream deploy failures with cryptic namespace errors.
+    const originalName = projectName;
+    projectName = this.sanitizeProjectName(projectName);
+
+    // Warn user if name was changed by sanitization
+    let sanitizationWarning: string | undefined;
+    if (projectName !== originalName) {
+      if (originalName.length > 63) {
+        sanitizationWarning = `Project name truncated to 63 characters: "${originalName}" → "${projectName}"`;
+      } else {
+        sanitizationWarning = `Project name sanitized: "${originalName}" → "${projectName}" (RFC 1123: lowercase, letters/numbers/hyphens, max 63 chars)`;
+      }
+      if (opts.name && !opts.json) {
+        this.deps.writeTo(sanitizationWarning);
+      }
     }
 
     const apps: AppSpec[] = [];
@@ -201,7 +218,7 @@ export class InitCommand {
           apps.push({
             name: projectName,
             framework: fw.framework,
-            port: fw.port,
+            port: fw.port ?? 3000,
             path: '.',
           });
         }
@@ -224,18 +241,6 @@ export class InitCommand {
       );
     }
 
-    // Validate explicitly provided project name
-    if (opts.name) {
-      // Explicitly provided via --name: warn if not RFC 1123 compliant
-      // (downstream API will enforce; CLI allows through for flexibility)
-      if (!PROJECT_NAME_REGEX.test(projectName) && !opts.json) {
-        this.deps.writeTo(
-          `Warning: project name "${projectName}" may not be valid. ` +
-          'Recommended: lowercase, start with a letter, letters/numbers/hyphens only (max 63 chars).',
-        );
-      }
-    }
-
     // Generate loopzero.yaml
     const yamlContent = this.generateYaml(projectName, apps);
     fs.writeFileSync(yamlPath, yamlContent);
@@ -254,8 +259,14 @@ export class InitCommand {
       if (err instanceof ApiError && err.statusCode === 409) {
         // 409 = project already exists, this is normal for re-init
         warning = 'Project already registered.';
+      } else if (err instanceof ApiError && err.statusCode >= 400 && err.statusCode < 500) {
+        // Client errors (400 invalid name, 422 validation, etc.) — show the actual message
+        warning = err.message;
+        if (!opts.json) {
+          this.deps.writeError(warning);
+        }
       } else {
-        // Real errors (connection refused, 500, etc.)
+        // Network errors (connection refused, 500, etc.)
         warning = 'Could not reach server. Run "loopzero deploy" to retry.';
         if (!opts.json) {
           this.deps.writeError(warning);
@@ -275,8 +286,11 @@ export class InitCommand {
       if (detected) {
         jsonOutput.detected = detected;
       }
-      if (warning) {
-        jsonOutput.warning = warning;
+      if (projectName !== originalName) {
+        jsonOutput.sanitized_from = originalName;
+      }
+      if (sanitizationWarning || warning || noGitWarning) {
+        jsonOutput.warning = [sanitizationWarning, warning, noGitWarning].filter(Boolean).join('. ');
       }
       this.deps.writeTo(JSON.stringify(jsonOutput));
     } else {
@@ -315,6 +329,7 @@ export class InitCommand {
    */
   private scanSubdirectories(rootDir: string): Array<{ name: string; dir: string }> {
     const SKIP = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.cache', 'tmp']);
+    const CONVENTIONAL_APP_DIRS = ['apps', 'services', 'microservices'];
     const results: Array<{ name: string; dir: string }> = [];
     try {
       const entries = fs.readdirSync(rootDir, { withFileTypes: true });
@@ -322,7 +337,27 @@ export class InitCommand {
         if (!entry.isDirectory()) continue;
         if (entry.name.startsWith('.')) continue;
         if (SKIP.has(entry.name)) continue;
-        results.push({ name: entry.name, dir: path.join(rootDir, entry.name) });
+
+        // Check if this is a conventional container directory — scan its children instead
+        if (CONVENTIONAL_APP_DIRS.includes(entry.name)) {
+          const containerDir = path.join(rootDir, entry.name);
+          try {
+            const subEntries = fs.readdirSync(containerDir, { withFileTypes: true });
+            for (const subEntry of subEntries) {
+              if (!subEntry.isDirectory()) continue;
+              if (subEntry.name.startsWith('.')) continue;
+              if (SKIP.has(subEntry.name)) continue;
+              results.push({
+                name: subEntry.name,
+                dir: path.join(containerDir, subEntry.name),
+              });
+            }
+          } catch {
+            // Ignore read errors on container dir
+          }
+        } else {
+          results.push({ name: entry.name, dir: path.join(rootDir, entry.name) });
+        }
       }
     } catch {
       // Ignore read errors
@@ -353,6 +388,8 @@ export class InitCommand {
 
   private generateYaml(projectName: string, apps: AppSpec[]): string {
     const lines: string[] = [];
+    // v2: Always include version for schema evolution
+    lines.push('version: 1');
     lines.push(`project: ${this.quoteYaml(projectName)}`);
     lines.push('');
     lines.push('apps:');
@@ -360,11 +397,17 @@ export class InitCommand {
       lines.push(`  ${this.quoteYaml(app.name)}:`);
       lines.push(`    path: ${this.quoteYaml(app.path)}`);
       lines.push(`    framework: ${this.quoteYaml(app.framework)}`);
-      if (app.type === 'worker') {
-        lines.push('    type: worker');
-      } else if (app.type === 'frontend') {
-        lines.push('    type: frontend');
-      } else if (app.port !== null) {
+      // v2: Always include explicit type (no inference at deploy time)
+      const appType = app.type ?? 'server';
+      lines.push(`    type: ${appType}`);
+      // v2: Always include build strategy
+      const build = (app.framework === 'custom' || app.framework === 'unknown') ? 'dockerfile' : 'buildpack';
+      lines.push(`    build: ${build}`);
+      // MEET-2026-03-29-016: Frontends are ALWAYS static delivery (zero pods, served from CDN).
+      if (appType === 'frontend') {
+        lines.push('    render: static');
+      }
+      if (appType === 'server' && app.port !== null) {
         lines.push(`    port: ${app.port}`);
       }
       lines.push('');
@@ -380,9 +423,13 @@ export class InitCommand {
     return value;
   }
 
-  private exitWithError(opts: InitOptions, message: string, exitCode: number): number {
+  private exitWithError(opts: InitOptions, message: string, exitCode: number, code?: string): number {
     if (opts.json) {
-      this.deps.writeTo(JSON.stringify({ error: message, exit_code: exitCode }));
+      const payload: Record<string, unknown> = { error: message, exit_code: exitCode };
+      if (code) {
+        payload.code = code;
+      }
+      this.deps.writeTo(JSON.stringify(payload));
     } else {
       this.deps.writeError(message);
     }

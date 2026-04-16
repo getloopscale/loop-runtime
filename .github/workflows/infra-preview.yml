@@ -1,0 +1,140 @@
+# Infrastructure Preview — runs `pulumi preview` on PRs touching infra/pulumi/
+#
+# Posts the execution plan as a PR comment so reviewers see exactly
+# what infrastructure changes the PR will cause before merging.
+#
+# State backend: DigitalOcean Spaces (S3-compatible) — no Pulumi Cloud dependency.
+#
+# Required secrets:
+#   DIGITALOCEAN_TOKEN         — DO API token (read-only sufficient for preview)
+#   SPACES_ACCESS_KEY_ID       — DO Spaces access key (for state backend)
+#   SPACES_SECRET_ACCESS_KEY   — DO Spaces secret key (for state backend)
+#   PULUMI_CONFIG_PASSPHRASE   — Passphrase for secrets encryption in state
+
+name: "Infra: Preview"
+
+on:
+  pull_request:
+    branches: [develop, homolog, main]
+    paths:
+      - "infra/pulumi/**"
+      - ".github/workflows/infra-preview.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  NODE_VERSION: "20"
+  PULUMI_WORKING_DIR: infra/pulumi
+  PULUMI_BACKEND_URL: "s3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
+  PULUMI_HOMOLOG_BACKEND_URL: "s3://loopzero-homolog-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
+
+concurrency:
+  group: infra-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────
+  # VALIDATE — typecheck + tests before preview
+  # ─────────────────────────────────────────────
+  validate:
+    name: Validate Pulumi code
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.PULUMI_WORKING_DIR }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: npm ci
+
+      - name: Type check
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: npm test
+
+  # ─────────────────────────────────────────────
+  # RESOLVE — determine which stack to preview
+  # ─────────────────────────────────────────────
+  resolve-stack:
+    name: Resolve target stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      stack: ${{ steps.resolve.outputs.stack }}
+      environment: ${{ steps.resolve.outputs.environment }}
+    steps:
+      - name: Map branch to stack
+        id: resolve
+        run: |
+          case "${{ github.base_ref }}" in
+            develop) STACK="dev"; ENV="infra-dev" ;;
+            homolog) STACK="homolog"; ENV="infra-homolog" ;;
+            main)    STACK="prod"; ENV="infra-prod" ;;
+            *)       STACK="dev"; ENV="infra-dev" ;;
+          esac
+          echo "stack=$STACK" >> "$GITHUB_OUTPUT"
+          echo "environment=$ENV" >> "$GITHUB_OUTPUT"
+          echo "Target branch: ${{ github.base_ref }} → stack: $(cat "$GITHUB_OUTPUT" | grep stack | cut -d= -f2)"
+
+  # ─────────────────────────────────────────────
+  # PREVIEW — show what would change
+  # ─────────────────────────────────────────────
+  preview:
+    name: "Pulumi Preview (${{ needs.resolve-stack.outputs.stack }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [validate, resolve-stack]
+    environment: ${{ needs.resolve-stack.outputs.environment }}
+    env:
+      # S3 state backend auth (Pulumi reads AWS_* for S3 protocol)
+      AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      # DO provider auth for Spaces resources (buckets, objects)
+      SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      # Cloudflare — static frontend delivery (Sprint 10)
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.PULUMI_WORKING_DIR }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: npm ci
+
+      - name: Validate state backend credentials
+        run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "::error::SPACES_ACCESS_KEY_ID or SPACES_SECRET_ACCESS_KEY secret is not set."
+            exit 1
+          fi
+
+      - name: Login to S3 state backend
+        run: pulumi login "$PULUMI_BACKEND_URL"
+
+      - name: Run Pulumi preview
+        uses: pulumi/actions@v6
+        with:
+          command: preview
+          stack-name: ${{ needs.resolve-stack.outputs.stack }}
+          work-dir: ${{ env.PULUMI_WORKING_DIR }}
+          comment-on-pr: true
+          comment-on-pr-number: ${{ github.event.pull_request.number }}

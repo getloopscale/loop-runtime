@@ -27,7 +27,7 @@ prometheus:
           - targets:
               # Build cluster LB IP on k3d-loopzero-build network.
               # Updated by: bash infra/scripts/update-cross-cluster-ips.sh
-              - "10.0.2.6:30090"
+              - "172.18.0.10:30090"
             labels:
               cluster: build
               component: argo-workflows
@@ -39,7 +39,7 @@ prometheus:
           - targets:
               # Workload cluster LB IP on k3d-loopzero-workload network.
               # Updated by: bash infra/scripts/update-cross-cluster-ips.sh
-              - "10.0.3.6:30091"
+              - "172.18.0.14:30091"
             labels:
               cluster: workload
               component: traefik
@@ -51,6 +51,24 @@ grafana:
   securityContext:
     runAsNonRoot: true
   adminPassword: loopzero-dev-password
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki.monitoring:3100
+      access: proxy
+      isDefault: false
+      jsonData:
+        derivedFields:
+          - datasourceUid: tempo
+            matcherRegex: '"trace_id":"([a-f0-9]+)"'
+            name: TraceID
+            url: "$${__value.raw}"
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.platform-system:3200
+      access: proxy
+      isDefault: false
   sidecar:
     dashboards:
       enabled: true

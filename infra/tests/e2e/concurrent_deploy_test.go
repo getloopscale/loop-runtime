@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package e2e tests concurrent deploy rejection behavior end-to-end.
 //
 // These tests prove that the environment lock correctly serializes deploys:

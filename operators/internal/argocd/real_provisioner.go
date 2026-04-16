@@ -1,15 +1,20 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package argocd
 
 import (
 	"context"
 	"fmt"
-	"strings"
+	"log/slog"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
+
+	"github.com/loopzero/loopzero/operators/internal/constants"
 )
 
 var applicationGVR = schema.GroupVersionResource{
@@ -24,32 +29,59 @@ var appProjectGVR = schema.GroupVersionResource{
 	Resource: "appprojects",
 }
 
+// Compile-time interface compliance check.
+var _ Provisioner = (*RealProvisioner)(nil)
+
 // RealProvisioner manages ArgoCD Application CRs using the Kubernetes API.
+//
+// ARCH-OP-003: Uses dynamic/unstructured client intentionally to avoid pinning
+// the argoproj.io CRD Go types as a dependency. The ArgoCD Application and
+// AppProject schemas evolve independently of this operator, and a typed client
+// would create a tight coupling requiring coordinated version bumps. The trade-off
+// is no compile-time type safety for the CR spec — mitigated by integration tests.
 type RealProvisioner struct {
 	client    dynamic.Interface
 	namespace string // ArgoCD namespace (typically "argocd")
 }
 
 // NewRealProvisioner creates a provisioner that manages real ArgoCD Application CRs.
-func NewRealProvisioner(namespace string) (*RealProvisioner, error) {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		return nil, fmt.Errorf("argocd provisioner: get config: %w", err)
-	}
-
-	client, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("argocd provisioner: dynamic client: %w", err)
-	}
-
+// The dynamic client is injected rather than created internally (ARCH-003: DIP compliance).
+// In cmd/main.go, create the client via dynamic.NewForConfig(mgr.GetConfig()) and pass it here.
+func NewRealProvisioner(namespace string, client dynamic.Interface) *RealProvisioner {
 	return &RealProvisioner{
 		client:    client,
 		namespace: namespace,
-	}, nil
+	}
 }
 
 // EnsureAppProject creates or updates an ArgoCD AppProject CR for tenant RBAC isolation (MOD-5).
 func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectSpec) error {
+	// Build destination list scoped to tenant namespaces only.
+	// Each destination restricts to the tenant's environment namespaces,
+	// preventing cross-tenant deployment via ArgoCD.
+	// SEC-007: Use explicit destination server instead of wildcard to prevent
+	// cross-cluster deployment when multiple clusters are registered in ArgoCD.
+	destServer := spec.DestinationServer
+	if destServer == "" {
+		destServer = "*"
+	}
+
+	destinations := make([]interface{}, 0, len(spec.DestinationNamespaces))
+	for _, ns := range spec.DestinationNamespaces {
+		destinations = append(destinations, map[string]interface{}{
+			"namespace": ns,
+			"server":    destServer,
+		})
+	}
+	// SEC-007: No glob fallback. If no namespaces are provided, the AppProject
+	// will have an empty destinations list, blocking all deployments until the
+	// EnvironmentController creates the namespaces and the next reconcile
+	// populates this list. This is fail-closed by design.
+	if len(destinations) == 0 {
+		slog.Warn("argocd provisioner: no destination namespaces for tenant, AppProject will block deploys until environments are reconciled",
+			"tenant", spec.TenantID, "project", spec.Name)
+	}
+
 	proj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "argoproj.io/v1alpha1",
@@ -58,25 +90,28 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 				"name":      spec.Name,
 				"namespace": p.namespace,
 				"labels": map[string]interface{}{
-					"loopzero.io/tenant":     spec.TenantID,
-					"loopzero.io/managed-by": "tenant-controller",
+					constants.LabelTenant:    spec.TenantID,
+					constants.LabelManagedBy: constants.ManagedByTenantController,
 				},
 			},
 			"spec": map[string]interface{}{
-				"sourceRepos": toInterfaceSlice(spec.SourceRepos),
-				"destinations": []interface{}{
+				"sourceRepos":  toInterfaceSlice(spec.SourceRepos),
+				"destinations": destinations,
+				"clusterResourceWhitelist": []interface{}{
 					map[string]interface{}{
-						"namespace": spec.TenantID + "-*",
-						"server":    "*",
+						"group": "",
+						"kind":  "Namespace",
 					},
 				},
-				"clusterResourceWhitelist": []interface{}{},
 			},
 		},
 	}
 
 	existing, err := p.client.Resource(appProjectGVR).Namespace(p.namespace).Get(ctx, spec.Name, metav1.GetOptions{})
 	if err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("argocd: get appproject %s: %w", spec.Name, err)
+		}
 		_, err = p.client.Resource(appProjectGVR).Namespace(p.namespace).Create(ctx, proj, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("argocd: create appproject %s: %w", spec.Name, err)
@@ -85,6 +120,10 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 	}
 
 	proj.SetResourceVersion(existing.GetResourceVersion())
+
+	// Preserve existing metadata that we don't manage (annotations added by ArgoCD, finalizers).
+	mergeExistingMetadata(existing, proj)
+
 	_, err = p.client.Resource(appProjectGVR).Namespace(p.namespace).Update(ctx, proj, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("argocd: update appproject %s: %w", spec.Name, err)
@@ -101,21 +140,33 @@ func toInterfaceSlice(ss []string) []interface{} {
 	return result
 }
 
-// EnsureApplication creates or updates an ArgoCD Application CR.
-func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec ApplicationSpec) error {
-	app := &unstructured.Unstructured{
+// buildApplicationObject constructs the ArgoCD Application unstructured object.
+// Pure function (no side effects) — testable without a K8s client.
+//
+// Sync policy: manual sync only (automated: nil). The API controls sync timing
+// via POST /api/v1/applications/{name}/sync. Auto-sync (selfHeal/prune) creates
+// race conditions with the API's manual trigger. See MEET-2026-03-27-012.
+//
+// CreateNamespace: false — the TenantController creates namespaces, not ArgoCD.
+func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "argoproj.io/v1alpha1",
 			"kind":       "Application",
 			"metadata": map[string]interface{}{
-				"name":      spec.Name,
-				"namespace": p.namespace,
+				"name": spec.Name,
 				"labels": map[string]interface{}{
-					"loopzero.io/tenant":     spec.TenantID,
-					"loopzero.io/managed-by": "tenant-controller",
+					constants.LabelTenant:    spec.TenantID,
+					constants.LabelManagedBy: constants.ManagedByTenantController,
+				},
+				"annotations": map[string]interface{}{
+					// ArgoCD Notifications: subscribe to sync-completed trigger.
+					// When Synced + Healthy, ArgoCD calls POST /internal/argocd-callback
+					// on the API to activate the release (push-based, replaces polling).
+					"notifications.argoproj.io/subscribe.on-sync-healthy.loopzero-api": "",
 				},
 				"finalizers": []interface{}{
-					"resources-finalizer.argocd.argoproj.io",
+					constants.ArgoCDResourcesFinalizer,
 				},
 			},
 			"spec": map[string]interface{}{
@@ -133,18 +184,30 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 					"namespace": spec.DestinationNS,
 				},
 				"syncPolicy": map[string]interface{}{
+					"automated": nil,
 					"syncOptions": []interface{}{
 						"CreateNamespace=false",
+						"PrunePropagationPolicy=foreground",
+						"PruneLast=true",
 					},
 				},
 			},
 		},
 	}
+}
+
+// EnsureApplication creates or updates an ArgoCD Application CR.
+func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec ApplicationSpec) error {
+	app := buildApplicationObject(spec)
+	app.Object["metadata"].(map[string]interface{})["namespace"] = p.namespace
 
 	// Try to get existing application
 	existing, err := p.client.Resource(applicationGVR).Namespace(p.namespace).Get(ctx, spec.Name, metav1.GetOptions{})
 	if err != nil {
-		// Create new
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("argocd: get application %s: %w", spec.Name, err)
+		}
+		// Resource does not exist — create it.
 		_, err = p.client.Resource(applicationGVR).Namespace(p.namespace).Create(ctx, app, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("argocd: create application %s: %w", spec.Name, err)
@@ -154,6 +217,10 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 
 	// Update existing — preserve resourceVersion
 	app.SetResourceVersion(existing.GetResourceVersion())
+
+	// Preserve existing metadata that we don't manage (e.g., notifications annotations, finalizers).
+	mergeExistingMetadata(existing, app)
+
 	_, err = p.client.Resource(applicationGVR).Namespace(p.namespace).Update(ctx, app, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("argocd: update application %s: %w", spec.Name, err)
@@ -162,10 +229,55 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 	return nil
 }
 
+// mergeExistingMetadata preserves annotations, labels, and finalizers from the existing
+// resource that our desired object does not explicitly set. This prevents full-replace
+// updates from erasing metadata added by ArgoCD itself (e.g., notification subscriptions,
+// resource finalizers).
+func mergeExistingMetadata(existing, desired *unstructured.Unstructured) {
+	existingMeta, _ := existing.Object["metadata"].(map[string]interface{})
+	desiredMeta, _ := desired.Object["metadata"].(map[string]interface{})
+	if existingMeta == nil || desiredMeta == nil {
+		return
+	}
+
+	// Merge annotations: keep existing, overlay ours
+	if existingAnnotations, ok := existingMeta["annotations"].(map[string]interface{}); ok {
+		merged := make(map[string]interface{}, len(existingAnnotations))
+		for k, v := range existingAnnotations {
+			merged[k] = v
+		}
+		if ourAnnotations, ok := desiredMeta["annotations"].(map[string]interface{}); ok {
+			for k, v := range ourAnnotations {
+				merged[k] = v
+			}
+		}
+		desiredMeta["annotations"] = merged
+	}
+
+	// Merge labels: keep existing, overlay ours
+	if existingLabels, ok := existingMeta["labels"].(map[string]interface{}); ok {
+		merged := make(map[string]interface{}, len(existingLabels))
+		for k, v := range existingLabels {
+			merged[k] = v
+		}
+		if ourLabels, ok := desiredMeta["labels"].(map[string]interface{}); ok {
+			for k, v := range ourLabels {
+				merged[k] = v
+			}
+		}
+		desiredMeta["labels"] = merged
+	}
+
+	// Preserve existing finalizers
+	if existingFinalizers, ok := existingMeta["finalizers"]; ok {
+		desiredMeta["finalizers"] = existingFinalizers
+	}
+}
+
 // DeleteApplications removes all ArgoCD Application CRs for a tenant.
 func (p *RealProvisioner) DeleteApplications(ctx context.Context, tenantID string) error {
 	list, err := p.client.Resource(applicationGVR).Namespace(p.namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("loopzero.io/tenant=%s", tenantID),
+		LabelSelector: fmt.Sprintf("%s=%s", constants.LabelTenant, tenantID),
 	})
 	if err != nil {
 		return fmt.Errorf("argocd: list applications for tenant %s: %w", tenantID, err)
@@ -184,8 +296,7 @@ func (p *RealProvisioner) DeleteApplications(ctx context.Context, tenantID strin
 func (p *RealProvisioner) DeleteAppProject(ctx context.Context, tenantID string) error {
 	err := p.client.Resource(appProjectGVR).Namespace(p.namespace).Delete(ctx, tenantID, metav1.DeleteOptions{})
 	if err != nil {
-		// Check if already gone (idempotent)
-		if strings.Contains(err.Error(), "not found") {
+		if errors.IsNotFound(err) {
 			return nil
 		}
 		return fmt.Errorf("argocd: delete appproject %s: %w", tenantID, err)

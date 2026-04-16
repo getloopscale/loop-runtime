@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import { randomUUID } from 'crypto';
 import { getDefaultApiUrl, API_REQUEST_TIMEOUT_MS } from '../config/constants';
 
@@ -13,7 +16,8 @@ const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 
 /** CLI version for User-Agent header. */
-const CLI_VERSION = '0.1.0';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { version: CLI_VERSION } = require('../../package.json');
 
 export interface ApiClientOptions {
   baseURL?: string;
@@ -21,6 +25,12 @@ export interface ApiClientOptions {
   fetchFn?: FetchFn;
   /** Max retry attempts for transient errors. Default: 3. Set to 0 to disable. */
   maxRetries?: number;
+  /**
+   * Called when a 401 is received. Should attempt token refresh and return
+   * a new access token, or null if refresh fails. The request will be
+   * retried once with the new token.
+   */
+  onUnauthorized?: () => Promise<string | null>;
 }
 
 export class ApiError extends Error {
@@ -51,6 +61,12 @@ export class ApiError extends Error {
       return new ApiError(
         serverMessage || 'Permission denied. Check your account access.',
         4, status, serverCode ?? 'PERMISSION_DENIED',
+      );
+    }
+    if (status === 402) {
+      return new ApiError(
+        serverMessage || 'Plan limit reached. Upgrade your plan to continue.',
+        3, status, serverCode ?? 'PLAN_LIMIT_EXCEEDED',
       );
     }
     if (status === 409) {
@@ -94,15 +110,17 @@ export class ApiError extends Error {
 
 export class ApiClient {
   private readonly baseURL: string;
-  private readonly token: string | null;
+  private token: string | null;
   private readonly fetchFn: FetchFn;
   private readonly maxRetries: number;
+  private readonly onUnauthorized?: () => Promise<string | null>;
 
   constructor(opts: ApiClientOptions = {}) {
     this.baseURL = opts.baseURL ?? getDefaultApiUrl();
     this.token = opts.token ?? null;
     this.fetchFn = opts.fetchFn ?? globalThis.fetch;
     this.maxRetries = opts.maxRetries ?? MAX_RETRIES;
+    this.onUnauthorized = opts.onUnauthorized;
   }
 
   async get<T = unknown>(path: string): Promise<T> {
@@ -117,6 +135,13 @@ export class ApiClient {
     return this.request<T>('POST', path, body, extraHeaders);
   }
 
+  async patch<T = unknown>(
+    path: string,
+    body: Record<string, unknown>,
+  ): Promise<T> {
+    return this.request<T>('PATCH', path, body);
+  }
+
   async del<T = unknown>(path: string): Promise<T> {
     return this.request<T>('DELETE', path);
   }
@@ -125,7 +150,8 @@ export class ApiClient {
     method: string,
     path: string,
     body?: Record<string, unknown>,
-    extraHeaders?: Record<string, string>
+    extraHeaders?: Record<string, string>,
+    isRetryAfterRefresh = false,
   ): Promise<T> {
     const headers: Record<string, string> = {
       'Correlation-ID': randomUUID(),
@@ -168,6 +194,15 @@ export class ApiClient {
             errorBody = (await res.json()) as { code?: string; message?: string };
           } catch {
             /* ignore parse errors */
+          }
+
+          // 401 + onUnauthorized callback → attempt token refresh once
+          if (res.status === 401 && this.onUnauthorized && !isRetryAfterRefresh) {
+            const newToken = await this.onUnauthorized();
+            if (newToken) {
+              this.token = newToken;
+              return this.request<T>(method, path, body, extraHeaders, true);
+            }
           }
 
           const apiError = this.mapError(res.status, errorBody);

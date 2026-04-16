@@ -1,12 +1,23 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import * as fs from 'fs';
 import * as path from 'path';
+import { FRONTEND_FRAMEWORKS } from '../adapters/app-unit';
+
+export type AppCategory = 'frontend' | 'server';
 
 export interface FrameworkDetection {
   framework: string;
   port: number | null;
+  category: AppCategory;
   buildCommand?: string;
   startCommand?: string;
 }
+
+// Single source of truth for frontend frameworks is in adapters/app-unit.ts.
+// MEET-2026-03-29-016: Frontend frameworks are ALWAYS static delivery (zero pods).
+const FRONTEND_FRAMEWORKS_SET = new Set(FRONTEND_FRAMEWORKS);
 
 interface FrameworkSpec {
   name: string;
@@ -36,10 +47,39 @@ const FRAMEWORKS: FrameworkSpec[] = [
     detectByDep: (deps) => 'vite' in deps,
   },
   {
+    // Remix is SSR-first — classified as server, not frontend (MEET-2026-03-29-016).
+    // Users who want static Remix can manually set type: frontend + render: static.
     name: 'remix',
     port: 3000,
     detectByConfig: (dir) => fileExists(dir, 'remix.config.js'),
     detectByDep: (deps) => '@remix-run/node' in deps || '@remix-run/react' in deps,
+  },
+  {
+    name: 'astro',
+    port: 4321,
+    detectByConfig: (dir) => fileExists(dir, 'astro.config.mjs') || fileExists(dir, 'astro.config.ts'),
+    detectByDep: (deps) => 'astro' in deps,
+  },
+  {
+    name: 'angular',
+    port: 4200,
+    detectByConfig: (dir) => fileExists(dir, 'angular.json'),
+    detectByDep: (deps) => '@angular/core' in deps,
+  },
+  {
+    name: 'svelte',
+    port: 5173,
+    detectByDep: (deps) => 'svelte' in deps || '@sveltejs/kit' in deps,
+  },
+  {
+    name: 'vue',
+    port: 5173,
+    detectByDep: (deps) => 'vue' in deps,
+  },
+  {
+    name: 'react',
+    port: 3000,
+    detectByDep: (deps) => 'react' in deps && !('next' in deps) && !('remix' in (deps)),
   },
   {
     name: 'nestjs',
@@ -91,17 +131,23 @@ const FRAMEWORKS: FrameworkSpec[] = [
 ];
 
 export function detectFramework(appDir: string): FrameworkDetection {
+  const classify = (name: string, port: number): FrameworkDetection => ({
+    framework: name,
+    port,
+    category: FRONTEND_FRAMEWORKS_SET.has(name) ? 'frontend' : 'server',
+  });
+
   // Phase 1: config file detection (highest priority)
   for (const fw of FRAMEWORKS) {
     if (fw.detectByConfig?.(appDir)) {
-      return { framework: fw.name, port: fw.port };
+      return classify(fw.name, fw.port);
     }
   }
 
   // Phase 2: file-based detection
   for (const fw of FRAMEWORKS) {
     if (fw.detectByFile?.(appDir)) {
-      return { framework: fw.name, port: fw.port };
+      return classify(fw.name, fw.port);
     }
   }
 
@@ -110,22 +156,22 @@ export function detectFramework(appDir: string): FrameworkDetection {
   if (Object.keys(allDeps).length > 0) {
     for (const fw of FRAMEWORKS) {
       if (fw.detectByDep?.(allDeps)) {
-        return { framework: fw.name, port: fw.port };
+        return classify(fw.name, fw.port);
       }
     }
 
     // Node.js fallback — has package.json but no known framework
     if (fileExists(appDir, 'package.json')) {
-      return { framework: 'node', port: 3000 };
+      return { framework: 'node', port: 3000, category: 'server' };
     }
   }
 
   // Check for bare package.json (no deps but has package.json)
   if (fileExists(appDir, 'package.json')) {
-    return { framework: 'node', port: 3000 };
+    return { framework: 'node', port: 3000, category: 'server' };
   }
 
-  return { framework: 'custom', port: null };
+  return { framework: 'custom', port: null, category: 'server' };
 }
 
 function fileExists(dir: string, name: string): boolean {

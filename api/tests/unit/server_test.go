@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package unit
 
 import (
@@ -43,9 +46,8 @@ func (f *fakeServerMembershipStore) GetMemberships(ctx context.Context, userID s
 func TestServerRouting(t *testing.T) {
 	validator := &fakeServerTokenValidator{
 		result: &middleware.TokenValidationResult{
-			UserID:   "github-lucas",
-			Email:    "lucas@acme.dev",
-			GitHubID: 12345,
+			UserID: "github-lucas",
+			Email:  "lucas@acme.dev",
 		},
 	}
 	memberStore := &fakeServerMembershipStore{

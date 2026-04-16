@@ -1,0 +1,215 @@
+# Infrastructure Deploy — provisions cloud resources via Pulumi.
+#
+# This workflow runs `pulumi up` and nothing else.
+# No state surgery, no image builds, no bootstrap tokens.
+# If `pulumi up` fails, the pipeline fails — operator investigates.
+#
+# Commands: up (default on push), preview, refresh.
+# Destroy is a SEPARATE workflow (infra-destroy.yml).
+#
+# Required secrets (per GitHub Environment):
+#   DIGITALOCEAN_TOKEN, SPACES_ACCESS_KEY_ID, SPACES_SECRET_ACCESS_KEY,
+#   PULUMI_CONFIG_PASSPHRASE, CLOUDFLARE_API_TOKEN (optional)
+
+name: "Infra: Deploy"
+
+on:
+  push:
+    branches: [develop, homolog, main]
+    paths:
+      - "infra/pulumi/**"
+      - "infra/helm/**"
+      - ".github/workflows/infra-deploy.yml"
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: "Target stack"
+        required: true
+        type: choice
+        options: [dev, homolog, prod]
+      command:
+        description: "Pulumi command"
+        required: true
+        type: choice
+        options: [up, preview, refresh]
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+  PULUMI_WORKING_DIR: infra/pulumi
+  PULUMI_BACKEND_URL: "s3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
+  PULUMI_HOMOLOG_BACKEND_URL: "s3://loopzero-homolog-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
+
+concurrency:
+  group: infra-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Resolve target ──────────────────────────────────────
+  resolve:
+    name: Resolve target
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      stack: ${{ steps.r.outputs.stack }}
+      environment: ${{ steps.r.outputs.environment }}
+      command: ${{ steps.r.outputs.command }}
+      backend_url: ${{ steps.r.outputs.backend_url }}
+    steps:
+      - name: Resolve
+        id: r
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            STACK="${{ inputs.stack }}"
+            COMMAND="${{ inputs.command }}"
+          else
+            case "${{ github.ref_name }}" in
+              develop) STACK="dev" ;;
+              homolog) STACK="homolog" ;;
+              main)    STACK="prod" ;;
+              *)       echo "::error::Unexpected branch" && exit 1 ;;
+            esac
+            COMMAND="up"
+          fi
+          case "$STACK" in
+            dev)     ENV="infra-dev" ;;
+            homolog) ENV="infra-homolog" ;;
+            prod)    ENV="infra-prod" ;;
+          esac
+          BACKEND="${{ env.PULUMI_BACKEND_URL }}"
+          [ "$STACK" = "homolog" ] && BACKEND="${{ env.PULUMI_HOMOLOG_BACKEND_URL }}"
+          echo "stack=$STACK" >> "$GITHUB_OUTPUT"
+          echo "environment=$ENV" >> "$GITHUB_OUTPUT"
+          echo "command=$COMMAND" >> "$GITHUB_OUTPUT"
+          echo "backend_url=$BACKEND" >> "$GITHUB_OUTPUT"
+
+  # ── Validate ────────────────────────────────────────────
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.PULUMI_WORKING_DIR }}/package-lock.json
+      - run: npm ci
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+      - run: npx tsc --noEmit
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+
+  # ── Deploy ──────────────────────────────────────────────
+  deploy:
+    name: "${{ needs.resolve.outputs.command }} → ${{ needs.resolve.outputs.stack }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [resolve, validate]
+    environment: ${{ needs.resolve.outputs.environment }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.PULUMI_WORKING_DIR }}/package-lock.json
+
+      - name: Install Pulumi CLI
+        run: curl -fsSL https://get.pulumi.com | PULUMI_VERSION=3.227.0 sh
+
+      - name: Install dependencies
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: npm ci
+
+      - name: Build Helm chart dependencies
+        run: |
+          for chart_dir in infra/helm/*/; do
+            if [ -f "$chart_dir/Chart.yaml" ] && grep -q "dependencies:" "$chart_dir/Chart.yaml"; then
+              echo "Building deps: $chart_dir"
+              helm dependency update "$chart_dir"
+            fi
+          done
+
+      - name: Login to Pulumi backend
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: pulumi login "${{ needs.resolve.outputs.backend_url }}"
+
+      - name: Configure secrets
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          # CF provider auth — required for Tunnel, KV, Worker resources
+          if ! pulumi config get cloudflare:apiToken --stack "$STACK" >/dev/null 2>&1; then
+            pulumi config set --secret cloudflare:apiToken "$CLOUDFLARE_API_TOKEN" --stack "$STACK"
+          fi
+          # App-level CF token — used by bootstrap to create K8s secrets
+          if ! pulumi config get cfApiToken --stack "$STACK" >/dev/null 2>&1; then
+            pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" --stack "$STACK"
+          fi
+          # Spaces credentials for Pulumi code (bucket creation, etc.)
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" --stack "$STACK" 2>/dev/null
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" --stack "$STACK" 2>/dev/null
+          pulumi config set --secret digitaloceanToken "$DIGITALOCEAN_TOKEN" --stack "$STACK" 2>/dev/null
+
+      - name: "Run: pulumi ${{ needs.resolve.outputs.command }}"
+        id: pulumi
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          COMMAND="${{ needs.resolve.outputs.command }}"
+          START=$(date +%s)
+          pulumi $COMMAND --yes --skip-preview --stack "$STACK" --non-interactive
+          DURATION=$(( $(date +%s) - START ))
+          echo "duration=$DURATION" >> "$GITHUB_OUTPUT"
+
+      - name: State integrity check
+        if: always()
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          pulumi stack --stack "$STACK" export 2>/dev/null | python3 -c "
+          import sys, json
+          from collections import Counter
+          state = json.load(sys.stdin)
+          urns = [r['urn'] for r in state['deployment']['resources']]
+          dupes = {u:c for u,c in Counter(urns).items() if c > 1}
+          if dupes:
+              for u,c in dupes.items():
+                  print(f'::warning::Duplicate URN ({c}x): {u.split(\"::\")[-1]}')
+          else:
+              print(f'State OK: {len(urns)} unique resources')
+          " || echo "::warning::Could not validate state"
+
+      - name: Deploy summary
+        if: always()
+        run: |
+          echo "### Deploy Result" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Stack | ${{ needs.resolve.outputs.stack }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Command | ${{ needs.resolve.outputs.command }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Duration | ${{ steps.pulumi.outputs.duration }}s |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | ${{ job.status }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Bootstrap (after successful up) ─────────────────────
+  bootstrap:
+    name: Bootstrap
+    needs: [resolve, deploy]
+    if: needs.resolve.outputs.command == 'up' && needs.deploy.result == 'success'
+    uses: ./.github/workflows/infra-bootstrap.yml
+    with:
+      stack: ${{ needs.resolve.outputs.stack }}
+    secrets: inherit

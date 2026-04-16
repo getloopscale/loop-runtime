@@ -1,10 +1,18 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package argo provides real Argo Workflows integration for build pipeline execution.
 package argo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
+
+	forge "github.com/getloopscale/loopzero-forge"
+	"github.com/getloopscale/loopzero-forge/model"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -12,6 +20,11 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/loopzero/loopzero/api/internal/services"
 )
@@ -31,26 +44,28 @@ var workflowGVR = schema.GroupVersionResource{
 type WorkflowSubmitterConfig struct {
 	Kubeconfig string // Path to kubeconfig file
 	Context    string // Kube context (e.g., "k3d-loopzero-build")
-	Namespace  string // Namespace for workflows (e.g., "argo")
 
 	// Infrastructure parameters passed to every workflow via the WorkflowBuilder.
 	// C-01 fix: CallbackURL/CallbackSecret removed. No more HTTP callback.
-	GiteaURL    string // e.g., "http://10.0.1.3:30000" (cross-cluster for workflow)
-	GiteaToken  string // Admin token for Gitea access
-	RegistryURL string // e.g., "k3d-loopzero-registry:5000"
-	// Note: MinIO credentials are NOT in this config. CWTs read them from
-	// K8s Secret loopzero-minio-credentials in the build cluster (envFrom.secretRef).
-	BaseDomain     string // e.g., "loopzero.local" — base domain for app hostnames
+	// BLOCKER-2 fix: GiteaURL/GiteaToken removed. Clone CWT gets credentials
+	// from K8s Secret (loopzero-gitea-credentials) via envFrom.
+	RegistryURL       string // e.g., "k3d-loopzero-registry:5000"
+	RegistryInsecure  bool   // true for local dev registries without TLS
+	BaseDomain        string // e.g., "loopzero.local" — base domain for app hostnames
+	HarborRegistryURL string // MEET-048: secondary registry for dual-push. Empty = disabled.
+	// MinIO credentials are injected via K8s Secret (envFrom) in CWTs, not via workflow params.
 }
 
 // WorkflowSubmitter implements services.WorkflowSubmitter using real Argo Workflows.
 // It uses the WorkflowBuilder to generate self-contained Workflow CRs with
 // ClusterWorkflowTemplate refs for reusable steps and inline templates for
 // language-specific steps.
+//
+// MOD-2: The submitter is namespace-agnostic. Each workflow runs in the tenant's
+// own build namespace (e.g., "build-acme"), passed via WorkflowSpec.Namespace.
 type WorkflowSubmitter struct {
-	client    dynamic.Interface
-	namespace string
-	builder   *WorkflowBuilder
+	client  dynamic.Interface
+	builder *WorkflowBuilder
 }
 
 // NewWorkflowSubmitter creates a WorkflowSubmitter connected to the build cluster.
@@ -72,27 +87,48 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 	}
 
 	builder := NewWorkflowBuilder(InfraParams{
-		GiteaURL:    cfg.GiteaURL,
-		GiteaToken:  cfg.GiteaToken,
-		RegistryURL: cfg.RegistryURL,
-		BaseDomain:  cfg.BaseDomain,
+		RegistryURL:       cfg.RegistryURL,
+		RegistryInsecure:  cfg.RegistryInsecure,
+		BaseDomain:        cfg.BaseDomain,
+		HarborRegistryURL: cfg.HarborRegistryURL,
 	})
 
 	return &WorkflowSubmitter{
-		client:    client,
-		namespace: cfg.Namespace,
-		builder:   builder,
+		client:  client,
+		builder: builder,
 	}, nil
 }
 
 // Submit generates a self-contained Workflow CR via the WorkflowBuilder and creates it
 // in the build cluster with retry for transient errors.
 func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSpec) (string, error) {
-	wfObject := s.builder.Build(spec)
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.workflow_submit",
+		trace.WithAttributes(
+			attribute.String("loopzero.workflow.namespace", spec.Namespace),
+		))
+	defer span.End()
 
-	meta, ok := wfObject["metadata"].(map[string]interface{})
-	if ok {
-		meta["namespace"] = s.namespace
+	wf, err := s.builder.Build(spec)
+	if err != nil {
+		return "", fmt.Errorf("argo: build workflow: %w", err)
+	}
+
+	wf.Namespace = spec.Namespace
+
+	// Sprint 6 B3: Propagate trace context to the Argo Workflow via annotations.
+	// This allows the build reconcile loop to link the completed workflow back
+	// to the originating deploy trace, creating end-to-end trace visibility.
+	if spanCtx := trace.SpanFromContext(ctx).SpanContext(); spanCtx.IsValid() {
+		if wf.Annotations == nil {
+			wf.Annotations = make(map[string]string)
+		}
+		wf.Annotations["loopzero.io/trace-id"] = spanCtx.TraceID().String()
+		wf.Annotations["loopzero.io/span-id"] = spanCtx.SpanID().String()
+	}
+
+	wfObject, err := wf.ToDict()
+	if err != nil {
+		return "", fmt.Errorf("argo: serialize workflow: %w", err)
 	}
 
 	workflow := &unstructured.Unstructured{Object: wfObject}
@@ -108,9 +144,11 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 			}
 		}
 
-		created, err := s.client.Resource(workflowGVR).Namespace(s.namespace).Create(ctx, workflow, metav1.CreateOptions{})
+		created, err := s.client.Resource(workflowGVR).Namespace(spec.Namespace).Create(ctx, workflow, metav1.CreateOptions{})
 		if err == nil {
-			return created.GetName(), nil
+			name := created.GetName()
+			span.SetAttributes(attribute.String("loopzero.workflow.name", name))
+			return name, nil
 		}
 
 		lastErr = err
@@ -125,14 +163,22 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 		return "", fmt.Errorf("argo: create workflow: %w", err)
 	}
 
+	span.RecordError(lastErr)
+	span.SetStatus(codes.Error, "workflow submission failed after retries")
 	return "", fmt.Errorf("argo: create workflow after %d retries: %w", submitMaxRetries, lastErr)
 }
 
 // Cancel stops a running workflow by setting its shutdown strategy.
-func (s *WorkflowSubmitter) Cancel(ctx context.Context, workflowID string) error {
-	patch := []byte(`{"spec":{"shutdown":"Stop"}}`)
-	_, err := s.client.Resource(workflowGVR).Namespace(s.namespace).Patch(
-		ctx, workflowID, "application/merge-patch+json", patch, metav1.PatchOptions{},
+func (s *WorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID string) error {
+	shutdownPatch := model.WorkflowModel{
+		Spec: model.WorkflowSpec{Shutdown: "Stop"},
+	}
+	patchBytes, err := json.Marshal(shutdownPatch)
+	if err != nil {
+		return fmt.Errorf("argo: marshal shutdown patch: %w", err)
+	}
+	_, err = s.client.Resource(workflowGVR).Namespace(namespace).Patch(
+		ctx, workflowID, "application/merge-patch+json", patchBytes, metav1.PatchOptions{},
 	)
 	if err != nil {
 		return fmt.Errorf("argo: cancel workflow %s: %w", workflowID, err)
@@ -140,15 +186,61 @@ func (s *WorkflowSubmitter) Cancel(ctx context.Context, workflowID string) error
 	return nil
 }
 
+// Delete removes a workflow object from the build cluster.
+// Used to free ResourceQuota (count/workflows.argoproj.io) after a build completes.
+// Returns nil if the workflow is already deleted (NotFound).
+func (s *WorkflowSubmitter) Delete(ctx context.Context, namespace, workflowID string) error {
+	err := s.client.Resource(workflowGVR).Namespace(namespace).Delete(ctx, workflowID, metav1.DeleteOptions{})
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return fmt.Errorf("argo: delete workflow %s/%s: %w", namespace, workflowID, err)
+	}
+	return nil
+}
+
 // GetStatus checks the external state of a workflow in the build cluster.
 // Returns (status, nil) if the workflow exists, or (nil, nil) if not found.
-func (s *WorkflowSubmitter) GetStatus(ctx context.Context, workflowID string) (*services.WorkflowStatus, error) {
-	wf, err := s.client.Resource(workflowGVR).Namespace(s.namespace).Get(ctx, workflowID, metav1.GetOptions{})
+//
+// BuildKit sidecar fix: When Argo kills the buildkitd daemon sidecar (SIGTERM after
+// main container exits), the sidecar exits non-zero and Argo marks the workflow as
+// "Failed" even though the build succeeded (main container exit code 0). This is a
+// known Argo Workflows behavior with daemon sidecars.
+//
+// To handle this, when the phase is "Failed", we check if all Pod-type nodes have
+// exitCode "0" on their outputs. If so, the build actually succeeded — the failure
+// is only from daemon sidecar termination.
+func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*services.WorkflowStatus, error) {
+	wf, err := s.client.Resource(workflowGVR).Namespace(namespace).Get(ctx, workflowID, metav1.GetOptions{})
 	if err != nil {
-		// Not found — workflow was cleaned up or never existed
-		return nil, nil
+		// BRC-006 fix: distinguish NotFound (workflow deleted/expired) from transient
+		// errors (network timeout, auth expiry, API server blip). Previously ALL errors
+		// returned (nil, nil), causing the reconcile loop to permanently fail live builds
+		// on any transient K8s API disruption.
+		if k8serrors.IsNotFound(err) {
+			return nil, nil
+		}
+		// Transient error — propagate to caller so reconcile loop retries next tick
+		return nil, fmt.Errorf("argo: get workflow %s/%s: %w", namespace, workflowID, err)
 	}
 
-	phase, _, _ := unstructured.NestedString(wf.Object, "status", "phase")
+	status, err := forge.ParseWorkflowStatusFromUnstructured(wf.Object)
+	if err != nil {
+		return nil, fmt.Errorf("argo: parse workflow status %s/%s: %w", namespace, workflowID, err)
+	}
+	if status == nil {
+		return &services.WorkflowStatus{}, nil
+	}
+
+	phase := string(status.Phase)
+
+	// Defensive check: if Argo reports "Failed" but all pod main containers exited with 0,
+	// override to "Succeeded". Originally needed for sidecar false-failures (MEET-2026-03-26-007).
+	// Retained as defense-in-depth against Argo phase-reporting edge cases (node eviction,
+	// CRI timeout, etc.). Should fire zero times with single-container BuildKit pattern.
+	if phase == "Failed" && forge.AllPodNodesExitedZero(status) {
+		slog.Warn("workflow phase overridden: all main containers exited 0 but Argo reported Failed",
+			"workflow_id", workflowID, "namespace", namespace)
+		phase = "Succeeded"
+	}
+
 	return &services.WorkflowStatus{Phase: phase}, nil
 }

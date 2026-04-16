@@ -1,0 +1,41 @@
+# Chaos Experiment: kill loopzero-api leader pod
+#
+# Roadmap 01 D/F: non-leader pod must survive leader kill and take
+# over without being killed by its own liveness probe during election.
+#
+# Historical bug: leader election took 60s, liveness probe killed pods
+# at 45s → infinite restart loop. The fix was to start the HTTP server
+# BEFORE leader election so /healthz is always 200 from t=0.
+#
+# Hypothesis: killing the leader results in election by the survivor
+# within 90s. Neither pod restarts. Health endpoint never returns 5xx.
+#
+# Steady-state SLO:
+#   - /api/v1/health returns 200 during the entire experiment
+#   - pod restart count does NOT increase for loopzero-api pods
+#   - new leader's loopzero_leader_status=1 within 90s
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kill-loopzero-api-leader
+  namespace: platform-system
+  annotations:
+    loopzero.io/roadmap: "01"
+    loopzero.io/dod-test: "Non-leader pod restart count = 0 during 30 min"
+    loopzero.io/hypothesis: "Killing leader pod elects new leader within 90s; surviving pod never restarts"
+    loopzero.io/slo-query: |
+      # No pod restarts during the experiment window
+      increase(kube_pod_container_status_restarts_total{pod=~"loopzero-api-.*"}[5m]) == 0
+      and
+      # API health stays 200
+      probe_success{job="loopzero-api-health"} == 1
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - platform-system
+    labelSelectors:
+      "app": "loopzero-api"
+  duration: "30s"

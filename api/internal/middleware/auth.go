@@ -1,7 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package middleware
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,11 +19,10 @@ import (
 // ErrInvalidToken is returned when token validation fails.
 var ErrInvalidToken = errors.New("invalid or expired token")
 
-// TokenValidationResult holds the result of validating a GitHub token.
+// TokenValidationResult holds the result of validating an auth token.
 type TokenValidationResult struct {
-	UserID   string
-	Email    string
-	GitHubID int64
+	UserID string
+	Email  string
 }
 
 // TokenValidator validates authentication tokens (DIP — abstracts GitHub API).
@@ -41,7 +45,6 @@ type MembershipStore interface {
 type UserContext struct {
 	UserID   string
 	Email    string
-	GitHubID int64
 	TenantID string
 	Role     string
 }
@@ -83,13 +86,78 @@ func Auth(validator TokenValidator, store MembershipStore) func(http.Handler) ht
 // The TTL ensures entries expire naturally; this limit is a safety net.
 const maxTokenCacheSize = 10000
 
+// ServiceAuthSecret is the shared secret for internal service-to-service calls.
+// Set from LOOPZERO_SERVICE_AUTH_SECRET env var. When empty, service auth is disabled.
+var ServiceAuthSecret string
+
+// ServiceAuthSecretPrevious is the previous secret for zero-downtime rotation (S1.2).
+// Set from LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS env var. When empty, single-key mode.
+var ServiceAuthSecretPrevious string
+
+// validateServiceAuth checks the X-Service-Auth header against current and previous secrets.
+// S1.2: Dual-key rotation — accepts current OR previous during rotation window.
+func validateServiceAuth(provided string) bool {
+	if ServiceAuthSecret == "" {
+		return false
+	}
+	if provided == ServiceAuthSecret {
+		return true
+	}
+	if ServiceAuthSecretPrevious != "" && provided == ServiceAuthSecretPrevious {
+		return true
+	}
+	return false
+}
+
 // AuthWithTTL is like Auth but with a configurable cache TTL.
+// Also accepts internal service calls with X-Service-Auth header (cloud→engine proxy).
 func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.Duration) func(http.Handler) http.Handler {
 	cache := &sync.Map{}
 	var cacheSize atomic.Int64
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Internal service auth: cloud proxy sends X-Service-Auth + identity headers.
+			// S2.3: Engine resolves role from DB, not from headers. Proxy sends only
+			// identity (user ID, tenant, email). Role is NEVER trusted from headers.
+			if serviceAuth := r.Header.Get("X-Service-Auth"); serviceAuth != "" {
+				if validateServiceAuth(serviceAuth) {
+					userID := r.Header.Get("X-LoopZero-User-ID")
+					tenantID := r.Header.Get("X-LoopZero-Tenant")
+					email := r.Header.Get("X-LoopZero-Email")
+					if userID != "" && tenantID != "" {
+						// Resolve role from DB — same authority as Bearer path
+						memberships, mErr := store.GetMemberships(r.Context(), userID)
+						if mErr != nil {
+							writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to resolve team memberships")
+							return
+						}
+						role := ""
+						for _, m := range memberships {
+							if m.TenantID == tenantID {
+								role = m.Role
+								break
+							}
+						}
+						if role == "" {
+							writeError(w, http.StatusForbidden, "TENANT_NOT_FOUND", "You are not a member of the requested team")
+							return
+						}
+						ctx := context.WithValue(r.Context(), userContextKey, &UserContext{
+							UserID:   userID,
+							Email:    email,
+							TenantID: tenantID,
+							Role:     role,
+						})
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
+					}
+				}
+				// Invalid service auth — reject immediately, do not fall through
+				writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid service authentication")
+				return
+			}
+
 			// Extract token
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
@@ -117,9 +185,8 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 			}
 
 			uc := &UserContext{
-				UserID:   result.UserID,
-				Email:    result.Email,
-				GitHubID: result.GitHubID,
+				UserID: result.UserID,
+				Email:  result.Email,
 			}
 
 			switch len(memberships) {
@@ -156,14 +223,24 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 	}
 }
 
+// tokenCacheKey returns a SHA256 hash of the token for use as cache key.
+// SEC-001 fix: raw tokens as map keys means a heap dump exposes all active sessions.
+// Using a hash prevents token recovery from memory dumps.
+func tokenCacheKey(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
+}
+
 func validateWithCache(ctx context.Context, validator TokenValidator, cache *sync.Map, cacheSize *atomic.Int64, token string, ttl time.Duration) (*TokenValidationResult, error) {
+	cacheKey := tokenCacheKey(token)
+
 	// Check cache
-	if cached, ok := cache.Load(token); ok {
+	if cached, ok := cache.Load(cacheKey); ok {
 		cv := cached.(*cachedValidation)
 		if time.Now().Before(cv.expiresAt) {
 			return cv.result, nil
 		}
-		cache.Delete(token)
+		cache.Delete(cacheKey)
 		cacheSize.Add(-1)
 	}
 
@@ -180,7 +257,7 @@ func validateWithCache(ctx context.Context, validator TokenValidator, cache *syn
 		evictCache(cache, cacheSize, now)
 	}
 
-	cache.Store(token, &cachedValidation{
+	cache.Store(cacheKey, &cachedValidation{
 		result:    result,
 		createdAt: now,
 		expiresAt: now.Add(ttl),

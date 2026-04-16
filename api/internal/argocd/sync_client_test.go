@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package argocd
 
 import (
@@ -52,7 +55,7 @@ func TestSyncClient_WaitForSyncTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := client.WaitForSync(ctx, "nonexistent-app-12345", 2*time.Second)
+	err := client.WaitForSync(ctx, "nonexistent-app-12345", 2*time.Second, nil)
 	if err == nil {
 		t.Fatal("expected error for non-existent application")
 	}

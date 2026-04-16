@@ -1,0 +1,102 @@
+# Infrastructure Restart — restart platform pods after new images are built.
+#
+# Triggered automatically after Build Images succeeds.
+# Verifies CI passed for the same SHA before restarting.
+
+name: "Infra: Restart Pods"
+
+on:
+  workflow_run:
+    workflows: ["Build: Container Images"]
+    types: [completed]
+    branches: [develop, homolog, main]
+
+permissions:
+  contents: read
+  checks: read
+
+env:
+  DOCTL_VERSION: "1.104.0"
+
+jobs:
+  restart:
+    name: Restart platform pods
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: infra-dev
+    env:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+    steps:
+      - name: Verify CI passed for this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          REPO="${{ github.repository }}"
+          echo "Checking CI status for SHA: $SHA"
+
+          # Poll for CI completion (max 5 min)
+          for attempt in $(seq 1 30); do
+            RESULT=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=1" \
+              --jq '.workflow_runs[0] | "\(.status) \(.conclusion)"' 2>/dev/null || echo "not_found")
+
+            STATUS=$(echo "$RESULT" | awk '{print $1}')
+            CONCLUSION=$(echo "$RESULT" | awk '{print $2}')
+
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ]; then
+                echo "CI passed for $SHA"
+                break
+              else
+                echo "::error::CI failed for $SHA (conclusion: $CONCLUSION) — skipping restart"
+                exit 1
+              fi
+            fi
+
+            echo "CI not yet complete ($STATUS) — waiting 10s ($attempt/30)"
+            sleep 10
+          done
+
+          if [ "$STATUS" != "completed" ]; then
+            echo "::error::CI did not complete within 5 min — skipping restart"
+            exit 1
+          fi
+
+      - name: Install tools
+        run: |
+          curl -sL "https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-amd64.tar.gz" | tar xz -C /usr/local/bin
+          curl -sLO "https://dl.k8s.io/release/v1.32.0/bin/linux/amd64/kubectl" && chmod +x kubectl && mv kubectl /usr/local/bin/
+          doctl auth init --access-token "$DIGITALOCEAN_TOKEN"
+
+      - name: Restart deployments
+        run: |
+          # Discover mgmt cluster for the branch
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          case "$BRANCH" in
+            develop) PATTERN="loopzero-infra-dev" ;;
+            homolog) PATTERN="loopzero-infra-homolog" ;;
+            main)    PATTERN="loopzero-infra-prod" ;;  # TODO: resolve actual name
+            *)       echo "::error::Unknown branch: $BRANCH" && exit 1 ;;
+          esac
+
+          CLUSTER=$(doctl kubernetes cluster list --no-header --format Name | grep "${PATTERN}.*mgmt" | head -1)
+          if [ -z "$CLUSTER" ]; then
+            echo "::error::No mgmt cluster found matching $PATTERN"
+            exit 1
+          fi
+
+          doctl kubernetes cluster kubeconfig save "$CLUSTER"
+
+          for deploy in loopzero-api loopzero-controller tenant-controller loopzero-cloud loopzero-dashboard; do
+            if kubectl get deploy "$deploy" -n platform-system >/dev/null 2>&1; then
+              kubectl rollout restart deploy "$deploy" -n platform-system
+              echo "Restarted: $deploy"
+            fi
+          done
+
+          echo "Waiting for rollouts..."
+          for deploy in loopzero-api loopzero-controller tenant-controller; do
+            kubectl rollout status deploy "$deploy" -n platform-system --timeout=120s
+          done
+          echo "All rollouts complete"

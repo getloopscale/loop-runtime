@@ -55,6 +55,7 @@ spec:
             properties:
               branch:
                 description: Branch is the source branch for the preview.
+                minLength: 1
                 type: string
               expiresAt:
                 description: ExpiresAt is the time at which this preview should be
@@ -64,19 +65,23 @@ spec:
               prNumber:
                 description: PRNumber is the pull request number that triggered this
                   preview.
+                minimum: 1
                 type: integer
               projectId:
                 description: ProjectID is the project this preview belongs to.
+                minLength: 1
                 type: string
               releaseId:
                 description: ReleaseID is the release associated with this preview.
                 type: string
               tenantId:
                 description: TenantID is the owning tenant identifier.
+                minLength: 1
                 type: string
             required:
             - branch
             - expiresAt
+            - prNumber
             - projectId
             - releaseId
             - tenantId

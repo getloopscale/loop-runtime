@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package server
 
 import (
@@ -18,6 +21,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/sse"
+	"github.com/loopzero/loopzero/pkg/enforcement"
 )
 
 // Config holds the server configuration.
@@ -26,18 +30,26 @@ type Config struct {
 	MetricsPort        string
 	Logger             *slog.Logger
 	DB                 routes.DBHealthChecker
+	HealthServices     []routes.ServiceHealthChecker
 	TokenValidator     middleware.TokenValidator
 	MemberStore        middleware.MembershipStore
 	ProjectStore       routes.ProjectStore
 	TenantCRMgr        routes.TenantCRManager
+	ProjectDeleter     routes.ProjectDeleter
 	IdempotencyStore   middleware.IdempotencyStore
 	SourceStore        source.SourceStore
+	ObjectUploader     routes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
 	// ArgoCallbackSecret is deprecated — callback route removed (C-01 fix).
 	// Kept in Config struct for backwards compatibility of env var parsing.
 	ArgoCallbackSecret string
 	EventStore         sse.EventStore
 	BuildStoreReader   sse.BuildStoreReader
 	SecretStore        routes.SecretStore
+	// BootstrapStore handles platform bootstrap (internal-only endpoint).
+	// When set, POST /internal/bootstrap is available.
+	BootstrapStore     routes.BootstrapStore
+	BootstrapSecret    string // SEC-003: shared secret for /internal/bootstrap auth
+	CellPlacement      routes.CellPlacementEngine // ADR-0008: Cell assignment for new tenants
 	// ShutdownCtx is cancelled when the server begins graceful shutdown.
 	// Background goroutines (reaper, cleaner, pruner, callback processing)
 	// should use this context so they stop before the connection pool closes (A-05).
@@ -49,6 +61,8 @@ type Config struct {
 	// and callback routes. Created in main.go to avoid duplicate instances
 	// with separate callbackWg (C-08).
 	BuildHandler       *routes.BuildHandler
+	// ArgoCallbackHandler handles POST /internal/argocd-callback from ArgoCD Notifications.
+	ArgoCallbackHandler *routes.ArgoCallbackHandler
 	// RateLimiter applies per-tenant rate limiting on mutation routes (C-01).
 	// When nil, rate limiting is disabled.
 	RateLimiter        *middleware.RateLimiter
@@ -62,16 +76,73 @@ type Config struct {
 	SSEPollInterval         time.Duration
 	SSESafetyTimeout        time.Duration
 	SSEMaxConcurrentStreams int64
+	// LogsHandler handles GET /api/v1/builds/{id}/logs (build log retrieval via Loki).
+	LogsHandler *routes.LogsHandler
+	// RollbackHandler handles POST /api/v1/projects/{name}/rollback.
+	RollbackHandler *routes.RollbackHandler
+	// StatusHandler handles GET /api/v1/projects/{name}/status.
+	StatusHandler *routes.StatusHandler
+	// BuildListHandler handles GET /api/v1/projects/{name}/builds.
+	BuildListHandler *routes.BuildListHandler
+	// SecretK8sSync creates K8s Secrets on mgmt + ExternalSecret CRs on workload.
+	SecretK8sSync routes.SecretK8sSync
+	// EnvironmentHandler handles GET/POST/DELETE /api/v1/environments.
+	EnvironmentHandler *routes.EnvironmentHandler
+	// TeamHandler handles GET/POST/DELETE/PATCH /api/v1/teams/members.
+	TeamHandler *routes.TeamHandler
+	// DomainHandler handles custom domain CRUD + verification.
+	// MEET-2026-04-05-033: Custom Domains feature.
+	DomainHandler *routes.DomainHandler
+	// GitHubWebhookHandler handles POST /api/v1/webhooks/github (no auth — GitHub sends events).
+	GitHubWebhookHandler http.Handler
+	// RepositoryHandler handles project↔GitHub repository linking.
+	RepositoryHandler *routes.RepositoryHandler
+	// IsProduction indicates production mode — enables strict error handling.
+	IsProduction bool
+	// AuditWriter writes mutation events to audit_log table. Nil = slog only.
+	AuditWriter middleware.AuditWriter
+	// AuditHandler handles GET /api/v1/audit (requires admin+ role).
+	AuditHandler *routes.AuditHandler
+	// PlanLimiter enforces plan limits on mutation routes (Phase 1).
+	PlanLimiter *enforcement.PlanLimiter
+	// UpgradeURL is included in 402 responses when plan limits are hit.
+	UpgradeURL string
+	// PGPoolStatsFunc returns (inUse, total) connection counts for backpressure.
+	// When set, mutations are rejected with 503 when pool utilization > 90%.
+	PGPoolStatsFunc func() (inUse int32, total int32)
+	// PGCircuitBreakerThresholdPct is the pool saturation % for backpressure (default 90).
+	PGCircuitBreakerThresholdPct int
 }
 
 // NewRouter creates a chi router with middleware and routes.
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 
-	// Middleware chain: metrics → correlation-id → logging
+	// CORS — allow dashboard (cloud.{domain}) to call API (api.{domain}).
+	// Must be FIRST middleware so preflight OPTIONS get handled before auth.
+	r.Use(corsMiddleware(os.Getenv("CORS_ALLOWED_ORIGIN")))
+
+	// Middleware chain: metrics → otel-tracing → correlation-id → logging → backpressure
+	// OtelHTTP MUST be before CorrelationID so span context is available,
+	// but CorrelationID remains independent (C2 — MEET-020).
 	r.Use(metrics.HTTPMetrics)
+	r.Use(middleware.OtelHTTP)
 	r.Use(middleware.CorrelationID)
 	r.Use(middleware.RequestLogging(cfg.Logger))
+
+	// PG backpressure: reject mutations when connection pool is near saturation.
+	// Prevents cascading failures under load — returns 503 with Retry-After.
+	if cfg.PGPoolStatsFunc != nil {
+		threshold := cfg.PGCircuitBreakerThresholdPct
+		if threshold == 0 {
+			threshold = 90
+		}
+		pgCB := middleware.NewPGCircuitBreaker(middleware.PGCircuitBreakerConfig{
+			ThresholdPct:  threshold,
+			PoolStatsFunc: cfg.PGPoolStatsFunc,
+		})
+		r.Use(pgCB.Middleware())
+	}
 
 	// Custom 404/405 handlers: return JSON with LoopZeroError format (F-05)
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
@@ -86,15 +157,29 @@ func NewRouter(cfg Config) *chi.Mux {
 	})
 
 	// Public routes (no auth required)
-	health := routes.NewHealthHandler(cfg.DB)
+	health := routes.NewHealthHandler(cfg.DB, cfg.HealthServices...)
 	r.Get("/api/v1/health", health.Health)
 	r.Get("/api/v1/health/deep", health.DeepHealth)
+
+	// Internal-only routes (no auth — called by platform controllers, not users)
+	if cfg.BootstrapStore != nil {
+		bootstrap := routes.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret, cfg.CellPlacement)
+		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
+	}
+	if cfg.ArgoCallbackHandler != nil {
+		r.Post("/internal/argocd-callback", cfg.ArgoCallbackHandler.Handle)
+	}
+
+	// GitHub webhook (no auth — GitHub validates via HMAC signature internally)
+	if cfg.GitHubWebhookHandler != nil {
+		r.Post("/api/v1/webhooks/github", cfg.GitHubWebhookHandler.ServeHTTP)
+	}
 
 	// Protected routes (auth required)
 	if cfg.TokenValidator != nil && cfg.MemberStore != nil {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Auth(cfg.TokenValidator, cfg.MemberStore))
-			r.Use(middleware.AuditLog(cfg.Logger))
+			r.Use(middleware.AuditLog(cfg.Logger, cfg.AuditWriter))
 
 			// Auth routes
 			auth := routes.NewAuthHandler()
@@ -114,18 +199,73 @@ func NewRouter(cfg Config) *chi.Mux {
 				idempotentMiddlewares = append(idempotentMiddlewares, middleware.Idempotency(cfg.IdempotencyStore))
 			}
 
+			// Plan enforcement middlewares (Phase 1).
+			// Each mutation route gets a middleware that checks the plan limit before proceeding.
+			// CountFn closures query the DB directly via PlanLimiter's DB connection.
+			tenantFromCtx := func(r *http.Request) string {
+				uc := middleware.GetUserContext(r.Context())
+				if uc == nil {
+					return ""
+				}
+				return uc.TenantID
+			}
+			upgradeURL := cfg.UpgradeURL
+			if upgradeURL == "" {
+				upgradeURL = "/billing"
+			}
+
+			projectEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
+				Metric: "projects",
+				CountFn: func(tenantID string) int {
+					if cfg.ProjectStore == nil {
+						return 0
+					}
+					ps, _ := cfg.ProjectStore.ListByTenant(context.Background(), tenantID)
+					return len(ps)
+				},
+			}, tenantFromCtx, upgradeURL)
+
+			buildEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
+				Metric: "builds_per_month",
+				CountFn: enforcement.CountBuildsThisMonth(cfg.PlanLimiter),
+			}, tenantFromCtx, upgradeURL)
+
+			envEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
+				Metric: "environments",
+				CountFn: enforcement.CountRows(cfg.PlanLimiter, "SELECT COUNT(*) FROM environment_targets WHERE tenant_id = $1"),
+			}, tenantFromCtx, upgradeURL)
+
+			seatEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
+				Metric: "seats",
+				CountFn: enforcement.CountRows(cfg.PlanLimiter, "SELECT COUNT(*) FROM tenant_members WHERE tenant_id = $1"),
+			}, tenantFromCtx, upgradeURL)
+
 			// Source upload — auth + rate limiting, no idempotency.
 			// Upload is a pre-build step; idempotency belongs on build submission.
 			if cfg.SourceStore != nil {
-				sourceHandler := routes.NewSourceHandler(cfg.SourceStore)
+				var sourceOpts []func(*routes.SourceHandler)
+				if cfg.ObjectUploader != nil {
+					sourceOpts = append(sourceOpts, routes.WithObjectUploader(cfg.ObjectUploader))
+				}
+				if cfg.IsProduction {
+					sourceOpts = append(sourceOpts, routes.WithProductionMode())
+				}
+				sourceHandler := routes.NewSourceHandler(cfg.SourceStore, sourceOpts...)
 				r.With(rateLimitMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)
 			}
 
-			// Project creation — auth + rate limiting, no idempotency.
+			// Project routes — auth + rate limiting, no idempotency.
 			// Project names are unique per tenant; the DB constraint handles duplicates.
 			if cfg.ProjectStore != nil && cfg.TenantCRMgr != nil {
 				projects := routes.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
-				r.With(rateLimitMiddlewares...).Post("/api/v1/projects", projects.Create)
+				if cfg.ProjectDeleter != nil {
+					projects.SetDeleter(cfg.ProjectDeleter)
+				}
+				r.Get("/api/v1/projects", projects.List)
+				r.Get("/api/v1/projects/{name}", projects.Get)
+				r.With(append(rateLimitMiddlewares, projectEnforcement)...).Post("/api/v1/projects", projects.Create)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}", projects.Delete)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}/environments/{env}", projects.DeleteEnvironment)
 			}
 
 			// SSE stream route (no idempotency needed — read-only)
@@ -149,10 +289,15 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.Get("/api/v1/builds/{id}/stream", streamHandler.ServeHTTP)
 			}
 
-			// Secret routes (read-only, no idempotency needed)
+			// Secret routes
 			if cfg.SecretStore != nil {
 				secrets := routes.NewSecretHandler(cfg.SecretStore)
+				if cfg.SecretK8sSync != nil {
+					secrets.SetK8sSync(cfg.SecretK8sSync)
+				}
 				r.Get("/api/v1/secrets", secrets.List)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/secrets", secrets.Set)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secrets.DeleteSecret)
 			}
 
 			// Build routes — use the single BuildHandler from Config (C-08).
@@ -163,8 +308,67 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.Get("/api/v1/builds/{id}", cfg.BuildHandler.Get)
 
 				// Mutating build routes with rate limiting + idempotency
-				r.With(idempotentMiddlewares...).Post("/api/v1/builds", cfg.BuildHandler.Create)
-				r.With(idempotentMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
+				r.With(append(idempotentMiddlewares, buildEnforcement)...).Post("/api/v1/builds", cfg.BuildHandler.Create)
+				// Cancel is inherently idempotent (cancelling twice = same result).
+				// Rate-limited but no Idempotency-Key required.
+				r.With(rateLimitMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
+			}
+
+			// Build logs route (read-only, no idempotency needed)
+			if cfg.LogsHandler != nil {
+				r.Get("/api/v1/builds/{id}/logs", cfg.LogsHandler.Get)
+			}
+
+			// Status route (read-only, no idempotency needed)
+			if cfg.StatusHandler != nil {
+				r.Get("/api/v1/projects/{name}/status", cfg.StatusHandler.Get)
+			}
+
+			// Build list route (read-only, no idempotency needed)
+			if cfg.BuildListHandler != nil {
+				r.Get("/api/v1/projects/{name}/builds", cfg.BuildListHandler.List)
+			}
+
+			// Rollback route — mutation, needs rate limiting
+			if cfg.RollbackHandler != nil {
+				r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
+			}
+
+			// Team routes
+			if cfg.TeamHandler != nil {
+				r.Get("/api/v1/teams/members", cfg.TeamHandler.List)
+				r.With(append(rateLimitMiddlewares, seatEnforcement)...).Post("/api/v1/teams/members", cfg.TeamHandler.Add)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/teams/members/{username}", cfg.TeamHandler.Remove)
+				r.With(rateLimitMiddlewares...).Patch("/api/v1/teams/members/{username}", cfg.TeamHandler.UpdateRole)
+			}
+
+			// Environment routes
+			if cfg.EnvironmentHandler != nil {
+				r.Get("/api/v1/environments", cfg.EnvironmentHandler.List)
+				r.Get("/api/v1/environments/{name}", cfg.EnvironmentHandler.Get)
+				r.With(append(rateLimitMiddlewares, envEnforcement)...).Post("/api/v1/environments", cfg.EnvironmentHandler.Create)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/environments/{name}", cfg.EnvironmentHandler.Delete)
+			}
+
+			// Custom domain routes (MEET-2026-04-05-033)
+			if cfg.DomainHandler != nil {
+				r.Get("/api/v1/domains", cfg.DomainHandler.List)
+				r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)
+				r.With(append(rateLimitMiddlewares, idempotentMiddlewares...)...).Post("/api/v1/domains", cfg.DomainHandler.Create)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/domains/{domain}/verify", cfg.DomainHandler.Verify)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)
+			}
+
+			// Repository connection routes (GitHub App — auto-deploy)
+			if cfg.RepositoryHandler != nil {
+				r.Post("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Connect)
+				r.Delete("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Disconnect)
+				r.Get("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.GetConnection)
+			}
+
+			// Audit log endpoint (requires admin+ role)
+			if cfg.AuditHandler != nil {
+				r.Get("/api/v1/audit", cfg.AuditHandler.List)
 			}
 		})
 	}
@@ -298,7 +502,46 @@ func Run(cfg Config) error {
 		cfg.Logger.Error("metrics server shutdown failed", "error", err)
 	}
 
-	// Step 3: After Run() returns, main.go's defer dbAdapter.Close() runs,
-	// closing the connection pool. By this point all goroutines have stopped.
+	// Step 3: After Run() returns, main.go defers execute in LIFO order:
+	//   a) bgWg wait (up to 30s for background goroutines to finish)
+	//   b) dbAdapter.Close() (connection pool closed only after goroutines drain)
 	return srv.Shutdown(ctx)
+}
+
+// corsMiddleware adds CORS headers for the dashboard to call the API cross-origin.
+func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Allow specific origin or wildcard for dev
+			allowed := false
+			if allowedOrigin != "" && origin == allowedOrigin {
+				allowed = true
+			} else if allowedOrigin == "" {
+				// No restriction configured — allow any *.loopzero.example
+				allowed = true
+			}
+
+			if allowed {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Correlation-ID")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Max-Age", "86400")
+			}
+
+			// Handle preflight
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package unit
 
 import (
@@ -10,4 +13,9 @@ import (
 func TestKubeTenantCRManagerImplementsInterface(t *testing.T) {
 	// Compile-time check: TenantCRManager implements routes.TenantCRManager.
 	var _ routes.TenantCRManager = (*k8s.TenantCRManager)(nil)
+}
+
+func TestKubeTenantCRManagerImplementsEnvironmentManager(t *testing.T) {
+	// Compile-time check: TenantCRManager implements routes.EnvironmentManager.
+	var _ routes.EnvironmentManager = (*k8s.TenantCRManager)(nil)
 }

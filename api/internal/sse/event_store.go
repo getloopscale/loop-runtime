@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package sse
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -78,10 +82,13 @@ func (s *PostgresEventStore) Append(ctx context.Context, buildID string, eventTy
 
 	// Send NOTIFY to wake up SSE listeners for this build.
 	// Best-effort: if NOTIFY fails, SSE handlers will fall back to polling.
-	_, _ = s.execDB.Exec(ctx,
+	if _, err := s.execDB.Exec(ctx,
 		"SELECT pg_notify('sse_events', $1)",
 		buildID,
-	)
+	); err != nil {
+		slog.Warn("event store: pg_notify failed, SSE listeners will fall back to polling",
+			"build_id", buildID, "error", err)
+	}
 
 	return id, nil
 }

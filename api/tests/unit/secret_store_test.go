@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package unit
 
 import (
@@ -153,6 +156,18 @@ func (f *fakeQueryExecutorForSecrets) Query(ctx context.Context, sql string, arg
 	}
 	return f.rows, nil
 }
+
+func (f *fakeQueryExecutorForSecrets) Exec(_ context.Context, _ string, _ ...any) (db.ExecResult, error) {
+	return db.ExecResult{RowsAffected: 1}, nil
+}
+
+func (f *fakeQueryExecutorForSecrets) QueryRow(_ context.Context, _ string, _ ...any) db.Row {
+	return &fakeRowImpl{}
+}
+
+type fakeRowImpl struct{}
+
+func (f *fakeRowImpl) Scan(_ ...any) error { return nil }
 
 // fakeRowsImpl implements db.Rows for testing.
 type fakeRowsImpl struct {

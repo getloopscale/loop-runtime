@@ -1,11 +1,17 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package routes
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -23,14 +29,41 @@ type SourceUploadResponse struct {
 	Apps      []string `json:"apps"`
 }
 
+// ObjectUploader uploads objects to S3-compatible storage (Spaces/MinIO).
+type ObjectUploader interface {
+	Upload(ctx context.Context, bucket, key string, data io.Reader) error
+}
+
 // SourceHandler provides HTTP handlers for source upload operations.
 type SourceHandler struct {
-	store source.SourceStore
+	store        source.SourceStore
+	objStore     ObjectUploader // optional: upload bundle to object storage for build cluster access
+	isProduction bool           // when true, S3 upload failure is fatal (CODE-SILENT-S3-001 fix)
 }
 
 // NewSourceHandler creates a new SourceHandler.
-func NewSourceHandler(store source.SourceStore) *SourceHandler {
-	return &SourceHandler{store: store}
+func NewSourceHandler(store source.SourceStore, opts ...func(*SourceHandler)) *SourceHandler {
+	h := &SourceHandler{store: store}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
+
+// WithObjectUploader sets an optional object store for uploading bundles
+// to S3-compatible storage (Spaces/MinIO) for build cluster access.
+func WithObjectUploader(u ObjectUploader) func(*SourceHandler) {
+	return func(h *SourceHandler) {
+		h.objStore = u
+	}
+}
+
+// WithProductionMode marks the handler as running in production.
+// In production, S3 upload failures are fatal instead of warnings.
+func WithProductionMode() func(*SourceHandler) {
+	return func(h *SourceHandler) {
+		h.isProduction = true
+	}
 }
 
 // Upload handles POST /api/v1/source/upload.
@@ -109,7 +142,8 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract bundle file
+	// Extract bundle file and stream to temp file (CODE-003 fix: avoids triple-buffering
+	// up to 1.5GB per request by writing once to disk instead of io.ReadAll).
 	bundleFile, _, err := r.FormFile("bundle")
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
@@ -121,25 +155,87 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = bundleFile.Close() }()
 
+	// Write bundle to temp file once — Gitea and S3 read from disk, not memory.
+	tmpFile, err := os.CreateTemp("", "loopzero-bundle-*.tar.gz")
+	if err != nil {
+		slog.Error("source upload: failed to create temp file", "error", err)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+	defer func() {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+	}()
+
+	if _, err := io.Copy(tmpFile, bundleFile); err != nil {
+		slog.Error("source upload: failed to write temp file", "error", err)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
 	// Extract project name from loopzero.yaml (supports both 'project' and 'name' fields)
 	projectName := cfg.Project
 	if projectName == "" {
 		projectName = cfg.Name
 	}
 
-	// Push bundle to source store — repo: loopzero-source-{tenant}-{project}
-	commitSHA, err := h.store.PushBundle(ctx, uc.TenantID, projectName, bundleFile)
+	// Rewind temp file for Gitea push
+	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
+	// Push bundle to source store (Gitea) — repo: loopzero-source-{tenant}-{project}
+	result, err := h.store.PushBundle(ctx, uc.TenantID, projectName, tmpFile)
 	if err != nil {
 		slog.Error("source upload failed", "error", err, "team_id", uc.TenantID)
 		writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
 		return
 	}
 
+	// Clean up the git bundle temp dir if one was created (tar.gz flow).
+	if result.GitBundlePath != "" {
+		defer func() { _ = os.RemoveAll(filepath.Dir(result.GitBundlePath)) }()
+	}
+
+	// Upload bundle to object storage (Spaces/MinIO) for build cluster access.
+	if h.objStore != nil {
+		objKey := fmt.Sprintf("%s/source/%s.bundle", uc.TenantID, result.SourceID)
+
+		// For tar.gz sources, PushBundle already created a git bundle (in GitBundlePath).
+		// For git bundle sources, reuse the original uploaded bundle.
+		var uploadReader io.Reader
+		if result.GitBundlePath != "" {
+			gitBundleFile, openErr := os.Open(result.GitBundlePath)
+			if openErr != nil {
+				writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+				return
+			}
+			defer func() { _ = gitBundleFile.Close() }()
+			uploadReader = gitBundleFile
+		} else {
+			if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+				writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+				return
+			}
+			uploadReader = tmpFile
+		}
+
+		if uploadErr := h.objStore.Upload(ctx, "loopzero-builds", objKey, uploadReader); uploadErr != nil {
+			if h.isProduction {
+				slog.Error("object store upload failed (fatal in production)", "error", uploadErr, "key", objKey)
+				writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
+				return
+			}
+			slog.Warn("object store upload failed (non-fatal in dev)", "error", uploadErr, "key", objKey)
+		}
+	}
+
 	// Sort app names for deterministic output
 	sort.Strings(appNames)
 
 	resp := SourceUploadResponse{
-		CommitSHA: commitSHA,
+		CommitSHA: result.SourceID,
 		Apps:      appNames,
 	}
 

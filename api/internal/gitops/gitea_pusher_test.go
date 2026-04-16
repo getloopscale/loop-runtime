@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package gitops
 
 import (
@@ -115,7 +118,7 @@ func TestGiteaGitOpsPusher_PushCreatesCorrectPath(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(cloneDir) }()
 
-	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopzero/loopzero-tenant-acme.git"
+	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopzero/acme-gitops.git"
 	gitRun(t, cloneDir, "git", "clone", cloneURL, filepath.Join(cloneDir, "repo"))
 
 	content, err := os.ReadFile(filepath.Join(cloneDir, "repo", "staging", "pathtest", "manifests.yaml"))
@@ -152,7 +155,7 @@ func TestGiteaGitOpsPusher_PushHasGitTrailers(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(cloneDir) }()
 
-	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopzero/loopzero-tenant-acme.git"
+	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopzero/acme-gitops.git"
 	gitRun(t, cloneDir, "git", "clone", cloneURL, filepath.Join(cloneDir, "repo"))
 
 	logOutput := gitRun(t, filepath.Join(cloneDir, "repo"), "git", "log", "-1", "--format=%B")

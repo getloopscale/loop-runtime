@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -181,7 +184,8 @@ describe('InitCommand', () => {
       await cmd.execute({ yes: true, name: 'my:project' });
 
       const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
-      expect(content).toContain('"my:project"');
+      // F-01 fix: names are now sanitized (RFC 1123). "my:project" becomes "my-project"
+      expect(content).toContain('my-project');
     });
 
     it('should quote app path containing spaces', async () => {
@@ -294,6 +298,64 @@ describe('InitCommand', () => {
       const calledDirs = detectFramework.mock.calls.map((c: string[]) => c[0]);
       expect(calledDirs.some((d: string) => d.includes('node_modules'))).toBe(false);
       expect(calledDirs.some((d: string) => d.includes('.git'))).toBe(false);
+    });
+  });
+
+  describe('conventional monorepo directory detection (non-monorepo fallback)', () => {
+    it('should detect apps inside apps/ directory when root has no framework', async () => {
+      // Create apps/hello-api/package.json — no workspace config
+      fs.mkdirSync(path.join(tmpDir, 'apps', 'hello-api'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpDir, 'apps', 'hello-api', 'package.json'),
+        '{"name":"hello-api","dependencies":{"express":"^4.0.0"}}',
+      );
+
+      const detectFramework = jest.fn().mockImplementation((dir: string) => {
+        if (dir.endsWith('/hello-api')) {
+          return { framework: 'express', port: 3000 };
+        }
+        return { framework: 'custom', port: null };
+      });
+
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework,
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true });
+
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('hello-api:');
+      expect(content).toContain('framework: express');
+      expect(content).toContain('port: 3000');
+    });
+
+    it('should detect apps inside services/ directory when root has no framework', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'services', 'auth-svc'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpDir, 'services', 'auth-svc', 'go.mod'),
+        'module auth-svc',
+      );
+
+      const detectFramework = jest.fn().mockImplementation((dir: string) => {
+        if (dir.endsWith('/auth-svc')) {
+          return { framework: 'go', port: 8080 };
+        }
+        return { framework: 'custom', port: null };
+      });
+
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework,
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true });
+
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('auth-svc:');
+      expect(content).toContain('framework: go');
     });
   });
 
@@ -681,6 +743,70 @@ describe('InitCommand', () => {
       // The app key should use sanitized name, not the raw directory name
       expect(content).toContain('tmp-dbfeso52xo:');
       expect(content).not.toContain('tmp.DbFESo52xo');
+    });
+  });
+
+  describe('name truncation warning (F-02)', () => {
+    it('should include warning in JSON when name is truncated by length', async () => {
+      const longName = 'a'.repeat(65);
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 3000 }),
+        createProject: jest.fn().mockResolvedValue({ id: 'proj-123', name: 'a'.repeat(63), team: 'acme' }),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true, name: longName, json: true });
+
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
+      const parsed = JSON.parse(allWrites[allWrites.length - 1]);
+      expect(parsed.sanitized_from).toBe(longName);
+      expect(parsed.warning).toMatch(/truncated|length|63/i);
+    });
+
+    it('should show human warning when name is truncated by length', async () => {
+      const longName = 'a'.repeat(65);
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 3000 }),
+        createProject: jest.fn().mockResolvedValue({ id: 'proj-123', name: 'a'.repeat(63), team: 'acme' }),
+      });
+      const cmd = new InitCommand(deps);
+
+      await cmd.execute({ yes: true, name: longName });
+
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(allWrites).toMatch(/sanitized|truncated|63/i);
+    });
+  });
+
+  describe('custom framework default port (F-06)', () => {
+    it('should default to port 3000 when root app has custom framework and no port', async () => {
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'custom', port: null }),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('port: 3000');
+    });
+
+    it('should use detected port when framework provides one', async () => {
+      const deps = createMockDeps(tmpDir, {
+        detectMonorepo: jest.fn().mockReturnValue(null),
+        detectFramework: jest.fn().mockReturnValue({ framework: 'express', port: 8080 }),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(path.join(tmpDir, 'loopzero.yaml'), 'utf-8');
+      expect(content).toContain('port: 8080');
     });
   });
 

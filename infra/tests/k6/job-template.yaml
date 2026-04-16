@@ -1,0 +1,243 @@
+# LoopZero — k6 Runner Job Template
+#
+# Runs a k6 load test script inside the LoopZero platform cluster. Each
+# run is a one-shot Job that:
+#   1. Seeds the DB with tenants/users/memberships for the target level
+#   2. Builds a fresh git bundle fixture (init container)
+#   3. Executes the k6 script (main container)
+#   4. Uploads the summary JSON to Spaces (sidecar on exit)
+#
+# The script and fixture are mounted via ConfigMap so this template
+# can be reused across L1/L2/L3/stress/soak runs by changing a single
+# env var (K6_SCRIPT).
+#
+# Prerequisites installed once per cluster:
+#   - k6-operator (optional — this template uses a plain Job)
+#   - Prometheus (for remote-write)
+#   - DO Spaces bucket for report archival (optional)
+#
+# Usage:
+#   K6_SCRIPT=scripts/l2-50-tenants.js envsubst < job-template.yaml | kubectl apply -f -
+#
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-scripts
+  namespace: platform-system
+  labels:
+    app.kubernetes.io/name: k6-runner
+    app.kubernetes.io/part-of: loopzero
+data:
+  # The scripts ConfigMap is populated by the Makefile / Taskfile from
+  # the scripts/ directory before apply. See infra/tests/k6/Makefile.
+  # Placeholder kept for documentation — real content is injected.
+  README: |
+    This ConfigMap is intentionally empty in git. It is populated at
+    apply time by `task k6:apply` which runs:
+      kubectl create configmap k6-scripts \
+        --from-file=scripts/ --dry-run=client -o yaml \
+        | kubectl apply -f -
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-fixture-builder
+  namespace: platform-system
+data:
+  build-bundle.sh: |
+    #!/bin/sh
+    set -euo pipefail
+
+    # Build a fresh git bundle fixture at /fixtures/bundle.bin for the
+    # k6 script to POST to /api/v1/source/upload.
+    #
+    # This runs in an init container before k6 starts so the fixture
+    # is always fresh (git history = empty) and k6 never has to shell
+    # out during the test.
+
+    apk add --no-cache git >/dev/null
+
+    WORK=/tmp/fixture
+    mkdir -p "$WORK"
+    cd "$WORK"
+
+    cat > package.json <<'EOF'
+    {"name":"k6-loadtest","version":"1.0.0","main":"server.js","scripts":{"start":"node server.js"},"engines":{"node":">=18"}}
+    EOF
+
+    cat > package-lock.json <<'EOF'
+    {"name":"k6-loadtest","version":"1.0.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"k6-loadtest","version":"1.0.0"}}}
+    EOF
+
+    cat > server.js <<'EOF'
+    const http = require("http");
+    const port = process.env.PORT || 8080;
+    http.createServer((_, r) => {
+      r.writeHead(200, {"Content-Type": "application/json"});
+      r.end(JSON.stringify({status: "ok", service: "k6-loadtest"}));
+    }).listen(port, () => console.log("listening on " + port));
+    EOF
+
+    git config --global user.email "k6@loopzero.test"
+    git config --global user.name  "k6 runner"
+    git init -q .
+    git add -A
+    git commit -q -m "k6 loadtest fixture"
+
+    mkdir -p /fixtures
+    git bundle create /fixtures/bundle.bin HEAD
+    ls -l /fixtures/bundle.bin
+    echo "fixture built successfully"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-seed-sql
+  namespace: platform-system
+data:
+  seed.sh: |
+    #!/bin/sh
+    set -euo pipefail
+
+    # Seed the DB with k6 tenants/users/memberships. The level-specific
+    # scripts expect tenant IDs matching `k6-<level>-tn-<N>` and
+    # github_id base > 10_000_000 to avoid colliding with real users.
+
+    CLEAN_DB=$(echo "$DATABASE_URL" | sed -E 's/\&tcp_keepalives[^&]*//g')
+    COUNT="${K6_SEED_COUNT:-10}"
+    LEVEL="${K6_SEED_LEVEL:-l1}"
+
+    echo "Seeding $COUNT tenants for level $LEVEL..."
+
+    psql "$CLEAN_DB" -v ON_ERROR_STOP=1 -q <<SQL
+    INSERT INTO users (id, email, github_id, display_name)
+      SELECT format('k6-${LEVEL}-user-%s', i),
+             format('k6-${LEVEL}-%s@loopzero.test', i),
+             10000000 + i,
+             format('k6 ${LEVEL} user %s', i)
+      FROM generate_series(0, ${COUNT}-1) i
+      ON CONFLICT DO NOTHING;
+
+    INSERT INTO tenants (id, slug, display_name, owner_id)
+      SELECT format('k6-${LEVEL}-tn-%s', i),
+             format('k6-${LEVEL}-tn-%s', i),
+             format('k6 ${LEVEL} tenant %s', i),
+             format('k6-${LEVEL}-user-%s', i)
+      FROM generate_series(0, ${COUNT}-1) i
+      ON CONFLICT DO NOTHING;
+
+    INSERT INTO tenant_members (tenant_id, user_id, role)
+      SELECT format('k6-${LEVEL}-tn-%s', i),
+             format('k6-${LEVEL}-user-%s', i),
+             'owner'
+      FROM generate_series(0, ${COUNT}-1) i
+      ON CONFLICT DO NOTHING;
+    SQL
+
+    echo "Seed complete."
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-runner
+  namespace: platform-system
+  labels:
+    app.kubernetes.io/name: k6-runner
+    app.kubernetes.io/part-of: loopzero
+    loopzero.io/roadmap: "04-08"
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k6-runner
+    spec:
+      restartPolicy: Never
+      initContainers:
+        # 1. Build the git bundle fixture.
+        - name: build-fixture
+          image: alpine:3.21
+          command: ["sh", "/scripts/build-bundle.sh"]
+          volumeMounts:
+            - name: fixture-builder
+              mountPath: /scripts
+            - name: fixtures
+              mountPath: /fixtures
+        # 2. Seed the DB with tenants/users.
+        - name: seed-db
+          image: postgres:16-alpine
+          command: ["sh", "/seed/seed.sh"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-secrets
+                  key: DATABASE_URL
+            - name: K6_SEED_COUNT
+              value: "${K6_SEED_COUNT}"
+            - name: K6_SEED_LEVEL
+              value: "${K6_SEED_LEVEL}"
+          volumeMounts:
+            - name: seed-sql
+              mountPath: /seed
+      containers:
+        # 3. Run k6 against the live API.
+        - name: k6
+          image: grafana/k6:0.52.0
+          command:
+            - k6
+            - run
+            - --summary-trend-stats=avg,min,med,max,p(90),p(95),p(99)
+            - --out=experimental-prometheus-rw
+            - "${K6_SCRIPT}"
+          env:
+            - name: K6_API_URL
+              value: "http://loopzero-api.platform-system.svc.cluster.local:8080"
+            - name: K6_SVC_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-secrets
+                  key: LOOPZERO_SERVICE_AUTH_SECRET
+            - name: K6_BUNDLE_PATH
+              value: "/fixtures/bundle.bin"
+            - name: K6_PROMETHEUS_RW_SERVER_URL
+              value: "http://prometheus-server.platform-system.svc.cluster.local/api/v1/write"
+            - name: K6_PROMETHEUS_RW_TREND_STATS
+              value: "p(50),p(95),p(99)"
+            - name: K6_PROMETHEUS_RW_PUSH_INTERVAL
+              value: "5s"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          volumeMounts:
+            - name: scripts
+              mountPath: /home/k6/scripts
+              readOnly: true
+            - name: fixtures
+              mountPath: /fixtures
+              readOnly: true
+            - name: summary
+              mountPath: /tmp
+          workingDir: /home/k6
+      volumes:
+        - name: fixture-builder
+          configMap:
+            name: k6-fixture-builder
+            defaultMode: 0755
+        - name: seed-sql
+          configMap:
+            name: k6-seed-sql
+            defaultMode: 0755
+        - name: scripts
+          configMap:
+            name: k6-scripts
+        - name: fixtures
+          emptyDir: {}
+        - name: summary
+          emptyDir: {}

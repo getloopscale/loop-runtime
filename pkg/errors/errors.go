@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package errors defines typed error types for all LoopZero components.
 // All errors carry a code, message, and HTTP status for consistent
 // error handling across the system. See CLAUDE.md Rule 8.
@@ -30,6 +33,11 @@ func (e *LoopZeroError) Error() string {
 
 // Is checks whether the target error has the same code as this LoopZeroError.
 // This enables errors.Is() support for comparing error codes.
+//
+// NOTE: Only the Code field is compared. HTTPStatus is intentionally excluded
+// because factory functions (e.g. NewLockTimeout) may return errors with the
+// same code but different messages/statuses. Callers that need the HTTP status
+// should use errors.As to extract the actual LoopZeroError, not the sentinel.
 func (e *LoopZeroError) Is(target error) bool {
 	t, ok := target.(*LoopZeroError)
 	if !ok {
@@ -96,6 +104,13 @@ var (
 		HTTPStatus: 404,
 	}
 
+	// ErrProjectNotFound is returned when a referenced project does not exist.
+	ErrProjectNotFound = &LoopZeroError{
+		Code:       "PROJECT_NOT_FOUND",
+		Message:    "project not found",
+		HTTPStatus: 404,
+	}
+
 	// ErrBuildNotFound is returned when a referenced build does not exist.
 	ErrBuildNotFound = &LoopZeroError{
 		Code:       "BUILD_NOT_FOUND",
@@ -107,6 +122,20 @@ var (
 	ErrReleaseNotFound = &LoopZeroError{
 		Code:       "RELEASE_NOT_FOUND",
 		Message:    "release not found",
+		HTTPStatus: 404,
+	}
+
+	// ErrNoActiveRelease is returned when rollback is attempted but no release is active.
+	ErrNoActiveRelease = &LoopZeroError{
+		Code:       "NO_ACTIVE_RELEASE",
+		Message:    "No active release found. Deploy at least once before rolling back.",
+		HTTPStatus: 404,
+	}
+
+	// ErrNoPreviousRelease is returned when rollback is attempted but no previous release exists.
+	ErrNoPreviousRelease = &LoopZeroError{
+		Code:       "NO_PREVIOUS_RELEASE",
+		Message:    "No previous release found to rollback to. Deploy at least twice before rolling back.",
 		HTTPStatus: 404,
 	}
 
@@ -167,7 +196,7 @@ var (
 	// ErrInternalError is returned for unexpected server-side failures.
 	ErrInternalError = &LoopZeroError{
 		Code:       "INTERNAL_ERROR",
-		Message:    "internal server error",
+		Message:    "Something went wrong. Try again, or check `loopzero status` for details. If the problem persists, contact support.",
 		HTTPStatus: 500,
 	}
 
@@ -182,6 +211,22 @@ var (
 	ErrValidationFailed = &LoopZeroError{
 		Code:       "VALIDATION_FAILED",
 		Message:    "validation failed",
+		HTTPStatus: 422,
+	}
+
+	// ErrFrontendMustBeStatic is returned when a frontend app doesn't use render: static.
+	// MEET-2026-03-29-016: All frontends are served from CDN, zero pods.
+	ErrFrontendMustBeStatic = &LoopZeroError{
+		Code:       "FRONTEND_MUST_BE_STATIC",
+		Message:    "frontend apps must use static delivery. Add 'render: static' to your loopzero.yaml",
+		HTTPStatus: 422,
+	}
+
+	// ErrPodLimitExceeded is returned when a project has more than 1 server or 1 worker.
+	// MEET-2026-03-29-016: Max 1 API service + 1 background worker per project.
+	ErrPodLimitExceeded = &LoopZeroError{
+		Code:       "POD_LIMIT_EXCEEDED",
+		Message:    "project exceeds the maximum of 1 API service and 1 background worker",
 		HTTPStatus: 422,
 	}
 
@@ -206,14 +251,55 @@ var (
 		Message:    "deploy service is temporarily unavailable",
 		HTTPStatus: 503,
 	}
+
+	// ErrDeployServiceAuthFailed is returned when the deploy service rejects its credentials (401/403).
+	// This is NOT a transient failure — the credentials are invalid and must be renewed.
+	// The circuit breaker MUST NOT count this toward the open threshold (MEET-013).
+	ErrDeployServiceAuthFailed = &LoopZeroError{
+		Code:       "DEPLOY_SERVICE_AUTH_FAILED",
+		Message:    "deploy service credentials rejected — contact your platform administrator",
+		HTTPStatus: 503,
+	}
+
+	// ErrSyncOperationInProgress is returned when the deploy service has a sync already running (409).
+	// MEET-2026-03-29-019: This is NOT a transient failure — the previous operation must
+	// be terminated before a new sync can start. The circuit breaker MUST NOT count this
+	// toward the open threshold (same exclusion pattern as ErrDeployServiceAuthFailed).
+	ErrSyncOperationInProgress = &LoopZeroError{
+		Code:       "SYNC_OPERATION_IN_PROGRESS",
+		Message:    "another sync operation is already in progress",
+		HTTPStatus: 409,
+	}
+
+	// ErrCellAtCapacity is returned when the cell's concurrent build budget
+	// is full. Roadmap 07: the build admission gate returns 429 so clients
+	// know to retry after a bounded wait. The response MUST include a
+	// `Retry-After` header with a sensible duration.
+	ErrCellAtCapacity = &LoopZeroError{
+		Code:       "CELL_AT_CAPACITY",
+		Message:    "the platform is currently busy — retry in a few seconds",
+		HTTPStatus: 429,
+	}
+
+	// ErrTenantBuildQuota is returned when a single tenant already has the
+	// maximum allowed concurrent builds in flight. Enforces per-tenant
+	// fairness so one noisy tenant cannot starve others even when the cell
+	// has free capacity. Same Retry-After semantics as ErrCellAtCapacity.
+	ErrTenantBuildQuota = &LoopZeroError{
+		Code:       "TENANT_BUILD_QUOTA",
+		Message:    "your team has too many builds in progress — wait for one to finish",
+		HTTPStatus: 429,
+	}
 )
 
 // NewLockTimeout creates a LOCK_TIMEOUT error with optional detail.
+// Always returns a fresh copy to prevent mutation of the global sentinel.
 func NewLockTimeout(detail string) *LoopZeroError {
-	if detail == "" {
-		return ErrLockTimeout
+	msg := ErrLockTimeout.Message
+	if detail != "" {
+		msg = detail
 	}
-	return &LoopZeroError{Code: "LOCK_TIMEOUT", Message: detail, HTTPStatus: 409}
+	return &LoopZeroError{Code: "LOCK_TIMEOUT", Message: msg, HTTPStatus: 409}
 }
 
 // NewInvalidTransition creates an INVALID_TRANSITION error with state context.
@@ -250,6 +336,31 @@ func NewReleaseNotFound(releaseID string) *LoopZeroError {
 		Message:    fmt.Sprintf("release '%s' not found", releaseID),
 		HTTPStatus: 404,
 	}
+}
+
+// NewProjectNotFound creates a PROJECT_NOT_FOUND error with project name context.
+func NewProjectNotFound(name string) *LoopZeroError {
+	return &LoopZeroError{
+		Code:       "PROJECT_NOT_FOUND",
+		Message:    fmt.Sprintf("project '%s' not found", name),
+		HTTPStatus: 404,
+	}
+}
+
+// NewEnvironmentNotFound creates an ENVIRONMENT_NOT_FOUND error with environment name context.
+func NewEnvironmentNotFound(name string) *LoopZeroError {
+	return &LoopZeroError{
+		Code:       "ENVIRONMENT_NOT_FOUND",
+		Message:    fmt.Sprintf("environment '%s' not found", name),
+		HTTPStatus: 404,
+	}
+}
+
+// ErrForbidden is returned when an operation is not permitted.
+var ErrForbidden = &LoopZeroError{
+	Code:       "FORBIDDEN",
+	Message:    "this operation is not permitted",
+	HTTPStatus: 403,
 }
 
 // NewIdempotencyConflict creates an IDEMPOTENCY_CONFLICT error with key context.

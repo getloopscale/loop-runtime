@@ -1,0 +1,45 @@
+config:
+  loopzero-infra:environment: staging
+  loopzero-infra:provider: digitalocean
+  loopzero-infra:region: nyc3
+  loopzero-infra:domain: staging.loopzero.example
+  loopzero-infra:dnsZone: loopzero.example
+  loopzero-infra:infraVersion: v1
+
+  # Management cluster — platform services
+  loopzero-infra:mgmtK8sVersion: "1.32.13-do.2"
+  loopzero-infra:mgmtNodeClass: small
+  loopzero-infra:mgmtMinNodes: "2"
+  loopzero-infra:mgmtMaxNodes: "3"
+
+  # Runtime cluster — user applications
+  loopzero-infra:runtimeK8sVersion: "1.32.13-do.2"
+  loopzero-infra:runtimeNodeClass: small
+  loopzero-infra:runtimeMinNodes: "2"
+  loopzero-infra:runtimeMaxNodes: "3"
+
+  # Build cluster — Argo Workflows + BuildKit
+  loopzero-infra:buildK8sVersion: "1.32.13-do.2"
+  loopzero-infra:buildNodeClass: small
+  loopzero-infra:buildMinNodes: "2"
+  loopzero-infra:buildMaxNodes: "3"
+
+  # Database — managed PostgreSQL (single node for staging)
+  loopzero-infra:dbNodeClass: small
+  loopzero-infra:dbVersion: "16"
+  loopzero-infra:dbNodeCount: "1"
+
+  # Cloudflare — same zone, different subdomain (staging.loopzero.example)
+  loopzero-infra:cfAccountId: "362767409c4de7fda7990c10103efdd9"
+  loopzero-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
+
+  # Secrets — set at first deploy via infra-deploy.yml workflow:
+  #   The workflow sets spacesAccessKeyId, spacesSecretAccessKey, digitaloceanToken
+  #   from GitHub Environment secrets automatically.
+  #   cfApiToken is set by the "Set Cloudflare config" step.
+  #
+  # Manual (only if needed):
+  #   pulumi config set --secret spacesAccessKeyId <value> --stack staging
+  #   pulumi config set --secret spacesSecretAccessKey <value> --stack staging
+  #   pulumi config set --secret digitaloceanToken <value> --stack staging
+  #   pulumi config set --secret cfApiToken <value> --stack staging

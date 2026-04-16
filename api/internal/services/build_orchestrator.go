@@ -1,16 +1,26 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package services implements business logic orchestration.
 package services
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/loopzero/loopzero/api/internal/cfkv"
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	"github.com/loopzero/loopzero/pkg/statemachine"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // WorkflowStatus represents the external state of a build workflow.
@@ -21,8 +31,16 @@ type WorkflowStatus struct {
 // WorkflowSubmitter abstracts Argo Workflows submission (DIP — no direct coupling).
 type WorkflowSubmitter interface {
 	Submit(ctx context.Context, spec WorkflowSpec) (workflowID string, err error)
-	Cancel(ctx context.Context, workflowID string) error
-	GetStatus(ctx context.Context, workflowID string) (*WorkflowStatus, error)
+	Cancel(ctx context.Context, namespace, workflowID string) error
+	GetStatus(ctx context.Context, namespace, workflowID string) (*WorkflowStatus, error)
+}
+
+// StaticRoutingClient writes routing entries for static frontends (CF Workers KV).
+// The key is the flat subdomain (e.g., "tn-loopzero-e2e-project-web-production"),
+// the value is a JSON object with buildId and s3Prefix.
+// Nil is valid — it means CF KV is not configured (local dev).
+type StaticRoutingClient interface {
+	Put(ctx context.Context, subdomain string, entry interface{}) error
 }
 
 // WorkflowSpec contains everything needed to submit a build workflow.
@@ -32,18 +50,26 @@ type WorkflowSpec struct {
 	ProjectID     string
 	Environment   string
 	CommitSHA     string
+	NoCache       bool // Skip BuildKit layer cache (full rebuild via --no-cache)
 	Apps          []AppSpec
+	Plan          *BuildPlan // v2: resolved build plan (when present, WorkflowBuilder uses this instead of Apps)
 	CorrelationID string
+	Namespace     string // Target namespace for the workflow (e.g., "build-acme")
 }
 
-// AppSpec describes a single app from loopzero.yaml.
+// AppSpec describes a single app from loopzero.yaml as received from the CLI.
+// This is the raw input — use NormalizeApp() to resolve into a fully populated AppUnit.
 type AppSpec struct {
-	Name      string   `json:"name"`
-	Type      string   `json:"type"`                        // "server", "worker", "frontend"
-	Port      int      `json:"port"`
-	Path      string   `json:"path,omitempty"`
-	Framework string   `json:"framework,omitempty"`          // "nextjs", "express", "gin", "fastapi", "custom", etc.
-	Secrets   []string `json:"secrets,omitempty"`            // declared secret names from loopzero.yaml
+	Name       string            `json:"name"`
+	Type       string            `json:"type"`                        // "server", "worker", "frontend"
+	Port       int               `json:"port"`
+	Path       string            `json:"path,omitempty"`
+	Framework  string            `json:"framework,omitempty"`          // "nextjs", "express", "gin", "fastapi", "custom", etc.
+	Build      string            `json:"build,omitempty"`              // v2: "dockerfile", "buildpack", "custom"
+	Dockerfile string            `json:"dockerfile,omitempty"`         // v2: Dockerfile path relative to app path
+	Rendering  string            `json:"rendering,omitempty"`          // v2: "static" or "server" (MEET-009)
+	Env        map[string]string `json:"env,omitempty"`                // v2: build-time environment variables
+	Secrets    []string          `json:"secrets,omitempty"`            // declared secret names from loopzero.yaml
 }
 
 // GitOpsPusher abstracts the commit-and-push of manifests to the tenant GitOps
@@ -53,6 +79,11 @@ type GitOpsPusher interface {
 	// Push commits manifests to the tenant GitOps repo and returns the git commit SHA.
 	// Path inside repo: {projectID}/{environment}/manifests.yaml
 	Push(ctx context.Context, opts GitOpsPushOpts) (commitSHA string, err error)
+
+	// Remove deletes a project's manifests from the tenant GitOps repo.
+	// The operation is idempotent: if the directory doesn't exist, returns success.
+	// ArgoCD with prune: true will automatically remove the K8s resources.
+	Remove(ctx context.Context, opts GitOpsRemoveOpts) (commitSHA string, err error)
 }
 
 // GitOpsPushOpts contains everything needed to push manifests to the GitOps repo.
@@ -66,19 +97,30 @@ type GitOpsPushOpts struct {
 	CorrelationID string
 }
 
+// GitOpsRemoveOpts contains everything needed to remove a project from the GitOps repo.
+type GitOpsRemoveOpts struct {
+	TenantID      string
+	ProjectID     string
+	Environment   string
+	CorrelationID string
+}
+
 // AppRelease describes a built app with its image digest and URL.
 type AppRelease struct {
 	Name        string `json:"name"`
 	ImageDigest string `json:"image_digest"`
 	URL         string `json:"url"`
-	Type        string `json:"type,omitempty"` // "server", "worker", "frontend"
+	Type        string `json:"type,omitempty"`      // "server", "worker", "frontend"
+	Rendering   string `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
 	DurationMs  int    `json:"duration_ms"`
 }
 
 // SyncClient abstracts ArgoCD sync operations (DIP).
 type SyncClient interface {
 	TriggerSync(ctx context.Context, appName string) error
-	WaitForSync(ctx context.Context, appName string, timeout time.Duration) error
+	// WaitForSync polls until the ArgoCD Application is synced and the specified
+	// deployedApps are healthy. If deployedApps is empty, checks global Application health.
+	WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error
 }
 
 // EnvironmentLocker abstracts the advisory lock acquisition (DIP for testability).
@@ -94,6 +136,7 @@ type SubmitBuildRequest struct {
 	ProjectID     string
 	Environment   string
 	CommitSHA     string
+	NoCache       bool
 	Apps          []AppSpec
 	CreatedBy     string
 	CorrelationID string
@@ -114,10 +157,18 @@ type BuildCallbackRequest struct {
 }
 
 // BuildOrchestratorDeps holds all dependencies for BuildOrchestrator.
+// ProjectEnsurer guarantees a project exists in the projects table.
+// Used by the deploy flow so that deleted-then-redeployed projects
+// reappear in `loopzero project list`.
+type ProjectEnsurer interface {
+	EnsureProject(ctx context.Context, tx db.DBTX, tenantID, name, createdBy string) error
+}
+
 type BuildOrchestratorDeps struct {
 	BuildStore     db.BuildStore
 	ReleaseStore   db.ReleaseStore
 	EnvTargetStore db.EnvironmentTargetStore
+	ProjectStore   ProjectEnsurer // nil = project ensure disabled (local dev without projects table)
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -125,7 +176,11 @@ type BuildOrchestratorDeps struct {
 	Sync               SyncClient
 	Locker             EnvironmentLocker
 	GitOps             GitOpsPusher
+	Delivery           DeliveryActivator // MEET-009: polymorphic release activation
+	RegistryURL        string        // Container registry URL for BuildPlan image tag resolution
 	ArgocdSyncTimeout  time.Duration // 0 = default 120s
+	KVClient           StaticRoutingClient // CF KV client for static frontend routing (nil = disabled)
+	BaseDomain         string              // Base domain for app hostnames
 }
 
 // BuildOrchestrator orchestrates the entire deploy flow:
@@ -137,6 +192,7 @@ type BuildOrchestrator struct {
 	buildStore     db.BuildStore
 	releaseStore   db.ReleaseStore
 	envTargetStore db.EnvironmentTargetStore
+	projectStore   ProjectEnsurer
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -144,11 +200,18 @@ type BuildOrchestrator struct {
 	sync              SyncClient
 	locker            EnvironmentLocker
 	gitops            GitOpsPusher
+	delivery          DeliveryActivator // MEET-009: polymorphic release activation
+	registryURL       string // Container registry URL for BuildPlan image tag resolution
 	argocdSyncTimeout time.Duration
+	kvClient          StaticRoutingClient // CF KV client for static frontend routing
+	baseDomain        string
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
-const defaultArgocdSyncTimeout = 120 * time.Second
+// 600s accommodates monorepo deploys with multiple apps (3+ Deployments rolling
+// out simultaneously, each with image pull + rollout + cert issuance + health probes).
+// At 300s, 3-app monorepos consistently hit SYNC_FAILED during ArgoCD WaitForSync.
+const defaultArgocdSyncTimeout = 600 * time.Second
 
 // NewBuildOrchestrator creates a new BuildOrchestrator with all dependencies injected.
 func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
@@ -156,34 +219,73 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 	if syncTimeout == 0 {
 		syncTimeout = defaultArgocdSyncTimeout
 	}
+	registryURL := deps.RegistryURL
+	if registryURL == "" {
+		registryURL = "k3d-loopzero-registry:5000" // local dev default
+	}
+	// MEET-009: If no DeliveryActivator provided, create default ContainerDeliveryActivator.
+	// This ensures backward compatibility — existing call sites don't need to change.
+	delivery := deps.Delivery
+	if delivery == nil {
+		delivery = NewContainerDeliveryActivator(ContainerDeliveryDeps{
+			ReleaseStore:      deps.ReleaseStore,
+			EnvTargetStore:    deps.EnvTargetStore,
+			EventStore:        deps.EventStore,
+			Sync:              deps.Sync,
+			Locker:            deps.Locker,
+			GitOps:            deps.GitOps,
+			ArgocdSyncTimeout: syncTimeout,
+		})
+	}
+
 	return &BuildOrchestrator{
 		buildStore:        deps.BuildStore,
 		releaseStore:      deps.ReleaseStore,
 		envTargetStore:    deps.EnvTargetStore,
+		projectStore:      deps.ProjectStore,
 		eventStore:        deps.EventStore,
 		workflow:          deps.Workflow,
 		sync:              deps.Sync,
 		locker:            deps.Locker,
 		gitops:            deps.GitOps,
+		delivery:          delivery,
+		registryURL:       registryURL,
 		argocdSyncTimeout: syncTimeout,
+		kvClient:          deps.KVClient,
+		baseDomain:        deps.BaseDomain,
 	}
 }
 
-// SubmitBuild acquires the environment lock (Lock 1) and submits a new build.
+// SubmitBuild acquires the environment lock to reserve a build slot, then
+// submits the workflow OUTSIDE the lock to avoid holding it during slow
+// Argo API calls (REVIEW-BLOCKER-1 fix).
 //
 // Steps (spec §10.1, steps 4-11):
 //  1. Acquire environment lock
 //  2. Check concurrent build (HasActiveBuild) — INSIDE the lock
-//  3. Create Build record (QUEUED)
-//  4. Submit Argo Workflow (via WorkflowSubmitter)
-//  5. Transition Build to RUNNING
-//  6. Emit SSE event (build.started)
-//  7. Release lock (transaction commits)
+//  3. Create Build record (QUEUED) + persist apps spec — INSIDE the lock
+//  4. Release lock (transaction commits) — build exists as QUEUED
+//  5. Submit Argo Workflow (OUTSIDE the lock)
+//  6. Persist workflow ID, transition QUEUED → RUNNING, emit SSE
+//
+// If workflow submission fails (step 5), the build is immediately transitioned
+// to FAILED so the environment is unblocked. The build reaper also covers this
+// case (5min QUEUED timeout) as a safety net.
 //
 // Returns ErrDeployInProgress if another build is active.
 // Returns ErrLockTimeout if the lock cannot be acquired within 5s.
 func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequest) (*SubmitBuildResponse, error) {
-	var resp *SubmitBuildResponse
+	// MEET-2026-03-30-020: distributed tracing (C3 naming convention)
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.submit",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", req.TenantID),
+			attribute.String("loopzero.project", req.ProjectID),
+			attribute.String("loopzero.environment", req.Environment),
+		))
+	defer span.End()
+
+	// Phase 1 (INSIDE lock): reserve build slot as QUEUED
+	var buildID string
 
 	err := o.locker.WithLock(ctx, req.TenantID, req.ProjectID, req.Environment, func(tx db.DBTX) error {
 		// Step 2: concurrent build check INSIDE the lock (Rule 6)
@@ -193,6 +295,15 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		}
 		if hasActive {
 			return loopzeroerrors.ErrDeployInProgress
+		}
+
+		// Step 2.5: ensure project exists in projects table (idempotent).
+		// After `loopzero project delete` + redeploy, the build succeeds but the
+		// project doesn't appear in `loopzero project list` because it was hard-deleted.
+		if o.projectStore != nil {
+			if err := o.projectStore.EnsureProject(ctx, tx, req.TenantID, req.ProjectID, req.CreatedBy); err != nil {
+				return fmt.Errorf("submit build: ensure project: %w", err)
+			}
 		}
 
 		// Step 3: create Build (QUEUED)
@@ -207,66 +318,22 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		if err := o.buildStore.Create(ctx, tx, build); err != nil {
 			return fmt.Errorf("submit build: create build: %w", err)
 		}
-
-		// Step 4: submit workflow
-		wfSpec := WorkflowSpec{
-			BuildID:       build.ID,
-			TenantID:      req.TenantID,
-			ProjectID:     req.ProjectID,
-			Environment:   req.Environment,
-			CommitSHA:     req.CommitSHA,
-			Apps:          req.Apps,
-			CorrelationID: req.CorrelationID,
-		}
-		workflowID, err := o.workflow.Submit(ctx, wfSpec)
-		if err != nil {
-			return fmt.Errorf("submit build: submit workflow: %w", err)
-		}
-
-		// Persist workflow ID for reconcile loop and cancel (BLOCKER-1 fix)
-		if err := o.buildStore.SetWorkflowID(ctx, tx, build.ID, workflowID); err != nil {
-			return fmt.Errorf("submit build: set workflow id: %w", err)
-		}
+		buildID = build.ID
 
 		// C-01 fix: Persist app specs so the reconcile loop can generate
 		// manifests and compute image references when the workflow completes.
 		var appsSpec []db.BuildAppSpec
 		for _, a := range req.Apps {
 			appsSpec = append(appsSpec, db.BuildAppSpec{
-				Name:    a.Name,
-				Type:    a.Type,
-				Port:    a.Port,
-				Secrets: a.Secrets,
+				Name:      a.Name,
+				Type:      a.Type,
+				Rendering: a.Rendering,
+				Port:      a.Port,
+				Secrets:   a.Secrets,
 			})
 		}
 		if err := o.buildStore.SetAppsSpec(ctx, tx, build.ID, appsSpec); err != nil {
 			return fmt.Errorf("submit build: set apps spec: %w", err)
-		}
-
-		// Step 5: transition QUEUED → RUNNING
-		if _, err := o.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildStarted)); err != nil {
-			return fmt.Errorf("submit build: transition to RUNNING: %w", err)
-		}
-
-		// Step 6: emit SSE build.started — include app names for CLI per-app rendering (F-01)
-		appNames := make([]string, len(req.Apps))
-		for i, a := range req.Apps {
-			appNames[i] = a.Name
-		}
-		eventData, _ := json.Marshal(map[string]interface{}{
-			"build_id": build.ID,
-			"status":   "running",
-			"apps":     appNames,
-		})
-		if _, err := o.eventStore.Append(ctx, build.ID, "build.started", eventData); err != nil {
-			return fmt.Errorf("submit build: emit SSE event: %w", err)
-		}
-
-		// Build response
-		streamURL := fmt.Sprintf("/api/v1/builds/%s/stream", build.ID)
-		resp = &SubmitBuildResponse{
-			BuildID:   build.ID,
-			StreamURL: streamURL,
 		}
 
 		return nil
@@ -276,7 +343,158 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		return nil, err
 	}
 
-	return resp, nil
+	// Phase 2 (OUTSIDE lock): submit workflow and activate build.
+	// Lock is released — Argo API latency no longer blocks other deploys.
+	// If anything below fails, the build stays QUEUED briefly, then we
+	// immediately transition it to FAILED so the env is unblocked.
+
+	// Normalize AppSpecs into AppUnits and create a BuildPlan.
+	// The BuildPlan resolves all paths, image tags, and strategies before
+	// reaching the WorkflowBuilder — no inference happens in the pipeline.
+	var units []AppUnit
+	for _, a := range req.Apps {
+		unit, normErr := NormalizeApp(a.Name, a)
+		if normErr != nil {
+			// BRC-001 fix: fail the QUEUED build immediately so the environment
+			// is unblocked. Previously, the build sat QUEUED until the reaper
+			// fired (5min timeout), blocking all deploys to this environment.
+			o.failQueuedBuild(ctx, buildID, fmt.Sprintf("app normalization failed: %v", normErr))
+			return nil, fmt.Errorf("normalize app %q: %w", a.Name, normErr)
+		}
+		units = append(units, unit)
+	}
+	plan := CreateBuildPlan(units, req.TenantID, req.ProjectID, req.CommitSHA, o.registryURL)
+
+	wfSpec := WorkflowSpec{
+		BuildID:       buildID,
+		TenantID:      req.TenantID,
+		ProjectID:     req.ProjectID,
+		Environment:   req.Environment,
+		CommitSHA:     req.CommitSHA,
+		NoCache:       req.NoCache,
+		Apps:          req.Apps,
+		Plan:          &plan,
+		CorrelationID: req.CorrelationID,
+		Namespace:     "argo",
+	}
+	workflowID, submitErr := o.workflow.Submit(ctx, wfSpec)
+	if submitErr != nil {
+		// Workflow submit failed — immediately fail the build so the environment
+		// is unblocked. The build reaper is a safety net (5min QUEUED timeout)
+		// but immediate failure gives better UX.
+		o.failQueuedBuild(ctx, buildID, fmt.Sprintf("Workflow submission failed: %v", submitErr))
+		return nil, fmt.Errorf("submit build: submit workflow: %w", submitErr)
+	}
+
+	// Persist workflow ID (outside lock, tx=nil → uses pool directly)
+	if err := o.buildStore.SetWorkflowID(ctx, nil, buildID, workflowID); err != nil {
+		slog.Error("submit build: failed to set workflow ID after submit",
+			"build_id", buildID, "workflow_id", workflowID, "error", err)
+		// Non-fatal: reconcile loop will find the workflow by label matching.
+		// The build will still work, just cancel won't correlate by workflow ID.
+	}
+
+	// Transition QUEUED → RUNNING
+	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildStarted)); err != nil {
+		slog.Error("submit build: failed to transition to RUNNING",
+			"build_id", buildID, "error", err)
+		// Non-fatal: reconcile loop handles EC-N (QUEUED build with completed workflow).
+	}
+
+	// Emit SSE build.started — include app names for CLI per-app rendering (F-01)
+	appNames := make([]string, len(req.Apps))
+	for i, a := range req.Apps {
+		appNames[i] = a.Name
+	}
+	eventData := safeJSONMarshal(map[string]interface{}{
+		"build_id": buildID,
+		"status":   "running",
+		"apps":     appNames,
+	})
+	if _, err := o.eventStore.Append(ctx, buildID, "build.started", eventData); err != nil {
+		slog.Error("submit build: failed to emit SSE event",
+			"build_id", buildID, "error", err)
+	}
+
+	metrics.DeploysTotal.WithLabelValues(req.TenantID, req.Environment, "submitted").Inc()
+	metrics.BuildQueueDepth.Inc()
+
+	span.SetAttributes(attribute.String("loopzero.build_id", buildID))
+
+	streamURL := fmt.Sprintf("/api/v1/builds/%s/stream", buildID)
+	return &SubmitBuildResponse{
+		BuildID:   buildID,
+		StreamURL: streamURL,
+	}, nil
+}
+
+// failQueuedBuild transitions a QUEUED build to FAILED when workflow submission
+// fails. This runs OUTSIDE the advisory lock using the connection pool directly.
+// REVIEW-BLOCKER-1: ensures the environment is immediately unblocked on submit failure.
+func (o *BuildOrchestrator) failQueuedBuild(ctx context.Context, buildID string, reason string) {
+	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildFailedEvent)); err != nil {
+		slog.Error("submit build: failed to mark QUEUED build as FAILED",
+			"build_id", buildID, "error", err)
+		return
+	}
+	if err := o.buildStore.SetErrorMessage(ctx, nil, buildID, reason); err != nil {
+		slog.Error("submit build: failed to set error message on failed build",
+			"build_id", buildID, "error", err)
+	}
+
+	// Emit SSE build.failed so CLI gets notified
+	eventData := safeJSONMarshal(map[string]string{
+		"build_id": buildID,
+		"status":   "failed",
+		"error":    reason,
+	})
+	if _, err := o.eventStore.Append(ctx, buildID, "build.failed", eventData); err != nil {
+		slog.Error("submit build: failed to emit build.failed SSE event",
+			"build_id", buildID, "error", err)
+	}
+}
+
+// RetryReleaseActivation retries Phase 2 (release activation) for a build stuck
+// in RELEASING state. Called by the reconcile loop when it detects a RELEASING
+// build whose Phase 2 was interrupted (pod crash, rollout, Gitea/ArgoCD failure).
+//
+// MEET-2026-03-26-008: This method does NOT check IsBuildTerminal because
+// RELEASING is explicitly non-terminal. It directly runs activateRelease and
+// transitions to SUCCEEDED on success or leaves in RELEASING for retry.
+func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *db.Build, result BuildCallbackRequest) error {
+	if build.Status != string(statemachine.BuildReleasing) {
+		return fmt.Errorf("retry release activation: build %s is in %s state, expected RELEASING", build.ID, build.Status)
+	}
+
+	activationErr := o.delivery.Activate(ctx, build, result)
+	if activationErr != nil {
+		slog.Warn("retry release activation: Phase 2 failed, will retry on next tick",
+			"build_id", build.ID, "error", activationErr)
+		o.emitActivationFailure(ctx, build.ID, activationErr)
+		return activationErr
+	}
+
+	// Phase 2 succeeded — transition RELEASING → SUCCEEDED (inside lock to handle races)
+	return o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
+		// Re-fetch inside lock — another pod may have already completed this
+		current, err := o.buildStore.GetByID(ctx, build.ID)
+		if err != nil {
+			return fmt.Errorf("retry release activation: re-fetch build: %w", err)
+		}
+		if statemachine.IsBuildTerminal(statemachine.State(current.Status)) {
+			return nil // Already finalized by another pod — safe to skip
+		}
+		if _, err := o.buildStore.UpdateStatus(ctx, tx, current.ID, string(statemachine.BuildReleaseCompleted)); err != nil {
+			return fmt.Errorf("retry release activation: transition to SUCCEEDED: %w", err)
+		}
+		return nil
+	})
+}
+
+// FindReleaseForBuild returns the most recent release for a build, or nil if none exists.
+// Used by the reconcile loop to determine whether Activate() has already been called.
+func (o *BuildOrchestrator) FindReleaseForBuild(ctx context.Context, buildID string) (*db.Release, error) {
+	return o.releaseStore.GetLatestByBuildID(ctx, buildID)
 }
 
 // CancelBuild cancels a running or queued build.
@@ -326,7 +544,7 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 
 		// Step 6: cancel the workflow (best-effort — workflow may already be done)
 		if build.WorkflowID != "" {
-			if cancelErr := o.workflow.Cancel(ctx, build.WorkflowID); cancelErr != nil {
+			if cancelErr := o.workflow.Cancel(ctx, "argo", build.WorkflowID); cancelErr != nil {
 				slog.Warn("workflow cancel failed (best-effort)", "workflow_id", build.WorkflowID, "error", cancelErr)
 			}
 		}
@@ -339,7 +557,7 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 		}
 
 		// Step 8: emit SSE build.cancelled
-		eventData, _ := json.Marshal(map[string]string{
+		eventData := safeJSONMarshal(map[string]string{
 			"build_id": buildID,
 			"status":   "cancelled",
 		})
@@ -430,7 +648,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 			if result.Error != "" {
 				failedPayload["error"] = result.Error
 			}
-			eventData, _ := json.Marshal(failedPayload)
+			eventData := safeJSONMarshal(failedPayload)
 			if _, err := o.eventStore.Append(ctx, buildID, "build.failed", eventData); err != nil {
 				return fmt.Errorf("on build completed: emit build.failed: %w", err)
 			}
@@ -444,7 +662,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		}
 
 		// Emit SSE build.succeeded
-		eventData, _ := json.Marshal(map[string]string{
+		eventData := safeJSONMarshal(map[string]string{
 			"build_id": buildID,
 			"status":   "succeeded",
 		})
@@ -470,21 +688,93 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	}
 
 	// If build was cancelled concurrently during Phase 1, skip activation
-	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) && build.Status != string(statemachine.BuildSucceeded) {
+	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
 		return nil
 	}
 
-	// Phase 2: Release activation (create release, gitops push, sync, health probe).
-	// BLOCKER-2 fix: each sub-phase acquires/releases its own lock. External I/O
-	// (gitops push, ArgoCD sync, health probes) runs OUTSIDE locks.
-	activationErr := o.activateRelease(ctx, build, result)
+	// Build should be in RELEASING state after Phase 1 (MEET-2026-03-26-008).
+	// Phase 2: Release activation via DeliveryActivator (MEET-2026-03-26-009).
+	// Dispatches to ContainerDeliveryActivator or StaticDeliveryActivator
+	// based on build plan. Each sub-phase acquires/releases its own lock.
+	// Write CF KV routing entries for static apps BEFORE activation (Sprint 10).
+	// The assets are already in S3 at this point (uploaded by Argo Workflow).
+	// Writing KV early ensures the CF Worker serves the new version immediately,
+	// even if the ArgoCD sync (container delivery) takes longer or fails.
+	o.writeStaticRoutingEntries(ctx, build, result)
+
+	activationErr := o.delivery.Activate(ctx, build, result)
 
 	if activationErr != nil {
-		// Activation failed — emit deploy failure event so the CLI knows.
-		// The build stays SUCCEEDED (Phase 1 already committed), which is correct:
-		// the code was built successfully, the deployment just didn't complete.
-		o.emitActivationFailure(ctx, buildID, activationErr)
+		// BRC-002 fix: if the delivery activator already handled the failure
+		// (emitted SSE event, transitioned release state), skip our own emit
+		// to prevent duplicate deploy.sync_failed events in the CLI stream.
+		if !errors.Is(activationErr, ErrActivationAlreadyHandled) {
+			o.emitActivationFailure(ctx, buildID, activationErr)
+		}
+		// Build stays in RELEASING so the reconcile loop retries (MEET-2026-03-26-008).
+		return nil
+	}
+
+	// Phase 2 succeeded — transition RELEASING → SUCCEEDED (deploy complete).
+	if err := o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
+		// Re-fetch inside lock — another pod's reconcile loop may have already transitioned
+		current, err := o.buildStore.GetByID(ctx, buildID)
+		if err != nil {
+			return fmt.Errorf("on build completed: re-fetch for SUCCEEDED transition: %w", err)
+		}
+		if statemachine.IsBuildTerminal(statemachine.State(current.Status)) {
+			return nil // Already finalized (race with reconcile loop) — safe
+		}
+		if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildReleaseCompleted)); err != nil {
+			return fmt.Errorf("on build completed: transition to SUCCEEDED: %w", err)
+		}
+		return nil
+	}); err != nil {
+		slog.Error("on build completed: failed to transition RELEASING → SUCCEEDED",
+			"build_id", buildID, "error", err)
+		return fmt.Errorf("on build completed: RELEASING → SUCCEEDED: %w", err)
 	}
 
 	return nil
+}
+
+// writeStaticRoutingEntries writes CF KV entries for static apps in the build.
+// This enables the Cloudflare Worker to serve static assets from DO Spaces
+// without any cluster involvement (Sprint 10).
+func (o *BuildOrchestrator) writeStaticRoutingEntries(ctx context.Context, build *db.Build, result BuildCallbackRequest) {
+	if o.kvClient == nil {
+		return // CF KV not configured (local dev or not enabled)
+	}
+
+	for _, app := range result.Apps {
+		// Only write KV for static apps
+		if app.Rendering != "static" {
+			continue
+		}
+
+		// ARCH-004 fix: Use cfkv.Subdomain() instead of inline generation to avoid
+		// divergence with the canonical function (missing TrimRight for trailing hyphens).
+		subdomain := cfkv.Subdomain(build.TenantID, build.ProjectID, app.Name, build.Environment)
+
+		entry := map[string]string{
+			"buildId":  build.ID,
+			"s3Prefix": fmt.Sprintf("/%s/%s/%s/%s", build.TenantID, build.ProjectID, app.Name, build.ID),
+		}
+
+		if err := o.kvClient.Put(ctx, subdomain, entry); err != nil {
+			slog.Error("static routing: failed to write KV entry",
+				"subdomain", subdomain,
+				"build_id", build.ID,
+				"error", err,
+			)
+			// Non-fatal: assets are still accessible via nginx-s3-gateway in cluster
+			continue
+		}
+
+		slog.Info("static routing: KV entry written",
+			"subdomain", subdomain,
+			"build_id", build.ID,
+			"url", fmt.Sprintf("https://%s.%s", subdomain, o.baseDomain),
+		)
+	}
 }

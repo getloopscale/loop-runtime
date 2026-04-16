@@ -1,12 +1,17 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package services implements business logic orchestration.
 package services
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
@@ -78,14 +83,55 @@ func (cb *CircuitBreakerSyncClient) TriggerSync(ctx context.Context, appName str
 }
 
 // WaitForSync delegates to the inner SyncClient with circuit breaker protection.
-func (cb *CircuitBreakerSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration) error {
+func (cb *CircuitBreakerSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error {
 	if err := cb.preCheck(); err != nil {
 		return err
 	}
 
-	err := cb.inner.WaitForSync(ctx, appName, timeout)
+	err := cb.inner.WaitForSync(ctx, appName, timeout, deployedApps)
 	cb.recordResult(err)
 	return err
+}
+
+// GetAppStatus delegates to the inner SyncClient.
+// Read-only operation — no circuit breaker needed (does not mutate state).
+// Required so that the ReleaseConvergenceLoop type assertion succeeds
+// when the SyncClient is wrapped by the circuit breaker (AUDIT-2026-03-28).
+func (cb *CircuitBreakerSyncClient) GetAppStatus(ctx context.Context, appName string, deployedApps []string) (bool, bool, error) {
+	type statusChecker interface {
+		GetAppStatus(ctx context.Context, appName string, deployedApps []string) (bool, bool, error)
+	}
+	if checker, ok := cb.inner.(statusChecker); ok {
+		return checker.GetAppStatus(ctx, appName, deployedApps)
+	}
+	return false, false, nil
+}
+
+// TerminateOperation delegates to the inner SyncClient.
+// Required so that the ReleaseConvergenceLoop type assertion succeeds
+// when the SyncClient is wrapped by the circuit breaker (MEET-2026-03-29-019).
+func (cb *CircuitBreakerSyncClient) TerminateOperation(ctx context.Context, appName string) error {
+	type terminator interface {
+		TerminateOperation(ctx context.Context, appName string) error
+	}
+	if t, ok := cb.inner.(terminator); ok {
+		return t.TerminateOperation(ctx, appName)
+	}
+	return nil
+}
+
+// GetSyncRevision delegates to the inner SyncClient.
+// Read-only operation — no circuit breaker needed.
+// Required so that the commit SHA verification type assertion succeeds
+// when the SyncClient is wrapped by the circuit breaker (AUDIT-2026-03-28).
+func (cb *CircuitBreakerSyncClient) GetSyncRevision(ctx context.Context, appName string) (string, error) {
+	type revisionChecker interface {
+		GetSyncRevision(ctx context.Context, appName string) (string, error)
+	}
+	if checker, ok := cb.inner.(revisionChecker); ok {
+		return checker.GetSyncRevision(ctx, appName)
+	}
+	return "", nil
 }
 
 // preCheck evaluates the circuit state. Returns ErrPlatformDegraded if the
@@ -110,6 +156,7 @@ func (cb *CircuitBreakerSyncClient) preCheck() error {
 	if cb.state == circuitOpen {
 		cb.state = circuitHalfOpen
 		cb.successCount = 0
+		metrics.ArgoCDCircuitState.Set(2) // half-open
 		cb.logger.Info("circuit breaker: transitioning to half-open, allowing recovery probe")
 	}
 	cb.mu.Unlock()
@@ -118,7 +165,24 @@ func (cb *CircuitBreakerSyncClient) preCheck() error {
 }
 
 // recordResult updates the circuit breaker state based on the sync result.
+// Auth failures (401/403) are NOT counted toward the open threshold — they
+// indicate a credential problem, not a transient ArgoCD outage (MEET-013 Phase 1.3).
 func (cb *CircuitBreakerSyncClient) recordResult(err error) {
+	// Auth failures bypass the circuit breaker entirely (MEET-013 Phase 1.3)
+	if err != nil && errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
+		metrics.ArgoCDAuthFailures.Inc()
+		cb.logger.Error("argocd auth failure — not counted toward circuit breaker",
+			"suggestion", "check ARGOCD_TOKEN or see docs/runbooks/argocd-token-regeneration.md")
+		return
+	}
+	// MEET-2026-03-29-019: 409 "operation in progress" is NOT a transient failure —
+	// it means a previous sync is stuck. Counting it toward the CB threshold would
+	// cause a single stuck Application to trip the circuit for the ENTIRE platform.
+	if err != nil && errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
+		cb.logger.Warn("argocd sync operation in progress — not counted toward circuit breaker")
+		return
+	}
+
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
@@ -131,6 +195,7 @@ func (cb *CircuitBreakerSyncClient) recordResult(err error) {
 			// Recovery probe failed — back to open
 			cb.state = circuitOpen
 			cb.openedAt = time.Now()
+			metrics.ArgoCDCircuitState.Set(1) // open
 			cb.logger.Warn("circuit breaker: recovery probe failed, re-opening circuit",
 				"failure_count", cb.failureCount)
 			return
@@ -139,6 +204,7 @@ func (cb *CircuitBreakerSyncClient) recordResult(err error) {
 		if cb.failureCount >= cb.openThreshold && cb.state == circuitClosed {
 			cb.state = circuitOpen
 			cb.openedAt = time.Now()
+			metrics.ArgoCDCircuitState.Set(1) // open
 			cb.logger.Error("circuit breaker: opened — too many consecutive failures",
 				"failure_count", cb.failureCount, "threshold", cb.openThreshold)
 		}
@@ -148,6 +214,7 @@ func (cb *CircuitBreakerSyncClient) recordResult(err error) {
 
 		if cb.state == circuitHalfOpen && cb.successCount >= cb.closeThreshold {
 			cb.state = circuitClosed
+			metrics.ArgoCDCircuitState.Set(0) // closed
 			cb.logger.Info("circuit breaker: closed — recovery confirmed",
 				"success_count", cb.successCount, "threshold", cb.closeThreshold)
 			cb.successCount = 0

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package logging provides structured JSON logging for all LoopZero components.
 // Uses Go's stdlib slog with JSON handler. Log level is configurable via
 // the LOG_LEVEL environment variable (default: "info").

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import { parseLoopZeroYaml } from '../../../src/adapters/loopzero-yaml';
 
 describe('parseLoopZeroYaml', () => {
@@ -84,5 +87,112 @@ describe('parseLoopZeroYaml', () => {
     const yaml = `project: test\napps:\n  api:\n    path: .\n    port: 3000\n`;
     const result = parseLoopZeroYaml(yaml);
     expect(result.apps.api.secrets).toBeUndefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Schema v2 fields
+  // ---------------------------------------------------------------------------
+
+  it('should parse version field', () => {
+    const yaml = `version: 1\nproject: my-app\napps:\n  api:\n    path: .\n    port: 3000\n`;
+    const result = parseLoopZeroYaml(yaml);
+    expect(result.version).toBe(1);
+  });
+
+  it('should parse ignore field', () => {
+    const yaml = [
+      'version: 1',
+      'project: my-app',
+      'ignore:',
+      '  - node_modules',
+      '  - .git',
+      'apps:',
+      '  api:',
+      '    path: .',
+      '    port: 3000',
+    ].join('\n');
+    const result = parseLoopZeroYaml(yaml);
+    expect(result.ignore).toEqual(['node_modules', '.git']);
+  });
+
+  it('should parse build strategy', () => {
+    const yaml = `version: 1\nproject: my-app\napps:\n  api:\n    path: .\n    port: 3000\n    build: dockerfile\n`;
+    const result = parseLoopZeroYaml(yaml);
+    expect(result.apps.api.build).toBe('dockerfile');
+  });
+
+  it('should parse dockerfile field', () => {
+    const yaml = `version: 1\nproject: my-app\napps:\n  api:\n    path: .\n    port: 3000\n    build: dockerfile\n    dockerfile: Dockerfile.prod\n`;
+    const result = parseLoopZeroYaml(yaml);
+    expect(result.apps.api.dockerfile).toBe('Dockerfile.prod');
+  });
+
+  it('should parse env field', () => {
+    const yaml = [
+      'version: 1',
+      'project: my-app',
+      'apps:',
+      '  api:',
+      '    path: .',
+      '    port: 3000',
+      '    env:',
+      '      NODE_ENV: production',
+      '      LOG_LEVEL: info',
+    ].join('\n');
+    const result = parseLoopZeroYaml(yaml);
+    expect(result.apps.api.env).toEqual({ NODE_ENV: 'production', LOG_LEVEL: 'info' });
+  });
+
+  it('should reject invalid build strategy', () => {
+    const yaml = `version: 1\nproject: my-app\napps:\n  api:\n    path: .\n    port: 3000\n    build: invalid\n`;
+    const result = parseLoopZeroYaml(yaml);
+    expect(result.apps.api.build).toBeUndefined(); // invalid values are ignored
+  });
+
+  it('should roundtrip all v2 fields', () => {
+    const yaml = [
+      'version: 1',
+      'project: roundtrip-test',
+      'ignore:',
+      '  - "*.tmp"',
+      'apps:',
+      '  api:',
+      '    path: apps/api',
+      '    framework: express',
+      '    type: server',
+      '    port: 3000',
+      '    build: buildpack',
+      '    env:',
+      '      NODE_ENV: production',
+      '    secrets:',
+      '      - DATABASE_URL',
+      '  worker:',
+      '    path: apps/worker',
+      '    framework: node',
+      '    type: worker',
+      '    port: null',
+      '    build: dockerfile',
+      '    dockerfile: Dockerfile.worker',
+    ].join('\n');
+    const result = parseLoopZeroYaml(yaml);
+
+    expect(result.version).toBe(1);
+    expect(result.project).toBe('roundtrip-test');
+    expect(result.ignore).toEqual(['*.tmp']);
+    expect(result.apps.api.build).toBe('buildpack');
+    expect(result.apps.api.env).toEqual({ NODE_ENV: 'production' });
+    expect(result.apps.api.secrets).toEqual(['DATABASE_URL']);
+    expect(result.apps.worker.build).toBe('dockerfile');
+    expect(result.apps.worker.dockerfile).toBe('Dockerfile.worker');
+    expect(result.apps.worker.type).toBe('worker');
+  });
+
+  it('should handle legacy yaml without v2 fields', () => {
+    const yaml = `project: legacy\napps:\n  api:\n    path: .\n    port: 3000\n`;
+    const result = parseLoopZeroYaml(yaml);
+    expect(result.version).toBeUndefined();
+    expect(result.ignore).toBeUndefined();
+    expect(result.apps.api.build).toBeUndefined();
+    expect(result.apps.api.env).toBeUndefined();
   });
 });

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import { execSync } from 'child_process';
 import * as path from 'path';
 import { program, createProgram } from '../../src/index';
@@ -57,6 +60,17 @@ describe('CLI entrypoint', () => {
 
     it('should register init command', () => {
       expect(commandNames).toContain('init');
+    });
+
+    it('should register project command', () => {
+      expect(commandNames).toContain('project');
+    });
+
+    it('should register project delete subcommand', () => {
+      const projectCmd = program.commands.find((cmd) => cmd.name() === 'project');
+      expect(projectCmd).toBeDefined();
+      const subcommandNames = projectCmd!.commands.map((cmd) => cmd.name());
+      expect(subcommandNames).toContain('delete');
     });
   });
 
@@ -123,9 +137,10 @@ describe('loopzero --json with no command', () => {
     try {
       output = execSync(`node ${binPath} --json`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
       exitCode = 0;
-    } catch (err: any) {
-      output = err.stdout || '';
-      exitCode = err.status;
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; status: number };
+      output = e.stdout || '';
+      exitCode = e.status;
     }
 
     expect(exitCode).toBe(1);
@@ -139,14 +154,73 @@ describe('loopzero --json with no command', () => {
     expect(parsed).toHaveProperty('exit_code', 1);
   });
 
+  it('should return exit code 1 and error message for unknown command', () => {
+    let output: string;
+    let exitCode: number;
+    try {
+      output = execSync(`node ${binPath} nonexistent-command`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      exitCode = 0;
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; status: number };
+      output = (e.stderr || '') + (e.stdout || '');
+      exitCode = e.status;
+    }
+
+    expect(exitCode).toBe(1);
+    expect(output).toContain('Unknown command: nonexistent-command');
+    expect(output).toContain('loopzero --help');
+  });
+
+  it('should return exit code 1 and structured JSON for unknown command with --json', () => {
+    let output: string;
+    let exitCode: number;
+    try {
+      output = execSync(`node ${binPath} --json nonexistent-command`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      exitCode = 0;
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; status: number };
+      output = e.stdout || '';
+      exitCode = e.status;
+    }
+
+    expect(exitCode).toBe(1);
+    const parsed = JSON.parse(output.trim());
+    expect(parsed).toHaveProperty('error');
+    expect(parsed.error).toContain('Unknown command: nonexistent-command');
+    expect(parsed).toHaveProperty('exit_code', 1);
+  });
+
+  it('should return structured JSON for missing required argument with --json (F-05)', () => {
+    let output: string;
+    let exitCode: number;
+    try {
+      output = execSync(`node ${binPath} project delete --yes --json`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      exitCode = 0;
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; status: number };
+      output = (e.stdout || '') + (e.stderr || '');
+      exitCode = e.status;
+    }
+
+    expect(exitCode).toBe(1);
+    const parsed = JSON.parse(output.trim());
+    expect(parsed).toHaveProperty('error');
+    expect(parsed.error).toMatch(/missing|required|name/i);
+    expect(parsed).toHaveProperty('exit_code', 1);
+  });
+
   it('should still show text help when --json is NOT passed and no command is given', () => {
     let stdout = '';
     let stderr = '';
     try {
       stdout = execSync(`node ${binPath}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
-    } catch (err: any) {
-      stdout = err.stdout || '';
-      stderr = err.stderr || '';
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string };
+      stdout = e.stdout || '';
+      stderr = e.stderr || '';
     }
     const combined = stdout + stderr;
 

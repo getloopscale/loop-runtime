@@ -1,0 +1,1 @@
+-- Forward-only migration. No rollback.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package db
 
 import (
@@ -16,6 +19,12 @@ import (
 // buildMachine is the build state machine singleton.
 // Used to validate all status transitions.
 var buildMachine = statemachine.NewBuildMachine()
+
+// CellDefault is the cell identifier used by single-cell deployments and as
+// the default for any row created without an explicit cell assignment.
+// Kept as a local constant to avoid a db→placement package dependency;
+// placement.DefaultCellID is the authoritative value and must match.
+const CellDefault = "cell-default"
 
 // Build represents a build record in the database.
 type Build struct {
@@ -39,10 +48,11 @@ type Build struct {
 // BuildAppSpec is a single app spec stored at build submission time.
 // Used by the reconcile loop to generate manifests and compute image refs.
 type BuildAppSpec struct {
-	Name    string   `json:"name"`
-	Type    string   `json:"type"`
-	Port    int      `json:"port"`
-	Secrets []string `json:"secrets,omitempty"`
+	Name      string   `json:"name"`
+	Type      string   `json:"type"`
+	Rendering string   `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
+	Port      int      `json:"port"`
+	Secrets   []string `json:"secrets,omitempty"`
 }
 
 // BuildStore defines the interface for build persistence operations.
@@ -56,7 +66,12 @@ type BuildStore interface {
 	SetAppsSpec(ctx context.Context, tx DBTX, id string, apps []BuildAppSpec) error
 	GetBuildApps(ctx context.Context, buildID string) ([]BuildAppSpec, error)
 	ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error)
-	FindActiveBuilds(ctx context.Context) ([]Build, error)
+	ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]Build, int, error)
+	// FindActiveBuilds returns QUEUED/RUNNING/RELEASING builds belonging to the
+	// given cell (roadmap 03). Pass CellDefault for single-cell / backward
+	// compatible behavior.
+	FindActiveBuilds(ctx context.Context, cellID string) ([]Build, error)
+	CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, []string, error)
 }
 
 // PostgresBuildStore implements BuildStore using PostgreSQL.
@@ -106,8 +121,11 @@ func (s *PostgresBuildStore) GetByID(ctx context.Context, buildID string) (*Buil
 	))
 }
 
-// HasActiveBuild checks if there is a build in QUEUED or RUNNING status
+// HasActiveBuild checks if there is a build in QUEUED, RUNNING, or RELEASING status
 // for the given tenant, project, and environment.
+// RELEASING is included because a build in this state has completed its image build
+// and is in the process of creating a release — allowing a new deploy would create
+// two concurrent releases for the same environment (ARCH-002 fix).
 // This runs inside the advisory lock transaction.
 func (s *PostgresBuildStore) HasActiveBuild(ctx context.Context, tx DBTX, tenantID, projectID, env string) (bool, error) {
 	var exists bool
@@ -115,7 +133,7 @@ func (s *PostgresBuildStore) HasActiveBuild(ctx context.Context, tx DBTX, tenant
 		`SELECT EXISTS(
 			SELECT 1 FROM builds
 			WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
-			AND status IN ('QUEUED', 'RUNNING')
+			AND status IN ('QUEUED', 'RUNNING', 'RELEASING')
 		)`,
 		tenantID, projectID, env,
 	).Scan(&exists)
@@ -153,11 +171,27 @@ func (s *PostgresBuildStore) UpdateStatus(ctx context.Context, tx DBTX, buildID 
 		return nil, err
 	}
 
-	// Update in DB
-	_, err = executor.Exec(ctx,
-		`UPDATE builds SET status = $1 WHERE id = $2`,
-		string(newState), buildID,
-	)
+	// Update in DB — set timing fields based on state transition.
+	// RUNNING: record started_at (build execution began)
+	// Terminal states (SUCCEEDED/FAILED/CANCELLED): record finished_at + compute duration
+	var query string
+	var args []interface{}
+
+	switch newState {
+	case statemachine.BuildRunning:
+		query = `UPDATE builds SET status = $1, started_at = NOW() WHERE id = $2`
+		args = []interface{}{string(newState), buildID}
+	case statemachine.BuildSucceeded, statemachine.BuildFailed, statemachine.BuildCancelled:
+		query = `UPDATE builds SET status = $1, finished_at = NOW(),
+			duration_seconds = COALESCE(EXTRACT(EPOCH FROM (NOW() - started_at))::int, 0)
+			WHERE id = $2`
+		args = []interface{}{string(newState), buildID}
+	default:
+		query = `UPDATE builds SET status = $1 WHERE id = $2`
+		args = []interface{}{string(newState), buildID}
+	}
+
+	_, err = executor.Exec(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("build store: update status failed: %w", err)
 	}
@@ -288,17 +322,116 @@ func (s *PostgresBuildStore) ListByProject(ctx context.Context, tenantID, projec
 	return builds, nil
 }
 
-// FindActiveBuilds returns all builds in QUEUED or RUNNING state.
-// Used by the startup reconciler to find orphaned builds on boot.
-func (s *PostgresBuildStore) FindActiveBuilds(ctx context.Context) ([]Build, error) {
+// ListByProjectAndEnv returns builds for a project, optionally filtered by environment.
+// Returns (builds, totalCount, error). If env is empty, returns builds for all environments.
+func (s *PostgresBuildStore) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]Build, int, error) {
+	// Clamp limit to 1-50
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	var rows Rows
+	var err error
+	var total int
+
+	if env != "" {
+		rows, err = s.db.Query(ctx,
+			`SELECT id, tenant_id, project_id, environment, status, COALESCE(commit_sha, ''),
+			        correlation_id, created_by, created_at, started_at, finished_at,
+			        COALESCE(error_message, ''), duration_seconds, COALESCE(workflow_id, '')
+			 FROM builds
+			 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
+			 ORDER BY created_at DESC
+			 LIMIT $4 OFFSET $5`,
+			tenantID, projectID, env, limit, offset,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("build store: list by project and env query failed: %w", err)
+		}
+
+		err = s.db.QueryRow(ctx,
+			`SELECT COUNT(*) FROM builds WHERE tenant_id = $1 AND project_id = $2 AND environment = $3`,
+			tenantID, projectID, env,
+		).Scan(&total)
+	} else {
+		rows, err = s.db.Query(ctx,
+			`SELECT id, tenant_id, project_id, environment, status, COALESCE(commit_sha, ''),
+			        correlation_id, created_by, created_at, started_at, finished_at,
+			        COALESCE(error_message, ''), duration_seconds, COALESCE(workflow_id, '')
+			 FROM builds
+			 WHERE tenant_id = $1 AND project_id = $2
+			 ORDER BY created_at DESC
+			 LIMIT $3 OFFSET $4`,
+			tenantID, projectID, limit, offset,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("build store: list by project query failed: %w", err)
+		}
+
+		err = s.db.QueryRow(ctx,
+			`SELECT COUNT(*) FROM builds WHERE tenant_id = $1 AND project_id = $2`,
+			tenantID, projectID,
+		).Scan(&total)
+	}
+
+	if err != nil {
+		return nil, 0, fmt.Errorf("build store: count query failed: %w", err)
+	}
+
+	defer rows.Close()
+
+	var builds []Build
+	for rows.Next() {
+		var b Build
+		if err := rows.Scan(
+			&b.ID, &b.TenantID, &b.ProjectID, &b.Environment, &b.Status,
+			&b.CommitSHA, &b.CorrelationID, &b.CreatedBy,
+			&b.CreatedAt, &b.StartedAt, &b.FinishedAt, &b.ErrorMessage,
+			&b.DurationSeconds, &b.WorkflowID,
+		); err != nil {
+			return nil, 0, fmt.Errorf("build store: scan failed: %w", err)
+		}
+		builds = append(builds, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("build store: rows error: %w", err)
+	}
+
+	if builds == nil {
+		builds = []Build{}
+	}
+	return builds, total, nil
+}
+
+// FindActiveBuilds returns all builds in QUEUED, RUNNING, or RELEASING state
+// belonging to the given cell. Roadmap 03 adds the cell_id filter so that in
+// a multi-cell deployment, each cell's reconciler only sees its own work.
+// Pass CellDefault ("cell-default") for single-cell / backward-compatible
+// behavior — existing data and any rows inserted without an explicit cell_id
+// default to 'cell-default' via migration 000029.
+func (s *PostgresBuildStore) FindActiveBuilds(ctx context.Context, cellID string) ([]Build, error) {
+	if cellID == "" {
+		cellID = CellDefault
+	}
 	rows, err := s.db.Query(ctx,
+		// RELEASING included per MEET-2026-03-26-008: builds with completed images
+		// that need release activation (Phase 2) to be retried after crash/failure.
+		// cell_id filter uses idx_builds_cell_status_created (migration 000029).
 		`SELECT id, tenant_id, project_id, environment, status, COALESCE(commit_sha, ''),
 		        correlation_id, created_by, created_at, started_at, finished_at,
 		        COALESCE(error_message, ''), duration_seconds, COALESCE(workflow_id, '')
 		 FROM builds
-		 WHERE status IN ('QUEUED', 'RUNNING')
+		 WHERE cell_id = $1
+		   AND status IN ('QUEUED', 'RUNNING', 'RELEASING')
 		 ORDER BY created_at ASC
 		 LIMIT 100`,
+		cellID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build store: find active builds: %w", err)
@@ -326,6 +459,49 @@ func (s *PostgresBuildStore) FindActiveBuilds(ctx context.Context) ([]Build, err
 		builds = []Build{}
 	}
 	return builds, nil
+}
+
+// CancelActiveBuilds cancels all QUEUED or RUNNING builds for a (tenant, project, env).
+// Returns the number of builds cancelled and their workflow IDs (for Argo cancellation).
+// This method runs inside an advisory lock transaction.
+//
+// NOTE: This intentionally bypasses the state machine (direct SQL UPDATE to CANCELLED)
+// for batch operations during project deletion. For RUNNING builds this skips the
+// CANCELLING intermediate state — Argo workflow cancellation is handled separately
+// via the returned workflow IDs. Do not reuse this for single-build cancellation.
+func (s *PostgresBuildStore) CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, []string, error) {
+	executor := tx
+	if executor == nil {
+		executor = s.db
+	}
+	rows, err := executor.Query(ctx,
+		`UPDATE builds SET status = 'CANCELLED', finished_at = NOW()
+		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
+		 AND status IN ('QUEUED', 'RUNNING')
+		 RETURNING COALESCE(workflow_id, '')`,
+		tenantID, projectID, env,
+	)
+	if err != nil {
+		return 0, nil, fmt.Errorf("build store: cancel active builds: %w", err)
+	}
+	defer rows.Close()
+
+	var workflowIDs []string
+	count := 0
+	for rows.Next() {
+		var wfID string
+		if err := rows.Scan(&wfID); err != nil {
+			return 0, nil, fmt.Errorf("build store: scan workflow_id: %w", err)
+		}
+		count++
+		if wfID != "" {
+			workflowIDs = append(workflowIDs, wfID)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, nil, fmt.Errorf("build store: cancel active builds rows: %w", err)
+	}
+	return count, workflowIDs, nil
 }
 
 // scanBuild scans a single build row.

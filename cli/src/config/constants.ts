@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 /**
  * Centralized constants for the LoopZero CLI.
  * All magic numbers and configurable defaults live here.
@@ -17,31 +20,59 @@ function envInt(name: string, defaultValue: number): number {
 // --- API Connection ---
 
 /**
- * Default API base URL fallback when LOOPZERO_API_URL is not set.
- * Port 13001 matches the k3d mgmt cluster NodePort mapping (host:13001 → NodePort:30001).
- * For production, set LOOPZERO_API_URL to the real API endpoint.
+ * MEET-040: Single URL for all CLI operations.
+ * Traefik routes /v1/auth/* → cloud service, /* → engine API.
+ *
+ * Priority: LOOPZERO_URL > LOOPZERO_API_URL (deprecated) > fallback.
+ * Local dev: port 8080 matches the Traefik-less direct API server.
+ * Production: set LOOPZERO_URL=https://api.dev.loopzero.example
  */
-export const DEFAULT_API_URL_FALLBACK = 'http://localhost:13001';
+export const DEFAULT_API_URL_FALLBACK = 'http://localhost:8080';
 
-/** Returns the API base URL, checking LOOPZERO_API_URL at call time. */
+/** Returns the unified API URL. Checks LOOPZERO_URL first, then legacy LOOPZERO_API_URL. */
 export function getDefaultApiUrl(): string {
-  return process.env.LOOPZERO_API_URL || DEFAULT_API_URL_FALLBACK;
+  const url = process.env.LOOPZERO_URL || process.env.LOOPZERO_API_URL || DEFAULT_API_URL_FALLBACK;
+  if (process.env.LOOPZERO_API_URL && !process.env.LOOPZERO_URL) {
+    // Legacy env var — accepted but deprecated
+  }
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    throw new Error(`Invalid LOOPZERO_URL: must start with http:// or https://. Got: ${url}`);
+  }
+  return url;
 }
 
 /**
- * Returns true if no explicit LOOPZERO_API_URL was provided,
+ * Returns true if no explicit URL was provided,
  * meaning the CLI is using the dev-only localhost fallback.
- * Commands can use this to warn users in non-dev contexts.
  */
 export function isUsingDefaultApiUrl(): boolean {
-  return !process.env.LOOPZERO_API_URL;
+  return !process.env.LOOPZERO_URL && !process.env.LOOPZERO_API_URL;
 }
 
 /** HTTP request timeout for API calls (ms). Override: LOOPZERO_API_TIMEOUT */
 export const API_REQUEST_TIMEOUT_MS = envInt('LOOPZERO_API_TIMEOUT', 30000);
 
 /** HTTP timeout for source bundle upload (ms). Override: LOOPZERO_UPLOAD_TIMEOUT */
-export const UPLOAD_TIMEOUT_MS = envInt('LOOPZERO_UPLOAD_TIMEOUT', 30000);
+export const UPLOAD_TIMEOUT_MS = envInt('LOOPZERO_UPLOAD_TIMEOUT', 120000);
+
+// --- Cloud Service ---
+
+/**
+ * MEET-040: getCloudUrl returns the same base URL as getDefaultApiUrl.
+ * Traefik routes /v1/auth/* to cloud service. No separate URL needed.
+ * Legacy LOOPZERO_CLOUD_URL accepted for backward compatibility.
+ */
+export function getCloudUrl(): string {
+  if (process.env.LOOPZERO_CLOUD_URL) {
+    const url = process.env.LOOPZERO_CLOUD_URL;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      throw new Error(`Invalid LOOPZERO_CLOUD_URL: must start with http:// or https://. Got: ${url}`);
+    }
+    return url;
+  }
+  // Default: same as API URL (Traefik handles routing)
+  return getDefaultApiUrl();
+}
 
 // --- OAuth ---
 

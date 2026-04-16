@@ -17,13 +17,13 @@ metadata:
 rules:
   # --- LoopZero CRDs (full CRUD needed for reconciliation) ---
   - apiGroups: ["loopzero.io"]
-    resources: ["tenants", "appsecrets", "clustercredentials", "previewenvironments", "reconciliationreports"]
+    resources: ["tenants", "appsecrets", "clustercredentials", "previewenvironments", "reconciliationreports", "environments", "exposedroutes", "gitrepositorybindings", "platformbootstraps", "loopzeroapplications"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["loopzero.io"]
-    resources: ["tenants/status", "appsecrets/status", "clustercredentials/status", "previewenvironments/status", "reconciliationreports/status"]
+    resources: ["tenants/status", "appsecrets/status", "clustercredentials/status", "previewenvironments/status", "reconciliationreports/status", "environments/status", "exposedroutes/status", "gitrepositorybindings/status", "platformbootstraps/status", "loopzeroapplications/status"]
     verbs: ["get", "update", "patch"]
   - apiGroups: ["loopzero.io"]
-    resources: ["tenants/finalizers", "clustercredentials/finalizers", "previewenvironments/finalizers"]
+    resources: ["tenants/finalizers", "clustercredentials/finalizers", "previewenvironments/finalizers", "environments/finalizers", "loopzeroapplications/finalizers"]
     verbs: ["update"]
 
   # --- Namespaces: create/manage tenant namespaces ---
@@ -51,7 +51,7 @@ rules:
 
   # --- NetworkPolicies: tenant network isolation ---
   - apiGroups: ["networking.k8s.io"]
-    resources: ["networkpolicies"]
+    resources: ["networkpolicies", "ingresses"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]
 
   # --- Secrets: kubeconfig secrets for ClusterCredentialController ---
@@ -66,6 +66,33 @@ rules:
   - apiGroups: ["scheduling.k8s.io"]
     resources: ["priorityclasses"]
     verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- Workload resources: required for RBAC escalation prevention ---
+  # Kubernetes prevents a controller from creating Roles that grant permissions
+  # the controller itself does not hold. rbacRulesForPlan() grants permissions
+  # split by API group; the controller must hold all of them at cluster scope.
+  # See: operators/internal/controller/tenant_rbac.go rbacRulesForPlan()
+  - apiGroups: [""]
+    resources: ["configmaps", "services"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch"]
+
+  # --- Backward compat: old rbacRulesForPlan used combined APIGroups ["", "apps"] ---
+  # Kubernetes expands this as cartesian product, requiring ALL combinations.
+  # These cover the extra combinations until all operator images use split rules.
+  - apiGroups: [""]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["configmaps", "services"]
+    verbs: ["get", "list", "create", "update", "patch"]
+
+  # --- ArgoCD: create/manage Applications and AppProjects in argocd namespace ---
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "appprojects"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
   # --- Events: emit Kubernetes events for observability ---
   - apiGroups: [""]
@@ -127,9 +154,25 @@ spec:
                 secretKeyRef:
                   name: loopzero-api-tokens
                   key: gitea-token
-                  optional: true
             - name: ARGOCD_NAMESPACE
               value: "argocd"
+            - name: BUILD_KUBECONFIG
+              value: "/etc/loopzero/build-kubeconfig"
+            - name: RUNTIME_KUBECONFIG
+              value: "/etc/loopzero/runtime-kubeconfig"
+            # MinIO per-tenant provisioner disabled for local dev.
+            # Production uses SPACES_ACCESS_KEY_ID/SECRET_ACCESS_KEY (DO Spaces).
+            # Set MINIO_ENDPOINT + ACCESS/SECRET_KEY to enable per-tenant isolation.
+            - name: BASE_DOMAIN
+              value: "loopzero.local"
+            # Workload cluster API server URL for ArgoCD Application destination.
+            # This is the workload cluster's k3d LB IP on the mgmt network.
+            # Update after cluster recreate: docker inspect k3d-loopzero-workload-server-0
+            - name: WORKLOAD_CLUSTER_URL
+              value: "https://172.18.0.11:6443"
+            # Local dev: Traefik is in 'traefik' namespace (production: platform-system)
+            - name: INGRESS_NAMESPACE
+              value: "traefik"
           ports:
             - containerPort: 8081
               name: health
@@ -159,6 +202,14 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: build-kubeconfig
+              mountPath: /etc/loopzero/build-kubeconfig
+              subPath: build-kubeconfig
+              readOnly: true
+            - name: runtime-kubeconfig
+              mountPath: /etc/loopzero/runtime-kubeconfig
+              subPath: runtime-kubeconfig
+              readOnly: true
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
@@ -166,3 +217,15 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: build-kubeconfig
+          configMap:
+            name: loopzero-build-kubeconfig
+            items:
+              - key: config
+                path: build-kubeconfig
+        - name: runtime-kubeconfig
+          configMap:
+            name: loopzero-runtime-kubeconfig
+            items:
+              - key: config
+                path: runtime-kubeconfig

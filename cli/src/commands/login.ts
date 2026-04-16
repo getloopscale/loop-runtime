@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 export interface TokenValidationResult {
   valid: boolean;
   email: string | null;
@@ -5,9 +8,16 @@ export interface TokenValidationResult {
   serverError?: boolean;
 }
 
+export interface DeviceFlowResult {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
+
 export interface LoginDeps {
-  saveToken: (token: string, email: string, team: string) => void;
+  saveToken: (token: string, email: string, team: string, refreshToken?: string, expiresIn?: number) => void;
   validateToken: (token: string) => Promise<TokenValidationResult>;
+  executeDeviceFlow?: () => Promise<DeviceFlowResult | null>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
   isCI: boolean;
@@ -32,7 +42,29 @@ export class LoginCommand {
         return this.exitWithError(opts, 'In CI mode, use: loopzero login --token <token>', 1, 'MISSING_TOKEN');
       }
 
-      return this.exitWithError(opts, 'Token is required. Use: loopzero login --token <token>', 1, 'MISSING_TOKEN');
+      // Device Code Flow — interactive browser-based login
+      if (this.deps.executeDeviceFlow) {
+        return this.executeDeviceFlow(opts);
+      }
+
+      return this.exitWithError(
+        opts,
+        'Token is required. Use: loopzero login --token <token>\n' +
+        'Generate a token at your account settings or ask your team admin.',
+        1,
+        'MISSING_TOKEN'
+      );
+    }
+
+    // Deprecation warning for GitHub PAT tokens
+    // JWT tokens (3 dot-separated segments) are the new standard.
+    // PAT tokens (ghp_, gho_, github_pat_) are deprecated.
+    if (this.isGitHubPAT(opts.token) && !this.isSuppressed() && !opts.json) {
+      this.deps.writeError(
+        'Warning: Token-based authentication is deprecated.\n' +
+        'Run `loopzero login` (without --token) to switch to the new login flow.\n' +
+        'Token support will be removed in a future version.'
+      );
     }
 
     const result = await this.deps.validateToken(opts.token);
@@ -41,7 +73,15 @@ export class LoginCommand {
       if (result.serverError) {
         return this.exitWithError(opts, 'Service temporarily unavailable. Try again in a moment.', 4, 'SERVICE_UNAVAILABLE');
       } else {
-        return this.exitWithError(opts, 'Authentication failed. Check your token and try again.', 4, 'AUTH_FAILED');
+        return this.exitWithError(
+          opts,
+          'Authentication failed. Your token may be expired, revoked, or missing required scopes.\n' +
+          'LoopZero requires a GitHub token with read:user scope (Classic PAT) or a GitHub OAuth token.\n' +
+          'Create a Classic PAT at: https://github.com/settings/tokens/new?scopes=read:user\n' +
+          'Then run: loopzero login --token <new-token>',
+          4,
+          'AUTH_FAILED'
+        );
       }
     }
 
@@ -58,12 +98,58 @@ export class LoginCommand {
           authenticated: true,
           email: result.email,
           team,
+          team_id: team,
         })
       );
     } else {
-      this.deps.writeTo(`Authenticated as ${result.email} (team: ${team})`);
+      // §3.5: Rich post-auth output (Vercel CLI style)
+      this.deps.writeTo('');
+      this.deps.writeTo(`  Authenticated as ${result.email}`);
+      this.deps.writeTo(`  Team: ${team}`);
+      this.deps.writeTo('');
+      this.deps.writeTo('  Next: run `loopzero deploy` to deploy your project');
     }
 
+    return 0;
+  }
+
+  private async executeDeviceFlow(opts: LoginOptions): Promise<number> {
+    const result = await this.deps.executeDeviceFlow!();
+    if (!result) {
+      return this.exitWithError(opts, 'Authentication failed. Try again with: loopzero login', 4, 'AUTH_FAILED');
+    }
+
+    // Validate the received token to get user info
+    const validation = await this.deps.validateToken(result.access_token);
+    if (!validation.valid || !validation.email) {
+      return this.exitWithError(opts, 'Authentication succeeded but token validation failed. Try again.', 4, 'AUTH_FAILED');
+    }
+
+    const team = this.resolveTeam(validation.teams, opts.team);
+    if (team === null) {
+      return this.handleTeamResolutionFailure(opts, validation.teams, opts.team);
+    }
+
+    this.deps.saveToken(result.access_token, validation.email, team, result.refresh_token, result.expires_in);
+
+    if (opts.json) {
+      this.deps.writeTo(JSON.stringify({
+        authenticated: true,
+        email: validation.email,
+        team,
+        team_id: team,
+        expires_in: result.expires_in,
+      }));
+    } else {
+      // §3.5: Rich post-auth output (Vercel CLI style)
+      const expiry = result.expires_in ? `in ${Math.round(result.expires_in / 60)} minutes` : 'in 1 hour';
+      this.deps.writeTo('');
+      this.deps.writeTo(`  Authenticated as ${validation.email}`);
+      this.deps.writeTo(`  Team: ${team}`);
+      this.deps.writeTo(`  Token expires: ${expiry}`);
+      this.deps.writeTo('');
+      this.deps.writeTo('  Next: run `loopzero deploy` to deploy your project');
+    }
     return 0;
   }
 
@@ -114,6 +200,14 @@ export class LoginCommand {
     }
 
     return this.exitWithError(opts, 'No teams available for this account.', 1, 'NO_TEAMS');
+  }
+
+  private isGitHubPAT(token: string): boolean {
+    return token.startsWith('ghp_') || token.startsWith('gho_') || token.startsWith('github_pat_');
+  }
+
+  private isSuppressed(): boolean {
+    return process.env.LOOPZERO_SUPPRESS_DEPRECATION === '1';
   }
 
   private exitWithError(opts: LoginOptions, message: string, exitCode: number, code: string): number {

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package middleware
 
 import (
@@ -23,9 +26,8 @@ func (v *concurrentTokenValidator) ValidateToken(_ context.Context, token string
 	defer v.mu.Unlock()
 	v.calls++
 	return &TokenValidationResult{
-		UserID:   "user-" + token,
-		Email:    token + "@test.dev",
-		GitHubID: 1,
+		UserID: "user-" + token,
+		Email:  token + "@test.dev",
 	}, nil
 }
 

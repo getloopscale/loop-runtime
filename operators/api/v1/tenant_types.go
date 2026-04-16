@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package v1
 
 import (
@@ -46,7 +49,10 @@ type Tenant struct {
 // TenantSpec defines the desired state of a Tenant as described in spec section 9.2.
 type TenantSpec struct {
 	// DisplayName is the human-readable name of the tenant.
+	// SEC-011: Pattern constraint prevents injection of control characters or markup.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9][a-zA-Z0-9 _.\-]*$`
 	DisplayName string `json:"displayName"`
 
 	// Plan is the subscription tier: starter, growth, or enterprise.
@@ -54,7 +60,7 @@ type TenantSpec struct {
 
 	// Environments lists the environments available to this tenant.
 	// +kubebuilder:validation:MinItems=1
-	Environments []EnvironmentSpec `json:"environments"`
+	Environments []TenantEnvironmentEntry `json:"environments"`
 
 	// GitOps configures the tenant's GitOps repository.
 	GitOps GitOpsSpec `json:"gitops"`
@@ -64,10 +70,18 @@ type TenantSpec struct {
 
 	// Limits defines resource limits for the tenant.
 	Limits ResourceLimits `json:"limits"`
+
+	// CellID identifies which Cell this tenant's workloads run in.
+	// ADR-0008: Phase 0 defaults to "cell-default" (single Cell).
+	// Phase 1+ PlacementEngine assigns tenants to specific Cells.
+	// +kubebuilder:default="cell-default"
+	// +kubebuilder:validation:MinLength=1
+	CellID string `json:"cellID,omitempty"`
 }
 
-// EnvironmentSpec defines an environment configuration for a tenant.
-type EnvironmentSpec struct {
+// TenantEnvironmentEntry defines an environment reference within a Tenant spec.
+// ARCH-004: Renamed from EnvironmentSpec to resolve naming collision with EnvironmentCRSpec.
+type TenantEnvironmentEntry struct {
 	// Name is the environment name (e.g., "production", "staging").
 	Name string `json:"name"`
 
@@ -78,9 +92,11 @@ type EnvironmentSpec struct {
 // GitOpsSpec configures the tenant's GitOps repository in Gitea.
 type GitOpsSpec struct {
 	// RepoName is the name of the GitOps repository in Gitea.
+	// +kubebuilder:validation:MinLength=1
 	RepoName string `json:"repoName"`
 
 	// Branch is the branch used for GitOps (default: "main").
+	// +kubebuilder:validation:MinLength=1
 	Branch string `json:"branch"`
 }
 
@@ -105,6 +121,7 @@ type ResourceLimits struct {
 	MaxStorage resource.Quantity `json:"maxStorage"`
 
 	// MaxBuildConcurrency is the maximum number of concurrent builds.
+	// +kubebuilder:validation:Minimum=1
 	MaxBuildConcurrency int `json:"maxBuildConcurrency"`
 }
 
@@ -123,12 +140,6 @@ type TenantStatus struct {
 
 	// ObservedGeneration is the most recent generation observed by the controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// ActiveBuilds is the current number of active builds for this tenant.
-	ActiveBuilds int `json:"activeBuilds"`
-
-	// TotalReleases is the total number of releases created for this tenant.
-	TotalReleases int `json:"totalReleases"`
 }
 
 // TenantList contains a list of Tenant resources.

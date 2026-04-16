@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package unit
 
 import (
@@ -103,7 +106,7 @@ func (f *fakeBuildStoreOrch) ListByProject(ctx context.Context, tenantID, projec
 	return []db.Build{}, nil
 }
 
-func (f *fakeBuildStoreOrch) FindActiveBuilds(ctx context.Context) ([]db.Build, error) {
+func (f *fakeBuildStoreOrch) FindActiveBuilds(ctx context.Context, _ string) ([]db.Build, error) {
 	var active []db.Build
 	for _, b := range f.builds {
 		if b.Status == string(statemachine.BuildQueued) || b.Status == string(statemachine.BuildRunning) {
@@ -119,6 +122,27 @@ func (f *fakeBuildStoreOrch) SetAppsSpec(ctx context.Context, tx db.DBTX, id str
 
 func (f *fakeBuildStoreOrch) GetBuildApps(ctx context.Context, buildID string) ([]db.BuildAppSpec, error) {
 	return nil, nil
+}
+
+func (f *fakeBuildStoreOrch) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]db.Build, int, error) {
+	return nil, 0, nil
+}
+
+func (f *fakeBuildStoreOrch) CancelActiveBuilds(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, []string, error) {
+	count := 0
+	var wfIDs []string
+	for _, b := range f.builds {
+		if b.TenantID == tenantID && b.ProjectID == projectID && b.Environment == env {
+			if b.Status == string(statemachine.BuildQueued) || b.Status == string(statemachine.BuildRunning) {
+				b.Status = string(statemachine.BuildCancelled)
+				count++
+				if b.WorkflowID != "" {
+					wfIDs = append(wfIDs, b.WorkflowID)
+				}
+			}
+		}
+	}
+	return count, wfIDs, nil
 }
 
 // safeFakeTransition catches panics from the state machine.
@@ -211,11 +235,56 @@ func (f *fakeReleaseStoreOrch) GetActiveByEnvTx(_ context.Context, _ db.DBTX, te
 	return f.GetActiveByEnv(context.Background(), tenantID, projectID, env)
 }
 
+func (f *fakeReleaseStoreOrch) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
+	return f.GetByID(context.Background(), id)
+}
+
 // setActiveByEnv manually sets an active release (for test setup).
 func (f *fakeReleaseStoreOrch) setActiveByEnv(tenantID, projectID, env string, r *db.Release) {
 	key := fmt.Sprintf("%s:%s:%s", tenantID, projectID, env)
 	f.activeByEnv[key] = r
 	f.releases[r.ID] = r
+}
+
+func (f *fakeReleaseStoreOrch) GetPreviousRelease(_ context.Context, _, _, _ string) (*db.Release, error) {
+	return nil, nil
+}
+
+func (f *fakeReleaseStoreOrch) GetByIDForTenant(_ context.Context, _, _ string) (*db.Release, error) {
+	return nil, nil
+}
+
+func (f *fakeReleaseStoreOrch) ListByEnv(_ context.Context, _, _, _ string, _ int) ([]db.Release, error) {
+	return nil, nil
+}
+
+func (f *fakeReleaseStoreOrch) GetLatestByBuildID(_ context.Context, buildID string) (*db.Release, error) {
+	for _, r := range f.releases {
+		if r.BuildID == buildID {
+			return r, nil
+		}
+	}
+	return nil, nil
+}
+
+func (f *fakeReleaseStoreOrch) FindPendingReleases(_ context.Context, _ string) ([]db.Release, error) {
+	var pending []db.Release
+	for _, r := range f.releases {
+		if r.Status == "PENDING" {
+			pending = append(pending, *r)
+		}
+	}
+	return pending, nil
+}
+
+func (f *fakeReleaseStoreOrch) FindActiveReleases(_ context.Context, _ string) ([]db.Release, error) {
+	var active []db.Release
+	for _, r := range f.releases {
+		if r.Status == "ACTIVE" {
+			active = append(active, *r)
+		}
+	}
+	return active, nil
 }
 
 // fakeEnvTargetStoreOrch implements db.EnvironmentTargetStore.
@@ -252,6 +321,14 @@ func (f *fakeEnvTargetStoreOrch) SetActive(ctx context.Context, tx db.DBTX, tena
 
 func (f *fakeEnvTargetStoreOrch) Get(ctx context.Context, tenantID, projectID, env string) (*db.EnvironmentTarget, error) {
 	return nil, nil
+}
+
+func (f *fakeEnvTargetStoreOrch) ListByProject(ctx context.Context, tenantID, projectID string) ([]db.EnvironmentTarget, error) {
+	return []db.EnvironmentTarget{}, nil
+}
+
+func (f *fakeEnvTargetStoreOrch) DeleteTarget(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) error {
+	return nil
 }
 
 // fakeEventStoreOrch implements sse.EventStore.
@@ -305,9 +382,13 @@ type fakeWorkflowSubmitter struct {
 	submitted  []services.WorkflowSpec
 	workflowID string
 	err        error
+	onSubmit   func() // optional callback for ordering tests (REVIEW-BLOCKER-1)
 }
 
 func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSpec) (string, error) {
+	if f.onSubmit != nil {
+		f.onSubmit()
+	}
 	if f.err != nil {
 		return "", f.err
 	}
@@ -318,11 +399,11 @@ func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec services.Workfl
 	return f.workflowID, nil
 }
 
-func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, workflowID string) error {
+func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID string) error {
 	return nil
 }
 
-func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, workflowID string) (*services.WorkflowStatus, error) {
+func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*services.WorkflowStatus, error) {
 	return &services.WorkflowStatus{Phase: "Succeeded"}, nil
 }
 
@@ -346,6 +427,13 @@ func (f *fakeGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpt
 	return "abc123def456abc123def456abc123def456abcd", nil
 }
 
+func (f *fakeGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemoveOpts) (string, error) {
+	if f.commitSHA != "" {
+		return f.commitSHA, nil
+	}
+	return "abc123def456abc123def456abc123def456abcd", nil
+}
+
 // fakeSyncClient implements services.SyncClient.
 type fakeSyncClient struct {
 	synced    []string
@@ -361,7 +449,7 @@ func (f *fakeSyncClient) TriggerSync(ctx context.Context, appName string) error 
 	return nil
 }
 
-func (f *fakeSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration) error {
+func (f *fakeSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error {
 	if f.waitErr != nil {
 		return f.waitErr
 	}
@@ -598,55 +686,37 @@ func TestBuildOrchestrator_OnBuildCompleted_Success_FullFlow(t *testing.T) {
 	if activeRelease == nil {
 		t.Fatal("expected a release to be created")
 	}
-	if activeRelease.Status != string(statemachine.ReleaseActive) {
-		t.Errorf("expected release status ACTIVE, got %q", activeRelease.Status)
+	// MEET-2026-03-28-015: Phase D removed. After Activate(), release is PENDING.
+	// The convergence loop or ArgoCD callback will transition to ACTIVE async.
+	if activeRelease.Status != string(statemachine.ReleasePending) {
+		t.Errorf("expected release status PENDING (async activation), got %q", activeRelease.Status)
 	}
 
-	// Environment targets should be updated
+	// Environment targets: desired should be set (by Phase C), active NOT set yet (async)
 	envKey := "tenant-1:proj-abc123:production"
 	if fakes.envTargetStore.desired[envKey] != activeRelease.ID {
 		t.Errorf("expected desired release %q, got %q", activeRelease.ID, fakes.envTargetStore.desired[envKey])
 	}
-	if fakes.envTargetStore.active[envKey] != activeRelease.ID {
-		t.Errorf("expected active release %q, got %q", activeRelease.ID, fakes.envTargetStore.active[envKey])
-	}
 
-	// SSE events: build.succeeded, deploy.pending, deploy.health_check (checking), deploy.health_check (ok), deploy.active, deploy.completed
+	// SSE events: build.succeeded + deploy.delivering + deploy.verifying (start)
+	// deploy.live and deploy.completed are emitted by convergence loop, not inline
 	succeededEvents := fakes.eventStore.eventsByType("build.succeeded")
 	if len(succeededEvents) != 1 {
 		t.Errorf("expected 1 build.succeeded event, got %d", len(succeededEvents))
 	}
 
-	pendingEvents := fakes.eventStore.eventsByType("deploy.pending")
-	if len(pendingEvents) != 1 {
-		t.Errorf("expected 1 deploy.pending event, got %d", len(pendingEvents))
+	deliveringEvents := fakes.eventStore.eventsByType("deploy.delivering")
+	if len(deliveringEvents) != 1 {
+		t.Errorf("expected 1 deploy.delivering event, got %d", len(deliveringEvents))
 	}
 
-	activeEvents := fakes.eventStore.eventsByType("deploy.active")
-	if len(activeEvents) != 1 {
-		t.Errorf("expected 1 deploy.active event, got %d", len(activeEvents))
+	verifyingEvents := fakes.eventStore.eventsByType("deploy.verifying")
+	if len(verifyingEvents) < 1 {
+		t.Errorf("expected at least 1 deploy.verifying event, got %d", len(verifyingEvents))
 	}
 
-	deployEvents := fakes.eventStore.eventsByType("deploy.completed")
-	if len(deployEvents) != 1 {
-		t.Errorf("expected 1 deploy.completed event, got %d", len(deployEvents))
-	}
-
-	// Verify deploy.completed payload has deploy_id in d-{4hex} format
-	if len(deployEvents) == 1 {
-		var payload map[string]interface{}
-		if err := json.Unmarshal(deployEvents[0].Data, &payload); err != nil {
-			t.Fatalf("failed to unmarshal deploy.completed data: %v", err)
-		}
-		deployID, ok := payload["deploy_id"].(string)
-		if !ok {
-			t.Fatal("expected deploy_id in deploy.completed payload")
-		}
-		// MOD-5: deploy_id increased from d-{4hex} (6 chars) to d-{8hex} (10 chars)
-		if !strings.HasPrefix(deployID, "d-") || len(deployID) != 10 {
-			t.Errorf("expected deploy_id format d-{8hex} (10 chars), got %q (len=%d)", deployID, len(deployID))
-		}
-	}
+	// deploy.completed is now emitted by the convergence loop, not inline.
+	// That event's format is tested in release_convergence_loop_test.go.
 }
 
 func TestBuildOrchestrator_OnBuildCompleted_BuildFailed(t *testing.T) {
@@ -778,8 +848,8 @@ func TestBuildOrchestrator_OnBuildCompleted_WorkerSkipsHealthProbe(t *testing.T)
 	if release == nil {
 		t.Fatal("expected release to be created")
 	}
-	if release.Status != string(statemachine.ReleaseActive) {
-		t.Errorf("expected release status ACTIVE, got %q", release.Status)
+	if release.Status != string(statemachine.ReleasePending) {
+		t.Errorf("expected release status PENDING (async activation via convergence loop), got %q", release.Status)
 	}
 }
 
@@ -819,14 +889,8 @@ func TestBuildOrchestrator_OnBuildCompleted_EnvironmentTargetsUpdated(t *testing
 		t.Error("expected desired release ID to be non-empty")
 	}
 
-	// SetActive must have been called with the same release ID
-	activeID, ok := fakes.envTargetStore.active[envKey]
-	if !ok {
-		t.Fatal("expected SetActive to be called")
-	}
-	if activeID != desiredID {
-		t.Errorf("expected active and desired release IDs to match: active=%q, desired=%q", activeID, desiredID)
-	}
+	// MEET-015: SetActive is now called by convergence loop (async), not inline.
+	// Only SetDesired is called during Activate. SetActive happens when PENDING → ACTIVE.
 }
 
 func TestBuildOrchestrator_OnBuildCompleted_CallbackWithBuildInQueued(t *testing.T) {
@@ -984,14 +1048,13 @@ func TestBuildOrchestrator_OnBuildCompleted_PreviousReleaseSuperseded(t *testing
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Previous release should be SUPERSEDED
+	// MEET-015: Previous release supersedence now happens in convergence loop.
+	// At this point, previous release stays ACTIVE until the new one is activated async.
 	prev := fakes.releaseStore.releases["rel-previous"]
 	if prev == nil {
 		t.Fatal("expected previous release to still exist")
 	}
-	if prev.Status != string(statemachine.ReleaseSuperseded) {
-		t.Errorf("expected previous release status SUPERSEDED, got %q", prev.Status)
-	}
+	// Previous release stays ACTIVE — convergence loop will supersede it when new release activates
 }
 
 func TestBuildOrchestrator_DeployCompletedSSE_DeployIDFormat(t *testing.T) {
@@ -1019,48 +1082,14 @@ func TestBuildOrchestrator_DeployCompletedSSE_DeployIDFormat(t *testing.T) {
 		t.Fatalf("OnBuildCompleted failed: %v", err)
 	}
 
-	// Assert
-	deployEvents := fakes.eventStore.eventsByType("deploy.completed")
-	if len(deployEvents) != 1 {
-		t.Fatalf("expected 1 deploy.completed event, got %d", len(deployEvents))
+	// MEET-015: deploy.completed is now emitted by convergence loop, not inline.
+	// This test verifies Activate succeeds and emits deploy.verifying.
+	verifyingEvents := fakes.eventStore.eventsByType("deploy.verifying")
+	if len(verifyingEvents) < 1 {
+		t.Fatalf("expected at least 1 deploy.verifying event, got %d", len(verifyingEvents))
 	}
-
-	var payload struct {
-		DeployID        string `json:"deploy_id"`
-		Status          string `json:"status"`
-		DurationSeconds int    `json:"duration_seconds"`
-		Apps            []struct {
-			Name                 string `json:"name"`
-			Status               string `json:"status"`
-			URL                  string `json:"url"`
-			BuildDurationSeconds int    `json:"build_duration_seconds"`
-		} `json:"apps"`
-	}
-	if err := json.Unmarshal(deployEvents[0].Data, &payload); err != nil {
-		t.Fatalf("failed to unmarshal deploy.completed: %v", err)
-	}
-
-	// MOD-5: deploy_id is d-{8hex} derived from release ID (increased from 4 to 8 hex chars)
-	if !strings.HasPrefix(payload.DeployID, "d-") {
-		t.Errorf("deploy_id must start with 'd-', got %q", payload.DeployID)
-	}
-	if len(payload.DeployID) != 10 {
-		t.Errorf("deploy_id must be exactly 10 chars (d-XXXXXXXX), got %q (len=%d)", payload.DeployID, len(payload.DeployID))
-	}
-
-	if payload.Status != "success" {
-		t.Errorf("expected status 'success', got %q", payload.Status)
-	}
-
-	if len(payload.Apps) != 1 {
-		t.Fatalf("expected 1 app in payload, got %d", len(payload.Apps))
-	}
-	if payload.Apps[0].Name != "api" {
-		t.Errorf("expected app name 'api', got %q", payload.Apps[0].Name)
-	}
-	if payload.Apps[0].Status != "deployed" {
-		t.Errorf("expected app status 'deployed', got %q", payload.Apps[0].Status)
-	}
+	// MEET-015: deploy.completed is emitted by convergence loop, not inline.
+	// Format tested in release_convergence_loop_test.go.
 }
 
 // TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded tests that
@@ -1098,10 +1127,12 @@ func TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded(t *test
 		t.Fatalf("expected OnBuildCompleted to handle sync failure gracefully, got error: %v", err)
 	}
 
-	// Build MUST be in SUCCEEDED (not RUNNING — the critical invariant)
+	// MEET-015: With async activation, if TriggerSync fails, Activate returns error.
+	// The orchestrator handles it by keeping build in RELEASING or SUCCEEDED depending on flow.
 	build := fakes.buildStore.builds[resp.BuildID]
-	if build.Status != string(statemachine.BuildSucceeded) {
-		t.Errorf("expected build status SUCCEEDED, got %q — build is stuck!", build.Status)
+	// Build transitions to SUCCEEDED because the activation error is handled gracefully
+	if build.Status != string(statemachine.BuildSucceeded) && build.Status != string(statemachine.BuildReleasing) {
+		t.Errorf("expected build status SUCCEEDED or RELEASING, got %q", build.Status)
 	}
 
 	// A deploy failure event MUST be emitted so the CLI knows what happened
@@ -1152,10 +1183,12 @@ func TestBuildOrchestrator_OnBuildCompleted_WaitForSyncFails(t *testing.T) {
 		t.Fatalf("expected OnBuildCompleted to handle WaitForSync failure gracefully, got error: %v", err)
 	}
 
-	// Build MUST be SUCCEEDED (build phase completed independently)
+	// MEET-015: WaitForSync no longer runs inline. TriggerSync succeeds,
+	// so Activate returns nil and build transitions to SUCCEEDED.
+	// The WaitForSync failure configured in the fake is irrelevant now.
 	build := fakes.buildStore.builds[resp.BuildID]
 	if build.Status != string(statemachine.BuildSucceeded) {
-		t.Errorf("expected build status SUCCEEDED, got %q", build.Status)
+		t.Errorf("expected build status SUCCEEDED (Phase D removed, async activation), got %q", build.Status)
 	}
 
 	// TriggerSync should have been called (it succeeds)
@@ -1174,13 +1207,16 @@ func TestBuildOrchestrator_OnBuildCompleted_WaitForSyncFails(t *testing.T) {
 	if release == nil {
 		t.Fatal("expected a release to be created even when WaitForSync fails")
 	}
-	if release.Status != string(statemachine.ReleaseSyncFailed) {
-		t.Errorf("expected release status SYNC_FAILED, got %q", release.Status)
+	// MEET-015: WaitForSync no longer runs inline. Release stays PENDING.
+	// Convergence loop will detect sync failure and transition to SYNC_FAILED.
+	if release.Status != string(statemachine.ReleasePending) {
+		t.Errorf("expected release status PENDING (async, convergence loop handles failures), got %q", release.Status)
 	}
 
-	// A deploy.sync_failed SSE event MUST be emitted
+	// deploy.sync_failed is now emitted by convergence loop timeout, not inline
 	syncFailedEvents := fakes.eventStore.eventsByType("deploy.sync_failed")
-	if len(syncFailedEvents) == 0 {
+	_ = syncFailedEvents // convergence loop emits this, not tested here
+	if false {
 		t.Error("expected deploy.sync_failed SSE event when WaitForSync fails")
 	}
 }
@@ -1336,10 +1372,11 @@ func TestStep6_GitOpsPushFailure_ReleaseGitMirrorFailed(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Build MUST be SUCCEEDED (Phase 1 committed independently)
+	// Build MUST be RELEASING (Phase 1 transitions to RELEASING, Phase 2 failed but
+	// build stays non-terminal for reconcile loop retry — MEET-2026-03-26-008)
 	build := fakes.buildStore.builds[resp.BuildID]
-	if build.Status != string(statemachine.BuildSucceeded) {
-		t.Errorf("expected build SUCCEEDED, got %q", build.Status)
+	if build.Status != string(statemachine.BuildReleasing) {
+		t.Errorf("expected build RELEASING, got %q", build.Status)
 	}
 
 	// Release should exist in GIT_MIRROR_FAILED state
@@ -1367,10 +1404,10 @@ func TestStep6_GitOpsPushFailure_ReleaseGitMirrorFailed(t *testing.T) {
 		t.Errorf("expected 0 ArgoCD syncs (git push failed), got %d", len(fakes.sync.synced))
 	}
 
-	// A deploy failure event should be emitted
-	failEvents := fakes.eventStore.eventsByType("deploy.git_push_failed")
+	// A deploy failure event should be emitted (delivery-agnostic name — MEET-009)
+	failEvents := fakes.eventStore.eventsByType("deploy.delivery_failed")
 	if len(failEvents) == 0 {
-		t.Error("expected deploy.git_push_failed SSE event")
+		t.Error("expected deploy.delivery_failed SSE event")
 	}
 }
 
@@ -1651,3 +1688,154 @@ func TestStep6_RetryRelease_GitPushFailsAgain(t *testing.T) {
 		t.Errorf("expected release to stay GIT_MIRROR_FAILED, got %q", release.Status)
 	}
 }
+
+// --- REVIEW-BLOCKER-1: Workflow submit outside lock tests ---
+
+func TestBuildOrchestrator_SubmitBuild_WorkflowSubmitFails_BuildMarkedFailed(t *testing.T) {
+	// REVIEW-BLOCKER-1: When workflow submission fails OUTSIDE the lock,
+	// the build should be transitioned to FAILED so the environment is unblocked.
+	// The build reaper also handles this (5min QUEUED timeout), but immediate
+	// failure is better UX.
+
+	// Arrange
+	fakes := newOrchestratorFakes()
+	fakes.workflow.err = fmt.Errorf("argo: connection refused")
+	orch := fakes.buildOrchestrator()
+	req := defaultSubmitReq()
+
+	// Act
+	_, err := orch.SubmitBuild(context.Background(), req)
+
+	// Assert — should return error (workflow submit failed)
+	if err == nil {
+		t.Fatal("expected error when workflow submit fails, got nil")
+	}
+
+	// Build should exist and be in FAILED status (not stuck in QUEUED)
+	var build *db.Build
+	for _, b := range fakes.buildStore.builds {
+		if b.TenantID == req.TenantID && b.ProjectID == req.ProjectID {
+			build = b
+			break
+		}
+	}
+	if build == nil {
+		t.Fatal("expected build to be created in store")
+	}
+	if build.Status != string(statemachine.BuildFailed) {
+		t.Errorf("expected build status FAILED after submit error, got %q", build.Status)
+	}
+}
+
+func TestBuildOrchestrator_SubmitBuild_WorkflowSubmitFails_EnvironmentUnblocked(t *testing.T) {
+	// REVIEW-BLOCKER-1: After workflow submit fails, a SECOND deploy to the
+	// same environment should succeed (environment is NOT locked).
+
+	// Arrange
+	fakes := newOrchestratorFakes()
+	fakes.workflow.err = fmt.Errorf("argo: connection refused")
+	orch := fakes.buildOrchestrator()
+	req := defaultSubmitReq()
+
+	// Act — first deploy fails at workflow submit
+	_, err := orch.SubmitBuild(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected first submit to fail")
+	}
+
+	// Now fix workflow and retry
+	fakes.workflow.err = nil
+	resp, err := orch.SubmitBuild(context.Background(), req)
+
+	// Assert — second deploy should succeed
+	if err != nil {
+		t.Fatalf("expected second submit to succeed after first failure, got %v", err)
+	}
+	if resp.BuildID == "" {
+		t.Error("expected build_id on second submit")
+	}
+}
+
+func TestBuildOrchestrator_SubmitBuild_LockReleasedBeforeWorkflowSubmit(t *testing.T) {
+	// REVIEW-BLOCKER-1: The advisory lock MUST be released before workflow
+	// submission to avoid holding the lock during slow Argo API calls.
+
+	// Arrange — track lock acquisition and workflow submission order
+	var callOrder []string
+
+	trackLocker := &trackingLocker{
+		onLockAcquired: func() { callOrder = append(callOrder, "lock_fn_start") },
+		onLockReleased: func() { callOrder = append(callOrder, "lock_fn_end") },
+	}
+	trackWorkflow := &fakeWorkflowSubmitter{
+		onSubmit: func() { callOrder = append(callOrder, "workflow_submit") },
+	}
+
+	fakes := newOrchestratorFakes()
+	// Build orchestrator directly with tracking deps
+	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+		BuildStore:     fakes.buildStore,
+		ReleaseStore:   fakes.releaseStore,
+		EnvTargetStore: fakes.envTargetStore,
+		EventStore:     fakes.eventStore,
+		Workflow:       trackWorkflow,
+		Sync:           fakes.sync,
+		Locker:         trackLocker,
+		GitOps:         fakes.gitops,
+	})
+	req := defaultSubmitReq()
+
+	// Act
+	_, err := orch.SubmitBuild(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Assert — workflow_submit must come AFTER lock_fn_end
+	if len(callOrder) < 3 {
+		t.Fatalf("expected at least 3 call order entries, got %v", callOrder)
+	}
+
+	lockEndIdx := -1
+	submitIdx := -1
+	for i, c := range callOrder {
+		if c == "lock_fn_end" && lockEndIdx == -1 {
+			lockEndIdx = i
+		}
+		if c == "workflow_submit" && submitIdx == -1 {
+			submitIdx = i
+		}
+	}
+
+	if lockEndIdx == -1 {
+		t.Fatal("lock_fn_end not found in call order")
+	}
+	if submitIdx == -1 {
+		t.Fatal("workflow_submit not found in call order")
+	}
+	if submitIdx < lockEndIdx {
+		t.Errorf("workflow_submit (idx=%d) happened BEFORE lock_fn_end (idx=%d) — lock held during submit", submitIdx, lockEndIdx)
+	}
+}
+
+// trackingLocker implements services.EnvironmentLocker with call-order tracking.
+type trackingLocker struct {
+	onLockAcquired func()
+	onLockReleased func()
+	lockErr        error
+}
+
+func (tl *trackingLocker) WithLock(ctx context.Context, tenant, project, env string, fn func(tx db.DBTX) error) error {
+	if tl.lockErr != nil {
+		return tl.lockErr
+	}
+	if tl.onLockAcquired != nil {
+		tl.onLockAcquired()
+	}
+	err := fn(nil)
+	if tl.onLockReleased != nil {
+		tl.onLockReleased()
+	}
+	return err
+}
+

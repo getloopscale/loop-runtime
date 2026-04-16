@@ -1,0 +1,3 @@
+name: loopzero-infra
+runtime: nodejs
+description: LoopZero platform infrastructure — DigitalOcean now, AWS later

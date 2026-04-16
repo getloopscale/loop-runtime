@@ -11,27 +11,62 @@ spec:
     - name: clone-repo
       inputs:
         parameters:
-          - name: gitea-url
-            description: "Gitea server URL for source repos"
-          - name: gitea-token
-            description: "Ephemeral Gitea token scoped to tenant repos"
           - name: tenant-id
             description: "Tenant identifier for isolation"
-          - name: project-id
-            description: "Project identifier"
+          - name: build-id
+            description: "Build identifier — maps to the source bundle path in MinIO"
+      retryStrategy:
+        limit: "2"
+        retryPolicy: "OnFailure"
+        backoff:
+          duration: "5s"
+          factor: "2"
+          maxDuration: "30s"
       container:
-        image: alpine/git:2.43.0
+        # SEC-004: Custom image with mc + git baked in (no runtime downloads).
+        # Built from: infra/images/clone-runner/Dockerfile
+        # CI builds via build-images.yml, local via task images:build.
+        image: {{ .Values.images.cloneRunner | default "registry.digitalocean.com/loopzero-infra-registry/loopzero-clone-runner:v0.1.0" }}
+        env:
+          - name: HOME
+            value: /tmp
+        envFrom:
+          - secretRef:
+              name: loopzero-minio-credentials
         command:
           - sh
           - -c
           - |
             set -euo pipefail
-            REPO_URL="{{inputs.parameters.gitea-url}}/loopzero/loopzero-source-{{inputs.parameters.tenant-id}}-{{inputs.parameters.project-id}}.git"
-            CLONE_URL=$(echo "$REPO_URL" | sed "s|://|://oauth2:{{inputs.parameters.gitea-token}}@|")
-            git clone --depth 1 "$CLONE_URL" /workspace
-            cd /workspace
-            echo "Cloned from Gitea source repo"
-            ls -la
+
+            BUNDLE_PATH="{{ "{{inputs.parameters.tenant-id}}" }}/source/{{ "{{inputs.parameters.build-id}}" }}.bundle"
+            echo "Downloading source bundle: ${BUNDLE_PATH}"
+
+            mc alias set loopzero "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
+              {{- if .Values.minio.insecure }}
+              --insecure \
+              {{- end }}
+              --api S3v4 >/dev/null 2>&1
+
+            mc cp \
+              {{- if .Values.minio.insecure }}
+              --insecure \
+              {{- end }}
+              "loopzero/loopzero-builds/${BUNDLE_PATH}" /tmp/source.bundle 2>&1 || {
+              echo "ERROR: Failed to download source bundle"
+              exit 1
+            }
+
+            echo "Bundle downloaded: $(stat -c%s /tmp/source.bundle) bytes"
+
+            # Clone from bundle into temp dir, then copy contents to workspace
+            # Use cp -r (not cp -a) because non-root cannot preserve ownership/timestamps
+            git clone /tmp/source.bundle /tmp/repo
+            cp -r /tmp/repo/. /workspace/
+            rm -rf /tmp/repo /tmp/source.bundle
+
+            echo "Source unpacked into /workspace"
+            ls -la /workspace
         volumeMounts:
           - name: workspace
             mountPath: /workspace
@@ -45,3 +80,6 @@ spec:
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]

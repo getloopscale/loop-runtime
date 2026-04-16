@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package db
 
 import (
@@ -24,14 +27,14 @@ type PostgresIdempotencyStore struct {
 
 const idempotencyTTL = 24 * time.Hour
 
-// Get retrieves an idempotency record by key.
+// Get retrieves an idempotency record by key, scoped to a tenant.
 // Returns nil (not error) when the key is not found or has expired.
-func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string) (*middleware.IdempotencyRecord, error) {
+func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string, tenantID string) (*middleware.IdempotencyRecord, error) {
 	rows, err := s.DB.Query(ctx,
 		`SELECT key, tenant_id, endpoint, request_hash, response_status, response_body
 		 FROM idempotency_keys
-		 WHERE key = $1 AND expires_at > NOW()`,
-		key,
+		 WHERE key = $1 AND tenant_id = $2 AND expires_at > NOW()`,
+		key, tenantID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("idempotency store: query failed: %w", err)

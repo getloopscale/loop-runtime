@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+//
+// SLO thresholds for k6 load tests.
+//
+// These numbers come from docs/capacity/cell-budget.md and the SLO
+// targets in each roadmap item. Changing a threshold here must be
+// justified against the budget doc — k6 will fail the test (non-zero
+// exit code) when any threshold is breached, which feeds directly
+// into CI pass/fail.
+//
+// The thresholds are split into three tiers:
+//
+//   1. base — universal SLOs every load level must meet (L1 through L5).
+//      e.g., "any 5xx is a bug, p99 must stay under the deploy budget."
+//
+//   2. perLevel — level-specific tightenings. L5 demands tighter
+//      latency than L2 because the whole point of the roadmap is to
+//      prove linear scalability.
+//
+//   3. custom metrics — references to the Rate/Trend metrics defined
+//      in lib/loopzero-api.js. Scripts can opt-in per test.
+
+export const base = {
+  // HTTP layer — measured by k6 automatically.
+  'http_req_failed':   ['rate<0.01'],      // < 1% non-2xx at HTTP level
+  'http_req_duration': [
+    'p(50)<2000',                           // p50 < 2s
+    'p(95)<10000',                          // p95 < 10s
+    'p(99)<30000',                          // p99 < 30s (API only, not deploy)
+  ],
+
+  // Custom LoopZero metrics.
+  'loopzero_build_submit_success':   ['rate>0.99'],  // ≥ 99% submissions accepted
+  'loopzero_project_created':        ['rate>0.99'],  // ≥ 99% project creations succeed
+  'loopzero_build_succeeded':        ['rate>0.99'],  // ≥ 99% builds reach SUCCEEDED
+  'loopzero_upload_duration_ms':     ['p(95)<10000'], // upload < 10s
+  'loopzero_build_submit_duration_ms': ['p(95)<2000'], // build submit < 2s
+  'loopzero_deploy_duration_ms':     ['p(95)<600000'], // deploy < 600s (CLAUDE.md budget)
+};
+
+// Per-level tightenings. Merge into base to get the final thresholds.
+export const perLevel = {
+  l1: {
+    'loopzero_deploy_duration_ms': ['p(99)<600000'], // L1: p99 < 10min
+  },
+  l2: {
+    'loopzero_deploy_duration_ms': ['p(99)<600000'], // L2: p99 < 10min
+    'loopzero_build_succeeded':    ['rate>0.99'],    // >= 99%
+  },
+  l3: {
+    'loopzero_deploy_duration_ms': ['p(99)<900000'], // L3: p99 < 15min (more contention)
+    'loopzero_build_succeeded':    ['rate>0.995'],   // >= 99.5% per roadmap 08
+  },
+  l4: {
+    'loopzero_deploy_duration_ms': ['p(99)<1200000'], // L4: p99 < 20min
+    'loopzero_build_succeeded':    ['rate>0.99'],     // >= 99% per roadmap 08
+  },
+  l5: {
+    'loopzero_deploy_duration_ms': ['p(99)<1500000'], // L5: p99 < 25min
+    'loopzero_build_succeeded':    ['rate>0.99'],     // >= 99% per roadmap 08
+  },
+};
+
+/**
+ * Combines base thresholds with a per-level override. Use in your
+ * script's options.thresholds field.
+ *
+ * @param {keyof perLevel} level
+ * @returns {object} merged threshold map
+ */
+export function thresholdsFor(level) {
+  const overrides = perLevel[level] || {};
+  return Object.assign({}, base, overrides);
+}

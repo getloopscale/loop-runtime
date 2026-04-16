@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package k8s
 
 import (
@@ -161,4 +164,233 @@ func TestTenantCRManager_EnsureTenant_UpdatesPlan(t *testing.T) {
 func TestTenantCRManager_ImplementsInterface(t *testing.T) {
 	// Compile-time check
 	var _ routes.TenantCRManager = (*TenantCRManager)(nil)
+}
+
+// Compile-time check: TenantCRManager implements EnvironmentManager.
+func TestTenantCRManager_ImplementsEnvironmentManager(t *testing.T) {
+	var _ routes.EnvironmentManager = (*TenantCRManager)(nil)
+}
+
+func TestTenantCRManager_AddEnvironment(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "test-add-env"
+
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+
+	// Create tenant first
+	err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "starter"})
+	if err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+
+	// Add a new environment
+	err = mgr.AddEnvironment(context.Background(), tenantID, "staging")
+	if err != nil {
+		t.Fatalf("AddEnvironment failed: %v", err)
+	}
+
+	// Verify the environment was added
+	envs, err := mgr.ListEnvironments(context.Background(), tenantID)
+	if err != nil {
+		t.Fatalf("ListEnvironments failed: %v", err)
+	}
+
+	found := false
+	for _, e := range envs {
+		if e.Name == "staging" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'staging' in environments, got %v", envs)
+	}
+}
+
+func TestTenantCRManager_AddEnvironment_Idempotent(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "test-add-env-idem"
+
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+
+	err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "starter"})
+	if err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+
+	// Add "staging" twice — second call should be a no-op
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "staging"); err != nil {
+		t.Fatalf("first AddEnvironment failed: %v", err)
+	}
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "staging"); err != nil {
+		t.Fatalf("second AddEnvironment (idempotent) failed: %v", err)
+	}
+
+	envs, err := mgr.ListEnvironments(context.Background(), tenantID)
+	if err != nil {
+		t.Fatalf("ListEnvironments failed: %v", err)
+	}
+
+	count := 0
+	for _, e := range envs {
+		if e.Name == "staging" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 'staging' entry, got %d in %v", count, envs)
+	}
+}
+
+func TestTenantCRManager_RemoveEnvironment(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "test-rm-env"
+
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+
+	err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "starter"})
+	if err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+
+	// Add staging, then remove it
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "staging"); err != nil {
+		t.Fatalf("AddEnvironment failed: %v", err)
+	}
+	if err := mgr.RemoveEnvironment(context.Background(), tenantID, "staging"); err != nil {
+		t.Fatalf("RemoveEnvironment failed: %v", err)
+	}
+
+	envs, err := mgr.ListEnvironments(context.Background(), tenantID)
+	if err != nil {
+		t.Fatalf("ListEnvironments failed: %v", err)
+	}
+
+	for _, e := range envs {
+		if e.Name == "staging" {
+			t.Errorf("expected 'staging' to be removed, but it is still present in %v", envs)
+		}
+	}
+}
+
+func TestTenantCRManager_RemoveEnvironment_Idempotent(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "test-rm-env-idem"
+
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+
+	err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "starter"})
+	if err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+
+	// Remove a non-existing environment — should succeed (idempotent)
+	err = mgr.RemoveEnvironment(context.Background(), tenantID, "does-not-exist")
+	if err != nil {
+		t.Fatalf("RemoveEnvironment (non-existing) should be idempotent, got: %v", err)
+	}
+}
+
+func TestTenantCRManager_RemoveEnvironment_RejectsLastEnvironment(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "test-rm-env-last"
+
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+
+	err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "starter"})
+	if err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+
+	// Default tenant has only "production" — cannot remove last env
+	err = mgr.RemoveEnvironment(context.Background(), tenantID, "production")
+	if err == nil {
+		t.Fatal("expected error when removing the last environment, got nil")
+	}
+}
+
+func TestTenantCRManager_ListEnvironments(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "test-list-env"
+
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+
+	err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "starter"})
+	if err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+
+	envs, err := mgr.ListEnvironments(context.Background(), tenantID)
+	if err != nil {
+		t.Fatalf("ListEnvironments failed: %v", err)
+	}
+
+	// Default tenant has "production"
+	if len(envs) != 1 {
+		t.Fatalf("expected 1 environment, got %d: %v", len(envs), envs)
+	}
+	if envs[0].Name != "production" {
+		t.Errorf("expected 'production', got %q", envs[0].Name)
+	}
+	if envs[0].Status != "active" {
+		t.Errorf("expected status 'active', got %q", envs[0].Status)
+	}
+}
+
+func TestTenantCRManager_GetEnvironmentDetail(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "test-get-env-detail"
+
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+
+	err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "starter"})
+	if err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+
+	// Existing environment
+	detail, err := mgr.GetEnvironmentDetail(context.Background(), tenantID, "production")
+	if err != nil {
+		t.Fatalf("GetEnvironmentDetail failed: %v", err)
+	}
+	if detail == nil {
+		t.Fatal("expected detail for 'production', got nil")
+		return // unreachable — helps staticcheck
+	}
+	if detail.Name != "production" {
+		t.Errorf("expected name 'production', got %q", detail.Name)
+	}
+	if detail.Status != "active" {
+		t.Errorf("expected status 'active', got %q", detail.Status)
+	}
+
+	// Non-existing environment
+	detail, err = mgr.GetEnvironmentDetail(context.Background(), tenantID, "nonexistent")
+	if err != nil {
+		t.Fatalf("GetEnvironmentDetail (nonexistent) failed: %v", err)
+	}
+	if detail != nil {
+		t.Errorf("expected nil for nonexistent environment, got %+v", detail)
+	}
 }

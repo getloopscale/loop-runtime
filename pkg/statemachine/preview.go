@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package statemachine
 
 // PreviewEnvironment states as defined in spec section 5.3.

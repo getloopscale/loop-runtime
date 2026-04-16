@@ -1,0 +1,163 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Package metrics provides Prometheus-native observability for the cloud service.
+// §4.1 + §4.2: Auth and billing metrics exposed via /metrics endpoint.
+//
+// Migrated from manual sync/atomic counters to prometheus/client_golang.
+// The public API (Inc*, Observe* functions) is preserved for all call sites.
+package metrics
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+var (
+	// Auth metrics (§4.1)
+	tokenExchanges = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_auth_token_exchanges_total",
+		Help: "Token exchanges by result.",
+	}, []string{"result"})
+
+	deviceFlows = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_auth_device_flow_total",
+		Help: "Device flow completions.",
+	}, []string{"result"})
+
+	tenantProvisioning = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_tenant_provisioning_total",
+		Help: "Tenant provisioning operations.",
+	}, []string{"result"})
+
+	tenantProvisioningDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "loopzero_tenant_provisioning_duration_seconds",
+		Help:    "Tenant provisioning duration in seconds.",
+		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0},
+	})
+
+	authRejections = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_auth_rejections_total",
+		Help: "Auth rejections by reason.",
+	}, []string{"reason"})
+
+	// Billing metrics (§4.2)
+	webhookEvents = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_webhook_events_total",
+		Help: "Webhook events by status.",
+	}, []string{"status"})
+
+	checkoutOps = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_billing_checkout_total",
+		Help: "Checkout operations.",
+	}, []string{"result"})
+
+	usageDrift = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_usage_drift_detected_total",
+		Help: "Usage drift detection events.",
+	})
+
+	subscriptionFallback = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_subscription_fallback_total",
+		Help: "Subscription missing -- defaulted to starter.",
+	})
+
+	// HTTP metrics (added with OTel instrumentation)
+	httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_cloud_http_request_duration_seconds",
+		Help:    "HTTP request duration in seconds.",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"method", "path", "status_code"})
+)
+
+func init() {
+	prometheus.MustRegister(
+		tokenExchanges,
+		deviceFlows,
+		tenantProvisioning,
+		tenantProvisioningDuration,
+		authRejections,
+		webhookEvents,
+		checkoutOps,
+		usageDrift,
+		subscriptionFallback,
+		httpRequestDuration,
+	)
+}
+
+// IncTokenExchange increments token exchange counter.
+func IncTokenExchange(success bool) {
+	if success {
+		tokenExchanges.WithLabelValues("success").Inc()
+	} else {
+		tokenExchanges.WithLabelValues("error").Inc()
+	}
+}
+
+// IncDeviceFlow increments device flow counter.
+func IncDeviceFlow(success bool) {
+	if success {
+		deviceFlows.WithLabelValues("success").Inc()
+	} else {
+		deviceFlows.WithLabelValues("error").Inc()
+	}
+}
+
+// ObserveTenantProvisioning records a tenant provisioning operation.
+func ObserveTenantProvisioning(success bool, duration time.Duration) {
+	tenantProvisioningDuration.Observe(duration.Seconds())
+	if success {
+		tenantProvisioning.WithLabelValues("success").Inc()
+	} else {
+		tenantProvisioning.WithLabelValues("error").Inc()
+	}
+}
+
+// IncAuthRejection increments auth rejection counter by reason.
+func IncAuthRejection(reason string) {
+	authRejections.WithLabelValues(reason).Inc()
+}
+
+// IncWebhook increments webhook counter.
+func IncWebhook(success bool) {
+	if success {
+		webhookEvents.WithLabelValues("processed").Inc()
+	} else {
+		webhookEvents.WithLabelValues("failed").Inc()
+	}
+}
+
+// IncCheckout increments checkout counter.
+func IncCheckout(success bool) {
+	if success {
+		checkoutOps.WithLabelValues("started").Inc()
+	} else {
+		checkoutOps.WithLabelValues("error").Inc()
+	}
+}
+
+// IncUsageDrift increments usage drift counter.
+func IncUsageDrift() {
+	usageDrift.Inc()
+}
+
+// IncSubscriptionFallback increments when plan resolution falls back to starter (S1.4).
+func IncSubscriptionFallback() {
+	subscriptionFallback.Inc()
+}
+
+// ObserveHTTPRequest records an HTTP request duration.
+func ObserveHTTPRequest(method, path, statusCode string, duration time.Duration) {
+	httpRequestDuration.WithLabelValues(method, path, statusCode).Observe(duration.Seconds())
+}
+
+// Handler returns an HTTP handler that emits metrics in Prometheus exposition format.
+func Handler() http.HandlerFunc {
+	h := promhttp.Handler()
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r)
+	}
+}

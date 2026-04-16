@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package statemachine
 
 import "testing"
@@ -101,20 +104,22 @@ func TestReleaseMachine_RollbackTimeout(t *testing.T) {
 	assertState(t, state, ReleaseRollbackFailed)
 }
 
-func TestReleaseMachine_TerminalStatesRejectAllEvents(t *testing.T) {
+func TestReleaseMachine_InvalidEventsRejectFromNonActiveStates(t *testing.T) {
 	m := NewReleaseMachine()
 
-	terminalStates := []State{ReleaseSuperseded, ReleaseRolledBack, ReleaseCancelled}
-	sampleEvents := []Event{
+	// CANCELLED is the only truly terminal state.
+	// SUPERSEDED and ROLLED_BACK accept Reactivated but reject other events.
+	statesWithLimitedTransitions := []State{ReleaseSuperseded, ReleaseRolledBack, ReleaseCancelled}
+	invalidEvents := []Event{
 		ReleaseGitMirrorCompleted, ReleaseSyncCompleted,
 		ReleaseNewActivated, ReleaseRollbackStarted,
 	}
 
-	for _, terminal := range terminalStates {
-		for _, event := range sampleEvents {
+	for _, state := range statesWithLimitedTransitions {
+		for _, event := range invalidEvents {
 			assertPanics(t, func() {
-				m.Transition(terminal, event)
-			}, "expected panic for transition from terminal state %q on event %q", terminal, event)
+				m.Transition(state, event)
+			}, "expected panic for invalid event %q from state %q", event, state)
 		}
 	}
 }
@@ -122,10 +127,12 @@ func TestReleaseMachine_TerminalStatesRejectAllEvents(t *testing.T) {
 func TestReleaseMachine_IsTerminal(t *testing.T) {
 	m := NewReleaseMachine()
 
+	// SUPERSEDED and ROLLED_BACK are NOT terminal — they can be reactivated via rollback.
 	nonTerminal := []State{
 		ReleaseReady, ReleasePending, ReleaseActive,
 		ReleaseGitMirrorFailed, ReleaseSyncFailed, ReleaseDriftAlert,
 		ReleaseRollingBack, ReleaseRollbackFailed,
+		ReleaseSuperseded, ReleaseRolledBack,
 	}
 	for _, s := range nonTerminal {
 		if m.IsTerminal(s) {
@@ -133,7 +140,8 @@ func TestReleaseMachine_IsTerminal(t *testing.T) {
 		}
 	}
 
-	terminal := []State{ReleaseSuperseded, ReleaseRolledBack, ReleaseCancelled}
+	// Only CANCELLED is truly terminal (cannot be recovered).
+	terminal := []State{ReleaseCancelled}
 	for _, s := range terminal {
 		if !m.IsTerminal(s) {
 			t.Errorf("state %q should be terminal", s)
@@ -156,5 +164,101 @@ func TestReleaseMachine_RollbackFailedIsNotTerminal(t *testing.T) {
 	m := NewReleaseMachine()
 	if m.IsTerminal(ReleaseRollbackFailed) {
 		t.Error("ROLLBACK_FAILED should not be terminal (requires manual intervention)")
+	}
+}
+
+func TestReleaseMachine_Reactivation(t *testing.T) {
+	m := NewReleaseMachine()
+
+	t.Run("SUPERSEDED can be reactivated to ACTIVE", func(t *testing.T) {
+		next := m.Transition(ReleaseSuperseded, ReleaseReactivated)
+		if next != ReleaseActive {
+			t.Errorf("expected ACTIVE, got %s", next)
+		}
+	})
+
+	t.Run("ROLLED_BACK can be reactivated to ACTIVE", func(t *testing.T) {
+		next := m.Transition(ReleaseRolledBack, ReleaseReactivated)
+		if next != ReleaseActive {
+			t.Errorf("expected ACTIVE, got %s", next)
+		}
+	})
+
+	t.Run("CANCELLED cannot be reactivated", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic for reactivating CANCELLED release")
+			}
+		}()
+		m.Transition(ReleaseCancelled, ReleaseReactivated)
+	})
+}
+
+func TestReleaseMachine_ManualResolve(t *testing.T) {
+	m := NewReleaseMachine()
+
+	t.Run("DRIFT_ALERT can be manually resolved to ACTIVE", func(t *testing.T) {
+		next := m.Transition(ReleaseDriftAlert, ReleaseManualResolve)
+		if next != ReleaseActive {
+			t.Errorf("expected ACTIVE, got %s", next)
+		}
+	})
+
+	t.Run("ROLLBACK_FAILED can be manually resolved to ACTIVE", func(t *testing.T) {
+		next := m.Transition(ReleaseRollbackFailed, ReleaseManualResolve)
+		if next != ReleaseActive {
+			t.Errorf("expected ACTIVE, got %s", next)
+		}
+	})
+}
+
+func TestIsReleaseTerminal(t *testing.T) {
+	m := NewReleaseMachine()
+
+	// IsReleaseTerminal must be consistent with Machine.IsTerminal.
+	allStates := []State{
+		ReleaseReady, ReleasePending, ReleaseActive,
+		ReleaseGitMirrorFailed, ReleaseSyncFailed, ReleaseDriftAlert,
+		ReleaseRollingBack, ReleaseRollbackFailed,
+		ReleaseSuperseded, ReleaseRolledBack, ReleaseCancelled,
+	}
+
+	for _, s := range allStates {
+		got := IsReleaseTerminal(s)
+		want := m.IsTerminal(s)
+		if got != want {
+			t.Errorf("IsReleaseTerminal(%s) = %v, but Machine.IsTerminal = %v", s, got, want)
+		}
+	}
+
+	// Unknown state should not be terminal.
+	if IsReleaseTerminal("UNKNOWN") {
+		t.Error("IsReleaseTerminal(UNKNOWN) should return false")
+	}
+}
+
+func TestIsReleaseReapable(t *testing.T) {
+	tests := []struct {
+		state State
+		want  bool
+	}{
+		{ReleaseReady, true},
+		{ReleasePending, true},
+		{ReleaseActive, false},
+		{ReleaseSuperseded, false},
+		{ReleaseRolledBack, false},
+		{ReleaseCancelled, false},
+		{ReleaseGitMirrorFailed, false},
+		{ReleaseSyncFailed, false},
+		{ReleaseDriftAlert, false},
+		{ReleaseRollingBack, false},
+		{ReleaseRollbackFailed, false},
+		{"UNKNOWN", false},
+	}
+
+	for _, tt := range tests {
+		if got := IsReleaseReapable(tt.state); got != tt.want {
+			t.Errorf("IsReleaseReapable(%s) = %v, want %v", tt.state, got, tt.want)
+		}
 	}
 }

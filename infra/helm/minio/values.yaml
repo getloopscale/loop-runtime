@@ -39,3 +39,5 @@ buckets:
     policy: none
   - name: loopzero-builds
     policy: none
+  - name: loopzero-logs
+    policy: none

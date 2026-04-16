@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package github provides a concrete TokenValidator that validates tokens
 // against the GitHub API. It implements middleware.TokenValidator (DIP).
 package github
@@ -79,8 +82,7 @@ func (v *TokenValidator) ValidateToken(ctx context.Context, token string) (*midd
 	}
 
 	return &middleware.TokenValidationResult{
-		UserID:   "github-" + user.Login,
-		Email:    email,
-		GitHubID: user.ID,
+		UserID: "github-" + user.Login,
+		Email:  email,
 	}, nil
 }

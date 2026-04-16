@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package controller
 
 import (
@@ -11,23 +14,31 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/operators/internal/constants"
 )
 
 // priorityClassForPlan returns the PriorityClass name, value, and preemption policy for a given plan.
 func priorityClassForPlan(plan loopzerov1.PlanTier) (name string, value int32, preemptionPolicy corev1.PreemptionPolicy) {
 	switch plan {
 	case loopzerov1.PlanGrowth:
-		return "loopzero-tenant-growth", 500, corev1.PreemptLowerPriority
+		return constants.PriorityClassGrowth, constants.PriorityValueGrowth, corev1.PreemptLowerPriority
 	case loopzerov1.PlanEnterprise:
-		return "loopzero-tenant-enterprise", 1000, corev1.PreemptLowerPriority
+		return constants.PriorityClassEnterprise, constants.PriorityValueEnterprise, corev1.PreemptLowerPriority
 	default:
-		return "loopzero-tenant-starter", 100, corev1.PreemptNever
+		return constants.PriorityClassStarter, constants.PriorityValueStarter, corev1.PreemptNever
 	}
 }
 
 // reconcilePriorityClass ensures the PriorityClass for the tenant's plan exists.
 // PriorityClasses are cluster-scoped and shared across tenants of the same plan,
 // so they must NOT be deleted when a tenant is deleted.
+//
+// ARCH-010: PriorityClasses are created on the RUNTIME cluster only, not the build cluster.
+// Build cluster priority is intentionally flat — all builds are equal regardless of plan tier.
+// Rationale: build pods are short-lived and managed by Argo Workflows with its own queue
+// and parallelism controls. Plan-based priority would create starvation for starter tenants
+// during peak build times, which is worse than FIFO ordering.
 func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	pcName, pcValue, preemptionPolicy := priorityClassForPlan(tenant.Spec.Plan)
 
@@ -36,7 +47,7 @@ func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *l
 			Name: pcName,
 		},
 	}
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, pc, func() error {
+	result, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, pc, func() error {
 		pc.Value = pcValue
 		pc.PreemptionPolicy = &preemptionPolicy
 		pc.GlobalDefault = false
@@ -44,7 +55,7 @@ func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *l
 		if pc.Labels == nil {
 			pc.Labels = make(map[string]string)
 		}
-		pc.Labels["loopzero.io/managed-by"] = "tenant-controller"
+		pc.Labels[constants.LabelManagedBy] = constants.ManagedByTenantController
 		return nil
 	})
 	if err != nil {
@@ -52,7 +63,7 @@ func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *l
 	}
 
 	log.FromContext(ctx).Info("priorityclass reconciled", "name", pcName, "result", result)
-	loopzerov1.SetCondition(&tenant.Status.Conditions, loopzerov1.ConditionPriorityClassReady,
+	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypePriorityClassReady,
 		metav1.ConditionTrue, "PriorityClassReady", "priority class provisioned", tenant.Generation)
 	return nil
 }

@@ -1,8 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package unit
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -101,4 +106,90 @@ func TestDeepHealthHandler(t *testing.T) {
 			t.Fatalf("expected database=disconnected, got %q", body["database"])
 		}
 	})
+
+	t.Run("returns 200 when DB and all services healthy", func(t *testing.T) {
+		checker := &fakeHealthChecker{err: nil}
+		handler := routes.NewHealthHandler(checker,
+			&fakeServiceChecker{name: "argocd", err: nil},
+			&fakeServiceChecker{name: "gitea", err: nil},
+		)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/deep", nil)
+		rec := httptest.NewRecorder()
+
+		handler.DeepHealth(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+		var body map[string]string
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if body["argocd"] != "connected" {
+			t.Errorf("expected argocd=connected, got %q", body["argocd"])
+		}
+		if body["gitea"] != "connected" {
+			t.Errorf("expected gitea=connected, got %q", body["gitea"])
+		}
+	})
+
+	t.Run("returns 503 when any service is unreachable", func(t *testing.T) {
+		checker := &fakeHealthChecker{err: nil} // DB ok
+		handler := routes.NewHealthHandler(checker,
+			&fakeServiceChecker{name: "argocd", err: errors.New("connection refused")},
+			&fakeServiceChecker{name: "gitea", err: nil},
+		)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/deep", nil)
+		rec := httptest.NewRecorder()
+
+		handler.DeepHealth(rec, req)
+
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected status 503, got %d", rec.Code)
+		}
+		var body map[string]string
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if body["status"] != "degraded" {
+			t.Errorf("expected status=degraded, got %q", body["status"])
+		}
+		if body["argocd"] != "unreachable" {
+			t.Errorf("expected argocd=unreachable, got %q", body["argocd"])
+		}
+		if body["database"] != "connected" {
+			t.Errorf("expected database=connected (DB ok), got %q", body["database"])
+		}
+	})
+
+	t.Run("returns auth_failed for 401 errors", func(t *testing.T) {
+		checker := &fakeHealthChecker{err: nil}
+		handler := routes.NewHealthHandler(checker,
+			&fakeServiceChecker{name: "argocd", err: fmt.Errorf("argocd: auth_failed")},
+		)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/deep", nil)
+		rec := httptest.NewRecorder()
+
+		handler.DeepHealth(rec, req)
+
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", rec.Code)
+		}
+		var body map[string]string
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if body["argocd"] != "auth_failed" {
+			t.Errorf("expected argocd=auth_failed, got %q", body["argocd"])
+		}
+	})
 }
+
+// fakeServiceChecker implements routes.ServiceHealthChecker for testing.
+type fakeServiceChecker struct {
+	name string
+	err  error
+}
+
+func (f *fakeServiceChecker) Name() string                        { return f.name }
+func (f *fakeServiceChecker) Check(_ context.Context) error       { return f.err }

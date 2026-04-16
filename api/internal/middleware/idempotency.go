@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package middleware
 
 import (
@@ -9,6 +12,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+
+	"github.com/loopzero/loopzero/api/internal/metrics"
 )
 
 // IdempotencyRecord holds a cached idempotent response.
@@ -23,7 +28,7 @@ type IdempotencyRecord struct {
 
 // IdempotencyStore abstracts persistence for idempotency keys (DIP).
 type IdempotencyStore interface {
-	Get(ctx context.Context, key string) (*IdempotencyRecord, error)
+	Get(ctx context.Context, key string, tenantID string) (*IdempotencyRecord, error)
 	Store(ctx context.Context, rec *IdempotencyRecord) error
 }
 
@@ -74,8 +79,14 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 
 			hash := hashRequestBody(body)
 
-			// Check for existing key
-			existing, err := store.Get(r.Context(), key)
+			// Extract tenant for scoped lookup
+			var tenantID string
+			if uc := GetUserContext(r.Context()); uc != nil {
+				tenantID = uc.TenantID
+			}
+
+			// Check for existing key (scoped by tenant to prevent cross-tenant replay)
+			existing, err := store.Get(r.Context(), key, tenantID)
 			if err != nil {
 				writeIdempotencyError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to check idempotency key")
 				return
@@ -88,12 +99,14 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 					return
 				}
 				// Same key, same payload → return cached response
+				metrics.IdempotencyHits.WithLabelValues(r.URL.Path).Inc()
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(existing.ResponseStatus)
 				_, _ = w.Write(existing.ResponseBody)
 				return
 			}
 
+				metrics.IdempotencyMisses.WithLabelValues(r.URL.Path).Inc()
 			// New key → process request and capture response
 			capture := &responseCapture{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(capture, r)

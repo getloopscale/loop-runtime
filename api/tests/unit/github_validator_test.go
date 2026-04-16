@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package unit
 
 import (
@@ -50,9 +53,6 @@ func TestGitHubTokenValidator(t *testing.T) {
 		}
 		if result.Email != "lucas@acme.dev" {
 			t.Errorf("expected Email=lucas@acme.dev, got %q", result.Email)
-		}
-		if result.GitHubID != 12345 {
-			t.Errorf("expected GitHubID=12345, got %d", result.GitHubID)
 		}
 	})
 

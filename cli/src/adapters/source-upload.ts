@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import * as fs from 'fs';
 import * as path from 'path';
 import { ApiError } from '../api/client';
@@ -9,25 +12,15 @@ export interface UploadResult {
 }
 
 /**
- * Create a Blob from a file path using streaming when available.
+ * Create a Blob from a file by reading it into memory.
  *
- * Prefers `fs.openAsBlob` (Node 20.8+) which streams file content
- * without loading the entire file into memory. Falls back to
- * `fs.readFileSync` for older Node versions or test environments.
+ * readFileSync is used instead of openAsBlob (Node 20.8+ streaming)
+ * because openAsBlob's lazy file handle can cause intermittent
+ * multipart upload failures (422) when the file handle becomes
+ * unavailable during fetch. Git bundles are bounded by MAX_BUNDLE_SIZE_BYTES
+ * (500MB), which is within memory limits for modern systems.
  */
-async function fileBlobStreaming(filePath: string, contentType: string): Promise<Blob> {
-  try {
-    // Node 20.8+ provides openAsBlob which streams file content
-    // without loading it entirely into memory — critical for large bundles.
-    const nodeFs = await import('node:fs');
-    if (typeof nodeFs.openAsBlob === 'function') {
-      return await nodeFs.openAsBlob(filePath, { type: contentType });
-    }
-  } catch {
-    // openAsBlob unavailable or file access failed — fall through to readFileSync
-  }
-
-  // Fallback: load into memory (works on all Node 20+ versions and in tests)
+function fileBlob(filePath: string, contentType: string): Blob {
   const data = fs.readFileSync(filePath);
   return new Blob([data], { type: contentType });
 }
@@ -38,7 +31,7 @@ export async function uploadSource(
   bundlePath: string,
   loopzeroYamlPath: string,
 ): Promise<UploadResult> {
-  const bundleBlob = await fileBlobStreaming(bundlePath, 'application/octet-stream');
+  const bundleBlob = fileBlob(bundlePath, 'application/octet-stream');
 
   // loopzero.yaml is always small — readFileSync is fine
   const loopzeroYamlContent = fs.readFileSync(loopzeroYamlPath, 'utf-8');

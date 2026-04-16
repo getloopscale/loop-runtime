@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 export interface DeployEvent {
   type: string;
   data: Record<string, unknown>;
@@ -7,6 +10,7 @@ export interface AppResult {
   name: string;
   status: string;
   url?: string;
+  custom_domain_urls?: string[]; // MEET-2026-04-05-033: Active custom domain URLs
   build_duration_seconds?: number;
   error?: string;
 }
@@ -54,34 +58,6 @@ export class DeployRenderer {
     return this.renderTTYResult(result);
   }
 
-  /**
-   * Render the final deploy result as a JSON string for --json mode.
-   */
-  renderJSON(result: DeployResult): string {
-    const output: Record<string, unknown> = {
-      deploy_id: result.deploy_id,
-      status: result.status,
-      duration_seconds: result.duration_seconds,
-      apps: result.apps.map((app) => {
-        const entry: Record<string, unknown> = {
-          name: app.name,
-          status: app.status,
-        };
-        // F-08: Use null for absent/empty URLs (workers), never empty string
-        entry.url = app.url || null;
-        if (app.build_duration_seconds !== undefined) {
-          entry.build_duration_seconds = app.build_duration_seconds;
-        }
-        if (app.error !== undefined) {
-          entry.error = app.error;
-        }
-        return entry;
-      }),
-    };
-
-    return JSON.stringify(output);
-  }
-
   private renderTTYEvent(event: DeployEvent): string | null {
     const app = String(event.data.app ?? '');
 
@@ -103,6 +79,17 @@ export class DeployRenderer {
       case 'build.failed': {
         const error = String(event.data.error ?? 'unknown error');
         return `\x1b[31m✗\x1b[0m Building ${app} [${error}]`;
+      }
+
+      case 'deploy.delivering':
+        return `\x1b[36m⠋\x1b[0m Deploying to environment...`;
+
+      case 'deploy.verifying':
+        return `\x1b[36m⠋\x1b[0m Verifying service health${app ? ` (${app})` : ''}...`;
+
+      case 'deploy.live': {
+        const url = String(event.data.url ?? '');
+        return `\x1b[32m✓\x1b[0m ${app} live${url ? ` ${url}` : ''}`;
       }
 
       case 'deploy.app_live': {
@@ -146,6 +133,17 @@ export class DeployRenderer {
         return `[build] ${app}: failed [${error}]`;
       }
 
+      case 'deploy.delivering':
+        return `[deploy] delivering to environment...`;
+
+      case 'deploy.verifying':
+        return `[deploy] verifying service health${app ? ` (${app})` : ''}...`;
+
+      case 'deploy.live': {
+        const url = String(event.data.url ?? '');
+        return `[deploy] ${app}: live${url ? ` ${url}` : ''}`;
+      }
+
       case 'deploy.app_live': {
         const url = String(event.data.url ?? '');
         return `[deploy] ${app}: deployed ${url}`;
@@ -181,6 +179,12 @@ export class DeployRenderer {
         lines.push(`  \x1b[31m✗\x1b[0m ${app.name}: ${app.error ?? 'failed'}`);
       } else if (app.url) {
         lines.push(`  ${app.name} → ${app.url}`);
+        // MEET-2026-04-05-033: Show custom domain URLs alongside auto-generated URL
+        if (app.custom_domain_urls?.length) {
+          for (const cdUrl of app.custom_domain_urls) {
+            lines.push(`  ${app.name} → ${cdUrl} \x1b[2m(custom domain)\x1b[0m`);
+          }
+        }
       } else {
         lines.push(`  ${app.name} (no URL — background worker)`);
       }
@@ -203,6 +207,12 @@ export class DeployRenderer {
         lines.push(`  ${app.name}: ${app.error ?? 'failed'}`);
       } else if (app.url) {
         lines.push(`  ${app.name}: ${app.url}`);
+        // MEET-2026-04-05-033: Show custom domain URLs in CI output
+        if (app.custom_domain_urls?.length) {
+          for (const cdUrl of app.custom_domain_urls) {
+            lines.push(`  ${app.name}: ${cdUrl} (custom domain)`);
+          }
+        }
       } else {
         lines.push(`  ${app.name}: (no URL — background worker)`);
       }

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package integration tests advisory lock crash recovery behavior.
 //
 // These tests prove that pg_advisory_xact_lock releases automatically when:

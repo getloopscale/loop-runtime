@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package statemachine
 
 import (
@@ -8,11 +11,14 @@ import (
 func TestBuildMachine_HappyPath(t *testing.T) {
 	m := NewBuildMachine()
 
-	// QUEUED -> RUNNING -> SUCCEEDED
+	// QUEUED → RUNNING → RELEASING → SUCCEEDED
 	state := m.Transition(BuildQueued, BuildStarted)
 	assertState(t, state, BuildRunning)
 
 	state = m.Transition(state, BuildSucceededEvent)
+	assertState(t, state, BuildReleasing)
+
+	state = m.Transition(state, BuildReleaseCompleted)
 	assertState(t, state, BuildSucceeded)
 }
 
@@ -23,6 +29,16 @@ func TestBuildMachine_BuildFails(t *testing.T) {
 	assertState(t, state, BuildRunning)
 
 	state = m.Transition(state, BuildFailedEvent)
+	assertState(t, state, BuildFailed)
+}
+
+func TestBuildMachine_QueuedBuildFails_SubmitError(t *testing.T) {
+	// REVIEW-BLOCKER-1: A QUEUED build can fail immediately if workflow
+	// submission fails. This transition allows the orchestrator to mark
+	// the build as FAILED without waiting for the 5min queue timeout.
+	m := NewBuildMachine()
+
+	state := m.Transition(BuildQueued, BuildFailedEvent)
 	assertState(t, state, BuildFailed)
 }
 
@@ -70,6 +86,50 @@ func TestBuildMachine_BuildTimeout(t *testing.T) {
 	assertState(t, state, BuildFailed)
 }
 
+func TestBuildMachine_ReleasingToSucceeded(t *testing.T) {
+	m := NewBuildMachine()
+
+	state := m.Transition(BuildQueued, BuildStarted)
+	state = m.Transition(state, BuildSucceededEvent)
+	assertState(t, state, BuildReleasing)
+
+	state = m.Transition(state, BuildReleaseCompleted)
+	assertState(t, state, BuildSucceeded)
+}
+
+func TestBuildMachine_ReleasingToFailed_ActivationError(t *testing.T) {
+	m := NewBuildMachine()
+
+	state := m.Transition(BuildQueued, BuildStarted)
+	state = m.Transition(state, BuildSucceededEvent)
+	assertState(t, state, BuildReleasing)
+
+	state = m.Transition(state, BuildReleaseFailedEvent)
+	assertState(t, state, BuildFailed)
+}
+
+func TestBuildMachine_ReleasingTimeout(t *testing.T) {
+	m := NewBuildMachine()
+
+	state := m.Transition(BuildQueued, BuildStarted)
+	state = m.Transition(state, BuildSucceededEvent)
+	assertState(t, state, BuildReleasing)
+
+	state = m.Transition(state, BuildReleaseTimeoutEvent)
+	assertState(t, state, BuildFailed)
+}
+
+func TestBuildMachine_ReleasingCancel(t *testing.T) {
+	m := NewBuildMachine()
+
+	state := m.Transition(BuildQueued, BuildStarted)
+	state = m.Transition(state, BuildSucceededEvent)
+	assertState(t, state, BuildReleasing)
+
+	state = m.Transition(state, BuildCancelRequested)
+	assertState(t, state, BuildCancelled)
+}
+
 func TestBuildMachine_TerminalStatesRejectAllEvents(t *testing.T) {
 	m := NewBuildMachine()
 
@@ -78,6 +138,7 @@ func TestBuildMachine_TerminalStatesRejectAllEvents(t *testing.T) {
 		BuildStarted, BuildSucceededEvent, BuildFailedEvent,
 		BuildCancelRequested, BuildCancelConfirmed,
 		BuildQueueTimeout, BuildTimeout, BuildCancelTimeout,
+		BuildReleaseCompleted, BuildReleaseFailedEvent, BuildReleaseTimeoutEvent,
 	}
 
 	for _, terminal := range terminalStates {
@@ -106,6 +167,9 @@ func TestBuildMachine_IsTerminal(t *testing.T) {
 	if m.IsTerminal(BuildRunning) {
 		t.Error("RUNNING should not be terminal")
 	}
+	if m.IsTerminal(BuildReleasing) {
+		t.Error("RELEASING should not be terminal")
+	}
 	if m.IsTerminal(BuildCancelling) {
 		t.Error("CANCELLING should not be terminal")
 	}
@@ -127,6 +191,7 @@ func TestBuildMachine_Timeouts(t *testing.T) {
 	expected := map[State]time.Duration{
 		BuildQueued:     5 * time.Minute,
 		BuildRunning:    30 * time.Minute,
+		BuildReleasing:  10 * time.Minute,
 		BuildCancelling: 60 * time.Second,
 	}
 
@@ -163,6 +228,7 @@ func TestIsBuildTerminal(t *testing.T) {
 		{BuildCancelled, true},
 		{BuildQueued, false},
 		{BuildRunning, false},
+		{BuildReleasing, false},
 		{BuildCancelling, false},
 		{State("UNKNOWN"), false},
 	}

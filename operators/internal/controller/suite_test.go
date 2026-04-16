@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package controller_test
 
 import (
@@ -9,6 +12,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -20,6 +24,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/controller"
 )
 
@@ -37,6 +42,7 @@ var (
 	cancel         context.CancelFunc
 	fakeGitProvider    *fakeGiteaProvisioner
 	fakeArgoCDProvider *fakeArgoCDProvisioner
+	fakeMinIOProvider  *fakeMinIOProvisioner
 )
 
 func TestControllers(t *testing.T) {
@@ -47,7 +53,7 @@ func TestControllers(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	ctx, cancel = context.WithCancel(context.TODO())
+	ctx, cancel = context.WithCancel(context.Background())
 
 	By("bootstrapping test environment")
 	// Resolve envtest binary path: KUBEBUILDER_ASSETS env var, then setup-envtest,
@@ -55,11 +61,19 @@ var _ = BeforeSuite(func() {
 	// (which sets KUBEBUILDER_ASSETS) and direct `go test` invocations. (F-06)
 	binaryDir := os.Getenv("KUBEBUILDER_ASSETS")
 	if binaryDir == "" {
-		// Try common setup-envtest path
+		// Auto-discover latest envtest binary under the standard setup-envtest path.
+		// This avoids hardcoding a specific Kubernetes version.
 		home, _ := os.UserHomeDir()
-		candidate := filepath.Join(home, ".local", "share", "kubebuilder-envtest", "k8s", "1.35.0-linux-amd64")
-		if _, err := os.Stat(filepath.Join(candidate, "etcd")); err == nil {
-			binaryDir = candidate
+		envtestBase := filepath.Join(home, ".local", "share", "kubebuilder-envtest", "k8s")
+		if entries, err := os.ReadDir(envtestBase); err == nil {
+			// Iterate in reverse to prefer the latest version (lexicographic order).
+			for i := len(entries) - 1; i >= 0; i-- {
+				candidate := filepath.Join(envtestBase, entries[i].Name())
+				if _, statErr := os.Stat(filepath.Join(candidate, "etcd")); statErr == nil {
+					binaryDir = candidate
+					break
+				}
+			}
 		}
 	}
 	testEnv = &envtest.Environment{
@@ -93,11 +107,43 @@ var _ = BeforeSuite(func() {
 
 	fakeGitProvider = newFakeGiteaProvisioner()
 	fakeArgoCDProvider = newFakeArgoCDProvisioner()
-	err = controller.SetupTenantController(mgr, fakeGitProvider, fakeArgoCDProvider, controller.TenantControllerConfig{})
+	fakeMinIOProvider = newFakeMinIOProvisioner()
+
+	// Multi-cluster: in envtest all three "clusters" share the same API server.
+	// This validates client routing logic; physical separation is tested in E2E (Sprint 8).
+	buildClient, err := client.New(cfg, client.Options{Scheme: scheme})
+	Expect(err).NotTo(HaveOccurred())
+	runtimeClient, err := client.New(cfg, client.Options{Scheme: scheme})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = controller.SetupClusterCredentialController(mgr)
+	err = controller.SetupTenantController(mgr, fakeGitProvider, fakeArgoCDProvider, buildClient, runtimeClient, controller.TenantControllerConfig{
+		MinIOProvisioner: fakeMinIOProvider,
+	})
 	Expect(err).NotTo(HaveOccurred())
+
+	err = controller.SetupClusterCredentialController(mgr, constants.DefaultArgoCDNamespace)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = controller.SetupPlatformBootstrapController(mgr, nil)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = controller.SetupGitRepositoryBindingController(mgr, nil)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = controller.SetupEnvironmentController(mgr, runtimeClient)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = controller.SetupApplicationController(mgr, "dev.loopzero.example")
+	Expect(err).NotTo(HaveOccurred())
+
+	err = controller.SetupExposureController(mgr, controller.ExposureControllerConfig{
+		AllowProbeURLOverride: true, // test environment only — allows probe URL injection via annotation
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	// ADR-0006: LoopZeroBuild and LoopZeroRelease CRDs removed.
+	// Build state owned by PostgreSQL, Release state owned by PostgreSQL.
+	// Controllers were stubs — no reconciliation logic to preserve.
 
 	go func() {
 		defer GinkgoRecover()
@@ -116,3 +162,15 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
+
+// --- Shared test helpers ---
+
+// findCondition returns the condition with the given type, or nil.
+func findCondition(conds []metav1.Condition, conditionType string) *metav1.Condition {
+	for i, c := range conds {
+		if c.Type == conditionType {
+			return &conds[i]
+		}
+	}
+	return nil
+}

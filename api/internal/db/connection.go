@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package db
 
 import (
@@ -32,9 +35,13 @@ func GetDatabaseConfig() DatabaseConfig {
 }
 
 // DSN returns the PostgreSQL connection string.
+// SEC-006: sslmode is configurable via DATABASE_SSLMODE env var.
+// MEET-2026-03-31-024: Default changed from "disable" to "require".
+// Local dev must explicitly set DATABASE_SSLMODE=disable.
 func (c DatabaseConfig) DSN() string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
-		c.User, c.Password, c.Host, c.Port, c.Database)
+	sslmode := getEnvOrDefault("DATABASE_SSLMODE", "require")
+	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		c.User, c.Password, c.Host, c.Port, c.Database, sslmode)
 }
 
 func getEnvOrDefault(key, defaultValue string) string {

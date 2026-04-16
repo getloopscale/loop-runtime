@@ -1,4 +1,7 @@
-import { DeployRenderer, DeployRendererOptions, DeployEvent, DeployResult, AppResult } from '../../../src/output/deploy-renderer';
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+import { DeployRenderer, DeployRendererOptions, DeployEvent, DeployResult } from '../../../src/output/deploy-renderer';
 
 function createRenderer(overrides: Partial<DeployRendererOptions> = {}): DeployRenderer {
   return new DeployRenderer({
@@ -111,6 +114,43 @@ describe('DeployRenderer', () => {
       expect(output).toContain('Building worker');
     });
 
+    it('should render deploy.delivering event (MEET-012)', () => {
+      const renderer = createRenderer({ isTTY: true, isCI: false, isJSON: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.delivering',
+        data: { deploy_id: 'd-abc1', status: 'delivering' },
+      });
+
+      expect(output).toBeDefined();
+      expect(output).toContain('Deploying');
+    });
+
+    it('should render deploy.verifying event (MEET-012)', () => {
+      const renderer = createRenderer({ isTTY: true, isCI: false, isJSON: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.verifying',
+        data: { deploy_id: 'd-abc1', status: 'verifying', app: 'api' },
+      });
+
+      expect(output).toBeDefined();
+      expect(output).toContain('Verifying');
+    });
+
+    it('should render deploy.live event (MEET-012)', () => {
+      const renderer = createRenderer({ isTTY: true, isCI: false, isJSON: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.live',
+        data: { app: 'api', url: 'https://api.example.com' },
+      });
+
+      expect(output).toBeDefined();
+      expect(output).toContain('live');
+      expect(output).toContain('api');
+    });
+
     it('should render health check event', () => {
       const renderer = createRenderer({ isTTY: true, isCI: false, isJSON: false });
 
@@ -171,6 +211,42 @@ describe('DeployRenderer', () => {
       });
 
       expect(output).toBe('[build] api: complete [45s]');
+    });
+
+    it('should render deploy.delivering event in CI mode (MEET-012)', () => {
+      const renderer = createRenderer({ isCI: true, isJSON: false, isTTY: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.delivering',
+        data: { deploy_id: 'd-abc1', status: 'delivering' },
+      });
+
+      expect(output).toContain('[deploy]');
+      expect(output).toContain('delivering');
+    });
+
+    it('should render deploy.verifying event in CI mode (MEET-012)', () => {
+      const renderer = createRenderer({ isCI: true, isJSON: false, isTTY: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.verifying',
+        data: { deploy_id: 'd-abc1', status: 'verifying', app: 'api' },
+      });
+
+      expect(output).toContain('[deploy]');
+      expect(output).toContain('verifying');
+    });
+
+    it('should render deploy.live event in CI mode (MEET-012)', () => {
+      const renderer = createRenderer({ isCI: true, isJSON: false, isTTY: false });
+
+      const output = renderer.onEvent({
+        type: 'deploy.live',
+        data: { app: 'api', url: 'https://api.example.com' },
+      });
+
+      expect(output).toContain('[deploy]');
+      expect(output).toContain('live');
     });
 
     it('should render deployed event with URL and [deploy] prefix', () => {
@@ -236,53 +312,6 @@ describe('DeployRenderer', () => {
   });
 
   describe('JSON mode', () => {
-    it('should output valid JSON matching DA-5 schema', () => {
-      const renderer = createRenderer({ isJSON: true, isCI: false, isTTY: false });
-      const result = makeDeployResult();
-
-      const output = renderer.renderJSON(result);
-      const parsed = JSON.parse(output);
-
-      expect(parsed).toHaveProperty('deploy_id');
-      expect(parsed).toHaveProperty('status');
-      expect(parsed).toHaveProperty('duration_seconds');
-      expect(parsed).toHaveProperty('apps');
-      expect(Array.isArray(parsed.apps)).toBe(true);
-
-      const app = parsed.apps[0];
-      expect(app).toHaveProperty('name');
-      expect(app).toHaveProperty('status');
-      expect(app).toHaveProperty('url');
-      expect(app).toHaveProperty('build_duration_seconds');
-    });
-
-    it('should have deploy_id matching d-{4hex} format (DA-11)', () => {
-      const renderer = createRenderer({ isJSON: true, isCI: false, isTTY: false });
-      const result = makeDeployResult({ deploy_id: 'd-8f3a' });
-
-      const output = renderer.renderJSON(result);
-      const parsed = JSON.parse(output);
-
-      expect(parsed.deploy_id).toMatch(/^d-[0-9a-f]{4}$/);
-    });
-
-    it('should include error field for failed apps', () => {
-      const renderer = createRenderer({ isJSON: true, isCI: false, isTTY: false });
-      const result = makeDeployResult({
-        status: 'partial_failure',
-        apps: [
-          { name: 'api', status: 'deployed', url: 'https://api.example.com', build_duration_seconds: 30 },
-          { name: 'web', status: 'failed', error: 'Compilation error', build_duration_seconds: 30 },
-        ],
-      });
-
-      const output = renderer.renderJSON(result);
-      const parsed = JSON.parse(output);
-
-      const failedApp = parsed.apps.find((a: AppResult) => a.status === 'failed');
-      expect(failedApp).toHaveProperty('error', 'Compilation error');
-    });
-
     it('should suppress intermediate event output in JSON mode', () => {
       const renderer = createRenderer({ isJSON: true, isCI: false, isTTY: false });
 
@@ -292,63 +321,6 @@ describe('DeployRenderer', () => {
       });
 
       expect(output).toBeNull();
-    });
-
-    it('should output exactly one JSON object (no extra text)', () => {
-      const renderer = createRenderer({ isJSON: true, isCI: false, isTTY: false });
-      const result = makeDeployResult();
-
-      const output = renderer.renderJSON(result);
-
-      // Should parse as valid JSON without extra text
-      expect(() => JSON.parse(output)).not.toThrow();
-      // Should be exactly one JSON object (starts with { ends with })
-      expect(output.trim()).toMatch(/^\{[\s\S]*\}$/);
-    });
-  });
-
-  describe('worker app URL normalization in JSON (F-08)', () => {
-    it('should output url as null for apps with empty string URL', () => {
-      const renderer = createRenderer({ isJSON: true, isCI: false, isTTY: false });
-      const result = makeDeployResult({
-        apps: [
-          { name: 'api', status: 'deployed', url: 'https://api.example.com', build_duration_seconds: 45 },
-          { name: 'worker', status: 'deployed', url: '', build_duration_seconds: 30 },
-        ],
-      });
-
-      const output = renderer.renderJSON(result);
-      const parsed = JSON.parse(output);
-
-      const workerApp = parsed.apps.find((a: AppResult) => a.name === 'worker');
-      expect(workerApp.url).toBeNull();
-    });
-
-    it('should output url as null for apps with undefined URL', () => {
-      const renderer = createRenderer({ isJSON: true, isCI: false, isTTY: false });
-      const result = makeDeployResult({
-        apps: [
-          { name: 'api', status: 'deployed', url: 'https://api.example.com', build_duration_seconds: 45 },
-          { name: 'worker', status: 'deployed', build_duration_seconds: 30 },
-        ],
-      });
-
-      const output = renderer.renderJSON(result);
-      const parsed = JSON.parse(output);
-
-      const workerApp = parsed.apps.find((a: AppResult) => a.name === 'worker');
-      expect(workerApp.url).toBeNull();
-    });
-
-    it('should preserve valid URLs in JSON output', () => {
-      const renderer = createRenderer({ isJSON: true, isCI: false, isTTY: false });
-      const result = makeDeployResult();
-
-      const output = renderer.renderJSON(result);
-      const parsed = JSON.parse(output);
-
-      const apiApp = parsed.apps.find((a: AppResult) => a.name === 'api');
-      expect(apiApp.url).toBe('https://api.example.com');
     });
   });
 
@@ -405,15 +377,6 @@ describe('DeployRenderer', () => {
       }
     });
 
-    it('should not contain forbidden internal terms in JSON output', () => {
-      const renderer = createRenderer({ isJSON: true, isCI: false, isTTY: false });
-      const result = makeDeployResult();
-
-      const output = renderer.renderJSON(result);
-
-      for (const term of FORBIDDEN_TERMS) {
-        expect(output).not.toContain(term);
-      }
-    });
+    // JSON output is tested in deploy.test.ts where the inline JSON rendering happens
   });
 });

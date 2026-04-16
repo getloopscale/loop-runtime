@@ -1,0 +1,357 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+import { StatusCommand, StatusDeps } from '../../../src/commands/status';
+import { ApiError } from '../../../src/api/client';
+
+function createMockDeps(overrides: Partial<StatusDeps> = {}): StatusDeps {
+  return {
+    getToken: jest.fn().mockReturnValue('test-token'),
+    findLoopZeroYaml: jest.fn().mockReturnValue({
+      path: '/project/loopzero.yaml',
+      content: { project: 'my-app', apps: { web: { path: '.', framework: 'express', port: 3000 } } },
+    }),
+    getStatus: jest.fn().mockResolvedValue({
+      environment: 'production',
+      last_build: {
+        build_id: 'build-a1b2c3d4',
+        status: 'SUCCEEDED',
+        finished_at: '2026-03-25T12:30:00Z',
+      },
+      release: {
+        release_id: 'rel-e5f6g7h8',
+        state: 'ACTIVE',
+        activated_at: '2026-03-25T12:30:00Z',
+      },
+      sync_status: 'Synced',
+      url: 'https://my-app.dev.loopzero.example',
+    }),
+    writeTo: jest.fn(),
+    writeError: jest.fn(),
+    ...overrides,
+  };
+}
+
+describe('StatusCommand', () => {
+  describe('success', () => {
+    it('should display environment status and return exit code 0', async () => {
+      const deps = createMockDeps();
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({ env: 'production' });
+
+      expect(exitCode).toBe(0);
+      expect(deps.getStatus).toHaveBeenCalledWith('my-app', 'production');
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('production');
+      expect(output).toContain('build-a1b2c3d4');
+      expect(output).toContain('SUCCEEDED');
+      expect(output).toContain('rel-e5f6g7h8');
+      expect(output).toContain('https://my-app.dev.loopzero.example');
+    });
+
+    it('should default to production environment', async () => {
+      const deps = createMockDeps();
+      const cmd = new StatusCommand(deps);
+
+      await cmd.execute({});
+
+      expect(deps.getStatus).toHaveBeenCalledWith('my-app', 'production');
+    });
+
+    it('should display no-deploys message when no builds exist', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(0);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('production');
+      expect(output).toContain('No deploys yet');
+      expect(output).toContain('loopzero deploy');
+    });
+  });
+
+  describe('sync_status mapping', () => {
+    it('should map Synced to "Up to date" in human output', async () => {
+      const deps = createMockDeps();
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({});
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Up to date');
+      expect(output).not.toContain('Synced');
+    });
+
+    it('should map OutOfSync to "Update pending"', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { build_id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-03-25T12:30:00Z' },
+          sync_status: 'OutOfSync',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({});
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Update pending');
+    });
+
+    it('should map Progressing to "Deploying"', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { build_id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-03-25T12:30:00Z' },
+          sync_status: 'Progressing',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({});
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Deploying');
+    });
+
+    it('should map sync_status in JSON output too', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          sync_status: 'Synced',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({ json: true });
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.sync_status).toBe('Up to date');
+    });
+  });
+
+  describe('--json flag', () => {
+    it('should output raw API response as JSON', async () => {
+      const apiResponse = {
+        environment: 'production',
+        last_build: {
+          build_id: 'build-a1b2c3d4',
+          status: 'SUCCEEDED',
+          finished_at: '2026-03-25T12:30:00Z',
+        },
+        release: {
+          release_id: 'rel-e5f6g7h8',
+          state: 'ACTIVE',
+          activated_at: '2026-03-25T12:30:00Z',
+        },
+        sync_status: 'Synced',
+        url: 'https://my-app.dev.loopzero.example',
+      };
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue(apiResponse),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(0);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.environment).toBe('production');
+      expect(parsed.last_build.build_id).toBe('build-a1b2c3d4');
+      expect(parsed.release.release_id).toBe('rel-e5f6g7h8');
+      expect(parsed.url).toBe('https://my-app.dev.loopzero.example');
+    });
+
+    it('should output JSON for no-deploys state', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({ environment: 'production' }),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(0);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.environment).toBe('production');
+    });
+  });
+
+  describe('auth failure', () => {
+    it('should return exit code 4 when not authenticated', async () => {
+      const deps = createMockDeps({
+        getToken: jest.fn().mockReturnValue(null),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(4);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput).toContain('Not authenticated');
+      expect(errOutput).toContain('loopzero login');
+    });
+
+    it('should return exit code 4 with JSON when not authenticated', async () => {
+      const deps = createMockDeps({
+        getToken: jest.fn().mockReturnValue(null),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(4);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.error).toContain('Not authenticated');
+      expect(parsed.exit_code).toBe(4);
+      expect(parsed.code).toBe('AUTH_REQUIRED');
+    });
+  });
+
+  describe('missing loopzero.yaml', () => {
+    it('should return exit code 1 when loopzero.yaml not found', async () => {
+      const deps = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue(null),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(1);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput).toContain('loopzero.yaml');
+      expect(errOutput).toContain('loopzero init');
+    });
+
+    it('should return exit code 1 when loopzero.yaml has parse error', async () => {
+      const deps = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue({
+          path: '/project/loopzero.yaml',
+          content: { project: 'my-app', apps: {} },
+          parseError: 'Invalid YAML syntax',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(1);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput).toContain('Invalid loopzero.yaml');
+    });
+
+    it('should return exit code 1 with JSON when loopzero.yaml not found', async () => {
+      const deps = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue(null),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.exit_code).toBe(1);
+      expect(parsed.code).toBe('MISSING_CONFIG');
+    });
+  });
+
+  describe('API error handling', () => {
+    it('should handle API errors gracefully', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockRejectedValue(
+          new ApiError('Service unavailable. Try again in a moment.', 3, 503, 'SERVICE_UNAVAILABLE'),
+        ),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(3);
+    });
+
+    it('should return exit 4 on 401 API error', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockRejectedValue(
+          new ApiError('Not authenticated. Run: loopzero login', 4, 401, 'AUTH_REQUIRED'),
+        ),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(4);
+    });
+
+    it('should handle unexpected non-ApiError with exit code 3', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockRejectedValue(new Error('Connection refused')),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(3);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput).toContain('Connection refused');
+    });
+
+    it('should handle non-Error thrown values with exit code 3', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockRejectedValue('network failure'),
+      });
+      const cmd = new StatusCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(3);
+    });
+  });
+
+  describe('no internal terms', () => {
+    it('should not contain forbidden terms in any output', async () => {
+      const forbidden = [
+        'ArgoCD', 'argocd', 'GitOps', 'gitops-push', 'CRD',
+        'tenant_id', 'advisory lock', 'pg_advisory', 'Gitea',
+        'MinIO', 'kubebuilder', 'envtest', 'Kaniko',
+      ];
+
+      // Success scenario
+      const deps1 = createMockDeps();
+      const cmd1 = new StatusCommand(deps1);
+      await cmd1.execute({});
+
+      // No deploys scenario
+      const deps2 = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({ environment: 'production' }),
+      });
+      const cmd2 = new StatusCommand(deps2);
+      await cmd2.execute({});
+
+      // Auth failure scenario
+      const deps3 = createMockDeps({
+        getToken: jest.fn().mockReturnValue(null),
+      });
+      const cmd3 = new StatusCommand(deps3);
+      await cmd3.execute({});
+
+      // Missing config scenario
+      const deps4 = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue(null),
+      });
+      const cmd4 = new StatusCommand(deps4);
+      await cmd4.execute({});
+
+      for (const deps of [deps1, deps2, deps3, deps4]) {
+        const allOutput = [
+          ...(deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]),
+          ...(deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]),
+        ].join(' ');
+        for (const term of forbidden) {
+          expect(allOutput).not.toContain(term);
+        }
+      }
+    });
+  });
+});

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package e2e contains end-to-end tests that prove system convergence.
 //
 // The vertical slice test validates the full flow:
@@ -98,6 +101,18 @@ func (f *fakeProjectStore) CreateProject(_ context.Context, input apitest.Create
 	return result, nil
 }
 
+func (f *fakeProjectStore) GetByName(_ context.Context, tenantID, name string) (*apitest.ProjectResult, error) {
+	key := tenantID + "/" + name
+	if result, exists := f.projects[key]; exists {
+		return &result, nil
+	}
+	return nil, nil
+}
+
+func (f *fakeProjectStore) DeleteProject(_ context.Context, _, _ string) error {
+	return nil
+}
+
 // k8sTenantCRManager implements TenantCRManager using a real K8s client.
 // This is the critical bridge between API and operator — it creates the Tenant CR
 // that the TenantController will reconcile.
@@ -190,7 +205,16 @@ func TestVerticalSlice_APIToControllerConvergence(t *testing.T) {
 
 	fakeGit := operatortest.NewFakeGitProvisioner()
 	fakeArgoCD := operatortest.NewFakeArgoCDProvisioner()
-	if err := operatortest.SetupTenantController(mgr, fakeGit, fakeArgoCD); err != nil {
+	// Multi-cluster: in envtest both clients point to the same API server.
+	buildClient, err := client.New(cfg, client.Options{Scheme: scheme})
+	if err != nil {
+		t.Fatalf("failed to create build client: %v", err)
+	}
+	runtimeClient, err := client.New(cfg, client.Options{Scheme: scheme})
+	if err != nil {
+		t.Fatalf("failed to create runtime client: %v", err)
+	}
+	if err := operatortest.SetupTenantController(mgr, fakeGit, fakeArgoCD, buildClient, runtimeClient); err != nil {
 		t.Fatalf("failed to setup controller: %v", err)
 	}
 

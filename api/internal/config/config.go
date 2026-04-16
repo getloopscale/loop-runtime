@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package config centralizes all environment-based configuration for the LoopZero API.
 // Every value has a sensible default for local k3d development.
 // In production (LOOPZERO_ENV=production), security-sensitive values MUST be set explicitly.
@@ -8,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -24,6 +28,8 @@ type Config struct {
 	IdleTimeout          time.Duration
 	GracefulShutdownTime time.Duration
 
+	// Database
+	DatabaseURL string // DATABASE_URL — validated for sslmode in production
 	// Database Pool
 	DBMaxConns         int32
 	DBMinConns         int32
@@ -40,16 +46,21 @@ type Config struct {
 	// Kubernetes Contexts
 	MgmtKubeconfig  string
 	MgmtKubeContext string
-	BuildKubeconfig string
-	BuildKubeContext string
+	BuildKubeconfig   string
+	BuildKubeContext  string
+	RuntimeKubeconfig string
+	RuntimeKubeContext string
 
 	// Service URLs
 	GiteaURL             string
 	GiteaCrossClusterURL string
 	APICrossClusterURL   string
 	ArgocdURL            string
-	MinIOEndpoint        string
+	MinIOEndpoint             string
+	MinIOCrossClusterEndpoint string // Used by build cluster workflows to reach MinIO
 	RegistryURL          string
+	RegistryInsecure     bool   // true for local dev registries without TLS
+	HarborRegistryURL    string // MEET-048: secondary registry for dual-push during migration. Empty = disabled.
 	WorkloadIngressURL   string
 	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
 
@@ -58,7 +69,9 @@ type Config struct {
 	ArgocdToken        string
 	MinIOAccessKey     string
 	MinIOSecretKey     string
-	ArgoCallbackSecret string
+	ArgoCallbackSecret    string
+	BootstrapSecret       string // SEC-003: shared secret for POST /internal/bootstrap
+	SecretEncryptionKey   string // SEC-001: 32-byte hex-encoded AES-256 key for secret encryption at rest
 
 	// Argo Workflows
 	ArgoNamespace string
@@ -93,8 +106,69 @@ type Config struct {
 	BuildCancelTimeout  time.Duration
 	BuildReaperInterval time.Duration
 
+	// Release Reaper (spec §5.2)
+	ReleaseReadyTimeout   time.Duration
+	ReleasePendingTimeout time.Duration
+	ReleaseReaperInterval time.Duration
+
 	// Build Reconcile Loop (C-01 fix)
-	ReconcileInterval time.Duration
+	ReconcileInterval  time.Duration
+	MaxBuildsPerTenant int
+
+	// Loki (build log aggregation)
+	LokiURL string
+
+	// Cloudflare (static frontend delivery via CF Worker + KV + Zone Management)
+	CFAPIToken        string // Cloudflare API token
+	CFAccountID       string // Cloudflare account ID
+	CFKVNamespaceID   string // KV namespace ID for routing table
+	CFZoneManagement  bool   // Enable CF Zone Management for custom domains (v2)
+
+	// JWT Authentication (Sprint 11 — Ory Hydra integration)
+	// When set, enables dual validation: JWT (via JWKS) + GitHub PAT (legacy).
+	// When empty, only GitHub PAT validation is used (backward compatible).
+	// Env: JWKS_ENDPOINT (e.g., "http://ory-hydra-public.loopzero-system:4444/.well-known/jwks.json")
+	JWKSEndpoint string
+	// JWTIssuer is the expected issuer in JWT tokens (must match Hydra config).
+	// Env: JWT_ISSUER (e.g., "http://ory-hydra-public.loopzero-system:4444/")
+	JWTIssuer string
+
+	// Roadmap 02 — API Loop Extraction feature flag.
+	//
+	// When DisableLegacyLoops is true, the API process skips leader election
+	// and does NOT start ANY of the background loops (build reconcile, build
+	// reaper, release reaper, release convergence, idempotency cleaner, SSE
+	// event pruner, domain provisioner, domain health checker, cell metrics).
+	// The API continues to serve HTTP requests; the controller binary
+	// (cmd/controller/) is expected to run the loops instead.
+	//
+	// Default: false (loops run in the API, matching pre-extraction behavior).
+	// When the controller binary is fully rolled out, this flag defaults to
+	// true on the API Deployment and the controller Deployment runs the loops.
+	// Setting it back to false is the documented rollback path.
+	//
+	// Env: LOOPZERO_DISABLE_LEGACY_LOOPS ("true" to disable loops in the API).
+	DisableLegacyLoops bool
+
+	// Roadmap 07 — Backpressure and Admission Control.
+	//
+	// When AdmissionControl is true, the API consults the build admission
+	// gate and pg-pool circuit breaker. At capacity returns HTTP 429 or 503.
+	// Default: false — preserves pre-roadmap-07 behavior.
+	// Env: LOOPZERO_ADMISSION_CONTROL
+	AdmissionControl bool
+
+	// MaxConcurrentBuildsPerCell: cell-level concurrent build limit.
+	// Env: MAX_CONCURRENT_BUILDS_PER_CELL (default: 20)
+	MaxConcurrentBuildsPerCell int
+
+	// MaxConcurrentBuildsPerTenant: per-tenant concurrent build limit.
+	// Env: MAX_CONCURRENT_BUILDS_PER_TENANT (default: 3)
+	MaxConcurrentBuildsPerTenant int
+
+	// PGCircuitBreakerThresholdPct: pool utilization % above which mutations are rejected.
+	// Env: PG_CIRCUIT_BREAKER_THRESHOLD_PCT (default: 90)
+	PGCircuitBreakerThresholdPct int
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -114,6 +188,8 @@ func Load() Config {
 		IdleTimeout:          envDuration("SERVER_IDLE_TIMEOUT", 120*time.Second),
 		GracefulShutdownTime: envDuration("SERVER_GRACEFUL_SHUTDOWN", 15*time.Second),
 
+		// Database
+		DatabaseURL: os.Getenv("DATABASE_URL"),
 		// Database Pool
 		DBMaxConns:         int32(envInt("DB_MAX_CONNS", 25)),
 		DBMinConns:         int32(envInt("DB_MIN_CONNS", 5)),
@@ -130,16 +206,21 @@ func Load() Config {
 		// Kubernetes Contexts
 		MgmtKubeconfig:  envOr("MGMT_KUBECONFIG", defaultKubeconfig),
 		MgmtKubeContext: envOr("MGMT_KUBE_CONTEXT", "k3d-loopzero-mgmt"),
-		BuildKubeconfig: envOr("BUILD_KUBECONFIG", defaultKubeconfig),
-		BuildKubeContext: envOr("BUILD_KUBE_CONTEXT", "k3d-loopzero-build"),
+		BuildKubeconfig:   envOr("BUILD_KUBECONFIG", defaultKubeconfig),
+		BuildKubeContext:  envOr("BUILD_KUBE_CONTEXT", "k3d-loopzero-build"),
+		RuntimeKubeconfig: envOr("RUNTIME_KUBECONFIG", defaultKubeconfig),
+		RuntimeKubeContext: envOr("RUNTIME_KUBE_CONTEXT", "k3d-loopzero-workload"),
 
 		// Service URLs
 		GiteaURL:             envOr("GITEA_URL", "http://gitea-http.loopzero-system.svc.cluster.local:3000"),
 		GiteaCrossClusterURL: envOr("GITEA_CROSS_CLUSTER_URL", ""),
 		APICrossClusterURL:   envOr("API_CROSS_CLUSTER_URL", "http://loopzero-api.loopzero-system.svc.cluster.local:3001"),
 		ArgocdURL:            envOr("ARGOCD_URL", "http://argocd-server.argocd.svc.cluster.local:80"),
-		MinIOEndpoint:        envOr("MINIO_ENDPOINT", "minio.loopzero-system.svc.cluster.local:9000"),
+		MinIOEndpoint:             envOr("MINIO_ENDPOINT", "minio.loopzero-system.svc.cluster.local:9000"),
+		MinIOCrossClusterEndpoint: envOr("MINIO_CROSS_CLUSTER_ENDPOINT", ""),
 		RegistryURL:          envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
+		RegistryInsecure:     os.Getenv("REGISTRY_INSECURE") == "true",
+		HarborRegistryURL:    os.Getenv("HARBOR_REGISTRY_URL"), // MEET-048: empty = disabled
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
 		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
 
@@ -148,7 +229,9 @@ func Load() Config {
 		ArgocdToken:        os.Getenv("ARGOCD_TOKEN"),
 		MinIOAccessKey:     envOr("MINIO_ACCESS_KEY", "loopzero-admin"),
 		MinIOSecretKey:     envOr("MINIO_SECRET_KEY", "loopzero-dev-password"),
-		ArgoCallbackSecret: envOr("LOOPZERO_ARGO_CALLBACK_SECRET", "loopzero-dev-callback-secret"),
+		ArgoCallbackSecret:  envOr("LOOPZERO_ARGO_CALLBACK_SECRET", "loopzero-dev-callback-secret"),
+		BootstrapSecret:     envOr("LOOPZERO_BOOTSTRAP_SECRET", "loopzero-dev-bootstrap-secret"),
+		SecretEncryptionKey: os.Getenv("LOOPZERO_SECRET_ENCRYPTION_KEY"), // SEC-001: empty = no encryption (dev only)
 
 		// Argo Workflows
 		ArgoNamespace: envOr("ARGO_NAMESPACE", "argo"),
@@ -161,7 +244,7 @@ func Load() Config {
 
 		// ArgoCD Sync
 		ArgocdPollInterval: envDuration("ARGOCD_POLL_INTERVAL", 10*time.Second),
-		ArgocdSyncTimeout:  envDuration("ARGOCD_SYNC_TIMEOUT", 120*time.Second),
+		ArgocdSyncTimeout:  envDuration("ARGOCD_SYNC_TIMEOUT", 300*time.Second),
 		ArgocdInsecure:     os.Getenv("ARGOCD_INSECURE") == "true",
 
 		// SSE
@@ -183,8 +266,37 @@ func Load() Config {
 		BuildCancelTimeout:  envDuration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
 		BuildReaperInterval: envDuration("BUILD_REAPER_INTERVAL", 30*time.Second),
 
+		// Release Reaper (spec §5.2)
+		ReleaseReadyTimeout:   envDuration("RELEASE_READY_TIMEOUT", 5*time.Minute),
+		ReleasePendingTimeout: envDuration("RELEASE_PENDING_TIMEOUT", 2*time.Minute),
+		ReleaseReaperInterval: envDuration("RELEASE_REAPER_INTERVAL", 30*time.Second),
+
 		// Build Reconcile Loop (C-01 fix): polls Argo Workflow CRDs every 5s
-		ReconcileInterval: envDuration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
+		ReconcileInterval:  envDuration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
+		MaxBuildsPerTenant: envInt("MAX_BUILDS_PER_TENANT", 3),
+
+		// Loki (build log aggregation)
+		LokiURL: envOr("LOKI_URL", "http://loki.monitoring:3100"),
+
+		// Cloudflare (static frontend delivery)
+		CFAPIToken:        os.Getenv("CF_API_TOKEN"),
+		CFAccountID:       os.Getenv("CF_ACCOUNT_ID"),
+		CFKVNamespaceID:   os.Getenv("CF_KV_NAMESPACE_ID"),
+		CFZoneManagement:  os.Getenv("CF_ZONE_MANAGEMENT") == "true",
+
+		// JWT Authentication (Sprint 11 — when set, enables dual JWT + PAT validation)
+		JWKSEndpoint: os.Getenv("JWKS_ENDPOINT"),
+		JWTIssuer:    os.Getenv("JWT_ISSUER"),
+
+		// Roadmap 02 — API Loop Extraction. When true, the API does not run
+		// any background loops (controller binary runs them instead).
+		DisableLegacyLoops: os.Getenv("LOOPZERO_DISABLE_LEGACY_LOOPS") == "true",
+
+		// Roadmap 07 — Backpressure & Admission Control.
+		AdmissionControl:             os.Getenv("LOOPZERO_ADMISSION_CONTROL") == "true",
+		MaxConcurrentBuildsPerCell:   envInt("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
+		MaxConcurrentBuildsPerTenant: envInt("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
+		PGCircuitBreakerThresholdPct: envInt("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
 	}
 }
 
@@ -192,19 +304,59 @@ func Load() Config {
 // security violations in production that must not be ignored.
 // Called after Load() to surface non-production configuration (C-03).
 func (c Config) Validate() error {
-	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" {
+	// MEET-2026-03-31-023 T2-13: Cross-field validation rules.
+	// These prevent silent misconfigurations that cause runtime failures.
+	if c.DBMaxConns > 0 && c.DBMinConns > 0 && c.DBMaxConns < c.DBMinConns {
+		return fmt.Errorf("DB_MAX_CONNS (%d) must be >= DB_MIN_CONNS (%d)", c.DBMaxConns, c.DBMinConns)
+	}
+	if c.ReleasePendingTimeout > 0 && c.ArgocdSyncTimeout > 0 && c.ReleasePendingTimeout < c.ArgocdSyncTimeout {
+		slog.Warn("RELEASE_PENDING_TIMEOUT is less than ARGOCD_SYNC_TIMEOUT — releases may be reaped before ArgoCD sync completes",
+			"release_pending_timeout", c.ReleasePendingTimeout, "argocd_sync_timeout", c.ArgocdSyncTimeout)
+	}
+	if c.BuildRunningTimeout > 0 && c.BuildQueueTimeout > 0 && c.BuildRunningTimeout < c.BuildQueueTimeout {
+		slog.Warn("BUILD_RUNNING_TIMEOUT is less than BUILD_QUEUE_TIMEOUT — unusual configuration",
+			"running_timeout", c.BuildRunningTimeout, "queue_timeout", c.BuildQueueTimeout)
+	}
+
+	// Dev credential warnings (production check is done below as fatal)
+	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" && !c.IsProduction() {
 		slog.Warn("using default callback secret — only acceptable for local development")
+	}
+	// SEC-001: Warn if secret encryption is disabled.
+	if c.SecretEncryptionKey == "" {
+		if c.IsProduction() {
+			return fmt.Errorf("LOOPZERO_SECRET_ENCRYPTION_KEY is required in production — secrets must be encrypted at rest")
+		}
+		slog.Warn("LOOPZERO_SECRET_ENCRYPTION_KEY not set — secrets stored in plaintext (only acceptable for local development)")
 	}
 	// SEC-2: ARGOCD_INSECURE=true in production is a fatal error, not just a log.
 	// TLS skip allows MITM attacks on ArgoCD API calls.
 	if c.ArgocdInsecure && c.IsProduction() {
 		return fmt.Errorf("ARGOCD_INSECURE=true is forbidden in production — TLS verification must be enabled")
 	}
+	// REVIEW-BLOCKER-2: REGISTRY_INSECURE=true in production is a fatal error.
+	// Without TLS, BuildKit pushes images over HTTP — MITM can replace images,
+	// rendering all supply chain security (cosign, SBOM) useless.
+	if c.RegistryInsecure && c.IsProduction() {
+		return fmt.Errorf("REGISTRY_INSECURE=true is forbidden in production — registry TLS verification must be enabled")
+	}
+	// H4: Default dev credentials in production are a fatal error, not just a warning.
+	// Without this, production deployments silently use "loopzero-admin/loopzero-dev-password".
 	if c.MinIOAccessKey == "loopzero-admin" && c.IsProduction() {
-		slog.Error("MINIO_ACCESS_KEY using default dev credentials in production — override via MINIO_ACCESS_KEY env var")
+		return fmt.Errorf("MINIO_ACCESS_KEY using default dev credentials in production — override via MINIO_ACCESS_KEY env var")
 	}
 	if c.MinIOSecretKey == "loopzero-dev-password" && c.IsProduction() {
-		slog.Error("MINIO_SECRET_KEY using default dev credentials in production — override via MINIO_SECRET_KEY env var")
+		return fmt.Errorf("MINIO_SECRET_KEY using default dev credentials in production — override via MINIO_SECRET_KEY env var")
+	}
+	if c.BootstrapSecret == "loopzero-dev-bootstrap-secret" && c.IsProduction() {
+		return fmt.Errorf("LOOPZERO_BOOTSTRAP_SECRET using default dev value in production — override via LOOPZERO_BOOTSTRAP_SECRET env var")
+	}
+	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" && c.IsProduction() {
+		return fmt.Errorf("LOOPZERO_ARGO_CALLBACK_SECRET using default dev value in production — override via LOOPZERO_ARGO_CALLBACK_SECRET env var")
+	}
+	// H1: DATABASE_URL with sslmode=disable in production sends credentials and data in plaintext.
+	if c.DatabaseURL != "" && c.IsProduction() && strings.Contains(c.DatabaseURL, "sslmode=disable") {
+		return fmt.Errorf("DATABASE_URL contains sslmode=disable which is forbidden in production — use sslmode=require or sslmode=verify-full")
 	}
 	return nil
 }
@@ -216,6 +368,15 @@ func (c Config) GiteaCrossCluster() string {
 		return c.GiteaCrossClusterURL
 	}
 	return c.GiteaURL
+}
+
+// MinIOCrossCluster returns the MinIO endpoint accessible from the build cluster.
+// Falls back to the internal MinIOEndpoint if not explicitly set.
+func (c Config) MinIOCrossCluster() string {
+	if c.MinIOCrossClusterEndpoint != "" {
+		return c.MinIOCrossClusterEndpoint
+	}
+	return c.MinIOEndpoint
 }
 
 // IsProduction returns true when running in production mode.

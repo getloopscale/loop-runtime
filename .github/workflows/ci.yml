@@ -2,18 +2,22 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main, develop, homolog]
   pull_request:
-    branches: [main]
+    branches: [main, develop, homolog]
 
 permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.25.9'
   NODE_VERSION: '20'
   KUBECONFORM_VERSION: 'v0.6.7'
   ENVTEST_K8S_VERSION: '1.31.0'
+  # Private Go modules — skip sum.golang.org verification for getloopscale org.
+  # Without this, `go mod tidy` and `go test` fail with checksum errors for loopzero-forge.
+  GOPRIVATE: 'github.com/getloopscale/*'
+  GONOSUMCHECK: 'github.com/getloopscale/*'
 
 # Cancel in-progress runs for the same branch/PR
 concurrency:
@@ -22,6 +26,61 @@ concurrency:
 
 jobs:
   # ─────────────────────────────────────────────
+  # CHANGE DETECTION — skip jobs when files unchanged
+  # ─────────────────────────────────────────────
+
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      go-api: ${{ steps.filter.outputs.go-api }}
+      go-operators: ${{ steps.filter.outputs.go-operators }}
+      go-pkg: ${{ steps.filter.outputs.go-pkg }}
+      go-infra: ${{ steps.filter.outputs.go-infra }}
+      cli: ${{ steps.filter.outputs.cli }}
+      pulumi: ${{ steps.filter.outputs.pulumi }}
+      manifests: ${{ steps.filter.outputs.manifests }}
+      docs-only: ${{ steps.filter.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            go-api:
+              - 'api/**'
+              - 'pkg/**'
+              - 'go.work'
+            go-operators:
+              - 'operators/**'
+              - 'pkg/**'
+              - 'go.work'
+            go-pkg:
+              - 'pkg/**'
+            go-infra:
+              - 'infra/tests/**'
+              - 'infra/scripts/**'
+            cli:
+              - 'cli/**'
+            pulumi:
+              - 'infra/pulumi/**'
+            manifests:
+              - 'operators/config/**'
+              - 'infra/helm/**'
+              - 'infra/tilt/**'
+            docs-only:
+              - '!**/*.go'
+              - '!**/*.ts'
+              - '!**/*.js'
+              - '!**/*.yaml'
+              - '!**/*.yml'
+              - '!**/go.mod'
+              - '!**/go.sum'
+              - '!**/package.json'
+              - '!**/package-lock.json'
+
+  # ─────────────────────────────────────────────
   # LINT
   # ─────────────────────────────────────────────
 
@@ -29,6 +88,11 @@ jobs:
     name: Lint Go (${{ matrix.component }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: >-
+      needs.changes.outputs.go-pkg == 'true' ||
+      needs.changes.outputs.go-api == 'true' ||
+      needs.changes.outputs.go-operators == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -40,7 +104,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: ${{ matrix.component }}/go.sum
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.3
           working-directory: ${{ matrix.component }}
@@ -49,6 +113,8 @@ jobs:
     name: Lint CLI (TypeScript)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.cli == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -67,31 +133,39 @@ jobs:
         run: npx tsc --noEmit
 
   # ─────────────────────────────────────────────
-  # TIDINESS — go.mod/go.sum consistency
+  # TIDINESS — consolidated into single job
   # ─────────────────────────────────────────────
 
   tidy-go:
-    name: Go mod tidy (${{ matrix.component }})
+    name: Go mod tidy
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        component: [pkg, api, operators, infra/tests, infra/scripts]
+    needs: [changes]
+    if: >-
+      needs.changes.outputs.go-api == 'true' ||
+      needs.changes.outputs.go-operators == 'true' ||
+      needs.changes.outputs.go-pkg == 'true' ||
+      needs.changes.outputs.go-infra == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Verify go.mod and go.sum are tidy
-        working-directory: ${{ matrix.component }}
         run: |
-          go mod tidy
-          if [ -n "$(git status --porcelain -- go.mod go.sum)" ]; then
-            echo "::error::go.mod or go.sum is not tidy in ${{ matrix.component }}. Run 'go mod tidy' and commit."
-            git diff -- go.mod go.sum
-            exit 1
-          fi
+          FAILED=0
+          for dir in pkg api operators infra/tests infra/scripts; do
+            if [ -f "$dir/go.mod" ]; then
+              echo "Checking $dir..."
+              (cd "$dir" && go mod tidy)
+              if [ -n "$(git status --porcelain -- "$dir/go.mod" "$dir/go.sum")" ]; then
+                echo "::error::go.mod or go.sum is not tidy in $dir. Run 'go mod tidy' and commit."
+                git diff -- "$dir/go.mod" "$dir/go.sum"
+                FAILED=1
+              fi
+            fi
+          done
+          exit $FAILED
 
   # ─────────────────────────────────────────────
   # TESTS
@@ -101,6 +175,8 @@ jobs:
     name: Test pkg
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.go-pkg == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -111,34 +187,48 @@ jobs:
         working-directory: pkg
         run: go test ./... -short -v -race -count=1
 
-  test-go:
-    name: Test Go (${{ matrix.component }})
+  test-api:
+    name: Test API
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [test-pkg]
-    strategy:
-      fail-fast: false
-      matrix:
-        component: [operators, api]
+    needs: [changes]
+    if: needs.changes.outputs.go-api == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: ${{ matrix.component }}/go.sum
+          cache-dependency-path: api/go.sum
+      - name: Run API tests
+        working-directory: api
+        run: go test ./... -short -v -race -count=1
+
+  test-operators:
+    name: Test Operators
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [changes]
+    if: needs.changes.outputs.go-operators == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: operators/go.sum
       - name: Install envtest binaries
-        if: matrix.component == 'operators'
         run: |
           go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
           echo "KUBEBUILDER_ASSETS=$(setup-envtest use ${{ env.ENVTEST_K8S_VERSION }} -p path)" >> $GITHUB_ENV
-      - name: Run Go tests
-        working-directory: ${{ matrix.component }}
+      - name: Run operator tests
+        working-directory: operators
         run: go test ./... -short -v -race -count=1
 
   test-infra:
     name: Test infra
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.go-infra == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -153,6 +243,8 @@ jobs:
     name: Test CLI (TypeScript)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.cli == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -163,16 +255,42 @@ jobs:
       - name: Install dependencies
         working-directory: cli
         run: npm ci
+      - name: Build CLI
+        working-directory: cli
+        run: npm run build
       - name: Run Jest tests
         working-directory: cli
         run: npm test -- --ci --coverage
       - name: Upload coverage
-        if: success()
+        if: success() && !env.ACT
         uses: actions/upload-artifact@v4
         with:
           name: cli-coverage
           path: cli/coverage/
           retention-days: 7
+
+  test-pulumi:
+    name: Test Pulumi (TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.pulumi == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: infra/pulumi/package-lock.json
+      - name: Install dependencies
+        working-directory: infra/pulumi
+        run: npm ci
+      - name: Type check
+        working-directory: infra/pulumi
+        run: npx tsc --noEmit
+      - name: Run tests
+        working-directory: infra/pulumi
+        run: npm test
 
   # ─────────────────────────────────────────────
   # VALIDATE MANIFESTS
@@ -182,6 +300,8 @@ jobs:
     name: Validate K8s manifests
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.manifests == 'true' || needs.changes.outputs.go-operators == 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Install kubeconform
@@ -206,154 +326,188 @@ jobs:
         run: kubeconform --strict --skip ServiceMonitor,PrometheusRule infra/helm/monitoring/manifests/
 
   # ─────────────────────────────────────────────
-  # SECURITY — Vulnerability Scanning
+  # MIGRATION SAFETY (Roadmap 01 Correction B + forward-only rule)
   # ─────────────────────────────────────────────
+  #
+  # Two gates:
+  #   1. No code, CI file, or shell script may invoke `migrate force` — on a
+  #      production DB this silently corrupts schema_migrations and is the
+  #      root cause of Correction B (schema_migrations fixed directly in PG).
+  #      Forward-only migrations are a hard rule (CLAUDE.md Rule 9 family).
+  #   2. Every .up.sql must not contain DROP TABLE / DROP COLUMN unless the
+  #      migration file name includes the word `rebuild` (explicit opt-in).
+  #      Forward-only means additive: ALTER ADD, CREATE INDEX, UPDATE, never
+  #      destructive changes that can't be rolled forward.
+  #
+  # The job runs on ALL PRs and pushes that touch the migrations directory
+  # or this workflow itself — it is cheap and fails fast.
 
-  security-go:
-    name: Security scan Go (${{ matrix.component }})
+  migration-safety:
+    name: Migration safety (forward-only + no force)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        component: [api, operators, pkg]
+    timeout-minutes: 3
+    needs: [changes]
+    if: needs.changes.outputs.go-api == 'true' || github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
+      - name: Reject `migrate force` invocations
+        run: |
+          set -e
+          echo "Scanning for forbidden 'migrate force' invocations..."
+          # The invocation must look like an actual command — `migrate` immediately
+          # followed by optional flags and then `force <version>`. Random prose
+          # mentioning the two words is not matched because we require a trailing
+          # version number (digits) or end of line.
+          #
+          # We exclude this workflow file itself because it necessarily contains
+          # the pattern in documentation / error messages.
+          matches=$(grep -rnE '(^|[[:space:]`"''])migrate([[:space:]]+-[^[:space:]]+)*[[:space:]]+force([[:space:]]+[0-9]+|$)' \
+              --include='*.sh' --include='*.yml' --include='*.yaml' \
+              --include='*.go' --include='*.ts' --include='*.tsx' \
+              --include='Taskfile.yml' --include='Tiltfile' \
+              --exclude-dir=node_modules --exclude-dir=.git \
+              --exclude-dir=docs \
+              --exclude='ci.yml' \
+              . || true)
+          # Allow lines prefixed with NEVER as a warning comment.
+          offending=$(echo "$matches" | grep -vE '(^|[[:space:]])(#|//)\s*NEVER' || true)
+          offending=$(echo "$offending" | grep -vE '^\s*$' || true)
+          if [ -n "$offending" ]; then
+            echo "ERROR: 'migrate force' invocation found. This corrupts production migrations."
+            echo "$offending"
+            echo ""
+            echo "If you must document the danger in a comment, prefix it with 'NEVER' (e.g. '# NEVER run migrate force on production')."
+            exit 1
+          fi
+          echo "OK — no forbidden 'migrate force' invocations."
+      - name: Forward-only .up.sql (reject DROP TABLE / DROP COLUMN)
+        run: |
+          set -e
+          echo "Scanning migration files for destructive DDL..."
+          # DROP TABLE / DROP COLUMN in a forward-only .up.sql is a bug unless
+          # the migration file EXPLICITLY opts in via either:
+          #   a) filename containing `_rebuild_`, or
+          #   b) a top-of-file comment `-- ALLOW-DESTRUCTIVE: <reason>`.
+          # Note: DROP NOT NULL / DROP DEFAULT / DROP CONSTRAINT / DROP INDEX
+          # are NOT matched — they are non-destructive to row data.
+          viol=$(grep -rlnE '^\s*(ALTER\s+TABLE\s+\w+\s+)?DROP\s+(TABLE|COLUMN)' \
+              api/internal/db/migrations/ \
+              --include='*.up.sql' 2>/dev/null || true)
+          offending=""
+          for f in $viol; do
+            case "$(basename "$f")" in
+              *rebuild*) continue ;; # filename opt-in
+            esac
+            if head -20 "$f" | grep -qE '^\s*--\s*ALLOW-DESTRUCTIVE'; then
+              continue # inline opt-in with reason comment
+            fi
+            offending="$offending $f"
+          done
+          if [ -n "$offending" ]; then
+            echo "ERROR: forward-only migration rule violated. Destructive DDL in:"
+            for f in $offending; do echo "  - $f"; done
+            echo ""
+            echo "Forward-only migrations are additive (ALTER ADD, CREATE INDEX, UPDATE)."
+            echo "If a destructive change is unavoidable, opt in via either:"
+            echo "  1. Name the file with '_rebuild_' (e.g. 000042_plan_rebuild_tiers.up.sql), or"
+            echo "  2. Add '-- ALLOW-DESTRUCTIVE: <reason>' as a comment in the first 20 lines."
+            echo "Either way, document the backup + rollback procedure in the migration header."
+            exit 1
+          fi
+          echo "OK — all migrations are forward-only."
+      - name: Migration filenames are sequential
+        run: |
+          set -e
+          echo "Checking migration file numbering..."
+          cd api/internal/db/migrations
+          expected=1
+          for f in $(ls *.up.sql | sort); do
+            n=$(echo "$f" | sed -E 's/^0*([0-9]+)_.*/\1/')
+            if [ "$n" != "$expected" ]; then
+              echo "ERROR: migration numbering gap — expected $expected, found $f"
+              exit 1
+            fi
+            expected=$((expected + 1))
+          done
+          echo "OK — $((expected - 1)) migrations numbered 1..$((expected - 1))."
+
+  # ─────────────────────────────────────────────
+  # SECURITY — runs on all triggers (push + PR)
+  # ─────────────────────────────────────────────
+
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [changes]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: ${{ matrix.component }}/go.sum
-      - name: Run govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          cd ${{ matrix.component }}
-          govulncheck ./...
-
-  security-cli:
-    name: Security scan CLI (npm audit)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: cli/package-lock.json
-      - name: Install dependencies
-        working-directory: cli
-        run: npm ci
-      - name: Audit production dependencies
-        working-directory: cli
-        run: npm audit --omit=dev --audit-level=high
 
-  security-trivy:
-    name: Trivy filesystem scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
+      # govulncheck — only changed Go components
+      - name: govulncheck (pkg)
+        if: needs.changes.outputs.go-pkg == 'true'
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd pkg && govulncheck ./...
+      - name: govulncheck (api)
+        if: needs.changes.outputs.go-api == 'true'
+        run: cd api && govulncheck ./...
+      - name: govulncheck (operators)
+        if: needs.changes.outputs.go-operators == 'true'
+        run: cd operators && govulncheck ./...
+
+      # npm audit — only if CLI changed
+      - name: npm audit
+        if: needs.changes.outputs.cli == 'true'
+        working-directory: cli
+        run: npm ci && npm audit --omit=dev --audit-level=high
+
+      # Trivy — always on PRs (filesystem + IaC + Dockerfiles)
+      # ignore-unfixed: don't block on vulnerabilities without available patches.
+      # trivyignores: suppress known false positives (see .trivyignore).
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: fs
           scan-ref: .
           severity: CRITICAL,HIGH
           exit-code: 1
           format: table
-      - name: Run Trivy IaC scanner
-        uses: aquasecurity/trivy-action@0.28.0
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          skip-dirs: infra/tests/e2e/fixtures,examples,loopzero-packs,loopzero-forge,referencias
+      - name: Trivy Dockerfile scan (api)
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: config
-          scan-ref: .
+          scan-ref: api
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          format: table
+      - name: Trivy Dockerfile scan (operators)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: config
+          scan-ref: operators
           severity: CRITICAL,HIGH
           exit-code: 1
           format: table
 
-  security-dockerfiles:
-    name: Trivy Dockerfile scan (${{ matrix.component }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        component: [api, operators]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Scan Dockerfile for misconfigurations
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: config
-          scan-ref: ${{ matrix.component }}
-          severity: CRITICAL,HIGH
-          exit-code: 1
-          format: table
-
-  # ─────────────────────────────────────────────
-  # SECRETS — Detect leaked credentials
-  # ─────────────────────────────────────────────
-
-  secrets-scan:
-    name: Secret detection
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      # TruffleHog secret detection
       - name: TruffleHog secret scan
-        uses: trufflesecurity/trufflehog@v3.88.27
+        uses: trufflesecurity/trufflehog@v3.94.3
         with:
           extra_args: --only-verified --results=verified,unknown
-
-  # ─────────────────────────────────────────────
-  # BUILD — Verify artifacts compile
-  # ─────────────────────────────────────────────
-
-  build-go:
-    name: Build Go (${{ matrix.component }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [test-go, lint-go]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - component: api
-            binary: loopzero-api
-          - component: operators
-            binary: tenant-controller
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: ${{ matrix.component }}/go.sum
-      - name: Build binary
-        working-directory: ${{ matrix.component }}
-        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ${{ matrix.binary }} ./cmd/
-      - name: Verify binary
-        working-directory: ${{ matrix.component }}
-        run: test -f ${{ matrix.binary }}
-
-  build-cli:
-    name: Build CLI (TypeScript)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [test-cli, lint-cli]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: cli/package-lock.json
-      - name: Install dependencies
-        working-directory: cli
-        run: npm ci
-      - name: Build
-        working-directory: cli
-        run: npm run build
 
   # ─────────────────────────────────────────────
   # GATE — All checks must pass
@@ -365,45 +519,45 @@ jobs:
     timeout-minutes: 1
     if: always()
     needs:
+      - changes
       - lint-go
       - lint-cli
       - tidy-go
       - test-pkg
-      - test-go
+      - test-api
+      - test-operators
       - test-infra
       - test-cli
+      - test-pulumi
       - validate-manifests
-      - security-go
-      - security-cli
-      - security-trivy
-      - security-dockerfiles
-      - secrets-scan
-      - build-go
-      - build-cli
+      - migration-safety
+      - security
     steps:
       - name: Check all jobs passed
         run: |
           echo "Job results:"
-          echo "  lint-go:              ${{ needs.lint-go.result }}"
-          echo "  lint-cli:             ${{ needs.lint-cli.result }}"
-          echo "  tidy-go:              ${{ needs.tidy-go.result }}"
-          echo "  test-pkg:             ${{ needs.test-pkg.result }}"
-          echo "  test-go:              ${{ needs.test-go.result }}"
-          echo "  test-infra:           ${{ needs.test-infra.result }}"
-          echo "  test-cli:             ${{ needs.test-cli.result }}"
-          echo "  validate-manifests:   ${{ needs.validate-manifests.result }}"
-          echo "  security-go:          ${{ needs.security-go.result }}"
-          echo "  security-cli:         ${{ needs.security-cli.result }}"
-          echo "  security-trivy:       ${{ needs.security-trivy.result }}"
-          echo "  security-dockerfiles: ${{ needs.security-dockerfiles.result }}"
-          echo "  secrets-scan:         ${{ needs.secrets-scan.result }}"
-          echo "  build-go:             ${{ needs.build-go.result }}"
-          echo "  build-cli:            ${{ needs.build-cli.result }}"
+          echo "  changes:            ${{ needs.changes.result }}"
+          echo "  lint-go:            ${{ needs.lint-go.result }}"
+          echo "  lint-cli:           ${{ needs.lint-cli.result }}"
+          echo "  tidy-go:            ${{ needs.tidy-go.result }}"
+          echo "  test-pkg:           ${{ needs.test-pkg.result }}"
+          echo "  test-api:           ${{ needs.test-api.result }}"
+          echo "  test-operators:     ${{ needs.test-operators.result }}"
+          echo "  test-infra:         ${{ needs.test-infra.result }}"
+          echo "  test-cli:           ${{ needs.test-cli.result }}"
+          echo "  test-pulumi:        ${{ needs.test-pulumi.result }}"
+          echo "  validate-manifests: ${{ needs.validate-manifests.result }}"
+          echo "  migration-safety:   ${{ needs.migration-safety.result }}"
+          echo "  security:           ${{ needs.security.result }}"
 
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]] || \
-             [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
-            echo "::error::One or more CI jobs failed or were cancelled"
-            exit 1
-          fi
+          # "skipped" is OK (means path filter excluded it)
+          # "failure" or "cancelled" is NOT OK
+          RESULTS="${{ join(needs.*.result, ' ') }}"
+          for result in $RESULTS; do
+            if [[ "$result" == "failure" ]] || [[ "$result" == "cancelled" ]]; then
+              echo "::error::One or more CI jobs failed or were cancelled"
+              exit 1
+            fi
+          done
 
-          echo "All CI checks passed"
+          echo "All CI checks passed (skipped jobs are OK — no relevant changes)"

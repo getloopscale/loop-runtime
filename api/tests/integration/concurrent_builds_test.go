@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package integration tests concurrent build submission and idempotency behavior.
 //
 // These tests prove:
@@ -146,11 +149,11 @@ func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec services.Workfl
 	return "wf-" + spec.BuildID, nil
 }
 
-func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, workflowID string) error {
+func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID string) error {
 	return nil
 }
 
-func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, workflowID string) (*services.WorkflowStatus, error) {
+func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*services.WorkflowStatus, error) {
 	return &services.WorkflowStatus{Phase: "Succeeded"}, nil
 }
 
@@ -160,13 +163,17 @@ func (f *fakeGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpt
 	return "fake-commit-sha", nil
 }
 
+func (f *fakeGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemoveOpts) (string, error) {
+	return "fake-commit-sha", nil
+}
+
 type fakeSyncClient struct{}
 
 func (f *fakeSyncClient) TriggerSync(ctx context.Context, appName string) error {
 	return nil
 }
 
-func (f *fakeSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration) error {
+func (f *fakeSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error {
 	return nil
 }
 
@@ -177,9 +184,8 @@ type fakeTokenValidator struct{}
 func (f *fakeTokenValidator) ValidateToken(ctx context.Context, token string) (*middleware.TokenValidationResult, error) {
 	if token == "valid-token" {
 		return &middleware.TokenValidationResult{
-			UserID:   "user-test",
-			Email:    "test@example.com",
-			GitHubID: 12345,
+			UserID: "user-test",
+			Email:  "test@example.com",
 		}, nil
 	}
 	return nil, middleware.ErrInvalidToken
@@ -329,8 +335,8 @@ func seedTestData(t *testing.T, pool *pgxpool.Pool) {
 
 	// Create test tenant
 	_, err = pool.Exec(ctx,
-		`INSERT INTO tenants (id, display_name, plan, owner_id)
-		 VALUES ('tenant-test', 'Test Tenant', 'starter', 'user-test')
+		`INSERT INTO tenants (id, display_name, slug, owner_id)
+		 VALUES ('tenant-test', 'Test Tenant', 'test-tenant', 'user-test')
 		 ON CONFLICT (id) DO NOTHING`)
 	if err != nil {
 		t.Fatalf("failed to seed tenant: %v", err)

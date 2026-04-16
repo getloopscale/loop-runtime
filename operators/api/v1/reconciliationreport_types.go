@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package v1
 
 import (
@@ -26,6 +29,11 @@ const (
 // It reports drift between desired state (Git) and actual state (cluster).
 // The StateReconciler is observational only and never modifies Git or cluster state.
 // See spec section 13.
+//
+// NOTE: This CRD is currently dead code — no controller implements reconciliation
+// for this type and no sprint is assigned for its implementation. It is retained
+// as a placeholder for future drift-detection work. Do not depend on its schema
+// being stable.
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package unit
 
 import (
@@ -90,7 +93,7 @@ func TestPostgresProjectStoreCreateProjectValidation(t *testing.T) {
 	})
 }
 
-// fakeQueryExecForInsert implements db.ExecQueryExecutor for testing CreateProject.
+// fakeQueryExecForInsert implements db.DBTX for testing CreateProject.
 type fakeQueryExecForInsert struct {
 	shouldConflict bool
 }
@@ -100,4 +103,12 @@ func (f *fakeQueryExecForInsert) Exec(ctx context.Context, sql string, args ...a
 		return db.ExecResult{}, &db.UniqueViolationError{Constraint: "projects_tenant_id_name_key"}
 	}
 	return db.ExecResult{RowsAffected: 1}, nil
+}
+
+func (f *fakeQueryExecForInsert) Query(ctx context.Context, sql string, args ...any) (db.Rows, error) {
+	return &emptyRows{}, nil
+}
+
+func (f *fakeQueryExecForInsert) QueryRow(ctx context.Context, sql string, args ...any) db.Row {
+	return &fakeRow{}
 }

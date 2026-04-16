@@ -9,11 +9,10 @@ resources:
 securityContext:
   runAsNonRoot: true
 
-crds:
-  enabled: true
+installCRDs: true
 
 # Prometheus metrics for cert-manager (certificate expiry, issuance latency)
 prometheus:
   enabled: true
   servicemonitor:
-    enabled: false  # Enable when ServiceMonitor CRD is available in workload cluster
+    enabled: true

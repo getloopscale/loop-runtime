@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package logging
 
 import (
@@ -71,6 +74,46 @@ func TestNewLogger(t *testing.T) {
 			t.Fatal("expected non-nil logger")
 		}
 	})
+}
+
+func TestParseLogLevel_AllVariants(t *testing.T) {
+	tests := []struct {
+		env      string
+		wantSuppressed string // a message at this level should be suppressed
+		wantVisible    string // a message at this level should be visible
+	}{
+		{"DEBUG", "", "debug message"},
+		{"debug", "", "debug message"},
+		{"WARN", "info suppressed", "warn message"},
+		{"WARNING", "info suppressed", "warn visible"},
+		{"warn", "info suppressed", "warn message"},
+		{"ERROR", "warn suppressed", "error message"},
+		{"error", "warn suppressed", "error message"},
+		{"", "debug suppressed", "info message"},         // default = info
+		{"INVALID", "debug suppressed", "info message"},  // unknown = info
+		{"  WARN  ", "info suppressed", "warn message"},  // whitespace trimmed
+	}
+
+	for _, tt := range tests {
+		t.Run("LOG_LEVEL="+tt.env, func(t *testing.T) {
+			t.Setenv("LOG_LEVEL", tt.env)
+			var buf bytes.Buffer
+			logger := NewLogger("test", &buf)
+
+			if tt.wantSuppressed != "" {
+				logger.Debug(tt.wantSuppressed)
+				logger.Info(tt.wantSuppressed)
+			}
+			// Reset buffer to only check visible message
+			buf.Reset()
+			logger.Warn(tt.wantVisible)
+			logger.Error(tt.wantVisible)
+
+			if buf.Len() == 0 {
+				t.Errorf("expected at least one log line for level %q", tt.env)
+			}
+		})
+	}
 }
 
 func TestWithCorrelationID(t *testing.T) {

@@ -1,33 +1,40 @@
 #!/bin/bash
-# Provisions API tokens for Gitea and ArgoCD, and build cluster kubeconfig.
+# Provisions API tokens for Gitea and ArgoCD, plus cross-cluster kubeconfigs.
 # Idempotent — safe to run multiple times.
+#
+# Creates:
+#   - loopzero-api-tokens Secret          (gitea-token + argocd-token)
+#   - loopzero-build-kubeconfig ConfigMap  (build cluster access for API + operator)
+#   - loopzero-runtime-kubeconfig ConfigMap (workload cluster access for operator)
 #
 # ArgoCD auth: Uses a dedicated 'loopzero-api' account with apiKey capability.
 # Tokens from apiKey accounts do NOT expire (unlike admin session tokens which expire in 24h).
-# The account is configured in infra/helm/argocd/values.yaml:
-#   accounts.loopzero-api: apiKey   (no login — cannot access UI)
-# RBAC: sync + get on applications only (least privilege).
 set -euo pipefail
 
 MGMT_CTX="k3d-loopzero-mgmt"
 BUILD_CTX="k3d-loopzero-build"
-NAMESPACE="loopzero-system"
+WORKLOAD_CTX="k3d-loopzero-workload"
+# REVIEW-2026-03-30: Fixes MED-12 — was "loopzero-system" but Pulumi uses "platform-system".
+# Local dev uses loopzero-system, production uses platform-system.
+NAMESPACE="${LOOPZERO_NAMESPACE:-loopzero-system}"
+
+# REVIEW-2026-03-30: Fixes HIGH-06 — was "loopzero-admin", now "gitea_admin" to match Pulumi Helm config.
+GITEA_USER="${GITEA_USER:-gitea_admin}"
+GITEA_PASS="${GITEA_PASS:-loopzero-gitea-dev-2026}"
 
 echo "=== Provisioning API tokens ==="
 
-# 1. Gitea token — minimal scope (read + write repos only)
-#
-# The API only needs: clone source repos + push to GitOps repos.
-# Scopes: write:repository (includes read). Never use "all".
+# ---------------------------------------------------------------------------
+# 1. Gitea token
+# ---------------------------------------------------------------------------
 echo "Creating Gitea API token (repo + org scope)..."
-GITEA_PORT_FORWARD_PID=""
 kubectl --context "$MGMT_CTX" port-forward -n "$NAMESPACE" svc/gitea-http 13000:3000 &
 GITEA_PORT_FORWARD_PID=$!
 sleep 2
 
 # Ensure 'loopzero' org exists (idempotent — Gitea returns 422 if already exists)
 curl -s -X POST "http://localhost:13000/api/v1/orgs" \
-  -u "REDACTED_SECRET_037" \
+  -u "${GITEA_USER}:${GITEA_PASS}" \
   -H "Content-Type: application/json" \
   -d '{"username":"loopzero","full_name":"LoopZero Platform","visibility":"private"}' > /dev/null 2>&1
 echo "Gitea org 'loopzero': ensured"
@@ -36,26 +43,19 @@ echo "Gitea org 'loopzero': ensured"
 # Use fixed token name to avoid accumulating stale tokens on repeated runs (E-13).
 TOKEN_NAME="loopzero-api"
 # Delete existing token with this name (idempotent — 404 if not found)
-curl -s -X DELETE "http://localhost:13000/api/v1/users/loopzero-admin/tokens/${TOKEN_NAME}" \
-  -u "REDACTED_SECRET_037" > /dev/null 2>&1 || true
-GITEA_TOKEN=$(curl -s -X POST "http://localhost:13000/api/v1/users/loopzero-admin/tokens" \
-  -u "REDACTED_SECRET_037" \
+curl -s -X DELETE "http://localhost:13000/api/v1/users/${GITEA_USER}/tokens/${TOKEN_NAME}" \
+  -u "${GITEA_USER}:${GITEA_PASS}" > /dev/null 2>&1 || true
+GITEA_TOKEN=$(curl -s -X POST "http://localhost:13000/api/v1/users/${GITEA_USER}/tokens" \
+  -u "${GITEA_USER}:${GITEA_PASS}" \
   -H "Content-Type: application/json" \
   -d "{\"name\":\"${TOKEN_NAME}\",\"scopes\":[\"write:repository\",\"write:organization\",\"read:user\"]}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha1',''))")
 
 kill "$GITEA_PORT_FORWARD_PID" 2>/dev/null; wait "$GITEA_PORT_FORWARD_PID" 2>/dev/null || true
 echo "Gitea token: ${#GITEA_TOKEN} chars"
 
-# 2. ArgoCD token — dedicated 'loopzero-api' account with apiKey capability
-#
-# The 'loopzero-api' account is defined in argocd-cm (via Helm values):
-#   accounts.loopzero-api: apiKey    (apiKey only, no login — cannot access UI)
-# RBAC grants: sync + get on all applications (least privilege).
-#
-# Unlike admin session tokens (/api/v1/session), apiKey tokens do NOT expire.
-# This eliminates silent 24h expiration that broke all deploys.
-#
-# ArgoCD is optional — not needed until Sprint 2.
+# ---------------------------------------------------------------------------
+# 2. ArgoCD token
+# ---------------------------------------------------------------------------
 ARGOCD_TOKEN=""
 if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1; then
   echo "Creating ArgoCD API token (loopzero-api account, non-expiring)..."
@@ -66,51 +66,92 @@ if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1; then
     ARGOCD_PORT_FORWARD_PID=$!
     sleep 2
 
-    # Step 1: Admin login to get temporary session (just for generating the service token)
     ADMIN_SESSION=$(curl -s -X POST "http://localhost:18080/api/v1/session" \
       -H "Content-Type: application/json" \
       -d "{\"username\":\"admin\",\"password\":\"$ARGOCD_PASS\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
 
-    if [ -z "$ADMIN_SESSION" ]; then
-      echo "WARNING: Failed to get ArgoCD admin session. Skipping ArgoCD token (not needed until Sprint 2)."
-    else
-      # Step 2: Generate non-expiring API token for loopzero-api account
-      # expiresIn=0 means the token never expires (ArgoCD default for apiKey accounts)
+    if [ -n "$ADMIN_SESSION" ]; then
       ARGOCD_TOKEN=$(curl -s -X POST "http://localhost:18080/api/v1/account/loopzero-api/token" \
         -H "Authorization: Bearer $ADMIN_SESSION" \
         -H "Content-Type: application/json" \
         -d "{\"expiresIn\":0,\"id\":\"loopzero-api-$(date +%s)\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
 
-      if [ -z "$ARGOCD_TOKEN" ]; then
-        echo "WARNING: Failed to generate loopzero-api token. Skipping ArgoCD token (not needed until Sprint 2)."
-      else
+      if [ -n "$ARGOCD_TOKEN" ]; then
         echo "ArgoCD token: ${#ARGOCD_TOKEN} chars (non-expiring, loopzero-api account)"
+      else
+        echo "WARNING: Failed to generate loopzero-api token."
       fi
+    else
+      echo "WARNING: Failed to get ArgoCD admin session."
     fi
 
     kill "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null; wait "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null || true
   else
-    echo "WARNING: ArgoCD namespace exists but admin secret not found. Skipping ArgoCD token."
+    echo "WARNING: ArgoCD admin secret not found."
   fi
 else
-  echo "WARNING: ArgoCD namespace not found. Skipping ArgoCD token (not needed until Sprint 2)."
+  echo "WARNING: ArgoCD namespace not found. Skipping."
 fi
 
-# 3. Create/update K8s secret with both tokens
+# ---------------------------------------------------------------------------
+# 3. Create K8s secret with tokens
+# ---------------------------------------------------------------------------
 echo "Creating K8s secret loopzero-api-tokens..."
 kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create secret generic loopzero-api-tokens \
   --from-literal=gitea-token="$GITEA_TOKEN" \
   --from-literal=argocd-token="$ARGOCD_TOKEN" \
   --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f -
 
-# 4. Build cluster kubeconfig — scoped ServiceAccount (not admin)
-#
-# The API only needs: create/get/list Workflows + ConfigMaps in the argo namespace.
-# We create a dedicated ServiceAccount + Role + RoleBinding in the build cluster,
-# then extract a token for kubeconfig. This replaces the overly-broad admin cert.
-echo "Setting up scoped build cluster access..."
+# ---------------------------------------------------------------------------
+# 4. ArgoCD repo credentials (so ArgoCD can clone from Gitea)
+# ---------------------------------------------------------------------------
+if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1 && [ -n "$GITEA_TOKEN" ]; then
+  echo "Setting up ArgoCD repo credentials..."
+  # Use repo-creds (credential template) — matches ALL repos under this URL prefix.
+  # This is more robust than per-repo secrets because tenant repos are created dynamically.
+  kubectl --context "$MGMT_CTX" -n argocd create secret generic argocd-creds-gitea \
+    --from-literal=type=git \
+    --from-literal=url="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000" \
+    --from-literal=username="${GITEA_USER}" \
+    --from-literal=password="${GITEA_TOKEN}" \
+    --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" -n argocd apply -f -
+  kubectl --context "$MGMT_CTX" -n argocd label secret argocd-creds-gitea argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
+  echo "ArgoCD repo credentials: configured (credential template)"
+fi
 
-# Create ServiceAccount + RBAC in build cluster (idempotent)
+# ---------------------------------------------------------------------------
+# 5. ArgoCD workload cluster registration
+# ---------------------------------------------------------------------------
+if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1; then
+  echo "Registering workload cluster in ArgoCD..."
+  WORKLOAD_CERT=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
+  WORKLOAD_KEY=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
+  # Use the same server URL that update-cross-cluster-ips.sh writes to WORKLOAD_CLUSTER_URL
+  # in the operator deployment. The ArgoCD Application destination.server must match exactly.
+  WORKLOAD_IP=$(docker inspect k3d-loopzero-workload-server-0 --format '{{(index .NetworkSettings.Networks "k3d-loopzero").IPAddress}}' 2>/dev/null)
+  WORKLOAD_SERVER="https://${WORKLOAD_IP}:6443"
+  echo "  Workload server: $WORKLOAD_SERVER"
+
+  CLUSTER_CONFIG=$(python3 -c "
+import json
+config = {'tlsClientConfig': {'insecure': True, 'certData': '${WORKLOAD_CERT}', 'keyData': '${WORKLOAD_KEY}'}}
+print(json.dumps(config))
+")
+
+  kubectl --context "$MGMT_CTX" -n argocd create secret generic cluster-workload \
+    --from-literal=name=workload \
+    --from-literal=server="${WORKLOAD_SERVER}" \
+    --from-literal=config="${CLUSTER_CONFIG}" \
+    --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" -n argocd apply -f -
+  kubectl --context "$MGMT_CTX" -n argocd label secret cluster-workload argocd.argoproj.io/secret-type=cluster --overwrite 2>/dev/null
+  echo "ArgoCD cluster-workload: registered (insecure TLS, Docker hostname)"
+fi
+
+# ---------------------------------------------------------------------------
+# 6. Build cluster kubeconfig
+# ---------------------------------------------------------------------------
+echo "Setting up build cluster kubeconfig..."
+
 kubectl --context "$BUILD_CTX" apply -f - <<'RBAC'
 apiVersion: v1
 kind: ServiceAccount
@@ -144,69 +185,19 @@ subjects:
   - kind: ServiceAccount
     name: loopzero-workflow-submitter
     namespace: argo
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: loopzero-workflow-submitter-token
-  namespace: argo
-  annotations:
-    kubernetes.io/service-account.name: loopzero-workflow-submitter
-type: kubernetes.io/service-account-token
 RBAC
 
-# Wait for token to be populated
-sleep 3
+BUILD_CERT=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
+BUILD_KEY=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
+BUILD_SERVER="https://k3d-loopzero-build-server-0:6443"
 
-# Extract the scoped token
-BUILD_TOKEN=$(kubectl --context "$BUILD_CTX" -n argo get secret loopzero-workflow-submitter-token -o jsonpath='{.data.token}' | base64 -d)
-# ca.crt in K8s secrets is already base64-encoded. The kubeconfig field
-# certificate-authority-data expects base64(PEM), so we use the value directly.
-BUILD_CA=$(kubectl --context "$BUILD_CTX" -n argo get secret loopzero-workflow-submitter-token -o jsonpath='{.data.ca\.crt}')
-
-if [ -z "$BUILD_TOKEN" ]; then
-  echo "WARNING: Could not get scoped build token. Falling back to admin cert."
-  BUILD_CERT=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
-  BUILD_KEY=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
-  BUILD_CA=$(kubectl --context "$BUILD_CTX" config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
-  USE_TOKEN=false
-else
-  echo "Build cluster token: scoped to argo namespace (workflows + configmaps only)"
-  USE_TOKEN=true
-fi
-
-# Rewrite server URL to be accessible from mgmt cluster
-BUILD_SERVER_INTERNAL="https://k3d-loopzero-build-server-0:6443"
-
-if [ "$USE_TOKEN" = true ]; then
 cat > /tmp/build-kubeconfig.yaml <<KUBECONFIG
 apiVersion: v1
 kind: Config
 clusters:
 - cluster:
-    server: ${BUILD_SERVER_INTERNAL}
-    certificate-authority-data: ${BUILD_CA}
-  name: build
-contexts:
-- context:
-    cluster: build
-    user: loopzero-workflow-submitter
-    namespace: argo
-  name: build
-current-context: build
-users:
-- name: loopzero-workflow-submitter
-  user:
-    token: ${BUILD_TOKEN}
-KUBECONFIG
-else
-cat > /tmp/build-kubeconfig.yaml <<KUBECONFIG
-apiVersion: v1
-kind: Config
-clusters:
-- cluster:
-    server: ${BUILD_SERVER_INTERNAL}
-    certificate-authority-data: ${BUILD_CA}
+    server: ${BUILD_SERVER}
+    insecure-skip-tls-verify: true
   name: build
 contexts:
 - context:
@@ -220,18 +211,75 @@ users:
     client-certificate-data: ${BUILD_CERT}
     client-key-data: ${BUILD_KEY}
 KUBECONFIG
-fi
 
-# Create configmap with the kubeconfig
 kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create configmap loopzero-build-kubeconfig \
   --from-file=config=/tmp/build-kubeconfig.yaml \
   --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f -
 rm -f /tmp/build-kubeconfig.yaml
+echo "Build cluster kubeconfig: created (admin certs, insecure TLS)"
+
+# ---------------------------------------------------------------------------
+# 7. Runtime (workload) cluster kubeconfig
+# ---------------------------------------------------------------------------
+echo "Setting up runtime cluster kubeconfig..."
+
+RUNTIME_CERT=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
+RUNTIME_KEY=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
+RUNTIME_SERVER="https://k3d-loopzero-workload-server-0:6443"
+
+cat > /tmp/runtime-kubeconfig.yaml <<KUBECONFIG
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: ${RUNTIME_SERVER}
+    insecure-skip-tls-verify: true
+  name: runtime
+contexts:
+- context:
+    cluster: runtime
+    user: runtime-admin
+  name: runtime
+current-context: runtime
+users:
+- name: runtime-admin
+  user:
+    client-certificate-data: ${RUNTIME_CERT}
+    client-key-data: ${RUNTIME_KEY}
+KUBECONFIG
+
+kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create configmap loopzero-runtime-kubeconfig \
+  --from-file=config=/tmp/runtime-kubeconfig.yaml \
+  --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f -
+rm -f /tmp/runtime-kubeconfig.yaml
+echo "Runtime cluster kubeconfig: created (admin certs, insecure TLS)"
+
+# ---------------------------------------------------------------------------
+# 8. MinIO buckets (idempotent — mc mb --ignore-existing)
+# ---------------------------------------------------------------------------
+# The lifecycle Job can fail if MinIO isn't ready during Helm install.
+# By this point MinIO has been running for several minutes — guaranteed ready.
+echo "Ensuring MinIO buckets exist..."
+MINIO_POD=$(kubectl --context "$MGMT_CTX" -n "$NAMESPACE" get pod -l app=minio -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+if [ -n "$MINIO_POD" ]; then
+  kubectl --context "$MGMT_CTX" -n "$NAMESPACE" exec "$MINIO_POD" -- sh -c "
+    mc alias set local http://localhost:9000 \$MINIO_ROOT_USER \$MINIO_ROOT_PASSWORD 2>/dev/null
+    mc mb --ignore-existing local/loopzero-builds
+    mc mb --ignore-existing local/loopzero-artifacts
+    mc mb --ignore-existing local/loopzero-static-assets
+  " 2>&1 | grep -E "created|already"
+  echo "MinIO buckets: ensured"
+else
+  echo "WARNING: MinIO pod not found — buckets not created"
+fi
 
 echo ""
 echo "=== Done ==="
 echo "Secret 'loopzero-api-tokens' created in $NAMESPACE"
 echo "ConfigMap 'loopzero-build-kubeconfig' created in $NAMESPACE"
+echo "ConfigMap 'loopzero-runtime-kubeconfig' created in $NAMESPACE"
+echo "ArgoCD repo + cluster secrets configured"
+echo "MinIO buckets ensured"
 echo ""
-echo "Restart the API pod to pick up new tokens:"
-echo "  kubectl --context $MGMT_CTX -n $NAMESPACE rollout restart deployment/loopzero-api"
+echo "Restart pods to pick up new tokens:"
+echo "  kubectl --context $MGMT_CTX -n $NAMESPACE rollout restart deployment/loopzero-api deployment/tenant-controller"

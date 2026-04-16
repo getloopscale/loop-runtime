@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -7,6 +10,7 @@ export interface MonorepoDetection {
 }
 
 const PROJECT_MARKERS = ['package.json', 'go.mod', 'requirements.txt', 'Cargo.toml', 'pyproject.toml'];
+const CONVENTIONAL_APP_DIRS = ['apps', 'services', 'microservices'];
 
 export function detectMonorepoTool(rootDir: string): MonorepoDetection | null {
   // Priority order: Turborepo > Nx > Lerna > pnpm > yarn > npm > flat
@@ -23,7 +27,8 @@ export function detectMonorepoTool(rootDir: string): MonorepoDetection | null {
 
   if (fileExists(rootDir, 'lerna.json')) {
     const lernaConfig = readJSON(rootDir, 'lerna.json');
-    const patterns = lernaConfig?.packages ?? ['packages/*'];
+    const packages = lernaConfig?.packages;
+    const patterns: string[] = Array.isArray(packages) ? packages : ['packages/*'];
     const workspaces = resolveGlobPatterns(rootDir, patterns);
     return { tool: 'lerna', workspaces };
   }
@@ -37,9 +42,7 @@ export function detectMonorepoTool(rootDir: string): MonorepoDetection | null {
 
   const pkgJson = readJSON(rootDir, 'package.json');
   if (pkgJson?.workspaces) {
-    const patterns: string[] = Array.isArray(pkgJson.workspaces)
-      ? pkgJson.workspaces
-      : pkgJson.workspaces.packages ?? [];
+    const patterns: string[] = extractWorkspacePatterns(pkgJson.workspaces);
     const workspaces = resolveGlobPatterns(rootDir, patterns);
 
     if (fileExists(rootDir, 'yarn.lock')) {
@@ -49,8 +52,9 @@ export function detectMonorepoTool(rootDir: string): MonorepoDetection | null {
   }
 
   // Flat detection: look for multiple subdirectories with project markers
+  // Also scans inside conventional monorepo directories (apps/, services/, microservices/)
   const flatWorkspaces = detectFlatWorkspaces(rootDir);
-  if (flatWorkspaces.length >= 2) {
+  if (flatWorkspaces.length >= 1) {
     return { tool: 'flat', workspaces: flatWorkspaces };
   }
 
@@ -61,7 +65,7 @@ function fileExists(rootDir: string, fileName: string): boolean {
   return fs.existsSync(path.join(rootDir, fileName));
 }
 
-function readJSON(rootDir: string, fileName: string): Record<string, any> | null {
+function readJSON(rootDir: string, fileName: string): Record<string, unknown> | null {
   const filePath = path.join(rootDir, fileName);
   if (!fs.existsSync(filePath)) return null;
   try {
@@ -74,10 +78,17 @@ function readJSON(rootDir: string, fileName: string): Record<string, any> | null
 function resolveWorkspaces(rootDir: string): string[] {
   const pkgJson = readJSON(rootDir, 'package.json');
   if (!pkgJson?.workspaces) return [];
-  const patterns: string[] = Array.isArray(pkgJson.workspaces)
-    ? pkgJson.workspaces
-    : pkgJson.workspaces.packages ?? [];
+  const patterns: string[] = extractWorkspacePatterns(pkgJson.workspaces);
   return resolveGlobPatterns(rootDir, patterns);
+}
+
+function extractWorkspacePatterns(workspaces: unknown): string[] {
+  if (Array.isArray(workspaces)) return workspaces;
+  if (typeof workspaces === 'object' && workspaces !== null) {
+    const packages = (workspaces as Record<string, unknown>).packages;
+    if (Array.isArray(packages)) return packages;
+  }
+  return [];
 }
 
 function resolveGlobPatterns(rootDir: string, patterns: string[]): string[] {
@@ -121,6 +132,23 @@ function detectFlatWorkspaces(rootDir: string): string[] {
       if (fs.existsSync(path.join(subDir, marker))) {
         workspaces.push(entry.name);
         break;
+      }
+    }
+  }
+
+  // Also check inside conventional monorepo directories (apps/, services/, microservices/)
+  for (const dirName of CONVENTIONAL_APP_DIRS) {
+    const conventionalDir = path.join(rootDir, dirName);
+    if (!fs.existsSync(conventionalDir) || !fs.statSync(conventionalDir).isDirectory()) continue;
+    const subEntries = fs.readdirSync(conventionalDir, { withFileTypes: true });
+    for (const entry of subEntries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+      const subDir = path.join(conventionalDir, entry.name);
+      for (const marker of PROJECT_MARKERS) {
+        if (fs.existsSync(path.join(subDir, marker))) {
+          workspaces.push(path.join(dirName, entry.name));
+          break;
+        }
       }
     }
   }

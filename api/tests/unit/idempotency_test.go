@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package unit
 
 import (
@@ -22,9 +25,12 @@ func newFakeIdempotencyStore() *fakeIdempotencyStore {
 	return &fakeIdempotencyStore{keys: make(map[string]*middleware.IdempotencyRecord)}
 }
 
-func (f *fakeIdempotencyStore) Get(ctx context.Context, key string) (*middleware.IdempotencyRecord, error) {
+func (f *fakeIdempotencyStore) Get(ctx context.Context, key string, tenantID string) (*middleware.IdempotencyRecord, error) {
 	rec, ok := f.keys[key]
 	if !ok {
+		return nil, nil
+	}
+	if rec.TenantID != "" && tenantID != "" && rec.TenantID != tenantID {
 		return nil, nil
 	}
 	return rec, nil
@@ -89,7 +95,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 		}
 
 		// Verify stored
-		record, _ := store.Get(context.Background(), "550e8400-e29b-41d4-a716-446655440000")
+		record, _ := store.Get(context.Background(), "550e8400-e29b-41d4-a716-446655440000", "")
 		if record == nil {
 			t.Fatal("expected idempotency record to be stored")
 		}
@@ -193,7 +199,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 		}
 
 		// Verify the hash was computed on the truncated body (10MB, not 10MB+1)
-		record, _ := store.Get(context.Background(), "key-large-body")
+		record, _ := store.Get(context.Background(), "key-large-body", "")
 		if record == nil {
 			t.Fatal("expected idempotency record to be stored")
 		}

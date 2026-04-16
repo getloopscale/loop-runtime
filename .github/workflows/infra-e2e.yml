@@ -1,0 +1,197 @@
+# Infrastructure E2E — weekly destroy→up→bootstrap→health validation.
+#
+# Proves the entire infra pipeline works from scratch.
+# Runs weekly (Monday 6am UTC) or on manual dispatch.
+# Cost: ~$2/run (20min of DO clusters).
+
+name: "Infra: E2E Validation"
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Every Monday 6am UTC
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: "Target stack"
+        required: true
+        type: choice
+        options: [dev]
+      skip_destroy:
+        description: "Skip destroy (start from current state)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+  PULUMI_WORKING_DIR: infra/pulumi
+  PULUMI_BACKEND_URL: "s3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
+
+concurrency:
+  group: infra-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: "E2E Validation (${{ inputs.stack || 'dev' }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: infra-${{ inputs.stack || 'dev' }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.PULUMI_WORKING_DIR }}/package-lock.json
+
+      - name: Install tools
+        run: |
+          curl -fsSL https://get.pulumi.com | PULUMI_VERSION=3.227.0 sh
+          curl -sL "https://github.com/digitalocean/doctl/releases/download/v1.104.0/doctl-1.104.0-linux-amd64.tar.gz" | tar xz -C /usr/local/bin
+          curl -sL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin --strip-components=1 linux-amd64/helm
+          curl -sLO "https://dl.k8s.io/release/v1.32.0/bin/linux/amd64/kubectl" && chmod +x kubectl && mv kubectl /usr/local/bin/
+          doctl auth init --access-token "$DIGITALOCEAN_TOKEN"
+
+      - name: Install Pulumi dependencies
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: npm ci
+
+      - name: Build Helm chart dependencies
+        run: |
+          for chart_dir in infra/helm/*/; do
+            if [ -f "$chart_dir/Chart.yaml" ] && grep -q "dependencies:" "$chart_dir/Chart.yaml"; then
+              helm dependency update "$chart_dir"
+            fi
+          done
+
+      - name: Login to Pulumi backend
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: pulumi login "${{ env.PULUMI_BACKEND_URL }}"
+
+      # ── Step 1: Destroy (if not skipped) ──────────────
+      - name: "Step 1: Pre-destroy cleanup"
+        if: inputs.skip_destroy != true
+        run: STACK=${{ inputs.stack || 'dev' }} bash infra/scripts/pre-destroy-cleanup.sh
+        continue-on-error: true
+
+      - name: "Step 1: State reset"
+        if: inputs.skip_destroy != true
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ inputs.stack || 'dev' }}"
+          pulumi stack --stack "organization/loopzero-infra/$STACK" export > /tmp/state.json
+          python3 -c "
+          import json
+          state = json.load(open('/tmp/state.json'))
+          count = len(state['deployment']['resources'])
+          state['deployment']['resources'] = [r for r in state['deployment']['resources'] if r.get('type') == 'pulumi:pulumi:Stack']
+          state['deployment']['pending_operations'] = []
+          json.dump(state, open('/tmp/state-clean.json', 'w'))
+          print(f'Reset: {count} -> {len(state[\"deployment\"][\"resources\"])} resources')
+          "
+          pulumi stack --stack "organization/loopzero-infra/$STACK" import --file /tmp/state-clean.json
+
+      # ── Step 2: Pulumi up (single pass) ───────────────
+      - name: "Step 2: Pulumi up"
+        id: pulumi_up
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ inputs.stack || 'dev' }}"
+          START=$(date +%s)
+          pulumi up --yes --skip-preview --stack "organization/loopzero-infra/$STACK" --non-interactive
+          DURATION=$(( $(date +%s) - START ))
+          echo "duration=$DURATION" >> "$GITHUB_OUTPUT"
+
+      # ── Step 3: Bootstrap ─────────────────────────────
+      - name: "Step 3: Get kubeconfig"
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ inputs.stack || 'dev' }}"
+          pulumi stack output mgmtKubeconfig --show-secrets --stack "organization/loopzero-infra/$STACK" > /tmp/mgmt-kc.yaml
+          pulumi stack output buildKubeconfig --show-secrets --stack "organization/loopzero-infra/$STACK" > /tmp/build-kc.yaml
+          pulumi stack output runtimeKubeconfig --show-secrets --stack "organization/loopzero-infra/$STACK" > /tmp/runtime-kc.yaml
+          echo "KUBECONFIG=/tmp/mgmt-kc.yaml" >> "$GITHUB_ENV"
+          echo "BUILD_KUBECONFIG=/tmp/build-kc.yaml" >> "$GITHUB_ENV"
+          echo "RUNTIME_KUBECONFIG=/tmp/runtime-kc.yaml" >> "$GITHUB_ENV"
+
+      - name: "Step 3: Bootstrap"
+        run: STACK=${{ inputs.stack || 'dev' }} bash infra/scripts/bootstrap-platform.sh
+        env:
+          LOOPZERO_GITHUB_CLIENT_ID: ${{ secrets.LOOPZERO_GITHUB_CLIENT_ID }}
+          LOOPZERO_GITHUB_CLIENT_SECRET: ${{ secrets.LOOPZERO_GITHUB_CLIENT_SECRET }}
+          LOOPZERO_GOOGLE_CLIENT_ID: ${{ secrets.LOOPZERO_GOOGLE_CLIENT_ID }}
+          LOOPZERO_GOOGLE_CLIENT_SECRET: ${{ secrets.LOOPZERO_GOOGLE_CLIENT_SECRET }}
+          LOOPZERO_RESEND_API_KEY: ${{ secrets.LOOPZERO_RESEND_API_KEY }}
+          LOOPZERO_STRIPE_API_KEY: ${{ secrets.LOOPZERO_STRIPE_API_KEY }}
+          LOOPZERO_STRIPE_WEBHOOK_SECRET: ${{ secrets.LOOPZERO_STRIPE_WEBHOOK_SECRET }}
+          LOOPZERO_SESSION_TOKEN_SECRET: ${{ secrets.LOOPZERO_SESSION_TOKEN_SECRET }}
+
+      # ── Step 4: Health check ──────────────────────────
+      - name: "Step 4: Health check"
+        run: |
+          BASE_DOMAIN="${{ inputs.stack == 'prod' && 'loopzero.example' || format('{0}.loopzero.example', inputs.stack || 'dev') }}"
+          BASE_DOMAIN=$BASE_DOMAIN bash infra/scripts/health-check.sh
+
+      # ── Step 5: Idempotency check ────────────────────
+      - name: "Step 5: Idempotency check (second pulumi up)"
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ inputs.stack || 'dev' }}"
+          OUTPUT=$(pulumi preview --stack "organization/loopzero-infra/$STACK" --non-interactive 2>&1)
+          echo "$OUTPUT" | tail -5
+
+          # Extract change counts
+          CREATES=$(echo "$OUTPUT" | grep -oP '\+ \K[0-9]+(?= to create)' || echo "0")
+          DELETES=$(echo "$OUTPUT" | grep -oP '- \K[0-9]+(?= to delete)' || echo "0")
+
+          echo "Creates: $CREATES, Deletes: $DELETES"
+          if [ "${CREATES:-0}" -gt 0 ] || [ "${DELETES:-0}" -gt 0 ]; then
+            echo "::warning::Idempotency issue: $CREATES creates, $DELETES deletes on second run"
+          fi
+
+      # ── Step 6: State integrity ──────────────────────
+      - name: "Step 6: State integrity check"
+        if: always()
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ inputs.stack || 'dev' }}"
+          pulumi stack --stack "organization/loopzero-infra/$STACK" export 2>/dev/null | python3 -c "
+          import sys, json
+          from collections import Counter
+          state = json.load(sys.stdin)
+          urns = [r['urn'] for r in state['deployment']['resources']]
+          dupes = {u:c for u,c in Counter(urns).items() if c > 1}
+          if dupes:
+              for u,c in dupes.items():
+                  print(f'::warning::Duplicate URN ({c}x): {u.split(\"::\")[-1]}')
+          else:
+              print(f'State OK: {len(urns)} unique resources')
+          "
+
+      # ── Summary ──────────────────────────────────────
+      - name: E2E Summary
+        if: always()
+        run: |
+          echo "### E2E Validation Result" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Step | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Pulumi up | ${{ steps.pulumi_up.outcome }} (${{ steps.pulumi_up.outputs.duration }}s) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Stack | ${{ inputs.stack || 'dev' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Trigger | ${{ github.event_name }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/mgmt-kc.yaml /tmp/build-kc.yaml /tmp/runtime-kc.yaml

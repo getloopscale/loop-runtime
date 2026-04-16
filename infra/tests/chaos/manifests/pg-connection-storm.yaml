@@ -1,0 +1,49 @@
+# Chaos Experiment: StressChaos to saturate PG pool and trip circuit breaker
+#
+# Roadmap 07 DoD: TestPGCircuitBreaker_RejectAt90Percent (live validation)
+#
+# The pg-pool circuit breaker trips when active connections reach 90%
+# of the pool max. This experiment uses StressChaos to spawn CPU workers
+# on the API pod that each hold a long-lived PG connection, driving
+# the pool toward saturation. The admission middleware MUST respond
+# with 503 for mutating operations while reads continue working.
+#
+# Hypothesis:
+#   - Pool saturation > 90% triggers loopzero_pg_circuit_breaker_tripped=1
+#   - Mutations (POST /builds) return 503 with typed error
+#   - Reads (GET /builds/:id) continue succeeding
+#   - After the experiment ends, pool saturation returns to baseline
+#     within 30s and the breaker resets (LowWaterMark=0.75)
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: pg-connection-storm
+  namespace: platform-system
+  annotations:
+    loopzero.io/roadmap: "07"
+    loopzero.io/dod-test: "TestPGCircuitBreaker_RejectAt90Percent"
+    loopzero.io/hypothesis: "PG saturation > 90% trips breaker, mutations 503, reads OK, auto-reset"
+    loopzero.io/slo-query: |
+      # Breaker tripped during the experiment window
+      max_over_time(loopzero_pg_circuit_breaker_tripped[3m]) == 1
+      and
+      # But read traffic kept flowing
+      rate(loopzero_http_requests_total{endpoint="get_build", code="200"}[2m]) > 0
+      and
+      # And reset within 30s of the experiment ending
+      avg_over_time(loopzero_pg_circuit_breaker_tripped[30s] offset 3m) == 0
+spec:
+  mode: all
+  selector:
+    namespaces:
+      - platform-system
+    labelSelectors:
+      "app": "loopzero-api"
+  stressors:
+    # CPU pressure slows the pool connection handlers and queues
+    # requests up to the pool limit.
+    cpu:
+      workers: 4
+      load: 90
+  duration: "120s"

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package errors
 
 import (
@@ -90,11 +93,28 @@ func TestPredefinedErrors(t *testing.T) {
 		{"ErrLockTimeout", ErrLockTimeout, "LOCK_TIMEOUT", 409},
 		{"ErrInvalidTransition", ErrInvalidTransition, "INVALID_TRANSITION", 409},
 		{"ErrTenantNotFound", ErrTenantNotFound, "TENANT_NOT_FOUND", 404},
+		{"ErrProjectNotFound", ErrProjectNotFound, "PROJECT_NOT_FOUND", 404},
 		{"ErrBuildNotFound", ErrBuildNotFound, "BUILD_NOT_FOUND", 404},
 		{"ErrReleaseNotFound", ErrReleaseNotFound, "RELEASE_NOT_FOUND", 404},
+		{"ErrNoActiveRelease", ErrNoActiveRelease, "NO_ACTIVE_RELEASE", 404},
+		{"ErrNoPreviousRelease", ErrNoPreviousRelease, "NO_PREVIOUS_RELEASE", 404},
+		{"ErrBuildAlreadyCompleted", ErrBuildAlreadyCompleted, "BUILD_ALREADY_COMPLETED", 409},
 		{"ErrDeployInProgress", ErrDeployInProgress, "DEPLOY_IN_PROGRESS", 409},
 		{"ErrInvalidName", ErrInvalidName, "INVALID_NAME", 400},
 		{"ErrIdempotencyConflict", ErrIdempotencyConflict, "IDEMPOTENCY_CONFLICT", 422},
+		{"ErrUnauthorized", ErrUnauthorized, "UNAUTHORIZED", 401},
+		{"ErrInvalidRequest", ErrInvalidRequest, "INVALID_REQUEST", 400},
+		{"ErrProjectExists", ErrProjectExists, "PROJECT_EXISTS", 409},
+		{"ErrInternalError", ErrInternalError, "INTERNAL_ERROR", 500},
+		{"ErrPayloadTooLarge", ErrPayloadTooLarge, "PAYLOAD_TOO_LARGE", 413},
+		{"ErrValidationFailed", ErrValidationFailed, "VALIDATION_FAILED", 422},
+		{"ErrFrontendMustBeStatic", ErrFrontendMustBeStatic, "FRONTEND_MUST_BE_STATIC", 422},
+		{"ErrPodLimitExceeded", ErrPodLimitExceeded, "POD_LIMIT_EXCEEDED", 422},
+		{"ErrMissingField", ErrMissingField, "MISSING_FIELD", 400},
+		{"ErrSourceUploadFailed", ErrSourceUploadFailed, "SOURCE_UPLOAD_FAILED", 500},
+		{"ErrPlatformDegraded", ErrPlatformDegraded, "PLATFORM_DEGRADED", 503},
+		{"ErrDeployServiceAuthFailed", ErrDeployServiceAuthFailed, "DEPLOY_SERVICE_AUTH_FAILED", 503},
+		{"ErrSyncOperationInProgress", ErrSyncOperationInProgress, "SYNC_OPERATION_IN_PROGRESS", 409},
 	}
 
 	for _, tt := range tests {
@@ -150,10 +170,16 @@ func TestLoopZeroErrorWrapPreservesCause(t *testing.T) {
 }
 
 func TestErrorFactories(t *testing.T) {
-	t.Run("NewLockTimeout with empty detail uses default", func(t *testing.T) {
+	t.Run("NewLockTimeout with empty detail returns fresh copy with default message", func(t *testing.T) {
 		err := NewLockTimeout("")
-		if err != ErrLockTimeout {
-			t.Error("expected default ErrLockTimeout when detail is empty")
+		if err.Code != ErrLockTimeout.Code {
+			t.Errorf("expected code %q, got %q", ErrLockTimeout.Code, err.Code)
+		}
+		if err.Message != ErrLockTimeout.Message {
+			t.Errorf("expected message %q, got %q", ErrLockTimeout.Message, err.Message)
+		}
+		if err == ErrLockTimeout {
+			t.Error("NewLockTimeout must return a fresh copy, not the global sentinel pointer")
 		}
 	})
 
@@ -204,4 +230,83 @@ func TestErrorFactories(t *testing.T) {
 			t.Errorf("expected status 422, got %d", err.HTTPStatus)
 		}
 	})
+
+	t.Run("NewProjectNotFound includes project name", func(t *testing.T) {
+		err := NewProjectNotFound("my-app")
+		if err.Code != "PROJECT_NOT_FOUND" {
+			t.Errorf("expected code PROJECT_NOT_FOUND, got %s", err.Code)
+		}
+		if err.HTTPStatus != 404 {
+			t.Errorf("expected status 404, got %d", err.HTTPStatus)
+		}
+		expected := "project 'my-app' not found"
+		if err.Message != expected {
+			t.Errorf("expected message %q, got %q", expected, err.Message)
+		}
+	})
+}
+
+func TestLoopZeroError_Is_CodeOnlyComparison(t *testing.T) {
+	// Is() compares only Code, not HTTPStatus. This is documented behavior.
+	err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom", HTTPStatus: 500}
+	if !stderrors.Is(err, ErrLockTimeout) {
+		t.Error("expected errors.Is to match by code even with different HTTPStatus")
+	}
+}
+
+func TestLoopZeroError_DoubleWrap_ErrorsIs(t *testing.T) {
+	original := NewBuildNotFound("build-abc")
+	wrap1 := original.Wrap("service layer")
+	wrap2 := wrap1.Wrap("route handler")
+
+	if !stderrors.Is(wrap2, ErrBuildNotFound) {
+		t.Error("errors.Is should find ErrBuildNotFound through double-wrapped chain")
+	}
+}
+
+func TestLoopZeroError_ErrorsAs(t *testing.T) {
+	original := NewBuildNotFound("build-abc")
+	wrapped := original.Wrap("service layer")
+
+	var target *LoopZeroError
+	if !stderrors.As(wrapped, &target) {
+		t.Fatal("errors.As should extract LoopZeroError from wrapped error")
+	}
+	// errors.As returns the outermost match — the wrapped error, not the original
+	if target.Code != "BUILD_NOT_FOUND" {
+		t.Errorf("expected code BUILD_NOT_FOUND, got %q", target.Code)
+	}
+	if !strings.Contains(target.Message, "service layer") {
+		t.Errorf("expected wrapped message context, got %q", target.Message)
+	}
+}
+
+func TestNoInternalTermsInErrorMessages(t *testing.T) {
+	// CLAUDE.md Rule 3: no internal terms in user-facing output.
+	// LoopZeroError messages are sent to CLI via ToJSON().
+	forbidden := []string{"ArgoCD", "argocd", "Gitea", "MinIO", "CRD",
+		"tenant_id", "advisory lock", "pg_advisory", "kubebuilder", "envtest", "Kaniko"}
+
+	allErrors := []*LoopZeroError{
+		ErrLockTimeout, ErrInvalidTransition, ErrTenantNotFound,
+		ErrProjectNotFound, ErrBuildNotFound, ErrReleaseNotFound,
+		ErrNoActiveRelease, ErrNoPreviousRelease, ErrBuildAlreadyCompleted,
+		ErrDeployInProgress, ErrInvalidName, ErrIdempotencyConflict,
+		ErrUnauthorized, ErrInvalidRequest, ErrProjectExists,
+		ErrInternalError, ErrPayloadTooLarge, ErrValidationFailed,
+		ErrFrontendMustBeStatic, ErrPodLimitExceeded, ErrMissingField,
+		ErrSourceUploadFailed, ErrPlatformDegraded, ErrDeployServiceAuthFailed,
+		ErrSyncOperationInProgress,
+	}
+
+	for _, e := range allErrors {
+		for _, term := range forbidden {
+			if strings.Contains(e.Message, term) {
+				t.Errorf("[%s] message contains forbidden term %q: %s", e.Code, term, e.Message)
+			}
+			if strings.Contains(e.Code, term) {
+				t.Errorf("[%s] code contains forbidden term %q", e.Code, term)
+			}
+		}
+	}
 }

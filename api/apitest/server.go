@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package apitest exports API server types for integration and E2E testing.
 //
 // This package provides type aliases and a router factory so that external

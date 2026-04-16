@@ -53,15 +53,29 @@ spec:
             description: TenantSpec defines the desired state of a Tenant as described
               in spec section 9.2.
             properties:
+              cellID:
+                default: cell-default
+                description: |-
+                  CellID identifies which Cell this tenant's workloads run in.
+                  ADR-0008: Phase 0 defaults to "cell-default" (single Cell).
+                  Phase 1+ PlacementEngine assigns tenants to specific Cells.
+                minLength: 1
+                type: string
               displayName:
-                description: DisplayName is the human-readable name of the tenant.
+                description: |-
+                  DisplayName is the human-readable name of the tenant.
+                  SEC-011: Pattern constraint prevents injection of control characters or markup.
+                maxLength: 128
+                minLength: 1
+                pattern: ^[a-zA-Z0-9][a-zA-Z0-9 _.\-]*$
                 type: string
               environments:
                 description: Environments lists the environments available to this
                   tenant.
                 items:
-                  description: EnvironmentSpec defines an environment configuration
-                    for a tenant.
+                  description: |-
+                    TenantEnvironmentEntry defines an environment reference within a Tenant spec.
+                    ARCH-004: Renamed from EnvironmentSpec to resolve naming collision with EnvironmentCRSpec.
                   properties:
                     cluster:
                       description: Cluster is the target cluster for this environment.
@@ -74,16 +88,19 @@ spec:
                   - cluster
                   - name
                   type: object
+                minItems: 1
                 type: array
               gitops:
                 description: GitOps configures the tenant's GitOps repository.
                 properties:
                   branch:
                     description: 'Branch is the branch used for GitOps (default: "main").'
+                    minLength: 1
                     type: string
                   repoName:
                     description: RepoName is the name of the GitOps repository in
                       Gitea.
+                    minLength: 1
                     type: string
                 required:
                 - branch
@@ -95,6 +112,7 @@ spec:
                   maxBuildConcurrency:
                     description: MaxBuildConcurrency is the maximum number of concurrent
                       builds.
+                    minimum: 1
                     type: integer
                   maxCPU:
                     anyOf:
@@ -159,10 +177,6 @@ spec:
           status:
             description: TenantStatus defines the observed state of a Tenant.
             properties:
-              activeBuilds:
-                description: ActiveBuilds is the current number of active builds for
-                  this tenant.
-                type: integer
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the tenant's state.
@@ -239,13 +253,6 @@ spec:
                 - Suspended
                 - Deleting
                 type: string
-              totalReleases:
-                description: TotalReleases is the total number of releases created
-                  for this tenant.
-                type: integer
-            required:
-            - activeBuilds
-            - totalReleases
             type: object
         type: object
     served: true

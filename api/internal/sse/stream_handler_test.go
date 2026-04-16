@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package sse_test
 
 import (
@@ -244,6 +247,9 @@ func TestStreamHappyPath(t *testing.T) {
 	}
 	if conn := resp.Header.Get("Connection"); conn != "keep-alive" {
 		t.Errorf("expected Connection keep-alive, got %q", conn)
+	}
+	if xab := resp.Header.Get("X-Accel-Buffering"); xab != "no" {
+		t.Errorf("expected X-Accel-Buffering no, got %q", xab)
 	}
 
 	body := readFullBody(resp)

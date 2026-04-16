@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package adapters provides bridge types between infrastructure and domain interfaces.
 //
 // These adapters exist because the lock package uses pgx.Tx (infrastructure),
@@ -11,6 +14,7 @@ package adapters
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -125,6 +129,9 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 			Port:      appPort,
 			Path:      app.Path,
 			Framework: app.Framework,
+			Build:     app.Build,
+			Rendering: app.Rendering,
+			Secrets:   app.Secrets,
 		})
 	}
 
@@ -133,6 +140,7 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		ProjectID:     req.ProjectID,
 		Environment:   req.Environment,
 		CommitSHA:     req.CommitSHA,
+		NoCache:       req.NoCache,
 		Apps:          apps,
 		CreatedBy:     req.CreatedBy,
 		CorrelationID: req.CorrelationID,
@@ -152,14 +160,32 @@ func (a *BuildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 	if err != nil {
 		return nil, err
 	}
-	return &routes.BuildStatusResponse{
-		BuildID:     build.ID,
-		ProjectID:   build.ProjectID,
-		Environment: build.Environment,
-		Status:      build.Status,
-		CommitSHA:   build.CommitSHA,
-		CreatedBy:   build.CreatedBy,
-	}, nil
+	resp := &routes.BuildStatusResponse{
+		BuildID:         build.ID,
+		ProjectID:       build.ProjectID,
+		Environment:     build.Environment,
+		Status:          build.Status,
+		CommitSHA:       build.CommitSHA,
+		CreatedBy:       build.CreatedBy,
+		CreatedAt:       build.CreatedAt.UTC().Format(time.RFC3339),
+		DurationSeconds: build.DurationSeconds,
+		ErrorMessage:    build.ErrorMessage,
+	}
+	if build.StartedAt != nil {
+		resp.StartedAt = build.StartedAt.UTC().Format(time.RFC3339)
+	}
+	if build.FinishedAt != nil {
+		resp.FinishedAt = build.FinishedAt.UTC().Format(time.RFC3339)
+	}
+	// Populate apps from stored spec
+	apps, _ := a.BuildStore.GetBuildApps(ctx, buildID)
+	for _, app := range apps {
+		resp.Apps = append(resp.Apps, routes.BuildAppInfo{
+			Name: app.Name,
+			Type: app.Type,
+		})
+	}
+	return resp, nil
 }
 
 func (a *BuildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result routes.BuildCallbackInput) error {
@@ -220,6 +246,110 @@ func (a *BuildStoreReaderAdapter) GetByID(ctx context.Context, id string) (*sse.
 		ID:       build.ID,
 		TenantID: build.TenantID,
 		Status:   build.Status,
+	}, nil
+}
+
+// --- LogBuildStoreAdapter: bridges db.BuildStore to routes.LogBuildStore ---
+
+// LogBuildStoreAdapter implements routes.LogBuildStore using db.BuildStore.
+// The logs handler needs only build ID, tenant, and status for authorization
+// and response metadata.
+type LogBuildStoreAdapter struct {
+	Store db.BuildStore
+}
+
+func (a *LogBuildStoreAdapter) GetByID(ctx context.Context, id string) (*routes.LogBuild, error) {
+	build, err := a.Store.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &routes.LogBuild{
+		ID:       build.ID,
+		TenantID: build.TenantID,
+		Status:   build.Status,
+	}, nil
+}
+
+// --- StatusBuildStoreAdapter: bridges db.BuildStore to routes.StatusBuildStore ---
+
+// StatusBuildStoreAdapter implements routes.StatusBuildStore using db.BuildStore.
+// The status handler needs only a subset of build fields for the project status response.
+type StatusBuildStoreAdapter struct {
+	Store db.BuildStore
+}
+
+func (a *StatusBuildStoreAdapter) ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]routes.StatusBuild, error) {
+	builds, err := a.Store.ListByProject(ctx, tenantID, projectID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]routes.StatusBuild, len(builds))
+	for i, b := range builds {
+		result[i] = routes.StatusBuild{
+			ID:              b.ID,
+			Environment:     b.Environment,
+			Status:          b.Status,
+			CommitSHA:       b.CommitSHA,
+			CreatedAt:       b.CreatedAt,
+			FinishedAt:      b.FinishedAt,
+			DurationSeconds: b.DurationSeconds,
+			ErrorMessage:    b.ErrorMessage,
+		}
+	}
+	return result, nil
+}
+
+// --- BuildListStoreAdapter: bridges db.BuildStore to routes.BuildListStore ---
+
+// BuildListStoreAdapter implements routes.BuildListStore using db.BuildStore.
+type BuildListStoreAdapter struct {
+	Store db.BuildStore
+}
+
+func (a *BuildListStoreAdapter) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]routes.BuildListItem, int, error) {
+	builds, total, err := a.Store.ListByProjectAndEnv(ctx, tenantID, projectID, env, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	result := make([]routes.BuildListItem, len(builds))
+	for i, b := range builds {
+		result[i] = routes.BuildListItem{
+			ID:              b.ID,
+			ProjectID:       b.ProjectID,
+			Environment:     b.Environment,
+			Status:          b.Status,
+			CommitSHA:       b.CommitSHA,
+			CreatedBy:       b.CreatedBy,
+			CreatedAt:       b.CreatedAt,
+			StartedAt:       b.StartedAt,
+			FinishedAt:      b.FinishedAt,
+			DurationSeconds: b.DurationSeconds,
+			ErrorMessage:    b.ErrorMessage,
+		}
+	}
+	return result, total, nil
+}
+
+// --- StatusReleaseStoreAdapter: bridges db.ReleaseStore to routes.StatusReleaseStore ---
+
+// StatusReleaseStoreAdapter implements routes.StatusReleaseStore using db.ReleaseStore.
+type StatusReleaseStoreAdapter struct {
+	Store db.ReleaseStore
+}
+
+func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*routes.StatusRelease, error) {
+	release, err := a.Store.GetActiveByEnv(ctx, tenantID, projectID, env)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, nil
+	}
+	return &routes.StatusRelease{
+		ID:        release.ID,
+		Status:    release.Status,
+		GitCommit: release.GitCommit,
+		CreatedAt: release.CreatedAt,
 	}, nil
 }
 

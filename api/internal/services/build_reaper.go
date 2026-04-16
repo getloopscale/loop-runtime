@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package services implements business logic orchestration.
 package services
 
@@ -18,19 +21,25 @@ type BuildReaperConfig struct {
 	QueueTimeout time.Duration
 	// RunningTimeout is how long a build can stay in RUNNING before being reaped (spec §5.1: 30min).
 	RunningTimeout time.Duration
+	// ReleasingTimeout is how long a build can stay in RELEASING before being reaped (MEET-008: 10min).
+	ReleasingTimeout time.Duration
 	// CancelTimeout is how long a build can stay in CANCELLING before being reaped (spec §5.1: 60s).
 	CancelTimeout time.Duration
 	// Interval is how often the reaper runs.
 	Interval time.Duration
+	// CellID scopes the reaper to a single cell (roadmap 03). Empty or
+	// "cell-default" means single-cell / backward-compatible behavior.
+	CellID string
 }
 
 // DefaultBuildReaperConfig returns the spec-defined timeouts.
 func DefaultBuildReaperConfig() BuildReaperConfig {
 	return BuildReaperConfig{
-		QueueTimeout:   5 * time.Minute,
-		RunningTimeout: 30 * time.Minute,
-		CancelTimeout:  60 * time.Second,
-		Interval:       30 * time.Second,
+		QueueTimeout:     5 * time.Minute,
+		RunningTimeout:   30 * time.Minute,
+		ReleasingTimeout: 10 * time.Minute,
+		CancelTimeout:    60 * time.Second,
+		Interval:         30 * time.Second,
 	}
 }
 
@@ -43,7 +52,16 @@ type StaleBuild struct {
 
 // BuildStaleChecker finds builds that have exceeded their state timeout.
 type BuildStaleChecker interface {
-	FindStaleBuilds(ctx context.Context, queueTimeout, runningTimeout, cancelTimeout time.Duration) ([]StaleBuild, error)
+	// FindStaleBuilds returns builds whose state has exceeded the given
+	// timeout, scoped to the given cell. Roadmap 03: pass db.CellDefault for
+	// single-cell / backward-compatible behavior.
+	FindStaleBuilds(ctx context.Context, cellID string, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error)
+}
+
+// BuildReconcileChecker allows the reaper to check if a build is being reconciled.
+// MOD-6: Coordinates BuildReaper with BuildReconcileLoop to avoid competing on the same build.
+type BuildReconcileChecker interface {
+	IsProcessing(buildID string) bool
 }
 
 // BuildReaper periodically checks for stale builds and transitions them to FAILED/CANCELLED.
@@ -61,14 +79,15 @@ type BuildReaper struct {
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	logger *slog.Logger
-	cfg    BuildReaperConfig
+	logger     *slog.Logger
+	cfg        BuildReaperConfig
+	reconciler BuildReconcileChecker // MOD-6: coordinate with reconcile loop
 }
 
 // NewBuildReaper creates a new BuildReaper.
 func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker EnvironmentLocker, workflow WorkflowSubmitter, eventStore interface {
 	Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
-}, logger *slog.Logger, cfg BuildReaperConfig) *BuildReaper {
+}, logger *slog.Logger, cfg BuildReaperConfig, reconciler BuildReconcileChecker) *BuildReaper {
 	return &BuildReaper{
 		buildStore: buildStore,
 		checker:    checker,
@@ -77,6 +96,7 @@ func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker 
 		eventStore: eventStore,
 		logger:     logger,
 		cfg:        cfg,
+		reconciler: reconciler,
 	}
 }
 
@@ -123,7 +143,11 @@ func reaperReason(event statemachine.Event) string {
 }
 
 func (r *BuildReaper) reap(ctx context.Context) int {
-	stale, err := r.checker.FindStaleBuilds(ctx, r.cfg.QueueTimeout, r.cfg.RunningTimeout, r.cfg.CancelTimeout)
+	cellID := r.cfg.CellID
+	if cellID == "" {
+		cellID = db.CellDefault
+	}
+	stale, err := r.checker.FindStaleBuilds(ctx, cellID, r.cfg.QueueTimeout, r.cfg.RunningTimeout, r.cfg.ReleasingTimeout, r.cfg.CancelTimeout)
 	if err != nil {
 		r.logger.Error("build reaper: failed to find stale builds", "error", err)
 		return 0
@@ -131,6 +155,12 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 
 	reaped := 0
 	for _, s := range stale {
+		// MOD-6: Skip builds currently being processed by reconcile loop
+		if r.reconciler != nil && r.reconciler.IsProcessing(s.ID) {
+			r.logger.Debug("build reaper: skipping build being reconciled", "build_id", s.ID)
+			continue
+		}
+
 		build, err := r.buildStore.GetByID(ctx, s.ID)
 		if err != nil {
 			r.logger.Error("build reaper: failed to get build", "build_id", s.ID, "error", err)
@@ -147,7 +177,7 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 		// legitimately slow, not stuck. Only reap when the workflow is gone,
 		// failed, or we can't determine its state.
 		if build.WorkflowID != "" && r.workflow != nil {
-			wfStatus, wfErr := r.workflow.GetStatus(ctx, build.WorkflowID)
+			wfStatus, wfErr := r.workflow.GetStatus(ctx, "argo", build.WorkflowID)
 			if wfErr != nil {
 				r.logger.Warn("build reaper: cannot verify workflow state, proceeding with reap",
 					"build_id", s.ID, "workflow_id", build.WorkflowID, "error", wfErr)
@@ -189,7 +219,7 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 		// MOD-5: Emit SSE build.failed so the CLI gets notified immediately
 		// instead of waiting for the deploy timeout (10 minutes).
 		if r.eventStore != nil {
-			eventData, _ := json.Marshal(map[string]string{
+			eventData := safeJSONMarshal(map[string]string{
 				"build_id": s.ID,
 				"status":   "failed",
 				"error":    reason,
@@ -216,13 +246,23 @@ type PostgresStaleBuildChecker struct {
 	DB db.DBTX
 }
 
-// FindStaleBuilds queries for builds that have exceeded their state timeout.
-func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, queueTimeout, runningTimeout, cancelTimeout time.Duration) ([]StaleBuild, error) {
+// FindStaleBuilds queries for builds that have exceeded their state timeout,
+// scoped to the given cell (roadmap 03). Pass db.CellDefault for backward
+// compatibility with single-cell deployments.
+func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, cellID string, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error) {
+	if cellID == "" {
+		cellID = db.CellDefault
+	}
+	// MEET-2026-03-26-008: RELEASING added — builds stuck in release activation
+	// are reaped after 10min (default) to prevent infinite retry.
+	// cell_id filter (migration 000029) uses idx_builds_cell_status_created.
 	query := `
 		SELECT id, status FROM builds
-		WHERE (status = 'QUEUED' AND created_at < $1)
-		   OR (status = 'RUNNING' AND started_at < $2)
-		   OR (status = 'CANCELLING' AND started_at < $3)
+		WHERE cell_id = $5
+		  AND ((status = 'QUEUED' AND created_at < $1)
+		    OR (status = 'RUNNING' AND started_at < $2)
+		    OR (status = 'RELEASING' AND started_at < $3)
+		    OR (status = 'CANCELLING' AND started_at < $4))
 		ORDER BY created_at ASC
 		LIMIT 100
 	`
@@ -231,7 +271,9 @@ func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, queueTi
 	rows, err := c.DB.Query(ctx, query,
 		now.Add(-queueTimeout),
 		now.Add(-runningTimeout),
+		now.Add(-releasingTimeout),
 		now.Add(-cancelTimeout),
+		cellID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find stale builds: %w", err)
@@ -251,6 +293,8 @@ func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, queueTi
 			event = statemachine.BuildQueueTimeout
 		case statemachine.BuildRunning:
 			event = statemachine.BuildTimeout
+		case statemachine.BuildReleasing:
+			event = statemachine.BuildReleaseTimeoutEvent
 		case statemachine.BuildCancelling:
 			event = statemachine.BuildCancelTimeout
 		default:

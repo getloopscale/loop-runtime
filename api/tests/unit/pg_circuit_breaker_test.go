@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package unit
 
 import (
@@ -28,9 +31,17 @@ func (f *fakeInnerSync) TriggerSync(_ context.Context, _ string) error {
 	return f.triggerErr
 }
 
-func (f *fakeInnerSync) WaitForSync(_ context.Context, _ string, _ time.Duration) error {
+func (f *fakeInnerSync) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
 	f.waitCalls++
 	return f.waitErr
+}
+
+func (f *fakeInnerSync) GetAppStatus(_ context.Context, _ string, _ []string) (bool, bool, error) {
+	return true, true, nil
+}
+
+func (f *fakeInnerSync) GetSyncRevision(_ context.Context, _ string) (string, error) {
+	return "abc123", nil
 }
 
 // --- Helper ---
@@ -68,7 +79,7 @@ func TestCircuitBreaker_ClosedState_WaitForSyncPassesThrough(t *testing.T) {
 	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Act
-	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second)
+	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second, nil)
 
 	// Assert
 	if err != nil {
@@ -117,7 +128,7 @@ func TestCircuitBreaker_OpenState_RejectsWaitForSync(t *testing.T) {
 	inner.waitCalls = 0
 
 	// Act
-	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second)
+	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second, nil)
 
 	// Assert
 	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
@@ -234,6 +245,104 @@ func TestCircuitBreaker_InnerErrorPropagated(t *testing.T) {
 	}
 	if err.Error() != "argocd 503" {
 		t.Errorf("expected 'argocd 503', got %q", err.Error())
+	}
+}
+
+func TestCircuitBreaker_AuthFailure_DoesNotOpenCircuit(t *testing.T) {
+	// 401 errors MUST NOT count toward circuit breaker threshold (MEET-013)
+	inner := &fakeInnerSync{triggerErr: loopzeroerrors.ErrDeployServiceAuthFailed}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	// Send 10 auth failures — more than the open threshold (3)
+	for i := 0; i < 10; i++ {
+		err := cb.TriggerSync(context.Background(), "my-app")
+		// Error should be propagated as-is (not ErrPlatformDegraded)
+		if !errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
+			t.Fatalf("iteration %d: expected ErrDeployServiceAuthFailed, got %v", i, err)
+		}
+	}
+
+	// Circuit should still be CLOSED — auth failures don't count
+	// Verify by sending a successful request (inner now succeeds)
+	inner.triggerErr = nil
+	inner.triggerCalls = 0
+	err := cb.TriggerSync(context.Background(), "my-app")
+	if err != nil {
+		t.Fatalf("expected success after auth failures (circuit should be closed), got %v", err)
+	}
+	if inner.triggerCalls != 1 {
+		t.Errorf("expected inner to be called (circuit closed), got %d calls", inner.triggerCalls)
+	}
+}
+
+func TestCircuitBreaker_ServiceFailure_StillOpensCircuit(t *testing.T) {
+	// 503 errors MUST still open the circuit (regression test)
+	inner := &fakeInnerSync{triggerErr: errors.New("argocd: connection refused")}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	// Send 3 service failures (threshold)
+	for i := 0; i < 3; i++ {
+		_ = cb.TriggerSync(context.Background(), "my-app")
+	}
+
+	// Circuit should be OPEN — next call should return ErrPlatformDegraded
+	err := cb.TriggerSync(context.Background(), "my-app")
+	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+		t.Fatalf("expected ErrPlatformDegraded (circuit open), got %v", err)
+	}
+}
+
+func TestCircuitBreaker_GetAppStatus_DelegatesToInner(t *testing.T) {
+	inner := &fakeInnerSync{}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	synced, healthy, err := cb.GetAppStatus(context.Background(), "my-app", nil)
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !synced || !healthy {
+		t.Error("expected synced=true, healthy=true from inner")
+	}
+}
+
+func TestCircuitBreaker_GetSyncRevision_DelegatesToInner(t *testing.T) {
+	inner := &fakeInnerSync{}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	rev, err := cb.GetSyncRevision(context.Background(), "my-app")
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if rev != "abc123" {
+		t.Errorf("expected revision 'abc123', got %q", rev)
+	}
+}
+
+func TestCircuitBreaker_SyncOperationInProgress_DoesNotOpenCircuit(t *testing.T) {
+	// 409 "operation in progress" MUST NOT count toward circuit breaker threshold (MEET-2026-03-29-019).
+	// A single stuck ArgoCD Application should not trip the circuit for the entire platform.
+	inner := &fakeInnerSync{triggerErr: loopzeroerrors.ErrSyncOperationInProgress}
+	cb := services.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+
+	// Send 10 x 409 — well above the open threshold (3)
+	for i := 0; i < 10; i++ {
+		err := cb.TriggerSync(context.Background(), "my-app")
+		if !errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
+			t.Fatalf("iteration %d: expected ErrSyncOperationInProgress, got %v", i, err)
+		}
+	}
+
+	// Circuit should still be CLOSED — 409 errors are excluded
+	inner.triggerErr = nil
+	inner.triggerCalls = 0
+	err := cb.TriggerSync(context.Background(), "my-app")
+	if err != nil {
+		t.Fatalf("expected success after 409 errors (circuit should be closed), got %v", err)
+	}
+	if inner.triggerCalls != 1 {
+		t.Errorf("expected inner to be called (circuit closed), got %d calls", inner.triggerCalls)
 	}
 }
 

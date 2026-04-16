@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package argocd
 
 import "context"
@@ -27,6 +30,11 @@ type ApplicationSpec struct {
 
 	// DestinationURL is the Kubernetes API server URL for the destination cluster.
 	DestinationURL string
+
+	// CellID identifies which Cell this Application targets.
+	// ADR-0008 Phase 1: The provisioner resolves CellID to the correct ArgoCD instance.
+	// Phase 0: empty or "cell-default" — uses the single ArgoCD instance.
+	CellID string
 }
 
 // AppProjectSpec defines the desired state of an ArgoCD AppProject for tenant RBAC isolation.
@@ -42,6 +50,16 @@ type AppProjectSpec struct {
 
 	// SourceRepos lists allowed Git repository URLs.
 	SourceRepos []string
+
+	// DestinationNamespaces restricts which namespaces ArgoCD can deploy to.
+	// If empty, defaults to "loopzero-{tenantID}-*" wildcard pattern.
+	DestinationNamespaces []string
+
+	// DestinationServer is the Kubernetes API server URL for allowed destinations.
+	// SEC-007: Replaces wildcard `server: *` with explicit server URL to prevent
+	// cross-cluster deployment via ArgoCD when multiple clusters are registered.
+	// If empty, defaults to "*" for backward compatibility.
+	DestinationServer string
 }
 
 // Provisioner manages ArgoCD Application and AppProject CRs.

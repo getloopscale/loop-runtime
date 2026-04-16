@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package db
 
 import (
@@ -42,6 +45,23 @@ func (a *PgxAdapter) QueryRow(ctx context.Context, sql string, args ...any) Row 
 // Ping checks database connectivity. Satisfies routes.DBHealthChecker.
 func (a *PgxAdapter) Ping() error {
 	return a.Pool.Ping(context.Background())
+}
+
+// PoolSaturated returns true when acquired connections exceed the saturation
+// threshold (80% of MaxConns). Callers can use this to apply backpressure
+// (return 503 Service Unavailable) before the pool is fully exhausted.
+func (a *PgxAdapter) PoolSaturated() bool {
+	stat := a.Pool.Stat()
+	maxConns := stat.MaxConns()
+	acquired := stat.AcquiredConns()
+	threshold := int32(float64(maxConns) * 0.8)
+	return acquired >= threshold
+}
+
+// PoolStats returns current pool statistics for observability.
+func (a *PgxAdapter) PoolStats() (acquired, idle, maxConns int32) {
+	stat := a.Pool.Stat()
+	return stat.AcquiredConns(), stat.IdleConns(), stat.MaxConns()
 }
 
 // Close closes the underlying pool.
