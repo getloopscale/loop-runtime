@@ -7,7 +7,25 @@
 
 **Scope:** Execução do L2 (50 tenants sustained) no DO real — ativação da Phase 0 completa, descoberta de bugs operacionais/infra, aprendizados sobre drift de state Pulumi.
 
-**Status:** L2 em execução — arquitetura Phase 0 completa validada (admission gate, PG claims, API stateless, controller separate, docker mirror).
+**Status:** ⚠️ **L2 CONDITIONAL PASS — 47/50 live (94%)** em 45.7 min. Zero workflow failures; 3 verify failures por watcher race (imagePullSecret não provisionado pelo TenantController).
+
+## Resultado final
+
+```
+═══════════════════════════════════════════════════════
+  REAL DEPLOY L2 — 50 TENANTS — RESULTS
+═══════════════════════════════════════════════════════
+  Succeeded:     47 / 50  (94%)
+  Apps Live:     47 / 50  (HTTP 200 verified)
+  Failed:        3  (tn-41, 42, 46 — imagePullSecret race)
+  Duration:      2743s (~45.7 min total)
+  Workflow failures: 0 (pipeline 100% clean)
+  Deploy p99:    6m7s (SLO < 10min ✅)
+  Avg build:     ~4m (range 2m43s - 6m7s)
+═══════════════════════════════════════════════════════
+```
+
+**Interpretação:** pipeline estruturalmente pronto. As 3 falhas são operacionais (race condition entre ArgoCD sync e watcher external de imagePullSecret), não arquiteturais. Fix identificado: mover provisionamento de pull secret + SA patch para TenantController (ver bug #24 abaixo).
 
 ---
 
@@ -200,6 +218,61 @@ kubectl patch deploy prometheus-server --type=json -p='[{
 
 ### Efeito esperado
 TSDB compacta blocks >7d nas próximas 2-3h. Memória vai cair para ~400Mi de baseline. Dev vai sustentar L3 (100 tenants) sem pressão.
+
+---
+
+## 8.5 Bug #24 — imagePullSecret watcher race (L2 3/50 failures)
+
+### Sintoma
+3 tenants (tn-41, tn-42, tn-46) falharam em L2 mesmo com:
+- Build SUCCEEDED (imagem presente no DOCR)
+- ArgoCD Sync = Healthy
+- Pod criado no runtime namespace
+
+Error: `Failed to pull image ... 401 Unauthorized`, kubelet cacheou anonymous token attempt e não retry.
+
+### Causa raiz — race condition
+
+```
+Tempo  Evento
+─────  ────────────────────────────────────────
+T=0    API cria project
+T+Xs   ArgoCD sync → cria namespace + pod
+                       ↓
+                    Pod tenta pull → SA=loopzero-app sem imagePullSecrets → 401
+                       ↓
+                    Kubelet cacheia ImagePullBackOff
+T+Ys   Watcher external patcha SA (tarde demais)
+```
+
+Para tn-0 a tn-40 funcionou porque watcher patched ANTES do pod nascer (timing favorável).
+Para tn-41+ o teste deploy phase estava rodando paralelamente (concurrency=5), watcher não conseguiu acompanhar.
+
+### Fix manual aplicado
+```bash
+kubectl delete pod <image-pull-failing> # força re-pull com secret já patcheado
+```
+
+### Fix permanente (não aplicado nesta sessão)
+Mover criação do pull secret + SA patch para `TenantController` na reconciliação de Environment CR:
+
+```go
+// operators/internal/controller/environment_controller.go
+func (r *EnvironmentReconciler) ensureRuntimeNamespace(ctx, env) error {
+    // ... create namespace ...
+    if err := r.ensurePullSecret(ctx, env.Namespace); err != nil { return err }
+    if err := r.patchServiceAccount(ctx, env.Namespace, "loopzero-app"); err != nil { return err }
+    return nil
+}
+```
+
+**Vantagens:**
+- Atômico com namespace creation (antes de qualquer pod)
+- Não depende de watcher external
+- Sobrevive restart do loopzero-api
+- Documentado no K8s state (não em shell script ephemeral)
+
+Ver memory files e tarefa #37.
 
 ---
 
