@@ -100,10 +100,15 @@ func TestRealDeploy_L1_10Tenants(t *testing.T) {
 		liveCnt    int64
 	)
 
+	// Limit concurrency to 3 to avoid overwhelming port-forward / CF Tunnel.
+	// When running in-cluster (k6 Job), this can be increased to 10+.
+	sem := make(chan struct{}, 3)
 	for i, id := range identities {
 		wg.Add(1)
 		go func(idx int, tenant TenantIdentity) {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			r := harness.RealDeploy(ctx, tenant)
 			results[idx] = r
 			if r.Success {
