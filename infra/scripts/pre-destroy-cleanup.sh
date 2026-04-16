@@ -140,16 +140,31 @@ for BUCKET_REGION in nyc3 sfo3 ams3 fra1 sgp1 lon1 sfo2 syd1; do
     AWS_SECRET_ACCESS_KEY="${SPACES_SECRET_ACCESS_KEY}" \
     aws s3 ls --endpoint-url "https://${BUCKET_REGION}.digitaloceanspaces.com" \
     --region us-east-1 2>/dev/null | awk '{print $3}' | grep -E "^${PREFIX}" | grep -v pulumi-state); do
+    EP="https://${BUCKET_REGION}.digitaloceanspaces.com"
+    # Step 1: delete current objects
     AWS_ACCESS_KEY_ID="${SPACES_ACCESS_KEY_ID}" \
       AWS_SECRET_ACCESS_KEY="${SPACES_SECRET_ACCESS_KEY}" \
       aws s3 rm "s3://${BUCKET}" --recursive \
-      --endpoint-url "https://${BUCKET_REGION}.digitaloceanspaces.com" \
-      --region us-east-1 2>/dev/null || true
+      --endpoint-url "$EP" --region us-east-1 2>/dev/null || true
+    # Step 2: delete versioned objects + delete markers (versioned buckets
+    # cannot be deleted until ALL versions are removed — aws s3 rm only
+    # removes current versions, leaving old versions behind).
+    AWS_ACCESS_KEY_ID="${SPACES_ACCESS_KEY_ID}" \
+      AWS_SECRET_ACCESS_KEY="${SPACES_SECRET_ACCESS_KEY}" \
+      aws s3api list-object-versions --bucket "${BUCKET}" \
+      --endpoint-url "$EP" --region us-east-1 --output json 2>/dev/null | \
+      python3 -c "
+import json, sys, subprocess, os
+data = json.load(sys.stdin)
+env = {**os.environ, 'AWS_ACCESS_KEY_ID': os.environ.get('SPACES_ACCESS_KEY_ID',''), 'AWS_SECRET_ACCESS_KEY': os.environ.get('SPACES_SECRET_ACCESS_KEY','')}
+for v in data.get('Versions', []) + data.get('DeleteMarkers', []):
+    subprocess.run(['aws', 's3api', 'delete-object', '--bucket', '${BUCKET}', '--key', v['Key'], '--version-id', v['VersionId'], '--endpoint-url', '$EP', '--region', 'us-east-1'], env=env, capture_output=True)
+" 2>/dev/null || true
+    # Step 3: delete empty bucket
     AWS_ACCESS_KEY_ID="${SPACES_ACCESS_KEY_ID}" \
       AWS_SECRET_ACCESS_KEY="${SPACES_SECRET_ACCESS_KEY}" \
       aws s3 rb "s3://${BUCKET}" \
-      --endpoint-url "https://${BUCKET_REGION}.digitaloceanspaces.com" \
-      --region us-east-1 2>/dev/null || true
+      --endpoint-url "$EP" --region us-east-1 2>/dev/null || true
     echo "  Bucket ${BUCKET} deleted from ${BUCKET_REGION}"
   done
 done
