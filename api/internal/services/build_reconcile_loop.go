@@ -117,6 +117,12 @@ type BuildReconcileLoop struct {
 	// duplicate processing and coordinate with BuildReaper (MOD-6 fix).
 	active sync.Map
 
+	// pgDedup is the optional PG-backed dedup layer (Phase 0.2,
+	// scale-50k-plan). When non-nil and enabled, claim/release go
+	// through PG for cross-replica dedup visibility. The sync.Map
+	// above remains as the fast-path local check.
+	pgDedup *PGClaimDedup
+
 	// BRC-003 fix: tracks activation attempt counts per build ID.
 	// After maxActivationAttempts consecutive failures, the build is failed
 	// immediately instead of waiting for the 10-minute reaper timeout.
@@ -160,6 +166,21 @@ func NewBuildReconcileLoop(
 		cfg:        cfg,
 		sem:        make(chan struct{}, cfg.MaxConcurrent),
 	}
+}
+
+// WithPGClaims attaches a PG-backed dedup layer to the reconcile loop.
+// When enabled, every build claim/release goes through PG in addition
+// to the local sync.Map, making the dedup state visible across
+// controller replicas. This is the Phase 0.2 wiring from the scale
+// plan.
+//
+// Call this after NewBuildReconcileLoop and before Start:
+//
+//	loop := NewBuildReconcileLoop(...)
+//	loop.WithPGClaims(pgDedup)
+//	loop.Start(ctx)
+func (r *BuildReconcileLoop) WithPGClaims(dedup *PGClaimDedup) {
+	r.pgDedup = dedup
 }
 
 // Start runs the reconcile loop until the context is cancelled.
@@ -236,6 +257,15 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 			continue
 		}
 
+		// Phase 0.2 (scale-50k-plan): cross-replica dedup via PG claims.
+		// The sync.Map check above is the fast path (in-process). The PG
+		// claim adds the cross-replica guarantee: if another controller
+		// replica claimed this build, TryClaim returns false and we skip it.
+		if r.pgDedup != nil && !r.pgDedup.TryClaim(ctx, "builds", build.ID) {
+			r.active.Delete(build.ID) // undo the local LoadOrStore
+			continue
+		}
+
 		// Per-tenant backpressure: skip if this tenant has too many active builds.
 		if tenantActive[build.TenantID] >= r.cfg.MaxBuildsPerTenant {
 			r.active.Delete(build.ID)
@@ -256,6 +286,11 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 			go func() {
 				defer func() { <-r.sem }()
 				defer r.active.Delete(b.ID)
+				defer func() {
+					if r.pgDedup != nil {
+						r.pgDedup.Release(ctx, "builds", b.ID)
+					}
+				}()
 				// BRC-004 fix: recover from panics in reconcileBuild. The call chain
 				// reaches deep into BuildOrchestrator → DeliveryActivator → ActivateReleaseKernel.
 				// State machine panics on invalid transitions (by design). Without recovery,
