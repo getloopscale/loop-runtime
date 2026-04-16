@@ -30,8 +30,16 @@ type K8sCellStore struct {
 }
 
 // NewK8sCellStore creates a CellStore backed by the K8s API.
-// Pass nil restConfig to use in-cluster config.
+// Pass nil restConfig to use in-cluster config (for pods running on
+// the mgmt cluster reading ClusterCredential CRDs from themselves).
 func NewK8sCellStore(restConfig *rest.Config, namespace string) (*K8sCellStore, error) {
+	if restConfig == nil {
+		var err error
+		restConfig, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, fmt.Errorf("k8s cell store: in-cluster config: %w", err)
+		}
+	}
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
 		return nil, fmt.Errorf("k8s cell store: create dynamic client: %w", err)

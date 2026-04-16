@@ -214,30 +214,38 @@ func buildkitEntrypointScript(socketPath string, insecure bool, registryURL stri
 	quotedSocket := shellgen.ShellQuote(socketPath)
 	buildkitdArgs := "--oci-worker-no-process-sandbox --addr " + quotedSocket
 
-	if insecure {
-		// Validate registryURL before TOML injection — reject characters that
-		// could break the TOML structure or inject arbitrary content.
-		for _, ch := range registryURL {
-			if ch == '"' || ch == '\n' || ch == '\r' || ch == '\\' {
-				// This is a programming error — registryURL should be a clean hostname:port.
-				panic(fmt.Sprintf("buildkit: registryURL contains invalid character %q", string(ch)))
-			}
+	// Validate registryURL before TOML injection — reject characters that
+	// could break the TOML structure or inject arbitrary content.
+	for _, ch := range registryURL {
+		if ch == '"' || ch == '\n' || ch == '\r' || ch == '\\' {
+			// This is a programming error — registryURL should be a clean hostname:port.
+			panic(fmt.Sprintf("buildkit: registryURL contains invalid character %q", string(ch)))
 		}
+	}
 
+	// Always configure buildkitd.toml with a docker.io mirror (mirror.gcr.io) to
+	// avoid Docker Hub anonymous rate limits (100 pulls/6h) during L2+ load tests.
+	// mirror.gcr.io is Google's public Docker Hub mirror, no auth needed.
+	// See https://cloud.google.com/container-registry/docs/pulling-cached-images.
+	var tomlBuilder strings.Builder
+	tomlBuilder.WriteString(`[registry."docker.io"]
+  mirrors = ["mirror.gcr.io"]
+`)
+	if insecure {
 		buildkitdArgs += " --oci-worker-snapshotter native"
 		buildkitdArgs += " --allow-insecure-entitlement security.insecure"
-
-		b.Blank().
-			Comment("Configure insecure registry (HTTP) for local dev").
-			MkdirP("/tmp/buildkit").
-			Raw(fmt.Sprintf(`cat > /tmp/buildkit/buildkitd.toml <<TOML
-[registry."%s"]
+		tomlBuilder.WriteString(fmt.Sprintf(`[registry."%s"]
   http = true
   insecure = true
-TOML`, registryURL))
-
-		buildkitdArgs += " --config /tmp/buildkit/buildkitd.toml"
+`, registryURL))
 	}
+
+	b.Blank().
+		Comment("Configure buildkitd.toml (docker.io mirror to avoid rate limits)").
+		MkdirP("/tmp/buildkit").
+		Raw(fmt.Sprintf(`cat > /tmp/buildkit/buildkitd.toml <<'TOML'
+%sTOML`, tomlBuilder.String()))
+	buildkitdArgs += " --config /tmp/buildkit/buildkitd.toml"
 
 	b.Blank().
 		Comment("Start buildkitd daemon in background (inside rootlesskit user namespace)").
