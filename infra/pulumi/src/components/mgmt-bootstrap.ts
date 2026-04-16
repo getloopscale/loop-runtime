@@ -1720,6 +1720,13 @@ function installCloudService(
           metadata: { labels: { app: "loopzero-cloud" } },
           spec: {
             serviceAccountName: "default",
+            securityContext: {
+              runAsNonRoot: true,
+              runAsUser: 1000,
+              runAsGroup: 1000,
+              fsGroup: 1000,
+              seccompProfile: { type: "RuntimeDefault" },
+            },
             imagePullSecrets: [{ name: registrySecretName }],
             containers: [{
               name: "cloud",
@@ -1743,6 +1750,10 @@ function installCloudService(
                 httpGet: { path: "/health", port: 13002 },
                 initialDelaySeconds: 10,
                 periodSeconds: 30,
+              },
+              securityContext: {
+                allowPrivilegeEscalation: false,
+                capabilities: { drop: ["ALL"] },
               },
             }],
           },
@@ -1781,6 +1792,13 @@ function installCloudService(
         template: {
           metadata: { labels: { app: "loopzero-dashboard" } },
           spec: {
+            securityContext: {
+              runAsNonRoot: true,
+              runAsUser: 101,   // nginx-unprivileged default UID
+              runAsGroup: 101,
+              fsGroup: 101,
+              seccompProfile: { type: "RuntimeDefault" },
+            },
             imagePullSecrets: [{ name: registrySecretName }],
             containers: [{
               name: "dashboard",
@@ -1795,6 +1813,10 @@ function installCloudService(
                 httpGet: { path: "/", port: 8080 },
                 initialDelaySeconds: 2,
                 periodSeconds: 10,
+              },
+              securityContext: {
+                allowPrivilegeEscalation: false,
+                capabilities: { drop: ["ALL"] },
               },
             }],
           },
@@ -2105,6 +2127,13 @@ function installLoopZeroAPI(
           },
           spec: {
             serviceAccountName: "loopzero-api",
+            securityContext: {
+              runAsNonRoot: true,
+              runAsUser: 1000,
+              runAsGroup: 1000,
+              fsGroup: 1000,
+              seccompProfile: { type: "RuntimeDefault" },
+            },
             // Database migrations run before API starts via init container.
             // The API image includes migration SQL files at /migrations/.
             initContainers: [
@@ -2141,6 +2170,10 @@ function installLoopZeroAPI(
                 resources: {
                   requests: { cpu: "50m", memory: "64Mi" },
                   limits: { cpu: "100m", memory: "128Mi" },
+                },
+                securityContext: {
+                  allowPrivilegeEscalation: false,
+                  capabilities: { drop: ["ALL"] },
                 },
               },
             ],
@@ -2220,6 +2253,10 @@ function installLoopZeroAPI(
                   initialDelaySeconds: 5,
                   periodSeconds: 5,
                 },
+                securityContext: {
+                  allowPrivilegeEscalation: false,
+                  capabilities: { drop: ["ALL"] },
+                },
               },
             ],
           },
@@ -2293,6 +2330,7 @@ function installLoopZeroController(
               runAsUser: 1000,
               runAsGroup: 1000,
               fsGroup: 1000,
+              seccompProfile: { type: "RuntimeDefault" },
             },
             containers: [
               {
@@ -2360,6 +2398,10 @@ function installLoopZeroController(
                 resources: {
                   requests: { cpu: "100m", memory: "128Mi" },
                   limits: { memory: "512Mi" },
+                },
+                securityContext: {
+                  allowPrivilegeEscalation: false,
+                  capabilities: { drop: ["ALL"] },
                 },
               },
             ],
@@ -2609,6 +2651,7 @@ function installTenantController(
               runAsNonRoot: true,
               runAsUser: 1000,
               fsGroup: 1000,
+              seccompProfile: { type: "RuntimeDefault" },
             },
             imagePullSecrets: [{ name: "loopzero-infra-registry" }],
             volumes: [
@@ -3231,6 +3274,15 @@ function createScopedKubeconfig(
     kubeconfig: cluster.kubeconfig,
   });
 
+  // Ensure namespace exists before creating SA — prevents race condition when
+  // the namespace is created by a Helm chart in another bootstrap function.
+  // Pulumi treats this as adopt-if-exists (no error if namespace already exists).
+  const nsResource = new k8s.core.v1.Namespace(
+    `${role}-scoped-ns`,
+    { metadata: { name: namespace } },
+    { provider: k8sProvider, ignoreChanges: ["metadata"] },
+  );
+
   const saName = `loopzero-${role}-sa`;
 
   const sa = new k8s.core.v1.ServiceAccount(
@@ -3238,7 +3290,7 @@ function createScopedKubeconfig(
     {
       metadata: { name: saName, namespace },
     },
-    { provider: k8sProvider },
+    { provider: k8sProvider, dependsOn: [nsResource] },
   );
 
   const clusterRole = new k8s.rbac.v1.ClusterRole(

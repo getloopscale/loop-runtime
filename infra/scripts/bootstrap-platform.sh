@@ -116,17 +116,8 @@ bootstrap_argocd() {
     python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
 
   if [ -n "$ARGOCD_TOKEN" ]; then
-    # Create loopzero-api account if not exists
-    ACCOUNT_HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8443/api/v1/account" \
-      -H "Authorization: Bearer $ARGOCD_TOKEN" \
-      -H "Content-Type: application/json" \
-      -d '{"name":"loopzero-api","enabled":true}')
-    case "$ACCOUNT_HTTP" in
-      200|201) log "ArgoCD: loopzero-api account created" ;;
-      409)     log "ArgoCD: loopzero-api account already exists" ;;
-      *)       warn "ArgoCD: account creation returned HTTP $ACCOUNT_HTTP" ;;
-    esac
-
+    # loopzero-api account is pre-configured via Helm values (accounts.loopzero-api: apiKey).
+    # No REST API for account creation in ArgoCD — only token generation.
     # Generate apiKey for loopzero-api
     API_KEY=$(curl -s -X POST "http://localhost:8443/api/v1/account/loopzero-api/token" \
       -H "Authorization: Bearer $ARGOCD_TOKEN" \
