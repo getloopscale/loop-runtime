@@ -107,6 +107,11 @@ type Config struct {
 	PlanLimiter *enforcement.PlanLimiter
 	// UpgradeURL is included in 402 responses when plan limits are hit.
 	UpgradeURL string
+	// PGPoolStatsFunc returns (inUse, total) connection counts for backpressure.
+	// When set, mutations are rejected with 503 when pool utilization > 90%.
+	PGPoolStatsFunc func() (inUse int32, total int32)
+	// PGCircuitBreakerThresholdPct is the pool saturation % for backpressure (default 90).
+	PGCircuitBreakerThresholdPct int
 }
 
 // NewRouter creates a chi router with middleware and routes.
@@ -117,13 +122,27 @@ func NewRouter(cfg Config) *chi.Mux {
 	// Must be FIRST middleware so preflight OPTIONS get handled before auth.
 	r.Use(corsMiddleware(os.Getenv("CORS_ALLOWED_ORIGIN")))
 
-	// Middleware chain: metrics → otel-tracing → correlation-id → logging
+	// Middleware chain: metrics → otel-tracing → correlation-id → logging → backpressure
 	// OtelHTTP MUST be before CorrelationID so span context is available,
 	// but CorrelationID remains independent (C2 — MEET-020).
 	r.Use(metrics.HTTPMetrics)
 	r.Use(middleware.OtelHTTP)
 	r.Use(middleware.CorrelationID)
 	r.Use(middleware.RequestLogging(cfg.Logger))
+
+	// PG backpressure: reject mutations when connection pool is near saturation.
+	// Prevents cascading failures under load — returns 503 with Retry-After.
+	if cfg.PGPoolStatsFunc != nil {
+		threshold := cfg.PGCircuitBreakerThresholdPct
+		if threshold == 0 {
+			threshold = 90
+		}
+		pgCB := middleware.NewPGCircuitBreaker(middleware.PGCircuitBreakerConfig{
+			ThresholdPct:  threshold,
+			PoolStatsFunc: cfg.PGPoolStatsFunc,
+		})
+		r.Use(pgCB.Middleware())
+	}
 
 	// Custom 404/405 handlers: return JSON with LoopZeroError format (F-05)
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {

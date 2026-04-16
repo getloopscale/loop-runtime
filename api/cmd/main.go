@@ -1051,6 +1051,11 @@ func main() {
 		},
 		PlanLimiter:            planLimiter,
 		UpgradeURL:             os.Getenv("BILLING_UPGRADE_URL"),
+		PGPoolStatsFunc: func() (int32, int32) {
+			stat := dbAdapter.Pool.Stat()
+			return stat.AcquiredConns(), stat.MaxConns()
+		},
+		PGCircuitBreakerThresholdPct: 90, // matches PG_CIRCUIT_BREAKER_THRESHOLD_PCT default
 	}
 
 	if err := server.Run(srvCfg); err != nil {

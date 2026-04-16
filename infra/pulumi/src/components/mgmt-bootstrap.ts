@@ -1827,6 +1827,46 @@ function installCloudService(
     },
     { provider, dependsOn: [ns] },
   );
+
+  // HPA — cloud service
+  new k8s.autoscaling.v2.HorizontalPodAutoscaler(
+    "loopzero-cloud-hpa",
+    {
+      metadata: { name: "loopzero-cloud", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        scaleTargetRef: { apiVersion: "apps/v1", kind: "Deployment", name: "loopzero-cloud" },
+        minReplicas: 1,
+        maxReplicas: 5,
+        metrics: [{
+          type: "Resource",
+          resource: { name: "cpu", target: { type: "Utilization", averageUtilization: 70 } },
+        }],
+        behavior: {
+          scaleDown: { stabilizationWindowSeconds: 300, policies: [{ type: "Percent", value: 25, periodSeconds: 60 }] },
+          scaleUp: { stabilizationWindowSeconds: 30, policies: [{ type: "Percent", value: 100, periodSeconds: 30 }] },
+        },
+      },
+    },
+    { provider },
+  );
+
+  // HPA — dashboard (lightweight nginx, minimal scaling needed)
+  new k8s.autoscaling.v2.HorizontalPodAutoscaler(
+    "loopzero-dashboard-hpa",
+    {
+      metadata: { name: "loopzero-dashboard", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        scaleTargetRef: { apiVersion: "apps/v1", kind: "Deployment", name: "loopzero-dashboard" },
+        minReplicas: 1,
+        maxReplicas: 3,
+        metrics: [{
+          type: "Resource",
+          resource: { name: "cpu", target: { type: "Utilization", averageUtilization: 80 } },
+        }],
+      },
+    },
+    { provider },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -2105,7 +2145,7 @@ function installLoopZeroAPI(
     { provider },
   );
 
-  return new k8s.apps.v1.Deployment(
+  const apiDeployment = new k8s.apps.v1.Deployment(
     "loopzero-api",
     {
       metadata: {
@@ -2267,6 +2307,46 @@ function installLoopZeroAPI(
     },
     { provider, dependsOn: [ns, secret, kubeconfigSecret, migrationsConfigMap, configMap, svc, apiSA] },
   );
+
+  // HPA — scale API pods based on CPU usage.
+  // Requires metrics-server (installed above via installMetricsServer).
+  new k8s.autoscaling.v2.HorizontalPodAutoscaler(
+    "loopzero-api-hpa",
+    {
+      metadata: { name: "loopzero-api", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        scaleTargetRef: {
+          apiVersion: "apps/v1",
+          kind: "Deployment",
+          name: "loopzero-api",
+        },
+        minReplicas: 2,
+        maxReplicas: 10,
+        metrics: [
+          {
+            type: "Resource",
+            resource: {
+              name: "cpu",
+              target: { type: "Utilization", averageUtilization: 70 },
+            },
+          },
+        ],
+        behavior: {
+          scaleDown: {
+            stabilizationWindowSeconds: 300, // wait 5min before scaling down
+            policies: [{ type: "Percent", value: 25, periodSeconds: 60 }],
+          },
+          scaleUp: {
+            stabilizationWindowSeconds: 30,
+            policies: [{ type: "Percent", value: 100, periodSeconds: 30 }],
+          },
+        },
+      },
+    },
+    { provider },
+  );
+
+  return apiDeployment;
 }
 
 // ---------------------------------------------------------------------------

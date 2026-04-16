@@ -23,7 +23,7 @@ config:
   # Database
   loopzero-infra:dbNodeClass: small
   loopzero-infra:dbVersion: "16"
-  loopzero-infra:dbNodeCount: "2"
+  loopzero-infra:dbNodeCount: "3"
   loopzero-infra:spacesAccessKeyId:
     secure: v1:xvantuWgXZNnNRF8:0pRKV0fidI2ECxMjrt2Jrdz1FqzH4qsnNhULr93M5UsiSJHW
   loopzero-infra:spacesSecretAccessKey:
