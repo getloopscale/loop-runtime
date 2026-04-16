@@ -38,11 +38,12 @@ import (
 // which uploads a fake git header (builds always fail), this harness
 // produces REAL running apps that respond to HTTP requests.
 type RealDeployHarness struct {
-	apiURL      string
-	appDomain   string // e.g., "dev.loopzero.example" — for URL verification
-	serviceAuth string
-	client      *http.Client
-	bundleBytes []byte // pre-built git bundle from fixture
+	apiURL          string
+	appDomain       string // e.g., "dev.loopzero.example" — for URL verification
+	serviceAuth     string
+	bootstrapSecret string
+	client          *http.Client
+	bundleBytes     []byte // pre-built git bundle from fixture
 }
 
 // RealDeployConfig configures the harness.
@@ -54,6 +55,9 @@ type RealDeployConfig struct {
 	AppDomain string
 	// ServiceAuth is the X-Service-Auth bypass token.
 	ServiceAuth string
+	// BootstrapSecret is the shared secret for POST /internal/bootstrap.
+	// Default: "loopzero-dev-bootstrap-secret" (dev mode).
+	BootstrapSecret string
 	// FixturePath is the path to the fixture directory to bundle
 	// (e.g., "infra/tests/e2e/fixtures/hello-server").
 	FixturePath string
@@ -68,12 +72,17 @@ func NewRealDeployHarness(cfg RealDeployConfig) (*RealDeployHarness, error) {
 	if err != nil {
 		return nil, fmt.Errorf("prepare fixture bundle from %s: %w", cfg.FixturePath, err)
 	}
+	bootstrapSecret := cfg.BootstrapSecret
+	if bootstrapSecret == "" {
+		bootstrapSecret = "loopzero-dev-bootstrap-secret"
+	}
 	return &RealDeployHarness{
-		apiURL:      cfg.APIURL,
-		appDomain:   cfg.AppDomain,
-		serviceAuth: cfg.ServiceAuth,
-		client:      &http.Client{Timeout: 300 * time.Second},
-		bundleBytes: bundle,
+		apiURL:          cfg.APIURL,
+		appDomain:       cfg.AppDomain,
+		serviceAuth:     cfg.ServiceAuth,
+		bootstrapSecret: bootstrapSecret,
+		client:          &http.Client{Timeout: 300 * time.Second},
+		bundleBytes:     bundle,
 	}, nil
 }
 
@@ -146,9 +155,12 @@ type TenantIdentity struct {
 // NewTenantIdentity creates a deterministic identity for tenant index i
 // at the given load level prefix (e.g., "l1", "l2", "stress").
 func NewTenantIdentity(level string, i int) TenantIdentity {
+	slug := fmt.Sprintf("lt-%s-tn-%d", level, i)
 	return TenantIdentity{
-		TenantID:    fmt.Sprintf("lt-%s-tn-%d", level, i),
-		UserID:      fmt.Sprintf("lt-%s-user-%d", level, i),
+		// Bootstrap creates tenant_id = "tn-" + slug. The X-LoopZero-Tenant
+		// header must match the DB value exactly.
+		TenantID:    fmt.Sprintf("tn-%s", slug),
+		UserID:      fmt.Sprintf("github-lt-%s-user-%d", level, i),
 		Email:       fmt.Sprintf("lt-%s-%d@loadtest.loopzero.dev", level, i),
 		ProjectName: fmt.Sprintf("lt-%s-app-%d", level, i),
 	}
@@ -175,63 +187,103 @@ type StageTimings struct {
 	AppVerify       time.Duration // HTTP GET app URL → 200
 }
 
-// ProvisionTenant creates user + tenant + membership via API (NOT SQL
-// seed). This triggers TenantController reconciliation which creates:
-// Gitea repos, K8s namespaces, ArgoCD Application, RBAC, quotas.
+// ProvisionTenant creates user + tenant + membership via the internal
+// bootstrap API endpoint. This creates the DB records (users, tenants,
+// tenant_members) AND triggers TenantController reconciliation which
+// creates: Gitea repos, K8s namespaces, ArgoCD Application, RBAC.
 //
-// The function waits for the tenant to reach Active status by polling
-// the API. Without this wait, deploys fail because the infrastructure
-// (Gitea repo, ArgoCD app) doesn't exist yet.
+// Uses POST /internal/bootstrap (same endpoint the Pulumi bootstrap Job
+// calls). This is the ONLY correct way to create a tenant that can
+// actually deploy — SQL seeding skips the Tenant CR creation.
+//
+// The function waits 30s after bootstrap for the TenantController to
+// reconcile before returning.
 func (h *RealDeployHarness) ProvisionTenant(ctx context.Context, t TenantIdentity) (time.Duration, error) {
 	start := time.Now()
 
-	// 1. Create user + tenant via bootstrap-style API calls.
-	// The API's service-auth bypass creates users on-the-fly when
-	// X-LoopZero-User-ID is provided, so we just need to create the project
-	// which triggers EnsureTenant → Tenant CR → TenantController reconcile.
-	body := fmt.Sprintf(`{"name":%q}`, t.ProjectName)
-	req, err := http.NewRequestWithContext(ctx, "POST", h.apiURL+"/api/v1/projects", strings.NewReader(body))
+	// Step 1: Call /internal/bootstrap to create user + tenant + membership.
+	// This endpoint creates the DB records AND creates a Tenant CR on the
+	// mgmt cluster, which triggers TenantController reconcile.
+	// The bootstrap endpoint creates user_id = "github-" + admin_login
+	// and tenant_id = "tn-" + tenant_slug. Our TenantIdentity already
+	// has the prefixed values, so we strip them for the bootstrap call.
+	slug := strings.TrimPrefix(t.TenantID, "tn-")
+	login := strings.TrimPrefix(t.UserID, "github-")
+	bootstrapBody := fmt.Sprintf(`{
+		"admin_github_id": "%d",
+		"admin_login": %q,
+		"tenant_slug": %q,
+		"tenant_display_name": "Load Test %s",
+		"plan": "starter"
+	}`, 9900000+hashTenantIndex(t.TenantID), login, slug, slug)
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		h.apiURL+"/internal/bootstrap", strings.NewReader(bootstrapBody))
 	if err != nil {
-		return time.Since(start), fmt.Errorf("create project request: %w", err)
+		return time.Since(start), fmt.Errorf("bootstrap request: %w", err)
 	}
-	h.setAuth(req, t)
 	req.Header.Set("Content-Type", "application/json")
+	// Bootstrap endpoint uses Bearer auth with a shared secret (SEC-003).
+	req.Header.Set("Authorization", "Bearer "+h.bootstrapSecret)
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return time.Since(start), fmt.Errorf("create project: %w", err)
+		return time.Since(start), fmt.Errorf("bootstrap call: %w", err)
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 
 	switch resp.StatusCode {
-	case 201, 200:
-		// Created or already exists — both OK
-	case 402:
-		// Plan limit — tenant exists but can't create more projects
-		return time.Since(start), fmt.Errorf("plan limit: %s", string(respBody))
+	case 200, 201:
+		// Created successfully
+	case 409:
+		// Already exists — fine for idempotent retries
 	default:
-		return time.Since(start), fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+		return time.Since(start), fmt.Errorf("bootstrap HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	// 2. Wait for TenantController to reconcile (Gitea repos, namespace, ArgoCD).
-	// The plan says ~30s per tenant. We poll for up to 60s.
-	deadline := time.Now().Add(60 * time.Second)
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			return time.Since(start), ctx.Err()
-		case <-time.After(5 * time.Second):
-		}
-		// We can't directly poll Tenant CR status via API (no endpoint for that).
-		// The proxy: try uploading — if Gitea repo exists, upload succeeds.
-		// For now, use a fixed wait (the most reliable approach until a
-		// /api/v1/tenants/{id}/status endpoint is added).
+	// Step 2: Create the project (triggers environment provisioning).
+	projBody := fmt.Sprintf(`{"name":%q}`, t.ProjectName)
+	projReq, err := http.NewRequestWithContext(ctx, "POST",
+		h.apiURL+"/api/v1/projects", strings.NewReader(projBody))
+	if err != nil {
+		return time.Since(start), fmt.Errorf("project request: %w", err)
+	}
+	h.setAuth(projReq, t)
+	projReq.Header.Set("Content-Type", "application/json")
+
+	projResp, err := h.client.Do(projReq)
+	if err != nil {
+		return time.Since(start), fmt.Errorf("create project: %w", err)
+	}
+	defer projResp.Body.Close()
+	projRespBody, _ := io.ReadAll(projResp.Body)
+
+	switch projResp.StatusCode {
+	case 201, 200, 409:
+		// OK
+	default:
+		return time.Since(start), fmt.Errorf("project HTTP %d: %s", projResp.StatusCode, string(projRespBody))
 	}
 
-	// Fixed wait as fallback — TenantController takes ~15-30s on dev.
-	// The deadline loop above covers most of the wait already.
+	// Step 3: Wait for TenantController to reconcile (~15-30s).
+	// The controller creates Gitea repos, namespace, ArgoCD app.
+	time.Sleep(30 * time.Second)
+
 	return time.Since(start), nil
+}
+
+// hashTenantIndex extracts a numeric suffix from a tenant ID for
+// generating unique github_id values. Falls back to a hash.
+func hashTenantIndex(tenantID string) int {
+	h := 0
+	for _, c := range tenantID {
+		h = h*31 + int(c)
+	}
+	if h < 0 {
+		h = -h
+	}
+	return h % 1000000
 }
 
 // RealDeploy executes the FULL pipeline: upload real bundle → submit
