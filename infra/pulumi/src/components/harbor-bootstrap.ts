@@ -53,6 +53,9 @@ export function installHarbor(
       timeout: 900,
       values: {
         harbor: {
+          // Recreate strategy: jobservice uses a PVC — RollingUpdate causes
+          // Multi-Attach deadlock (new pod can't mount volume while old exists).
+          updateStrategy: { type: "Recreate" },
           externalURL: `https://${harborUrl}`,
           // Database — external PG (LoopZero's managed instance)
           database: {
@@ -111,9 +114,6 @@ export function installHarbor(
           },
           jobservice: {
             replicas: 1,
-            // Recreate strategy: jobservice uses a PVC — RollingUpdate causes
-            // Multi-Attach deadlock (new pod can't mount volume while old exists).
-            strategy: { type: "Recreate" },
             resources: {
               requests: { cpu: "50m", memory: "128Mi" },
               limits: { cpu: "300m", memory: "256Mi" },
