@@ -45,11 +45,166 @@ At 500 tenants/cell (validated at L4): **~100 cells**.
 
 ---
 
+## Load Test Strategy: Real Dogfood, Not Synthetic Stubs
+
+### Problem with current approach
+
+The existing load test infrastructure has two modes, both inadequate for real validation:
+
+1. **`seed_test.go`** — Inserts data directly into PostgreSQL (users, tenants, projects). This bypasses the entire platform: no Tenant CRs created, no Kubernetes namespaces provisioned, no Gitea repos, no ArgoCD Applications. Tenants exist in the database but **not in the infrastructure**. A deploy to these tenants would fail.
+
+2. **`cell_scale_test.go`** — Calls the API (`POST /api/v1/projects`, upload, `POST /api/v1/builds`) but with **fake git bundles** (a minimal header that passes upload validation but causes build failure). Measures upload + queue latency only. **No build completes. No image pushed. No pod runs. No URL works.**
+
+Neither approach tests what a real user does: `loopzero login` → `loopzero init` → `loopzero connect` → `git push` → app running with URL accessible.
+
+### Required: Real fullstack deploy flow
+
+Every load test deploy MUST execute the **complete pipeline**, exactly as a real user would:
+
+```
+Create tenant (via API)
+  → TenantController reconciles (Gitea repo, namespace, ArgoCD, RBAC)
+  → Wait for tenant Active
+
+Create project (via API)
+  → Environment provisioned
+
+Upload REAL source bundle (built from fixture)
+  → Git bundle with real code (hello-server or dogfood-monorepo fixture)
+
+Submit build (via API)
+  → Argo Workflow runs (clone → BuildKit → push image → sign)
+  → GitOps commit to Gitea
+  → ArgoCD syncs manifests
+
+Wait for terminal state
+  → Release ACTIVE
+  → Pod Running
+  → HTTP 200 on app URL
+
+Verify app is reachable
+  → GET https://{tenant}-{project}-{env}-production.{domain}
+  → Assert HTTP 200 or expected response
+```
+
+### Fixtures
+
+Three fixture types, matching real workloads:
+
+| Fixture | Path | Type | Build time | Pod cost |
+|---------|------|------|------------|----------|
+| `hello-server` | `infra/tests/e2e/fixtures/hello-server/` | Node.js server | ~20s | ~30Mi |
+| `dogfood-monorepo` | `infra/tests/e2e/fixtures/dogfood-monorepo/` | Turbo monorepo (API + Web + Worker) | ~40s | ~90Mi |
+| `static-frontend` | New — Vite + React | Static (CDN delivery) | ~15s | 0 pods |
+
+For scale tests, `hello-server` is the default (smallest, fastest, predictable). The `dogfood-monorepo` is used for a percentage of tenants to validate multi-app deploys.
+
+### Bundle preparation
+
+Each load test tenant needs a **real git bundle**. Pre-build once, reuse for all tenants:
+
+```go
+// PrepareFixtureBundle creates a real git bundle from a fixture directory.
+// This runs ONCE before the load test, not per-tenant.
+func PrepareFixtureBundle(fixturePath string) ([]byte, error) {
+    // 1. Copy fixture to temp dir
+    // 2. git init + git add + git commit
+    // 3. git bundle create bundle.bin HEAD
+    // 4. Return bundle bytes
+}
+```
+
+The bundle is identical for all tenants — the `loopzero.yaml` project name is the only difference (set via upload metadata, not bundle content).
+
+### Authentication for load tests
+
+Use `X-Service-Auth` (internal service auth bypass) — already implemented in `seed_test.go`. This avoids needing N GitHub OAuth tokens.
+
+For **each synthetic tenant**, the load test creates a unique identity:
+- User: `loadtest-user-{i}` with email `loadtest-{i}@loadtest.loopzero.dev`
+- Tenant: `loadtest-tn-{i}`
+- Project: `loadtest-proj-{i}`
+
+### Tenant provisioning (the critical difference)
+
+**Old approach (wrong):** `INSERT INTO tenants` via SQL.
+
+**New approach (correct):** Call `POST /api/v1/tenants` or equivalent bootstrap flow that:
+1. Creates user + tenant in PostgreSQL
+2. Creates Tenant CR on mgmt cluster
+3. Waits for TenantController to reconcile:
+   - Gitea source + gitops repos created
+   - ArgoCD Application created
+   - Build namespace created with RBAC + quotas
+   - Runtime namespace created with NetworkPolicy + PSA
+   - Harbor project created (if configured)
+4. Tenant status reaches `Active`
+
+**This is the ONLY way to create a tenant that can actually deploy.** The SQL seed is insufficient because the platform infrastructure (Gitea, ArgoCD, K8s namespaces) is never provisioned.
+
+Time budget: ~30s per tenant (TenantController reconcile). For 500 tenants: ~25 min with parallelism of 10.
+
+### Verification after deploy
+
+Every deploy is verified by:
+1. **Build state = SUCCEEDED** (polled via API)
+2. **Release state = ACTIVE** (polled via API)
+3. **HTTP reachability** — GET the app URL, assert 200
+4. **Pod health** — GET /api/v1/projects/{name}/status, assert pods running
+
+If any verification fails, the deploy counts as **failure** in the report.
+
+### Cleanup
+
+After each load test level:
+1. `loopzero project delete` for each synthetic project (via API — triggers clean gitops removal + ArgoCD prune)
+2. Wait for pods to terminate
+3. Delete Tenant CRs (triggers TenantController cleanup)
+4. Verify: no orphaned namespaces, no orphaned ArgoCD apps, no orphaned Gitea repos
+
+Cleanup is done via API, not SQL — to validate the delete flow at scale too.
+
+### k6 integration
+
+The existing k6 suite (`infra/tests/k6/`) provides coordinated-omission-safe scheduling and Prometheus remote-write. The k6 scripts should be updated to:
+1. Use real git bundles (built by init container, already in `job-template.yaml`)
+2. Wait for build completion (SUCCEEDED, not just 202)
+3. Verify app URL reachability
+4. Report `deploy_e2e_duration` (upload → app live), not just `upload_duration`
+
+### What the load test measures (changed)
+
+| Metric | Old (fake) | New (real) |
+|--------|:----------:|:----------:|
+| Upload latency | Fake header → ~100ms | Real bundle → ~2s |
+| Build latency | N/A (fails) | BuildKit compile → ~20-40s |
+| Image push | N/A | Harbor push → ~5s |
+| GitOps commit | N/A | Gitea push → ~1s |
+| ArgoCD sync | N/A | Sync + health → ~30s |
+| App reachable | N/A | HTTP 200 → ~5s |
+| **Total e2e** | **~5s (meaningless)** | **~2-4min (real)** |
+
+---
+
 ## Phases
 
-### Phase 0 — Wire Everything (Week 1)
+### Phase 0 — Wire Everything + Real Load Test Harness (Week 1)
 
-**Goal:** Activate all existing building blocks. Zero new implementation.
+**Goal:** Activate all existing building blocks AND build a load test harness that exercises the real deploy flow.
+
+#### 0.0 — Build real deploy load test harness
+
+The current `DeploySimulator` in `cell_scale_test.go` uploads fake bundles and never completes a real deploy. Replace it with a harness that executes the full dogfood flow.
+
+1. **`PrepareFixtureBundle()`** — Pre-build a real git bundle from `infra/tests/e2e/fixtures/hello-server/` (once, reusable)
+2. **`ProvisionTenant()`** — Create user + tenant via API (not SQL), wait for TenantController reconcile (Tenant status = Active). Verify: Gitea repos exist, namespace exists, ArgoCD app exists
+3. **`RealDeploy()`** — Upload real bundle → POST /builds → poll until SUCCEEDED → verify release ACTIVE → HTTP GET app URL → assert 200
+4. **`VerifyAppLive()`** — GET `https://{tenant}-{project}-production.dev.loopzero.example` → assert HTTP 200
+5. **`CleanupTenant()`** — `DELETE /api/v1/projects/{name}` → wait for pods gone → delete Tenant CR → verify no orphans
+6. Update k6 scripts (`infra/tests/k6/scripts/`) to use real bundles and verify app reachability
+7. Update k6 `job-template.yaml` init container to build a real git bundle from the hello-server fixture (already partially there)
+
+**DoD:** Running `TestL1_10Tenants` creates 10 real tenants, deploys real apps, verifies all 10 URLs return HTTP 200, then cleans up. No fake bundles. No SQL seeds.
 
 #### 0.1 — Activate controller binary extraction
 
@@ -115,19 +270,27 @@ Run `TestL0_Baseline` against production (dev stack):
 
 #### 1.2 — L1 (10 tenants)
 
-Run all L1 scenarios from load-test-plan.md:
-- 1.1 Sequential deploys (10 tenants, serial)
-- 1.2 Concurrent deploys (10 tenants, simultaneous)
-- 1.3 Webhook burst (10 push events in 1s)
-- 1.4 Superseded push (2 rapid pushes)
-- 1.5 Rollback under load
+Run all L1 scenarios from load-test-plan.md — **every deploy must produce a live, reachable app:**
+- 1.1 Sequential deploys (10 tenants, serial) → **10 apps live with HTTP 200**
+- 1.2 Concurrent deploys (10 tenants, simultaneous) → **1 active per env, others queued (409), all eventually live**
+- 1.3 Webhook burst (10 push events in 1s) → **dedup correct, 10 builds (not 20), all apps reachable**
+- 1.4 Superseded push (2 rapid pushes) → **first cancelled, second succeeds, app serves latest code**
+- 1.5 Rollback under load → **rollback succeeds, app reverts to previous version (verified by response content)**
+
+**Verification per deploy:**
+1. Build state = SUCCEEDED
+2. Release state = ACTIVE
+3. `GET https://{tenant}-loadtest-{i}-production.dev.loopzero.example` returns HTTP 200
+4. Response body matches expected fixture output (e.g., `{"status":"ok"}` for hello-server)
 
 **Chaos injection at L1:**
-- Kill API pod during deploy → verify controller continues processing
-- Kill controller pod → verify leader re-election via generation fencing
-- PG connection spike → verify circuit breaker trips + recovers
+- Kill API pod during deploy → verify controller continues processing → app goes live
+- Kill controller pod → verify leader re-election via generation fencing → no stuck builds
+- PG connection spike → verify circuit breaker trips + recovers → next deploy succeeds
 
-**DoD:** All 5 scenarios pass. Zero stuck builds. All chaos scenarios recover. **Time:** 4 hours
+**Cleanup:** Delete all 10 projects via API. Verify: zero orphaned namespaces, zero orphaned ArgoCD apps, zero orphaned Gitea repos.
+
+**DoD:** All 5 scenarios pass. 10 apps live and verified. Zero stuck builds. All chaos scenarios recover. Cleanup leaves zero orphans. **Time:** 4 hours
 
 #### 1.3 — L2 (50 tenants)
 
@@ -136,18 +299,22 @@ Run all L1 scenarios from load-test-plan.md:
 - Build MaxConcurrent: 10 → 20
 - Build cluster: 2 → 4 nodes
 
-Run all L2 scenarios:
-- 2.1 Sustained deploys (50 tenants, 5 deploys/min, 30min)
-- 2.2 Burst (50 simultaneous deploys)
-- 2.3 Webhook storm (50 push events in 2s)
-- 2.4 Mixed operations (deploy + rollback + secret-set concurrent)
+Run all L2 scenarios — **every deploy produces a live, verified app:**
+- 2.1 Sustained deploys (50 tenants, 5 deploys/min, 30min) → **50 apps live, verified every 5min**
+- 2.2 Burst (50 simultaneous deploys) → **all 50 complete within 15min, all URLs return 200**
+- 2.3 Webhook storm (50 push events in 2s) → **dedup + serialization correct, all apps eventually live**
+- 2.4 Mixed operations (deploy + rollback + secret-set concurrent) → **no deadlocks, rollback app serves previous version**
+
+**Verification:** Same as L1 — every deploy checked for BUILD SUCCEEDED + RELEASE ACTIVE + HTTP 200 on app URL.
 
 **Chaos injection at L2:**
-- PG failover (kill primary) during 20 active deploys → recovery < 2min
-- Build cluster node drain → builds reschedule
-- Network partition on controller → new leader elected, no stuck builds
+- PG failover (kill primary) during 20 active deploys → recovery < 2min, all 20 eventually succeed
+- Build cluster node drain → builds reschedule to remaining nodes, complete successfully
+- Network partition on controller → new leader elected, no stuck builds, all deploys complete
 
-**DoD:** All scenarios pass. No metric in Red zone. Lock conflicts resolve within 5s. **Time:** 1 day
+**Cleanup:** Delete all 50 projects via API. Verify zero orphans (namespaces, ArgoCD, Gitea, Harbor).
+
+**DoD:** All scenarios pass. 50 apps verified live. No metric in Red zone. Lock conflicts resolve within 5s. Zero orphans after cleanup. **Time:** 1 day
 
 ---
 
@@ -360,16 +527,20 @@ Between each step:
 
 ## Success Criteria
 
-| Level | Tenants | Apps | Cells | Deploy p99 | Failure Rate | Chaos Pass |
-|-------|---------|------|-------|------------|--------------|:----------:|
-| L0 | 2 | 4 | 1 | Baseline | 0% | — |
-| L1 | 10 | 20 | 1 | < 5min | 0% | 3 scenarios |
-| L2 | 50 | 100 | 1 | < 5min | 0% | 6 scenarios |
-| L3 | 100 | 200 | 1 | < 7min | < 0.5% | 9 scenarios |
-| L4 | 500 | 1,000 | 1 | < 10min | < 1% | 12 scenarios |
-| L4-MC | 500 | 1,000 | 2 | < 10min | < 1% | 15 scenarios |
-| L5 | 5,000 | 10,000 | 10 | < 10min | < 1% | 18 scenarios |
-| L6 | 50,000 | 100,000 | 100 | < 10min | < 0.5% | 28 scenarios (C1-C10 + all prior) |
+**All latencies are REAL end-to-end** (upload → build → image push → gitops → ArgoCD sync → pod running → HTTP 200). Not upload-only.
+
+| Level | Tenants | Apps | Cells | Deploy e2e p99 | Failure Rate | Apps Verified Live | Chaos Pass |
+|-------|---------|------|-------|----------------|--------------|:------------------:|:----------:|
+| L0 | 2 | 4 | 1 | Baseline (~4min) | 0% | 4 | — |
+| L1 | 10 | 20 | 1 | < 6min | 0% | 20 | 3 scenarios |
+| L2 | 50 | 100 | 1 | < 6min | 0% | 100 | 6 scenarios |
+| L3 | 100 | 200 | 1 | < 8min | < 0.5% | 200 | 9 scenarios |
+| L4 | 500 | 1,000 | 1 | < 10min | < 1% | 1,000 | 12 scenarios |
+| L4-MC | 500 | 1,000 | 2 | < 10min | < 1% | 1,000 | 15 scenarios |
+| L5 | 5,000 | 10,000 | 10 | < 10min | < 1% | 10,000 | 18 scenarios |
+| L6 | 50,000 | 100,000 | 100 | < 10min | < 0.5% | 100,000 | 28 scenarios (C1-C10 + all prior) |
+
+**"Apps Verified Live"** = each app URL returns HTTP 200 after deploy completes. This is the dogfood guarantee — if it's not live, it's not a successful deploy.
 
 ---
 
@@ -420,15 +591,18 @@ Weeks 10-16: Phase 5 — Scale to 100 cells + L6 (50,000 tenants) + full chaos s
 The plan is complete when ALL of the following are true simultaneously:
 
 1. 50,000 fullstack applications deployed across 100 cells in 2 regions
-2. Deploy p99 < 10 minutes under sustained load (12 hours)
-3. Failure rate < 0.5% during sustained load
-4. All 28 chaos scenarios pass (C1-C10 + per-level chaos)
-5. Cell failure does not propagate (blast radius = 1 cell)
-6. Capacity model documented with measured (not projected) values per cell
-7. PG, ArgoCD, Argo Workflows tuned with validated parameters
-8. Controller runs independently from API (zero singleton dependency)
-9. Admission control active (build gate + circuit breaker + rate limiter)
-10. All load test reports archived in `docs/validation/load-reports/`
+2. **All 100,000 apps verified live** — HTTP 200 on every app URL (not just build SUCCEEDED)
+3. Deploy e2e p99 < 10 minutes under sustained load (12 hours) — measured from upload to app reachable
+4. Failure rate < 0.5% during sustained load
+5. All 28 chaos scenarios pass (C1-C10 + per-level chaos)
+6. Cell failure does not propagate (blast radius = 1 cell)
+7. Capacity model documented with **measured** (not projected) values per cell
+8. PG, ArgoCD, Argo Workflows tuned with validated parameters
+9. Controller runs independently from API (zero singleton dependency)
+10. Admission control active (build gate + circuit breaker + rate limiter)
+11. **Zero fake data** — every tenant provisioned via API (not SQL), every deploy uses real bundles, every app runs real code
+12. **Cleanup verified** — after test, zero orphaned namespaces, ArgoCD apps, Gitea repos, Harbor projects
+13. All load test reports archived in `docs/validation/load-reports/`
 
 ---
 
