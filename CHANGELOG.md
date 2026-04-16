@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Platform hardening v2 — E2E workflow** (hardening-v2): Weekly scheduled `infra-e2e.yml` validates full destroy→up→bootstrap→health cycle. `health-check.sh` validates 30+ deployments, services, tunnel, nodes, external endpoints.
+- **OTel instrumentation — operators/** (hardening-v2): Custom Prometheus metrics (reconcile_duration, reconcile_errors, provisioner_duration). Child spans on all 7 controllers for provisioner calls (Gitea, ArgoCD, Harbor, MinIO). Error recording on spans. TraceExtractor for pkg/logging.
+- **OTel instrumentation — cloud/** (hardening-v2): TracerProvider + OTLP exporter. otelhttp on all HTTP clients (Hydra, Kratos, Stripe). Prometheus metrics replacing atomic counters. trace_id in slog.
+- **pkg/logging context propagation** (hardening-v2): `TraceExtractor` interface + `FromContext()` for trace_id/span_id injection without OTel dependency.
+- **State integrity check** (hardening-v2): Post-deploy step in `infra-deploy.yml` detects duplicate URNs in Pulumi state.
+- **Infra pre-merge checklist** (hardening-v2): `docs/checklists/infra-pre-merge.md` with 15 validation items.
+
 ### Changed
 - **Pipeline simplification** (MEET-049, MEET-050): Rewrote infra pipeline from 1 monolithic workflow (1539 lines) to 5 focused workflows (~470 lines total). `infra-deploy.yml` (Pulumi up only), `infra-bootstrap.yml` (idempotent tokens/secrets/seed), `infra-destroy.yml` (stack-scoped with approval), `infra-restart.yml` (CI-gated pod restart), `infra-state-reset.yml` (break-glass emergency). Zero `pulumi cancel`/`state delete` in deploy path. Stack-scoped destroy prevents cross-environment deletion.
+- **Pulumi idempotency** (hardening-v2): `resolve-build-node-ip` trigger changed from `Date.now()` to cluster endpoint. `gitea-bootstrap` Job: `ignoreChanges` on status/labels.
 
 ### Security
 - **COOKIE_SECRET rotated to RandomPassword** (C1): Kratos UI cookie secret replaced from hardcoded string to Pulumi-managed `RandomPassword`. Eliminates session cookie forgery risk from source code access.
