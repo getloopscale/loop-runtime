@@ -1,6 +1,10 @@
 # Scale 50k — Day 2 Execution Learnings (2026-04-16)
 
-**Companion document to:** [`scale-50k-plan.md`](scale-50k-plan.md) · [`scale-50k-day1-learnings.md`](scale-50k-day1-learnings.md)
+**Companion documents:**
+- [`scale-50k-plan.md`](scale-50k-plan.md) — plano mestre
+- [`scale-50k-day1-learnings.md`](scale-50k-day1-learnings.md) — Day 1 setup
+- [`scale-50k-l2-learnings.md`](scale-50k-l2-learnings.md) — L2 + infra drift + Phase 0 ativação (continuação da sessão)
+
 **Scope:** Segunda sessão de execução — foco em fechar L1 DoD com 10/10 apps LIVE em infra DigitalOcean real.
 **Status:** 🏆 **L1 DoD ACHIEVED (10/10 success + live)**
 
