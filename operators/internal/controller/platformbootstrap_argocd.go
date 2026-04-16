@@ -29,6 +29,8 @@ import (
 // Steps: check reachability, validate/create JWT, register repo credentials.
 // ARCH-OP-001: Uses ArgoCDBootstrapClient interface for HTTP operations.
 func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
+	ctx, span := startChildSpan(ctx, "bootstrap.argocd.configure")
+	defer span.End()
 	logger := log.FromContext(ctx)
 	argoURL := strings.TrimRight(pb.Spec.ArgoCD.InternalURL, "/")
 	argoNS := pb.Spec.ArgoCD.Namespace

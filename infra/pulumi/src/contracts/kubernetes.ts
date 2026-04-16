@@ -22,6 +22,8 @@ export interface KubernetesClusterSpec {
   readonly autoScale?: boolean;
   readonly network: ClusterNetworkRef;
   readonly tags: BaseLabels;
+  /** Enable protect (recommended for prod, disabled for dev/ephemeral). */
+  readonly protect?: boolean;
 }
 
 export interface KubernetesClusterOutput {

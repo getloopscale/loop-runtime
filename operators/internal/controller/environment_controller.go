@@ -9,9 +9,6 @@ import (
 	"os"
 	"time"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -51,14 +48,18 @@ type EnvironmentReconciler struct {
 }
 
 // Reconcile handles the reconciliation loop for Environment resources.
-func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx, span := otel.Tracer("loopzero-operator").Start(ctx, "loopzero.operator.environment.reconcile",
-		trace.WithAttributes(
-			attribute.String("k8s.object.name", req.Name),
-			attribute.String("k8s.namespace", req.Namespace),
-		),
-	)
+func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+	ctx, span := startReconcileSpan(ctx, "environment", req.Name, req.Namespace)
 	defer span.End()
+	start := time.Now()
+	defer func() {
+		if retErr != nil {
+			recordError(span, retErr)
+		} else {
+			setSuccess(span)
+		}
+		reconcileOutcome("environment", start, retErr)
+	}()
 
 	logger := log.FromContext(ctx)
 
@@ -227,6 +228,8 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 
 // reconcileNamespace ensures the namespace exists via CreateOrUpdate.
 func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, env *loopzerov1.Environment, nsName, tenantName string) error {
+	ctx, span := startChildSpan(ctx, "environment.namespace.ensure")
+	defer span.End()
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nsName,
@@ -346,6 +349,8 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 
 // reconcileNetworkPolicies ensures deny-all + allow-ingress + allow-egress policies exist.
 func (r *EnvironmentReconciler) reconcileNetworkPolicies(ctx context.Context, nsName string) error {
+	ctx, span := startChildSpan(ctx, "environment.network_policies.ensure")
+	defer span.End()
 	if err := r.reconcileEnvDenyAllPolicy(ctx, nsName); err != nil {
 		return err
 	}

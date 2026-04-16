@@ -14,6 +14,7 @@
 // Uses execSync+curl for synchronous HTTP in a CommonJS Pulumi program.
 // Lookups are fast (~200ms each) and fail-safe (return undefined on any error).
 
+import * as pulumi from "@pulumi/pulumi";
 import { execSync } from "child_process";
 
 function httpGet(url: string, token: string): any {
@@ -23,7 +24,9 @@ function httpGet(url: string, token: string): any {
       { encoding: "utf-8", timeout: 10000, stdio: ["pipe", "pipe", "pipe"] },
     );
     return JSON.parse(result);
-  } catch {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    pulumi.log.warn(`[adopt-or-create] lookup failed: ${url.split("?")[0]} — ${msg.split("\n")[0]}`);
     return undefined;
   }
 }
@@ -41,6 +44,15 @@ export function lookupExistingVpc(name: string): string | undefined {
   return vpc?.id;
 }
 
+/** Lookup an existing CDN by origin domain. Returns CDN ID or undefined. */
+export function lookupExistingCdn(originDomain: string): string | undefined {
+  const token = process.env.DIGITALOCEAN_TOKEN;
+  if (!token) return undefined;
+  const data = httpGet("https://api.digitalocean.com/v2/cdn/endpoints?per_page=50", token);
+  const cdn = data?.endpoints?.find((c: any) => c.origin?.includes(originDomain));
+  return cdn?.id;
+}
+
 /** Lookup an existing Spaces bucket by name. Returns bucket name if exists, undefined otherwise. */
 export function lookupExistingBucket(
   name: string,
@@ -55,7 +67,9 @@ export function lookupExistingBucket(
     );
     const status = parseInt(result.trim(), 10);
     return (status === 200 || status === 403) ? name : undefined;
-  } catch {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    pulumi.log.warn(`[adopt-or-create] bucket lookup failed: ${name} in ${region} — ${msg.split("\n")[0]}`);
     return undefined;
   }
 }

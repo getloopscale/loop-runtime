@@ -21,6 +21,8 @@ import (
 // reconcileGiteaPhase handles the ConfiguringGitea phase.
 // Steps: check reachability, validate/create admin token, ensure orgs exist.
 func (r *PlatformBootstrapReconciler) reconcileGiteaPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
+	ctx, span := startChildSpan(ctx, "bootstrap.gitea.configure")
+	defer span.End()
 	logger := log.FromContext(ctx)
 
 	giteaClient := r.giteaClient(pb.Spec.Gitea.InternalURL)

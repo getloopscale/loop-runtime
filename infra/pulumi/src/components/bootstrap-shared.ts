@@ -539,6 +539,12 @@ export function createDockerRegistryPullSecret(
       metadata: {
         name: "loopzero-infra-registry",
         namespace,
+        // Force Pulumi to own this Secret even if it was created by another
+        // manager (e.g. doctl kubernetes cluster registry add). Without this,
+        // server-side apply fails with field conflict on .data..dockerconfigjson.
+        annotations: {
+          "pulumi.com/patchForce": "true",
+        },
       },
       type: "kubernetes.io/dockerconfigjson",
       stringData: {

@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	"github.com/loopzero/loopzero/cloud/internal/auth"
 )
 
@@ -42,7 +44,10 @@ func NewHandler(hydra *auth.HydraClient, tenantProv *auth.TenantProvisioner, kra
 		tenantProvisioner: tenantProv,
 		kratosPublicURL:   kratosPublicURL,
 		kratosInternalURL: kratosInternalURL,
-		kratosClient:     &http.Client{Timeout: 5 * time.Second},
+		kratosClient: &http.Client{
+			Timeout:   5 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
 		logger:           logger,
 	}
 }

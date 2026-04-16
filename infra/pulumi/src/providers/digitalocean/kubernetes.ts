@@ -32,8 +32,9 @@ export class DigitalOceanKubernetesProvider implements IProviderKubernetes {
         tags,
       },
     }, {
-      // C3-fix: Prevent accidental deletion of production clusters.
-      protect: true,
+      // Protect prod clusters from accidental deletion. Dev/ephemeral
+      // environments use protect=false for clean destroy+up cycles.
+      protect: spec.protect ?? false,
     });
 
     return {

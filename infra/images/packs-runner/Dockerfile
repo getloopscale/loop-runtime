@@ -1,6 +1,6 @@
 # loopzero-packs-runner: Analyzes source code and generates optimized Dockerfiles.
 # Replaces hardcoded bash Dockerfile templates (MEET-2026-03-29-017).
-FROM alpine:3.21.3
+FROM alpine:3.21.6
 
 LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 LABEL org.opencontainers.image.title="loopzero-packs-runner"

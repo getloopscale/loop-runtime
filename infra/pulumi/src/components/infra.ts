@@ -128,6 +128,7 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
   });
 
   // --- Management cluster ---
+  const isProd = config.environment === "prod";
   const mgmtCluster = factory.createKubernetesCluster({
     name: `${baseName}-mgmt`,
     region: config.region,
@@ -138,6 +139,7 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     autoScale: config.mgmtMaxNodes !== undefined,
     network: { vpcId: network.vpcId },
     tags,
+    protect: isProd,
   });
 
   // --- Runtime cluster ---
@@ -151,6 +153,7 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     autoScale: config.runtimeMaxNodes !== undefined,
     network: { vpcId: network.vpcId },
     tags,
+    protect: isProd,
   });
 
   // --- Build cluster ---
@@ -166,6 +169,7 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     autoScale: config.buildMaxNodes !== undefined,
     network: { vpcId: network.vpcId },
     tags,
+    protect: isProd,
   });
 
   // --- Managed PostgreSQL ---
@@ -181,6 +185,8 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     // Allow all 3 DOKS clusters to connect — critical for pipeline idempotency.
     // Without this, destroy+recreate leaves DB unreachable (no trusted sources).
     trustedK8sClusters: [mgmtCluster.clusterId, buildCluster.clusterId, runtimeCluster.clusterId],
+    // Only protect prod databases — dev/ephemeral need clean destroy+up cycles.
+    protect: config.environment === "prod",
   });
 
   // --- Object storage ---
@@ -225,9 +231,11 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
 
   // Enable CDN on static assets bucket for edge caching.
   // CF Worker uses the direct endpoint; CDN is an additional optimization layer.
+  const staticBucketName = bucketName({ project: config.project, env: config.environment, region: config.region, suffix: "static-assets" });
   const staticCdn = factory.createCdn({
     origin: staticBucket.endpoint,
     ttl: 3600, // 1 hour edge cache
+    bucketName: staticBucketName, // Plain string for CDN adopt-or-create lookup
   });
 
   // Storage endpoint — provider-specific S3-compatible endpoint for SDKs and Loki.

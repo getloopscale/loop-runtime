@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // HydraClient communicates with Ory Hydra's public and admin APIs.
@@ -30,7 +32,8 @@ func NewHydraClient(publicURL, adminURL, clientID string) *HydraClient {
 		adminURL:  strings.TrimRight(adminURL, "/"),
 		clientID:  clientID,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   10 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
 		},
 	}
 }

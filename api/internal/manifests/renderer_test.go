@@ -594,6 +594,7 @@ func TestRender_SecurityContext_PodRunsAsNonRoot(t *testing.T) {
 	podSec := dep.Spec.Template.Spec.SecurityContext
 	if podSec == nil {
 		t.Fatal("pod must have securityContext")
+		return
 	}
 	if podSec.RunAsNonRoot == nil || !*podSec.RunAsNonRoot {
 		t.Error("pod securityContext.runAsNonRoot must be true")
@@ -619,6 +620,7 @@ func TestRender_SecurityContext_ContainerRestricted(t *testing.T) {
 	cSec := dep.Spec.Template.Spec.Containers[0].SecurityContext
 	if cSec == nil {
 		t.Fatal("container must have securityContext")
+		return
 	}
 	if cSec.AllowPrivilegeEscalation == nil || *cSec.AllowPrivilegeEscalation {
 		t.Error("container securityContext.allowPrivilegeEscalation must be false")

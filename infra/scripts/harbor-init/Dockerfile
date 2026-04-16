@@ -2,10 +2,12 @@
 # Multi-stage build for harbor-init — idempotent post-deploy configuration.
 # Produces a minimal distroless image (~5 MB).
 
-FROM golang:1.25.3-bookworm AS builder
+FROM golang:1.25.9-bookworm AS builder
 WORKDIR /src
 
 COPY infra/scripts/go.mod infra/scripts/go.sum* ./infra/scripts/
+# infra/scripts/go.mod has `replace ../tests` — copy its go.mod to satisfy the replace
+COPY infra/tests/go.mod infra/tests/go.sum* ./infra/tests/
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     cd infra/scripts && go mod download
 

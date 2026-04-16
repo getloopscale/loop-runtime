@@ -7,7 +7,7 @@
 #
 # Size: ~50MB (Alpine base + mc binary + git)
 # Security: runs as non-root user 1000 (loopzero)
-FROM alpine:3.21.3
+FROM alpine:3.21.6
 
 LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 LABEL org.opencontainers.image.title="loopzero-clone-runner"

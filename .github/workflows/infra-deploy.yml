@@ -1,32 +1,15 @@
-# Infrastructure Deploy — provisions cloud resources via Pulumi
+# Infrastructure Deploy — provisions cloud resources via Pulumi.
 #
-# Trigger chain: push → CI + Build Images (parallel) → Infra Deploy (waits for images)
-#   The "wait-for-images" job polls until the Build Images workflow for this
-#   commit succeeds, ensuring container images exist BEFORE Pulumi runs.
+# This workflow runs `pulumi up` and nothing else.
+# No state surgery, no image builds, no bootstrap tokens.
+# If `pulumi up` fails, the pipeline fails — operator investigates.
 #
-# NOTE: workflow_run trigger requires the file to exist on the default branch (main).
-# Since infra-deploy.yml may not exist on main yet, we use push + polling instead.
+# Commands: up (default on push), preview, refresh.
+# Destroy is a SEPARATE workflow (infra-destroy.yml).
 #
-# Trigger map:
-#   push to develop  → deploy to dev     (automatic, waits for images)
-#   push to homolog  → deploy to staging (automatic, waits for images)
-#   push to main     → deploy to prod    (requires approval, waits for images)
-#   workflow_dispatch → manual operations (any stack, any command, no wait)
-#
-# State backend: DigitalOcean Spaces (S3-compatible) — no Pulumi Cloud dependency.
-#
-# Required secrets (set per GitHub Environment):
-#   DIGITALOCEAN_TOKEN         — DO API token (full access for provisioning)
-#   SPACES_ACCESS_KEY_ID       — DO Spaces access key (for state backend)
-#   SPACES_SECRET_ACCESS_KEY   — DO Spaces secret key (for state backend)
-#   PULUMI_CONFIG_PASSPHRASE   — Passphrase for secrets encryption in state
-#   HARBOR_ROBOT_USERNAME      — Harbor robot account username (MEET-048, optional during transition)
-#   HARBOR_ROBOT_PASSWORD      — Harbor robot account password (MEET-048, optional during transition)
-#
-# Required GitHub Environments:
-#   infra-dev      — no protection rules (auto-deploy on develop)
-#   infra-staging  — no protection rules (auto-deploy on homolog)
-#   infra-prod     — required reviewers + deployment branch = main
+# Required secrets (per GitHub Environment):
+#   DIGITALOCEAN_TOKEN, SPACES_ACCESS_KEY_ID, SPACES_SECRET_ACCESS_KEY,
+#   PULUMI_CONFIG_PASSPHRASE, CLOUDFLARE_API_TOKEN (optional)
 
 name: "Infra: Deploy"
 
@@ -34,366 +17,106 @@ on:
   push:
     branches: [develop, homolog, main]
     paths:
-      # Only trigger when infrastructure or deployment config changes.
-      # Application code changes trigger Build Images, which then triggers
-      # a separate restart workflow (not a full infra deploy).
-      - 'infra/**'
-      - '.github/workflows/infra-deploy.yml'
-
-  # Triggered after Build Images completes — restarts pods to pull new images.
-  workflow_run:
-    workflows: ["Build: Container Images"]
-    types: [completed]
-    branches: [develop, homolog, main]
-
+      - "infra/pulumi/**"
+      - "infra/helm/**"
+      - ".github/workflows/infra-deploy.yml"
   workflow_dispatch:
     inputs:
       stack:
         description: "Target stack"
         required: true
         type: choice
-        options:
-          - dev
-          - homolog
-          - prod
+        options: [dev, homolog, prod]
       command:
         description: "Pulumi command"
         required: true
         type: choice
-        options:
-          - up
-          - preview
-          - refresh
-          - destroy
-      message:
-        description: "Reason for this operation"
-        required: false
-        type: string
+        options: [up, preview, refresh]
 
 permissions:
   contents: read
-  actions: read
 
 env:
   NODE_VERSION: "20"
-  DOCTL_VERSION: "1.104.0"
-  # Default: monolith (dev/prod). Homolog uses 3-project split with separate backend.
   PULUMI_WORKING_DIR: infra/pulumi
   PULUMI_BACKEND_URL: "s3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
-  # Homolog backend (separate state, separate region)
   PULUMI_HOMOLOG_BACKEND_URL: "s3://loopzero-homolog-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true"
 
-jobs:
-  # ─────────────────────────────────────────────
-  # GATE — skip deploy if Build Images failed (workflow_run trigger)
-  # ─────────────────────────────────────────────
-  gate:
-    name: Validate trigger
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    outputs:
-      mode: ${{ steps.mode.outputs.mode }}
-    steps:
-      - name: Determine deploy mode
-        id: mode
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            # Triggered by Build Images completion
-            if [[ "${{ github.event.workflow_run.conclusion }}" != "success" ]]; then
-              echo "❌ Build Images failed — skipping deploy"
-              exit 1
-            fi
-            echo "mode=restart-only" >> "$GITHUB_OUTPUT"
-            echo "### Deploy Mode: restart-only (new images)" >> "$GITHUB_STEP_SUMMARY"
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "mode=manual" >> "$GITHUB_OUTPUT"
-            echo "### Deploy Mode: manual (${{ inputs.command }})" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "mode=full" >> "$GITHUB_OUTPUT"
-            echo "### Deploy Mode: full (infra changed)" >> "$GITHUB_STEP_SUMMARY"
-          fi
+concurrency:
+  group: infra-${{ github.ref_name }}
+  cancel-in-progress: false
 
+jobs:
+  # ── Resolve target ──────────────────────────────────────
   resolve:
-    name: Resolve deployment target
-    needs: [gate]
+    name: Resolve target
     runs-on: ubuntu-latest
     timeout-minutes: 1
     outputs:
-      stack: ${{ steps.resolve.outputs.stack }}
-      environment: ${{ steps.resolve.outputs.environment }}
-      command: ${{ steps.resolve.outputs.command }}
-      is_split: ${{ steps.resolve.outputs.is_split }}
-      backend_url: ${{ steps.resolve.outputs.backend_url }}
+      stack: ${{ steps.r.outputs.stack }}
+      environment: ${{ steps.r.outputs.environment }}
+      command: ${{ steps.r.outputs.command }}
+      backend_url: ${{ steps.r.outputs.backend_url }}
     steps:
-      - name: Resolve from trigger
-        id: resolve
+      - name: Resolve
+        id: r
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             STACK="${{ inputs.stack }}"
             COMMAND="${{ inputs.command }}"
           else
-            # Resolve branch — workflow_run uses head_branch, push uses ref_name
-            BRANCH="${{ github.event.workflow_run.head_branch || github.ref_name }}"
-            case "$BRANCH" in
+            case "${{ github.ref_name }}" in
               develop) STACK="dev" ;;
               homolog) STACK="homolog" ;;
               main)    STACK="prod" ;;
-              *)       echo "::error::Unexpected branch: $BRANCH" && exit 1 ;;
+              *)       echo "::error::Unexpected branch" && exit 1 ;;
             esac
             COMMAND="up"
           fi
-
           case "$STACK" in
-            dev)      ENV="infra-dev" ;;
-            homolog)  ENV="infra-homolog" ;;
-            prod)     ENV="infra-prod" ;;
+            dev)     ENV="infra-dev" ;;
+            homolog) ENV="infra-homolog" ;;
+            prod)    ENV="infra-prod" ;;
           esac
-
-          # Homolog uses 3-project split; dev/prod use monolith (until migrated)
-          IS_SPLIT="false"
-          BACKEND_URL="${{ env.PULUMI_BACKEND_URL }}"
-          if [ "$STACK" = "homolog" ]; then
-            IS_SPLIT="true"
-            BACKEND_URL="${{ env.PULUMI_HOMOLOG_BACKEND_URL }}"
-          fi
-
+          BACKEND="${{ env.PULUMI_BACKEND_URL }}"
+          [ "$STACK" = "homolog" ] && BACKEND="${{ env.PULUMI_HOMOLOG_BACKEND_URL }}"
           echo "stack=$STACK" >> "$GITHUB_OUTPUT"
           echo "environment=$ENV" >> "$GITHUB_OUTPUT"
           echo "command=$COMMAND" >> "$GITHUB_OUTPUT"
-          echo "is_split=$IS_SPLIT" >> "$GITHUB_OUTPUT"
-          echo "backend_url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
+          echo "backend_url=$BACKEND" >> "$GITHUB_OUTPUT"
 
-          echo "### Deployment Target" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Stack | \`$STACK\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Command | \`$COMMAND\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Environment | \`$ENV\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Split mode | \`$IS_SPLIT\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Backend | \`$BACKEND_URL\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Trigger | \`${{ github.event_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
-
-  # ─────────────────────────────────────────────
-  # VALIDATE — typecheck + tests (gate before deploy)
-  # ─────────────────────────────────────────────
+  # ── Validate ────────────────────────────────────────────
   validate:
-    name: Validate Pulumi code
+    name: Validate
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs: [gate]
-    if: needs.gate.outputs.mode != 'restart-only'
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: ${{ env.PULUMI_WORKING_DIR }}/package-lock.json
-
-      - name: Install dependencies
+      - run: npm ci
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        run: npm ci
-
-      - name: Type check
+      - run: npx tsc --noEmit
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        run: npx tsc --noEmit
 
-      - name: Run tests
-        working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        run: npm test
-
-  # ─────────────────────────────────────────────
-  # DEPLOY-SPLIT — 3-project deploy for homolog (infra → platform → control-plane)
-  # ─────────────────────────────────────────────
-  deploy-split:
-    name: "split deploy → ${{ needs.resolve.outputs.stack }}"
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [gate, resolve]
-    if: (needs.gate.outputs.mode == 'full' || needs.gate.outputs.mode == 'manual') && needs.resolve.outputs.is_split == 'true'
-    environment: ${{ needs.resolve.outputs.environment }}
-    concurrency:
-      group: infra-deploy-${{ needs.resolve.outputs.stack }}
-      cancel-in-progress: false
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
-      SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
-      SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
-      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
-      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install Pulumi CLI
-        run: curl -fsSL https://get.pulumi.com | sh && echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
-
-      - name: "Phase 1: Deploy loopzero-infra"
-        run: |
-          STACK="${{ needs.resolve.outputs.stack }}"
-          BACKEND="${{ needs.resolve.outputs.backend_url }}"
-          cd infra/pulumi-infra
-          npm ci
-          pulumi login "$BACKEND"
-          # Backup YAML config (stack init overwrites it with just encryptionsalt)
-          cp "Pulumi.${STACK}.yaml" "/tmp/Pulumi.${STACK}.yaml.bak" 2>/dev/null || true
-          pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
-          # Restore YAML config (stack init may have overwritten it)
-          cp "/tmp/Pulumi.${STACK}.yaml.bak" "Pulumi.${STACK}.yaml" 2>/dev/null || true
-          pulumi cancel -s "$STACK" 2>/dev/null || true
-          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
-          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
-          pulumi config set --secret digitaloceanToken "$DIGITALOCEAN_TOKEN" -s "$STACK"
-          # Clear pending operations from interrupted runs (non-interactive safe).
-          # pulumi refresh --yes doesn't clear pending CREATEs without interaction.
-          # Instead: export state, remove pending ops, reimport, then refresh.
-          pulumi stack export -s "$STACK" 2>/dev/null | \
-            python3 -c "import sys,json; s=json.load(sys.stdin); s['deployment']['pending_operations']=[]; json.dump(s,sys.stdout)" 2>/dev/null | \
-            pulumi stack import -s "$STACK" 2>/dev/null || true
-          pulumi refresh --yes --skip-preview -s "$STACK" 2>/dev/null || true
-          pulumi up --yes --skip-preview -s "$STACK"
-          echo "### Phase 1: loopzero-infra ✅" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: "Phase 2: Deploy loopzero-platform"
-        run: |
-          STACK="${{ needs.resolve.outputs.stack }}"
-          BACKEND="${{ needs.resolve.outputs.backend_url }}"
-          cd infra/pulumi-platform
-          npm ci
-          pulumi login "$BACKEND"
-          cp "Pulumi.${STACK}.yaml" "/tmp/Pulumi.${STACK}.yaml.platform.bak" 2>/dev/null || true
-          pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
-          cp "/tmp/Pulumi.${STACK}.yaml.platform.bak" "Pulumi.${STACK}.yaml" 2>/dev/null || true
-          pulumi cancel -s "$STACK" 2>/dev/null || true
-          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
-          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
-          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
-            pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" -s "$STACK"
-          fi
-          pulumi up --yes --skip-preview -s "$STACK"
-          echo "### Phase 2: loopzero-platform ✅" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: "Phase 3: Deploy loopzero-control-plane"
-        run: |
-          STACK="${{ needs.resolve.outputs.stack }}"
-          BACKEND="${{ needs.resolve.outputs.backend_url }}"
-          cd infra/pulumi-control-plane
-          npm ci
-          pulumi login "$BACKEND"
-          cp "Pulumi.${STACK}.yaml" "/tmp/Pulumi.${STACK}.yaml.cp.bak" 2>/dev/null || true
-          pulumi stack select "$STACK" 2>/dev/null || pulumi stack init "$STACK"
-          cp "/tmp/Pulumi.${STACK}.yaml.cp.bak" "Pulumi.${STACK}.yaml" 2>/dev/null || true
-          pulumi cancel -s "$STACK" 2>/dev/null || true
-          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" -s "$STACK"
-          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" -s "$STACK"
-          pulumi up --yes --skip-preview -s "$STACK"
-          echo "### Phase 3: loopzero-control-plane ✅" >> "$GITHUB_STEP_SUMMARY"
-
-  # ─────────────────────────────────────────────
-  # RESTART-ONLY — triggered by new container images (no infra changes)
-  # Skips Pulumi entirely. Just restarts pods to pull new images.
-  # ~2min instead of ~15min full deploy.
-  # ─────────────────────────────────────────────
-  restart-only:
-    name: "restart pods → ${{ needs.resolve.outputs.stack }}"
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs: [gate, resolve]
-    if: needs.gate.outputs.mode == 'restart-only'
-    environment: ${{ needs.resolve.outputs.environment }}
-    env:
-      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-    steps:
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
-
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v4
-
-      - name: Restart workloads
-        run: |
-          STACK="${{ needs.resolve.outputs.stack }}"
-
-          # Discover mgmt cluster name from DO API
-          MGMT_CLUSTER=$(doctl kubernetes cluster list --format Name --no-header | grep "loopzero.*${STACK}.*mgmt" | head -1)
-          if [ -z "$MGMT_CLUSTER" ]; then
-            echo "::warning::No mgmt cluster found for stack $STACK — skipping restart"
-            exit 0
-          fi
-
-          # Get kubeconfig
-          doctl kubernetes cluster kubeconfig save "$MGMT_CLUSTER" --set-current-context
-
-          NAMESPACE="platform-system"
-          echo "Restarting workloads in $NAMESPACE on $MGMT_CLUSTER..."
-
-          # Restart API and controllers to pick up new images
-          kubectl -n $NAMESPACE rollout restart deployment loopzero-api 2>/dev/null || true
-          kubectl -n $NAMESPACE delete pod -l app=tenant-controller 2>/dev/null || true
-          kubectl -n $NAMESPACE rollout restart deployment cloud-service 2>/dev/null || true
-          kubectl -n $NAMESPACE rollout restart deployment cloud-dashboard 2>/dev/null || true
-
-          # Wait for API to be ready
-          kubectl -n $NAMESPACE rollout status deployment loopzero-api --timeout=120s 2>/dev/null || true
-
-          echo "### Restart Complete" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Cluster | $MGMT_CLUSTER |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Workloads | loopzero-api, tenant-controller, cloud-service, cloud-dashboard |" >> "$GITHUB_STEP_SUMMARY"
-
-  # ─────────────────────────────────────────────
-  # DEPLOY — execute Pulumi command (full infra deploy)
-  # Skipped when mode is restart-only (no infra changes).
-  # ─────────────────────────────────────────────
+  # ── Deploy ──────────────────────────────────────────────
   deploy:
     name: "${{ needs.resolve.outputs.command }} → ${{ needs.resolve.outputs.stack }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    needs: [gate, resolve, validate]
-    if: needs.gate.outputs.mode != 'restart-only' && needs.resolve.outputs.is_split != 'true'
+    timeout-minutes: 30
+    needs: [resolve, validate]
     environment: ${{ needs.resolve.outputs.environment }}
-
-    # CRITICAL: never cancel a running deploy — creates orphaned resources
-    concurrency:
-      group: infra-deploy-${{ needs.resolve.outputs.stack }}
-      cancel-in-progress: false
-
     env:
-      # S3 state backend auth (Pulumi reads AWS_* for S3 protocol)
       AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
-      # DO provider auth for Spaces resources (buckets, objects)
       SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
       SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
       DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-      # Cloudflare — static frontend delivery (Sprint 10)
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      # OAuth providers — social login via Ory Kratos
-      LOOPZERO_GITHUB_CLIENT_ID: ${{ secrets.LOOPZERO_GITHUB_CLIENT_ID }}
-      LOOPZERO_GITHUB_CLIENT_SECRET: ${{ secrets.LOOPZERO_GITHUB_CLIENT_SECRET }}
-      LOOPZERO_GOOGLE_CLIENT_ID: ${{ secrets.LOOPZERO_GOOGLE_CLIENT_ID }}
-      LOOPZERO_GOOGLE_CLIENT_SECRET: ${{ secrets.LOOPZERO_GOOGLE_CLIENT_SECRET }}
-      # Resend API key for email delivery (HTTP API, not SMTP — DO blocks SMTP)
-      LOOPZERO_RESEND_API_KEY: ${{ secrets.LOOPZERO_RESEND_API_KEY }}
-      # Stripe Billing (MEET-038)
-      LOOPZERO_STRIPE_API_KEY: ${{ secrets.LOOPZERO_STRIPE_API_KEY }}
-      LOOPZERO_STRIPE_WEBHOOK_SECRET: ${{ secrets.LOOPZERO_STRIPE_WEBHOOK_SECRET }}
-      # Session token HMAC secret (dashboard JWT issuance)
-      LOOPZERO_SESSION_TOKEN_SECRET: ${{ secrets.LOOPZERO_SESSION_TOKEN_SECRET }}
-      # MEET-048: Harbor registry (dual-push transition period)
-      HARBOR_REGISTRY: harbor.dev.loopzero.example
-      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
-      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
-
     steps:
       - uses: actions/checkout@v4
 
@@ -403,1031 +126,90 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ env.PULUMI_WORKING_DIR }}/package-lock.json
 
+      - name: Install Pulumi CLI
+        run: curl -fsSL https://get.pulumi.com | PULUMI_VERSION=3.227.0 sh
+
       - name: Install dependencies
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: npm ci
 
-      - name: Validate state backend credentials
+      - name: Build Helm chart dependencies
         run: |
-          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-            echo "::error::SPACES_ACCESS_KEY_ID or SPACES_SECRET_ACCESS_KEY secret is not set."
-            echo "::error::These are required for Pulumi S3 state backend (DigitalOcean Spaces)."
-            echo "::error::Set them in Settings → Secrets → Actions."
-            exit 1
-          fi
-          echo "State backend credentials: OK"
+          for chart_dir in infra/helm/*/; do
+            if [ -f "$chart_dir/Chart.yaml" ] && grep -q "dependencies:" "$chart_dir/Chart.yaml"; then
+              echo "Building deps: $chart_dir"
+              helm dependency update "$chart_dir"
+            fi
+          done
 
-      - name: Login to S3 state backend
-        run: pulumi login "$PULUMI_BACKEND_URL"
+      - name: Login to Pulumi backend
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: pulumi login "${{ needs.resolve.outputs.backend_url }}"
 
-      # Ensure Cloudflare API token is set in Pulumi config (for K8s secret creation).
-      # CLOUDFLARE_API_TOKEN env var handles Pulumi provider auth; this sets the
-      # cfApiToken config value used by bootstrap.ts to create the K8s secret.
-      - name: Set Cloudflare config (Sprint 10)
+      - name: Configure secrets
         if: env.CLOUDFLARE_API_TOKEN != ''
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           STACK="${{ needs.resolve.outputs.stack }}"
-          # Cancel stale locks before config set (may fail if no lock exists)
-          pulumi cancel -s "$STACK" 2>/dev/null || true
-          # Set cfApiToken as secret in Pulumi config (required for K8s secret creation)
-          if ! pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" --stack "$STACK" 2>&1; then
-            echo "::warning::Failed to set cfApiToken via pulumi config. Falling back to YAML patch."
-            # Fallback: the Pulumi code handles missing cfApiToken gracefully (conditional secret creation).
-            # But we need to ensure the K8s secret exists for the API to start.
-            # This is handled by the bootstrap step below.
+          # CF provider auth — required for Tunnel, KV, Worker resources
+          if ! pulumi config get cloudflare:apiToken --stack "$STACK" >/dev/null 2>&1; then
+            pulumi config set --secret cloudflare:apiToken "$CLOUDFLARE_API_TOKEN" --stack "$STACK"
           fi
-          # Verify it was set
-          if pulumi config get cfApiToken --stack "$STACK" >/dev/null 2>&1; then
-            echo "✅ cfApiToken configured in Pulumi stack"
-          else
-            echo "::warning::cfApiToken not in Pulumi config — K8s secret will be created in bootstrap step"
+          # App-level CF token — used by bootstrap to create K8s secrets
+          if ! pulumi config get cfApiToken --stack "$STACK" >/dev/null 2>&1; then
+            pulumi config set --secret cfApiToken "$CLOUDFLARE_API_TOKEN" --stack "$STACK"
           fi
+          # Spaces credentials for Pulumi code (bucket creation, etc.)
+          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" --stack "$STACK" 2>/dev/null
+          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" --stack "$STACK" 2>/dev/null
+          pulumi config set --secret digitaloceanToken "$DIGITALOCEAN_TOKEN" --stack "$STACK" 2>/dev/null
 
-          # Tunnel secret — must be stable across runs. Generate once, reuse forever.
-          # If not set, generate a new one. On subsequent runs, the existing value is reused.
-          if ! pulumi config get tunnelSecret --stack "$STACK" >/dev/null 2>&1; then
-            echo "Generating tunnel secret (first deploy)..."
-            TUNNEL_SECRET=$(openssl rand -base64 32)
-            pulumi config set --secret tunnelSecret "$TUNNEL_SECRET" --stack "$STACK"
-            echo "✅ tunnelSecret generated and stored in Pulumi config"
-          else
-            echo "✅ tunnelSecret already configured (reusing existing)"
-          fi
-
-      # --- Pre-destroy: remove K8s finalizers + delete cloud resources ---
-      # REVIEW-2026-03-30: Fixes INFRA-005 — extracted from inline shell to standalone script.
-      - name: Pre-destroy cleanup
-        if: needs.resolve.outputs.command == 'destroy'
-        continue-on-error: true
-        working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        run: |
-          STACK="${{ needs.resolve.outputs.stack }}" \
-          bash "$GITHUB_WORKSPACE/infra/scripts/pre-destroy-cleanup.sh"
-
-      # --- Non-up commands (destroy, refresh, preview) ---
       - name: "Run: pulumi ${{ needs.resolve.outputs.command }}"
-        if: needs.resolve.outputs.command != 'up'
+        id: pulumi
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           STACK="${{ needs.resolve.outputs.stack }}"
           COMMAND="${{ needs.resolve.outputs.command }}"
-          pulumi cancel -s "$STACK" 2>/dev/null || true
+          START=$(date +%s)
+          pulumi $COMMAND --yes --skip-preview --stack "$STACK" --non-interactive
+          DURATION=$(( $(date +%s) - START ))
+          echo "duration=$DURATION" >> "$GITHUB_OUTPUT"
 
-          if [ "$COMMAND" = "destroy" ]; then
-            # Refresh: sync state with reality after pre-cleanup deleted resources
-            PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
-
-            # Attempt destroy. If it fails (K8s finalizers), force-clean state
-            # and delete cloud resources directly via API.
-            if ! pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive 2>&1; then
-              echo "::warning::Destroy failed. Force-cleaning Pulumi state..."
-              # Remove ALL K8s resources from state (they're on clusters being deleted)
-              PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>/dev/null || true
-              # Retry destroy (now only cloud resources remain)
-              pulumi destroy -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || {
-                echo "::warning::Retry failed. Clearing state and deleting via API..."
-                # Nuclear: clear state — keep only the Stack resource
-                pulumi stack export -s "$STACK" | python3 -c "import sys,json; s=json.load(sys.stdin); s['deployment']['resources']=[r for r in s['deployment']['resources'] if r.get('type')=='pulumi:pulumi:Stack']; json.dump(s,sys.stdout)" | pulumi stack import -s "$STACK" 2>/dev/null
-
-                # Delete cloud resources via DO API
-                curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/registry" 2>/dev/null || true
-                for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/kubernetes/clusters" | python3 -c "import sys,json; [print(c['id']) for c in json.load(sys.stdin)['kubernetes_clusters'] if 'loopzero' in c['name']]" 2>/dev/null); do
-                  curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/kubernetes/clusters/$ID?dangerous=true" 2>/dev/null || true
-                done
-                for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/databases" | python3 -c "import sys,json; [print(d['id']) for d in json.load(sys.stdin)['databases'] if 'loopzero' in d['name']]" 2>/dev/null); do
-                  curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/databases/$ID" 2>/dev/null || true
-                done
-                echo "Cloud resources deleted via API. State cleared."
-              }
-            fi
-          else
-            pulumi $COMMAND --yes --skip-preview --stack "$STACK" --non-interactive
-          fi
-
-      # ═══════════════════════════════════════════════
-      # UP COMMAND: 3 steps — infra → images → deploy
-      # ═══════════════════════════════════════════════
-
-      # Step 1: Provision ALL cloud resources + K8s services.
-      # All Deployments/Services have pulumi.com/skipAwait annotation,
-      # so Pulumi won't block waiting for pods (images don't exist yet).
-      # This step MUST succeed fully — no || true masking failures.
-      - name: "Step 1/3: Provision infrastructure"
-        if: needs.resolve.outputs.command == 'up'
+      - name: State integrity check
+        if: always()
         working-directory: ${{ env.PULUMI_WORKING_DIR }}
         run: |
           STACK="${{ needs.resolve.outputs.stack }}"
-          # Cancel stale locks from previous failed runs
-          pulumi cancel -s "$STACK" 2>/dev/null || true
+          pulumi stack --stack "$STACK" export 2>/dev/null | python3 -c "
+          import sys, json
+          from collections import Counter
+          state = json.load(sys.stdin)
+          urns = [r['urn'] for r in state['deployment']['resources']]
+          dupes = {u:c for u,c in Counter(urns).items() if c > 1}
+          if dupes:
+              for u,c in dupes.items():
+                  print(f'::warning::Duplicate URN ({c}x): {u.split(\"::\")[-1]}')
+          else:
+              print(f'State OK: {len(urns)} unique resources')
+          " || echo "::warning::Could not validate state"
 
-          # Resolve region from Pulumi config (dynamic — supports sfo3, nyc3, etc.)
-          REGION=$(pulumi config get region --stack "$STACK" 2>/dev/null || echo "sfo3")
-          echo "Resolved region: $REGION"
-
-          # ═══ Set secrets from GitHub Environment (required for first deploy) ═══
-          # These are idempotent — safe to re-set on every run.
-          pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" --stack "$STACK" 2>/dev/null || true
-          pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" --stack "$STACK" 2>/dev/null || true
-          pulumi config set --secret digitaloceanToken "$DIGITALOCEAN_TOKEN" --stack "$STACK" 2>/dev/null || true
-
-          # Import pre-existing VPC if it exists but is not in Pulumi state.
-          # DO VPCs cannot be deleted when default — they persist across destroy cycles.
-          VPC_NAME="loopzero-infra-${STACK}-${REGION}-net"
-          VPC_ID=$(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/vpcs" | \
-            python3 -c "import sys,json; vpcs=[v for v in json.load(sys.stdin)['vpcs'] if v['name']=='$VPC_NAME']; print(vpcs[0]['id'] if vpcs else '')" 2>/dev/null)
-          if [ -n "$VPC_ID" ]; then
-            # Check if already in state
-            IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "digitalocean:index/vpc:Vpc") | .id' 2>/dev/null)
-            if [ -z "$IN_STATE" ]; then
-              echo "Importing existing VPC $VPC_NAME ($VPC_ID) into Pulumi state..."
-              pulumi import digitalocean:index/vpc:Vpc "$VPC_NAME" "$VPC_ID" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
-            fi
-          fi
-
-          # Import pre-existing Spaces buckets (survive destroy due to DO Spaces delete marker bug).
-          for BUCKET_NAME in loopzero-static-assets loopzero-builds loopzero-logs; do
-            BUCKET_EXISTS=$(AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY" \
-              aws s3api head-bucket --bucket "$BUCKET_NAME" --endpoint-url "https://${REGION}.digitaloceanspaces.com" 2>/dev/null && echo "yes" || echo "no")
-            if [ "$BUCKET_EXISTS" = "yes" ]; then
-              IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r ".deployment.resources[]? | select(.type == \"digitalocean:index/spacesBucket:SpacesBucket\" and .inputs.name == \"$BUCKET_NAME\") | .id" 2>/dev/null)
-              if [ -z "$IN_STATE" ]; then
-                echo "Importing existing bucket $BUCKET_NAME into Pulumi state..."
-                pulumi import "digitalocean:index/spacesBucket:SpacesBucket" "$BUCKET_NAME" "${REGION},$BUCKET_NAME" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
-              fi
-            fi
-          done
-
-          # Delete stale Cloudflare Tunnel if it exists outside Pulumi state.
-          # Tunnels persist if the destroy step fails to clean connections first.
-          # Pulumi needs to create a fresh tunnel with a new secret on each full deploy.
-          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
-            CF_ACCOUNT_ID=$(pulumi config get cfAccountId --stack "$STACK" 2>/dev/null || echo "")
-            CF_ZONE_ID=$(pulumi config get cfZoneId --stack "$STACK" 2>/dev/null || echo "")
-            if [ -n "$CF_ACCOUNT_ID" ]; then
-              IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "cloudflare:index/zeroTrustTunnelCloudflared:ZeroTrustTunnelCloudflared") | .id' 2>/dev/null)
-              if [ -z "$IN_STATE" ]; then
-                # No tunnel in state — delete any orphaned tunnel with matching name
-                TUNNEL_ID=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-                  "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel?name=loopzero-${STACK}&is_deleted=false" 2>/dev/null | \
-                  python3 -c "import sys,json; r=json.load(sys.stdin).get('result',[]); print(r[0]['id'] if r else '')" 2>/dev/null)
-                if [ -n "$TUNNEL_ID" ]; then
-                  echo "Deleting orphaned CF Tunnel $TUNNEL_ID (not in Pulumi state)..."
-                  # Clean connections first (required before tunnel deletion)
-                  curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-                    "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUNNEL_ID/connections" 2>/dev/null || true
-                  sleep 3
-                  curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-                    "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUNNEL_ID" 2>/dev/null || true
-                  echo "  Tunnel deleted"
-                fi
-                # Delete orphaned wildcard CNAME record (tunnel DNS)
-                if [ -n "$CF_ZONE_ID" ]; then
-                  DOMAIN=$(pulumi config get domain --stack "$STACK" 2>/dev/null || echo "")
-                  if [ -n "$DOMAIN" ]; then
-                    CNAME_ID=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-                      "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=CNAME&name=*.${DOMAIN}" 2>/dev/null | \
-                      python3 -c "import sys,json; r=json.load(sys.stdin).get('result',[]); print(r[0]['id'] if r else '')" 2>/dev/null)
-                    if [ -n "$CNAME_ID" ]; then
-                      echo "Deleting orphaned wildcard CNAME for *.${DOMAIN}..."
-                      curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-                        "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$CNAME_ID" 2>/dev/null || true
-                    fi
-                  fi
-                fi
-              fi
-            fi
-          fi
-
-
-          # ═══════════════════════════════════════════════════════════
-          # IDEMPOTENT 2-PASS DEPLOY
-          # ═══════════════════════════════════════════════════════════
-          # Handles: node pool resize, fresh deploys, state drift, gRPC crashes.
-          #
-          # Pass 1: pulumi up — may fail during node pool resize (expected)
-          # Between: wait for nodes Ready + refresh state + registry integration
-          # Pass 2: pulumi up — nodes stable, state synced → success
-          # ═══════════════════════════════════════════════════════════
-
-          # --- Pre-cleanup ---
-          pulumi cancel --stack "$STACK" 2>/dev/null || true
-
-          # Remove resources that block idempotent deploys
-          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.pendingReplacement == true) | .urn' 2>/dev/null); do
-            echo "Removing pending-replacement: $(echo $URN | rev | cut -d: -f1 | rev)"
-            pulumi state delete "$URN" --stack "$STACK" --force --yes 2>/dev/null || true
-          done
-
-          # Jobs are immutable — remove from state + cluster
-          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:batch/v1:Job") | .urn' 2>/dev/null); do
-            pulumi state delete "$URN" --stack "$STACK" --force --yes 2>/dev/null || true
-          done
-          MGMT_KC=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null || true)
-          if [ -n "$MGMT_KC" ] && [ "$MGMT_KC" != "undefined" ]; then
-            echo "$MGMT_KC" > /tmp/kc.yaml
-            kubectl --kubeconfig=/tmp/kc.yaml delete job gitea-bootstrap -n platform-system --ignore-not-found 2>/dev/null || true
-            rm -f /tmp/kc.yaml
-          fi
-
-          # Remove failed Helm releases + ArgoCD repo-creds placeholder
-          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select((.type == "kubernetes:helm.sh/v3:Release" and (.outputs.status.status == "failed" or .outputs.status == null)) or (.urn | contains("argocd-gitea-repo-creds"))) | .urn' 2>/dev/null); do
-            pulumi state delete "$URN" --stack "$STACK" --force --yes 2>/dev/null || true
-          done
-
-          # Import pre-existing DO CDN (persists across destroys)
-          CDN_ID=$(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" "https://api.digitalocean.com/v2/cdn/endpoints" 2>/dev/null | \
-            python3 -c "import sys,json; cdns=[c for c in json.load(sys.stdin).get('endpoints',[]) if 'loopzero-static-assets' in c.get('origin','')]; print(cdns[0]['id'] if cdns else '')" 2>/dev/null)
-          if [ -n "$CDN_ID" ]; then
-            IN_STATE=$(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "digitalocean:index/cdn:Cdn") | .id' 2>/dev/null)
-            [ -z "$IN_STATE" ] && pulumi import "digitalocean:index/cdn:Cdn" "loopzero-infra-${STACK}-${REGION}-static-cdn" "$CDN_ID" --stack "$STACK" --yes --skip-preview 2>/dev/null || true
-          fi
-
-          # Refresh state to sync with cluster reality
-          echo "Refreshing state..."
-          PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
-
-          # --- Pass 1 ---
-          echo ""
-          echo "═══ Pass 1: pulumi up ═══"
-          if pulumi up --yes --skip-preview --stack "$STACK" --non-interactive 2>&1; then
-            echo "✅ Pass 1 succeeded"
-          else
-            echo ""
-            echo "::notice::Pass 1 failed — running recovery sequence..."
-
-            # 1. Wait for ALL cluster nodes to be Ready (handles node pool resize)
-            echo "Waiting for cluster nodes..."
-            for KC_OUTPUT in mgmtKubeconfig buildKubeconfig runtimeKubeconfig; do
-              KC=$(pulumi stack output "$KC_OUTPUT" --show-secrets --stack "$STACK" 2>/dev/null || true)
-              if [ -n "$KC" ] && [ "$KC" != "undefined" ]; then
-                echo "$KC" > /tmp/kc.yaml
-                for attempt in $(seq 1 24); do
-                  NOT_READY=$(kubectl --kubeconfig=/tmp/kc.yaml get nodes --no-headers 2>/dev/null | grep -cv " Ready " || true)
-                  [ "$NOT_READY" = "0" ] && echo "  $KC_OUTPUT: Ready" && break
-                  echo "  $KC_OUTPUT: $NOT_READY not Ready ($attempt/24)"
-                  sleep 10
-                done
-                rm -f /tmp/kc.yaml
-              fi
-            done
-
-            # 2. Integrate registry with DOKS (needed for image pulls on new nodes)
-            REGISTRY_NAME=$(pulumi stack output registryName --stack "$STACK" 2>/dev/null || true)
-            if [ -n "$REGISTRY_NAME" ]; then
-              for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
-                CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || true)
-                [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
-              done
-            fi
-
-            # 3. Cancel + refresh (THE KEY STEP — syncs state with post-resize reality)
-            pulumi cancel --stack "$STACK" 2>/dev/null || true
-            echo "Refreshing state after recovery..."
-            PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
-
-            # 4. Wait for cert-manager webhooks
-            for KC_OUTPUT in mgmtKubeconfig runtimeKubeconfig; do
-              KC=$(pulumi stack output "$KC_OUTPUT" --show-secrets --stack "$STACK" 2>/dev/null || true)
-              if [ -n "$KC" ] && [ "$KC" != "undefined" ]; then
-                echo "$KC" > /tmp/kc.yaml
-                kubectl --kubeconfig=/tmp/kc.yaml rollout status deployment \
-                  -l app.kubernetes.io/component=webhook,app.kubernetes.io/name=cert-manager \
-                  -n platform-system --timeout=120s 2>/dev/null || true
-                rm -f /tmp/kc.yaml
-              fi
-            done
-
-            # --- Pass 2 ---
-            echo ""
-            echo "═══ Pass 2: pulumi up (after recovery) ═══"
-            pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
-          fi
-
-      # Step 2: Build and push container images.
-      # Only runs if Step 1 succeeded (all infra provisioned, registry exists).
-      - name: "Step 2/3: Build container images"
-        if: success() && needs.resolve.outputs.command == 'up'
-        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+      - name: Deploy summary
+        if: always()
         run: |
-          STACK="${{ needs.resolve.outputs.stack }}"
-
-          # Install doctl + Helm + kubectl + auth
-          curl -sL "https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-amd64.tar.gz" | tar xz -C /usr/local/bin
-          curl -sL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin --strip-components=1 linux-amd64/helm
-          curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x kubectl && mv kubectl /usr/local/bin/
-          doctl auth init --access-token "$DIGITALOCEAN_TOKEN"
-          doctl registry login --expiry-seconds 600
-
-          # MEET-048: Harbor dual-push login during transition.
-          if [ -n "$HARBOR_ROBOT_PASSWORD" ]; then
-            echo "$HARBOR_ROBOT_PASSWORD" | docker login "$HARBOR_REGISTRY" -u "$HARBOR_ROBOT_USERNAME" --password-stdin
-          fi
-
-          # Read registry endpoint from Pulumi output (avoids hardcoded constant drift)
-          REGISTRY=$(pulumi stack output registryEndpoint --stack "$STACK" 2>/dev/null || echo "registry.digitalocean.com/loopzero-infra-registry")
-          echo "Registry: $REGISTRY"
-
-          # Build + push ALL images needed for a fully functional platform.
-          # Tag matches stack name (dev, staging, prod) — Pulumi uses config.environment for image refs.
-          TAG="$STACK"
-          cd "$GITHUB_WORKSPACE"
-
-          echo "Building loopzero-api..."
-          docker build -f api/Dockerfile -t "$REGISTRY/loopzero-api:$TAG" .
-          docker push "$REGISTRY/loopzero-api:$TAG"
-
-          echo "Building tenant-controller..."
-          docker build -f operators/Dockerfile -t "$REGISTRY/tenant-controller:$TAG" .
-          docker push "$REGISTRY/tenant-controller:$TAG"
-
-          # loopzero-clone-runner — downloads source bundles from S3 and unpacks via git clone.
-          # Used by the loopzero-clone CWT (ClusterWorkflowTemplate) in build workflows.
-          # Without this image, ALL builds fail at clone-repo step (ImagePullBackOff).
-          echo "Building loopzero-clone-runner..."
-          docker build -f infra/images/clone-runner/Dockerfile \
-            -t "$REGISTRY/loopzero-clone-runner:v0.1.0" \
-            infra/images/clone-runner/
-          docker push "$REGISTRY/loopzero-clone-runner:v0.1.0"
-
-          # loopzero-packs-runner — analyzes source code and generates optimized Dockerfiles.
-          # Without this image, Argo Workflows fail at generate-dockerfile step.
-          echo "Building loopzero-packs-runner..."
-          docker build -f infra/images/packs-runner/Dockerfile \
-            -t "$REGISTRY/loopzero-packs-runner:v0.1.0" \
-            infra/images/packs-runner/
-          docker push "$REGISTRY/loopzero-packs-runner:v0.1.0"
-
-          # MEET-048: Dual-push all images to Harbor during transition.
-          # TODO(MEET-048): After migration, build directly against Harbor and remove DOCR pushes.
-          if [ -n "$HARBOR_ROBOT_PASSWORD" ] && [ -n "$HARBOR_REGISTRY" ]; then
-            echo "Dual-pushing images to Harbor..."
-            for IMAGE in loopzero-api tenant-controller; do
-              docker tag "$REGISTRY/$IMAGE:$TAG" "$HARBOR_REGISTRY/loopzero-platform/$IMAGE:$TAG"
-              docker push "$HARBOR_REGISTRY/loopzero-platform/$IMAGE:$TAG"
-            done
-            docker tag "$REGISTRY/loopzero-clone-runner:v0.1.0" "$HARBOR_REGISTRY/loopzero-platform/loopzero-clone-runner:v0.1.0"
-            docker push "$HARBOR_REGISTRY/loopzero-platform/loopzero-clone-runner:v0.1.0"
-            docker tag "$REGISTRY/loopzero-packs-runner:v0.1.0" "$HARBOR_REGISTRY/loopzero-platform/loopzero-packs-runner:v0.1.0"
-            docker push "$HARBOR_REGISTRY/loopzero-platform/loopzero-packs-runner:v0.1.0"
-            echo "Harbor dual-push complete"
-          fi
-
-          # Integrate DOCR registry with all DOKS clusters (idempotent).
-          # This creates the imagePullSecret in each cluster's default namespace
-          # and patches the default SA. Must run BEFORE Step 3 convergence.
-          # TODO(MEET-048): After migration, replace with Harbor imagePullSecret provisioning.
-          cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}"
-          for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
-            CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || echo "")
-            [ -n "$CLUSTER" ] && doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
-          done
-
-          # MEET-048: Harbor imagePullSecret for all DOKS clusters.
-          if [ -n "$HARBOR_ROBOT_PASSWORD" ] && [ -n "$HARBOR_REGISTRY" ]; then
-            for KEY in mgmtClusterName buildClusterName runtimeClusterName; do
-              CLUSTER=$(pulumi stack output "$KEY" --show-secrets --stack "$STACK" 2>/dev/null || echo "")
-              [ -z "$CLUSTER" ] && continue
-              doctl kubernetes cluster kubeconfig save "$CLUSTER" 2>/dev/null || continue
-              CTX=$(kubectl config get-contexts -o name 2>/dev/null | grep "$CLUSTER" | head -1)
-              [ -z "$CTX" ] && continue
-
-              for NS in default platform-system; do
-                kubectl --context "$CTX" create secret docker-registry harbor-registry \
-                  --docker-server="$HARBOR_REGISTRY" \
-                  --docker-username="$HARBOR_ROBOT_USERNAME" \
-                  --docker-password="$HARBOR_ROBOT_PASSWORD" \
-                  --namespace "$NS" \
-                  --dry-run=client -o yaml | kubectl --context "$CTX" apply -f - 2>/dev/null || true
-              done
-            done
-          fi
-
-          # Copy registry secret to platform-system namespace on mgmt cluster.
-          # doctl only creates the secret in the default namespace.
-          # Pods in platform-system (loopzero-api, tenant-controller) need it too.
-          MGMT_KC=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
-          if [ -n "$MGMT_KC" ]; then
-            echo "$MGMT_KC" > /tmp/mgmt-registry-kc.yaml
-            # Copy secret from default to platform-system
-            kubectl --kubeconfig=/tmp/mgmt-registry-kc.yaml get secret loopzero-infra-registry -n default -o json 2>/dev/null | \
-              jq '.metadata.namespace = "platform-system" | del(.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp)' | \
-              kubectl --kubeconfig=/tmp/mgmt-registry-kc.yaml apply -f - 2>/dev/null || true
-            # Restart stuck pods so they pick up the new secret
-            for DEPLOY in loopzero-api tenant-controller; do
-              kubectl --kubeconfig=/tmp/mgmt-registry-kc.yaml rollout restart deployment "$DEPLOY" -n platform-system 2>/dev/null || true
-            done
-            rm -f /tmp/mgmt-registry-kc.yaml
-            echo "Registry secret copied to platform-system + deployments restarted"
-          fi
-
-          # Update CWTs on build cluster — ensures build templates match latest code.
-          echo "Updating CWTs on build cluster..."
-          BUILD_CLUSTER=$(pulumi stack output buildClusterName --stack "$STACK" 2>/dev/null || echo "")
-          if [ -n "$BUILD_CLUSTER" ]; then
-            doctl kubernetes cluster kubeconfig save "$BUILD_CLUSTER" 2>/dev/null
-            BUILD_CTX=$(kubectl config get-contexts -o name 2>/dev/null | grep "$BUILD_CLUSTER" | head -1)
-            if [ -n "$BUILD_CTX" ]; then
-              # Render and apply CWT templates
-              helm template loopzero-build-cwts "$GITHUB_WORKSPACE/infra/helm/argo-workflows" \
-                --set minio.insecure=${{ needs.resolve.outputs.stack == 'dev' }} | \
-                kubectl apply --context "$BUILD_CTX" -f - 2>/dev/null || true
-
-              # BuildKit registry credentials — needed for image push in build workflows (DOCR).
-              # SEC-003: Reduced token expiry from 2592000s (30d) to 600s (10min) for CI context.
-              RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 600)
-              kubectl create secret generic buildkit-registry-config \
-                --context "$BUILD_CTX" --namespace argo \
-                --from-literal=config.json="$RW_CONFIG" \
-                --dry-run=client -o yaml | kubectl apply --context "$BUILD_CTX" -f - 2>/dev/null || true
-              echo "CWTs and BuildKit credentials updated on $BUILD_CLUSTER"
-
-              # MEET-048: Harbor BuildKit credentials for build cluster.
-              if [ -n "$HARBOR_ROBOT_PASSWORD" ] && [ -n "$HARBOR_REGISTRY" ]; then
-                HARBOR_CONFIG="{\"auths\":{\"$HARBOR_REGISTRY\":{\"username\":\"$HARBOR_ROBOT_USERNAME\",\"password\":\"$HARBOR_ROBOT_PASSWORD\"}}}"
-                kubectl create secret generic buildkit-harbor-registry-config \
-                  --context "$BUILD_CTX" --namespace argo \
-                  --from-literal=config.json="$HARBOR_CONFIG" \
-                  --dry-run=client -o yaml | kubectl apply --context "$BUILD_CTX" -f - 2>/dev/null || true
-                echo "Harbor BuildKit credentials ensured on $BUILD_CLUSTER"
-              fi
-            fi
-          fi
-
-      # Step 3: Convergence — deployments now have images available.
-      # Only runs if Steps 1+2 succeeded. Re-runs pulumi up to update
-      # Deployments that were skipAwaited in Step 1 (now images exist).
-      - name: "Step 3/3: Deploy applications"
-        if: success() && needs.resolve.outputs.command == 'up'
-        working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        run: |
-          STACK="${{ needs.resolve.outputs.stack }}"
-          # Cancel stale lock from Step 1/2
-          pulumi cancel -s "$STACK" 2>/dev/null || true
-          # Refresh: sync state with reality. Completed Jobs may have been
-          # garbage-collected by K8s between Step 1 and now.
-          PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh -s "$STACK" --yes --skip-preview --non-interactive 2>&1 || true
-          # Remove stale Jobs from state (TTL-deleted by K8s)
-          for URN in $(pulumi stack export --stack "$STACK" 2>/dev/null | jq -r '.deployment.resources[]? | select(.type == "kubernetes:batch/v1:Job" and .outputs == null) | .urn' 2>/dev/null); do
-            echo "Removing stale Job from state: $URN"
-            pulumi state delete "$URN" --stack "$STACK" --force 2>/dev/null || true
-          done
-          # Converge: update Deployments (now images exist), recreate GC'd Jobs
-          pulumi up --yes --skip-preview --stack "$STACK" --non-interactive
-
-          # Restart API pods to re-acquire leader lock.
-          # On fresh deploy, Step 1 creates pods that try leader election before
-          # the DB pool is stable. Both replicas may fail to acquire the lock.
-          # After Step 3 convergence, all infrastructure is ready — restart ensures
-          # exactly one replica wins the leader lock and starts background loops.
-          MGMT_KC=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
-          if [ -n "$MGMT_KC" ]; then
-            echo "$MGMT_KC" > /tmp/step3-kc.yaml
-            kubectl --kubeconfig=/tmp/step3-kc.yaml rollout restart deployment loopzero-api -n platform-system 2>/dev/null || true
-            kubectl --kubeconfig=/tmp/step3-kc.yaml rollout status deployment loopzero-api -n platform-system --timeout=120s 2>/dev/null || true
-            rm -f /tmp/step3-kc.yaml
-            echo "API pods restarted for leader election"
-          fi
-
-      # --- Post-deploy: capture execution state ---
-      - name: Capture execution state
-        if: always() && needs.resolve.outputs.command == 'up'
-        continue-on-error: true
-        working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        run: |
-          set +e
-          STACK="${{ needs.resolve.outputs.stack }}"
-
-          echo "### Execution State" >> "$GITHUB_STEP_SUMMARY"
-          echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          EXEC_OUT=$(pulumi stack output execution --json --stack "$STACK" 2>&1)
-          if [ $? -eq 0 ]; then
-            echo "$EXEC_OUT" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo '{"status": "could not retrieve execution state"}' >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-          echo "### Wiring" >> "$GITHUB_STEP_SUMMARY"
-          echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          WIRING_OUT=$(pulumi stack output wiring --json --stack "$STACK" 2>&1)
-          if [ $? -eq 0 ]; then
-            echo "$WIRING_OUT" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo '{"status": "could not retrieve wiring"}' >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-      # --- Post-deploy: bootstrap platform (credentials + seed data) ---
-      # This step makes the system fully functional after a from-scratch deploy.
-      # All operations are idempotent — safe to re-run on existing infrastructure.
-      # MEET-2026-04-01-026 CRIT-01: Bootstrap failure MUST fail the pipeline.
-      # Previously continue-on-error masked total platform failure (no tokens, no seed).
-      - name: Bootstrap platform
-        if: success() && needs.resolve.outputs.command == 'up'
-        run: |
-          set +e
-          STACK="${{ needs.resolve.outputs.stack }}"
-          BOOT_FAIL=0
-
-          # Install tools (psql no longer needed — seed runs inside cluster)
-          curl -sL "https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-amd64.tar.gz" | tar xz -C /usr/local/bin
-          curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl && mv kubectl /usr/local/bin/
-
-          # Get kubeconfigs + DB URI from Pulumi
-          cd ${{ env.PULUMI_WORKING_DIR }}
-          pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" > /tmp/kubeconfig 2>/dev/null
-          export KUBECONFIG=/tmp/kubeconfig
-          DB_URI=$(pulumi stack output dbUri --show-secrets --stack "$STACK" 2>/dev/null)
-          NAMESPACE="platform-system"
-
-          # ═══════════════════════════════════════
-          # 1. GITEA: generate admin token + orgs
-          # ═══════════════════════════════════════
-          echo "Waiting for Gitea pod..."
-          kubectl -n $NAMESPACE wait --for=condition=ready pod -l app.kubernetes.io/name=gitea --timeout=180s 2>/dev/null || true
-
-          GITEA_POD=$(kubectl -n $NAMESPACE get pod -l app.kubernetes.io/name=gitea -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-          if [ -z "$GITEA_POD" ]; then
-            echo "::error::Gitea pod not found — platform cannot function without Gitea"
-            exit 1
-          fi
-
-          # Validate existing token against Gitea. If invalid (e.g., fresh deploy),
-          # generate a new one. This handles destroy+recreate where the old token
-          # is in K8s Secret but doesn't exist in the new Gitea instance.
-          EXISTING_TOKEN=$(kubectl -n $NAMESPACE get secret loopzero-platform-tokens -o jsonpath='{.data.GITEA_TOKEN}' 2>/dev/null | base64 -d)
-          TOKEN_VALID="false"
-          if [ -n "$EXISTING_TOKEN" ] && [ "$EXISTING_TOKEN" != "placeholder-set-after-first-deploy" ]; then
-            kubectl -n $NAMESPACE port-forward svc/gitea-http 13099:3000 &
-            VALIDATE_PID=$!
-            sleep 3
-            VALIDATE_RESP=$(curl -sf "http://localhost:13099/api/v1/user" -H "Authorization: token $EXISTING_TOKEN" 2>/dev/null)
-            kill $VALIDATE_PID 2>/dev/null
-            wait $VALIDATE_PID 2>/dev/null
-            if echo "$VALIDATE_RESP" | grep -q "login"; then
-              TOKEN_VALID="true"
-              GITEA_TOKEN="$EXISTING_TOKEN"
-              echo "Gitea token: validated existing"
-            fi
-          fi
-
-          if [ "$TOKEN_VALID" = "false" ]; then
-            echo "Generating fresh Gitea admin token..."
-            GITEA_TOKEN=$(kubectl -n $NAMESPACE exec "$GITEA_POD" -- gitea admin user generate-access-token --username gitea_admin --token-name "loopzero-platform-$(date +%s)" --scopes all 2>/dev/null | grep -oP 'Access token was successfully created: \K.*')
-            if [ -z "$GITEA_TOKEN" ]; then
-              echo "::error::Failed to generate Gitea token — platform cannot function"
-              exit 1
-            fi
-            echo "Gitea token: generated fresh"
-          fi
-
-          # Create Gitea orgs (idempotent)
-          kubectl -n $NAMESPACE port-forward svc/gitea-http 13000:3000 &
-          PF_PID=$!
-          sleep 3
-          for ORG in loopzero loopzero-platform; do
-            curl -sf "http://localhost:13000/api/v1/orgs/$ORG" -H "Authorization: token $GITEA_TOKEN" > /dev/null 2>&1 || \
-              curl -sf -X POST "http://localhost:13000/api/v1/orgs" \
-                -H "Authorization: token $GITEA_TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "{\"username\":\"$ORG\",\"visibility\":\"private\"}" > /dev/null 2>&1 || true
-          done
-          kill $PF_PID 2>/dev/null
-
-          # ═══════════════════════════════════════
-          # 2. ARGOCD: generate apiKey token for loopzero-api account
-          # MEET-013: Uses non-expiring apiKey (not 24h session JWT).
-          # The loopzero-api account is configured in ArgoCD Helm values
-          # with capability: apiKey (accounts.loopzero-api: apiKey).
-          # ═══════════════════════════════════════
-          echo "Waiting for ArgoCD..."
-          kubectl -n $NAMESPACE wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=120s 2>/dev/null || true
-
-          ARGOCD_PASS=$(kubectl -n $NAMESPACE get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
-          ARGOCD_JWT=""
-
-          kubectl -n $NAMESPACE port-forward svc/argocd-server 18080:80 &
-          PF_PID=$!
-          sleep 3
-
-          # Step 2a: Get admin session (temporary, only used to generate apiKey)
-          ADMIN_SESSION=$(curl -sf "http://localhost:18080/api/v1/session" \
-            -H "Content-Type: application/json" \
-            -d "{\"username\":\"admin\",\"password\":\"$ARGOCD_PASS\"}" 2>/dev/null \
-            | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
-
-          if [ -n "$ADMIN_SESSION" ]; then
-            # Step 2b: Generate non-expiring apiKey for loopzero-api account
-            ARGOCD_JWT=$(curl -sf "http://localhost:18080/api/v1/account/loopzero-api/token" \
-              -H "Authorization: Bearer $ADMIN_SESSION" \
-              -H "Content-Type: application/json" \
-              -d "{\"expiresIn\":0,\"id\":\"loopzero-api-$(date +%s)\"}" 2>/dev/null \
-              | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
-
-            if [ -n "$ARGOCD_JWT" ]; then
-              echo "ArgoCD apiKey: generated for loopzero-api account (non-expiring, ${#ARGOCD_JWT} chars)"
-            else
-              echo "::warning::Could not generate apiKey for loopzero-api — account may not exist yet (Helm values need accounts.loopzero-api: apiKey)"
-              echo "::warning::Falling back to admin session token (expires in 24h)"
-              ARGOCD_JWT="$ADMIN_SESSION"
-            fi
-          else
-            echo "::warning::Failed to authenticate to ArgoCD, falling back to password"
-            ARGOCD_JWT="$ARGOCD_PASS"
-          fi
-
-          kill $PF_PID 2>/dev/null
-
-          # ═══════════════════════════════════════
-          # 3. UPDATE K8s SECRETS
-          # ═══════════════════════════════════════
-          kubectl -n $NAMESPACE create secret generic loopzero-platform-tokens \
-            --from-literal=GITEA_TOKEN="$GITEA_TOKEN" \
-            --from-literal=ARGOCD_TOKEN="$ARGOCD_JWT" \
-            --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
-
-          # ArgoCD repo credentials — both internal AND public URLs.
-          # The TenantController creates ArgoCD Applications using either:
-          #   - Internal URL: http://gitea-http.platform-system.svc.cluster.local:3000/...
-          #   - Public URL: https://git.{domain}/... (set by bootstrap or API)
-          # ArgoCD does prefix matching: credentials must cover BOTH URL patterns.
-          GITEA_BASE="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000"
-          STACK="${{ needs.resolve.outputs.stack }}"
-          DOMAIN=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi config get domain --stack "$STACK" 2>/dev/null || echo "")
-          GITEA_PUBLIC="https://git.${DOMAIN}"
-
-          # Internal credential template (for operator-created Applications)
-          kubectl -n $NAMESPACE create secret generic gitea-repo-creds \
-            --from-literal=type=git \
-            --from-literal=url="$GITEA_BASE" \
-            --from-literal=username=gitea_admin \
-            --from-literal=password="$GITEA_TOKEN" \
-            --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
-          kubectl -n $NAMESPACE label secret gitea-repo-creds argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
-
-          # Public URL credential template (for Applications using public Gitea URL).
-          # insecure=true: Gitea behind Cloudflare Tunnel uses CF's TLS cert, not
-          # Let's Encrypt. Git inside ArgoCD repo-server fails TLS verification.
-          if [ -n "$DOMAIN" ]; then
-            kubectl -n $NAMESPACE create secret generic gitea-repo-creds-public \
-              --from-literal=type=git \
-              --from-literal=url="$GITEA_PUBLIC" \
-              --from-literal=username=gitea_admin \
-              --from-literal=password="$GITEA_TOKEN" \
-              --from-literal=insecure=true \
-              --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
-            kubectl -n $NAMESPACE label secret gitea-repo-creds-public argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
-          fi
-
-          # Explicit repo registration for the bootstrap tenant gitops repo.
-          # ArgoCD reliably detects type=repository secrets (unlike repo-creds).
-          # Internal URL (used by operator when creating Applications via internal Gitea):
-          kubectl -n $NAMESPACE create secret generic argocd-repo-tn-loopzero-gitops \
-            --from-literal=type=git \
-            --from-literal=url="${GITEA_BASE}/loopzero/tn-loopzero-gitops.git" \
-            --from-literal=username=gitea_admin \
-            --from-literal=password="$GITEA_TOKEN" \
-            --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
-          kubectl -n $NAMESPACE label secret argocd-repo-tn-loopzero-gitops argocd.argoproj.io/secret-type=repository --overwrite 2>/dev/null
-
-          # Public URL (used when Application repoURL points to public Gitea).
-          # insecure=true: Traefik serves self-signed cert until Let's Encrypt issues.
-          # ArgoCD repo-server verifies TLS by default — must skip for public Gitea URL.
-          if [ -n "$DOMAIN" ]; then
-            kubectl -n $NAMESPACE create secret generic argocd-repo-tn-loopzero-gitops-public \
-              --from-literal=type=git \
-              --from-literal=url="${GITEA_PUBLIC}/loopzero/tn-loopzero-gitops.git" \
-              --from-literal=username=gitea_admin \
-              --from-literal=password="$GITEA_TOKEN" \
-              --from-literal=insecure=true \
-              --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
-            kubectl -n $NAMESPACE label secret argocd-repo-tn-loopzero-gitops-public argocd.argoproj.io/secret-type=repository --overwrite 2>/dev/null
-          fi
-
-          # Flush ArgoCD Redis cache and restart all ArgoCD components.
-          # On destroy+recreate, ArgoCD may cache stale state (e.g., "project not found")
-          # from before credentials and AppProjects are fully configured.
-          # Deleting the Redis pod clears the cache; restarting repo-server and
-          # application-controller forces fresh credential + project discovery.
-          kubectl -n $NAMESPACE delete pod -l app.kubernetes.io/name=argocd-redis 2>/dev/null || true
-          kubectl -n $NAMESPACE rollout restart deployment argocd-repo-server 2>/dev/null || true
-          kubectl -n $NAMESPACE rollout restart statefulset argocd-application-controller 2>/dev/null || true
-          # Wait for ArgoCD to be ready before creating Tenant CR (which triggers sync).
-          kubectl -n $NAMESPACE wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=120s 2>/dev/null || true
-
-          # ═══════════════════════════════════════
-          # 4. SEED DATABASE (idempotent)
-          # Runs inside the cluster via ephemeral pod because the DB firewall
-          # only allows DOKS clusters (not GH Actions runners).
-          # ═══════════════════════════════════════
-          if [ -n "$DB_URI" ]; then
-            echo "Seeding database..."
-            LOOPZERO_DB_URI=$(echo "$DB_URI" | sed 's|/defaultdb?|/loopzero?|; s|/defaultdb$|/loopzero|')
-
-            # Sanitize: remove single quotes to prevent SQL injection via GitHub username.
-            GH_LOGIN=$(echo "${{ github.triggering_actor }}" | tr -d "'")
-            GH_USER_ID="github-${GH_LOGIN}"
-            GH_EMAIL="${GH_LOGIN}@users.noreply.github.com"
-
-            # Build seed SQL with sanitized variables (quotes already stripped above).
-            SEED_SQL=$(cat <<SEEDEOF
-          -- User record (ON CONFLICT by id — github_id UNIQUE was dropped in migration 000016)
-          INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
-          VALUES ('${GH_USER_ID}', '${GH_EMAIL}',
-                  abs(hashtext('${GH_LOGIN}')), '${GH_LOGIN}', NOW(), NOW())
-          ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email,
-                  display_name = EXCLUDED.display_name, updated_at = NOW();
-
-          -- Tenant (slug required since migration 000017, plan removed since migration 000018)
-          INSERT INTO tenants (id, display_name, slug, owner_id, created_at, updated_at)
-          VALUES ('tn-loopzero', 'loopzero', 'loopzero', '${GH_USER_ID}', NOW(), NOW())
-          ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id, updated_at = NOW();
-
-          INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)
-          VALUES ('tn-loopzero', '${GH_USER_ID}', 'owner', NOW(), NOW())
-          ON CONFLICT DO NOTHING;
-
-          -- Subscription (source of truth for plan since migration 000018)
-          INSERT INTO subscriptions (id, tenant_id, plan, status, created_at, updated_at)
-          VALUES ('sub_bootstrap_tn-loopzero', 'tn-loopzero', 'starter', 'active', NOW(), NOW())
-          ON CONFLICT (tenant_id) DO NOTHING;
-
-          -- Paulo (legacy GitHub user with real github_id)
-          INSERT INTO users (id, email, github_id, display_name, created_at, updated_at)
-          VALUES ('github-paulohenriquevn', 'paulohenriquevn@gmail.com',
-                  6766298, 'paulohenriquevn', NOW(), NOW())
-          ON CONFLICT (id) DO UPDATE SET updated_at = NOW();
-
-          INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)
-          VALUES ('tn-loopzero', 'github-paulohenriquevn', 'owner', NOW(), NOW())
-          ON CONFLICT DO NOTHING;
-          SEEDEOF
-          )
-
-            # Run seed inside the cluster via ephemeral pod.
-            # DB firewall only allows DOKS clusters — GH runner can't connect directly.
-            kubectl -n $NAMESPACE delete pod db-seed --ignore-not-found 2>/dev/null
-            if kubectl run db-seed -n $NAMESPACE \
-              --image=postgres:16-alpine \
-              --restart=Never \
-              --rm -i \
-              --env="PGCONNECT_TIMEOUT=30" \
-              --command -- psql "$LOOPZERO_DB_URI" -c "$SEED_SQL" 2>&1; then
-              echo "Database seeded: user=${GH_USER_ID} + paulohenriquevn tenant=tn-loopzero"
-            else
-              echo "::error::Database seed failed — platform will lack admin user and tenant"
-              BOOT_FAIL=$((BOOT_FAIL + 1))
-            fi
-          else
-            echo "::error::DB_URI not available — cannot seed database"
-            BOOT_FAIL=$((BOOT_FAIL + 1))
-          fi
-
-          # ═══════════════════════════════════════
-          # 5. CREATE TENANT CR (idempotent)
-          # ═══════════════════════════════════════
-          kubectl apply -f - <<'TENANT_CR'
-          apiVersion: loopzero.io/v1
-          kind: Tenant
-          metadata:
-            name: tn-loopzero
-            namespace: platform-system
-          spec:
-            displayName: loopzero
-            plan: starter
-            environments:
-              - name: production
-                cluster: runtime
-            gitops:
-              repoName: tn-loopzero-gitops
-              branch: main
-            limits:
-              maxBuildConcurrency: 2
-              maxCPU: "4"
-              maxMemory: "8Gi"
-              maxStorage: "20Gi"
-            preview:
-              maxEnvironments: 3
-              ttlHours: 24
-          TENANT_CR
-          echo "Tenant CR applied"
-
-          # Wait for controller to reconcile
-          echo "Waiting for tenant reconciliation..."
-          for i in $(seq 1 30); do
-            PHASE=$(kubectl -n $NAMESPACE get tenant tn-loopzero -o jsonpath='{.status.phase}' 2>/dev/null)
-            [ "$PHASE" = "Active" ] && echo "Tenant Active" && break
-            sleep 5
-          done
-
-          # ═══════════════════════════════════════
-          # 5.5. CLOUDFLARE CREDENTIALS SECRET (Sprint 10)
-          # Ensures loopzero-cf-credentials K8s secret exists even if Pulumi config set failed.
-          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
-            CF_ACCOUNT_ID=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi config get cfAccountId --stack "$STACK" 2>/dev/null || echo "")
-            CF_KV_NS_ID=$(cd "$GITHUB_WORKSPACE/${{ env.PULUMI_WORKING_DIR }}" && pulumi stack output cfKvNamespaceId --stack "$STACK" 2>/dev/null || echo "")
-            if [ -n "$CF_ACCOUNT_ID" ]; then
-              kubectl -n $NAMESPACE create secret generic loopzero-cf-credentials \
-                --from-literal=CF_API_TOKEN="$CLOUDFLARE_API_TOKEN" \
-                --from-literal=CF_ACCOUNT_ID="$CF_ACCOUNT_ID" \
-                --from-literal=CF_KV_NAMESPACE_ID="${CF_KV_NS_ID:-not-set}" \
-                --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
-              echo "  Cloudflare credentials secret ensured"
-            fi
-          fi
-
-          # 6. RESTART SERVICES (pick up new tokens)
-          # ═══════════════════════════════════════
-          kubectl -n $NAMESPACE rollout restart deployment loopzero-api 2>/dev/null || true
-          kubectl -n $NAMESPACE delete pod -l app=tenant-controller 2>/dev/null || true
-          kubectl -n $NAMESPACE rollout status deployment loopzero-api --timeout=60s 2>/dev/null || true
-
-          # ═══════════════════════════════════════
-          # FINAL GATE: verify minimum viable bootstrap
-          # Pipeline MUST fail if critical tokens are missing — a green pipeline
-          # with missing tokens means the platform is non-functional.
-          # BOOT_FAIL may already be >0 from seed failure above.
-          # ═══════════════════════════════════════
-          [ -z "$GITEA_TOKEN" ] && echo "::error::Missing Gitea token" && BOOT_FAIL=$((BOOT_FAIL + 1))
-          [ -z "$ARGOCD_JWT" ] && echo "::error::Missing ArgoCD JWT" && BOOT_FAIL=$((BOOT_FAIL + 1))
-
-          # Verify secrets were persisted to K8s (not still placeholder)
-          STORED_GITEA=$(kubectl -n $NAMESPACE get secret loopzero-platform-tokens -o jsonpath='{.data.GITEA_TOKEN}' 2>/dev/null | base64 -d)
-          if [ "$STORED_GITEA" = "placeholder-set-after-first-deploy" ]; then
-            echo "::error::Gitea token still placeholder in K8s Secret"
-            BOOT_FAIL=$((BOOT_FAIL + 1))
-          fi
-
-          if [ "$BOOT_FAIL" -gt 0 ]; then
-            echo "::error::Bootstrap failed — $BOOT_FAIL critical items missing"
-            exit 1
-          fi
-
-          echo "### Platform Bootstrap Complete" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Gitea token: configured" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ArgoCD JWT: generated" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Database: seeded (admin user + tenant)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Tenant CR: applied (tn-loopzero)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Gitea orgs: loopzero, loopzero-platform" >> "$GITHUB_STEP_SUMMARY"
-
-      # --- Post-deploy: deploy Cloudflare Worker (Sprint 10) ---
-      # The Pulumi WorkerScript resource tracks state but can't update the
-      # Worker content reliably (CF API multipart format issue). This step
-      # deploys the Worker script via CF API with correct KV binding.
-      # REVIEW-2026-03-30: Removed continue-on-error — Worker deploy failure must be visible.
-      - name: Deploy Cloudflare Worker
-        if: success() && needs.resolve.outputs.command == 'up' && env.CLOUDFLARE_API_TOKEN != ''
-        working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        run: |
-          STACK="${{ needs.resolve.outputs.stack }}"
-          CF_ACCOUNT_ID=$(pulumi config get cfAccountId --stack "$STACK" 2>/dev/null || echo "")
-          CF_KV_NS_ID=$(pulumi stack output cfKvNamespaceId --stack "$STACK" 2>/dev/null || echo "")
-
-          if [ -z "$CF_ACCOUNT_ID" ] || [ -z "$CF_KV_NS_ID" ]; then
-            echo "Cloudflare not configured for this stack — skipping Worker deploy"
-            exit 0
-          fi
-
-          WORKER_FILE="$GITHUB_WORKSPACE/infra/cloudflare/worker.mjs"
-          if [ ! -f "$WORKER_FILE" ]; then
-            echo "Worker source not found at $WORKER_FILE — skipping"
-            exit 0
-          fi
-
-          echo "Deploying CF Worker loopzero-static-delivery with KV binding..."
-          RESULT=$(curl -s -w "%{http_code}" -o /tmp/cf-worker-response.json \
-            -X PUT "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/loopzero-static-delivery" \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            -F "metadata={\"body_part\":\"script\",\"bindings\":[{\"type\":\"kv_namespace\",\"name\":\"LOOPZERO_ROUTING\",\"namespace_id\":\"$CF_KV_NS_ID\"}]};type=application/json" \
-            -F "script=@$WORKER_FILE;type=application/javascript")
-
-          if [ "$RESULT" = "200" ]; then
-            echo "✅ CF Worker deployed successfully"
-          else
-            echo "::error::CF Worker deploy returned HTTP $RESULT"
-            cat /tmp/cf-worker-response.json
-            exit 1
-          fi
-
-      # --- Post-deploy: verify cross-cluster Loki access ---
-      # Loki URL is now resolved by Pulumi via @pulumi/command (resolve-build-node-ip).
-      # This step only verifies reachability — no more kubectl patch needed.
-      - name: Verify cross-cluster Loki
-        if: success() && needs.resolve.outputs.command == 'up'
-        continue-on-error: true
-        working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        run: |
-          set +e
-          STACK="${{ needs.resolve.outputs.stack }}"
-
-          BUILD_KUBECONFIG=$(pulumi stack output buildKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
-          MGMT_KUBECONFIG=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
-
-          if [ -z "$BUILD_KUBECONFIG" ] || [ -z "$MGMT_KUBECONFIG" ]; then
-            echo "::warning::Could not retrieve kubeconfigs for Loki verification"
-            exit 0
-          fi
-
-          echo "$BUILD_KUBECONFIG" > /tmp/build-kubeconfig.yaml
-          echo "$MGMT_KUBECONFIG" > /tmp/mgmt-kubeconfig.yaml
-
-          # Read Loki URL from API configmap (set by Pulumi)
-          NAMESPACE="platform-system"
-          LOKI_URL=$(kubectl --kubeconfig=/tmp/mgmt-kubeconfig.yaml get configmap loopzero-api-config \
-            -n "$NAMESPACE" -o jsonpath='{.data.LOKI_URL}' 2>/dev/null)
-
-          if [ -z "$LOKI_URL" ] || [ "$LOKI_URL" = "http://pending-loki-ip:30100" ]; then
-            echo "::warning::Loki URL not resolved by Pulumi — build cluster nodes may not be ready"
-            exit 0
-          fi
-
-          echo "Loki URL (from Pulumi): $LOKI_URL"
-
-          # Verify Loki is reachable from mgmt cluster
-          kubectl --kubeconfig=/tmp/mgmt-kubeconfig.yaml run loki-check --rm -i \
-            --image=curlimages/curl:8.11.1 --restart=Never \
-            -- curl -sf "$LOKI_URL/ready" 2>/dev/null && echo "✅ Loki: reachable" || echo "::warning::Loki not reachable at $LOKI_URL"
-
-          echo "- Loki URL: $LOKI_URL (resolved by Pulumi)" >> "$GITHUB_STEP_SUMMARY"
-
-          # Cleanup
-          rm -f /tmp/build-kubeconfig.yaml /tmp/mgmt-kubeconfig.yaml
-
-      # --- Post-deploy: verify all phases completed ---
-      # MEET-2026-04-01-026 CRIT-02: Health validation failure MUST fail the pipeline.
-      # Previously continue-on-error reported green while platform was non-functional.
-      - name: Verify deployment health
-        if: success() && needs.resolve.outputs.command == 'up'
-        working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        run: |
-          set +e
-          EXECUTION=$(pulumi stack output execution --json --stack ${{ needs.resolve.outputs.stack }} 2>&1)
-          if [ $? -ne 0 ]; then
-            echo "::error::Could not retrieve execution state — Pulumi state may be corrupted"
-            echo "### ❌ Could not verify deployment health" >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-
-          PENDING=$(echo "$EXECUTION" | jq -r '.phases[]? | select(.status != "completed") | .phase' 2>/dev/null)
-
-          if [ -n "$PENDING" ]; then
-            echo "::warning::The following phases are not completed: $PENDING"
-            echo "### ⚠️ Incomplete Phases" >> "$GITHUB_STEP_SUMMARY"
-            echo "$PENDING" | while read -r phase; do
-              echo "- \`$phase\`" >> "$GITHUB_STEP_SUMMARY"
-            done
-          else
-            echo "### ✅ All phases completed" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      # --- Post-deploy: runtime health validation ---
-      # Verifies that critical pods are Running and services are reachable.
-      # This catches config issues (wrong ports, missing NetworkPolicies, bad kubeconfigs)
-      # that Pulumi can't detect because it only checks K8s resource creation, not pod health.
-      - name: Validate runtime health
-        if: success() && needs.resolve.outputs.command == 'up'
-        working-directory: ${{ env.PULUMI_WORKING_DIR }}
-        run: |
-          set +e
-          STACK="${{ needs.resolve.outputs.stack }}"
-          pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" > /tmp/health-kc.yaml 2>/dev/null
-          export KUBECONFIG=/tmp/health-kc.yaml
-          NS="platform-system"
-          PASS=0
-          FAIL=0
-
-          check() {
-            local name="$1" cmd="$2"
-            if eval "$cmd" > /dev/null 2>&1; then
-              echo "✅ $name"
-              PASS=$((PASS + 1))
-            else
-              echo "❌ $name"
-              FAIL=$((FAIL + 1))
-            fi
-          }
-
-          echo "Waiting for critical deployments (max 5 min)..."
-          for deploy in loopzero-api tenant-controller; do
-            kubectl rollout status deployment/$deploy -n $NS --timeout=300s 2>/dev/null || true
-          done
-
-          echo ""
-          echo "=== Health Checks ==="
-          check "API health" "kubectl exec deploy/loopzero-api -n $NS -c api -- wget -qO- --timeout=10 http://localhost:8080/api/v1/health"
-          check "Gitea reachable" "kubectl exec deploy/tenant-controller -n $NS -- wget -qO- --timeout=10 http://gitea-http.$NS.svc.cluster.local:3000/api/v1/repos/search?limit=1"
-          check "Tenant controller running" "kubectl get deploy tenant-controller -n $NS -o jsonpath='{.status.readyReplicas}' | grep -q '[1-9]'"
-
-          echo ""
-          echo "Results: $PASS passed, $FAIL failed"
-          echo "### Runtime Health" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Checks passed: $PASS" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Checks failed: $FAIL" >> "$GITHUB_STEP_SUMMARY"
-
-          rm -f /tmp/health-kc.yaml
-          if [ "$FAIL" -gt 0 ]; then
-            echo "::error::$FAIL health checks failed — platform is not fully functional"
-            exit 1
-          fi
+          echo "### Deploy Result" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Stack | ${{ needs.resolve.outputs.stack }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Command | ${{ needs.resolve.outputs.command }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Duration | ${{ steps.pulumi.outputs.duration }}s |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | ${{ job.status }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Bootstrap (after successful up) ─────────────────────
+  bootstrap:
+    name: Bootstrap
+    needs: [resolve, deploy]
+    if: needs.resolve.outputs.command == 'up' && needs.deploy.result == 'success'
+    uses: ./.github/workflows/infra-bootstrap.yml
+    with:
+      stack: ${{ needs.resolve.outputs.stack }}
+    secrets: inherit

@@ -6,10 +6,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -80,14 +78,18 @@ type TenantControllerConfig struct {
 }
 
 // Reconcile handles the reconciliation loop for Tenant resources.
-func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx, span := otel.Tracer("loopzero-operator").Start(ctx, "loopzero.operator.tenant.reconcile",
-		trace.WithAttributes(
-			attribute.String("k8s.object.name", req.Name),
-			attribute.String("k8s.namespace", req.Namespace),
-		),
-	)
+func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+	ctx, span := startReconcileSpan(ctx, "tenant", req.Name, req.Namespace)
 	defer span.End()
+	start := time.Now()
+	defer func() {
+		if retErr != nil {
+			recordError(span, retErr)
+		} else {
+			setSuccess(span)
+		}
+		reconcileOutcome("tenant", start, retErr)
+	}()
 
 	logger := log.FromContext(ctx)
 

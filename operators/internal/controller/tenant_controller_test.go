@@ -1434,17 +1434,27 @@ var _ = Describe("TenantController — Phase Transition + Deletion", Ordered, fu
 				}
 			}, timeout, interval).Should(Succeed())
 
-			// Clean up build namespaces
-			var buildNsList corev1.NamespaceList
-			_ = k8sClient.List(ctx, &buildNsList, client.MatchingLabels{
-				"loopzero.io/tenant": tenantName,
-			})
-			for i := range buildNsList.Items {
-				ns := &buildNsList.Items[i]
-				ns.Finalizers = nil
-				delete(ns.Labels, "loopzero.io/tenant")
-				_ = k8sClient.Update(ctx, ns)
-			}
+			// Clean up build namespaces — remove tenant label so the controller
+			// sees zero remaining namespaces and proceeds to remove the finalizer.
+			// Use Eventually to handle race conditions with the controller's requeue loop.
+			Eventually(func(g Gomega) {
+				var buildNsList corev1.NamespaceList
+				g.Expect(k8sClient.List(ctx, &buildNsList, client.MatchingLabels{
+					"loopzero.io/tenant": tenantName,
+				})).To(Succeed())
+				for i := range buildNsList.Items {
+					ns := buildNsList.Items[i].DeepCopy()
+					ns.Finalizers = nil
+					delete(ns.Labels, "loopzero.io/tenant")
+					g.Expect(k8sClient.Update(ctx, ns)).To(Succeed())
+				}
+				// Verify labels are actually gone
+				var verify corev1.NamespaceList
+				g.Expect(k8sClient.List(ctx, &verify, client.MatchingLabels{
+					"loopzero.io/tenant": tenantName,
+				})).To(Succeed())
+				g.Expect(verify.Items).To(BeEmpty(), "build namespaces should have no tenant label")
+			}, timeout, interval).Should(Succeed())
 
 			// Tenant should eventually be fully deleted
 			Eventually(func(g Gomega) {

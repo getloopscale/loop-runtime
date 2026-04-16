@@ -140,22 +140,6 @@ func TestWorkflowBuilder_Build_HasPodAffinity(t *testing.T) {
 	}
 }
 
-func containsAll(s string, subs ...string) bool {
-	for _, sub := range subs {
-		found := false
-		for i := 0; i+len(sub) <= len(s); i++ {
-			if s[i:i+len(sub)] == sub {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
-}
-
 // ---------------------------------------------------------------------------
 // DAG structure
 // ---------------------------------------------------------------------------
@@ -226,7 +210,7 @@ func TestWorkflowBuilder_Build_NodeStrategy_HasSaveCache(t *testing.T) {
 	}
 
 	dag := findDAG(t, wf, "finalize")
-	task := findTask(dag, "save-cache")
+	task := findTask(t, dag, "save-cache")
 	if task == nil {
 		t.Error("Node strategy should include save-cache in finalize DAG")
 	}
@@ -265,10 +249,7 @@ func TestWorkflowBuilder_Build_CloneTask_UsesCWTRef(t *testing.T) {
 	}
 
 	dag := findDAG(t, wf, "build-pipeline")
-	task := findTask(dag, "clone-repo")
-	if task == nil {
-		t.Fatal("clone-repo task not found")
-	}
+	task := findTask(t, dag, "clone-repo")
 
 	if task.TemplateRef == nil {
 		t.Fatal("clone-repo missing templateRef")
@@ -306,10 +287,7 @@ func TestWorkflowBuilder_Build_BuildImageTask_IsInlineTemplate(t *testing.T) {
 
 	// Per-app BuildKit task: build-image-{app}
 	dag := findDAG(t, wf, "build-pipeline")
-	task := findTask(dag, "build-image-api")
-	if task == nil {
-		t.Fatal("build-image-api task not found")
-	}
+	task := findTask(t, dag, "build-image-api")
 
 	if task.TemplateRef != nil {
 		t.Error("build-image-api should NOT use templateRef — inline template")
@@ -320,9 +298,7 @@ func TestWorkflowBuilder_Build_BuildImageTask_IsInlineTemplate(t *testing.T) {
 
 	// Verify inline container template exists and uses BuildKit rootless image
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api inline container template not found")
-	}
+	// findContainer now fatals if not found — no nil check needed
 	if c.Image != imageBuildKit {
 		t.Errorf("build-image image = %q, want moby/buildkit:v0.18.2-rootless", c.Image)
 	}
@@ -338,9 +314,7 @@ func TestWorkflowBuilder_Build_InsecureFlags_WhenRegistryInsecure(t *testing.T) 
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api inline container template not found")
-	}
+	// findContainer now fatals if not found — no nil check needed
 
 	// BuildKit uses --allow security.insecure for insecure registries
 	argsStr := strings.Join(c.Args, " ")
@@ -389,9 +363,7 @@ func TestWorkflowBuilder_Build_NoInsecureFlags_WhenRegistrySecure(t *testing.T) 
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api inline container template not found")
-	}
+	// findContainer now fatals if not found — no nil check needed
 
 	argsStr := strings.Join(c.Args, " ")
 	if strings.Contains(argsStr, "--allow") {
@@ -411,7 +383,7 @@ func TestWorkflowBuilder_Build_RestoreCache_NoMinIOParams(t *testing.T) {
 	}
 
 	dag := findDAG(t, wf, "build-pipeline")
-	task := findTask(dag, "restore-cache")
+	task := findTask(t, dag, "restore-cache")
 	if task == nil {
 		t.Fatal("restore-cache task not found")
 	}
@@ -440,7 +412,7 @@ func TestWorkflowBuilder_Build_SaveCache_NoMinIOParams(t *testing.T) {
 	}
 
 	dag := findDAG(t, wf, "finalize")
-	task := findTask(dag, "save-cache")
+	task := findTask(t, dag, "save-cache")
 	if task == nil {
 		t.Fatal("save-cache task not found in finalize DAG")
 	}
@@ -480,10 +452,7 @@ func TestWorkflowBuilder_Build_HasInlineTemplates(t *testing.T) {
 	}
 
 	for _, name := range inlineNames {
-		c := findContainer(t, wf, name)
-		if c == nil {
-			t.Errorf("missing inline container template: %s", name)
-		}
+		findContainer(t, wf, name) // fatals if not found
 	}
 }
 
@@ -501,19 +470,19 @@ func TestWorkflowBuilder_Build_DAGDependencies(t *testing.T) {
 	dag := findDAG(t, wf, "build-pipeline")
 
 	// install-deps depends on restore-cache and validate-workspace
-	installTask := findTask(dag, "install-deps")
+	installTask := findTask(t, dag, "install-deps")
 	assertDependencies(t, installTask, []string{"restore-cache", "validate-workspace"})
 
 	// build-apps depends on install-deps
-	buildTask := findTask(dag, "build-apps")
+	buildTask := findTask(t, dag, "build-apps")
 	assertDependencies(t, buildTask, []string{"install-deps"})
 
 	// build-image depends on generate-dockerfile
-	imageTask := findTask(dag, "build-image-api")
+	imageTask := findTask(t, dag, "build-image-api")
 	assertDependencies(t, imageTask, []string{"generate-dockerfile"})
 
 	// clone-repo has no dependencies
-	cloneTask := findTask(dag, "clone-repo")
+	cloneTask := findTask(t, dag, "clone-repo")
 	if len(cloneTask.Dependencies) > 0 {
 		t.Error("clone-repo should have no dependencies")
 	}
@@ -607,12 +576,12 @@ func TestWorkflowBuilder_Build_MultiApp_EndAtBuildImage(t *testing.T) {
 
 	// Verify build-image exists
 	dag := findDAG(t, wf, "build-pipeline")
-	if task := findTask(dag, "build-image-api"); task == nil {
+	if task := findTask(t, dag, "build-image-api"); task == nil {
 		t.Fatal("build-image task not found in DAG")
 	}
 
 	// Verify generate-manifests does NOT exist
-	if task := findTask(dag, "generate-manifests"); task != nil {
+	if task := findTaskOpt(dag, "generate-manifests"); task != nil {
 		t.Errorf("generate-manifests should not exist in workflow DAG — manifests are generated by API")
 	}
 }
@@ -707,7 +676,19 @@ func findDAG(t *testing.T, wf *forge.Workflow, name string) *forge.DAG {
 	return nil
 }
 
-func findTask(dag *forge.DAG, name string) *forge.Task {
+func findTask(t *testing.T, dag *forge.DAG, name string) *forge.Task {
+	t.Helper()
+	for _, task := range dag.Tasks {
+		if task.Name == name {
+			return task
+		}
+	}
+	t.Fatalf("task %q not found in DAG", name)
+	return nil
+}
+
+// findTaskOpt returns nil if not found (no fatal). Use when asserting absence.
+func findTaskOpt(dag *forge.DAG, name string) *forge.Task {
 	for _, task := range dag.Tasks {
 		if task.Name == name {
 			return task
@@ -723,6 +704,7 @@ func findContainer(t *testing.T, wf *forge.Workflow, name string) *forge.Contain
 			return c
 		}
 	}
+	t.Fatalf("container template %q not found", name)
 	return nil
 }
 
@@ -803,9 +785,7 @@ func TestWorkflowBuilder_BuildKit_SingleContainerNoSidecars(t *testing.T) {
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api template not found")
-	}
+	// findContainer now fatals if not found — no nil check needed
 
 	// Single container: rootless image, no sidecars (MEET-2026-03-26-007)
 	if c.Image != imageBuildKit {
@@ -828,9 +808,7 @@ func TestWorkflowBuilder_BuildKit_EntrypointScript(t *testing.T) {
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api not found")
-	}
+	// findContainer now fatals if not found
 
 	// Command: ["rootlesskit", "sh", "-c", <script>, "--"]
 	if len(c.Command) != 5 {
@@ -874,9 +852,7 @@ func TestWorkflowBuilder_BuildKit_SecurityContext_Rootless(t *testing.T) {
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api template not found")
-	}
+	// findContainer now fatals if not found — no nil check needed
 
 	// Single container security context (runs both buildkitd + buildctl)
 	if c.SecurityContext == nil {
@@ -902,9 +878,7 @@ func TestWorkflowBuilder_BuildKit_ResourceLimits(t *testing.T) {
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api template not found")
-	}
+	// findContainer now fatals if not found — no nil check needed
 
 	// Single container resources: must cover both buildkitd + buildctl
 	if c.Resources == nil {
@@ -929,9 +903,7 @@ func TestWorkflowBuilder_BuildKit_BuildctlArgs_ContainsCacheFlags(t *testing.T) 
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api template not found")
-	}
+	// findContainer now fatals if not found — no nil check needed
 
 	argsStr := strings.Join(c.Args, " ")
 
@@ -1000,13 +972,7 @@ func TestWorkflowBuilder_BuildKit_MultiApp_IndependentContainers(t *testing.T) {
 
 	apiContainer := findContainer(t, wf, "build-image-api")
 	workerContainer := findContainer(t, wf, "build-image-worker")
-
-	if apiContainer == nil {
-		t.Fatal("build-image-api not found")
-	}
-	if workerContainer == nil {
-		t.Fatal("build-image-worker not found")
-	}
+	// findContainer fatals if not found — no nil checks needed
 
 	// Each app: single container, no sidecars, rootless image
 	if len(apiContainer.Sidecars) != 0 {
@@ -1175,9 +1141,7 @@ func TestWorkflowBuilder_BuildPlan_UsesResolvedPaths(t *testing.T) {
 	}
 
 	c := findContainer(t, wf, "build-image-api")
-	if c == nil {
-		t.Fatal("build-image-api not found")
-	}
+	// findContainer now fatals if not found
 
 	argsStr := strings.Join(c.Args, " ")
 

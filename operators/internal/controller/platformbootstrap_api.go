@@ -21,6 +21,8 @@ import (
 // reconcileAPIPhase handles the WaitingForAPI phase.
 // Steps: check API health, resolve bootstrap secret, call bootstrap endpoint for DB seeding.
 func (r *PlatformBootstrapReconciler) reconcileAPIPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
+	ctx, span := startChildSpan(ctx, "bootstrap.api.configure")
+	defer span.End()
 	logger := log.FromContext(ctx)
 
 	healthURL := pb.Spec.API.HealthEndpoint

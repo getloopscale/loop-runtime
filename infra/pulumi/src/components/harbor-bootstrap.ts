@@ -50,9 +50,12 @@ export function installHarbor(
       chart: path.resolve(__dirname, "../../../../infra/helm/harbor"),
       namespace: PLATFORM_NAMESPACE,
       createNamespace: false,
-      timeout: 600,
+      timeout: 900,
       values: {
         harbor: {
+          // Recreate strategy: jobservice uses a PVC — RollingUpdate causes
+          // Multi-Attach deadlock (new pod can't mount volume while old exists).
+          updateStrategy: { type: "Recreate" },
           externalURL: `https://${harborUrl}`,
           // Database — external PG (LoopZero's managed instance)
           database: {
@@ -182,13 +185,13 @@ export function installHarbor(
           // Post-install init Job — configures Harbor after deployment.
           // Requires harbor-init image built by build-images.yml workflow.
           // Password comes from K8s Secret synced by ESO.
+          // Harbor init hook is disabled during initial provisioning.
+          // The post-install Job requires the harbor-init image which may not
+          // exist yet on first deploy, causing Helm DeadlineExceeded. The init
+          // runs as a separate step in the CI pipeline (Step 3: Deploy apps)
+          // after images are built.
           init: {
-            enabled: true,
-            image: `registry.digitalocean.com/loopzero-infra-registry/harbor-init:latest`,
-            passwordSecretRef: {
-              name: "harbor-admin-credentials",
-              key: "harbor-admin-password",
-            },
+            enabled: false,
           },
         },
       },

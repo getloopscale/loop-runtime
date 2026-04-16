@@ -9,8 +9,9 @@
 // §3.6: Session expiry shows notification before redirect.
 
 // MEET-040: Single origin. Dashboard served at cloud.{domain} — all API calls are relative.
-// VITE_API_URL is empty in production (same-origin). Only set for local dev (localhost:13002).
-const API_BASE = import.meta.env.VITE_API_URL || '';
+// Runtime config via /__config.js (empty in prod = same-origin, set per-env in container).
+import { API_URL } from './config';
+const API_BASE = API_URL;
 
 export function getApiBase() { return API_BASE; }
 

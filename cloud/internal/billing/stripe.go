@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // StripeClient communicates with the Stripe API.
@@ -32,7 +34,8 @@ func NewStripeClientWithURL(apiKey, baseURL string) *StripeClient {
 		apiKey:  apiKey,
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout:   15 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
 		},
 	}
 }

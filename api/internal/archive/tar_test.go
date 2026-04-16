@@ -78,7 +78,7 @@ func TestSafeExtractTarGz_BasicExtraction(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := writeTarGzFile(t, tmpDir, data)
 	destDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(destDir, 0755)
+	_ = os.MkdirAll(destDir, 0755)
 
 	count, err := SafeExtractTarGz(archivePath, destDir, nil)
 	if err != nil {
@@ -102,7 +102,7 @@ func TestSafeExtractTarGz_SymlinkRejected(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := writeTarGzFile(t, tmpDir, data)
 	destDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(destDir, 0755)
+	_ = os.MkdirAll(destDir, 0755)
 
 	_, err := SafeExtractTarGz(archivePath, destDir, nil)
 	if err == nil {
@@ -121,7 +121,7 @@ func TestSafeExtractTarGz_PathTraversalRejected(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := writeTarGzFile(t, tmpDir, data)
 	destDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(destDir, 0755)
+	_ = os.MkdirAll(destDir, 0755)
 
 	_, err := SafeExtractTarGz(archivePath, destDir, nil)
 	if err == nil {
@@ -144,7 +144,7 @@ func TestSafeExtractTarGz_StripComponents(t *testing.T) {
 	tmpDir := t.TempDir()
 	archivePath := writeTarGzFile(t, tmpDir, data)
 	destDir := filepath.Join(tmpDir, "out")
-	os.MkdirAll(destDir, 0755)
+	_ = os.MkdirAll(destDir, 0755)
 
 	count, err := SafeExtractTarGz(archivePath, destDir, &ExtractOpts{StripComponents: 1})
 	if err != nil {

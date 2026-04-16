@@ -8,10 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,14 +36,18 @@ type ClusterCredentialReconciler struct {
 }
 
 // Reconcile handles the reconciliation loop for ClusterCredential resources.
-func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx, span := otel.Tracer("loopzero-operator").Start(ctx, "loopzero.operator.clustercredential.reconcile",
-		trace.WithAttributes(
-			attribute.String("k8s.object.name", req.Name),
-			attribute.String("k8s.namespace", req.Namespace),
-		),
-	)
+func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+	ctx, span := startReconcileSpan(ctx, "clustercredential", req.Name, req.Namespace)
 	defer span.End()
+	start := time.Now()
+	defer func() {
+		if retErr != nil {
+			recordError(span, retErr)
+		} else {
+			setSuccess(span)
+		}
+		reconcileOutcome("clustercredential", start, retErr)
+	}()
 
 	logger := log.FromContext(ctx)
 
@@ -148,6 +150,8 @@ func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr 
 // checkConnectivity validates that the cluster is reachable via /healthz.
 // Returns (false, result, nil) if unreachable (status updated, requeue set).
 func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr *loopzerov1.ClusterCredential, kubeconfigData []byte) (bool, ctrl.Result, error) {
+	ctx, span := startChildSpan(ctx, "clustercredential.connectivity.check")
+	defer span.End()
 	logger := log.FromContext(ctx)
 
 	restConfig, err := clientcmd.RESTConfigFromKubeConfig(kubeconfigData)

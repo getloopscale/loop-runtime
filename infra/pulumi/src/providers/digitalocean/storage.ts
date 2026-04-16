@@ -5,23 +5,27 @@ import * as digitalocean from "@pulumi/digitalocean";
 import * as pulumi from "@pulumi/pulumi";
 import { ObjectStorageSpec, ObjectStorageOutput, CdnSpec, CdnOutput, StorageEndpointSpec, StorageEndpointOutput } from "../../contracts/storage";
 import { IProviderStorage } from "../../contracts/provider";
-import { lookupExistingBucket } from "../../core/adopt-or-create";
+import { lookupExistingCdn } from "../../core/adopt-or-create";
 
 export class DigitalOceanStorageProvider implements IProviderStorage {
   createObjectStorage(spec: ObjectStorageSpec): ObjectStorageOutput {
-    // Adopt-or-create: check if bucket already exists (orphan from partial
-    // destroy — DO Spaces buckets sometimes can't be deleted even when empty).
-    const existing = lookupExistingBucket(spec.name, spec.region as string);
-    // DO SpacesBucket import format: "region,bucket-name"
-    const importId = existing ? `${spec.region},${existing}` : undefined;
-
+    // NO programmatic import for SpacesBucket.
+    //
+    // Root cause (2026-04-16): the DO provider's SpacesBucket import creates
+    // duplicate URN entries in state on every run. This corrupts state and
+    // breaks idempotency. Confirmed across multiple destroy→up cycles.
+    //
+    // If an orphan bucket exists after partial destroy, resolve via CLI:
+    //   pulumi import digitalocean:index/spacesBucket:SpacesBucket <name> <region>,<name>
     const bucket = new digitalocean.SpacesBucket(spec.name, {
       name: spec.name,
       region: spec.region,
+      acl: "private",
+      forceDestroy: true,
       versioning: {
         enabled: spec.versioning ?? false,
       },
-    }, importId ? { import: importId } : undefined);
+    });
 
     return {
       bucketName: bucket.name,
@@ -31,10 +35,13 @@ export class DigitalOceanStorageProvider implements IProviderStorage {
   }
 
   createCdn(spec: CdnSpec): CdnOutput {
+    const existingId = spec.bucketName
+      ? lookupExistingCdn(spec.bucketName)
+      : undefined;
     const cdn = new digitalocean.Cdn("static-cdn", {
       origin: spec.origin,
       ttl: spec.ttl,
-    });
+    }, existingId ? { import: existingId } : undefined);
 
     return {
       cdnEndpoint: cdn.endpoint,

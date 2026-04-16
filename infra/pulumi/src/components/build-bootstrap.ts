@@ -4,6 +4,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 import * as command from "@pulumi/command";
+
 import * as path from "path";
 import { InfraOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
@@ -447,26 +448,28 @@ export function bootstrapBuildCluster(
     { provider, dependsOn: [argoWorkflows, ns] },
   );
 
-  // Loki endpoint for cross-cluster access from mgmt API.
-  // Resolve build cluster node InternalIP via kubectl — the NodePort 30100
-  // is accessible at any node's private IP within the VPC.
-  // Uses @pulumi/command to avoid post-deploy kubectl patch in the pipeline.
+  // Loki + Argo Workflows endpoints for cross-cluster access from mgmt.
+  // NodePorts 30100 (Loki) and 30090 (Argo metrics) are accessible at any
+  // node's private IP within the VPC.
+  // Uses cluster endpoint as stable trigger — only re-resolves when cluster
+  // is recreated (new endpoint), not on every `pulumi up`.
   const buildNodeIp = new command.local.Command(
     "resolve-build-node-ip",
     {
       create: pulumi.interpolate`kubectl --kubeconfig <(echo '${infra.buildCluster.kubeconfig}') get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'`,
       interpreter: ["/bin/bash", "-c"],
-      // Re-resolve on every `pulumi up` — node IPs can change after cluster updates.
-      triggers: [Date.now()],
+      // Stable trigger: only re-resolve when cluster endpoint changes (= cluster recreated).
+      // Previously used Date.now() which caused diff on every run.
+      triggers: [infra.buildCluster.endpoint],
     },
   );
   const lokiEndpoint = buildNodeIp.stdout.apply(
-    (ip) => ip.trim() ? `http://${ip.trim()}:30100` : "http://pending-loki-ip:30100",
+    (ip: string) => ip.trim() ? `http://${ip.trim()}:30100` : "http://pending-loki-ip:30100",
   );
 
   // Argo Workflows metrics endpoint for cross-cluster Prometheus scrape.
   const argoMetricsEndpoint = buildNodeIp.stdout.apply(
-    (ip) => ip.trim() ? `${ip.trim()}:30090` : "pending-argo-metrics-ip:30090",
+    (ip: string) => ip.trim() ? `${ip.trim()}:30090` : "pending-argo-metrics-ip:30090",
   );
 
   return {

@@ -72,16 +72,19 @@ jobs:
     timeout-minutes: 1
     outputs:
       stack: ${{ steps.resolve.outputs.stack }}
+      environment: ${{ steps.resolve.outputs.environment }}
     steps:
       - name: Map branch to stack
         id: resolve
         run: |
           case "${{ github.base_ref }}" in
-            develop) echo "stack=dev" >> "$GITHUB_OUTPUT" ;;
-            homolog) echo "stack=homolog" >> "$GITHUB_OUTPUT" ;;
-            main)    echo "stack=prod" >> "$GITHUB_OUTPUT" ;;
-            *)       echo "stack=dev" >> "$GITHUB_OUTPUT" ;;
+            develop) STACK="dev"; ENV="infra-dev" ;;
+            homolog) STACK="homolog"; ENV="infra-homolog" ;;
+            main)    STACK="prod"; ENV="infra-prod" ;;
+            *)       STACK="dev"; ENV="infra-dev" ;;
           esac
+          echo "stack=$STACK" >> "$GITHUB_OUTPUT"
+          echo "environment=$ENV" >> "$GITHUB_OUTPUT"
           echo "Target branch: ${{ github.base_ref }} → stack: $(cat "$GITHUB_OUTPUT" | grep stack | cut -d= -f2)"
 
   # ─────────────────────────────────────────────
@@ -92,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [validate, resolve-stack]
-    environment: infra-dev
+    environment: ${{ needs.resolve-stack.outputs.environment }}
     env:
       # S3 state backend auth (Pulumi reads AWS_* for S3 protocol)
       AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}

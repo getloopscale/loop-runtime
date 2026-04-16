@@ -23,6 +23,13 @@ set -o pipefail
 
 echo "=== Pre-destroy cleanup for stack: $STACK ==="
 
+# Derive stack-scoped prefix for safe filtering.
+# Naming convention: loopzero-infra-{stack}-{region}[-suffix]
+# e.g., loopzero-infra-dev-sfo3-mgmt, loopzero-infra-prod-nyc3-db
+REGION=$(cd "${PULUMI_WORKING_DIR:-infra/pulumi}" && pulumi config get region --stack "organization/loopzero-infra/$STACK" 2>/dev/null || echo "sfo3")
+PREFIX="loopzero-infra-${STACK}-${REGION}"
+echo "Stack-scoped prefix: $PREFIX"
+
 # --- Phase 1: Remove K8s finalizers ---
 KUBECONFIG_DATA=$(pulumi stack output mgmtKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
 if [ -z "$KUBECONFIG_DATA" ]; then
@@ -83,10 +90,20 @@ if ! command -v doctl &>/dev/null; then
 fi
 doctl auth init --access-token "$DIGITALOCEAN_TOKEN" 2>/dev/null
 
-# Load balancers (block VPC deletion)
+# Find VPC IDs for this stack (needed to scope LB deletion)
+STACK_VPC_IDS=$(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+  "https://api.digitalocean.com/v2/vpcs" | \
+  python3 -c "import sys,json; prefix='$PREFIX'; [print(v['id']) for v in json.load(sys.stdin)['vpcs'] if v['name'].startswith(prefix)]" 2>/dev/null || echo "")
+
+# Load balancers (block VPC deletion) — only delete LBs in stack-scoped VPCs
 for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
   "https://api.digitalocean.com/v2/load_balancers" | \
-  python3 -c "import sys,json; [print(lb['id']) for lb in json.load(sys.stdin).get('load_balancers',[])]" 2>/dev/null); do
+  python3 -c "
+import sys,json
+vpc_ids = set('$STACK_VPC_IDS'.split())
+lbs = json.load(sys.stdin).get('load_balancers',[])
+[print(lb['id']) for lb in lbs if lb.get('vpc_uuid','') in vpc_ids]
+" 2>/dev/null); do
   curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
     "https://api.digitalocean.com/v2/load_balancers/$ID" 2>/dev/null
   echo "  LB $ID deleting"
@@ -95,7 +112,7 @@ done
 # Kubernetes clusters
 for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
   "https://api.digitalocean.com/v2/kubernetes/clusters" | \
-  python3 -c "import sys,json; [print(c['id']) for c in json.load(sys.stdin)['kubernetes_clusters'] if 'loopzero' in c['name']]" 2>/dev/null); do
+  python3 -c "import sys,json; prefix='$PREFIX'; [print(c['id']) for c in json.load(sys.stdin)['kubernetes_clusters'] if c['name'].startswith(prefix)]" 2>/dev/null); do
   curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
     "https://api.digitalocean.com/v2/kubernetes/clusters/$ID?dangerous=true" 2>/dev/null
   echo "  Cluster $ID deleting"
@@ -104,7 +121,7 @@ done
 # Database
 for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
   "https://api.digitalocean.com/v2/databases" | \
-  python3 -c "import sys,json; [print(d['id']) for d in json.load(sys.stdin)['databases'] if 'loopzero' in d['name']]" 2>/dev/null); do
+  python3 -c "import sys,json; prefix='$PREFIX'; [print(d['id']) for d in json.load(sys.stdin)['databases'] if d['name'].startswith(prefix)]" 2>/dev/null); do
   curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
     "https://api.digitalocean.com/v2/databases/$ID" 2>/dev/null
   echo "  DB $ID deleting"
@@ -116,23 +133,39 @@ done
 # Manual deletion only: doctl registry delete (requires confirmation).
 echo "  Registry: skipped (shared resource, retainOnDelete)"
 
-# Spaces buckets (any region, skip pulumi-state)
-for REGION in nyc3 sfo3 ams3 fra1 sgp1 lon1 sfo2 syd1; do
+# Spaces buckets (stack-scoped prefix, skip pulumi-state)
+# Bucket naming: loopzero-infra-{stack}-{region}[-suffix] (from naming.ts:bucketName)
+for BUCKET_REGION in nyc3 sfo3 ams3 fra1 sgp1 lon1 sfo2 syd1; do
   for BUCKET in $(AWS_ACCESS_KEY_ID="${SPACES_ACCESS_KEY_ID}" \
     AWS_SECRET_ACCESS_KEY="${SPACES_SECRET_ACCESS_KEY}" \
-    aws s3 ls --endpoint-url "https://${REGION}.digitaloceanspaces.com" \
-    --region us-east-1 2>/dev/null | awk '{print $3}' | grep -E "^loopzero-" | grep -v pulumi-state); do
+    aws s3 ls --endpoint-url "https://${BUCKET_REGION}.digitaloceanspaces.com" \
+    --region us-east-1 2>/dev/null | awk '{print $3}' | grep -E "^${PREFIX}" | grep -v pulumi-state); do
+    EP="https://${BUCKET_REGION}.digitaloceanspaces.com"
+    # Step 1: delete current objects
     AWS_ACCESS_KEY_ID="${SPACES_ACCESS_KEY_ID}" \
       AWS_SECRET_ACCESS_KEY="${SPACES_SECRET_ACCESS_KEY}" \
       aws s3 rm "s3://${BUCKET}" --recursive \
-      --endpoint-url "https://${REGION}.digitaloceanspaces.com" \
-      --region us-east-1 2>/dev/null || true
+      --endpoint-url "$EP" --region us-east-1 2>/dev/null || true
+    # Step 2: delete versioned objects + delete markers (versioned buckets
+    # cannot be deleted until ALL versions are removed — aws s3 rm only
+    # removes current versions, leaving old versions behind).
+    AWS_ACCESS_KEY_ID="${SPACES_ACCESS_KEY_ID}" \
+      AWS_SECRET_ACCESS_KEY="${SPACES_SECRET_ACCESS_KEY}" \
+      aws s3api list-object-versions --bucket "${BUCKET}" \
+      --endpoint-url "$EP" --region us-east-1 --output json 2>/dev/null | \
+      python3 -c "
+import json, sys, subprocess, os
+data = json.load(sys.stdin)
+env = {**os.environ, 'AWS_ACCESS_KEY_ID': os.environ.get('SPACES_ACCESS_KEY_ID',''), 'AWS_SECRET_ACCESS_KEY': os.environ.get('SPACES_SECRET_ACCESS_KEY','')}
+for v in data.get('Versions', []) + data.get('DeleteMarkers', []):
+    subprocess.run(['aws', 's3api', 'delete-object', '--bucket', '${BUCKET}', '--key', v['Key'], '--version-id', v['VersionId'], '--endpoint-url', '$EP', '--region', 'us-east-1'], env=env, capture_output=True)
+" 2>/dev/null || true
+    # Step 3: delete empty bucket
     AWS_ACCESS_KEY_ID="${SPACES_ACCESS_KEY_ID}" \
       AWS_SECRET_ACCESS_KEY="${SPACES_SECRET_ACCESS_KEY}" \
       aws s3 rb "s3://${BUCKET}" \
-      --endpoint-url "https://${REGION}.digitaloceanspaces.com" \
-      --region us-east-1 2>/dev/null || true
-    echo "  Bucket ${BUCKET} deleted from ${REGION}"
+      --endpoint-url "$EP" --region us-east-1 2>/dev/null || true
+    echo "  Bucket ${BUCKET} deleted from ${BUCKET_REGION}"
   done
 done
 
@@ -142,7 +175,7 @@ sleep 120
 # VPC (after clusters + LBs are gone)
 for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
   "https://api.digitalocean.com/v2/vpcs" | \
-  python3 -c "import sys,json; [print(v['id']) for v in json.load(sys.stdin)['vpcs'] if 'loopzero-infra' in v['name'] and not v.get('default',False)]" 2>/dev/null); do
+  python3 -c "import sys,json; prefix='$PREFIX'; [print(v['id']) for v in json.load(sys.stdin)['vpcs'] if v['name'].startswith(prefix) and not v.get('default',False)]" 2>/dev/null); do
   RESP=$(curl -s -w "\n%{http_code}" -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
     "https://api.digitalocean.com/v2/vpcs/$ID" 2>/dev/null)
   HTTP_CODE=$(echo "$RESP" | tail -1)
@@ -151,7 +184,12 @@ for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
     sleep 60
     for LBID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
       "https://api.digitalocean.com/v2/load_balancers" | \
-      python3 -c "import sys,json; [print(lb['id']) for lb in json.load(sys.stdin).get('load_balancers',[])]" 2>/dev/null); do
+      python3 -c "
+import sys,json
+vpc_ids = set('$STACK_VPC_IDS'.split())
+lbs = json.load(sys.stdin).get('load_balancers',[])
+[print(lb['id']) for lb in lbs if lb.get('vpc_uuid','') in vpc_ids]
+" 2>/dev/null); do
       curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
         "https://api.digitalocean.com/v2/load_balancers/$LBID" 2>/dev/null
     done
@@ -162,14 +200,25 @@ for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
   echo "  VPC $ID deleting"
 done
 
-# DNS records
+# DNS records — stack-scoped: only delete records matching {x}.{stack}.loopzero.example
+DNS_SUFFIX=".${STACK}."
 for ID in $(curl -s -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
   "https://api.digitalocean.com/v2/domains/loopzero.example/records" | \
-  python3 -c "import sys,json; [print(r['id']) for r in json.load(sys.stdin)['domain_records'] if 'dev' in r.get('name','') and r['type'] in ['A','CNAME']]" 2>/dev/null); do
+  python3 -c "
+import sys,json
+suffix='$DNS_SUFFIX'
+stack='$STACK'
+records = json.load(sys.stdin)['domain_records']
+for r in records:
+    name = r.get('name','')
+    # Match: name ends with .{stack} (DO strips the domain suffix) or name == stack
+    if (name.endswith('.'+stack) or name == stack) and r['type'] in ['A','CNAME']:
+        print(r['id'])
+" 2>/dev/null); do
   curl -s -X DELETE -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
     "https://api.digitalocean.com/v2/domains/loopzero.example/records/$ID" 2>/dev/null
 done
-echo "  DNS records deleted"
+echo "  DNS records deleted (stack: $STACK)"
 
 # --- Phase 3: Cloudflare resources (Sprint 10) ---
 if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
@@ -190,14 +239,14 @@ if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
     # KV namespaces
     for NS_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
       "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces" | \
-      python3 -c "import sys,json; [print(ns['id']) for ns in json.load(sys.stdin).get('result',[]) if ns['title'].startswith('loopzero')]" 2>/dev/null); do
+      python3 -c "import sys,json; stack='$STACK'; [print(ns['id']) for ns in json.load(sys.stdin).get('result',[]) if ns['title'].endswith('-'+stack)]" 2>/dev/null); do
       curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
         "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$NS_ID" 2>/dev/null
     done
     # DNS CNAME records
     for REC_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
       "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=CNAME" | \
-      python3 -c "import sys,json; [print(r['id']) for r in json.load(sys.stdin).get('result',[]) if '.dev.' in r.get('name','')]" 2>/dev/null); do
+      python3 -c "import sys,json; stack='$STACK'; [print(r['id']) for r in json.load(sys.stdin).get('result',[]) if '.'+stack+'.' in r.get('name','') or r.get('name','').endswith('.'+stack)]" 2>/dev/null); do
       curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
         "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$REC_ID" 2>/dev/null
     done
@@ -211,7 +260,7 @@ if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
       rm -f /tmp/runtime-kc.yaml
     fi
     for TUN_ID in $(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-      "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel?name=loopzero" | \
+      "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel?name=loopzero-${STACK}&is_deleted=false" | \
       python3 -c "import sys,json; [print(t['id']) for t in json.load(sys.stdin).get('result',[])]" 2>/dev/null); do
       curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
         "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUN_ID/connections" 2>/dev/null

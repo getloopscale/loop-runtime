@@ -4,7 +4,8 @@ import { motion } from 'framer-motion';
 import { CheckCircle2, Loader2, Mail, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const KRATOS_URL = import.meta.env.VITE_API_URL || '';
+import { API_URL } from '@/lib/config';
+const KRATOS_URL = API_URL;
 
 export function VerificationPage() {
   const [searchParams] = useSearchParams();

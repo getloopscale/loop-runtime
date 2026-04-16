@@ -148,7 +148,7 @@ export function bootstrapMgmtCluster(
   );
 
   // Ory Kratos — identity management (signup, login, recovery)
-  const oryKratos = installOryKratos(provider, ns, infra, config);
+  const oryKratos = installOryKratos(provider, ns, infra, config, cookieSecret);
 
   // Ory Hydra — OAuth2 server (JWT tokens, Device Code Flow, PKCE)
   const oryHydra = installOryHydra(provider, ns, infra, config, oryKratos);
@@ -178,7 +178,7 @@ export function bootstrapMgmtCluster(
   createArgoCDRepoCredentials(provider, ns, argocd, gitea);
 
   // LoopZero API — platform HTTP server (connects to DB, Gitea, ArgoCD, Argo Workflows)
-  const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config, lokiEndpoint, callbackToken, cf);
+  const loopzeroApi = installLoopZeroAPI(provider, ns, infra, config, lokiEndpoint, callbackToken, cf, serviceAuthSecret);
 
   // LoopZero Controller — background reconciliation loops (roadmap 02).
   // Runs: build reconcile, build/release reapers, release convergence,
@@ -188,7 +188,7 @@ export function bootstrapMgmtCluster(
   const loopzeroController = installLoopZeroController(provider, loopzeroApi, config, infra, lokiEndpoint);
 
   // Cloud Auth Service — OAuth2 (Hydra), identity (Kratos), billing (Stripe), dashboard
-  installCloudService(provider, ns, infra, config);
+  installCloudService(provider, ns, infra, config, serviceAuthSecret);
 
   // TenantController — K8s operator for tenant lifecycle (namespaces, RBAC, quotas)
   const tenantController = installTenantController(provider, ns, infra, config);
@@ -955,6 +955,7 @@ function installOryKratos(
   ns: k8s.core.v1.Namespace,
   infra: InfraOutputs,
   config: PlatformStackConfig,
+  cookieSecret: random.RandomPassword,
 ): k8s.helm.v3.Release {
   const kratosValuesPath = path.resolve(
     __dirname,
@@ -1576,8 +1577,10 @@ echo "=== Bootstrap complete ==="
       retainOnDelete: true,
       deleteBeforeReplace: true,
       // Jobs have immutable spec.template — any change must be delete+recreate.
-      // metadata.annotations changes (run-id) also force replacement to re-run the bootstrap.
-      replaceOnChanges: ["metadata.annotations", "spec"],
+      // Only replace when infraVersion changes (encoded in run-id annotation).
+      replaceOnChanges: ["spec"],
+      // Ignore status and completion fields that K8s adds after Job runs.
+      ignoreChanges: ["status", "metadata.labels", "metadata.managedFields"],
     },
   );
 
@@ -1635,6 +1638,7 @@ function installCloudService(
   ns: k8s.core.v1.Namespace,
   infra: InfraOutputs,
   config: PlatformStackConfig,
+  serviceAuthSecret: random.RandomPassword,
 ): void {
   const registrySecretName = "loopzero-infra-registry";
   const imageTag = config.environment || "dev";
@@ -1702,10 +1706,15 @@ function installCloudService(
   );
 
   // Deployment
+  // skipAwait: on fresh deploys, images don't exist yet (built separately).
   new k8s.apps.v1.Deployment(
     "loopzero-cloud",
     {
-      metadata: { name: "loopzero-cloud", namespace: PLATFORM_NAMESPACE },
+      metadata: {
+        name: "loopzero-cloud",
+        namespace: PLATFORM_NAMESPACE,
+        annotations: { "pulumi.com/skipAwait": "true" },
+      },
       spec: {
         replicas: 1,
         selector: { matchLabels: { app: "loopzero-cloud" } },
@@ -1713,6 +1722,13 @@ function installCloudService(
           metadata: { labels: { app: "loopzero-cloud" } },
           spec: {
             serviceAccountName: "default",
+            securityContext: {
+              runAsNonRoot: true,
+              runAsUser: 1000,
+              runAsGroup: 1000,
+              fsGroup: 1000,
+              seccompProfile: { type: "RuntimeDefault" },
+            },
             imagePullSecrets: [{ name: registrySecretName }],
             containers: [{
               name: "cloud",
@@ -1737,6 +1753,10 @@ function installCloudService(
                 initialDelaySeconds: 10,
                 periodSeconds: 30,
               },
+              securityContext: {
+                allowPrivilegeEscalation: false,
+                capabilities: { drop: ["ALL"] },
+              },
             }],
           },
         },
@@ -1752,36 +1772,53 @@ function installCloudService(
       metadata: { name: "loopzero-dashboard", namespace: PLATFORM_NAMESPACE },
       spec: {
         selector: { app: "loopzero-dashboard" },
-        ports: [{ name: "http", port: 80, targetPort: 80 }],
+        ports: [{ name: "http", port: 80, targetPort: 8080 }],
       },
     },
     { provider, dependsOn: [ns] },
   );
 
+  // skipAwait: on fresh deploys, images don't exist yet (built separately).
+  // Restart workflow converges pods after images are pushed.
   new k8s.apps.v1.Deployment(
     "loopzero-dashboard",
     {
-      metadata: { name: "loopzero-dashboard", namespace: PLATFORM_NAMESPACE },
+      metadata: {
+        name: "loopzero-dashboard",
+        namespace: PLATFORM_NAMESPACE,
+        annotations: { "pulumi.com/skipAwait": "true" },
+      },
       spec: {
         replicas: 1,
         selector: { matchLabels: { app: "loopzero-dashboard" } },
         template: {
           metadata: { labels: { app: "loopzero-dashboard" } },
           spec: {
+            securityContext: {
+              runAsNonRoot: true,
+              runAsUser: 101,   // nginx-unprivileged default UID
+              runAsGroup: 101,
+              fsGroup: 101,
+              seccompProfile: { type: "RuntimeDefault" },
+            },
             imagePullSecrets: [{ name: registrySecretName }],
             containers: [{
               name: "dashboard",
               image: `registry.digitalocean.com/loopzero-infra-registry/loopzero-dashboard:${imageTag}`,
               imagePullPolicy: "Always",
-              ports: [{ containerPort: 80 }],
+              ports: [{ containerPort: 8080 }],
               resources: {
                 requests: { cpu: "10m", memory: "16Mi" },
                 limits: { cpu: "100m", memory: "64Mi" },
               },
               readinessProbe: {
-                httpGet: { path: "/", port: 80 },
+                httpGet: { path: "/", port: 8080 },
                 initialDelaySeconds: 2,
                 periodSeconds: 10,
+              },
+              securityContext: {
+                allowPrivilegeEscalation: false,
+                capabilities: { drop: ["ALL"] },
               },
             }],
           },
@@ -1789,6 +1826,46 @@ function installCloudService(
       },
     },
     { provider, dependsOn: [ns] },
+  );
+
+  // HPA — cloud service
+  new k8s.autoscaling.v2.HorizontalPodAutoscaler(
+    "loopzero-cloud-hpa",
+    {
+      metadata: { name: "loopzero-cloud", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        scaleTargetRef: { apiVersion: "apps/v1", kind: "Deployment", name: "loopzero-cloud" },
+        minReplicas: 1,
+        maxReplicas: 5,
+        metrics: [{
+          type: "Resource",
+          resource: { name: "cpu", target: { type: "Utilization", averageUtilization: 70 } },
+        }],
+        behavior: {
+          scaleDown: { stabilizationWindowSeconds: 300, policies: [{ type: "Percent", value: 25, periodSeconds: 60 }] },
+          scaleUp: { stabilizationWindowSeconds: 30, policies: [{ type: "Percent", value: 100, periodSeconds: 30 }] },
+        },
+      },
+    },
+    { provider },
+  );
+
+  // HPA — dashboard (lightweight nginx, minimal scaling needed)
+  new k8s.autoscaling.v2.HorizontalPodAutoscaler(
+    "loopzero-dashboard-hpa",
+    {
+      metadata: { name: "loopzero-dashboard", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        scaleTargetRef: { apiVersion: "apps/v1", kind: "Deployment", name: "loopzero-dashboard" },
+        minReplicas: 1,
+        maxReplicas: 3,
+        metrics: [{
+          type: "Resource",
+          resource: { name: "cpu", target: { type: "Utilization", averageUtilization: 80 } },
+        }],
+      },
+    },
+    { provider },
   );
 }
 
@@ -1803,7 +1880,8 @@ function installLoopZeroAPI(
   config: PlatformStackConfig,
   lokiEndpoint: pulumi.Output<string>,
   callbackToken: random.RandomPassword,
-  cf?: CloudflareOutputs,
+  cf: CloudflareOutputs | undefined,
+  serviceAuthSecret: random.RandomPassword,
 ): k8s.apps.v1.Deployment {
   // Database connection string for the `loopzero` database (created in Phase 1).
   // MEET-2026-03-31-024: When loopzeroApiDbPassword is set, the API connects as loopzero_api role
@@ -2067,7 +2145,7 @@ function installLoopZeroAPI(
     { provider },
   );
 
-  return new k8s.apps.v1.Deployment(
+  const apiDeployment = new k8s.apps.v1.Deployment(
     "loopzero-api",
     {
       metadata: {
@@ -2091,6 +2169,13 @@ function installLoopZeroAPI(
           },
           spec: {
             serviceAccountName: "loopzero-api",
+            securityContext: {
+              runAsNonRoot: true,
+              runAsUser: 1000,
+              runAsGroup: 1000,
+              fsGroup: 1000,
+              seccompProfile: { type: "RuntimeDefault" },
+            },
             // Database migrations run before API starts via init container.
             // The API image includes migration SQL files at /migrations/.
             initContainers: [
@@ -2127,6 +2212,10 @@ function installLoopZeroAPI(
                 resources: {
                   requests: { cpu: "50m", memory: "64Mi" },
                   limits: { cpu: "100m", memory: "128Mi" },
+                },
+                securityContext: {
+                  allowPrivilegeEscalation: false,
+                  capabilities: { drop: ["ALL"] },
                 },
               },
             ],
@@ -2206,6 +2295,10 @@ function installLoopZeroAPI(
                   initialDelaySeconds: 5,
                   periodSeconds: 5,
                 },
+                securityContext: {
+                  allowPrivilegeEscalation: false,
+                  capabilities: { drop: ["ALL"] },
+                },
               },
             ],
           },
@@ -2214,6 +2307,46 @@ function installLoopZeroAPI(
     },
     { provider, dependsOn: [ns, secret, kubeconfigSecret, migrationsConfigMap, configMap, svc, apiSA] },
   );
+
+  // HPA — scale API pods based on CPU usage.
+  // Requires metrics-server (installed above via installMetricsServer).
+  new k8s.autoscaling.v2.HorizontalPodAutoscaler(
+    "loopzero-api-hpa",
+    {
+      metadata: { name: "loopzero-api", namespace: PLATFORM_NAMESPACE },
+      spec: {
+        scaleTargetRef: {
+          apiVersion: "apps/v1",
+          kind: "Deployment",
+          name: "loopzero-api",
+        },
+        minReplicas: 2,
+        maxReplicas: 10,
+        metrics: [
+          {
+            type: "Resource",
+            resource: {
+              name: "cpu",
+              target: { type: "Utilization", averageUtilization: 70 },
+            },
+          },
+        ],
+        behavior: {
+          scaleDown: {
+            stabilizationWindowSeconds: 300, // wait 5min before scaling down
+            policies: [{ type: "Percent", value: 25, periodSeconds: 60 }],
+          },
+          scaleUp: {
+            stabilizationWindowSeconds: 30,
+            policies: [{ type: "Percent", value: 100, periodSeconds: 30 }],
+          },
+        },
+      },
+    },
+    { provider },
+  );
+
+  return apiDeployment;
 }
 
 // ---------------------------------------------------------------------------
@@ -2279,6 +2412,7 @@ function installLoopZeroController(
               runAsUser: 1000,
               runAsGroup: 1000,
               fsGroup: 1000,
+              seccompProfile: { type: "RuntimeDefault" },
             },
             containers: [
               {
@@ -2346,6 +2480,10 @@ function installLoopZeroController(
                 resources: {
                   requests: { cpu: "100m", memory: "128Mi" },
                   limits: { memory: "512Mi" },
+                },
+                securityContext: {
+                  allowPrivilegeEscalation: false,
+                  capabilities: { drop: ["ALL"] },
                 },
               },
             ],
@@ -2595,6 +2733,7 @@ function installTenantController(
               runAsNonRoot: true,
               runAsUser: 1000,
               fsGroup: 1000,
+              seccompProfile: { type: "RuntimeDefault" },
             },
             imagePullSecrets: [{ name: "loopzero-infra-registry" }],
             volumes: [
@@ -3217,6 +3356,15 @@ function createScopedKubeconfig(
     kubeconfig: cluster.kubeconfig,
   });
 
+  // Ensure namespace exists before creating SA — prevents race condition when
+  // the namespace is created by a Helm chart in another bootstrap function.
+  // Pulumi treats this as adopt-if-exists (no error if namespace already exists).
+  const nsResource = new k8s.core.v1.Namespace(
+    `${role}-scoped-ns`,
+    { metadata: { name: namespace } },
+    { provider: k8sProvider, ignoreChanges: ["metadata"] },
+  );
+
   const saName = `loopzero-${role}-sa`;
 
   const sa = new k8s.core.v1.ServiceAccount(
@@ -3224,7 +3372,7 @@ function createScopedKubeconfig(
     {
       metadata: { name: saName, namespace },
     },
-    { provider: k8sProvider },
+    { provider: k8sProvider, dependsOn: [nsResource] },
   );
 
   const clusterRole = new k8s.rbac.v1.ClusterRole(

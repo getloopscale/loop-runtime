@@ -26,7 +26,14 @@ import (
 
 // reconcileBuildNamespace orchestrates the build-{tenantID} namespace provisioning.
 // Each step is idempotent via CreateOrUpdate. Steps are extracted into focused functions.
-func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *loopzerov1.Tenant) error {
+func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *loopzerov1.Tenant) (err error) {
+	ctx, span := startChildSpan(ctx, "tenant.build.namespace")
+	defer span.End()
+	defer func() {
+		if err != nil {
+			recordError(span, err)
+		}
+	}()
 	buildNs, err := naming.BuildNamespace(tenant.Name)
 	if err != nil {
 		return fmt.Errorf("invalid build namespace name for tenant %s: %w", tenant.Name, err)

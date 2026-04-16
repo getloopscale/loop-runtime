@@ -11,7 +11,7 @@ require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/loopzero/loopzero/pkg v0.0.0
-	github.com/getloopscale/loopzero-forge v0.3.0
+	github.com/getloopscale/loopzero-forge v0.3.1
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0

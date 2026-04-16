@@ -6,10 +6,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,14 +33,18 @@ type ApplicationReconciler struct {
 }
 
 // Reconcile handles the reconciliation loop for LoopZeroApplication resources.
-func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx, span := otel.Tracer("loopzero-operator").Start(ctx, "loopzero.operator.application.reconcile",
-		trace.WithAttributes(
-			attribute.String("k8s.object.name", req.Name),
-			attribute.String("k8s.namespace", req.Namespace),
-		),
-	)
+func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+	ctx, span := startReconcileSpan(ctx, "application", req.Name, req.Namespace)
 	defer span.End()
+	start := time.Now()
+	defer func() {
+		if retErr != nil {
+			recordError(span, retErr)
+		} else {
+			setSuccess(span)
+		}
+		reconcileOutcome("application", start, retErr)
+	}()
 
 	logger := log.FromContext(ctx)
 
@@ -86,10 +88,19 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	r.reconcileRouteStatus(ctx, &app)
 	r.reconcileHealthCondition(&app)
 
-	app.Status.ObservedGeneration = app.Generation
+	// Save computed status, then re-fetch to get latest ResourceVersion,
+	// then apply status via Patch (avoids UID precondition failures from Update).
+	computedStatus := app.Status.DeepCopy()
+	computedStatus.ObservedGeneration = app.Generation
 
-	if err := r.Status().Update(ctx, &app); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating application status: %w", err)
+	if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
+		return ctrl.Result{}, fmt.Errorf("re-fetching application: %w", err)
+	}
+	// MergeFrom captures the clean base; then we mutate status and patch.
+	patch := client.MergeFrom(app.DeepCopy())
+	app.Status = *computedStatus
+	if err := r.Status().Patch(ctx, &app, patch); err != nil {
+		return ctrl.Result{}, fmt.Errorf("patching application status: %w", err)
 	}
 
 	logger.Info("reconciled application",
@@ -119,6 +130,9 @@ func (r *ApplicationReconciler) reconcileHostname(ctx context.Context, req ctrl.
 
 // reconcileExposedRoute ensures the ExposedRoute CR exists with correct spec.
 func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app *loopzerov1.LoopZeroApplication) error {
+	ctx, span := startChildSpan(ctx, "application.exposed_route.ensure")
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	routeName := constants.ExposedRouteName(app.Name)
 
@@ -250,13 +264,19 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 	if app.Status.EndpointsReady {
 		return loopzerov1.ApplicationPhaseServing
 	}
-	// Check conditions for degraded/down states
+	// Check conditions for degraded/down states.
+	// "Waiting" is normal progression (not yet reachable), "Failed" is degraded.
 	for _, c := range app.Status.Conditions {
 		if c.Type == "RouteReachable" && c.Status == "False" {
-			if c.Reason == "Failed" {
+			switch c.Reason {
+			case "Failed":
 				return loopzerov1.ApplicationPhaseDown
+			case "Degraded":
+				return loopzerov1.ApplicationPhaseDegraded
+			default:
+				// "Waiting" or any other reason — still progressing
+				return loopzerov1.ApplicationPhaseProgressing
 			}
-			return loopzerov1.ApplicationPhaseDegraded
 		}
 	}
 	return loopzerov1.ApplicationPhaseProgressing

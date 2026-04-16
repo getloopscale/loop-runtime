@@ -21,6 +21,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	_ "github.com/lib/pq"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 
 	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 
@@ -31,11 +33,18 @@ import (
 	"github.com/loopzero/loopzero/cloud/internal/metering"
 	cloudmetrics "github.com/loopzero/loopzero/cloud/internal/metrics"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
+	"github.com/loopzero/loopzero/cloud/internal/tracing"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
+
+	// Initialize OTel tracing (no-op if LOOPZERO_TRACING_ENABLED=false).
+	tracingShutdown, err := tracing.Init(context.Background(), "loopzero-cloud")
+	if err != nil {
+		logger.Warn("tracing init failed (continuing without traces)", "error", err)
+	}
 
 	cfg := config.Load()
 	if err := cfg.Validate(); err != nil {
@@ -136,18 +145,32 @@ func main() {
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 
+	// OTel HTTP tracing middleware -- creates a span per request with route info.
+	r.Use(func(next http.Handler) http.Handler {
+		return otelhttp.NewHandler(next, "cloud-service",
+			otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
+				return r.Method + " " + r.URL.Path
+			}),
+		)
+	})
+
 	// MEET-040: CORS removed — dashboard is same-origin (cloud.{domain}).
 	// All API calls are relative URLs, no cross-origin requests.
 
-	// Request logging — every request gets logged for observability
+	// Request logging — every request gets logged with trace_id for correlation.
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/health" { // Don't log health checks
-				logger.Info("request",
+				attrs := []any{
 					"method", r.Method,
 					"path", r.URL.Path,
 					"remote", r.RemoteAddr,
-				)
+				}
+				sc := trace.SpanContextFromContext(r.Context())
+				if sc.IsValid() {
+					attrs = append(attrs, "trace_id", sc.TraceID().String())
+				}
+				logger.Info("request", attrs...)
 			}
 			next.ServeHTTP(w, r)
 		})
@@ -216,6 +239,10 @@ func main() {
 	// Dashboard has HMAC tokens, so cloud authenticates to engine via X-Service-Auth.
 	engineURL := cfg.EngineAPIURL
 	serviceSecret := string(cfg.ServiceAuthSecret)
+	engineClient := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
 	r.Route("/engine", func(r chi.Router) {
 		r.Use(requireJWT) // Dashboard must be authenticated
 		r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +281,7 @@ func main() {
 				// X-LoopZero-Role intentionally NOT sent — engine resolves from DB (S2.3)
 			}
 
-			resp, err := http.DefaultClient.Do(proxyReq)
+			resp, err := engineClient.Do(proxyReq)
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadGateway)
@@ -301,6 +328,11 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)
+		if tracingShutdown != nil {
+			if err := tracingShutdown(ctx); err != nil {
+				logger.Warn("tracing shutdown error", "error", err)
+			}
+		}
 		if db != nil {
 			db.Close()
 		}

@@ -22,6 +22,8 @@ export interface CdnSpec {
   readonly origin: pulumi.Input<string>;
   /** Edge cache TTL in seconds */
   readonly ttl: number;
+  /** Bucket name for adopt-or-create lookup (plain string, not Output) */
+  readonly bucketName?: string;
 }
 
 export interface CdnOutput {
