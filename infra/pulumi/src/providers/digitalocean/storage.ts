@@ -5,21 +5,18 @@ import * as digitalocean from "@pulumi/digitalocean";
 import * as pulumi from "@pulumi/pulumi";
 import { ObjectStorageSpec, ObjectStorageOutput, CdnSpec, CdnOutput, StorageEndpointSpec, StorageEndpointOutput } from "../../contracts/storage";
 import { IProviderStorage } from "../../contracts/provider";
-import { lookupExistingBucket, lookupExistingCdn } from "../../core/adopt-or-create";
+import { lookupExistingCdn } from "../../core/adopt-or-create";
 
 export class DigitalOceanStorageProvider implements IProviderStorage {
   createObjectStorage(spec: ObjectStorageSpec): ObjectStorageOutput {
-    // Adopt-or-create: if bucket exists in provider, import it into state.
-    // This handles orphan buckets from partial destroys (DO Spaces buckets
-    // sometimes survive cleanup).
+    // NO programmatic import for SpacesBucket.
     //
-    // IMPORTANT: The DO provider has a bug where `{ import }` on SpacesBucket
-    // causes duplicate URN entries in state on repeated runs. To prevent this,
-    // we pass `ignoreChanges: ["*"]` which tells Pulumi not to diff the resource
-    // after import — avoiding the re-import behavior that creates duplicates.
-    const existing = lookupExistingBucket(spec.name, spec.region as string);
-    const importId = existing ? `${spec.region},${existing}` : undefined;
-
+    // Root cause (2026-04-16): the DO provider's SpacesBucket import creates
+    // duplicate URN entries in state on every run. This corrupts state and
+    // breaks idempotency. Confirmed across multiple destroy→up cycles.
+    //
+    // If an orphan bucket exists after partial destroy, resolve via CLI:
+    //   pulumi import digitalocean:index/spacesBucket:SpacesBucket <name> <region>,<name>
     const bucket = new digitalocean.SpacesBucket(spec.name, {
       name: spec.name,
       region: spec.region,
@@ -28,8 +25,6 @@ export class DigitalOceanStorageProvider implements IProviderStorage {
       versioning: {
         enabled: spec.versioning ?? false,
       },
-    }, {
-      ...(importId ? { import: importId } : {}),
     });
 
     return {
@@ -40,9 +35,6 @@ export class DigitalOceanStorageProvider implements IProviderStorage {
   }
 
   createCdn(spec: CdnSpec): CdnOutput {
-    // Adopt existing CDN: lookup by bucket name (sync, not Output)
-    // spec.origin is an Output<string> that can't be resolved synchronously.
-    // bucketName is the plain string known at compile time.
     const existingId = spec.bucketName
       ? lookupExistingCdn(spec.bucketName)
       : undefined;
