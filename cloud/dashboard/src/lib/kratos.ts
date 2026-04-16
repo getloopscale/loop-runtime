@@ -3,8 +3,8 @@
 // No internal terms (Kratos, Ory) are exposed to users.
 
 // MEET-040: Kratos is same-origin (cloud.{domain}/self-service/*). Relative URLs.
-// In local dev, VITE_API_URL points to localhost:13002.
-const ACCOUNTS_URL = import.meta.env.VITE_API_URL || '';
+import { API_URL } from './config';
+const ACCOUNTS_URL = API_URL;
 
 export interface FlowNode {
   type: string;

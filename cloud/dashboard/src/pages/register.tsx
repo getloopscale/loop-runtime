@@ -5,7 +5,8 @@ import { Zap, Github, Loader2, AlertCircle, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getSession } from '@/lib/auth';
 
-const KRATOS_URL = import.meta.env.VITE_API_URL || '';
+import { API_URL } from '@/lib/config';
+const KRATOS_URL = API_URL;
 
 interface FlowNode {
   group: string;

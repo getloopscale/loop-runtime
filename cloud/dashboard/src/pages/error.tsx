@@ -4,7 +4,8 @@ import { motion } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const ACCOUNTS_URL = import.meta.env.VITE_API_URL || 'http://localhost:13002';
+import { API_URL } from '@/lib/config';
+const ACCOUNTS_URL = API_URL;
 
 interface ErrorDetails {
   id: string;

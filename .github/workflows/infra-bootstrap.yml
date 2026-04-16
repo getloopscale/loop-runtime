@@ -90,6 +90,39 @@ jobs:
           kubectl get pods -n platform-system -l app.kubernetes.io/name=argocd-server --no-headers | grep Running
           echo "Bootstrap health: OK"
 
+      # Registry integration + CWT updates — moved from build-images.yml
+      # (pipeline review: build pipeline should produce artifacts only).
+      # These are idempotent infra operations, safe to re-run.
+      - name: Integrate DOCR registry with clusters
+        run: |
+          CLUSTERS=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra" || true)
+          [ -z "$CLUSTERS" ] && exit 0
+          for CLUSTER in $CLUSTERS; do
+            doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
+            echo "  Registry added: $CLUSTER"
+          done
+
+      - name: Update CWTs on build cluster
+        run: |
+          BUILD_CLUSTER=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra.*-build$" | head -1)
+          [ -z "$BUILD_CLUSTER" ] && exit 0
+          doctl kubernetes cluster kubeconfig save "$BUILD_CLUSTER"
+          BUILD_CTX=$(kubectl config get-contexts -o name 2>/dev/null | grep "$BUILD_CLUSTER" | head -1)
+          kubectl --context "$BUILD_CTX" get ns argo >/dev/null 2>&1 || { echo "argo ns not found — skipping"; exit 0; }
+
+          # Render + apply CWT templates
+          helm template loopzero-build-cwts infra/helm/argo-workflows \
+            --set minio.insecure=true | \
+            kubectl apply --context "$BUILD_CTX" -f - || { echo "::warning::CWT apply failed"; exit 0; }
+
+          # BuildKit registry config (DOCR, 30d expiry for async user builds)
+          RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 2592000)
+          kubectl create secret generic buildkit-registry-config \
+            --context "$BUILD_CTX" --namespace argo \
+            --from-literal=config.json="$RW_CONFIG" \
+            --dry-run=client -o yaml | kubectl apply --context "$BUILD_CTX" -f - || true
+          echo "  CWTs + registry config updated on $BUILD_CLUSTER"
+
       - name: Cleanup
         if: always()
         run: rm -f /tmp/mgmt-kc.yaml
