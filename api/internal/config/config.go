@@ -169,6 +169,19 @@ type Config struct {
 	// PGCircuitBreakerThresholdPct: pool utilization % above which mutations are rejected.
 	// Env: PG_CIRCUIT_BREAKER_THRESHOLD_PCT (default: 90)
 	PGCircuitBreakerThresholdPct int
+
+	// UsePGClaims enables PG-backed processing claims for the reconcile
+	// and convergence loops (Phase 0.2, scale-50k-plan). When true, both
+	// loops use ClaimStore.Claim/Release in addition to sync.Map for
+	// cross-replica dedup visibility.
+	// Env: LOOPZERO_USE_PG_CLAIMS
+	UsePGClaims bool
+
+	// DynamicRouter enables the DynamicRouter that discovers cells from
+	// ClusterCredential CRDs (Phase 0.3, scale-50k-plan). When true and
+	// cells are found, the API auto-discovers new cells without restart.
+	// Env: LOOPZERO_DYNAMIC_ROUTER
+	DynamicRouter bool
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -297,6 +310,10 @@ func Load() Config {
 		MaxConcurrentBuildsPerCell:   envInt("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
 		MaxConcurrentBuildsPerTenant: envInt("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
 		PGCircuitBreakerThresholdPct: envInt("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
+
+		// Scale 50k plan — Phase 0.2/0.3 feature flags.
+		UsePGClaims:   os.Getenv("LOOPZERO_USE_PG_CLAIMS") == "true",
+		DynamicRouter: os.Getenv("LOOPZERO_DYNAMIC_ROUTER") == "true",
 	}
 }
 

@@ -624,8 +624,11 @@ func main() {
 		// This makes the API automatically discover new cells as they are
 		// provisioned via Pulumi without any code changes.
 		var useDynamicRouter bool
-		if os.Getenv("LOOPZERO_DYNAMIC_ROUTER") == "true" {
-			k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, cfg.MgmtKubeconfig)
+		if cfg.DynamicRouter {
+			// K8sCellStore reads ClusterCredential CRDs from the mgmt cluster.
+			// nil restConfig = in-cluster config (API runs on mgmt cluster).
+			// Namespace = platform-system (where ClusterCredentials live).
+			k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, "platform-system")
 			if k8sErr == nil {
 				dynRouter := placement.NewDynamicRouter(k8sCellStore, 60*time.Second, logger)
 				// Try initial load — if it finds cells, use DynamicRouter.
