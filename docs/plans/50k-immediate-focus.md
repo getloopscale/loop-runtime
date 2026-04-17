@@ -575,12 +575,12 @@ O gate original do plano diz "L3 roda 10× consecutivas com 100% success sem int
 | Gate | Status | Evidência |
 |---|---|---|
 | #1 L3 10× consecutivas 100% | ❌ NOT MET | Best run: 75/100 (v8). v14: 62/100. Runtime capacity bottleneck (T-08 open). |
-| #2 Capacity baselines documentadas | 🟡 PARTIAL | loopzero-api ✅ (169ms p95 @ 20 RPS), minio ✅, argocd ✅. Gitea em progresso. |
-| #3 admin evict substitui bash workarounds | 🟡 PARTIAL | Bash tool (`tools/admin-evict-tenants.sh`) ✅ usado em cleanup runs. API endpoint scaffolded mas não wired em server.go (EnqueueEviction TODO). |
-| #4 6 alerts + zero live-patches não committed | 🟡 PARTIAL | 6 alerts ✅. Live-patches runtime overflow pools ❌ (usados doctl manual). |
+| #2 Capacity baselines documentadas | ✅ MET | loopzero-api ✅ (169ms p95 @ 20 RPS), minio ✅, argocd ✅, gitea ✅ (p50 453ms, p95 9.3s — 750024e). 4/4 capturadas. |
+| #3 admin evict substitui bash workarounds | 🟡 95% | Código 100% implementado: API handler wired (94e8ae9) + DB teardown (e79b50e) + K8s multi-cluster teardown (ea04ba9) + CLI wired (4a9a077). Último 5%: operador rodar 1 cleanup L3 usando apenas `loopzero admin tenants evict` (validação operacional — bash continua como fallback emergencial). |
+| #4 6 alerts + zero live-patches não committed | 🟡 PARTIAL | 6 alerts ✅. Live-patches runtime overflow pools ❌ (usados doctl manual — serão removidos quando T-08 aplicar). |
 | #5 CLI retries 429/503 | ✅ MET | `cli/src/api/client.ts` retry middleware + harness retry. |
 
-**Honest promise status:** 2/5 gates verdes. T-08 (runtime capacity) é blocker crítico descoberto por L3 v14 — depende de DO droplet quota increase. Plano NÃO completo.
+**Honest promise status (2026-04-17 v1.7):** 2/5 gates verdes totalmente (#2, #5), 1/5 ~95% (#3 — só falta validação operacional), 2/5 bloqueados externamente (#1 e #4 dependem de T-08 / DO droplet quota, ação humana). Todo o código do plano está implementado + testado; a promessa `TODAS AS TASKS CONCLUIDAS E VALIDADAS` só fica TRUE quando T-08 resolver + 10× L3 rodar ≥95/100 consecutivas.
 
 ---
 
@@ -658,3 +658,4 @@ A promise `TODAS AS TASKS, CRITERIOS DE ACEITES, DODs CONCLUIDOS E VALIDADOS` s�
   - [LOW] Harbor canary broken: root-cause 2 camadas — (1) secret `harbor-admin-credentials` ausente (Helm não cria), (2) projeto `loopzero-platform` ausente no Harbor (harbor-init desabilitado). Fix (6ffa736): Pulumi cria secret + projeto criado via API. Canary agora retorna "OK: Harbor canary passed".
   - [CRITICAL] T-08 Runtime capacity: permanece bloqueado em DO droplet quota (ação humana).
 - **v1.6 (2026-04-17 17:40):** Gitea baseline capturada (750024e) — Gate #2 fecha 4/4 baselines. T-02 phase 2 K8s teardown implementado em Go (ea04ba9): 5-step sequence multi-cluster, 11 unit tests, invariant "K8s fail → skip DB" enforced por teste. Gate #3 agora ~95% fechado; flip para ✅ após operador rodar L3 cleanup 100% via API sem tocar bash.
+- **v1.7 (2026-04-17 18:00):** CLI `loopzero admin tenants evict` wired em Commander (4a9a077) + 10 unit tests. L3 v8-v14 results registrados em `scale-50k-l3-readiness.md` (1385a78) — completa DoD T-01. `tools/l3-stability-loop.sh` criado (a051ba2) — T-09 pronto para rodar assim que T-08 resolver. End-to-end path agora existe: `loopzero admin tenants evict --pattern 'tn-lt-%' --yes` → HTTP POST → K8s multi-cluster teardown + DB FK cleanup. Gate #3 flip para ✅ depende só de um L3 cleanup real via CLI (validação operacional).
