@@ -250,9 +250,131 @@ loop before deploy phase. At ~6s/tenant × 100 tenants = ~10min of pure wait. Pa
 with concurrency 5-10 would cut bootstrap to ~1-2min. Low priority (not on critical path for
 L2/L3 gates), but consider for L4/L5 where bootstrap cost grows.
 
+## L3 v8 — Gitea HPA calibration (2026-04-17 14:39)
+
+**Config:** c=30, Gitea HPA min=2 max=8 (pre-bug-#44-fix HA config).
+
+**Result:** FAIL — 75/100 apps live. Best-ever to date.
+
+| Metric | Value |
+|---|---|
+| Apps live | 75/100 (75%) |
+| Upload failures | 18 (SOURCE_UPLOAD_FAILED HTTP 500) |
+| Build failures | 4 (BuildKit MaxDuration exceeded) |
+| Late failures | 3 (verifyAppLive timeout) |
+
+**HPA behavior observed:** Gitea scaled 2→5 replicas, CPU peaked 206%
+before stabilizing at 29%. Scaled correctly but reactive lag during
+initial burst (18 uploads failed in first 60s).
+
+**Root cause:** reactive HPA cannot absorb burst faster than ~60s
+from scale decision to pod-ready. The 30-concurrent-push burst arrives
+in <10s.
+
+**Decision:** Gitea `minReplicas: 2 → 4` (baseline replicas absorb
+initial burst while HPA ramps for sustained load). Also bumped BuildKit
+`retryStrategy.MaxDuration` 60s → 900s. Plan: L3 v9.
+
+---
+
+## L3 v9-v13 — iterating with clean slate + API fixes (2026-04-17 afternoon)
+
+Multiple iterations to close secondary bugs surfaced by v8:
+
+| Version | Apps Live | wf_ok | Primary bug |
+|---|---|---|---|
+| v9  | 32/100 | 65  | admission gate env wiring (bug #43) |
+| v10 | — | — | API deploy mid-test sabotage (env not wired; bug #43 round 2) |
+| v11 | ~50/100 | — | dirty state (prior run tenants not evicted) |
+| v12 | ~55/100 | — | Gitea HA config incomplete — session/cache in-memory per pod → 401s mid-stream (bug #44) |
+| v13 | ~58/100 | 90 | Argo quota 403 + Gitea burst + runtime memory pressure |
+
+**Bug #44 — Gitea HA multi-pod session divergence** discovered during
+v12 analysis. When HPA scales beyond 1 replica with `provider: memory`
+for session/cache/queue, auth state diverges per pod. Some requests
+hit a pod with valid session, some hit a stale pod → intermittent 401
+in the middle of a git push sequence.
+
+**Fix (bfbe818):** session/cache/queue all backed by Redis (separate DB
+per concern: 0/1/2). Plus PG pool config (MAX_OPEN_CONNS=8,
+MAX_IDLE_CONNS=4, CONN_MAX_LIFETIME=3600s), indexer switched from
+Bleve (incompatible with HA) to DB-backed for issues + disabled for repo.
+
+---
+
+## L3 v14 — post-HA-fix + Argo quota bumped (2026-04-17 16:53)
+
+**Config:** c=30, Gitea HPA min=4 max=8, Argo quota 128 CPU / 256Gi / 200 pods,
+API phase-1 (handlers wired, K8s teardown still via bash).
+
+**Result:** FAIL — 62/100 apps live.
+
+| Metric | Value |
+|---|---|
+| Builds succeeded | 97/101 (96%) ✅ above the 95% build target |
+| Builds error | 4/101 (4%) |
+| Apps live | 62/100 (62%) 🔴 below 95% app-live target |
+| Apps Pending indefinite | 32/100 (32%) |
+| Apps No Pod | 6/100 (6%) |
+
+**Root cause NEW:** runtime cluster out of capacity. 32 apps stuck
+Pending with Kubernetes event
+`0/9 nodes are available: 3 Insufficient cpu, 6 Insufficient memory`.
+
+**Cluster shape at test time:** 9 nodes — 3× `s-2vcpu-4gb` (default
+Pulumi pool) + 6× overflow pools (`overflow-s-2vcpu-2gb`, `overflow2`)
+created via doctl. Total effective memory after system pods ≈ 18Gi;
+100 apps × 128Mi memory requests = 12.8Gi. Math fits on paper, but
+with fragmentation + existing platform pod overhead, scheduling tops
+out around 65-75 apps.
+
+**What this proved:**
+- HPAs (Gitea, Harbor, ArgoCD, Ory) all scaled correctly ✅
+- Argo quota (128 CPU / 256Gi / 200 pods) absorbed the burst ✅
+- BuildKit retry + cosign TUF_ROOT + admission gate env fix all
+  working ✅ (96% build success rate confirms)
+- Gitea HA config preserves auth state across replicas ✅ (0 401s in
+  the sample)
+- **Runtime scheduling capacity is now THE gap.** Software bugs that
+  v1-v13 fought are all closed. What remains is infra sizing.
+
+**Decision:** Add T-08 (Runtime capacity planning — runtime default pool
+from s-2vcpu-4gb×3 to s-4vcpu-8gb×6) to the plan. Blocker for T-08 is
+external: DO droplet quota increase (Paulo opens ticket).
+
+**Other action items from SRE Guardian iter 15 — all closed:**
+- Gitea HPA maxReplicas 8 → 12 (source ba26abb + live kubectl patch)
+- 4 Error workflows (cleanup eviction removed them)
+- Harbor canary broken (6ffa736 — harbor-admin-credentials secret + loopzero-platform project)
+
+---
+
+## L3 consolidated progress
+
+| Version | Build Success | Apps Live | Dominant bottleneck |
+|---|---|---|---|
+| v1 | 66% | — | bugs #18/#35/#36 cascading |
+| v2 | ~40% | — | cosign TUF + Argo quota |
+| v3-v7 | 0-50% | — | dirty state + admission gate env |
+| v8 | 75% | 75% | Gitea burst (pre-HPA minReplicas=4) + BuildKit timeout |
+| v9-v13 | 40-90% | 32-58% | Gitea HA + Argo quota + runtime memory |
+| **v14** | **96%** | **62%** | Runtime cluster scheduling capacity |
+
+**Trajectory:** build pipeline success moved 66% → 96% through
+software fixes. App-live success is now gated on infra sizing (T-08).
+Each dominant bottleneck has shifted from "bug" toward "capacity
+plan", which is the desired progression.
+
+---
+
 ## References
 
 - [scale-50k-plan.md](scale-50k-plan.md) Phase 2.1
 - [scale-50k-l2-learnings.md](scale-50k-l2-learnings.md) — L2 bugs + patterns
+- [50k-immediate-focus.md](50k-immediate-focus.md) — current plan (T-01..T-09, Gates)
+- [capacity-baselines.md](capacity-baselines.md) — bench measurements (loopzero-api, minio, argocd, gitea)
 - Operator fix: commit a5601d1
 - L3 capacity commits: see git log for ArgoCD/Gitea patches
+- Key commits this cycle: ba26abb (L3 v14 results + T-08), 94e8ae9 (API T-02 wired),
+  e79b50e (DB teardown), ea04ba9 (K8s teardown), 4a9a077 (CLI wired), 6ffa736 (Harbor canary fix),
+  bfbe818 (Gitea HA), 750024e (Gitea baseline)
