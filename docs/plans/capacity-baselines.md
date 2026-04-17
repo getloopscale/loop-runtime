@@ -46,13 +46,21 @@ Serão preenchidos com primeiros runs validados após T-04 (HPAs) + T-05 (shardi
 |---|---|---|---|---|---|---|---|
 | 50 | 100 | — | — | — | — | — | Post T-04 (HPA 2-8) |
 
-### minio PUT (via mc)
+### minio PUT 1MB
 
-Pendente: implementação de `minio_test.go`.
+| Concurrency | Target RPS | Actual RPS | p50 | p95 | p99 | Error rate | Notes |
+|---|---|---|---|---|---|---|---|
+| 20 | 50 | — | — | — | — | — | Post T-04 + Fase 1 MinIO tune |
 
-### argocd sync
+**Guard:** p95 > 1s indica bug #35 regression.
 
-Pendente: implementação de `argocd_test.go`.
+### argocd app-get (applications list)
+
+| Concurrency | Target RPS | Actual RPS | p50 | p95 | p99 | Error rate | Notes |
+|---|---|---|---|---|---|---|---|
+| 20 | 50 | — | — | — | — | — | Post T-05 sharding (3 controllers) |
+
+**Guard:** p95 > 500ms indica repo-server saturating.
 
 ## Regressão
 
