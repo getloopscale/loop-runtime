@@ -102,5 +102,9 @@ spec:
           allowPrivilegeEscalation: false
           capabilities:
             drop: [ALL]
-      # Cache restore is best-effort — failure should not block the build
-      activeDeadlineSeconds: 120
+      # Cache restore is best-effort — failure should not block the build.
+      # Bumped 120s→600s for L3+ scale: with 100 concurrent builds pulling from
+      # MinIO standalone, even tuned, cold-cache restores can queue past 120s.
+      # Failure at 600s is a real MinIO problem worth investigating (not a
+      # false-positive from queue pressure).
+      activeDeadlineSeconds: 600

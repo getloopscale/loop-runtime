@@ -13,17 +13,26 @@ readinessProbe:
 
 resources:
   limits:
-    cpu: "500m"
-    memory: "512Mi"
+    cpu: "2000m"     # was 500m — bug #35 Fase 1 (cache-restore saturation at L3)
+    memory: "4Gi"    # was 512Mi
   requests:
-    cpu: "100m"
-    memory: "128Mi"
+    cpu: "500m"      # was 100m
+    memory: "2Gi"    # was 128Mi — requires s-4vcpu-8gb node (added mgmt-big pool)
 
 podSecurityContext:
   runAsNonRoot: true
 
 persistence:
-  size: 10Gi  # Sized for ~30 projects with dependency cache (~300MB each compressed)
+  size: 50Gi  # was 10Gi — room for 100+ tenants with cache
+
+# Performance tuning — prevents cache-restore timeouts at L3+ scale (bug #35).
+extraEnvVars:
+  - name: MINIO_API_REQUESTS_MAX
+    value: "10000"          # default: 4 × CPU = 8 (too low for concurrent builds)
+  - name: MINIO_API_REQUESTS_DEADLINE
+    value: "30s"            # default: 10s (too aggressive for mc cp pulls)
+  - name: MINIO_SCANNER_SPEED
+    value: "slowest"        # reduce background load
 
 service:
   type: NodePort
