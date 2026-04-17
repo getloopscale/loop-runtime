@@ -316,9 +316,24 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 
 	// Task 7.4: Dedicated ServiceAccount for app workloads (separate from deployer SA).
 	// Pods use this SA with automountServiceAccountToken=false.
-	// imagePullSecrets: registry credentials created by `doctl kubernetes cluster registry add`
-	// are added to the default SA but NOT to custom SAs. Without this, pods using
-	// loopzero-app SA get 401 Unauthorized pulling from the DO container registry.
+	//
+	// imagePullSecrets provisioning (bug #24 fix — L2 race condition):
+	//   1. Copy the docker config from loopzero-infra-registry-source in platform-system
+	//      (seeded once at platform bootstrap) into this namespace as loopzero-infra-registry.
+	//   2. Attach it to loopzero-app SA.
+	//
+	// Previously we relied on doctl kubernetes cluster registry add propagating a
+	// secret to the default SA, then copied it to loopzero-app. That mechanism was not
+	// guaranteed on fresh namespaces under load — pods could be created by ArgoCD
+	// before the default SA had the pull secret, causing ImagePullBackOff that
+	// kubelet cached until manual pod deletion.
+	if err := r.ensurePullSecret(ctx, nsName); err != nil {
+		// Non-fatal: pod may still pull if another mechanism (doctl integration,
+		// namespace-level auto-propagation) provides the secret later.
+		// Log but do not block Environment readiness.
+		log.FromContext(ctx).Info("pull secret ensure failed (non-fatal)", "error", err.Error(), "namespace", nsName)
+	}
+
 	appSA := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "loopzero-app",
@@ -332,18 +347,61 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		appSA.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
 		falseVal := false
 		appSA.AutomountServiceAccountToken = &falseVal
-		// Copy imagePullSecrets from default SA to loopzero-app SA.
-		// `doctl kubernetes cluster registry add` adds registry credentials to the default SA.
-		// Custom SAs don't inherit these — we must copy them explicitly.
+		// Prefer loopzero-infra-registry (provisioned by ensurePullSecret above).
+		// Fall back to copying from default SA (legacy doctl integration path).
+		appSA.ImagePullSecrets = []corev1.LocalObjectReference{
+			{Name: "loopzero-infra-registry"},
+		}
 		var defaultSA corev1.ServiceAccount
 		if err := r.RuntimeClient.Get(ctx, client.ObjectKey{Namespace: nsName, Name: "default"}, &defaultSA); err == nil {
-			appSA.ImagePullSecrets = defaultSA.ImagePullSecrets
+			// Merge: keep loopzero-infra-registry + add any other refs from default.
+			for _, ref := range defaultSA.ImagePullSecrets {
+				if ref.Name == "loopzero-infra-registry" {
+					continue
+				}
+				appSA.ImagePullSecrets = append(appSA.ImagePullSecrets, ref)
+			}
 		}
 		return nil
 	}); err != nil {
 		return fmt.Errorf("serviceaccount %s/loopzero-app: %w", nsName, err)
 	}
 
+	return nil
+}
+
+// ensurePullSecret copies the registry pull secret from the control plane
+// namespace (platform-system) into the tenant runtime namespace. Called
+// per-reconcile; idempotent via CreateOrUpdate.
+//
+// Source secret: loopzero-infra-registry in platform-system, seeded at bootstrap.
+// Destination: loopzero-infra-registry in nsName.
+func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, nsName string) error {
+	var src corev1.Secret
+	srcKey := client.ObjectKey{Namespace: "platform-system", Name: "loopzero-infra-registry"}
+	// r.Client is the mgmt cluster client (embedded); r.RuntimeClient is runtime.
+	if err := r.Client.Get(ctx, srcKey, &src); err != nil {
+		return fmt.Errorf("source pull secret platform-system/loopzero-infra-registry: %w", err)
+	}
+
+	dst := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "loopzero-infra-registry",
+			Namespace: nsName,
+		},
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, dst, func() error {
+		dst.Type = corev1.SecretTypeDockerConfigJson
+		dst.Data = src.Data
+		if dst.Labels == nil {
+			dst.Labels = make(map[string]string)
+		}
+		dst.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("destination pull secret %s/loopzero-infra-registry: %w", nsName, err)
+	}
 	return nil
 }
 
