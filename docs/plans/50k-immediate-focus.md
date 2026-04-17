@@ -390,9 +390,38 @@ Quando todos 5 verdes → abrir planning L4 (500 tenants).
 
 ---
 
+## L3 v8 RESULTS (2026-04-17)
+
+```
+REAL DEPLOY L3 — 100 TENANTS — RESULTS
+  Succeeded:     75 / 100
+  Apps Live:     75 / 100 (HTTP 200 verified)
+  L3 FAIL: 75/100 succeeded (target: >= 99.5%)
+```
+
+Breakdown dos 25 failures:
+- **18 upload failures** — SOURCE_UPLOAD_FAILED HTTP 500 → Gitea retornando 401 porque CPU saturou (206%) antes HPA escalar (2→5). Todos nos primeiros 60s de deploy phase.
+- **4 build failures** — `Max duration limit exceeded` em `build-image-api` (BuildKit retry MaxDuration 60s excedido sob contenção de CPU).
+- **3 late failures** — não classificadas (possivelmente timeout verifyAppLive).
+
+Comparação histórica L3:
+| Versão | Success | Causa raiz principal |
+|---|---|---|
+| v1 | 66/100 | bugs #18/#35/#36 cascading |
+| v2 | ~40/100 | cosign TUF (bug #39) + quota (bug #41) |
+| v3-v7 | 0-50/100 | dirty state + admission bugs (bug #43) |
+| **v8** | **75/100** | Gitea burst + BuildKit timeout |
+
 ## Lessons learned (L3 v8)
 
-**Reactive HPA lag vs burst arrival:** L3 v8 com concurrency=30 entregou ~82/100 success. Os 18 uploads falhados ocorreram nos primeiros ~60s, enquanto HPA escalava Gitea 2→5. A velocidade da chegada (30 pushes em ~10s) excede a velocidade do HPA reagir (~60s estabilização + pod start). Lesson: **reactive HPA não basta para burst** — precisa de `minReplicas` ≥ tamanho esperado do burst.
+**Reactive HPA lag vs burst arrival:** L3 v8 com concurrency=30 entregou 75/100 success. Os 18 uploads falhados ocorreram nos primeiros ~60s, enquanto HPA escalava Gitea 2→5. A velocidade da chegada (30 pushes em ~10s) excede a velocidade do HPA reagir (~60s estabilização + pod start). Lesson: **reactive HPA não basta para burst** — precisa de `minReplicas` ≥ tamanho esperado do burst.
+
+**BuildKit timeout sob load:** 4 workflows falharam em `build-image-api` com "Max duration limit exceeded". O retryStrategy tem `MaxDuration: "60s"` (install-deps) e retries limitados. Sob contenção de CPU no build cluster, builds cold ultrapassam budget.
+
+**Próxima iteração (L3 v9):**
+- Gitea `minReplicas: 2 → 4` (committed 982dbbd) — vai absorver burst inicial
+- BuildKit `retryStrategy` precisa revisar MaxDuration para load real (gap novo — adicionar ao plano)
+- Expectativa: 90-95/100 success
 
 **Fix aplicado:** Gitea `minReplicas: 2 → 4` (commit 982dbbd). Padrão replicável para outras deps: antes de levantar limite de concurrency no teste, bumpar minReplicas da dep mais crítica.
 
