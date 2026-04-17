@@ -63,6 +63,39 @@ Pod is `Pending` with `Unschedulable` until node provisioned — not `ImagePullB
 - Reactive autoscaling during a deploy wave is not viable — deploys would straggle for 2min each.
 - **L3 gate: validate pre-warm strategy before advancing.**
 
+## Bug #26 — DO region capacity limits (discovered 2026-04-17, L2 v7)
+
+**Symptom:** `doctl kubernetes cluster node-pool update` returns 422
+`region has insufficient capacity to resize pool` for s-2vcpu-4gb in SFO3 during
+an active L2 run. Autoscaler had scaled down from 5→2 nodes between tests; when
+v7 deploys hit CPU pressure and triggered scale-up, DO rejected the request.
+
+**Root cause:** DO regions have spot capacity for droplet sizes. Mid-test if
+capacity is exhausted (by other DO customers), autoscaling stalls. This is
+outside LoopZero's control.
+
+**Implications for 50k plan:**
+
+1. **Single-region dependency is a blast radius** — if a cell region runs out of
+   capacity, all new deploys in that cell queue or fail. 100 cells in 1-2 regions
+   compounds this risk.
+2. **Reserved capacity** — for production, need committed capacity agreements with
+   cloud providers (DO Spaces + Droplet reservations, AWS Savings Plans, etc.).
+3. **Multi-region cell distribution** — cells should span 3+ regions so single-
+   region capacity loss degrades to ~30% vs 100%.
+4. **Graceful degradation** — when region capacity is exhausted, the placement
+   engine should route new tenants to other cells/regions rather than fail.
+
+**Mitigation for local dev:**
+- Use smaller instance sizes (s-1vcpu-2gb) for test clusters — higher availability.
+- Pre-warm with `minNodes >= expected peak` before running load tests (trades $ for predictability).
+- Accept that DO SFO3 at the specific test run had no capacity — retry later or use NYC3/FRA1.
+
+**Production-relevant lesson:** 50k apps across 100 cells cannot rely on reactive
+autoscaling. Must combine: (a) pre-warmed cells at capacity, (b) capacity
+reservations with provider, (c) cross-region distribution, (d) queue-and-retry
+for overflow.
+
 ## L3 Scenarios (from plan Phase 2.1)
 
 - [ ] **3.1 Sustained load** — 100 tenants, 10 deploys/min, 1 hour
