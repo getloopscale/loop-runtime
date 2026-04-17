@@ -46,8 +46,14 @@ podSecurityContext:
 
 service:
   http:
-    type: NodePort
-    nodePort: 30000
+    # Bug #44 root-cause deeper fix: NodePort (or headless ClusterIP from the
+    # gitea-http subchart) prevents kube-proxy load-balancing across HPA
+    # replicas. With NodePort + single-endpoint DNS lookup, all git pushes
+    # hit the first pod. Forcing ClusterIP with virtual IP enables round-
+    # robin across replicas.
+    type: ClusterIP
+    # clusterIP auto-assigned (not "None"!)
+    # Removed nodePort — not applicable to ClusterIP
 
 persistence:
   size: 1Gi
