@@ -458,7 +458,128 @@ Comparação histórica L3:
 
 ---
 
+## L3 v9..v14 RESULTS (2026-04-17 afternoon)
+
+| Version | Apps Live | wf_ok | Test fails | Root cause primary |
+|---|---|---|---|---|
+| v9 | 32/100 | 65 | 68 | admission gate mid-flight (bug #43) |
+| v10 | — | — | — | API deploy mid-test sabotage (env change not wired) |
+| v11 | ~50/100 | — | — | dirty state (prior run tenants) |
+| v12 | ~55/100 | — | — | Gitea HA config ausente (session in-memory, 401 mid-stream) |
+| v13 | ~58/100 | 90 | 41 | Argo quota 403 + Gitea burst + runtime memory pressure |
+| **v14** | **62/100** | **97** | **38** | Runtime cluster capacity saturado — 32 apps Pending (0/9 nodes insufficient CPU/mem) |
+
+**v14 breakdown (final):**
+- Succeeded: 62/100 (FAIL — target ≥95%)
+- Builds Succeeded: 97/101 (96%)
+- Apps Pending indefinidamente: 32/100
+- Evento Kubernetes típico: `0/9 nodes are available: 3 Insufficient cpu, 6 Insufficient memory`
+
+**Root cause analysis v14:**
+- Gitea HPA: FUNCIONOU (5 pods, sem 401). Confirma bug #44 resolvido.
+- Argo quota: FUNCIONOU (128 CPU / 256Gi / 200 pods absorveu burst). 97 builds succeeded.
+- **Gargalo novo:** runtime cluster com 9 nodes (3× s-2vcpu-4gb default + 6× s-2vcpu-2gb overflow) não consegue schedular 100 apps simultâneas com os requests atuais (cada app pede ~200m CPU + 256Mi).
+- Math: 100 apps × 256Mi = 25Gi memory mínimo só de apps. Runtime cluster efetivo: ~20Gi de memory após system pods.
+
+---
+
+## T-08 · Runtime capacity para 100 tenants (gap L3 v14)
+
+**Tipo:** T2 (infra provisioning — DO droplet quota)
+**Esforço:** 1h (Pulumi) + lead-time DO ticket (1-5 dias)
+**Owner:** Infra engineer + Paulo (DO ticket)
+**Depends on:** DO droplet quota increase
+
+### Motivação
+
+L3 v14 confirmou que o gargalo mudou: HPAs ✅, Gitea ✅, Argo ✅, mas o runtime cluster não tem CPU/memory suficientes para hospedar 100 apps simultaneamente. 32/100 apps ficaram Pending com "0/9 nodes available".
+
+### Tarefas
+
+- [ ] 8.1 Paulo abre ticket DO para bump droplet quota (conta atual: ~10 droplets; precisa: 15+)
+- [ ] 8.2 Pulumi: bump `loopzero-infra-dev-sfo3-runtime` default pool
+  - nodeCount: 3 → 6
+  - size: s-2vcpu-4gb → s-4vcpu-8gb (1900m→3800m CPU, 3Gi→7Gi memory por node)
+  - Total: 6 nodes × 3800m = 22800m CPU (vs atual 11400m); 6 × 7Gi = 42Gi mem (vs atual 9Gi)
+- [ ] 8.3 Re-run L3 v15 para validar 100/100 scheduling
+- [ ] 8.4 Medir p95 pod-start-to-ready — novo KPI em capacity-baselines.md
+
+### Critérios de aceite
+
+| Critério | Valor |
+|---|---|
+| Zero pods Pending em L3 c=30 | `kubectl get pods -A --field-selector=status.phase=Pending \| wc -l` → 0 por 10min |
+| Nodes sized for workload | default pool ≥ s-4vcpu-8gb × 6 |
+| L3 v15 apps live | ≥ 95/100 |
+| Headroom | 30% CPU + memory ociosas em steady-state após app live |
+
+### DoD
+
+- DO droplet quota increase approved.
+- Pulumi commit com nodeCount + size bumpados.
+- L3 v15 passa ≥ 95/100 apps live.
+- Baseline p95 pod-start committed em `capacity-baselines.md`.
+- **Anti-pattern documentado:** "runtime cluster default pool deve ser dimensionado para 1.5× o teto esperado de deployments simultâneos (tenants × apps × pods)".
+
+### Status intermediário (2026-04-17)
+
+- Pulumi source pending (aguardando DO quota).
+- Workaround aplicado: 2 pools de overflow (`overflow-s-2vcpu-2gb`, `overflow2`) via `doctl` — **viola regra "nunca manual nodepool changes"** (memory feedback). Esses pools devem ser substituídos por Pulumi quando quota chegar.
+
+---
+
+## T-09 · Validação 10× consecutiva (Gate #1 final)
+
+**Tipo:** T1 (execução disciplinada)
+**Esforço:** 1 dia (10 runs × ~30min + cleanup entre runs)
+**Owner:** Quem roda scale
+**Depends on:** T-08 resolvido + L3 v15 ≥95/100
+
+### Motivação
+
+O gate original do plano diz "L3 roda 10× consecutivas com 100% success sem intervenção manual". Sem isso não há confiança de estabilidade. Cada run é um sample; 10 consecutivas descartam flakiness e revelam degradação acumulativa (memory leaks, disk slowly filling, Gitea LFS growing, etc.).
+
+### Tarefas
+
+- [ ] 9.1 Script: `tools/l3-stability-loop.sh` — roda L3 N vezes com admin-evict cleanup entre cada
+- [ ] 9.2 Executar 10× com `--max-runs 10` e registrar success rate de cada
+- [ ] 9.3 Análise: nenhum run deve ficar <95%; p95 delta entre runs <10%
+- [ ] 9.4 Documentar em `scale-50k-l3-readiness.md` — seção "L3 estabilidade validada"
+
+### Critérios de aceite
+
+| Critério | Valor |
+|---|---|
+| 10/10 runs ≥ 95/100 apps live | Zero exceptions |
+| p95 deploy time consistente | Delta máximo <10% entre min/max runs |
+| Zero intervenção manual | Sem live-patches, sem kubectl delete --type=json --force |
+| Cleanup completo entre runs | admin-evict-tenants.sh retorna exit 0 com 100 tenants evicted |
+
+### DoD
+
+- 10 runs loggados em `/tmp/l3-v{N}.log`.
+- Tabela de resultados committed em `scale-50k-l3-readiness.md`.
+- Gate #1 marcado ✅.
+- Abrir planning L4 (500 tenants).
+
+---
+
+## Gate Status Final (2026-04-17 ~17:00)
+
+| Gate | Status | Evidência |
+|---|---|---|
+| #1 L3 10× consecutivas 100% | ❌ NOT MET | Best run: 75/100 (v8). v14: 62/100. Runtime capacity bottleneck (T-08 open). |
+| #2 Capacity baselines documentadas | 🟡 PARTIAL | loopzero-api ✅ (169ms p95 @ 20 RPS), minio ✅, argocd ✅. Gitea em progresso. |
+| #3 admin evict substitui bash workarounds | 🟡 PARTIAL | Bash tool (`tools/admin-evict-tenants.sh`) ✅ usado em cleanup runs. API endpoint scaffolded mas não wired em server.go (EnqueueEviction TODO). |
+| #4 6 alerts + zero live-patches não committed | 🟡 PARTIAL | 6 alerts ✅. Live-patches runtime overflow pools ❌ (usados doctl manual). |
+| #5 CLI retries 429/503 | ✅ MET | `cli/src/api/client.ts` retry middleware + harness retry. |
+
+**Honest promise status:** 2/5 gates verdes. T-08 (runtime capacity) é blocker crítico descoberto por L3 v14 — depende de DO droplet quota increase. Plano NÃO completo.
+
+---
+
 ## Changelog
 
 - **v1 (2026-04-17):** Criação com 7 tasks derivadas de meeting de análise de gaps.
 - **v1.1 (2026-04-17):** 6 tasks completadas em iteração Ralph (T-02..T-07). T-01 em validação final via L3 v8. Commits: 4c63824, c89f54d, 4236c2e, 15ce9be, f094fa1, 9c5d75f.
+- **v1.2 (2026-04-17 PM):** L3 v9..v14 rodadas. v14 final 62/100 — runtime capacity bottleneck descoberto. T-08 adicionado (runtime nodes bump + DO droplet quota). T-09 adicionado (10× consecutivo gate). Gitea HPA maxReplicas bumpado 8→12.
