@@ -158,7 +158,12 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 		Annotations: map[string]string{
 			"container.apparmor.security.beta.kubernetes.io/main": "unconfined",
 		},
-		RetryStrategy: retryStrategy(3, "10s", "2", "300s"),
+		// L3 v8 observed 4 workflows "Max duration limit exceeded" at c=30.
+		// BuildKit first-attempt cold build under contention can exceed 300s
+		// (image layer pulls + dependency install + build). Bump MaxDuration
+		// to 900s (15 min) — happy path remains 2-3min. Budget covers 3 retries
+		// with exponential backoff 10s, 20s, 40s.
+		RetryStrategy: retryStrategy(3, "10s", "2", "900s"),
 	}
 }
 
