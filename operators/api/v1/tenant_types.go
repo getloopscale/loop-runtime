@@ -19,14 +19,15 @@ const (
 )
 
 // TenantPhase represents the overall lifecycle phase of a Tenant.
-// +kubebuilder:validation:Enum=Provisioning;Active;Suspended;Deleting
+// +kubebuilder:validation:Enum=Provisioning;Active;Suspended;PendingDeletion;Deleting
 type TenantPhase string
 
 const (
-	TenantPhaseProvisioning TenantPhase = "Provisioning"
-	TenantPhaseActive       TenantPhase = "Active"
-	TenantPhaseSuspended    TenantPhase = "Suspended"
-	TenantPhaseDeleting     TenantPhase = "Deleting"
+	TenantPhaseProvisioning    TenantPhase = "Provisioning"
+	TenantPhaseActive          TenantPhase = "Active"
+	TenantPhaseSuspended       TenantPhase = "Suspended"
+	TenantPhasePendingDeletion TenantPhase = "PendingDeletion" // MEET-052: soft delete grace period
+	TenantPhaseDeleting        TenantPhase = "Deleting"
 )
 
 // Tenant is the Schema for the tenants API.

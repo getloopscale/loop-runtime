@@ -97,9 +97,10 @@ func TestTenantPhase_Values(t *testing.T) {
 		TenantPhaseProvisioning,
 		TenantPhaseActive,
 		TenantPhaseSuspended,
+		TenantPhasePendingDeletion,
 		TenantPhaseDeleting,
 	}
-	expected := []string{"Provisioning", "Active", "Suspended", "Deleting"}
+	expected := []string{"Provisioning", "Active", "Suspended", "PendingDeletion", "Deleting"}
 
 	for i, p := range phases {
 		if string(p) != expected[i] {

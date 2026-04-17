@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Tenant deletion lifecycle — Phases 0-5** (MEET-052): Full tenant deletion lifecycle implementation. Meeting record: MEET-2026-04-17-052.
+  - Phase 0: DeleteApplications NotFound idempotency fix (prevents retry storms)
+  - Phase 1: MaxConcurrentReconciles=5, exponential backoff (5s-5min, 10 max), PendingDeletion state machine
+  - Phase 2: Generic circuit breaker (pkg/circuitbreaker/) + Gitea/ArgoCD provisioner wrappers
+  - Phase 3: DB migration (tenants_pending_deletion + tenant_tombstones), LOOPZERO_ADMIN_API_KEY middleware with dual-key rotation, DELETE /api/v1/tenants/:id endpoint (soft-delete + 202), POST /api/v1/tenants/:id/restore (grace period cancel), IDOR protection
+  - Phase 5: Per-step deletion metrics (loopzero_tenant_deletion_step_duration_seconds, loopzero_tenant_deletion_stuck_total, loopzero_tenant_cb_state)
+- **Meeting record MEET-052** (MEET-052): Tenant Lifecycle & Deletion design review. TenantReaper rejected, controller-native approved. 3 security vetoes resolved, 21 mandatory actions.
+
+### Fixed
+- **DeleteApplications NotFound idempotency** (MEET-052): ArgoCD DeleteApplications now handles NotFound errors during concurrent deletion, preventing infinite requeue loops that caused retry storms on bulk tenant deletion.
+
+### Added
 - **Platform hardening v2 — E2E workflow** (hardening-v2): Weekly scheduled `infra-e2e.yml` validates full destroy→up→bootstrap→health cycle. `health-check.sh` validates 30+ deployments, services, tunnel, nodes, external endpoints.
 - **OTel instrumentation — operators/** (hardening-v2): Custom Prometheus metrics (reconcile_duration, reconcile_errors, provisioner_duration). Child spans on all 7 controllers for provisioner calls (Gitea, ArgoCD, Harbor, MinIO). Error recording on spans. TraceExtractor for pkg/logging.
 - **OTel instrumentation — cloud/** (hardening-v2): TracerProvider + OTLP exporter. otelhttp on all HTTP clients (Hydra, Kratos, Stripe). Prometheus metrics replacing atomic counters. trace_id in slog.

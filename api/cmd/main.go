@@ -133,6 +133,11 @@ func main() {
 	middleware.ServiceAuthSecret = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
 	middleware.ServiceAuthSecretPrevious = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS")
 
+	// MEET-052: Platform admin API key for cross-tenant operations (force-delete, bulk-delete).
+	// Dual-key rotation: accepts current OR previous during rotation window.
+	middleware.AdminAPIKey = os.Getenv("LOOPZERO_ADMIN_API_KEY")
+	middleware.AdminAPIKeyPrevious = os.Getenv("LOOPZERO_ADMIN_API_KEY_PREVIOUS")
+
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
 	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
 	if err != nil {

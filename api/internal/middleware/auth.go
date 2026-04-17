@@ -94,6 +94,15 @@ var ServiceAuthSecret string
 // Set from LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS env var. When empty, single-key mode.
 var ServiceAuthSecretPrevious string
 
+// AdminAPIKey is the platform-admin API key for cross-tenant operations.
+// Set from LOOPZERO_ADMIN_API_KEY env var. When empty, admin endpoints are disabled.
+// MEET-052 Security VETO: Required for force-delete, bulk-delete, and admin operations.
+var AdminAPIKey string
+
+// AdminAPIKeyPrevious is the previous admin API key for zero-downtime rotation.
+// Set from LOOPZERO_ADMIN_API_KEY_PREVIOUS env var. When empty, single-key mode.
+var AdminAPIKeyPrevious string
+
 // validateServiceAuth checks the X-Service-Auth header against current and previous secrets.
 // S1.2: Dual-key rotation — accepts current OR previous during rotation window.
 func validateServiceAuth(provided string) bool {
@@ -107,6 +116,39 @@ func validateServiceAuth(provided string) bool {
 		return true
 	}
 	return false
+}
+
+// validateAdminAPIKey checks the provided key against current and previous admin API keys.
+// MEET-052: Dual-key rotation for zero-downtime key rotation.
+func validateAdminAPIKey(provided string) bool {
+	if AdminAPIKey == "" {
+		return false
+	}
+	if provided == AdminAPIKey {
+		return true
+	}
+	if AdminAPIKeyPrevious != "" && provided == AdminAPIKeyPrevious {
+		return true
+	}
+	return false
+}
+
+// RequireAdmin is a middleware that requires a valid admin API key in the
+// X-Admin-Key header. Used for cross-tenant operations (force-delete, bulk-delete).
+// MEET-052 Security VETO: No destructive admin endpoint may be exposed without this.
+func RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := r.Header.Get("X-Admin-Key")
+		if key == "" {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "Admin API key required. Set X-Admin-Key header.")
+			return
+		}
+		if !validateAdminAPIKey(key) {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "Invalid admin API key")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // AuthWithTTL is like Auth but with a configurable cache TTL.

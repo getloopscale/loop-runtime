@@ -83,4 +83,8 @@ const (
 	// triggers the EnvironmentController to re-reconcile and correct drift on
 	// cross-cluster resources (NetworkPolicy, ResourceQuota, RBAC).
 	AnnotationParentGeneration = "loopzero.io/parent-generation"
+
+	// AnnotationDeletionRetryCount tracks the number of failed cleanup attempts
+	// during tenant deletion. Used for exponential backoff calculation. MEET-052.
+	AnnotationDeletionRetryCount = "loopzero.io/deletion-retry-count"
 )
