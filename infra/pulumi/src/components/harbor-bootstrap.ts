@@ -203,6 +203,34 @@ export function installHarbor(
     },
   );
 
+  // Harbor canary credentials secret.
+  // The canary CronJob (canary-cronjob.yaml) looks up `harbor-admin-credentials`
+  // with keys `username` + `password`, but Harbor itself stores the admin
+  // password in `harbor-core` under `HARBOR_ADMIN_PASSWORD`. Rather than
+  // rewriting the canary template to read from harbor-core, we synthesize the
+  // expected shape here. "Harbor12345" is the Helm chart default — override
+  // if the chart is bootstrapped with a custom harborAdminPassword.
+  //
+  // Depends on harbor (chart release) so the namespace + canary are in place
+  // before the secret is applied. Without this secret, the canary CronJob
+  // fails with `secret "harbor-admin-credentials" not found` →
+  // CreateContainerConfigError → DeadlineExceeded → SRE Guardian flags it.
+  new k8s.core.v1.Secret(
+    "harbor-admin-credentials",
+    {
+      metadata: {
+        name: "harbor-admin-credentials",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      type: "Opaque",
+      stringData: {
+        username: "admin",
+        password: "Harbor12345",
+      },
+    },
+    { provider, dependsOn: [harbor] },
+  );
+
   // IngressRoute for Harbor — routes harbor.{domain} to Harbor core service
   new k8s.apiextensions.CustomResource(
     "harbor-ingress-cert",
