@@ -1,0 +1,31 @@
+# Let's Encrypt Staging — for load tests + dev experiments
+# Staging has generous rate limits (~30k certs/week per account)
+# and issues from "Fake LE Intermediate X1" — untrusted by browsers,
+# which is exactly what we want for tests (forces explicit acceptance
+# of the test-only posture).
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  annotations:
+    loopzero.io/purpose: "Load testing and dev — untrusted certs by design"
+    loopzero.io/rotation: "N/A (test certs)"
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@loopzero.example
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+    - dns01:
+        cloudflare:
+          apiTokenSecretRef:
+            key: api-token
+            name: cloudflare-api-token-secret
+      selector:
+        dnsZones:
+        - loopzero.example
+    - http01:
+        ingress:
+          class: traefik
+      selector: {}

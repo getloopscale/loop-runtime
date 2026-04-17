@@ -1,0 +1,18 @@
+# Cloudflare Origin CA ClusterIssuer
+# Prerequisite: create secret `cloudflare-origin-ca-key` in origin-ca-issuer ns
+# with key `key` containing the Origin CA Key from:
+# https://dash.cloudflare.com/profile/api-tokens (section "Origin CA Key")
+apiVersion: cert-manager.k8s.cloudflare.com/v1
+kind: ClusterOriginIssuer
+metadata:
+  name: cloudflare-origin-ca
+  annotations:
+    loopzero.io/purpose: "TLS for UIs served only via Cloudflare (argocd, auth, cloud, harbor)"
+    loopzero.io/rotation: "Annual review; certs valid up to 15y but operational rotation required"
+spec:
+  requestType: OriginRSA  # or OriginECC
+  auth:
+    serviceKeyRef:
+      name: cloudflare-origin-ca-key
+      namespace: origin-ca-issuer
+      key: key
