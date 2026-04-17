@@ -436,7 +436,7 @@ Comparação histórica L3:
 | T-02 admin-evict (API scaffold) | ✅ done | 9899ae0, 9273007 | Routes + CLI command |
 | T-02 admin-evict (API wired) | ✅ done | 94e8ae9 | `server.Config.AdminEvictor`, `PostgresTenantStore`, 15 tests |
 | T-02 admin-evict (DB teardown) | ✅ done | e79b50e | `DeleteTenantsFKOrdered` atomic, 10 service tests |
-| T-02 admin-evict (K8s teardown) | ❌ pending | — | Phase 2: multi-cluster client + finalizer force-null (4-8h) |
+| T-02 admin-evict (K8s teardown) | ✅ done | ea04ba9 | `k8s.TenantK8sEvictor` (multi-cluster mgmt/build/runtime) + 11 tests. 5-step bash sequence implementada em Go + invariant test (K8s error → skip DB) |
 | T-03 Capacity harness | ✅ done | c89f54d | `infra/tests/capacity/` (harness + 2 suites) + `capacity-baselines.md` |
 | T-04 8 HPAs | ✅ done | 4236c2e | Harbor (3), ArgoCD (2), Ory (2), mgmt-traefik (1) |
 | T-05 ArgoCD sharding | ✅ done | 15ce9be | replicas=3 + env `ARGOCD_CONTROLLER_REPLICAS=3` |
@@ -657,3 +657,4 @@ A promise `TODAS AS TASKS, CRITERIOS DE ACEITES, DODs CONCLUIDOS E VALIDADOS` s�
   - [MEDIUM] 4 Error workflows: resolvidos pelo cleanup completo (tenant eviction removeu workflows órfãos).
   - [LOW] Harbor canary broken: root-cause 2 camadas — (1) secret `harbor-admin-credentials` ausente (Helm não cria), (2) projeto `loopzero-platform` ausente no Harbor (harbor-init desabilitado). Fix (6ffa736): Pulumi cria secret + projeto criado via API. Canary agora retorna "OK: Harbor canary passed".
   - [CRITICAL] T-08 Runtime capacity: permanece bloqueado em DO droplet quota (ação humana).
+- **v1.6 (2026-04-17 17:40):** Gitea baseline capturada (750024e) — Gate #2 fecha 4/4 baselines. T-02 phase 2 K8s teardown implementado em Go (ea04ba9): 5-step sequence multi-cluster, 11 unit tests, invariant "K8s fail → skip DB" enforced por teste. Gate #3 agora ~95% fechado; flip para ✅ após operador rodar L3 cleanup 100% via API sem tocar bash.
