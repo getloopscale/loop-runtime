@@ -2667,6 +2667,10 @@ function installTenantController(
       // Without "delete" verb, the kick is a silent no-op (403 logged, pod waits for
       // kubelet ~5min backoff instead of recovering immediately).
       { apiGroups: [""], resources: ["pods"], verbs: ["get", "list", "delete"] },
+      // Bug #37: reconcileDelete in EnvironmentController deletes tenant namespaces
+      // during tenant tear-down. Without "delete" verb, the operator loops logging
+      // Forbidden and the namespace never terminates. Discovered during L3 v2 run.
+      { apiGroups: [""], resources: ["namespaces"], verbs: ["delete"] },
       { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
       { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind"] },
       // PriorityClasses are cluster-scoped. Tenant controller creates per-plan classes

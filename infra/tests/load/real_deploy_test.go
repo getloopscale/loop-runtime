@@ -343,6 +343,9 @@ func TestRealDeploy_L3_100Tenants(t *testing.T) {
 	}
 
 	const tenantCount = 100
+	// Concurrency 10 — matches scale-50k-plan L3 spec (sustained 10 deploys/min).
+	// L3 v2 tried 15 and hit DO API rate limit 429 on CSI volume provisioning
+	// (bug #40). L4 bumps to 20 with pre-provisioned volumes or RWX storage.
 	const concurrency = 10
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Hour)
 	defer cancel()
