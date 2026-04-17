@@ -1,9 +1,59 @@
 # Scale 50k — Foco Imediato
 
 **Criado:** 2026-04-17
+**Última atualização:** 2026-04-17 18:15 (v1.9)
 **Horizonte:** 5-7 dias úteis
 **Objetivo:** Destravar L3 (100 tenants) com pipeline limpo, estabelecer baselines de capacity, eliminar os 4 anti-patterns observados.
-**Context:** L1 (10/10 ✅), L2 (50/50 ✅), L3 (0/6 ❌ — Gitea, finalizer, quota, cosign, RBAC saturando). Ver `scale-50k-l3-readiness.md` e `scale-50k-technical-debt.md`.
+**Context:** L1 (10/10 ✅), L2 (50/50 ✅), L3 (best 75/100 @ v8 · 62/100 @ v14). Ver `scale-50k-l3-readiness.md` e `scale-50k-technical-debt.md`.
+
+---
+
+## 📌 Estado atual (snapshot 2026-04-17 18:15)
+
+**TL;DR:** Código 100% implementado. Gate #2 e #5 fechados. Gate #3 a 95% (falta validação operacional). Gates #1 e #4 bloqueados em DO droplet quota (ticket aberto). Contingência `LOOPZERO_LEAN_RESOURCES=true` permite validar Gate #1 sem esperar DO.
+
+### Gates
+
+| Gate | Status | O que falta |
+|---|---|---|
+| #1 L3 10× ≥95/100 consecutivas | ❌ | Ou DO quota (T-08) + L3 v15, ou ativar `LOOPZERO_LEAN_RESOURCES=true` + L3 v15 |
+| #2 4 capacity baselines | ✅ | loopzero-api, minio, argocd, gitea — todas em `capacity-baselines.md` |
+| #3 admin evict substitui bash | 🟡 95% | Código pronto (API + DB + K8s + CLI end-to-end). Falta 1 cleanup real via `loopzero admin tenants evict` (validação operacional) |
+| #4 zero live-patches uncommitted | ❌ | 2 overflow node pools criados via `doctl` (serão removidos quando T-08 Pulumi apply) |
+| #5 CLI retries 429/503 | ✅ | Retry middleware + harness retry |
+
+### Blockers externos (não autônomos)
+
+1. **DO droplet quota** → ticket aberto por Paulo. ETA 24-48h típico. Destrava Gates #1 e #4.
+2. **Operational validation Gate #3** → Paulo roda 1 cleanup real via CLI após próximo deploy da API.
+
+### Caminhos para destravar HOJE
+
+**Opção 1 (contingência autônoma):** ativar lean resources no API
+```bash
+kubectl --context mgmt -n loopzero-system set env deploy/loopzero-api LOOPZERO_LEAN_RESOURCES=true
+# apps rendem com 64Mi/50m em vez de 128Mi/100m → cabem 100 no runtime atual
+# rodar L3 v15, se ≥95/100 rodar tools/l3-stability-loop.sh --max-runs 10
+```
+
+**Opção 2 (esperar DO):** aguardar ticket, `pulumi up` com runtime bump, L3 v15 natural.
+
+Ambas fecham Gate #1. Opção 1 é contingência; Opção 2 é a versão "limpa" do plano.
+
+### Artefatos prontos
+
+- `tools/admin-evict-tenants.sh` — bash fallback (emergencial, ainda funciona)
+- `tools/l3-stability-loop.sh` — roda 10× L3 com fail-fast e TSV summary
+- `loopzero admin tenants evict --pattern 'tn-lt-%' [--dry-run|--yes]` — CLI end-to-end
+- `LOOPZERO_LEAN_RESOURCES=true` flag no renderer — escape hatch T-08
+- API: `/api/v1/admin/tenants/evict` (gated por `LOOPZERO_ADMIN_API=true` + `X-Service-Auth`)
+
+### Métricas desta sessão de implementação
+
+- 17 commits (ver `git log --oneline`)
+- 54 unit tests novos passando (Go + TypeScript)
+- 4 bugs fixados em infra (#44 Gitea HA, Harbor canary secret+projeto, #35-36 RBAC, #43 admission env)
+- 9 docs atualizados/criados (capacity-baselines, scale-50k-l3-readiness, este plano)
 
 ---
 
@@ -431,7 +481,7 @@ Comparação histórica L3:
 
 | Task | Status | Commits | Artefatos |
 |------|--------|---------|-----------|
-| T-01 L3 v8 Gitea HPA | ⏳ in-progress | — | `/tmp/l3-v8.log` + HPA `cpu: 206% → 29%`, replicas `2→5` (v14: 62/100 → T-08 blocker) |
+| T-01 L3 Gitea HPA calibration | ✅ done (DoD cumprido) + ❌ Gate #1 pendente | ba26abb, 1385a78 | L3 v8..v14 documentados em `scale-50k-l3-readiness.md`; HPA validada (2→5 replicas em burst). Gate #1 ≥95/100 bloqueado por T-08 |
 | T-02 admin-evict (bash) | ✅ done | 4c63824 | `tools/admin-evict-tenants.sh` |
 | T-02 admin-evict (API scaffold) | ✅ done | 9899ae0, 9273007 | Routes + CLI command |
 | T-02 admin-evict (API wired) | ✅ done | 94e8ae9 | `server.Config.AdminEvictor`, `PostgresTenantStore`, 15 tests |
@@ -442,8 +492,8 @@ Comparação histórica L3:
 | T-05 ArgoCD sharding | ✅ done | 15ce9be | replicas=3 + env `ARGOCD_CONTROLLER_REPLICAS=3` |
 | T-06 CLI retry 429/503 | ✅ done | f094fa1 | `cli/src/api/client.ts` + `real_deploy_harness.go` |
 | T-07 6 alerts | ✅ done | 9c5d75f | `prometheusrule-capacity.yaml` + Prometheus reloaded |
-| T-08 Runtime capacity | ❌ pending | — | DO droplet quota (human action) + Pulumi preview (drift risk) |
-| T-09 10× consecutive L3 | ❌ pending | — | Blocked by T-08 |
+| T-08 Runtime capacity | ❌ pending (ticket aberto) + 🟢 contingência pronta | 183e5eb | DO droplet quota em fila. Backup: `LOOPZERO_LEAN_RESOURCES=true` flag no renderer destrava L3 no cluster atual (100 × 64Mi cabe em 18Gi) |
+| T-09 10× consecutive L3 | 🟢 script pronto, blocked by T-08/contingência | a051ba2 | `tools/l3-stability-loop.sh` com fail-fast + TSV summary. Roda assim que L3 v15 passar ≥95/100 uma vez |
 
 **Evidência de que os fixes funcionam:**
 - Gitea HPA: escalou 2→5 replicas em L3 v8 quando CPU atingiu 206% → baixou para 29%
@@ -452,15 +502,16 @@ Comparação histórica L3:
 - Prometheus: 19 rules (10 platform + 6 capacity + 3 TLS)
 
 **Anti-patterns eliminados:**
-1. ~~Live-patches antes de source commits~~ → cada mudança neste iteration tem commit Pulumi/Helm
-2. ~~Force-null finalizers como rotina~~ → `tools/admin-evict-tenants.sh` encapsula o workaround em tool auditado
-3. ~~Teste prova antes do alerta~~ → T-07 cobre 6 modos de falha que o teste revelou
-4. Bench isolado antes de E2E → T-03 framework pronto (próximo passo: capturar baselines reais)
+1. ~~Live-patches antes de source commits~~ → cada mudança tem commit Pulumi/Helm. Exceção pendente: 2 overflow node pools via doctl (Gate #4).
+2. ~~Force-null finalizers como rotina~~ → substituído por `k8s.TenantK8sEvictor` no API (commit ea04ba9). Bash fica como fallback emergencial.
+3. ~~Teste prova antes do alerta~~ → T-07 cobre 6 modos de falha que o teste revelou.
+4. ~~Bench isolado antes de E2E~~ → 4/4 baselines capturadas em `capacity-baselines.md` (loopzero-api, minio, argocd, gitea).
 
 **Pendente para gate final:**
-1. L3 v8 RESULTS ≥ 95/100 success (em progresso)
-2. Capacity baselines capturadas (T-03 framework pronto; runs sob demanda)
-3. 10× consecutivas L3 100% success (validação de estabilidade pós-estabilização)
+1. **Gate #1:** L3 v15 ≥ 95/100 (caminho: DO quota OU `LOOPZERO_LEAN_RESOURCES=true`) — **BLOCKER**
+2. **Gate #1:** 10× L3 consecutivas ≥ 95/100 via `tools/l3-stability-loop.sh --max-runs 10` — segue Gate #1 imediato
+3. **Gate #3:** 1 cleanup real executado via `loopzero admin tenants evict` (não bash) — **validação operacional**
+4. **Gate #4:** remover overflow pools doctl quando T-08 Pulumi apply rodar
 
 ---
 
@@ -661,3 +712,4 @@ A promise `TODAS AS TASKS, CRITERIOS DE ACEITES, DODs CONCLUIDOS E VALIDADOS` s�
 - **v1.6 (2026-04-17 17:40):** Gitea baseline capturada (750024e) — Gate #2 fecha 4/4 baselines. T-02 phase 2 K8s teardown implementado em Go (ea04ba9): 5-step sequence multi-cluster, 11 unit tests, invariant "K8s fail → skip DB" enforced por teste. Gate #3 agora ~95% fechado; flip para ✅ após operador rodar L3 cleanup 100% via API sem tocar bash.
 - **v1.7 (2026-04-17 18:00):** CLI `loopzero admin tenants evict` wired em Commander (4a9a077) + 10 unit tests. L3 v8-v14 results registrados em `scale-50k-l3-readiness.md` (1385a78) — completa DoD T-01. `tools/l3-stability-loop.sh` criado (a051ba2) — T-09 pronto para rodar assim que T-08 resolver. End-to-end path agora existe: `loopzero admin tenants evict --pattern 'tn-lt-%' --yes` → HTTP POST → K8s multi-cluster teardown + DB FK cleanup. Gate #3 flip para ✅ depende só de um L3 cleanup real via CLI (validação operacional).
 - **v1.8 (2026-04-17 18:10):** Paulo abriu ticket DO droplet quota. Em paralelo, implementado `LOOPZERO_LEAN_RESOURCES=true` flag (183e5eb) como contingência — halva os resource defaults (128Mi→64Mi memory, 100m→50m CPU) apenas no fallback path. Invariant test garante que não override de valores explicitos. Math: 100 apps × 64Mi = 6.4Gi caberia confortavelmente no runtime cluster atual (18Gi). Path de uso: `kubectl set env deploy/loopzero-api LOOPZERO_LEAN_RESOURCES=true` → redeploy → L3 v15 pode rodar antes do quota chegar. 8 novos tests passing. Plano fica com escape-hatch se DO demorar.
+- **v1.9 (2026-04-17 18:15):** Refresh consolidado no topo do plano (seção "📌 Estado atual"). TL;DR: código 100% implementado; Gates #2 e #5 fechados; Gate #3 a 95% (falta validação operacional); Gates #1 e #4 bloqueados em DO quota (ticket aberto) OU via contingência lean-resources. Corrigidos markers stale: T-01 agora ✅ done (DoD cumprido), T-08 com 🟢 contingência pronta, T-09 script pronto esperando Gate #1 imediato. Anti-patterns 1-4 todos riscados (4º fechou com Gitea baseline). Esta sessão: 17 commits, 54 unit tests novos, 4 bugs fixados.
