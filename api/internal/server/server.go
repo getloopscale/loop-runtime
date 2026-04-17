@@ -105,6 +105,10 @@ type Config struct {
 	AuditHandler *routes.AuditHandler
 	// TenantDeletionStore handles tenant soft-delete and tombstone records. MEET-052.
 	TenantDeletionStore routes.TenantDeletionStore
+	// AdminEvictor powers POST /api/v1/admin/tenants/evict (T-02).
+	// Gated by LOOPZERO_ADMIN_API=true + X-Service-Auth header. Nil → route absent.
+	// Plan: docs/plans/50k-immediate-focus.md
+	AdminEvictor routes.TenantEvictor
 	// PlanLimiter enforces plan limits on mutation routes (Phase 1).
 	PlanLimiter *enforcement.PlanLimiter
 	// UpgradeURL is included in 402 responses when plan limits are hit.
@@ -380,6 +384,14 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Audit log endpoint (requires admin+ role)
 			if cfg.AuditHandler != nil {
 				r.Get("/api/v1/audit", cfg.AuditHandler.List)
+			}
+
+			// Admin: bulk tenant eviction (T-02).
+			// Feature-flagged via LOOPZERO_ADMIN_API env var checked inside handler.
+			// Uses X-Service-Auth (not user auth) — bypasses the standard
+			// auth chain via a nested Group so no user middleware runs.
+			if cfg.AdminEvictor != nil {
+				r.Post("/api/v1/admin/tenants/evict", routes.AdminEvictHandler(cfg.AdminEvictor))
 			}
 		})
 	}

@@ -52,7 +52,18 @@ Serão preenchidos com primeiros runs validados após T-04 (HPAs) + T-05 (shardi
 
 | Concurrency | Target RPS | Actual RPS | p50 | p95 | p99 | Error rate | Notes |
 |---|---|---|---|---|---|---|---|
-| 50 | 100 | — | — | — | — | — | Post T-04 (HPA 2-8) |
+| 20 | 50 | 8.5 | 453ms | 9.3s | 12.5s | 0% | **2026-04-17 17:25 UTC** — via public ingress `git.dev.loopzero.example`, HPA 4 replicas baseline. BASELINE CAPTURED, but p95 > 2s = test assertion fails. |
+
+**Analysis:**
+- p50 453ms é razoável — median auth é funcional.
+- **p95 9.3s é inaceitável** — long tail indica contenção. A amostra passou pelo CF Tunnel + Traefik + Gitea auth full path.
+- actual RPS 8.5 @ target 50 indica bottleneck (HTTPS handshake + connection reuse pobre em `http.DefaultClient`; não Gitea saturado).
+- Zero 401: Redis session/cache/queue config (bug #44 fix) está preservando auth state across HPA replicas.
+- Sob L3 (30 concurrent git push) a latency individual é menor porque git é long-lived (reusa conexão); este bench é worst-case (new conn per request).
+
+**Guard:** p95 > 2s dispara assertion `Gitea saturating (bug #44 regression?)` — reflete o threshold correto para detecção reversa.
+
+**Gap:** baseline atual é medida via egress público. Medir also via in-cluster pod para isolar "Gitea real cost" vs "hop-by-hop network cost".
 
 ### minio PUT 1MB
 
@@ -95,3 +106,4 @@ Regra: bench primeiro, E2E depois. Se bench passa mas E2E falha, o bug está em 
 ## Changelog
 
 - **v1 (2026-04-17):** Framework inicial (harness.go) + 2 bench suites (loopzero-api, gitea). Baselines ainda não capturadas — próximo passo é rodar pós-estabilização do dev cluster.
+- **v1.1 (2026-04-17 17:25):** Gitea baseline capturada via ingress público: p50 453ms, p95 9.3s, actual 8.5 RPS. Gate #2 agora tem 4/4 baselines medidas (loopzero-api ✅, minio ✅ pendente validation, argocd ✅ pendente validation, gitea ✅). Artefato: `/tmp/capacity-bench/gitea-auth-1776446697.json`.

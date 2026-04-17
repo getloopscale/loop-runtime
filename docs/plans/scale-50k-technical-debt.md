@@ -12,6 +12,8 @@ Hoje, `pulumi destroy + pulumi up + deploy` **NÃO restaura** a plataforma ao es
 
 **Causa raiz dominante:** Bug 22 (Pulumi state drift no stack `dev`) multiplica o problema — impede aplicação de fixes que já estão em código.
 
+**Outro gap crítico para escala:** a plataforma é **cell-ready** (código completo), mas **cell-deployed=false** (roda em single-cell default). Isso é aceitável para L1/L2, mas bloqueia L4+ e inviabiliza meta de 50k apps sem Phase 3.
+
 **Prioridade #1 para Dia 3:** Resolver Pulumi drift. Desbloqueia 3 bugs imediatamente e interrompe o crescimento da dívida.
 
 ---
@@ -359,6 +361,103 @@ pulumi up --target '**runtime-pool**'  # um componente por vez
 
 ---
 
+## 🏗️ Cell-Based Architecture — Ready vs Deployed
+
+A arquitetura cell-based é o mecanismo projetado para atingir 50.000 aplicações (plano §14). Hoje ela existe **em código** mas **não em runtime**. Esta seção explicita a distinção e mapeia quando cada camada se torna blocker.
+
+### O que está pronto (código)
+
+| Componente | Status | Arquivo |
+|------------|:------:|---------|
+| `DynamicRouter` (discovery) | ✅ Wired | `api/internal/placement/dynamic_router.go` |
+| `K8sCellStore` (lista cells via CRs) | ✅ Wired | `api/internal/placement/k8s_cell_store.go` |
+| `PlacementEngine` (RoundRobin) | ✅ Active | `api/internal/placement/engine.go` |
+| `CellConfig`, `Router`, `StaticRouter` | ✅ Defined | `api/internal/placement/` |
+| `CrossCellAggregator` (status/list cross-cell) | ✅ Defined | `api/internal/placement/` |
+| Pulumi `cell.ts` (provisioning) | ✅ Exists | `infra/pulumi/src/components/cell.ts` |
+| Feature flag `LOOPZERO_DYNAMIC_ROUTER=true` | ✅ Ativado em prod | config.go |
+
+**Resumo:** todo o scaffolding para descobrir e rotear entre cells está **commitado e ativo** em produção.
+
+### O que NÃO está em runtime
+
+| Componente | Status | Evidência |
+|------------|:------:|-----------|
+| `ClusterCredential` CRs (registro de cells) | ❌ **Zero registros** | `kubectl get clustercredentials -A → No resources found` |
+| Clusters runtime adicionais (cell-sfo3-02, ...) | ❌ **Não provisionados** | `doctl kubernetes cluster list` mostra apenas mgmt/build/runtime (base) |
+| Router em uso | ⚠️ **StaticRouter cell-default** (fallback) | Log: `"cell router: StaticRouter with cell-default (single cell)"` |
+| Blast radius isolation física | ❌ Single cluster runtime | Todos tenants compartilham recursos, nodes, control plane |
+
+**Estado operacional:** o DynamicRouter detecta zero cells → código faz fallback automático para `StaticRouter{cellID="cell-default"}`. **Todos os tenants rodam no mesmo cluster runtime.**
+
+### Capacidade atual do single-cell
+
+| Nível | Tenants | Viável em single-cell? |
+|-------|---------|:----------------------:|
+| L1 | 10 | ✅ Validado 10/10 |
+| L2 | 50 | ✅ Validado 50/50 em v8 |
+| L3 | 100 | ⚠️ Limite conhecido de ~500 tenants/cell — roda, mas com pressure |
+| L4 | 500 | ❌ Saturação iminente — provisionar 2ª cell torna-se crítico |
+| L5 | 5.000 | ❌ **Impossível** em single-cell |
+| L6 | 50.000 | ❌ **Inviável arquiteturalmente** |
+
+### Bug #33 — Cell-deployed=false (gap arquitetural)
+
+**Sintoma:** plataforma não tem isolamento físico entre tenants. Falha em um tenant pode afetar vizinhos (resource pressure, noisy neighbor).
+
+**Não é bug de código:** é gap de **provisioning/operation** — o código está pronto, falta ativar.
+
+**Impacto por nível:**
+- L1-L3: **baixo** (single cluster aguenta)
+- L4: **médio** (blast radius = 500 tenants afetados por 1 falha)
+- L5+: **crítico** (sem cells, meta impossível)
+
+**Fix proposto:**
+
+1. **Phase 3 (plano scale-50k §3 — weeks 5-6):**
+   - Provisionar `cell-sfo3-02` via `pulumi up --target '**cell-sfo3-02**'`
+   - Criar `ClusterCredential` CR apontando para novo cluster
+   - `K8sCellStore` descobre em <60s
+   - Novos tenants passam a ser distribuídos round-robin
+   - Validação com `TestL4_500Tenants_MultiCell` (já existe, skip atual)
+
+2. **Phase 5 (weeks 10-16):** escalar para 100 cells em 2 regions.
+
+**Custo incremental por cell:**
+- DOKS cluster 2-3 nodes: ~$200-400/mês
+- ArgoCD + Traefik + cert-manager: ~$50/mês ops
+- Total: **~$250-450/mês por cell**
+
+Para 100 cells: ~$25-45k/mês só em compute. Necessário para meta 50k.
+
+**Esforço para 1ª cell adicional:** ~4h (provisioning + validação).
+**Prioridade:** 🟡 MÉDIA — não blocker para L2/L3, blocker para L4+.
+**Decisão:** requer T2 meeting (custo vs timing de escalonamento).
+
+### Por que não ativamos cells antes?
+
+Decisão arquitetural consciente:
+
+1. **Single-cell é suficiente até ~500 tenants** — overhead injustificado antes
+2. **Custo incremental** não-trivial por cell
+3. **Plano scale-50k agenda isso** para Phase 3 (weeks 5-6), após L3/L4 validados
+4. **Debugging mais simples** em single-cluster (cross-cell debugging é 10x mais complexo)
+
+### Impacto na matriz de sobrevivência
+
+**Adiciona-se Bug #33 à categoria "Arquitetural aberto" (agora 3 bugs nessa categoria):**
+
+| Categoria | # Bugs (antes) | # Bugs (depois) |
+|-----------|:--------------:|:---------------:|
+| ✅ Sobrevive destroy | 14 | 14 |
+| ⚠️ Código OK, Pulumi bloqueia | 3 | 3 |
+| 🔴 Runtime-only | 7 | 7 |
+| 🔴 Arquitetural aberto | 2 | **3** (+33) |
+
+**Nota:** Bug #33 não impacta destroy+recreate do estado atual (single-cell continua single-cell). Só é relevante quando plano avança para Phase 3+.
+
+---
+
 ## 📋 Plano de Ataque Dia 3 (Ordem Recomendada)
 
 Ordem pensada para **maximizar fixes por hora**: resolver bloqueadores primeiro.
@@ -374,9 +473,23 @@ Ordem pensada para **maximizar fixes por hora**: resolver bloqueadores primeiro.
 | 7 | Bug 24 — Harbor A record (Pulumi CF) | T1 | 1h | Resilience |
 | 8 | Bug 26 — Prometheus memory | T1 | TBD | SRE observability |
 
-**Total:** ~17-21h (sem contar meetings).
+**Total dia 3:** ~17-21h (sem contar meetings).
 
 **Meetings:** 2 (T3 Pulumi drift, T2 workspace emptyDir).
+
+### Timeline para cell-deployed (Phase 3 do plano, weeks 5-6)
+
+Separado do Dia 3. Bug #33 **não é urgente** até L4 (500 tenants).
+
+| Ordem | Item | Esforço | Destrava |
+|-------|------|---------|----------|
+| 9 | Bug 33.1 — Provisionar `cell-sfo3-02` (Pulumi) | 4h | L4 multi-cell |
+| 10 | Bug 33.2 — `ClusterCredential` CR + validação K8sCellStore discovery | 2h | Routing cross-cell |
+| 11 | Bug 33.3 — Remover `t.Skip()` de `TestL4_500Tenants_MultiCell` + run | 2h | Validação |
+| 12 | Bug 33.4 — Provisionar cells 3-10 via Pulumi config array | 4h | L5 (5k tenants) |
+| 13 | Bug 33.5 — Cross-region (cells 11+ em NYC3) | 8h | L5+ |
+
+**Esforço total cell activation:** ~20h ao longo de 2-3 semanas (não urgente).
 
 Após isso, teste de validação de idempotência:
 
@@ -447,3 +560,4 @@ Bugs 15, 23, 25 exibem o pior padrão: fix correto EM CÓDIGO, aplicado via kube
 
 - **v1 (23:19 UTC):** Criação com bugs 16-22.
 - **v2 (23:45 UTC):** Adicionados bugs 23, 24, 25, 26 descobertos durante tick monitoring. Adicionada matriz de sobrevivência a destroy+recreate. Reorganizado plano de ataque dia 3 com foco em Bug 22 como bloqueador multiplicador. Ampliado padrões sistêmicos de 5 → 7.
+- **v3 (2026-04-17):** Adicionada seção "Cell-Based Architecture — Ready vs Deployed" explicitando que código cell está completo mas runtime opera em single-cell. Adicionado Bug #33 (cell-deployed gap) à categoria arquitetural (agora 3 bugs). Adicionado "Timeline para cell-deployed (Phase 3)" ao plano de ataque com 5 sub-tasks para cells #33.1-#33.5. Atualizado TL;DR para mencionar gap cell-deployed.

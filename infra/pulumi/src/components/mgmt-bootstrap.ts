@@ -142,8 +142,11 @@ export function bootstrapMgmtCluster(
         // 18/100 upload failures occurred during the HPA ramp-up window.
         // With 4 baseline replicas, the initial burst is absorbed while HPA
         // scales to 5-8 for sustained load.
+        // maxReplicas=12: L3 v14 saw Gitea HPA pegged at 8 under sustained c=30
+        // burst — indicates ceiling reached. Bumped to 12 for headroom on
+        // sustained operation + safety margin for L4 (c≥50) validation.
         minReplicas: 4,
-        maxReplicas: 8,
+        maxReplicas: 12,
         metrics: [
           {
             type: "Resource",
