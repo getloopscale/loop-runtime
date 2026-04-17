@@ -105,3 +105,63 @@ func TestEnqueueEviction_ReturnsJobID(t *testing.T) {
 		t.Fatalf("expected non-empty job id")
 	}
 }
+
+type fakeDeleter struct {
+	called   int
+	received []string
+	counts   TenantDeletionCounts
+	err      error
+}
+
+func (f *fakeDeleter) DeleteTenantsFKOrdered(_ context.Context, tenantIDs []string) (TenantDeletionCounts, error) {
+	f.called++
+	f.received = tenantIDs
+	return f.counts, f.err
+}
+
+func TestEnqueueEviction_WithDeleter_RunsCleanup(t *testing.T) {
+	d := &fakeDeleter{counts: TenantDeletionCounts{Tenants: 3, Projects: 5}}
+	ev := NewTenantEvictorWithDB(nil, d)
+	_, err := ev.EnqueueEviction(context.Background(), []string{"tn-a", "tn-b", "tn-c"})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if d.called != 1 {
+		t.Fatalf("deleter should be called exactly once, got %d", d.called)
+	}
+	if len(d.received) != 3 {
+		t.Fatalf("deleter should get 3 ids, got %d", len(d.received))
+	}
+	got := ev.GetLastCounts()
+	if got.Tenants != 3 || got.Projects != 5 {
+		t.Fatalf("counts not surfaced: %+v", got)
+	}
+}
+
+func TestEnqueueEviction_DeleterError_Surfaces(t *testing.T) {
+	d := &fakeDeleter{err: errDeleterDown()}
+	ev := NewTenantEvictorWithDB(nil, d)
+	_, err := ev.EnqueueEviction(context.Background(), []string{"tn-a"})
+	if err == nil {
+		t.Fatalf("expected err from deleter to propagate")
+	}
+}
+
+func TestEnqueueEviction_NilDeleter_SkipsCleanup(t *testing.T) {
+	ev := NewTenantEvictorWithDB(nil, nil)
+	jobID, err := ev.EnqueueEviction(context.Background(), []string{"tn-a"})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if jobID == "" {
+		t.Fatalf("should still return a job id without deleter")
+	}
+	// counts default-zero when no deleter ran
+	if ev.GetLastCounts().Tenants != 0 {
+		t.Fatalf("counts should be zero without deleter")
+	}
+}
+
+func errDeleterDown() error {
+	return errors.New("deleter down")
+}

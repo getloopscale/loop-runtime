@@ -1068,7 +1068,14 @@ func main() {
 		AuditHandler:       routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter}),
 		// T-02: admin evict — route present only when DB available.
 		// Feature-flagged at runtime via LOOPZERO_ADMIN_API env var.
-		AdminEvictor: services.NewTenantEvictor(&db.PostgresTenantStore{DB: dbAdapter}),
+		// WithDB variant performs synchronous FK-ordered DB teardown as part
+		// of EnqueueEviction. K8s cluster teardown (CRs, namespaces, Argo
+		// workflows) is still handled by tools/admin-evict-tenants.sh until
+		// the background worker lands in phase 2.
+		AdminEvictor: services.NewTenantEvictorWithDB(
+			&db.PostgresTenantStore{DB: dbAdapter},
+			&adapters.TenantDBDeleterAdapter{Store: &db.PostgresTenantStore{DB: dbAdapter}},
+		),
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,

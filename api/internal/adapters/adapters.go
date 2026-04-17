@@ -353,6 +353,33 @@ func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID
 	}, nil
 }
 
+// --- TenantDBDeleterAdapter: bridges db.PostgresTenantStore to services.TenantDBDeleter ---
+
+// TenantDBDeleterAdapter implements services.TenantDBDeleter by translating
+// db.TenantDeletionCounts (infrastructure shape) to services.TenantDeletionCounts
+// (domain shape). Fields are identical; separate types exist to prevent a
+// cyclic import between services and db.
+type TenantDBDeleterAdapter struct {
+	Store *db.PostgresTenantStore
+}
+
+func (a *TenantDBDeleterAdapter) DeleteTenantsFKOrdered(ctx context.Context, tenantIDs []string) (services.TenantDeletionCounts, error) {
+	c, err := a.Store.DeleteTenantsFKOrdered(ctx, tenantIDs)
+	if err != nil {
+		return services.TenantDeletionCounts{}, err
+	}
+	return services.TenantDeletionCounts{
+		EnvironmentTargets: c.EnvironmentTargets,
+		Releases:           c.Releases,
+		BuildApps:          c.BuildApps,
+		Builds:             c.Builds,
+		Projects:           c.Projects,
+		Subscriptions:      c.Subscriptions,
+		TenantMembers:      c.TenantMembers,
+		Tenants:            c.Tenants,
+	}, nil
+}
+
 // NOTE: All Fake* types have been REMOVED from production code.
 // Real implementations are required:
 //   - WorkflowSubmitter → api/internal/argo/workflow_submitter.go

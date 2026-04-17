@@ -56,3 +56,81 @@ func (s *PostgresTenantStore) ListTenantIDsByPattern(ctx context.Context, patter
 	}
 	return ids, nil
 }
+
+// TenantDeletionCounts reports how many rows were removed per table during a
+// single call to DeleteTenantsFKOrdered. Exposed for auditing and for the
+// AdminEvictHandler response; the bash equivalent (tools/admin-evict-tenants.sh)
+// only printed "remaining=0" to stdout.
+type TenantDeletionCounts struct {
+	EnvironmentTargets int64 `json:"environment_targets"`
+	Releases           int64 `json:"releases"`
+	BuildApps          int64 `json:"build_apps"`
+	Builds             int64 `json:"builds"`
+	Projects           int64 `json:"projects"`
+	Subscriptions      int64 `json:"subscriptions"`
+	TenantMembers      int64 `json:"tenant_members"`
+	Tenants            int64 `json:"tenants"`
+}
+
+// DeleteTenantsFKOrdered removes all rows associated with tenantIDs across the
+// 8 tables touched by loadtest cleanup, in FK-safe order. The caller supplies
+// the concrete list of IDs (resolved earlier via ListTenantIDsByPattern) so
+// that pattern matching races cannot accidentally widen the blast radius.
+//
+// The method expects a transaction (DBTX): the caller is responsible for
+// BEGIN/COMMIT. This makes the whole cleanup atomic — either every row for
+// every tenant in the list is gone, or none of them are.
+//
+// FK order (validated by tools/admin-evict-tenants.sh step 5):
+//
+//   environment_targets → releases → build_apps → builds → projects →
+//   subscriptions → tenant_members → tenants
+//
+// Each child table is purged before its parent. Releases/build_apps reference
+// builds (not tenants directly), so they use a sub-SELECT against builds.
+//
+// Notes:
+//   - If tenantIDs is empty, this is a no-op returning zero counts.
+//   - The queries use `= ANY($1::text[])` which is pgx-idiomatic and safer
+//     than building an IN-list manually.
+//   - Audit log rows are retained intentionally: eviction is itself auditable.
+func (s *PostgresTenantStore) DeleteTenantsFKOrdered(ctx context.Context, tenantIDs []string) (TenantDeletionCounts, error) {
+	var counts TenantDeletionCounts
+	if len(tenantIDs) == 0 {
+		return counts, nil
+	}
+
+	type step struct {
+		sql   string
+		tally *int64
+	}
+	steps := []step{
+		{`DELETE FROM environment_targets WHERE tenant_id = ANY($1::text[])`, &counts.EnvironmentTargets},
+		{`DELETE FROM releases WHERE build_id IN (SELECT id FROM builds WHERE tenant_id = ANY($1::text[]))`, &counts.Releases},
+		{`DELETE FROM build_apps WHERE build_id IN (SELECT id FROM builds WHERE tenant_id = ANY($1::text[]))`, &counts.BuildApps},
+		{`DELETE FROM builds WHERE tenant_id = ANY($1::text[])`, &counts.Builds},
+		{`DELETE FROM projects WHERE tenant_id = ANY($1::text[])`, &counts.Projects},
+		{`DELETE FROM subscriptions WHERE tenant_id = ANY($1::text[])`, &counts.Subscriptions},
+		{`DELETE FROM tenant_members WHERE tenant_id = ANY($1::text[])`, &counts.TenantMembers},
+		{`DELETE FROM tenants WHERE id = ANY($1::text[])`, &counts.Tenants},
+	}
+
+	for i, st := range steps {
+		res, err := s.DB.Exec(ctx, st.sql, tenantIDs)
+		if err != nil {
+			return counts, fmt.Errorf("tenant store: step %d (%s): %w", i+1, truncateSQL(st.sql), err)
+		}
+		*st.tally = res.RowsAffected
+	}
+	return counts, nil
+}
+
+// truncateSQL trims a SQL query string for error context without leaking
+// the full body. Keeps error messages compact and safe.
+func truncateSQL(s string) string {
+	const max = 40
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}
