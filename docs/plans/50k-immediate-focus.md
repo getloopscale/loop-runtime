@@ -42,11 +42,23 @@ Ambas fecham Gate #1. Opção 1 é contingência; Opção 2 é a versão "limpa"
 
 ### Artefatos prontos
 
+**Scripts/tools:**
 - `tools/admin-evict-tenants.sh` — bash fallback (emergencial, ainda funciona)
 - `tools/l3-stability-loop.sh` — roda 10× L3 com fail-fast e TSV summary
+
+**CLI/API:**
 - `loopzero admin tenants evict --pattern 'tn-lt-%' [--dry-run|--yes]` — CLI end-to-end
-- `LOOPZERO_LEAN_RESOURCES=true` flag no renderer — escape hatch T-08
-- API: `/api/v1/admin/tenants/evict` (gated por `LOOPZERO_ADMIN_API=true` + `X-Service-Auth`)
+- API: `POST /api/v1/admin/tenants/evict` (gated por `LOOPZERO_ADMIN_API=true` + `X-Service-Auth`)
+
+**Flags de contingência:**
+- `LOOPZERO_LEAN_RESOURCES=true` no renderer — escape hatch T-08 (halva defaults 128Mi→64Mi)
+- `LOOPZERO_ADMIN_API=true` no API — enable admin endpoint (default off)
+
+**Runbooks operacionais:**
+- `docs/runbooks/tenant-bulk-evict.md` — 3 paths (CLI/bash/API) + troubleshooting completo
+- `docs/runbooks/runtime-capacity-bump.md` — procedimento T-08 passo-a-passo (pulumi + doctl cleanup + L3 v15)
+- `docs/runbooks/argocd-sharding.md` — re-sharding application-controller (T-05)
+- `docs/runbooks/alerts/*.md` — 6 alertas T-07
 
 ### Métricas desta sessão de implementação
 
