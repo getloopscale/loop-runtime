@@ -120,6 +120,49 @@ export function bootstrapMgmtCluster(
   // Gitea — internal git server for desired state (ArgoCD reads from here)
   const gitea = installGitea(provider, ns, infra, config, giteaRedis, nfsProvisioner);
 
+  // Gitea HPA — bug #44 fix: L3 c=30 saturated single pod (7s auth latency
+  // → 401 errors cascading to SOURCE_UPLOAD_FAILED). HPA scales 2→8 replicas
+  // under CPU pressure. Preserves HA (minReplicas: 2) and handles burst to
+  // c=50+ concurrent git pushes at peak.
+  new k8s.autoscaling.v2.HorizontalPodAutoscaler(
+    "gitea-hpa",
+    {
+      metadata: {
+        name: "gitea",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        scaleTargetRef: {
+          apiVersion: "apps/v1",
+          kind: "Deployment",
+          name: "gitea",
+        },
+        minReplicas: 2,
+        maxReplicas: 8,
+        metrics: [
+          {
+            type: "Resource",
+            resource: {
+              name: "cpu",
+              target: { type: "Utilization", averageUtilization: 70 },
+            },
+          },
+        ],
+        behavior: {
+          scaleUp: {
+            stabilizationWindowSeconds: 30,
+            policies: [{ type: "Percent", value: 100, periodSeconds: 30 }],
+          },
+          scaleDown: {
+            stabilizationWindowSeconds: 300,
+            policies: [{ type: "Percent", value: 25, periodSeconds: 60 }],
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [gitea] },
+  );
+
   // Gitea backup — daily dump to DO Spaces (retain 7 days).
   // Runs `gitea dump` from the same NFS volume and uploads to S3.
   createGiteaBackupCronJob(provider, ns, infra, config, gitea);

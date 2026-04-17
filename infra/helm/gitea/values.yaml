@@ -31,12 +31,15 @@ image:
   tag: "1.22.6"
 
 resources:
+  # Bug #44 fix persisted: L3 c=30 saturated default 500m CPU (7s auth latency
+  # → 401 errors in git push). Per-pod headroom for burst + HPA scaling across
+  # replicas. See docs/plans/scale-50k-technical-debt.md.
   limits:
-    cpu: "500m"
-    memory: "512Mi"
+    cpu: "3000m"     # was 500m
+    memory: "2Gi"    # was 512Mi
   requests:
-    cpu: "100m"
-    memory: "128Mi"
+    cpu: "500m"      # was 100m
+    memory: "1Gi"    # was 128Mi
 
 podSecurityContext:
   runAsNonRoot: true
