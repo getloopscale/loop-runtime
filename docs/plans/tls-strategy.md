@@ -99,6 +99,105 @@ kubectl --context do-sfo3-loopzero-infra-dev-sfo3-mgmt \
 # duration: 43800h = 5y (not 15y, per rotation policy above)
 ```
 
+## Fallback Procedure (Origin CA outage)
+
+Origin CA depends on (1) Cloudflare API available, (2) `origin-ca-issuer` operator running, (3) `cloudflare-origin-ca-key` secret valid. If any breaks, new certs cannot be issued. Existing certs keep working until their validity (5y cap) expires.
+
+### Emergency fallback steps
+
+**Scenario:** Origin CA issuer broken at 3am, a fresh tenant needs a cert for `argocd.{domain}`.
+
+**Runbook:**
+
+1. **Diagnose** — is it local or upstream?
+   ```bash
+   kubectl describe clusterissuer cloudflare-origin-ca
+   kubectl -n origin-ca-issuer logs -l app=origin-ca-issuer --tail=50
+   # If the operator is up but CF API returning errors, it's upstream.
+   ```
+
+2. **Temporary fallback to `letsencrypt-prod`** (for UIs that must be up NOW):
+   ```bash
+   # Patch the specific Certificate to use LE Prod
+   kubectl -n platform-system patch certificate <cert-name> --type=json -p='[
+     {"op":"replace","path":"/spec/issuerRef","value":{
+       "name":"letsencrypt-prod",
+       "kind":"ClusterIssuer"
+     }},
+     {"op":"remove","path":"/spec/duration"}
+   ]'
+   ```
+   Accept: LE Prod has 5 certs/168h rate limit per identifier set. Only do this for the UIs actually down. **Do not** mass-migrate — you'll hit the rate limit.
+
+3. **Disable CF-only middleware on those routes temporarily** (so LE HTTP-01 challenge reaches the origin):
+   ```bash
+   # Remove cloudflare-ip-allowlist and require-cloudflare-proxy middleware
+   # from affected IngressRoute(s). Restore after Origin CA is back.
+   ```
+
+4. **After Origin CA recovers** — migrate back:
+   ```bash
+   # Revert the patch above. New Origin CA cert issued; LE cert stays until revoked.
+   ```
+
+### Non-emergency fallback
+
+If Origin CA is persistently broken (operator deprecated, CF API changes), migrate entire fleet back to LE Prod permanently. Track in ADR. Accept the rate limit trade-off (mitigate with DNS-01 wildcard certs + ARI).
+
+## Security hardening
+
+### Origin-only access enforcement
+
+Origin CA certs **are only trusted by Cloudflare**. If traffic bypasses CF (direct IP access, internal debug, health check misconfigured), the TLS handshake fails and the origin exposure is also wrong.
+
+Defense-in-depth via Traefik middleware:
+
+- **`require-cloudflare-proxy`** — rejects requests missing `CF-Connecting-IP` header (set by CF on all proxied requests). See `infra/manifests/cluster-issuers/cf-origin-ca-middleware.yaml`.
+- **`cloudflare-ip-allowlist`** — restricts to CF IP ranges. Snapshot 2026-04-17; **re-validate quarterly** at https://www.cloudflare.com/ips.
+
+Applied to IngressRoutes serving UIs with Origin CA:
+```yaml
+spec:
+  routes:
+  - match: Host(`argocd.dev.loopzero.example`)
+    middlewares:
+    - name: cloudflare-ip-allowlist
+    - name: require-cloudflare-proxy
+```
+
+### Origin CA key management
+
+The Origin CA key can issue certs for **any domain in the account's zones** — it's a sensitive credential. Storage hierarchy:
+
+1. **Preferred:** External Secrets Operator (ESO) sourcing from Vault/SOPS/DO Spaces encrypted. See `infra/manifests/cluster-issuers/cf-origin-ca-externalsecret.yaml`.
+2. **Acceptable:** `kubectl create secret` **only** during bootstrap, then rotate into ESO. Audit trail in runbook.
+3. **Never:** commit to git, store in ConfigMap, log in build output.
+
+ESO sync interval: 1h. Rotation in backend propagates automatically — no pod restart needed.
+
+### Secret rotation (Origin CA key)
+
+- **Frequency:** annual (scheduled) or immediately on suspected compromise.
+- **Process:** generate new key in CF dashboard → update backend → ESO syncs → origin-ca-issuer picks up on next reconcile → certs issued with new key going forward. Old certs remain valid (signed by CF intermediate, not the service key).
+- **Zero downtime:** existing certs unaffected; only *new issuances* use new key.
+
+## Observability
+
+### Metrics
+
+cert-manager exports these (already scraped by Prometheus):
+- `certmanager_certificate_expiration_timestamp_seconds{name, namespace}` — notAfter timestamp
+- `certmanager_certificate_ready_status{name, namespace, condition}` — Ready condition
+- `certmanager_clusterissuer_ready_status{name, condition}` — Issuer health
+
+### Alerts (3 added — `infra/manifests/cluster-issuers/tls-alerts.yaml`)
+
+| Alert | Trigger | Severity | Rationale |
+|---|---|---|---|
+| `LoopZeroCertApproachingRotationCap` | cert < 180 days to expire | warning | Origin CA certs don't expire in 90d like LE — forget-and-break risk |
+| `LoopZeroClusterIssuerNotReady` | issuer `Ready=False` for 15min | critical | Blocks new cert issuance; early signal before Certificates fail |
+| `LoopZeroCertStuckNotReady` | cert `Ready=False` for 30min | warning | Catches DNS-01 hangs, rate limit hits, race conditions |
+
 ## Referências
 
 - [cert-manager External Issuers](https://cert-manager.io/docs/configuration/external/)

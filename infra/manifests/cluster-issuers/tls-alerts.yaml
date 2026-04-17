@@ -1,0 +1,84 @@
+# PrometheusRule: TLS-specific alerts
+#
+# cert-manager exposes metrics about Certificate/Issuer state.
+# These alerts catch the two Origin CA-specific failure modes the default
+# cert-manager alerts miss:
+#
+#   1. Origin CA cert approaching the 5-year rotation cap — since Origin CA
+#      certs don't naturally expire in 90d like LE, we can silently sit on
+#      them forever. Policy in tls-strategy.md says "rotate at 5y" — this
+#      alerts 6 months before.
+#
+#   2. ClusterIssuer (LE or Origin CA) Not Ready for >15min — catches
+#      config drift, API outages, secret missing, etc. Before: only
+#      manifested as Certificate stuck, discovered hours/days later.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: tls-loopzero-alerts
+  namespace: platform-system
+  labels:
+    app: loopzero
+    role: alert-rules
+spec:
+  groups:
+    - name: loopzero.tls
+      interval: 1m
+      rules:
+        # Alert 1: Certificate approaching rotation cap (Origin CA 5y policy)
+        # certmanager_certificate_expiration_timestamp_seconds is the cert's
+        # notAfter. We alert when < 180 days to rotation (6 months warning).
+        - alert: LoopZeroCertApproachingRotationCap
+          expr: |
+            (
+              certmanager_certificate_expiration_timestamp_seconds - time()
+            ) / 86400 < 180
+            AND ON(name, namespace)
+            certmanager_certificate_ready_status{condition="True"} == 1
+          for: 1h
+          labels:
+            severity: warning
+            component: tls
+          annotations:
+            summary: "TLS cert {{ $labels.namespace }}/{{ $labels.name }} expires in < 180 days"
+            description: |
+              Certificate {{ $labels.namespace }}/{{ $labels.name }} will expire in
+              {{ $value | humanize }} days.
+              For Origin CA certs, this hits the 5-year rotation cap.
+              For LE certs, this means auto-renewal failed. Investigate.
+              Runbook: docs/plans/tls-strategy.md#rotation-policy
+
+        # Alert 2: ClusterIssuer Not Ready for >15min
+        - alert: LoopZeroClusterIssuerNotReady
+          expr: |
+            certmanager_clusterissuer_ready_status{condition="True"} != 1
+          for: 15m
+          labels:
+            severity: critical
+            component: tls
+          annotations:
+            summary: "ClusterIssuer {{ $labels.name }} Not Ready"
+            description: |
+              ClusterIssuer {{ $labels.name }} has been Not Ready for 15+ minutes.
+              This blocks issuance of new certs. Likely causes:
+                - API credentials missing/invalid (LE account, Origin CA key)
+                - Upstream API outage (ACME server, Cloudflare API)
+                - CRD version drift after cert-manager upgrade
+              Check: kubectl describe clusterissuer {{ $labels.name }}
+
+        # Alert 3: Certificate stuck Not Ready > 30min (catches issuance race
+        # conditions, DNS-01 challenges hanging, etc.)
+        - alert: LoopZeroCertStuckNotReady
+          expr: |
+            certmanager_certificate_ready_status{condition="True"} != 1
+          for: 30m
+          labels:
+            severity: warning
+            component: tls
+          annotations:
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} Not Ready 30+min"
+            description: |
+              Certificate has been Not Ready for 30+ minutes.
+              Check: kubectl describe certificate {{ $labels.name }} -n {{ $labels.namespace }}
+              Common causes: rate limit (LE), DNS-01 challenge failure, issuer down.

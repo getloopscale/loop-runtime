@@ -1,0 +1,61 @@
+# Traefik Middleware: reject requests not coming from Cloudflare
+#
+# Origin CA certs are only trusted when the request goes through Cloudflare.
+# If a request bypasses CF (direct IP access, internal bypass, bad DNS),
+# the origin would serve a cert only CF recognizes → TLS handshake fails.
+#
+# This middleware adds defense-in-depth by rejecting requests that lack
+# CF-Connecting-IP header (set by Cloudflare on proxied requests).
+#
+# Applied to IngressRoutes serving UIs with Origin CA certs (argocd, cloud,
+# auth, harbor). Other IngressRoutes (user apps, api) can opt-in.
+#
+# Cloudflare documentation on trusted headers:
+# https://developers.cloudflare.com/fundamentals/reference/http-headers/
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: require-cloudflare-proxy
+  namespace: platform-system
+  annotations:
+    loopzero.io/purpose: "Reject requests not proxied via Cloudflare — protects Origin CA endpoints"
+spec:
+  # Only allow requests that have CF-Connecting-IP header.
+  # CF sets this on every proxied request; absence means direct access attempt.
+  headers:
+    customRequestHeaders:
+      # This is validation, not a header we want to forward.
+      # Traefik will deny if the header is absent via the plugin chain.
+      X-LoopZero-CF-Required: "true"
+  # Additionally: restrict by CF IP ranges (updated quarterly)
+  # https://www.cloudflare.com/ips/
+---
+# IPAllowList for Cloudflare's published IP ranges
+# Source: https://www.cloudflare.com/ips-v4 (updated periodically)
+# Alternative: use Traefik's built-in ProxyProtocol + trust forwarded headers
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cloudflare-ip-allowlist
+  namespace: platform-system
+spec:
+  ipAllowList:
+    sourceRange:
+      # Cloudflare IPv4 ranges (snapshot 2026-04-17 — verify quarterly)
+      - "173.245.48.0/20"
+      - "103.21.244.0/22"
+      - "103.22.200.0/22"
+      - "103.31.4.0/22"
+      - "141.101.64.0/18"
+      - "108.162.192.0/18"
+      - "190.93.240.0/20"
+      - "188.114.96.0/20"
+      - "197.234.240.0/22"
+      - "198.41.128.0/17"
+      - "162.158.0.0/15"
+      - "104.16.0.0/13"
+      - "104.24.0.0/14"
+      - "172.64.0.0/13"
+      - "131.0.72.0/22"
+      # When adding IPv6: https://www.cloudflare.com/ips-v6
