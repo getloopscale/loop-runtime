@@ -21,9 +21,47 @@
 
 | Bug | Status | Notes |
 |---|---|---|
-| #24 imagePullSecret race | ✅ **Fixed** (commit a5601d1) | EnvironmentController provisions secret atomically |
+| #24 imagePullSecret race | ✅ **Fixed** (commit a5601d1 + ca25f1a) | EnvironmentController provisions secret atomically + kicks stuck ImagePullBackOff pods |
+| #25 autoscaler scale-up latency | ⚠️ **New finding** (L2 v6) | Pods start on new nodes but test times out during scale-up (~2min). See below. |
 | Pulumi state drift | ❌ Open (T3) | Not blocking L3 if we avoid `pulumi up` |
 | TLS rate limit (Origin CA migration) | ⏳ Pending Paulo key provisioning | Doesn't block L3 but resolves noise |
+
+## Bug #25 — Cluster-autoscaler scale-up latency (discovered 2026-04-17, L2 v6)
+
+**Symptom:** 2-3 tenants consistently fail per L2 run with `success=false` at ~6min elapsed, regardless
+of bug #24 fix status. Same pattern across v4/v5/v6 (different tenant indices each run).
+
+**Root cause:** Runtime cluster starts with 1 node (cost-optimization). Deploys in a wave trigger
+cluster-autoscaler to add nodes. DO node provisioning takes ~90-120s. The first pod scheduled on
+each new node waits for provisioning + image pull, total ~5-6min. Test timeout is typically 5min
+per deploy wait.
+
+Evidence (tn-20 in v6, namespace `loopzero-tn-lt-l2-tn-20-production`):
+```
+9m33s  Pod created
+9m16s  TriggeredScaleUp: nodes 2→3 (max: 6)
+7m38s  Pulling image (1m38s after scale-up — waiting for node)
+7m32s  Pod Running (Ready 1/1)
+6m17s  ← test reported failure (but pod was actually up ~1m later)
+```
+
+**Why kickStuckPullBackoffPods didn't help:** the issue is BEFORE the pod schedules on any node.
+Pod is `Pending` with `Unschedulable` until node provisioned — not `ImagePullBackOff`.
+
+**Mitigation options for L3:**
+
+1. **Pre-warm runtime nodes to target capacity** (recommended) — before L3 starts, manually scale
+   node pool to ~6 nodes. `doctl k8s cluster node-pool update <pool> --count 6`. At 50k scale,
+   pre-warming is mandatory anyway; reactive autoscaling can't keep up with deploy rate.
+2. **Increase test deploy timeout** (bandaid) — raise per-deploy timeout from 5min to 8min. Doesn't
+   solve real-world problem but unblocks test.
+3. **Bump cluster min nodes** (production-relevant) — set runtime pool `minNodes=3` instead of 1.
+   Trades cost for availability.
+
+**Impact on 50k plan:**
+- At 50k apps across ~100 cells, each cell runs 500 apps on pre-warmed node pool.
+- Reactive autoscaling during a deploy wave is not viable — deploys would straggle for 2min each.
+- **L3 gate: validate pre-warm strategy before advancing.**
 
 ## L3 Scenarios (from plan Phase 2.1)
 

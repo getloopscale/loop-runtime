@@ -547,8 +547,12 @@ func (h *RealDeployHarness) waitForBuild(ctx context.Context, t TenantIdentity, 
 func (h *RealDeployHarness) verifyAppLive(ctx context.Context, appURL string) (bool, time.Duration, error) {
 	start := time.Now()
 
-	// Give ArgoCD + pod scheduling up to 120s to make the app live.
-	deadline := time.Now().Add(120 * time.Second)
+	// Give ArgoCD + pod scheduling + (if needed) cluster-autoscaler node provisioning
+	// up to 240s to make the app live. DO node provisioning alone takes ~90-120s when
+	// the autoscaler triggers; 120s was insufficient at L2+ scale — see bug #25 in
+	// docs/plans/scale-50k-l3-readiness.md. Pre-warmed clusters will still finish well
+	// under this budget.
+	deadline := time.Now().Add(240 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
@@ -566,7 +570,7 @@ func (h *RealDeployHarness) verifyAppLive(ctx context.Context, appURL string) (b
 		}
 	}
 
-	return false, time.Since(start), fmt.Errorf("app never returned 200 at %s after 120s", appURL)
+	return false, time.Since(start), fmt.Errorf("app never returned 200 at %s after 240s", appURL)
 }
 
 func (h *RealDeployHarness) appURL(t TenantIdentity) string {
