@@ -1066,6 +1066,9 @@ func main() {
 		GitHubWebhookHandler: githubWebhookHandler,
 		RepositoryHandler:    repoHandler,
 		AuditHandler:       routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter}),
+		// T-02: admin evict — route present only when DB available.
+		// Feature-flagged at runtime via LOOPZERO_ADMIN_API env var.
+		AdminEvictor: services.NewTenantEvictor(&db.PostgresTenantStore{DB: dbAdapter}),
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,
