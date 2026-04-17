@@ -529,8 +529,9 @@ L3 v14 confirmou que o gargalo mudou: HPAs ✅, Gitea ✅, Argo ✅, mas o runti
 
 ### Status intermediário (2026-04-17)
 
-- Pulumi source pending (aguardando DO quota).
+- Pulumi source pending (aguardando DO quota — ticket aberto por Paulo).
 - Workaround aplicado: 2 pools de overflow (`overflow-s-2vcpu-2gb`, `overflow2`) via `doctl` — **viola regra "nunca manual nodepool changes"** (memory feedback). Esses pools devem ser substituídos por Pulumi quando quota chegar.
+- **Contingência (Option A):** `LOOPZERO_LEAN_RESOURCES=true` flag (commit 183e5eb) permite validar L3 v15 no cluster atual antes do quota chegar. Halva resource defaults (128Mi→64Mi, 100m→50m CPU). Seguro: não override valores explicitos em loopzero.yaml.
 
 ---
 
@@ -659,3 +660,4 @@ A promise `TODAS AS TASKS, CRITERIOS DE ACEITES, DODs CONCLUIDOS E VALIDADOS` s�
   - [CRITICAL] T-08 Runtime capacity: permanece bloqueado em DO droplet quota (ação humana).
 - **v1.6 (2026-04-17 17:40):** Gitea baseline capturada (750024e) — Gate #2 fecha 4/4 baselines. T-02 phase 2 K8s teardown implementado em Go (ea04ba9): 5-step sequence multi-cluster, 11 unit tests, invariant "K8s fail → skip DB" enforced por teste. Gate #3 agora ~95% fechado; flip para ✅ após operador rodar L3 cleanup 100% via API sem tocar bash.
 - **v1.7 (2026-04-17 18:00):** CLI `loopzero admin tenants evict` wired em Commander (4a9a077) + 10 unit tests. L3 v8-v14 results registrados em `scale-50k-l3-readiness.md` (1385a78) — completa DoD T-01. `tools/l3-stability-loop.sh` criado (a051ba2) — T-09 pronto para rodar assim que T-08 resolver. End-to-end path agora existe: `loopzero admin tenants evict --pattern 'tn-lt-%' --yes` → HTTP POST → K8s multi-cluster teardown + DB FK cleanup. Gate #3 flip para ✅ depende só de um L3 cleanup real via CLI (validação operacional).
+- **v1.8 (2026-04-17 18:10):** Paulo abriu ticket DO droplet quota. Em paralelo, implementado `LOOPZERO_LEAN_RESOURCES=true` flag (183e5eb) como contingência — halva os resource defaults (128Mi→64Mi memory, 100m→50m CPU) apenas no fallback path. Invariant test garante que não override de valores explicitos. Math: 100 apps × 64Mi = 6.4Gi caberia confortavelmente no runtime cluster atual (18Gi). Path de uso: `kubectl set env deploy/loopzero-api LOOPZERO_LEAN_RESOURCES=true` → redeploy → L3 v15 pode rodar antes do quota chegar. 8 novos tests passing. Plano fica com escape-hatch se DO demorar.
