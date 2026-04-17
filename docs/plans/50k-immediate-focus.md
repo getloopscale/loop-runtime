@@ -431,13 +431,19 @@ Comparação histórica L3:
 
 | Task | Status | Commits | Artefatos |
 |------|--------|---------|-----------|
-| T-01 L3 v8 Gitea HPA | ⏳ in-progress | — | `/tmp/l3-v8.log` + HPA `cpu: 206% → 29%`, replicas `2→5` |
-| T-02 admin-evict (runtime) | ✅ done | 4c63824 | `tools/admin-evict-tenants.sh` |
+| T-01 L3 v8 Gitea HPA | ⏳ in-progress | — | `/tmp/l3-v8.log` + HPA `cpu: 206% → 29%`, replicas `2→5` (v14: 62/100 → T-08 blocker) |
+| T-02 admin-evict (bash) | ✅ done | 4c63824 | `tools/admin-evict-tenants.sh` |
+| T-02 admin-evict (API scaffold) | ✅ done | 9899ae0, 9273007 | Routes + CLI command |
+| T-02 admin-evict (API wired) | ✅ done | 94e8ae9 | `server.Config.AdminEvictor`, `PostgresTenantStore`, 15 tests |
+| T-02 admin-evict (DB teardown) | ✅ done | e79b50e | `DeleteTenantsFKOrdered` atomic, 10 service tests |
+| T-02 admin-evict (K8s teardown) | ❌ pending | — | Phase 2: multi-cluster client + finalizer force-null (4-8h) |
 | T-03 Capacity harness | ✅ done | c89f54d | `infra/tests/capacity/` (harness + 2 suites) + `capacity-baselines.md` |
 | T-04 8 HPAs | ✅ done | 4236c2e | Harbor (3), ArgoCD (2), Ory (2), mgmt-traefik (1) |
 | T-05 ArgoCD sharding | ✅ done | 15ce9be | replicas=3 + env `ARGOCD_CONTROLLER_REPLICAS=3` |
 | T-06 CLI retry 429/503 | ✅ done | f094fa1 | `cli/src/api/client.ts` + `real_deploy_harness.go` |
 | T-07 6 alerts | ✅ done | 9c5d75f | `prometheusrule-capacity.yaml` + Prometheus reloaded |
+| T-08 Runtime capacity | ❌ pending | — | DO droplet quota (human action) + Pulumi preview (drift risk) |
+| T-09 10× consecutive L3 | ❌ pending | — | Blocked by T-08 |
 
 **Evidência de que os fixes funcionam:**
 - Gitea HPA: escalou 2→5 replicas em L3 v8 quando CPU atingiu 206% → baixou para 29%
@@ -645,3 +651,4 @@ A promise `TODAS AS TASKS, CRITERIOS DE ACEITES, DODs CONCLUIDOS E VALIDADOS` s�
 - **v1.1 (2026-04-17):** 6 tasks completadas em iteração Ralph (T-02..T-07). T-01 em validação final via L3 v8. Commits: 4c63824, c89f54d, 4236c2e, 15ce9be, f094fa1, 9c5d75f.
 - **v1.2 (2026-04-17 PM):** L3 v9..v14 rodadas. v14 final 62/100 — runtime capacity bottleneck descoberto. T-08 adicionado (runtime nodes bump + DO droplet quota). T-09 adicionado (10× consecutivo gate). Gitea HPA maxReplicas bumpado 8→12.
 - **v1.3 (2026-04-17 17:00):** API T-02 wired (PostgresTenantStore + AdminEvictHandler + 15 tests passing). Runtime cleanup executado (100 tenants evicted). Next-iteration checklist adicionado. Commits: ba26abb, 94e8ae9.
+- **v1.4 (2026-04-17 17:10):** API T-02 DB teardown implementado — DeleteTenantsFKOrdered atomic transaction (8 tabelas em FK order) via `EnqueueEviction`. 10 service tests passing. K8s cluster teardown ainda via bash (phase 2). Commit: e79b50e.
