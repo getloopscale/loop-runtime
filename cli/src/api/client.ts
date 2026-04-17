@@ -6,14 +6,25 @@ import { getDefaultApiUrl, API_REQUEST_TIMEOUT_MS } from '../config/constants';
 
 type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
-/** HTTP status codes that are safe to retry (server-side transient errors). */
-const RETRYABLE_STATUS_CODES = new Set([502, 503, 504]);
+/**
+ * HTTP status codes that are safe to retry (server-side transient errors).
+ * T-06: Added 429 (CELL_AT_CAPACITY from admission gate) — the platform is
+ * advertising backpressure, not rejecting permanently. CLI should retry with
+ * exponential backoff instead of exiting 3.
+ */
+const RETRYABLE_STATUS_CODES = new Set([429, 502, 503, 504]);
 
-/** Max retry attempts for transient errors. */
-const MAX_RETRIES = 3;
+/**
+ * Max retry attempts for transient errors. T-06: bumped 3→5 so backoff ends
+ * at 16s before giving up (covers full admission gate queue drain cycle).
+ */
+const MAX_RETRIES = 5;
 
-/** Base delay between retries in ms (doubles each attempt: 1s, 2s, 4s). */
+/** Base delay between retries in ms (doubles each attempt: 1s, 2s, 4s, 8s, 16s). */
 const RETRY_BASE_DELAY_MS = 1000;
+
+/** Jitter ±10% added to backoff to avoid thundering-herd retry storms. */
+const RETRY_JITTER_PCT = 0.1;
 
 /** CLI version for User-Agent header. */
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -174,7 +185,11 @@ export class ApiClient {
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       if (attempt > 0) {
-        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        // T-06: exponential backoff with ±10% jitter to avoid thundering-herd.
+        // Attempts 1..5 → 1s, 2s, 4s, 8s, 16s (±10%).
+        const base = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        const jitter = base * RETRY_JITTER_PCT * (Math.random() * 2 - 1);
+        const delay = Math.floor(base + jitter);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
 

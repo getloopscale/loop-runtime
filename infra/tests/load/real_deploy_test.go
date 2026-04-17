@@ -343,10 +343,11 @@ func TestRealDeploy_L3_100Tenants(t *testing.T) {
 	}
 
 	const tenantCount = 100
-	// Concurrency 10 — matches scale-50k-plan L3 spec (sustained 10 deploys/min).
-	// L3 v2 tried 15 and hit DO API rate limit 429 on CSI volume provisioning
-	// (bug #40). L4 bumps to 20 with pre-provisioned volumes or RWX storage.
-	const concurrency = 10
+	// Concurrency 30 — stress test beyond base admission gate (bumped to 40 for this).
+	// All blockers fixed: local-path workspace (#21/#40), argo quota 48CPU (#41),
+	// operator RBAC (#36/#37), cosign HOME (#39). Build cluster scaled to ~7 nodes
+	// (2 default + 3 overflow + 2 c30-prep) ≈ 24 CPU allocatable.
+	const concurrency = 30
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Hour)
 	defer cancel()
 

@@ -482,30 +482,54 @@ func (h *RealDeployHarness) submitBuild(ctx context.Context, t TenantIdentity, c
 		"apps": [{"name":"api","build":"buildpack","framework":"node","render":"server","port":3000}]
 	}`, t.ProjectName, commitSHA)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", h.apiURL+"/api/v1/builds", strings.NewReader(reqBody))
-	if err != nil {
-		return "", time.Since(start), err
-	}
-	h.setAuth(req, t)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Idempotency-Key", fmt.Sprintf("lt-%s-%d", t.TenantID, time.Now().UnixNano()))
+	// T-06: retry on 429 (CELL_AT_CAPACITY admission backpressure) and 503
+	// (circuit breaker). Exponential backoff 1s, 2s, 4s, 8s, 16s — mirrors
+	// the CLI retry policy (cli/src/api/client.ts). Without this, the test
+	// treats load-shedding as failure rather than the designed behavior.
+	backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}
+	var lastErr error
+	for attempt := 0; attempt <= len(backoffs); attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return "", time.Since(start), ctx.Err()
+			case <-time.After(backoffs[attempt-1]):
+			}
+		}
 
-	resp, err := h.client.Do(req)
-	if err != nil {
-		return "", time.Since(start), fmt.Errorf("submit build: %w", err)
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
+		req, err := http.NewRequestWithContext(ctx, "POST", h.apiURL+"/api/v1/builds", strings.NewReader(reqBody))
+		if err != nil {
+			return "", time.Since(start), err
+		}
+		h.setAuth(req, t)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", fmt.Sprintf("lt-%s-%d", t.TenantID, time.Now().UnixNano()))
 
-	if resp.StatusCode != 202 && resp.StatusCode != 201 {
-		return "", time.Since(start), fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+		resp, err := h.client.Do(req)
+		if err != nil {
+			return "", time.Since(start), fmt.Errorf("submit build: %w", err)
+		}
+		respBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode == 202 || resp.StatusCode == 201 {
+			var buildResp struct {
+				BuildID string `json:"build_id"`
+			}
+			json.Unmarshal(respBody, &buildResp)
+			return buildResp.BuildID, time.Since(start), nil
+		}
+
+		lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+
+		// Retry only on 429 (capacity) and 503 (circuit breaker).
+		if resp.StatusCode != 429 && resp.StatusCode != 503 {
+			return "", time.Since(start), lastErr
+		}
+		// Continue to next retry iteration
 	}
 
-	var buildResp struct {
-		BuildID string `json:"build_id"`
-	}
-	json.Unmarshal(respBody, &buildResp)
-	return buildResp.BuildID, time.Since(start), nil
+	return "", time.Since(start), fmt.Errorf("submit exhausted retries: %w", lastErr)
 }
 
 func (h *RealDeployHarness) waitForBuild(ctx context.Context, t TenantIdentity, buildID string) (string, time.Duration, error) {
