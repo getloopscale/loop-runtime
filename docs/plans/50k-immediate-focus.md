@@ -390,6 +390,38 @@ Quando todos 5 verdes → abrir planning L4 (500 tenants).
 
 ---
 
+## Status atual (iteração Ralph — 2026-04-17)
+
+| Task | Status | Commits | Artefatos |
+|------|--------|---------|-----------|
+| T-01 L3 v8 Gitea HPA | ⏳ in-progress | — | `/tmp/l3-v8.log` + HPA `cpu: 206% → 29%`, replicas `2→5` |
+| T-02 admin-evict (runtime) | ✅ done | 4c63824 | `tools/admin-evict-tenants.sh` |
+| T-03 Capacity harness | ✅ done | c89f54d | `infra/tests/capacity/` (harness + 2 suites) + `capacity-baselines.md` |
+| T-04 8 HPAs | ✅ done | 4236c2e | Harbor (3), ArgoCD (2), Ory (2), mgmt-traefik (1) |
+| T-05 ArgoCD sharding | ✅ done | 15ce9be | replicas=3 + env `ARGOCD_CONTROLLER_REPLICAS=3` |
+| T-06 CLI retry 429/503 | ✅ done | f094fa1 | `cli/src/api/client.ts` + `real_deploy_harness.go` |
+| T-07 6 alerts | ✅ done | 9c5d75f | `prometheusrule-capacity.yaml` + Prometheus reloaded |
+
+**Evidência de que os fixes funcionam:**
+- Gitea HPA: escalou 2→5 replicas em L3 v8 quando CPU atingiu 206% → baixou para 29%
+- 8 novos HPAs live + argocd-repo-server já em 4 replicas
+- ArgoCD app-controller: 3 pods running (sharding ativo)
+- Prometheus: 19 rules (10 platform + 6 capacity + 3 TLS)
+
+**Anti-patterns eliminados:**
+1. ~~Live-patches antes de source commits~~ → cada mudança neste iteration tem commit Pulumi/Helm
+2. ~~Force-null finalizers como rotina~~ → `tools/admin-evict-tenants.sh` encapsula o workaround em tool auditado
+3. ~~Teste prova antes do alerta~~ → T-07 cobre 6 modos de falha que o teste revelou
+4. Bench isolado antes de E2E → T-03 framework pronto (próximo passo: capturar baselines reais)
+
+**Pendente para gate final:**
+1. L3 v8 RESULTS ≥ 95/100 success (em progresso)
+2. Capacity baselines capturadas (T-03 framework pronto; runs sob demanda)
+3. 10× consecutivas L3 100% success (validação de estabilidade pós-estabilização)
+
+---
+
 ## Changelog
 
 - **v1 (2026-04-17):** Criação com 7 tasks derivadas de meeting de análise de gaps.
+- **v1.1 (2026-04-17):** 6 tasks completadas em iteração Ralph (T-02..T-07). T-01 em validação final via L3 v8. Commits: 4c63824, c89f54d, 4236c2e, 15ce9be, f094fa1, 9c5d75f.
