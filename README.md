@@ -518,6 +518,87 @@ Exit code: 5 (partial failure)
 
 ---
 
+## Appendix A: Competitive Landscape (April 2026)
+
+> Research snapshot as of 2026-04-17. The PaaS market moves fast — validate before citing.
+
+### Market Context
+
+- The global PaaS market is projected to grow from $168B (2025) to $506B (2032) at 17.1% CAGR.
+- **Heroku is dead.** Salesforce announced "sustaining engineering model" in Feb/2026 — no new enterprise contracts, no new features. The space Heroku occupied is officially open.
+- **PaaS-first is the new default.** The "Kubernetes-first" era ended for most companies. If cloud bill < $2M/year, raw K8s doesn't justify the complexity. 80% of software orgs will have platform teams by end of 2026 (Gartner).
+- **BYOC (Bring Your Own Cloud)** is a growing differentiator — Qovery, Northflank, Porter, Flightcontrol all offer deploy on the customer's cloud account.
+- **AI-native platforms** are emerging — auto-scaling, auto-detect, prompt-to-deploy (Zeabur, Kuberns, Emergent.sh).
+- **Consolidation via acquisition** — Koyeb acquired by Mistral AI (Feb/2026). SST paused development to focus on OpenCode (AI coding agent).
+
+### Tier 1 — Direct Competitors
+
+| Platform | Funding | Model | Key Differentiator | LoopZero Advantage |
+|----------|---------|-------|--------------------|----------------|
+| [Railway](https://railway.com) | $100M Series B (Jan/2026) | Usage-based, managed | Best-in-class DX, $5/mo hobby | Multi-cluster isolation, cell architecture |
+| [Render](https://render.com) | ~$100M+ | Fixed pricing, managed | "Modern Heroku", $7/mo start | Monorepo-native, GitOps-backed consistency |
+| [Fly.io](https://fly.io) | ~$90M+ | Edge VMs, 35+ DCs | Global low-latency, GPU support | Simpler DX, multi-tenant isolation |
+| [Northflank](https://northflank.com) | Undisclosed | K8s abstraction, BYOC | "Best overall PaaS 2026", enterprise | Cell architecture for 50k+ scale |
+| [Qovery](https://qovery.com) | $19.3M | BYOC (AWS/GCP/Azure) | SOC2 Type 2, Gateway API | CLI-first, no cloud account required |
+
+### Tier 2 — Indirect Competitors
+
+| Platform | Model | Overlap with LoopZero |
+|----------|-------|-------------------|
+| [Flightcontrol](https://flightcontrol.dev) | Deploy on customer's AWS (YC-backed) | AWS-only, no multi-cluster |
+| [Zeabur](https://zeabur.com) | AI-powered deploy, drag-and-drop (Taiwan) | Innovative DX but small scale |
+| [Koyeb](https://koyeb.com) | Serverless + GPU (acquired by Mistral AI, Feb/2026) | Pivoted to AI/ML inference |
+| [Porter](https://porter.run) | K8s on customer's cloud, template-based | BYOC but less DX polish |
+| [SST (Ion/v3)](https://sst.dev) | IaC serverless via Pulumi+Terraform | Serverless-only, development paused |
+| [Coolify](https://coolify.io) | Open-source self-hosted (40k+ GitHub stars) | Docker-only, no multi-cluster |
+
+### Tier 3 — Self-Hosted / Open Source
+
+| Platform | GitHub Stars | Model | Notes |
+|----------|:-----------:|-------|-------|
+| [Coolify](https://coolify.io) | 40k+ | Self-hosted, Docker-native | Fast-growing community, different audience (DIY) |
+| [Dokploy](https://dokploy.com) | 15k+ | Self-hosted, Docker-first | Simpler, no K8s support |
+| [Dokku](https://dokku.com) | 29k+ | CLI-only, Heroku-like | Mature but limited |
+| [Kubero](https://kubero.dev) | ~2k | Self-hosted K8s PaaS | Niche |
+| [CapRover](https://caprover.com) | 13k+ | Docker Swarm | Older architecture |
+| [Canine](https://canine.sh) | New | K8s PaaS + MCP/AI integration | Integrates with Claude Code |
+
+### Tier 4 — New Entrants (2025-2026)
+
+| Platform | What It Does | Status |
+|----------|-------------|--------|
+| [Emergent.sh](https://emergent.sh) | Full-stack "vibe coding" — prompt to production app | New, AI-native |
+| [Sherpa.sh](https://sherpa.sh) | `git push` deploy, claims -80% cost vs Vercel | New, aggressive pricing |
+| [Kuberns](https://kuberns.com) | AI-powered auto-scaling, usage-based (India) | New, innovative pricing |
+| [Stormkit](https://stormkit.io) | Self-hosted enterprise deploys, preview envs | Niche enterprise |
+| [DanubeData](https://danubedata.ro) | EU-first PaaS (GDPR data residency) | Niche European market |
+| DollarDeploy | Deploy apps on your own server | Early stage |
+
+### Where LoopZero Is Unique
+
+| Capability | Railway | Render | Fly.io | Northflank | LoopZero |
+|------------|:-------:|:------:|:------:|:----------:|:----:|
+| CLI-first DX | Yes | Partial | Partial | Partial | **Yes** |
+| Multi-cluster (mgmt/build/workload) | No | No | No | Partial | **Yes** |
+| Cell-based architecture (50k+ apps) | No | No | Different | No | **Yes** |
+| Monorepo-native (API+Web+Worker) | Partial | Partial | No | Partial | **Yes** |
+| GitOps-backed (invisible to user) | No | No | No | No | **Yes** |
+| Supply chain security (cosign+SBOM+SLSA) | No | No | No | No | **Yes** |
+| Per-tenant container isolation (Harbor) | No | No | No | Partial | **Yes** |
+| Distributed tracing (end-to-end) | No | No | No | Partial | **Yes** |
+
+### Market Gaps to Watch
+
+| Trend | Who Offers It | LoopZero Status |
+|-------|--------------|-------------|
+| Preview environments (PR → temp URL) | Railway, Render, Vercel, Northflank | Sprint 5 — not started |
+| BYOC (deploy on customer's cloud) | Northflank, Qovery, Flightcontrol, Porter | Not planned |
+| GPU/AI workloads | Koyeb, Fly.io, Kuberns, TrueFoundry | Not planned |
+| AI-powered DX (auto-detect, prompt-deploy) | Zeabur, Canine, Kuberns, Emergent.sh | Not planned |
+| EU data residency | DanubeData | Not planned |
+
+---
+
 ## License
 
 [Apache License 2.0](LICENSE)
