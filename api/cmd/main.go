@@ -973,15 +973,25 @@ func main() {
 		if dbAdapter != nil {
 			buildStoreForAdmission := db.NewPostgresBuildStore(dbAdapter)
 			querier := &buildStoreAdmissionQuerier{store: buildStoreForAdmission}
-			gate := admission.NewBuildGate(querier, admission.DefaultConfig(), cfg.AdmissionControl)
+			// Bug #43: wire env-configurable MAX_CONCURRENT_BUILDS_PER_CELL /
+			// MAX_CONCURRENT_BUILDS_PER_TENANT from config. Previously the call
+			// used DefaultConfig() which hardcoded 20/3, ignoring the env vars.
+			admissionCfg := admission.DefaultConfig()
+			if cfg.MaxConcurrentBuildsPerCell > 0 {
+				admissionCfg.MaxConcurrentPerCell = cfg.MaxConcurrentBuildsPerCell
+			}
+			if cfg.MaxConcurrentBuildsPerTenant > 0 {
+				admissionCfg.MaxConcurrentPerTenant = cfg.MaxConcurrentBuildsPerTenant
+			}
+			gate := admission.NewBuildGate(querier, admissionCfg, cfg.AdmissionControl)
 			buildHandler = buildHandler.WithAdmission(
 				admission.NewRouteAdapter(gate),
 				placement.DefaultCellID, // single-cell for now; roadmap 06 routing picks the cell per tenant
 			)
 			if cfg.AdmissionControl {
 				logger.Info("build admission gate enabled",
-					"max_per_cell", admission.DefaultConfig().MaxConcurrentPerCell,
-					"max_per_tenant", admission.DefaultConfig().MaxConcurrentPerTenant,
+					"max_per_cell", admissionCfg.MaxConcurrentPerCell,
+					"max_per_tenant", admissionCfg.MaxConcurrentPerTenant,
 				)
 			}
 

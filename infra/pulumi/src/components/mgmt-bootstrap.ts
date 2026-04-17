@@ -137,7 +137,12 @@ export function bootstrapMgmtCluster(
           kind: "Deployment",
           name: "gitea",
         },
-        minReplicas: 2,
+        // minReplicas=4: L3 v8 showed that initial burst (30 concurrent git
+        // pushes) arrives in ~10s, faster than HPA can scale from 2 → 5 (~60s).
+        // 18/100 upload failures occurred during the HPA ramp-up window.
+        // With 4 baseline replicas, the initial burst is absorbed while HPA
+        // scales to 5-8 for sustained load.
+        minReplicas: 4,
         maxReplicas: 8,
         metrics: [
           {
@@ -166,6 +171,53 @@ export function bootstrapMgmtCluster(
   // Gitea backup — daily dump to DO Spaces (retain 7 days).
   // Runs `gitea dump` from the same NFS volume and uploads to S3.
   createGiteaBackupCronJob(provider, ns, infra, config, gitea);
+
+  // Task T-04 — HPAs for shared dependencies (plan: docs/plans/50k-immediate-focus.md).
+  // Without these, a single pod saturates at L3 scale and cascades to
+  // SOURCE_UPLOAD_FAILED / sync timeouts / 401s. HPA scales elastic with demand.
+  // Common behavior: scaleUp fast (30s stabilize, 100% burst/30s),
+  // scaleDown slow (300s stabilize, 25%/60s) — prevents flapping.
+  const hpaBehavior = {
+    scaleUp: {
+      stabilizationWindowSeconds: 30,
+      policies: [{ type: "Percent", value: 100, periodSeconds: 30 }],
+    },
+    scaleDown: {
+      stabilizationWindowSeconds: 300,
+      policies: [{ type: "Percent", value: 25, periodSeconds: 60 }],
+    },
+  };
+  const hpaCpuTarget = [
+    {
+      type: "Resource",
+      resource: { name: "cpu", target: { type: "Utilization", averageUtilization: 70 } },
+    },
+  ];
+  for (const [name, min, max] of [
+    ["harbor-core", 1, 5],
+    ["harbor-registry", 1, 8],      // critical: image push/pull path
+    ["harbor-jobservice", 1, 3],
+    ["argocd-repo-server", 2, 10],  // critical: sync queue scales with N apps
+    ["argocd-server", 1, 3],
+    ["ory-hydra", 1, 3],
+    ["ory-kratos", 1, 3],
+    ["mgmt-traefik", 2, 6],
+  ] as const) {
+    new k8s.autoscaling.v2.HorizontalPodAutoscaler(
+      `${name}-hpa`,
+      {
+        metadata: { name, namespace: PLATFORM_NAMESPACE },
+        spec: {
+          scaleTargetRef: { apiVersion: "apps/v1", kind: "Deployment", name },
+          minReplicas: min,
+          maxReplicas: max,
+          metrics: hpaCpuTarget,
+          behavior: hpaBehavior,
+        },
+      },
+      { provider, dependsOn: [ns] },
+    );
+  }
 
   // MinIO — S3-compatible artifact storage (source bundles, build cache)
   const minio = installMinIO(provider, ns, config);

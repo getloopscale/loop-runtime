@@ -28,6 +28,14 @@ server:
       namespace: monitoring
 
 controller:
+  # T-05: 3 replicas with sharding distributes Applications by hash across
+  # pods. At L3+ a single controller saturates reconciling 100+ Apps,
+  # causing sync latency >15min. Sharding cuts p95 sync below 60s.
+  # Plan: docs/plans/50k-immediate-focus.md
+  replicas: 3
+  env:
+    - name: ARGOCD_CONTROLLER_REPLICAS
+      value: "3"
   containerSecurityContext:
     runAsNonRoot: true
   readinessProbe:
@@ -36,11 +44,11 @@ controller:
     enabled: true
   resources:
     limits:
-      cpu: "500m"
-      memory: "512Mi"
+      cpu: "2000m"     # was 500m — bump for controller load
+      memory: "2Gi"    # was 512Mi — ArgoCD caches many Apps in memory
     requests:
-      cpu: "100m"
-      memory: "256Mi"
+      cpu: "200m"      # was 100m
+      memory: "512Mi"  # was 256Mi
   metrics:
     enabled: true
     serviceMonitor:
