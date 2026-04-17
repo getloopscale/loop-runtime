@@ -198,6 +198,50 @@ cert-manager exports these (already scraped by Prometheus):
 | `LoopZeroClusterIssuerNotReady` | issuer `Ready=False` for 15min | critical | Blocks new cert issuance; early signal before Certificates fail |
 | `LoopZeroCertStuckNotReady` | cert `Ready=False` for 30min | warning | Catches DNS-01 hangs, rate limit hits, race conditions |
 
+## Lições aprendidas (2026-04-17)
+
+Ao aplicar a strategy aos certs `tls-argocd` e `tls-cloud`, descobrimos um **pré-requisito não explicitado**:
+
+### Origin CA exige tráfego REALMENTE via CF proxy
+
+Os subdomínios `argocd.dev.loopzero.example` e `cloud.dev.loopzero.example` tinham **A records não-proxied** apontando direto para o Traefik LB (24.144.71.120). Isso foi uma escolha de arquitetura antiga para permitir debug/health check sem passar por CF.
+
+**Quando migramos para Origin CA sem mudar DNS**, o browser/curl direto encontrou:
+```
+SSL certificate problem: unable to get local issuer certificate
+```
+
+Motivo: Origin CA certs são emitidos por `CloudFlare Origin SSL CA` — não há CA pública raiz que valide. Apenas o próprio CF aceita esses certs.
+
+### Pré-requisito correto
+
+Para Origin CA funcionar de verdade:
+1. DNS **proxied=true** (CF recebe request primeiro)
+2. CF SSL mode **Full (Strict)** (CF faz handshake com origin usando Origin CA)
+3. Browser vê cert CF Universal SSL (trusted), origin vê request de CF (trusted)
+
+### Decisão revertida para `tls-argocd`, `tls-cloud`
+
+A combinação "A record direto + Origin CA" **não funciona**. Revertemos para `letsencrypt-staging` (sem rate limit mas untrusted por design — OK para dev) com DNS direto. Quando o rate limit de `letsencrypt-prod` resetar (~2026-04-17 07:50 UTC), migrar para LE Prod.
+
+### Quando Origin CA É a escolha certa
+
+- Subdomínios **sempre proxied** via CF (novos apps com onboarding automático via CF Zone Management)
+- UIs internas **só acessíveis via CF** (nunca debug direto)
+- Zero tolerância a rate limit de LE
+
+Para o LoopZero atual, Origin CA fica pronto mas **não-ativamente-usado** até os UIs internos serem migrados para proxied-only architecture. As ferramentas (issuer, approver RBAC, middlewares de proteção) estão todas instaladas.
+
+### Matriz atualizada
+
+| Subdomínio | DNS | Cert desejado | Cert atual (2026-04-17) |
+|---|---|---|---|
+| apps de user (`*.dev.loopzero.example`) | wildcard CNAME→tunnel | CF Universal SSL | ✅ funciona |
+| argocd, cloud | A direct | letsencrypt-prod | ⏳ LE Staging (temp) até rate limit resetar |
+| auth, git, grafana, harbor | A direct | letsencrypt-prod | ✅ funciona (ou wildcard) |
+| custom user domains | CF zone per-domain | CF Universal | ✅ funciona |
+| (futuro) UIs proxied-only | A proxied | CF Origin CA | ferramenta pronta |
+
 ## Referências
 
 - [cert-manager External Issuers](https://cert-manager.io/docs/configuration/external/)
