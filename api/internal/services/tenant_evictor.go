@@ -57,11 +57,31 @@ type TenantDBDeleter interface {
 	DeleteTenantsFKOrdered(ctx context.Context, tenantIDs []string) (TenantDeletionCounts, error)
 }
 
+// TenantK8sEvictor abstracts the multi-cluster K8s teardown (phase 2).
+// Implemented by k8s.TenantK8sEvictor through adapters.TenantK8sEvictorAdapter.
+// A nil evictor means EnqueueEviction skips the K8s portion and relies on
+// tools/admin-evict-tenants.sh for cluster cleanup — useful for dev and
+// for smoke-testing the DB half in isolation.
+type TenantK8sEvictor interface {
+	EvictTenantsFromClusters(ctx context.Context, tenantIDs []string) (K8sEvictionCounts, error)
+}
+
+// K8sEvictionCounts mirrors k8s.K8sEvictionCounts on the service-layer side
+// to avoid cyclic imports (same pattern as TenantDeletionCounts).
+type K8sEvictionCounts struct {
+	ArgoWorkflowsDeleted int `json:"argo_workflows_deleted"`
+	MgmtCRsDeleted       int `json:"mgmt_crs_deleted"`
+	FinalizersCleared    int `json:"finalizers_cleared"`
+	NamespacesFinalized  int `json:"namespaces_finalized"`
+}
+
 // TenantEvictor orchestrates bulk tenant teardown.
 type TenantEvictor struct {
-	lister     TenantLister         // nil-safe — if nil, only explicit IDs work
-	deleter    TenantDBDeleter      // nil-safe — if nil, EnqueueEviction skips DB work
-	lastCounts TenantDeletionCounts // result of most recent EnqueueEviction (non-thread-safe)
+	lister        TenantLister         // nil-safe — if nil, only explicit IDs work
+	deleter       TenantDBDeleter      // nil-safe — if nil, EnqueueEviction skips DB work
+	k8sEvictor    TenantK8sEvictor     // nil-safe — if nil, EnqueueEviction skips K8s work
+	lastCounts    TenantDeletionCounts // result of most recent DB cleanup (non-thread-safe)
+	lastK8sCounts K8sEvictionCounts    // result of most recent K8s cleanup (non-thread-safe)
 }
 
 // NewTenantEvictor creates a TenantEvictor bound to a tenant lister.
@@ -78,6 +98,18 @@ func NewTenantEvictor(lister TenantLister) *TenantEvictor {
 // until the background worker lands.
 func NewTenantEvictorWithDB(lister TenantLister, deleter TenantDBDeleter) *TenantEvictor {
 	return &TenantEvictor{lister: lister, deleter: deleter}
+}
+
+// NewTenantEvictorFull creates a TenantEvictor with both DB and K8s teardown
+// wired. This is the production configuration — EnqueueEviction runs the
+// full eviction pipeline: K8s cluster teardown (mgmt CRs, Argo wf, runtime
+// namespaces) followed by FK-ordered DB cleanup. Mirrors steps 1-5 of the
+// original bash tool (tools/admin-evict-tenants.sh).
+//
+// Any nil argument disables the corresponding stage. Passing all three nils
+// is equivalent to the scaffold NewTenantEvictor (lister-only).
+func NewTenantEvictorFull(lister TenantLister, deleter TenantDBDeleter, k8sEvictor TenantK8sEvictor) *TenantEvictor {
+	return &TenantEvictor{lister: lister, deleter: deleter, k8sEvictor: k8sEvictor}
 }
 
 // MatchTenants resolves a SQL LIKE pattern + explicit IDs into a
@@ -142,6 +174,18 @@ func (e *TenantEvictor) EnqueueEviction(ctx context.Context, tenantIDs []string)
 
 	jobID := fmt.Sprintf("evict-%d-tenants", len(tenantIDs))
 
+	// K8s cluster teardown must run BEFORE the DB cleanup. The bash tool
+	// does the same: deleting mgmt CRs triggers the operator's finalizer
+	// logic, which may still read DB rows to reconcile desired state. If
+	// the DB is wiped first, finalizers may leave orphaned CRs behind.
+	if e.k8sEvictor != nil {
+		k8sCounts, err := e.k8sEvictor.EvictTenantsFromClusters(ctx, tenantIDs)
+		if err != nil {
+			return "", fmt.Errorf("k8s cleanup: %w", err)
+		}
+		e.lastK8sCounts = k8sCounts
+	}
+
 	if e.deleter != nil {
 		counts, err := e.deleter.DeleteTenantsFKOrdered(ctx, tenantIDs)
 		if err != nil {
@@ -150,6 +194,13 @@ func (e *TenantEvictor) EnqueueEviction(ctx context.Context, tenantIDs []string)
 		e.lastCounts = counts
 	}
 	return jobID, nil
+}
+
+// GetLastK8sCounts returns the K8s resource eviction counts from the most
+// recent EnqueueEviction call. Zero-value when no K8s eviction has run.
+// Non-thread-safe; pair with GetLastCounts in the same goroutine.
+func (e *TenantEvictor) GetLastK8sCounts() K8sEvictionCounts {
+	return e.lastK8sCounts
 }
 
 // GetLastCounts returns the row deletion counts from the most recent

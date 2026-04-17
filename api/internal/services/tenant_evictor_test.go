@@ -165,3 +165,64 @@ func TestEnqueueEviction_NilDeleter_SkipsCleanup(t *testing.T) {
 func errDeleterDown() error {
 	return errors.New("deleter down")
 }
+
+type fakeK8sEvictor struct {
+	called   int
+	received []string
+	counts   K8sEvictionCounts
+	err      error
+}
+
+func (f *fakeK8sEvictor) EvictTenantsFromClusters(_ context.Context, tenantIDs []string) (K8sEvictionCounts, error) {
+	f.called++
+	f.received = tenantIDs
+	return f.counts, f.err
+}
+
+func TestEnqueueEviction_Full_RunsK8sThenDB(t *testing.T) {
+	k8sFake := &fakeK8sEvictor{counts: K8sEvictionCounts{MgmtCRsDeleted: 5, NamespacesFinalized: 3}}
+	dbFake := &fakeDeleter{counts: TenantDeletionCounts{Tenants: 5}}
+	ev := NewTenantEvictorFull(nil, dbFake, k8sFake)
+
+	_, err := ev.EnqueueEviction(context.Background(), []string{"tn-a", "tn-b"})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if k8sFake.called != 1 || dbFake.called != 1 {
+		t.Fatalf("both should be called once; k8s=%d db=%d", k8sFake.called, dbFake.called)
+	}
+	if ev.GetLastK8sCounts().MgmtCRsDeleted != 5 {
+		t.Fatalf("k8s counts not surfaced: %+v", ev.GetLastK8sCounts())
+	}
+	if ev.GetLastCounts().Tenants != 5 {
+		t.Fatalf("db counts not surfaced: %+v", ev.GetLastCounts())
+	}
+}
+
+func TestEnqueueEviction_K8sError_SkipsDBCleanup(t *testing.T) {
+	// Critical invariant: if K8s teardown fails, DB must NOT be wiped.
+	// Otherwise the cluster is left with CRs referencing non-existent rows.
+	k8sFake := &fakeK8sEvictor{err: errors.New("apiserver down")}
+	dbFake := &fakeDeleter{}
+	ev := NewTenantEvictorFull(nil, dbFake, k8sFake)
+
+	_, err := ev.EnqueueEviction(context.Background(), []string{"tn-a"})
+	if err == nil {
+		t.Fatalf("expected err to propagate")
+	}
+	if dbFake.called != 0 {
+		t.Fatalf("DB cleanup must NOT run when K8s fails (called %d times)", dbFake.called)
+	}
+}
+
+func TestEnqueueEviction_K8sOnly_NoDeleter(t *testing.T) {
+	k8sFake := &fakeK8sEvictor{}
+	ev := NewTenantEvictorFull(nil, nil, k8sFake)
+	_, err := ev.EnqueueEviction(context.Background(), []string{"tn-a"})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if k8sFake.called != 1 {
+		t.Fatalf("k8s evictor should run when provided")
+	}
+}

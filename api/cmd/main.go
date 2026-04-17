@@ -1068,14 +1068,12 @@ func main() {
 		AuditHandler:       routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter}),
 		// T-02: admin evict — route present only when DB available.
 		// Feature-flagged at runtime via LOOPZERO_ADMIN_API env var.
-		// WithDB variant performs synchronous FK-ordered DB teardown as part
-		// of EnqueueEviction. K8s cluster teardown (CRs, namespaces, Argo
-		// workflows) is still handled by tools/admin-evict-tenants.sh until
-		// the background worker lands in phase 2.
-		AdminEvictor: services.NewTenantEvictorWithDB(
-			&db.PostgresTenantStore{DB: dbAdapter},
-			&adapters.TenantDBDeleterAdapter{Store: &db.PostgresTenantStore{DB: dbAdapter}},
-		),
+		// Full variant runs K8s cluster teardown (phase 2) BEFORE the
+		// FK-ordered DB cleanup, matching the bash tool's sequence. When
+		// the K8s client construction fails (missing kubeconfig in local
+		// dev), we fall back to DB-only — admin still gets a working
+		// endpoint, just without the K8s teardown path.
+		AdminEvictor: buildAdminEvictor(cfg, dbAdapter),
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,
@@ -1155,4 +1153,56 @@ func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input serv
 		ServiceName: input.ServiceName,
 		ServicePort: input.ServicePort,
 	})
+}
+
+// buildAdminEvictor constructs the admin evictor with DB + (when possible)
+// K8s teardown. Called during server Config assembly. If the multi-cluster
+// K8s evictor cannot be built (missing kubeconfig, invalid context, etc.),
+// the helper falls back to DB-only — the admin endpoint still works, it just
+// skips the K8s phase and operators must run tools/admin-evict-tenants.sh
+// for the cluster resources.
+//
+// The fallback is intentional: local dev (k3d) often has all three contexts
+// available, but partial-cluster breakage (e.g. runtime kubeconfig mis-set)
+// shouldn't prevent the API from starting. A startup log line makes the
+// degraded mode explicit.
+func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) routes.TenantEvictor {
+	store := &db.PostgresTenantStore{DB: dbAdapter}
+	dbDeleter := &adapters.TenantDBDeleterAdapter{Store: store}
+
+	k8sEv, err := k8s.NewTenantK8sEvictor(
+		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
+		cfg.BuildKubeconfig, cfg.BuildKubeContext,
+		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,
+		"", "", // default namespaces (platform-system, argo)
+	)
+	if err != nil {
+		slog.Warn("admin evict: K8s teardown disabled — falling back to DB-only",
+			"error", err.Error(),
+			"consequence", "operators must run tools/admin-evict-tenants.sh for K8s cleanup",
+		)
+		return &tenantEvictorRouteAdapter{Inner: services.NewTenantEvictorWithDB(store, dbDeleter)}
+	}
+	return &tenantEvictorRouteAdapter{Inner: services.NewTenantEvictorFull(
+		store,
+		dbDeleter,
+		&adapters.TenantK8sEvictorAdapter{Evictor: k8sEv},
+	)}
+}
+
+// tenantEvictorRouteAdapter exposes *services.TenantEvictor via the
+// routes.TenantEvictor interface. The concrete type's pointer-receiver
+// methods already satisfy the interface — this wrapper only exists to make
+// that relationship explicit (and would allow future per-route concerns
+// like logging/tracing to be layered in without touching services).
+type tenantEvictorRouteAdapter struct {
+	Inner *services.TenantEvictor
+}
+
+func (a *tenantEvictorRouteAdapter) MatchTenants(ctx context.Context, pattern string, ids []string) ([]string, error) {
+	return a.Inner.MatchTenants(ctx, pattern, ids)
+}
+
+func (a *tenantEvictorRouteAdapter) EnqueueEviction(ctx context.Context, tenantIDs []string) (string, error) {
+	return a.Inner.EnqueueEviction(ctx, tenantIDs)
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/k8s"
 	"github.com/loopzero/loopzero/api/internal/lock"
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/services"
@@ -377,6 +378,28 @@ func (a *TenantDBDeleterAdapter) DeleteTenantsFKOrdered(ctx context.Context, ten
 		Subscriptions:      c.Subscriptions,
 		TenantMembers:      c.TenantMembers,
 		Tenants:            c.Tenants,
+	}, nil
+}
+
+// --- TenantK8sEvictorAdapter: bridges k8s.TenantK8sEvictor to services.TenantK8sEvictor ---
+
+// TenantK8sEvictorAdapter implements services.TenantK8sEvictor by wrapping
+// k8s.TenantK8sEvictor and translating K8sEvictionCounts across the package
+// boundary. Mirrors the TenantDBDeleterAdapter pattern.
+type TenantK8sEvictorAdapter struct {
+	Evictor *k8s.TenantK8sEvictor
+}
+
+func (a *TenantK8sEvictorAdapter) EvictTenantsFromClusters(ctx context.Context, tenantIDs []string) (services.K8sEvictionCounts, error) {
+	c, err := a.Evictor.EvictTenantsFromClusters(ctx, tenantIDs)
+	if err != nil {
+		return services.K8sEvictionCounts{}, err
+	}
+	return services.K8sEvictionCounts{
+		ArgoWorkflowsDeleted: c.ArgoWorkflowsDeleted,
+		MgmtCRsDeleted:       c.MgmtCRsDeleted,
+		FinalizersCleared:    c.FinalizersCleared,
+		NamespacesFinalized:  c.NamespacesFinalized,
 	}, nil
 }
 
