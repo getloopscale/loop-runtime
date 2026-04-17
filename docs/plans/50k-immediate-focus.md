@@ -67,6 +67,30 @@ Ambas fecham Gate #1. Opção 1 é contingência; Opção 2 é a versão "limpa"
 - 4 bugs fixados em infra (#44 Gitea HA, Harbor canary secret+projeto, #35-36 RBAC, #43 admission env)
 - 9 docs atualizados/criados (capacity-baselines, scale-50k-l3-readiness, este plano)
 
+### Posição atual na arquitetura ADR-0008 (cell-based)
+
+O escopo deste plano é **single-cell (Phase 0 do ADR-0008)**. Contexto
+necessário pra não confundir "gap de implementação" com "não chegou a
+hora ainda":
+
+| ADR-0008 Phase | Trigger | Status hoje | Parte deste plano? |
+|---|---|---|---|
+| **Phase 0** (Foundation) | Now | ✅ Deployed — `cell_id` em tenants, PlacementEngine, DynamicRouter, CellRouter — todos wired e live | Sim (base) |
+| **Phase 1** (Cell-Ready) | 50+ tenants | 🟡 Code ~75% — CRD `clustercredentials.loopzero.io` instalada, `ClusterCredentialController` escrito, Pulumi `cell.ts` scaffold. **ZERO ClusterCredential CRs registradas**, cell.ts returns placeholders | Não (Phase 2 é trigger) |
+| **Phase 2** (Multi-Cell) | 200+ tenants | ❌ Not started — só 1 workload cluster (`do-sfo3-loopzero-infra-dev-sfo3-runtime`), todos 100 tenants em `cell-default` | Não (L4+ blocker) |
+| **Phase 3** (Automation) | 500+ tenants | ❌ | Não |
+| **Phase 4** (Optimization) | 1000+ tenants | ❌ | Não |
+
+**TL;DR da análise:** rodamos L3 com 100 tenants (2× o trigger Phase 1),
+mas single-cell ainda tem capacity para mais. **T-08 expande o cell
+default** (runtime nodes s-2vcpu-4gb×3 → s-4vcpu-8gb×6). Phase 1
+ativação (2ª cell) vira relevante quando atingirmos ~200 tenants (L4)
+OU quando single-cell saturar K8s limits (150k pods/cluster — muito
+longe). Plano atual intencionalmente não força multi-cell.
+
+**Detalhamento completo:** `docs/plans/scale-50k-technical-debt.md`
+seção "Cell-Based Architecture — Ready vs Deployed" (commit c1c5c09).
+
 ---
 
 ## Princípios da fase imediata
