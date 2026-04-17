@@ -390,6 +390,14 @@ Quando todos 5 verdes → abrir planning L4 (500 tenants).
 
 ---
 
+## Lessons learned (L3 v8)
+
+**Reactive HPA lag vs burst arrival:** L3 v8 com concurrency=30 entregou ~82/100 success. Os 18 uploads falhados ocorreram nos primeiros ~60s, enquanto HPA escalava Gitea 2→5. A velocidade da chegada (30 pushes em ~10s) excede a velocidade do HPA reagir (~60s estabilização + pod start). Lesson: **reactive HPA não basta para burst** — precisa de `minReplicas` ≥ tamanho esperado do burst.
+
+**Fix aplicado:** Gitea `minReplicas: 2 → 4` (commit 982dbbd). Padrão replicável para outras deps: antes de levantar limite de concurrency no teste, bumpar minReplicas da dep mais crítica.
+
+**Regra geral:** `minReplicas(dep) ≥ concurrency(test) / requests-per-replica-handled-per-pod`
+
 ## Status atual (iteração Ralph — 2026-04-17)
 
 | Task | Status | Commits | Artefatos |
