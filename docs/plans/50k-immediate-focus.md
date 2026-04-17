@@ -578,8 +578,70 @@ O gate original do plano diz "L3 roda 10× consecutivas com 100% success sem int
 
 ---
 
+## Next-iteration checklist (Ralph resume point)
+
+Quando retomar o loop, **comece por esta seção** para evitar refazer trabalho.
+
+### Estado congelado em 2026-04-17 17:00
+
+- Runtime cluster: **limpo** (0 tenants L3, 0 orphan namespaces, 0 ArgoCD Apps). Pronto para v15.
+- API: `AdminEvictHandler` wired + `PostgresTenantStore.ListTenantIDsByPattern` implemented. Dry-run funcional; live `EnqueueEviction` ainda é stub (returns placeholder job_id, não executa teardown).
+- Bash tool `tools/admin-evict-tenants.sh`: **proven**, usado no último cleanup e completou 100/100 em ~2min.
+- Pulumi source tem Gitea HPA maxReplicas: 12 (vs cluster live: 8). Requer `pulumi preview` antes de apply.
+
+### Blockers para Gate #1
+
+1. **DO droplet quota** — Paulo precisa abrir ticket pedindo 15+ droplets (conta tem ~10 atualmente). Sem isso, runtime não escala para hospedar 100 apps simultaneamente.
+2. **Pulumi dev stack drift** — `pulumi up` na conta atual deleta os 3 clusters (memória `feedback_pulumi_state_drift`). Antes de qualquer apply: resolver drift via `pulumi preview` + adoção manual.
+
+### Pulumi target config para T-08 (aplicar SOMENTE após drift resolvido)
+
+```yaml
+# infra/pulumi/Pulumi.dev.yaml — diff proposto, NÃO committed por segurança
+loopzero-infra:runtimeNodeClass: small       # → medium (s-4vcpu-8gb-amd: 4 CPU / 8Gi)
+loopzero-infra:runtimeMinNodes: "2"          # → "4"
+loopzero-infra:runtimeMaxNodes: "3"          # → "6"
+```
+
+Math pós-bump: 6 nodes × 8Gi = 48Gi total (vs atual ~18Gi). 100 apps × 128Mi = 12.8Gi. Headroom 280%.
+
+### Próximos passos autônomos (sem depender de DO quota)
+
+Essas tarefas não precisam de DO quota e movem gates parcialmente:
+
+1. **[Gate #3, ~4-8h]** Implementar `TenantEvictor.EnqueueEviction` como worker real:
+   - Persist `eviction_jobs` table (migration 000XXX)
+   - Background goroutine processa N tenants paralelos (10 default)
+   - Por tenant: delete CRs na ordem FK (Environment → LoopZeroApplication → ExposedRoute → Tenant), wait finalizers 60s timeout, force-null se não converge, delete ArgoCD App + AppProject, delete DB rows em 7 tabelas
+   - Usar o bash script como checklist de ordem FK correta
+   - Idempotente: múltiplas chamadas seguras
+   - Substitui 100% bash workaround → fecha Gate #3
+
+2. **[Gate #2, ~2h]** Capturar Gitea baseline via port-forward:
+   - `kubectl port-forward svc/gitea-http 3000:3000`
+   - Rodar `infra/tests/capacity/gitea_test.go`
+   - Commit resultado em `docs/plans/capacity-baselines.md`
+
+3. **[Gate #4, ~1h]** Pulumi importar overflow pools criados via doctl:
+   - `pulumi import digitalocean:index/kubernetesNodePool:KubernetesNodePool ...` para cada overflow
+   - Adotar pools em `infra.ts` como transitional, marcados para remoção pós-T-08
+   - Limpa live-patch drift
+
+### Como outputar a promise sem mentir
+
+A promise `TODAS AS TASKS, CRITERIOS DE ACEITES, DODs CONCLUIDOS E VALIDADOS` só é TRUE quando:
+
+- [ ] Gate #1: 10 runs L3 ≥95/100 consecutivas registradas em `scale-50k-l3-readiness.md`
+- [ ] Gate #2: 4 baselines em `capacity-baselines.md` (loopzero-api ✅, minio ✅, argocd ✅, gitea ❌)
+- [ ] Gate #3: Último eviction via API (não bash) em `tools/admin-evict-tenants.sh.deprecated`
+- [ ] Gate #4: `kubectl get nodes -L doks.digitalocean.com/node-pool` mostra todos pools com nome do pattern Pulumi (`loopzero-infra-dev-sfo3-runtime-default-*`)
+- [ ] Gate #5: CLI retries (já ✅)
+
+---
+
 ## Changelog
 
 - **v1 (2026-04-17):** Criação com 7 tasks derivadas de meeting de análise de gaps.
 - **v1.1 (2026-04-17):** 6 tasks completadas em iteração Ralph (T-02..T-07). T-01 em validação final via L3 v8. Commits: 4c63824, c89f54d, 4236c2e, 15ce9be, f094fa1, 9c5d75f.
 - **v1.2 (2026-04-17 PM):** L3 v9..v14 rodadas. v14 final 62/100 — runtime capacity bottleneck descoberto. T-08 adicionado (runtime nodes bump + DO droplet quota). T-09 adicionado (10× consecutivo gate). Gitea HPA maxReplicas bumpado 8→12.
+- **v1.3 (2026-04-17 17:00):** API T-02 wired (PostgresTenantStore + AdminEvictHandler + 15 tests passing). Runtime cleanup executado (100 tenants evicted). Next-iteration checklist adicionado. Commits: ba26abb, 94e8ae9.
