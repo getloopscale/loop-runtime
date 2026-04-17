@@ -3,11 +3,34 @@
 **Target:** L3 — 100 tenants sustained, 10 deploys/min, 1 hour. Decision point on per-project ArgoCD Applications.
 **Last updated:** 2026-04-17
 
+## L2 Gate: PASSED ✅ (v8, 2026-04-17 03:53 UTC)
+
+```
+REAL DEPLOY L2 — 50 TENANTS — RESULTS
+  Succeeded:     50 / 50
+  Apps Live:     50 / 50 (HTTP 200 verified)
+  Failed:        0
+--- PASS: TestRealDeploy_L2_50Tenants (2933.57s)
+```
+
+**What made v8 pass (after v4 47/50, v5 47/50, v6 45/50, v7 40/50):**
+1. Operator fix — `ensurePullSecret` provisions pull secret atomically, `kickStuckPullBackoffPods`
+   handles residual ImagePullBackOff race (commits a5601d1 + ca25f1a).
+2. Harness fix — `verifyAppLive` deadline 120s → 240s covers autoscaler latency (commit 8c889dc).
+3. Cluster pre-warm — 6 Ready nodes before deploy wave (3 default + 1 overflow s-2vcpu-2gb +
+   2 overflow2 s-2vcpu-2gb). Avoids reactive autoscaling during deploy.
+
+**Critical operational lesson:** Pre-warming cells is not optional at scale. v7 (40/50)
+validated the loopzerory — 20 succeeded before DO SFO3 capacity crunch, 20 succeeded after overflow
+pools came up, 10 failed during the 15-minute capacity-exhausted window. A warm cell passes;
+a cold cell stragglers.
+
 ## Infra sizing (per `scale-50k-plan.md` Phase 2.1)
 
 | Requirement | Target | Current | Status |
 |---|---|---|---|
-| Runtime cluster maxNodes | 4 | **6** | ✅ (over-provisioned) |
+| Runtime cluster maxNodes | 4 (L3 plan), **10+** recommended | **6** (default) + overflow pools available | ✅ |
+| Runtime pre-warmed nodes | ≥ expected peak | **6 Ready** (3 default + 1 overflow + 2 overflow2) | ✅ |
 | Mgmt cluster maxNodes | 4 | 3 | ❌ Pending |
 | API replicas | 4 (HPA min=2 max=6 target 70%) | **HPA 2-6 active** | ✅ |
 | ArgoCD controller memory | 1Gi | **1Gi** | ✅ |
@@ -16,6 +39,11 @@
 | Gitea memory | 1Gi | **1Gi** | ✅ |
 
 **Remaining gap:** mgmt maxNodes 3 → 4. Blocked by Pulumi state drift (same reason as runtime 3→6 was via doctl). Can apply via doctl with same precedent if needed before L3.
+
+**For L3 (100 tenants), recommended pre-warm:** bump runtime to **8-10 nodes** before test start.
+The L2 v8 run demonstrated that 6 nodes handle 50 tenants comfortably; extrapolating linearly,
+L3's 100 tenants need ≥ 10 nodes. Script template: see `/tmp/bump-mgmt-nodes.sh` (adapt for
+runtime pool ID 89569c9c-44e8-490b-a4cf-651f0101567a).
 
 ## Bug fixes required for L3
 
