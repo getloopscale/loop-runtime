@@ -3,6 +3,35 @@
 **Target:** L3 — 100 tenants sustained, 10 deploys/min, 1 hour. Decision point on per-project ArgoCD Applications.
 **Last updated:** 2026-04-17
 
+## L3 v1: PARTIAL FAIL ⚠️ (2026-04-17 10:25 UTC)
+
+**Result:** 66/100 workflows Succeeded, 1 Failed (tn-34 cache timeout), 10 stuck Running.
+L3 **did NOT meet gate** (requires 100/100).
+
+**Root causes discovered (3 cascading bugs):**
+
+1. **Bug #18 — DO CSI PVC saturation** (primary blocker). 100 tenant builds × 5Gi PVC =
+   500Gi requested through DO CSI, which provisions serially (~3 PVCs/min). Workflows after
+   ~66 hit the queue; pods stuck `Init:0/1` waiting for volume mounts. Already documented in
+   `scale-50k-technical-debt.md` — L3 is the breaking scale.
+
+2. **Bug #35 — MinIO single-pod saturation**. Mirror-harbor-api step hits MinIO for cache
+   restore + image mirror. 100 concurrent builds overwhelm single standalone MinIO pod.
+   8 `Error` pods observed in mirror-harbor step. Temporary live-fix applied: bumped
+   resources to 2CPU/4Gi + MINIO_API_REQUESTS_MAX=10000.
+
+3. **Bug #36 — RBAC gap for `kickStuckPullBackoffPods`** (live-fixed, not in v1 run).
+   `loopzero-ctrl-runtime-sa` ClusterRole lacked `pods:delete` verb. Operator was logging
+   403 on kick attempts, pods waited kubelet natural backoff (~5min) instead of recovering
+   immediately. Fixed in commit ef93a1b + live patched on runtime cluster.
+
+**Single-bug impact tolerable; 3 bugs cascading → system deadlock.**
+
+L3 v2 plan (before re-run):
+- Fix Bug #18: scale MinIO to distributed mode OR reduce per-workflow PVC from 5Gi→2Gi
+- Fix Bug #35: MinIO distributed mode (4 nodes) with replicated pools
+- Verify Bug #36 fix persistent after next Pulumi `up`
+
 ## L2 Gate: PASSED ✅ (v8, 2026-04-17 03:53 UTC)
 
 ```
@@ -164,6 +193,23 @@ If L3 causes severe issues:
 - API replicas HPA to 6 then OOM → bump limits to 512Mi
 
 Each case: cancel via `pkill -9 -f real_deploy_test`, cleanup workflows, investigate before retry.
+
+## Parallelism analysis (4 layers observed at L3 run)
+
+| Layer | Concurrency | Notes |
+|-------|-------------|-------|
+| Harness client | 10 (L3), 5 (L2), 20 (L4), 50 (L5) | Semaphore in `real_deploy_test.go` |
+| API admission gate | 20 builds/cell, 3/tenant | `MAX_CONCURRENT_BUILDS_PER_CELL` config |
+| Argo Workflows | Capped by harness (10 at L3) | No saturation; admission allows 20 |
+| Build DAG intra-workflow | Serial | clone→cache→install→build→sign (natural deps) |
+
+**Observed bottleneck for L3:** harness concurrency is 10, not the admission gate (20) — room
+to grow when saturating build cluster.
+
+**Bug candidate #34 — serial bootstrap phase:** `ProvisionTenant` is called in a sequential
+loop before deploy phase. At ~6s/tenant × 100 tenants = ~10min of pure wait. Parallelizing
+with concurrency 5-10 would cut bootstrap to ~1-2min. Low priority (not on critical path for
+L2/L3 gates), but consider for L4/L5 where bootstrap cost grows.
 
 ## References
 
