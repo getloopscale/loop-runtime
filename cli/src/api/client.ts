@@ -119,6 +119,27 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * ApiClient — low-level HTTP client used by all LoopZero CLI commands.
+ *
+ * Retry policy (T-06 from docs/plans/50k-immediate-focus.md):
+ *   - HTTP 429 (CELL_AT_CAPACITY backpressure from admission gate)
+ *   - HTTP 502 (bad gateway, transient)
+ *   - HTTP 503 (SERVICE_UNAVAILABLE, circuit breaker)
+ *   - HTTP 504 (gateway timeout)
+ *   - Network errors: ECONNRESET, ECONNREFUSED, fetch failed, TimeoutError
+ *
+ * Backoff: 1s, 2s, 4s, 8s, 16s (exponential × 2) with ±10% jitter to avoid
+ * thundering-herd retry storms. maxRetries=5 default (configurable via opts).
+ *
+ * The platform advertises backpressure with 429/503 precisely because these
+ * are *recoverable* — the CLI should wait and retry, not exit. Only after
+ * all 5 retries exhausted does the CLI exit with code 3 (deploy failure).
+ *
+ * For non-retryable client errors (400, 401, 403, 404, 409, 422), the error
+ * is thrown immediately — no backoff. Exit codes follow spec mapping at
+ * mapError() above.
+ */
 export class ApiClient {
   private readonly baseURL: string;
   private token: string | null;
