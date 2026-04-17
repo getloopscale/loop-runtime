@@ -137,7 +137,12 @@ export function bootstrapMgmtCluster(
           kind: "Deployment",
           name: "gitea",
         },
-        minReplicas: 2,
+        // minReplicas=4: L3 v8 showed that initial burst (30 concurrent git
+        // pushes) arrives in ~10s, faster than HPA can scale from 2 → 5 (~60s).
+        // 18/100 upload failures occurred during the HPA ramp-up window.
+        // With 4 baseline replicas, the initial burst is absorbed while HPA
+        // scales to 5-8 for sustained load.
+        minReplicas: 4,
         maxReplicas: 8,
         metrics: [
           {
