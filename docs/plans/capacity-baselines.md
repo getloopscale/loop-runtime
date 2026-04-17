@@ -38,7 +38,15 @@ Serão preenchidos com primeiros runs validados após T-04 (HPAs) + T-05 (shardi
 
 | Concurrency | Target RPS | Actual RPS | p50 | p95 | p99 | Error rate | Notes |
 |---|---|---|---|---|---|---|---|
-| 20 | 50 | — | — | — | — | — | Post T-04 |
+| 10 | 20 | 19.6 | 162ms | 169ms | 404ms | 0% | **2026-04-17 14:57 UTC** — post T-01..T-07 stabilization, HPA 2 replicas |
+
+**Analysis:**
+- p95 162ms é excelente (guard é <5s) — admission path totalmente dentro do budget
+- p50 ≈ p95 means baixa variance — consistent latency
+- p99 404ms = some outliers — possivelmente retry após 429 ou idempotency lookup
+- 0% error rate @ 20 RPS é o expected dado MAX_CONCURRENT_BUILDS_PER_CELL=40 (>> request rate)
+
+**Guard:** p95 > 1s indica API struggling. p95 > 5s = hard failure (test assertion).
 
 ### gitea auth (GET /api/v1/user)
 
