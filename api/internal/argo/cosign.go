@@ -54,7 +54,11 @@ echo "Image signed successfully"
 		Image:   imageCosignSigner,
 		Command: []string{"sh", "-c", script},
 		Env: []forge.EnvBuilder{
-			forge.Env{Name: "HOME", Value: "/home/user"},
+			// Bug #39: cosign needs HOME writable for TUF cache (/.sigstore).
+			// /home/user is non-writable in the signer image under PSA restricted.
+			// /tmp is always writable. TUF_ROOT also honored by cosign.
+			forge.Env{Name: "HOME", Value: "/tmp"},
+			forge.Env{Name: "TUF_ROOT", Value: "/tmp/.sigstore/root"},
 			// COSIGN_PASSWORD is read from the secret mounted as env.
 			forge.SecretEnv{Name: "COSIGN_PASSWORD", SecretName: secretCosignKey, SecretKey: "cosign.password"},
 			// Docker config for registry auth — cosign needs this to push signatures.
