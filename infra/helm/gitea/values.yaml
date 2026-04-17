@@ -18,6 +18,9 @@ gitea:
       USER: loopzero
       PASSWD: loopzero-dev-password  # LOCAL DEV ONLY — override for production
       SSL_MODE: disable
+      MAX_OPEN_CONNS: "8"        # Bug #44 HA: 8 pods × 8 = 64 conns — under DO PG default 50 headroom
+      MAX_IDLE_CONNS: "4"
+      CONN_MAX_LIFETIME: "3600s"
     server:
       ROOT_URL: http://gitea-http.loopzero-system.svc.cluster.local:3000
       HTTP_PORT: 3000
@@ -26,6 +29,22 @@ gitea:
     metrics:
       ENABLED: true
       ENABLE_PPROF: false
+    # Bug #44 HA config (per Gitea Enterprise HA docs + helm-gitea/ha-setup.md).
+    # Without these, session/cache/queue use in-memory per-pod → auth cache
+    # misses race across pods, producing 401 mid-stream. Redis shares state.
+    session:
+      PROVIDER: redis
+      PROVIDER_CONFIG: "network=tcp,addr=gitea-redis:6379,db=0,pool_size=100,idle_timeout=180s"
+    cache:
+      ADAPTER: redis
+      HOST: "network=tcp,addr=gitea-redis:6379,db=1,pool_size=100,idle_timeout=180s"
+    queue:
+      TYPE: redis
+      CONN_STR: "network=tcp,addr=gitea-redis:6379,db=2,pool_size=100,idle_timeout=180s"
+    # Bleve repo indexer breaks HA — disable for multi-pod
+    indexer:
+      ISSUE_INDEXER_TYPE: db
+      REPO_INDEXER_ENABLED: false
 
 image:
   tag: "1.22.6"
@@ -46,23 +65,16 @@ podSecurityContext:
 
 service:
   http:
-    # Bug #44 root-cause deeper fix: NodePort (or headless ClusterIP from the
-    # gitea-http subchart) prevents kube-proxy load-balancing across HPA
-    # replicas. With NodePort + single-endpoint DNS lookup, all git pushes
-    # hit the first pod. Forcing ClusterIP with virtual IP enables round-
-    # robin across replicas.
+    # Bug #44 fix: ClusterIP virtual IP (não headless) habilita kube-proxy LB.
     type: ClusterIP
-    # clusterIP auto-assigned (not "None"!)
-    # Removed nodePort — not applicable to ClusterIP
     #
-    # Bug #44 part 3: git push is multi-step HTTP (GET info/refs, POST
-    # git-receive-pack, streaming) — without sticky session the phases
-    # land on different pods and auth session is lost → 401 + disconnect.
-    # ClientIP sessionAffinity pins a client to one pod for 180s.
-    sessionAffinity: ClientIP
-    sessionAffinityConfig:
-      clientIP:
-        timeoutSeconds: 180
+    # NO sessionAffinity — git HTTP uses Authorization header per request
+    # (stateless at transport), so ClientIP stickiness just creates
+    # hotspots when API pods have few IPs. Redis session/cache/queue
+    # (configured in gitea.config above) is the HA primitive that
+    # makes auth safe across pods. Per research:
+    # https://docs.gitea.com/enterprise/installation/high-availability
+    sessionAffinity: None
 
 persistence:
   size: 1Gi
