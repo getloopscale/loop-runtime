@@ -2662,6 +2662,11 @@ function installTenantController(
     PLATFORM_NAMESPACE,
     [
       { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "watch", "create", "update", "patch"] },
+      // Bug #36: kickStuckPullBackoffPods in EnvironmentController needs to delete pods
+      // stuck in ImagePullBackOff after ensurePullSecret provisions the secret.
+      // Without "delete" verb, the kick is a silent no-op (403 logged, pod waits for
+      // kubelet ~5min backoff instead of recovering immediately).
+      { apiGroups: [""], resources: ["pods"], verbs: ["get", "list", "delete"] },
       { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
       { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind"] },
       // PriorityClasses are cluster-scoped. Tenant controller creates per-plan classes
