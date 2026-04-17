@@ -25,6 +25,12 @@ func TestTenantMachine_ValidTransitions(t *testing.T) {
 		{"active to deleting", TenantActive, TenantDelete, TenantDeleting},
 		{"suspended to active", TenantSuspended, TenantUnsuspend, TenantActive},
 		{"suspended to deleting", TenantSuspended, TenantDelete, TenantDeleting},
+		// MEET-052: PendingDeletion state (grace period before hard delete)
+		{"active to pending deletion", TenantActive, TenantRequestDeletion, TenantPendingDeletion},
+		{"suspended to pending deletion", TenantSuspended, TenantRequestDeletion, TenantPendingDeletion},
+		{"pending deletion to deleting on grace expiry", TenantPendingDeletion, TenantGraceExpired, TenantDeleting},
+		{"pending deletion to active on restore", TenantPendingDeletion, TenantRestore, TenantActive},
+		{"pending deletion to deleting on force", TenantPendingDeletion, TenantDelete, TenantDeleting},
 	}
 
 	for _, tt := range tests {
@@ -44,6 +50,13 @@ func TestTenantMachine_DeletingIsTerminal(t *testing.T) {
 	}
 }
 
+func TestTenantMachine_PendingDeletionIsNotTerminal(t *testing.T) {
+	m := NewTenantMachine()
+	if m.IsTerminal(TenantPendingDeletion) {
+		t.Fatal("PendingDeletion should NOT be terminal — it can transition to Active (restore) or Deleting")
+	}
+}
+
 func TestTenantMachine_InvalidTransitionPanics(t *testing.T) {
 	m := NewTenantMachine()
 
@@ -55,6 +68,8 @@ func TestTenantMachine_InvalidTransitionPanics(t *testing.T) {
 		{"deleting is terminal", TenantDeleting, TenantCreate},
 		{"provisioning cannot suspend", TenantProvisioning, TenantSuspend},
 		{"empty cannot be active", TenantEmpty, TenantAllReady},
+		{"active cannot restore (not pending deletion)", TenantActive, TenantRestore},
+		{"provisioning cannot request deletion directly to deleting", TenantProvisioning, TenantRequestDeletion},
 	}
 
 	for _, tt := range tests {

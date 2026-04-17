@@ -285,6 +285,9 @@ func (p *RealProvisioner) DeleteApplications(ctx context.Context, tenantID strin
 
 	for _, app := range list.Items {
 		if err := p.client.Resource(applicationGVR).Namespace(p.namespace).Delete(ctx, app.GetName(), metav1.DeleteOptions{}); err != nil {
+			if errors.IsNotFound(err) {
+				continue // Already deleted by concurrent reconcile — idempotent
+			}
 			return fmt.Errorf("argocd: delete application %s: %w", app.GetName(), err)
 		}
 	}

@@ -103,6 +103,8 @@ type Config struct {
 	AuditWriter middleware.AuditWriter
 	// AuditHandler handles GET /api/v1/audit (requires admin+ role).
 	AuditHandler *routes.AuditHandler
+	// TenantDeletionStore handles tenant soft-delete and tombstone records. MEET-052.
+	TenantDeletionStore routes.TenantDeletionStore
 	// PlanLimiter enforces plan limits on mutation routes (Phase 1).
 	PlanLimiter *enforcement.PlanLimiter
 	// UpgradeURL is included in 402 responses when plan limits are hit.
@@ -340,6 +342,15 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.With(append(rateLimitMiddlewares, seatEnforcement)...).Post("/api/v1/teams/members", cfg.TeamHandler.Add)
 				r.With(rateLimitMiddlewares...).Delete("/api/v1/teams/members/{username}", cfg.TeamHandler.Remove)
 				r.With(rateLimitMiddlewares...).Patch("/api/v1/teams/members/{username}", cfg.TeamHandler.UpdateRole)
+			}
+
+			// Tenant deletion routes (MEET-052)
+			if cfg.TenantDeletionStore != nil {
+				tenantHandler := routes.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/tenants/{id}", tenantHandler.Delete)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/tenants/{id}/restore", tenantHandler.Restore)
+				// Force-delete and bulk-delete require admin API key
+				r.With(append(rateLimitMiddlewares, middleware.RequireAdmin)...).Post("/api/v1/tenants/bulk-delete", tenantHandler.Delete) // TODO: implement bulk handler
 			}
 
 			// Environment routes

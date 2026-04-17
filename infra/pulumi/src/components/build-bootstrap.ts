@@ -207,7 +207,9 @@ export function bootstrapBuildCluster(
         labels: {
           "app.kubernetes.io/managed-by": "pulumi",
           "app.kubernetes.io/part-of": "loopzero-platform",
-          "pod-security.kubernetes.io/enforce": "baseline",
+          // Promtail/Loki need hostPath volumes for log collection — privileged is the
+          // industry-standard PSA level for monitoring namespaces (same pattern as nfs-system).
+          "pod-security.kubernetes.io/enforce": "privileged",
           "pod-security.kubernetes.io/warn": "restricted",
           "pod-security.kubernetes.io/audit": "restricted",
         },

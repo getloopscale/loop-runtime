@@ -103,7 +103,9 @@ export function bootstrapRuntimeCluster(
           labels: {
             "app.kubernetes.io/managed-by": "pulumi",
             "app.kubernetes.io/part-of": "loopzero-platform",
-            "pod-security.kubernetes.io/enforce": "baseline",
+            // Promtail needs hostPath volumes (/var/log/pods, /var/lib/docker/containers)
+            // for log collection — privileged is required for monitoring DaemonSets.
+            "pod-security.kubernetes.io/enforce": "privileged",
             "pod-security.kubernetes.io/warn": "restricted",
             "pod-security.kubernetes.io/audit": "restricted",
           },

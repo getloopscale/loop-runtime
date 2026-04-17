@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -14,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	crcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -22,6 +24,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
+	"github.com/loopzero/loopzero/operators/internal/metrics"
 	"github.com/loopzero/loopzero/operators/internal/harbor"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/pkg/naming"
@@ -68,13 +71,14 @@ type TenantReconciler struct {
 
 // TenantControllerConfig holds configuration for the TenantController.
 type TenantControllerConfig struct {
-	GiteaURL           string
-	WorkloadClusterURL string
-	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
-	HarborClient       *harbor.Client              // nil disables Harbor integration
-	HarborRegistryHost string                       // e.g. "harbor.dev.loopzero.example"
-	Credentials        BuildCredentials             // storage + registry credentials
-	RegistryCIDRs      []string                     // CIDR ranges for container registry (RISK-007)
+	GiteaURL               string
+	WorkloadClusterURL     string
+	MinIOProvisioner       miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
+	HarborClient           *harbor.Client              // nil disables Harbor integration
+	HarborRegistryHost     string                       // e.g. "harbor.dev.loopzero.example"
+	Credentials            BuildCredentials             // storage + registry credentials
+	RegistryCIDRs          []string                     // CIDR ranges for container registry (RISK-007)
+	MaxConcurrentReconciles int                         // 0 defaults to 5 (MEET-052: backpressure for bulk deletion)
 }
 
 // Reconcile handles the reconciliation loop for Tenant resources.
@@ -296,60 +300,99 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	// Phase 2: All child Environments are gone. Clean up tenant-level resources.
 	// Track cleanup failures — finalizer is only removed when all steps succeed or
 	// resources are confirmed gone. This prevents orphaning ArgoCD apps and Gitea repos.
+	// MEET-052: Each step is instrumented with per-step duration metrics.
 	var cleanupErrors []string
 
 	// Delete Harbor project for this tenant (idempotent — no-op if HarborClient is nil)
-	if err := r.deleteHarborProject(ctx, tenant); err != nil {
+	if err := timedCleanupStep("harbor", func() error {
+		return r.deleteHarborProject(ctx, tenant)
+	}); err != nil {
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("harbor-cleanup: %v", err))
 		logger.Error(err, "cleanup failure", "step", "harbor-cleanup", "tenant", tenant.Name)
 	}
 
 	// Delete ArgoCD Applications for this tenant
-	if err := r.ArgoCDProvisioner.DeleteApplications(ctx, tenant.Name); err != nil {
+	if err := timedCleanupStep("argocd-apps", func() error {
+		return r.ArgoCDProvisioner.DeleteApplications(ctx, tenant.Name)
+	}); err != nil {
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("argocd-cleanup: %v", err))
 		logger.Error(err, "cleanup failure", "step", "argocd-cleanup", "tenant", tenant.Name)
 	}
 
 	// Delete ArgoCD AppProject for this tenant (MOD-5)
-	if err := r.ArgoCDProvisioner.DeleteAppProject(ctx, tenant.Name); err != nil {
+	if err := timedCleanupStep("argocd-appproject", func() error {
+		return r.ArgoCDProvisioner.DeleteAppProject(ctx, tenant.Name)
+	}); err != nil {
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("argocd-appproject-cleanup: %v", err))
 		logger.Error(err, "cleanup failure", "step", "argocd-appproject-cleanup", "tenant", tenant.Name)
 	}
 
 	// Delete namespaces on build cluster (build-{tenant})
-	var buildNsList corev1.NamespaceList
-	if err := r.BuildClient.List(ctx, &buildNsList, client.MatchingLabels{constants.LabelTenant: tenant.Name}); err != nil {
-		cleanupErrors = append(cleanupErrors, fmt.Sprintf("list-build-ns: %v", err))
-		logger.Error(err, "cleanup failure on build cluster", "step", "list-build-ns")
-	} else {
+	if err := timedCleanupStep("build-ns", func() error {
+		var buildNsList corev1.NamespaceList
+		if err := r.BuildClient.List(ctx, &buildNsList, client.MatchingLabels{constants.LabelTenant: tenant.Name}); err != nil {
+			return err
+		}
 		for i := range buildNsList.Items {
 			if buildNsList.Items[i].DeletionTimestamp.IsZero() {
 				if err := r.BuildClient.Delete(ctx, &buildNsList.Items[i]); err != nil && !errors.IsNotFound(err) {
-					return ctrl.Result{}, err
+					return err
 				}
 			}
 		}
+		return nil
+	}); err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("build-ns-cleanup: %v", err))
+		logger.Error(err, "cleanup failure on build cluster", "step", "build-ns-cleanup")
 	}
 
 	// Delete MinIO credentials for this tenant (arch_op_008: cleanup on deletion)
 	if r.MinIOProvisioner != nil {
-		if err := r.MinIOProvisioner.DeleteTenantCredentials(ctx, tenant.Name); err != nil {
+		if err := timedCleanupStep("minio", func() error {
+			return r.MinIOProvisioner.DeleteTenantCredentials(ctx, tenant.Name)
+		}); err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Sprintf("minio-cleanup: %v", err))
 			logger.Error(err, "cleanup failure", "step", "minio-cleanup", "tenant", tenant.Name)
 		}
 	}
 
 	// Archive Gitea repo (soft delete, idempotent)
-	if err := r.GitProvisioner.ArchiveRepo(ctx, tenant.Spec.GitOps.RepoName); err != nil {
+	if err := timedCleanupStep("gitea", func() error {
+		return r.GitProvisioner.ArchiveRepo(ctx, tenant.Spec.GitOps.RepoName)
+	}); err != nil {
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("gitea-archive: %v", err))
 		logger.Error(err, "cleanup failure", "step", "gitea-archive", "repo", tenant.Spec.GitOps.RepoName)
 	}
 
-	// If any cleanup step failed, requeue to retry instead of removing the finalizer.
-	// This prevents orphaning external resources (ArgoCD Applications, Gitea repos).
+	// If any cleanup step failed, apply exponential backoff (MEET-052).
+	// After DeletionMaxAttempts, stop requeuing and emit critical log for alerting.
 	if len(cleanupErrors) > 0 {
-		logger.Info("cleanup incomplete, requeuing", "failures", len(cleanupErrors), "details", cleanupErrors)
-		return ctrl.Result{RequeueAfter: constants.RequeueDeletionWait}, nil
+		retryCount := getDeletionRetryCount(tenant)
+		retryCount++
+
+		if retryCount >= constants.DeletionMaxAttempts {
+			logger.Error(fmt.Errorf("cleanup stuck after %d attempts: %v", retryCount, cleanupErrors),
+				"tenant deletion stuck — manual intervention required",
+				"tenant", tenant.Name, "attempts", retryCount)
+			// Update annotation to reflect final count but do NOT requeue.
+			// PrometheusRule loopzero_tenant_deletion_stuck will alert on this.
+			metrics.TenantDeletionStuckTotal.Inc()
+			setDeletionRetryCount(tenant, retryCount)
+			if err := r.Update(ctx, tenant); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+
+		backoff := deletionBackoff(retryCount)
+		logger.Info("cleanup incomplete, requeuing with backoff",
+			"failures", len(cleanupErrors), "attempt", retryCount,
+			"backoff", backoff.String(), "details", cleanupErrors)
+		setDeletionRetryCount(tenant, retryCount)
+		if err := r.Update(ctx, tenant); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: backoff}, nil
 	}
 
 	// Phase 3: Verify build namespaces are gone.
@@ -371,6 +414,60 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 
 	logger.Info("tenant deletion complete", "tenant", tenant.Name)
 	return ctrl.Result{}, nil
+}
+
+// timedCleanupStep executes a cleanup function and records its duration to Prometheus.
+// MEET-052: Per-step metrics for deletion observability.
+func timedCleanupStep(step string, fn func() error) error {
+	start := time.Now()
+	err := fn()
+	duration := time.Since(start).Seconds()
+	result := "success"
+	if err != nil {
+		result = "error"
+	}
+	metrics.TenantDeletionStepDuration.WithLabelValues(step, result).Observe(duration)
+	return err
+}
+
+// getDeletionRetryCount reads the deletion retry count from the tenant annotation.
+func getDeletionRetryCount(tenant *loopzerov1.Tenant) int {
+	annotations := tenant.GetAnnotations()
+	if annotations == nil {
+		return 0
+	}
+	v, ok := annotations[constants.AnnotationDeletionRetryCount]
+	if !ok {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// setDeletionRetryCount writes the deletion retry count to the tenant annotation.
+func setDeletionRetryCount(tenant *loopzerov1.Tenant, count int) {
+	annotations := tenant.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations[constants.AnnotationDeletionRetryCount] = strconv.Itoa(count)
+	tenant.SetAnnotations(annotations)
+}
+
+// deletionBackoff calculates exponential backoff for deletion cleanup retries.
+// Formula: min(base * 2^attempt, max). MEET-052.
+func deletionBackoff(attempt int) time.Duration {
+	backoff := constants.DeletionBackoffBase
+	for i := 0; i < attempt; i++ {
+		backoff *= 2
+		if backoff >= constants.DeletionBackoffMax {
+			return constants.DeletionBackoffMax
+		}
+	}
+	return backoff
 }
 
 // reconcileEnvironmentCRs creates/updates Environment CRs for each spec.environments[],
@@ -467,10 +564,15 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 	if workloadClusterURL == "" {
 		workloadClusterURL = constants.DefaultWorkloadClusterURL
 	}
+	maxConcurrent := cfg.MaxConcurrentReconciles
+	if maxConcurrent <= 0 {
+		maxConcurrent = 5 // MEET-052: default backpressure for bulk deletion
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.Tenant{}).
 		Owns(&loopzerov1.Environment{}).
 		Named("tenant").
+		WithOptions(crcontroller.Options{MaxConcurrentReconciles: maxConcurrent}).
 		Complete(&TenantReconciler{
 			Client:             mgr.GetClient(),
 			Scheme:             mgr.GetScheme(),

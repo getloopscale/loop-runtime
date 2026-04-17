@@ -7,7 +7,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,10 +36,11 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/httpclient"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/operators/internal/tracing"
+	cb "github.com/loopzero/loopzero/pkg/circuitbreaker"
 	"github.com/loopzero/loopzero/pkg/logging"
 
 	// Register metrics package so prometheus.MustRegister runs at init.
-	_ "github.com/loopzero/loopzero/operators/internal/metrics"
+	opmetrics "github.com/loopzero/loopzero/operators/internal/metrics"
 )
 
 var scheme = runtime.NewScheme()
@@ -134,7 +137,19 @@ func main() {
 		setupLog.Error(nil, "GITEA_TOKEN is required")
 		os.Exit(1)
 	}
-	gitProvisioner := gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero")
+	// MEET-052: circuit breaker state change logger + metrics for provisioner clients.
+	cbStateLogger := func(name string, from, to cb.State) {
+		slog.Info("circuit breaker state change",
+			"breaker", name, "from", from.String(), "to", to.String())
+		opmetrics.TenantCircuitBreakerState.WithLabelValues(name).Set(float64(to))
+	}
+
+	gitProvisionerRaw := gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero")
+	giteaCB := cb.New(cb.Config{
+		Name: "gitea", OpenThreshold: 5, CloseThreshold: 1,
+		RetryInterval: 120 * time.Second,
+	}, cbStateLogger)
+	gitProvisioner := gitea.NewCircuitBreakerProvisioner(gitProvisionerRaw, giteaCB, slog.Default())
 
 	argoCDNamespace := os.Getenv("ARGOCD_NAMESPACE")
 	if argoCDNamespace == "" {
@@ -147,7 +162,12 @@ func main() {
 		setupLog.Error(err, "unable to create dynamic client for ArgoCD provisioner")
 		os.Exit(1)
 	}
-	argoCDProvisioner := argocd.NewRealProvisioner(argoCDNamespace, dynClient)
+	argoCDProvisionerRaw := argocd.NewRealProvisioner(argoCDNamespace, dynClient)
+	argoCDCB := cb.New(cb.Config{
+		Name: "argocd", OpenThreshold: 5, CloseThreshold: 1,
+		RetryInterval: 120 * time.Second,
+	}, cbStateLogger)
+	argoCDProvisioner := argocd.NewCircuitBreakerProvisioner(argoCDProvisionerRaw, argoCDCB, slog.Default())
 
 	workloadClusterURL := os.Getenv("WORKLOAD_CLUSTER_URL")
 	if workloadClusterURL == "" {
@@ -265,13 +285,20 @@ func main() {
 		setupLog.Info("harbor integration disabled — HARBOR_URL not set")
 	}
 
+	tenantMaxConcurrent := 0 // defaults to 5 in SetupTenantController (MEET-052)
+	if v := os.Getenv("LOOPZERO_TENANT_MAX_CONCURRENT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			tenantMaxConcurrent = n
+		}
+	}
 	if err := controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, controller.TenantControllerConfig{
-		GiteaURL:           giteaURL,
-		WorkloadClusterURL: workloadClusterURL,
-		MinIOProvisioner:   minIOProvisioner,
-		HarborClient:       harborClient,
-		HarborRegistryHost: harborRegistryHost,
-		RegistryCIDRs:      registryCIDRs,
+		GiteaURL:                giteaURL,
+		WorkloadClusterURL:      workloadClusterURL,
+		MinIOProvisioner:        minIOProvisioner,
+		HarborClient:            harborClient,
+		HarborRegistryHost:      harborRegistryHost,
+		RegistryCIDRs:           registryCIDRs,
+		MaxConcurrentReconciles: tenantMaxConcurrent,
 		Credentials: controller.BuildCredentials{
 			MinIOEndpoint:        minIOEndpoint,
 			SpacesAccessKeyID:    os.Getenv("SPACES_ACCESS_KEY_ID"),

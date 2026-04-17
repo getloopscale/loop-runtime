@@ -74,6 +74,18 @@ const (
 const (
 	// DefaultMaxRetries is the fallback for PlatformBootstrap when spec.maxRetries is unset.
 	DefaultMaxRetries = 10
+
+	// DeletionMaxAttempts is the maximum number of cleanup retry attempts before
+	// the controller stops requeuing and emits a critical alert. MEET-052.
+	DeletionMaxAttempts = 10
+
+	// DeletionBackoffBase is the base delay for exponential backoff on deletion
+	// cleanup failures. Actual delay = min(base * 2^attempt, DeletionBackoffMax). MEET-052.
+	DeletionBackoffBase = 5 * time.Second
+
+	// DeletionBackoffMax is the ceiling for exponential backoff on deletion
+	// cleanup failures. MEET-052.
+	DeletionBackoffMax = 5 * time.Minute
 )
 
 // --- DO Registry Credential Expiry ---
