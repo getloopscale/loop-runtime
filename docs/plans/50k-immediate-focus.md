@@ -652,3 +652,8 @@ A promise `TODAS AS TASKS, CRITERIOS DE ACEITES, DODs CONCLUIDOS E VALIDADOS` s�
 - **v1.2 (2026-04-17 PM):** L3 v9..v14 rodadas. v14 final 62/100 — runtime capacity bottleneck descoberto. T-08 adicionado (runtime nodes bump + DO droplet quota). T-09 adicionado (10× consecutivo gate). Gitea HPA maxReplicas bumpado 8→12.
 - **v1.3 (2026-04-17 17:00):** API T-02 wired (PostgresTenantStore + AdminEvictHandler + 15 tests passing). Runtime cleanup executado (100 tenants evicted). Next-iteration checklist adicionado. Commits: ba26abb, 94e8ae9.
 - **v1.4 (2026-04-17 17:10):** API T-02 DB teardown implementado — DeleteTenantsFKOrdered atomic transaction (8 tabelas em FK order) via `EnqueueEviction`. 10 service tests passing. K8s cluster teardown ainda via bash (phase 2). Commit: e79b50e.
+- **v1.5 (2026-04-17 17:20):** SRE Guardian iter 15 action items resolvidos:
+  - [HIGH] Gitea HPA maxReplicas 8→12: source (ba26abb) + live aligned via kubectl patch.
+  - [MEDIUM] 4 Error workflows: resolvidos pelo cleanup completo (tenant eviction removeu workflows órfãos).
+  - [LOW] Harbor canary broken: root-cause 2 camadas — (1) secret `harbor-admin-credentials` ausente (Helm não cria), (2) projeto `loopzero-platform` ausente no Harbor (harbor-init desabilitado). Fix (6ffa736): Pulumi cria secret + projeto criado via API. Canary agora retorna "OK: Harbor canary passed".
+  - [CRITICAL] T-08 Runtime capacity: permanece bloqueado em DO droplet quota (ação humana).
