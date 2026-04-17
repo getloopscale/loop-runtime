@@ -334,6 +334,18 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		log.FromContext(ctx).Info("pull secret ensure failed (non-fatal)", "error", err.Error(), "namespace", nsName)
 	}
 
+	// Bug #24 complement: if a pod was already Pending with ImagePullBackOff
+	// (because ArgoCD sync created it BEFORE this reconcile ran and provisioned
+	// the pull secret), kubelet caches the 401 and won't retry with the new
+	// secret. Delete stuck pods so their ReplicaSet recreates them with the
+	// now-valid imagePullSecrets on loopzero-app SA.
+	//
+	// Non-fatal: if pod list/delete fails, the pod may self-recover later
+	// (kubelet does eventually retry) or manual intervention will fix it.
+	if err := r.kickStuckPullBackoffPods(ctx, nsName); err != nil {
+		log.FromContext(ctx).Info("kick stuck pull-backoff pods failed (non-fatal)", "error", err.Error(), "namespace", nsName)
+	}
+
 	appSA := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "loopzero-app",
@@ -401,6 +413,45 @@ func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, nsName str
 	})
 	if err != nil {
 		return fmt.Errorf("destination pull secret %s/loopzero-infra-registry: %w", nsName, err)
+	}
+	return nil
+}
+
+// kickStuckPullBackoffPods deletes pods in the namespace that are stuck in
+// ImagePullBackOff or ErrImagePull. When ArgoCD sync creates a pod BEFORE
+// this controller has provisioned the imagePullSecret, kubelet caches the 401
+// failure and won't retry with the new secret. Deleting the pod forces the
+// ReplicaSet to recreate it, which picks up the now-valid imagePullSecrets
+// from the loopzero-app ServiceAccount.
+//
+// Bug #24 complement (scale-50k L2). Idempotent — no-op if no stuck pods.
+func (r *EnvironmentReconciler) kickStuckPullBackoffPods(ctx context.Context, nsName string) error {
+	var pods corev1.PodList
+	if err := r.RuntimeClient.List(ctx, &pods, client.InNamespace(nsName)); err != nil {
+		return fmt.Errorf("list pods in %s: %w", nsName, err)
+	}
+	var kicked int
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		if pod.DeletionTimestamp != nil {
+			continue // already being deleted
+		}
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.State.Waiting != nil &&
+				(cs.State.Waiting.Reason == "ImagePullBackOff" || cs.State.Waiting.Reason == "ErrImagePull") {
+				if err := r.RuntimeClient.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+					log.FromContext(ctx).Info("kick pod failed",
+						"pod", pod.Name, "namespace", nsName, "error", err.Error())
+					continue
+				}
+				kicked++
+				break
+			}
+		}
+	}
+	if kicked > 0 {
+		log.FromContext(ctx).Info("kicked stuck pull-backoff pods",
+			"namespace", nsName, "count", kicked)
 	}
 	return nil
 }
