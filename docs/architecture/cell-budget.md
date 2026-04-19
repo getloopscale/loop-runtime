@@ -238,6 +238,57 @@ minutes. Item 08 (progressive load validation) is the validation gate.
    (Django, Rails, Next.js) will be bigger. Must measure against the
    top-3 framework templates.
 
+## Validation procedures
+
+Each assumption in the previous section has a corresponding capacity test
+in `infra/tests/capacity/`. These tests produce JSON results to
+`/tmp/capacity-bench/` that can be compared against the projections above.
+
+| Assumption | Test | Projected | Metric | Result file |
+|---|---|---|---|---|
+| Go memory under load | `TestCapacityGoMemory` | 200-300 Mi peak | `go_memstats_heap_inuse_bytes` | `go-memory-*.json` |
+| BuildKit concurrent solves | `TestCapacityBuildKitConcurrency` | ~4/node | `loopzero_builds_active` peak | `buildkit-concurrency-*.json` |
+| ArgoCD memory per app | `TestCapacityArgoCDMemoryPerApp` | ~500 kB/app | `go_memstats_heap_inuse_bytes` delta/N | `argocd-memory-*.json` |
+| Gitea push latency | `TestCapacityGiteaPushLatency` | p95 < 2s at 100 repos | wall-clock `git push` | `gitea-push-*.json` |
+| Pod memory by framework | `TestCapacityPodMemoryByFramework` | ~50 Mi avg | `kubectl top pod` | `pod-memory-*.json` |
+
+### Running validation
+
+```bash
+# Set up port-forwards for metrics endpoints
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+  port-forward svc/loopzero-api-metrics 19090:9090 &
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n argocd \
+  port-forward svc/argocd-metrics 18082:8082 &
+
+# Run full validation suite
+LOOPZERO_API_URL=https://api.dev.loopzero.example \
+LOOPZERO_API_METRICS_URL=http://localhost:19090 \
+LOOPZERO_ARGOCD_METRICS_URL=http://localhost:18082 \
+LOOPZERO_SERVICE_AUTH=<token> \
+LOOPZERO_APP_DOMAIN=dev.loopzero.example \
+LOOPZERO_MGMT_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-mgmt \
+LOOPZERO_RUNTIME_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-runtime \
+LOOPZERO_GITEA_URL=http://localhost:13000 \
+LOOPZERO_GITEA_USER=gitea_admin \
+LOOPZERO_GITEA_PASS=<password> \
+./infra/tests/capacity/run-capacity.sh all
+```
+
+### Interpreting results
+
+Each JSON result includes an `actual_vs_projected` ratio:
+
+- **< 0.5**: Projection overly conservative. Consider tightening budget.
+- **0.5–1.5**: Projection validated. No action needed.
+- **> 1.5**: Projection too optimistic. Update budget and thresholds.
+- **> 2.0**: RED — projection significantly wrong. Immediate budget revision required.
+
+Pod memory results report per-framework, enabling the cell planner to use
+weighted averages based on actual tenant framework distribution instead
+of the single-fixture 50 Mi guess. Frameworks are sourced from
+[getloopscale/loopzero-stacks](https://github.com/getloopscale/loopzero-stacks) templates.
+
 ## Rollout sequence
 
 1. **Ship this doc** (iteration 7).

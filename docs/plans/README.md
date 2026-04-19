@@ -56,6 +56,34 @@ Lidos em ordem cronologica para entender a evolucao:
 | [scale-50k-technical-debt.md](scale-50k-technical-debt.md) | 26 bugs em matriz de sobrevivencia a destroy+recreate, cell-ready vs cell-deployed |
 | [scale-50k-slo-bottlenecks.md](scale-50k-slo-bottlenecks.md) | 11 gargalos identificados, L2 real 1.15 deploys/min vs SLO 5/min |
 
+### Capacity Validation
+
+| Arquivo | Escopo | Quando ler |
+|---------|--------|------------|
+| [cell-budget.md](../architecture/cell-budget.md) | Capacity budget por celula, thresholds yellow/red, 5 suposicoes a validar | Antes de rodar capacity tests ou ajustar sizing |
+
+**Suite de validacao:** `infra/tests/capacity/` — 5 testes que validam as suposicoes "educated guess" do cell-budget contra medidas reais no DO.
+
+| Teste | Suposicao | Projecao | Metrica |
+|-------|-----------|----------|---------|
+| `TestCapacityGoMemory` | Memoria Go sob carga | 200-300 Mi peak | `go_memstats_heap_inuse_bytes` |
+| `TestCapacityBuildKitConcurrency` | BuildKit solves/no | ~4/no | `loopzero_builds_active` peak |
+| `TestCapacityArgoCDMemoryPerApp` | ArgoCD mem/app | ~500 kB/app | `go_memstats_heap_inuse_bytes` delta |
+| `TestCapacityGiteaPushLatency` | Gitea push latency | p95 < 2s a 100 repos | wall-clock `git push` |
+| `TestCapacityPodMemoryByFramework` | Pod memory real | ~50 Mi avg | `kubectl top pod` |
+
+Fixtures de pod-memory vem do [getloopscale/loopzero-stacks](https://github.com/getloopscale/loopzero-stacks) (templates reais: Go, Node, Python, Ruby, Rust).
+
+```bash
+# Rodar suite completa (requer port-forwards + tokens DO)
+./infra/tests/capacity/run-capacity.sh all
+
+# Rodar teste individual
+./infra/tests/capacity/run-capacity.sh argocd-memory
+```
+
+Resultados em `/tmp/capacity-bench/*.json`. Interpretar ratio `actual_vs_projected`: <0.5 conservador, 0.5-1.5 validado, >1.5 otimista, >2.0 revisao urgente.
+
 ### Infraestrutura
 
 | Arquivo | Escopo | Quando ler |
