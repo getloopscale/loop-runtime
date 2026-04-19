@@ -624,13 +624,14 @@ func main() {
 
 		// ADR-0008: Cell Router — resolves cell_id to cluster connection details.
 		//
-		// Phase 0.3 (scale-50k-plan): try DynamicRouter first (reads from
-		// K8sCellStore / ClusterCredential CRDs). If no CRDs are found
-		// (single-cell / dev), fall back to StaticRouter with cell-default.
-		// This makes the API automatically discover new cells as they are
-		// provisioned via Pulumi without any code changes.
+		// MEET-053: Cell Router setup.
+		// Priority: LOOPZERO_SINGLE_CELL=true (forced StaticRouter) > DynamicRouter > StaticRouter fallback.
+		// DynamicRouter reads ClusterCredential CRDs from the mgmt cluster.
+		// StaticRouter is the fallback when DynamicRouter is disabled or finds 0 cells.
 		var useDynamicRouter bool
-		if cfg.DynamicRouter {
+		if cfg.SingleCell {
+			logger.Warn("cell router: LOOPZERO_SINGLE_CELL=true — forced single-cell mode (rollback)")
+		} else if cfg.DynamicRouter {
 			// K8sCellStore reads ClusterCredential CRDs from the mgmt cluster.
 			// nil restConfig = in-cluster config (API runs on mgmt cluster).
 			// Namespace = platform-system (where ClusterCredentials live).
@@ -984,9 +985,11 @@ func main() {
 				admissionCfg.MaxConcurrentPerTenant = cfg.MaxConcurrentBuildsPerTenant
 			}
 			gate := admission.NewBuildGate(querier, admissionCfg, cfg.AdmissionControl)
+			// MEET-053 A-06: Resolve cell_id per-request from tenant's placement
+			// instead of hardcoded DefaultCellID. cellStore implements GetTenantCellID.
 			buildHandler = buildHandler.WithAdmission(
 				admission.NewRouteAdapter(gate),
-				placement.DefaultCellID, // single-cell for now; roadmap 06 routing picks the cell per tenant
+				cellStore,
 			)
 			if cfg.AdmissionControl {
 				logger.Info("build admission gate enabled",

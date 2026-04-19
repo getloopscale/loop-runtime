@@ -183,6 +183,12 @@ type Config struct {
 	// cells are found, the API auto-discovers new cells without restart.
 	// Env: LOOPZERO_DYNAMIC_ROUTER
 	DynamicRouter bool
+
+	// SingleCell forces StaticRouter regardless of DynamicRouter config.
+	// Use as rollback mechanism when multi-cell discovery has issues.
+	// MEET-2026-04-18-053: multi-cell-default rollback flag.
+	// Env: LOOPZERO_SINGLE_CELL
+	SingleCell bool
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -316,6 +322,7 @@ func Load() Config {
 		// Scale 50k plan — Phase 0.2/0.3 feature flags.
 		UsePGClaims:   os.Getenv("LOOPZERO_USE_PG_CLAIMS") == "true",
 		DynamicRouter: os.Getenv("LOOPZERO_DYNAMIC_ROUTER") == "true",
+		SingleCell:    os.Getenv("LOOPZERO_SINGLE_CELL") == "true",
 	}
 }
 

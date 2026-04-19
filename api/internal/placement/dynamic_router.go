@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/loopzero/loopzero/api/internal/metrics"
 )
 
 // CellStore is the interface for loading cell configurations.
@@ -89,10 +91,27 @@ func (r *DynamicRouter) refresh(ctx context.Context) error {
 		newCells[cfg.CellID] = cfg
 	}
 
+	// MEET-053 A-03: Stale-data protection.
+	// Never replace a non-empty cell map with an empty set from a poll.
+	// A K8s API hiccup returning 0 CRDs would otherwise wipe all cells
+	// and orphan every tenant until the next successful refresh (60s).
 	r.mu.Lock()
+	previousCount := len(r.cells)
+	if len(newCells) == 0 && previousCount > 0 {
+		r.mu.Unlock()
+		r.logger.Error("cell refresh returned 0 cells but router has active cells — refusing to clear (stale-data protection)",
+			"previous_count", previousCount)
+		metrics.CellDiscoveryCount.Set(float64(previousCount))
+		return fmt.Errorf("cell refresh: 0 cells returned, refusing to clear %d known cells", previousCount)
+	}
+	if len(newCells) < previousCount {
+		r.logger.Warn("cell count decreased", "previous", previousCount, "current", len(newCells))
+	}
 	r.cells = newCells
 	r.mu.Unlock()
 
+	// MEET-053 A-09: Emit discovery count metric for alerting.
+	metrics.CellDiscoveryCount.Set(float64(len(newCells)))
 	r.logger.Info("cell list refreshed", "count", len(newCells))
 	return nil
 }
@@ -123,4 +142,27 @@ func (r *DynamicRouter) ListCells(_ context.Context) ([]CellConfig, error) {
 		cells = append(cells, cfg)
 	}
 	return cells, nil
+}
+
+// DiscoveredCellCount returns the number of cells currently in the router.
+// MEET-053 A-04: Implements routes.CellDiscoveryChecker.
+func (r *DynamicRouter) DiscoveredCellCount() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.cells)
+}
+
+// IsDynamic returns true — DynamicRouter is always dynamic.
+func (r *DynamicRouter) IsDynamic() bool { return true }
+
+// ListCellIDs returns all known cell IDs (no connection details).
+// MEET-053 A-07: Implements services.CellLister for BuildReconcileLoop.
+func (r *DynamicRouter) ListCellIDs(_ context.Context) ([]string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := make([]string, 0, len(r.cells))
+	for id := range r.cells {
+		ids = append(ids, id)
+	}
+	return ids, nil
 }

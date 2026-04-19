@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
@@ -23,10 +24,21 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 	userID := fmt.Sprintf("github-%s", req.AdminLogin)
 	tenantID := fmt.Sprintf("tn-%s", req.TenantSlug)
 
+	// MEET-053 D-01: Use the serializer transaction if available.
+	// When AssignCell runs under the advisory lock serializer, it injects
+	// the transaction into the context. Using it here ensures that the
+	// count-and-pick (AssignCell) and the tenant INSERT execute in the same
+	// transaction, fixing the TOCTOU race where two concurrent creates
+	// could both read the same cell counts and both pick the same cell.
+	db := s.DB
+	if tx := placement.TxFromContext(ctx); tx != nil {
+		db = &PgxTxAdapter{Tx: tx}
+	}
+
 	anyCreated := false
 
 	// 1. INSERT user (ON CONFLICT by id → DO NOTHING)
-	res, err := s.DB.Exec(ctx,
+	res, err := db.Exec(ctx,
 		`INSERT INTO users (id, email, github_id, display_name)
 		 VALUES ($1, $2, $3, $4)
 		 ON CONFLICT (id) DO NOTHING`,
@@ -53,7 +65,7 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 	if cellID == "" {
 		cellID = "cell-default"
 	}
-	res, err = s.DB.Exec(ctx,
+	res, err = db.Exec(ctx,
 		`INSERT INTO tenants (id, display_name, slug, owner_id, cell_id)
 		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (id) DO NOTHING`,
@@ -71,7 +83,7 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 	}
 
 	// 3. INSERT tenant membership (ON CONFLICT by (tenant_id, user_id) → DO NOTHING)
-	res, err = s.DB.Exec(ctx,
+	res, err = db.Exec(ctx,
 		`INSERT INTO tenant_members (tenant_id, user_id, role)
 		 VALUES ($1, $2, 'owner')
 		 ON CONFLICT (tenant_id, user_id) DO NOTHING`,
@@ -92,7 +104,7 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.Boots
 		plan = "starter"
 	}
 	subID := fmt.Sprintf("sub_bootstrap_%s", tenantID)
-	res, err = s.DB.Exec(ctx,
+	res, err = db.Exec(ctx,
 		`INSERT INTO subscriptions (id, tenant_id, plan, status, created_at, updated_at)
 		 VALUES ($1, $2, $3, 'active', now(), now())
 		 ON CONFLICT (tenant_id) DO NOTHING`,

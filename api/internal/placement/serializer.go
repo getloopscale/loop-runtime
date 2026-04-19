@@ -12,6 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// txKey is the context key for the serializer transaction.
+// MEET-053 D-01: Allows downstream code (e.g., bootstrap INSERT) to use the
+// same transaction that holds the advisory lock, fixing the TOCTOU bug where
+// the count-and-pick runs under the lock but the INSERT runs outside it.
+type txKeyType struct{}
+
+var txKey = txKeyType{}
+
+// TxFromContext extracts the serializer transaction from the context.
+// Returns nil if no transaction is active (non-serialized path).
+func TxFromContext(ctx context.Context) pgx.Tx {
+	tx, _ := ctx.Value(txKey).(pgx.Tx)
+	return tx
+}
+
 // NewAdvisoryLockSerializer returns a Serializer that acquires a
 // transaction-scoped Postgres advisory lock before invoking the callback.
 // Use this in production so concurrent `AssignCell` calls — even across
@@ -55,7 +70,12 @@ func NewAdvisoryLockSerializer(pool *pgxpool.Pool) Serializer {
 			return fmt.Errorf("placement serializer: acquire advisory lock: %w", err)
 		}
 
-		if err := fn(ctx); err != nil {
+		// MEET-053 D-01: Inject tx into context so downstream code can use
+		// the same transaction. This fixes the TOCTOU bug where AssignCell
+		// runs under the lock but the tenant INSERT ran on a separate connection.
+		txCtx := context.WithValue(ctx, txKey, tx)
+
+		if err := fn(txCtx); err != nil {
 			return err // caller wants this error verbatim; defer rolls back
 		}
 

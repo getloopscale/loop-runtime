@@ -1,130 +1,144 @@
 # Plans
 
-Planos de engenharia do LoopZero Platform. Cada documento aqui representa uma decisao aprovada, um plano executavel, ou licoes aprendidas em producao real (DigitalOcean).
-
-**Regra:** decisoes sao gated por load tests reais (HTTP 200 verificado), nao estimativas teoricas.
+Planos de engenharia do LoopZero Platform. Cada documento representa uma decisao aprovada ou um plano executavel. Decisoes sao gated por load tests reais (HTTP 200 verificado), nao estimativas.
 
 ---
 
-## Estado Atual (2026-04-17)
+## Estado Atual (2026-04-19)
+
+### Scale Validation
 
 | Nivel | Tenants | Apps | Status |
-|-------|---------|------|--------|
-| L1 | 10 | 20 | PASSED 10/10 |
-| L2 | 50 | 100 | PASSED 50/50 |
-| L3 | 100 | 200 | Best 75/100 (v8). Bloqueado: runtime capacity (DO droplet quota) |
-| L4+ | 500+ | 1000+ | Requer multi-cell (codigo pronto, zero cells ativas) |
+|:-----:|:-------:|:----:|--------|
+| L1 | 10 | 20 | :white_check_mark: PASSED 10/10 |
+| L2 | 50 | 100 | :white_check_mark: PASSED 50/50 |
+| L3 | 100 | 200 | :arrow_forward: Quota desbloqueada — pronto para re-run |
+| L4+ | 500+ | 1000+ | Requer multi-cell ativado |
 
-**Blocker principal:** DO droplet quota + Pulumi state drift. Contingencia: `LOOPZERO_LEAN_RESOURCES=true`.
+### Blockers Ativos
 
----
+| Blocker | Severidade | Plano | Status |
+|---------|:----------:|-------|--------|
+| Alertmanager → /dev/null | :red_circle: SRE VETO | `multi-cloud-aws-do-plan.md` P0 | Bloqueia tudo |
+| Multi-cell Phase B (ClusterCredential CR) | :yellow_circle: HIGH | `multi-cell-default-roadmap.md` B-01 | Codigo pronto, falta Pulumi |
+| Multi-cell Phase C (flip DynamicRouter) | :yellow_circle: HIGH | `multi-cell-default-roadmap.md` C-01 | Requer Phase B |
+| AWS Pulumi provider (stub) | :yellow_circle: HIGH | `multi-cloud-aws-do-plan.md` P2 | Nao iniciado |
 
-## Indice por Categoria
+### Maturidade
 
-### Roadmap Cell-Based (Phase 0 a 50k)
-
-| Arquivo | Escopo | Quando ler |
-|---------|--------|------------|
-| [cell-architecture-overview.md](cell-architecture-overview.md) | Master roadmap Phase 0 a 50k, dependencias topologicas, invariants | Primeiro — visao geral de onde estamos |
-| [cell-architecture-phase2.md](cell-architecture-phase2.md) | Phase 2a (hardening shared services) + 2b (cell-2 real + chaos video) | Quando Phase 2a iniciar |
-| [cell-architecture-phase3.md](cell-architecture-phase3.md) | Automacao: add-cell em 15min, migration, per-cell ArgoCD, PG HA | Apos Phase 2b completa |
-| [cell-architecture-phase4.md](cell-architecture-phase4.md) | Otimizacao 5k a 50k: multi-region, Harbor geo-rep, PG partitioning | Apos Phase 3 completa |
-
-### Plano Master de Scale
-
-| Arquivo | Escopo | Quando ler |
-|---------|--------|------------|
-| [scale-50k-plan.md](scale-50k-plan.md) | Plano completo L0 a L6, 6 fases, 16 semanas, deploys reais, chaos suite | Referencia canonica para load tests |
-| [load-test-plan.md](load-test-plan.md) | Detalhamento L0 a L7 (ate 500k), cenarios por nivel, cost projection | Complemento ao scale-50k-plan |
-
-### Foco Imediato
-
-| Arquivo | Escopo | Quando ler |
-|---------|--------|------------|
-| [50k-immediate-focus.md](50k-immediate-focus.md) | 9 tasks para destravar L3, gates, status de cada task, next-iteration checklist | Diariamente — ponto de retomada do trabalho |
-
-### Learnings (diario de execucao)
-
-Lidos em ordem cronologica para entender a evolucao:
-
-| Arquivo | Escopo |
-|---------|--------|
-| [scale-50k-day1-learnings.md](scale-50k-day1-learnings.md) | Dia 1: Phase 0 wiring, 9 bugs pipeline (crane distroless, cosign SHA, xargs), 6/10 apps live |
-| [scale-50k-day2-learnings.md](scale-50k-day2-learnings.md) | Dia 2: L1 10/10 PASSED (marco historico), 15 bugs corrigidos, callback race, BuildReaper zero-value |
-| [scale-50k-l2-learnings.md](scale-50k-l2-learnings.md) | L2 50/50, Phase 0 ativada, Pulumi drift catastrofico, imagePullSecret race |
-| [scale-50k-l3-readiness.md](scale-50k-l3-readiness.md) | L3 v1 a v14 iterations, evolucao de bugs cascading para infra sizing |
-| [scale-50k-technical-debt.md](scale-50k-technical-debt.md) | 26 bugs em matriz de sobrevivencia a destroy+recreate, cell-ready vs cell-deployed |
-| [scale-50k-slo-bottlenecks.md](scale-50k-slo-bottlenecks.md) | 11 gargalos identificados, L2 real 1.15 deploys/min vs SLO 5/min |
-
-### Capacity Validation
-
-| Arquivo | Escopo | Quando ler |
-|---------|--------|------------|
-| [cell-budget.md](../architecture/cell-budget.md) | Capacity budget por celula, thresholds yellow/red, 5 suposicoes a validar | Antes de rodar capacity tests ou ajustar sizing |
-
-**Suite de validacao:** `infra/tests/capacity/` — 5 testes que validam as suposicoes "educated guess" do cell-budget contra medidas reais no DO.
-
-| Teste | Suposicao | Projecao | Metrica |
-|-------|-----------|----------|---------|
-| `TestCapacityGoMemory` | Memoria Go sob carga | 200-300 Mi peak | `go_memstats_heap_inuse_bytes` |
-| `TestCapacityBuildKitConcurrency` | BuildKit solves/no | ~4/no | `loopzero_builds_active` peak |
-| `TestCapacityArgoCDMemoryPerApp` | ArgoCD mem/app | ~500 kB/app | `go_memstats_heap_inuse_bytes` delta |
-| `TestCapacityGiteaPushLatency` | Gitea push latency | p95 < 2s a 100 repos | wall-clock `git push` |
-| `TestCapacityPodMemoryByFramework` | Pod memory real | ~50 Mi avg | `kubectl top pod` |
-
-Fixtures de pod-memory vem do [getloopscale/loopzero-stacks](https://github.com/getloopscale/loopzero-stacks) (templates reais: Go, Node, Python, Ruby, Rust).
-
-```bash
-# Rodar suite completa (requer port-forwards + tokens DO)
-./infra/tests/capacity/run-capacity.sh all
-
-# Rodar teste individual
-./infra/tests/capacity/run-capacity.sh argocd-memory
+```
+Codigo:         ████████████████████░░ 90%
+Testes:         ████████████████░░░░░░ 75%
+Infra DO:       ████████████████████░░ 90%
+Multi-cell:     ████████████████░░░░░░ 75%  (codigo done, infra/validation pendente)
+Multi-cloud:    ██░░░░░░░░░░░░░░░░░░░░ 10%
+Self-hosted:    ░░░░░░░░░░░░░░░░░░░░░░  0%
 ```
 
-Resultados em `/tmp/capacity-bench/*.json`. Interpretar ratio `actual_vs_projected`: <0.5 conservador, 0.5-1.5 validado, >1.5 otimista, >2.0 revisao urgente.
+---
 
-### Infraestrutura
+## Planos Ativos
+
+### 1. Multi-Cell Default (MEET-053)
+
+Ativar multi-cell como default para fail-fast: descobrir bugs no path multi-cell em producao desde Phase 0.
+
+| Arquivo | Status | Tasks |
+|---------|--------|:-----:|
+| [multi-cell-default-roadmap.md](multi-cell-default-roadmap.md) | Phase A+D done. **Phase B NEXT.** | 14/21 |
+
+Fases: A (fix safety net) :white_check_mark: → B (Pulumi CR) :arrow_forward: → C (flip switch) → D (harden) :white_check_mark:
+
+### 2. Multi-Cloud AWS + DO (MEET-054)
+
+Instalacao full multi-cluster em AWS e DigitalOcean. Crossplane rejeitado — modelo e Helm BYOI + Pulumi provider.
+
+| Arquivo | Status | Fases |
+|---------|--------|:-----:|
+| [multi-cloud-aws-do-plan.md](multi-cloud-aws-do-plan.md) | **Phase 0 NEXT** (fix Alertmanager) | 0/5 |
+
+Fases: P0 (Alertmanager) :arrow_forward: → P1 (abstrair lock-ins) → P2 (AWS provider) → P3 (Helm + CLI) → P4 (E2E)
+
+### 3. Cell Architecture (ADR-0008)
+
+Roadmap de escala de 100 a 50k apps via celulas autonomas.
 
 | Arquivo | Escopo | Quando ler |
 |---------|--------|------------|
-| [autoscaling-topology.md](autoscaling-topology.md) | Mapa visual de todos HPAs (12 no mgmt), ArgoCD sharding, behavior config | Ao ajustar HPAs ou debugar scaling |
-| [capacity-baselines.md](capacity-baselines.md) | Baselines medidas por subsistema (loopzero-api, Gitea, MinIO, ArgoCD) | Antes de rodar E2E — bench primeiro |
-| [minio-distributed-migration.md](minio-distributed-migration.md) | 3 fases: tune standalone, backup, blue/green distributed 4 pods | Prerequisito Phase 2a (T-2a-05) |
+| [cell-architecture-overview.md](cell-architecture-overview.md) | Master roadmap Phase 0→50k, dependencias, invariants | Visao geral |
+| [cell-architecture-phase2.md](cell-architecture-phase2.md) | Phase 2a (hardening) + 2b (cell-2 + chaos) | Quando Phase 2a iniciar |
+| [cell-architecture-phase3.md](cell-architecture-phase3.md) | Automacao: add-cell em 15min, per-cell ArgoCD, PG HA | Apos Phase 2b |
+| [cell-architecture-phase4.md](cell-architecture-phase4.md) | Multi-region, Harbor geo-rep, PG partitioning | Apos Phase 3 |
 
-### TLS e Edge Routing
-
-| Arquivo | Escopo | Quando ler |
-|---------|--------|------------|
-| [tls-strategy.md](tls-strategy.md) | 3 issuers (LE Prod, LE Staging, CF Origin CA), rotation policy, fallback | Ao tocar em certs ou issuers |
-| [edge-routing-tls-lessons.md](edge-routing-tls-lessons.md) | 9 licoes operacionais: CF routing hibrido, Origin CA exige proxy real, checklist | Antes de mexer em DNS ou TLS |
-
-### Tenant Lifecycle
+### 4. Scale Validation
 
 | Arquivo | Escopo | Quando ler |
 |---------|--------|------------|
-| [tenant-lifecycle-deletion.md](tenant-lifecycle-deletion.md) | Arquitetura aprovada (MEET-052): controller-native + API intent gateway, state machine, bulk delete | Ao implementar delete/evict de tenant |
+| [scale-50k-plan.md](scale-50k-plan.md) | Plano L0→L6, 6 fases, deploys reais, chaos suite | Playbook para load tests |
+| [load-test-plan.md](load-test-plan.md) | Detalhamento L0→L7, cenarios por nivel, cost projection | Complemento |
+
+**Capacity suite:** `infra/tests/capacity/` — 5 testes validam cell-budget.md (Go memory, BuildKit, ArgoCD, Gitea, pod memory). Run: `./infra/tests/capacity/run-capacity.sh all`
+
+### 5. Operacional
+
+| Arquivo | Escopo | Quando ler |
+|---------|--------|------------|
+| [edge-routing-tls-lessons.md](edge-routing-tls-lessons.md) | 9 licoes: CF routing, Origin CA, checklist | Antes de mexer em DNS/TLS |
 
 ---
 
-## Como usar estes planos
+## Arquivo Morto
 
-- **Daily standup:** abra `50k-immediate-focus.md`, veja qual task T-XX voce esta
-- **Sprint planning:** pegue tasks da fase atual seguindo topological order em `cell-architecture-overview.md`
-- **Debugging scale:** leia learnings na ordem cronologica, depois `slo-bottlenecks.md`
-- **Investor pitch:** `cell-architecture-overview.md` + chaos video + ADR-0008
-- **Novo engineer:** leia `cell-architecture-overview.md` primeiro, depois `scale-50k-plan.md`
+Planos concluidos, superados, ou absorvidos por planos ativos. Movidos para `olds/`.
+
+| Arquivo | Razao |
+|---------|-------|
+| `50k-immediate-focus.md` | Absorvido por `multi-cell-default-roadmap.md` e `multi-cloud-aws-do-plan.md` |
+| `scale-50k-day1-learnings.md` | Historico — learnings incorporados nos planos ativos |
+| `scale-50k-day2-learnings.md` | Historico |
+| `scale-50k-l2-learnings.md` | Historico |
+| `scale-50k-l3-readiness.md` | Historico |
+| `scale-50k-technical-debt.md` | Debt absorvido pelos roadmaps ativos |
+| `scale-50k-slo-bottlenecks.md` | Gargalos enderecados nos planos ativos |
+| `capacity-baselines.md` | Substituido pela capacity suite em `infra/tests/capacity/` |
+| `autoscaling-topology.md` | Referencia operacional, nao plano ativo |
+| `minio-distributed-migration.md` | Prerequisito Phase 2a (consultar quando iniciar) |
+| `tenant-lifecycle-deletion.md` | MEET-052 (consultar quando implementar delete) |
+| `tls-strategy.md` | Referencia (consultar quando tocar em certs) |
+
+---
+
+## Proximos Passos (prioridade)
+
+1. **Fix Alertmanager /dev/null** — SRE VETO. `multi-cloud-aws-do-plan.md` P0-01.
+2. **Multi-cell Phase B** — Pulumi ClusterCredential CR. `multi-cell-default-roadmap.md` B-01.
+3. **Multi-cell Phase C** — Flip DynamicRouter. `multi-cell-default-roadmap.md` C-01.
+4. **Re-run L3 100/100** — Quota desbloqueada. `scale-50k-plan.md`.
+5. **Abstrair lock-ins DO** — `multi-cloud-aws-do-plan.md` P1.
+6. **AWS Pulumi provider** — `multi-cloud-aws-do-plan.md` P2.
+
+---
 
 ## Convencoes
 
-- **Gate:** condicao que DEVE ser satisfeita antes de avancar. Nao e sugestao.
-- **DoD:** Definition of Done por task. Inclui testes, commits, e artefatos.
-- **Veto condition:** requisito de security/SRE que tem poder de veto absoluto.
-- **L{N}:** nivel de load test (L1=10 tenants, L2=50, L3=100, L4=500, L5=5k, L6=50k).
+- **Gate:** condicao que DEVE ser satisfeita antes de avancar
+- **DoD:** Definition of Done (testes, commits, artefatos)
+- **Veto:** requisito de security/SRE com poder absoluto
+- **L{N}:** nivel de load test (L1=10, L2=50, L3=100, L4=500, L5=5k, L6=50k)
+- **BYOI:** Bring Your Own Infrastructure (cliente ja tem K8s/PG/S3)
 
-## Referencias canonicas
+## Meetings
 
-- **Spec tecnico:** `docs/technical.md`
-- **ADR-0008:** `docs/meetings/adr/0008-cell-based-architecture.md`
-- **MEET-051:** `docs/meetings/records/MEET-2026-04-17-051.md` (Phase 2 rescope)
-- **MEET-052:** `docs/meetings/records/MEET-2026-04-17-052.md` (tenant lifecycle)
+| Record | Topico | Verdict |
+|--------|--------|---------|
+| [MEET-051](../meetings/records/MEET-2026-04-17-051.md) | Phase 2 rescope | DEFERRED → RESCOPED |
+| [MEET-052](../meetings/records/MEET-2026-04-17-052.md) | Tenant lifecycle deletion | APPROVED |
+| [MEET-053](../meetings/records/MEET-2026-04-18-053.md) | Multi-cell as default | APPROVED_WITH_CONDITIONS |
+| [MEET-054](../meetings/records/MEET-2026-04-18-054.md) | Multi-cloud strategy | APPROVED_WITH_CONDITIONS |
+
+## Referencias
+
+- **Spec:** `docs/technical.md`
+- **ADR-0008:** Cell-Based Architecture
+- **Cell Budget:** `docs/architecture/cell-budget.md`
+- **Runbooks:** `docs/runbooks/`

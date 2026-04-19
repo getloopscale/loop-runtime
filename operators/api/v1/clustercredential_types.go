@@ -81,6 +81,11 @@ type ClusterCredentialStatus struct {
 	// LastCheckedAt is the last time connectivity was verified.
 	LastCheckedAt *metav1.Time `json:"lastCheckedAt,omitempty"`
 
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// MEET-053 D-03: Enables consumers to check "has the controller processed my latest spec change?"
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions represent the latest available observations.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

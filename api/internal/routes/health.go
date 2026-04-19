@@ -26,16 +26,33 @@ type ServiceHealthChecker interface {
 	Check(ctx context.Context) error
 }
 
+// CellDiscoveryChecker reports how many cells the router currently knows.
+// MEET-053 A-04: Used by DeepHealth to detect "0 cells" degraded state.
+type CellDiscoveryChecker interface {
+	// DiscoveredCellCount returns the number of cells the router currently has.
+	DiscoveredCellCount() int
+	// IsDynamic returns true if cell discovery is active (DynamicRouter).
+	IsDynamic() bool
+}
+
 // HealthHandler provides HTTP handlers for health checks.
 type HealthHandler struct {
 	db       DBHealthChecker
 	services []ServiceHealthChecker
+	cells    CellDiscoveryChecker
 }
 
 // NewHealthHandler creates a new HealthHandler.
 // The db parameter can be nil for basic health checks (GET /health).
 func NewHealthHandler(db DBHealthChecker, services ...ServiceHealthChecker) *HealthHandler {
 	return &HealthHandler{db: db, services: services}
+}
+
+// WithCellDiscovery attaches cell discovery checking to the health handler.
+// MEET-053 A-04: DeepHealth returns 503 when DynamicRouter has 0 cells.
+func (h *HealthHandler) WithCellDiscovery(checker CellDiscoveryChecker) *HealthHandler {
+	h.cells = checker
+	return h
 }
 
 // Health responds with a simple 200 OK.
@@ -80,6 +97,22 @@ func (h *HealthHandler) DeepHealth(w http.ResponseWriter, r *http.Request) {
 			degraded = true
 		} else {
 			result[svc.Name()] = "connected"
+		}
+	}
+
+	// MEET-053 A-04: Cell discovery check.
+	// DynamicRouter with 0 cells = platform cannot serve any deploy operation.
+	if h.cells != nil {
+		count := h.cells.DiscoveredCellCount()
+		if h.cells.IsDynamic() {
+			if count == 0 {
+				result["cells"] = "0 discovered (DEGRADED)"
+				degraded = true
+			} else {
+				result["cells"] = fmt.Sprintf("%d discovered", count)
+			}
+		} else {
+			result["cells"] = fmt.Sprintf("static (%d)", count)
 		}
 	}
 

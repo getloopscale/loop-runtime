@@ -13,11 +13,18 @@ import (
 // Phase 1+: one CellConfig per Cell, resolved by Router.
 type CellConfig struct {
 	CellID        string // e.g., "cell-default", "cell-sfo3-02"
-	KubeConfig    string // path to kubeconfig file
+	KubeConfig    string // path to kubeconfig file (StaticRouter: from env)
 	KubeContext   string // context name within kubeconfig
 	ArgocdURL     string // ArgoCD server URL within the Cell
 	ArgocdToken   string // ArgoCD auth token for the Cell
 	IngressDomain string // base domain for the Cell's ingress
+	APIServer     string // K8s API server URL (DynamicRouter: from CRD spec)
+
+	// SecretRef identifies the kubeconfig Secret for this cell (DynamicRouter).
+	// StaticRouter leaves these empty (uses KubeConfig path instead).
+	// MEET-053 A-01: populated from ClusterCredential spec.secretRef.
+	SecretRefName      string // Secret name containing kubeconfig
+	SecretRefNamespace string // Secret namespace
 }
 
 // Router resolves cell_id to connection details.
@@ -56,6 +63,12 @@ func (r *PassthroughRouter) Resolve(_ context.Context, cellID string) (*CellConf
 func (r *PassthroughRouter) ListCells(_ context.Context) ([]CellConfig, error) {
 	return []CellConfig{r.defaultCell}, nil
 }
+
+// DiscoveredCellCount returns 1 (always one cell in passthrough mode).
+func (r *PassthroughRouter) DiscoveredCellCount() int { return 1 }
+
+// IsDynamic returns false — PassthroughRouter is static.
+func (r *PassthroughRouter) IsDynamic() bool { return false }
 
 // StaticRouter resolves cell_id from a static list of CellConfigs.
 // This is the Phase 1 implementation — configured at startup from
@@ -104,3 +117,9 @@ func (r *StaticRouter) ListCells(_ context.Context) ([]CellConfig, error) {
 	}
 	return cells, nil
 }
+
+// DiscoveredCellCount returns the number of statically configured cells.
+func (r *StaticRouter) DiscoveredCellCount() int { return len(r.cells) }
+
+// IsDynamic returns false — StaticRouter is static.
+func (r *StaticRouter) IsDynamic() bool { return false }

@@ -53,7 +53,15 @@ type BuildReconcileLoopConfig struct {
 	MaxBuildsPerTenant int
 	// CellID scopes the loop to a single cell (roadmap 03). Empty or
 	// "cell-default" means single-cell / backward-compatible behavior.
+	// MEET-053 A-07: When CellLister is set, CellID is ignored and the
+	// loop iterates over all cells returned by the lister each tick.
 	CellID string
+}
+
+// CellLister returns the list of active cell IDs.
+// MEET-053 A-07: Used by BuildReconcileLoop to process all cells.
+type CellLister interface {
+	ListCellIDs(ctx context.Context) ([]string, error)
 }
 
 // BuildReconcileLoop continuously reconciles non-terminal builds against
@@ -123,6 +131,10 @@ type BuildReconcileLoop struct {
 	// above remains as the fast-path local check.
 	pgDedup *PGClaimDedup
 
+	// cellLister returns all active cell IDs for multi-cell iteration.
+	// MEET-053 A-07: When set, reconcile processes builds from ALL cells.
+	cellLister CellLister
+
 	// BRC-003 fix: tracks activation attempt counts per build ID.
 	// After maxActivationAttempts consecutive failures, the build is failed
 	// immediately instead of waiting for the 10-minute reaper timeout.
@@ -183,6 +195,13 @@ func (r *BuildReconcileLoop) WithPGClaims(dedup *PGClaimDedup) {
 	r.pgDedup = dedup
 }
 
+// WithCellLister enables multi-cell iteration per tick.
+// MEET-053 A-07: When set, reconcile processes builds from ALL known cells
+// instead of only cfg.CellID. This ensures non-default cells are not abandoned.
+func (r *BuildReconcileLoop) WithCellLister(lister CellLister) {
+	r.cellLister = lister
+}
+
 // Start runs the reconcile loop until the context is cancelled.
 // It runs one cycle immediately on start (catching up on missed workflows from
 // API downtime) and then polls at the configured interval.
@@ -225,22 +244,38 @@ func (r *BuildReconcileLoop) Start(ctx context.Context) {
 // MOD-6 fix: Each build is tracked in r.active while being processed.
 // BuildReaper checks this to avoid competing on the same build.
 func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
-	cellID := r.cfg.CellID
-	if cellID == "" {
-		cellID = db.CellDefault
+	// MEET-053 A-07: Iterate over all known cells when CellLister is set.
+	// This ensures builds on non-default cells are processed.
+	cellIDs := []string{r.cfg.CellID}
+	if r.cellLister != nil {
+		if ids, err := r.cellLister.ListCellIDs(ctx); err == nil && len(ids) > 0 {
+			cellIDs = ids
+		} else if err != nil {
+			r.logger.Warn("reconcile loop: cell lister failed, using configured cell",
+				"error", err, "fallback_cell", r.cfg.CellID)
+		}
 	}
-	builds, err := r.buildStore.FindActiveBuilds(ctx, cellID)
-	if err != nil {
-		r.logger.Error("reconcile loop: failed to find active builds", "error", err)
-		return
+
+	var builds []db.Build
+	for _, cellID := range cellIDs {
+		cid := cellID
+		if cid == "" {
+			cid = db.CellDefault
+		}
+		cellBuilds, err := r.buildStore.FindActiveBuilds(ctx, cid)
+		if err != nil {
+			r.logger.Error("reconcile loop: failed to find active builds",
+				"error", err, "cell_id", cid)
+			continue
+		}
+		builds = append(builds, cellBuilds...)
+	}
+	if len(builds) == 0 {
+		return // avoid nil dereference below when builds is empty
 	}
 
 	// MEET-2026-03-31-023 T1-8: Record successful tick timestamp.
 	metrics.ReconcileLoopLastSuccess.WithLabelValues("build").SetToCurrentTime()
-
-	if len(builds) == 0 {
-		return
-	}
 
 	// Count active builds per tenant for backpressure.
 	tenantActive := make(map[string]int)
