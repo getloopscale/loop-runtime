@@ -58,6 +58,7 @@ type Config struct {
 	ArgocdURL            string
 	MinIOEndpoint             string
 	MinIOCrossClusterEndpoint string // Used by build cluster workflows to reach MinIO
+	SourceBucket              string // S3 bucket for source bundles (default: "loopzero-builds")
 	RegistryURL          string
 	RegistryInsecure     bool   // true for local dev registries without TLS
 	HarborRegistryURL    string // MEET-048: secondary registry for dual-push during migration. Empty = disabled.
@@ -238,6 +239,7 @@ func Load() Config {
 		ArgocdURL:            envOr("ARGOCD_URL", "http://argocd-server.argocd.svc.cluster.local:80"),
 		MinIOEndpoint:             envOr("MINIO_ENDPOINT", "minio.loopzero-system.svc.cluster.local:9000"),
 		MinIOCrossClusterEndpoint: envOr("MINIO_CROSS_CLUSTER_ENDPOINT", ""),
+		SourceBucket:              envOr("SOURCE_BUCKET", "loopzero-builds"),
 		RegistryURL:          envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
 		RegistryInsecure:     os.Getenv("REGISTRY_INSECURE") == "true",
 		HarborRegistryURL:    os.Getenv("HARBOR_REGISTRY_URL"), // MEET-048: empty = disabled
@@ -321,7 +323,7 @@ func Load() Config {
 
 		// Scale 50k plan — Phase 0.2/0.3 feature flags.
 		UsePGClaims:   os.Getenv("LOOPZERO_USE_PG_CLAIMS") == "true",
-		DynamicRouter: os.Getenv("LOOPZERO_DYNAMIC_ROUTER") == "true",
+		DynamicRouter: os.Getenv("LOOPZERO_DYNAMIC_ROUTER") != "false",
 		SingleCell:    os.Getenv("LOOPZERO_SINGLE_CELL") == "true",
 	}
 }

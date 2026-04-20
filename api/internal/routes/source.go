@@ -39,15 +39,25 @@ type SourceHandler struct {
 	store        source.SourceStore
 	objStore     ObjectUploader // optional: upload bundle to object storage for build cluster access
 	isProduction bool           // when true, S3 upload failure is fatal (CODE-SILENT-S3-001 fix)
+	sourceBucket string         // S3 bucket for source bundles (default: "loopzero-builds")
 }
 
 // NewSourceHandler creates a new SourceHandler.
 func NewSourceHandler(store source.SourceStore, opts ...func(*SourceHandler)) *SourceHandler {
-	h := &SourceHandler{store: store}
+	h := &SourceHandler{store: store, sourceBucket: "loopzero-builds"}
 	for _, opt := range opts {
 		opt(h)
 	}
 	return h
+}
+
+// WithSourceBucket configures the S3 bucket name for source bundles.
+func WithSourceBucket(bucket string) func(*SourceHandler) {
+	return func(h *SourceHandler) {
+		if bucket != "" {
+			h.sourceBucket = bucket
+		}
+	}
 }
 
 // WithObjectUploader sets an optional object store for uploading bundles
@@ -221,7 +231,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 			uploadReader = tmpFile
 		}
 
-		if uploadErr := h.objStore.Upload(ctx, "loopzero-builds", objKey, uploadReader); uploadErr != nil {
+		if uploadErr := h.objStore.Upload(ctx, h.sourceBucket, objKey, uploadReader); uploadErr != nil {
 			if h.isProduction {
 				slog.Error("object store upload failed (fatal in production)", "error", uploadErr, "key", objKey)
 				writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)

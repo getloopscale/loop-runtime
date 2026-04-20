@@ -70,14 +70,15 @@ Roadmap de escala de 100 a 50k apps via celulas autonomas.
 | [cell-architecture-phase3.md](cell-architecture-phase3.md) | Automacao: add-cell em 15min, per-cell ArgoCD, PG HA | Apos Phase 2b |
 | [cell-architecture-phase4.md](cell-architecture-phase4.md) | Multi-region, Harbor geo-rep, PG partitioning | Apos Phase 3 |
 
-### 4. Scale Validation
+### 4. Road to 50k (Evidence-Based)
 
 | Arquivo | Escopo | Quando ler |
 |---------|--------|------------|
-| [scale-50k-plan.md](scale-50k-plan.md) | Plano L0→L6, 6 fases, deploys reais, chaos suite | Playbook para load tests |
-| [load-test-plan.md](load-test-plan.md) | Detalhamento L0→L7, cenarios por nivel, cost projection | Complemento |
+| **[road-to-50k-evidence-based.md](road-to-50k-evidence-based.md)** | **5 tiers ate 50k apps, baseado em deep research do codigo real. 17/32 items ja DONE.** | **Plano master — substitui fases originais** |
+| [scale-50k-plan.md](scale-50k-plan.md) | Load test progression L0→L6, chaos suite | Playbook para cada nivel |
+| [load-test-plan.md](load-test-plan.md) | Detalhamento L0→L7, cost projection | Complemento |
 
-**Capacity suite:** `infra/tests/capacity/` — 5 testes validam cell-budget.md (Go memory, BuildKit, ArgoCD, Gitea, pod memory). Run: `./infra/tests/capacity/run-capacity.sh all`
+**Capacity suite:** `infra/tests/capacity/` — 5 testes validam cell-budget.md. Run: `./infra/tests/capacity/run-capacity.sh all`
 
 ### 5. Operacional
 
@@ -108,14 +109,18 @@ Planos concluidos, superados, ou absorvidos por planos ativos. Movidos para `old
 
 ---
 
-## Proximos Passos (prioridade)
+## Sprint Atual
 
-1. **Fix Alertmanager /dev/null** — SRE VETO. `multi-cloud-aws-do-plan.md` P0-01.
-2. **Multi-cell Phase B** — Pulumi ClusterCredential CR. `multi-cell-default-roadmap.md` B-01.
-3. **Multi-cell Phase C** — Flip DynamicRouter. `multi-cell-default-roadmap.md` C-01.
-4. **Re-run L3 100/100** — Quota desbloqueada. `scale-50k-plan.md`.
-5. **Abstrair lock-ins DO** — `multi-cloud-aws-do-plan.md` P1.
-6. **AWS Pulumi provider** — `multi-cloud-aws-do-plan.md` P2.
+**[next-sprint-execution.md](next-sprint-execution.md)** — 18 microtasks, 5-7 dias, 4 steps sequenciais:
+
+| Step | Objetivo | Tasks | Estimativa |
+|------|----------|:-----:|:----------:|
+| S1 | Fix Alertmanager /dev/null (SRE VETO) | 5 | 1 dia |
+| S2 | ClusterCredential CR via Pulumi | 5 | 1 dia |
+| S3 | Flip DynamicRouter default | 5 | 1 dia + 24h |
+| S4 | Capacity baselines + L3 100/100 | 3 | 2-3 dias |
+
+**Apos este sprint:** Abstrair lock-ins DO → AWS provider → Helm umbrella.
 
 ---
 

@@ -45,6 +45,10 @@ export interface PlatformStackConfig {
   readonly spacesSecretAccessKey: pulumi.Output<string>;
   readonly digitaloceanToken: pulumi.Output<string>;
 
+  // Cosign signing key (optional — generated once, stored encrypted)
+  readonly cosignPrivateKey?: string;
+  readonly cosignPassword?: string;
+
   // Cloudflare — static frontend delivery (Sprint 10)
   // Optional: when set, enables CF Worker + KV routing for static frontends.
   // When absent, static apps fall back to nginx-s3-gateway in cluster.

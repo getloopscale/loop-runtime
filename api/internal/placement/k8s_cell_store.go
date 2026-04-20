@@ -16,7 +16,7 @@ import (
 
 // ClusterCredentialGVR is the GroupVersionResource for ClusterCredential CRDs.
 var ClusterCredentialGVR = schema.GroupVersionResource{
-	Group:    "platform.loopzero.io",
+	Group:    "loopzero.io",
 	Version:  "v1",
 	Resource: "clustercredentials",
 }

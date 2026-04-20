@@ -1047,6 +1047,7 @@ func main() {
 		}(),
 		SourceStore:        sourceStore,
 		ObjectUploader:     objUploader,
+		SourceBucket:       cfg.SourceBucket,
 		ArgoCallbackSecret: "", // C-01 fix: callback route removed
 		EventStore:         eventStore,
 		BuildStoreReader:   buildStoreReader,

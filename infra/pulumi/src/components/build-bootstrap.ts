@@ -34,13 +34,75 @@ export function bootstrapBuildCluster(
           "app.kubernetes.io/managed-by": "pulumi",
           "app.kubernetes.io/part-of": "loopzero-platform",
           "loopzero.io/cluster-role": "build",
-          "pod-security.kubernetes.io/enforce": "baseline",
-          "pod-security.kubernetes.io/warn": "restricted",
-          "pod-security.kubernetes.io/audit": "restricted",
+          // BuildKit rootless requires Unconfined seccomp + AppArmor profiles.
+          // PSA "baseline" rejects these → pods Forbidden. Must be "privileged".
+          "pod-security.kubernetes.io/enforce": "privileged",
+          "pod-security.kubernetes.io/warn": "baseline",
+          "pod-security.kubernetes.io/audit": "baseline",
         },
       },
     },
     { provider },
+  );
+
+  // MEET-053: StorageClass "local-path" alias for DOKS (do-block-storage provisioner).
+  // CWT workspace PVCs request "local-path" (k3d default). On DOKS, this SC must
+  // exist and provision via dobs.csi.digitalocean.com. Without it, workflow pods
+  // stay Pending with "unbound immediate PersistentVolumeClaims".
+  new k8s.storage.v1.StorageClass(
+    "build-local-path-sc",
+    {
+      metadata: { name: "local-path" },
+      provisioner: "dobs.csi.digitalocean.com",
+      reclaimPolicy: "Delete",
+      volumeBindingMode: "Immediate",
+      allowVolumeExpansion: true,
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  // MEET-053: ClusterRole for tenant-controller SA to manage build executor RBAC.
+  // The tenant-controller runs on mgmt cluster but creates Roles/RoleBindings
+  // on the build cluster for Argo Workflow executor pods. Without this, tenant
+  // provisioning fails with "attempting to grant RBAC permissions not currently held".
+  const buildRbacRole = new k8s.rbac.v1.ClusterRole(
+    "build-loopzero-ctrl-rbac-admin",
+    {
+      metadata: { name: "loopzero-ctrl-build-rbac-admin" },
+      rules: [
+        { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "delete", "bind", "escalate"] },
+        { apiGroups: [""], resources: ["namespaces", "serviceaccounts", "secrets"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
+        { apiGroups: [""], resources: ["pods", "pods/log"], verbs: ["get", "list", "watch", "patch"] },
+        { apiGroups: ["argoproj.io"], resources: ["workflowtaskresults", "workflows"], verbs: ["get", "list", "create", "update", "patch", "delete", "watch"] },
+      ],
+    },
+    { provider },
+  );
+  new k8s.rbac.v1.ClusterRoleBinding(
+    "build-loopzero-ctrl-rbac-admin",
+    {
+      metadata: { name: "loopzero-ctrl-build-rbac-admin" },
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name: "loopzero-ctrl-build-rbac-admin" },
+      subjects: [{ kind: "ServiceAccount", name: "loopzero-ctrl-build-sa", namespace: "argo" }],
+    },
+    { provider, dependsOn: [buildRbacRole, ns] },
+  );
+
+  // Cosign signing key — used by sign-image workflow step.
+  // Key generated once, stored in Secret. Build workflow mounts it for signing.
+  // TODO: Replace with Pulumi-generated key or external KMS for production.
+  new k8s.core.v1.Secret(
+    "cosign-signing-key",
+    {
+      metadata: { name: "cosign-signing-key", namespace: "argo" },
+      stringData: {
+        // In production, generate via: cosign generate-key-pair
+        // Store private key securely. For dev, a placeholder that must be replaced.
+        "cosign.key": config.cosignPrivateKey ?? "PLACEHOLDER_GENERATE_VIA_COSIGN",
+        COSIGN_PASSWORD: config.cosignPassword ?? "loopzero-cosign-dev",
+      },
+    },
+    { provider, dependsOn: [ns] },
   );
 
   // Object storage credentials — needed by CWTs for source download and cache.

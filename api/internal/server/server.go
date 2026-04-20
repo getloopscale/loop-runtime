@@ -39,6 +39,7 @@ type Config struct {
 	IdempotencyStore   middleware.IdempotencyStore
 	SourceStore        source.SourceStore
 	ObjectUploader     routes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
+	SourceBucket       string                // S3 bucket name for source bundles (env: SOURCE_BUCKET)
 	// ArgoCallbackSecret is deprecated — callback route removed (C-01 fix).
 	// Kept in Config struct for backwards compatibility of env var parsing.
 	ArgoCallbackSecret string
@@ -255,6 +256,9 @@ func NewRouter(cfg Config) *chi.Mux {
 				}
 				if cfg.IsProduction {
 					sourceOpts = append(sourceOpts, routes.WithProductionMode())
+				}
+				if cfg.SourceBucket != "" {
+					sourceOpts = append(sourceOpts, routes.WithSourceBucket(cfg.SourceBucket))
 				}
 				sourceHandler := routes.NewSourceHandler(cfg.SourceStore, sourceOpts...)
 				r.With(rateLimitMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)

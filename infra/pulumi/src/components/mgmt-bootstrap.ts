@@ -2136,6 +2136,12 @@ function installLoopZeroAPI(
           resources: ["loopzeroapplications", "exposedroutes", "environments"],
           verbs: ["get", "list", "watch", "create", "update", "patch", "delete"],
         },
+        // MEET-053: DynamicRouter reads ClusterCredentials for cell discovery.
+        {
+          apiGroups: ["loopzero.io"],
+          resources: ["clustercredentials"],
+          verbs: ["get", "list", "watch"],
+        },
       ],
     },
     { provider },
@@ -2789,6 +2795,56 @@ function installTenantController(
       },
     },
     { provider, dependsOn: [ns] },
+  );
+
+  // MEET-053 B-01: ClusterCredential CR for runtime cluster.
+  // Registers the runtime cluster as a Cell so DynamicRouter can discover it.
+  // The controller reconciles → status.connected=true → ArgoCD cluster secret created.
+  // Requires: CRD installed (earlier in this file), kubeconfig Secret exists.
+  const runtimeCellKubeconfig = new k8s.core.v1.Secret(
+    "runtime-cell-kubeconfig",
+    {
+      metadata: {
+        name: "runtime-cell-kubeconfig",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      stringData: {
+        kubeconfig: controllerRuntimeKubeconfig,
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  new k8s.apiextensions.CustomResource(
+    "runtime-cluster-credential",
+    {
+      apiVersion: "loopzero.io/v1",
+      kind: "ClusterCredential",
+      metadata: {
+        name: `runtime-${config.region}-01`,
+        namespace: PLATFORM_NAMESPACE,
+        labels: {
+          "loopzero.io/ingress-domain": config.domain,
+        },
+      },
+      spec: {
+        clusterName: infra.runtimeCluster.clusterName,
+        apiServer: infra.runtimeCluster.endpoint,
+        secretRef: {
+          name: "runtime-cell-kubeconfig",
+          namespace: PLATFORM_NAMESPACE,
+        },
+        scope: {
+          argocd: true,
+          operators: true,
+        },
+        tls: {
+          insecure: false,
+        },
+        cellID: "cell-default",
+      },
+    },
+    { provider, dependsOn: [runtimeCellKubeconfig] },
   );
 
   // Secret with cloud provider credentials for the tenant controller.

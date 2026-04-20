@@ -4,6 +4,10 @@
 images:
   cloneRunner: "registry.digitalocean.com/loopzero-infra-registry/loopzero-clone-runner:v0.1.0"
 
+# S3 bucket name for source bundles and build cache.
+# Must match SOURCE_BUCKET env var in loopzero-api and the bucket created by Pulumi.
+sourceBucket: "loopzero-builds"
+
 controller:
   securityContext:
     runAsNonRoot: true

@@ -39,7 +39,7 @@ Phase D:  Hardening (TOCTOU, Secret watch, orphan detection)         🟡 Partia
 | A-09 | A | :white_check_mark: | B4 | `metrics.go`: `CellDiscoveryCount` gauge. `dynamic_router.go`: emitida em cada refresh com `len(r.cells)`. |
 | B-01 | B | :black_square_button: | B8 | Requer `pulumi up` contra DO |
 | B-02 | B | :black_square_button: | — | Requer kubectl contra DO mgmt cluster |
-| C-01 | C | :black_square_button: | Phase B | Flip `DynamicRouter: os.Getenv("LOOPZERO_DYNAMIC_ROUTER") != "false"` |
+| C-01 | C | :white_check_mark: | Phase B | Flip `DynamicRouter: os.Getenv("LOOPZERO_DYNAMIC_ROUTER") != "false"` — code applied 2026-04-19 |
 | C-02 | C | :black_square_button: | C-01 | Staging validation |
 | C-03 | C | :black_square_button: | C-02 | Rollback test |
 | C-04 | C | :black_square_button: | C-03 | Prod deploy + 24h validation |

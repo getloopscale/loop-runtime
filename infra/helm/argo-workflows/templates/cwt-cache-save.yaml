@@ -70,7 +70,7 @@ spec:
             else
               CACHE_KEY="{{ "{{inputs.parameters.tenant-id}}" }}/{{ "{{inputs.parameters.project-id}}" }}/{{ "{{inputs.parameters.cache-key}}" }}"
             fi
-            CACHE_PATH="loopzero/loopzero-builds/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
+            CACHE_PATH="loopzero/{{ .Values.sourceBucket }}/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
 
             # Build list of dirs to cache from comma-separated input
             DIRS="{{ "{{inputs.parameters.cache-dirs}}" }}"

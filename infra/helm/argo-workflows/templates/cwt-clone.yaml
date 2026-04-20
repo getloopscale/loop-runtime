@@ -52,7 +52,7 @@ spec:
               {{- if .Values.minio.insecure }}
               --insecure \
               {{- end }}
-              "loopzero/loopzero-builds/${BUNDLE_PATH}" /tmp/source.bundle 2>&1 || {
+              "loopzero/{{ .Values.sourceBucket }}/${BUNDLE_PATH}" /tmp/source.bundle 2>&1 || {
               echo "ERROR: Failed to download source bundle"
               exit 1
             }

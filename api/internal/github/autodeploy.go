@@ -25,9 +25,10 @@ type AutoDeployConfig struct {
 	AppClient      *AppClient
 	SourceStore    SourcePusher
 	BuildCanceller BuildCanceller
-	ObjectStore  ObjectUploader
+	ObjectStore    ObjectUploader
 	BuildSubmitter BuildSubmitter
-	Logger       *slog.Logger
+	SourceBucket   string // S3 bucket for source bundles (default: "loopzero-builds")
+	Logger         *slog.Logger
 }
 
 // SourcePusher pushes source bundles (DIP — subset of source.SourceStore).
@@ -147,7 +148,11 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 		}
 		defer func() { _ = bundleFile.Close() }()
 		objKey := fmt.Sprintf("%s/source/%s.bundle", tenantID, commitSHA)
-		if err := d.cfg.ObjectStore.Upload(ctx, "loopzero-builds", objKey, bundleFile); err != nil {
+		bucket := d.cfg.SourceBucket
+		if bucket == "" {
+			bucket = "loopzero-builds"
+		}
+		if err := d.cfg.ObjectStore.Upload(ctx, bucket, objKey, bundleFile); err != nil {
 			return fmt.Errorf("auto-deploy: S3 upload: %w", err)
 		}
 		log.Info("auto-deploy: git bundle uploaded to S3")
