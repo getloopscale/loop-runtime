@@ -34,6 +34,7 @@ export interface InfraOutputs {
   readonly mgmtCluster: ClusterOutputs;
   readonly buildCluster: ClusterOutputs;
   readonly runtimeCluster: ClusterOutputs;
+  readonly runtimeCluster2: ClusterOutputs;
 
   // Data
   readonly database: DatabaseClusterOutput;
@@ -156,6 +157,23 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     protect: isProd,
   });
 
+  // --- Runtime cluster 2 (multi-cell) ---
+  // Second runtime cluster for multi-cell validation. Proves horizontal scaling
+  // via DynamicRouter + ClusterCredential discovery. Each cell operates independently
+  // with its own ArgoCD apps, namespaces, and ingress.
+  const runtimeCluster2 = factory.createKubernetesCluster({
+    name: `${baseName}-runtime-2`,
+    region: config.region,
+    version: config.runtimeK8sVersion,
+    nodeClass: config.runtimeNodeClass,
+    minNodes: config.runtimeMinNodes,
+    maxNodes: config.runtimeMaxNodes,
+    autoScale: config.runtimeMaxNodes !== undefined,
+    network: { vpcId: network.vpcId },
+    tags,
+    protect: isProd,
+  });
+
   // --- Build cluster ---
   // Isolated compute for Argo Workflows + BuildKit builds.
   // Separate from mgmt to prevent build resource spikes from affecting platform services.
@@ -184,7 +202,7 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     tags,
     // Allow all 3 DOKS clusters to connect — critical for pipeline idempotency.
     // Without this, destroy+recreate leaves DB unreachable (no trusted sources).
-    trustedK8sClusters: [mgmtCluster.clusterId, buildCluster.clusterId, runtimeCluster.clusterId],
+    trustedK8sClusters: [mgmtCluster.clusterId, buildCluster.clusterId, runtimeCluster.clusterId, runtimeCluster2.clusterId],
     // Only protect prod databases — dev/ephemeral need clean destroy+up cycles.
     protect: config.environment === "prod",
   });
@@ -287,6 +305,12 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
       clusterName: runtimeCluster.clusterName,
       kubeconfig: runtimeCluster.kubeconfig,
       endpoint: runtimeCluster.endpoint,
+    },
+    runtimeCluster2: {
+      clusterId: runtimeCluster2.clusterId,
+      clusterName: runtimeCluster2.clusterName,
+      kubeconfig: runtimeCluster2.kubeconfig,
+      endpoint: runtimeCluster2.endpoint,
     },
     database,
     bucketName: storage.bucketName,

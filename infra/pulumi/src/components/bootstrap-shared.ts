@@ -146,6 +146,7 @@ export interface BootstrapOutputs {
   readonly mgmt: MgmtBootstrapOutputs;
   readonly build: BuildBootstrapOutputs;
   readonly runtime: RuntimeBootstrapOutputs;
+  readonly runtime2?: { ingressReady: pulumi.Output<boolean> };
 }
 
 /**

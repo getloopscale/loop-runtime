@@ -2894,6 +2894,69 @@ function installTenantController(
     { provider, dependsOn: [runtimeCellKubeconfig] },
   );
 
+  // --- Runtime cluster 2: ClusterCredential for multi-cell ---
+  // Second runtime cell. DynamicRouter discovers both cells and distributes
+  // tenants across them via RoundRobinEngine. Validates multi-cell horizontal scaling.
+  const controllerRuntime2Kubeconfig = createScopedKubeconfig(
+    "ctrl-runtime-2",
+    infra.runtimeCluster2,
+    PLATFORM_NAMESPACE,
+    [
+      { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "watch", "create", "update", "patch"] },
+      { apiGroups: [""], resources: ["pods"], verbs: ["get", "list", "delete"] },
+      { apiGroups: [""], resources: ["namespaces"], verbs: ["delete"] },
+      { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
+      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind"] },
+      { apiGroups: ["scheduling.k8s.io"], resources: ["priorityclasses"], verbs: ["get", "list", "create", "update", "patch"] },
+    ],
+  );
+
+  const runtime2CellKubeconfig = new k8s.core.v1.Secret(
+    "runtime-2-cell-kubeconfig",
+    {
+      metadata: {
+        name: "runtime-2-cell-kubeconfig",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      stringData: {
+        kubeconfig: controllerRuntime2Kubeconfig,
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  new k8s.apiextensions.CustomResource(
+    "runtime-2-cluster-credential",
+    {
+      apiVersion: "loopzero.io/v1",
+      kind: "ClusterCredential",
+      metadata: {
+        name: `runtime-${config.region}-02`,
+        namespace: PLATFORM_NAMESPACE,
+        labels: {
+          "loopzero.io/ingress-domain": config.domain,
+        },
+      },
+      spec: {
+        clusterName: infra.runtimeCluster2.clusterName,
+        apiServer: infra.runtimeCluster2.endpoint,
+        secretRef: {
+          name: "runtime-2-cell-kubeconfig",
+          namespace: PLATFORM_NAMESPACE,
+        },
+        scope: {
+          argocd: true,
+          operators: true,
+        },
+        tls: {
+          insecure: false,
+        },
+        cellID: "cell-runtime-2",
+      },
+    },
+    { provider, dependsOn: [runtime2CellKubeconfig] },
+  );
+
   // Secret with cloud provider credentials for the tenant controller.
   // These are used to create registry credentials and Spaces access in build namespaces.
   // Stored as Secret (not plain env vars) to prevent exposure via K8s API.

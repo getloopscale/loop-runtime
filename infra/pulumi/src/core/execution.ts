@@ -18,6 +18,7 @@ export type ComponentName =
   | "mgmtCluster"
   | "buildCluster"
   | "runtimeCluster"
+  | "runtimeCluster2"
   | "database"
   | "storage"
   | "registry"
