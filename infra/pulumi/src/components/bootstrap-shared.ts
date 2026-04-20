@@ -36,6 +36,7 @@ export const HELM_VERSIONS = {
   oryKratos: "0.61.0",
   oryHydra: "0.61.0",
   metricsServer: "3.12.1",
+  kubeStateMetrics: "5.25.1",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -130,6 +131,11 @@ export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
   readonly tlsConfigured: pulumi.Output<boolean>;
 }
 
+export interface RuntimeBootstrapOutputs extends ClusterBootstrapOutputs {
+  /** kube-state-metrics NodePort endpoint for cross-cluster Prometheus scrape. */
+  readonly ksmEndpoint: pulumi.Output<string>;
+}
+
 export interface BuildBootstrapOutputs {
   readonly argoWorkflowsReady: pulumi.Output<boolean>;
   readonly lokiEndpoint: pulumi.Output<string>;
@@ -139,7 +145,7 @@ export interface BuildBootstrapOutputs {
 export interface BootstrapOutputs {
   readonly mgmt: MgmtBootstrapOutputs;
   readonly build: BuildBootstrapOutputs;
-  readonly runtime: ClusterBootstrapOutputs;
+  readonly runtime: RuntimeBootstrapOutputs;
 }
 
 /**

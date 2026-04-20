@@ -2,12 +2,14 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import * as k8s from "@pulumi/kubernetes";
+import * as pulumi from "@pulumi/pulumi";
+import * as command from "@pulumi/command";
 import { InfraOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
 import {
   PLATFORM_NAMESPACE,
   HELM_VERSIONS,
-  ClusterBootstrapOutputs,
+  RuntimeBootstrapOutputs,
   createPlatformNamespace,
   installCertManager,
   installTraefik,
@@ -24,7 +26,7 @@ import {
 export function bootstrapRuntimeCluster(
   infra: InfraOutputs,
   config: PlatformStackConfig,
-): ClusterBootstrapOutputs {
+): RuntimeBootstrapOutputs {
   const provider = new k8s.Provider("runtime-k8s", {
     kubeconfig: infra.runtimeCluster.kubeconfig,
   });
@@ -130,30 +132,32 @@ export function bootstrapRuntimeCluster(
     { provider, dependsOn: [esoWriterRole] },
   );
 
+  // ---------------------------------------------------------------------------
+  // Monitoring namespace — shared by Promtail, kube-state-metrics
+  // Privileged PSA: Promtail needs hostPath volumes for log collection.
+  // ---------------------------------------------------------------------------
+  const runtimeMonitoringNs = new k8s.core.v1.Namespace(
+    "runtime-monitoring",
+    {
+      metadata: {
+        name: "monitoring",
+        labels: {
+          "app.kubernetes.io/managed-by": "pulumi",
+          "app.kubernetes.io/part-of": "loopzero-platform",
+          "pod-security.kubernetes.io/enforce": "privileged",
+          "pod-security.kubernetes.io/warn": "restricted",
+          "pod-security.kubernetes.io/audit": "restricted",
+        },
+      },
+    },
+    { provider },
+  );
+
   // Promtail — ships runtime pod logs to centralized Loki on build cluster.
   // Uses lokiPushUrl (NodePort on build cluster) for cross-cluster log shipping.
   // skipAwait + customTimeouts mitigate Pulumi K8s provider gRPC issues
   // during node pool resize operations.
   if (config.lokiPushUrl) {
-    const runtimeMonitoringNs = new k8s.core.v1.Namespace(
-      "runtime-monitoring",
-      {
-        metadata: {
-          name: "monitoring",
-          labels: {
-            "app.kubernetes.io/managed-by": "pulumi",
-            "app.kubernetes.io/part-of": "loopzero-platform",
-            // Promtail needs hostPath volumes (/var/log/pods, /var/lib/docker/containers)
-            // for log collection — privileged is required for monitoring DaemonSets.
-            "pod-security.kubernetes.io/enforce": "privileged",
-            "pod-security.kubernetes.io/warn": "restricted",
-            "pod-security.kubernetes.io/audit": "restricted",
-          },
-        },
-      },
-      { provider },
-    );
-
     new k8s.helm.v3.Release(
       "runtime-promtail",
       {
@@ -196,10 +200,85 @@ export function bootstrapRuntimeCluster(
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // kube-state-metrics — monitors tenant pod/deployment/namespace state.
+  // Prometheus on mgmt scrapes this cross-cluster via NodePort 30092.
+  // Dashboards (tenant-workloads, tenant-ecosystem) use job="runtime-kube-state-metrics".
+  // ---------------------------------------------------------------------------
+
+  const ksm = new k8s.helm.v3.Release(
+    "runtime-kube-state-metrics",
+    {
+      name: "kube-state-metrics",
+      chart: "kube-state-metrics",
+      version: HELM_VERSIONS.kubeStateMetrics,
+      repositoryOpts: {
+        repo: "https://prometheus-community.github.io/helm-charts",
+      },
+      namespace: "monitoring",
+      createNamespace: false,
+      values: {
+        fullnameOverride: "kube-state-metrics",
+        resources: {
+          requests: { cpu: "50m", memory: "64Mi" },
+          limits: { cpu: "100m", memory: "128Mi" },
+        },
+      },
+    },
+    { provider, dependsOn: [runtimeMonitoringNs] },
+  );
+
+  // NodePort Service — enables cross-cluster Prometheus scrape from mgmt.
+  // Port 30092 (pattern: 30090=argo-wf, 30100=loki, 30092=runtime-ksm).
+  new k8s.core.v1.Service(
+    "runtime-ksm-nodeport",
+    {
+      metadata: {
+        name: "ksm-nodeport",
+        namespace: "monitoring",
+        labels: {
+          "app.kubernetes.io/name": "kube-state-metrics",
+          "app.kubernetes.io/component": "nodeport-cross-cluster",
+        },
+      },
+      spec: {
+        type: "NodePort",
+        ports: [
+          {
+            port: 8080,
+            targetPort: 8080,
+            nodePort: 30092,
+            protocol: "TCP",
+            name: "metrics",
+          },
+        ],
+        selector: {
+          "app.kubernetes.io/name": "kube-state-metrics",
+        },
+      },
+    },
+    { provider, dependsOn: [ksm, runtimeMonitoringNs] },
+  );
+
+  // Resolve runtime cluster node IP for cross-cluster access.
+  // Pattern mirrors build-bootstrap.ts resolve-build-node-ip.
+  const runtimeNodeIp = new command.local.Command(
+    "resolve-runtime-node-ip",
+    {
+      create: pulumi.interpolate`kubectl --kubeconfig <(echo '${infra.runtimeCluster.kubeconfig}') get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'`,
+      interpreter: ["/bin/bash", "-c"],
+      triggers: [infra.runtimeCluster.endpoint],
+    },
+  );
+  const ksmEndpoint = runtimeNodeIp.stdout.apply(
+    (ip: string) => ip.trim() ? `${ip.trim()}:30092` : "pending-runtime-ksm-ip:30092",
+  );
+
   return {
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
     ingressEndpoint,
     platformNamespace: ns.metadata.name,
+    ksmEndpoint,
   };
 }
 

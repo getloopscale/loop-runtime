@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Grafana tenant-workloads dashboard showing no data**: Installed kube-state-metrics on runtime cluster with cross-cluster NodePort (30092) scrape from mgmt Prometheus. Dashboard queries use `job="runtime-kube-state-metrics"` which now resolves to real metrics. Also fixes tenant-ecosystem dashboard.
+
 ### Added
 - **Tenant deletion lifecycle — Phases 0-5** (MEET-052): Full tenant deletion lifecycle implementation. Meeting record: MEET-2026-04-17-052.
   - Phase 0: DeleteApplications NotFound idempotency fix (prevents retry storms)

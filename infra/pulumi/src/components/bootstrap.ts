@@ -14,6 +14,7 @@ export {
   PLATFORM_NAMESPACE,
   HELM_VERSIONS,
   ClusterBootstrapOutputs,
+  RuntimeBootstrapOutputs,
   MgmtBootstrapOutputs,
   BuildBootstrapOutputs,
   BootstrapOutputs,
@@ -53,8 +54,9 @@ export function bootstrapCluster(
 ): BootstrapOutputs {
   // Build cluster bootstrapped first — exports lokiEndpoint + argoMetricsEndpoint for mgmt
   const build = bootstrapBuildCluster(infra, config);
-  const mgmt = bootstrapMgmtCluster(infra, config, build.lokiEndpoint, build.argoMetricsEndpoint, cf);
+  // Runtime bootstrapped before mgmt — exports ksmEndpoint for cross-cluster Prometheus scrape
   const runtime = bootstrapRuntimeCluster(infra, config);
+  const mgmt = bootstrapMgmtCluster(infra, config, build.lokiEndpoint, build.argoMetricsEndpoint, cf, runtime.ksmEndpoint);
 
   return { mgmt, build, runtime };
 }

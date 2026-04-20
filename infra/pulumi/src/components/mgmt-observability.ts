@@ -15,6 +15,7 @@ export function installPrometheus(
   provider: k8s.Provider,
   ns: k8s.core.v1.Namespace,
   argoMetricsEndpoint: pulumi.Output<string>,
+  runtimeKSMEndpoint?: pulumi.Output<string>,
 ): k8s.helm.v3.Release {
   return new k8s.helm.v3.Release(
     "prometheus",
@@ -41,14 +42,18 @@ export function installPrometheus(
           },
         },
         "prometheus-pushgateway": { enabled: false },
-        extraScrapeConfigs: argoMetricsEndpoint.apply((target) => `
+        extraScrapeConfigs: pulumi.all([
+          argoMetricsEndpoint,
+          runtimeKSMEndpoint ?? pulumi.output(""),
+        ]).apply(([argoTarget, ksmTarget]) => {
+          let config = `
 - job_name: argo-workflows
   scrape_interval: 15s
   scrape_timeout: 10s
   metrics_path: /metrics
   static_configs:
     - targets:
-        - "${target}"
+        - "${argoTarget}"
       labels:
         cluster: build
         component: argo-workflows
@@ -84,7 +89,26 @@ export function installPrometheus(
 # Redis metrics are available indirectly via Gitea's own /metrics endpoint
 # (reports cache hit/miss rates). Dedicated redis-exporter can be added
 # later if deeper Redis observability is needed.
-`),
+`;
+          if (ksmTarget) {
+            config += `
+# Runtime cluster kube-state-metrics — cross-cluster scrape via NodePort 30092.
+# Provides kube_pod_*, kube_deployment_*, kube_namespace_* metrics for tenant
+# workloads. Dashboards (tenant-workloads, tenant-ecosystem) filter on this job.
+- job_name: runtime-kube-state-metrics
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  metrics_path: /metrics
+  static_configs:
+    - targets:
+        - "${ksmTarget}"
+      labels:
+        cluster: runtime
+        component: kube-state-metrics
+`;
+          }
+          return config;
+        }),
         serverFiles: {
           "alerting_rules.yml": {
             groups: [

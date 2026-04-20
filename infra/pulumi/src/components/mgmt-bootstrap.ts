@@ -36,6 +36,7 @@ export function bootstrapMgmtCluster(
   lokiEndpoint: pulumi.Output<string>,
   argoMetricsEndpoint: pulumi.Output<string>,
   cf?: CloudflareOutputs,
+  runtimeKSMEndpoint?: pulumi.Output<string>,
 ): MgmtBootstrapOutputs {
   // REVIEW-2026-03-30: Fixes CRIT-01 — fail-fast if production deploys without
   // explicit passwords. Dev defaults are acceptable only for non-prod environments.
@@ -293,7 +294,8 @@ export function bootstrapMgmtCluster(
 
   // Prometheus — metrics collection (kube-state-metrics, node-exporter, cAdvisor)
   // argoMetricsEndpoint enables cross-cluster scrape of Argo Workflows controller
-  const prometheus = installPrometheus(provider, ns, argoMetricsEndpoint);
+  // runtimeKSMEndpoint enables cross-cluster scrape of runtime kube-state-metrics (tenant dashboards)
+  const prometheus = installPrometheus(provider, ns, argoMetricsEndpoint, runtimeKSMEndpoint);
 
   // Grafana — dashboards and visualization, pre-configured with Prometheus + Loki data sources
   const grafana = installGrafana(provider, ns, config);
@@ -3523,8 +3525,8 @@ function createPlatformNetworkPolicies(
           { ports: [{ port: 25060, protocol: "TCP" }] },
           // HTTP (Gitea internal, MinIO, Loki cross-cluster on NodePort)
           { ports: [{ port: 80, protocol: "TCP" }, { port: 8080, protocol: "TCP" }, { port: 9000, protocol: "TCP" }] },
-          // Cross-cluster (build K8s API, Loki NodePort 30100, Argo WF metrics NodePort 30090)
-          { ports: [{ port: 30100, protocol: "TCP" }, { port: 30090, protocol: "TCP" }] },
+          // Cross-cluster (build K8s API, Loki NodePort 30100, Argo WF metrics NodePort 30090, runtime KSM NodePort 30092)
+          { ports: [{ port: 30100, protocol: "TCP" }, { port: 30090, protocol: "TCP" }, { port: 30092, protocol: "TCP" }] },
           // Intra-namespace (all pods can talk to each other)
           { to: [{ podSelector: {} }] },
         ],
