@@ -14,6 +14,7 @@ import {
   lookupLoadBalancerEndpoint,
   createClusterIssuer,
   installMetricsServer,
+  createDockerRegistryPullSecret,
 } from "./bootstrap-shared";
 
 // ---------------------------------------------------------------------------
@@ -47,6 +48,17 @@ export function bootstrapRuntimeCluster(
     "runtime",
     provider,
     traefik,
+  );
+
+  // DOCR pull secret — runtime cluster needs to pull tenant app images from DOCR.
+  // The TenantController creates per-namespace copies, but this ensures the
+  // Secret exists at cluster level for propagation.
+  createDockerRegistryPullSecret(
+    "runtime-docr-pull-secret",
+    infra.registryName,
+    PLATFORM_NAMESPACE,
+    provider,
+    { write: false, dependsOn: [ns] },
   );
 
   // External Secrets Operator — syncs secrets from mgmt cluster to runtime namespaces.

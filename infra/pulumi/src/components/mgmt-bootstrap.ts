@@ -104,6 +104,46 @@ export function bootstrapMgmtCluster(
   // ArgoCD — GitOps engine, manages runtime cluster
   const argocd = installArgoCD(provider, ns, certManager, callbackToken.result);
 
+  // ArgoCD repo-creds — allow ArgoCD to clone from Gitea.
+  // Uses Gitea admin password directly (same credentials Helm passes to Gitea).
+  // This eliminates dependency on the bootstrap job for ArgoCD→Gitea connectivity.
+  const giteaAdminPassword = config.giteaAdminPassword ?? GITEA_ADMIN_PASSWORD_DEFAULT;
+  new k8s.core.v1.Secret(
+    "argocd-repo-creds-internal",
+    {
+      metadata: {
+        name: "argocd-repo-creds-internal",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { "argocd.argoproj.io/secret-type": "repo-creds" },
+      },
+      stringData: {
+        type: "git",
+        url: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
+        username: "gitea_admin",
+        password: giteaAdminPassword,
+      },
+    },
+    { provider, dependsOn: [argocd] },
+  );
+  new k8s.core.v1.Secret(
+    "argocd-repo-creds-external",
+    {
+      metadata: {
+        name: "argocd-repo-creds-external",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { "argocd.argoproj.io/secret-type": "repo-creds" },
+      },
+      stringData: {
+        type: "git",
+        url: `https://git.${config.domain}`,
+        username: "gitea_admin",
+        password: giteaAdminPassword,
+        insecure: "true",
+      },
+    },
+    { provider, dependsOn: [argocd] },
+  );
+
   // NFS provisioner — provides ReadWriteMany (RWX) StorageClass for Gitea HA.
   // DOKS only supports RWO (block storage). Git repos need POSIX filesystem with
   // concurrent read/write from multiple pods. NFS-Ganesha runs a single NFS server
@@ -2527,6 +2567,7 @@ function installLoopZeroController(
                 ports: [{ containerPort: 9091, name: "health" }],
                 env: [
                   { name: "LOOPZERO_CELL_ID", value: "cell-default" },
+                  { name: "TENANT_NAMESPACE", value: PLATFORM_NAMESPACE },
                   { name: "REGISTRY_URL", value: infra.registryEndpoint },
                   { name: "REGISTRY_INSECURE", value: "false" },
                   { name: "BASE_DOMAIN", value: config.domain },

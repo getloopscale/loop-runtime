@@ -291,7 +291,7 @@ func Load() Config {
 
 		// Release Reaper (spec §5.2)
 		ReleaseReadyTimeout:   envDuration("RELEASE_READY_TIMEOUT", 5*time.Minute),
-		ReleasePendingTimeout: envDuration("RELEASE_PENDING_TIMEOUT", 2*time.Minute),
+		ReleasePendingTimeout: envDuration("RELEASE_PENDING_TIMEOUT", 6*time.Minute),
 		ReleaseReaperInterval: envDuration("RELEASE_REAPER_INTERVAL", 30*time.Second),
 
 		// Build Reconcile Loop (C-01 fix): polls Argo Workflow CRDs every 5s
@@ -338,6 +338,10 @@ func (c Config) Validate() error {
 		return fmt.Errorf("DB_MAX_CONNS (%d) must be >= DB_MIN_CONNS (%d)", c.DBMaxConns, c.DBMinConns)
 	}
 	if c.ReleasePendingTimeout > 0 && c.ArgocdSyncTimeout > 0 && c.ReleasePendingTimeout < c.ArgocdSyncTimeout {
+		if c.IsProduction() {
+			return fmt.Errorf("RELEASE_PENDING_TIMEOUT (%s) must be >= ARGOCD_SYNC_TIMEOUT (%s) — releases will be reaped before sync completes",
+				c.ReleasePendingTimeout, c.ArgocdSyncTimeout)
+		}
 		slog.Warn("RELEASE_PENDING_TIMEOUT is less than ARGOCD_SYNC_TIMEOUT — releases may be reaped before ArgoCD sync completes",
 			"release_pending_timeout", c.ReleasePendingTimeout, "argocd_sync_timeout", c.ArgocdSyncTimeout)
 	}
