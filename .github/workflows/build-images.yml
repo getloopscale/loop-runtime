@@ -93,7 +93,7 @@ jobs:
           case "$BRANCH" in
             develop) TAG="dev" ;;
             homolog) TAG="homolog" ;;
-            main)    TAG="latest" ;;
+            main)    TAG="prod" ;;
             *)       TAG="dev" ;;
           esac
 
@@ -179,7 +179,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -267,7 +267,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -354,7 +354,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -441,7 +441,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -518,7 +518,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -537,31 +537,8 @@ jobs:
       - name: Set reproducible timestamp
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
 
-      - name: Resolve dashboard URLs
-        id: urls
-        run: |
-          BRANCH="${{ github.ref_name }}"
-          case "$BRANCH" in
-            main)
-              echo "api_url=https://cloud.loopzero.example" >> "$GITHUB_OUTPUT"
-              echo "engine_url=https://api.loopzero.example" >> "$GITHUB_OUTPUT"
-              echo "auth_url=https://auth.loopzero.example" >> "$GITHUB_OUTPUT"
-              echo "accounts_url=https://cloud.loopzero.example" >> "$GITHUB_OUTPUT"
-              ;;
-            homolog)
-              echo "api_url=https://cloud.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
-              echo "engine_url=https://api.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
-              echo "auth_url=https://auth.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
-              echo "accounts_url=https://cloud.homolog.loopzero.example" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "api_url=https://cloud.dev.loopzero.example" >> "$GITHUB_OUTPUT"
-              echo "engine_url=https://api.dev.loopzero.example" >> "$GITHUB_OUTPUT"
-              echo "auth_url=https://auth.dev.loopzero.example" >> "$GITHUB_OUTPUT"
-              echo "accounts_url=https://cloud.dev.loopzero.example" >> "$GITHUB_OUTPUT"
-              ;;
-          esac
-
+      # Dashboard uses runtime config (docker-entrypoint.sh generates /__config.js).
+      # No VITE_* build args — same commit produces same image regardless of branch.
       - name: Build and push dashboard
         id: build
         run: |
@@ -572,10 +549,6 @@ jobs:
           docker buildx build \
             --provenance=true --sbom=true \
             --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
-            --build-arg VITE_API_URL=${{ steps.urls.outputs.api_url }} \
-            --build-arg VITE_ENGINE_URL=${{ steps.urls.outputs.engine_url }} \
-            --build-arg VITE_AUTH_URL=${{ steps.urls.outputs.auth_url }} \
-            --build-arg VITE_ACCOUNTS_URL=${{ steps.urls.outputs.accounts_url }} \
             --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-dashboard:cache \
             --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-dashboard:cache,mode=max \
             -t ${{ env.REGISTRY }}/loopzero-dashboard:${TAG} \
@@ -668,7 +641,7 @@ jobs:
 
       - name: Install doctl
         if: matrix.result == 'success' && matrix.digest != ''
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@v2.7.0
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -758,169 +731,6 @@ jobs:
           path: sbom-${{ matrix.component }}.spdx.json
           retention-days: 90
 
-  # ─────────────────────────────────────────────
-  # POST-BUILD — integrate registry with DOKS clusters
-  # ─────────────────────────────────────────────
-  integrate-registry:
-    name: Integrate registry with DOKS
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs: [resolve, build-api, build-operator, build-cloud, build-dashboard, build-harbor-init, sign-and-attest]
-    if: >-
-      always() &&
-      needs.sign-and-attest.result != 'failure' &&
-      (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success' || needs.build-harbor-init.result == 'success')
-    environment: ${{ needs.resolve.outputs.environment }}
-    env:
-      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
-      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
-    steps:
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
-
-      - name: Add DOCR registry to DOKS clusters
-        run: |
-          # Discover cluster names dynamically — avoids hardcoding region.
-          # doctl returns all DOKS clusters; we filter for loopzero-infra ones.
-          CLUSTERS=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra" || true)
-          if [ -z "$CLUSTERS" ]; then
-            echo "::warning::No loopzero-infra DOKS clusters found"
-            exit 0
-          fi
-
-          echo "### Registry Integration (DOCR)" >> "$GITHUB_STEP_SUMMARY"
-          for CLUSTER in $CLUSTERS; do
-            doctl kubernetes cluster registry add "$CLUSTER" 2>/dev/null || true
-            echo "- ✅ $CLUSTER" >> "$GITHUB_STEP_SUMMARY"
-          done
-
-      # MEET-048: Harbor imagePullSecret provisioning.
-      # TODO(MEET-048): After migration, replace DOCR integration above with Harbor-only.
-      # Harbor uses standard K8s docker-registry secrets instead of doctl integration.
-      - name: Add Harbor imagePullSecret to DOKS clusters
-        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
-        run: |
-          CLUSTERS=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra" || true)
-          if [ -z "$CLUSTERS" ]; then
-            exit 0
-          fi
-
-          echo "### Registry Integration (Harbor)" >> "$GITHUB_STEP_SUMMARY"
-          for CLUSTER in $CLUSTERS; do
-            doctl kubernetes cluster kubeconfig save "$CLUSTER" 2>/dev/null || continue
-            CTX=$(kubectl config get-contexts -o name 2>/dev/null | grep "$CLUSTER" | head -1)
-            [ -z "$CTX" ] && continue
-
-            # Create Harbor imagePullSecret in default and platform-system namespaces
-            for NS in default platform-system; do
-              kubectl --context "$CTX" create secret docker-registry harbor-registry \
-                --docker-server="${{ env.HARBOR_REGISTRY }}" \
-                --docker-username="${{ env.HARBOR_ROBOT_USERNAME }}" \
-                --docker-password="${{ env.HARBOR_ROBOT_PASSWORD }}" \
-                --namespace "$NS" \
-                --dry-run=client -o yaml | kubectl --context "$CTX" apply -f - 2>/dev/null || true
-            done
-            echo "- ✅ $CLUSTER (Harbor)" >> "$GITHUB_STEP_SUMMARY"
-          done
-
-  # ─────────────────────────────────────────────
-  # POST-BUILD — update CWTs on build cluster
-  # ─────────────────────────────────────────────
-  update-cwts:
-    name: Update CWTs on build cluster
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs: [resolve, build-api, build-operator, build-cloud, build-dashboard, build-harbor-init, sign-and-attest]
-    if: >-
-      always() &&
-      needs.sign-and-attest.result != 'failure' &&
-      (needs.build-api.result == 'success' || needs.build-operator.result == 'success' || needs.build-cloud.result == 'success' || needs.build-dashboard.result == 'success' || needs.build-harbor-init.result == 'success')
-    environment: ${{ needs.resolve.outputs.environment }}
-    env:
-      HARBOR_ROBOT_USERNAME: ${{ secrets.HARBOR_ROBOT_USERNAME }}
-      HARBOR_ROBOT_PASSWORD: ${{ secrets.HARBOR_ROBOT_PASSWORD }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
-
-      - name: Install Helm
-        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
-        with:
-          version: v3.14.0
-
-      - name: Update CWTs on build cluster
-        run: |
-          # Discover build cluster name dynamically — avoids hardcoding region.
-          BUILD_CLUSTER=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra.*-build$" | head -1)
-          if [ -z "$BUILD_CLUSTER" ]; then
-            echo "::warning::Build cluster not found"
-            exit 0
-          fi
-
-          # Get kubeconfig for the build cluster
-          doctl kubernetes cluster kubeconfig save "$BUILD_CLUSTER"
-
-          # Extract the kubectl context name from the saved kubeconfig
-          BUILD_CONTEXT=$(kubectl config get-contexts -o name 2>/dev/null | grep "$BUILD_CLUSTER" | head -1)
-
-          # Ensure argo namespace exists (may not if infra deploy hasn't run yet)
-          kubectl --context "$BUILD_CONTEXT" get ns argo >/dev/null 2>&1 || {
-            echo "::warning::Namespace 'argo' not found — skipping CWT update (infra deploy will create it)"
-            exit 0
-          }
-
-          # Render and apply CWT templates from the local Helm chart.
-          helm template loopzero-build-cwts infra/helm/argo-workflows \
-            --set minio.insecure=${{ github.ref != 'refs/heads/main' }} | \
-            kubectl apply --context "$BUILD_CONTEXT" -f - || {
-            echo "::warning::CWT apply failed — will be applied by infra deploy"
-            exit 0
-          }
-
-          # Ensure buildkit-registry-config secret exists for image push (DOCR).
-          # Note: 30-day expiry required — BuildKit uses this credential for async user builds
-          # between CI runs. Short-lived tokens would break user deploys.
-          RW_CONFIG=$(doctl registry docker-config --read-write --expiry-seconds 2592000)
-          kubectl create secret generic buildkit-registry-config \
-            --context "$BUILD_CONTEXT" \
-            --namespace argo \
-            --from-literal=config.json="$RW_CONFIG" \
-            --dry-run=client -o yaml | kubectl apply --context "$BUILD_CONTEXT" -f - || true
-
-          echo "### CWT Update" >> "$GITHUB_STEP_SUMMARY"
-          echo "- CWTs updated on $BUILD_CLUSTER" >> "$GITHUB_STEP_SUMMARY"
-          echo "- buildkit-registry-config secret ensured (DOCR)" >> "$GITHUB_STEP_SUMMARY"
-
-      # MEET-048: Harbor BuildKit credentials for build cluster.
-      # TODO(MEET-048): After migration, merge DOCR and Harbor configs into a single
-      # buildkit-registry-config secret, then remove DOCR config entirely.
-      - name: Ensure Harbor BuildKit credentials
-        if: env.HARBOR_REGISTRY != '' && env.HARBOR_ROBOT_PASSWORD != ''
-        run: |
-          BUILD_CLUSTER=$(doctl kubernetes cluster list --format Name --no-header 2>/dev/null | grep "^loopzero-infra.*-build$" | head -1)
-          if [ -z "$BUILD_CLUSTER" ]; then
-            exit 0
-          fi
-
-          doctl kubernetes cluster kubeconfig save "$BUILD_CLUSTER"
-          BUILD_CONTEXT=$(kubectl config get-contexts -o name 2>/dev/null | grep "$BUILD_CLUSTER" | head -1)
-
-          kubectl --context "$BUILD_CONTEXT" get ns argo >/dev/null 2>&1 || exit 0
-
-          # Create Harbor docker-config JSON for BuildKit
-          HARBOR_CONFIG=$(echo -n '{"auths":{"${{ env.HARBOR_REGISTRY }}":{"username":"${{ env.HARBOR_ROBOT_USERNAME }}","password":"${{ env.HARBOR_ROBOT_PASSWORD }}"}}}')
-          kubectl create secret generic buildkit-harbor-registry-config \
-            --context "$BUILD_CONTEXT" \
-            --namespace argo \
-            --from-literal=config.json="$HARBOR_CONFIG" \
-            --dry-run=client -o yaml | kubectl apply --context "$BUILD_CONTEXT" -f - || true
-
-          echo "- buildkit-harbor-registry-config secret ensured (Harbor)" >> "$GITHUB_STEP_SUMMARY"
+  # NOTE: Registry integration and CWT updates were moved to infra-bootstrap.yml
+  # (MEET-050 pipeline review). Build pipeline produces artifacts only.
+  # The infra-restart.yml workflow handles pod restarts after builds.

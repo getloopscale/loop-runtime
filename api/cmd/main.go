@@ -133,6 +133,11 @@ func main() {
 	middleware.ServiceAuthSecret = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
 	middleware.ServiceAuthSecretPrevious = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS")
 
+	// MEET-052: Platform admin API key for cross-tenant operations (force-delete, bulk-delete).
+	// Dual-key rotation: accepts current OR previous during rotation window.
+	middleware.AdminAPIKey = os.Getenv("LOOPZERO_ADMIN_API_KEY")
+	middleware.AdminAPIKeyPrevious = os.Getenv("LOOPZERO_ADMIN_API_KEY_PREVIOUS")
+
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
 	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
 	if err != nil {
@@ -466,10 +471,11 @@ func main() {
 			eventStore,
 			logger,
 			services.BuildReaperConfig{
-				QueueTimeout:   cfg.BuildQueueTimeout,
-				RunningTimeout: cfg.BuildRunningTimeout,
-				CancelTimeout:  cfg.BuildCancelTimeout,
-				Interval:       cfg.BuildReaperInterval,
+				QueueTimeout:     cfg.BuildQueueTimeout,
+				RunningTimeout:   cfg.BuildRunningTimeout,
+				ReleasingTimeout: cfg.BuildReleasingTimeout,
+				CancelTimeout:    cfg.BuildCancelTimeout,
+				Interval:         cfg.BuildReaperInterval,
 			},
 			reconcileLoop,
 		)
@@ -617,21 +623,57 @@ func main() {
 		var bgWg sync.WaitGroup
 
 		// ADR-0008: Cell Router — resolves cell_id to cluster connection details.
-		// Phase 0/1: StaticRouter with single Cell (backward compat).
-		// Phase 2+: populated from ClusterCredential CRDs or Pulumi outputs.
-		staticRouter, err := placement.NewStaticRouter([]placement.CellConfig{{
-			CellID:        placement.DefaultCellID,
-			KubeConfig:    cfg.RuntimeKubeconfig,
-			KubeContext:   cfg.RuntimeKubeContext,
-			ArgocdURL:     cfg.ArgocdURL,
-			ArgocdToken:   cfg.ArgocdToken,
-			IngressDomain: cfg.BaseDomain,
-		}})
-		if err != nil {
-			logger.Error("failed to create cell router", "error", err)
-			os.Exit(1)
+		//
+		// MEET-053: Cell Router setup.
+		// Priority: LOOPZERO_SINGLE_CELL=true (forced StaticRouter) > DynamicRouter > StaticRouter fallback.
+		// DynamicRouter reads ClusterCredential CRDs from the mgmt cluster.
+		// StaticRouter is the fallback when DynamicRouter is disabled or finds 0 cells.
+		var useDynamicRouter bool
+		if cfg.SingleCell {
+			logger.Warn("cell router: LOOPZERO_SINGLE_CELL=true — forced single-cell mode (rollback)")
+		} else if cfg.DynamicRouter {
+			// K8sCellStore reads ClusterCredential CRDs from the mgmt cluster.
+			// nil restConfig = in-cluster config (API runs on mgmt cluster).
+			// Namespace = platform-system (where ClusterCredentials live).
+			k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, "platform-system")
+			if k8sErr == nil {
+				dynRouter := placement.NewDynamicRouter(k8sCellStore, 60*time.Second, logger)
+				// Try initial load — if it finds cells, use DynamicRouter.
+				if cells, loadErr := k8sCellStore.LoadCells(context.Background()); loadErr == nil && len(cells) > 0 {
+					cellRouter = dynRouter
+					useDynamicRouter = true
+					bgWg.Add(1)
+					go func() {
+						defer bgWg.Done()
+						dynRouter.Start(shutdownCtx)
+					}()
+					logger.Info("cell router: DynamicRouter active",
+						"cells_discovered", len(cells))
+				} else {
+					logger.Info("cell router: no ClusterCredentials found, falling back to StaticRouter",
+						"load_err", loadErr, "cells_found", len(cells))
+				}
+			} else {
+				logger.Warn("cell router: K8sCellStore init failed, falling back to StaticRouter",
+					"error", k8sErr)
+			}
 		}
-		cellRouter = staticRouter
+		if !useDynamicRouter {
+			staticRouter, err := placement.NewStaticRouter([]placement.CellConfig{{
+				CellID:        placement.DefaultCellID,
+				KubeConfig:    cfg.RuntimeKubeconfig,
+				KubeContext:   cfg.RuntimeKubeContext,
+				ArgocdURL:     cfg.ArgocdURL,
+				ArgocdToken:   cfg.ArgocdToken,
+				IngressDomain: cfg.BaseDomain,
+			}})
+			if err != nil {
+				logger.Error("failed to create cell router", "error", err)
+				os.Exit(1)
+			}
+			cellRouter = staticRouter
+			logger.Info("cell router: StaticRouter with cell-default (single cell)")
+		}
 
 		// ADR-0008: Cell metrics collector (leader-only to avoid N identical PG queries).
 		cellStore = &db.PostgresCellStore{DB: dbAdapter}
@@ -932,15 +974,27 @@ func main() {
 		if dbAdapter != nil {
 			buildStoreForAdmission := db.NewPostgresBuildStore(dbAdapter)
 			querier := &buildStoreAdmissionQuerier{store: buildStoreForAdmission}
-			gate := admission.NewBuildGate(querier, admission.DefaultConfig(), cfg.AdmissionControl)
+			// Bug #43: wire env-configurable MAX_CONCURRENT_BUILDS_PER_CELL /
+			// MAX_CONCURRENT_BUILDS_PER_TENANT from config. Previously the call
+			// used DefaultConfig() which hardcoded 20/3, ignoring the env vars.
+			admissionCfg := admission.DefaultConfig()
+			if cfg.MaxConcurrentBuildsPerCell > 0 {
+				admissionCfg.MaxConcurrentPerCell = cfg.MaxConcurrentBuildsPerCell
+			}
+			if cfg.MaxConcurrentBuildsPerTenant > 0 {
+				admissionCfg.MaxConcurrentPerTenant = cfg.MaxConcurrentBuildsPerTenant
+			}
+			gate := admission.NewBuildGate(querier, admissionCfg, cfg.AdmissionControl)
+			// MEET-053 A-06: Resolve cell_id per-request from tenant's placement
+			// instead of hardcoded DefaultCellID. cellStore implements GetTenantCellID.
 			buildHandler = buildHandler.WithAdmission(
 				admission.NewRouteAdapter(gate),
-				placement.DefaultCellID, // single-cell for now; roadmap 06 routing picks the cell per tenant
+				cellStore,
 			)
 			if cfg.AdmissionControl {
 				logger.Info("build admission gate enabled",
-					"max_per_cell", admission.DefaultConfig().MaxConcurrentPerCell,
-					"max_per_tenant", admission.DefaultConfig().MaxConcurrentPerTenant,
+					"max_per_cell", admissionCfg.MaxConcurrentPerCell,
+					"max_per_tenant", admissionCfg.MaxConcurrentPerTenant,
 				)
 			}
 
@@ -993,6 +1047,7 @@ func main() {
 		}(),
 		SourceStore:        sourceStore,
 		ObjectUploader:     objUploader,
+		SourceBucket:       cfg.SourceBucket,
 		ArgoCallbackSecret: "", // C-01 fix: callback route removed
 		EventStore:         eventStore,
 		BuildStoreReader:   buildStoreReader,
@@ -1020,6 +1075,14 @@ func main() {
 		GitHubWebhookHandler: githubWebhookHandler,
 		RepositoryHandler:    repoHandler,
 		AuditHandler:       routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter}),
+		// T-02: admin evict — route present only when DB available.
+		// Feature-flagged at runtime via LOOPZERO_ADMIN_API env var.
+		// Full variant runs K8s cluster teardown (phase 2) BEFORE the
+		// FK-ordered DB cleanup, matching the bash tool's sequence. When
+		// the K8s client construction fails (missing kubeconfig in local
+		// dev), we fall back to DB-only — admin still gets a working
+		// endpoint, just without the K8s teardown path.
+		AdminEvictor: buildAdminEvictor(cfg, dbAdapter),
 		ShutdownCtx:        shutdownCtx,
 		ShutdownCancel:     shutdownCancel,
 		RateLimiter:        rateLimiter,
@@ -1099,4 +1162,56 @@ func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input serv
 		ServiceName: input.ServiceName,
 		ServicePort: input.ServicePort,
 	})
+}
+
+// buildAdminEvictor constructs the admin evictor with DB + (when possible)
+// K8s teardown. Called during server Config assembly. If the multi-cluster
+// K8s evictor cannot be built (missing kubeconfig, invalid context, etc.),
+// the helper falls back to DB-only — the admin endpoint still works, it just
+// skips the K8s phase and operators must run tools/admin-evict-tenants.sh
+// for the cluster resources.
+//
+// The fallback is intentional: local dev (k3d) often has all three contexts
+// available, but partial-cluster breakage (e.g. runtime kubeconfig mis-set)
+// shouldn't prevent the API from starting. A startup log line makes the
+// degraded mode explicit.
+func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) routes.TenantEvictor {
+	store := &db.PostgresTenantStore{DB: dbAdapter}
+	dbDeleter := &adapters.TenantDBDeleterAdapter{Store: store}
+
+	k8sEv, err := k8s.NewTenantK8sEvictor(
+		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
+		cfg.BuildKubeconfig, cfg.BuildKubeContext,
+		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,
+		"", "", // default namespaces (platform-system, argo)
+	)
+	if err != nil {
+		slog.Warn("admin evict: K8s teardown disabled — falling back to DB-only",
+			"error", err.Error(),
+			"consequence", "operators must run tools/admin-evict-tenants.sh for K8s cleanup",
+		)
+		return &tenantEvictorRouteAdapter{Inner: services.NewTenantEvictorWithDB(store, dbDeleter)}
+	}
+	return &tenantEvictorRouteAdapter{Inner: services.NewTenantEvictorFull(
+		store,
+		dbDeleter,
+		&adapters.TenantK8sEvictorAdapter{Evictor: k8sEv},
+	)}
+}
+
+// tenantEvictorRouteAdapter exposes *services.TenantEvictor via the
+// routes.TenantEvictor interface. The concrete type's pointer-receiver
+// methods already satisfy the interface — this wrapper only exists to make
+// that relationship explicit (and would allow future per-route concerns
+// like logging/tracing to be layered in without touching services).
+type tenantEvictorRouteAdapter struct {
+	Inner *services.TenantEvictor
+}
+
+func (a *tenantEvictorRouteAdapter) MatchTenants(ctx context.Context, pattern string, ids []string) ([]string, error) {
+	return a.Inner.MatchTenants(ctx, pattern, ids)
+}
+
+func (a *tenantEvictorRouteAdapter) EnqueueEviction(ctx context.Context, tenantIDs []string) (string, error) {
+	return a.Inner.EnqueueEviction(ctx, tenantIDs)
 }

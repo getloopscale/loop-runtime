@@ -306,3 +306,7 @@ type failingPlacementEngine struct{}
 func (e *failingPlacementEngine) AssignCell(_ context.Context) (string, error) {
 	return "", fmt.Errorf("cell placement unavailable: all cells full")
 }
+
+func (e *failingPlacementEngine) AssignAndExecute(_ context.Context, _ func(context.Context, string) error) error {
+	return fmt.Errorf("cell placement unavailable: all cells full")
+}

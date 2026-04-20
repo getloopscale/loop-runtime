@@ -24,6 +24,7 @@ package manifests
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -364,9 +365,28 @@ func (ri RenderInput) gatewayNamespace() string {
 	return "platform-system"
 }
 
+// leanResourcesEnabled reports whether the LOOPZERO_LEAN_RESOURCES env var
+// is set (case-insensitive "true" or "1"). When lean mode is on, the
+// fallback defaults are halved to fit 100 apps in the current DO dev
+// runtime cluster while a droplet quota increase is in flight.
+//
+// Plan: docs/plans/50k-immediate-focus.md (T-08 contingency, Option A).
+//
+// This flag affects ONLY the fallback path. If a caller sets
+// RenderInput.DefaultCPURequest/etc. explicitly (e.g. from config or
+// loopzero.yaml), those win — lean mode never overrides an explicit value.
+// Read live on every call so ops can toggle without restarting the API.
+func leanResourcesEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("LOOPZERO_LEAN_RESOURCES")))
+	return v == "true" || v == "1"
+}
+
 func (ri RenderInput) cpuRequest() string {
 	if ri.DefaultCPURequest != "" {
 		return ri.DefaultCPURequest
+	}
+	if leanResourcesEnabled() {
+		return "50m"
 	}
 	return "100m"
 }
@@ -375,6 +395,9 @@ func (ri RenderInput) memoryRequest() string {
 	if ri.DefaultMemoryRequest != "" {
 		return ri.DefaultMemoryRequest
 	}
+	if leanResourcesEnabled() {
+		return "64Mi"
+	}
 	return "128Mi"
 }
 
@@ -382,12 +405,18 @@ func (ri RenderInput) cpuLimit() string {
 	if ri.DefaultCPULimit != "" {
 		return ri.DefaultCPULimit
 	}
+	if leanResourcesEnabled() {
+		return "250m"
+	}
 	return "500m"
 }
 
 func (ri RenderInput) memoryLimit() string {
 	if ri.DefaultMemoryLimit != "" {
 		return ri.DefaultMemoryLimit
+	}
+	if leanResourcesEnabled() {
+		return "256Mi"
 	}
 	return "512Mi"
 }

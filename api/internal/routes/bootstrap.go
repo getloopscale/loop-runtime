@@ -59,6 +59,9 @@ type BootstrapStore interface {
 // ADR-0008: Phase 0 = DefaultEngine (always "cell-default").
 type CellPlacementEngine interface {
 	AssignCell(ctx context.Context) (cellID string, err error)
+	// AssignAndExecute picks a cell AND runs the callback in the same serialized
+	// transaction. MEET-053 D-01: fixes TOCTOU between AssignCell and INSERT.
+	AssignAndExecute(ctx context.Context, fn func(ctx context.Context, cellID string) error) error
 }
 
 // BootstrapHandler handles POST /internal/bootstrap.
@@ -134,18 +137,20 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	// Sanitize the tenant slug to ensure RFC 1123 compliance.
 	req.TenantSlug = naming.Sanitize(req.TenantSlug)
 
-	// ADR-0008: Assign Cell before persisting tenant.
-	cellID, cellErr := h.placement.AssignCell(r.Context())
-	if cellErr != nil {
-		slog.Error("cell placement failed", "error", cellErr)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
-		return
-	}
-	req.CellID = cellID
-
-	userID, tenantID, created, err := h.store.Bootstrap(r.Context(), req)
-	if err != nil {
-		slog.Error("bootstrap failed", "error", err)
+	// MEET-053 D-01: AssignAndExecute runs the cell pick AND the bootstrap
+	// INSERT inside the same serialized transaction. This fixes the TOCTOU
+	// race where concurrent tenant creations could both read the same cell
+	// counts and both pick the same cell.
+	var userID, tenantID string
+	var created bool
+	assignErr := h.placement.AssignAndExecute(r.Context(), func(txCtx context.Context, cellID string) error {
+		req.CellID = cellID
+		var err error
+		userID, tenantID, created, err = h.store.Bootstrap(txCtx, req)
+		return err
+	})
+	if assignErr != nil {
+		slog.Error("bootstrap failed", "error", assignErr)
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}

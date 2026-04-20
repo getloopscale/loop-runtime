@@ -47,6 +47,7 @@ import { TeamRemoveCommand } from './commands/team-remove';
 import { TeamRoleCommand } from './commands/team-role';
 import { DomainAddCommand, DomainVerifyCommand, DomainStatusCommand, DomainListCommand, DomainRemoveCommand, DomainDNSCommand } from './commands/domain';
 import { ConnectCommand, DisconnectCommand } from './commands/connect';
+import { runAdminEvict, AdminEvictInput, AdminEvictResponse } from './commands/admin-evict';
 import { detectMonorepoTool } from './detection/monorepo';
 import { detectFramework } from './detection/framework';
 
@@ -1753,6 +1754,75 @@ export function createProgram(): Command {
         else { writeError(err.message); }
         return 3;
       });
+    });
+
+  // --- admin (operator-only; gated by LOOPZERO_SERVICE_AUTH) ---
+  // See docs/plans/50k-immediate-focus.md — T-02 admin evict.
+  // `loopzero admin tenants evict --pattern 'tn-lt-%' [--dry-run | --yes] [--ids a,b,c]`
+  const adminCmd = program
+    .command('admin')
+    .description('Operator-only commands (require LOOPZERO_SERVICE_AUTH)');
+  const adminTenantsCmd = adminCmd
+    .command('tenants')
+    .description('Bulk tenant operations');
+  adminTenantsCmd
+    .command('evict')
+    .description('Bulk tenant eviction — dry-run by default unless --yes')
+    .option('--pattern <sqlLike>', "SQL LIKE pattern against tenants.id (e.g., 'tn-lt-%')")
+    .option('--ids <csv>', 'Comma-separated tenant IDs (alternative to --pattern)')
+    .option('--dry-run', 'Show matches without evicting')
+    .option('--yes', 'Skip confirmation prompt')
+    .action(async (cmdOpts: { pattern?: string; ids?: string; dryRun?: boolean; yes?: boolean }) => {
+      const globalOpts = program.opts();
+      const apiUrl = getDefaultApiUrl();
+      // Admin path uses X-Service-Auth, not user JWT. The env var is the
+      // same one the API reads from its own secret — operator supplies it
+      // via `export LOOPZERO_SERVICE_AUTH=...` before running this command.
+      const serviceAuth = process.env.LOOPZERO_SERVICE_AUTH ?? '';
+
+      const adminPost = async (input: AdminEvictInput): Promise<AdminEvictResponse> => {
+        const res = await fetch(`${apiUrl}/api/v1/admin/tenants/evict`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Service-Auth': serviceAuth,
+          },
+          body: JSON.stringify(input),
+        });
+        if (!res.ok) {
+          const body = await res.text();
+          throw new Error(`admin evict HTTP ${res.status}: ${body}`);
+        }
+        return (await res.json()) as AdminEvictResponse;
+      };
+
+      const { createInterface } = await import('readline');
+      const ask = (question: string): Promise<string> =>
+        new Promise((resolve) => {
+          const rl = createInterface({ input: process.stdin, output: process.stdout });
+          rl.question(question, (answer) => {
+            rl.close();
+            resolve(answer);
+          });
+        });
+
+      const exitCode = await runAdminEvict(
+        {
+          pattern: cmdOpts.pattern,
+          ids: cmdOpts.ids,
+          dryRun: cmdOpts.dryRun,
+          yes: cmdOpts.yes,
+          json: globalOpts.json,
+        },
+        {
+          getServiceAuth: () => (serviceAuth ? serviceAuth : null),
+          postEvict: adminPost,
+          writeTo,
+          writeError,
+          prompt: ask,
+        },
+      );
+      process.exitCode = exitCode;
     });
 
   // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)

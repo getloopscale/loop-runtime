@@ -113,6 +113,39 @@
       "title": "Failure Investigation",
       "type": "link",
       "url": "/d/loopzero-failure-investigation"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Component Inventory",
+      "type": "link",
+      "url": "/d/loopzero-component-inventory"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Tenant Workloads",
+      "type": "link",
+      "url": "/d/loopzero-tenant-workloads"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Tenant Ecosystem",
+      "type": "link",
+      "url": "/d/loopzero-tenant-ecosystem"
     }
   ],
   "panels": [
@@ -154,7 +187,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=\"loopzero-api\", endpoint=\"metrics\"}",
+          "expr": "up{job=\"kubernetes-pods\", app=\"loopzero-api\"}",
           "legendFormat": "",
           "refId": "A"
         }
@@ -191,7 +224,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "pg_up",
+          "expr": "clamp_max(sum(loopzero_postgres_pool_max_conns), 1)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -265,7 +298,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=~\".*argocd-server.*\"}",
+          "expr": "clamp_max(count(kube_pod_status_phase{namespace=\"platform-system\", pod=~\"argocd-application-controller.*\", phase=\"Running\"}), 1)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -335,11 +368,11 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
-      "title": "MinIO",
+      "title": "Harbor",
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=\"minio\"}",
+          "expr": "harbor_health or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -376,7 +409,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=\"traefik\"}",
+          "expr": "clamp_max(count(traefik_config_last_reload_success), 1)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -502,7 +535,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "loopzero_builds_active or vector(0)",
+          "expr": "sum(loopzero_releasing_builds) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -544,10 +577,82 @@
       ]
     },
     {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "mappings": []
+        }
+      },
+      "gridPos": { "h": 3, "w": 4, "x": 20, "y": 6 },
+      "id": 21,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "title": "Releases Pending",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(loopzero_releases_pending) or vector(0)",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [
+            { "options": { "0": { "text": "FOLLOWER", "index": 0 } }, "type": "value" },
+            { "options": { "1": { "text": "LEADER", "index": 1 } }, "type": "value" }
+          ]
+        }
+      },
+      "gridPos": { "h": 3, "w": 4, "x": 20, "y": 9 },
+      "id": 22,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "title": "API Leader",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "max(loopzero_api_leader_status)",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
       "id": 102,
-      "title": "ArgoCD & Deployments",
+      "title": "Deployments & Locks",
       "type": "row"
     },
     {
@@ -561,27 +666,30 @@
       "id": 13,
       "options": {
         "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi" },
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "pieType": "donut"
+        "tooltip": { "mode": "multi" }
       },
-      "title": "ArgoCD Sync Status",
-      "type": "piechart",
+      "title": "Deploy Rate",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15,
+            "stacking": { "mode": "none" }
+          }
+        }
+      },
       "targets": [
         {
-          "expr": "count(argocd_app_info{sync_status=\"Synced\"}) or vector(0)",
-          "legendFormat": "Synced",
+          "expr": "sum(rate(loopzero_deploys_total[5m]))",
+          "legendFormat": "Deploys/s",
           "refId": "A"
         },
         {
-          "expr": "count(argocd_app_info{sync_status=\"OutOfSync\"}) or vector(0)",
-          "legendFormat": "OutOfSync",
+          "expr": "sum(rate(loopzero_build_duration_seconds_count[5m]))",
+          "legendFormat": "Builds completed/s",
           "refId": "B"
-        },
-        {
-          "expr": "count(argocd_app_info{sync_status=\"Unknown\"}) or vector(0)",
-          "legendFormat": "Unknown",
-          "refId": "C"
         }
       ]
     },
@@ -626,12 +734,12 @@
       "gridPos": { "h": 7, "w": 6, "x": 12, "y": 14 },
       "id": 15,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Lock Conflicts",
+      "title": "Lock Acquisitions",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_lock_conflicts_total[5m]))",
-          "legendFormat": "Conflicts/s",
+          "expr": "sum(rate(loopzero_lock_acquired_total[5m]))",
+          "legendFormat": "Acquisitions/s",
           "refId": "A"
         }
       ]
@@ -651,18 +759,13 @@
       "gridPos": { "h": 7, "w": 6, "x": 18, "y": 14 },
       "id": 16,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Idempotency Hits vs Misses",
+      "title": "Idempotency Cache Misses",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "rate(loopzero_idempotency_cache_hits_total[5m])",
-          "legendFormat": "Cache Hits",
+          "expr": "sum(rate(loopzero_idempotency_cache_misses_total[5m]))",
+          "legendFormat": "Misses/s",
           "refId": "A"
-        },
-        {
-          "expr": "rate(loopzero_idempotency_cache_misses_total[5m])",
-          "legendFormat": "Cache Misses",
-          "refId": "B"
         }
       ]
     },
@@ -692,14 +795,24 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "loopzero_postgres_connections_active",
+          "expr": "sum(loopzero_postgres_connections_active)",
           "legendFormat": "Active",
           "refId": "A"
         },
         {
-          "expr": "loopzero_postgres_connections_idle",
+          "expr": "sum(loopzero_postgres_connections_idle)",
           "legendFormat": "Idle",
           "refId": "B"
+        },
+        {
+          "expr": "sum(loopzero_postgres_connections_total)",
+          "legendFormat": "Total",
+          "refId": "C"
+        },
+        {
+          "expr": "max(loopzero_postgres_pool_max_conns)",
+          "legendFormat": "Max",
+          "refId": "D"
         }
       ]
     },
@@ -752,11 +865,11 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
-      "title": "MinIO Storage",
+      "title": "Harbor Storage",
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(minio_bucket_usage_total_bytes)",
+          "expr": "sum(harbor_project_quota_usage_byte) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }

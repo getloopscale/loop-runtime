@@ -43,6 +43,7 @@ spec:
     metadata:
       labels:
         app: loopzero-api
+        loopzero.io/component: control-plane
     spec:
       serviceAccountName: loopzero-api
       securityContext:
@@ -61,6 +62,11 @@ spec:
               value: "dev-callback-secret"
             - name: LOG_LEVEL
               value: "debug"
+            # Phase 0.1 (scale-50k-plan): When loopzero-controller is deployed
+            # alongside, set this to "true" so the API serves HTTP only.
+            # The controller binary owns all background loops.
+            - name: LOOPZERO_DISABLE_LEGACY_LOOPS
+              value: "false"
             # W1: MinIO (real source store)
             - name: MINIO_ENDPOINT
               value: "http://minio.loopzero-system.svc.cluster.local:9000"

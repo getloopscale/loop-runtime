@@ -104,6 +104,46 @@ export function bootstrapMgmtCluster(
   // ArgoCD — GitOps engine, manages runtime cluster
   const argocd = installArgoCD(provider, ns, certManager, callbackToken.result);
 
+  // ArgoCD repo-creds — allow ArgoCD to clone from Gitea.
+  // Uses Gitea admin password directly (same credentials Helm passes to Gitea).
+  // This eliminates dependency on the bootstrap job for ArgoCD→Gitea connectivity.
+  const giteaAdminPassword = config.giteaAdminPassword ?? GITEA_ADMIN_PASSWORD_DEFAULT;
+  new k8s.core.v1.Secret(
+    "argocd-repo-creds-internal",
+    {
+      metadata: {
+        name: "argocd-repo-creds-internal",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { "argocd.argoproj.io/secret-type": "repo-creds" },
+      },
+      stringData: {
+        type: "git",
+        url: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
+        username: "gitea_admin",
+        password: giteaAdminPassword,
+      },
+    },
+    { provider, dependsOn: [argocd] },
+  );
+  new k8s.core.v1.Secret(
+    "argocd-repo-creds-external",
+    {
+      metadata: {
+        name: "argocd-repo-creds-external",
+        namespace: PLATFORM_NAMESPACE,
+        labels: { "argocd.argoproj.io/secret-type": "repo-creds" },
+      },
+      stringData: {
+        type: "git",
+        url: `https://git.${config.domain}`,
+        username: "gitea_admin",
+        password: giteaAdminPassword,
+        insecure: "true",
+      },
+    },
+    { provider, dependsOn: [argocd] },
+  );
+
   // NFS provisioner — provides ReadWriteMany (RWX) StorageClass for Gitea HA.
   // DOKS only supports RWO (block storage). Git repos need POSIX filesystem with
   // concurrent read/write from multiple pods. NFS-Ganesha runs a single NFS server
@@ -120,9 +160,107 @@ export function bootstrapMgmtCluster(
   // Gitea — internal git server for desired state (ArgoCD reads from here)
   const gitea = installGitea(provider, ns, infra, config, giteaRedis, nfsProvisioner);
 
+  // Gitea HPA — bug #44 fix: L3 c=30 saturated single pod (7s auth latency
+  // → 401 errors cascading to SOURCE_UPLOAD_FAILED). HPA scales 2→8 replicas
+  // under CPU pressure. Preserves HA (minReplicas: 2) and handles burst to
+  // c=50+ concurrent git pushes at peak.
+  new k8s.autoscaling.v2.HorizontalPodAutoscaler(
+    "gitea-hpa",
+    {
+      metadata: {
+        name: "gitea",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      spec: {
+        scaleTargetRef: {
+          apiVersion: "apps/v1",
+          kind: "Deployment",
+          name: "gitea",
+        },
+        // minReplicas=4: L3 v8 showed that initial burst (30 concurrent git
+        // pushes) arrives in ~10s, faster than HPA can scale from 2 → 5 (~60s).
+        // 18/100 upload failures occurred during the HPA ramp-up window.
+        // With 4 baseline replicas, the initial burst is absorbed while HPA
+        // scales to 5-8 for sustained load.
+        // maxReplicas=12: L3 v14 saw Gitea HPA pegged at 8 under sustained c=30
+        // burst — indicates ceiling reached. Bumped to 12 for headroom on
+        // sustained operation + safety margin for L4 (c≥50) validation.
+        minReplicas: 4,
+        maxReplicas: 12,
+        metrics: [
+          {
+            type: "Resource",
+            resource: {
+              name: "cpu",
+              target: { type: "Utilization", averageUtilization: 70 },
+            },
+          },
+        ],
+        behavior: {
+          scaleUp: {
+            stabilizationWindowSeconds: 30,
+            policies: [{ type: "Percent", value: 100, periodSeconds: 30 }],
+          },
+          scaleDown: {
+            stabilizationWindowSeconds: 300,
+            policies: [{ type: "Percent", value: 25, periodSeconds: 60 }],
+          },
+        },
+      },
+    },
+    { provider, dependsOn: [gitea] },
+  );
+
   // Gitea backup — daily dump to DO Spaces (retain 7 days).
   // Runs `gitea dump` from the same NFS volume and uploads to S3.
   createGiteaBackupCronJob(provider, ns, infra, config, gitea);
+
+  // Task T-04 — HPAs for shared dependencies (plan: docs/plans/50k-immediate-focus.md).
+  // Without these, a single pod saturates at L3 scale and cascades to
+  // SOURCE_UPLOAD_FAILED / sync timeouts / 401s. HPA scales elastic with demand.
+  // Common behavior: scaleUp fast (30s stabilize, 100% burst/30s),
+  // scaleDown slow (300s stabilize, 25%/60s) — prevents flapping.
+  const hpaBehavior = {
+    scaleUp: {
+      stabilizationWindowSeconds: 30,
+      policies: [{ type: "Percent", value: 100, periodSeconds: 30 }],
+    },
+    scaleDown: {
+      stabilizationWindowSeconds: 300,
+      policies: [{ type: "Percent", value: 25, periodSeconds: 60 }],
+    },
+  };
+  const hpaCpuTarget = [
+    {
+      type: "Resource",
+      resource: { name: "cpu", target: { type: "Utilization", averageUtilization: 70 } },
+    },
+  ];
+  for (const [name, min, max] of [
+    ["harbor-core", 1, 5],
+    ["harbor-registry", 1, 8],      // critical: image push/pull path
+    ["harbor-jobservice", 1, 3],
+    ["argocd-repo-server", 2, 10],  // critical: sync queue scales with N apps
+    ["argocd-server", 1, 3],
+    ["ory-hydra", 1, 3],
+    ["ory-kratos", 1, 3],
+    ["mgmt-traefik", 2, 6],
+  ] as const) {
+    new k8s.autoscaling.v2.HorizontalPodAutoscaler(
+      `${name}-hpa`,
+      {
+        metadata: { name, namespace: PLATFORM_NAMESPACE },
+        spec: {
+          scaleTargetRef: { apiVersion: "apps/v1", kind: "Deployment", name },
+          minReplicas: min,
+          maxReplicas: max,
+          metrics: hpaCpuTarget,
+          behavior: hpaBehavior,
+        },
+      },
+      { provider, dependsOn: [ns] },
+    );
+  }
 
   // MinIO — S3-compatible artifact storage (source bundles, build cache)
   const minio = installMinIO(provider, ns, config);
@@ -2038,6 +2176,12 @@ function installLoopZeroAPI(
           resources: ["loopzeroapplications", "exposedroutes", "environments"],
           verbs: ["get", "list", "watch", "create", "update", "patch", "delete"],
         },
+        // MEET-053: DynamicRouter reads ClusterCredentials for cell discovery.
+        {
+          apiGroups: ["loopzero.io"],
+          resources: ["clustercredentials"],
+          verbs: ["get", "list", "watch"],
+        },
       ],
     },
     { provider },
@@ -2423,6 +2567,7 @@ function installLoopZeroController(
                 ports: [{ containerPort: 9091, name: "health" }],
                 env: [
                   { name: "LOOPZERO_CELL_ID", value: "cell-default" },
+                  { name: "TENANT_NAMESPACE", value: PLATFORM_NAMESPACE },
                   { name: "REGISTRY_URL", value: infra.registryEndpoint },
                   { name: "REGISTRY_INSECURE", value: "false" },
                   { name: "BASE_DOMAIN", value: config.domain },
@@ -2662,6 +2807,15 @@ function installTenantController(
     PLATFORM_NAMESPACE,
     [
       { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "watch", "create", "update", "patch"] },
+      // Bug #36: kickStuckPullBackoffPods in EnvironmentController needs to delete pods
+      // stuck in ImagePullBackOff after ensurePullSecret provisions the secret.
+      // Without "delete" verb, the kick is a silent no-op (403 logged, pod waits for
+      // kubelet ~5min backoff instead of recovering immediately).
+      { apiGroups: [""], resources: ["pods"], verbs: ["get", "list", "delete"] },
+      // Bug #37: reconcileDelete in EnvironmentController deletes tenant namespaces
+      // during tenant tear-down. Without "delete" verb, the operator loops logging
+      // Forbidden and the namespace never terminates. Discovered during L3 v2 run.
+      { apiGroups: [""], resources: ["namespaces"], verbs: ["delete"] },
       { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
       { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind"] },
       // PriorityClasses are cluster-scoped. Tenant controller creates per-plan classes
@@ -2682,6 +2836,56 @@ function installTenantController(
       },
     },
     { provider, dependsOn: [ns] },
+  );
+
+  // MEET-053 B-01: ClusterCredential CR for runtime cluster.
+  // Registers the runtime cluster as a Cell so DynamicRouter can discover it.
+  // The controller reconciles → status.connected=true → ArgoCD cluster secret created.
+  // Requires: CRD installed (earlier in this file), kubeconfig Secret exists.
+  const runtimeCellKubeconfig = new k8s.core.v1.Secret(
+    "runtime-cell-kubeconfig",
+    {
+      metadata: {
+        name: "runtime-cell-kubeconfig",
+        namespace: PLATFORM_NAMESPACE,
+      },
+      stringData: {
+        kubeconfig: controllerRuntimeKubeconfig,
+      },
+    },
+    { provider, dependsOn: [ns] },
+  );
+
+  new k8s.apiextensions.CustomResource(
+    "runtime-cluster-credential",
+    {
+      apiVersion: "loopzero.io/v1",
+      kind: "ClusterCredential",
+      metadata: {
+        name: `runtime-${config.region}-01`,
+        namespace: PLATFORM_NAMESPACE,
+        labels: {
+          "loopzero.io/ingress-domain": config.domain,
+        },
+      },
+      spec: {
+        clusterName: infra.runtimeCluster.clusterName,
+        apiServer: infra.runtimeCluster.endpoint,
+        secretRef: {
+          name: "runtime-cell-kubeconfig",
+          namespace: PLATFORM_NAMESPACE,
+        },
+        scope: {
+          argocd: true,
+          operators: true,
+        },
+        tls: {
+          insecure: false,
+        },
+        cellID: "cell-default",
+      },
+    },
+    { provider, dependsOn: [runtimeCellKubeconfig] },
   );
 
   // Secret with cloud provider credentials for the tenant controller.

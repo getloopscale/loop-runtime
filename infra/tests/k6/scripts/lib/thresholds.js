@@ -34,9 +34,11 @@ export const base = {
   'loopzero_build_submit_success':   ['rate>0.99'],  // ≥ 99% submissions accepted
   'loopzero_project_created':        ['rate>0.99'],  // ≥ 99% project creations succeed
   'loopzero_build_succeeded':        ['rate>0.99'],  // ≥ 99% builds reach SUCCEEDED
+  'loopzero_app_verified':           ['rate>0.99'],  // ≥ 99% apps verified live (HTTP 200)
   'loopzero_upload_duration_ms':     ['p(95)<10000'], // upload < 10s
   'loopzero_build_submit_duration_ms': ['p(95)<2000'], // build submit < 2s
   'loopzero_deploy_duration_ms':     ['p(95)<600000'], // deploy < 600s (CLAUDE.md budget)
+  'loopzero_app_verify_duration_ms': ['p(95)<120000'], // app live within 120s of build SUCCEEDED
 };
 
 // Per-level tightenings. Merge into base to get the final thresholds.

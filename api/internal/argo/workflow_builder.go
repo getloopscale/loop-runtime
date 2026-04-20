@@ -206,8 +206,19 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		// Each step in the DAG runs as a separate pod — emptyDir does NOT share across pods.
 		// VolumeClaimTemplates create the PVC when the Workflow starts; it is shared
 		// across all pods and cleaned up when the Workflow is garbage collected (TTL).
+		//
+		// Bug #21/#40 fix (scale-50k-plan): use local-path-provisioner (Rancher) instead
+		// of DO Block Storage. DO CSI rate-limits volume creation to ~3/min and hits
+		// HTTP 429 at concurrency >15. local-path creates hostPath volumes instantly
+		// without cloud API calls. The podAffinity rule below co-locates all DAG pods
+		// on the same node, so hostPath sharing just works. Requires
+		// local-path-provisioner deployed on the build cluster.
 		VolumeClaimTemplates: []forge.PVCVolume{
-			{BaseVolume: forge.BaseVolume{Name: volumeWorkspace}, Size: workspacePVCSize},
+			{
+				BaseVolume:       forge.BaseVolume{Name: volumeWorkspace},
+				Size:             workspacePVCSize,
+				StorageClassName: "local-path",
+			},
 		},
 		Volumes: b.buildVolumes(),
 		// FSGroup ensures the PVC volume is writable by non-root user 1000.

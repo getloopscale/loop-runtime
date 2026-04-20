@@ -54,6 +54,37 @@ var (
 		},
 		[]string{"crd_type"},
 	)
+
+	// MEET-052: Tenant deletion per-step metrics.
+
+	// TenantDeletionStepDuration measures the duration of each cleanup step
+	// during tenant deletion (harbor, argocd, build-ns, minio, gitea).
+	TenantDeletionStepDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "loopzero_tenant_deletion_step_duration_seconds",
+			Help:    "Duration of each cleanup step during tenant deletion.",
+			Buckets: []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60},
+		},
+		[]string{"step", "result"}, // result: "success" | "error"
+	)
+
+	// TenantDeletionStuckTotal counts tenants that exceeded max deletion attempts.
+	TenantDeletionStuckTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "loopzero_tenant_deletion_stuck_total",
+			Help: "Total number of tenants that exceeded max deletion retry attempts.",
+		},
+	)
+
+	// TenantCircuitBreakerState tracks circuit breaker state per dependency.
+	// 0=closed, 1=open, 2=half-open.
+	TenantCircuitBreakerState = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "loopzero_tenant_cb_state",
+			Help: "Circuit breaker state per dependency (0=closed, 1=open, 2=half-open).",
+		},
+		[]string{"dep"},
+	)
 )
 
 func init() {
@@ -63,5 +94,8 @@ func init() {
 		ReconcileTotal,
 		ProvisionerDuration,
 		CRDCount,
+		TenantDeletionStepDuration,
+		TenantDeletionStuckTotal,
+		TenantCircuitBreakerState,
 	)
 }

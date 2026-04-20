@@ -14,6 +14,7 @@ import {
   lookupLoadBalancerEndpoint,
   createClusterIssuer,
   installMetricsServer,
+  createDockerRegistryPullSecret,
 } from "./bootstrap-shared";
 
 // ---------------------------------------------------------------------------
@@ -47,6 +48,17 @@ export function bootstrapRuntimeCluster(
     "runtime",
     provider,
     traefik,
+  );
+
+  // DOCR pull secret — runtime cluster needs to pull tenant app images from DOCR.
+  // The TenantController creates per-namespace copies, but this ensures the
+  // Secret exists at cluster level for propagation.
+  createDockerRegistryPullSecret(
+    "runtime-docr-pull-secret",
+    infra.registryName,
+    PLATFORM_NAMESPACE,
+    provider,
+    { write: false, dependsOn: [ns] },
   );
 
   // External Secrets Operator — syncs secrets from mgmt cluster to runtime namespaces.
@@ -103,7 +115,9 @@ export function bootstrapRuntimeCluster(
           labels: {
             "app.kubernetes.io/managed-by": "pulumi",
             "app.kubernetes.io/part-of": "loopzero-platform",
-            "pod-security.kubernetes.io/enforce": "baseline",
+            // Promtail needs hostPath volumes (/var/log/pods, /var/lib/docker/containers)
+            // for log collection — privileged is required for monitoring DaemonSets.
+            "pod-security.kubernetes.io/enforce": "privileged",
             "pod-security.kubernetes.io/warn": "restricted",
             "pod-security.kubernetes.io/audit": "restricted",
           },

@@ -121,16 +121,23 @@ type AdmissionChecker interface {
 	Check(ctx context.Context, cellID, tenantID string) (admitted bool, retryAfter time.Duration, code, message string, err error)
 }
 
+// CellResolver resolves the cell_id for a given tenant.
+// MEET-053 A-06: Replaces hardcoded DefaultCellID in admission checks.
+// Implemented by db.PostgresCellStore.GetTenantCellID.
+type CellResolver interface {
+	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
+}
+
 // BuildHandler provides HTTP handlers for build operations.
 //
 // C-01 fix: The callback handler has been removed. Build completion is now
 // detected by the BuildReconcileLoop which polls Argo Workflow CRDs from the
 // control plane. The build cluster no longer calls the API.
 type BuildHandler struct {
-	orch      BuildOrchestratorService
-	logger    *slog.Logger
-	admission AdmissionChecker // nil = disabled, no-op
-	cellID    string           // the cell this API replica is scoped to
+	orch         BuildOrchestratorService
+	logger       *slog.Logger
+	admission    AdmissionChecker // nil = disabled, no-op
+	cellResolver CellResolver     // MEET-053: resolves tenant → cell_id per-request
 }
 
 // NewBuildHandler creates a new BuildHandler.
@@ -141,12 +148,12 @@ func NewBuildHandler(orch BuildOrchestratorService, logger *slog.Logger) *BuildH
 	}
 }
 
-// WithAdmission attaches a build admission gate + cell id. Returns the
-// handler so callers can chain: `NewBuildHandler(...).WithAdmission(gate,
-// cellID)`. Passing nil disables the gate (same as not calling this).
-func (h *BuildHandler) WithAdmission(a AdmissionChecker, cellID string) *BuildHandler {
+// WithAdmission attaches a build admission gate and cell resolver.
+// MEET-053 A-06: cellResolver replaces the hardcoded cellID string.
+// The resolver is called per-request to get the tenant's actual cell.
+func (h *BuildHandler) WithAdmission(a AdmissionChecker, resolver CellResolver) *BuildHandler {
 	h.admission = a
-	h.cellID = cellID
+	h.cellResolver = resolver
 	return h
 }
 
@@ -246,7 +253,19 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// (WithAdmission + LOOPZERO_ADMISSION_CONTROL=true). A nil checker
 	// means the feature is off, which is the pre-roadmap default.
 	if h.admission != nil {
-		admitted, retryAfter, code, message, adErr := h.admission.Check(ctx, h.cellID, uc.TenantID)
+		// MEET-053 A-06: Resolve cell_id per-request from tenant's placement.
+		cellID := "cell-default" // fallback if resolver not set
+		if h.cellResolver != nil {
+			if resolved, resolveErr := h.cellResolver.GetTenantCellID(ctx, uc.TenantID); resolveErr == nil {
+				cellID = resolved
+			} else if h.logger != nil {
+				h.logger.Warn("cell resolver failed — using default",
+					"error", resolveErr,
+					"tenant_id", uc.TenantID,
+				)
+			}
+		}
+		admitted, retryAfter, code, message, adErr := h.admission.Check(ctx, cellID, uc.TenantID)
 		if adErr != nil {
 			// Fail-open: the gate is advisory, a query error must not
 			// penalize users by blocking builds. Log and continue.
@@ -254,7 +273,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 				h.logger.Warn("admission gate query failed — failing open",
 					"error", adErr,
 					"tenant_id", uc.TenantID,
-					"cell_id", h.cellID,
+					"cell_id", cellID,
 				)
 			}
 		} else if !admitted {

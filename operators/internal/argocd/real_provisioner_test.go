@@ -4,8 +4,101 @@
 package argocd
 
 import (
+	"context"
+	"fmt"
 	"testing"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
+
+	"github.com/loopzero/loopzero/operators/internal/constants"
 )
+
+func TestDeleteApplications_NotFoundIsIdempotent(t *testing.T) {
+	// Arrange: Create a fake client with one Application CR.
+	// Inject a reactor that returns NotFound on Delete (simulating concurrent deletion).
+	scheme := runtime.NewScheme()
+	app := &unstructured.Unstructured{}
+	app.SetGroupVersionKind(schema.GroupVersionKind{
+		Group: "argoproj.io", Version: "v1alpha1", Kind: "Application",
+	})
+	app.SetName("acme-production")
+	app.SetNamespace("argocd")
+	app.SetLabels(map[string]string{constants.LabelTenant: "acme"})
+
+	client := dynamicfake.NewSimpleDynamicClient(scheme, app)
+
+	// Prepend a reactor that makes Delete return NotFound (simulates concurrent delete)
+	client.PrependReactor("delete", "applications", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewNotFound(
+			schema.GroupResource{Group: "argoproj.io", Resource: "applications"},
+			"acme-production",
+		)
+	})
+
+	provisioner := NewRealProvisioner("argocd", client)
+
+	// Act
+	err := provisioner.DeleteApplications(context.Background(), "acme")
+
+	// Assert: NotFound must NOT be treated as error
+	if err != nil {
+		t.Errorf("DeleteApplications should ignore NotFound errors (concurrent delete), got: %v", err)
+	}
+}
+
+func TestDeleteApplications_OtherErrorPropagates(t *testing.T) {
+	// Arrange: a non-NotFound error should still propagate
+	scheme := runtime.NewScheme()
+	app := &unstructured.Unstructured{}
+	app.SetGroupVersionKind(schema.GroupVersionKind{
+		Group: "argoproj.io", Version: "v1alpha1", Kind: "Application",
+	})
+	app.SetName("acme-production")
+	app.SetNamespace("argocd")
+	app.SetLabels(map[string]string{constants.LabelTenant: "acme"})
+
+	client := dynamicfake.NewSimpleDynamicClient(scheme, app)
+
+	// Prepend a reactor that makes Delete return Forbidden
+	client.PrependReactor("delete", "applications", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(
+			schema.GroupResource{Group: "argoproj.io", Resource: "applications"},
+			"acme-production",
+			fmt.Errorf("forbidden"),
+		)
+	})
+
+	provisioner := NewRealProvisioner("argocd", client)
+
+	// Act
+	err := provisioner.DeleteApplications(context.Background(), "acme")
+
+	// Assert: non-NotFound errors must propagate
+	if err == nil {
+		t.Error("DeleteApplications should propagate non-NotFound errors")
+	}
+}
+
+func TestDeleteAppProject_NotFoundIsIdempotent(t *testing.T) {
+	// Arrange: DeleteAppProject already handles NotFound — this is a regression test
+	scheme := runtime.NewScheme()
+	client := dynamicfake.NewSimpleDynamicClient(scheme)
+
+	provisioner := NewRealProvisioner("argocd", client)
+
+	// Act: delete a non-existent AppProject
+	err := provisioner.DeleteAppProject(context.Background(), "nonexistent")
+
+	// Assert: should not error
+	if err != nil {
+		t.Errorf("DeleteAppProject should ignore NotFound, got: %v", err)
+	}
+}
 
 func TestBuildApplicationObject_ManualSyncPolicy(t *testing.T) {
 	// The Application CR created by EnsureApplication must use manual sync

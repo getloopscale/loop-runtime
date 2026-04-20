@@ -31,6 +31,8 @@ import {
   submitBuild,
   pollBuildUntilDone,
   healthCheck,
+  verifyAppLive,
+  appURL,
 } from './lib/loopzero-api.js';
 import { thresholdsFor } from './lib/thresholds.js';
 import { loadBundleBytes } from '../fixtures/bundle-builder.js';
@@ -130,11 +132,30 @@ export default function (data) {
     return;
   }
 
+  let buildOK = false;
   group('poll until done', function () {
     const r = pollBuildUntilDone(tenantID, buildID, userID, email, 15 * 60 * 1000, 20 * 1000);
     console.log(`VU ${vuID}: build ${buildID} → ${r.terminalState} in ${Math.round(r.durationMs / 1000)}s`);
     if (!r.ok) {
       console.error(`VU ${vuID}: build did not reach SUCCEEDED`);
+    }
+    buildOK = r.ok;
+  });
+
+  if (!buildOK) {
+    return;
+  }
+
+  // scale-50k-plan requirement: every deploy verified live via HTTP 200.
+  // This is the "dogfood guarantee" — if the URL doesn't return 200,
+  // the deploy is not successful regardless of build state.
+  group('verify app live', function () {
+    const url = appURL(tenantID, projectName);
+    const r = verifyAppLive(url, 120 * 1000);
+    if (r.ok) {
+      console.log(`VU ${vuID}: app LIVE at ${url} in ${Math.round(r.durationMs / 1000)}s`);
+    } else {
+      console.error(`VU ${vuID}: app NOT LIVE at ${url} (last status=${r.statusCode}, waited ${Math.round(r.durationMs / 1000)}s)`);
     }
   });
 }
@@ -166,14 +187,19 @@ function summaryText(data) {
   const m = data.metrics;
   const succeeded = (m.loopzero_build_succeeded || {}).values || {};
   const deploy = (m.loopzero_deploy_duration_ms || {}).values || {};
+  const verified = (m.loopzero_app_verified || {}).values || {};
+  const verify = (m.loopzero_app_verify_duration_ms || {}).values || {};
   return `
 ═════════════════════════════════════════════════════════
   L1 — 10 tenants (k6)
 ═════════════════════════════════════════════════════════
   Build success rate:  ${(succeeded.rate * 100 || 0).toFixed(1)}%
+  Apps verified live:  ${(verified.rate * 100 || 0).toFixed(1)}%
   Deploy p50:          ${Math.round((deploy.med || 0) / 1000)}s
   Deploy p95:          ${Math.round((deploy['p(95)'] || 0) / 1000)}s
   Deploy p99:          ${Math.round((deploy['p(99)'] || 0) / 1000)}s
+  App verify p50:      ${Math.round((verify.med || 0) / 1000)}s
+  App verify p95:      ${Math.round((verify['p(95)'] || 0) / 1000)}s
   HTTP failures:       ${((m.http_req_failed || {}).values || {}).rate || 0}
 ═════════════════════════════════════════════════════════
 `;

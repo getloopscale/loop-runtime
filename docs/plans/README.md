@@ -1,82 +1,149 @@
-# Execution Plans
+# Plans
 
-> Plans organized by launch phase. Each phase unlocks a pricing tier.
-> Reference: `docs/strategy/pricing-reality-check.md`
-
----
-
-## Phase 1 — Enforcement (Unlocks: Starter + Pro launch)
-
-Without plan enforcement, all tiers have identical access. No upgrade trigger. No revenue.
-
-| Plan | Effort | What it Enables |
-|------|--------|-----------------|
-| [01-plan-enforcement.md](phase-1-enforcement/01-plan-enforcement.md) | 1-2 days | Projects, builds, environments, seats limited per plan |
-| [02-audit-log.md](phase-1-enforcement/02-audit-log.md) | 2-3 days | Mutation events recorded to audit_log table |
-
-**After Phase 1:**
-- Starter (Free) works with real limits (1 project, 50 builds, 3 members)
-- Pro ($29) works with real limits (3 projects, 500 builds, 10 members)
-- Upgrade trigger exists: hit the limit → see "Upgrade to Pro"
+Planos de engenharia do LoopZero Platform. Cada documento representa uma decisao aprovada ou um plano executavel. Decisoes sao gated por load tests reais (HTTP 200 verificado), nao estimativas.
 
 ---
 
-## Phase 2 — Differentiators (Unlocks: Pro becomes worth $29)
+## Estado Atual (2026-04-19)
 
-Preview environments and custom domains are the features that make Pro compelling.
+### Scale Validation
 
-| Plan | Effort | What it Enables |
-|------|--------|-----------------|
-| [01-preview-environments.md](phase-2-differentiators/01-preview-environments.md) | 2-3 weeks | PR → full-stack preview (API + DB + secrets + DNS) |
-| [02-custom-domains.md](phase-2-differentiators/02-custom-domains.md) | 1 week | `loopzero domain add example.com` with auto-TLS |
+| Nivel | Tenants | Apps | Status |
+|:-----:|:-------:|:----:|--------|
+| L1 | 10 | 20 | :white_check_mark: PASSED 10/10 |
+| L2 | 50 | 100 | :white_check_mark: PASSED 50/50 |
+| L3 | 100 | 200 | :arrow_forward: Quota desbloqueada — pronto para re-run |
+| L4+ | 500+ | 1000+ | Requer multi-cell ativado |
 
-**After Phase 2:**
-- Pro has its killer feature (preview environments)
-- Custom domains work for Pro+ tiers
-- Clear differentiation vs Vercel/Railway
+### Blockers Ativos
 
----
+| Blocker | Severidade | Plano | Status |
+|---------|:----------:|-------|--------|
+| Alertmanager → /dev/null | :red_circle: SRE VETO | `multi-cloud-aws-do-plan.md` P0 | Bloqueia tudo |
+| Multi-cell Phase B (ClusterCredential CR) | :yellow_circle: HIGH | `multi-cell-default-roadmap.md` B-01 | Codigo pronto, falta Pulumi |
+| Multi-cell Phase C (flip DynamicRouter) | :yellow_circle: HIGH | `multi-cell-default-roadmap.md` C-01 | Requer Phase B |
+| AWS Pulumi provider (stub) | :yellow_circle: HIGH | `multi-cloud-aws-do-plan.md` P2 | Nao iniciado |
 
-## Phase 3 — Team Tier (Unlocks: Team at $79)
-
-Enterprise-grade features that justify the Team price.
-
-| Plan | Effort | What it Enables |
-|------|--------|-----------------|
-| [01-sso-saml.md](phase-3-team-tier/01-sso-saml.md) | 2-3 weeks | Per-tenant OIDC/SAML provider, "Require SSO" toggle |
-
-**After Phase 3:**
-- Team tier has SSO — the #1 enterprise requirement
-- Audit log (Phase 1) provides compliance trail
-- Team is a credible $79/mo offering
-
----
-
-## Completed Plans (Archive)
-
-| Plan | Status | Date |
-|------|--------|------|
-| [PLAN-auth-billing-hardening.md](PLAN-auth-billing-hardening.md) | DONE | 2026-04-07 |
-| [PLAN-s1-s2-hardening.md](PLAN-s1-s2-hardening.md) | DONE | 2026-04-07 |
-| [PLAN-api-gateway-unification.md](PLAN-api-gateway-unification.md) | DONE | 2026-04-08 |
-
----
-
-## Timeline
+### Maturidade
 
 ```
-Week 1-2:   Phase 1 (enforcement + audit log)
-            → Launch Starter (Free) + Pro ($29)
-
-Week 3-5:   Phase 2 (preview environments)
-            → Pro becomes the plan it was designed to be
-
-Week 5-6:   Phase 2 (custom domains)
-            → Standard PaaS feature, completes Pro
-
-Week 7-10:  Phase 3 (SSO/SAML)
-            → Launch Team ($79)
-
-Week 11+:   Enterprise (BYOC, compliance, SLA)
-            → Custom pricing
+Codigo:         ████████████████████░░ 90%
+Testes:         ████████████████░░░░░░ 75%
+Infra DO:       ████████████████████░░ 90%
+Multi-cell:     ████████████████░░░░░░ 75%  (codigo done, infra/validation pendente)
+Multi-cloud:    ██░░░░░░░░░░░░░░░░░░░░ 10%
+Self-hosted:    ░░░░░░░░░░░░░░░░░░░░░░  0%
 ```
+
+---
+
+## Planos Ativos
+
+### 1. Multi-Cell Default (MEET-053)
+
+Ativar multi-cell como default para fail-fast: descobrir bugs no path multi-cell em producao desde Phase 0.
+
+| Arquivo | Status | Tasks |
+|---------|--------|:-----:|
+| [multi-cell-default-roadmap.md](multi-cell-default-roadmap.md) | Phase A+D done. **Phase B NEXT.** | 14/21 |
+
+Fases: A (fix safety net) :white_check_mark: → B (Pulumi CR) :arrow_forward: → C (flip switch) → D (harden) :white_check_mark:
+
+### 2. Multi-Cloud AWS + DO (MEET-054)
+
+Instalacao full multi-cluster em AWS e DigitalOcean. Crossplane rejeitado — modelo e Helm BYOI + Pulumi provider.
+
+| Arquivo | Status | Fases |
+|---------|--------|:-----:|
+| [multi-cloud-aws-do-plan.md](multi-cloud-aws-do-plan.md) | **Phase 0 NEXT** (fix Alertmanager) | 0/5 |
+
+Fases: P0 (Alertmanager) :arrow_forward: → P1 (abstrair lock-ins) → P2 (AWS provider) → P3 (Helm + CLI) → P4 (E2E)
+
+### 3. Cell Architecture (ADR-0008)
+
+Roadmap de escala de 100 a 50k apps via celulas autonomas.
+
+| Arquivo | Escopo | Quando ler |
+|---------|--------|------------|
+| [cell-architecture-overview.md](cell-architecture-overview.md) | Master roadmap Phase 0→50k, dependencias, invariants | Visao geral |
+| [cell-architecture-phase2.md](cell-architecture-phase2.md) | Phase 2a (hardening) + 2b (cell-2 + chaos) | Quando Phase 2a iniciar |
+| [cell-architecture-phase3.md](cell-architecture-phase3.md) | Automacao: add-cell em 15min, per-cell ArgoCD, PG HA | Apos Phase 2b |
+| [cell-architecture-phase4.md](cell-architecture-phase4.md) | Multi-region, Harbor geo-rep, PG partitioning | Apos Phase 3 |
+
+### 4. Road to 50k (Evidence-Based)
+
+| Arquivo | Escopo | Quando ler |
+|---------|--------|------------|
+| **[road-to-50k-evidence-based.md](road-to-50k-evidence-based.md)** | **5 tiers ate 50k apps, baseado em deep research do codigo real. 17/32 items ja DONE.** | **Plano master — substitui fases originais** |
+| [scale-50k-plan.md](scale-50k-plan.md) | Load test progression L0→L6, chaos suite | Playbook para cada nivel |
+| [load-test-plan.md](load-test-plan.md) | Detalhamento L0→L7, cost projection | Complemento |
+
+**Capacity suite:** `infra/tests/capacity/` — 5 testes validam cell-budget.md. Run: `./infra/tests/capacity/run-capacity.sh all`
+
+### 5. Operacional
+
+| Arquivo | Escopo | Quando ler |
+|---------|--------|------------|
+| [edge-routing-tls-lessons.md](edge-routing-tls-lessons.md) | 9 licoes: CF routing, Origin CA, checklist | Antes de mexer em DNS/TLS |
+
+---
+
+## Arquivo Morto
+
+Planos concluidos, superados, ou absorvidos por planos ativos. Movidos para `olds/`.
+
+| Arquivo | Razao |
+|---------|-------|
+| `50k-immediate-focus.md` | Absorvido por `multi-cell-default-roadmap.md` e `multi-cloud-aws-do-plan.md` |
+| `scale-50k-day1-learnings.md` | Historico — learnings incorporados nos planos ativos |
+| `scale-50k-day2-learnings.md` | Historico |
+| `scale-50k-l2-learnings.md` | Historico |
+| `scale-50k-l3-readiness.md` | Historico |
+| `scale-50k-technical-debt.md` | Debt absorvido pelos roadmaps ativos |
+| `scale-50k-slo-bottlenecks.md` | Gargalos enderecados nos planos ativos |
+| `capacity-baselines.md` | Substituido pela capacity suite em `infra/tests/capacity/` |
+| `autoscaling-topology.md` | Referencia operacional, nao plano ativo |
+| `minio-distributed-migration.md` | Prerequisito Phase 2a (consultar quando iniciar) |
+| `tenant-lifecycle-deletion.md` | MEET-052 (consultar quando implementar delete) |
+| `tls-strategy.md` | Referencia (consultar quando tocar em certs) |
+
+---
+
+## Sprint Atual
+
+**[next-sprint-execution.md](next-sprint-execution.md)** — 18 microtasks, 5-7 dias, 4 steps sequenciais:
+
+| Step | Objetivo | Tasks | Estimativa |
+|------|----------|:-----:|:----------:|
+| S1 | Fix Alertmanager /dev/null (SRE VETO) | 5 | 1 dia |
+| S2 | ClusterCredential CR via Pulumi | 5 | 1 dia |
+| S3 | Flip DynamicRouter default | 5 | 1 dia + 24h |
+| S4 | Capacity baselines + L3 100/100 | 3 | 2-3 dias |
+
+**Apos este sprint:** Abstrair lock-ins DO → AWS provider → Helm umbrella.
+
+---
+
+## Convencoes
+
+- **Gate:** condicao que DEVE ser satisfeita antes de avancar
+- **DoD:** Definition of Done (testes, commits, artefatos)
+- **Veto:** requisito de security/SRE com poder absoluto
+- **L{N}:** nivel de load test (L1=10, L2=50, L3=100, L4=500, L5=5k, L6=50k)
+- **BYOI:** Bring Your Own Infrastructure (cliente ja tem K8s/PG/S3)
+
+## Meetings
+
+| Record | Topico | Verdict |
+|--------|--------|---------|
+| [MEET-051](../meetings/records/MEET-2026-04-17-051.md) | Phase 2 rescope | DEFERRED → RESCOPED |
+| [MEET-052](../meetings/records/MEET-2026-04-17-052.md) | Tenant lifecycle deletion | APPROVED |
+| [MEET-053](../meetings/records/MEET-2026-04-18-053.md) | Multi-cell as default | APPROVED_WITH_CONDITIONS |
+| [MEET-054](../meetings/records/MEET-2026-04-18-054.md) | Multi-cloud strategy | APPROVED_WITH_CONDITIONS |
+
+## Referencias
+
+- **Spec:** `docs/technical.md`
+- **ADR-0008:** Cell-Based Architecture
+- **Cell Budget:** `docs/architecture/cell-budget.md`
+- **Runbooks:** `docs/runbooks/`

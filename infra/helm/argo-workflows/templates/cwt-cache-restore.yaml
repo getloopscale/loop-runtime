@@ -23,7 +23,7 @@ spec:
       container:
         # MOD-4 fix: Replaced amazon/aws-cli (~200MB) with minio/mc (~30MB).
         # Faster image pull on the hot path (cache hit).
-        image: minio/mc:RELEASE.2025-04-08T15-05-49Z
+        image: minio/mc:RELEASE.2025-08-13T08-35-41Z
         # Credentials injected from K8s Secret via envFrom — never as workflow parameters.
         # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
         env:
@@ -71,7 +71,7 @@ spec:
             else
               CACHE_KEY="{{ "{{inputs.parameters.tenant-id}}" }}/{{ "{{inputs.parameters.project-id}}" }}/{{ "{{inputs.parameters.cache-key}}" }}"
             fi
-            CACHE_PATH="loopzero/loopzero-builds/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
+            CACHE_PATH="loopzero/{{ .Values.sourceBucket }}/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
 
             mc cp "${CACHE_PATH}" /tmp/cache.tar.gz \
               {{- if .Values.minio.insecure }}
@@ -102,5 +102,9 @@ spec:
           allowPrivilegeEscalation: false
           capabilities:
             drop: [ALL]
-      # Cache restore is best-effort — failure should not block the build
-      activeDeadlineSeconds: 120
+      # Cache restore is best-effort — failure should not block the build.
+      # Bumped 120s→600s for L3+ scale: with 100 concurrent builds pulling from
+      # MinIO standalone, even tuned, cold-cache restores can queue past 120s.
+      # Failure at 600s is a real MinIO problem worth investigating (not a
+      # false-positive from queue pressure).
+      activeDeadlineSeconds: 600

@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -18,6 +17,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
@@ -91,6 +91,9 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, err
 		}
 	}
+
+	// MEET-053 D-03: Record observed generation for change detection.
+	cr.Status.ObservedGeneration = cr.Generation
 
 	if statusErr := r.Status().Update(ctx, &cr); statusErr != nil {
 		return ctrl.Result{}, statusErr
@@ -235,8 +238,26 @@ type argoCDTLSConfig struct {
 func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.Context, cr *loopzerov1.ClusterCredential, kubeconfigData []byte) error {
 	secretName := constants.ArgoCDClusterSecretName(cr.Spec.ClusterName)
 
-	// Extract bearer token and CA from kubeconfig for ArgoCD's config field.
-	token, caData := extractCredentialsFromKubeconfig(string(kubeconfigData))
+	// MEET-053 A-02: Extract credentials via clientcmd (replaces naive string parser).
+	// Properly handles bearer tokens, client certs, and CA data from any valid
+	// kubeconfig format (including exec-based auth used by DOKS default kubeconfigs).
+	restConfig, err := clientcmd.RESTConfigFromKubeConfig(kubeconfigData)
+	if err != nil {
+		return fmt.Errorf("parse kubeconfig for ArgoCD credentials: %w", err)
+	}
+
+	token := restConfig.BearerToken
+	caData := ""
+	if len(restConfig.CAData) > 0 {
+		caData = string(restConfig.CAData)
+	} else if len(restConfig.TLSClientConfig.CAData) > 0 {
+		caData = string(restConfig.TLSClientConfig.CAData)
+	}
+
+	// Fail-fast if no authentication mechanism found.
+	if token == "" && len(restConfig.CertData) == 0 {
+		return fmt.Errorf("kubeconfig has no bearer token or client certificate — exec-based auth not supported for ArgoCD cluster secrets")
+	}
 
 	argoConfig := argoCDClusterConfig{
 		BearerToken: token,
@@ -279,22 +300,6 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 	return nil
 }
 
-// extractCredentialsFromKubeconfig parses a DOKS kubeconfig YAML and extracts
-// the bearer token and CA certificate data. These are the minimal credentials
-// ArgoCD needs — the full kubeconfig is not stored in the cluster secret.
-func extractCredentialsFromKubeconfig(raw string) (token, caData string) {
-	for _, line := range strings.Split(raw, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "token:") {
-			token = strings.TrimSpace(strings.TrimPrefix(trimmed, "token:"))
-		}
-		if strings.HasPrefix(trimmed, "certificate-authority-data:") {
-			caData = strings.TrimSpace(strings.TrimPrefix(trimmed, "certificate-authority-data:"))
-		}
-	}
-	return token, caData
-}
-
 // reconcileDelete handles cleanup when a ClusterCredential is being deleted.
 func (r *ClusterCredentialReconciler) reconcileDelete(ctx context.Context, cr *loopzerov1.ClusterCredential) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -330,15 +335,47 @@ func (r *ClusterCredentialReconciler) reconcileDelete(ctx context.Context, cr *l
 }
 
 // SetupClusterCredentialController registers the ClusterCredentialController with the manager.
+// MEET-053 D-02: Watches Secrets so kubeconfig rotation triggers immediate reconciliation
+// instead of waiting for the 5-minute periodic requeue.
 func SetupClusterCredentialController(mgr ctrl.Manager, argoCDNamespace string) error {
 	if argoCDNamespace == "" {
 		argoCDNamespace = constants.DefaultArgoCDNamespace
 	}
+	reconciler := &ClusterCredentialReconciler{
+		Client:          mgr.GetClient(),
+		ArgoCDNamespace: argoCDNamespace,
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.ClusterCredential{}).
+		// D-02: Watch Secrets — when a kubeconfig Secret is updated (e.g.,
+		// rotated by Pulumi), find the ClusterCredentials that reference it
+		// and requeue them immediately.
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(reconciler.findCredentialsForSecret),
+		).
 		Named("clustercredential").
-		Complete(&ClusterCredentialReconciler{
-			Client:          mgr.GetClient(),
-			ArgoCDNamespace: argoCDNamespace,
-		})
+		Complete(reconciler)
+}
+
+// findCredentialsForSecret maps a Secret to the ClusterCredentials that reference it.
+// MEET-053 D-02: Enables immediate reconciliation on kubeconfig Secret rotation.
+func (r *ClusterCredentialReconciler) findCredentialsForSecret(ctx context.Context, obj client.Object) []ctrl.Request {
+	secret := obj.(*corev1.Secret)
+
+	// List all ClusterCredentials and find those referencing this Secret.
+	var credList loopzerov1.ClusterCredentialList
+	if err := r.List(ctx, &credList); err != nil {
+		return nil
+	}
+
+	var requests []ctrl.Request
+	for _, cred := range credList.Items {
+		if cred.Spec.SecretRef.Name == secret.Name &&
+			cred.Spec.SecretRef.Namespace == secret.Namespace {
+			requests = append(requests, ctrl.Request{
+				NamespacedName: client.ObjectKeyFromObject(&cred),
+			})
+		}
+	}
+	return requests
 }

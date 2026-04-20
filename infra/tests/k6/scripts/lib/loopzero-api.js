@@ -36,6 +36,7 @@ import { Counter, Trend, Rate } from 'k6/metrics';
 // against api.dev.loopzero.example and in-cluster against the service DNS.
 export const API_URL = __ENV.K6_API_URL || 'http://loopzero-api.platform-system.svc.cluster.local:8080';
 export const SVC_AUTH = __ENV.K6_SVC_AUTH || 'dev-service-auth-secret-default';
+export const APP_DOMAIN = __ENV.K6_APP_DOMAIN || 'dev.loopzero.example';
 
 /* ------------------------------------------------------------------ */
 /* Custom metrics                                                      */
@@ -51,6 +52,9 @@ export const projectCreated = new Rate('loopzero_project_created');
 export const uploadDuration = new Trend('loopzero_upload_duration_ms', true);
 export const buildSubmitDuration = new Trend('loopzero_build_submit_duration_ms', true);
 export const deployDuration = new Trend('loopzero_deploy_duration_ms', true);
+
+export const appVerified = new Rate('loopzero_app_verified');
+export const appVerifyDuration = new Trend('loopzero_app_verify_duration_ms', true);
 
 export const admissionReject = new Counter('loopzero_admission_reject_total');
 export const planLimitReject = new Counter('loopzero_plan_limit_reject_total');
@@ -232,6 +236,61 @@ export function pollBuildUntilDone(tenantID, buildID, userID, email, timeoutMs, 
     deployDuration.add(elapsed);
   }
   return { ok, terminalState: state, durationMs: elapsed };
+}
+
+/* ------------------------------------------------------------------ */
+/* App verification (scale-50k-plan requirement)                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Constructs the expected app URL for a deployed tenant.
+ * Pattern: https://{tenantID}-{projectName}-{appName}-{env}.{domain}
+ */
+export function appURL(tenantID, projectName, appName, env) {
+  appName = appName || 'api';
+  env = env || 'production';
+  return `https://${tenantID}-${projectName}-${appName}-${env}.${APP_DOMAIN}`;
+}
+
+/**
+ * Verifies a deployed app is reachable by polling its URL until HTTP 200
+ * or timeout. This is the critical "dogfood guarantee" from scale-50k-plan:
+ * if the app URL doesn't return 200, the deploy is NOT successful.
+ *
+ * Polls every 10s for up to 120s (ArgoCD sync + pod scheduling + TLS).
+ *
+ * @param {string} url - The full app URL to check
+ * @param {number} [timeoutMs=120000] - Max time to wait
+ * @returns {{ ok: boolean, statusCode: number, durationMs: number }}
+ */
+export function verifyAppLive(url, timeoutMs) {
+  timeoutMs = timeoutMs || 120 * 1000;
+  const start = Date.now();
+
+  let lastStatus = 0;
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = http.get(url, {
+        tags: { endpoint: 'app_verify' },
+        timeout: '10s',
+      });
+      lastStatus = res.status;
+      if (res.status === 200) {
+        const elapsed = Date.now() - start;
+        appVerified.add(1);
+        appVerifyDuration.add(elapsed);
+        return { ok: true, statusCode: 200, durationMs: elapsed };
+      }
+    } catch (_) {
+      // Connection refused, DNS not ready, TLS not provisioned yet
+    }
+    sleepSec(10);
+  }
+
+  const elapsed = Date.now() - start;
+  appVerified.add(0);
+  appVerifyDuration.add(elapsed);
+  return { ok: false, statusCode: lastStatus, durationMs: elapsed };
 }
 
 /* ------------------------------------------------------------------ */

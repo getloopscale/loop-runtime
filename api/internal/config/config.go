@@ -58,6 +58,7 @@ type Config struct {
 	ArgocdURL            string
 	MinIOEndpoint             string
 	MinIOCrossClusterEndpoint string // Used by build cluster workflows to reach MinIO
+	SourceBucket              string // S3 bucket for source bundles (default: "loopzero-builds")
 	RegistryURL          string
 	RegistryInsecure     bool   // true for local dev registries without TLS
 	HarborRegistryURL    string // MEET-048: secondary registry for dual-push during migration. Empty = disabled.
@@ -101,10 +102,11 @@ type Config struct {
 	MultipartMaxMemory   int64
 
 	// Build Reaper
-	BuildQueueTimeout   time.Duration
-	BuildRunningTimeout time.Duration
-	BuildCancelTimeout  time.Duration
-	BuildReaperInterval time.Duration
+	BuildQueueTimeout     time.Duration
+	BuildRunningTimeout   time.Duration
+	BuildReleasingTimeout time.Duration
+	BuildCancelTimeout    time.Duration
+	BuildReaperInterval   time.Duration
 
 	// Release Reaper (spec §5.2)
 	ReleaseReadyTimeout   time.Duration
@@ -169,6 +171,25 @@ type Config struct {
 	// PGCircuitBreakerThresholdPct: pool utilization % above which mutations are rejected.
 	// Env: PG_CIRCUIT_BREAKER_THRESHOLD_PCT (default: 90)
 	PGCircuitBreakerThresholdPct int
+
+	// UsePGClaims enables PG-backed processing claims for the reconcile
+	// and convergence loops (Phase 0.2, scale-50k-plan). When true, both
+	// loops use ClaimStore.Claim/Release in addition to sync.Map for
+	// cross-replica dedup visibility.
+	// Env: LOOPZERO_USE_PG_CLAIMS
+	UsePGClaims bool
+
+	// DynamicRouter enables the DynamicRouter that discovers cells from
+	// ClusterCredential CRDs (Phase 0.3, scale-50k-plan). When true and
+	// cells are found, the API auto-discovers new cells without restart.
+	// Env: LOOPZERO_DYNAMIC_ROUTER
+	DynamicRouter bool
+
+	// SingleCell forces StaticRouter regardless of DynamicRouter config.
+	// Use as rollback mechanism when multi-cell discovery has issues.
+	// MEET-2026-04-18-053: multi-cell-default rollback flag.
+	// Env: LOOPZERO_SINGLE_CELL
+	SingleCell bool
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -218,6 +239,7 @@ func Load() Config {
 		ArgocdURL:            envOr("ARGOCD_URL", "http://argocd-server.argocd.svc.cluster.local:80"),
 		MinIOEndpoint:             envOr("MINIO_ENDPOINT", "minio.loopzero-system.svc.cluster.local:9000"),
 		MinIOCrossClusterEndpoint: envOr("MINIO_CROSS_CLUSTER_ENDPOINT", ""),
+		SourceBucket:              envOr("SOURCE_BUCKET", "loopzero-builds"),
 		RegistryURL:          envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
 		RegistryInsecure:     os.Getenv("REGISTRY_INSECURE") == "true",
 		HarborRegistryURL:    os.Getenv("HARBOR_REGISTRY_URL"), // MEET-048: empty = disabled
@@ -261,14 +283,15 @@ func Load() Config {
 		MultipartMaxMemory: int64(envInt("SOURCE_MULTIPART_MAX_MEMORY", 32<<20)),
 
 		// Build Reaper (spec §5.1)
-		BuildQueueTimeout:   envDuration("BUILD_QUEUE_TIMEOUT", 5*time.Minute),
-		BuildRunningTimeout: envDuration("BUILD_RUNNING_TIMEOUT", 30*time.Minute),
-		BuildCancelTimeout:  envDuration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
-		BuildReaperInterval: envDuration("BUILD_REAPER_INTERVAL", 30*time.Second),
+		BuildQueueTimeout:     envDuration("BUILD_QUEUE_TIMEOUT", 5*time.Minute),
+		BuildRunningTimeout:   envDuration("BUILD_RUNNING_TIMEOUT", 30*time.Minute),
+		BuildReleasingTimeout: envDuration("BUILD_RELEASING_TIMEOUT", 10*time.Minute),
+		BuildCancelTimeout:    envDuration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
+		BuildReaperInterval:   envDuration("BUILD_REAPER_INTERVAL", 30*time.Second),
 
 		// Release Reaper (spec §5.2)
 		ReleaseReadyTimeout:   envDuration("RELEASE_READY_TIMEOUT", 5*time.Minute),
-		ReleasePendingTimeout: envDuration("RELEASE_PENDING_TIMEOUT", 2*time.Minute),
+		ReleasePendingTimeout: envDuration("RELEASE_PENDING_TIMEOUT", 6*time.Minute),
 		ReleaseReaperInterval: envDuration("RELEASE_REAPER_INTERVAL", 30*time.Second),
 
 		// Build Reconcile Loop (C-01 fix): polls Argo Workflow CRDs every 5s
@@ -297,6 +320,11 @@ func Load() Config {
 		MaxConcurrentBuildsPerCell:   envInt("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
 		MaxConcurrentBuildsPerTenant: envInt("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
 		PGCircuitBreakerThresholdPct: envInt("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
+
+		// Scale 50k plan — Phase 0.2/0.3 feature flags.
+		UsePGClaims:   os.Getenv("LOOPZERO_USE_PG_CLAIMS") == "true",
+		DynamicRouter: os.Getenv("LOOPZERO_DYNAMIC_ROUTER") != "false",
+		SingleCell:    os.Getenv("LOOPZERO_SINGLE_CELL") == "true",
 	}
 }
 
@@ -310,6 +338,10 @@ func (c Config) Validate() error {
 		return fmt.Errorf("DB_MAX_CONNS (%d) must be >= DB_MIN_CONNS (%d)", c.DBMaxConns, c.DBMinConns)
 	}
 	if c.ReleasePendingTimeout > 0 && c.ArgocdSyncTimeout > 0 && c.ReleasePendingTimeout < c.ArgocdSyncTimeout {
+		if c.IsProduction() {
+			return fmt.Errorf("RELEASE_PENDING_TIMEOUT (%s) must be >= ARGOCD_SYNC_TIMEOUT (%s) — releases will be reaped before sync completes",
+				c.ReleasePendingTimeout, c.ArgocdSyncTimeout)
+		}
 		slog.Warn("RELEASE_PENDING_TIMEOUT is less than ARGOCD_SYNC_TIMEOUT — releases may be reaped before ArgoCD sync completes",
 			"release_pending_timeout", c.ReleasePendingTimeout, "argocd_sync_timeout", c.ArgocdSyncTimeout)
 	}

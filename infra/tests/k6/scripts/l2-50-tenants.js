@@ -26,6 +26,8 @@ import {
   submitBuild,
   pollBuildUntilDone,
   healthCheck,
+  verifyAppLive,
+  appURL,
 } from './lib/loopzero-api.js';
 import { thresholdsFor } from './lib/thresholds.js';
 import { loadBundleBytes } from '../fixtures/bundle-builder.js';
@@ -92,8 +94,17 @@ export default function (data) {
   });
   if (!buildID) return;
 
+  let buildOK = false;
   group('poll until done', function () {
-    pollBuildUntilDone(tenantID, buildID, userID, email, 15 * 60 * 1000, 20 * 1000);
+    const r = pollBuildUntilDone(tenantID, buildID, userID, email, 15 * 60 * 1000, 20 * 1000);
+    buildOK = r.ok;
+  });
+
+  if (!buildOK) return;
+
+  group('verify app live', function () {
+    const url = appURL(tenantID, projectName);
+    verifyAppLive(url, 120 * 1000);
   });
 }
 
@@ -111,17 +122,21 @@ export function handleSummary(data) {
 function buildReport(title, data) {
   const m = data.metrics;
   const succeeded = (m.loopzero_build_succeeded || {}).values || {};
+  const verified = (m.loopzero_app_verified || {}).values || {};
   const deploy = (m.loopzero_deploy_duration_ms || {}).values || {};
+  const verify = (m.loopzero_app_verify_duration_ms || {}).values || {};
   const admissionRej = (m.loopzero_admission_reject_total || {}).values || {};
   return `
 ═════════════════════════════════════════════════════════
   ${title}
 ═════════════════════════════════════════════════════════
   Build success rate:  ${(succeeded.rate * 100 || 0).toFixed(2)}%
+  Apps verified live:  ${(verified.rate * 100 || 0).toFixed(2)}%
   Total builds:        ${succeeded.count || 0}
   Deploy p50:          ${Math.round((deploy.med || 0) / 1000)}s
   Deploy p95:          ${Math.round((deploy['p(95)'] || 0) / 1000)}s
   Deploy p99:          ${Math.round((deploy['p(99)'] || 0) / 1000)}s
+  App verify p95:      ${Math.round((verify['p(95)'] || 0) / 1000)}s
   Admission rejects:   ${admissionRej.count || 0}
 ═════════════════════════════════════════════════════════
 `;

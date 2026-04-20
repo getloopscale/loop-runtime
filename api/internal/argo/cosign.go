@@ -33,7 +33,7 @@ func cosignSignTemplate(appName, imageTag string) *forge.Container {
 	script := fmt.Sprintf(`set -e
 # Extract digest from BuildKit metadata using sed.
 # BuildKit writes: {"containerimage.digest":"sha256:abc123..."}
-DIGEST=$(sed -n 's/.*"containerimage.digest":"\([^"]*\)".*/\1/p' %s)
+DIGEST=$(sed -n 's/.*"containerimage.digest":[[:space:]]*"\([^"]*\)".*/\1/p' %s)
 if [ -z "$DIGEST" ]; then
   echo "ERROR: no digest found in metadata file" >&2
   exit 1
@@ -54,7 +54,11 @@ echo "Image signed successfully"
 		Image:   imageCosignSigner,
 		Command: []string{"sh", "-c", script},
 		Env: []forge.EnvBuilder{
-			forge.Env{Name: "HOME", Value: "/home/user"},
+			// Bug #39: cosign needs HOME writable for TUF cache (/.sigstore).
+			// /home/user is non-writable in the signer image under PSA restricted.
+			// /tmp is always writable. TUF_ROOT also honored by cosign.
+			forge.Env{Name: "HOME", Value: "/tmp"},
+			forge.Env{Name: "TUF_ROOT", Value: "/tmp/.sigstore/root"},
 			// COSIGN_PASSWORD is read from the secret mounted as env.
 			forge.SecretEnv{Name: "COSIGN_PASSWORD", SecretName: secretCosignKey, SecretKey: "cosign.password"},
 			// Docker config for registry auth — cosign needs this to push signatures.

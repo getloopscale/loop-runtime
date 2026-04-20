@@ -39,6 +39,7 @@ type Config struct {
 	IdempotencyStore   middleware.IdempotencyStore
 	SourceStore        source.SourceStore
 	ObjectUploader     routes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
+	SourceBucket       string                // S3 bucket name for source bundles (env: SOURCE_BUCKET)
 	// ArgoCallbackSecret is deprecated — callback route removed (C-01 fix).
 	// Kept in Config struct for backwards compatibility of env var parsing.
 	ArgoCallbackSecret string
@@ -103,6 +104,12 @@ type Config struct {
 	AuditWriter middleware.AuditWriter
 	// AuditHandler handles GET /api/v1/audit (requires admin+ role).
 	AuditHandler *routes.AuditHandler
+	// TenantDeletionStore handles tenant soft-delete and tombstone records. MEET-052.
+	TenantDeletionStore routes.TenantDeletionStore
+	// AdminEvictor powers POST /api/v1/admin/tenants/evict (T-02).
+	// Gated by LOOPZERO_ADMIN_API=true + X-Service-Auth header. Nil → route absent.
+	// Plan: docs/plans/50k-immediate-focus.md
+	AdminEvictor routes.TenantEvictor
 	// PlanLimiter enforces plan limits on mutation routes (Phase 1).
 	PlanLimiter *enforcement.PlanLimiter
 	// UpgradeURL is included in 402 responses when plan limits are hit.
@@ -250,6 +257,9 @@ func NewRouter(cfg Config) *chi.Mux {
 				if cfg.IsProduction {
 					sourceOpts = append(sourceOpts, routes.WithProductionMode())
 				}
+				if cfg.SourceBucket != "" {
+					sourceOpts = append(sourceOpts, routes.WithSourceBucket(cfg.SourceBucket))
+				}
 				sourceHandler := routes.NewSourceHandler(cfg.SourceStore, sourceOpts...)
 				r.With(rateLimitMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)
 			}
@@ -342,6 +352,15 @@ func NewRouter(cfg Config) *chi.Mux {
 				r.With(rateLimitMiddlewares...).Patch("/api/v1/teams/members/{username}", cfg.TeamHandler.UpdateRole)
 			}
 
+			// Tenant deletion routes (MEET-052)
+			if cfg.TenantDeletionStore != nil {
+				tenantHandler := routes.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger)
+				r.With(rateLimitMiddlewares...).Delete("/api/v1/tenants/{id}", tenantHandler.Delete)
+				r.With(rateLimitMiddlewares...).Post("/api/v1/tenants/{id}/restore", tenantHandler.Restore)
+				// Force-delete and bulk-delete require admin API key
+				r.With(append(rateLimitMiddlewares, middleware.RequireAdmin)...).Post("/api/v1/tenants/bulk-delete", tenantHandler.Delete) // TODO: implement bulk handler
+			}
+
 			// Environment routes
 			if cfg.EnvironmentHandler != nil {
 				r.Get("/api/v1/environments", cfg.EnvironmentHandler.List)
@@ -369,6 +388,14 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Audit log endpoint (requires admin+ role)
 			if cfg.AuditHandler != nil {
 				r.Get("/api/v1/audit", cfg.AuditHandler.List)
+			}
+
+			// Admin: bulk tenant eviction (T-02).
+			// Feature-flagged via LOOPZERO_ADMIN_API env var checked inside handler.
+			// Uses X-Service-Auth (not user auth) — bypasses the standard
+			// auth chain via a nested Group so no user middleware runs.
+			if cfg.AdminEvictor != nil {
+				r.Post("/api/v1/admin/tenants/evict", routes.AdminEvictHandler(cfg.AdminEvictor))
 			}
 		})
 	}

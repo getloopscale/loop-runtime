@@ -42,16 +42,31 @@ No Kubernetes. No Helm. No Dockerfile required. Just push.
 
 ## Project Status
 
-> **Phase: Pre-release.** Infrastructure validated on production (DigitalOcean). Not yet available to external users.
+> **Phase: Pre-release → Scale Validation.** Infrastructure validated on production (DigitalOcean). Entering scale validation phase targeting 50,000 fullstack applications.
 >
-> Last validation: 2026-04-09 — Production failure mode analysis (8 scenarios). Auto-deploy on push with commit status (pending→success). 30 language frameworks. Manifest validation gate. Build GC. TCP keepalive for PG failover. 871 CLI tests, CI green.
+> **🏆 Milestone 2026-04-16: L1 DoD achieved — 10/10 apps deployed and verified LIVE (HTTP 200) on DO real infrastructure.** End-to-end validation of the full pipeline: bundle → BuildKit → cosign sign → DO Registry → GitOps → ArgoCD sync → pod → HTTP 200. Avg deploy: 3m26s, best: 2m43s. 15 production bugs discovered and fixed. See [scale-50k-day1-learnings.md](docs/plans/scale-50k-day1-learnings.md).
+>
+> Last validation: 2026-04-16 — Supply chain security (cosign + syft + SLSA provenance). Harbor container registry. Distributed tracing (Tempo). Pipeline simplification (11 workflows). Leader-generation fencing. PG-backed processing claims. Distributed work queue. Build admission gate. PG circuit breaker. 852 CLI tests, 44 Go test packages, CI green.
+
+### Scale Readiness (4 / 5)
+
+The platform has all building blocks for large-scale operation. Current focus is wiring and validating them end-to-end.
+
+| Domain | Score | Status |
+|--------|:-----:|--------|
+| Control plane decoupling | 3.5/5 | Controller binary ready, generation fencing implemented, loops still run in API by default |
+| Cell isolation | 3/5 | All components exist (DynamicRouter, K8sCellStore, PlacementEngine, cell.ts), not yet wired as default |
+| Backpressure / admission | 4.5/5 | Build gate, PG circuit breaker, rate limiter, SSE limits — all wired and tested |
+| Consistency model | 4/5 | Leader fencing, PG claims, work queue — implemented and tested, loops not yet migrated |
+| Scale contracts | 4.5/5 | Cell budget published, **L1 10/10 live validated on DO (2026-04-16)**, L2-L5 tests scaffolded |
+| **Target** | **5/5** | **50,000 fullstack apps across multiple cells — see [Scale Plan](docs/plans/scale-50k-plan.md)** |
 
 ### What Works (Validated on DigitalOcean)
 
 | Capability | Status | Evidence |
 |------------|:------:|----------|
-| `loopzero login` / `logout` / `whoami` | **Working** | GitHub token auth + RBAC |
-| `loopzero init` (monorepo detection) | **Working** | Turbo/Nx/Lerna/pnpm + 10 frameworks |
+| `loopzero login` / `logout` / `whoami` | **Working** | Device Code Flow + Ory Hydra OIDC (GitHub/Google/email) |
+| `loopzero init` (monorepo detection) | **Working** | Turbo/Nx/Lerna/pnpm + 15 frameworks |
 | `loopzero deploy` (full pipeline) | **Working** | 24s build, pod Running, health OK |
 | `loopzero deploy` (static frontends) | **Working** | S3 upload + CF Worker KV routing + CDN delivery |
 | `loopzero rollback` | **Working** | ~3s revert, version verified |
@@ -64,42 +79,54 @@ No Kubernetes. No Helm. No Dockerfile required. Just push.
 | `loopzero team list/add/remove/role` | **Working** | RBAC: owner/admin/member roles |
 | `loopzero build list/inspect` | **Working** | Build history with env filter |
 | `loopzero validate` | **Working** | Local loopzero.yaml validation |
-| Auto-deploy on `git push` | **Working** | GitHub App "LoopZero Platform" — push to main → build + deploy automatically (~4min). Model Vercel. |
-| `loopzero domain add/status/dns/remove` | **Working** | CF Zone Management (model Vercel) — apex + subdomain, WAF/DDoS, auto TLS. E2E validated with aquim.ai |
+| `loopzero connect` / `disconnect` | **Working** | Link/unlink GitHub repo |
 | `loopzero audit` | **Working** | Audit log with action/timestamp filters |
+| `loopzero billing` | **Working** | Stripe checkout, webhooks, plan upgrades, metering |
+| Auto-deploy on `git push` | **Working** | GitHub App "LoopZero Platform" — push → build + deploy (~4min) |
+| `loopzero domain add/status/dns/remove` | **Working** | CF Zone Management — apex + subdomain, WAF/DDoS, auto TLS |
 | Plan enforcement (Starter/Pro/Team) | **Working** | Limits on projects/builds/environments/members. 402 on quota exceeded |
-| Auth (Device Code Flow + JWT) | **Working** | Ory Hydra OIDC, GitHub/Google/email login, RSA JWT, token refresh |
-| Billing (Stripe) | **Working** | Checkout, webhooks, plan upgrades, metering |
-| TLS (HTTPS) | **Working** | CF Universal SSL for custom domains, Let's Encrypt DNS-01 for platform domains |
-| Observability | **Working** | Prometheus + Grafana + Loki + 4 SLO alert rules |
+| Auth (Device Code Flow + JWT) | **Working** | Ory Hydra OIDC, GitHub/Google/email, RSA JWT, token refresh |
+| TLS (HTTPS) | **Working** | CF Universal SSL for custom domains, Let's Encrypt DNS-01 for platform |
+| Observability | **Working** | Prometheus + Grafana + Loki + Tempo + OTel + 4 SLO alert rules |
+| Distributed tracing | **Working** | End-to-end trace propagation (API → operator → Argo → DB) via Tempo |
 | Concurrent deploy protection | **Working** | `pg_advisory_xact_lock` → 409 on conflict |
 | Idempotency | **Working** | Retry-safe via `Idempotency-Key` header |
+| Supply chain security | **Working** | cosign signing, syft SBOM, SLSA provenance attestation |
+| Image signature admission | **Working** | ValidatingAdmissionPolicy requires `@sha256:` digests |
+| Harbor container registry | **Working** | Per-tenant isolation, robot accounts, quota enforcement |
 | SecurityContext (non-root pods) | **Working** | `runAsNonRoot: true`, `drop: ALL`, `readOnlyRootFilesystem` |
-| PodSecurity Admission | **Working** | `restricted` profile enforced on all tenant namespaces |
+| PodSecurity Admission | **Working** | `restricted` profile on all tenant namespaces |
 | NetworkPolicy | **Working** | Mandatory deny-all + allow-ingress + allow-egress |
-| IaC destroy + recreate | **Working** | Full pipeline in 10m33s via GitHub Actions |
-| ArgoCD notifications | **Working** | Push-based sync callback activation |
+| Build admission gate | **Working** | Cell-level + per-tenant concurrent build limits (429 on capacity) |
+| PG pool circuit breaker | **Working** | 503 + Retry-After on pool saturation |
+| Leader-generation fencing | **Working** | Stale leader writes no-op via monotonic generation ID. 18 tests |
+| PG-backed processing claims | **Working** | CAS dedup for multi-replica safety. 14 tests + 2 stress |
+| Distributed work queue | **Working** | PG-backed SELECT FOR UPDATE SKIP LOCKED. 6 queue types |
+| Controller binary (extracted) | **Ready** | Separate binary with generation fencing. Behind `LOOPZERO_DISABLE_LEGACY_LOOPS` flag |
+| Multi-cell components | **Ready** | DynamicRouter, K8sCellStore, PlacementEngine (RoundRobin), CrossCellAggregator, cell.ts provisioner. Not yet wired as default |
+| IaC destroy + recreate | **Working** | Full pipeline via GitHub Actions |
+| CF edge security | **Working** | WAF (OWASP + CF managed), rate limiting, Zero Trust Access |
 
 ### What's Not Built Yet
 
 | Feature | Sprint | Notes |
 |---------|--------|-------|
-| Preview environments (PR → temp URL → cleanup) | Sprint 5 | CRD defined, controller not implemented |
+| Preview environments (PR → temp URL → cleanup) | Sprint 5 | CRD defined, controller not implemented. GitHub App receives PR events (foundation ready) |
 | `loopzero promote` (staging → production) | Sprint 4 | Not started |
-| Image signing (cosign + syft) | Sprint 6 | Supply chain security, not started |
-| Chaos engineering tests | Sprint 8 | Not started |
-| AppSecret controller | — | CRD defined, no reconciler. Secrets work via ESO directly but lack lifecycle automation |
+| Chaos engineering (full suite) | Sprint 8 | 7 chaos tests implemented, full suite pending |
+| AppSecret controller | — | CRD defined, no reconciler. Secrets work via ESO directly |
 
 ### Test Suite
 
 | Component | Tests | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 871 | All passing |
-| API (Go) | 33 packages | All passing |
-| Shared libraries (Go) | 8 packages | All passing |
-| Operators (Ginkgo + envtest) | — | Passing (requires envtest binary) |
+| CLI (Jest) | 852 | Passing |
+| API + Shared libs (Go) | 44 packages | Passing |
+| Operators (Ginkgo + envtest) | — | Passing |
 | Infra (Pulumi + vitest) | — | Passing |
-| CI pipeline | 4 workflows | Green (lint, test, security, manifests) |
+| Load tests (L3/L4/L5) | 4 scenarios | Passing |
+| Chaos tests | 7 scenarios | Passing |
+| CI pipeline | 11 workflows | Green |
 
 ---
 
@@ -112,10 +139,10 @@ LoopZero gives you Vercel-quality DX for everything Vercel can't deploy.
 | | Vercel | LoopZero |
 |---|:---:|:---:|
 | Auto-deploy on `git push` | Yes | Yes (~4min, GitHub App) |
-| Static frontends (React, Vite, Next.js) | Yes | Yes (CDN) |
-| API servers (Express, NestJS, Go, Python) | Serverless only | Any framework (30 supported) |
+| Static frontends (React, Vite) | Yes | Yes (CDN via CF Worker) |
+| API servers (Express, Go, Python, etc.) | Serverless only | Any framework (15 supported) |
 | Background workers | — | Yes |
-| Multiple services per repo | — | Yes |
+| Multiple services per repo | — | Yes (monorepo-native) |
 | Rollback in seconds | Yes | Yes (~3s) |
 | Secrets per environment | Yes | Yes (encrypted, ESO sync) |
 | Custom domains (apex + subdomain) | Yes | Yes (CF Zone Management, WAF/DDoS) |
@@ -124,6 +151,9 @@ LoopZero gives you Vercel-quality DX for everything Vercel can't deploy.
 | Team management + RBAC | Yes | Yes |
 | Billing (Stripe) | Yes | Yes |
 | Real-time build logs | Yes | Yes (Loki) |
+| Image signing + SBOM | — | Yes (cosign + syft + SLSA) |
+| Per-tenant container isolation | — | Yes (Harbor, scoped robot accounts) |
+| Distributed tracing | — | Yes (OTel + Tempo, end-to-end) |
 
 ---
 
@@ -142,7 +172,7 @@ cd my-monorepo
 loopzero init
 ```
 
-LoopZero detects your monorepo structure (Turborepo, Nx, pnpm workspaces) and frameworks (Node.js, Go, Python, Next.js, Vite, and 10+ others), then generates `loopzero.yaml`:
+LoopZero detects your monorepo structure (Turborepo, Nx, pnpm workspaces) and frameworks, then generates `loopzero.yaml`:
 
 ```yaml
 version: 1
@@ -165,13 +195,21 @@ apps:
     type: worker
 ```
 
-### 3. Deploy
+### 3. Connect your GitHub repo
+
+```bash
+loopzero connect
+```
+
+### 4. Deploy
 
 ```bash
 loopzero deploy
 ```
 
-That's it. TLS, health checks, ingress routing, and zero-downtime rolling updates are automatic.
+That's it. TLS, health checks, ingress routing, and zero-downtime rolling updates are automatic. After connecting, every `git push` deploys automatically.
+
+**Auto-detected frameworks:** Express, NestJS, Fastify, Next.js, Vite, Remix, Astro, Angular, Svelte, Vue, React, Go (Gin), Python (FastAPI, Django), Node.js, and any Dockerfile.
 
 ---
 
@@ -181,8 +219,10 @@ That's it. TLS, health checks, ingress routing, and zero-downtime rolling update
 
 | Command | Purpose |
 |---------|---------|
-| `loopzero login` | Authenticate via GitHub |
+| `loopzero login` | Authenticate (Device Code Flow — GitHub, Google, or email) |
 | `loopzero init` | Detect monorepo, generate `loopzero.yaml` |
+| `loopzero connect` | Link GitHub repo for auto-deploy on push |
+| `loopzero disconnect` | Unlink GitHub repo |
 | `loopzero deploy` | Build and deploy all apps |
 | `loopzero deploy --env staging` | Deploy to a specific environment |
 | `loopzero deploy --app api` | Deploy a single app |
@@ -240,7 +280,19 @@ That's it. TLS, health checks, ingress routing, and zero-downtime rolling update
 | `loopzero domain list` | List all custom domains |
 | `loopzero domain remove <domain>` | Remove domain and CF zone (requires `--confirm`) |
 
-Custom domains use the **Vercel model**: LoopZero creates a Cloudflare zone per domain, automatically imports existing DNS records (email preservation), and adds a proxied CNAME for routing. The user only changes nameservers at their registrar. Apex domains work via Cloudflare CNAME flattening. WAF/DDoS protection is automatic.
+Custom domains use the **Vercel model**: LoopZero creates a Cloudflare zone per domain, automatically imports existing DNS records (preserving email), and adds a proxied CNAME for routing. The user only changes nameservers at their registrar. Apex domains work via Cloudflare CNAME flattening. WAF/DDoS protection is automatic.
+
+### Billing
+
+| Command | Purpose |
+|---------|---------|
+| `loopzero billing` | Manage subscription (Stripe checkout, plan upgrades) |
+
+### Audit
+
+| Command | Purpose |
+|---------|---------|
+| `loopzero audit` | View audit log (filterable by action, timestamp) |
 
 ### Session
 
@@ -284,13 +336,14 @@ From the developer's perspective: `git push` → URL. Everything below is invisi
                     ┌────────────▼─────────────────────────────┐
                     │  Build Cluster                            │
                     │  • BuildKit (rootless, single-container)  │
-                    │  • Push image to container registry       │
+                    │  • Push image to Harbor registry          │
+                    │  • Sign image (cosign) + generate SBOM    │
                     └────────────┬─────────────────────────────┘
                                  │
               ┌──────────────────┼──────────────────┐
               ▼                  ▼                   ▼
         Server apps        Static apps         Worker apps
-        (API, Go, etc)     (Vite, Next.js)     (BullMQ, etc)
+        (API, Go, etc)     (Vite, React)       (BullMQ, etc)
               │                  │                   │
      ArgoCD sync          Upload to S3 +       ArgoCD sync
      → K8s Deployment     CF Worker KV         → K8s Deployment
@@ -304,11 +357,14 @@ From the developer's perspective: `git push` → URL. Everything below is invisi
 
 - **Serialization** — No two operations can mutate the same environment concurrently. Concurrent deploys get `409`.
 - **Idempotency** — Retrying any operation produces the same result.
-- **Isolation** — Tenants are isolated at compute, network, and build levels.
+- **Isolation** — Tenants are isolated at compute, network, build, and registry levels.
 - **Consistency** — A release is marked active only after cluster confirmation.
 - **Rollback** — Every deploy creates a rollback point. `loopzero rollback` reverts in ~3 seconds.
 - **Clean delete** — `loopzero project delete` removes manifests, triggers prune, verifies pods are gone.
-- **Security** — Pods run as non-root, drop all capabilities, use dedicated ServiceAccount, PSA restricted.
+- **Security** — Pods run as non-root, drop all capabilities, PSA restricted. Images signed with cosign.
+- **Traceability** — End-to-end distributed tracing from CLI to database via OpenTelemetry + Tempo.
+- **Admission control** — Cell-level and per-tenant build limits prevent resource exhaustion.
+- **Supply chain** — Image signing (cosign), SBOM (syft), SLSA provenance attestation on every build.
 
 ### Architecture
 
@@ -316,9 +372,9 @@ Four-plane separation with dedicated Kubernetes clusters:
 
 | Plane | Cluster | Purpose |
 |-------|---------|---------|
-| Developer | — | CLI (TypeScript) + API (Go) |
-| Control | mgmt | Operators, Gitea, PostgreSQL, ArgoCD, Traefik, cert-manager |
-| Build | build | Argo Workflows + BuildKit (rootless) |
+| Developer | — | CLI (TypeScript) + API (Go) + Dashboard (Go + React) |
+| Control | mgmt | Operators, Gitea, PostgreSQL, Harbor, ArgoCD, Traefik, cert-manager |
+| Build | build | Argo Workflows + BuildKit (rootless) + cosign signing |
 | Workload | workload | User applications managed by ArgoCD |
 
 ### Stack
@@ -326,33 +382,41 @@ Four-plane separation with dedicated Kubernetes clusters:
 | Layer | Technology |
 |-------|-----------|
 | CLI | TypeScript + Commander |
-| API | Go + chi + pgx |
-| Operators | Go + kubebuilder + controller-runtime (9 CRDs, 7 controllers) |
-| Build engine | Argo Workflows + BuildKit (rootless, single-container) |
-| GitOps | ArgoCD (manual sync) + Gitea |
-| Database | PostgreSQL 16 (managed, advisory locks) |
-| Secrets | External Secrets Operator |
-| Git integration | GitHub App (auto-deploy on push, webhook events, commit status) |
-| Edge | Cloudflare Tunnel + Worker + KV + Zone Management |
-| Custom Domains | Cloudflare for Platforms (per-domain zones, WAF/DDoS, Universal SSL) |
+| API | Go + chi + pgx (connection pool) |
+| Dashboard | Go + React (nginx-unprivileged) |
 | Auth | Ory Kratos (identity) + Ory Hydra (OAuth2/OIDC) + Device Code Flow |
 | Billing | Stripe (subscriptions, webhooks, metering) |
+| Operators | Go + kubebuilder + controller-runtime (10 CRDs, 7 controllers) |
+| Shared libraries | Go — errors, logging, naming, health, statemachine, id (pkg/) |
+| Build engine | Argo Workflows + BuildKit (rootless, single-container) |
+| Supply chain | cosign (signing) + syft (SBOM) + SLSA provenance |
+| GitOps | ArgoCD (manual sync) + Gitea |
+| Database | PostgreSQL 16 (managed, advisory locks, leader-generation fencing) |
+| Container registry | Harbor (per-tenant projects, robot accounts, quota enforcement) |
+| Secrets | External Secrets Operator |
+| Git integration | GitHub App (auto-deploy on push, commit status lifecycle) |
+| Edge proxy | Cloudflare Tunnel + Worker + KV + Zone Management |
+| Custom domains | Cloudflare for Platforms (per-domain zones, WAF/DDoS, Universal SSL) |
+| Edge security | CF WAF (OWASP + managed), rate limiting, Zero Trust Access |
 | Static assets | DigitalOcean Spaces + CDN |
 | Monitoring | Prometheus + Grafana + Loki + Alertmanager |
+| Tracing | OpenTelemetry + Grafana Tempo (cross-plane trace propagation) |
 | IaC | Pulumi (TypeScript) — DigitalOcean + Cloudflare |
-| CI/CD | GitHub Actions (4 workflows: CI, Build Images, Infra Deploy, Infra Preview) |
+| CI/CD | GitHub Actions (11 workflows: CI, Build Images, Infra Deploy/Destroy/Preview, Bootstrap, E2E, Restart, State Reset, Release) |
 
 ### Production Infrastructure (DigitalOcean)
 
 | Resource | Configuration |
 |----------|---------------|
 | 3 DOKS clusters | v1.32.13, SFO3 (dev) / NYC3 (prod) |
-| PostgreSQL | v16, managed, HA (3 nodes in prod) |
-| Container Registry | DigitalOcean Container Registry (Professional) |
+| PostgreSQL | v16, managed, HA (3 nodes in prod), tuned (pg_stat_statements, slow query logging) |
+| Harbor registry | Per-tenant projects, robot accounts (TTL ≤ 24h), plan-based quotas, canary probe |
 | Edge proxy | Cloudflare Tunnel (DDoS/WAF, zero public IPs) |
 | Static delivery | CF Worker + DO Spaces CDN |
 | DNS | `*.dev.loopzero.example` (dev), `*.loopzero.example` (prod) |
 | State backend | DO Spaces (S3-compatible) for Pulumi state |
+| External monitoring | DO UptimeCheck from 3 regions |
+| Logging | Loki + Promtail (cross-cluster) |
 
 ---
 
@@ -384,8 +448,6 @@ apps:
     build: buildpack
 ```
 
-**Auto-detected frameworks:** Node.js, Express, NestJS, Next.js, Vite, Remix, Go, Python/FastAPI, Python/Django, Java/Spring, Ruby on Rails, and any Dockerfile.
-
 ---
 
 ## Development
@@ -406,7 +468,7 @@ task doctor      # Verify everything is healthy
 
 ```bash
 task test              # All tests (unit + lint + manifests)
-cd cli && npm test     # CLI tests (Jest)
+cd cli && npm test     # CLI tests (Jest, 852 tests)
 go test ./api/...      # API tests (Go testing)
 go test ./operators/...# Operator tests (Ginkgo + envtest)
 go test ./pkg/...      # Shared library tests
@@ -440,10 +502,9 @@ Exit code: 5 (partial failure)
 
 - **Database migrations** — LoopZero deploys code, not schema changes.
 - **Application data repair** — If a bug corrupted data, that's on you.
-- **Custom domains on non-Cloudflare DNS without nameserver change** — Users must change nameservers to Cloudflare (same model as Vercel). Alternative: CNAME for subdomains works with any provider.
+- **Custom domains without nameserver change** — Users must change nameservers to Cloudflare (same model as Vercel). CNAME for subdomains works with any provider.
 - **Multi-region** — Single-region in v1.
 - **Preview environments** — Planned for Sprint 5, not yet implemented.
-- **Image signing** — Supply chain security (cosign + syft) planned for Sprint 6.
 
 ---
 
@@ -454,6 +515,87 @@ Exit code: 5 (partial failure)
 - `--json` output is a contract — shape doesn't change without major version.
 - Exit codes are permanent.
 - Default behavior is frozen.
+
+---
+
+## Appendix A: Competitive Landscape (April 2026)
+
+> Research snapshot as of 2026-04-17. The PaaS market moves fast — validate before citing.
+
+### Market Context
+
+- The global PaaS market is projected to grow from $168B (2025) to $506B (2032) at 17.1% CAGR.
+- **Heroku is dead.** Salesforce announced "sustaining engineering model" in Feb/2026 — no new enterprise contracts, no new features. The space Heroku occupied is officially open.
+- **PaaS-first is the new default.** The "Kubernetes-first" era ended for most companies. If cloud bill < $2M/year, raw K8s doesn't justify the complexity. 80% of software orgs will have platform teams by end of 2026 (Gartner).
+- **BYOC (Bring Your Own Cloud)** is a growing differentiator — Qovery, Northflank, Porter, Flightcontrol all offer deploy on the customer's cloud account.
+- **AI-native platforms** are emerging — auto-scaling, auto-detect, prompt-to-deploy (Zeabur, Kuberns, Emergent.sh).
+- **Consolidation via acquisition** — Koyeb acquired by Mistral AI (Feb/2026). SST paused development to focus on OpenCode (AI coding agent).
+
+### Tier 1 — Direct Competitors
+
+| Platform | Funding | Model | Key Differentiator | LoopZero Advantage |
+|----------|---------|-------|--------------------|----------------|
+| [Railway](https://railway.com) | $100M Series B (Jan/2026) | Usage-based, managed | Best-in-class DX, $5/mo hobby | Multi-cluster isolation, cell architecture |
+| [Render](https://render.com) | ~$100M+ | Fixed pricing, managed | "Modern Heroku", $7/mo start | Monorepo-native, GitOps-backed consistency |
+| [Fly.io](https://fly.io) | ~$90M+ | Edge VMs, 35+ DCs | Global low-latency, GPU support | Simpler DX, multi-tenant isolation |
+| [Northflank](https://northflank.com) | Undisclosed | K8s abstraction, BYOC | "Best overall PaaS 2026", enterprise | Cell architecture for 50k+ scale |
+| [Qovery](https://qovery.com) | $19.3M | BYOC (AWS/GCP/Azure) | SOC2 Type 2, Gateway API | CLI-first, no cloud account required |
+
+### Tier 2 — Indirect Competitors
+
+| Platform | Model | Overlap with LoopZero |
+|----------|-------|-------------------|
+| [Flightcontrol](https://flightcontrol.dev) | Deploy on customer's AWS (YC-backed) | AWS-only, no multi-cluster |
+| [Zeabur](https://zeabur.com) | AI-powered deploy, drag-and-drop (Taiwan) | Innovative DX but small scale |
+| [Koyeb](https://koyeb.com) | Serverless + GPU (acquired by Mistral AI, Feb/2026) | Pivoted to AI/ML inference |
+| [Porter](https://porter.run) | K8s on customer's cloud, template-based | BYOC but less DX polish |
+| [SST (Ion/v3)](https://sst.dev) | IaC serverless via Pulumi+Terraform | Serverless-only, development paused |
+| [Coolify](https://coolify.io) | Open-source self-hosted (40k+ GitHub stars) | Docker-only, no multi-cluster |
+
+### Tier 3 — Self-Hosted / Open Source
+
+| Platform | GitHub Stars | Model | Notes |
+|----------|:-----------:|-------|-------|
+| [Coolify](https://coolify.io) | 40k+ | Self-hosted, Docker-native | Fast-growing community, different audience (DIY) |
+| [Dokploy](https://dokploy.com) | 15k+ | Self-hosted, Docker-first | Simpler, no K8s support |
+| [Dokku](https://dokku.com) | 29k+ | CLI-only, Heroku-like | Mature but limited |
+| [Kubero](https://kubero.dev) | ~2k | Self-hosted K8s PaaS | Niche |
+| [CapRover](https://caprover.com) | 13k+ | Docker Swarm | Older architecture |
+| [Canine](https://canine.sh) | New | K8s PaaS + MCP/AI integration | Integrates with Claude Code |
+
+### Tier 4 — New Entrants (2025-2026)
+
+| Platform | What It Does | Status |
+|----------|-------------|--------|
+| [Emergent.sh](https://emergent.sh) | Full-stack "vibe coding" — prompt to production app | New, AI-native |
+| [Sherpa.sh](https://sherpa.sh) | `git push` deploy, claims -80% cost vs Vercel | New, aggressive pricing |
+| [Kuberns](https://kuberns.com) | AI-powered auto-scaling, usage-based (India) | New, innovative pricing |
+| [Stormkit](https://stormkit.io) | Self-hosted enterprise deploys, preview envs | Niche enterprise |
+| [DanubeData](https://danubedata.ro) | EU-first PaaS (GDPR data residency) | Niche European market |
+| DollarDeploy | Deploy apps on your own server | Early stage |
+
+### Where LoopZero Is Unique
+
+| Capability | Railway | Render | Fly.io | Northflank | LoopZero |
+|------------|:-------:|:------:|:------:|:----------:|:----:|
+| CLI-first DX | Yes | Partial | Partial | Partial | **Yes** |
+| Multi-cluster (mgmt/build/workload) | No | No | No | Partial | **Yes** |
+| Cell-based architecture (50k+ apps) | No | No | Different | No | **Yes** |
+| Monorepo-native (API+Web+Worker) | Partial | Partial | No | Partial | **Yes** |
+| GitOps-backed (invisible to user) | No | No | No | No | **Yes** |
+| Supply chain security (cosign+SBOM+SLSA) | No | No | No | No | **Yes** |
+| Per-tenant container isolation (Harbor) | No | No | No | Partial | **Yes** |
+| Distributed tracing (end-to-end) | No | No | No | Partial | **Yes** |
+
+### Market Gaps to Watch
+
+| Trend | Who Offers It | LoopZero Status |
+|-------|--------------|-------------|
+| Preview environments (PR → temp URL) | Railway, Render, Vercel, Northflank | Sprint 5 — not started |
+| BYOC (deploy on customer's cloud) | Northflank, Qovery, Flightcontrol, Porter | Not planned |
+| GPU/AI workloads | Koyeb, Fly.io, Kuberns, TrueFoundry | Not planned |
+| AI-powered DX (auto-detect, prompt-deploy) | Zeabur, Canine, Kuberns, Emergent.sh | Not planned |
+| EU data residency | DanubeData | Not planned |
 
 ---
 
@@ -468,8 +610,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Every PR starts with a failing test.
 ## Links
 
 - [System Design](docs/technical.md) — authoritative specification
+- [Scale Plan: 50k Apps](docs/plans/scale-50k-plan.md) — active plan to validate 50,000 fullstack applications
+- [Load Test Plan](docs/plans/load-test-plan.md) — L0-L7 progressive load test scenarios
+- [Cell Capacity Budget](docs/capacity/cell-budget.md) — measured capacity limits per cell
 - [Sprint Roadmap](docs/sprints/ROADMAP.md)
-- [Hardening Roadmap](docs/hardening-sprints/ROADMAP.md)
 - [Changelog](CHANGELOG.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security Policy](SECURITY.md)

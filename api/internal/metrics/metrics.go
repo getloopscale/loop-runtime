@@ -267,6 +267,21 @@ var (
 		Name: "loopzero_cell_tenant_count",
 		Help: "Number of tenants assigned to each Cell.",
 	}, []string{"cell_id"})
+
+	// CellDiscoveryCount tracks the number of cells currently discovered by DynamicRouter.
+	// MEET-053 A-09: Feeds LoopZeroCellDiscoveryEmpty alert (critical when == 0 for 60s).
+	CellDiscoveryCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_cell_discovery_count",
+		Help: "Number of cells currently discovered by DynamicRouter.",
+	})
+
+	// OrphanedTenants tracks tenants assigned to cells that no longer exist in the router.
+	// MEET-053 D-04: Non-zero value means tenants cannot deploy until cell is restored
+	// or tenants are migrated.
+	OrphanedTenants = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_orphaned_tenants",
+		Help: "Number of tenants assigned to cells not currently discovered by the router.",
+	})
 )
 
 // Leader election metrics — MEET-2026-04-04-029 P1.

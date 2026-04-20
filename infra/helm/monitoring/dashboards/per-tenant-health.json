@@ -45,12 +45,10 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.9 },
-              { "color": "green", "value": 0.95 }
+              { "color": "green", "value": null }
             ]
           },
-          "unit": "percentunit",
+          "unit": "reqps",
           "mappings": []
         }
       },
@@ -62,12 +60,12 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
-      "title": "Build Success Rate (1h)",
+      "title": "Deploy Rate (1h)",
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_builds_total{tenant=\"$tenant\", status=\"SUCCEEDED\"}[1h])) / sum(rate(loopzero_builds_total{tenant=\"$tenant\"}[1h]))",
-          "legendFormat": "Success Rate",
+          "expr": "sum(rate(loopzero_deploys_total{tenant=\"$tenant\"}[1h])) or vector(0)",
+          "legendFormat": "Deploys/s",
           "refId": "A"
         }
       ]
@@ -95,12 +93,12 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
-      "title": "Active Builds",
+      "title": "Lock Acquisitions (1h)",
       "type": "stat",
       "targets": [
         {
-          "expr": "loopzero_builds_active{tenant=\"$tenant\"} or vector(0)",
-          "legendFormat": "Active",
+          "expr": "sum(increase(loopzero_lock_acquired_total{tenant=\"$tenant\"}[1h])) or vector(0)",
+          "legendFormat": "Acquisitions",
           "refId": "A"
         }
       ]
@@ -158,12 +156,12 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
-      "title": "Lock Conflicts (1h)",
+      "title": "Release Convergence p95 (1h)",
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(increase(loopzero_lock_conflicts_total{tenant=\"$tenant\"}[1h])) or vector(0)",
-          "legendFormat": "Conflicts",
+          "expr": "histogram_quantile(0.95, sum(rate(loopzero_release_convergence_duration_seconds_bucket{tenant=\"$tenant\"}[1h])) by (le)) or vector(0)",
+          "legendFormat": "p95",
           "refId": "A"
         }
       ]
@@ -190,18 +188,13 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
       "id": 5,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Builds by Status",
+      "title": "Deploy Submissions",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(increase(loopzero_builds_total{tenant=\"$tenant\", status=\"SUCCEEDED\"}[5m])) or vector(0)",
-          "legendFormat": "Succeeded",
+          "expr": "sum(rate(loopzero_deploys_total{tenant=\"$tenant\"}[5m])) or vector(0)",
+          "legendFormat": "Deploys/s",
           "refId": "A"
-        },
-        {
-          "expr": "sum(increase(loopzero_builds_total{tenant=\"$tenant\", status=\"FAILED\"}[5m])) or vector(0)",
-          "legendFormat": "Failed",
-          "refId": "B"
         }
       ]
     },
@@ -221,16 +214,16 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
       "id": 6,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Build Duration by Environment",
+      "title": "Release Convergence Duration",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopzero_build_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
+          "expr": "histogram_quantile(0.50, sum(rate(loopzero_release_convergence_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
           "legendFormat": "{{ environment }} p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_build_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
+          "expr": "histogram_quantile(0.95, sum(rate(loopzero_release_convergence_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
           "legendFormat": "{{ environment }} p95",
           "refId": "B"
         }
@@ -262,14 +255,9 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(increase(loopzero_deploys_total{tenant=\"$tenant\", status=\"ACTIVE\"}[5m])) or vector(0)",
-          "legendFormat": "Active",
+          "expr": "sum(increase(loopzero_deploys_total{tenant=\"$tenant\"}[5m])) by (status) or vector(0)",
+          "legendFormat": "{{ status }}",
           "refId": "A"
-        },
-        {
-          "expr": "sum(increase(loopzero_deploys_total{tenant=\"$tenant\", status=\"SYNC_FAILED\"}[5m])) or vector(0)",
-          "legendFormat": "Sync Failed",
-          "refId": "B"
         }
       ]
     },
@@ -308,7 +296,7 @@
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 },
       "id": 103,
-      "title": "Idempotency & Concurrency",
+      "title": "Lock & Concurrency",
       "type": "row"
     },
     {
@@ -327,17 +315,17 @@
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 25 },
       "id": 9,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Idempotency Cache Hits vs Misses",
+      "title": "Lock Hold Duration",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_idempotency_cache_hits_total[5m]))",
-          "legendFormat": "Cache Hits",
+          "expr": "histogram_quantile(0.50, sum(rate(loopzero_lock_hold_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le))",
+          "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(loopzero_idempotency_cache_misses_total[5m]))",
-          "legendFormat": "Cache Misses",
+          "expr": "histogram_quantile(0.95, sum(rate(loopzero_lock_hold_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le))",
+          "legendFormat": "p95",
           "refId": "B"
         }
       ]
@@ -358,18 +346,13 @@
       "gridPos": { "h": 7, "w": 12, "x": 12, "y": 25 },
       "id": 10,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Lock Contention",
+      "title": "Lock Acquisitions Rate",
       "type": "timeseries",
       "targets": [
         {
           "expr": "sum(rate(loopzero_lock_acquired_total{tenant=\"$tenant\"}[5m]))",
-          "legendFormat": "Acquired",
+          "legendFormat": "Acquired/s",
           "refId": "A"
-        },
-        {
-          "expr": "sum(rate(loopzero_lock_conflicts_total{tenant=\"$tenant\"}[5m]))",
-          "legendFormat": "Conflicts",
-          "refId": "B"
         }
       ]
     }
@@ -392,12 +375,12 @@
       {
         "current": {},
         "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-        "definition": "label_values(loopzero_builds_total, tenant)",
+        "definition": "label_values(loopzero_deploys_total, tenant)",
         "hide": 0,
         "includeAll": false,
         "name": "tenant",
         "options": [],
-        "query": { "query": "label_values(loopzero_builds_total, tenant)", "refId": "StandardVariableQuery" },
+        "query": { "query": "label_values(loopzero_deploys_total, tenant)", "refId": "StandardVariableQuery" },
         "refresh": 2,
         "sort": 1,
         "type": "query"

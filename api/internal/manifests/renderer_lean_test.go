@@ -1,0 +1,107 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package manifests
+
+import "testing"
+
+// Tests for LOOPZERO_LEAN_RESOURCES env flag — T-08 contingency path.
+// Plan: docs/plans/50k-immediate-focus.md (Option A, backup for DO
+// droplet quota delay).
+
+func TestResources_DefaultFallback(t *testing.T) {
+	ri := RenderInput{}
+	if got := ri.cpuRequest(); got != "100m" {
+		t.Errorf("default cpu request = %q, want 100m", got)
+	}
+	if got := ri.memoryRequest(); got != "128Mi" {
+		t.Errorf("default memory request = %q, want 128Mi", got)
+	}
+	if got := ri.cpuLimit(); got != "500m" {
+		t.Errorf("default cpu limit = %q, want 500m", got)
+	}
+	if got := ri.memoryLimit(); got != "512Mi" {
+		t.Errorf("default memory limit = %q, want 512Mi", got)
+	}
+}
+
+func TestResources_LeanFallback_WhenFlagTrue(t *testing.T) {
+	t.Setenv("LOOPZERO_LEAN_RESOURCES", "true")
+	ri := RenderInput{}
+	if got := ri.cpuRequest(); got != "50m" {
+		t.Errorf("lean cpu request = %q, want 50m", got)
+	}
+	if got := ri.memoryRequest(); got != "64Mi" {
+		t.Errorf("lean memory request = %q, want 64Mi", got)
+	}
+	if got := ri.cpuLimit(); got != "250m" {
+		t.Errorf("lean cpu limit = %q, want 250m", got)
+	}
+	if got := ri.memoryLimit(); got != "256Mi" {
+		t.Errorf("lean memory limit = %q, want 256Mi", got)
+	}
+}
+
+func TestResources_LeanFallback_WhenFlagOne(t *testing.T) {
+	// "1" and "true" are equivalent — common shell pattern
+	// (e.g. env var set by a flag-passing script).
+	t.Setenv("LOOPZERO_LEAN_RESOURCES", "1")
+	ri := RenderInput{}
+	if got := ri.memoryRequest(); got != "64Mi" {
+		t.Errorf("lean (=1) memory request = %q, want 64Mi", got)
+	}
+}
+
+func TestResources_LeanFlagIgnoresExplicit(t *testing.T) {
+	// Critical invariant: if the caller supplies a specific default,
+	// lean mode MUST NOT override it. Otherwise lean mode would silently
+	// shrink production deploys where capacity planning is explicit.
+	t.Setenv("LOOPZERO_LEAN_RESOURCES", "true")
+	ri := RenderInput{
+		DefaultCPURequest:    "200m",
+		DefaultMemoryRequest: "512Mi",
+		DefaultCPULimit:      "1000m",
+		DefaultMemoryLimit:   "2Gi",
+	}
+	if got := ri.cpuRequest(); got != "200m" {
+		t.Errorf("explicit cpu request should win, got %q", got)
+	}
+	if got := ri.memoryRequest(); got != "512Mi" {
+		t.Errorf("explicit memory request should win, got %q", got)
+	}
+	if got := ri.cpuLimit(); got != "1000m" {
+		t.Errorf("explicit cpu limit should win, got %q", got)
+	}
+	if got := ri.memoryLimit(); got != "2Gi" {
+		t.Errorf("explicit memory limit should win, got %q", got)
+	}
+}
+
+func TestResources_LeanFlagOffValues(t *testing.T) {
+	for _, v := range []string{"", "false", "0", "FALSE", "no", "off"} {
+		t.Run("flag="+v, func(t *testing.T) {
+			t.Setenv("LOOPZERO_LEAN_RESOURCES", v)
+			ri := RenderInput{}
+			if got := ri.memoryRequest(); got != "128Mi" {
+				t.Errorf("flag=%q should leave defaults, got memoryRequest=%q", v, got)
+			}
+		})
+	}
+}
+
+func TestLeanResources_FitsHundredAppsInCurrentRuntime(t *testing.T) {
+	// Math sanity check documented alongside code: runtime cluster at
+	// the time this flag was introduced had ~18Gi total allocatable
+	// memory. 100 apps × lean memory request must fit with headroom.
+	// Default 128Mi × 100 = 12.8Gi (cuts it close, fragmentation fails);
+	// lean 64Mi × 100 = 6.4Gi (comfortable headroom).
+	const lean = 64                    // MiB per app
+	const appCount = 100
+	const runtimeAllocatableMiB = 18 * 1024 // rough — see L3 v14 postmortem
+	const systemReservedMiB = 4 * 1024      // platform pods + DaemonSets
+
+	if lean*appCount > runtimeAllocatableMiB-systemReservedMiB {
+		t.Fatalf("lean sizing regression: %d apps × %dMiB = %dMiB exceeds %dMiB available",
+			appCount, lean, lean*appCount, runtimeAllocatableMiB-systemReservedMiB)
+	}
+}

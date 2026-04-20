@@ -47,6 +47,11 @@ func (e *DefaultEngine) GetCell(_ context.Context, _ string) (string, error) {
 	return DefaultCellID, nil
 }
 
+// AssignAndExecute runs the callback with "cell-default" (no serialization needed).
+func (e *DefaultEngine) AssignAndExecute(ctx context.Context, fn func(ctx context.Context, cellID string) error) error {
+	return fn(ctx, DefaultCellID)
+}
+
 // ExtractRegion derives region from cell_id.
 // "cell-default" → "default", "cell-sfo3-02" → "sfo3".
 func ExtractRegion(cellID string) string {
@@ -201,6 +206,30 @@ func (e *RoundRobinEngine) assignLocked(ctx context.Context) (string, error) {
 	}
 
 	return bestCell, nil
+}
+
+// AssignAndExecute picks a cell AND runs the given callback inside the same
+// serialized transaction. This fixes the TOCTOU bug (MEET-053 D-01) where
+// AssignCell runs under the advisory lock but the tenant INSERT runs outside it.
+//
+// The callback receives the assigned cellID and a context that contains the
+// serializer's transaction (retrievable via placement.TxFromContext). The
+// callback MUST use this context for its database operations.
+//
+// When no serializer is attached, the callback runs without a transaction
+// (single-replica safe).
+func (e *RoundRobinEngine) AssignAndExecute(ctx context.Context, fn func(ctx context.Context, cellID string) error) error {
+	run := func(txCtx context.Context) error {
+		cellID, err := e.assignLocked(txCtx)
+		if err != nil {
+			return err
+		}
+		return fn(txCtx, cellID)
+	}
+	if e.serialize != nil {
+		return e.serialize(ctx, run)
+	}
+	return run(ctx)
 }
 
 // GetCell returns the cell_id for an existing tenant (reads from DB).

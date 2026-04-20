@@ -242,5 +242,5 @@ func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID
 		phase = "Succeeded"
 	}
 
-	return &services.WorkflowStatus{Phase: phase}, nil
+	return &services.WorkflowStatus{Phase: phase, FinishedAt: status.FinishedAt}, nil
 }

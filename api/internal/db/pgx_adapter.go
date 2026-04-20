@@ -69,6 +69,34 @@ func (a *PgxAdapter) Close() {
 	a.Pool.Close()
 }
 
+// PgxTxAdapter wraps a pgx.Tx to implement DBTX.
+// MEET-053 D-01: Used by the placement serializer to inject a transaction
+// into the bootstrap store, fixing the TOCTOU race between AssignCell and
+// the tenant INSERT.
+type PgxTxAdapter struct {
+	Tx pgx.Tx
+}
+
+func (a *PgxTxAdapter) Query(ctx context.Context, sql string, args ...any) (Rows, error) {
+	rows, err := a.Tx.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	return &pgxRows{rows: rows}, nil
+}
+
+func (a *PgxTxAdapter) Exec(ctx context.Context, sql string, args ...any) (ExecResult, error) {
+	tag, err := a.Tx.Exec(ctx, sql, args...)
+	if err != nil {
+		return ExecResult{}, translatePgError(err)
+	}
+	return ExecResult{RowsAffected: tag.RowsAffected()}, nil
+}
+
+func (a *PgxTxAdapter) QueryRow(ctx context.Context, sql string, args ...any) Row {
+	return &pgxRow{row: a.Tx.QueryRow(ctx, sql, args...)}
+}
+
 // pgxRows wraps pgx.Rows to implement our Rows interface.
 type pgxRows struct {
 	rows pgx.Rows

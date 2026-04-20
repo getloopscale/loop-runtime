@@ -24,7 +24,7 @@ spec:
             description: "Comma-separated directories to tar (e.g., node_modules)"
       container:
         # MOD-4 fix: Replaced amazon/aws-cli (~200MB) with minio/mc (~30MB).
-        image: minio/mc:RELEASE.2025-04-08T15-05-49Z
+        image: minio/mc:RELEASE.2025-08-13T08-35-41Z
         # Credentials injected from K8s Secret via envFrom — never as workflow parameters.
         # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
         env:
@@ -70,14 +70,16 @@ spec:
             else
               CACHE_KEY="{{ "{{inputs.parameters.tenant-id}}" }}/{{ "{{inputs.parameters.project-id}}" }}/{{ "{{inputs.parameters.cache-key}}" }}"
             fi
-            CACHE_PATH="loopzero/loopzero-builds/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
+            CACHE_PATH="loopzero/{{ .Values.sourceBucket }}/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
 
             # Build list of dirs to cache from comma-separated input
             DIRS="{{ "{{inputs.parameters.cache-dirs}}" }}"
             EXISTING_DIRS=""
             IFS=',' read -ra DIR_ARRAY <<< "$DIRS"
             for d in "${DIR_ARRAY[@]}"; do
-              d=$(echo "$d" | xargs)  # trim whitespace
+              # Trim whitespace (portable — xargs not available in minio/mc 2025-08+)
+              d="${d#"${d%%[![:space:]]*}"}"
+              d="${d%"${d##*[![:space:]]}"}"
               if [ -d "$d" ]; then
                 EXISTING_DIRS="$EXISTING_DIRS $d/"
               fi

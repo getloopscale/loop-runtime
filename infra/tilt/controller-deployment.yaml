@@ -1,0 +1,216 @@
+# Controller Deployment — Phase 0.5 of scale-50k-plan
+#
+# This is the dedicated controller binary that owns all background
+# reconciliation loops (build reconcile, release convergence, reapers,
+# event pruning, idempotency cleanup). The API binary runs with
+# LOOPZERO_DISABLE_LEGACY_LOOPS=true and serves only HTTP.
+#
+# Leader election is via PG generation fencing (api/internal/leader),
+# not K8s Lease objects.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loopzero-controller
+  namespace: loopzero-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loopzero-controller
+rules:
+  # Tenant CRs: read for status checks
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants", "tenants/status"]
+    verbs: ["get", "list", "watch"]
+  # ClusterCredentials for DynamicRouter/cell discovery
+  - apiGroups: ["loopzero.io"]
+    resources: ["clustercredentials"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loopzero-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loopzero-controller
+subjects:
+  - kind: ServiceAccount
+    name: loopzero-controller
+    namespace: loopzero-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loopzero-controller
+  namespace: loopzero-system
+  labels:
+    app: loopzero-controller
+    loopzero.io/component: control-plane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loopzero-controller
+  template:
+    metadata:
+      labels:
+        app: loopzero-controller
+        loopzero.io/component: control-plane
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: loopzero-controller
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: controller
+          image: loopzero-api
+          command: ["/loopzero-controller"]
+          args:
+            - "-health-port=9091"
+          env:
+            - name: DATABASE_URL
+              value: "postgres://loopzero:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/loopzero?sslmode=disable"
+            - name: LOG_LEVEL
+              value: "debug"
+            # MinIO for source operations
+            - name: MINIO_ENDPOINT
+              value: "http://minio.loopzero-system.svc.cluster.local:9000"
+            - name: MINIO_CROSS_CLUSTER_ENDPOINT
+              value: "http://172.18.0.3:32000"
+            - name: MINIO_ACCESS_KEY
+              value: "loopzero-admin"
+            - name: MINIO_SECRET_KEY
+              value: "loopzero-dev-password"
+            # Gitea for gitops operations
+            - name: GITEA_URL
+              value: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+            - name: GITEA_CROSS_CLUSTER_URL
+              value: "http://172.18.0.3:30000"
+            - name: GITEA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-tokens
+                  key: gitea-token
+                  optional: true
+            # ArgoCD for sync operations
+            - name: ARGOCD_URL
+              value: "http://argocd-server.argocd.svc.cluster.local:80"
+            - name: ARGOCD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-tokens
+                  key: argocd-token
+                  optional: true
+            # Build cluster for Argo Workflows
+            - name: BUILD_KUBECONFIG
+              value: "/etc/loopzero/build-kubeconfig"
+            - name: BUILD_KUBE_CONTEXT
+              value: "build"
+            - name: REGISTRY_URL
+              value: "k3d-loopzero-registry:5000"
+            - name: REGISTRY_INSECURE
+              value: "true"
+            - name: LOOPZERO_PACKS_IMAGE
+              value: "k3d-loopzero-registry:5000/loopzero-packs-runner:latest"
+            # Workload cluster
+            - name: WORKLOAD_INGRESS_URL
+              value: "http://172.18.0.14:80"
+            - name: BASE_DOMAIN
+              value: "loopzero.local"
+            # PG claims for cross-replica dedup
+            - name: LOOPZERO_USE_PG_CLAIMS
+              value: "true"
+            # Pod name for claim holder identity
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - containerPort: 9091
+              name: health
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9091
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9091
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: build-kubeconfig
+              mountPath: /etc/loopzero
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: build-kubeconfig
+          configMap:
+            name: loopzero-build-kubeconfig
+            items:
+              - key: config
+                path: build-kubeconfig
+---
+# ServiceMonitor for Prometheus scraping (if prometheus-operator is installed)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: loopzero-controller
+  namespace: loopzero-system
+  labels:
+    app: loopzero-controller
+spec:
+  selector:
+    matchLabels:
+      app: loopzero-controller
+  endpoints:
+    - port: health
+      path: /metrics
+      interval: 15s
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loopzero-controller
+  namespace: loopzero-system
+  labels:
+    app: loopzero-controller
+spec:
+  type: ClusterIP
+  selector:
+    app: loopzero-controller
+  ports:
+    - port: 9091
+      targetPort: 9091
+      protocol: TCP
+      name: health

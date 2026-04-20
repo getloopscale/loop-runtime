@@ -5,7 +5,6 @@ package placement
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,7 +16,7 @@ import (
 
 // ClusterCredentialGVR is the GroupVersionResource for ClusterCredential CRDs.
 var ClusterCredentialGVR = schema.GroupVersionResource{
-	Group:    "platform.loopzero.io",
+	Group:    "loopzero.io",
 	Version:  "v1",
 	Resource: "clustercredentials",
 }
@@ -30,8 +29,16 @@ type K8sCellStore struct {
 }
 
 // NewK8sCellStore creates a CellStore backed by the K8s API.
-// Pass nil restConfig to use in-cluster config.
+// Pass nil restConfig to use in-cluster config (for pods running on
+// the mgmt cluster reading ClusterCredential CRDs from themselves).
 func NewK8sCellStore(restConfig *rest.Config, namespace string) (*K8sCellStore, error) {
+	if restConfig == nil {
+		var err error
+		restConfig, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, fmt.Errorf("k8s cell store: in-cluster config: %w", err)
+		}
+	}
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
 		return nil, fmt.Errorf("k8s cell store: create dynamic client: %w", err)
@@ -59,41 +66,37 @@ func (s *K8sCellStore) LoadCells(ctx context.Context) ([]CellConfig, error) {
 	return cells, nil
 }
 
+// extractCellConfig converts an unstructured ClusterCredential CR to CellConfig.
+// MEET-053 A-01: Reads all fields from spec (not labels). Returns false if
+// the CR is not connected or has no cellID.
 func extractCellConfig(obj unstructured.Unstructured) (CellConfig, bool) {
-	// Check status.connected
+	// Only include connected cells.
 	connected, found, _ := unstructured.NestedBool(obj.Object, "status", "connected")
 	if !found || !connected {
 		return CellConfig{}, false
 	}
 
-	// Extract spec fields
-	clusterName, _, _ := unstructured.NestedString(obj.Object, "spec", "clusterName")
+	// CellID from spec.cellID (not from labels — MEET-053 fix B9).
+	cellID, _, _ := unstructured.NestedString(obj.Object, "spec", "cellID")
+	if cellID == "" {
+		return CellConfig{}, false
+	}
+
+	// Connection details from spec.
 	apiServer, _, _ := unstructured.NestedString(obj.Object, "spec", "apiServer")
 
-	// Extract labels for cell metadata
-	labels := obj.GetLabels()
-	cellID := labels["loopzero.io/cell-id"]
-	if cellID == "" {
-		cellID = clusterName // fallback: use cluster name as cell ID
-	}
+	// Kubeconfig Secret reference from spec.secretRef.
+	secretName, _, _ := unstructured.NestedString(obj.Object, "spec", "secretRef", "name")
+	secretNS, _, _ := unstructured.NestedString(obj.Object, "spec", "secretRef", "namespace")
 
-	ingressDomain := labels["loopzero.io/ingress-domain"]
-
-	// Extract ArgoCD scope
-	scopeData, _, _ := unstructured.NestedMap(obj.Object, "spec", "scope")
-	argocdEnabled := false
-	if scopeData != nil {
-		if v, ok := scopeData["argoCD"]; ok {
-			argocdEnabled, _ = v.(bool)
-		}
-	}
-
-	_ = apiServer
-	_ = argocdEnabled
-	_ = json.Marshal // prevent unused import
+	// Ingress domain from label (operational metadata, not spec).
+	ingressDomain := obj.GetLabels()["loopzero.io/ingress-domain"]
 
 	return CellConfig{
-		CellID:        cellID,
-		IngressDomain: ingressDomain,
+		CellID:             cellID,
+		APIServer:          apiServer,
+		IngressDomain:      ingressDomain,
+		SecretRefName:      secretName,
+		SecretRefNamespace: secretNS,
 	}, true
 }

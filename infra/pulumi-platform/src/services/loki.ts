@@ -41,7 +41,8 @@ export class Loki extends pulumi.ComponentResource {
           labels: {
             "app.kubernetes.io/managed-by": "pulumi",
             "app.kubernetes.io/part-of": "loopzero-platform",
-            "pod-security.kubernetes.io/enforce": "baseline",
+            // Loki/Promtail need hostPath for log collection — privileged required.
+            "pod-security.kubernetes.io/enforce": "privileged",
             "pod-security.kubernetes.io/warn": "restricted",
             "pod-security.kubernetes.io/audit": "restricted",
           },

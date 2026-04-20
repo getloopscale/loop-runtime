@@ -1,0 +1,35 @@
+# Chaos Experiment: Build node cordon (unschedulable)
+#
+# scale-50k-plan L2-L4: "Build cluster node drain → builds reschedule
+# to remaining nodes, complete successfully"
+#
+# Uses Chaos Mesh's PodChaos to simulate a node becoming unavailable
+# by killing pods on a specific node. Combined with manual cordon in
+# the Go test, this validates that Argo Workflows reschedules to
+# surviving nodes.
+#
+# Hypothesis:
+#   - Running workflows on the target node are evicted
+#   - Argo Workflows retries them on surviving nodes
+#   - New workflows schedule on available nodes only
+#   - After uncordon, node returns to pool
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: build-node-failure
+  namespace: argo
+  annotations:
+    loopzero.io/roadmap: "08"
+    loopzero.io/dod-test: "TestChaos_BuildNodeFailure"
+    loopzero.io/hypothesis: "Workflows reschedule when build node fails"
+spec:
+  action: pod-kill
+  mode: fixed-percent
+  value: "50"
+  selector:
+    namespaces:
+      - argo
+    labelSelectors:
+      "workflows.argoproj.io/workflow": ""
+  duration: "30s"
