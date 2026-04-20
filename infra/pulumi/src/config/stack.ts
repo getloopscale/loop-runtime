@@ -45,8 +45,10 @@ export interface PlatformStackConfig {
   readonly spacesSecretAccessKey: pulumi.Output<string>;
   readonly digitaloceanToken: pulumi.Output<string>;
 
-  // Cosign signing key (optional — generated once, stored encrypted)
-  readonly cosignPrivateKey?: string;
+  // Cosign signing key (generated once per env, stored encrypted via pulumi config set --secret)
+  // cosignPrivateKeyB64: base64-encoded cosign private key file
+  // cosignPassword: password used during cosign generate-key-pair
+  readonly cosignPrivateKeyB64?: string;
   readonly cosignPassword?: string;
 
   // Cloudflare — static frontend delivery (Sprint 10)
@@ -243,5 +245,9 @@ export function loadStackConfig(): PlatformStackConfig {
     // Container registry backend — defaults to "docr" for backward compatibility.
     registryType: (config.get("registryType") ?? "docr") as "docr" | "harbor",
     harborExternalUrl: config.get("harborExternalUrl") ?? undefined,
+
+    // Cosign signing key — stored encrypted via: pulumi config set --secret cosignPrivateKeyB64 $(base64 -w0 cosign.key)
+    cosignPrivateKeyB64: config.get("cosignPrivateKeyB64") ?? undefined,
+    cosignPassword: config.get("cosignPassword") ?? undefined,
   };
 }

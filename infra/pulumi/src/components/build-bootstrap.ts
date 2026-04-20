@@ -89,17 +89,18 @@ export function bootstrapBuildCluster(
   );
 
   // Cosign signing key — used by sign-image workflow step.
-  // Key generated once, stored in Secret. Build workflow mounts it for signing.
-  // TODO: Replace with Pulumi-generated key or external KMS for production.
+  // Key stored encrypted in Pulumi state: `pulumi config set --secret cosignPrivateKeyB64 $(base64 -w0 cosign.key)`
+  // Generated once per environment via: COSIGN_PASSWORD=xxx cosign generate-key-pair
+  const cosignKey = config.cosignPrivateKeyB64
+    ? Buffer.from(config.cosignPrivateKeyB64, "base64").toString("utf-8")
+    : "PLACEHOLDER_RUN_PULUMI_CONFIG_SET_COSIGN";
   new k8s.core.v1.Secret(
     "cosign-signing-key",
     {
       metadata: { name: "cosign-signing-key", namespace: "argo" },
       stringData: {
-        // In production, generate via: cosign generate-key-pair
-        // Store private key securely. For dev, a placeholder that must be replaced.
-        "cosign.key": config.cosignPrivateKey ?? "PLACEHOLDER_GENERATE_VIA_COSIGN",
-        COSIGN_PASSWORD: config.cosignPassword ?? "loopzero-cosign-dev",
+        "cosign.key": cosignKey,
+        "cosign.password": config.cosignPassword ?? "loopzero-cosign-dev",
       },
     },
     { provider, dependsOn: [ns] },
