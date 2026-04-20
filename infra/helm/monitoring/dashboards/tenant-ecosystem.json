@@ -232,7 +232,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(loopzero_builds_active) or vector(0)",
+          "expr": "max(loopzero_releasing_builds) or vector(0)",
           "legendFormat": "Active",
           "refId": "A"
         }
@@ -475,7 +475,7 @@
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (tenant) (increase(loopzero_builds_total{status=\"SUCCEEDED\"}[24h])) / clamp_min(sum by (tenant) (increase(loopzero_builds_total[24h])), 1)",
+          "expr": "sum by (tenant) (increase(loopzero_builds_total{status=\"succeeded\"}[24h])) / clamp_min(sum by (tenant) (increase(loopzero_builds_total[24h])), 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -483,7 +483,7 @@
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (tenant) (loopzero_builds_active)",
+          "expr": "sum by (tenant) (loopzero_releasing_builds)",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -865,7 +865,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (tenant) (rate(loopzero_lock_conflicts_total[5m])) > 0",
+          "expr": "sum by (tenant) (rate(loopzero_lock_acquired_total{result=\"conflict\"}[5m])) > 0",
           "legendFormat": "{{tenant}}",
           "refId": "A"
         }

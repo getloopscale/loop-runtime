@@ -2570,6 +2570,10 @@ function installLoopZeroController(
                   { name: "TENANT_NAMESPACE", value: PLATFORM_NAMESPACE },
                   { name: "REGISTRY_URL", value: infra.registryEndpoint },
                   { name: "REGISTRY_INSECURE", value: "false" },
+                  // Harbor integration — auto-creates projects per tenant.
+                  { name: "HARBOR_URL", value: `https://harbor.${config.domain}` },
+                  { name: "HARBOR_ADMIN_USERNAME", value: "admin" },
+                  { name: "HARBOR_ADMIN_PASSWORD", value: config.harborAdminPassword ?? "Harbor12345" },
                   { name: "BASE_DOMAIN", value: config.domain },
                   { name: "BUILD_KUBECONFIG", value: "/etc/loopzero/build-kubeconfig" },
                   { name: "BUILD_KUBE_CONTEXT", value: "build" },

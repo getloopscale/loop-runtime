@@ -271,6 +271,7 @@ func main() {
 			Interval:           cfg.ReconcileInterval,
 			RegistryURL:        cfg.RegistryURL,
 			BaseDomain:         cfg.BaseDomain,
+			MaxConcurrent:      cfg.MaxConcurrentBuildsPerCell,
 			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 			CellID:             cellID(cfg),
 		},

@@ -68,7 +68,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_builds_total{status=\"SUCCEEDED\"}[1h])) / sum(rate(loopzero_builds_total[1h]))",
+          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[1h])) / sum(rate(loopzero_builds_total[1h]))",
           "legendFormat": "Success Rate",
           "refId": "A"
         }
@@ -139,7 +139,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopzero_builds_active) or vector(0)",
+          "expr": "max(loopzero_releasing_builds) or vector(0)",
           "legendFormat": "Active",
           "refId": "A"
         }
@@ -174,7 +174,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "loopzero_build_queue_depth or vector(0)",
+          "expr": "max(loopzero_build_queue_depth) or vector(0)",
           "legendFormat": "Queued",
           "refId": "A"
         }
@@ -322,17 +322,17 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "loopzero_postgres_connections_active",
+          "expr": "sum(loopzero_postgres_connections_active)",
           "legendFormat": "Active",
           "refId": "A"
         },
         {
-          "expr": "loopzero_postgres_connections_idle",
+          "expr": "sum(loopzero_postgres_connections_idle)",
           "legendFormat": "Idle",
           "refId": "B"
         },
         {
-          "expr": "loopzero_postgres_connections_total",
+          "expr": "sum(loopzero_postgres_connections_total)",
           "legendFormat": "Total",
           "refId": "C"
         }
@@ -357,7 +357,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "loopzero_sse_connections_active",
+          "expr": "sum(loopzero_sse_connections_active)",
           "legendFormat": "Active Streams",
           "refId": "A"
         }
@@ -382,7 +382,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "loopzero_api_requests_in_flight",
+          "expr": "sum(loopzero_api_requests_in_flight)",
           "legendFormat": "In-Flight",
           "refId": "A"
         }

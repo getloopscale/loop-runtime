@@ -50,6 +50,34 @@ export function bootstrapRuntimeCluster(
     traefik,
   );
 
+  // RBAC for EnvironmentController to manage tenant namespaces on runtime.
+  // The controller runs on mgmt cluster and creates Roles/RoleBindings/NetworkPolicies
+  // on the runtime cluster via loopzero-ctrl-runtime-sa ServiceAccount.
+  const runtimeRbacRole = new k8s.rbac.v1.ClusterRole(
+    "runtime-loopzero-ctrl-rbac-admin",
+    {
+      metadata: { name: "loopzero-ctrl-runtime-rbac-admin" },
+      rules: [
+        { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "delete", "bind", "escalate"] },
+        { apiGroups: [""], resources: ["namespaces", "serviceaccounts", "secrets", "configmaps", "services"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
+        { apiGroups: ["apps"], resources: ["deployments"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
+        { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
+        { apiGroups: [""], resources: ["resourcequotas", "limitranges"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
+        { apiGroups: ["policy"], resources: ["poddisruptionbudgets"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
+      ],
+    },
+    { provider },
+  );
+  new k8s.rbac.v1.ClusterRoleBinding(
+    "runtime-loopzero-ctrl-rbac-admin",
+    {
+      metadata: { name: "loopzero-ctrl-runtime-rbac-admin" },
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name: "loopzero-ctrl-runtime-rbac-admin" },
+      subjects: [{ kind: "ServiceAccount", name: "loopzero-ctrl-runtime-sa", namespace: PLATFORM_NAMESPACE }],
+    },
+    { provider, dependsOn: [runtimeRbacRole, ns] },
+  );
+
   // DOCR pull secret — runtime cluster needs to pull tenant app images from DOCR.
   // The TenantController creates per-namespace copies, but this ensures the
   // Secret exists at cluster level for propagation.

@@ -143,17 +143,17 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "loopzero_postgres_connections_active{job=\"loopzero-api\"}",
+          "expr": "sum(loopzero_postgres_connections_active)",
           "legendFormat": "Active",
           "refId": "A"
         },
         {
-          "expr": "loopzero_postgres_connections_idle{job=\"loopzero-api\"}",
+          "expr": "sum(loopzero_postgres_connections_idle)",
           "legendFormat": "Idle",
           "refId": "B"
         },
         {
-          "expr": "loopzero_postgres_connections_total{job=\"loopzero-api\"}",
+          "expr": "sum(loopzero_postgres_connections_total)",
           "legendFormat": "Total",
           "refId": "C"
         }
@@ -193,7 +193,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "loopzero_postgres_connections_active{job=\"loopzero-api\"} / 25 * 100",
+          "expr": "sum(loopzero_postgres_connections_active) / max(loopzero_postgres_pool_max_conns) * 100",
           "legendFormat": "",
           "refId": "A"
         }
@@ -229,7 +229,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "loopzero_postgres_connections_active{job=\"loopzero-api\"} or vector(0)",
+          "expr": "sum(loopzero_postgres_connections_active) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -262,7 +262,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "loopzero_postgres_connections_idle{job=\"loopzero-api\"} or vector(0)",
+          "expr": "sum(loopzero_postgres_connections_idle) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -295,7 +295,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "loopzero_postgres_connections_total{job=\"loopzero-api\"} or vector(0)",
+          "expr": "sum(loopzero_postgres_connections_total) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -329,12 +329,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_http_requests_total{job=\"loopzero-api\"}[5m]))",
+          "expr": "sum(rate(loopzero_api_requests_total[5m]))",
           "legendFormat": "Total req/s",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(loopzero_http_requests_total{job=\"loopzero-api\"}[5m])) by (method)",
+          "expr": "sum(rate(loopzero_api_requests_total[5m])) by (method)",
           "legendFormat": "{{method}}",
           "refId": "B"
         }
@@ -470,7 +470,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_lock_conflicts_total[5m]))",
+          "expr": "sum(rate(loopzero_lock_acquired_total{result=\"conflict\"}[5m]))",
           "legendFormat": "Conflicts/s",
           "refId": "A"
         }
@@ -506,7 +506,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopzero_lock_conflicts_total) or vector(0)",
+          "expr": "sum(loopzero_lock_acquired_total{result=\"conflict\"}) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }

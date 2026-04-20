@@ -6,12 +6,12 @@ config:
   loopzero-infra:domain: homolog.loopzero.example
   loopzero-infra:dnsZone: loopzero.example
   loopzero-infra:infraVersion: v3
-  loopzero-infra:mgmtNodeClass: small
+  loopzero-infra:mgmtNodeClass: medium
   loopzero-infra:mgmtMinNodes: "3"
-  loopzero-infra:runtimeNodeClass: small
-  loopzero-infra:runtimeMinNodes: "2"
-  loopzero-infra:buildNodeClass: small
-  loopzero-infra:buildMinNodes: "2"
+  loopzero-infra:runtimeNodeClass: large
+  loopzero-infra:runtimeMinNodes: "4"
+  loopzero-infra:buildNodeClass: large
+  loopzero-infra:buildMinNodes: "4"
   loopzero-infra:registryType: docr
   loopzero-infra:harborExternalUrl: harbor.homolog.loopzero.example
   loopzero-infra:cfZoneId: 9f9a41bef0bcb7adf15969c81c303bef
@@ -31,3 +31,6 @@ config:
     secure: v1:rh6G4QsD1FKsGgby:y99+OZDq4k0AILPrcMdDG0hsFKhyiuDPdn72z933ApiE4sOd7+7sXjxMkO8ObEJ2EzrIKEcEtDn+j+LNc7h6XBMrm30yH24qcOecX+8XeCEFTx2aXXhvctAUv2QkGT2GMZYLNu6Um6RW7dWpM8BkcvE3EoPbsdfsRF5vgUIQyOtWMgpLa3WlWDBG5NdML+y6Y29haGt6og9088RJzRlky9CI8676/WcdTnfxKvY6v2QO1bymheedfJA7tlkoZG36iwu+FggeITBHCC+6vzxrAuPjDdJjPELiczszXyV/X/ez9S90gay14rdWGqUBtgDaRD+AnUmt8sDafEWBZOggOhVfCOdQJGPlnzmTgNUayX0t4y2iH9agLQu6labz7IMnSSS4vUcTO0gMOhh7zwHRJsZl0ORKoqakBp9Jw9C3h3M8fbZ85iHk1N0GE4Oc19CjI8DZJnLD5AGZEGJ7INDw4JRYVcmlaBE0tF1u1RRX4gaFq5+mcp0ZdNCCdQ7vDr22YxBH26vzA7hky+rAZHwegHJK3e1mI4jlp3MB3lU6Wc0mcKV3aMSimm+7ddHQhiIrfA1Smzj9jcqpQcTUWyeuSwZcxO/jpqWmUICZg8l1WQjJR8htESJo7yz8owr/wvB16bKTFHAw3A1slDqfh90dJMUlarLOETtMvj1LG0Cj8PlEAsKjphC9w66yvOe/Ym3TeKXr3LQQ5I7TLeIAXFQ0tP4j9yDPfN+ZMAdxZ+AoWaXQ00g97q2pMBIJhaiwTTjIgm+HkhHz1lHgTGmE81l70Jgu6Tdoo+A+Qb9TDvuqLxRn4Ep/z8iUeJP/PZGQoX+N+ap8YN/06QInLxg9V8lKwHfF8ww43u7f81macfsX0AYNhZld396rV8Y4yOBLQ0WPLqMHIrkvszK6GH0b32oZ6OsN21nm8Zm/1wCt/EemwDrlmSLl1ZO8RX9I2ZHidzryXeVRXth5z26wqSuq0AVZugnVD5iMka3x/Jigc6L3MRl2AGue1rTkM/DDY+dqmsGD6GVPa3vWHvGF2U6h9GPqTahe5OCo4ndc+4oXUYpRBrHudRlJ64uOgvMWheUDjNIgRTUZQSEXcSf1dvRZwSjBjbGUIuSrhFMLt2o6a4chce3YDMLFcTtoHoy8PYrqwubSslNf1kpAEbPCPcsRpDzNYcT6tu5GkKVU
   loopzero-infra:cosignPassword:
     secure: v1:A5siu19nRezgu1lT:aINuJDMuJ7A8yNoJ2F+hheI8TNNvqk69g10Dmoq/D2/8mudRTgCJZg==
+  loopzero-infra:mgmtMaxNodes: "8"
+  loopzero-infra:runtimeMaxNodes: "50"
+  loopzero-infra:buildMaxNodes: "20"

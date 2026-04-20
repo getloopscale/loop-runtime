@@ -190,9 +190,9 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
       "id": 8,
       "targets": [
-        { "expr": "argo_workflows_pods_gauge", "legendFormat": "Active Pods" },
-        { "expr": "argo_workflows_pod_pending_count", "legendFormat": "Pending Pods" },
-        { "expr": "argo_workflows_pod_missing", "legendFormat": "Missing Pods" }
+        { "expr": "sum(argo_workflows_pods_gauge)", "legendFormat": "Active Pods" },
+        { "expr": "sum(argo_workflows_pod_pending_count)", "legendFormat": "Pending Pods" },
+        { "expr": "sum(argo_workflows_pod_missing) by (node_phase)", "legendFormat": "Missing ({{node_phase}})" }
       ],
       "title": "Workflow Pods",
       "type": "timeseries"
@@ -487,7 +487,7 @@
       "id": 27,
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
       "targets": [
-        { "expr": "argo_workflows_total_count", "legendFormat": "Total Workflows (all time)" }
+        { "expr": "sum(argo_workflows_total_count)", "legendFormat": "Total Workflows (all time)" }
       ],
       "title": "Total Workflows Processed",
       "type": "stat"
@@ -501,7 +501,7 @@
       "id": 28,
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
       "targets": [
-        { "expr": "argo_workflows_pods_total_count", "legendFormat": "Total Pods Created" }
+        { "expr": "sum(argo_workflows_pods_total_count)", "legendFormat": "Total Pods Created" }
       ],
       "title": "Total Pods Created",
       "type": "stat"

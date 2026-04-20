@@ -164,6 +164,12 @@ func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
 					// When Synced + Healthy, ArgoCD calls POST /internal/argocd-callback
 					// on the API to activate the release (push-based, replaces polling).
 					"notifications.argoproj.io/subscribe.on-sync-healthy.loopzero-api": "",
+					// skip-reconcile: Prevents ArgoCD from reconciling this app until
+					// the first gitops push creates the target path. Without this, apps
+					// without manifests cause a CPU amplification loop (91 ComparisonError
+					// apps = 100 git fetches/sec). The API removes this annotation after
+					// the first successful gitops push.
+					"argocd.argoproj.io/skip-reconcile": "true",
 				},
 				"finalizers": []interface{}{
 					constants.ArgoCDResourcesFinalizer,

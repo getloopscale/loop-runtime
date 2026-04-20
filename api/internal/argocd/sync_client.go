@@ -112,7 +112,13 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 }
 
 // TriggerSync initiates a sync operation on an ArgoCD Application.
+// Before syncing, removes the skip-reconcile annotation (if present) so
+// ArgoCD begins processing the app. This annotation was set during tenant
+// provisioning to prevent CPU amplification from empty repos.
 func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
+	// Remove skip-reconcile annotation to enable ArgoCD processing.
+	c.removeSkipReconcile(ctx, appName)
+
 	url := fmt.Sprintf("%s/api/v1/applications/%s/sync", c.baseURL, appName)
 
 	body := strings.NewReader(`{"prune": true}`)
@@ -147,6 +153,26 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	}
 
 	return nil
+}
+
+// removeSkipReconcile removes the argocd.argoproj.io/skip-reconcile annotation
+// from an Application. This is a best-effort operation — if it fails, TriggerSync
+// will still work (ArgoCD processes sync requests even with skip-reconcile set).
+func (c *SyncClient) removeSkipReconcile(ctx context.Context, appName string) {
+	patchURL := fmt.Sprintf("%s/api/v1/applications/%s", c.baseURL, appName)
+	// JSON Merge Patch: set annotation to null to remove it.
+	patch := strings.NewReader(`{"metadata":{"annotations":{"argocd.argoproj.io/skip-reconcile":null}}}`)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, patchURL, patch)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
+	req.Header.Set("Content-Type", "application/merge-patch+json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
 }
 
 // TerminateOperation cancels a running sync operation on an ArgoCD Application.
