@@ -43,8 +43,13 @@ func scriptValidateNode(apps []services.AppSpec) string {
 		b.Raw(`done`)
 	}
 
+	// Lockfile check: warn if missing, don't block. The Dockerfile or install step
+	// handles the actual failure with a clear message. Model: Vercel/Railway behavior —
+	// lockfile absence is the user's responsibility, not a platform gate.
+	// If npm ci is in their Dockerfile, Docker itself fails clearly.
+	// If no Dockerfile, scriptInstallNode falls back to npm install with a warning.
 	b.Raw(`if [ "$HAS_LOCK" = "false" ]; then`)
-	b.Raw(`  ERRORS="${ERRORS}No lockfile found. Run npm install and commit the lockfile. "`)
+	b.Raw(`  echo "WARNING: No lockfile found. Builds may be non-deterministic. Consider running npm install and committing the lockfile."`)
 	b.Raw(`fi`)
 
 	appendErrorExit(b)
@@ -116,7 +121,9 @@ func scriptValidateGo(apps []services.AppSpec) string {
 		Raw(`ERRORS=""`)
 
 	appendValidateFile(b, paths, "go.mod")
-	appendValidateFile(b, paths, "go.sum")
+	// go.sum: warn if missing, don't block. go mod download generates it.
+	// The Dockerfile handles this via `COPY go.sum* ./` (wildcard).
+	appendWarnFile(b, paths, "go.sum")
 
 	appendErrorExit(b)
 	b.Echo("Workspace validation passed")
@@ -320,6 +327,17 @@ func appendValidateFile(b *shellgen.ScriptBuilder, paths []string, filename stri
 		filePath := shellgen.ShellQuote(p + "/" + filename)
 		b.Raw(fmt.Sprintf("if [ ! -f %s ]; then", filePath)).
 			Raw(fmt.Sprintf(`  ERRORS="${ERRORS}No %s found at %s/%s. "`, filename, p, filename)).
+			Raw("fi")
+	}
+}
+
+// appendWarnFile appends shell code to WARN (not error) if a file is missing.
+// Used for optional lockfiles where absence is the user's choice, not a platform gate.
+func appendWarnFile(b *shellgen.ScriptBuilder, paths []string, filename string) {
+	for _, p := range paths {
+		filePath := shellgen.ShellQuote(p + "/" + filename)
+		b.Raw(fmt.Sprintf("if [ ! -f %s ]; then", filePath)).
+			Raw(fmt.Sprintf(`  echo "WARNING: No %s found at %s/%s — build may be non-deterministic"`, filename, p, filename)).
 			Raw("fi")
 	}
 }

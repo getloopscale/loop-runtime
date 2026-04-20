@@ -178,6 +178,7 @@ type k8sPodSpec struct {
 	ServiceAccountName            string                  `json:"serviceAccountName,omitempty"`
 	AutomountServiceAccountToken  *bool                   `json:"automountServiceAccountToken,omitempty"`
 	SecurityContext               *k8sPodSecurityContext   `json:"securityContext,omitempty"`
+	Volumes                       []k8sVolume             `json:"volumes,omitempty"`
 	Containers                    []k8sContainer           `json:"containers"`
 	TerminationGracePeriodSeconds int                      `json:"terminationGracePeriodSeconds,omitempty"`
 }
@@ -202,10 +203,23 @@ type k8sContainer struct {
 	Env             []k8sEnvVar                 `json:"env,omitempty"`
 	EnvFrom         []k8sEnvFromSource          `json:"envFrom,omitempty"`
 	SecurityContext *k8sContainerSecurityContext `json:"securityContext,omitempty"`
+	VolumeMounts    []k8sVolumeMount            `json:"volumeMounts,omitempty"`
 	StartupProbe    *k8sProbe                   `json:"startupProbe,omitempty"`
 	ReadinessProbe  *k8sProbe                   `json:"readinessProbe,omitempty"`
 	LivenessProbe   *k8sProbe                   `json:"livenessProbe,omitempty"`
 }
+
+type k8sVolumeMount struct {
+	Name      string `json:"name"`
+	MountPath string `json:"mountPath"`
+}
+
+type k8sVolume struct {
+	Name     string        `json:"name"`
+	EmptyDir *k8sEmptyDir  `json:"emptyDir,omitempty"`
+}
+
+type k8sEmptyDir struct{}
 
 type k8sContainerSecurityContext struct {
 	AllowPrivilegeEscalation *bool              `json:"allowPrivilegeEscalation,omitempty"`
@@ -638,6 +652,11 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 			ReadOnlyRootFilesystem:   &trueVal,
 			Capabilities:             &k8sCapabilities{Drop: []string{"ALL"}},
 		},
+		// Mount writable /tmp for frameworks that need temp dirs at runtime
+		// (Java Spring, Python, etc). Required with readOnlyRootFilesystem=true.
+		VolumeMounts: []k8sVolumeMount{
+			{Name: "tmp", MountPath: "/tmp"},
+		},
 	}
 
 	if port > 0 {
@@ -727,6 +746,12 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 						RunAsGroup:     int64Ptr(1000),
 						FSGroup:        int64Ptr(1000),
 						SeccompProfile: &k8sSeccompProfile{Type: "RuntimeDefault"},
+					},
+					// Writable /tmp volume: required for readOnlyRootFilesystem=true.
+					// Java (Spring tmpdir), Python (compiled modules), and others
+					// write to /tmp at runtime. emptyDir is ephemeral and size-limited.
+					Volumes: []k8sVolume{
+						{Name: "tmp", EmptyDir: &k8sEmptyDir{}},
 					},
 					Containers:                    []k8sContainer{container},
 					TerminationGracePeriodSeconds: 30,
