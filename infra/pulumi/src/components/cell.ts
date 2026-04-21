@@ -129,7 +129,7 @@ export function createCell(
   const cluster = new digitalocean.KubernetesCluster(cellName, {
     name: cellName,
     region: config.region,
-    version: "1.33.9-do.2",
+    version: "1.33.9-do.3",
     autoUpgrade: true,
     surgeUpgrade: true,
     vpcUuid: refs.vpcId,

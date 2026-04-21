@@ -164,6 +164,10 @@ type Config struct {
 	// Env: MAX_CONCURRENT_BUILDS_PER_CELL (default: 20)
 	MaxConcurrentBuildsPerCell int
 
+	// MaxTenantsPerCell: maximum tenants per cell for placement engine.
+	// Env: MAX_TENANTS_PER_CELL (default: 5000)
+	MaxTenantsPerCell int
+
 	// MaxConcurrentBuildsPerTenant: per-tenant concurrent build limit.
 	// Env: MAX_CONCURRENT_BUILDS_PER_TENANT (default: 3)
 	MaxConcurrentBuildsPerTenant int
@@ -318,6 +322,7 @@ func Load() Config {
 		// Roadmap 07 — Backpressure & Admission Control.
 		AdmissionControl:             os.Getenv("LOOPZERO_ADMISSION_CONTROL") == "true",
 		MaxConcurrentBuildsPerCell:   envInt("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
+		MaxTenantsPerCell:            envInt("MAX_TENANTS_PER_CELL", 5000),
 		MaxConcurrentBuildsPerTenant: envInt("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
 		PGCircuitBreakerThresholdPct: envInt("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
 

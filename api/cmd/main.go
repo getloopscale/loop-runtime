@@ -1061,7 +1061,7 @@ func main() {
 		// cell (roadmap 06 TOCTOU fix). When the pool is nil (local dev
 		// without a DB) NewAdvisoryLockSerializer returns nil and the
 		// engine falls back to its unserialized path.
-		CellPlacement: placement.NewRoundRobinEngine(cellRouter, cellStore, 500).
+		CellPlacement: placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell).
 			WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool)),
 		BuildHandler:        buildHandler,
 		ArgoCallbackHandler: argoCallbackHandler,
