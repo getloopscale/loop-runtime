@@ -51,6 +51,7 @@ type Config struct {
 	BootstrapStore     routes.BootstrapStore
 	BootstrapSecret    string // SEC-003: shared secret for /internal/bootstrap auth
 	CellPlacement      routes.CellPlacementEngine // ADR-0008: Cell assignment for new tenants
+	CellDiscovery      routes.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
 	// ShutdownCtx is cancelled when the server begins graceful shutdown.
 	// Background goroutines (reaper, cleaner, pruner, callback processing)
 	// should use this context so they stop before the connection pool closes (A-05).
@@ -165,6 +166,9 @@ func NewRouter(cfg Config) *chi.Mux {
 
 	// Public routes (no auth required)
 	health := routes.NewHealthHandler(cfg.DB, cfg.HealthServices...)
+	if cfg.CellDiscovery != nil {
+		health.WithCellDiscovery(cfg.CellDiscovery)
+	}
 	r.Get("/api/v1/health", health.Health)
 	r.Get("/api/v1/health/deep", health.DeepHealth)
 

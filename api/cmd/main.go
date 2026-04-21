@@ -460,6 +460,12 @@ func main() {
 				MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 			},
 		)
+		// MEET-053 A-07: Wire CellLister so reconcile loop processes builds across ALL cells.
+		// DynamicRouter implements ListCellIDs(). Without this, builds on non-default
+		// cells are never reconciled (stuck in RUNNING forever).
+		if lister, ok := cellRouter.(services.CellLister); ok {
+			reconcileLoop.WithCellLister(lister)
+		}
 
 		// Build reaper — enforces spec §5.1 timeouts
 		// MOD-6: reconcileLoop is passed so reaper skips builds being reconciled.
@@ -1063,6 +1069,13 @@ func main() {
 		// engine falls back to its unserialized path.
 		CellPlacement: placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell).
 			WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool)),
+		// MEET-053 A-04: Wire CellDiscovery for health endpoint (reports cell count, 503 if 0).
+		CellDiscovery: func() routes.CellDiscoveryChecker {
+			if checker, ok := cellRouter.(routes.CellDiscoveryChecker); ok {
+				return checker
+			}
+			return nil
+		}(),
 		BuildHandler:        buildHandler,
 		ArgoCallbackHandler: argoCallbackHandler,
 		LogsHandler:        logsHandler,

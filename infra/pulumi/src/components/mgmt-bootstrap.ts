@@ -2111,16 +2111,26 @@ function installLoopZeroAPI(
     ],
   );
 
+  const apiRuntimeRbacRules = [
+    // Get pods and services (health check, status)
+    { apiGroups: [""], resources: ["pods", "services", "endpoints"], verbs: ["get", "list", "watch"] },
+    // Manage namespaces (for tenant namespaces — read only for API)
+    { apiGroups: [""], resources: ["namespaces"], verbs: ["get", "list"] },
+  ];
+
   const runtimeScopedKubeconfig = createScopedKubeconfig(
     "runtime",
     infra.runtimeCluster,
     PLATFORM_NAMESPACE,
-    [
-      // Get pods and services (health check, status)
-      { apiGroups: [""], resources: ["pods", "services", "endpoints"], verbs: ["get", "list", "watch"] },
-      // Manage namespaces (for tenant namespaces — read only for API)
-      { apiGroups: [""], resources: ["namespaces"], verbs: ["get", "list"] },
-    ],
+    apiRuntimeRbacRules,
+  );
+
+  // Multi-cell: scoped kubeconfig for runtime-2 with same RBAC as runtime-1.
+  const runtime2ScopedKubeconfig = createScopedKubeconfig(
+    "api-runtime-2",
+    infra.runtimeCluster2,
+    PLATFORM_NAMESPACE,
+    apiRuntimeRbacRules,
   );
 
   const kubeconfigSecret = new k8s.core.v1.Secret(
@@ -2133,6 +2143,7 @@ function installLoopZeroAPI(
         "mgmt-kubeconfig": infra.mgmtCluster.kubeconfig,
         "build-kubeconfig": buildScopedKubeconfig,
         "runtime-kubeconfig": runtimeScopedKubeconfig,
+        "runtime-2-kubeconfig": runtime2ScopedKubeconfig,
       },
     },
     { provider, dependsOn: [ns] },
@@ -2829,6 +2840,23 @@ function installTenantController(
       { apiGroups: ["scheduling.k8s.io"], resources: ["priorityclasses"], verbs: ["get", "list", "create", "update", "patch"] },
     ],
   );
+
+  // Multi-cell: scoped kubeconfig for runtime-2 tenant controller operations.
+  // Must be defined BEFORE the tenant-controller-kubeconfig Secret that references it.
+  const controllerRuntime2Kubeconfig = createScopedKubeconfig(
+    "ctrl-runtime-2",
+    infra.runtimeCluster2,
+    PLATFORM_NAMESPACE,
+    [
+      { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "watch", "create", "update", "patch"] },
+      { apiGroups: [""], resources: ["pods"], verbs: ["get", "list", "delete"] },
+      { apiGroups: [""], resources: ["namespaces"], verbs: ["delete"] },
+      { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
+      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind"] },
+      { apiGroups: ["scheduling.k8s.io"], resources: ["priorityclasses"], verbs: ["get", "list", "create", "update", "patch"] },
+    ],
+  );
+
   const controllerKubeconfig = new k8s.core.v1.Secret(
     "tenant-controller-kubeconfig",
     {
@@ -2839,6 +2867,7 @@ function installTenantController(
       stringData: {
         "build-kubeconfig": controllerBuildKubeconfig,
         "runtime-kubeconfig": controllerRuntimeKubeconfig,
+        "runtime-2-kubeconfig": controllerRuntime2Kubeconfig,
       },
     },
     { provider, dependsOn: [ns] },
@@ -2895,21 +2924,7 @@ function installTenantController(
   );
 
   // --- Runtime cluster 2: ClusterCredential for multi-cell ---
-  // Second runtime cell. DynamicRouter discovers both cells and distributes
-  // tenants across them via RoundRobinEngine. Validates multi-cell horizontal scaling.
-  const controllerRuntime2Kubeconfig = createScopedKubeconfig(
-    "ctrl-runtime-2",
-    infra.runtimeCluster2,
-    PLATFORM_NAMESPACE,
-    [
-      { apiGroups: [""], resources: ["namespaces", "secrets", "serviceaccounts", "resourcequotas", "limitranges"], verbs: ["get", "list", "watch", "create", "update", "patch"] },
-      { apiGroups: [""], resources: ["pods"], verbs: ["get", "list", "delete"] },
-      { apiGroups: [""], resources: ["namespaces"], verbs: ["delete"] },
-      { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch"] },
-      { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "bind"] },
-      { apiGroups: ["scheduling.k8s.io"], resources: ["priorityclasses"], verbs: ["get", "list", "create", "update", "patch"] },
-    ],
-  );
+  // controllerRuntime2Kubeconfig already created above (before tenant-controller-kubeconfig Secret).
 
   const runtime2CellKubeconfig = new k8s.core.v1.Secret(
     "runtime-2-cell-kubeconfig",
