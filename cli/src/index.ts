@@ -612,7 +612,7 @@ export function createProgram(): Command {
       });
 
       const exitCode = await withTimeout(
-        logsCmd.execute({ build: cmdOpts.build, tail: cmdOpts.tail, step: cmdOpts.step, json: globalOpts.json }),
+        logsCmd.execute({ build: cmdOpts.build, tail: cmdOpts.tail, step: cmdOpts.step, env: cmdOpts.env, json: globalOpts.json }),
         API_REQUEST_TIMEOUT_MS + 10_000,
         'Logs request timed out. Check your connection and try again.',
       ).catch((err: Error) => {
@@ -1397,7 +1397,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new DomainAddCommand({
         getToken: () => configStore.getToken(),
@@ -1434,7 +1434,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new DomainVerifyCommand({
         getToken: () => configStore.getToken(),
@@ -1465,7 +1465,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new DomainStatusCommand({
         getToken: () => configStore.getToken(),
@@ -1499,7 +1499,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new DomainListCommand({
         getToken: () => configStore.getToken(),
@@ -1537,7 +1537,7 @@ export function createProgram(): Command {
       const globalOpts = program.opts();
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new DomainRemoveCommand({
         getToken: () => configStore.getToken(),
@@ -1567,7 +1567,7 @@ export function createProgram(): Command {
     .action(async (domain: string) => {
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new DomainDNSCommand({
         getToken: () => configStore.getToken(),
@@ -1603,7 +1603,7 @@ export function createProgram(): Command {
     .action(async (opts: { repo?: string; branch?: string; installationId?: string }) => {
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new ConnectCommand({
         getToken: () => configStore.getToken(),
@@ -1637,7 +1637,7 @@ export function createProgram(): Command {
     .action(async () => {
       const token = configStore.getToken();
       const baseURL = getDefaultApiUrl();
-      const apiClient = new ApiClient({ baseURL, token: token ?? undefined });
+      const apiClient = new ApiClient({ baseURL, token: token ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new DisconnectCommand({
         getToken: () => configStore.getToken(),

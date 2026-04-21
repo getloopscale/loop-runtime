@@ -890,7 +890,20 @@ func main() {
 		}
 
 		if isLeader && !cfg.DisableLegacyLoops {
-			bgWg.Add(10) // 6 leader loops + 1 cell metrics + 1 leader heartbeat + 2 domain services
+			// review-output F1: BuildGC — garbage collect old builds/releases (retain 10, max 30d)
+			buildGCStore := &db.PostgresBuildGCStore{DB: dbAdapter}
+			buildGC := services.NewBuildGC(buildGCStore, logger, 1*time.Hour, 30*24*time.Hour, 10)
+
+			// review-output F7: OrphanDetector — detect tenants assigned to removed cells
+			// Uses CellLister interface — only DynamicRouter implements it.
+			var orphanDetector *services.OrphanDetector
+			if lister, ok := cellRouter.(services.CellLister); ok {
+				if querier, ok2 := interface{}(cellStore).(services.OrphanedTenantQuerier); ok2 {
+					orphanDetector = services.NewOrphanDetector(lister, querier, logger, 60*time.Second)
+				}
+			}
+
+			bgWg.Add(13) // 6 core + 1 cell metrics + 1 heartbeat + 2 domain + 1 BuildGC + 1 OrphanDetector + 1 KV/CF reconciler
 			go func() { defer bgWg.Done(); reconcileLoop.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); reaper.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); releaseReaper.Start(shutdownCtx) }()
@@ -900,6 +913,33 @@ func main() {
 			go func() { defer bgWg.Done(); cellMetrics.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); domainProvisioner.Start(shutdownCtx) }()
 			go func() { defer bgWg.Done(); domainHealthChecker.Start(shutdownCtx) }()
+			go func() { defer bgWg.Done(); buildGC.Start(shutdownCtx) }()
+			if orphanDetector != nil {
+				go func() { defer bgWg.Done(); orphanDetector.Start(shutdownCtx) }()
+			} else {
+				bgWg.Done() // release the slot if orphanDetector not available
+			}
+
+			// review-output F5: KVReconciler — reconcile static frontend routing table
+			// Only when CF KV client is available AND store implements KVRoutingSource
+			if kvClient != nil {
+				if kvC, ok := kvClient.(*cfkv.Client); ok {
+					if kvSource, ok2 := interface{}(buildStore).(services.KVRoutingSource); ok2 {
+						bgWg.Add(1)
+						kvReconciler := services.NewKVReconciler(kvC, kvSource, logger, 5*time.Minute)
+						go func() { defer bgWg.Done(); kvReconciler.Start(shutdownCtx) }()
+					}
+				}
+			}
+
+			// review-output F6: DomainCFReconciler — detect CF zone drift
+			if cfg.CFZoneManagement && cfZoneClient != nil {
+				if cfStore, ok := interface{}(domainStore).(services.CFZoneReconcilerStore); ok {
+					bgWg.Add(1)
+					domainCFReconciler := services.NewDomainCFReconciler(cfStore, cfZoneClient, logger, 15*time.Minute)
+					go func() { defer bgWg.Done(); domainCFReconciler.Start(shutdownCtx) }()
+				}
+			}
 
 			// MEET-2026-04-04-029 P1: Leader heartbeat — verify lock every 60s.
 			// If the advisory lock is lost (pgx reconnect, PG failover), crash the
@@ -1067,8 +1107,13 @@ func main() {
 		// cell (roadmap 06 TOCTOU fix). When the pool is nil (local dev
 		// without a DB) NewAdvisoryLockSerializer returns nil and the
 		// engine falls back to its unserialized path.
-		CellPlacement: placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell).
-			WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool)),
+		CellPlacement: func() routes.CellPlacementEngine {
+			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
+			if dbAdapter != nil {
+				return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))
+			}
+			return engine
+		}(),
 		// MEET-053 A-04: Wire CellDiscovery for health endpoint (reports cell count, 503 if 0).
 		CellDiscovery: func() routes.CellDiscoveryChecker {
 			if checker, ok := cellRouter.(routes.CellDiscoveryChecker); ok {
@@ -1128,6 +1173,9 @@ func main() {
 		PlanLimiter:            planLimiter,
 		UpgradeURL:             os.Getenv("BILLING_UPGRADE_URL"),
 		PGPoolStatsFunc: func() (int32, int32) {
+			if dbAdapter == nil {
+				return 0, 0
+			}
 			stat := dbAdapter.Pool.Stat()
 			return stat.AcquiredConns(), stat.MaxConns()
 		},
