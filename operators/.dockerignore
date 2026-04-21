@@ -1,0 +1,10 @@
+# INFRA-003: Exclude build context bloat and sensitive files
+.git
+**/*_test.go
+**/testdata/
+operatortest/
+**/*.md
+**/*.bak
+.github/
+review/
+docs/

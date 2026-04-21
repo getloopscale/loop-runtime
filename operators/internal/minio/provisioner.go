@@ -62,6 +62,11 @@ type AdminConfig struct {
 func NewAdminProvisioner(cfg AdminConfig) (*AdminProvisioner, error) {
 	client, err := madmin.NewWithOptions(cfg.Endpoint, &madmin.Options{
 		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		// SEC-003: Secure=false is intentional for in-cluster MinIO (no TLS).
+		// MinIO runs as a ClusterIP service on the mgmt cluster — traffic stays
+		// within the pod network, never traverses external networks.
+		// For production with external MinIO/Spaces, this is disabled entirely
+		// (DigitalOcean uses SPACES_ACCESS_KEY_ID, not MinIO admin API).
 		Secure: false,
 	})
 	if err != nil {
