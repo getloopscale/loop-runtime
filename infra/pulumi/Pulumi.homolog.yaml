@@ -34,3 +34,4 @@ config:
   loopzero-infra:mgmtMaxNodes: "8"
   loopzero-infra:runtimeMaxNodes: "50"
   loopzero-infra:buildMaxNodes: "20"
+  loopzero-infra:dbNodeClass: medium

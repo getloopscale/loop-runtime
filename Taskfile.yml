@@ -1486,6 +1486,108 @@ tasks:
         echo "=== Grafana Dashboards ==="
         curl -sf -u REDACTED_SECRET_056 http://localhost:{{.GRAFANA_PORT}}/api/search?type=dash-db | jq -r '.[].title' 2>/dev/null || echo "Grafana not reachable at localhost:{{.GRAFANA_PORT}}"
 
+  # =========================================================================
+  # MEET-055: Post-Stress-Test Operational Tasks
+  # =========================================================================
+
+  loadtest:run:
+    desc: Run load test at specified LEVEL (l1-l5). Uses Go E2E harness.
+    vars:
+      LEVEL: '{{.LEVEL | default "l1"}}'
+    cmds:
+      - |
+        cd infra/tests/load
+        if [ ! -f run-tests.sh ]; then
+          echo "ERROR: run-tests.sh not found in infra/tests/load/"
+          exit 1
+        fi
+        echo "=== Load Test Level: {{.LEVEL}} ==="
+        bash run-tests.sh {{.LEVEL}}
+
+  api:hotfix:
+    desc: Sanctioned fast-path for API image hotfix (build, push, rollout restart with audit)
+    vars:
+      TAG: '{{.TAG | default "homolog"}}'
+      CONTEXT: '{{.CONTEXT | default "do-nyc3-loopzero-infra-homolog-nyc3-mgmt"}}'
+    cmds:
+      - |
+        set -euo pipefail
+        echo "=== API Hotfix ==="
+        echo "  Operator: $(whoami)"
+        echo "  Time:     $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "  Tag:      {{.TAG}}"
+        echo "  Context:  {{.CONTEXT}}"
+        echo ""
+        echo "Building API image..."
+        docker build -f api/Dockerfile -t registry.digitalocean.com/loopzero-infra-registry/loopzero-api:{{.TAG}} .
+        echo "Pushing..."
+        docker push registry.digitalocean.com/loopzero-infra-registry/loopzero-api:{{.TAG}}
+        echo "Rolling out..."
+        kubectl --context={{.CONTEXT}} -n platform-system rollout restart deploy/loopzero-api
+        kubectl --context={{.CONTEXT}} -n platform-system rollout restart deploy/loopzero-controller
+        echo ""
+        echo "✅ Hotfix applied. Rollout status:"
+        kubectl --context={{.CONTEXT}} -n platform-system rollout status deploy/loopzero-api --timeout=120s
+        echo ""
+        echo "⚠️  Do NOT use 'kubectl set image'. This task is the sanctioned fast-path."
+
+  infra:drift:
+    desc: Check Pulumi drift (expect no changes). Run locally or in CI.
+    cmds:
+      - |
+        cd infra/pulumi
+        echo "=== Pulumi Drift Check ==="
+        echo "  Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        npx pulumi preview --stack homolog --expect-no-changes --non-interactive 2>&1 || {
+          echo ""
+          echo "🚨 DRIFT DETECTED! Review changes above."
+          echo "   If intentional (hotfix): reconcile via 'pulumi up' within 24h."
+          echo "   If unauthorized: investigate and revert."
+          exit 1
+        }
+        echo "✅ No drift detected."
+
+  infra:state-delete:
+    desc: Wrapper for 'pulumi state delete' with audit trail. Use ONLY when necessary.
+    vars:
+      URN: '{{.URN}}'
+      REASON: '{{.REASON | default "no reason provided"}}'
+    cmds:
+      - |
+        set -euo pipefail
+        if [ -z "{{.URN}}" ]; then
+          echo "ERROR: URN is required. Usage: task infra:state-delete URN=<urn> REASON='why'"
+          exit 1
+        fi
+        echo "=== Pulumi State Delete (AUDITED) ==="
+        echo "  Operator: $(whoami)"
+        echo "  Time:     $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "  URN:      {{.URN}}"
+        echo "  Reason:   {{.REASON}}"
+        echo ""
+        echo "⚠️  WARNING: This removes the resource from Pulumi state."
+        echo "⚠️  The REAL resource in the cloud is NOT deleted."
+        echo "⚠️  You MUST delete the real resource FIRST (doctl/aws/cf)."
+        echo ""
+        read -p "Have you already deleted the real resource? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+          echo "Aborted. Delete the real resource first, then retry."
+          exit 1
+        fi
+        cd infra/pulumi
+        npx pulumi state delete --stack homolog "{{.URN}}" --force
+        echo "✅ Resource removed from state."
+
+  break-glass:
+    desc: Issue time-boxed cluster-admin access for emergency operations (MEET-055 M3)
+    vars:
+      CONTEXT: '{{.CONTEXT | default "do-nyc3-loopzero-infra-homolog-nyc3-mgmt"}}'
+      TTL: '{{.TTL | default "4"}}'
+      REASON: '{{.REASON | default ""}}'
+    cmds:
+      - bash infra/scripts/break-glass.sh {{.CONTEXT}} {{.TTL}} "{{.REASON}}"
+
   tempo:status:
     desc: Check Tempo health, ServiceMonitor, and PrometheusRules (MEET-020)
     cmds:

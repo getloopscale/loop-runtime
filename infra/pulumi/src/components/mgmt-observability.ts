@@ -16,7 +16,30 @@ export function installPrometheus(
   ns: k8s.core.v1.Namespace,
   argoMetricsEndpoint: pulumi.Output<string>,
   runtimeKSMEndpoint?: pulumi.Output<string>,
+  slackWebhookUrl?: pulumi.Output<string>,
+  slackCriticalWebhookUrl?: pulumi.Output<string>,
 ): k8s.helm.v3.Release {
+  // MEET-055 M1: Alertmanager Slack webhook Secret.
+  // Without this, alerts go to /dev/null (SRE VETO blocker).
+  // Create the Secret only when webhook URLs are configured.
+  const slackUrl = slackWebhookUrl ?? slackCriticalWebhookUrl;
+  if (slackUrl) {
+    new k8s.core.v1.Secret(
+      "alertmanager-slack-webhooks",
+      {
+        metadata: {
+          name: "alertmanager-slack-webhooks",
+          namespace: "monitoring",
+        },
+        stringData: {
+          "slack-webhook-url": slackWebhookUrl ?? pulumi.output(""),
+          "slack-critical-webhook-url": slackCriticalWebhookUrl ?? slackWebhookUrl ?? pulumi.output(""),
+        },
+      },
+      { provider },
+    );
+  }
+
   return new k8s.helm.v3.Release(
     "prometheus",
     {

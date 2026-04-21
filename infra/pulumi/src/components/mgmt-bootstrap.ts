@@ -295,7 +295,12 @@ export function bootstrapMgmtCluster(
   // Prometheus — metrics collection (kube-state-metrics, node-exporter, cAdvisor)
   // argoMetricsEndpoint enables cross-cluster scrape of Argo Workflows controller
   // runtimeKSMEndpoint enables cross-cluster scrape of runtime kube-state-metrics (tenant dashboards)
-  const prometheus = installPrometheus(provider, ns, argoMetricsEndpoint, runtimeKSMEndpoint);
+  // MEET-055 M1: Pass Slack webhook URLs for Alertmanager receivers.
+  const prometheus = installPrometheus(
+    provider, ns, argoMetricsEndpoint, runtimeKSMEndpoint,
+    config.slackWebhookUrl ? pulumi.output(config.slackWebhookUrl) : undefined,
+    config.slackCriticalWebhookUrl ? pulumi.output(config.slackCriticalWebhookUrl) : undefined,
+  );
 
   // Grafana — dashboards and visualization, pre-configured with Prometheus + Loki data sources
   const grafana = installGrafana(provider, ns, config);
