@@ -50,6 +50,8 @@ jobs:
 
       - name: Pulumi preview (expect no changes)
         id: preview
+        # continue-on-error: true is required so the "Create GitHub Issue" step runs on drift.
+        # The job is marked as failed via the explicit exit 1 in "Check for drift" step.
         continue-on-error: true
         run: |
           npx pulumi preview --stack ${{ matrix.stack }} --expect-no-changes --non-interactive --json 2>&1 | tee /tmp/drift-output.json
@@ -100,3 +102,9 @@ jobs:
               body,
               labels: ['infra', 'drift'],
             });
+
+      - name: Fail job on drift
+        if: steps.drift.outputs.drift_detected == 'true'
+        run: |
+          echo "::error::Drift detected. GitHub Issue created. Job marked as failed."
+          exit 1
