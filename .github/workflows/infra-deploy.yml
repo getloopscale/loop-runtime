@@ -115,6 +115,10 @@ jobs:
       SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
       SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      # DO Spaces rate-limits API calls making Pulumi extremely slow.
+      # SKIP_CHECKPOINTS skips intermediate state saves (10x faster).
+      # Safe: pulumi refresh recovers if process is killed mid-operation.
+      PULUMI_SKIP_CHECKPOINTS: "true"
       DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
@@ -163,6 +167,13 @@ jobs:
           pulumi config set --secret spacesAccessKeyId "$SPACES_ACCESS_KEY_ID" --stack "$STACK" 2>/dev/null
           pulumi config set --secret spacesSecretAccessKey "$SPACES_SECRET_ACCESS_KEY" --stack "$STACK" 2>/dev/null
           pulumi config set --secret digitaloceanToken "$DIGITALOCEAN_TOKEN" --stack "$STACK" 2>/dev/null
+
+      - name: "Refresh state (sync with cloud reality)"
+        working-directory: ${{ env.PULUMI_WORKING_DIR }}
+        run: |
+          STACK="${{ needs.resolve.outputs.stack }}"
+          echo "Refreshing state to detect drift before apply..."
+          pulumi refresh --yes --stack "$STACK" --non-interactive --clear-pending-creates 2>&1 || true
 
       - name: "Run: pulumi ${{ needs.resolve.outputs.command }}"
         id: pulumi

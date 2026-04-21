@@ -203,8 +203,9 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     // Allow all 3 DOKS clusters to connect — critical for pipeline idempotency.
     // Without this, destroy+recreate leaves DB unreachable (no trusted sources).
     trustedK8sClusters: [mgmtCluster.clusterId, buildCluster.clusterId, runtimeCluster.clusterId, runtimeCluster2.clusterId],
-    // Only protect prod databases — dev/ephemeral need clean destroy+up cycles.
-    protect: config.environment === "prod",
+    // Protect databases in all environments — accidental deletion loses all tenant data.
+    // Use `pulumi state unprotect` + `pulumi destroy --target` for intentional deletion.
+    protect: true,
   });
 
   // --- Object storage ---
