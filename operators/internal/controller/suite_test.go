@@ -156,6 +156,24 @@ var _ = BeforeSuite(func() {
 	Expect(mgr.GetCache().WaitForCacheSync(ctx)).To(BeTrue())
 })
 
+// Clear injected errors between test specs to prevent error state leakage.
+// We only clear errors (not data) because some test Contexts share provisioner
+// state across multiple It blocks within the same BeforeAll/AfterAll scope.
+var _ = BeforeEach(func() {
+	if fakeGitProvider != nil {
+		fakeGitProvider.SetErr(nil)
+	}
+	if fakeArgoCDProvider != nil {
+		fakeArgoCDProvider.Mu.Lock()
+		fakeArgoCDProvider.EnsureErr = nil
+		fakeArgoCDProvider.DeleteErr = nil
+		fakeArgoCDProvider.Mu.Unlock()
+	}
+	if fakeMinIOProvider != nil {
+		fakeMinIOProvider.ClearErrors()
+	}
+})
+
 var _ = AfterSuite(func() {
 	cancel()
 	By("tearing down the test environment")

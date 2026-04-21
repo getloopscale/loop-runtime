@@ -224,6 +224,14 @@ func (f *FakeMinIOProvisioner) Reset() {
 	f.DeleteCalls = 0
 }
 
+// ClearErrors clears all injected errors without resetting credentials or call counts.
+// Use between test specs to prevent error leakage while preserving data state.
+func (f *FakeMinIOProvisioner) ClearErrors() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Errors = make(map[string]error)
+}
+
 // SetError configures the fake to return the given error for a specific tenant.
 func (f *FakeMinIOProvisioner) SetError(tenantID string, err error) {
 	f.mu.Lock()

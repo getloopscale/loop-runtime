@@ -1236,6 +1236,11 @@ export function installTenantController(
                     name: "BASE_DOMAIN",
                     value: config.domain,
                   },
+                  // SEC-001: Enforce TLS verification in production.
+                  {
+                    name: "OPERATOR_INSECURE_SKIP_TLS",
+                    value: "false",
+                  },
                   // Object storage endpoint — S3-compatible (DO Spaces).
                   {
                     name: "MINIO_ENDPOINT",

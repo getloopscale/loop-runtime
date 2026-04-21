@@ -32,12 +32,12 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&TenantList{},
 		&PreviewEnvironment{},
 		&PreviewEnvironmentList{},
-		&AppSecret{},
-		&AppSecretList{},
+		// AppSecret: intentionally unregistered — no controller implemented.
+		// Secrets are managed via ESO directly. Re-register when AppSecret controller is built.
 		&ClusterCredential{},
 		&ClusterCredentialList{},
-		&ReconciliationReport{},
-		&ReconciliationReportList{},
+		// ReconciliationReport: intentionally unregistered — dead code, no controller, no sprint.
+		// Types retained in source for future drift-detection work.
 		&PlatformBootstrap{},
 		&PlatformBootstrapList{},
 		&GitRepositoryBinding{},

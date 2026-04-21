@@ -332,6 +332,11 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		// namespace-level auto-propagation) provides the secret later.
 		// Log but do not block Environment readiness.
 		log.FromContext(ctx).Info("pull secret ensure failed (non-fatal)", "error", err.Error(), "namespace", nsName)
+		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
+			metav1.ConditionFalse, conditions.ReasonFailed, err.Error(), env.Generation)
+	} else {
+		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
+			metav1.ConditionTrue, conditions.ReasonReady, "Pull secret provisioned", env.Generation)
 	}
 
 	// Bug #24 complement: if a pod was already Pending with ImagePullBackOff
@@ -390,7 +395,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 // Destination: loopzero-infra-registry in nsName.
 func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, nsName string) error {
 	var src corev1.Secret
-	srcKey := client.ObjectKey{Namespace: "platform-system", Name: "loopzero-infra-registry"}
+	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: "loopzero-infra-registry"}
 	// r.Client is the mgmt cluster client (embedded); r.RuntimeClient is runtime.
 	if err := r.Client.Get(ctx, srcKey, &src); err != nil {
 		return fmt.Errorf("source pull secret platform-system/loopzero-infra-registry: %w", err)

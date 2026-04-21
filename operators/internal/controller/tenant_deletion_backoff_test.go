@@ -73,9 +73,21 @@ func TestGetDeletionRetryCount_InvalidAnnotation(t *testing.T) {
 	}
 }
 
-func TestDeletionMaxAttempts_StopsRequeue(t *testing.T) {
+func TestDeletionMaxAttempts_Value(t *testing.T) {
 	// Verify that the max attempts constant is 10 as mandated by MEET-052
 	if constants.DeletionMaxAttempts != 10 {
 		t.Errorf("DeletionMaxAttempts = %d, want 10 (MEET-052 mandate)", constants.DeletionMaxAttempts)
+	}
+}
+
+func TestRequeueDeletionStuck_ContinuesRetrying(t *testing.T) {
+	// After DeletionMaxAttempts, the controller should requeue at a slow rate
+	// instead of stopping entirely — allows self-healing if dependencies recover.
+	if constants.RequeueDeletionStuck != 1*time.Hour {
+		t.Errorf("RequeueDeletionStuck = %v, want 1h", constants.RequeueDeletionStuck)
+	}
+	if constants.RequeueDeletionStuck <= constants.DeletionBackoffMax {
+		t.Errorf("RequeueDeletionStuck (%v) should be greater than DeletionBackoffMax (%v)",
+			constants.RequeueDeletionStuck, constants.DeletionBackoffMax)
 	}
 }

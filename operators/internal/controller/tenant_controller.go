@@ -61,7 +61,7 @@ type TenantReconciler struct {
 	GitProvisioner     gitea.GitRepoProvisioner
 	ArgoCDProvisioner  argocd.Provisioner
 	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
-	HarborClient       *harbor.Client              // nil disables Harbor integration (backward compat with DOCR)
+	HarborClient       harbor.Provisioner           // nil disables Harbor integration (backward compat with DOCR)
 	HarborRegistryHost string                       // e.g. "harbor.dev.loopzero.example" — used in Docker config.json
 	GiteaURL           string
 	WorkloadClusterURL string           // URL of the workload cluster API server
@@ -74,7 +74,7 @@ type TenantControllerConfig struct {
 	GiteaURL               string
 	WorkloadClusterURL     string
 	MinIOProvisioner       miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
-	HarborClient           *harbor.Client              // nil disables Harbor integration
+	HarborClient           harbor.Provisioner           // nil disables Harbor integration
 	HarborRegistryHost     string                       // e.g. "harbor.dev.loopzero.example"
 	Credentials            BuildCredentials             // storage + registry credentials
 	RegistryCIDRs          []string                     // CIDR ranges for container registry (RISK-007)
@@ -374,14 +374,16 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 			logger.Error(fmt.Errorf("cleanup stuck after %d attempts: %v", retryCount, cleanupErrors),
 				"tenant deletion stuck — manual intervention required",
 				"tenant", tenant.Name, "attempts", retryCount)
-			// Update annotation to reflect final count but do NOT requeue.
+			// Update annotation and continue retrying at a slow rate.
 			// PrometheusRule loopzero_tenant_deletion_stuck will alert on this.
+			// Instead of stopping entirely, requeue at RequeueDeletionStuck
+			// to allow self-healing if the dependency recovers.
 			metrics.TenantDeletionStuckTotal.Inc()
 			setDeletionRetryCount(tenant, retryCount)
 			if err := r.Update(ctx, tenant); err != nil {
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: constants.RequeueDeletionStuck}, nil
 		}
 
 		backoff := deletionBackoff(retryCount)

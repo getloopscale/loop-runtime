@@ -265,7 +265,7 @@ func main() {
 
 	// Harbor registry integration (optional — nil disables, backward compatible with DOCR).
 	// Only enabled when HARBOR_URL is set. All 3 env vars are required when enabled.
-	var harborClient *harbor.Client
+	var harborClient harbor.Provisioner
 	var harborRegistryHost string
 	if harborURL := os.Getenv("HARBOR_URL"); harborURL != "" {
 		harborUser := os.Getenv("HARBOR_ADMIN_USERNAME")
@@ -274,7 +274,12 @@ func main() {
 			setupLog.Error(nil, "HARBOR_ADMIN_USERNAME and HARBOR_ADMIN_PASSWORD are required when HARBOR_URL is set")
 			os.Exit(1)
 		}
-		harborClient = harbor.NewClient(harborURL, harborUser, harborPass)
+		harborReal := harbor.NewClient(harborURL, harborUser, harborPass)
+		harborCB := cb.New(cb.Config{
+			Name: "harbor", OpenThreshold: 5, CloseThreshold: 1,
+			RetryInterval: 120 * time.Second,
+		}, cbStateLogger)
+		harborClient = harbor.NewCircuitBreakerClient(harborReal, harborCB, slog.Default())
 		harborRegistryHost = os.Getenv("HARBOR_REGISTRY_HOST")
 		if harborRegistryHost == "" {
 			// Derive from HARBOR_URL by stripping the scheme.

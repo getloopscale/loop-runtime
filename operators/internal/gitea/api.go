@@ -219,12 +219,12 @@ func (c *APIClient) EnsureOrg(ctx context.Context, token, orgName string) error 
 	if createResp.StatusCode == http.StatusUnprocessableEntity {
 		verifyReq, verifyErr := http.NewRequestWithContext(ctx, http.MethodGet, c.apiV1("orgs", orgName), nil)
 		if verifyErr != nil {
-			return nil // best-effort: assume org exists if we can't verify
+			return fmt.Errorf("gitea: org %s creation returned 422, verification request failed: %w", orgName, verifyErr)
 		}
 		verifyReq.Header.Set("Authorization", "token "+token)
 		verifyResp, verifyErr := c.client.Do(verifyReq)
 		if verifyErr != nil {
-			return nil // best-effort
+			return fmt.Errorf("gitea: org %s creation returned 422, verification call failed: %w", orgName, verifyErr)
 		}
 		defer func() { _ = verifyResp.Body.Close() }()
 		_, _ = io.ReadAll(verifyResp.Body)

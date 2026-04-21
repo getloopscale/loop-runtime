@@ -41,6 +41,7 @@ const (
 	TypeEnvRBACReady          = "RBACReady"
 	TypeEnvNetworkPolicyReady = "NetworkPolicyReady"
 	TypeEnvQuotaReady         = "QuotaReady"
+	TypePullSecretReady       = "PullSecretReady" // Informational only — does not block Active transition
 )
 
 // --- Application conditions ---

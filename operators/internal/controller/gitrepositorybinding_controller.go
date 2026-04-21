@@ -83,7 +83,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 	token, err := r.resolveCredential(ctx, &binding, gen)
 	if err != nil {
 		if statusErr := r.Status().Update(ctx, &binding); statusErr != nil {
-			return ctrl.Result{}, statusErr
+			logger.Error(statusErr, "failed to update binding status after credential resolve error")
 		}
 		return ctrl.Result{RequeueAfter: constants.RequeueRepoBindingOnError}, nil
 	}
@@ -94,7 +94,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 	// Step 3: Ensure ArgoCD Secret exists with correct data.
 	if err := r.ensureArgoCDSecret(ctx, &binding, token, hash, gen); err != nil {
 		if statusErr := r.Status().Update(ctx, &binding); statusErr != nil {
-			return ctrl.Result{}, statusErr
+			logger.Error(statusErr, "failed to update binding status after ArgoCD secret error")
 		}
 		return ctrl.Result{RequeueAfter: constants.RequeueRepoBindingOnError}, nil
 	}

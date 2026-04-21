@@ -8,7 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **Tenant deletion stuck with no recovery** (operators-review): After DeletionMaxAttempts, controller now requeues every 1h instead of stopping entirely. Allows self-healing if dependencies recover. Metric `loopzero_tenant_deletion_stuck_total` still emitted for alerting.
+- **MinIO error matching fragility** (operators-review): Replaced custom `contains()`/`searchString()` with `strings.Contains()` in minio provisioner. Added regression test `TestIsNotFoundError`.
+- **Gitea EnsureOrg swallowed verification errors** (operators-review): On 422 + verification failure, now returns error instead of nil. Prevents silent org creation failures.
+- **Inconsistent status update error handling** (operators-review): Standardized across GitRepositoryBinding and ClusterCredential controllers to log statusErr instead of returning it (preserves original reconcile error).
+- **EnvironmentController pull secret failures invisible** (operators-review): Added `PullSecretReady` condition (informational, non-blocking) so operators can detect pull secret provisioning failures via `kubectl describe environment`.
+- **Hardcoded "platform-system" string** (operators-review): Replaced with `constants.NamespacePlatformSystem` in `environment_controller.go`.
 - **Grafana tenant-workloads dashboard showing no data**: Installed kube-state-metrics on runtime cluster with cross-cluster NodePort (30092) scrape from mgmt Prometheus. Dashboard queries use `job="runtime-kube-state-metrics"` which now resolves to real metrics. Also fixes tenant-ecosystem dashboard.
+
+### Added
+- **CircuitBreaker for MinIO provisioner** (operators-review): Wraps MinIO CredentialProvisioner with same CB pattern as Gitea/ArgoCD. Prevents retry storms on MinIO outage.
+- **CircuitBreaker for Harbor client** (operators-review): Wraps Harbor Client with CB pattern. Preserves nil-guard behavior.
+- **Type tests for 5 CRDs** (operators-review): Added type-level tests for LoopZeroApplication, Environment, ExposedRoute, GitRepositoryBinding, PlatformBootstrap (~40 new tests).
+- **Ginkgo fake provisioner Reset()** (operators-review): Added `BeforeEach` in suite_test.go to reset fake provisioner state between test Contexts. Prevents state leakage between tests.
+- **PlatformBootstrap ownership check** (operators-review): Validates `managed-by` label before deleting platform-tokens secret during cleanup.
+
+### Security
+- **TLS verification enforced in production** (operators-review, SEC-001): Added `OPERATOR_INSECURE_SKIP_TLS=false` to Pulumi production config and explicit `true` for dev. Previously defaulted to skip (insecure).
+
+### Removed
+- **AppSecret CRD unregistered** (operators-review): Removed from scheme registration. No controller ever implemented — secrets managed via ESO directly. Go types retained for future use.
+- **ReconciliationReport CRD unregistered** (operators-review): Removed from scheme registration + CRD YAML deleted. Dead code with no controller or sprint assigned. Go types retained as experimental.
 
 ### Added
 - **Tenant deletion lifecycle — Phases 0-5** (MEET-052): Full tenant deletion lifecycle implementation. Meeting record: MEET-2026-04-17-052.
