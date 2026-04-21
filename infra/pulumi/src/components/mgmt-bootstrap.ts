@@ -2175,6 +2175,32 @@ function installLoopZeroAPI(
     { provider, dependsOn: [ns] },
   );
 
+  // MEET-055 M2: Restricted RBAC for human operators.
+  // Root cause of 62 manual operations during stress test: cluster-admin kubeconfig.
+  // This ClusterRole provides read-only access + scoped write (restart, port-forward, logs).
+  // cluster-admin is available ONLY via break-glass procedure (M3).
+  new k8s.rbac.v1.ClusterRole(
+    "loopzero-operator-readonly",
+    {
+      metadata: { name: "loopzero-operator" },
+      rules: [
+        // Read-only: everything
+        { apiGroups: ["*"], resources: ["*"], verbs: ["get", "list", "watch"] },
+        // Scoped write: restart deployments (rollout restart)
+        { apiGroups: ["apps"], resources: ["deployments"], verbs: ["patch"], resourceNames: [] },
+        // Scoped write: delete pods (for stuck pod cleanup)
+        { apiGroups: [""], resources: ["pods"], verbs: ["delete"] },
+        // Scoped write: port-forward
+        { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
+        // Scoped write: exec into pods (debugging)
+        { apiGroups: [""], resources: ["pods/exec"], verbs: ["create"] },
+        // Scoped write: view logs
+        { apiGroups: [""], resources: ["pods/log"], verbs: ["get"] },
+      ],
+    },
+    { provider },
+  );
+
   // ClusterRole for loopzero-api — RBAC for all LoopZero CRD operations.
   // API needs: Tenants (create/manage), LoopZeroApplications + ExposedRoutes (reconcile loop
   // reads status), Environments (create on deploy). Without these, reconcile loop logs
