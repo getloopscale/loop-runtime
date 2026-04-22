@@ -209,6 +209,10 @@ func TestMetricDefinitions_Extended(t *testing.T) {
 		{"BuildAdmissionAdmitted", metrics.BuildAdmissionAdmitted},
 		{"BuildAdmissionRejected", metrics.BuildAdmissionRejected},
 		{"PGCircuitBreakerTripped", metrics.PGCircuitBreakerTripped},
+		// Phase 4A business metrics
+		{"DeployLeadTime", metrics.DeployLeadTime},
+		{"FalseSuccessTotal", metrics.FalseSuccessTotal},
+		{"RetryAmplificationTotal", metrics.RetryAmplificationTotal},
 	}
 
 	for _, c := range checks {
@@ -317,4 +321,9 @@ func TestMetrics_CanIncrement(t *testing.T) {
 	metrics.DomainVerificationDuration.WithLabelValues("success").Observe(2.0)
 	metrics.DomainProvisioningDuration.WithLabelValues("success").Observe(120.0)
 	metrics.DomainNSPropagationDuration.WithLabelValues("success").Observe(3600.0)
+
+	// Phase 4A business metrics
+	metrics.DeployLeadTime.WithLabelValues("tn-test", "production").Observe(180.0)
+	metrics.FalseSuccessTotal.WithLabelValues("tn-test", "production").Inc()
+	metrics.RetryAmplificationTotal.WithLabelValues("release_activation").Inc()
 }

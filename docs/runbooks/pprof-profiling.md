@@ -50,18 +50,20 @@ go tool pprof -http=:8080 http://localhost:6060/debug/pprof/heap
 
 | Env var | Description | Default |
 |---------|-------------|---------|
-| `LOOPZERO_PPROF_ENABLED` | Enable/disable pprof server | `true` |
+| `LOOPZERO_PPROF_ENABLED` | Enable/disable pprof server | `false` |
 | `LOOPZERO_PPROF_ADDR` | Listen address | `:6060` (API), `:6061` (Operator) |
 
-To disable in production:
+To enable for debugging:
 ```yaml
 env:
   - name: LOOPZERO_PPROF_ENABLED
-    value: "false"
+    value: "true"
 ```
 
 ## Security
 
-- pprof runs on a SEPARATE port from the API and metrics ports
+- pprof is **disabled by default** — requires explicit `LOOPZERO_PPROF_ENABLED=true`
+- Uses a **dedicated ServeMux** (not DefaultServeMux) to prevent handler pollution
+- Runs on a SEPARATE port from the API and metrics ports
 - NOT exposed via Traefik/Ingress — only accessible via `kubectl port-forward`
-- Contains sensitive runtime information — restrict access to operators
+- Contains sensitive runtime information (heap, goroutines) — restrict access to operators

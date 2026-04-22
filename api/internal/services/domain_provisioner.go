@@ -348,6 +348,7 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 
 	if lockErr != nil {
 		log.Error("domain provisioner: lock/render failed", "error", lockErr)
+		metrics.DomainProvisioningDuration.WithLabelValues("failure").Observe(time.Since(start).Seconds())
 		if err2 := p.store.UpdateFailure(ctx, d.Domain, "failed", fmt.Sprintf("Provisioning failed: %v", lockErr)); err2 != nil {
 			log.Error("domain provisioner: failed to record failure", "error", err2)
 		}
@@ -361,6 +362,7 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 
 	if _, err := p.gitops.Push(pushCtx, pushOpts); err != nil {
 		log.Warn("domain provisioner: gitops push failed, will retry", "error", err)
+		metrics.DomainProvisioningDuration.WithLabelValues("failure").Observe(time.Since(start).Seconds())
 		return // stay in provisioning — F-006 timeout handles permanent failures
 	}
 

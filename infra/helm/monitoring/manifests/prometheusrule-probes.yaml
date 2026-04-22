@@ -31,7 +31,7 @@ spec:
             runbook: "Check cert-manager Certificate resources. Verify ACME issuer is working. Renew manually if needed."
 
         - alert: LoopZeroProbeSlow
-          expr: probe_duration_seconds > 10
+          expr: probe_duration_seconds{job=~"probe/monitoring/loopzero-.*"} > 10
           for: 5m
           labels:
             severity: warning

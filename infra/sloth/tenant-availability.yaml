@@ -2,6 +2,9 @@
 # Measures blackbox probe success rate against tenant-deployed applications.
 # Target: 99.9% — tenant URLs must be reachable.
 # Depends on: blackbox_exporter (Phase 1A).
+#
+# Uses raw SLI because probe_success is a gauge (0/1 per scrape), not a counter.
+# error_ratio = (failed probes) / (total probes) over the window.
 version: "prometheus/v1"
 service: "loopzero-tenant-availability"
 labels:
@@ -12,9 +15,13 @@ slos:
     objective: 99.9
     description: "Percentage of successful blackbox probes against tenant URLs."
     sli:
-      events:
-        error_query: sum(rate(probe_success{job=~".*loopzero-api-probe.*"}[{{.window}}]) == bool 0)
-        total_query: count(rate(probe_success{job=~".*loopzero-api-probe.*"}[{{.window}}]))
+      raw:
+        error_ratio_query: |
+          1 - (
+            sum(avg_over_time(probe_success{job=~".*loopzero-api-probe.*"}[{{.window}}]))
+            /
+            count(avg_over_time(probe_success{job=~".*loopzero-api-probe.*"}[{{.window}}]))
+          )
     alerting:
       name: LoopZeroTenantAvailabilityBudgetBurn
       labels:
