@@ -6,6 +6,8 @@ package gitops
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -220,6 +222,124 @@ func TestGiteaGitOpsPusher_EmptyManifests(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "manifests cannot be empty") {
 		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestGiteaGitOpsPusher_GetManifestsAtCommit_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	pusher := &GiteaGitOpsPusher{
+		baseURL: srv.URL,
+		token:   "test-token",
+		orgName: "loopzero",
+		client:  srv.Client(),
+	}
+
+	_, err := pusher.GetManifestsAtCommit(context.Background(), "acme", "myapp", "production", "abc123")
+	if err == nil {
+		t.Fatal("expected error for 404")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' in error, got: %v", err)
+	}
+}
+
+func TestGiteaGitOpsPusher_GetManifestsAtCommit_Success(t *testing.T) {
+	manifest := "apiVersion: apps/v1\nkind: Deployment\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "token test-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(manifest))
+	}))
+	defer srv.Close()
+
+	pusher := &GiteaGitOpsPusher{
+		baseURL: srv.URL,
+		token:   "test-token",
+		orgName: "loopzero",
+		client:  srv.Client(),
+	}
+
+	data, err := pusher.GetManifestsAtCommit(context.Background(), "acme", "myapp", "production", "abc123")
+	if err != nil {
+		t.Fatalf("GetManifestsAtCommit failed: %v", err)
+	}
+	if string(data) != manifest {
+		t.Errorf("got %q, want %q", string(data), manifest)
+	}
+}
+
+func TestGiteaGitOpsPusher_GetManifestsAtCommit_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	pusher := &GiteaGitOpsPusher{
+		baseURL: srv.URL,
+		token:   "test-token",
+		orgName: "loopzero",
+		client:  srv.Client(),
+	}
+
+	_, err := pusher.GetManifestsAtCommit(context.Background(), "acme", "myapp", "production", "abc123")
+	if err == nil {
+		t.Fatal("expected error for 500")
+	}
+}
+
+func TestGiteaGitOpsPusher_GetManifestsAtCommit_ContextCancelled(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	pusher := &GiteaGitOpsPusher{
+		baseURL: srv.URL,
+		token:   "test-token",
+		orgName: "loopzero",
+		client:  srv.Client(),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := pusher.GetManifestsAtCommit(ctx, "acme", "myapp", "prod", "abc")
+	if err == nil {
+		t.Fatal("expected error with cancelled context")
+	}
+}
+
+func TestGiteaGitOpsPusher_Push_ForbiddenManifest(t *testing.T) {
+	// Push should fail if manifest contains a forbidden kind.
+	// This test validates the manifest gate integration in Push().
+	pusher := NewGiteaGitOpsPusher(GiteaGitOpsPusherConfig{
+		BaseURL: "http://localhost:3000",
+		Token:   "fake",
+		OrgName: "loopzero",
+	})
+
+	forbiddenManifest := "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: evil\n"
+	_, err := pusher.Push(context.Background(), services.GitOpsPushOpts{
+		TenantID:      "acme",
+		ProjectID:     "app",
+		Environment:   "production",
+		Manifests:     forbiddenManifest,
+		BuildID:       "bld-1",
+		ReleaseID:     "rel-1",
+		CorrelationID: "corr-1",
+	})
+	if err == nil {
+		t.Fatal("expected error for forbidden manifest kind")
+	}
+	if !strings.Contains(err.Error(), "manifest validation failed") {
+		t.Errorf("expected manifest validation error, got: %v", err)
 	}
 }
 

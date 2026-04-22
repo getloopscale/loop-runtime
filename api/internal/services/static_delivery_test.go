@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
 // COMP-007: Tests for StaticDeliveryActivator (329 lines, previously 0 tests).
@@ -308,6 +309,68 @@ func TestStaticDeliveryActivator_DeployCompletedEvent_ContainsURL(t *testing.T) 
 		}
 	}
 	t.Error("deploy.completed event not found")
+}
+
+func TestStaticDeliveryActivator_SupersedesPreviousRelease(t *testing.T) {
+	rs := newFakeReleaseStoreStatic()
+	prevRelease := &db.Release{
+		ID: "rel-prev", BuildID: "build-old", TenantID: "tn-acme",
+		ProjectID: "web", Environment: "production",
+		Status: "ACTIVE",
+	}
+	rs.activeByEnv["tn-acme-web-production"] = prevRelease
+	rs.releases["rel-prev"] = prevRelease
+
+	es := &fakeEventStoreStatic{}
+	ets := newFakeEnvTargetStoreStatic()
+
+	activator := NewStaticDeliveryActivator(StaticDeliveryDeps{
+		ReleaseStore:   rs,
+		EnvTargetStore: ets,
+		EventStore:     es,
+		Locker:         &fakeLockerStatic{},
+		KVClient:       nil,
+		BaseDomain:     "loopzero.example",
+	})
+
+	build := &db.Build{
+		ID: "build-new", TenantID: "tn-acme", ProjectID: "web", Environment: "production",
+	}
+	result := BuildCallbackRequest{
+		Status: "succeeded",
+		Apps:   []AppRelease{{Name: "app", Type: "frontend"}},
+	}
+
+	if err := activator.Activate(context.Background(), build, result); err != nil {
+		t.Fatal(err)
+	}
+
+	// Previous release should be superseded
+	if rs.lastStatus["rel-prev"] != string(statemachine.ReleaseNewActivated) {
+		t.Errorf("expected previous release to be superseded via %s event, got %q",
+			statemachine.ReleaseNewActivated, rs.lastStatus["rel-prev"])
+	}
+}
+
+func TestStaticDeliveryActivator_Rollback_NilKVClient_Fails(t *testing.T) {
+	activator := NewStaticDeliveryActivator(StaticDeliveryDeps{
+		KVClient: nil,
+	})
+
+	err := activator.Rollback(context.Background(), RollbackDeliveryRequest{
+		TenantID:    "tn-1",
+		ProjectID:   "proj-1",
+		Environment: "production",
+		TargetRelease: &db.Release{
+			ID:      "rel-1",
+			BuildID: "build-1",
+			Apps:    json.RawMessage(`[{"name":"web"}]`),
+		},
+	})
+
+	if err == nil {
+		t.Fatal("expected error when KV client is nil for rollback")
+	}
 }
 
 // helper

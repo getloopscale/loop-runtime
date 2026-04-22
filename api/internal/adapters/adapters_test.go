@@ -436,3 +436,189 @@ var _ routes.BuildOrchestratorService = (*BuildOrchestratorAdapter)(nil)
 var _ routes.LogBuildStore = (*LogBuildStoreAdapter)(nil)
 var _ routes.StatusBuildStore = (*StatusBuildStoreAdapter)(nil)
 var _ routes.StatusReleaseStore = (*StatusReleaseStoreAdapter)(nil)
+
+// --- IsBuildTerminal ---
+
+func TestBuildOrchestratorAdapter_IsBuildTerminal_Succeeded(t *testing.T) {
+	store := &fakeBuildStore{
+		build: &db.Build{ID: "bld-term-001", Status: "SUCCEEDED"},
+	}
+	adapter := &BuildOrchestratorAdapter{BuildStore: store}
+
+	terminal, err := adapter.IsBuildTerminal(context.Background(), "bld-term-001")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !terminal {
+		t.Error("SUCCEEDED build should be terminal")
+	}
+}
+
+func TestBuildOrchestratorAdapter_IsBuildTerminal_Running(t *testing.T) {
+	store := &fakeBuildStore{
+		build: &db.Build{ID: "bld-run-001", Status: "RUNNING"},
+	}
+	adapter := &BuildOrchestratorAdapter{BuildStore: store}
+
+	terminal, err := adapter.IsBuildTerminal(context.Background(), "bld-run-001")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if terminal {
+		t.Error("RUNNING build should NOT be terminal")
+	}
+}
+
+func TestBuildOrchestratorAdapter_IsBuildTerminal_Failed(t *testing.T) {
+	store := &fakeBuildStore{
+		build: &db.Build{ID: "bld-fail-001", Status: "FAILED"},
+	}
+	adapter := &BuildOrchestratorAdapter{BuildStore: store}
+
+	terminal, err := adapter.IsBuildTerminal(context.Background(), "bld-fail-001")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !terminal {
+		t.Error("FAILED build should be terminal")
+	}
+}
+
+func TestBuildOrchestratorAdapter_IsBuildTerminal_Cancelled(t *testing.T) {
+	store := &fakeBuildStore{
+		build: &db.Build{ID: "bld-can-001", Status: "CANCELLED"},
+	}
+	adapter := &BuildOrchestratorAdapter{BuildStore: store}
+
+	terminal, err := adapter.IsBuildTerminal(context.Background(), "bld-can-001")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !terminal {
+		t.Error("CANCELLED build should be terminal")
+	}
+}
+
+func TestBuildOrchestratorAdapter_IsBuildTerminal_NotFound(t *testing.T) {
+	store := &fakeBuildStore{}
+	adapter := &BuildOrchestratorAdapter{BuildStore: store}
+
+	_, err := adapter.IsBuildTerminal(context.Background(), "bld-nope")
+	if !errors.Is(err, db.ErrNoRows) {
+		t.Errorf("expected db.ErrNoRows, got %v", err)
+	}
+}
+
+// --- GetBuildTenantID ---
+
+func TestBuildOrchestratorAdapter_GetBuildTenantID(t *testing.T) {
+	store := &fakeBuildStore{
+		build: &db.Build{ID: "bld-sec-001", TenantID: "tn-acme"},
+	}
+	adapter := &BuildOrchestratorAdapter{BuildStore: store}
+
+	tenant, err := adapter.GetBuildTenantID(context.Background(), "bld-sec-001")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tenant != "tn-acme" {
+		t.Errorf("tenant = %q, want tn-acme", tenant)
+	}
+}
+
+func TestBuildOrchestratorAdapter_GetBuildTenantID_NotFound(t *testing.T) {
+	store := &fakeBuildStore{}
+	adapter := &BuildOrchestratorAdapter{BuildStore: store}
+
+	_, err := adapter.GetBuildTenantID(context.Background(), "bld-nope")
+	if !errors.Is(err, db.ErrNoRows) {
+		t.Errorf("expected db.ErrNoRows, got %v", err)
+	}
+}
+
+// --- BuildStoreReaderAdapter not found ---
+
+func TestBuildStoreReaderAdapter_GetByID_NotFound(t *testing.T) {
+	store := &fakeBuildStore{}
+	adapter := &BuildStoreReaderAdapter{Store: store}
+
+	_, err := adapter.GetByID(context.Background(), "bld-nope")
+	if !errors.Is(err, db.ErrNoRows) {
+		t.Errorf("expected db.ErrNoRows, got %v", err)
+	}
+}
+
+// --- LogBuildStoreAdapter not found ---
+
+func TestLogBuildStoreAdapter_GetByID_NotFound(t *testing.T) {
+	store := &fakeBuildStore{}
+	adapter := &LogBuildStoreAdapter{Store: store}
+
+	_, err := adapter.GetByID(context.Background(), "bld-nope")
+	if !errors.Is(err, db.ErrNoRows) {
+		t.Errorf("expected db.ErrNoRows, got %v", err)
+	}
+}
+
+// --- StatusReleaseStoreAdapter error ---
+
+func TestStatusReleaseStoreAdapter_GetActiveByEnv_Error(t *testing.T) {
+	store := &fakeStatusReleaseStoreWithError{err: errors.New("db down")}
+	adapter := &StatusReleaseStoreAdapter{Store: store}
+
+	_, err := adapter.GetActiveByEnv(context.Background(), "tn-acme", "app", "prod")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+type fakeStatusReleaseStoreWithError struct {
+	fakeStatusReleaseStore
+	err error
+}
+
+func (f *fakeStatusReleaseStoreWithError) GetActiveByEnv(_ context.Context, _, _, _ string) (*db.Release, error) {
+	return nil, f.err
+}
+
+// --- BuildListStoreAdapter error ---
+
+func TestBuildListStoreAdapter_ListByProjectAndEnv_Error(t *testing.T) {
+	store := &fakeBuildListStoreWithError{err: errors.New("db down")}
+	adapter := &BuildListStoreAdapter{Store: store}
+
+	_, _, err := adapter.ListByProjectAndEnv(context.Background(), "tn", "proj", "prod", 10, 0)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+type fakeBuildListStoreWithError struct {
+	fakeBuildStore
+	err error
+}
+
+func (f *fakeBuildListStoreWithError) ListByProjectAndEnv(_ context.Context, _, _, _ string, _, _ int) ([]db.Build, int, error) {
+	return nil, 0, f.err
+}
+
+// --- StatusBuildStoreAdapter error ---
+
+func TestStatusBuildStoreAdapter_ListByProject_Error(t *testing.T) {
+	store := &fakeStatusBuildStoreWithError{err: errors.New("db down")}
+	adapter := &StatusBuildStoreAdapter{Store: store}
+
+	_, err := adapter.ListByProject(context.Background(), "tn", "proj", 10, 0)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+type fakeStatusBuildStoreWithError struct {
+	fakeBuildStore
+	err error
+}
+
+func (f *fakeStatusBuildStoreWithError) ListByProject(_ context.Context, _, _ string, _, _ int) ([]db.Build, error) {
+	return nil, f.err
+}

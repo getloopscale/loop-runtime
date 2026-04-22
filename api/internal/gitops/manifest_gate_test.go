@@ -189,3 +189,93 @@ func TestManifestGate_RejectsMalformedYAML(t *testing.T) {
 		t.Fatal("malformed YAML must be rejected (fail closed)")
 	}
 }
+
+func TestManifestGate_BlocksCRD(t *testing.T) {
+	manifest := `apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: evil.example.com
+`
+	err := validateManifests(manifest)
+	if err == nil {
+		t.Fatal("top-level CRD must be blocked")
+	}
+	if !strings.Contains(err.Error(), "CustomResourceDefinition") {
+		t.Errorf("error should name blocked kind, got: %v", err)
+	}
+}
+
+func TestManifestGate_BlocksClusterRoleBinding(t *testing.T) {
+	manifest := `apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: escalate
+`
+	if err := validateManifests(manifest); err == nil {
+		t.Fatal("top-level ClusterRoleBinding must be blocked")
+	}
+}
+
+func TestManifestGate_AllowsRole(t *testing.T) {
+	manifest := `apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: app-role
+  namespace: tenant-foo
+`
+	if err := validateManifests(manifest); err != nil {
+		t.Fatalf("namespaced Role should be allowed, got: %v", err)
+	}
+}
+
+func TestManifestGate_AllowsRoleBinding(t *testing.T) {
+	manifest := `apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-binding
+  namespace: tenant-foo
+`
+	if err := validateManifests(manifest); err != nil {
+		t.Fatalf("namespaced RoleBinding should be allowed, got: %v", err)
+	}
+}
+
+func TestManifestGate_WhitespaceOnly(t *testing.T) {
+	if err := validateManifests("   \n\n   \t  "); err != nil {
+		t.Fatalf("whitespace-only should pass, got: %v", err)
+	}
+}
+
+func TestManifestGate_MultipleValidDocuments(t *testing.T) {
+	manifest := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: s1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ss1
+`
+	if err := validateManifests(manifest); err != nil {
+		t.Fatalf("multiple valid docs should pass, got: %v", err)
+	}
+}
+
+func TestManifestGate_AllowsIssuer(t *testing.T) {
+	// Namespaced Issuer should NOT be blocked (only ClusterIssuer is blocked)
+	manifest := `apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-issuer
+  namespace: tenant-foo
+`
+	if err := validateManifests(manifest); err != nil {
+		t.Fatalf("namespaced Issuer should be allowed, got: %v", err)
+	}
+}

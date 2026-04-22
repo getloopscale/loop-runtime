@@ -118,6 +118,63 @@ func fileExistsInBare(t *testing.T, bareDir, filePath string) bool {
 
 // getAllFilesInBare returns all file paths in HEAD of the bare repo.
 
+func TestIsLocalURL(t *testing.T) {
+	tests := []struct {
+		url  string
+		want bool
+	}{
+		{"file:///tmp/repo", true},
+		{"/tmp/repo", true},
+		{"http://gitea:3000", false},
+		{"https://gitea.example.com", false},
+	}
+	for _, tt := range tests {
+		got := isLocalURL(tt.url)
+		if got != tt.want {
+			t.Errorf("isLocalURL(%q) = %v, want %v", tt.url, got, tt.want)
+		}
+	}
+}
+
+func TestGoGitPusher_RemoteURL_Local(t *testing.T) {
+	p := NewGoGitGitOpsPusher(GiteaGitOpsPusherConfig{
+		BaseURL: "file:///tmp/repos",
+		Token:   "t",
+		OrgName: "loopzero",
+	})
+	got := p.remoteURL("test-repo")
+	if got != "/tmp/repos" {
+		t.Errorf("remoteURL = %q, want /tmp/repos", got)
+	}
+}
+
+func TestGoGitPusher_Auth(t *testing.T) {
+	p := NewGoGitGitOpsPusher(GiteaGitOpsPusherConfig{
+		BaseURL: "http://gitea:3000",
+		Token:   "my-token",
+		OrgName: "loopzero",
+	})
+	auth := p.auth()
+	if auth.Username != "loopzero-api" {
+		t.Errorf("auth username = %q, want loopzero-api", auth.Username)
+	}
+	if auth.Password != "my-token" {
+		t.Errorf("auth password = %q, want my-token", auth.Password)
+	}
+}
+
+func TestGoGitPusher_RemoteURL_HTTP(t *testing.T) {
+	p := NewGoGitGitOpsPusher(GiteaGitOpsPusherConfig{
+		BaseURL: "http://gitea:3000",
+		Token:   "t",
+		OrgName: "loopzero",
+	})
+	got := p.remoteURL("my-repo")
+	if got != "http://gitea:3000/loopzero/my-repo.git" {
+		t.Errorf("remoteURL = %q, want http://gitea:3000/loopzero/my-repo.git", got)
+	}
+}
+
 func TestGoGitPush_WritesManifestsToCorrectPath(t *testing.T) {
 	bareDir := initBareRepo(t)
 	pusher := newLocalPusher(t, bareDir)
@@ -316,6 +373,105 @@ func TestGoGitRemove_IdempotentWhenAlreadyRemoved(t *testing.T) {
 
 	if sha1 != sha2 {
 		t.Errorf("expected same SHA for idempotent remove: got %s and %s", sha1, sha2)
+	}
+}
+
+func TestGoGitPush_MultipleProjectsSameEnvironment(t *testing.T) {
+	bareDir := initBareRepo(t)
+	pusher := newLocalPusher(t, bareDir)
+	ctx := context.Background()
+
+	// Push project A
+	_, err := pusher.Push(ctx, services.GitOpsPushOpts{
+		TenantID:      "tenant-abc",
+		ProjectID:     "project-a",
+		Environment:   "production",
+		Manifests:     "kind: Deployment\nmetadata:\n  name: a\n",
+		BuildID:       "b-a",
+		ReleaseID:     "r-a",
+		CorrelationID: "c-a",
+	})
+	if err != nil {
+		t.Fatalf("Push project-a: %v", err)
+	}
+
+	// Push project B to same environment
+	_, err = pusher.Push(ctx, services.GitOpsPushOpts{
+		TenantID:      "tenant-abc",
+		ProjectID:     "project-b",
+		Environment:   "production",
+		Manifests:     "kind: Service\nmetadata:\n  name: b\n",
+		BuildID:       "b-b",
+		ReleaseID:     "r-b",
+		CorrelationID: "c-b",
+	})
+	if err != nil {
+		t.Fatalf("Push project-b: %v", err)
+	}
+
+	// Both files should exist
+	contentA := cloneBareAndReadFile(t, bareDir, "production/project-a/manifests.yaml")
+	if !strings.Contains(contentA, "name: a") {
+		t.Errorf("project-a manifest wrong: %s", contentA)
+	}
+	contentB := cloneBareAndReadFile(t, bareDir, "production/project-b/manifests.yaml")
+	if !strings.Contains(contentB, "name: b") {
+		t.Errorf("project-b manifest wrong: %s", contentB)
+	}
+}
+
+func TestGoGitRemove_NonexistentProject(t *testing.T) {
+	bareDir := initBareRepo(t)
+	pusher := newLocalPusher(t, bareDir)
+	ctx := context.Background()
+
+	// Push something first (so repo isn't empty)
+	_, err := pusher.Push(ctx, services.GitOpsPushOpts{
+		TenantID:      "tenant-abc",
+		ProjectID:     "exists",
+		Environment:   "staging",
+		Manifests:     "kind: Pod\n",
+		BuildID:       "b1",
+		ReleaseID:     "r1",
+		CorrelationID: "c1",
+	})
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+
+	// Remove a project that doesn't exist -- should be idempotent
+	sha, err := pusher.Remove(ctx, services.GitOpsRemoveOpts{
+		TenantID:      "tenant-abc",
+		ProjectID:     "nonexistent",
+		Environment:   "staging",
+		CorrelationID: "c2",
+	})
+	if err != nil {
+		t.Fatalf("Remove nonexistent: %v", err)
+	}
+	if sha == "" {
+		t.Fatal("expected non-empty SHA for idempotent remove of nonexistent project")
+	}
+}
+
+func TestGoGitRemove_EmptyRepo(t *testing.T) {
+	bareDir := initBareRepo(t)
+	pusher := newLocalPusher(t, bareDir)
+	ctx := context.Background()
+
+	// Remove from an empty repo — should return empty string, no error
+	sha, err := pusher.Remove(ctx, services.GitOpsRemoveOpts{
+		TenantID:      "tenant-abc",
+		ProjectID:     "any",
+		Environment:   "production",
+		CorrelationID: "c1",
+	})
+	if err != nil {
+		t.Fatalf("Remove from empty repo: %v", err)
+	}
+	// Empty repo clone fails, so sha should be empty
+	if sha != "" {
+		t.Errorf("expected empty SHA for empty repo remove, got %q", sha)
 	}
 }
 

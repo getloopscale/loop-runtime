@@ -14,10 +14,11 @@ func deriveAction(method, path string) string {
 		case "projects":
 			return "project.created"
 		case "builds":
-			if strings.Contains(path, "/cancel") {
+			return "build.submitted"
+		case "cancel":
+			if strings.Contains(path, "/builds/") {
 				return "build.cancelled"
 			}
-			return "build.submitted"
 		case "environments":
 			return "environment.created"
 		case "members":
@@ -97,20 +98,53 @@ func extractResourceID(path string) string {
 	return ""
 }
 
+// knownCollections is the set of URL path segments that represent resource
+// collections. extractSegment uses this to distinguish collection names from
+// resource identifiers when walking a URL path backwards.
+var knownCollections = map[string]bool{
+	"projects":     true,
+	"builds":       true,
+	"environments": true,
+	"members":      true,
+	"secrets":      true,
+	"rollback":     true,
+	"checkout":     true,
+	"billing":      true,
+	"portal":       true,
+	"teams":        true,
+	"domains":      true,
+	"cancel":       true,
+	"stream":       true,
+	"callback":     true,
+	"status":       true,
+	"audit":        true,
+}
+
 // extractSegment returns the last meaningful URL segment for action/resource mapping.
+// It walks backwards through the path, skipping segments that look like resource IDs,
+// and returns the first known collection or action segment it finds.
+//
+//	/api/v1/projects/my-app → "projects"
+//	/api/v1/builds/123/cancel → "cancel"
+//	/api/v1/teams/members → "members"
 func extractSegment(path string) string {
 	parts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(path, "/"), "/"), "/")
-	// Walk backwards to find the first non-ID segment
-	// /api/v1/projects/my-app → "projects"
-	// /api/v1/builds/123/cancel → "cancel"
-	// /api/v1/teams/members → "members"
+	// Walk backwards to find the first known collection/action segment
 	for i := len(parts) - 1; i >= 0; i-- {
 		p := parts[i]
-		// Skip likely ID segments (UUIDs, hex IDs, names with hyphens that look like IDs)
 		if p == "" || p == "api" || p == "v1" || p == "internal" {
 			continue
 		}
-		// Return the first meaningful segment from the end
+		if knownCollections[p] {
+			return p
+		}
+	}
+	// Fallback: return the last non-infrastructure segment
+	for i := len(parts) - 1; i >= 0; i-- {
+		p := parts[i]
+		if p == "" || p == "api" || p == "v1" || p == "internal" {
+			continue
+		}
 		return p
 	}
 	return "unknown"

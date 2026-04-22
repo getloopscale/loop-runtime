@@ -1,0 +1,328 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package services
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/routes"
+)
+
+// --- Test doubles for ProjectDeleter ---
+
+type fakeBuildStoreDeleter struct {
+	cancelledCount int
+	cancelledWFIDs []string
+	cancelErr      error
+}
+
+func (f *fakeBuildStoreDeleter) Create(_ context.Context, _ db.DBTX, _ *db.Build) error { return nil }
+func (f *fakeBuildStoreDeleter) GetByID(_ context.Context, _ string) (*db.Build, error) {
+	return nil, nil
+}
+func (f *fakeBuildStoreDeleter) HasActiveBuild(_ context.Context, _ db.DBTX, _, _, _ string) (bool, error) {
+	return false, nil
+}
+func (f *fakeBuildStoreDeleter) UpdateStatus(_ context.Context, _ db.DBTX, _, _ string) (*db.Build, error) {
+	return nil, nil
+}
+func (f *fakeBuildStoreDeleter) SetErrorMessage(_ context.Context, _ db.DBTX, _, _ string) error {
+	return nil
+}
+func (f *fakeBuildStoreDeleter) SetWorkflowID(_ context.Context, _ db.DBTX, _, _ string) error {
+	return nil
+}
+func (f *fakeBuildStoreDeleter) SetAppsSpec(_ context.Context, _ db.DBTX, _ string, _ []db.BuildAppSpec) error {
+	return nil
+}
+func (f *fakeBuildStoreDeleter) GetBuildApps(_ context.Context, _ string) ([]db.BuildAppSpec, error) {
+	return nil, nil
+}
+func (f *fakeBuildStoreDeleter) ListByProject(_ context.Context, _, _ string, _, _ int) ([]db.Build, error) {
+	return nil, nil
+}
+func (f *fakeBuildStoreDeleter) ListByProjectAndEnv(_ context.Context, _, _, _ string, _, _ int) ([]db.Build, int, error) {
+	return nil, 0, nil
+}
+func (f *fakeBuildStoreDeleter) FindActiveBuilds(_ context.Context, _ string) ([]db.Build, error) {
+	return nil, nil
+}
+func (f *fakeBuildStoreDeleter) CancelActiveBuilds(_ context.Context, _ db.DBTX, _, _, _ string) (int, []string, error) {
+	return f.cancelledCount, f.cancelledWFIDs, f.cancelErr
+}
+
+type fakeEnvTargetStoreDeleter struct {
+	targets       []db.EnvironmentTarget
+	deletedTarget bool
+}
+
+func (f *fakeEnvTargetStoreDeleter) SetDesired(_ context.Context, _ db.DBTX, _, _, _, _, _, _ string) error {
+	return nil
+}
+func (f *fakeEnvTargetStoreDeleter) SetActive(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
+	return nil
+}
+func (f *fakeEnvTargetStoreDeleter) Get(_ context.Context, _, _, _ string) (*db.EnvironmentTarget, error) {
+	return nil, nil
+}
+func (f *fakeEnvTargetStoreDeleter) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+	return f.targets, nil
+}
+func (f *fakeEnvTargetStoreDeleter) DeleteTarget(_ context.Context, _ db.DBTX, _, _, _ string) error {
+	f.deletedTarget = true
+	return nil
+}
+
+type fakeProjectStoreDeleter struct {
+	deleted bool
+}
+
+func (f *fakeProjectStoreDeleter) DeleteProject(_ context.Context, _, _ string) error {
+	f.deleted = true
+	return nil
+}
+
+type fakeLockerDeleter struct{}
+
+func (f *fakeLockerDeleter) WithLock(_ context.Context, _, _, _ string, fn func(tx db.DBTX) error) error {
+	return fn(nil)
+}
+
+type fakeGitOpsDeleter struct {
+	pushCalled   bool
+	removeCalled bool
+	removeErr    error
+}
+
+func (f *fakeGitOpsDeleter) Push(_ context.Context, _ GitOpsPushOpts) (string, error) {
+	f.pushCalled = true
+	return "abc123", nil
+}
+func (f *fakeGitOpsDeleter) Remove(_ context.Context, _ GitOpsRemoveOpts) (string, error) {
+	f.removeCalled = true
+	return "def456", f.removeErr
+}
+
+type fakeWorkflowCanceller struct {
+	cancelledIDs []string
+}
+
+func (f *fakeWorkflowCanceller) Cancel(_ context.Context, _, id string) error {
+	f.cancelledIDs = append(f.cancelledIDs, id)
+	return nil
+}
+
+type fakeSyncDeleter struct {
+	syncCalled bool
+}
+
+func (f *fakeSyncDeleter) TriggerSync(_ context.Context, _ string) error {
+	f.syncCalled = true
+	return nil
+}
+
+// --- Tests ---
+
+func TestProjectDeleter_SingleEnv_FullCascade(t *testing.T) {
+	bs := &fakeBuildStoreDeleter{cancelledCount: 2, cancelledWFIDs: []string{"wf-1", "wf-2"}}
+	ets := &fakeEnvTargetStoreDeleter{}
+	ps := &fakeProjectStoreDeleter{}
+	gitops := &fakeGitOpsDeleter{}
+	wfCancel := &fakeWorkflowCanceller{}
+	sync := &fakeSyncDeleter{}
+
+	deleter := NewProjectDeleter(ProjectDeleterDeps{
+		BuildStore:        bs,
+		EnvTargetStore:    ets,
+		ProjectStore:      ps,
+		Locker:            &fakeLockerDeleter{},
+		GitOps:            gitops,
+		WorkflowCanceller: wfCancel,
+		Sync:              sync,
+	})
+
+	result, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+		TenantID:      "tn-1",
+		ProjectID:     "proj-uuid",
+		ProjectName:   "my-app",
+		Environment:   "production",
+		CorrelationID: "corr-1",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.CancelledBuilds != 2 {
+		t.Errorf("expected 2 cancelled builds, got %d", result.CancelledBuilds)
+	}
+	if len(result.DeletedEnvironments) != 1 || result.DeletedEnvironments[0] != "production" {
+		t.Errorf("unexpected deleted envs: %v", result.DeletedEnvironments)
+	}
+	if !ets.deletedTarget {
+		t.Error("expected environment target to be deleted")
+	}
+	if !gitops.removeCalled {
+		t.Error("expected gitops remove to be called")
+	}
+	if len(wfCancel.cancelledIDs) != 2 {
+		t.Errorf("expected 2 workflows cancelled, got %d", len(wfCancel.cancelledIDs))
+	}
+	if !sync.syncCalled {
+		t.Error("expected argocd sync to be triggered")
+	}
+	// Single env delete should NOT delete the project record
+	if ps.deleted {
+		t.Error("project record should NOT be deleted for single-env delete")
+	}
+}
+
+func TestProjectDeleter_AllEnvs_DeletesProjectRecord(t *testing.T) {
+	ets := &fakeEnvTargetStoreDeleter{
+		targets: []db.EnvironmentTarget{
+			{TenantID: "tn-1", ProjectID: "my-app", Environment: "production"},
+			{TenantID: "tn-1", ProjectID: "my-app", Environment: "staging"},
+		},
+	}
+	ps := &fakeProjectStoreDeleter{}
+	gitops := &fakeGitOpsDeleter{}
+
+	deleter := NewProjectDeleter(ProjectDeleterDeps{
+		BuildStore:     &fakeBuildStoreDeleter{},
+		EnvTargetStore: ets,
+		ProjectStore:   ps,
+		Locker:         &fakeLockerDeleter{},
+		GitOps:         gitops,
+	})
+
+	result, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+		TenantID:    "tn-1",
+		ProjectID:   "proj-uuid",
+		ProjectName: "my-app",
+		// No environment = delete all
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.DeletedEnvironments) != 2 {
+		t.Errorf("expected 2 deleted envs, got %d", len(result.DeletedEnvironments))
+	}
+	if !ps.deleted {
+		t.Error("expected project record to be deleted when all envs removed")
+	}
+}
+
+func TestProjectDeleter_GitOpsRemoveFails_ReturnsFatalError(t *testing.T) {
+	gitops := &fakeGitOpsDeleter{removeErr: fmt.Errorf("gitea connection refused")}
+
+	deleter := NewProjectDeleter(ProjectDeleterDeps{
+		BuildStore:     &fakeBuildStoreDeleter{},
+		EnvTargetStore: &fakeEnvTargetStoreDeleter{},
+		ProjectStore:   &fakeProjectStoreDeleter{},
+		Locker:         &fakeLockerDeleter{},
+		GitOps:         gitops,
+	})
+
+	_, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+		TenantID:    "tn-1",
+		ProjectID:   "proj-uuid",
+		ProjectName: "my-app",
+		Environment: "production",
+	})
+
+	if err == nil {
+		t.Fatal("expected error when gitops remove fails")
+	}
+}
+
+func TestProjectDeleter_NoEnvTargets_FallbackGitOpsCleanup(t *testing.T) {
+	// When no environment_targets exist, should try fallback cleanup on "production"
+	ets := &fakeEnvTargetStoreDeleter{targets: nil} // empty
+	ps := &fakeProjectStoreDeleter{}
+	gitops := &fakeGitOpsDeleter{}
+	sync := &fakeSyncDeleter{}
+
+	deleter := NewProjectDeleter(ProjectDeleterDeps{
+		BuildStore:     &fakeBuildStoreDeleter{},
+		EnvTargetStore: ets,
+		ProjectStore:   ps,
+		Locker:         &fakeLockerDeleter{},
+		GitOps:         gitops,
+		Sync:           sync,
+	})
+
+	result, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+		TenantID:    "tn-1",
+		ProjectID:   "proj-uuid",
+		ProjectName: "orphan-app",
+		// No environment = delete all
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !gitops.removeCalled {
+		t.Error("expected fallback gitops remove on production env")
+	}
+	if !ps.deleted {
+		t.Error("expected project record to be deleted")
+	}
+	// Should have "production" from fallback
+	if len(result.DeletedEnvironments) != 1 || result.DeletedEnvironments[0] != "production" {
+		t.Errorf("expected [production] from fallback, got %v", result.DeletedEnvironments)
+	}
+}
+
+func TestProjectDeleter_NilWorkflowCanceller_DoesNotPanic(t *testing.T) {
+	deleter := NewProjectDeleter(ProjectDeleterDeps{
+		BuildStore:        &fakeBuildStoreDeleter{cancelledCount: 1, cancelledWFIDs: []string{"wf-1"}},
+		EnvTargetStore:    &fakeEnvTargetStoreDeleter{},
+		ProjectStore:      &fakeProjectStoreDeleter{},
+		Locker:            &fakeLockerDeleter{},
+		GitOps:            &fakeGitOpsDeleter{},
+		WorkflowCanceller: nil, // nil-safe
+		Sync:              nil,  // nil-safe
+	})
+
+	_, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+		TenantID:    "tn-1",
+		ProjectID:   "proj-uuid",
+		ProjectName: "my-app",
+		Environment: "production",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error with nil workflow canceller: %v", err)
+	}
+}
+
+func TestProjectDeleter_UsesProjectNameForGitOps(t *testing.T) {
+	// Verifies that gitops uses ProjectName, not ProjectID UUID
+	gitops := &fakeGitOpsDeleter{}
+
+	deleter := NewProjectDeleter(ProjectDeleterDeps{
+		BuildStore:     &fakeBuildStoreDeleter{},
+		EnvTargetStore: &fakeEnvTargetStoreDeleter{},
+		ProjectStore:   &fakeProjectStoreDeleter{},
+		Locker:         &fakeLockerDeleter{},
+		GitOps:         gitops,
+	})
+
+	_, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+		TenantID:    "tn-1",
+		ProjectID:   "550e8400-e29b-41d4-a716-446655440000", // UUID
+		ProjectName: "my-real-app",                          // name
+		Environment: "production",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !gitops.removeCalled {
+		t.Error("expected gitops remove to be called")
+	}
+}
