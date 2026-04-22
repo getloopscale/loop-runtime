@@ -11,6 +11,10 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // DBHealthChecker is an interface for checking database connectivity.
@@ -75,6 +79,12 @@ func (h *HealthHandler) DeepHealth(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
+	_, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.health.deep_check",
+		trace.WithAttributes(
+			attribute.String("loopzero.health.status", "pending"),
+		))
+	defer span.End()
+
 	result := make(map[string]string)
 	degraded := false
 
@@ -118,9 +128,11 @@ func (h *HealthHandler) DeepHealth(w http.ResponseWriter, r *http.Request) {
 
 	if degraded {
 		result["status"] = "degraded"
+		span.SetAttributes(attribute.String("loopzero.health.status", "degraded"))
 		w.WriteHeader(http.StatusServiceUnavailable)
 	} else {
 		result["status"] = "ok"
+		span.SetAttributes(attribute.String("loopzero.health.status", "healthy"))
 		w.WriteHeader(http.StatusOK)
 	}
 	_ = json.NewEncoder(w).Encode(result)

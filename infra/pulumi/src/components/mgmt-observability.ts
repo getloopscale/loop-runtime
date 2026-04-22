@@ -11,6 +11,7 @@ import { PLATFORM_NAMESPACE, HELM_VERSIONS } from "./bootstrap-shared";
 // Re-exports for backward compatibility — consumers import from this file.
 export { installGrafana, provisionGrafanaDashboards } from "./mgmt-grafana";
 export { installTempo, installOtelCollector } from "./mgmt-tempo-otel";
+export { installBlackboxExporter } from "./mgmt-blackbox";
 
 export function installPrometheus(
   provider: k8s.Provider,

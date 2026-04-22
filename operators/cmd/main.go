@@ -8,6 +8,8 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/pprof"
 	"os"
 	"strconv"
 	"strings"
@@ -340,6 +342,13 @@ func setupControllers(setupLog logr.Logger, mgr ctrl.Manager, deps provisionerDe
 	}
 }
 
+// pprofEnabled checks LOOPZERO_PPROF_ENABLED. Default: false (safe for production).
+// Set LOOPZERO_PPROF_ENABLED=true explicitly to enable (dev/debug only).
+func pprofEnabled() bool {
+	v := os.Getenv("LOOPZERO_PPROF_ENABLED")
+	return v == "true" || v == "1"
+}
+
 func main() {
 	var metricsAddr string
 	var healthProbeAddr string
@@ -370,6 +379,27 @@ func main() {
 		}
 		return sc.TraceID().String(), sc.SpanID().String()
 	})
+
+	// pprof profiling — accessible via kubectl port-forward, never via public ingress.
+	// Controlled by LOOPZERO_PPROF_ENABLED (default: false). Uses dedicated ServeMux.
+	if pprofEnabled() {
+		go func() {
+			pprofAddr := os.Getenv("LOOPZERO_PPROF_ADDR")
+			if pprofAddr == "" {
+				pprofAddr = ":6061"
+			}
+			mux := http.NewServeMux()
+			mux.HandleFunc("/debug/pprof/", pprof.Index)
+			mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+			mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+			mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+			slog.Info("pprof server starting", "addr", pprofAddr)
+			if err := http.ListenAndServe(pprofAddr, mux); err != nil {
+				slog.Error("pprof server failed", "error", err)
+			}
+		}()
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,

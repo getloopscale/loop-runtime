@@ -15,6 +15,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -63,9 +64,18 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		// After `loopzero project delete` + redeploy, the build succeeds but the
 		// project doesn't appear in `loopzero project list` because it was hard-deleted.
 		if o.projectStore != nil {
-			if err := o.projectStore.EnsureProject(ctx, tx, req.TenantID, req.ProjectID, req.CreatedBy); err != nil {
+			ensureCtx, ensureSpan := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.project.ensure",
+				trace.WithAttributes(
+					attribute.String("loopzero.tenant", req.TenantID),
+					attribute.String("loopzero.project", req.ProjectID),
+				))
+			if err := o.projectStore.EnsureProject(ensureCtx, tx, req.TenantID, req.ProjectID, req.CreatedBy); err != nil {
+				ensureSpan.RecordError(err)
+				ensureSpan.SetStatus(codes.Error, err.Error())
+				ensureSpan.End()
 				return fmt.Errorf("submit build: ensure project: %w", err)
 			}
+			ensureSpan.End()
 		}
 
 		// Step 3: create Build (QUEUED)

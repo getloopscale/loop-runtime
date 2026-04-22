@@ -1,0 +1,29 @@
+# SLO: Build Pipeline Success Rate
+# Measures the ratio of successful builds to total build attempts.
+# Target: 99% — build failures due to platform issues (not user code) should be rare.
+version: "prometheus/v1"
+service: "loopzero-builds"
+labels:
+  owner: "platform-team"
+  tier: "infrastructure"
+slos:
+  - name: "build-pipeline-success"
+    objective: 99
+    description: "Percentage of builds that complete successfully (SUCCEEDED state)."
+    sli:
+      events:
+        error_query: sum(rate(loopzero_builds_total{status=~"FAILED|CANCELLED"}[{{.window}}]))
+        total_query: sum(rate(loopzero_builds_total[{{.window}}]))
+    alerting:
+      name: LoopZeroBuildPipelineBudgetBurn
+      labels:
+        category: build
+      annotations:
+        summary: "Build pipeline error budget burn rate is too high."
+        runbook: "Check Argo Workflows health. Review build failure reasons. Check BuildKit and registry connectivity."
+      page_alert:
+        labels:
+          severity: critical
+      ticket_alert:
+        labels:
+          severity: warning

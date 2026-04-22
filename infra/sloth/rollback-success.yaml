@@ -1,0 +1,29 @@
+# SLO: Rollback Success Rate
+# Measures the ratio of successful rollbacks to total attempts.
+# Target: 99.9% — rollbacks are the last safety net; they must work.
+version: "prometheus/v1"
+service: "loopzero-rollbacks"
+labels:
+  owner: "platform-team"
+  tier: "product"
+slos:
+  - name: "rollback-success-rate"
+    objective: 99.9
+    description: "Percentage of rollbacks that restore service health."
+    sli:
+      events:
+        error_query: sum(rate(loopzero_rollbacks_total{status!="success"}[{{.window}}]))
+        total_query: sum(rate(loopzero_rollbacks_total[{{.window}}]))
+    alerting:
+      name: LoopZeroRollbackSuccessBudgetBurn
+      labels:
+        category: reliability
+      annotations:
+        summary: "Rollback success error budget burn rate is too high."
+        runbook: "Investigate rollback failures. Check ArgoCD sync health. Verify Gitea is accessible."
+      page_alert:
+        labels:
+          severity: critical
+      ticket_alert:
+        labels:
+          severity: warning

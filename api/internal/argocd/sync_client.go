@@ -18,6 +18,10 @@ import (
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
@@ -116,6 +120,12 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 // ArgoCD begins processing the app. This annotation was set during tenant
 // provisioning to prevent CPU amplification from empty repos.
 func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.argocd.sync_trigger",
+		trace.WithAttributes(
+			attribute.String("loopzero.argocd.app_name", appName),
+		))
+	defer span.End()
+
 	// Remove skip-reconcile annotation to enable ArgoCD processing.
 	c.removeSkipReconcile(ctx, appName)
 
@@ -131,25 +141,37 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("argocd sync: request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		span.RecordError(loopzeroerrors.ErrDeployServiceAuthFailed)
+		span.SetStatus(codes.Error, "auth failed")
 		return loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	if resp.StatusCode == 404 {
-		return fmt.Errorf("argocd sync: application %q not found", appName)
+		syncErr := fmt.Errorf("argocd sync: application %q not found", appName)
+		span.RecordError(syncErr)
+		span.SetStatus(codes.Error, syncErr.Error())
+		return syncErr
 	}
 	// MEET-2026-03-29-019: Return typed error for 409 so callers can
 	// distinguish "operation in progress" from other failures.
 	// This error must NOT count toward the circuit breaker threshold.
 	if resp.StatusCode == 409 {
+		span.RecordError(loopzeroerrors.ErrSyncOperationInProgress)
+		span.SetStatus(codes.Error, "sync operation in progress")
 		return loopzeroerrors.ErrSyncOperationInProgress
 	}
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("argocd sync: status %d: %s", resp.StatusCode, string(respBody))
+		syncErr := fmt.Errorf("argocd sync: status %d: %s", resp.StatusCode, string(respBody))
+		span.RecordError(syncErr)
+		span.SetStatus(codes.Error, syncErr.Error())
+		return syncErr
 	}
 
 	return nil
@@ -172,7 +194,7 @@ func (c *SyncClient) removeSkipReconcile(ctx context.Context, appName string) {
 	if err != nil {
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
 
 // TerminateOperation cancels a running sync operation on an ArgoCD Application.

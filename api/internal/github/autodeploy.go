@@ -18,6 +18,11 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/archive"
 	"github.com/loopzero/loopzero/api/internal/gitclient"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // AutoDeployConfig holds configuration for auto-deploy on push.
@@ -81,6 +86,13 @@ func NewAutoDeployer(cfg AutoDeployConfig) *AutoDeployer {
 func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, commitSHA string,
 	installationID int64, tenantID, projectName, commitMessage, senderLogin string) error {
 
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.github.autodeploy",
+		trace.WithAttributes(
+			attribute.String("loopzero.github.repo", repoFullName),
+			attribute.String("loopzero.github.commit_sha", commitSHA),
+		))
+	defer span.End()
+
 	log := d.cfg.Logger.With(
 		"repo", repoFullName,
 		"branch", branch,
@@ -100,6 +112,8 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 
 	tarballReader, err := d.cfg.AppClient.DownloadSource(ctx, installationID, owner, repo, commitSHA)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("auto-deploy: download source: %w", err)
 	}
 	defer func() { _ = tarballReader.Close() }()

@@ -1,0 +1,30 @@
+# SLO: Tenant URL Availability
+# Measures blackbox probe success rate against tenant-deployed applications.
+# Target: 99.9% — tenant URLs must be reachable.
+# Depends on: blackbox_exporter (Phase 1A).
+version: "prometheus/v1"
+service: "loopzero-tenant-availability"
+labels:
+  owner: "platform-team"
+  tier: "product"
+slos:
+  - name: "tenant-url-availability"
+    objective: 99.9
+    description: "Percentage of successful blackbox probes against tenant URLs."
+    sli:
+      events:
+        error_query: sum(rate(probe_success{job=~".*loopzero-api-probe.*"}[{{.window}}]) == bool 0)
+        total_query: count(rate(probe_success{job=~".*loopzero-api-probe.*"}[{{.window}}]))
+    alerting:
+      name: LoopZeroTenantAvailabilityBudgetBurn
+      labels:
+        category: availability
+      annotations:
+        summary: "Tenant availability error budget burn rate is too high."
+        runbook: "Check Traefik health. Verify CF Tunnel connectivity. Check tenant pod status."
+      page_alert:
+        labels:
+          severity: critical
+      ticket_alert:
+        labels:
+          severity: warning
