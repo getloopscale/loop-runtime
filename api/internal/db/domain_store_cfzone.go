@@ -8,13 +8,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // --- v2: CF Zone Management methods ---
 
 // CreateWithCFZone inserts a new custom domain with CF zone metadata.
-func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *routes.CustomDomain) error {
+func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *domain.CustomDomain) error {
 	_, err := s.DB.Exec(ctx,
 		`INSERT INTO custom_domains (id, tenant_id, project_name, app_name, environment, domain, status,
 		    verification_token, tls_status, cf_zone_id, cf_zone_status, cf_nameservers, dns_records_imported, created_at, updated_at)
@@ -25,7 +25,7 @@ func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *routes.Cu
 	if err != nil {
 		var uv *UniqueViolationError
 		if errors.As(err, &uv) {
-			return routes.ErrDomainExists
+			return domain.ErrDomainExists
 		}
 		return fmt.Errorf("domain store: create with cf zone: %w", err)
 	}
@@ -48,11 +48,11 @@ func (s *PostgresDomainStore) UpdateCFZoneStatus(ctx context.Context, domain, cf
 }
 
 // FindPendingNS returns CF-managed domains waiting for nameserver propagation.
-func (s *PostgresDomainStore) FindPendingNS(ctx context.Context) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) FindPendingNS(ctx context.Context) ([]domain.CustomDomain, error) {
 	return s.findByStatus(ctx, "pending_ns")
 }
 
 // FindNSActive returns CF-managed domains with active nameservers ready for provisioning.
-func (s *PostgresDomainStore) FindNSActive(ctx context.Context) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) FindNSActive(ctx context.Context) ([]domain.CustomDomain, error) {
 	return s.findByStatus(ctx, "ns_active")
 }

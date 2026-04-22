@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // PostgresSecretStore manages secrets in PostgreSQL.
@@ -100,7 +100,7 @@ func (s *PostgresSecretStore) Delete(ctx context.Context, tenantID, projectID, e
 // ListNames returns metadata (name, environment, app) for all secrets
 // matching the given tenant, project, and environment.
 // Results are ordered alphabetically by name.
-func (s *PostgresSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]routes.SecretMetadata, error) {
+func (s *PostgresSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]domain.SecretMetadata, error) {
 	rows, err := s.DB.Query(ctx,
 		"SELECT name, environment, app FROM secrets WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 ORDER BY name",
 		tenantID, projectID, env,
@@ -110,9 +110,9 @@ func (s *PostgresSecretStore) ListNames(ctx context.Context, tenantID, projectID
 	}
 	defer rows.Close()
 
-	var result []routes.SecretMetadata
+	var result []domain.SecretMetadata
 	for rows.Next() {
-		var m routes.SecretMetadata
+		var m domain.SecretMetadata
 		if err := rows.Scan(&m.Name, &m.Environment, &m.App); err != nil {
 			return nil, fmt.Errorf("secret_store: scan row: %w", err)
 		}
@@ -124,7 +124,7 @@ func (s *PostgresSecretStore) ListNames(ctx context.Context, tenantID, projectID
 
 	// Return empty slice instead of nil to avoid null in JSON responses.
 	if result == nil {
-		result = []routes.SecretMetadata{}
+		result = []domain.SecretMetadata{}
 	}
 
 	return result, nil

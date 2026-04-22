@@ -30,6 +30,15 @@ import {
 // Re-export types so existing consumers (tests, index.ts) keep working
 export type { DeployDeps, DeployOptions } from './deploy-types';
 
+/** Result of validatePrerequisites — carries validated state needed by subsequent phases. */
+interface PrerequisiteResult {
+  config: { project: string; apps: Record<string, unknown> };
+  yamlPath: string;
+  environment: string;
+  selectedApps: string[];
+  appUnits: ReturnType<typeof normalizeApps>;
+}
+
 export class DeployCommand {
   private readonly deps: import('./deploy-types').DeployDeps;
 
@@ -41,12 +50,36 @@ export class DeployCommand {
     const environment = opts.env ?? 'production';
     const shouldWait = opts.wait !== false;
 
+    // Phase 1: Validate all prerequisites (auth, config, env, apps, secrets)
+    const prereqResult = await this.validatePrerequisites(opts, environment);
+    if (typeof prereqResult === 'number') {
+      return prereqResult;
+    }
+
+    const { config, yamlPath, selectedApps, appUnits } = prereqResult;
+
+    // Phase 2: Create source bundle and upload
+    const uploadResult = await this.createAndUploadBundle(opts, config, yamlPath);
+    if (typeof uploadResult === 'number') {
+      return uploadResult;
+    }
+
+    // Phase 3: Submit build and optionally stream SSE events
+    return this.submitAndStreamBuild(opts, config, environment, selectedApps, appUnits, uploadResult, shouldWait);
+  }
+
+  /**
+   * Phase 1: Validate auth, loopzero.yaml, environment, app selection, and secrets.
+   * Returns a PrerequisiteResult on success or an exit code on failure.
+   */
+  private async validatePrerequisites(
+    opts: import('./deploy-types').DeployOptions,
+    environment: string,
+  ): Promise<PrerequisiteResult | number> {
     // 1. Auth check
     if (!this.deps.getToken()) {
       return exitWithError(this.deps, opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
-
-    // 2. (Removed) .git is no longer required — content hash used when git is unavailable.
 
     // 3. Find loopzero.yaml
     const yamlResult = this.deps.findLoopZeroYaml();
@@ -104,32 +137,63 @@ export class DeployCommand {
     const appUnits = normalizeApps(config.apps, selectedApps);
 
     // 7. Validate secrets (pre-deploy check) — scoped to selected apps only (F-02)
-    const declaredSecrets = [...new Set(appUnits.flatMap(u => u.secrets))];
-    if (declaredSecrets.length > 0) {
-      let configuredSecrets: string[];
-      try {
-        configuredSecrets = await this.deps.getSecrets(config.project, environment);
-      } catch {
-        // MOD-6: Network error during secrets check — warn and continue
-        if (!opts.json) {
-          this.deps.writeTo('Warning: Could not verify secrets. Deploy will continue but may fail if secrets are missing.');
-        }
-        configuredSecrets = declaredSecrets; // skip validation
-      }
-      const missingSecrets = declaredSecrets.filter((s) => !configuredSecrets.includes(s));
-      if (missingSecrets.length > 0) {
-        const msg = `Missing secrets for env "${environment}": ${missingSecrets.join(', ')}`;
-        const hint = 'Set secrets before deploying. See: https://docs.loopzero.example/secrets';
-        if (opts.json) {
-          this.deps.writeTo(JSON.stringify({ code: 'MISSING_SECRETS', error: `${msg}. ${hint}`, exit_code: 1 }));
-        } else {
-          this.deps.writeError(msg);
-          this.deps.writeError(hint);
-        }
-        return 1;
-      }
+    const secretsError = await this.validateSecrets(opts, config, environment, appUnits);
+    if (secretsError !== null) {
+      return secretsError;
     }
 
+    return { config, yamlPath: yamlResult.path, environment, selectedApps, appUnits };
+  }
+
+  /**
+   * Validate that all declared secrets are configured on the server.
+   * Returns null on success or an exit code on failure.
+   */
+  private async validateSecrets(
+    opts: import('./deploy-types').DeployOptions,
+    config: { project: string },
+    environment: string,
+    appUnits: ReturnType<typeof normalizeApps>,
+  ): Promise<number | null> {
+    const declaredSecrets = [...new Set(appUnits.flatMap(u => u.secrets))];
+    if (declaredSecrets.length === 0) {
+      return null;
+    }
+
+    let configuredSecrets: string[];
+    try {
+      configuredSecrets = await this.deps.getSecrets(config.project, environment);
+    } catch {
+      // MOD-6: Network error during secrets check — warn and continue
+      if (!opts.json) {
+        this.deps.writeTo('Warning: Could not verify secrets. Deploy will continue but may fail if secrets are missing.');
+      }
+      return null;
+    }
+    const missingSecrets = declaredSecrets.filter((s) => !configuredSecrets.includes(s));
+    if (missingSecrets.length > 0) {
+      const msg = `Missing secrets for env "${environment}": ${missingSecrets.join(', ')}`;
+      const hint = 'Set secrets before deploying. See: https://docs.loopzero.example/secrets';
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({ code: 'MISSING_SECRETS', error: `${msg}. ${hint}`, exit_code: 1 }));
+      } else {
+        this.deps.writeError(msg);
+        this.deps.writeError(hint);
+      }
+      return 1;
+    }
+    return null;
+  }
+
+  /**
+   * Phase 2: Emit pre-upload warnings, create source bundle, validate size, and upload.
+   * Returns the UploadResult on success or an exit code on failure.
+   */
+  private async createAndUploadBundle(
+    opts: import('./deploy-types').DeployOptions,
+    config: { apps: Record<string, unknown> },
+    yamlPath: string,
+  ): Promise<import('./deploy-types').UploadResult | number> {
     // 8. Warn about uncommitted changes (only relevant for git projects)
     if (this.deps.hasGitRepo() && this.deps.hasUncommittedChanges()) {
       if (!opts.json) {
@@ -139,7 +203,7 @@ export class DeployCommand {
 
     // 8b. Warn about missing lockfile (F-03: fail-fast before upload)
     if (!this.deps.hasLockfile()) {
-      const appPaths = Object.values(config.apps).map(a => a.path).filter(p => p && p !== '.');
+      const appPaths = Object.values(config.apps).map((a) => (a as Record<string, unknown>).path as string).filter(p => p && p !== '.');
       const hasAppLockfile = appPaths.some(appPath => {
         return ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'].some(
           f => fs.existsSync(path.join(appPath, f))
@@ -201,7 +265,7 @@ export class DeployCommand {
     // 11. Upload source
     let uploadResult: import('./deploy-types').UploadResult;
     try {
-      uploadResult = await this.deps.uploadSource(bundlePath, yamlResult.path);
+      uploadResult = await this.deps.uploadSource(bundlePath, yamlPath);
     } catch (err) {
       this.deps.cleanupFile(bundlePath);
       return handleError(this.deps, opts, err, 'Upload rejected');
@@ -210,6 +274,22 @@ export class DeployCommand {
     // 12. Cleanup temp file
     this.deps.cleanupFile(bundlePath);
 
+    return uploadResult;
+  }
+
+  /**
+   * Phase 3: Submit the build and optionally connect to SSE stream for completion.
+   * Returns the CLI exit code.
+   */
+  private async submitAndStreamBuild(
+    opts: import('./deploy-types').DeployOptions,
+    config: { project: string },
+    environment: string,
+    selectedApps: string[],
+    appUnits: ReturnType<typeof normalizeApps>,
+    uploadResult: import('./deploy-types').UploadResult,
+    shouldWait: boolean,
+  ): Promise<number> {
     // 13. Generate deterministic Idempotency-Key (A-01)
     const idempotencyKey = this.deps.generateIdempotencyKey(
       uploadResult.commit_sha,
@@ -259,6 +339,18 @@ export class DeployCommand {
     }
 
     // 15. Connect SSE stream and wait for completion
+    return this.streamBuildEvents(opts, buildResult, selectedApps);
+  }
+
+  /**
+   * Connect to SSE stream and wait for build completion, handling all event types.
+   * Returns the CLI exit code.
+   */
+  private streamBuildEvents(
+    opts: import('./deploy-types').DeployOptions,
+    buildResult: import('./deploy-types').SubmitBuildResult,
+    selectedApps: string[],
+  ): Promise<number> {
     const deployStartTime = Date.now();
 
     const renderer = new DeployRenderer({
@@ -325,130 +417,147 @@ export class DeployCommand {
         // Reset activity timeout on every received event (A-04)
         resetTimeout();
 
-        if (event.type === 'deploy.completed') {
-          const payload = event.data as DeployCompletedPayload;
-
-          // F-04: Use wall-clock time when server reports 0 duration
-          if (!payload.duration_seconds) {
-            payload.duration_seconds = Math.ceil((Date.now() - deployStartTime) / 1000);
+        const handled = this.handleSSEEvent(event, opts, buildResult, selectedApps, deployStartTime, renderer, finish);
+        if (!handled) {
+          // Render intermediate progress events via DeployRenderer
+          const progressLine = renderer.onEvent({ type: event.type, data: event.data as Record<string, unknown> });
+          if (progressLine) {
+            this.deps.writeTo(progressLine);
           }
-
-          // F-08: Normalize empty/missing URLs to null for JSON output
-          for (const app of payload.apps) {
-            if (!app.url) {
-              app.url = undefined;
-            }
-          }
-
-          if (opts.json) {
-            const jsonPayload = {
-              ...payload,
-              apps: payload.apps.map((app) => {
-                const entry: Record<string, unknown> = {
-                  ...app,
-                  url: app.url ?? null,
-                };
-                if (app.status === 'failed') {
-                  entry.build_log = `loopzero logs --build ${buildResult.build_id}`;
-                }
-                return entry;
-              }),
-            };
-            this.deps.writeTo(JSON.stringify(jsonPayload));
-            finish(resolveExitCode(payload, selectedApps.length));
-            return;
-          }
-
-          const result: DeployResult = {
-            deploy_id: payload.deploy_id,
-            status: payload.status,
-            duration_seconds: payload.duration_seconds,
-            apps: payload.apps,
-          };
-          this.deps.writeTo(renderer.renderResult(result));
-          finish(resolveExitCode(payload, selectedApps.length));
-          return;
-        }
-
-        if (event.type === 'build.failed') {
-          const data = event.data as Record<string, unknown>;
-          const rawReason = String(data.error ?? data.status ?? 'unknown error');
-          const reason = sanitizeBuildError(rawReason);
-          const suggestion = `Run: loopzero logs --build ${buildResult.build_id}`;
-          const errorMsg = /^Build\s+(failed|error)/i.test(reason) ? reason : `Build failed: ${reason}`;
-          if (opts.json) {
-            this.deps.writeTo(JSON.stringify({
-              code: 'BUILD_FAILED',
-              error: errorMsg,
-              exit_code: 2,
-              build_id: buildResult.build_id,
-              suggestion,
-            }));
-          } else {
-            this.deps.writeError(`${errorMsg}. ${suggestion}`);
-          }
-          finish(2);
-          return;
-        }
-
-        if (event.type === 'deploy.sync_failed') {
-          const data = event.data as Record<string, unknown>;
-          const rawReason = String(data.reason ?? 'sync failed');
-          const userMessage = mapSyncFailureReason(rawReason, buildResult.build_id);
-          if (opts.json) {
-            this.deps.writeTo(JSON.stringify({
-              code: 'DEPLOY_FAILED',
-              error: userMessage,
-              reason: rawReason,
-              exit_code: 3,
-              deploy_id: data.deploy_id ?? null,
-              build_id: buildResult.build_id,
-            }));
-          } else {
-            this.deps.writeError(userMessage);
-          }
-          finish(3);
-          return;
-        }
-
-        if (event.type === 'stream.error') {
-          const data = event.data as Record<string, unknown>;
-          const reason = String(data.error ?? 'Stream connection failed');
-          if (opts.json) {
-            this.deps.writeTo(JSON.stringify({
-              code: 'STREAM_ERROR',
-              error: `Deploy stream error: ${reason}`,
-              exit_code: 3,
-              build_id: buildResult.build_id,
-            }));
-          } else {
-            this.deps.writeError(`Deploy stream error: ${reason}`);
-          }
-          finish(3);
-          return;
-        }
-
-        if (event.type === 'stream.closed') {
-          if (opts.json) {
-            this.deps.writeTo(JSON.stringify({
-              code: 'STREAM_CLOSED',
-              error: 'Deploy stream closed before completion. The build may still be running.',
-              exit_code: 3,
-              build_id: buildResult.build_id,
-            }));
-          } else {
-            this.deps.writeError('Deploy stream closed before completion. The build may still be running.');
-          }
-          finish(3);
-          return;
-        }
-
-        // Render intermediate progress events via DeployRenderer
-        const progressLine = renderer.onEvent({ type: event.type, data: event.data as Record<string, unknown> });
-        if (progressLine) {
-          this.deps.writeTo(progressLine);
         }
       });
     });
+  }
+
+  /**
+   * Handle a single SSE event. Returns true if the event was a terminal event
+   * (deploy.completed, build.failed, etc.), false if it was a progress event.
+   */
+  private handleSSEEvent(
+    event: SSEEvent,
+    opts: import('./deploy-types').DeployOptions,
+    buildResult: import('./deploy-types').SubmitBuildResult,
+    selectedApps: string[],
+    deployStartTime: number,
+    renderer: DeployRenderer,
+    finish: (exitCode: number) => void,
+  ): boolean {
+    if (event.type === 'deploy.completed') {
+      const payload = event.data as DeployCompletedPayload;
+
+      // F-04: Use wall-clock time when server reports 0 duration
+      if (!payload.duration_seconds) {
+        payload.duration_seconds = Math.ceil((Date.now() - deployStartTime) / 1000);
+      }
+
+      // F-08: Normalize empty/missing URLs to null for JSON output
+      for (const app of payload.apps) {
+        if (!app.url) {
+          app.url = undefined;
+        }
+      }
+
+      if (opts.json) {
+        const jsonPayload = {
+          ...payload,
+          apps: payload.apps.map((app) => {
+            const entry: Record<string, unknown> = {
+              ...app,
+              url: app.url ?? null,
+            };
+            if (app.status === 'failed') {
+              entry.build_log = `loopzero logs --build ${buildResult.build_id}`;
+            }
+            return entry;
+          }),
+        };
+        this.deps.writeTo(JSON.stringify(jsonPayload));
+      } else {
+        const result: DeployResult = {
+          deploy_id: payload.deploy_id,
+          status: payload.status,
+          duration_seconds: payload.duration_seconds,
+          apps: payload.apps,
+        };
+        this.deps.writeTo(renderer.renderResult(result));
+      }
+      finish(resolveExitCode(payload, selectedApps.length));
+      return true;
+    }
+
+    if (event.type === 'build.failed') {
+      const data = event.data as Record<string, unknown>;
+      const rawReason = String(data.error ?? data.status ?? 'unknown error');
+      const reason = sanitizeBuildError(rawReason);
+      const suggestion = `Run: loopzero logs --build ${buildResult.build_id}`;
+      const errorMsg = /^Build\s+(failed|error)/i.test(reason) ? reason : `Build failed: ${reason}`;
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'BUILD_FAILED',
+          error: errorMsg,
+          exit_code: 2,
+          build_id: buildResult.build_id,
+          suggestion,
+        }));
+      } else {
+        this.deps.writeError(`${errorMsg}. ${suggestion}`);
+      }
+      finish(2);
+      return true;
+    }
+
+    if (event.type === 'deploy.sync_failed') {
+      const data = event.data as Record<string, unknown>;
+      const rawReason = String(data.reason ?? 'sync failed');
+      const userMessage = mapSyncFailureReason(rawReason, buildResult.build_id);
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'DEPLOY_FAILED',
+          error: userMessage,
+          reason: rawReason,
+          exit_code: 3,
+          deploy_id: data.deploy_id ?? null,
+          build_id: buildResult.build_id,
+        }));
+      } else {
+        this.deps.writeError(userMessage);
+      }
+      finish(3);
+      return true;
+    }
+
+    if (event.type === 'stream.error') {
+      const data = event.data as Record<string, unknown>;
+      const reason = String(data.error ?? 'Stream connection failed');
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'STREAM_ERROR',
+          error: `Deploy stream error: ${reason}`,
+          exit_code: 3,
+          build_id: buildResult.build_id,
+        }));
+      } else {
+        this.deps.writeError(`Deploy stream error: ${reason}`);
+      }
+      finish(3);
+      return true;
+    }
+
+    if (event.type === 'stream.closed') {
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'STREAM_CLOSED',
+          error: 'Deploy stream closed before completion. The build may still be running.',
+          exit_code: 3,
+          build_id: buildResult.build_id,
+        }));
+      } else {
+        this.deps.writeError('Deploy stream closed before completion. The build may still be running.');
+      }
+      finish(3);
+      return true;
+    }
+
+    return false;
   }
 }

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
@@ -1125,7 +1125,7 @@ func TestDomainStore_Create_Success(t *testing.T) {
 	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
 	store := &PostgresDomainStore{DB: fake}
 
-	d := &routes.CustomDomain{
+	d := &domain.CustomDomain{
 		ID: "dom-1", TenantID: "t1", ProjectName: "p1",
 		AppName: "api", Environment: "prod", Domain: "example.com",
 		Status: "pending_verification", VerificationToken: "tok-1",
@@ -1143,14 +1143,14 @@ func TestDomainStore_Create_UniqueViolation(t *testing.T) {
 	}
 	store := &PostgresDomainStore{DB: fake}
 
-	d := &routes.CustomDomain{
+	d := &domain.CustomDomain{
 		ID: "dom-1", TenantID: "t1", ProjectName: "p1",
 		AppName: "api", Environment: "prod", Domain: "example.com",
 		Status: "pending_verification", VerificationToken: "tok-1",
 	}
 
 	err := store.Create(context.Background(), d)
-	if !errors.Is(err, routes.ErrDomainExists) {
+	if !errors.Is(err, domain.ErrDomainExists) {
 		t.Errorf("expected ErrDomainExists, got: %v", err)
 	}
 }
@@ -1307,7 +1307,7 @@ func TestProjectStore_CreateProject_Success(t *testing.T) {
 	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
 	store := &PostgresProjectStore{DB: fake}
 
-	result, err := store.CreateProject(context.Background(), routes.CreateProjectInput{
+	result, err := store.CreateProject(context.Background(), domain.CreateProjectInput{
 		TenantID: "t1", Name: "my-project", CreatedBy: "user1",
 	})
 	if err != nil {
@@ -1327,10 +1327,10 @@ func TestProjectStore_CreateProject_UniqueViolation(t *testing.T) {
 	}
 	store := &PostgresProjectStore{DB: fake}
 
-	_, err := store.CreateProject(context.Background(), routes.CreateProjectInput{
+	_, err := store.CreateProject(context.Background(), domain.CreateProjectInput{
 		TenantID: "t1", Name: "my-project", CreatedBy: "user1",
 	})
-	if !errors.Is(err, routes.ErrProjectExists) {
+	if !errors.Is(err, domain.ErrProjectExists) {
 		t.Errorf("expected ErrProjectExists, got: %v", err)
 	}
 }
@@ -1610,7 +1610,7 @@ func TestTeamStore_UpdateMemberRole_NotFound(t *testing.T) {
 	store := &PostgresTeamStore{DB: fake}
 
 	err := store.UpdateMemberRole(context.Background(), "t1", "github-nonexistent", "admin")
-	if !errors.Is(err, routes.ErrMemberNotFound) {
+	if !errors.Is(err, domain.ErrMemberNotFound) {
 		t.Errorf("expected ErrMemberNotFound, got: %v", err)
 	}
 }
@@ -1890,7 +1890,7 @@ func TestIdempotencyStore_Cleanup_Success(t *testing.T) {
 func TestAuditStore_ListAuditEntries_NilDB(t *testing.T) {
 	store := &PostgresAuditStore{DB: nil}
 
-	entries, total, err := store.ListAuditEntries(context.Background(), "t1", routes.AuditFilter{})
+	entries, total, err := store.ListAuditEntries(context.Background(), "t1", domain.AuditFilter{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1910,7 +1910,7 @@ func TestAuditStore_ListAuditEntries_EmptyResult(t *testing.T) {
 	}
 	store := &PostgresAuditStore{DB: fake}
 
-	entries, total, err := store.ListAuditEntries(context.Background(), "t1", routes.AuditFilter{
+	entries, total, err := store.ListAuditEntries(context.Background(), "t1", domain.AuditFilter{
 		Limit: 50,
 	})
 	if err != nil {
@@ -2048,7 +2048,7 @@ func TestDomainStore_ListByTenant_DefaultLimitIs50(t *testing.T) {
 	}
 	store := &PostgresDomainStore{DB: fake}
 
-	_, _, err := store.ListByTenant(context.Background(), "t1", routes.DomainListFilter{
+	_, _, err := store.ListByTenant(context.Background(), "t1", domain.DomainListFilter{
 		Limit: 0, // Should default to 50
 	})
 	if err != nil {

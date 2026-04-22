@@ -76,8 +76,9 @@ type Config struct {
 	AdminEvictor            routes.TenantEvictor
 	PlanLimiter             *enforcement.PlanLimiter
 	UpgradeURL              string
-	PGPoolStatsFunc         func() (inUse int32, total int32)
+	PGPoolStatsFunc              func() (inUse int32, total int32)
 	PGCircuitBreakerThresholdPct int
+	CORSAllowedOrigin            string // CORS_ALLOWED_ORIGIN — empty in production blocks all cross-origin requests
 }
 
 // Run starts the HTTP server with graceful shutdown.

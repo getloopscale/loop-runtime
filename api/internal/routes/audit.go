@@ -4,39 +4,21 @@
 package routes
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 )
 
-// AuditStore abstracts audit log persistence.
-type AuditStore interface {
-	ListAuditEntries(ctx context.Context, tenantID string, filter AuditFilter) ([]AuditEntryResult, int, error)
-}
-
-// AuditFilter defines query parameters for audit log listing.
-type AuditFilter struct {
-	Action       string
-	ResourceType string
-	Since        time.Time
-	Limit        int
-	Offset       int
-}
-
-// AuditEntryResult represents a single audit log entry in API responses.
-type AuditEntryResult struct {
-	Action        string         `json:"action"`
-	ResourceType  string         `json:"resource_type"`
-	ResourceID    string         `json:"resource_id"`
-	Actor         string         `json:"actor"`
-	CorrelationID string         `json:"correlation_id,omitempty"`
-	Metadata      map[string]any `json:"metadata,omitempty"`
-	CreatedAt     time.Time      `json:"timestamp"`
-}
+// Type aliases for backward compatibility -- canonical definitions are in domain/.
+type (
+	AuditStore       = domain.AuditStore
+	AuditFilter      = domain.AuditFilter
+	AuditEntryResult = domain.AuditEntryResult
+)
 
 // AuditHandler handles GET /api/v1/audit.
 type AuditHandler struct {

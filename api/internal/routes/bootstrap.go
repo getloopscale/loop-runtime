@@ -19,23 +19,18 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/pkg/naming"
 
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
-// BootstrapRequest is the JSON body for POST /internal/bootstrap.
-type BootstrapRequest struct {
-	AdminGitHubID     string `json:"admin_github_id"`
-	AdminLogin        string `json:"admin_login"`
-	TenantSlug        string `json:"tenant_slug"`
-	TenantDisplayName string `json:"tenant_display_name"`
-	Plan              string `json:"plan"`
-	// CellID is set by the PlacementEngine before persisting.
-	// Not part of the JSON body — injected by the handler.
-	// ADR-0008: Phase 0 = "cell-default", Phase 1+ = PlacementEngine assigns.
-	CellID string `json:"-"`
-}
+// Type aliases for backward compatibility -- canonical definitions are in domain/.
+type (
+	BootstrapRequest    = domain.BootstrapRequest
+	BootstrapStore      = domain.BootstrapStore
+	CellPlacementEngine = domain.CellPlacementEngine
+)
 
 // BootstrapResponse is the JSON response for POST /internal/bootstrap.
 type BootstrapResponse struct {
@@ -43,25 +38,6 @@ type BootstrapResponse struct {
 	UserID   string `json:"user_id"`
 	TenantID string `json:"tenant_id"`
 	Created  bool   `json:"created"`
-}
-
-// BootstrapStore abstracts the database operations for bootstrap.
-// Implemented by PostgresBootstrapStore (production) and InMemoryBootstrapStore (tests).
-type BootstrapStore interface {
-	// Bootstrap creates the admin user, tenant, and membership records.
-	// Returns (userID, tenantID, created, error).
-	// created is true if any record was actually inserted (not already existing).
-	// Must be idempotent — duplicate calls with the same data must not fail.
-	Bootstrap(ctx context.Context, req BootstrapRequest) (userID, tenantID string, created bool, err error)
-}
-
-// CellPlacementEngine assigns tenants to Cells.
-// ADR-0008: Phase 0 = DefaultEngine (always "cell-default").
-type CellPlacementEngine interface {
-	AssignCell(ctx context.Context) (cellID string, err error)
-	// AssignAndExecute picks a cell AND runs the callback in the same serialized
-	// transaction. MEET-053 D-01: fixes TOCTOU between AssignCell and INSERT.
-	AssignAndExecute(ctx context.Context, fn func(ctx context.Context, cellID string) error) error
 }
 
 // BootstrapHandler handles POST /internal/bootstrap.

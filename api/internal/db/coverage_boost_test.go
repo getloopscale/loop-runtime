@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // =============================================================================
@@ -20,7 +20,7 @@ func TestBootstrapStore_Bootstrap_HappyPath(t *testing.T) {
 	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
 	store := &PostgresBootstrapStore{DB: fake}
 
-	userID, tenantID, created, err := store.Bootstrap(context.Background(), routes.BootstrapRequest{
+	userID, tenantID, created, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
 		AdminLogin:        "octocat",
 		AdminGitHubID:     "12345",
 		TenantSlug:        "acme",
@@ -46,7 +46,7 @@ func TestBootstrapStore_Bootstrap_DefaultPlanAndCell(t *testing.T) {
 	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
 	store := &PostgresBootstrapStore{DB: fake}
 
-	_, _, _, err := store.Bootstrap(context.Background(), routes.BootstrapRequest{
+	_, _, _, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
 		AdminLogin:    "user1",
 		AdminGitHubID: "111",
 		TenantSlug:    "test",
@@ -60,7 +60,7 @@ func TestBootstrapStore_Bootstrap_ExecError(t *testing.T) {
 	fake := &fakeDBTX{execErr: errors.New("connection refused")}
 	store := &PostgresBootstrapStore{DB: fake}
 
-	_, _, _, err := store.Bootstrap(context.Background(), routes.BootstrapRequest{
+	_, _, _, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
 		AdminLogin:    "user1",
 		AdminGitHubID: "111",
 		TenantSlug:    "test",
@@ -74,7 +74,7 @@ func TestBootstrapStore_Bootstrap_Idempotent(t *testing.T) {
 	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
 	store := &PostgresBootstrapStore{DB: fake}
 
-	_, _, created, err := store.Bootstrap(context.Background(), routes.BootstrapRequest{
+	_, _, created, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
 		AdminLogin:    "user1",
 		AdminGitHubID: "111",
 		TenantSlug:    "test",
@@ -139,7 +139,7 @@ func TestTenantDeletionStore_RequestDeletion_ExecError(t *testing.T) {
 	store := &PostgresTenantDeletionStore{DB: fake}
 
 	grace := time.Now().Add(24 * time.Hour)
-	_, err := store.RequestDeletion(context.Background(), routes.DeletionRequest{
+	_, err := store.RequestDeletion(context.Background(), domain.DeletionRequest{
 		TenantID:    "tn-test",
 		RequestedBy: "user1",
 		Reason:      "test",
@@ -154,7 +154,7 @@ func TestTenantDeletionStore_WriteTombstone_Success(t *testing.T) {
 	fake := &fakeDBTX{}
 	store := &PostgresTenantDeletionStore{DB: fake}
 
-	err := store.WriteTombstone(context.Background(), routes.TombstoneRecord{
+	err := store.WriteTombstone(context.Background(), domain.TombstoneRecord{
 		TenantID:         "tn-test",
 		TenantSlug:       "test",
 		RequestedBy:      "user1",
@@ -170,7 +170,7 @@ func TestTenantDeletionStore_WriteTombstone_WithFailed(t *testing.T) {
 	fake := &fakeDBTX{}
 	store := &PostgresTenantDeletionStore{DB: fake}
 
-	err := store.WriteTombstone(context.Background(), routes.TombstoneRecord{
+	err := store.WriteTombstone(context.Background(), domain.TombstoneRecord{
 		TenantID:         "tn-test",
 		TenantSlug:       "test",
 		RequestedBy:      "user1",
@@ -187,7 +187,7 @@ func TestTenantDeletionStore_WriteTombstone_ExecError(t *testing.T) {
 	fake := &fakeDBTX{execErr: errors.New("db down")}
 	store := &PostgresTenantDeletionStore{DB: fake}
 
-	err := store.WriteTombstone(context.Background(), routes.TombstoneRecord{
+	err := store.WriteTombstone(context.Background(), domain.TombstoneRecord{
 		TenantID:         "tn-test",
 		TenantSlug:       "test",
 		ResourcesCleaned: map[string]interface{}{},
@@ -374,7 +374,7 @@ func TestDomainStore_CreateWithCFZone_Success(t *testing.T) {
 	store := &PostgresDomainStore{DB: fake}
 
 	zoneID := "zone-123"
-	err := store.CreateWithCFZone(context.Background(), &routes.CustomDomain{
+	err := store.CreateWithCFZone(context.Background(), &domain.CustomDomain{
 		ID:       "dom-1",
 		TenantID: "tn-acme",
 		Domain:   "example.com",
@@ -390,7 +390,7 @@ func TestDomainStore_CreateWithCFZone_ExecError(t *testing.T) {
 	fake := &fakeDBTX{execErr: errors.New("db down")}
 	store := &PostgresDomainStore{DB: fake}
 
-	err := store.CreateWithCFZone(context.Background(), &routes.CustomDomain{
+	err := store.CreateWithCFZone(context.Background(), &domain.CustomDomain{
 		ID:       "dom-1",
 		TenantID: "tn-acme",
 		Domain:   "example.com",
@@ -491,7 +491,7 @@ func TestDomainStore_ListByTenant_QueryError(t *testing.T) {
 	fake := &fakeDBTX{queryErr: errors.New("db down")}
 	store := &PostgresDomainStore{DB: fake}
 
-	_, _, err := store.ListByTenant(context.Background(), "tn-test", routes.DomainListFilter{})
+	_, _, err := store.ListByTenant(context.Background(), "tn-test", domain.DomainListFilter{})
 	if err == nil {
 		t.Fatal("expected error")
 	}

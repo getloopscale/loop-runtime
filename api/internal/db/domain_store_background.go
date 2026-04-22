@@ -8,21 +8,21 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // --- Methods for background services (DomainProvisioner + DomainHealthChecker) ---
 
 // FindAndClaimVerified atomically claims verified domains → provisioning.
 // FIND-001: atomic claim prevents HA double-processing.
-func (s *PostgresDomainStore) FindAndClaimVerified(ctx context.Context) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) FindAndClaimVerified(ctx context.Context) ([]domain.CustomDomain, error) {
 	return s.ClaimByStatus(ctx, "verified", "provisioning")
 }
 
 // FindRemoving atomically claims removing domains for cleanup.
 // F-011 fix: uses ClaimByStatus to prevent HA double-processing.
 // The status stays "removing" (no-op transition) but the row is locked.
-func (s *PostgresDomainStore) FindRemoving(ctx context.Context) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) FindRemoving(ctx context.Context) ([]domain.CustomDomain, error) {
 	return s.ClaimByStatus(ctx, "removing", "removing")
 }
 
@@ -31,7 +31,7 @@ func (s *PostgresDomainStore) FindRemoving(ctx context.Context) ([]routes.Custom
 // tenants table because custom_domains is a small, low-frequency read; a JOIN
 // at this cardinality is cheaper than denormalizing another column. Pass
 // "cell-default" or "" for single-cell / backward-compatible behavior.
-func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context, cellID string) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context, cellID string) ([]domain.CustomDomain, error) {
 	if cellID == "" {
 		cellID = CellDefault
 	}
@@ -56,7 +56,7 @@ func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context, cell
 }
 
 // FindActiveForCNAMECheck returns active domains due for weekly CNAME re-verification.
-func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]domain.CustomDomain, error) {
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
@@ -76,7 +76,7 @@ func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, stale
 }
 
 // FindStalePending returns domains in pending_verification older than maxAge.
-func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.Duration) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.Duration) ([]domain.CustomDomain, error) {
 	cutoff := time.Now().UTC().Add(-maxAge)
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
@@ -98,7 +98,7 @@ func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.
 
 // FindStaleProvisioning returns domains stuck in "provisioning" older than maxAge.
 // F-006: used by DomainHealthChecker.checkProvisioningTimeout().
-func (s *PostgresDomainStore) FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]domain.CustomDomain, error) {
 	cutoff := time.Now().UTC().Add(-maxAge)
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
@@ -120,7 +120,7 @@ func (s *PostgresDomainStore) FindStaleProvisioning(ctx context.Context, maxAge 
 
 // FindActiveWithTLSExpiry returns active domains with TLS certificates expiring within N days.
 // F-005: used by DomainHealthChecker.checkTLSExpiry().
-func (s *PostgresDomainStore) FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]domain.CustomDomain, error) {
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
@@ -156,7 +156,7 @@ func (s *PostgresDomainStore) UpdateCNAMECheck(ctx context.Context, domain strin
 }
 
 // ListActiveByApp returns active custom domains for a specific app (used by manifest renderer).
-func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]domain.CustomDomain, error) {
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
@@ -181,7 +181,7 @@ func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, pro
 // statement, so the lock is never released before the transition completes.
 // This replaces the broken findByStatus which used FOR UPDATE SKIP LOCKED in a
 // plain SELECT that released locks before processing began.
-func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toStatus string) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toStatus string) ([]domain.CustomDomain, error) {
 	rows, err := s.DB.Query(ctx,
 		`UPDATE custom_domains
 		 SET status = $2, updated_at = now()
@@ -206,7 +206,7 @@ func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toS
 }
 
 // findByStatus is a simple read-only query (no locking) for non-critical reads.
-func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) ([]routes.CustomDomain, error) {
+func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) ([]domain.CustomDomain, error) {
 	rows, err := s.DB.Query(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,

@@ -293,6 +293,38 @@ jobs:
         run: npm test
 
   # ─────────────────────────────────────────────
+  # INTEGRATION TESTS (require PostgreSQL)
+  # ─────────────────────────────────────────────
+
+  integration-tests:
+    name: Integration Tests (PG)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.go-api == 'true'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: loopzero_test
+          POSTGRES_PASSWORD: loopzero_test_pass
+          POSTGRES_DB: loopzero_test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: api/go.sum
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgres://loopzero_test:loopzero_test_pass@localhost:5432/loopzero_test?sslmode=disable
+        working-directory: api
+        run: go test ./tests/integration/... -v -race -timeout 5m
+
+  # ─────────────────────────────────────────────
   # VALIDATE MANIFESTS
   # ─────────────────────────────────────────────
 
@@ -529,6 +561,7 @@ jobs:
       - test-infra
       - test-cli
       - test-pulumi
+      - integration-tests
       - validate-manifests
       - migration-safety
       - security
@@ -546,6 +579,7 @@ jobs:
           echo "  test-infra:         ${{ needs.test-infra.result }}"
           echo "  test-cli:           ${{ needs.test-cli.result }}"
           echo "  test-pulumi:        ${{ needs.test-pulumi.result }}"
+          echo "  integration-tests:  ${{ needs.integration-tests.result }}"
           echo "  validate-manifests: ${{ needs.validate-manifests.result }}"
           echo "  migration-safety:   ${{ needs.migration-safety.result }}"
           echo "  security:           ${{ needs.security.result }}"

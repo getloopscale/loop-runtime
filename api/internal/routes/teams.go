@@ -13,12 +13,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
-// ErrMemberNotFound is returned when a team member does not exist.
-var ErrMemberNotFound = errors.New("member not found")
+// ErrMemberNotFound is an alias for domain.ErrMemberNotFound (backward compatibility).
+var ErrMemberNotFound = domain.ErrMemberNotFound
 
 // validRoles defines the allowed team member roles.
 var validRoles = map[string]bool{
@@ -27,31 +28,12 @@ var validRoles = map[string]bool{
 	"member": true,
 }
 
-// TeamMemberInfo represents a team member in API responses.
-// Uses route-level types to avoid importing db (DIP).
-type TeamMemberInfo struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
-	JoinedAt string `json:"joined_at"`
-}
-
-// TeamUserInfo represents a platform user (for add-member lookup).
-type TeamUserInfo struct {
-	ID          string
-	Email       string
-	DisplayName string
-}
-
-// TeamStore abstracts team member persistence (DIP).
-type TeamStore interface {
-	ListMembers(ctx context.Context, tenantID string) ([]TeamMemberInfo, error)
-	AddMember(ctx context.Context, tenantID, userID, role string) error
-	RemoveMember(ctx context.Context, tenantID, userID string) error
-	UpdateMemberRole(ctx context.Context, tenantID, userID, newRole string) error
-	GetMember(ctx context.Context, tenantID, userID string) (*TeamMemberInfo, error)
-	GetUserByUsername(ctx context.Context, username string) (*TeamUserInfo, error)
-}
+// Type aliases for backward compatibility -- canonical definitions are in domain/.
+type (
+	TeamMemberInfo = domain.TeamMemberInfo
+	TeamUserInfo   = domain.TeamUserInfo
+	TeamStore      = domain.TeamStore
+)
 
 // TeamHandler provides HTTP handlers for team member operations.
 type TeamHandler struct {

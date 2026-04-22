@@ -10,17 +10,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
-// PostgresDomainStore implements routes.DomainStore using PostgreSQL.
+// PostgresDomainStore implements domain.DomainStore using PostgreSQL.
 type PostgresDomainStore struct {
 	DB DBTX
 }
 
 // Create inserts a new custom domain.
 // Returns ErrDomainExists if the domain is already registered (CODE-001 fix: atomic conflict detection).
-func (s *PostgresDomainStore) Create(ctx context.Context, d *routes.CustomDomain) error {
+func (s *PostgresDomainStore) Create(ctx context.Context, d *domain.CustomDomain) error {
 	_, err := s.DB.Exec(ctx,
 		`INSERT INTO custom_domains (id, tenant_id, project_name, app_name, environment, domain, status, verification_token, tls_status, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now())`,
@@ -29,7 +29,7 @@ func (s *PostgresDomainStore) Create(ctx context.Context, d *routes.CustomDomain
 	if err != nil {
 		var uv *UniqueViolationError
 		if errors.As(err, &uv) {
-			return routes.ErrDomainExists
+			return domain.ErrDomainExists
 		}
 		return fmt.Errorf("domain store: create: %w", err)
 	}
@@ -37,7 +37,7 @@ func (s *PostgresDomainStore) Create(ctx context.Context, d *routes.CustomDomain
 }
 
 // GetByDomainAndTenant retrieves a domain by FQDN filtered by tenant (tenant isolation).
-func (s *PostgresDomainStore) GetByDomainAndTenant(ctx context.Context, domain, tenantID string) (*routes.CustomDomain, error) {
+func (s *PostgresDomainStore) GetByDomainAndTenant(ctx context.Context, domain, tenantID string) (*domain.CustomDomain, error) {
 	return s.scanOne(ctx,
 		`SELECT id, tenant_id, project_name, app_name, environment, domain, status,
 		        verification_token, verified_at, tls_status, tls_expires_at,
@@ -49,7 +49,7 @@ func (s *PostgresDomainStore) GetByDomainAndTenant(ctx context.Context, domain, 
 }
 
 // ListByTenant returns domains for a tenant with optional filters.
-func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string, filter routes.DomainListFilter) ([]routes.CustomDomain, int, error) {
+func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string, filter domain.DomainListFilter) ([]domain.CustomDomain, int, error) {
 	var conditions []string
 	var args []any
 	argIdx := 1
@@ -107,7 +107,7 @@ func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string,
 	}
 	defer rows.Close()
 
-	var results []routes.CustomDomain
+	var results []domain.CustomDomain
 	for rows.Next() {
 		d, err := scanDomain(rows)
 		if err != nil {
@@ -120,7 +120,7 @@ func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string,
 	}
 
 	if results == nil {
-		results = []routes.CustomDomain{}
+		results = []domain.CustomDomain{}
 	}
 	return results, total, nil
 }
@@ -233,8 +233,8 @@ func (s *PostgresDomainStore) CountByTenant(ctx context.Context, tenantID string
 
 // --- Internal scan helpers (shared by domain_store_background.go and domain_store_cfzone.go) ---
 
-func scanDomains(rows Rows) ([]routes.CustomDomain, error) {
-	var results []routes.CustomDomain
+func scanDomains(rows Rows) ([]domain.CustomDomain, error) {
+	var results []domain.CustomDomain
 	for rows.Next() {
 		d, err := scanDomain(rows)
 		if err != nil {
@@ -246,12 +246,12 @@ func scanDomains(rows Rows) ([]routes.CustomDomain, error) {
 		return nil, fmt.Errorf("domain store: rows error: %w", err)
 	}
 	if results == nil {
-		results = []routes.CustomDomain{}
+		results = []domain.CustomDomain{}
 	}
 	return results, nil
 }
 
-func (s *PostgresDomainStore) scanOne(ctx context.Context, query string, args ...any) (*routes.CustomDomain, error) {
+func (s *PostgresDomainStore) scanOne(ctx context.Context, query string, args ...any) (*domain.CustomDomain, error) {
 	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("domain store: query: %w", err)
@@ -268,8 +268,8 @@ func (s *PostgresDomainStore) scanOne(ctx context.Context, query string, args ..
 	return scanDomain(rows)
 }
 
-func scanDomain(rows Rows) (*routes.CustomDomain, error) {
-	var d routes.CustomDomain
+func scanDomain(rows Rows) (*domain.CustomDomain, error) {
+	var d domain.CustomDomain
 	if err := rows.Scan(
 		&d.ID, &d.TenantID, &d.ProjectName, &d.AppName, &d.Environment, &d.Domain, &d.Status,
 		&d.VerificationToken, &d.VerifiedAt, &d.TLSStatus, &d.TLSExpiresAt,

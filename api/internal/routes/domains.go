@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -15,20 +14,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
-// ErrDomainExists is returned when a domain is already registered (unique constraint violation).
-var ErrDomainExists = errors.New("domain already exists")
+// ErrDomainExists is an alias for domain.ErrDomainExists (backward compatibility).
+var ErrDomainExists = domain.ErrDomainExists
 
-// GenerateDomainID generates a domain ID in the format "dom-{8 hex chars}".
-func GenerateDomainID() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return "dom-" + hex.EncodeToString(b)
-}
+// GenerateDomainID is an alias for domain.GenerateDomainID (backward compatibility).
+var GenerateDomainID = domain.GenerateDomainID
 
 // generateVerificationToken generates a TXT verification value.
 func generateVerificationToken() string {
@@ -37,75 +33,17 @@ func generateVerificationToken() string {
 	return "loopzero-verify=" + hex.EncodeToString(b)
 }
 
-// CustomDomain represents a custom domain record.
-type CustomDomain struct {
-	ID                      string     `json:"id"`
-	TenantID                string     `json:"-"`
-	ProjectName             string     `json:"project"`
-	AppName                 string     `json:"app"`
-	Environment             string     `json:"environment"`
-	Domain                  string     `json:"domain"`
-	Status                  string     `json:"status"`
-	VerificationToken       string     `json:"-"`
-	VerifiedAt              *time.Time `json:"verified_at,omitempty"`
-	TLSStatus               *string    `json:"tls_status,omitempty"`
-	TLSExpiresAt            *time.Time `json:"tls_expires_at,omitempty"`
-	FailureReason           *string    `json:"failure_reason,omitempty"`
-	LastCNAMECheck          *time.Time `json:"-"`
-	CNAMEConsecutiveFailures int       `json:"-"`
-	CreatedAt               time.Time  `json:"created_at"`
-	UpdatedAt               time.Time  `json:"updated_at"`
-
-	// v2: CF Zone Management fields
-	CFZoneID           *string  `json:"cf_zone_id,omitempty"`
-	CFZoneStatus       string   `json:"cf_zone_status,omitempty"`
-	CFNameservers      []string `json:"nameservers,omitempty"`
-	DNSRecordsImported bool     `json:"-"`
-}
-
-// IsCFManaged returns true if this domain uses CF Zone Management (v2).
-func (d *CustomDomain) IsCFManaged() bool {
-	return d.CFZoneID != nil && *d.CFZoneID != ""
-}
-
-// DomainStore abstracts custom domain persistence (DIP).
-type DomainStore interface {
-	Create(ctx context.Context, d *CustomDomain) error
-	GetByDomainAndTenant(ctx context.Context, domain, tenantID string) (*CustomDomain, error)
-	ListByTenant(ctx context.Context, tenantID string, filter DomainListFilter) ([]CustomDomain, int, error)
-	CountByTenant(ctx context.Context, tenantID string) (int, error)
-	UpdateStatus(ctx context.Context, domain, status string) error
-	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
-	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
-	UpdateTLS(ctx context.Context, domain, tlsStatus string, expiresAt *time.Time) error
-	UpdateFailure(ctx context.Context, domain, status, reason string) error
-	Delete(ctx context.Context, domain string) error
-
-	// v2: CF Zone Management
-	CreateWithCFZone(ctx context.Context, d *CustomDomain) error
-	UpdateCFZoneStatus(ctx context.Context, domain, cfZoneStatus string) error
-	FindPendingNS(ctx context.Context) ([]CustomDomain, error)
-	FindNSActive(ctx context.Context) ([]CustomDomain, error)
-}
-
-// DomainListFilter holds optional filters for listing domains.
-type DomainListFilter struct {
-	Project     string
-	App         string
-	Environment string
-	Limit       int
-	Offset      int
-}
-
-// DomainVerifier checks DNS TXT records for domain ownership.
-type DomainVerifier interface {
-	VerifyTXT(ctx context.Context, domain, expectedToken string) (bool, error)
-}
-
-// DomainValidator validates domain names against platform rules.
-type DomainValidator interface {
-	Validate(domain string) error
-}
+// Type aliases for backward compatibility -- canonical definitions are in domain/.
+type (
+	CustomDomain    = domain.CustomDomain
+	DomainListFilter = domain.DomainListFilter
+	CFZoneResult    = domain.CFZoneResult
+	CFDNSRecord     = domain.CFDNSRecord
+	DomainStore     = domain.DomainStore
+	DomainVerifier  = domain.DomainVerifier
+	DomainValidator = domain.DomainValidator
+	CFZoneManager   = domain.CFZoneManager
+)
 
 // domainMachine is the formal domain state machine (CRIT-02 fix).
 // Replaces ad-hoc map with pkg/statemachine convention.
@@ -122,33 +60,6 @@ func canRemove(currentStatus string) bool {
 	}()
 	result := domainMachine.Transition(statemachine.State(currentStatus), statemachine.DomainRemove)
 	return ok && result == statemachine.DomainRemoving
-}
-
-// CFZoneManager abstracts CF Zone API operations (DIP — testable without real CF).
-type CFZoneManager interface {
-	CreateZone(ctx context.Context, domain string) (*CFZoneResult, error)
-	ScanDNSRecords(ctx context.Context, zoneID string) error
-	ListDNSRecords(ctx context.Context, zoneID string) ([]CFDNSRecord, error)
-	CreateDNSRecord(ctx context.Context, zoneID string, record CFDNSRecord) (*CFDNSRecord, error)
-	DeleteDNSRecord(ctx context.Context, zoneID, recordID string) error
-	DeleteZone(ctx context.Context, zoneID string) error
-}
-
-// CFZoneResult contains the result of creating a CF zone.
-type CFZoneResult struct {
-	ZoneID      string
-	Nameservers []string
-}
-
-// CFDNSRecord mirrors cfzone.DNSRecord for DIP.
-type CFDNSRecord struct {
-	ID       string `json:"id,omitempty"`
-	Type     string `json:"type"`
-	Name     string `json:"name"`
-	Content  string `json:"content"`
-	TTL      int    `json:"ttl,omitempty"`
-	Priority *int   `json:"priority,omitempty"`
-	Proxied  *bool  `json:"proxied,omitempty"`
 }
 
 // DomainHandler provides HTTP handlers for custom domain operations.

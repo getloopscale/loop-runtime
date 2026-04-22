@@ -8,10 +8,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
-// PostgresTenantDeletionStore implements routes.TenantDeletionStore using PostgreSQL.
+// PostgresTenantDeletionStore implements domain.TenantDeletionStore using PostgreSQL.
 // MEET-052: Manages tenants_pending_deletion and tenant_tombstones tables.
 type PostgresTenantDeletionStore struct {
 	DB DBTX
@@ -19,7 +19,7 @@ type PostgresTenantDeletionStore struct {
 
 // RequestDeletion inserts a pending deletion record. Idempotent: if the tenant
 // already has a pending deletion, returns the existing record without error.
-func (s *PostgresTenantDeletionStore) RequestDeletion(ctx context.Context, input routes.DeletionRequest) (*routes.DeletionRecord, error) {
+func (s *PostgresTenantDeletionStore) RequestDeletion(ctx context.Context, input domain.DeletionRequest) (*domain.DeletionRecord, error) {
 	_, err := s.DB.Exec(ctx,
 		`INSERT INTO tenants_pending_deletion (tenant_id, requested_by, reason, grace_until, force)
 		 VALUES ($1, $2, $3, $4, $5)
@@ -48,7 +48,7 @@ func (s *PostgresTenantDeletionStore) CancelDeletion(ctx context.Context, tenant
 
 // GetPendingDeletion returns the pending deletion record for a tenant, or nil
 // if no pending deletion exists.
-func (s *PostgresTenantDeletionStore) GetPendingDeletion(ctx context.Context, tenantID string) (*routes.DeletionRecord, error) {
+func (s *PostgresTenantDeletionStore) GetPendingDeletion(ctx context.Context, tenantID string) (*domain.DeletionRecord, error) {
 	rows, err := s.DB.Query(ctx,
 		`SELECT tenant_id, requested_at, requested_by, reason, grace_until, force, attempt_count
 		 FROM tenants_pending_deletion
@@ -67,7 +67,7 @@ func (s *PostgresTenantDeletionStore) GetPendingDeletion(ctx context.Context, te
 		return nil, nil
 	}
 
-	var record routes.DeletionRecord
+	var record domain.DeletionRecord
 	if err := rows.Scan(
 		&record.TenantID,
 		&record.RequestedAt,
@@ -84,7 +84,7 @@ func (s *PostgresTenantDeletionStore) GetPendingDeletion(ctx context.Context, te
 }
 
 // WriteTombstone writes a permanent audit record after tenant deletion completes.
-func (s *PostgresTenantDeletionStore) WriteTombstone(ctx context.Context, tombstone routes.TombstoneRecord) error {
+func (s *PostgresTenantDeletionStore) WriteTombstone(ctx context.Context, tombstone domain.TombstoneRecord) error {
 	cleanedJSON, err := json.Marshal(tombstone.ResourcesCleaned)
 	if err != nil {
 		cleanedJSON = []byte("{}")

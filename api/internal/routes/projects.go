@@ -15,73 +15,30 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
 var (
-	// ErrProjectExists is returned when a project with the same name already exists in the tenant.
-	ErrProjectExists = errors.New("project already exists")
+	// ErrProjectExists is an alias for domain.ErrProjectExists (backward compatibility).
+	ErrProjectExists = domain.ErrProjectExists
 
 	// rfc1123 validates Kubernetes-compatible names: lowercase, alphanumeric, hyphens, max 63 chars.
 	rfc1123 = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 )
 
-// CreateProjectInput is the input for creating a project.
-type CreateProjectInput struct {
-	TenantID  string
-	Name      string
-	CreatedBy string
-}
-
-// ProjectResult is the result of creating or retrieving a project.
-type ProjectResult struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	TeamID    string    `json:"team"`
-	CreatedBy string    `json:"created_by,omitempty"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
-}
-
-// ProjectStore abstracts project persistence (DIP).
-type ProjectStore interface {
-	CreateProject(ctx context.Context, input CreateProjectInput) (ProjectResult, error)
-	GetByName(ctx context.Context, tenantID, name string) (*ProjectResult, error)
-	ListByTenant(ctx context.Context, tenantID string) ([]ProjectResult, error)
-	DeleteProject(ctx context.Context, tenantID, projectID string) error
-}
-
-// TenantCRSpec holds the spec for creating/updating a Tenant CR.
-type TenantCRSpec struct {
-	Plan string
-}
-
-// TenantCRManager abstracts Kubernetes Tenant CR operations (DIP).
-type TenantCRManager interface {
-	EnsureTenant(ctx context.Context, tenantID string, spec TenantCRSpec) error
-}
-
-// ProjectDeleteInput is the input for deleting a project.
-type ProjectDeleteInput struct {
-	TenantID      string
-	ProjectID     string
-	ProjectName   string
-	Environment   string // empty = all environments
-	DeletedBy     string
-	CorrelationID string
-}
-
-// ProjectDeleteOutput is the result of project deletion.
-type ProjectDeleteOutput struct {
-	ProjectName         string   `json:"project"`
-	DeletedEnvironments []string `json:"deleted_environments"`
-	CancelledBuilds     int      `json:"cancelled_builds"`
-}
-
-// ProjectDeleter abstracts project deletion orchestration (DIP — routes don't import services).
-type ProjectDeleter interface {
-	Delete(ctx context.Context, req ProjectDeleteInput) (*ProjectDeleteOutput, error)
-}
+// Type aliases for backward compatibility -- canonical definitions are in domain/.
+type (
+	CreateProjectInput = domain.CreateProjectInput
+	ProjectResult      = domain.ProjectResult
+	ProjectStore       = domain.ProjectStore
+	TenantCRSpec       = domain.TenantCRSpec
+	TenantCRManager    = domain.TenantCRManager
+	ProjectDeleteInput  = domain.ProjectDeleteInput
+	ProjectDeleteOutput = domain.ProjectDeleteOutput
+	ProjectDeleter      = domain.ProjectDeleter
+)
 
 // ProjectHandler provides HTTP handlers for project operations.
 type ProjectHandler struct {

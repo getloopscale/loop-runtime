@@ -6,7 +6,6 @@ package server
 import (
 	"context"
 	"net/http"
-	"os"
 
 	"github.com/go-chi/chi/v5"
 
@@ -21,9 +20,12 @@ import (
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 
+	// Security headers — before CORS so they are always present.
+	r.Use(middleware.SecurityHeaders)
+
 	// CORS — allow dashboard (cloud.{domain}) to call API (api.{domain}).
-	// Must be FIRST middleware so preflight OPTIONS get handled before auth.
-	r.Use(corsMiddleware(os.Getenv("CORS_ALLOWED_ORIGIN")))
+	// Must be early middleware so preflight OPTIONS get handled before auth.
+	r.Use(corsMiddleware(cfg.CORSAllowedOrigin, cfg.IsProduction))
 
 	// Middleware chain: metrics → otel-tracing → correlation-id → logging → backpressure
 	r.Use(metrics.HTTPMetrics)
@@ -289,7 +291,9 @@ func registerProtectedRoutes(
 }
 
 // corsMiddleware adds CORS headers for the dashboard to call the API cross-origin.
-func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
+// In production, if allowedOrigin is empty, no CORS headers are returned (deny all
+// cross-origin requests). In development, an empty allowedOrigin permits any origin.
+func corsMiddleware(allowedOrigin string, isProduction bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
@@ -301,7 +305,8 @@ func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
 			allowed := false
 			if allowedOrigin != "" && origin == allowedOrigin {
 				allowed = true
-			} else if allowedOrigin == "" {
+			} else if allowedOrigin == "" && !isProduction {
+				// Dev only: open CORS when no origin is configured.
 				allowed = true
 			}
 

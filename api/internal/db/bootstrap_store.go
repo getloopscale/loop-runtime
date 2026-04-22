@@ -8,10 +8,10 @@ import (
 	"fmt"
 
 	"github.com/loopzero/loopzero/api/internal/placement"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
-// PostgresBootstrapStore implements routes.BootstrapStore using PostgreSQL.
+// PostgresBootstrapStore implements domain.BootstrapStore using PostgreSQL.
 // All INSERTs use ON CONFLICT DO NOTHING for idempotency.
 type PostgresBootstrapStore struct {
 	DB DBTX
@@ -20,7 +20,7 @@ type PostgresBootstrapStore struct {
 // Bootstrap creates the admin user, tenant, and tenant membership records.
 // Returns (userID, tenantID, created, error).
 // Uses ON CONFLICT DO NOTHING so duplicate calls are safe.
-func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req routes.BootstrapRequest) (string, string, bool, error) {
+func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req domain.BootstrapRequest) (string, string, bool, error) {
 	userID := fmt.Sprintf("github-%s", req.AdminLogin)
 	tenantID := fmt.Sprintf("tn-%s", req.TenantSlug)
 

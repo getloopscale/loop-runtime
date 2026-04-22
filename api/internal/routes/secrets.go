@@ -13,36 +13,18 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
-// SecretMetadata holds the name and context of a secret — never its value.
-type SecretMetadata struct {
-	Name        string `json:"name"`
-	Environment string `json:"environment"`
-	App         string `json:"app"`
-}
-
-// SecretStore abstracts secret persistence (DIP).
-// Implementations MUST NOT expose secret values in list operations.
-type SecretStore interface {
-	ListNames(ctx context.Context, tenantID, projectID, env string) ([]SecretMetadata, error)
-	Set(ctx context.Context, tenantID, projectID, env, app, name string, value []byte) (created bool, err error)
-	Delete(ctx context.Context, tenantID, projectID, env, app, name string) (deleted bool, err error)
-}
-
-// SecretK8sSync abstracts K8s Secret + ExternalSecret CR creation (DIP).
-type SecretK8sSync interface {
-	CreateSecret(ctx context.Context, tenantID, projectID, env, app, name, value string) error
-	DeleteSecret(ctx context.Context, tenantID, env, app, name string) error
-}
-
-// AuditLogger abstracts audit log writing (DIP).
-// MEET-2026-03-31-024: Application-level audit for sensitive operations.
-type AuditLogger interface {
-	LogAudit(ctx context.Context, tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) error
-}
+// Type aliases for backward compatibility -- canonical definitions are in domain/.
+type (
+	SecretMetadata = domain.SecretMetadata
+	SecretStore    = domain.SecretStore
+	SecretK8sSync  = domain.SecretK8sSync
+	AuditLogger    = domain.AuditLogger
+)
 
 // SecretHandler provides HTTP handlers for secret operations.
 type SecretHandler struct {

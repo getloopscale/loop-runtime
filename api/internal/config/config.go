@@ -126,6 +126,9 @@ type Config struct {
 	CFKVNamespaceID   string // KV namespace ID for routing table
 	CFZoneManagement  bool   // Enable CF Zone Management for custom domains (v2)
 
+	// CORS
+	CORSAllowedOrigin string // CORS_ALLOWED_ORIGIN — required in production, open in dev
+
 	// JWT Authentication (Sprint 11 — Ory Hydra integration)
 	// When set, enables dual validation: JWT (via JWKS) + GitHub PAT (legacy).
 	// When empty, only GitHub PAT validation is used (backward compatible).
@@ -311,6 +314,9 @@ func Load() Config {
 		CFKVNamespaceID:   os.Getenv("CF_KV_NAMESPACE_ID"),
 		CFZoneManagement:  os.Getenv("CF_ZONE_MANAGEMENT") == "true",
 
+		// CORS
+		CORSAllowedOrigin: os.Getenv("CORS_ALLOWED_ORIGIN"),
+
 		// JWT Authentication (Sprint 11 — when set, enables dual JWT + PAT validation)
 		JWKSEndpoint: os.Getenv("JWKS_ENDPOINT"),
 		JWTIssuer:    os.Getenv("JWT_ISSUER"),
@@ -390,6 +396,10 @@ func (c Config) Validate() error {
 	}
 	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" && c.IsProduction() {
 		return fmt.Errorf("LOOPZERO_ARGO_CALLBACK_SECRET using default dev value in production — override via LOOPZERO_ARGO_CALLBACK_SECRET env var")
+	}
+	// SEC: CORS_ALLOWED_ORIGIN must be set in production to prevent open CORS.
+	if c.CORSAllowedOrigin == "" && c.IsProduction() {
+		return fmt.Errorf("CORS_ALLOWED_ORIGIN must be set in production")
 	}
 	// H1: DATABASE_URL with sslmode=disable in production sends credentials and data in plaintext.
 	if c.DatabaseURL != "" && c.IsProduction() && strings.Contains(c.DatabaseURL, "sslmode=disable") {

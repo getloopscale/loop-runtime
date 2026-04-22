@@ -200,6 +200,187 @@ func setupDomains(
 	return domainHandler, domainProvisioner, domainHealthChecker, cfZoneClient
 }
 
+// bgLoop describes a named background loop with an optional condition guard.
+type bgLoop struct {
+	name  string
+	start func(context.Context)
+}
+
+// createCoreLoops builds the list of always-on background loops.
+func createCoreLoops(
+	dbAdapter *db.PgxAdapter,
+	stores *StoreDeps,
+	workflows *WorkflowDeps,
+	orchDeps *OrchestratorDeps,
+	k8sDeps *K8sDeps,
+	cellRouter placement.Router,
+	domainProvisioner *services.DomainProvisioner,
+	domainHealthChecker *services.DomainHealthChecker,
+	cfg config.Config,
+	logger *slog.Logger,
+) []bgLoop {
+	buildStore := stores.BuildStore
+	releaseStore := stores.ReleaseStore
+	envTargetStore := stores.EnvTargetStore
+	pgEventStore := stores.PgEventStore
+
+	reconcileLoop := services.NewBuildReconcileLoop(
+		buildStore,
+		workflows.WorkflowSubmitter,
+		orchDeps.Orchestrator,
+		stores.Locker,
+		stores.DomainStore,
+		k8sDeps.AppCRMgr,
+		pgEventStore,
+		logger,
+		services.BuildReconcileLoopConfig{
+			Interval:           cfg.ReconcileInterval,
+			RegistryURL:        cfg.RegistryURL,
+			BaseDomain:         cfg.BaseDomain,
+			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
+		},
+	)
+	if lister, ok := cellRouter.(services.CellLister); ok {
+		reconcileLoop.WithCellLister(lister)
+	}
+
+	reaper := services.NewBuildReaper(
+		buildStore,
+		&services.PostgresStaleBuildChecker{DB: dbAdapter},
+		stores.Locker,
+		workflows.WorkflowSubmitter,
+		stores.EventStore,
+		logger,
+		services.BuildReaperConfig{
+			QueueTimeout:     cfg.BuildQueueTimeout,
+			RunningTimeout:   cfg.BuildRunningTimeout,
+			ReleasingTimeout: cfg.BuildReleasingTimeout,
+			CancelTimeout:    cfg.BuildCancelTimeout,
+			Interval:         cfg.BuildReaperInterval,
+		},
+		reconcileLoop,
+	)
+
+	releaseReaper := services.NewReleaseReaper(
+		releaseStore,
+		&services.PostgresStaleReleaseChecker{DB: dbAdapter},
+		stores.Locker,
+		pgEventStore,
+		logger,
+		services.ReleaseReaperConfig{
+			ReadyTimeout:   cfg.ReleaseReadyTimeout,
+			PendingTimeout: cfg.ReleasePendingTimeout,
+			Interval:       cfg.ReleaseReaperInterval,
+		},
+	)
+
+	releaseConvergenceLoop := services.NewReleaseConvergenceLoop(
+		releaseStore, envTargetStore, workflows.SyncClient, stores.Locker,
+		stores.EventStore, cfg.BaseDomain, logger,
+		services.ReleaseConvergenceLoopConfig{
+			Interval:      10 * time.Second,
+			SyncTimeout:   300 * time.Second,
+			MaxConcurrent: 10,
+		},
+	)
+
+	idempotencyCleaner := services.NewIdempotencyCleaner(
+		&db.PostgresIdempotencyStore{DB: dbAdapter}, logger, 1*time.Hour,
+	)
+	eventPruner := sse.NewEventPruner(pgEventStore, logger, 24*time.Hour, 1*time.Hour)
+	cellMetrics := placement.NewCellMetricsCollector(stores.CellStore, logger, 60*time.Second)
+	buildGC := services.NewBuildGC(
+		&db.PostgresBuildGCStore{DB: dbAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
+	)
+
+	loops := []bgLoop{
+		{"build-reconcile", reconcileLoop.Start},
+		{"build-reaper", reaper.Start},
+		{"release-reaper", releaseReaper.Start},
+		{"release-convergence", releaseConvergenceLoop.Start},
+		{"idempotency-cleaner", idempotencyCleaner.Start},
+		{"event-pruner", eventPruner.Start},
+		{"cell-metrics", cellMetrics.Start},
+		{"domain-provisioner", domainProvisioner.Start},
+		{"domain-health-checker", domainHealthChecker.Start},
+		{"build-gc", buildGC.Start},
+	}
+
+	// OrphanDetector (conditional on CellLister + OrphanedTenantQuerier)
+	if lister, ok := cellRouter.(services.CellLister); ok {
+		if querier, ok2 := interface{}(stores.CellStore).(services.OrphanedTenantQuerier); ok2 {
+			orphanDetector := services.NewOrphanDetector(lister, querier, logger, 60*time.Second)
+			loops = append(loops, bgLoop{"orphan-detector", orphanDetector.Start})
+		}
+	}
+
+	return loops
+}
+
+// createOptionalLoops builds the list of conditional background loops (KV, CF reconcilers).
+func createOptionalLoops(
+	stores *StoreDeps,
+	workflows *WorkflowDeps,
+	cfZoneClient *cfzone.Client,
+	cfg config.Config,
+	logger *slog.Logger,
+) []bgLoop {
+	var loops []bgLoop
+
+	// KVReconciler (optional)
+	if workflows.KVClient != nil {
+		if kvC, ok := workflows.KVClient.(*cfkv.Client); ok {
+			if kvSource, ok2 := interface{}(stores.BuildStore).(services.KVRoutingSource); ok2 {
+				kvReconciler := services.NewKVReconciler(kvC, kvSource, logger, 5*time.Minute)
+				loops = append(loops, bgLoop{"kv-reconciler", kvReconciler.Start})
+			}
+		}
+	}
+
+	// DomainCFReconciler (optional)
+	if cfg.CFZoneManagement && cfZoneClient != nil {
+		if cfStore, ok := interface{}(stores.DomainStore).(services.CFZoneReconcilerStore); ok {
+			domainCFReconciler := services.NewDomainCFReconciler(cfStore, cfZoneClient, logger, 15*time.Minute)
+			loops = append(loops, bgLoop{"domain-cf-reconciler", domainCFReconciler.Start})
+		}
+	}
+
+	return loops
+}
+
+// runLeaderHeartbeat monitors the leader advisory lock and exits if lost.
+func runLeaderHeartbeat(
+	shutdownCtx context.Context,
+	leaderConn *pgxpool.Conn,
+	logger *slog.Logger,
+) {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-shutdownCtx.Done():
+			return
+		case <-ticker.C:
+			var stillLeader bool
+			heartbeatCtx, heartbeatCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if err := leaderConn.QueryRow(heartbeatCtx,
+				"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&stillLeader); err != nil {
+				heartbeatCancel()
+				logger.Error("leader heartbeat: lock check failed — exiting", "error", err)
+				metrics.LeaderStatus.Set(0)
+				os.Exit(1)
+			}
+			heartbeatCancel()
+			if !stillLeader {
+				logger.Error("leader heartbeat: lock LOST — exiting for re-election")
+				metrics.LeaderStatus.Set(0)
+				os.Exit(1)
+			}
+			metrics.LeaderStatus.Set(1)
+		}
+	}
+}
+
 // startLeaderLoops starts all background loops that run on the leader replica only.
 func startLeaderLoops(
 	shutdownCtx context.Context,
@@ -223,161 +404,24 @@ func startLeaderLoops(
 		return
 	}
 
-	buildStore := stores.BuildStore
-	releaseStore := stores.ReleaseStore
-	envTargetStore := stores.EnvTargetStore
-	pgEventStore := stores.PgEventStore
+	coreLoops := createCoreLoops(dbAdapter, stores, workflows, orchDeps, k8sDeps, cellRouter, domainProvisioner, domainHealthChecker, cfg, logger)
+	optionalLoops := createOptionalLoops(stores, workflows, cfZoneClient, cfg, logger)
+	allLoops := append(coreLoops, optionalLoops...)
 
-	// Build reconcile loop
-	reconcileLoop := services.NewBuildReconcileLoop(
-		buildStore,
-		workflows.WorkflowSubmitter,
-		orchDeps.Orchestrator,
-		stores.Locker,
-		stores.DomainStore,
-		k8sDeps.AppCRMgr,
-		pgEventStore,
-		logger,
-		services.BuildReconcileLoopConfig{
-			Interval:           cfg.ReconcileInterval,
-			RegistryURL:        cfg.RegistryURL,
-			BaseDomain:         cfg.BaseDomain,
-			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
-		},
-	)
-	if lister, ok := cellRouter.(services.CellLister); ok {
-		reconcileLoop.WithCellLister(lister)
-	}
-
-	// Build reaper
-	reaper := services.NewBuildReaper(
-		buildStore,
-		&services.PostgresStaleBuildChecker{DB: dbAdapter},
-		stores.Locker,
-		workflows.WorkflowSubmitter,
-		stores.EventStore,
-		logger,
-		services.BuildReaperConfig{
-			QueueTimeout:     cfg.BuildQueueTimeout,
-			RunningTimeout:   cfg.BuildRunningTimeout,
-			ReleasingTimeout: cfg.BuildReleasingTimeout,
-			CancelTimeout:    cfg.BuildCancelTimeout,
-			Interval:         cfg.BuildReaperInterval,
-		},
-		reconcileLoop,
-	)
-
-	// Release reaper
-	releaseReaper := services.NewReleaseReaper(
-		releaseStore,
-		&services.PostgresStaleReleaseChecker{DB: dbAdapter},
-		stores.Locker,
-		pgEventStore,
-		logger,
-		services.ReleaseReaperConfig{
-			ReadyTimeout:   cfg.ReleaseReadyTimeout,
-			PendingTimeout: cfg.ReleasePendingTimeout,
-			Interval:       cfg.ReleaseReaperInterval,
-		},
-	)
-
-	// Release convergence loop
-	releaseConvergenceLoop := services.NewReleaseConvergenceLoop(
-		releaseStore, envTargetStore, workflows.SyncClient, stores.Locker,
-		stores.EventStore, cfg.BaseDomain, logger,
-		services.ReleaseConvergenceLoopConfig{
-			Interval:      10 * time.Second,
-			SyncTimeout:   300 * time.Second,
-			MaxConcurrent: 10,
-		},
-	)
-
-	// Cleanup loops
-	idempotencyCleaner := services.NewIdempotencyCleaner(
-		&db.PostgresIdempotencyStore{DB: dbAdapter}, logger, 1*time.Hour,
-	)
-	eventPruner := sse.NewEventPruner(pgEventStore, logger, 24*time.Hour, 1*time.Hour)
-	cellMetrics := placement.NewCellMetricsCollector(stores.CellStore, logger, 60*time.Second)
-
-	// BuildGC
-	buildGC := services.NewBuildGC(
-		&db.PostgresBuildGCStore{DB: dbAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
-	)
-
-	// OrphanDetector
-	var orphanDetector *services.OrphanDetector
-	if lister, ok := cellRouter.(services.CellLister); ok {
-		if querier, ok2 := interface{}(stores.CellStore).(services.OrphanedTenantQuerier); ok2 {
-			orphanDetector = services.NewOrphanDetector(lister, querier, logger, 60*time.Second)
-		}
-	}
-
-	// Start core loops (13 slots: 6 core + cell metrics + heartbeat + 2 domain + BuildGC + OrphanDetector + KV/CF slot)
-	bgWg.Add(13)
-	go func() { defer bgWg.Done(); reconcileLoop.Start(shutdownCtx) }()
-	go func() { defer bgWg.Done(); reaper.Start(shutdownCtx) }()
-	go func() { defer bgWg.Done(); releaseReaper.Start(shutdownCtx) }()
-	go func() { defer bgWg.Done(); releaseConvergenceLoop.Start(shutdownCtx) }()
-	go func() { defer bgWg.Done(); idempotencyCleaner.Start(shutdownCtx) }()
-	go func() { defer bgWg.Done(); eventPruner.Start(shutdownCtx) }()
-	go func() { defer bgWg.Done(); cellMetrics.Start(shutdownCtx) }()
-	go func() { defer bgWg.Done(); domainProvisioner.Start(shutdownCtx) }()
-	go func() { defer bgWg.Done(); domainHealthChecker.Start(shutdownCtx) }()
-	go func() { defer bgWg.Done(); buildGC.Start(shutdownCtx) }()
-	if orphanDetector != nil {
-		go func() { defer bgWg.Done(); orphanDetector.Start(shutdownCtx) }()
-	} else {
-		bgWg.Done()
-	}
-
-	// KVReconciler (optional)
-	if workflows.KVClient != nil {
-		if kvC, ok := workflows.KVClient.(*cfkv.Client); ok {
-			if kvSource, ok2 := interface{}(buildStore).(services.KVRoutingSource); ok2 {
-				bgWg.Add(1)
-				kvReconciler := services.NewKVReconciler(kvC, kvSource, logger, 5*time.Minute)
-				go func() { defer bgWg.Done(); kvReconciler.Start(shutdownCtx) }()
-			}
-		}
-	}
-
-	// DomainCFReconciler (optional)
-	if cfg.CFZoneManagement && cfZoneClient != nil {
-		if cfStore, ok := interface{}(stores.DomainStore).(services.CFZoneReconcilerStore); ok {
-			bgWg.Add(1)
-			domainCFReconciler := services.NewDomainCFReconciler(cfStore, cfZoneClient, logger, 15*time.Minute)
-			go func() { defer bgWg.Done(); domainCFReconciler.Start(shutdownCtx) }()
-		}
+	// Start all loops + 1 slot for leader heartbeat
+	bgWg.Add(len(allLoops) + 1)
+	for _, loop := range allLoops {
+		l := loop // capture for goroutine
+		go func() {
+			defer bgWg.Done()
+			l.start(shutdownCtx)
+		}()
 	}
 
 	// Leader heartbeat
 	go func() {
 		defer bgWg.Done()
-		ticker := time.NewTicker(60 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-shutdownCtx.Done():
-				return
-			case <-ticker.C:
-				var stillLeader bool
-				heartbeatCtx, heartbeatCancel := context.WithTimeout(context.Background(), 10*time.Second)
-				if err := leaderConn.QueryRow(heartbeatCtx,
-					"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&stillLeader); err != nil {
-					heartbeatCancel()
-					logger.Error("leader heartbeat: lock check failed — exiting", "error", err)
-					metrics.LeaderStatus.Set(0)
-					os.Exit(1)
-				}
-				heartbeatCancel()
-				if !stillLeader {
-					logger.Error("leader heartbeat: lock LOST — exiting for re-election")
-					metrics.LeaderStatus.Set(0)
-					os.Exit(1)
-				}
-				metrics.LeaderStatus.Set(1)
-			}
-		}
+		runLeaderHeartbeat(shutdownCtx, leaderConn, logger)
 	}()
 }
 

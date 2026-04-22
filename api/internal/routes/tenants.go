@@ -12,56 +12,18 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
-// TenantDeletionStore provides access to tenant deletion data in PostgreSQL.
-type TenantDeletionStore interface {
-	// RequestDeletion inserts a pending deletion record. Idempotent: returns existing
-	// record if tenant is already pending deletion.
-	RequestDeletion(ctx context.Context, input DeletionRequest) (*DeletionRecord, error)
-
-	// CancelDeletion removes the pending deletion record (restore within grace).
-	// Returns nil if no pending deletion exists (idempotent).
-	CancelDeletion(ctx context.Context, tenantID string) error
-
-	// GetPendingDeletion returns the pending deletion record for a tenant, or nil.
-	GetPendingDeletion(ctx context.Context, tenantID string) (*DeletionRecord, error)
-
-	// WriteTombstone writes a permanent audit record after tenant deletion completes.
-	WriteTombstone(ctx context.Context, tombstone TombstoneRecord) error
-}
-
-// DeletionRequest is the input for requesting tenant deletion.
-type DeletionRequest struct {
-	TenantID    string
-	RequestedBy string
-	Reason      string // "user_request" | "trial_expired" | "admin_evict"
-	GraceUntil  *time.Time
-	Force       bool
-}
-
-// DeletionRecord represents a pending deletion in the database.
-type DeletionRecord struct {
-	TenantID     string     `json:"id"`
-	RequestedAt  time.Time  `json:"requested_at"`
-	RequestedBy  string     `json:"requested_by"`
-	Reason       string     `json:"reason"`
-	GraceUntil   *time.Time `json:"grace_until,omitempty"`
-	Force        bool       `json:"force"`
-	AttemptCount int        `json:"attempt_count"`
-}
-
-// TombstoneRecord is the permanent audit record for a deleted tenant.
-type TombstoneRecord struct {
-	TenantID         string
-	TenantSlug       string
-	RequestedBy      string
-	Reason           string
-	ResourcesCleaned map[string]interface{}
-	ResourcesFailed  map[string]interface{}
-}
+// Type aliases for backward compatibility -- canonical definitions are in domain/.
+type (
+	TenantDeletionStore = domain.TenantDeletionStore
+	DeletionRequest     = domain.DeletionRequest
+	DeletionRecord      = domain.DeletionRecord
+	TombstoneRecord     = domain.TombstoneRecord
+)
 
 // TenantDeletionResponse is the 202 response for DELETE /api/v1/tenants/:id.
 type TenantDeletionResponse struct {

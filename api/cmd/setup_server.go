@@ -75,6 +75,7 @@ func buildServerConfig(
 		IsProduction:                 cfg.IsProduction(),
 		UpgradeURL:                   os.Getenv("BILLING_UPGRADE_URL"),
 		PGCircuitBreakerThresholdPct: 90,
+		CORSAllowedOrigin:           cfg.CORSAllowedOrigin,
 	}
 
 	if dbDeps != nil {
