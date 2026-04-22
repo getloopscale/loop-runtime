@@ -119,7 +119,11 @@ func TestWithEnvironmentLock_ConcurrentSameKey(t *testing.T) {
 	}()
 
 	// Give B time to start waiting for the lock.
-	time.Sleep(200 * time.Millisecond)
+	// This sleep is intentional: we need goroutine B to be blocked on the
+	// advisory lock before we release A. There is no observable signal for
+	// "B is waiting on the lock" — only the PG backend status could tell us,
+	// and that would add a test-only query. 200ms is a safe margin.
+	time.Sleep(200 * time.Millisecond) // intentional: waiting for goroutine to block on PG advisory lock
 
 	// Release A.
 	close(releaseA)
@@ -151,7 +155,7 @@ func TestWithEnvironmentLock_Timeout(t *testing.T) {
 		_, _ = lock.WithEnvironmentLock(ctx, pool, "tenant-1", "project-x", "prod",
 			func(tx lock.Tx) (struct{}, error) {
 				close(lockAcquired)
-				// Hold lock for longer than the 5s timeout.
+				// intentional: hold lock for longer than the 5s timeout to test lock acquisition timeout behavior
 				time.Sleep(8 * time.Second)
 				return struct{}{}, nil
 			},

@@ -133,3 +133,71 @@ func TestSyncCallbackActivator_IgnoresOtherTenants(t *testing.T) {
 		t.Errorf("expected release to stay PENDING (wrong tenant), got %q", releaseStore.statuses["rel-cb-003"])
 	}
 }
+
+// --- BUG-03 defense: release without GitCommit must be skipped ---
+
+func TestSyncCallbackActivator_SkipsEmptyGitCommit(t *testing.T) {
+	// Arrange: release with empty GitCommit (BUG-03 scenario)
+	releaseStore := newFakeConvergenceReleaseStore()
+	releaseStore.pending = []db.Release{{
+		ID: "rel-cb-nocommit", BuildID: "build-cb-nocommit",
+		TenantID: "tn-loopzero", ProjectID: "my-app", Environment: "production",
+		Status: "PENDING", GitCommit: "", // Empty! BUG-03 defense
+		CreatedAt: time.Now(),
+	}}
+	releaseStore.statuses["rel-cb-nocommit"] = "PENDING"
+
+	envTargetStore := &fakeConvergenceEnvTargetStore{}
+	locker := &fakeConvergenceLocker{}
+	eventStore := &fakeConvergenceEventStore{}
+
+	activator := services.NewSyncCallbackActivator(
+		releaseStore, envTargetStore, locker, eventStore, "test.local", testLogger,
+	)
+
+	// Act: callback arrives — release should be skipped (deferred to convergence loop)
+	err := activator.OnSyncCompleted("tn-loopzero-production", "abc123")
+
+	// Assert: release stays PENDING, no activation
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if releaseStore.statuses["rel-cb-nocommit"] != "PENDING" {
+		t.Errorf("expected release to stay PENDING (empty GitCommit), got %q", releaseStore.statuses["rel-cb-nocommit"])
+	}
+	if envTargetStore.getActiveCalls() != 0 {
+		t.Errorf("expected SetActive NOT called (empty GitCommit skip), got %d calls", envTargetStore.getActiveCalls())
+	}
+}
+
+// --- ParseArgoAppName with tenant containing multiple hyphens ---
+
+func TestParseArgoAppName_TenantWithMultipleHyphens(t *testing.T) {
+	// "my-org-e2e-test-staging" → tenant="my-org-e2e-test", env="staging"
+	tenant, env, ok := services.ParseArgoAppName("my-org-e2e-test-staging")
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+	if tenant != "my-org-e2e-test" {
+		t.Errorf("expected tenant 'my-org-e2e-test', got %q", tenant)
+	}
+	if env != "staging" {
+		t.Errorf("expected env 'staging', got %q", env)
+	}
+}
+
+func TestParseArgoAppName_TrailingHyphen(t *testing.T) {
+	// "tenant-" → invalid (env would be empty)
+	_, _, ok := services.ParseArgoAppName("tenant-")
+	if ok {
+		t.Error("expected ok=false for trailing hyphen")
+	}
+}
+
+func TestParseArgoAppName_SingleChar(t *testing.T) {
+	// "x" → no hyphen → invalid
+	_, _, ok := services.ParseArgoAppName("x")
+	if ok {
+		t.Error("expected ok=false for single char without hyphen")
+	}
+}

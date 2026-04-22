@@ -1,0 +1,238 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package main
+
+import (
+	"context"
+	"crypto/tls"
+	"log/slog"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/loopzero/loopzero/api/internal/adapters"
+	"github.com/loopzero/loopzero/api/internal/argo"
+	"github.com/loopzero/loopzero/api/internal/argocd"
+	"github.com/loopzero/loopzero/api/internal/config"
+	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/gitops"
+	"github.com/loopzero/loopzero/api/internal/k8s"
+	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/loopzero/loopzero/api/internal/sse"
+)
+
+// controllerDeps holds all services and stores wired during setup. Passed to
+// startBackgroundLoops so the main function stays lean.
+type controllerDeps struct {
+	reconcileLoop          *services.BuildReconcileLoop
+	buildReaper            *services.BuildReaper
+	releaseReaper          *services.ReleaseReaper
+	releaseConvergenceLoop *services.ReleaseConvergenceLoop
+	idempotencyCleaner     *services.IdempotencyCleaner
+	eventPruner            *sse.EventPruner
+}
+
+// setupServices creates all stores, clients, and the build orchestrator
+// needed by the controller background loops. It exits the process on
+// fatal errors (e.g. unable to create the workflow submitter).
+func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Logger) controllerDeps {
+	// ---- Stores ----
+	buildStore := db.NewPostgresBuildStore(dbAdapter)
+	releaseStore := db.NewPostgresReleaseStore(dbAdapter)
+	envTargetStore := db.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
+	pgEventStore := sse.NewPostgresEventStore(dbAdapter, dbAdapter)
+	domainStore := &db.PostgresDomainStore{DB: dbAdapter}
+
+	// Environment locker (pg_advisory_xact_lock, roadmap Rule 6).
+	locker := &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool}
+
+	// ---- Build cluster (Argo) ----
+	rawWorkflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
+		Kubeconfig:       cfg.BuildKubeconfig,
+		Context:          cfg.BuildKubeContext,
+		RegistryURL:      cfg.RegistryURL,
+		RegistryInsecure: cfg.RegistryInsecure,
+		BaseDomain:       cfg.BaseDomain,
+	})
+	if err != nil {
+		logger.Error("failed to create workflow submitter", "error", err)
+		panic("fatal: workflow submitter creation failed") // unreachable after os.Exit
+	}
+	workflowSubmitter := services.NewCircuitBreakerWorkflowSubmitter(
+		rawWorkflowSubmitter,
+		services.CircuitBreakerConfig{
+			OpenThreshold:  cfg.CBOpenThreshold,
+			CloseThreshold: cfg.CBCloseThreshold,
+			RetryInterval:  cfg.CBRetryInterval,
+		},
+		logger,
+	)
+
+	// ---- ArgoCD sync client ----
+	argocdHTTPClient := &http.Client{Timeout: cfg.ArgocdClientTimeout}
+	if cfg.ArgocdInsecure {
+		// #nosec G402 — Insecure is opt-in, used for self-signed in dev clusters.
+		argocdHTTPClient.Transport = &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+	rawSyncClient := argocd.NewSyncClient(argocd.SyncClientConfig{
+		BaseURL:    cfg.ArgocdURL,
+		Token:      cfg.ArgocdToken,
+		Insecure:   cfg.ArgocdInsecure,
+		HTTPClient: argocdHTTPClient,
+	})
+	syncClient := services.NewCircuitBreakerSyncClient(rawSyncClient, services.CircuitBreakerConfig{
+		OpenThreshold:  cfg.CBOpenThreshold,
+		CloseThreshold: cfg.CBCloseThreshold,
+		RetryInterval:  cfg.CBRetryInterval,
+	}, logger)
+
+	// ---- Gitea gitops pusher ----
+	gitopsPusher := gitops.NewGiteaGitOpsPusher(gitops.GiteaGitOpsPusherConfig{
+		BaseURL: cfg.GiteaURL,
+		Token:   cfg.GiteaToken,
+		OrgName: "loopzero",
+	})
+
+	// ---- k8s managers (mgmt cluster) ----
+	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
+	if err != nil {
+		logger.Error("failed to create tenant CR manager", "error", err)
+		panic("fatal: tenant CR manager creation failed") // unreachable after os.Exit
+	}
+	appCRMgr := &appCRAdapter{mgr: k8s.NewApplicationCRManager(tenantCRMgr.Client, "")}
+
+	// ---- Build orchestrator (required by reconcile loop) ----
+	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+		BuildStore:        buildStore,
+		ReleaseStore:      releaseStore,
+		EnvTargetStore:    envTargetStore,
+		ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
+		EventStore:        pgEventStore,
+		Workflow:          workflowSubmitter,
+		Sync:              syncClient,
+		Locker:            locker,
+		GitOps:            gitopsPusher,
+		RegistryURL:       cfg.RegistryURL,
+		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
+		BaseDomain:        cfg.BaseDomain,
+	})
+
+	// ---- Build reconcile loop ----
+	reconcileLoop := services.NewBuildReconcileLoop(
+		buildStore,
+		workflowSubmitter,
+		orch,
+		locker,
+		domainStore,
+		appCRMgr,
+		pgEventStore,
+		logger,
+		services.BuildReconcileLoopConfig{
+			Interval:           cfg.ReconcileInterval,
+			RegistryURL:        cfg.RegistryURL,
+			BaseDomain:         cfg.BaseDomain,
+			MaxConcurrent:      cfg.MaxConcurrentBuildsPerCell,
+			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
+			CellID:             cellID(cfg),
+		},
+	)
+
+	// ---- Build reaper ----
+	buildReaper := services.NewBuildReaper(
+		buildStore,
+		&services.PostgresStaleBuildChecker{DB: dbAdapter},
+		locker,
+		workflowSubmitter,
+		pgEventStore,
+		logger,
+		services.BuildReaperConfig{
+			QueueTimeout:     cfg.BuildQueueTimeout,
+			RunningTimeout:   cfg.BuildRunningTimeout,
+			ReleasingTimeout: cfg.BuildReleasingTimeout,
+			CancelTimeout:    cfg.BuildCancelTimeout,
+			Interval:         cfg.BuildReaperInterval,
+			CellID:           cellID(cfg),
+		},
+		reconcileLoop,
+	)
+
+	// ---- Release reaper ----
+	releaseReaper := services.NewReleaseReaper(
+		releaseStore,
+		&services.PostgresStaleReleaseChecker{DB: dbAdapter},
+		locker,
+		pgEventStore,
+		logger,
+		services.ReleaseReaperConfig{
+			ReadyTimeout:   cfg.ReleaseReadyTimeout,
+			PendingTimeout: cfg.ReleasePendingTimeout,
+			Interval:       cfg.ReleaseReaperInterval,
+			CellID:         cellID(cfg),
+		},
+	)
+
+	// ---- Release convergence loop ----
+	releaseConvergenceLoop := services.NewReleaseConvergenceLoop(
+		releaseStore,
+		envTargetStore,
+		syncClient,
+		locker,
+		pgEventStore,
+		cfg.BaseDomain,
+		logger,
+		services.ReleaseConvergenceLoopConfig{
+			Interval:      10 * time.Second,
+			SyncTimeout:   300 * time.Second,
+			MaxConcurrent: 10,
+			CellID:        cellID(cfg),
+		},
+	)
+
+	// ---- Idempotency cleaner ----
+	idempotencyCleaner := services.NewIdempotencyCleaner(
+		&db.PostgresIdempotencyStore{DB: dbAdapter},
+		logger,
+		1*time.Hour,
+	)
+
+	// ---- SSE event pruner ----
+	eventPruner := sse.NewEventPruner(
+		pgEventStore,
+		logger,
+		24*time.Hour,
+		1*time.Hour,
+	)
+
+	return controllerDeps{
+		reconcileLoop:          reconcileLoop,
+		buildReaper:            buildReaper,
+		releaseReaper:          releaseReaper,
+		releaseConvergenceLoop: releaseConvergenceLoop,
+		idempotencyCleaner:     idempotencyCleaner,
+		eventPruner:            eventPruner,
+	}
+}
+
+// startBackgroundLoops launches all 6 background loops as goroutines tracked
+// by the provided WaitGroup. Each loop runs until shutdownCtx is cancelled.
+func startBackgroundLoops(
+	shutdownCtx context.Context,
+	wg *sync.WaitGroup,
+	deps controllerDeps,
+	_ config.Config,
+	_ *slog.Logger,
+) {
+	wg.Add(6)
+	go func() { defer wg.Done(); deps.reconcileLoop.Start(shutdownCtx) }()
+	go func() { defer wg.Done(); deps.buildReaper.Start(shutdownCtx) }()
+	go func() { defer wg.Done(); deps.releaseReaper.Start(shutdownCtx) }()
+	go func() { defer wg.Done(); deps.releaseConvergenceLoop.Start(shutdownCtx) }()
+	go func() { defer wg.Done(); deps.idempotencyCleaner.Start(shutdownCtx) }()
+	go func() { defer wg.Done(); deps.eventPruner.Start(shutdownCtx) }()
+}

@@ -1,0 +1,397 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package main
+
+import (
+	"context"
+	"log/slog"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/loopzero/loopzero/api/internal/cfkv"
+	"github.com/loopzero/loopzero/api/internal/cfzone"
+	"github.com/loopzero/loopzero/api/internal/config"
+	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/loopzero/loopzero/api/internal/placement"
+	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/loopzero/loopzero/api/internal/sse"
+)
+
+// LeaderElectionResult holds leader election state.
+type LeaderElectionResult struct {
+	IsLeader   bool
+	LeaderConn *pgxpool.Conn
+}
+
+const leaderLockID int64 = 0x7468656F6C656164 // "loopzerolead" in hex
+
+// setupLeaderElection acquires the leader advisory lock.
+// Caller must defer LeaderConn.Release() on shutdown.
+func setupLeaderElection(
+	pool *pgxpool.Pool,
+	shutdownCtx context.Context,
+	logger *slog.Logger,
+) *LeaderElectionResult {
+	leaderConn, err := pool.Acquire(context.Background())
+	if err != nil {
+		logger.Error("failed to acquire database connection for leader election", "error", err)
+		os.Exit(1)
+	}
+
+	var isLeader bool
+	logger.Info("starting leader election", "lockID", leaderLockID, "maxAttempts", 12)
+	for attempt := 0; attempt < 12; attempt++ {
+		if err := leaderConn.QueryRow(context.Background(),
+			"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&isLeader); err != nil {
+			logger.Error("failed to acquire leader lock", "error", err)
+			os.Exit(1)
+		}
+		if isLeader {
+			break
+		}
+		logger.Info("leader lock held by another instance, retrying...", "attempt", attempt+1, "max", 12)
+		time.Sleep(5 * time.Second)
+	}
+
+	if isLeader {
+		metrics.LeaderStatus.Set(1)
+		logger.Info("leader lock acquired — background loops will start on this replica")
+	} else {
+		metrics.LeaderStatus.Set(0)
+		logger.Warn("another API instance holds the leader lock — background loops will NOT start on this replica",
+			"hint", "The API can serve HTTP requests but reconcile/reaper loops are disabled.")
+		startNonLeaderReelection(leaderConn, shutdownCtx, logger)
+	}
+
+	return &LeaderElectionResult{IsLeader: isLeader, LeaderConn: leaderConn}
+}
+
+// startNonLeaderReelection periodically retries leader acquisition for non-leader pods.
+func startNonLeaderReelection(leaderConn *pgxpool.Conn, shutdownCtx context.Context, logger *slog.Logger) {
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-shutdownCtx.Done():
+				return
+			case <-ticker.C:
+				var acquired bool
+				reelCtx, reelCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				if err := leaderConn.QueryRow(reelCtx,
+					"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&acquired); err != nil {
+					reelCancel()
+					continue
+				}
+				reelCancel()
+				if acquired {
+					logger.Info("non-leader pod acquired leader lock — restarting to enable background loops")
+					metrics.LeaderStatus.Set(1)
+					os.Exit(0)
+				}
+			}
+		}
+	}()
+}
+
+// setupCellRouter creates the cell placement router (dynamic or static).
+func setupCellRouter(
+	cfg config.Config,
+	shutdownCtx context.Context,
+	bgWg *sync.WaitGroup,
+	logger *slog.Logger,
+) placement.Router {
+	if cfg.SingleCell {
+		logger.Warn("cell router: LOOPZERO_SINGLE_CELL=true — forced single-cell mode (rollback)")
+		return placement.NewPassthroughRouter(placement.CellConfig{CellID: placement.DefaultCellID})
+	}
+
+	if cfg.DynamicRouter {
+		k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, "platform-system")
+		if k8sErr == nil {
+			dynRouter := placement.NewDynamicRouter(k8sCellStore, 60*time.Second, logger)
+			cells, loadErr := k8sCellStore.LoadCells(context.Background())
+			if loadErr == nil && len(cells) > 0 {
+				bgWg.Add(1)
+				go func() {
+					defer bgWg.Done()
+					dynRouter.Start(shutdownCtx)
+				}()
+				logger.Info("cell router: DynamicRouter active", "cells_discovered", len(cells))
+				return dynRouter
+			}
+			logger.Info("cell router: no ClusterCredentials found, falling back to StaticRouter",
+				"load_err", loadErr, "cells_found", len(cells))
+		} else {
+			logger.Warn("cell router: K8sCellStore init failed, falling back to StaticRouter", "error", k8sErr)
+		}
+	}
+
+	staticRouter, err := placement.NewStaticRouter([]placement.CellConfig{{
+		CellID:        placement.DefaultCellID,
+		KubeConfig:    cfg.RuntimeKubeconfig,
+		KubeContext:   cfg.RuntimeKubeContext,
+		ArgocdURL:     cfg.ArgocdURL,
+		ArgocdToken:   cfg.ArgocdToken,
+		IngressDomain: cfg.BaseDomain,
+	}})
+	if err != nil {
+		logger.Error("failed to create cell router", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("cell router: StaticRouter with cell-default (single cell)")
+	return staticRouter
+}
+
+// DomainDeps holds domain-related components created during background setup.
+type DomainDeps struct {
+	DomainHandler *routes.DomainHandler
+}
+
+// setupDomains creates the domain handler, provisioner, and health checker.
+// The provisioner and health checker are started as background loops only when isLeader is true.
+func setupDomains(
+	stores *StoreDeps,
+	workflows *WorkflowDeps,
+	cfg config.Config,
+	logger *slog.Logger,
+) (*routes.DomainHandler, *services.DomainProvisioner, *services.DomainHealthChecker, *cfzone.Client) {
+	cnameTarget := "cname." + cfg.BaseDomain
+	domainValidator := domain.NewValidator(cfg.BaseDomain, nil)
+	dnsVerifier := &domain.DNSVerifier{}
+	domainHandler := routes.NewDomainHandler(stores.DomainStore, dnsVerifier, domainValidator, cnameTarget)
+
+	cfZoneClient := cfzone.NewClient(cfg.CFAccountID, cfg.CFAPIToken)
+	if cfg.CFZoneManagement && cfZoneClient != nil {
+		logger.Info("custom domains: CF Zone Management enabled (v2)")
+		domainHandler.WithCFZone(&cfZoneAdapter{client: cfZoneClient})
+	} else {
+		logger.Info("custom domains: TXT verification mode (v1)")
+	}
+
+	domainProvisioner := services.NewDomainProvisioner(
+		stores.DomainStore, stores.ReleaseStore, stores.BuildStore,
+		workflows.GitOpsPusher, stores.Locker, logger,
+		services.DomainProvisionerConfig{
+			Interval:    30 * time.Second,
+			BaseDomain:  cfg.BaseDomain,
+			RegistryURL: cfg.RegistryURL,
+		},
+	)
+	if cfg.CFZoneManagement && cfZoneClient != nil {
+		domainProvisioner.WithCFZone(&cfZoneStatusAdapter{client: cfZoneClient})
+	}
+
+	domainHealthChecker := services.NewDomainHealthChecker(
+		stores.DomainStore, logger, services.DomainHealthCheckerConfig{
+			CNAMETarget: cnameTarget,
+			GraceDays:   14,
+			StaleDays:   7,
+		},
+	)
+
+	return domainHandler, domainProvisioner, domainHealthChecker, cfZoneClient
+}
+
+// startLeaderLoops starts all background loops that run on the leader replica only.
+func startLeaderLoops(
+	shutdownCtx context.Context,
+	bgWg *sync.WaitGroup,
+	leaderConn *pgxpool.Conn,
+	dbAdapter *db.PgxAdapter,
+	stores *StoreDeps,
+	workflows *WorkflowDeps,
+	orchDeps *OrchestratorDeps,
+	k8sDeps *K8sDeps,
+	cellRouter placement.Router,
+	domainProvisioner *services.DomainProvisioner,
+	domainHealthChecker *services.DomainHealthChecker,
+	cfZoneClient *cfzone.Client,
+	cfg config.Config,
+	logger *slog.Logger,
+) {
+	if cfg.DisableLegacyLoops {
+		logger.Info("LOOPZERO_DISABLE_LEGACY_LOOPS=true — loops will not run here; controller binary owns them")
+		metrics.LeaderStatus.Set(0)
+		return
+	}
+
+	buildStore := stores.BuildStore
+	releaseStore := stores.ReleaseStore
+	envTargetStore := stores.EnvTargetStore
+	pgEventStore := stores.PgEventStore
+
+	// Build reconcile loop
+	reconcileLoop := services.NewBuildReconcileLoop(
+		buildStore,
+		workflows.WorkflowSubmitter,
+		orchDeps.Orchestrator,
+		stores.Locker,
+		stores.DomainStore,
+		k8sDeps.AppCRMgr,
+		pgEventStore,
+		logger,
+		services.BuildReconcileLoopConfig{
+			Interval:           cfg.ReconcileInterval,
+			RegistryURL:        cfg.RegistryURL,
+			BaseDomain:         cfg.BaseDomain,
+			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
+		},
+	)
+	if lister, ok := cellRouter.(services.CellLister); ok {
+		reconcileLoop.WithCellLister(lister)
+	}
+
+	// Build reaper
+	reaper := services.NewBuildReaper(
+		buildStore,
+		&services.PostgresStaleBuildChecker{DB: dbAdapter},
+		stores.Locker,
+		workflows.WorkflowSubmitter,
+		stores.EventStore,
+		logger,
+		services.BuildReaperConfig{
+			QueueTimeout:     cfg.BuildQueueTimeout,
+			RunningTimeout:   cfg.BuildRunningTimeout,
+			ReleasingTimeout: cfg.BuildReleasingTimeout,
+			CancelTimeout:    cfg.BuildCancelTimeout,
+			Interval:         cfg.BuildReaperInterval,
+		},
+		reconcileLoop,
+	)
+
+	// Release reaper
+	releaseReaper := services.NewReleaseReaper(
+		releaseStore,
+		&services.PostgresStaleReleaseChecker{DB: dbAdapter},
+		stores.Locker,
+		pgEventStore,
+		logger,
+		services.ReleaseReaperConfig{
+			ReadyTimeout:   cfg.ReleaseReadyTimeout,
+			PendingTimeout: cfg.ReleasePendingTimeout,
+			Interval:       cfg.ReleaseReaperInterval,
+		},
+	)
+
+	// Release convergence loop
+	releaseConvergenceLoop := services.NewReleaseConvergenceLoop(
+		releaseStore, envTargetStore, workflows.SyncClient, stores.Locker,
+		stores.EventStore, cfg.BaseDomain, logger,
+		services.ReleaseConvergenceLoopConfig{
+			Interval:      10 * time.Second,
+			SyncTimeout:   300 * time.Second,
+			MaxConcurrent: 10,
+		},
+	)
+
+	// Cleanup loops
+	idempotencyCleaner := services.NewIdempotencyCleaner(
+		&db.PostgresIdempotencyStore{DB: dbAdapter}, logger, 1*time.Hour,
+	)
+	eventPruner := sse.NewEventPruner(pgEventStore, logger, 24*time.Hour, 1*time.Hour)
+	cellMetrics := placement.NewCellMetricsCollector(stores.CellStore, logger, 60*time.Second)
+
+	// BuildGC
+	buildGC := services.NewBuildGC(
+		&db.PostgresBuildGCStore{DB: dbAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
+	)
+
+	// OrphanDetector
+	var orphanDetector *services.OrphanDetector
+	if lister, ok := cellRouter.(services.CellLister); ok {
+		if querier, ok2 := interface{}(stores.CellStore).(services.OrphanedTenantQuerier); ok2 {
+			orphanDetector = services.NewOrphanDetector(lister, querier, logger, 60*time.Second)
+		}
+	}
+
+	// Start core loops (13 slots: 6 core + cell metrics + heartbeat + 2 domain + BuildGC + OrphanDetector + KV/CF slot)
+	bgWg.Add(13)
+	go func() { defer bgWg.Done(); reconcileLoop.Start(shutdownCtx) }()
+	go func() { defer bgWg.Done(); reaper.Start(shutdownCtx) }()
+	go func() { defer bgWg.Done(); releaseReaper.Start(shutdownCtx) }()
+	go func() { defer bgWg.Done(); releaseConvergenceLoop.Start(shutdownCtx) }()
+	go func() { defer bgWg.Done(); idempotencyCleaner.Start(shutdownCtx) }()
+	go func() { defer bgWg.Done(); eventPruner.Start(shutdownCtx) }()
+	go func() { defer bgWg.Done(); cellMetrics.Start(shutdownCtx) }()
+	go func() { defer bgWg.Done(); domainProvisioner.Start(shutdownCtx) }()
+	go func() { defer bgWg.Done(); domainHealthChecker.Start(shutdownCtx) }()
+	go func() { defer bgWg.Done(); buildGC.Start(shutdownCtx) }()
+	if orphanDetector != nil {
+		go func() { defer bgWg.Done(); orphanDetector.Start(shutdownCtx) }()
+	} else {
+		bgWg.Done()
+	}
+
+	// KVReconciler (optional)
+	if workflows.KVClient != nil {
+		if kvC, ok := workflows.KVClient.(*cfkv.Client); ok {
+			if kvSource, ok2 := interface{}(buildStore).(services.KVRoutingSource); ok2 {
+				bgWg.Add(1)
+				kvReconciler := services.NewKVReconciler(kvC, kvSource, logger, 5*time.Minute)
+				go func() { defer bgWg.Done(); kvReconciler.Start(shutdownCtx) }()
+			}
+		}
+	}
+
+	// DomainCFReconciler (optional)
+	if cfg.CFZoneManagement && cfZoneClient != nil {
+		if cfStore, ok := interface{}(stores.DomainStore).(services.CFZoneReconcilerStore); ok {
+			bgWg.Add(1)
+			domainCFReconciler := services.NewDomainCFReconciler(cfStore, cfZoneClient, logger, 15*time.Minute)
+			go func() { defer bgWg.Done(); domainCFReconciler.Start(shutdownCtx) }()
+		}
+	}
+
+	// Leader heartbeat
+	go func() {
+		defer bgWg.Done()
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-shutdownCtx.Done():
+				return
+			case <-ticker.C:
+				var stillLeader bool
+				heartbeatCtx, heartbeatCancel := context.WithTimeout(context.Background(), 10*time.Second)
+				if err := leaderConn.QueryRow(heartbeatCtx,
+					"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&stillLeader); err != nil {
+					heartbeatCancel()
+					logger.Error("leader heartbeat: lock check failed — exiting", "error", err)
+					metrics.LeaderStatus.Set(0)
+					os.Exit(1)
+				}
+				heartbeatCancel()
+				if !stillLeader {
+					logger.Error("leader heartbeat: lock LOST — exiting for re-election")
+					metrics.LeaderStatus.Set(0)
+					os.Exit(1)
+				}
+				metrics.LeaderStatus.Set(1)
+			}
+		}
+	}()
+}
+
+// waitForBackgroundGoroutines waits up to 30s for background goroutines to stop.
+func waitForBackgroundGoroutines(bgWg *sync.WaitGroup, logger *slog.Logger) {
+	waitDone := make(chan struct{})
+	go func() {
+		bgWg.Wait()
+		close(waitDone)
+	}()
+	select {
+	case <-waitDone:
+		logger.Info("all background goroutines stopped")
+	case <-time.After(30 * time.Second):
+		logger.Warn("background goroutines did not stop within 30s, proceeding with shutdown")
+	}
+}

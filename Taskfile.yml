@@ -1333,6 +1333,30 @@ tasks:
     cmds:
       - cd infra/tests && go test ./e2e/... -v -run "Chaos" -timeout 15m
 
+  test:coverage:
+    desc: Run all tests with coverage reports (HTML per component)
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: 'setup-envtest use -p path 2>/dev/null || echo "/tmp"'
+    cmds:
+      - echo "Generating coverage reports..."
+      - cd pkg && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd api && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd operators && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd cli && npm test -- --coverage 2>/dev/null || true
+      - echo "Coverage reports generated:"
+      - echo "  pkg/coverage.html"
+      - echo "  api/coverage.html"
+      - echo "  operators/coverage.html"
+      - echo "  cli/coverage/"
+
+  test:coverage:summary:
+    desc: Show per-package coverage summary (no HTML)
+    cmds:
+      - echo "=== pkg/ ===" && cd pkg && go test ./... -short -coverprofile=/dev/stderr 2>&1 | grep "^ok" || true
+      - echo "=== api/ ===" && cd api && go test ./... -short -cover 2>&1 | grep "^ok" || true
+      - echo "=== operators/ ===" && cd operators && go test ./... -short -cover 2>&1 | grep "^ok" || true
+
   # ─────────────────────────────────────────────
   # k6 Load Testing (Grafana k6, industry standard)
   # Replaces the previous shell-script smoke runners.

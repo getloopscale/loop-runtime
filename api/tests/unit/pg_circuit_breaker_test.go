@@ -154,7 +154,7 @@ func TestCircuitBreaker_HalfOpen_AllowsRecoveryProbe(t *testing.T) {
 		_ = cb.TriggerSync(context.Background(), "my-app")
 	}
 
-	// Wait past the retry interval
+	// intentional: testing real-time behavior — wait past the 1ms retry interval
 	time.Sleep(5 * time.Millisecond)
 
 	// Reset inner: succeeds now
@@ -214,9 +214,9 @@ func TestCircuitBreaker_OpenToClosed_AfterThresholdSuccesses(t *testing.T) {
 	inner.triggerErr = nil
 
 	// Act: 2 successful recovery probes (with waits to pass retry interval)
-	time.Sleep(5 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond) // intentional: testing real-time behavior — wait past 1ms retry interval
 	_ = cb.TriggerSync(context.Background(), "my-app")
-	time.Sleep(5 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond) // intentional: testing real-time behavior — wait past 1ms retry interval
 	_ = cb.TriggerSync(context.Background(), "my-app")
 
 	// Assert: circuit should be closed — next call succeeds without delay

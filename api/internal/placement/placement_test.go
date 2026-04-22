@@ -410,7 +410,7 @@ func TestPlacement_ConcurrentCreation_NoTOCTOU(t *testing.T) {
 		counts: map[string]int{cellA: 0, cellB: 0},
 		// 100µs jitter between the snapshot read and the caller's write
 		// is enough to let goroutines interleave deterministically.
-		readHook: func() { time.Sleep(100 * time.Microsecond) },
+		readHook: func() { time.Sleep(100 * time.Microsecond) }, // intentional: jitter for race condition testing
 	}
 
 	// A mutex-backed serializer — the simplest correct Serializer. In
@@ -494,7 +494,7 @@ func TestPlacement_ConcurrentCreation_WithoutSerializerHotSpots(t *testing.T) {
 	router := newMultiCellRouter(cellA, cellB)
 	querier := &raceQuerier{
 		counts:   map[string]int{cellA: 0, cellB: 0},
-		readHook: func() { time.Sleep(100 * time.Microsecond) },
+		readHook: func() { time.Sleep(100 * time.Microsecond) }, // intentional: jitter for race condition testing
 	}
 	engine := NewRoundRobinEngine(router, querier, 500) // no serializer
 

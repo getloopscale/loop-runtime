@@ -103,27 +103,38 @@ func TestBUG04_SyncRetriggersCleanedUpOnActivation(t *testing.T) {
 	)
 
 	// Run loop briefly to trigger sync retrigger
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	go loop.Start(ctx)
-	time.Sleep(150*time.Millisecond)
 
-	// Verify retrigger happened (sync was called)
-	if syncClient.getTriggerSyncCalls() == 0 {
-		t.Fatal("expected sync retrigger to have happened")
+	// Poll until sync retrigger happens instead of sleeping.
+	deadline := time.After(5 * time.Second)
+	for syncClient.getTriggerSyncCalls() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for sync retrigger to happen")
+		default:
+			time.Sleep(5 * time.Millisecond) // intentional: tight poll for convergence loop tick
+		}
 	}
+	cancel()
 
 	// Now make ArgoCD healthy and run another tick to activate
 	syncClient.setStatus(true, true)
 
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel2()
 	go loop.Start(ctx2)
-	time.Sleep(150*time.Millisecond)
 
-	// Assert: release should be ACTIVE
-	if releaseStore.getStatus("rel-bug04-a") != "ACTIVE" {
-		t.Errorf("expected release ACTIVE, got %q", releaseStore.getStatus("rel-bug04-a"))
+	// Poll until release becomes ACTIVE.
+	deadline2 := time.After(5 * time.Second)
+	for releaseStore.getStatus("rel-bug04-a") != "ACTIVE" {
+		select {
+		case <-deadline2:
+			t.Fatalf("timeout waiting for release ACTIVE, got %q", releaseStore.getStatus("rel-bug04-a"))
+		default:
+			time.Sleep(5 * time.Millisecond) // intentional: tight poll for convergence loop tick
+		}
 	}
 
 	// The syncRetriggers cleanup is internal (sync.Map) and not directly observable
@@ -154,12 +165,21 @@ func TestBUG04_SyncRetriggersCleanedUpOnFailure(t *testing.T) {
 		},
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	go loop.Start(ctx)
-	time.Sleep(150*time.Millisecond)
 
-	// Assert: release should be SYNC_FAILED (timed out)
+	// Poll until release transitions to SYNC_FAILED.
+	deadline := time.After(5 * time.Second)
+	for releaseStore.getStatus("rel-bug04-b") != string(statemachine.ReleaseSyncFailed) {
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for SYNC_FAILED, got %q", releaseStore.getStatus("rel-bug04-b"))
+		default:
+			time.Sleep(5 * time.Millisecond) // intentional: tight poll for convergence loop tick
+		}
+	}
+
 	if releaseStore.getStatus("rel-bug04-b") != string(statemachine.ReleaseSyncFailed) {
 		t.Errorf("expected release SYNC_FAILED, got %q", releaseStore.getStatus("rel-bug04-b"))
 	}

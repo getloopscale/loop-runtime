@@ -384,7 +384,7 @@ func TestStreamJournalExpiredFalsePositiveFixed(t *testing.T) {
 	srv := serveWithChi(handler.ServeHTTP)
 	defer srv.Close()
 
-	// Inject a deploy.completed event after a delay
+	// intentional: inject event after short delay to simulate async event arrival during SSE stream
 	go func() {
 		time.Sleep(80 * time.Millisecond)
 		_, _ = eventStore.Append(context.Background(), "build-1", "deploy.completed", json.RawMessage(`{"status":"success"}`))
@@ -524,12 +524,15 @@ func TestStreamClientDisconnectNoLeak(t *testing.T) {
 	cancel()
 	_ = resp.Body.Close()
 
-	// Give the handler time to clean up
-	time.Sleep(100 * time.Millisecond)
-
-	// Assert - active streams should be back to 0
-	if active := handler.ActiveStreams(); active != 0 {
-		t.Errorf("expected 0 active streams after disconnect, got %d", active)
+	// Poll until the handler cleans up (active streams return to 0).
+	deadline := time.After(5 * time.Second)
+	for handler.ActiveStreams() != 0 {
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for active streams to drop to 0, got %d", handler.ActiveStreams())
+		default:
+			time.Sleep(5 * time.Millisecond) // intentional: tight poll for cleanup detection
+		}
 	}
 }
 
@@ -647,7 +650,7 @@ func TestStreamStaysOpenAfterBuildSucceededUntilDeployEvent(t *testing.T) {
 	srv := serveWithChi(handler.ServeHTTP)
 	defer srv.Close()
 
-	// Simulate Phase 2 writing deploy.completed after a short delay
+	// intentional: simulate Phase 2 writing deploy.completed after a short delay during SSE stream
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		_, _ = eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-5678","status":"success"}`))
@@ -908,7 +911,7 @@ func TestStreamLastEventIDReplayWithBuildSucceededButNoDeployEvent(t *testing.T)
 	srv := serveWithChi(handler.ServeHTTP)
 	defer srv.Close()
 
-	// Simulate Phase 2 writing deploy.completed after a delay
+	// intentional: simulate Phase 2 writing deploy.completed after a short delay during SSE stream
 	go func() {
 		time.Sleep(80 * time.Millisecond)
 		_, _ = eventStore.Append(ctx, "build-1", "deploy.completed", json.RawMessage(`{"deploy_id":"d-9999","status":"success"}`))
@@ -1070,8 +1073,16 @@ func TestStreamRejectsWhenMaxConcurrentStreamsReached(t *testing.T) {
 		t.Fatalf("first stream failed: %v", err)
 	}
 
-	// Wait for the stream to be established
-	time.Sleep(50 * time.Millisecond)
+	// Poll until the stream is established (active streams = 1).
+	deadline := time.After(5 * time.Second)
+	for handler.ActiveStreams() < 1 {
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for first stream to be established")
+		default:
+			time.Sleep(1 * time.Millisecond) // intentional: tight poll for stream establishment
+		}
+	}
 
 	// Act - try to open second stream (should be rejected)
 	resp2, err := http.Get(srv.URL + "/api/v1/builds/build-1/stream")
@@ -1093,7 +1104,17 @@ func TestStreamRejectsWhenMaxConcurrentStreamsReached(t *testing.T) {
 	// Cleanup first stream
 	cancel1()
 	_ = resp1.Body.Close()
-	time.Sleep(50 * time.Millisecond)
+
+	// Poll until the first stream is cleaned up.
+	deadline2 := time.After(5 * time.Second)
+	for handler.ActiveStreams() != 0 {
+		select {
+		case <-deadline2:
+			t.Fatalf("timeout waiting for first stream cleanup, active=%d", handler.ActiveStreams())
+		default:
+			time.Sleep(1 * time.Millisecond) // intentional: tight poll for cleanup detection
+		}
+	}
 
 	// After cleanup, a new stream should succeed
 	resp3, err := http.Get(srv.URL + "/api/v1/builds/build-1/stream")
@@ -1135,8 +1156,16 @@ func TestStreamActiveStreamCountTracking(t *testing.T) {
 		t.Fatalf("GET failed: %v", err)
 	}
 
-	// Wait for stream to be established
-	time.Sleep(50 * time.Millisecond)
+	// Poll until stream is established.
+	deadline := time.After(5 * time.Second)
+	for handler.ActiveStreams() < 1 {
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for stream to be established")
+		default:
+			time.Sleep(1 * time.Millisecond) // intentional: tight poll for stream establishment
+		}
+	}
 
 	if handler.ActiveStreams() != 1 {
 		t.Errorf("expected 1 active stream, got %d", handler.ActiveStreams())
@@ -1145,9 +1174,15 @@ func TestStreamActiveStreamCountTracking(t *testing.T) {
 	// Disconnect
 	cancel()
 	_ = resp.Body.Close()
-	time.Sleep(100 * time.Millisecond)
 
-	if handler.ActiveStreams() != 0 {
-		t.Errorf("expected 0 active streams after disconnect, got %d", handler.ActiveStreams())
+	// Poll until cleanup completes.
+	deadline2 := time.After(5 * time.Second)
+	for handler.ActiveStreams() != 0 {
+		select {
+		case <-deadline2:
+			t.Fatalf("timeout waiting for active streams to drop to 0, got %d", handler.ActiveStreams())
+		default:
+			time.Sleep(1 * time.Millisecond) // intentional: tight poll for cleanup detection
+		}
 	}
 }
