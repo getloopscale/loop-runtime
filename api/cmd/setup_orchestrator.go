@@ -20,8 +20,10 @@ import (
 type OrchestratorDeps struct {
 	Orchestrator      *services.BuildOrchestrator
 	BuildOrchestrator routes.BuildOrchestratorService
-	LogsHandler       *routes.LogsHandler
+	LogsHandler         *routes.LogsHandler
+	LogStreamHandler    *routes.LogStreamHandler
 	RollbackHandler   *routes.RollbackHandler
+	PromoteHandler    *routes.PromoteHandler
 	StatusHandler     *routes.StatusHandler
 	BuildListHandler  *routes.BuildListHandler
 	ProjectDeleter    routes.ProjectDeleter
@@ -70,6 +72,9 @@ func setupOrchestrator(
 	lokiClient := loki.NewClient(cfg.LokiURL, lokiHTTPClient, logger)
 	logBuildStore := &adapters.LogBuildStoreAdapter{Store: stores.BuildStore}
 	logsHandler := routes.NewLogsHandler(logBuildStore, lokiClient)
+	logStreamHandler := routes.NewLogStreamHandler(logBuildStore, lokiClient, routes.LogStreamHandlerOpts{
+		Logger: logger,
+	})
 
 	// Rollback orchestrator — coordinates release rollback with lock + state machine
 	rollbackOrch := services.NewRollbackOrchestrator(services.RollbackOrchestratorDeps{
@@ -84,6 +89,20 @@ func setupOrchestrator(
 	rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 	projectStore := &db.PostgresProjectStore{DB: dbAdapter}
 	rollbackHandler := routes.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain)
+
+	// Promotion orchestrator — coordinates release promotion across environments
+	promotionOrch := services.NewPromotionOrchestrator(services.PromotionOrchestratorDeps{
+		Releases:   stores.ReleaseStore,
+		EnvTargets: stores.EnvTargetStore,
+		GitReader:  workflows.GitOpsPusher,
+		GitPusher:  workflows.GitOpsPusher,
+		Sync:       workflows.SyncClient,
+		Locker:     stores.Locker,
+		BaseDomain: cfg.BaseDomain,
+		Logger:     logger,
+	})
+	promoteService := &adapters.PromoteServiceAdapter{Orchestrator: promotionOrch}
+	promoteHandler := routes.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
 
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
 	statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: stores.BuildStore}
@@ -116,7 +135,9 @@ func setupOrchestrator(
 		Orchestrator:        orch,
 		BuildOrchestrator:   buildOrchestrator,
 		LogsHandler:         logsHandler,
+		LogStreamHandler:    logStreamHandler,
 		RollbackHandler:     rollbackHandler,
+		PromoteHandler:      promoteHandler,
 		StatusHandler:       statusHandler,
 		BuildListHandler:    buildListHandler,
 		ProjectDeleter:      projectDeleter,

@@ -163,6 +163,18 @@ spec:
             description: "MinIO has been unreachable for more than 2 minutes. Build cache unavailable. Source uploads will fail."
             runbook: "Check MinIO pod status. Verify PVC. Builds will run without cache (slower but not blocked)."
 
+        # WS.1: Service auth secret approaching 90-day rotation deadline.
+        # Fires at 80 days (6912000s) to give operators 10 days to rotate.
+        - alert: LoopZeroServiceAuthSecretExpiring
+          expr: loopzero_service_auth_secret_age_seconds > 6912000
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Service auth secret approaching 90-day rotation deadline"
+            description: "Service auth secret has been in use for {{ $value | humanizeDuration }}. Rotate within 10 days."
+            runbook: "docs/runbooks/service-auth-rotation.md"
+
         # MEET-020 F-01: Build stuck in RUNNING beyond reaper timeout
         - alert: LoopZeroBuildStuckRunning
           expr: (time() - loopzero_build_started_timestamp) > 2100 and loopzero_build_status == 1

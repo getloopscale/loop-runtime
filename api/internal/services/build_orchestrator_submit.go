@@ -86,13 +86,22 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		// manifests and compute image references when the workflow completes.
 		var appsSpec []db.BuildAppSpec
 		for _, a := range req.Apps {
-			appsSpec = append(appsSpec, db.BuildAppSpec{
+			spec := db.BuildAppSpec{
 				Name:      a.Name,
 				Type:      a.Type,
 				Rendering: a.Rendering,
 				Port:      a.Port,
 				Secrets:   a.Secrets,
-			})
+				Replicas:  a.Replicas,
+			}
+			if a.Autoscaling != nil {
+				spec.Autoscaling = &db.BuildAppAutoscaling{
+					MinReplicas: a.Autoscaling.MinReplicas,
+					MaxReplicas: a.Autoscaling.MaxReplicas,
+					TargetCPU:   a.Autoscaling.TargetCPU,
+				}
+			}
+			appsSpec = append(appsSpec, spec)
 		}
 		if err := o.buildStore.SetAppsSpec(ctx, tx, build.ID, appsSpec); err != nil {
 			return fmt.Errorf("submit build: set apps spec: %w", err)

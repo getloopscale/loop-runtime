@@ -99,7 +99,9 @@ func buildServerConfig(
 	if orchDeps != nil {
 		sc.ArgoCallbackHandler = orchDeps.ArgoCallbackHandler
 		sc.LogsHandler = orchDeps.LogsHandler
+		sc.LogStreamHandler = orchDeps.LogStreamHandler
 		sc.RollbackHandler = orchDeps.RollbackHandler
+		sc.PromoteHandler = orchDeps.PromoteHandler
 		sc.StatusHandler = orchDeps.StatusHandler
 		sc.BuildListHandler = orchDeps.BuildListHandler
 		sc.ProjectDeleter = orchDeps.ProjectDeleter

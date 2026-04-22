@@ -467,7 +467,7 @@ type fakeSecretStore2 struct{}
 func (f *fakeSecretStore2) ListNames(_ context.Context, _, _, _ string) ([]SecretMetadata, error) {
 	return nil, nil
 }
-func (f *fakeSecretStore2) Set(_ context.Context, _, _, _, _ string, _ []byte) (bool, error) {
+func (f *fakeSecretStore2) Set(_ context.Context, _, _, _, _, _ string, _ []byte) (bool, error) {
 	return true, nil
 }
 func (f *fakeSecretStore2) Delete(_ context.Context, _, _, _, _, _ string) (bool, error) {

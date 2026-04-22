@@ -26,6 +26,8 @@ import { registerTeamCommands } from './register/team';
 import { registerEnvCommands } from './register/env';
 import { registerDomainCommands } from './register/domain';
 import { registerInfraCommands } from './register/infra';
+import { registerPreviewCommands } from './register/preview';
+import { registerScaleCommands } from './register/scale';
 import type { CommandDeps } from './register/types';
 
 // --- Cleanup registry for graceful signal handling (B-09) ---
@@ -152,6 +154,8 @@ export function createProgram(): Command {
   registerEnvCommands(deps);
   registerDomainCommands(deps);
   registerInfraCommands(deps);
+  registerPreviewCommands(deps);
+  registerScaleCommands(deps);
 
   // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)
   program.argument('[args...]');

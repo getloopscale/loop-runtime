@@ -114,6 +114,63 @@ describe('normalizeApp', () => {
       expect(unit.rendering).toBe('static');
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Scaling fields
+  // ---------------------------------------------------------------------------
+
+  it('should default replicas to 1 when not specified', () => {
+    const unit = normalizeApp('api', {
+      path: '.', framework: 'express', port: 3000,
+    });
+    expect(unit.replicas).toBe(1);
+    expect(unit.autoscaling).toBeNull();
+  });
+
+  it('should preserve explicit replicas', () => {
+    const unit = normalizeApp('api', {
+      path: '.', framework: 'express', port: 3000, replicas: 3,
+    });
+    expect(unit.replicas).toBe(3);
+  });
+
+  it('should default replicas to 1 when invalid', () => {
+    const unit = normalizeApp('api', {
+      path: '.', framework: 'express', port: 3000, replicas: 0,
+    });
+    expect(unit.replicas).toBe(1);
+  });
+
+  it('should normalize autoscaling with defaults', () => {
+    const unit = normalizeApp('api', {
+      path: '.', framework: 'express', port: 3000,
+      autoscaling: { min: 2 },
+    });
+    expect(unit.autoscaling).toEqual({
+      min: 2,
+      max: 3,
+      targetCPU: 80,
+    });
+  });
+
+  it('should normalize full autoscaling config', () => {
+    const unit = normalizeApp('api', {
+      path: '.', framework: 'express', port: 3000,
+      autoscaling: { min: 2, max: 10, targetCPU: 75 },
+    });
+    expect(unit.autoscaling).toEqual({
+      min: 2,
+      max: 10,
+      targetCPU: 75,
+    });
+  });
+
+  it('should set autoscaling to null when not specified', () => {
+    const unit = normalizeApp('api', {
+      path: '.', framework: 'express', port: 3000,
+    });
+    expect(unit.autoscaling).toBeNull();
+  });
 });
 
 describe('normalizeApps', () => {

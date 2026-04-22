@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import type { LoopZeroYamlApp, BuildStrategy } from './loopzero-yaml';
+import type { LoopZeroYamlApp, LoopZeroYamlAutoscaling, BuildStrategy } from './loopzero-yaml';
 
 /**
  * AppUnit is a fully resolved app — all fields required, ready for build plan generation.
@@ -9,6 +9,12 @@ import type { LoopZeroYamlApp, BuildStrategy } from './loopzero-yaml';
  * After AppUnit, everything is deterministic.
  */
 export type RenderMode = 'static' | 'server';
+
+export interface AppAutoscaling {
+  min: number;       // default: 1
+  max: number;       // default: 3
+  targetCPU: number; // default: 80
+}
 
 export interface AppUnit {
   name: string;
@@ -21,6 +27,8 @@ export interface AppUnit {
   rendering: RenderMode;              // v2: "static" (CDN) or "server" (container). MEET-009.
   env: Record<string, string>;
   secrets: string[];
+  replicas: number;                   // desired replica count (default: 1)
+  autoscaling: AppAutoscaling | null; // HPA configuration (null = no autoscaling)
 }
 
 export const FRONTEND_FRAMEWORKS = ['nextjs', 'next', 'vite', 'remix', 'react', 'vue', 'svelte', 'astro', 'angular'];
@@ -79,6 +87,19 @@ export function normalizeApp(name: string, raw: LoopZeroYamlApp): AppUnit {
     rendering = 'server'; // Always server — container pod
   }
 
+  // Resolve replicas (default: 1)
+  const replicas = raw.replicas !== undefined && raw.replicas >= 1 ? raw.replicas : 1;
+
+  // Resolve autoscaling
+  let autoscaling: AppAutoscaling | null = null;
+  if (raw.autoscaling) {
+    autoscaling = {
+      min: raw.autoscaling.min ?? 1,
+      max: raw.autoscaling.max ?? 3,
+      targetCPU: raw.autoscaling.targetCPU ?? 80,
+    };
+  }
+
   return {
     name,
     type,
@@ -90,6 +111,8 @@ export function normalizeApp(name: string, raw: LoopZeroYamlApp): AppUnit {
     rendering,
     env: raw.env ?? {},
     secrets: raw.secrets ?? [],
+    replicas,
+    autoscaling,
   };
 }
 

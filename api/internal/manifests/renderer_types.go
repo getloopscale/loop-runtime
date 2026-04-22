@@ -242,6 +242,43 @@ type certIssuerRef struct {
 	Kind string `json:"kind"`
 }
 
+// HorizontalPodAutoscaler types
+
+type k8sHPA struct {
+	APIVersion string      `json:"apiVersion"`
+	Kind       string      `json:"kind"`
+	Metadata   k8sMetadata `json:"metadata"`
+	Spec       k8sHPASpec  `json:"spec"`
+}
+
+type k8sHPASpec struct {
+	ScaleTargetRef k8sScaleTargetRef `json:"scaleTargetRef"`
+	MinReplicas    int               `json:"minReplicas"`
+	MaxReplicas    int               `json:"maxReplicas"`
+	Metrics        []k8sMetricSpec   `json:"metrics"`
+}
+
+type k8sScaleTargetRef struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+}
+
+type k8sMetricSpec struct {
+	Type     string          `json:"type"`
+	Resource k8sMetricTarget `json:"resource"`
+}
+
+type k8sMetricTarget struct {
+	Name   string              `json:"name"`
+	Target k8sMetricTargetSpec `json:"target"`
+}
+
+type k8sMetricTargetSpec struct {
+	Type               string `json:"type"`
+	AverageUtilization int    `json:"averageUtilization"`
+}
+
 // --- Traefik Middleware types (for static frontend) ---
 
 type traefikMiddleware struct {

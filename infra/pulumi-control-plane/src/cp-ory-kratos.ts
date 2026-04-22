@@ -116,6 +116,19 @@ export function installOryKratos(
                 error: { ui_url: `https://cloud.${config.domain}/error` },
                 logout: { after: { default_browser_return_url: `https://cloud.${config.domain}/login` } },
               },
+              // SB-1: TOTP MFA + recovery codes (lookup_secret).
+              // Enabled for all users. Enforcement via selfservice.flows.settings.
+              methods: {
+                totp: {
+                  enabled: true,
+                  config: {
+                    issuer: "LoopZero Platform",
+                  },
+                },
+                lookup_secret: {
+                  enabled: true, // Recovery codes as MFA backup
+                },
+              },
               // Social login providers — only included when secrets are configured.
               ...(config.githubOAuthClientId || config.googleOAuthClientId
                 ? {

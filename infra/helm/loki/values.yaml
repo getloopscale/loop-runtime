@@ -3,8 +3,10 @@
 # Purpose: Stores build output from Argo Workflows pods, queried by loopzero API
 # Storage: MinIO (S3-compatible) — bucket loopzero-logs
 #
-# PRODUCTION: Override S3 credentials via secretKeyRef or Pulumi config.
-# Default values are for local development only.
+# LOCAL DEVELOPMENT (k3d) ONLY.
+# Production: Pulumi (infra/pulumi/src/components/build-loki.ts) overrides S3
+# credentials with config.spacesAccessKeyId / config.spacesSecretAccessKey from
+# `pulumi config set --secret`. These dev defaults are never used in production.
 loki:
   auth_enabled: false
   commonConfig:

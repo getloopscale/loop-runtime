@@ -230,6 +230,10 @@ func registerProtectedRoutes(
 	if cfg.LogsHandler != nil {
 		r.Get("/api/v1/builds/{id}/logs", cfg.LogsHandler.Get)
 	}
+	if cfg.LogStreamHandler != nil {
+		r.Get("/api/v1/builds/{id}/logs/stream", cfg.LogStreamHandler.StreamBuildLogs)
+		r.Get("/api/v1/projects/{name}/logs/stream", cfg.LogStreamHandler.StreamRuntimeLogs)
+	}
 	if cfg.StatusHandler != nil {
 		r.Get("/api/v1/projects/{name}/status", cfg.StatusHandler.Get)
 	}
@@ -238,6 +242,9 @@ func registerProtectedRoutes(
 	}
 	if cfg.RollbackHandler != nil {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
+	}
+	if cfg.PromoteHandler != nil {
+		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/promote", cfg.PromoteHandler.Create)
 	}
 
 	// Team routes

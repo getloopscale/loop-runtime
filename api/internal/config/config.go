@@ -197,6 +197,14 @@ type Config struct {
 	// MEET-2026-04-18-053: multi-cell-default rollback flag.
 	// Env: LOOPZERO_SINGLE_CELL
 	SingleCell bool
+
+	// ServiceAuthSecretCreatedAt is the ISO 8601 timestamp of when the
+	// current service auth secret was created. Used to compute the age
+	// metric (loopzero_service_auth_secret_age_seconds). If unset, the
+	// process start time is used as a fallback (less accurate but still
+	// triggers rotation alerts on long-running processes).
+	// Env: LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT
+	ServiceAuthSecretCreatedAt time.Time
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -336,6 +344,9 @@ func Load() Config {
 		UsePGClaims:   os.Getenv("LOOPZERO_USE_PG_CLAIMS") == "true",
 		DynamicRouter: os.Getenv("LOOPZERO_DYNAMIC_ROUTER") != "false",
 		SingleCell:    os.Getenv("LOOPZERO_SINGLE_CELL") == "true",
+
+		// WS.1: Service auth secret rotation monitoring.
+		ServiceAuthSecretCreatedAt: envTime("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT"),
 	}
 }
 
@@ -458,4 +469,16 @@ func envDuration(key string, defaultValue time.Duration) time.Duration {
 		}
 	}
 	return defaultValue
+}
+
+// envTime parses an environment variable as an RFC 3339 timestamp.
+// Returns the zero value if the variable is unset or unparseable.
+func envTime(key string) time.Time {
+	if v := os.Getenv(key); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			return t
+		}
+		slog.Warn("invalid timestamp in environment variable — ignoring", "key", key, "value", v)
+	}
+	return time.Time{}
 }

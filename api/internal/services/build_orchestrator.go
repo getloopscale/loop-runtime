@@ -49,17 +49,26 @@ type WorkflowSpec struct {
 
 // AppSpec describes a single app from loopzero.yaml as received from the CLI.
 // This is the raw input -- use NormalizeApp() to resolve into a fully populated AppUnit.
+// AppAutoscalingSpec holds HPA configuration from loopzero.yaml.
+type AppAutoscalingSpec struct {
+	MinReplicas int `json:"min,omitempty"`
+	MaxReplicas int `json:"max,omitempty"`
+	TargetCPU   int `json:"target_cpu,omitempty"`
+}
+
 type AppSpec struct {
-	Name       string            `json:"name"`
-	Type       string            `json:"type"`                        // "server", "worker", "frontend"
-	Port       int               `json:"port"`
-	Path       string            `json:"path,omitempty"`
-	Framework  string            `json:"framework,omitempty"`          // "nextjs", "express", "gin", "fastapi", "custom", etc.
-	Build      string            `json:"build,omitempty"`              // v2: "dockerfile", "buildpack", "custom"
-	Dockerfile string            `json:"dockerfile,omitempty"`         // v2: Dockerfile path relative to app path
-	Rendering  string            `json:"rendering,omitempty"`          // v2: "static" or "server" (MEET-009)
-	Env        map[string]string `json:"env,omitempty"`                // v2: build-time environment variables
-	Secrets    []string          `json:"secrets,omitempty"`            // declared secret names from loopzero.yaml
+	Name        string              `json:"name"`
+	Type        string              `json:"type"`                        // "server", "worker", "frontend"
+	Port        int                 `json:"port"`
+	Path        string              `json:"path,omitempty"`
+	Framework   string              `json:"framework,omitempty"`          // "nextjs", "express", "gin", "fastapi", "custom", etc.
+	Build       string              `json:"build,omitempty"`              // v2: "dockerfile", "buildpack", "custom"
+	Dockerfile  string              `json:"dockerfile,omitempty"`         // v2: Dockerfile path relative to app path
+	Rendering   string              `json:"rendering,omitempty"`          // v2: "static" or "server" (MEET-009)
+	Env         map[string]string   `json:"env,omitempty"`                // v2: build-time environment variables
+	Secrets     []string            `json:"secrets,omitempty"`            // declared secret names from loopzero.yaml
+	Replicas    int                 `json:"replicas,omitempty"`           // desired replica count (default: 1)
+	Autoscaling *AppAutoscalingSpec `json:"autoscaling,omitempty"`        // HPA configuration
 }
 
 // GitOpsPusher abstracts the commit-and-push of manifests to the tenant GitOps

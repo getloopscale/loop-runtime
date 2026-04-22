@@ -144,3 +144,14 @@ spec:
             summary: "Zero cells discovered by DynamicRouter"
             description: "No ClusterCredential CRDs found or all disconnected. All deploy, rollback, and status operations will fail."
             runbook: "1) Check ClusterCredential CRs: kubectl get clustercredentials -n platform-system. 2) Verify status.connected=true. 3) If missing, check Pulumi bootstrap. 4) Rollback: set LOOPZERO_SINGLE_CELL=true on loopzero-api deployment."
+
+        # Cloudflare Tunnel is the sole ingress path for all user traffic.
+        # If disconnected, every deployed app and the platform API become unreachable.
+        - alert: LoopZeroCFTunnelDisconnected
+          expr: absent(cloudflared_tunnel_connections{status="connected"}) or cloudflared_tunnel_connections{status="connected"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Cloudflare Tunnel disconnected — all user traffic blocked"
+            runbook: "docs/runbooks/alerts/LoopZeroCFTunnelDisconnected.md"

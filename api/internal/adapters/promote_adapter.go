@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package adapters
+
+import (
+	"context"
+
+	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/services"
+)
+
+// PromoteServiceAdapter bridges the promotion orchestrator to the route handler interface.
+// The handler uses routes.PromoteInput/Output while the orchestrator uses services.PromotionRequest/Result.
+type PromoteServiceAdapter struct {
+	Orchestrator *services.PromotionOrchestrator
+}
+
+// Promote converts route-layer types to service-layer types and delegates to the orchestrator.
+func (a *PromoteServiceAdapter) Promote(ctx context.Context, req routes.PromoteInput) (*routes.PromoteOutput, error) {
+	result, err := a.Orchestrator.Promote(ctx, services.PromotionRequest{
+		TenantID:      req.TenantID,
+		ProjectID:     req.ProjectID,
+		ProjectName:   req.ProjectName,
+		FromEnv:       req.FromEnv,
+		ToEnv:         req.ToEnv,
+		CorrelationID: req.CorrelationID,
+		UserID:        req.UserID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &routes.PromoteOutput{
+		PromotionID:     result.PromotionID,
+		SourceReleaseID: result.SourceRelease.ID,
+		NewReleaseID:    result.NewRelease.ID,
+		FromEnv:         result.FromEnv,
+		ToEnv:           result.ToEnv,
+		URL:             result.URL,
+	}, nil
+}

@@ -37,6 +37,14 @@ type CustomDomainInput struct {
 	CFManaged bool   // v2: true if domain uses CF Zone (TLS at CF edge, no cert-manager Certificate needed)
 }
 
+// AutoscalingConfig defines horizontal pod autoscaler settings.
+// When present on an app, an HPA resource is generated alongside the Deployment.
+type AutoscalingConfig struct {
+	MinReplicas int // Minimum replicas (default: 1)
+	MaxReplicas int // Maximum replicas (default: 3)
+	TargetCPU   int // Target CPU utilization percentage (default: 80)
+}
+
 // AppManifestInput contains everything needed to generate manifests for a single app.
 type AppManifestInput struct {
 	Name      string            // e.g., "api", "worker", "dashboard"
@@ -47,6 +55,11 @@ type AppManifestInput struct {
 	S3Prefix  string            // S3 path prefix for static assets (static apps only)
 	Secrets   []string          // Secret names from loopzero.yaml (injected via envFrom)
 	Env       map[string]string // Environment variables
+	Replicas  int               // Desired replica count (default: 1 when 0)
+
+	// Autoscaling configures HPA generation. When non-nil, an HPA is rendered
+	// alongside the Deployment and the Deployment replicas are set to MinReplicas.
+	Autoscaling *AutoscalingConfig
 
 	// CustomDomains are active custom domains for this app (MEET-2026-04-05-033).
 	// Each generates an additional IngressRoute + Certificate alongside the auto-generated one.

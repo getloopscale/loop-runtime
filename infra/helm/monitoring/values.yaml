@@ -1,4 +1,6 @@
-# kube-prometheus-stack values for dev local
+# kube-prometheus-stack values for LOCAL DEVELOPMENT (k3d) only.
+# Production overrides are applied by Pulumi (infra/pulumi/src/components/mgmt-observability.ts,
+# mgmt-grafana.ts). Credentials here are dev-only defaults — never used in production.
 prometheus:
   prometheusSpec:
     retention: 15d
@@ -50,6 +52,8 @@ prometheus:
 grafana:
   securityContext:
     runAsNonRoot: true
+  # LOCAL DEV ONLY — Pulumi production does not set adminPassword; Grafana chart
+  # auto-generates a random one stored in K8s Secret "grafana" (key admin-password).
   adminPassword: loopzero-dev-password
   additionalDataSources:
     - name: Loki

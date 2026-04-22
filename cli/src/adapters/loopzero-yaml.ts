@@ -11,6 +11,12 @@ import YAML from 'js-yaml';
 //   - "custom": User-provided build script (framework must be "custom")
 export type BuildStrategy = 'dockerfile' | 'buildpack' | 'custom';
 
+export interface LoopZeroYamlAutoscaling {
+  min?: number;           // minimum replicas (default: 1)
+  max?: number;           // maximum replicas (default: 3)
+  targetCPU?: number;     // target CPU utilization % (default: 80)
+}
+
 export interface LoopZeroYamlApp {
   path: string;
   framework: string;
@@ -21,6 +27,8 @@ export interface LoopZeroYamlApp {
   render?: 'static' | 'server';     // v2: delivery mode (MEET-009). "static" = S3/CDN, "server" = container.
   env?: Record<string, string>;      // v2: build-time environment variables (not runtime)
   secrets?: string[];
+  replicas?: number;                 // desired replica count (default: 1)
+  autoscaling?: LoopZeroYamlAutoscaling; // HPA configuration
 }
 
 export interface LoopZeroYaml {
@@ -91,6 +99,34 @@ export function parseLoopZeroYaml(raw: string): LoopZeroYaml {
         ? (cfg.render as 'static' | 'server')
         : undefined;
 
+      // Replicas (must be >= 1)
+      const rawReplicas = cfg.replicas != null ? Number(cfg.replicas) : undefined;
+      const replicas = rawReplicas !== undefined && !isNaN(rawReplicas) && rawReplicas >= 1
+        ? rawReplicas
+        : undefined;
+
+      // Autoscaling (HPA configuration)
+      let autoscaling: LoopZeroYamlAutoscaling | undefined;
+      if (cfg.autoscaling && typeof cfg.autoscaling === 'object' && !Array.isArray(cfg.autoscaling)) {
+        const asCfg = cfg.autoscaling as Record<string, unknown>;
+        const min = asCfg.min != null ? Number(asCfg.min) : undefined;
+        const max = asCfg.max != null ? Number(asCfg.max) : undefined;
+        const targetCPU = asCfg.targetCPU != null ? Number(asCfg.targetCPU) : undefined;
+
+        // Validate: min >= 1, max >= min, targetCPU 1-100
+        const validMin = min !== undefined && !isNaN(min) && min >= 1 ? min : undefined;
+        const validMax = max !== undefined && !isNaN(max) && max >= (validMin ?? 1) ? max : undefined;
+        const validCPU = targetCPU !== undefined && !isNaN(targetCPU) && targetCPU >= 1 && targetCPU <= 100
+          ? targetCPU
+          : undefined;
+
+        autoscaling = {
+          ...(validMin !== undefined ? { min: validMin } : {}),
+          ...(validMax !== undefined ? { max: validMax } : {}),
+          ...(validCPU !== undefined ? { targetCPU: validCPU } : {}),
+        };
+      }
+
       apps[appName] = {
         path: String(cfg.path ?? '.'),
         framework: String(cfg.framework ?? 'unknown'),
@@ -101,6 +137,8 @@ export function parseLoopZeroYaml(raw: string): LoopZeroYaml {
         ...(render ? { render } : {}),
         ...(env ? { env } : {}),
         ...(secrets ? { secrets } : {}),
+        ...(replicas !== undefined ? { replicas } : {}),
+        ...(autoscaling ? { autoscaling } : {}),
       };
     }
   }

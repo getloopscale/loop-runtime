@@ -169,9 +169,10 @@ notifications:
       - name: Content-Type
         value: application/json
       # MEET-2026-04-04-029 P0: Must match LOOPZERO_ARGO_CALLBACK_SECRET.
-      # TODO (Sprint 6): inject from Kubernetes Secret instead of hardcode.
+      # Production: overridden by Pulumi with RandomPassword-generated secret.
+      # Dev: uses this default. NEVER use this value in production.
       - name: Authorization
-        value: "Bearer cb-loopzero-dev-2026"
+        value: "Bearer cb-loopzero-dev-local-only"
   # Template: sends sync status as JSON payload
   templates:
     template.sync-completed: |

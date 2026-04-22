@@ -206,6 +206,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 		RepositoryHandler:   repositoryHandler,
 		AuditHandler:        auditHandler,
 		ArgoCallbackHandler: argoCallbackHandler,
+		LogStreamHandler:    routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
 		AdminEvictor:         &stubTenantEvictor{},
@@ -260,6 +261,10 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 
 		// Logs
 		{"GET", "/api/v1/builds/test-build-id/logs", true},
+
+		// Log streaming (SSE)
+		{"GET", "/api/v1/builds/test-build-id/logs/stream", true},
+		{"GET", "/api/v1/projects/test-project/logs/stream", true},
 
 		// Status
 		{"GET", "/api/v1/projects/test-project/status", true},

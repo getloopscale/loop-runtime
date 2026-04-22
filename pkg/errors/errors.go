@@ -290,6 +290,14 @@ var (
 		Message:    "your team has too many builds in progress — wait for one to finish",
 		HTTPStatus: 429,
 	}
+
+	// ErrSameEnvironment is returned when a promote request specifies the same
+	// source and target environment.
+	ErrSameEnvironment = &LoopZeroError{
+		Code:       "SAME_ENVIRONMENT",
+		Message:    "source and target environments must be different",
+		HTTPStatus: 400,
+	}
 )
 
 // NewLockTimeout creates a LOCK_TIMEOUT error with optional detail.

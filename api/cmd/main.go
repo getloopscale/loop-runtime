@@ -18,6 +18,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/admission"
 	"github.com/loopzero/loopzero/api/internal/config"
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/routes"
@@ -90,6 +91,11 @@ func main() {
 			defer func() { _ = dbDeps.StdDB.Close() }()
 		}
 	}
+
+	// WS.1: Track service auth secret age for rotation alerting.
+	secretAgeCollector := metrics.NewSecretAgeCollector(cfg.ServiceAuthSecretCreatedAt, logger)
+	secretAgeCollector.Start(context.Background())
+	defer secretAgeCollector.Stop()
 
 	var stores *StoreDeps
 	var workflows *WorkflowDeps

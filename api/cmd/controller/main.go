@@ -116,6 +116,11 @@ func main() {
 	poolCollector.Start(context.Background(), 15*time.Second)
 	defer poolCollector.Stop()
 
+	// WS.1: Track service auth secret age for rotation alerting.
+	secretAgeCollector := metrics.NewSecretAgeCollector(cfg.ServiceAuthSecretCreatedAt, logger)
+	secretAgeCollector.Start(context.Background())
+	defer secretAgeCollector.Stop()
+
 	// ---- Services + orchestrator ----
 	deps := setupServices(cfg, dbAdapter, logger)
 

@@ -158,3 +158,47 @@ func TestValidate_WarnsReleasePendingLessThanSyncTimeout(t *testing.T) {
 		t.Fatalf("expected warning (not error) for timeout mismatch, got %v", err)
 	}
 }
+
+// WS.1: envTime and ServiceAuthSecretCreatedAt tests.
+
+func TestEnvTime_ParsesRFC3339(t *testing.T) {
+	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT", "2026-01-15T10:30:00Z")
+	got := envTime("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT")
+	expected := time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC)
+	if !got.Equal(expected) {
+		t.Errorf("envTime = %v, want %v", got, expected)
+	}
+}
+
+func TestEnvTime_ReturnsZeroWhenUnset(t *testing.T) {
+	_ = os.Unsetenv("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT")
+	got := envTime("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT")
+	if !got.IsZero() {
+		t.Errorf("envTime should return zero time when unset, got %v", got)
+	}
+}
+
+func TestEnvTime_ReturnsZeroOnInvalidFormat(t *testing.T) {
+	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT", "not-a-timestamp")
+	got := envTime("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT")
+	if !got.IsZero() {
+		t.Errorf("envTime should return zero time on invalid format, got %v", got)
+	}
+}
+
+func TestLoad_ServiceAuthSecretCreatedAt_ParsesFromEnv(t *testing.T) {
+	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT", "2026-03-01T00:00:00Z")
+	cfg := Load()
+	expected := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	if !cfg.ServiceAuthSecretCreatedAt.Equal(expected) {
+		t.Errorf("ServiceAuthSecretCreatedAt = %v, want %v", cfg.ServiceAuthSecretCreatedAt, expected)
+	}
+}
+
+func TestLoad_ServiceAuthSecretCreatedAt_DefaultsToZero(t *testing.T) {
+	_ = os.Unsetenv("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT")
+	cfg := Load()
+	if !cfg.ServiceAuthSecretCreatedAt.IsZero() {
+		t.Errorf("ServiceAuthSecretCreatedAt should be zero when unset, got %v", cfg.ServiceAuthSecretCreatedAt)
+	}
+}

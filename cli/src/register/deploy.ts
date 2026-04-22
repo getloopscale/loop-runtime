@@ -9,6 +9,7 @@ import { ValidateCommand } from '../commands/validate';
 import { StatusCommand } from '../commands/status';
 import { LogsCommand } from '../commands/logs';
 import { RollbackCommand } from '../commands/rollback';
+import { PromoteCommand } from '../commands/promote';
 import { CancelCommand } from '../commands/cancel';
 import { API_REQUEST_TIMEOUT_MS, DEPLOY_TIMEOUT_MS } from '../config/constants';
 import { hasGitRepo, hasUncommittedChanges, hasLockfile, getSourceIdentifier, getGitRoot, createSourceBundle, checkSensitiveFiles } from '../adapters/git';
@@ -245,6 +246,7 @@ export function registerDeployCommands(deps: CommandDeps): void {
     .option('--tail <n>', 'Show last N lines', parseInt)
     .option('--step <name>', 'Filter by build step')
     .option('--env <name>', 'Target environment', 'production')
+    .option('-f, --follow', 'Stream logs in real-time')
     .action(async (cmdOpts) => {
       const globalOpts = getGlobalOpts();
       const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
@@ -269,13 +271,40 @@ export function registerDeployCommands(deps: CommandDeps): void {
             `/api/v1/projects/${encodeURIComponent(project)}/status?environment=${encodeURIComponent(env)}`
           );
         },
+        // SSE log streaming for --follow mode
+        streamLogs: (buildID, onLine, onError, onClose) => {
+          const token = configStore.getToken();
+          const streamUrl = `${apiUrl}/api/v1/builds/${encodeURIComponent(buildID)}/logs/stream`;
+          const client = new SSEClient({
+            url: streamUrl,
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            onEvent: (event) => {
+              if (event.event === 'log' && event.data) {
+                onLine({
+                  timestamp: (event.data.timestamp as string) ?? '',
+                  line: (event.data.line as string) ?? '',
+                  step: (event.data.step as string) ?? undefined,
+                });
+              } else if (event.event === 'stream.done' || event.event === 'stream.timeout') {
+                client.close();
+              }
+            },
+            onError,
+            onClose,
+          });
+          client.connect().catch(onError);
+          return { close: () => client.close() };
+        },
         writeTo,
         writeError,
       });
 
+      // Follow mode has no timeout (streams until build completes or user hits Ctrl+C)
+      const timeout = cmdOpts.follow ? 30 * 60 * 1000 : API_REQUEST_TIMEOUT_MS + 10_000;
+
       const exitCode = await withTimeout(
-        logsCmd.execute({ build: cmdOpts.build, tail: cmdOpts.tail, step: cmdOpts.step, env: cmdOpts.env, json: globalOpts.json }),
-        API_REQUEST_TIMEOUT_MS + 10_000,
+        logsCmd.execute({ build: cmdOpts.build, tail: cmdOpts.tail, step: cmdOpts.step, env: cmdOpts.env, json: globalOpts.json, follow: cmdOpts.follow }),
+        timeout,
         'Logs request timed out. Check your connection and try again.',
       ).catch((err: Error) => {
         if (globalOpts.json) {
@@ -335,6 +364,59 @@ export function registerDeployCommands(deps: CommandDeps): void {
       ).catch((err: Error) => {
         if (globalOpts.json) {
           writeTo(JSON.stringify({ code: 'ROLLBACK_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
+      });
+      process.exitCode = exitCode;
+    });
+
+  // --- promote ---
+  program
+    .command('promote')
+    .description('Promote a release from one environment to another')
+    .option('--from <env>', 'Source environment', 'staging')
+    .option('--to <env>', 'Target environment', 'production')
+    .option('--yes', 'Skip confirmation prompt')
+    .action(async (cmdOpts) => {
+      const globalOpts = getGlobalOpts();
+      const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
+
+      const promoteCmd = new PromoteCommand({
+        getToken: () => configStore.getToken(),
+        findLoopZeroYaml: () => {
+          const gitRoot = getGitRoot() ?? process.cwd();
+          return findLoopZeroYaml(process.cwd(), gitRoot);
+        },
+        promote: async (project: string, from: string, to: string) => {
+          return apiClient.post(
+            `/api/v1/projects/${encodeURIComponent(project)}/promote`,
+            { from, to },
+          );
+        },
+        confirm: async (message: string) => {
+          const readline = await import('readline');
+          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+          return new Promise<boolean>((resolve) => {
+            rl.question(message, (answer) => {
+              rl.close();
+              resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+            });
+          });
+        },
+        writeTo,
+        writeError,
+        isCI,
+      });
+
+      const exitCode = await withTimeout(
+        promoteCmd.execute({ from: cmdOpts.from, to: cmdOpts.to, json: globalOpts.json, yes: cmdOpts.yes }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Promotion timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'PROMOTE_TIMEOUT', error: err.message, exit_code: 3 }));
         } else {
           writeError(err.message);
         }

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`loopzero promote` command** — promote a release from one environment to another without re-building. API endpoint `POST /api/v1/projects/{name}/promote`, PromotionOrchestrator service, CLI command with `--from`/`--to` flags and `--json` output. Uses existing promotion state machine. Locks target environment via `withEnvironmentLock`. 28 new tests (6 service + 8 route handler + 15 CLI).
+
 ### Fixed
 - **Tenant deletion stuck with no recovery** (operators-review): After DeletionMaxAttempts, controller now requeues every 1h instead of stopping entirely. Allows self-healing if dependencies recover. Metric `loopzero_tenant_deletion_stuck_total` still emitted for alerting.
 - **MinIO error matching fragility** (operators-review): Replaced custom `contains()`/`searchString()` with `strings.Contains()` in minio provisioner. Added regression test `TestIsNotFoundError`.

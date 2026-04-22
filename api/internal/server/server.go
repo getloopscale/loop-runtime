@@ -60,7 +60,9 @@ type Config struct {
 	SSESafetyTimeout        time.Duration
 	SSEMaxConcurrentStreams int64
 	LogsHandler             *routes.LogsHandler
+	LogStreamHandler        *routes.LogStreamHandler
 	RollbackHandler         *routes.RollbackHandler
+	PromoteHandler          *routes.PromoteHandler
 	StatusHandler           *routes.StatusHandler
 	BuildListHandler        *routes.BuildListHandler
 	SecretK8sSync           routes.SecretK8sSync

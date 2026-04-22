@@ -57,6 +57,14 @@ func marshalResource(v interface{}) string {
 	return strings.TrimSpace(string(data))
 }
 
+// maybeHPA appends an HPA document if autoscaling is configured for the app.
+func maybeHPA(docs []string, ri RenderInput, app AppManifestInput) []string {
+	if app.Autoscaling != nil {
+		docs = append(docs, marshalResource(buildHPA(ri, app)))
+	}
+	return docs
+}
+
 // renderServerApp generates Deployment + Service + IngressRoute for a server app.
 func renderServerApp(ri RenderInput, app AppManifestInput) []string {
 	port := app.Port
@@ -75,6 +83,7 @@ func renderServerApp(ri RenderInput, app AppManifestInput) []string {
 		marshalResource(service),
 	}
 	docs = append(docs, ingressResources...)
+	docs = maybeHPA(docs, ri, app)
 	return docs
 }
 
@@ -82,7 +91,9 @@ func renderServerApp(ri RenderInput, app AppManifestInput) []string {
 func renderWorkerApp(ri RenderInput, app AppManifestInput) []string {
 	deployment := buildDeployment(ri, app, 0)
 	pdb := buildPDB(ri, app)
-	return []string{marshalResource(deployment), marshalResource(pdb)}
+	docs := []string{marshalResource(deployment), marshalResource(pdb)}
+	docs = maybeHPA(docs, ri, app)
+	return docs
 }
 
 // renderFrontendApp generates Deployment + PDB + Service + IngressRoute for a frontend app.
@@ -104,5 +115,6 @@ func renderFrontendApp(ri RenderInput, app AppManifestInput) []string {
 		marshalResource(service),
 	}
 	docs = append(docs, ingressResources...)
+	docs = maybeHPA(docs, ri, app)
 	return docs
 }

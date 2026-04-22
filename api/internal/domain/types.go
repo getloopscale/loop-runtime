@@ -352,3 +352,16 @@ type TenantDeletionStore interface {
 	// WriteTombstone writes a permanent audit record after tenant deletion completes.
 	WriteTombstone(ctx context.Context, tombstone TombstoneRecord) error
 }
+
+// Preview represents a preview environment created for a pull request.
+type Preview struct {
+	ID        string `json:"id"`
+	TenantID  string `json:"tenant_id"`
+	ProjectID string `json:"project_id"`
+	PRNumber  int    `json:"pr_number"`
+	Branch    string `json:"branch"`
+	Status    string `json:"status"`
+	URL       string `json:"url"`
+	CreatedAt string `json:"created_at"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+}

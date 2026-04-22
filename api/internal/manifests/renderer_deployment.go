@@ -91,6 +91,21 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 		}
 	}
 
+	// Determine replica count:
+	//   - If autoscaling is set, use minReplicas as baseline (HPA manages scaling)
+	//   - If explicit replicas configured, use that
+	//   - Otherwise default to 1
+	replicas := 1
+	if app.Autoscaling != nil {
+		minR := app.Autoscaling.MinReplicas
+		if minR < 1 {
+			minR = 1
+		}
+		replicas = minR
+	} else if app.Replicas > 0 {
+		replicas = app.Replicas
+	}
+
 	return k8sDeployment{
 		APIVersion: "apps/v1",
 		Kind:       "Deployment",
@@ -104,7 +119,7 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 			},
 		},
 		Spec: k8sDeploymentSpec{
-			Replicas:                1,
+			Replicas:                replicas,
 			ProgressDeadlineSeconds: 210,
 			MinReadySeconds:         10,
 			Strategy: &k8sDeployStrategy{
@@ -132,6 +147,58 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 					},
 					Containers:                    []k8sContainer{container},
 					TerminationGracePeriodSeconds: 30,
+				},
+			},
+		},
+	}
+}
+
+// buildHPA creates a HorizontalPodAutoscaler for an app.
+// Only called when app.Autoscaling is non-nil.
+func buildHPA(ri RenderInput, app AppManifestInput) k8sHPA {
+	ns := namespace(ri.TenantID, ri.Environment)
+	labels := commonLabels(ri, app)
+
+	as := app.Autoscaling
+	minR := as.MinReplicas
+	if minR < 1 {
+		minR = 1
+	}
+	maxR := as.MaxReplicas
+	if maxR < 1 {
+		maxR = 3
+	}
+	targetCPU := as.TargetCPU
+	if targetCPU < 1 {
+		targetCPU = 80
+	}
+
+	return k8sHPA{
+		APIVersion: "autoscaling/v2",
+		Kind:       "HorizontalPodAutoscaler",
+		Metadata: k8sMetadata{
+			Name:      app.Name,
+			Namespace: ns,
+			Labels:    labels,
+		},
+		Spec: k8sHPASpec{
+			ScaleTargetRef: k8sScaleTargetRef{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       app.Name,
+			},
+			MinReplicas: minR,
+			MaxReplicas: maxR,
+			Metrics: []k8sMetricSpec{
+				{
+					Type: "Resource",
+					Resource: k8sMetricTarget{
+						Name: "cpu",
+						Target: k8sMetricTargetSpec{
+							Type:               "Utilization",
+							AverageUtilization: targetCPU,
+						},
+					},
 				},
 			},
 		},
