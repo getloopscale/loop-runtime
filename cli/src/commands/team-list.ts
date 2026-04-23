@@ -3,7 +3,7 @@
 
 import { ApiError } from '../api/client';
 
-import { formatErrorMessage } from '../output/error-message';
+import { formatErrorMessage, classifyNetworkError } from '../output/error-message';
 interface MemberItem {
   username: string;
   email: string;
@@ -95,6 +95,13 @@ export class TeamListCommand {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
       return this.exitWithError(opts, formatErrorMessage('Failed to list team members', err.message, 'Try again'), 1, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-24: differentiate API unreachable from unexpected
+    // so scripts can match on code=API_UNREACHABLE and users see the
+    // "Check LOOPZERO_URL" hint instead of the generic "Try again".
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 1, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, formatErrorMessage('Failed to list team members', err.message, 'Try again'), 1, 'UNEXPECTED_ERROR');

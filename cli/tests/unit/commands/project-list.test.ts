@@ -148,6 +148,31 @@ describe('ProjectListCommand', () => {
     });
   });
 
+  // CHG-2026-04-23-AUDIT-24: same rationale as team-list.
+  describe('API unreachable (AUDIT-24)', () => {
+    it('network error produces API_UNREACHABLE code + Check LOOPZERO_URL hint', async () => {
+      const cmd = new ProjectListCommand(makeDeps({
+        listProjects: async () => { throw new Error('fetch failed'); },
+      }));
+      const code = await cmd.execute({ json: true });
+      expect(code).toBe(1);
+      const parsed = JSON.parse(output[0]);
+      expect(parsed.code).toBe('API_UNREACHABLE');
+      expect(parsed.error).toContain('Cannot reach API');
+      expect(parsed.error).toContain('Check LOOPZERO_URL');
+    });
+
+    it('non-network Error keeps UNEXPECTED_ERROR code', async () => {
+      const cmd = new ProjectListCommand(makeDeps({
+        listProjects: async () => { throw new Error('some business logic'); },
+      }));
+      const code = await cmd.execute({ json: true });
+      expect(code).toBe(1);
+      const parsed = JSON.parse(output[0]);
+      expect(parsed.code).toBe('UNEXPECTED_ERROR');
+    });
+  });
+
   describe('no internal terms', () => {
     const FORBIDDEN_TERMS = [
       'ArgoCD', 'argocd', 'GitOps', 'gitops-push', 'CRD', 'tenant_id',

@@ -3,6 +3,7 @@
 
 import { ApiError } from '../api/client';
 import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
+import { classifyNetworkError } from '../output/error-message';
 
 // CHG-2026-04-23-AUDIT-2: aligned with real API shape.
 // API returns `last_build.id` (not build_id) and `active_release` (not release).
@@ -146,6 +147,13 @@ export class StatusCommand {
   private handleError(opts: StatusOptions, err: unknown): number {
     if (err instanceof ApiError) {
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-24: surface API_UNREACHABLE for network errors so
+    // users know to check LOOPZERO_URL. Exit code stays 3 (contract) — only
+    // the code label and message change.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');
