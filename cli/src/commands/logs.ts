@@ -147,6 +147,11 @@ export class LogsCommand {
     }
 
     return new Promise<number>((resolve) => {
+      // CHG-2026-04-23-AUDIT-37: track if the stream errored so close
+      // can resolve with exit 3 instead of 0. Previously an SSE error
+      // followed by close always reported success, silently masking
+      // failures from scripts that check exit code.
+      let streamErrored = false;
       const stream = this.deps.streamLogs!(
         opts.build!,
         (event: StreamLogEvent) => {
@@ -159,15 +164,17 @@ export class LogsCommand {
           }
         },
         (err: Error) => {
+          streamErrored = true;
           this.deps.writeError(`Stream error: ${err.message}`);
         },
         () => {
-          // Stream closed (build completed or server closed)
-          resolve(0);
+          // Stream closed (build completed or server closed).
+          // Exit 3 if we saw an error during the stream; 0 otherwise.
+          resolve(streamErrored ? 3 : 0);
         },
       );
 
-      // Handle SIGINT gracefully
+      // Handle SIGINT gracefully — user cancellation is exit 0 regardless.
       const cleanup = () => {
         stream.close();
         resolve(0);

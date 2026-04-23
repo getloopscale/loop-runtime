@@ -270,6 +270,29 @@ describe('LogsCommand', () => {
   });
 
   describe('--follow mode', () => {
+    // CHG-2026-04-23-AUDIT-37: stream error must produce exit 3, not 0.
+    // Previously the error handler printed to stderr and the close
+    // handler blindly resolved 0, masking failures from scripts like
+    // `loopzero logs --follow --build X | tee log.txt || alert`.
+    it('returns exit 3 when stream errors before close', async () => {
+      const deps = createMockDeps({
+        streamLogs: (_buildID, _onLine, onError, onClose) => {
+          setTimeout(() => {
+            onError(new Error('SSE connection reset'));
+            onClose();
+          }, 5);
+          return { close: jest.fn() };
+        },
+      });
+      const cmd = new LogsCommand(deps);
+
+      const exitCode = await cmd.execute({ build: 'build-abc123', follow: true });
+
+      expect(exitCode).toBe(3);
+      const errs = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errs).toContain('Stream error');
+    });
+
     it('should stream log events and return exit code 0 when stream closes', async () => {
       const lines: string[] = [];
       const deps = createMockDeps({
