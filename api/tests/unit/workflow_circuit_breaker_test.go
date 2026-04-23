@@ -124,8 +124,7 @@ func TestWorkflowCircuitBreaker_RecoveryProbe(t *testing.T) {
 		t.Fatalf("expected ErrPlatformDegraded, got %v", err)
 	}
 
-	// Wait for retryInterval
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(20 * time.Millisecond) // intentional: testing real-time behavior — wait past the 10ms retry interval
 
 	// Fix inner and send recovery probes
 	inner.err = nil

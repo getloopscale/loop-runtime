@@ -86,14 +86,26 @@ spec:
             done
 
             if [ -n "$EXISTING_DIRS" ]; then
-              tar czf /tmp/cache.tar.gz $EXISTING_DIRS
-              mc cp /tmp/cache.tar.gz "${CACHE_PATH}" \
-                {{- if .Values.minio.insecure }}
-                --insecure \
-                {{- end }}
-                2>&1 || echo "Cache save failed — non-fatal"
-              rm -f /tmp/cache.tar.gz
-              echo "Cache saved to ${CACHE_KEY}"
+              # B9 (CHG-2026-04-22-001): guard against missing `tar` in minio/mc image.
+              # minio/mc:RELEASE.2025-08-13T08-35-41Z does NOT ship tar. Without this guard,
+              # `tar: command not found` marks the entire workflow Failed, which propagates
+              # upstream so the API reports FAILED even when build+image+sign all succeeded.
+              # Cache save is inherently best-effort (see non-fatal echo below) — it MUST NOT
+              # break a successful build.
+              # TODO(T2 follow-up): migrate to dedicated loopzero-cache-runner image with tar+mc
+              # baked in, following SEC-006 pattern (clone-runner, cosign-signer).
+              if command -v tar >/dev/null 2>&1; then
+                tar czf /tmp/cache.tar.gz $EXISTING_DIRS
+                mc cp /tmp/cache.tar.gz "${CACHE_PATH}" \
+                  {{- if .Values.minio.insecure }}
+                  --insecure \
+                  {{- end }}
+                  2>&1 || echo "Cache save failed — non-fatal"
+                rm -f /tmp/cache.tar.gz
+                echo "Cache saved to ${CACHE_KEY}"
+              else
+                echo "tar not available in image — cache save skipped (non-fatal)"
+              fi
             else
               echo "No directories to cache"
             fi

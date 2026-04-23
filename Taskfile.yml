@@ -710,6 +710,12 @@ tasks:
         kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
           env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE gitea OWNER {{.PG_USER}}"
         echo "gitea database: ensured"
+      # Redis (session/cache/queue backend for Gitea HA) — StatefulSet + PDB + NetworkPolicy.
+      # Gitea values.yaml hardcodes `gitea-redis:6379` as session/cache/queue addr; without this
+      # Service the gitea pod CrashLoopBackOffs on `cache.Init failed: lookup gitea-redis ... no such host`.
+      # Applied BEFORE `helm install gitea` so the Service is reachable when the pod boots.
+      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/gitea/templates/redis.yaml
+      - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout status statefulset/gitea-redis --timeout=3m
       - >-
         helm upgrade --install gitea gitea-charts/gitea
         --kube-context {{.MGMT_CONTEXT}}
@@ -860,17 +866,22 @@ tasks:
       - >-
         kubectl --context {{.MGMT_CONTEXT}}
         apply -f infra/helm/loki/nodeport-service.yaml
+      # Promtail DaemonSet — scrape config filters for Argo Workflow pods ONLY (`workflows_argoproj_io_workflow` label).
+      # At setup time, no workflows exist yet, so promtail's `/ready` endpoint returns 500 ("Unable to find any logs to tail").
+      # `--wait` would timeout every bootstrap; readiness converges automatically once the first build runs.
       - >-
         helm upgrade --install promtail grafana/promtail
         --kube-context {{.BUILD_CONTEXT}}
         --namespace monitoring --create-namespace
         --version 6.16.6
         -f infra/helm/promtail/values.yaml
-        --wait --timeout 3m
+        --timeout 3m
 
   dashboards:install:
     desc: Install LoopZero Grafana dashboards and ServiceMonitors
     cmds:
+      # Server-side apply — dashboard bundle exceeds 256KB `last-applied-configuration` annotation limit.
+      # `--force-conflicts` ensures ownership transfer across reruns (field manager: loopzero-task).
       - >-
         kubectl --context {{.MGMT_CONTEXT}} -n monitoring
         create configmap loopzero-grafana-dashboards
@@ -878,7 +889,8 @@ tasks:
         --dry-run=client -o yaml |
         kubectl --context {{.MGMT_CONTEXT}} label -f - --local --dry-run=client -o yaml
         grafana_dashboard=1 |
-        kubectl --context {{.MGMT_CONTEXT}} apply -f -
+        kubectl --context {{.MGMT_CONTEXT}} apply --server-side --force-conflicts
+        --field-manager=loopzero-task -f -
       # ServiceMonitors for mgmt cluster components (loopzero-api, gitea, minio, tenant-controller)
       - >-
         kubectl --context {{.MGMT_CONTEXT}} apply
@@ -900,15 +912,23 @@ tasks:
         -f infra/helm/monitoring/manifests/prometheusrule-warning.yaml
 
   infra:install:monitoring-crds:
-    desc: Install Prometheus CRDs + monitoring namespace (required before charts that create ServiceMonitors)
+    desc: Install Prometheus CRDs + monitoring namespace on ALL clusters (required before charts that create ServiceMonitors/PodMonitors/PrometheusRules)
     deps: [helm:repos]
     cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} create namespace monitoring --dry-run=client -o yaml | kubectl --context {{.MGMT_CONTEXT}} apply -f -
-      - >-
-        kubectl --context {{.MGMT_CONTEXT}} apply --server-side
-        -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
-        -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
-        -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
+      # CRDs must exist in every cluster where a chart creates a ServiceMonitor / PrometheusRule / PodMonitor.
+      # mgmt → kube-prometheus-stack owners; workload → cert-manager + traefik; build → argo-workflows.
+      # Prometheus Operator CRs are cluster-scoped by kind but reference objects in specific clusters,
+      # so each cluster needs the type registered independently before its charts install.
+      - |
+        for CTX in {{.MGMT_CONTEXT}} {{.BUILD_CONTEXT}} {{.WORKLOAD_CONTEXT}}; do
+          echo "=== Installing Prometheus CRDs + monitoring namespace on $CTX ==="
+          kubectl --context "$CTX" create namespace monitoring --dry-run=client -o yaml \
+            | kubectl --context "$CTX" apply -f -
+          kubectl --context "$CTX" apply --server-side \
+            -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml \
+            -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml \
+            -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
+        done
 
   infra:install:
     desc: Install all platform components via Helm
@@ -1333,6 +1353,30 @@ tasks:
     cmds:
       - cd infra/tests && go test ./e2e/... -v -run "Chaos" -timeout 15m
 
+  test:coverage:
+    desc: Run all tests with coverage reports (HTML per component)
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: 'setup-envtest use -p path 2>/dev/null || echo "/tmp"'
+    cmds:
+      - echo "Generating coverage reports..."
+      - cd pkg && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd api && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd operators && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd cli && npm test -- --coverage 2>/dev/null || true
+      - echo "Coverage reports generated:"
+      - echo "  pkg/coverage.html"
+      - echo "  api/coverage.html"
+      - echo "  operators/coverage.html"
+      - echo "  cli/coverage/"
+
+  test:coverage:summary:
+    desc: Show per-package coverage summary (no HTML)
+    cmds:
+      - echo "=== pkg/ ===" && cd pkg && go test ./... -short -coverprofile=/dev/stderr 2>&1 | grep "^ok" || true
+      - echo "=== api/ ===" && cd api && go test ./... -short -cover 2>&1 | grep "^ok" || true
+      - echo "=== operators/ ===" && cd operators && go test ./... -short -cover 2>&1 | grep "^ok" || true
+
   # ─────────────────────────────────────────────
   # k6 Load Testing (Grafana k6, industry standard)
   # Replaces the previous shell-script smoke runners.
@@ -1485,6 +1529,157 @@ tasks:
         echo ""
         echo "=== Grafana Dashboards ==="
         curl -sf -u REDACTED_SECRET_056 http://localhost:{{.GRAFANA_PORT}}/api/search?type=dash-db | jq -r '.[].title' 2>/dev/null || echo "Grafana not reachable at localhost:{{.GRAFANA_PORT}}"
+
+  # =========================================================================
+  # MEET-055: Post-Stress-Test Operational Tasks
+  # =========================================================================
+
+  loadtest:run:
+    desc: Run load test at specified LEVEL (l1-l5). Uses Go E2E harness.
+    vars:
+      LEVEL: '{{.LEVEL | default "l1"}}'
+    cmds:
+      - |
+        cd infra/tests/load
+        if [ ! -f run-tests.sh ]; then
+          echo "ERROR: run-tests.sh not found in infra/tests/load/"
+          exit 1
+        fi
+        echo "=== Load Test Level: {{.LEVEL}} ==="
+        bash run-tests.sh {{.LEVEL}}
+
+  api:hotfix:
+    desc: Sanctioned fast-path for API image hotfix (build, push, rollout restart with audit)
+    vars:
+      TAG: '{{.TAG | default "homolog"}}'
+      CONTEXT: '{{.CONTEXT | default "do-nyc3-loopzero-infra-homolog-nyc3-mgmt"}}'
+    cmds:
+      - |
+        set -euo pipefail
+        echo "=== API Hotfix ==="
+        echo "  Operator: $(whoami)"
+        echo "  Time:     $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "  Tag:      {{.TAG}}"
+        echo "  Context:  {{.CONTEXT}}"
+        echo ""
+        echo "Building API image..."
+        docker build -f api/Dockerfile -t registry.digitalocean.com/loopzero-infra-registry/loopzero-api:{{.TAG}} .
+        echo "Pushing..."
+        docker push registry.digitalocean.com/loopzero-infra-registry/loopzero-api:{{.TAG}}
+        echo "Rolling out..."
+        kubectl --context={{.CONTEXT}} -n platform-system rollout restart deploy/loopzero-api
+        kubectl --context={{.CONTEXT}} -n platform-system rollout restart deploy/loopzero-controller
+        echo ""
+        echo "✅ Hotfix applied. Rollout status:"
+        kubectl --context={{.CONTEXT}} -n platform-system rollout status deploy/loopzero-api --timeout=120s
+        echo ""
+        echo "⚠️  Do NOT use 'kubectl set image'. This task is the sanctioned fast-path."
+
+  infra:drift:
+    desc: Check Pulumi drift (expect no changes). Run locally or in CI.
+    cmds:
+      - |
+        cd infra/pulumi
+        echo "=== Pulumi Drift Check ==="
+        echo "  Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        npx pulumi preview --stack homolog --expect-no-changes --non-interactive 2>&1 || {
+          echo ""
+          echo "🚨 DRIFT DETECTED! Review changes above."
+          echo "   If intentional (hotfix): reconcile via 'pulumi up' within 24h."
+          echo "   If unauthorized: investigate and revert."
+          exit 1
+        }
+        echo "✅ No drift detected."
+
+  infra:state-delete:
+    desc: Wrapper for 'pulumi state delete' with audit trail. Use ONLY when necessary.
+    vars:
+      URN: '{{.URN}}'
+      REASON: '{{.REASON | default "no reason provided"}}'
+    cmds:
+      - |
+        set -euo pipefail
+        if [ -z "{{.URN}}" ]; then
+          echo "ERROR: URN is required. Usage: task infra:state-delete URN=<urn> REASON='why'"
+          exit 1
+        fi
+        echo "=== Pulumi State Delete (AUDITED) ==="
+        echo "  Operator: $(whoami)"
+        echo "  Time:     $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "  URN:      {{.URN}}"
+        echo "  Reason:   {{.REASON}}"
+        echo ""
+        echo "⚠️  WARNING: This removes the resource from Pulumi state."
+        echo "⚠️  The REAL resource in the cloud is NOT deleted."
+        echo "⚠️  You MUST delete the real resource FIRST (doctl/aws/cf)."
+        echo ""
+        read -p "Have you already deleted the real resource? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+          echo "Aborted. Delete the real resource first, then retry."
+          exit 1
+        fi
+        cd infra/pulumi
+        npx pulumi state delete --stack homolog "{{.URN}}" --force
+        echo "✅ Resource removed from state."
+
+  break-glass:
+    desc: Issue time-boxed cluster-admin access for emergency operations (MEET-055 M3)
+    vars:
+      CONTEXT: '{{.CONTEXT | default "do-nyc3-loopzero-infra-homolog-nyc3-mgmt"}}'
+      TTL: '{{.TTL | default "4"}}'
+      REASON: '{{.REASON | default ""}}'
+    cmds:
+      - bash infra/scripts/break-glass.sh {{.CONTEXT}} {{.TTL}} "{{.REASON}}"
+
+  # ===========================================================================
+  # Observability — Blackbox, pprof, Sloth
+  # ===========================================================================
+
+  pprof:api:
+    desc: Port-forward to API pprof endpoint (http://localhost:6060/debug/pprof/)
+    cmds:
+      - kubectl --context {{.MGMT_CONTEXT}} -n platform-system port-forward deploy/loopzero-api 6060:6060
+
+  pprof:operators:
+    desc: Port-forward to Operator pprof endpoint (http://localhost:6061/debug/pprof/)
+    cmds:
+      - kubectl --context {{.MGMT_CONTEXT}} -n platform-system port-forward deploy/loopzero-controller 6061:6061
+
+  blackbox:status:
+    desc: Check blackbox exporter health and probe results
+    cmds:
+      - |
+        echo "=== Blackbox Pod ==="
+        kubectl --context {{.MGMT_CONTEXT}} -n platform-system get pods -l app.kubernetes.io/name=prometheus-blackbox-exporter 2>/dev/null || echo "Blackbox pod not found"
+        echo ""
+        echo "=== Probe CRDs ==="
+        kubectl --context {{.MGMT_CONTEXT}} -n monitoring get probes 2>/dev/null || echo "No Probe resources found"
+        echo ""
+        echo "=== PrometheusRules ==="
+        kubectl --context {{.MGMT_CONTEXT}} -n monitoring get prometheusrules loopzero-probe-alerts 2>/dev/null || echo "PrometheusRule not found"
+
+  sloth:generate:
+    desc: Generate PrometheusRules from Sloth SLO specs
+    preconditions:
+      - sh: command -v sloth
+        msg: "sloth CLI not found. Install: go install github.com/slok/sloth/cmd/sloth@latest"
+    cmds:
+      - sloth generate -i infra/sloth/*.yaml -o infra/helm/monitoring/manifests/prometheusrule-slo-generated.yaml
+      - echo "✅ SLO rules generated at infra/helm/monitoring/manifests/prometheusrule-slo-generated.yaml"
+
+  sloth:validate:
+    desc: Validate Sloth SLO spec files
+    preconditions:
+      - sh: command -v sloth
+        msg: "sloth CLI not found. Install: go install github.com/slok/sloth/cmd/sloth@latest"
+    cmds:
+      - |
+        for f in infra/sloth/*.yaml; do
+          echo "Validating $f..."
+          sloth validate -i "$f"
+        done
+        echo "✅ All SLO specs valid"
 
   tempo:status:
     desc: Check Tempo health, ServiceMonitor, and PrometheusRules (MEET-020)

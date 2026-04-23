@@ -11,6 +11,12 @@ import YAML from 'js-yaml';
 //   - "custom": User-provided build script (framework must be "custom")
 export type BuildStrategy = 'dockerfile' | 'buildpack' | 'custom';
 
+export interface LoopZeroYamlAutoscaling {
+  min?: number;           // minimum replicas (default: 1)
+  max?: number;           // maximum replicas (default: 3)
+  targetCPU?: number;     // target CPU utilization % (default: 80)
+}
+
 export interface LoopZeroYamlApp {
   path: string;
   framework: string;
@@ -21,6 +27,8 @@ export interface LoopZeroYamlApp {
   render?: 'static' | 'server';     // v2: delivery mode (MEET-009). "static" = S3/CDN, "server" = container.
   env?: Record<string, string>;      // v2: build-time environment variables (not runtime)
   secrets?: string[];
+  replicas?: number;                 // desired replica count (default: 1)
+  autoscaling?: LoopZeroYamlAutoscaling; // HPA configuration
 }
 
 export interface LoopZeroYaml {
@@ -91,6 +99,37 @@ export function parseLoopZeroYaml(raw: string): LoopZeroYaml {
         ? (cfg.render as 'static' | 'server')
         : undefined;
 
+      // B15 (MEET-2026-04-23-059): parser PRESERVES invalid values so the
+      // validator can reject them explicitly. Previously the parser silently
+      // dropped invalid ints, making errors invisible to users.
+      // Range validation (replicas >= 1, max >= min, targetCPU 1-100) lives
+      // in validate-config.ts — the single authoritative gate.
+      let replicas: number | undefined;
+      if (cfg.replicas != null) {
+        const n = Number(cfg.replicas);
+        replicas = isNaN(n) ? undefined : n;
+      }
+
+      // Autoscaling (HPA configuration) — preserve invalid values for validator.
+      let autoscaling: LoopZeroYamlAutoscaling | undefined;
+      if (cfg.autoscaling && typeof cfg.autoscaling === 'object' && !Array.isArray(cfg.autoscaling)) {
+        const asCfg = cfg.autoscaling as Record<string, unknown>;
+        const coerce = (v: unknown): number | undefined => {
+          if (v == null) return undefined;
+          const n = Number(v);
+          return isNaN(n) ? undefined : n;
+        };
+        const min = coerce(asCfg.min);
+        const max = coerce(asCfg.max);
+        const targetCPU = coerce(asCfg.targetCPU);
+
+        autoscaling = {
+          ...(min !== undefined ? { min } : {}),
+          ...(max !== undefined ? { max } : {}),
+          ...(targetCPU !== undefined ? { targetCPU } : {}),
+        };
+      }
+
       apps[appName] = {
         path: String(cfg.path ?? '.'),
         framework: String(cfg.framework ?? 'unknown'),
@@ -101,6 +140,8 @@ export function parseLoopZeroYaml(raw: string): LoopZeroYaml {
         ...(render ? { render } : {}),
         ...(env ? { env } : {}),
         ...(secrets ? { secrets } : {}),
+        ...(replicas !== undefined ? { replicas } : {}),
+        ...(autoscaling ? { autoscaling } : {}),
       };
     }
   }

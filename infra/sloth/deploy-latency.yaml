@@ -1,0 +1,29 @@
+# SLO: Deploy Latency
+# Measures the ratio of deploys completing within 5 minutes.
+# Target: 95% of deploys finish in under 300 seconds.
+version: "prometheus/v1"
+service: "loopzero-deploys"
+labels:
+  owner: "platform-team"
+  tier: "product"
+slos:
+  - name: "deploy-latency-5m"
+    objective: 95
+    description: "Percentage of deploys that complete (build to live URL) within 5 minutes."
+    sli:
+      events:
+        error_query: sum(rate(loopzero_deploy_duration_seconds_count[{{.window}}])) - sum(rate(loopzero_deploy_duration_seconds_bucket{le="300"}[{{.window}}]))
+        total_query: sum(rate(loopzero_deploy_duration_seconds_count[{{.window}}]))
+    alerting:
+      name: LoopZeroDeployLatencyBudgetBurn
+      labels:
+        category: deploy
+      annotations:
+        summary: "Deploy latency SLO error budget burn rate is too high."
+        runbook: "Check build durations by framework. Investigate cache hit rate. Review build queue depth."
+      page_alert:
+        labels:
+          severity: critical
+      ticket_alert:
+        labels:
+          severity: warning

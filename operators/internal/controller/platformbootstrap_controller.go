@@ -79,12 +79,19 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if controllerutil.ContainsFinalizer(&pb, constants.FinalizerPlatformBootstrap) {
 			logger := log.FromContext(ctx)
 			logger.Info("cleaning up PlatformBootstrap resources")
-			// Delete the platform-tokens secret that holds Gitea/ArgoCD credentials.
+			// Delete the platform-tokens secret if managed by this controller.
 			tokenSecret := &corev1.Secret{}
-			tokenSecret.Name = "platform-tokens"
-			tokenSecret.Namespace = pb.Namespace
-			if err := r.Delete(ctx, tokenSecret); err != nil && !errors.IsNotFound(err) {
-				logger.Error(err, "failed to delete platform-tokens secret during cleanup")
+			tokenSecretKey := client.ObjectKey{Name: "platform-tokens", Namespace: pb.Namespace}
+			if getErr := r.Get(ctx, tokenSecretKey, tokenSecret); getErr != nil {
+				if !errors.IsNotFound(getErr) {
+					logger.Error(getErr, "failed to get platform-tokens secret during cleanup")
+				}
+			} else if tokenSecret.Labels[constants.LabelManagedBy] == "platformbootstrap-controller" {
+				if err := r.Delete(ctx, tokenSecret); err != nil && !errors.IsNotFound(err) {
+					logger.Error(err, "failed to delete platform-tokens secret during cleanup")
+				}
+			} else {
+				logger.Info("skipping platform-tokens delete — not managed by this controller")
 			}
 			controllerutil.RemoveFinalizer(&pb, constants.FinalizerPlatformBootstrap)
 			if err := r.Update(ctx, &pb); err != nil {

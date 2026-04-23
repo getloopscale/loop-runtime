@@ -4,18 +4,22 @@
 import { ApiError } from '../api/client';
 import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
 
+// CHG-2026-04-23-AUDIT-2: aligned with real API shape.
+// API returns `last_build.id` (not build_id) and `active_release` (not release).
+// Prior test fixtures used invented field names; this interface now matches
+// what api/internal/routes/status.go actually produces.
 interface StatusApiResponse {
   environment: string;
   last_build?: {
-    build_id: string;
+    id: string;
     status: string;
     finished_at: string;
   };
-  release?: {
+  active_release?: {
     release_id: string;
     state: string;
     activated_at: string;
-  };
+  } | null;
   sync_status?: string;
   url?: string;
 }
@@ -86,14 +90,16 @@ export class StatusCommand {
       return 0;
     }
 
-    const buildSummary = `${status.last_build.build_id}`;
+    const buildSummary = `${status.last_build.id}`;
     this.deps.writeTo(`Last deploy:  ${buildSummary} — ${status.last_build.status}`);
 
-    if (status.release) {
-      this.deps.writeTo(`Release:      ${status.release.release_id} (${status.release.state.toLowerCase()} since ${this.formatTime(status.release.activated_at)})`);
+    if (status.active_release) {
+      this.deps.writeTo(`Release:      ${status.active_release.release_id} (${status.active_release.state.toLowerCase()} since ${this.formatTime(status.active_release.activated_at)})`);
     }
 
-    if (status.sync_status) {
+    // CHG-2026-04-23-AUDIT-2: API returns literal "unknown" when sync state is
+    // not yet determined; surfacing that to the user is noise. Skip display.
+    if (status.sync_status && status.sync_status !== 'unknown') {
       this.deps.writeTo(`Sync:         ${status.sync_status}`);
     }
 

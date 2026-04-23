@@ -294,6 +294,16 @@ var (
 	})
 )
 
+// Service auth secret age metric — WS.1 security blocker.
+// Tracks how long the current service auth secret has been in use.
+// Alert: LoopZeroServiceAuthSecretExpiring fires when age > 80 days.
+var (
+	ServiceAuthSecretAge = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_service_auth_secret_age_seconds",
+		Help: "Age of the current service auth secret in seconds.",
+	})
+)
+
 // Custom domain metrics — MEET-2026-04-05-033.
 // Emitted by DomainHandler, DomainProvisioner, and DomainHealthChecker.
 var (
@@ -437,4 +447,40 @@ var (
 		Name: "loopzero_pg_circuit_breaker_tripped_total",
 		Help: "Mutation requests rejected due to PG pool saturation.",
 	}, []string{"method"})
+
+	// PlanLimitViolations tracks per-metric per-plan enforcement rejections.
+	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059 action #9).
+	// Emitted when BuildOrchestrator.SubmitBuild rejects a request via
+	// ErrReplicasExceedPlan or ErrScalingAmbiguous.
+	PlanLimitViolations = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_plan_limit_violation_total",
+		Help: "Plan-limit enforcement rejections by metric and plan.",
+	}, []string{"metric", "plan"})
+)
+
+// Business metrics — observability gaps resolution plan (Phase 4A).
+var (
+	// DeployLeadTime measures the total time from build creation to release ACTIVE
+	// plus health probe success. This is the executive metric: "how long until the
+	// user's code is live?"
+	DeployLeadTime = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_deploy_lead_time_seconds",
+		Help:    "Total time from build creation to healthy URL (deploy lead time).",
+		Buckets: []float64{30, 60, 120, 180, 300, 600, 900, 1800},
+	}, []string{"tenant", "environment"})
+
+	// FalseSuccessTotal counts releases that were marked ACTIVE but later detected
+	// as unhealthy by the convergence loop's health check. A non-zero rate indicates
+	// problems with health probes or deployment reliability.
+	FalseSuccessTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_false_success_total",
+		Help: "Releases marked ACTIVE that later became unhealthy (false success).",
+	}, []string{"tenant", "environment"})
+
+	// RetryAmplificationTotal counts total retry attempts per operation type.
+	// High values indicate cascading failures or misconfigured timeouts.
+	RetryAmplificationTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_retry_amplification_total",
+		Help: "Total retry attempts by operation type.",
+	}, []string{"operation"})
 )

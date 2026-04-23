@@ -131,6 +131,12 @@ export interface PlatformStackConfig {
   // is "harbor". The Helm chart configures ingress to match this hostname.
   // Set via: pulumi config set harborExternalUrl harbor.dev.loopzero.example
   readonly harborExternalUrl?: string;
+  readonly harborAdminPassword?: string;
+
+  // MEET-055 M1: Slack webhook URLs for Alertmanager receivers.
+  // Set via: pulumi config set --secret slackWebhookUrl "https://hooks.slack.com/..."
+  readonly slackWebhookUrl?: pulumi.Output<string>;
+  readonly slackCriticalWebhookUrl?: pulumi.Output<string>;
 
 }
 
@@ -245,6 +251,11 @@ export function loadStackConfig(): PlatformStackConfig {
     // Container registry backend — defaults to "docr" for backward compatibility.
     registryType: (config.get("registryType") ?? "docr") as "docr" | "harbor",
     harborExternalUrl: config.get("harborExternalUrl") ?? undefined,
+    harborAdminPassword: config.get("harborAdminPassword") ?? undefined,
+
+    // MEET-055 M1: Slack webhooks for Alertmanager
+    slackWebhookUrl: config.getSecret("slackWebhookUrl") ?? undefined,
+    slackCriticalWebhookUrl: config.getSecret("slackCriticalWebhookUrl") ?? undefined,
 
     // Cosign signing key — stored encrypted via: pulumi config set --secret cosignPrivateKeyB64 $(base64 -w0 cosign.key)
     cosignPrivateKeyB64: config.get("cosignPrivateKeyB64") ?? undefined,

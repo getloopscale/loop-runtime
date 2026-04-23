@@ -64,6 +64,10 @@ type Config struct {
 	HarborRegistryURL    string // MEET-048: secondary registry for dual-push during migration. Empty = disabled.
 	WorkloadIngressURL   string
 	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
+	// B14 (MEET-2026-04-23-058): cert-manager ClusterIssuer used for all app TLS
+	// Certificates. REQUIRED per-environment (prod: letsencrypt-prod; dev: loopzero-ca-issuer).
+	// Set via LOOPZERO_CLUSTER_ISSUER env var. Empty = Validate() fatal at startup.
+	ClusterIssuer        string
 
 	// Credentials (read from env vars or K8s secrets)
 	GiteaToken         string
@@ -126,6 +130,9 @@ type Config struct {
 	CFKVNamespaceID   string // KV namespace ID for routing table
 	CFZoneManagement  bool   // Enable CF Zone Management for custom domains (v2)
 
+	// CORS
+	CORSAllowedOrigin string // CORS_ALLOWED_ORIGIN — required in production, open in dev
+
 	// JWT Authentication (Sprint 11 — Ory Hydra integration)
 	// When set, enables dual validation: JWT (via JWKS) + GitHub PAT (legacy).
 	// When empty, only GitHub PAT validation is used (backward compatible).
@@ -164,6 +171,10 @@ type Config struct {
 	// Env: MAX_CONCURRENT_BUILDS_PER_CELL (default: 20)
 	MaxConcurrentBuildsPerCell int
 
+	// MaxTenantsPerCell: maximum tenants per cell for placement engine.
+	// Env: MAX_TENANTS_PER_CELL (default: 5000)
+	MaxTenantsPerCell int
+
 	// MaxConcurrentBuildsPerTenant: per-tenant concurrent build limit.
 	// Env: MAX_CONCURRENT_BUILDS_PER_TENANT (default: 3)
 	MaxConcurrentBuildsPerTenant int
@@ -190,6 +201,14 @@ type Config struct {
 	// MEET-2026-04-18-053: multi-cell-default rollback flag.
 	// Env: LOOPZERO_SINGLE_CELL
 	SingleCell bool
+
+	// ServiceAuthSecretCreatedAt is the ISO 8601 timestamp of when the
+	// current service auth secret was created. Used to compute the age
+	// metric (loopzero_service_auth_secret_age_seconds). If unset, the
+	// process start time is used as a fallback (less accurate but still
+	// triggers rotation alerts on long-running processes).
+	// Env: LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT
+	ServiceAuthSecretCreatedAt time.Time
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -245,6 +264,7 @@ func Load() Config {
 		HarborRegistryURL:    os.Getenv("HARBOR_REGISTRY_URL"), // MEET-048: empty = disabled
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
 		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
+		ClusterIssuer:        os.Getenv("LOOPZERO_CLUSTER_ISSUER"),
 
 		// Credentials
 		GiteaToken:         os.Getenv("GITEA_TOKEN"),
@@ -307,6 +327,9 @@ func Load() Config {
 		CFKVNamespaceID:   os.Getenv("CF_KV_NAMESPACE_ID"),
 		CFZoneManagement:  os.Getenv("CF_ZONE_MANAGEMENT") == "true",
 
+		// CORS
+		CORSAllowedOrigin: os.Getenv("CORS_ALLOWED_ORIGIN"),
+
 		// JWT Authentication (Sprint 11 — when set, enables dual JWT + PAT validation)
 		JWKSEndpoint: os.Getenv("JWKS_ENDPOINT"),
 		JWTIssuer:    os.Getenv("JWT_ISSUER"),
@@ -318,6 +341,7 @@ func Load() Config {
 		// Roadmap 07 — Backpressure & Admission Control.
 		AdmissionControl:             os.Getenv("LOOPZERO_ADMISSION_CONTROL") == "true",
 		MaxConcurrentBuildsPerCell:   envInt("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
+		MaxTenantsPerCell:            envInt("MAX_TENANTS_PER_CELL", 5000),
 		MaxConcurrentBuildsPerTenant: envInt("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
 		PGCircuitBreakerThresholdPct: envInt("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
 
@@ -325,6 +349,9 @@ func Load() Config {
 		UsePGClaims:   os.Getenv("LOOPZERO_USE_PG_CLAIMS") == "true",
 		DynamicRouter: os.Getenv("LOOPZERO_DYNAMIC_ROUTER") != "false",
 		SingleCell:    os.Getenv("LOOPZERO_SINGLE_CELL") == "true",
+
+		// WS.1: Service auth secret rotation monitoring.
+		ServiceAuthSecretCreatedAt: envTime("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT"),
 	}
 }
 
@@ -332,6 +359,13 @@ func Load() Config {
 // security violations in production that must not be ignored.
 // Called after Load() to surface non-production configuration (C-03).
 func (c Config) Validate() error {
+	// B14 (MEET-2026-04-23-058): ClusterIssuer is required — no in-code default.
+	// Each environment (prod/staging/dev) MUST set LOOPZERO_CLUSTER_ISSUER explicitly.
+	// Prevents the "invisible default" footgun that caused B14.
+	if c.ClusterIssuer == "" {
+		return fmt.Errorf("LOOPZERO_CLUSTER_ISSUER is required (prod: letsencrypt-prod, dev: loopzero-ca-issuer)")
+	}
+
 	// MEET-2026-03-31-023 T2-13: Cross-field validation rules.
 	// These prevent silent misconfigurations that cause runtime failures.
 	if c.DBMaxConns > 0 && c.DBMinConns > 0 && c.DBMaxConns < c.DBMinConns {
@@ -385,6 +419,10 @@ func (c Config) Validate() error {
 	}
 	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" && c.IsProduction() {
 		return fmt.Errorf("LOOPZERO_ARGO_CALLBACK_SECRET using default dev value in production — override via LOOPZERO_ARGO_CALLBACK_SECRET env var")
+	}
+	// SEC: CORS_ALLOWED_ORIGIN must be set in production to prevent open CORS.
+	if c.CORSAllowedOrigin == "" && c.IsProduction() {
+		return fmt.Errorf("CORS_ALLOWED_ORIGIN must be set in production")
 	}
 	// H1: DATABASE_URL with sslmode=disable in production sends credentials and data in plaintext.
 	if c.DatabaseURL != "" && c.IsProduction() && strings.Contains(c.DatabaseURL, "sslmode=disable") {
@@ -443,4 +481,16 @@ func envDuration(key string, defaultValue time.Duration) time.Duration {
 		}
 	}
 	return defaultValue
+}
+
+// envTime parses an environment variable as an RFC 3339 timestamp.
+// Returns the zero value if the variable is unset or unparseable.
+func envTime(key string) time.Time {
+	if v := os.Getenv(key); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			return t
+		}
+		slog.Warn("invalid timestamp in environment variable — ignoring", "key", key, "value", v)
+	}
+	return time.Time{}
 }

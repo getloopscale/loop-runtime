@@ -100,7 +100,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "count(loopzero_git_desired_state_divergence{tenant=~\"$tenant\", env=~\"$env\"} == 1) or vector(0)",
+          "expr": "count(loopzero_release_state_divergence{tenant=~\"$tenant\", env=~\"$env\"} == 1) or vector(0)",
           "legendFormat": "Divergences",
           "refId": "A"
         }
@@ -131,11 +131,11 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
-      "title": "Mirror Failures",
+      "title": "Revision Mismatches",
       "type": "stat",
       "targets": [
         {
-          "expr": "count(loopzero_git_mirror_status{status=\"FAILED\", tenant=~\"$tenant\", env=~\"$env\"}) or vector(0)",
+          "expr": "count(loopzero_release_revision_mismatch_total{tenant=~\"$tenant\", env=~\"$env\"}) or vector(0)",
           "legendFormat": "Mirror Failures",
           "refId": "A"
         }
@@ -166,11 +166,11 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
-      "title": "Reconciler Errors (5m)",
+      "title": "Resync Failures (5m)",
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(increase(loopzero_reconciler_errors_total{tenant=~\"$tenant\", env=~\"$env\"}[5m])) or vector(0)",
+          "expr": "sum(increase(loopzero_release_revision_resync_failure_total{tenant=~\"$tenant\", env=~\"$env\"}[5m])) or vector(0)",
           "legendFormat": "Errors",
           "refId": "A"
         }
@@ -202,11 +202,11 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
-      "title": "Drift Duration p95",
+      "title": "Convergence Duration p95",
       "type": "stat",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_drift_duration_seconds_bucket{tenant=~\"$tenant\", env=~\"$env\"}[1h])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(loopzero_release_convergence_duration_seconds_bucket{tenant=~\"$tenant\", env=~\"$env\"}[1h])) by (le))",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -242,7 +242,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "time() - min(loopzero_reconciliation_last_check_timestamp{tenant=~\"$tenant\", env=~\"$env\"})",
+          "expr": "time() - min(loopzero_reconcile_loop_last_success_timestamp{tenant=~\"$tenant\", env=~\"$env\"})",
           "legendFormat": "Seconds Ago",
           "refId": "A"
         }
@@ -318,11 +318,11 @@
         "showHeader": true,
         "sortBy": []
       },
-      "title": "Mirror Status by Environment",
+      "title": "Revision Mismatches by Environment",
       "type": "table",
       "targets": [
         {
-          "expr": "loopzero_git_mirror_status{tenant=~\"$tenant\", env=~\"$env\"}",
+          "expr": "loopzero_release_revision_mismatch_total{tenant=~\"$tenant\", env=~\"$env\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -443,11 +443,11 @@
         "legend": { "displayMode": "list", "placement": "bottom" },
         "tooltip": { "mode": "multi" }
       },
-      "title": "Reconciler Errors",
+      "title": "Resync Failures",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_reconciler_errors_total{tenant=~\"$tenant\", env=~\"$env\"}[5m])) by (tenant)",
+          "expr": "sum(rate(loopzero_release_revision_resync_failure_total{tenant=~\"$tenant\", env=~\"$env\"}[5m])) by (tenant)",
           "legendFormat": "{{tenant}}",
           "refId": "A"
         }
@@ -472,11 +472,11 @@
         "legend": { "displayMode": "list", "placement": "bottom" },
         "tooltip": { "mode": "multi" }
       },
-      "title": "Reconciliation Check Frequency",
+      "title": "Reconcile Loop Last Success",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "loopzero_reconciliation_last_check_timestamp{tenant=~\"$tenant\", env=~\"$env\"}",
+          "expr": "loopzero_reconcile_loop_last_success_timestamp{tenant=~\"$tenant\", env=~\"$env\"}",
           "legendFormat": "{{tenant}}/{{env}}",
           "refId": "A"
         }

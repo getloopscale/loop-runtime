@@ -1,0 +1,232 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package controller
+
+import (
+	"context"
+	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/loopzero/loopzero/operators/internal/constants"
+)
+
+// reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist in the namespace.
+func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
+	// ServiceAccount
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      constants.SADeployer,
+			Namespace: nsName,
+		},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, sa, func() error {
+		if sa.Labels == nil {
+			sa.Labels = make(map[string]string)
+		}
+		sa.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
+		return nil
+	}); err != nil {
+		return fmt.Errorf("serviceaccount %s/%s: %w", nsName, constants.SADeployer, err)
+	}
+
+	// Role (permissions vary by plan tier)
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      constants.RoleDeployer,
+			Namespace: nsName,
+		},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, role, func() error {
+		role.Rules = rbacRulesForPlan(env.Spec.Plan)
+		return nil
+	}); err != nil {
+		return fmt.Errorf("role %s/%s: %w", nsName, constants.RoleDeployer, err)
+	}
+
+	// RoleBinding
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      constants.RoleBindingDeployer,
+			Namespace: nsName,
+		},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, rb, func() error {
+		rb.RoleRef = rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "Role",
+			Name:     constants.RoleDeployer,
+		}
+		rb.Subjects = []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      constants.SADeployer,
+				Namespace: nsName,
+			},
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("rolebinding %s/%s: %w", nsName, constants.RoleBindingDeployer, err)
+	}
+
+	// Task 7.4: Dedicated ServiceAccount for app workloads (separate from deployer SA).
+	// Pods use this SA with automountServiceAccountToken=false.
+	//
+	// imagePullSecrets provisioning (bug #24 fix — L2 race condition):
+	//   1. Copy the docker config from loopzero-infra-registry-source in platform-system
+	//      (seeded once at platform bootstrap) into this namespace as loopzero-infra-registry.
+	//   2. Attach it to loopzero-app SA.
+	if err := r.ensurePullSecret(ctx, nsName); err != nil {
+		// Non-fatal: pod may still pull if another mechanism (doctl integration,
+		// namespace-level auto-propagation) provides the secret later.
+		// Log but do not block Environment readiness.
+		log.FromContext(ctx).Info("pull secret ensure failed (non-fatal)", "error", err.Error(), "namespace", nsName)
+		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
+			metav1.ConditionFalse, conditions.ReasonFailed, err.Error(), env.Generation)
+	} else {
+		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
+			metav1.ConditionTrue, conditions.ReasonReady, "Pull secret provisioned", env.Generation)
+	}
+
+	// Bug #24 complement: delete stuck ImagePullBackOff pods so ReplicaSet recreates them.
+	if err := r.kickStuckPullBackoffPods(ctx, nsName); err != nil {
+		log.FromContext(ctx).Info("kick stuck pull-backoff pods failed (non-fatal)", "error", err.Error(), "namespace", nsName)
+	}
+
+	appSA := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "loopzero-app",
+			Namespace: nsName,
+		},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, appSA, func() error {
+		if appSA.Labels == nil {
+			appSA.Labels = make(map[string]string)
+		}
+		appSA.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
+		falseVal := false
+		appSA.AutomountServiceAccountToken = &falseVal
+		appSA.ImagePullSecrets = []corev1.LocalObjectReference{
+			{Name: "loopzero-infra-registry"},
+		}
+		var defaultSA corev1.ServiceAccount
+		if err := r.RuntimeClient.Get(ctx, client.ObjectKey{Namespace: nsName, Name: "default"}, &defaultSA); err == nil {
+			for _, ref := range defaultSA.ImagePullSecrets {
+				if ref.Name == "loopzero-infra-registry" {
+					continue
+				}
+				appSA.ImagePullSecrets = append(appSA.ImagePullSecrets, ref)
+			}
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("serviceaccount %s/loopzero-app: %w", nsName, err)
+	}
+
+	return nil
+}
+
+// ensurePullSecret copies the registry pull secret from platform-system into the tenant namespace.
+func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, nsName string) error {
+	var src corev1.Secret
+	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: "loopzero-infra-registry"}
+	if err := r.Client.Get(ctx, srcKey, &src); err != nil {
+		return fmt.Errorf("source pull secret platform-system/loopzero-infra-registry: %w", err)
+	}
+
+	dst := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "loopzero-infra-registry",
+			Namespace: nsName,
+		},
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, dst, func() error {
+		dst.Type = corev1.SecretTypeDockerConfigJson
+		dst.Data = src.Data
+		if dst.Labels == nil {
+			dst.Labels = make(map[string]string)
+		}
+		dst.Labels[constants.LabelManagedBy] = constants.ManagedByEnvironmentController
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("destination pull secret %s/loopzero-infra-registry: %w", nsName, err)
+	}
+	return nil
+}
+
+// kickStuckPullBackoffPods deletes pods stuck in ImagePullBackOff or ErrImagePull.
+// Bug #24 complement (scale-50k L2). Idempotent — no-op if no stuck pods.
+func (r *EnvironmentReconciler) kickStuckPullBackoffPods(ctx context.Context, nsName string) error {
+	var pods corev1.PodList
+	if err := r.RuntimeClient.List(ctx, &pods, client.InNamespace(nsName)); err != nil {
+		return fmt.Errorf("list pods in %s: %w", nsName, err)
+	}
+	var kicked int
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.State.Waiting != nil &&
+				(cs.State.Waiting.Reason == "ImagePullBackOff" || cs.State.Waiting.Reason == "ErrImagePull") {
+				if err := r.RuntimeClient.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+					log.FromContext(ctx).Info("kick pod failed",
+						"pod", pod.Name, "namespace", nsName, "error", err.Error())
+					continue
+				}
+				kicked++
+				break
+			}
+		}
+	}
+	if kicked > 0 {
+		log.FromContext(ctx).Info("kicked stuck pull-backoff pods",
+			"namespace", nsName, "count", kicked)
+	}
+	return nil
+}
+
+// rbacRulesForPlan returns the RBAC rules for a given plan tier.
+func rbacRulesForPlan(plan loopzerov1.PlanTier) []rbacv1.PolicyRule {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services", "configmaps"},
+			Verbs:     []string{"get", "list", "create", "update", "patch"},
+		},
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
+			Verbs:     []string{"get", "list", "create", "update", "patch"},
+		},
+	}
+
+	if plan == loopzerov1.PlanGrowth || plan == loopzerov1.PlanEnterprise {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "list", "create", "update", "patch"},
+		})
+	}
+
+	if plan == loopzerov1.PlanEnterprise {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups: []string{"networking.k8s.io"},
+			Resources: []string{"ingresses", "networkpolicies"},
+			Verbs:     []string{"get", "list", "create", "update", "patch", "delete"},
+		})
+	}
+
+	return rules
+}

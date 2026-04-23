@@ -23,8 +23,19 @@ import (
 //
 // Image choice: Uses pre-built loopzero-cosign-signer image with cosign baked in.
 // SEC-006: No runtime binary downloads — cosign is checksum-verified at image build time.
-func cosignSignTemplate(appName, imageTag string) *forge.Container {
+//
+// B7 (CHG-2026-04-22-001): insecureRegistry mirrors the same toggle used by BuildKit
+// (InfraParams.RegistryInsecure). When true, cosign receives --allow-insecure-registry
+// so it speaks HTTP (local k3d dev). Config.Validate() enforces false in production.
+func cosignSignTemplate(appName, imageTag string, insecureRegistry bool) *forge.Container {
 	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, appName)
+
+	// cosign v3 distinguishes: --allow-insecure-registry (self-signed TLS) from
+	// --allow-http-registry (plain HTTP). Local k3d registry serves plain HTTP.
+	insecureFlag := ""
+	if insecureRegistry {
+		insecureFlag = " --allow-http-registry --allow-insecure-registry"
+	}
 
 	// Shell script that:
 	// 1. Extracts the image digest from BuildKit metadata using sed
@@ -41,13 +52,13 @@ fi
 echo "Signing image: %s@${DIGEST}"
 
 # Sign with cosign (key-based — cluster does not have OIDC provider for keyless)
-cosign sign --yes --key %s/cosign.key \
+cosign sign --yes%s --key %s/cosign.key \
   -a "build-system=loopzero" \
   -a "app=%s" \
   "%s@${DIGEST}"
 
 echo "Image signed successfully"
-`, metadataFile, imageTag, cosignKeyMountPath, appName, imageTag)
+`, metadataFile, imageTag, insecureFlag, cosignKeyMountPath, appName, imageTag)
 
 	return &forge.Container{
 		Name:    fmt.Sprintf("sign-image-%s", appName),

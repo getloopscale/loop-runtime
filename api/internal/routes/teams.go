@@ -7,18 +7,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
-// ErrMemberNotFound is returned when a team member does not exist.
-var ErrMemberNotFound = errors.New("member not found")
+// ErrMemberNotFound is an alias for domain.ErrMemberNotFound (backward compatibility).
+var ErrMemberNotFound = domain.ErrMemberNotFound
 
 // validRoles defines the allowed team member roles.
 var validRoles = map[string]bool{
@@ -27,31 +29,12 @@ var validRoles = map[string]bool{
 	"member": true,
 }
 
-// TeamMemberInfo represents a team member in API responses.
-// Uses route-level types to avoid importing db (DIP).
-type TeamMemberInfo struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
-	JoinedAt string `json:"joined_at"`
-}
-
-// TeamUserInfo represents a platform user (for add-member lookup).
-type TeamUserInfo struct {
-	ID          string
-	Email       string
-	DisplayName string
-}
-
-// TeamStore abstracts team member persistence (DIP).
-type TeamStore interface {
-	ListMembers(ctx context.Context, tenantID string) ([]TeamMemberInfo, error)
-	AddMember(ctx context.Context, tenantID, userID, role string) error
-	RemoveMember(ctx context.Context, tenantID, userID string) error
-	UpdateMemberRole(ctx context.Context, tenantID, userID, newRole string) error
-	GetMember(ctx context.Context, tenantID, userID string) (*TeamMemberInfo, error)
-	GetUserByUsername(ctx context.Context, username string) (*TeamUserInfo, error)
-}
+// Type aliases for backward compatibility -- canonical definitions are in domain/.
+type (
+	TeamMemberInfo = domain.TeamMemberInfo
+	TeamUserInfo   = domain.TeamUserInfo
+	TeamStore      = domain.TeamStore
+)
 
 // TeamHandler provides HTTP handlers for team member operations.
 type TeamHandler struct {
@@ -206,8 +189,23 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up the target member
-	targetUserID := "github-" + username
+	// Look up target user (AUDIT-7: provider-agnostic — no "github-" assumption)
+	targetUser, err := h.store.GetUserByUsername(ctx, username)
+	if err != nil {
+		slog.Error("failed to look up target user", "error", err.Error())
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+	if targetUser == nil {
+		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			"TEAM_MEMBER_NOT_FOUND",
+			fmt.Sprintf("User %q is not a team member.", username),
+			http.StatusNotFound,
+		))
+		return
+	}
+	targetUserID := targetUser.ID
+
 	targetMember, err := h.store.GetMember(ctx, uc.TenantID, targetUserID)
 	if err != nil {
 		slog.Error("failed to get target member", "error", err.Error())
@@ -215,14 +213,24 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// AUDIT-6: fail fast with 404 when user exists but is not a team member.
+	if targetMember == nil {
+		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			"TEAM_MEMBER_NOT_FOUND",
+			fmt.Sprintf("User %q is not a team member.", username),
+			http.StatusNotFound,
+		))
+		return
+	}
+
 	// Owner protection: cannot remove the owner
-	if targetMember != nil && targetMember.Role == "owner" {
+	if targetMember.Role == "owner" {
 		writeLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("the team owner cannot be removed"))
 		return
 	}
 
 	// Admin cannot remove another admin (only owner can)
-	if callerMember.Role == "admin" && targetMember != nil && targetMember.Role == "admin" {
+	if callerMember.Role == "admin" && targetMember.Role == "admin" {
 		writeLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("admins cannot remove other admins — only the owner can"))
 		return
 	}
@@ -289,8 +297,24 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Look up target user (AUDIT-7: provider-agnostic — no "github-" assumption)
+	targetUser, err := h.store.GetUserByUsername(ctx, username)
+	if err != nil {
+		slog.Error("failed to look up target user", "error", err.Error())
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+	if targetUser == nil {
+		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			Code:       "MEMBER_NOT_FOUND",
+			Message:    "member '" + username + "' not found in this team",
+			HTTPStatus: http.StatusNotFound,
+		})
+		return
+	}
+	targetUserID := targetUser.ID
+
 	// Owner protection: cannot change the owner's role
-	targetUserID := "github-" + username
 	targetMember, err := h.store.GetMember(ctx, uc.TenantID, targetUserID)
 	if err != nil {
 		slog.Error("failed to get target member", "error", err.Error())

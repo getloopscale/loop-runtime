@@ -131,6 +131,23 @@ spec:
               value: "http://172.18.0.14:80"
             - name: BASE_DOMAIN
               value: "loopzero.local"
+            # CHG-2026-04-22-001 B4 — JWKS wiring for local dev (Rule 10 parity).
+            # Engine is RSA-only (MEET-039 B3). Without these, no JWT validates
+            # and `loopzero login` → 401 across the board. Hydra runs in loopzero-system
+            # and exposes both URLs; consumed by api/cmd/setup_auth.go.
+            - name: JWKS_URL
+              value: "http://ory-hydra-public.loopzero-system.svc.cluster.local:4444/.well-known/jwks.json"
+            # JWT_ISSUER must match exactly the `iss` claim Hydra stamps into tokens.
+            # Local Hydra is configured with `urls.self.issuer=http://localhost:4444/`
+            # (see infra/helm/ory-hydra/values.yaml) so the API must validate against
+            # that exact string. JWKS is fetched in-cluster (correct URL above).
+            - name: JWT_ISSUER
+              value: "http://localhost:4444/"
+            # B14 (MEET-2026-04-23-058): cert-manager ClusterIssuer for TLS Certificates.
+            # Dev uses loopzero-ca-issuer (self-signed CA, already provisioned on workload cluster).
+            # Prod sets letsencrypt-prod via Pulumi mgmt-api.ts ConfigMap.
+            - name: LOOPZERO_CLUSTER_ISSUER
+              value: "loopzero-ca-issuer"
           ports:
             - containerPort: 3001
               name: http

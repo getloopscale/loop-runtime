@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Bootstrap shared: constants, types, kubeconfig parser, namespace creation.
+// Split modules: bootstrap-cert-ingress.ts, bootstrap-registry.ts
+
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
-import * as digitalocean from "@pulumi/digitalocean";
 import { PlatformStackConfig } from "../config/stack";
 
 // ---------------------------------------------------------------------------
@@ -36,18 +38,14 @@ export const HELM_VERSIONS = {
   oryKratos: "0.61.0",
   oryHydra: "0.61.0",
   metricsServer: "3.12.1",
+  kubeStateMetrics: "5.25.1",
+  blackboxExporter: "9.2.0",
 } as const;
 
 // ---------------------------------------------------------------------------
 // Kubeconfig parser (infra-arch-005: replaces fragile regex extraction)
 // ---------------------------------------------------------------------------
 
-/**
- * Parsed fields from a DOKS kubeconfig YAML.
- * Extracts bearer token and CA certificate data without a full YAML parser
- * by walking lines and matching key-value pairs. More robust than regex
- * because it handles variable whitespace and only matches YAML scalar values.
- */
 export interface KubeconfigFields {
   readonly token: string;
   readonly certificateAuthorityData: string;
@@ -57,9 +55,6 @@ export interface KubeconfigFields {
 /**
  * Parse a DOKS kubeconfig YAML string and extract key fields.
  * Returns empty strings for missing fields instead of failing silently.
- *
- * This replaces the fragile `/token:\s*(.+)/` regex that could break
- * if DigitalOcean changes kubeconfig format (e.g., exec-based auth).
  */
 export function parseKubeconfig(raw: string): KubeconfigFields {
   let token = "";
@@ -68,7 +63,6 @@ export function parseKubeconfig(raw: string): KubeconfigFields {
 
   for (const line of raw.split("\n")) {
     const trimmed = line.trim();
-    // Match "key: value" patterns (YAML scalar values only)
     const colonIdx = trimmed.indexOf(":");
     if (colonIdx < 0) continue;
     const key = trimmed.slice(0, colonIdx).trim();
@@ -88,9 +82,6 @@ export function parseKubeconfig(raw: string): KubeconfigFields {
     }
   }
 
-  // REVIEW-2026-03-30: Fixes MED-04 — fail fast on missing fields instead of
-  // returning empty strings that cause deferred runtime failures (e.g., ESO
-  // trying to authenticate with an empty bearer token).
   if (!token || !certificateAuthorityData || !server) {
     const missing = [
       !token && "token",
@@ -130,6 +121,10 @@ export interface MgmtBootstrapOutputs extends ClusterBootstrapOutputs {
   readonly tlsConfigured: pulumi.Output<boolean>;
 }
 
+export interface RuntimeBootstrapOutputs extends ClusterBootstrapOutputs {
+  readonly ksmEndpoint: pulumi.Output<string>;
+}
+
 export interface BuildBootstrapOutputs {
   readonly argoWorkflowsReady: pulumi.Output<boolean>;
   readonly lokiEndpoint: pulumi.Output<string>;
@@ -139,20 +134,19 @@ export interface BuildBootstrapOutputs {
 export interface BootstrapOutputs {
   readonly mgmt: MgmtBootstrapOutputs;
   readonly build: BuildBootstrapOutputs;
-  readonly runtime: ClusterBootstrapOutputs;
+  readonly runtime: RuntimeBootstrapOutputs;
+  readonly runtime2?: { ingressReady: pulumi.Output<boolean> };
 }
 
 /**
  * Cloudflare resource outputs produced BEFORE bootstrap (Phase 1.5).
- * Passed into bootstrap so mgmt-bootstrap can wire secrets from real outputs
- * instead of reading stale config values (fixes dual source of truth).
  */
 export interface CloudflareOutputs {
   readonly kvNamespaceId?: pulumi.Output<string>;
 }
 
 // ---------------------------------------------------------------------------
-// Shared utilities — used by mgmt, build, and runtime bootstrap modules
+// Shared utilities
 // ---------------------------------------------------------------------------
 
 export function createPlatformNamespace(
@@ -171,8 +165,6 @@ export function createPlatformNamespace(
           "loopzero.io/environment": config.environment,
           "loopzero.io/project": config.project,
           "loopzero.io/cluster-role": role,
-          // PSA enforcement: baseline allows common workloads (non-root not required
-          // for all platform services like Gitea, MinIO). Warn on restricted violations.
           "pod-security.kubernetes.io/enforce": "baseline",
           "pod-security.kubernetes.io/warn": "restricted",
           "pod-security.kubernetes.io/audit": "restricted",
@@ -183,374 +175,9 @@ export function createPlatformNamespace(
   );
 }
 
-export function installCertManager(
-  role: string,
-  provider: k8s.Provider,
-  ns: k8s.core.v1.Namespace,
-): k8s.helm.v3.Release {
-  return new k8s.helm.v3.Release(
-    `${role}-cert-manager`,
-    {
-      name: `${role}-cert-manager`,
-      chart: "cert-manager",
-      version: HELM_VERSIONS.certManager,
-      repositoryOpts: {
-        repo: "https://charts.jetstack.io",
-      },
-      namespace: PLATFORM_NAMESPACE,
-      createNamespace: false,
-      // Wait for ALL cert-manager pods (including webhook) to be Ready.
-      // Without this, the ClusterIssuer creation fails because the webhook
-      // isn't serving yet: "http: server gave HTTP response to HTTPS client".
-      // Critical for fresh deploys (destroy+recreate).
-      waitForJobs: true,
-      timeout: 300, // 5 min for webhook to become ready
-      values: {
-        installCRDs: true,
-        global: {
-          leaderElection: {
-            namespace: PLATFORM_NAMESPACE,
-          },
-        },
-        resources: {
-          requests: { cpu: "50m", memory: "64Mi" },
-          limits: { cpu: "200m", memory: "256Mi" },
-        },
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-}
-
-export function installTraefik(
-  role: string,
-  provider: k8s.Provider,
-  ns: k8s.core.v1.Namespace,
-  certManager?: k8s.helm.v3.Release,
-): k8s.helm.v3.Release {
-  const dependsOn: pulumi.Resource[] = [ns];
-  if (certManager) {
-    dependsOn.push(certManager);
-  }
-
-  // Helm release name stays "mgmt-traefik" for both mgmt and runtime clusters.
-  // K8s resources on the runtime cluster have annotation meta.helm.sh/release-name=mgmt-traefik.
-  // Changing the release name requires deleting all Traefik resources first (Helm ownership).
-  // The fullnameOverride differentiates K8s resource names: mgmt-traefik vs runtime-traefik.
-  // TODO: Rename to ${role}-traefik on next destroy+recreate cycle.
-  return new k8s.helm.v3.Release(
-    `${role}-traefik`,
-    {
-      name: "mgmt-traefik",
-      chart: "traefik",
-      version: HELM_VERSIONS.traefik,
-      repositoryOpts: {
-        repo: "https://traefik.github.io/charts",
-      },
-      namespace: PLATFORM_NAMESPACE,
-      createNamespace: false,
-      values: {
-        // Deterministic Service name so lookupLoadBalancerEndpoint can find it.
-        // Without this, the chart template may produce an unexpected name.
-        fullnameOverride: `${role}-traefik`,
-        ports: {
-          web: {
-            port: 8000,
-            expose: { default: true },
-            exposedPort: 80,
-          },
-          websecure: {
-            port: 8443,
-            expose: { default: true },
-            exposedPort: 443,
-          },
-        },
-        service: {
-          type: "LoadBalancer",
-        },
-        providers: {
-          kubernetesCRD: { enabled: true },
-          kubernetesIngress: { enabled: true },
-        },
-        resources: {
-          requests: { cpu: "100m", memory: "128Mi" },
-          limits: { cpu: "500m", memory: "512Mi" },
-        },
-        // HA: 2 replicas with PDB and topology spread (P0-2 audit fix)
-        deployment: {
-          replicas: 2,
-        },
-        podDisruptionBudget: {
-          enabled: true,
-          minAvailable: 1,
-        },
-        topologySpreadConstraints: [
-          {
-            maxSkew: 1,
-            topologyKey: "kubernetes.io/hostname",
-            whenUnsatisfiable: "ScheduleAnyway",
-            labelSelector: {
-              matchLabels: {
-                "app.kubernetes.io/name": "traefik",
-              },
-            },
-          },
-        ],
-        // Structured JSON logging for log aggregation (Loki/Promtail)
-        logs: {
-          general: { format: "json" },
-          access: { enabled: true, format: "json" },
-        },
-      },
-    },
-    {
-      provider,
-      dependsOn,
-    },
-  );
-}
-
-/**
- * Reads the Traefik LoadBalancer Service to get the external endpoint.
- *
- * Pulumi's K8s provider waits for the LB to be assigned before
- * marking the Service as ready, so this output resolves only
- * after the cloud provider has allocated an IP/hostname.
- *
- * DigitalOcean returns an IP; AWS returns a hostname (ELB).
- */
-export function lookupLoadBalancerEndpoint(
-  role: string,
-  provider: k8s.Provider,
-  traefik: k8s.helm.v3.Release,
-): pulumi.Output<string> {
-  // Service name is deterministic: fullnameOverride="{role}-traefik"
-  // is set in installTraefik, so the K8s Service name matches exactly.
-  const svc = k8s.core.v1.Service.get(
-    `${role}-traefik-lb-lookup`,
-    pulumi.interpolate`${PLATFORM_NAMESPACE}/${role}-traefik`,
-    { provider, dependsOn: [traefik] },
-  );
-
-  return svc.status.apply((status) => {
-    const ingress = status?.loadBalancer?.ingress?.[0];
-    return ingress?.ip ?? ingress?.hostname ?? "";
-  });
-}
-
 // ---------------------------------------------------------------------------
-// TLS — Let's Encrypt via cert-manager + Traefik IngressRoute
+// Re-exports from split modules (backward compatibility)
 // ---------------------------------------------------------------------------
 
-/**
- * Creates a ClusterIssuer for Let's Encrypt production certificates.
- * Uses DNS-01 challenge via Cloudflare DNS API when cfApiToken is available,
- * falling back to HTTP-01 via Traefik when not.
- *
- * DNS-01 is required when ingress is behind Cloudflare Tunnel (no public IP
- * for HTTP-01 validation). The Cloudflare API token needs Zone:DNS:Edit permission.
- */
-export function createClusterIssuer(
-  provider: k8s.Provider,
-  certManager: k8s.helm.v3.Release,
-  config: PlatformStackConfig,
-  role: string = "mgmt",
-): k8s.apiextensions.CustomResource {
-  // Cloudflare API token secret for DNS-01 challenge.
-  // Created on EVERY cluster with cert-manager — each cluster's ClusterIssuer
-  // references this secret by name in the same namespace.
-  if (config.cfApiToken) {
-    new k8s.core.v1.Secret(
-      `cloudflare-api-token-secret-${role}`,
-      {
-        metadata: {
-          name: "cloudflare-api-token-secret",
-          namespace: PLATFORM_NAMESPACE,
-        },
-        stringData: {
-          "api-token": config.cfApiToken,
-        },
-      },
-      { provider, dependsOn: [certManager] },
-    );
-  }
-
-  // Dual solver strategy:
-  // 1. DNS-01 via Cloudflare for platform domains (*.loopzero.example) — required behind CF Tunnel
-  // 2. HTTP-01 via Traefik as catch-all for custom domains (e.g., aquim.ai on Hostinger)
-  //
-  // cert-manager selects the most specific matching solver per Certificate.
-  // DNS-01 matches only the configured dnsZone; HTTP-01 catches everything else.
-  // Without this, custom domains on non-Cloudflare DNS providers can never issue TLS.
-  const solvers = config.cfApiToken
-    ? [
-        {
-          selector: {
-            dnsZones: [config.dnsZone],
-          },
-          dns01: {
-            cloudflare: {
-              apiTokenSecretRef: {
-                name: "cloudflare-api-token-secret",
-                key: "api-token",
-              },
-            },
-          },
-        },
-        {
-          selector: {},
-          http01: {
-            ingress: {
-              class: "traefik",
-            },
-          },
-        },
-      ]
-    : [
-        {
-          http01: {
-            ingress: {
-              class: "traefik",
-            },
-          },
-        },
-      ];
-
-  // ROOT CAUSE FIX: The "http: server gave HTTP response to HTTPS client" error was
-  // caused by the default-deny-ingress NetworkPolicy in platform-system blocking the
-  // K8s API server from reaching the cert-manager webhook pod. The allow-cert-manager-webhook
-  // NetworkPolicy in mgmt-bootstrap.ts fixes this by allowing ingress on port 10250.
-  //
-  // Previous misdiagnosis: We assumed this was a webhook TLS timing issue (cainjector
-  // needing time to generate certs). It was actually a network issue — the webhook was
-  // serving TLS correctly, but the K8s API server couldn't connect to it.
-  return new k8s.apiextensions.CustomResource(
-    `${role}-letsencrypt-prod`,
-    {
-      apiVersion: "cert-manager.io/v1",
-      kind: "ClusterIssuer",
-      metadata: {
-        name: "letsencrypt-prod",
-        labels: {
-          "app.kubernetes.io/managed-by": "pulumi",
-          "app.kubernetes.io/part-of": "loopzero-platform",
-          "loopzero.io/environment": config.environment,
-        },
-      },
-      spec: {
-        acme: {
-          email: `admin@${config.dnsZone}`,
-          server: "https://acme-v02.api.letsencrypt.org/directory",
-          privateKeySecretRef: {
-            name: "letsencrypt-prod-account-key",
-          },
-          solvers,
-        },
-      },
-    },
-    {
-      provider,
-      dependsOn: [certManager],
-      customTimeouts: { create: "5m", update: "2m" },
-    },
-  );
-}
-
-// ---------------------------------------------------------------------------
-// metrics-server — MEET-2026-04-09-045: enables kubectl top + HPA
-// ---------------------------------------------------------------------------
-
-/**
- * Installs metrics-server on a cluster. DOKS does not always pre-install it.
- * Required for `kubectl top`, HPA, and resource pressure visibility.
- */
-export function installMetricsServer(
-  role: string,
-  provider: k8s.Provider,
-): k8s.helm.v3.Release {
-  return new k8s.helm.v3.Release(
-    `${role}-metrics-server`,
-    {
-      name: "metrics-server",
-      chart: "metrics-server",
-      version: HELM_VERSIONS.metricsServer,
-      repositoryOpts: {
-        repo: "https://kubernetes-sigs.github.io/metrics-server/",
-      },
-      namespace: "kube-system",
-      createNamespace: false,
-      values: {
-        args: ["--kubelet-insecure-tls"], // DOKS uses self-signed kubelet certs
-        resources: {
-          requests: { cpu: "50m", memory: "64Mi" },
-          limits: { cpu: "100m", memory: "128Mi" },
-        },
-      },
-    },
-    { provider },
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Container registry pull secret
-// ---------------------------------------------------------------------------
-
-/**
- * Creates a `kubernetes.io/dockerconfigjson` Secret authorizing pulls from
- * DigitalOcean Container Registry (DOCR).
- *
- * Problem this solves:
- *   Previously the platform relied on `doctl kubernetes cluster registry add`
- *   being run manually to seed pull credentials on each cluster. That left
- *   homolog / any fresh cluster with 401 Unauthorized on every Deployment that
- *   pulls from registry.digitalocean.com/loopzero-infra-registry — a silent manual
- *   step that breaks "Local equals production" and `feedback_never_manual`.
- *
- * This helper uses `digitalocean.getContainerRegistryDockerCredentials` to
- * issue long-lived read credentials (default expiry ≈ 50 years) and persists
- * them as a dockerconfigjson Secret in the target namespace. Pods / SAs
- * reference it via `imagePullSecrets: [{ name: "loopzero-infra-registry" }]`.
- *
- * Use `write: true` only for namespaces whose pods need to *push* images
- * (e.g. Argo Workflows build pods using BuildKit). Everything else — platform
- * Deployments, runtime workloads — should use read-only credentials.
- */
-export function createDockerRegistryPullSecret(
-  resourceName: string,
-  registryName: pulumi.Input<string>,
-  namespace: pulumi.Input<string>,
-  provider: k8s.Provider,
-  opts: { write?: boolean; dependsOn?: pulumi.Resource[] } = {},
-): k8s.core.v1.Secret {
-  // DigitalOcean Container Registry — long-lived docker credentials.
-  // expirySeconds = 0 means the credentials never expire.
-  const creds = new digitalocean.ContainerRegistryDockerCredentials(
-    `${resourceName}-creds`,
-    {
-      registryName,
-      write: opts.write ?? false,
-      expirySeconds: 0,
-    },
-  );
-
-  return new k8s.core.v1.Secret(
-    resourceName,
-    {
-      metadata: {
-        name: "loopzero-infra-registry",
-        namespace,
-        // Force Pulumi to own this Secret even if it was created by another
-        // manager (e.g. doctl kubernetes cluster registry add). Without this,
-        // server-side apply fails with field conflict on .data..dockerconfigjson.
-        annotations: {
-          "pulumi.com/patchForce": "true",
-        },
-      },
-      type: "kubernetes.io/dockerconfigjson",
-      stringData: {
-        ".dockerconfigjson": creds.dockerCredentials,
-      },
-    },
-    { provider, dependsOn: opts.dependsOn },
-  );
-}
+export { installCertManager, installTraefik, lookupLoadBalancerEndpoint, createClusterIssuer } from "./bootstrap-cert-ingress";
+export { createDockerRegistryPullSecret, installMetricsServer } from "./bootstrap-registry";

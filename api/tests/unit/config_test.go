@@ -4,11 +4,20 @@
 package unit
 
 import (
+	"os"
 	"testing"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/config"
 )
+
+// TestMain seeds LOOPZERO_CLUSTER_ISSUER for ALL tests in this package.
+// B14 (MEET-2026-04-23-058): ClusterIssuer is now required in Validate().
+// Tests that explicitly exercise missing-var behavior override via t.Setenv("").
+func TestMain(m *testing.M) {
+	_ = os.Setenv("LOOPZERO_CLUSTER_ISSUER", "test-cluster-issuer")
+	os.Exit(m.Run())
+}
 
 func TestConfig_Load_DefaultValues(t *testing.T) {
 	// Act

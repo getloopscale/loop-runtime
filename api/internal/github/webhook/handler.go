@@ -17,6 +17,10 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -118,6 +122,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid signature", http.StatusForbidden)
 		return
 	}
+
+	_, span := otel.Tracer("loopzero-api").Start(r.Context(), "loopzero.api.webhook.github.receive",
+		trace.WithAttributes(
+			attribute.String("loopzero.webhook.event_type", eventType),
+			attribute.String("loopzero.webhook.delivery_id", deliveryID),
+		))
+	defer span.End()
 
 	log.Info("webhook: event received", "size", len(body))
 

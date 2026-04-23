@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Scaling config (`replicas` + `autoscaling`) wired end-to-end and plan-capped** (CHG-2026-04-23-B15 / MEET-2026-04-23-059 / ADR-0011): previously the CLI recognised, persisted, and rendered scaling config but no plan-cap enforcement existed; users on any plan could request any replica count, and the CLI validator warned "Unknown field 'apps.api.replicas' -- ignored". This release closes the chain from `loopzero.yaml` → CLI validator → CLI payload → API route DTO → adapter → orchestrator → persisted spec. Mutual exclusion between `replicas` and `autoscaling` is now enforced at both CLI and API boundaries (`SCALING_AMBIGUOUS`, HTTP 422). Per-service replica cap enforced via new `max_replicas_per_service` plan metric: Starter=2, Pro=5, Team=10, Enterprise=unlimited (`REPLICAS_EXCEED_PLAN`, HTTP 422). The authoritative enforcement point is `BuildOrchestrator.SubmitBuild` so both the CLI deploy path and the GitHub App auto-deploy webhook are covered by the same gate.
+
+### Fixed
+- **False "Unknown field" warning on `replicas`/`autoscaling`** (CHG-2026-04-23-B15): CLI validator `knownFields` allow-list extended.
+- **CLI parser silently dropped invalid scaling values** (CHG-2026-04-23-B15): `parseLoopZeroYaml` now preserves all numeric values so `validate-config.ts` can reject them explicitly with actionable messages naming the field and constraint.
+- **Pre-existing duplicate `TestMiddleware_EmptyTenantPasses` symbol in `pkg/enforcement`** (CHG-2026-04-23-B15 unblocker): build failure inherited from `develop` that blocked enforcement tests. Duplicate in `limiter_test.go` removed; identical test remains in `middleware_test.go`.
+
+### Added
+- **Observability gaps resolution** — comprehensive observability improvements across all components
+  - **Blackbox probes**: blackbox_exporter with HTTP, DNS, TCP modules. Probes API, Gitea, Traefik, ArgoCD. Alerts for probe failure, TLS cert expiry, slow probes
+  - **Deploy E2E trace**: 12 new OTel spans covering auth, idempotency, ArgoCD sync/callback, release activation, rollback, domain provisioning, build reconcile, webhook, auto-deploy
+  - **Sloth SLOs**: 7 formal SLO specs (deploy success 99.5%, deploy latency 95%<5min, rollback 99.9%, tenant availability 99.9%, API availability 99.9%, build pipeline 99%, domain provisioning 99%) with multi-window multi-burn-rate alerts
+  - **Business metrics**: `loopzero_deploy_lead_time_seconds`, `loopzero_false_success_total`, `loopzero_retry_amplification_total`
+  - **CLI tracing**: OpenTelemetry SDK in CLI with W3C TraceContext propagation to API. CLI spans become parent of API spans for E2E traces
+  - **pprof endpoints**: on-demand profiling via `kubectl port-forward` on API (:6060) and operators (:6061)
+  - **Telemetry pipeline observability**: ServiceMonitor for OTel Collector, alerts for span drop rate and export failures
+  - **Dashboards**: Executive Summary (SLO error budgets, burn rates, deploy trends, lead time) and Blackbox Probes (probe status, latency, TLS, DNS)
+- **`loopzero promote` command** — promote a release from one environment to another without re-building. API endpoint `POST /api/v1/projects/{name}/promote`, PromotionOrchestrator service, CLI command with `--from`/`--to` flags and `--json` output. Uses existing promotion state machine. Locks target environment via `withEnvironmentLock`. 28 new tests (6 service + 8 route handler + 15 CLI).
+
+### Fixed
+- **Tenant deletion stuck with no recovery** (operators-review): After DeletionMaxAttempts, controller now requeues every 1h instead of stopping entirely. Allows self-healing if dependencies recover. Metric `loopzero_tenant_deletion_stuck_total` still emitted for alerting.
+- **MinIO error matching fragility** (operators-review): Replaced custom `contains()`/`searchString()` with `strings.Contains()` in minio provisioner. Added regression test `TestIsNotFoundError`.
+- **Gitea EnsureOrg swallowed verification errors** (operators-review): On 422 + verification failure, now returns error instead of nil. Prevents silent org creation failures.
+- **Inconsistent status update error handling** (operators-review): Standardized across GitRepositoryBinding and ClusterCredential controllers to log statusErr instead of returning it (preserves original reconcile error).
+- **EnvironmentController pull secret failures invisible** (operators-review): Added `PullSecretReady` condition (informational, non-blocking) so operators can detect pull secret provisioning failures via `kubectl describe environment`.
+- **Hardcoded "platform-system" string** (operators-review): Replaced with `constants.NamespacePlatformSystem` in `environment_controller.go`.
+- **Grafana tenant-workloads dashboard showing no data**: Installed kube-state-metrics on runtime cluster with cross-cluster NodePort (30092) scrape from mgmt Prometheus. Dashboard queries use `job="runtime-kube-state-metrics"` which now resolves to real metrics. Also fixes tenant-ecosystem dashboard.
+
+### Added
+- **CircuitBreaker for MinIO provisioner** (operators-review): Wraps MinIO CredentialProvisioner with same CB pattern as Gitea/ArgoCD. Prevents retry storms on MinIO outage.
+- **CircuitBreaker for Harbor client** (operators-review): Wraps Harbor Client with CB pattern. Preserves nil-guard behavior.
+- **Type tests for 5 CRDs** (operators-review): Added type-level tests for LoopZeroApplication, Environment, ExposedRoute, GitRepositoryBinding, PlatformBootstrap (~40 new tests).
+- **Ginkgo fake provisioner Reset()** (operators-review): Added `BeforeEach` in suite_test.go to reset fake provisioner state between test Contexts. Prevents state leakage between tests.
+- **PlatformBootstrap ownership check** (operators-review): Validates `managed-by` label before deleting platform-tokens secret during cleanup.
+
+### Security
+- **TLS verification enforced in production** (operators-review, SEC-001): Added `OPERATOR_INSECURE_SKIP_TLS=false` to Pulumi production config and explicit `true` for dev. Previously defaulted to skip (insecure).
+
+### Removed
+- **AppSecret CRD unregistered** (operators-review): Removed from scheme registration. No controller ever implemented — secrets managed via ESO directly. Go types retained for future use.
+- **ReconciliationReport CRD unregistered** (operators-review): Removed from scheme registration + CRD YAML deleted. Dead code with no controller or sprint assigned. Go types retained as experimental.
+
 ### Added
 - **Tenant deletion lifecycle — Phases 0-5** (MEET-052): Full tenant deletion lifecycle implementation. Meeting record: MEET-2026-04-17-052.
   - Phase 0: DeleteApplications NotFound idempotency fix (prevents retry storms)

@@ -13,7 +13,7 @@ describe('ProjectInspectCommand', () => {
       getProject: async () => ({
         id: 'p-1',
         name: 'my-api',
-        team_id: 'tn-loopzero',
+        team: 'tn-loopzero',
         created_at: '2026-01-15T00:00:00Z',
         created_by: 'github|12345',
       }),
@@ -100,13 +100,34 @@ describe('ProjectInspectCommand', () => {
         getProject: async () => ({
           id: 'p-1',
           name: 'my-api',
-          team_id: 'tn-loopzero',
+          team: 'tn-loopzero',
           created_at: '2026-01-15T00:00:00Z',
         }),
       }));
       await cmd.execute('my-api');
       const allOutput = output.join('\n');
       expect(allOutput).not.toContain('Created by:');
+    });
+
+    // CHG-2026-04-23-AUDIT-4: API returns `team` (not `team_id`) per real
+    // response shape. Previously CLI rendered "Team: undefined" because
+    // interface and fixtures used invented `team_id` field name.
+    it('renders team from real API shape (team, not team_id)', async () => {
+      const cmd = new ProjectInspectCommand(makeDeps({
+        getProject: async () => ({
+          id: 'proj-7653baec',
+          name: 'e2e-test-hello',
+          // Shape that api/internal/routes/projects.go actually returns:
+          team: 'e2e-tenant',
+          created_at: '2026-04-23T05:55:32Z',
+          created_by: 'loopzero-e2e',
+        } as unknown as { id: string; name: string; team: string; created_at: string; created_by?: string }),
+      }));
+      const code = await cmd.execute('e2e-test-hello');
+      expect(code).toBe(0);
+      const allOutput = output.join('\n');
+      expect(allOutput).toContain('e2e-tenant');
+      expect(allOutput).not.toContain('undefined');
     });
 
     it('shows not found error with project name', async () => {
@@ -134,7 +155,7 @@ describe('ProjectInspectCommand', () => {
       expect(code).toBe(0);
       const parsed = JSON.parse(output[0]);
       expect(parsed.name).toBe('my-api');
-      expect(parsed.team_id).toBe('tn-loopzero');
+      expect(parsed.team).toBe('tn-loopzero');
       expect(parsed.created_at).toBe('2026-01-15T00:00:00Z');
       expect(parsed.created_by).toBe('github|12345');
     });

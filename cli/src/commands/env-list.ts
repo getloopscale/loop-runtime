@@ -3,6 +3,7 @@
 
 import { ApiError } from '../api/client';
 
+import { formatErrorMessage } from '../output/error-message';
 interface EnvItem {
   name: string;
   status: string;
@@ -95,10 +96,10 @@ export class EnvListCommand {
       if (err.exitCode === 4 || err.statusCode === 401) {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
-      return this.exitWithError(opts, `Failed to list environments: ${err.message}. Try again.`, 1, err.code);
+      return this.exitWithError(opts, formatErrorMessage('Failed to list environments', err.message, 'Try again'), 1, err.code);
     }
     if (err instanceof Error) {
-      return this.exitWithError(opts, `Failed to list environments: ${err.message}. Try again.`, 1, 'UNEXPECTED_ERROR');
+      return this.exitWithError(opts, formatErrorMessage('Failed to list environments', err.message, 'Try again'), 1, 'UNEXPECTED_ERROR');
     }
     return this.exitWithError(opts, 'Failed to list environments. Try again later.', 1, 'UNEXPECTED_ERROR');
   }

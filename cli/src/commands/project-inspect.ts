@@ -3,10 +3,13 @@
 
 import { ApiError } from '../api/client';
 
+// CHG-2026-04-23-AUDIT-4: aligned with real API shape.
+// api/internal/routes/projects.go returns `team` (string), not `team_id`.
+// Prior interface used an invented field name; fixtures propagated the drift.
 interface ProjectDetail {
   id: string;
   name: string;
-  team_id: string;
+  team: string;
   created_at: string;
   created_by?: string;
 }
@@ -66,7 +69,7 @@ export class ProjectInspectCommand {
 
     this.deps.writeTo(`Project: ${project.name}`);
     this.deps.writeTo('');
-    this.deps.writeTo(`  Team:       ${project.team_id}`);
+    this.deps.writeTo(`  Team:       ${project.team}`);
     this.deps.writeTo(`  Created:    ${formatDate(project.created_at)}`);
     if (project.created_by) {
       this.deps.writeTo(`  Created by: ${project.created_by}`);

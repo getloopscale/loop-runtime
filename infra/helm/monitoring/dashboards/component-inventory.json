@@ -797,7 +797,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_api_leader_status",
+          "expr": "max(loopzero_api_leader_status)",
           "legendFormat": "Leader",
           "refId": "A"
         }
@@ -835,7 +835,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_argocd_circuit_state",
+          "expr": "max(loopzero_argocd_circuit_state)",
           "legendFormat": "Circuit",
           "refId": "A"
         }
@@ -871,7 +871,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_build_queue_depth",
+          "expr": "max(loopzero_build_queue_depth)",
           "legendFormat": "Queue",
           "refId": "A"
         }
@@ -907,7 +907,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_releases_pending",
+          "expr": "max(loopzero_releases_pending)",
           "legendFormat": "Pending",
           "refId": "A"
         }
@@ -943,7 +943,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_postgres_connections_active",
+          "expr": "sum(loopzero_postgres_connections_active)",
           "legendFormat": "Active",
           "refId": "A"
         }
@@ -980,7 +980,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_postgres_connections_total",
+          "expr": "sum(loopzero_postgres_connections_total)",
           "legendFormat": "Total",
           "refId": "A"
         }
@@ -1018,7 +1018,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_drift_detected",
+          "expr": "max(loopzero_drift_detected)",
           "legendFormat": "Drift",
           "refId": "A"
         }
@@ -1052,7 +1052,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_sse_connections_active",
+          "expr": "sum(loopzero_sse_connections_active)",
           "legendFormat": "SSE",
           "refId": "A"
         }
@@ -1214,7 +1214,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_postgres_connections_total / loopzero_postgres_pool_max_conns",
+          "expr": "sum(loopzero_postgres_connections_total) / max(loopzero_postgres_pool_max_conns)",
           "legendFormat": "Utilization",
           "refId": "A"
         }
@@ -1264,19 +1264,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_postgres_connections_active",
+          "expr": "sum(loopzero_postgres_connections_active)",
           "legendFormat": "Active",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_postgres_connections_idle",
+          "expr": "sum(loopzero_postgres_connections_idle)",
           "legendFormat": "Idle",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "loopzero_postgres_connections_total",
+          "expr": "sum(loopzero_postgres_connections_total)",
           "legendFormat": "Total",
           "refId": "C"
         }

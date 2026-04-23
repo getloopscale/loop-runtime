@@ -10,11 +10,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // PostgresProjectStore creates projects in PostgreSQL.
-// It implements routes.ProjectStore (DIP).
+// It implements domain.ProjectStore (DIP).
 type PostgresProjectStore struct {
 	DB DBTX
 }
@@ -27,8 +27,8 @@ func GenerateProjectID() string {
 }
 
 // CreateProject inserts a new project into the database.
-// Returns routes.ErrProjectExists if the (tenant_id, name) unique constraint is violated.
-func (s *PostgresProjectStore) CreateProject(ctx context.Context, input routes.CreateProjectInput) (routes.ProjectResult, error) {
+// Returns domain.ErrProjectExists if the (tenant_id, name) unique constraint is violated.
+func (s *PostgresProjectStore) CreateProject(ctx context.Context, input domain.CreateProjectInput) (domain.ProjectResult, error) {
 	id := GenerateProjectID()
 
 	_, err := s.DB.Exec(ctx,
@@ -38,12 +38,12 @@ func (s *PostgresProjectStore) CreateProject(ctx context.Context, input routes.C
 	if err != nil {
 		var uv *UniqueViolationError
 		if errors.As(err, &uv) {
-			return routes.ProjectResult{}, routes.ErrProjectExists
+			return domain.ProjectResult{}, domain.ErrProjectExists
 		}
-		return routes.ProjectResult{}, fmt.Errorf("project store: insert failed: %w", err)
+		return domain.ProjectResult{}, fmt.Errorf("project store: insert failed: %w", err)
 	}
 
-	return routes.ProjectResult{
+	return domain.ProjectResult{
 		ID:     id,
 		Name:   input.Name,
 		TeamID: input.TenantID,
@@ -69,7 +69,7 @@ func (s *PostgresProjectStore) EnsureProject(ctx context.Context, tx DBTX, tenan
 }
 
 // ListByTenant returns all projects for a tenant, ordered by name.
-func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string) ([]routes.ProjectResult, error) {
+func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string) ([]domain.ProjectResult, error) {
 	rows, err := s.DB.Query(ctx,
 		"SELECT id, name, tenant_id, created_by, created_at FROM projects WHERE tenant_id = $1 ORDER BY name",
 		tenantID,
@@ -79,9 +79,9 @@ func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string
 	}
 	defer rows.Close()
 
-	var results []routes.ProjectResult
+	var results []domain.ProjectResult
 	for rows.Next() {
-		var r routes.ProjectResult
+		var r domain.ProjectResult
 		if err := rows.Scan(&r.ID, &r.Name, &r.TeamID, &r.CreatedBy, &r.CreatedAt); err != nil {
 			return nil, fmt.Errorf("project store: list by tenant scan: %w", err)
 		}
@@ -93,14 +93,14 @@ func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string
 
 	// Return empty slice instead of nil for consistent JSON serialization.
 	if results == nil {
-		results = []routes.ProjectResult{}
+		results = []domain.ProjectResult{}
 	}
 	return results, nil
 }
 
 // GetByName retrieves a project by tenant and name.
 // Returns nil when not found (not an error — caller decides).
-func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name string) (*routes.ProjectResult, error) {
+func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error) {
 	rows, err := s.DB.Query(ctx,
 		"SELECT id, name, tenant_id, created_by, created_at FROM projects WHERE tenant_id = $1 AND name = $2",
 		tenantID, name,
@@ -117,7 +117,7 @@ func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name str
 		return nil, nil
 	}
 
-	var result routes.ProjectResult
+	var result domain.ProjectResult
 	if err := rows.Scan(&result.ID, &result.Name, &result.TeamID, &result.CreatedBy, &result.CreatedAt); err != nil {
 		return nil, fmt.Errorf("project store: get by name scan: %w", err)
 	}

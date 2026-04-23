@@ -11,11 +11,11 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "rate(loopzero_builds_submitted_total[1m]) * 60",
+          "expr": "sum(rate(loopzero_deploys_total[1m])) * 60",
           "legendFormat": "Submitted/min"
         },
         {
-          "expr": "rate(loopzero_builds_completed_total[1m]) * 60",
+          "expr": "sum(rate(loopzero_builds_total[1m])) * 60",
           "legendFormat": "Completed/min"
         }
       ],
@@ -132,7 +132,7 @@
           "legendFormat": "Acquired/min"
         },
         {
-          "expr": "rate(loopzero_lock_conflicts_total[5m]) * 60",
+          "expr": "rate(loopzero_lock_acquired_total{result=\"conflict\"}[5m]) * 60",
           "legendFormat": "Conflicts/min"
         }
       ],
@@ -170,7 +170,7 @@
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 24 },
       "targets": [
         {
-          "expr": "rate(loopzero_builds_completed_total{state=\"SUCCEEDED\"}[5m]) / rate(loopzero_builds_completed_total[5m]) * 100",
+          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[5m])) / sum(rate(loopzero_builds_total[5m])) * 100",
           "legendFormat": ""
         }
       ],

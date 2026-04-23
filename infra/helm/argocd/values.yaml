@@ -36,6 +36,16 @@ controller:
   env:
     - name: ARGOCD_CONTROLLER_REPLICAS
       value: "3"
+    # Workqueue rate limiting — prevent CPU amplification from apps in
+    # persistent error state (e.g., ComparisonError with empty repos).
+    # Default maxdelay is 1s which means 100 broken apps = 100 retries/sec.
+    # With 300s maxdelay, exponential backoff caps at 5 min between retries.
+    - name: ARGOCD_CONTROLLER_WORKQUEUE_BASEDELAY
+      value: "5s"
+    - name: ARGOCD_CONTROLLER_WORKQUEUE_MAXDELAY
+      value: "300s"
+    - name: ARGOCD_CONTROLLER_WORKQUEUE_BACKOFF_FACTOR
+      value: "2"
   containerSecurityContext:
     runAsNonRoot: true
   readinessProbe:
@@ -159,9 +169,10 @@ notifications:
       - name: Content-Type
         value: application/json
       # MEET-2026-04-04-029 P0: Must match LOOPZERO_ARGO_CALLBACK_SECRET.
-      # TODO (Sprint 6): inject from Kubernetes Secret instead of hardcode.
+      # Production: overridden by Pulumi with RandomPassword-generated secret.
+      # Dev: uses this default. NEVER use this value in production.
       - name: Authorization
-        value: "Bearer cb-loopzero-dev-2026"
+        value: "Bearer cb-loopzero-dev-local-only"
   # Template: sends sync status as JSON payload
   templates:
     template.sync-completed: |

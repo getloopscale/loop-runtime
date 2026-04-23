@@ -3,6 +3,7 @@
 
 import { randomUUID } from 'crypto';
 import { getDefaultApiUrl, API_REQUEST_TIMEOUT_MS } from '../config/constants';
+import { injectTraceContext } from '../tracing/propagation';
 
 type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -198,6 +199,9 @@ export class ApiClient {
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json';
     }
+
+    // Inject W3C TraceContext so CLI spans become parent of API spans.
+    injectTraceContext(headers);
 
     const url = `${this.baseURL}${path}`;
     const bodyStr = body !== undefined ? JSON.stringify(body) : undefined;

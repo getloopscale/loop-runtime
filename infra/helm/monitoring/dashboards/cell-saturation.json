@@ -114,7 +114,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(loopzero_builds_active)",
+          "expr": "max(loopzero_releasing_builds) or vector(0)",
           "legendFormat": "active"
         }
       ],

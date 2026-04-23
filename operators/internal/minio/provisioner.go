@@ -20,6 +20,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/minio/madmin-go/v3"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -62,6 +63,11 @@ type AdminConfig struct {
 func NewAdminProvisioner(cfg AdminConfig) (*AdminProvisioner, error) {
 	client, err := madmin.NewWithOptions(cfg.Endpoint, &madmin.Options{
 		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		// SEC-003: Secure=false is intentional for in-cluster MinIO (no TLS).
+		// MinIO runs as a ClusterIP service on the mgmt cluster — traffic stays
+		// within the pod network, never traverses external networks.
+		// For production with external MinIO/Spaces, this is disabled entirely
+		// (DigitalOcean uses SPACES_ACCESS_KEY_ID, not MinIO admin API).
 		Secure: false,
 	})
 	if err != nil {
@@ -226,28 +232,17 @@ func (p *AdminProvisioner) attachPolicy(ctx context.Context, policyName, accessK
 
 // isNotFoundError checks if an error indicates a resource was not found.
 // madmin-go errors don't have a typed not-found; we check the message.
+// NOTE: This is fragile — if madmin-go changes error messages, this breaks.
+// Regression test TestIsNotFoundError covers known messages.
 func isNotFoundError(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := err.Error()
-	return contains(msg, "does not exist") ||
-		contains(msg, "not found") ||
-		contains(msg, "The specified user does not exist") ||
-		contains(msg, "The canned policy does not exist")
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(msg, "does not exist") ||
+		strings.Contains(msg, "not found") ||
+		strings.Contains(msg, "The specified user does not exist") ||
+		strings.Contains(msg, "The canned policy does not exist")
 }
 
 // generateSecretKey creates a cryptographically secure random secret key.

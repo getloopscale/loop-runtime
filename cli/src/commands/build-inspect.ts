@@ -1,5 +1,6 @@
 import { ApiError } from '../api/client';
 
+import { formatErrorMessage } from '../output/error-message';
 interface BuildDetailApp {
   name: string;
   framework?: string;
@@ -129,10 +130,10 @@ export class BuildInspectCommand {
       if (err.statusCode === 404) {
         return this.exitWithError(opts, `Build ${buildId} not found.`, 1, 'BUILD_NOT_FOUND');
       }
-      return this.exitWithError(opts, `Failed to get build: ${err.message}. Try again.`, 1, err.code);
+      return this.exitWithError(opts, formatErrorMessage('Failed to get build', err.message, 'Try again'), 1, err.code);
     }
     if (err instanceof Error) {
-      return this.exitWithError(opts, `Failed to get build: ${err.message}. Try again.`, 1, 'UNEXPECTED_ERROR');
+      return this.exitWithError(opts, formatErrorMessage('Failed to get build', err.message, 'Try again'), 1, 'UNEXPECTED_ERROR');
     }
     return this.exitWithError(opts, 'Failed to get build. Try again later.', 1, 'UNEXPECTED_ERROR');
   }

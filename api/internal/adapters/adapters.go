@@ -124,7 +124,7 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		if appPort == 0 && appType == "server" {
 			appPort = 8080
 		}
-		apps = append(apps, services.AppSpec{
+		spec := services.AppSpec{
 			Name:      app.Name,
 			Type:      appType,
 			Port:      appPort,
@@ -133,7 +133,19 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 			Build:     app.Build,
 			Rendering: app.Rendering,
 			Secrets:   app.Secrets,
-		})
+			// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): forward scaling
+			// config to the orchestrator so plan caps and mutual exclusion
+			// can be enforced at the authoritative gate.
+			Replicas: app.Replicas,
+		}
+		if app.Autoscaling != nil {
+			spec.Autoscaling = &services.AppAutoscalingSpec{
+				MinReplicas: app.Autoscaling.Min,
+				MaxReplicas: app.Autoscaling.Max,
+				TargetCPU:   app.Autoscaling.TargetCPU,
+			}
+		}
+		apps = append(apps, spec)
 	}
 
 	resp, err := a.Orch.SubmitBuild(ctx, services.SubmitBuildRequest{

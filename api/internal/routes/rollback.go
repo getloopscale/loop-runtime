@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -143,6 +145,15 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		// Mirror mapBuildError at builds.go:402 — log unexpected errors for diagnosis.
+		slog.Error("unexpected error in rollback handler",
+			"error", err.Error(),
+			"type", fmt.Sprintf("%T", err),
+			"tenant_id", uc.TenantID,
+			"project", name,
+			"env", env,
+			"to_release", req.ToReleaseID,
+		)
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}

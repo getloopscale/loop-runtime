@@ -297,6 +297,7 @@ func TestNoInternalTermsInErrorMessages(t *testing.T) {
 		ErrFrontendMustBeStatic, ErrPodLimitExceeded, ErrMissingField,
 		ErrSourceUploadFailed, ErrPlatformDegraded, ErrDeployServiceAuthFailed,
 		ErrSyncOperationInProgress,
+		ErrReplicasExceedPlan, ErrScalingAmbiguous, // B15
 	}
 
 	for _, e := range allErrors {
@@ -308,5 +309,51 @@ func TestNoInternalTermsInErrorMessages(t *testing.T) {
 				t.Errorf("[%s] code contains forbidden term %q", e.Code, term)
 			}
 		}
+	}
+}
+
+// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): scaling-related errors.
+func TestErrReplicasExceedPlan_Shape(t *testing.T) {
+	if ErrReplicasExceedPlan == nil {
+		t.Fatal("ErrReplicasExceedPlan must be defined")
+	}
+	if ErrReplicasExceedPlan.Code != "REPLICAS_EXCEED_PLAN" {
+		t.Errorf("expected code REPLICAS_EXCEED_PLAN, got %q", ErrReplicasExceedPlan.Code)
+	}
+	if ErrReplicasExceedPlan.HTTPStatus != 422 {
+		t.Errorf("expected HTTP 422, got %d", ErrReplicasExceedPlan.HTTPStatus)
+	}
+}
+
+func TestErrScalingAmbiguous_Shape(t *testing.T) {
+	if ErrScalingAmbiguous == nil {
+		t.Fatal("ErrScalingAmbiguous must be defined")
+	}
+	if ErrScalingAmbiguous.Code != "SCALING_AMBIGUOUS" {
+		t.Errorf("expected code SCALING_AMBIGUOUS, got %q", ErrScalingAmbiguous.Code)
+	}
+	if ErrScalingAmbiguous.HTTPStatus != 422 {
+		t.Errorf("expected HTTP 422, got %d", ErrScalingAmbiguous.HTTPStatus)
+	}
+	if !strings.Contains(ErrScalingAmbiguous.Message, "replicas") ||
+		!strings.Contains(ErrScalingAmbiguous.Message, "autoscaling") {
+		t.Errorf("ErrScalingAmbiguous must name both fields, got: %s", ErrScalingAmbiguous.Message)
+	}
+}
+
+func TestNewReplicasExceedPlan_FormatsContext(t *testing.T) {
+	err := NewReplicasExceedPlan("starter", 2, 5, "api")
+	if err.Code != "REPLICAS_EXCEED_PLAN" || err.HTTPStatus != 422 {
+		t.Fatalf("unexpected shape: %+v", err)
+	}
+	msg := err.Message
+	if !strings.Contains(msg, "Starter") && !strings.Contains(msg, "starter") {
+		t.Errorf("message missing plan name: %s", msg)
+	}
+	if !strings.Contains(msg, "2") || !strings.Contains(msg, "5") {
+		t.Errorf("message missing cap/requested: %s", msg)
+	}
+	if !strings.Contains(msg, "api") {
+		t.Errorf("message missing app name: %s", msg)
 	}
 }

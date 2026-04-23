@@ -170,6 +170,10 @@ spec:
             # Update after cluster recreate: docker inspect k3d-loopzero-workload-server-0
             - name: WORKLOAD_CLUSTER_URL
               value: "https://172.18.0.11:6443"
+            # TLS verification: true for local dev (self-signed certs).
+            # Production MUST set OPERATOR_INSECURE_SKIP_TLS=false (SEC-001).
+            - name: OPERATOR_INSECURE_SKIP_TLS
+              value: "true"
             # Local dev: Traefik is in 'traefik' namespace (production: platform-system)
             - name: INGRESS_NAMESPACE
               value: "traefik"

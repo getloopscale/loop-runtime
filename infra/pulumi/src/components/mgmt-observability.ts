@@ -1,21 +1,45 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// REVIEW-2026-03-30: Extracted from mgmt-bootstrap.ts (ARCH-001 decomposition).
-// Owns: Prometheus + Grafana installation on management cluster.
+// Observability orchestrator: Prometheus installation + re-exports from split modules.
+// Split modules: mgmt-grafana.ts, mgmt-tempo-otel.ts
 
 import * as k8s from "@pulumi/kubernetes";
 import * as pulumi from "@pulumi/pulumi";
-import * as fs from "fs";
-import * as path from "path";
-import { PlatformStackConfig } from "../config/stack";
 import { PLATFORM_NAMESPACE, HELM_VERSIONS } from "./bootstrap-shared";
+
+// Re-exports for backward compatibility — consumers import from this file.
+export { installGrafana, provisionGrafanaDashboards } from "./mgmt-grafana";
+export { installTempo, installOtelCollector } from "./mgmt-tempo-otel";
+export { installBlackboxExporter } from "./mgmt-blackbox";
 
 export function installPrometheus(
   provider: k8s.Provider,
   ns: k8s.core.v1.Namespace,
   argoMetricsEndpoint: pulumi.Output<string>,
+  runtimeKSMEndpoint?: pulumi.Output<string>,
+  slackWebhookUrl?: pulumi.Output<string>,
+  slackCriticalWebhookUrl?: pulumi.Output<string>,
 ): k8s.helm.v3.Release {
+  // MEET-055 M1: Alertmanager Slack webhook Secret.
+  const slackUrl = slackWebhookUrl ?? slackCriticalWebhookUrl;
+  if (slackUrl) {
+    new k8s.core.v1.Secret(
+      "alertmanager-slack-webhooks",
+      {
+        metadata: {
+          name: "alertmanager-slack-webhooks",
+          namespace: "monitoring",
+        },
+        stringData: {
+          "slack-webhook-url": slackWebhookUrl ?? pulumi.output(""),
+          "slack-critical-webhook-url": slackCriticalWebhookUrl ?? slackWebhookUrl ?? pulumi.output(""),
+        },
+      },
+      { provider },
+    );
+  }
+
   return new k8s.helm.v3.Release(
     "prometheus",
     {
@@ -26,9 +50,6 @@ export function installPrometheus(
         repo: "https://prometheus-community.github.io/helm-charts",
       },
       namespace: PLATFORM_NAMESPACE,
-      // Upgrades reload the full scrape config + PVC re-mount + readiness,
-      // which frequently exceeds the 300s default timeout on small DOKS nodes.
-      // 900s gives room for PVC provisioning and multi-container pod startup.
       timeout: 900,
       createNamespace: false,
       values: {
@@ -41,21 +62,22 @@ export function installPrometheus(
           },
         },
         "prometheus-pushgateway": { enabled: false },
-        extraScrapeConfigs: argoMetricsEndpoint.apply((target) => `
+        extraScrapeConfigs: pulumi.all([
+          argoMetricsEndpoint,
+          runtimeKSMEndpoint ?? pulumi.output(""),
+        ]).apply(([argoTarget, ksmTarget]) => {
+          let config = `
 - job_name: argo-workflows
   scrape_interval: 15s
   scrape_timeout: 10s
   metrics_path: /metrics
   static_configs:
     - targets:
-        - "${target}"
+        - "${argoTarget}"
       labels:
         cluster: build
         component: argo-workflows
 
-# Harbor container registry — scraped via harbor-exporter service.
-# ServiceMonitor CR is not used because the platform runs standalone Prometheus
-# (no Prometheus Operator / monitoring.coreos.com CRDs). See harbor-bootstrap.ts.
 - job_name: harbor
   scrape_interval: 30s
   scrape_timeout: 10s
@@ -67,8 +89,6 @@ export function installPrometheus(
         cluster: mgmt
         component: harbor
 
-# Gitea internal git server — repository operations, webhook delivery,
-# queue depth, and HTTP request metrics.
 - job_name: gitea
   scrape_interval: 30s
   scrape_timeout: 10s
@@ -79,12 +99,23 @@ export function installPrometheus(
       labels:
         cluster: mgmt
         component: gitea
-
-# Gitea Redis — uses official redis:7-alpine image without metrics exporter.
-# Redis metrics are available indirectly via Gitea's own /metrics endpoint
-# (reports cache hit/miss rates). Dedicated redis-exporter can be added
-# later if deeper Redis observability is needed.
-`),
+`;
+          if (ksmTarget) {
+            config += `
+- job_name: runtime-kube-state-metrics
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  metrics_path: /metrics
+  static_configs:
+    - targets:
+        - "${ksmTarget}"
+      labels:
+        cluster: runtime
+        component: kube-state-metrics
+`;
+          }
+          return config;
+        }),
         serverFiles: {
           "alerting_rules.yml": {
             groups: [
@@ -131,7 +162,6 @@ export function installPrometheus(
                       description: "{{ $labels.namespace }}/{{ $labels.pod }} is restarting frequently.",
                     },
                   },
-                  // --- Harbor registry alerts (MEET-048 mandatory gate) ---
                   {
                     alert: "HarborDown",
                     expr: 'up{job="harbor"} == 0',
@@ -211,355 +241,11 @@ export function installPrometheus(
         "kube-state-metrics": {
           fullnameOverride: "kube-state-metrics",
         },
-        // node-exporter DaemonSet requires hostNetwork/hostPID/hostPath/hostPort,
-        // which violate the `baseline` Pod Security Admission profile applied to
-        // platform-system. On DOKS we already get node-level metrics (CPU, memory,
-        // filesystem, network) from the kubelet/cAdvisor exporter that Prometheus
-        // scrapes via `kubernetes-nodes-cadvisor` job. If raw node-exporter metrics
-        // are needed in the future, install the DaemonSet in a dedicated
-        // `monitoring-system` namespace labelled `pod-security.kubernetes.io/enforce=privileged`.
         "prometheus-node-exporter": {
           enabled: false,
         },
       },
     },
     { provider, dependsOn: [ns] },
-  );
-}
-
-export function installGrafana(
-  provider: k8s.Provider,
-  ns: k8s.core.v1.Namespace,
-  config: PlatformStackConfig,
-): k8s.helm.v3.Release {
-  return new k8s.helm.v3.Release(
-    "grafana",
-    {
-      name: "grafana",
-      chart: "grafana",
-      timeout: 600, // 10 min — Grafana can be slow on first deploy (PVC provisioning)
-      cleanupOnFail: true, // Remove failed release resources to prevent accumulation
-      version: HELM_VERSIONS.grafana,
-      repositoryOpts: {
-        repo: "https://grafana.github.io/helm-charts",
-      },
-      namespace: PLATFORM_NAMESPACE,
-      createNamespace: false,
-      values: {
-        fullnameOverride: "grafana",
-        service: { type: "ClusterIP", port: 3000 },
-        datasources: {
-          "datasources.yaml": {
-            apiVersion: 1,
-            datasources: [
-              {
-                name: "Prometheus",
-                type: "prometheus",
-                url: `http://prometheus-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,
-                access: "proxy",
-                isDefault: true,
-              },
-              {
-                // MEET-2026-03-30-020: Tempo datasource for distributed tracing
-                name: "Tempo",
-                type: "tempo",
-                url: `http://tempo.${PLATFORM_NAMESPACE}.svc.cluster.local:3200`,
-                access: "proxy",
-                jsonData: {
-                  // C2: Correlation-ID remains UUID v4; trace_id is a separate slog field.
-                  // Grafana bridges trace→log via derived field query on trace_id.
-                  tracesToLogsV2: {
-                    datasourceUid: "loki",
-                    filterByTraceID: false,
-                    customQuery: true,
-                    query: `{job="loopzero-api"} |= "\${__trace.traceId}"`,
-                  },
-                },
-              },
-            ],
-          },
-        },
-        sidecar: {
-          dashboards: {
-            enabled: true,
-            label: "grafana_dashboard",
-            labelValue: "1",
-            folder: "/var/lib/grafana/dashboards/sidecar",
-            provider: {
-              name: "sidecar",
-              orgId: 1,
-              folder: "LoopZero",
-              type: "file",
-              disableDeletion: false,
-              editable: true,
-            },
-          },
-        },
-        dashboardProviders: {
-          "dashboardproviders.yaml": {
-            apiVersion: 1,
-            providers: [
-              {
-                name: "default",
-                orgId: 1,
-                folder: "",
-                type: "file",
-                disableDeletion: false,
-                editable: true,
-                options: { path: "/var/lib/grafana/dashboards/default" },
-              },
-            ],
-          },
-        },
-        dashboards: {
-          default: {
-            "k8s-cluster": { gnetId: 7249, revision: 1, datasource: "Prometheus" },
-            "node-exporter": { gnetId: 1860, revision: 37, datasource: "Prometheus" },
-            "k8s-pods": { gnetId: 6417, revision: 1, datasource: "Prometheus" },
-          },
-        },
-        persistence: { enabled: true, size: "5Gi", storageClassName: "do-block-storage" },
-        // MEET-2026-04-09-045: RWO PVC requires Recreate strategy.
-        // RollingUpdate (default) causes multi-attach deadlock — new pod can't
-        // mount the volume while old pod still holds it.
-        strategy: { type: "Recreate" },
-        adminUser: "admin",
-        "grafana.ini": {
-          server: {
-            domain: `grafana.${config.domain}`,
-            root_url: `https://grafana.${config.domain}/`,
-            serve_from_sub_path: false,
-          },
-          "auth.anonymous": {
-            enabled: config.environment !== "prod",
-            org_role: "Viewer",
-          },
-        },
-        resources: {
-          requests: { cpu: "100m", memory: "128Mi" },
-          limits: { cpu: "300m", memory: "256Mi" },
-        },
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Grafana Dashboard ConfigMaps — auto-provisioned via sidecar
-// ---------------------------------------------------------------------------
-
-/**
- * Creates ConfigMaps for all LoopZero dashboard JSON files.
- * The Grafana sidecar container watches for ConfigMaps with label
- * `grafana_dashboard=1` and auto-loads them into the "LoopZero" folder.
- * This ensures dashboards survive `pulumi up` and pod restarts.
- */
-export function provisionGrafanaDashboards(
-  provider: k8s.Provider,
-  ns: k8s.core.v1.Namespace,
-  grafana: k8s.helm.v3.Release,
-): void {
-  const dashboardDir = path.resolve(__dirname, "../../../helm/monitoring/dashboards");
-
-  if (!fs.existsSync(dashboardDir)) {
-    return; // dashboards dir not found — skip (CI without infra checkout)
-  }
-
-  const files = fs.readdirSync(dashboardDir).filter((f) => f.endsWith(".json"));
-
-  for (const file of files) {
-    const name = `grafana-dash-${file.replace(".json", "")}`;
-    const content = fs.readFileSync(path.join(dashboardDir, file), "utf-8");
-
-    new k8s.core.v1.ConfigMap(
-      name,
-      {
-        metadata: {
-          name,
-          namespace: PLATFORM_NAMESPACE,
-          labels: {
-            grafana_dashboard: "1",
-            "app.kubernetes.io/managed-by": "pulumi",
-          },
-        },
-        data: { [file]: content },
-      },
-      { provider, dependsOn: [ns, grafana] },
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Tempo — distributed trace backend (MEET-2026-03-30-020)
-// ---------------------------------------------------------------------------
-
-export function installTempo(
-  provider: k8s.Provider,
-  ns: k8s.core.v1.Namespace,
-  config: PlatformStackConfig,
-  storageEndpoint?: pulumi.Output<string>,
-): k8s.helm.v3.Release {
-  // Storage config: local filesystem for dev, S3 (DO Spaces) for prod.
-  const useS3 = !!config.tempoStorageBucket;
-  const storageConfig: Record<string, unknown> = {
-    trace: {
-      backend: useS3 ? "s3" : "local",
-      local: { path: "/var/tempo/traces" },
-      wal: { path: "/var/tempo/wal" },
-      ...(useS3 && storageEndpoint
-        ? {
-            s3: {
-              bucket: config.tempoStorageBucket,
-              // Tempo S3 client expects endpoint without https:// prefix
-              endpoint: storageEndpoint.apply(e => e.replace("https://", "")),
-              forcepathstyle: true,
-            },
-          }
-        : {}),
-    },
-  };
-
-  return new k8s.helm.v3.Release(
-    "tempo",
-    {
-      name: "tempo",
-      chart: "tempo",
-      version: HELM_VERSIONS.tempo,
-      repositoryOpts: {
-        repo: "https://grafana.github.io/helm-charts",
-      },
-      namespace: PLATFORM_NAMESPACE,
-      createNamespace: false,
-      values: {
-        fullnameOverride: "tempo",
-        tempo: {
-          receivers: {
-            otlp: {
-              protocols: {
-                grpc: { endpoint: "0.0.0.0:4317" },
-                http: { endpoint: "0.0.0.0:4318" },
-              },
-            },
-          },
-          retention: "168h",
-          storage: storageConfig,
-        },
-        server: { http_listen_port: 3200 },
-        persistence: { enabled: true, size: "5Gi" },
-        resources: {
-          requests: { cpu: "100m", memory: "256Mi" },
-          limits: { cpu: "300m", memory: "512Mi" },
-        },
-      },
-    },
-    { provider, dependsOn: [ns] },
-  );
-}
-
-// ---------------------------------------------------------------------------
-// OpenTelemetry Collector — centralized trace pipeline
-// ---------------------------------------------------------------------------
-
-/**
- * Installs the OTEL Collector as a centralized trace pipeline.
- * Services send OTLP to the collector, which samples, batches, and
- * forwards to Tempo. Also exposes Prometheus metrics for collector health.
- *
- * Config from infra/helm/otel/values.yaml:
- * - Receivers: OTLP gRPC (4317) + HTTP (4318)
- * - Processors: probabilistic_sampler (100%, tunable) + batch (5s/1024)
- * - Exporters: Tempo (OTLP) + Prometheus (collector metrics)
- */
-export function installOtelCollector(
-  provider: k8s.Provider,
-  ns: k8s.core.v1.Namespace,
-  tempo: k8s.helm.v3.Release,
-): k8s.helm.v3.Release {
-  return new k8s.helm.v3.Release(
-    "otel-collector",
-    {
-      name: "otel-collector",
-      chart: "opentelemetry-collector",
-      version: HELM_VERSIONS.otelCollector,
-      repositoryOpts: {
-        repo: "https://open-telemetry.github.io/opentelemetry-helm-charts",
-      },
-      namespace: PLATFORM_NAMESPACE,
-      createNamespace: false,
-      values: {
-        fullnameOverride: "otel-collector",
-        image: {
-          repository: "otel/opentelemetry-collector-contrib",
-          tag: HELM_VERSIONS.otelCollector,
-        },
-        mode: "deployment",
-        securityContext: { runAsNonRoot: true },
-        resources: {
-          requests: { cpu: "50m", memory: "128Mi" },
-          limits: { cpu: "200m", memory: "256Mi" },
-        },
-        livenessProbe: {
-          httpGet: { path: "/", port: 13133 },
-          initialDelaySeconds: 10,
-          periodSeconds: 15,
-        },
-        readinessProbe: {
-          httpGet: { path: "/", port: 13133 },
-          initialDelaySeconds: 10,
-          periodSeconds: 15,
-        },
-        config: {
-          extensions: {
-            health_check: { endpoint: "0.0.0.0:13133" },
-          },
-          receivers: {
-            otlp: {
-              protocols: {
-                grpc: { endpoint: "0.0.0.0:4317" },
-                http: { endpoint: "0.0.0.0:4318" },
-              },
-            },
-          },
-          processors: {
-            batch: { timeout: "5s", send_batch_size: 1024 },
-            probabilistic_sampler: { sampling_percentage: 100 },
-          },
-          exporters: {
-            debug: { verbosity: "basic" },
-            prometheus: { endpoint: "0.0.0.0:8889" },
-            "otlp/tempo": {
-              endpoint: `tempo.${PLATFORM_NAMESPACE}.svc:4317`,
-              tls: { insecure: true },
-            },
-          },
-          service: {
-            extensions: ["health_check"],
-            pipelines: {
-              traces: {
-                receivers: ["otlp"],
-                processors: ["probabilistic_sampler", "batch"],
-                exporters: ["otlp/tempo"],
-              },
-              metrics: {
-                receivers: ["otlp"],
-                processors: ["batch"],
-                exporters: ["prometheus"],
-              },
-            },
-          },
-        },
-        command: {
-          extraArgs: ["--set=service.telemetry.metrics.address=0.0.0.0:8890"],
-        },
-        ports: {
-          metrics: { enabled: true, containerPort: 8890, servicePort: 8890, protocol: "TCP" },
-          otlp: { enabled: true, containerPort: 4317, servicePort: 4317, protocol: "TCP" },
-          "otlp-http": { enabled: true, containerPort: 4318, servicePort: 4318, protocol: "TCP" },
-          prometheus: { enabled: true, containerPort: 8889, servicePort: 8889, protocol: "TCP" },
-        },
-      },
-    },
-    { provider, dependsOn: [ns, tempo] },
   );
 }

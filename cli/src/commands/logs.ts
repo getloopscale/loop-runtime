@@ -22,11 +22,28 @@ interface StatusResponse {
   last_build?: { id: string };
 }
 
+/** SSE log event from /api/v1/builds/{id}/logs/stream */
+export interface StreamLogEvent {
+  timestamp: string;
+  line: string;
+  step?: string;
+}
+
+/** Callback to connect to the SSE log stream. Returns a disconnect function. */
+export type StreamLogsFn = (
+  buildID: string,
+  onLine: (event: StreamLogEvent) => void,
+  onError: (err: Error) => void,
+  onClose: () => void,
+) => { close: () => void };
+
 export interface LogsDeps {
   getToken: () => string | null;
   findLoopZeroYaml: () => LoopZeroYamlResult | null;
   getLogs: (buildID: string, opts: { tail?: number; step?: string }) => Promise<LogsApiResponse>;
   getProjectStatus?: (project: string, env: string) => Promise<StatusResponse>;
+  /** SSE streaming function for --follow mode. Optional: if absent, --follow is unsupported. */
+  streamLogs?: StreamLogsFn;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
 }
@@ -37,6 +54,8 @@ export interface LogsOptions {
   step?: string;
   env?: string;
   json?: boolean;
+  /** Follow mode: stream logs in real-time via SSE. */
+  follow?: boolean;
 }
 
 export class LogsCommand {
@@ -74,10 +93,15 @@ export class LogsCommand {
       }
     }
 
-    // 4. Call API
+    // 4. Follow mode: stream logs via SSE
+    if (opts.follow) {
+      return this.executeFollow(opts);
+    }
+
+    // 5. Batch mode: call API for all logs at once
     let response: LogsApiResponse;
     try {
-      response = await this.deps.getLogs(opts.build, {
+      response = await this.deps.getLogs(opts.build!, {
         tail: opts.tail,
         step: opts.step,
       });
@@ -85,7 +109,7 @@ export class LogsCommand {
       return this.handleError(opts, err);
     }
 
-    // 5. Display result
+    // 6. Display result
     if (opts.json) {
       this.deps.writeTo(JSON.stringify(response));
       return 0;
@@ -105,6 +129,44 @@ export class LogsCommand {
     }
 
     return 0;
+  }
+
+  private executeFollow(opts: LogsOptions): Promise<number> {
+    if (!this.deps.streamLogs) {
+      return Promise.resolve(
+        this.exitWithError(opts, 'Log streaming is not available. Try without --follow.', 1, 'STREAM_UNAVAILABLE'),
+      );
+    }
+
+    return new Promise<number>((resolve) => {
+      const stream = this.deps.streamLogs!(
+        opts.build!,
+        (event: StreamLogEvent) => {
+          if (opts.json) {
+            this.deps.writeTo(JSON.stringify(event));
+          } else {
+            const prefix = event.step ? `[${event.step}]` : '';
+            const ts = event.timestamp ? `${event.timestamp} ` : '';
+            this.deps.writeTo(`${ts}${prefix} ${event.line}`);
+          }
+        },
+        (err: Error) => {
+          this.deps.writeError(`Stream error: ${err.message}`);
+        },
+        () => {
+          // Stream closed (build completed or server closed)
+          resolve(0);
+        },
+      );
+
+      // Handle SIGINT gracefully
+      const cleanup = () => {
+        stream.close();
+        resolve(0);
+      };
+      process.once('SIGINT', cleanup);
+      process.once('SIGTERM', cleanup);
+    });
   }
 
   private exitWithError(opts: LogsOptions, message: string, exitCode: number, code?: string): number {

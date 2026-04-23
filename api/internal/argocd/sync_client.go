@@ -18,6 +18,10 @@ import (
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
@@ -112,7 +116,20 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 }
 
 // TriggerSync initiates a sync operation on an ArgoCD Application.
+// MEET-2026-04-22-058 (B12): no annotation mutation anymore. The operator no
+// longer sets `argocd.argoproj.io/skip-reconcile`, so the API does not need
+// to remove it. Application CR metadata is owned exclusively by the operator
+// (K8s RBAC), not by the API (ArgoCD REST RBAC) — single-writer discipline.
 func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.argocd.sync_trigger",
+		trace.WithAttributes(
+			attribute.String("loopzero.argocd.app_name", appName),
+		))
+	defer span.End()
+
+	// MEET-2026-04-22-058 (B12): no removeSkipReconcile call — operator no longer
+	// sets the annotation, so there is nothing to remove.
+
 	url := fmt.Sprintf("%s/api/v1/applications/%s/sync", c.baseURL, appName)
 
 	body := strings.NewReader(`{"prune": true}`)
@@ -125,29 +142,46 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("argocd sync: request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		span.RecordError(loopzeroerrors.ErrDeployServiceAuthFailed)
+		span.SetStatus(codes.Error, "auth failed")
 		return loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	if resp.StatusCode == 404 {
-		return fmt.Errorf("argocd sync: application %q not found", appName)
+		syncErr := fmt.Errorf("argocd sync: application %q not found", appName)
+		span.RecordError(syncErr)
+		span.SetStatus(codes.Error, syncErr.Error())
+		return syncErr
 	}
 	// MEET-2026-03-29-019: Return typed error for 409 so callers can
 	// distinguish "operation in progress" from other failures.
 	// This error must NOT count toward the circuit breaker threshold.
 	if resp.StatusCode == 409 {
+		span.RecordError(loopzeroerrors.ErrSyncOperationInProgress)
+		span.SetStatus(codes.Error, "sync operation in progress")
 		return loopzeroerrors.ErrSyncOperationInProgress
 	}
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("argocd sync: status %d: %s", resp.StatusCode, string(respBody))
+		syncErr := fmt.Errorf("argocd sync: status %d: %s", resp.StatusCode, string(respBody))
+		span.RecordError(syncErr)
+		span.SetStatus(codes.Error, syncErr.Error())
+		return syncErr
 	}
 
 	return nil
 }
+
+// MEET-2026-04-22-058 (B12): removeSkipReconcile deleted. The skip-reconcile
+// annotation is no longer set by the operator, so there is nothing to remove.
+// Operator owns Application CR metadata exclusively (K8s RBAC); the API does
+// not touch the Application CR via ArgoCD REST any more. Single-writer discipline.
 
 // TerminateOperation cancels a running sync operation on an ArgoCD Application.
 // MEET-2026-03-29-019: Used when TriggerSync returns ErrSyncOperationInProgress
@@ -160,6 +194,9 @@ func (c *SyncClient) TerminateOperation(ctx context.Context, appName string) err
 		return fmt.Errorf("argocd terminate: create request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
+	// B11 (CHG-2026-04-23): ArgoCD rejects DELETE without Content-Type
+	// with HTTP 415 "Invalid content type", blocking stuck-operation recovery.
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {

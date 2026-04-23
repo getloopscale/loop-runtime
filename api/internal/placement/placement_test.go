@@ -6,6 +6,7 @@ package placement
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -410,7 +411,7 @@ func TestPlacement_ConcurrentCreation_NoTOCTOU(t *testing.T) {
 		counts: map[string]int{cellA: 0, cellB: 0},
 		// 100µs jitter between the snapshot read and the caller's write
 		// is enough to let goroutines interleave deterministically.
-		readHook: func() { time.Sleep(100 * time.Microsecond) },
+		readHook: func() { time.Sleep(100 * time.Microsecond) }, // intentional: jitter for race condition testing
 	}
 
 	// A mutex-backed serializer — the simplest correct Serializer. In
@@ -494,7 +495,7 @@ func TestPlacement_ConcurrentCreation_WithoutSerializerHotSpots(t *testing.T) {
 	router := newMultiCellRouter(cellA, cellB)
 	querier := &raceQuerier{
 		counts:   map[string]int{cellA: 0, cellB: 0},
-		readHook: func() { time.Sleep(100 * time.Microsecond) },
+		readHook: func() { time.Sleep(100 * time.Microsecond) }, // intentional: jitter for race condition testing
 	}
 	engine := NewRoundRobinEngine(router, querier, 500) // no serializer
 
@@ -608,6 +609,303 @@ func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 // TestRoundRobinEngine_WithSerializer_PropagatesError proves the
 // Serializer contract: if the wrapped callback returns an error, the
 // Serializer must surface it verbatim and AssignCell must propagate it.
+// --- ExtractRegion tests ---
+
+func TestExtractRegion_Default(t *testing.T) {
+	if got := ExtractRegion(DefaultCellID); got != "default" {
+		t.Errorf("ExtractRegion(%q) = %q, want default", DefaultCellID, got)
+	}
+}
+
+func TestExtractRegion_WithSuffix(t *testing.T) {
+	if got := ExtractRegion("cell-sfo3-02"); got != "sfo3" {
+		t.Errorf("ExtractRegion(cell-sfo3-02) = %q, want sfo3", got)
+	}
+}
+
+func TestExtractRegion_NoSuffix(t *testing.T) {
+	if got := ExtractRegion("cell-nyc3"); got != "nyc3" {
+		t.Errorf("ExtractRegion(cell-nyc3) = %q, want nyc3", got)
+	}
+}
+
+func TestExtractRegion_ShortID(t *testing.T) {
+	if got := ExtractRegion("abc"); got != "abc" {
+		t.Errorf("ExtractRegion(abc) = %q, want abc", got)
+	}
+}
+
+// --- DynamicRouter tests ---
+
+type fakeCellStore struct {
+	cells []CellConfig
+	err   error
+}
+
+func (f *fakeCellStore) LoadCells(_ context.Context) ([]CellConfig, error) {
+	return f.cells, f.err
+}
+
+func TestDynamicRouter_Resolve_AfterRefresh(t *testing.T) {
+	store := &fakeCellStore{
+		cells: []CellConfig{
+			{CellID: "cell-a", APIServer: "https://a.example.com"},
+			{CellID: "cell-b", APIServer: "https://b.example.com"},
+		},
+	}
+	router := NewDynamicRouter(store, time.Minute, slog.Default())
+
+	// Manual refresh instead of Start (avoid background goroutine)
+	if err := router.refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	cfg, err := router.Resolve(context.Background(), "cell-a")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.APIServer != "https://a.example.com" {
+		t.Errorf("APIServer = %q, want https://a.example.com", cfg.APIServer)
+	}
+}
+
+func TestDynamicRouter_Resolve_EmptyCellID(t *testing.T) {
+	store := &fakeCellStore{}
+	router := NewDynamicRouter(store, time.Minute, slog.Default())
+
+	_, err := router.Resolve(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected error for empty cell_id")
+	}
+}
+
+func TestDynamicRouter_Resolve_Unknown(t *testing.T) {
+	store := &fakeCellStore{
+		cells: []CellConfig{{CellID: "cell-a"}},
+	}
+	router := NewDynamicRouter(store, time.Minute, slog.Default())
+	_ = router.refresh(context.Background())
+
+	_, err := router.Resolve(context.Background(), "cell-unknown")
+	if err == nil {
+		t.Fatal("expected error for unknown cell_id")
+	}
+}
+
+func TestDynamicRouter_ListCells(t *testing.T) {
+	store := &fakeCellStore{
+		cells: []CellConfig{
+			{CellID: "cell-a"},
+			{CellID: "cell-b"},
+		},
+	}
+	router := NewDynamicRouter(store, time.Minute, slog.Default())
+	_ = router.refresh(context.Background())
+
+	cells, err := router.ListCells(context.Background())
+	if err != nil {
+		t.Fatalf("ListCells: %v", err)
+	}
+	if len(cells) != 2 {
+		t.Errorf("expected 2 cells, got %d", len(cells))
+	}
+}
+
+func TestDynamicRouter_DiscoveredCellCount(t *testing.T) {
+	store := &fakeCellStore{
+		cells: []CellConfig{{CellID: "cell-a"}, {CellID: "cell-b"}, {CellID: "cell-c"}},
+	}
+	router := NewDynamicRouter(store, time.Minute, slog.Default())
+	_ = router.refresh(context.Background())
+
+	if got := router.DiscoveredCellCount(); got != 3 {
+		t.Errorf("DiscoveredCellCount = %d, want 3", got)
+	}
+}
+
+func TestDynamicRouter_IsDynamic(t *testing.T) {
+	store := &fakeCellStore{}
+	router := NewDynamicRouter(store, time.Minute, slog.Default())
+	if !router.IsDynamic() {
+		t.Error("DynamicRouter.IsDynamic should return true")
+	}
+}
+
+func TestDynamicRouter_ListCellIDs(t *testing.T) {
+	store := &fakeCellStore{
+		cells: []CellConfig{{CellID: "cell-x"}, {CellID: "cell-y"}},
+	}
+	router := NewDynamicRouter(store, time.Minute, slog.Default())
+	_ = router.refresh(context.Background())
+
+	ids, err := router.ListCellIDs(context.Background())
+	if err != nil {
+		t.Fatalf("ListCellIDs: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Errorf("expected 2 IDs, got %d", len(ids))
+	}
+}
+
+func TestDynamicRouter_StaleDataProtection(t *testing.T) {
+	// Load 2 cells first
+	store := &fakeCellStore{
+		cells: []CellConfig{{CellID: "cell-a"}, {CellID: "cell-b"}},
+	}
+	router := NewDynamicRouter(store, time.Minute, slog.Default())
+	_ = router.refresh(context.Background())
+
+	if router.DiscoveredCellCount() != 2 {
+		t.Fatalf("expected 2 cells after initial refresh")
+	}
+
+	// Now store returns empty — should be rejected (stale-data protection)
+	store.cells = nil
+	err := router.refresh(context.Background())
+	if err == nil {
+		t.Fatal("expected error when refresh returns 0 cells while router has active cells")
+	}
+
+	// Cell count should remain 2
+	if got := router.DiscoveredCellCount(); got != 2 {
+		t.Errorf("DiscoveredCellCount = %d after stale protection, want 2", got)
+	}
+}
+
+func TestDynamicRouter_SkipsEmptyCellID(t *testing.T) {
+	store := &fakeCellStore{
+		cells: []CellConfig{
+			{CellID: "cell-a"},
+			{CellID: ""},  // should be skipped
+			{CellID: "cell-b"},
+		},
+	}
+	router := NewDynamicRouter(store, time.Minute, slog.Default())
+	_ = router.refresh(context.Background())
+
+	if got := router.DiscoveredCellCount(); got != 2 {
+		t.Errorf("DiscoveredCellCount = %d, want 2 (empty CellID skipped)", got)
+	}
+}
+
+// --- PassthroughRouter additional ---
+
+func TestPassthroughRouter_DiscoveredCellCount(t *testing.T) {
+	r := NewPassthroughRouter(CellConfig{CellID: DefaultCellID})
+	if got := r.DiscoveredCellCount(); got != 1 {
+		t.Errorf("DiscoveredCellCount = %d, want 1", got)
+	}
+}
+
+func TestPassthroughRouter_IsDynamic(t *testing.T) {
+	r := NewPassthroughRouter(CellConfig{CellID: DefaultCellID})
+	if r.IsDynamic() {
+		t.Error("PassthroughRouter.IsDynamic should return false")
+	}
+}
+
+func TestStaticRouter_DiscoveredCellCount(t *testing.T) {
+	r, _ := NewStaticRouter([]CellConfig{{CellID: "cell-a"}, {CellID: "cell-b"}})
+	if got := r.DiscoveredCellCount(); got != 2 {
+		t.Errorf("DiscoveredCellCount = %d, want 2", got)
+	}
+}
+
+func TestStaticRouter_IsDynamic(t *testing.T) {
+	r, _ := NewStaticRouter([]CellConfig{{CellID: "cell-a"}})
+	if r.IsDynamic() {
+		t.Error("StaticRouter.IsDynamic should return false")
+	}
+}
+
+func TestStaticRouter_RejectsEmptyCellIDInConfig(t *testing.T) {
+	_, err := NewStaticRouter([]CellConfig{{CellID: ""}})
+	if err == nil {
+		t.Fatal("expected error for empty cell_id in config")
+	}
+}
+
+// --- RoundRobinEngine.AssignAndExecute ---
+
+func TestRoundRobinEngine_AssignAndExecute(t *testing.T) {
+	router := newMultiCellRouter("cell-a", "cell-b")
+	querier := &fakeQuerier{
+		counts: map[string]int{"cell-a": 10, "cell-b": 5},
+	}
+	engine := NewRoundRobinEngine(router, querier, 500)
+
+	var assignedCell string
+	err := engine.AssignAndExecute(context.Background(), func(ctx context.Context, cellID string) error {
+		assignedCell = cellID
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("AssignAndExecute: %v", err)
+	}
+	if assignedCell != "cell-b" {
+		t.Errorf("expected cell-b (least loaded), got %q", assignedCell)
+	}
+}
+
+func TestRoundRobinEngine_AssignAndExecute_WithSerializer(t *testing.T) {
+	router := newMultiCellRouter("cell-a")
+	querier := &fakeQuerier{
+		counts: map[string]int{"cell-a": 0},
+	}
+	var mu sync.Mutex
+	serializer := func(ctx context.Context, fn func(ctx context.Context) error) error {
+		mu.Lock()
+		defer mu.Unlock()
+		return fn(ctx)
+	}
+	engine := NewRoundRobinEngine(router, querier, 500).WithSerializer(serializer)
+
+	var assignedCell string
+	err := engine.AssignAndExecute(context.Background(), func(ctx context.Context, cellID string) error {
+		assignedCell = cellID
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("AssignAndExecute: %v", err)
+	}
+	if assignedCell != "cell-a" {
+		t.Errorf("expected cell-a, got %q", assignedCell)
+	}
+}
+
+func TestDefaultEngine_AssignAndExecute(t *testing.T) {
+	engine := NewDefaultEngine()
+	var assignedCell string
+	err := engine.AssignAndExecute(context.Background(), func(ctx context.Context, cellID string) error {
+		assignedCell = cellID
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("AssignAndExecute: %v", err)
+	}
+	if assignedCell != DefaultCellID {
+		t.Errorf("expected %q, got %q", DefaultCellID, assignedCell)
+	}
+}
+
+// --- NewAdvisoryLockSerializer(nil) ---
+
+func TestNewAdvisoryLockSerializer_NilPool_ReturnsNil(t *testing.T) {
+	s := NewAdvisoryLockSerializer(nil)
+	if s != nil {
+		t.Error("expected nil serializer for nil pool")
+	}
+}
+
+// --- TxFromContext ---
+
+func TestTxFromContext_NoTx_ReturnsNil(t *testing.T) {
+	tx := TxFromContext(context.Background())
+	if tx != nil {
+		t.Error("expected nil tx from context without tx")
+	}
+}
+
 func TestRoundRobinEngine_WithSerializer_PropagatesError(t *testing.T) {
 	router := newMultiCellRouter("cell-a")
 	querier := &fakeQuerier{counts: map[string]int{"cell-a": 500}} // full

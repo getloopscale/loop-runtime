@@ -83,27 +83,22 @@ export function exposePlatform(
   );
 
   // --- Runtime cluster DNS ---
-  // When Cloudflare Tunnel is active (cfZoneId set), the wildcard CNAME is
-  // managed by the tunnel module (*.{domain} → tunnel.cfargotunnel.com).
-  // Creating a second record here would conflict. Skip the wildcard.
+  // Wildcard A record for tenant apps — always points to runtime Traefik LB.
+  // TLS termination: Traefik + cert-manager (Let's Encrypt) on the runtime cluster.
+  // CF Tunnel is used for cloudflared→Traefik routing internally, but DNS must
+  // still resolve externally to the Traefik LB IP for client connections.
   let runtimeDnsConfigured: pulumi.Output<boolean>;
-
-  if (config.cfZoneId) {
-    // Tunnel owns the wildcard — runtime DNS is already configured.
-    runtimeDnsConfigured = pulumi.output(true);
-  } else {
-    // No tunnel — create A record wildcard pointing to runtime LB.
-    const wildcardName = prefix ? `*.${prefix}` : "*";
-    const runtimeWildcard = factory.createDnsRecord({
-      zone,
-      recordName: wildcardName,
-      target: bootstrap.runtime.ingressEndpoint,
-      ttl: 300,
-    });
-    runtimeDnsConfigured = runtimeWildcard.fqdn.apply(
-      (fqdn) => fqdn.length > 0,
-    );
-  }
+  const wildcardName = prefix ? `*.${prefix}` : "*";
+  const runtimeWildcard = factory.createDnsRecord({
+    zone,
+    recordName: wildcardName,
+    target: bootstrap.runtime.ingressEndpoint,
+    recordType: "A",
+    ttl: 300,
+  });
+  runtimeDnsConfigured = runtimeWildcard.fqdn.apply(
+    (fqdn) => fqdn.length > 0,
+  );
 
   // Readiness: all management records created + runtime configured.
   const mgmtDnsConfigured = pulumi

@@ -6,26 +6,27 @@ package db
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // PostgresTeamStore handles team member CRUD operations.
-// It implements routes.TeamStore (DIP).
+// It implements domain.TeamStore (DIP).
 type PostgresTeamStore struct {
 	DB DBTX
 }
 
 // ListMembers returns all members of a tenant with their roles.
-func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([]routes.TeamMemberInfo, error) {
+// AUDIT-7: Username comes from the `users.username` column (provider-agnostic),
+// not from stripping a "github-" prefix off the id.
+func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([]domain.TeamMemberInfo, error) {
 	rows, err := s.DB.Query(ctx,
-		`SELECT u.id, u.email, COALESCE(u.display_name, ''), tm.role, tm.created_at
+		`SELECT u.username, u.email, tm.role, tm.created_at
 		 FROM tenant_members tm
 		 JOIN users u ON tm.user_id = u.id
 		 WHERE tm.tenant_id = $1
-		 ORDER BY tm.role, COALESCE(u.display_name, u.id)`,
+		 ORDER BY tm.role, u.username`,
 		tenantID,
 	)
 	if err != nil {
@@ -33,15 +34,15 @@ func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([
 	}
 	defer rows.Close()
 
-	var members []routes.TeamMemberInfo
+	var members []domain.TeamMemberInfo
 	for rows.Next() {
-		var userID, email, displayName, role string
+		var username, email, role string
 		var joinedAt time.Time
-		if err := rows.Scan(&userID, &email, &displayName, &role, &joinedAt); err != nil {
+		if err := rows.Scan(&username, &email, &role, &joinedAt); err != nil {
 			return nil, fmt.Errorf("team store: scan failed: %w", err)
 		}
-		members = append(members, routes.TeamMemberInfo{
-			Username: stripGitHubPrefix(userID),
+		members = append(members, domain.TeamMemberInfo{
+			Username: username,
 			Email:    email,
 			Role:     role,
 			JoinedAt: joinedAt.Format(time.RFC3339),
@@ -52,7 +53,7 @@ func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([
 	}
 
 	if members == nil {
-		members = []routes.TeamMemberInfo{}
+		members = []domain.TeamMemberInfo{}
 	}
 	return members, nil
 }
@@ -86,7 +87,7 @@ func (s *PostgresTeamStore) RemoveMember(ctx context.Context, tenantID, userID s
 }
 
 // UpdateMemberRole changes a member's role.
-// Returns routes.ErrMemberNotFound if the member doesn't exist.
+// Returns domain.ErrMemberNotFound if the member doesn't exist.
 func (s *PostgresTeamStore) UpdateMemberRole(ctx context.Context, tenantID, userID, newRole string) error {
 	result, err := s.DB.Exec(ctx,
 		`UPDATE tenant_members SET role = $1
@@ -97,46 +98,46 @@ func (s *PostgresTeamStore) UpdateMemberRole(ctx context.Context, tenantID, user
 		return fmt.Errorf("team store: update role failed: %w", err)
 	}
 	if result.RowsAffected == 0 {
-		return routes.ErrMemberNotFound
+		return domain.ErrMemberNotFound
 	}
 	return nil
 }
 
 // GetMember returns a single member's info (for authorization checks).
-func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID string) (*routes.TeamMemberInfo, error) {
+// AUDIT-7: Username from the users.username column, provider-agnostic.
+func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID string) (*domain.TeamMemberInfo, error) {
 	row := s.DB.QueryRow(ctx,
-		`SELECT u.id, u.email, COALESCE(u.display_name, ''), tm.role, tm.created_at
+		`SELECT u.username, u.email, tm.role, tm.created_at
 		 FROM tenant_members tm
 		 JOIN users u ON tm.user_id = u.id
 		 WHERE tm.tenant_id = $1 AND tm.user_id = $2`,
 		tenantID, userID,
 	)
 
-	var id, email, displayName, role string
+	var username, email, role string
 	var joinedAt time.Time
-	if err := row.Scan(&id, &email, &displayName, &role, &joinedAt); err != nil {
+	if err := row.Scan(&username, &email, &role, &joinedAt); err != nil {
 		if err.Error() == ErrNoRows.Error() {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("team store: get member failed: %w", err)
 	}
 
-	return &routes.TeamMemberInfo{
-		Username: stripGitHubPrefix(id),
+	return &domain.TeamMemberInfo{
+		Username: username,
 		Email:    email,
 		Role:     role,
 		JoinedAt: joinedAt.Format(time.RFC3339),
 	}, nil
 }
 
-// GetUserByUsername finds a user by their GitHub username.
-// Returns nil if not found (user hasn't done `loopzero login` yet).
-func (s *PostgresTeamStore) GetUserByUsername(ctx context.Context, username string) (*routes.TeamUserInfo, error) {
-	// User IDs are "github-{username}" format
-	userID := "github-" + username
+// GetUserByUsername finds a user by their username (provider-agnostic).
+// Returns nil if not found. AUDIT-7: no longer assumes "github-" id prefix;
+// queries the `users.username` column populated by migration 000037.
+func (s *PostgresTeamStore) GetUserByUsername(ctx context.Context, username string) (*domain.TeamUserInfo, error) {
 	row := s.DB.QueryRow(ctx,
-		`SELECT id, COALESCE(email, ''), COALESCE(display_name, '') FROM users WHERE id = $1`,
-		userID,
+		`SELECT id, COALESCE(email, ''), COALESCE(display_name, '') FROM users WHERE username = $1`,
+		username,
 	)
 
 	var id, email, displayName string
@@ -147,14 +148,9 @@ func (s *PostgresTeamStore) GetUserByUsername(ctx context.Context, username stri
 		return nil, fmt.Errorf("team store: get user by username failed: %w", err)
 	}
 
-	return &routes.TeamUserInfo{
+	return &domain.TeamUserInfo{
 		ID:          id,
 		Email:       email,
 		DisplayName: displayName,
 	}, nil
-}
-
-// stripGitHubPrefix removes the "github-" prefix from user IDs for display.
-func stripGitHubPrefix(id string) string {
-	return strings.TrimPrefix(id, "github-")
 }

@@ -290,7 +290,64 @@ var (
 		Message:    "your team has too many builds in progress — wait for one to finish",
 		HTTPStatus: 429,
 	}
+
+	// ErrSameEnvironment is returned when a promote request specifies the same
+	// source and target environment.
+	ErrSameEnvironment = &LoopZeroError{
+		Code:       "SAME_ENVIRONMENT",
+		Message:    "source and target environments must be different",
+		HTTPStatus: 400,
+	}
+
+	// ErrReplicasExceedPlan is returned when an app requests more replicas (or
+	// autoscaling.max) than the tenant's plan allows.
+	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059).
+	// Factory NewReplicasExceedPlan adds plan + cap + requested + app context.
+	ErrReplicasExceedPlan = &LoopZeroError{
+		Code:       "REPLICAS_EXCEED_PLAN",
+		Message:    "requested replicas exceed your plan's limit",
+		HTTPStatus: 422,
+	}
+
+	// ErrScalingAmbiguous is returned when both `replicas` and `autoscaling`
+	// are set on the same app. The two are mutually exclusive — pick one.
+	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059).
+	ErrScalingAmbiguous = &LoopZeroError{
+		Code:       "SCALING_AMBIGUOUS",
+		Message:    "'replicas' and 'autoscaling' are mutually exclusive — choose one",
+		HTTPStatus: 422,
+	}
 )
+
+// NewReplicasExceedPlan creates a REPLICAS_EXCEED_PLAN error with plan name,
+// plan cap, requested replica count, and the offending app name.
+// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059).
+func NewReplicasExceedPlan(plan string, limit, requested int, appName string) *LoopZeroError {
+	return &LoopZeroError{
+		Code: "REPLICAS_EXCEED_PLAN",
+		Message: fmt.Sprintf(
+			"App '%s' requested %d replicas — the %s plan allows up to %d per service. Upgrade at https://loopzero.example/pricing or lower the replica count.",
+			appName, requested, displayPlanName(plan), limit,
+		),
+		HTTPStatus: 422,
+	}
+}
+
+// displayPlanName returns a human-friendly plan name.
+func displayPlanName(plan string) string {
+	switch plan {
+	case "starter":
+		return "Starter"
+	case "pro":
+		return "Pro"
+	case "team":
+		return "Team"
+	case "enterprise":
+		return "Enterprise"
+	default:
+		return plan
+	}
+}
 
 // NewLockTimeout creates a LOCK_TIMEOUT error with optional detail.
 // Always returns a fresh copy to prevent mutation of the global sentinel.

@@ -102,128 +102,17 @@ export class InitCommand {
       return this.exitWithError(opts, 'loopzero.yaml already exists. Use --force to overwrite.', 1, 'FILE_EXISTS');
     }
 
-    // Detect monorepo and frameworks
-    const monorepo = this.deps.detectMonorepo(this.deps.cwd);
+    // Phase 1: Detect monorepo structure and build app list
     let projectName = opts.name || path.basename(this.deps.cwd);
-
-    // F-01 fix: ALWAYS sanitize project name — whether auto-detected or user-provided.
-    // RFC 1123 compliance is mandatory for K8s namespaces. Unsanitized names cause
-    // downstream deploy failures with cryptic namespace errors.
     const originalName = projectName;
     projectName = this.sanitizeProjectName(projectName);
 
-    // Warn user if name was changed by sanitization
-    let sanitizationWarning: string | undefined;
-    if (projectName !== originalName) {
-      if (originalName.length > 63) {
-        sanitizationWarning = `Project name truncated to 63 characters: "${originalName}" → "${projectName}"`;
-      } else {
-        sanitizationWarning = `Project name sanitized: "${originalName}" → "${projectName}" (RFC 1123: lowercase, letters/numbers/hyphens, max 63 chars)`;
-      }
-      if (opts.name && !opts.json) {
-        this.deps.writeTo(sanitizationWarning);
-      }
+    const sanitizationWarning = this.buildSanitizationWarning(projectName, originalName);
+    if (sanitizationWarning && opts.name && !opts.json) {
+      this.deps.writeTo(sanitizationWarning);
     }
 
-    const apps: AppSpec[] = [];
-    let detected: DetectedInfo | undefined;
-
-    if (monorepo) {
-      // Separate deployable apps from shared packages
-      const deployable: string[] = [];
-      const skipped: string[] = [];
-
-      for (const workspace of monorepo.workspaces) {
-        const isPackage = PACKAGE_DIR_PATTERNS.some(p => workspace.startsWith(p));
-        if (isPackage) {
-          skipped.push(workspace);
-        } else {
-          deployable.push(workspace);
-        }
-      }
-
-      // Build detection info for JSON output
-      detected = {
-        tool: monorepo.tool,
-        shared_packages: skipped.map(s => path.basename(s)),
-        apps: [],
-      };
-
-      // Human-only detection messages
-      if (!opts.json) {
-        this.deps.writeTo(`Detected: ${monorepo.tool} monorepo`);
-        if (skipped.length > 0) {
-          this.deps.writeTo(`  Shared packages (not deployed): ${skipped.map(s => path.basename(s)).join(', ')}`);
-        }
-      }
-
-      for (const workspace of deployable) {
-        const wsDir = path.join(this.deps.cwd, workspace);
-        const fw = this.deps.detectFramework(wsDir);
-        const appName = path.basename(workspace);
-        const appType = this.inferAppType(appName, fw.framework, fw.port);
-
-        apps.push({
-          name: appName,
-          framework: fw.framework,
-          port: appType === 'server' ? fw.port : null,
-          path: workspace,
-          type: appType,
-        });
-
-        detected.apps.push({
-          path: workspace,
-          framework: fw.framework,
-          type: appType,
-          port: appType === 'server' ? fw.port : null,
-        });
-
-        if (!opts.json) {
-          const label = appType === 'server'
-            ? `${fw.framework} (server, port ${fw.port})`
-            : `${fw.framework} (${appType})`;
-          this.deps.writeTo(`  ${workspace} → ${label}`);
-        }
-      }
-    } else {
-      const fw = this.deps.detectFramework(this.deps.cwd);
-      if (fw.framework !== 'custom' || fw.port !== null) {
-        // Root directory has a recognizable framework
-        apps.push({
-          name: projectName,
-          framework: fw.framework,
-          port: fw.port,
-          path: '.',
-        });
-      } else {
-        // Root has no framework — scan first-level subdirectories for apps
-        const subdirApps = this.scanSubdirectories(this.deps.cwd);
-        if (subdirApps.length > 0) {
-          for (const sub of subdirApps) {
-            const subFw = this.deps.detectFramework(sub.dir);
-            if (subFw.framework === 'custom' && subFw.port === null) continue;
-            const appName = sub.name;
-            const appType = this.inferAppType(appName, subFw.framework, subFw.port);
-            apps.push({
-              name: appName,
-              framework: subFw.framework,
-              port: appType === 'server' ? subFw.port : null,
-              path: `./${sub.name}`,
-              type: appType,
-            });
-          }
-        }
-        // Fallback: if no subdirectory apps found, use root as custom
-        if (apps.length === 0) {
-          apps.push({
-            name: projectName,
-            framework: fw.framework,
-            port: fw.port ?? 3000,
-            path: '.',
-          });
-        }
-      }
-    }
+    const { apps, detected } = this.detectAndBuildApps(opts, projectName);
 
     // Interactive wizard: ask for confirmation when not using --yes
     if (!opts.yes && this.deps.confirm) {
@@ -241,6 +130,164 @@ export class InitCommand {
       );
     }
 
+    // Phase 2: Generate config, register project, emit output
+    return this.createProjectAndEmitOutput(opts, yamlPath, projectName, originalName, apps, detected, sanitizationWarning, noGitWarning);
+  }
+
+  /**
+   * Build a sanitization warning message if the project name was modified.
+   * Returns undefined if no sanitization occurred.
+   */
+  private buildSanitizationWarning(sanitized: string, original: string): string | undefined {
+    if (sanitized === original) {
+      return undefined;
+    }
+    if (original.length > 63) {
+      return `Project name truncated to 63 characters: "${original}" → "${sanitized}"`;
+    }
+    return `Project name sanitized: "${original}" → "${sanitized}" (RFC 1123: lowercase, letters/numbers/hyphens, max 63 chars)`;
+  }
+
+  /**
+   * Detect monorepo structure and scan for deployable apps.
+   * Returns the app list and optional detection metadata for JSON output.
+   */
+  private detectAndBuildApps(
+    opts: InitOptions,
+    projectName: string,
+  ): { apps: AppSpec[]; detected?: DetectedInfo } {
+    const monorepo = this.deps.detectMonorepo(this.deps.cwd);
+
+    if (monorepo) {
+      return this.detectMonorepoApps(opts, monorepo);
+    }
+    return this.detectSingleProjectApps(projectName);
+  }
+
+  /**
+   * Detect apps from a monorepo workspace structure.
+   */
+  private detectMonorepoApps(
+    opts: InitOptions,
+    monorepo: MonorepoResult,
+  ): { apps: AppSpec[]; detected: DetectedInfo } {
+    const apps: AppSpec[] = [];
+    const deployable: string[] = [];
+    const skipped: string[] = [];
+
+    for (const workspace of monorepo.workspaces) {
+      const isPackage = PACKAGE_DIR_PATTERNS.some(p => workspace.startsWith(p));
+      if (isPackage) {
+        skipped.push(workspace);
+      } else {
+        deployable.push(workspace);
+      }
+    }
+
+    const detected: DetectedInfo = {
+      tool: monorepo.tool,
+      shared_packages: skipped.map(s => path.basename(s)),
+      apps: [],
+    };
+
+    if (!opts.json) {
+      this.deps.writeTo(`Detected: ${monorepo.tool} monorepo`);
+      if (skipped.length > 0) {
+        this.deps.writeTo(`  Shared packages (not deployed): ${skipped.map(s => path.basename(s)).join(', ')}`);
+      }
+    }
+
+    for (const workspace of deployable) {
+      const wsDir = path.join(this.deps.cwd, workspace);
+      const fw = this.deps.detectFramework(wsDir);
+      const appName = path.basename(workspace);
+      const appType = this.inferAppType(appName, fw.framework, fw.port);
+
+      apps.push({
+        name: appName,
+        framework: fw.framework,
+        port: appType === 'server' ? fw.port : null,
+        path: workspace,
+        type: appType,
+      });
+
+      detected.apps.push({
+        path: workspace,
+        framework: fw.framework,
+        type: appType,
+        port: appType === 'server' ? fw.port : null,
+      });
+
+      if (!opts.json) {
+        const label = appType === 'server'
+          ? `${fw.framework} (server, port ${fw.port})`
+          : `${fw.framework} (${appType})`;
+        this.deps.writeTo(`  ${workspace} → ${label}`);
+      }
+    }
+
+    return { apps, detected };
+  }
+
+  /**
+   * Detect apps from a single-project directory (no monorepo).
+   */
+  private detectSingleProjectApps(projectName: string): { apps: AppSpec[] } {
+    const apps: AppSpec[] = [];
+    const fw = this.deps.detectFramework(this.deps.cwd);
+
+    if (fw.framework !== 'custom' || fw.port !== null) {
+      apps.push({
+        name: projectName,
+        framework: fw.framework,
+        port: fw.port,
+        path: '.',
+      });
+      return { apps };
+    }
+
+    // Root has no framework — scan first-level subdirectories for apps
+    const subdirApps = this.scanSubdirectories(this.deps.cwd);
+    for (const sub of subdirApps) {
+      const subFw = this.deps.detectFramework(sub.dir);
+      if (subFw.framework === 'custom' && subFw.port === null) continue;
+      const appName = sub.name;
+      const appType = this.inferAppType(appName, subFw.framework, subFw.port);
+      apps.push({
+        name: appName,
+        framework: subFw.framework,
+        port: appType === 'server' ? subFw.port : null,
+        path: `./${sub.name}`,
+        type: appType,
+      });
+    }
+
+    // Fallback: if no subdirectory apps found, use root as custom
+    if (apps.length === 0) {
+      apps.push({
+        name: projectName,
+        framework: fw.framework,
+        port: fw.port ?? 3000,
+        path: '.',
+      });
+    }
+
+    return { apps };
+  }
+
+  /**
+   * Generate loopzero.yaml, register project with API, and emit output.
+   */
+  private async createProjectAndEmitOutput(
+    opts: InitOptions,
+    yamlPath: string,
+    projectName: string,
+    originalName: string,
+    apps: AppSpec[],
+    detected: DetectedInfo | undefined,
+    sanitizationWarning: string | undefined,
+    noGitWarning: string | undefined,
+  ): Promise<number> {
     // Generate loopzero.yaml
     const yamlContent = this.generateYaml(projectName, apps);
     fs.writeFileSync(yamlPath, yamlContent);
@@ -257,16 +304,13 @@ export class InitCommand {
       projectId = result.id;
     } catch (err) {
       if (err instanceof ApiError && err.statusCode === 409) {
-        // 409 = project already exists, this is normal for re-init
         warning = 'Project already registered.';
       } else if (err instanceof ApiError && err.statusCode >= 400 && err.statusCode < 500) {
-        // Client errors (400 invalid name, 422 validation, etc.) — show the actual message
         warning = err.message;
         if (!opts.json) {
           this.deps.writeError(warning);
         }
       } else {
-        // Network errors (connection refused, 500, etc.)
         warning = 'Could not reach server. Run "loopzero deploy" to retry.';
         if (!opts.json) {
           this.deps.writeError(warning);

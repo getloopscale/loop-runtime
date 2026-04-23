@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // Roadmap 03 — Cell-Scoped Queries.
@@ -221,7 +221,7 @@ func TestFindPendingForAutoVerify_CellScoped_JoinsTenants(t *testing.T) {
 	if result == nil {
 		t.Error("expected non-nil result slice")
 	}
-	_ = routes.CustomDomain{} // keep import anchored
+	_ = domain.CustomDomain{} // keep import anchored
 }
 
 // =============================================================================

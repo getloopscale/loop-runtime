@@ -86,6 +86,11 @@ const (
 	// DeletionBackoffMax is the ceiling for exponential backoff on deletion
 	// cleanup failures. MEET-052.
 	DeletionBackoffMax = 5 * time.Minute
+
+	// RequeueDeletionStuck is the requeue interval after DeletionMaxAttempts is exceeded.
+	// Instead of stopping requeue entirely (which leaves tenants permanently stuck),
+	// we continue retrying at a slow rate to allow self-healing if dependencies recover.
+	RequeueDeletionStuck = 1 * time.Hour
 )
 
 // --- DO Registry Credential Expiry ---

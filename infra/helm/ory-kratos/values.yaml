@@ -34,6 +34,14 @@ kratos:
             # Don't block registration if HIBP API is unreachable
             ignore_network_errors: true
 
+        totp:
+          enabled: true
+          config:
+            issuer: "LoopZero Platform"
+
+        lookup_secret:
+          enabled: true
+
         oidc:
           enabled: true
           config:

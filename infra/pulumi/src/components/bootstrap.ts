@@ -5,7 +5,7 @@ import { InfraOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
 import { bootstrapMgmtCluster } from "./mgmt-bootstrap";
 import { bootstrapBuildCluster } from "./build-bootstrap";
-import { bootstrapRuntimeCluster } from "./runtime-bootstrap";
+import { bootstrapRuntimeCluster, bootstrapRuntimeCluster2 } from "./runtime-bootstrap";
 import { BootstrapOutputs, CloudflareOutputs } from "./bootstrap-shared";
 
 // Re-export all shared types, constants, and utilities so existing consumers
@@ -14,6 +14,7 @@ export {
   PLATFORM_NAMESPACE,
   HELM_VERSIONS,
   ClusterBootstrapOutputs,
+  RuntimeBootstrapOutputs,
   MgmtBootstrapOutputs,
   BuildBootstrapOutputs,
   BootstrapOutputs,
@@ -53,8 +54,11 @@ export function bootstrapCluster(
 ): BootstrapOutputs {
   // Build cluster bootstrapped first — exports lokiEndpoint + argoMetricsEndpoint for mgmt
   const build = bootstrapBuildCluster(infra, config);
-  const mgmt = bootstrapMgmtCluster(infra, config, build.lokiEndpoint, build.argoMetricsEndpoint, cf);
+  // Runtime bootstrapped before mgmt — exports ksmEndpoint for cross-cluster Prometheus scrape
   const runtime = bootstrapRuntimeCluster(infra, config);
+  // Multi-cell: bootstrap second runtime cluster for horizontal scaling validation.
+  const runtime2 = bootstrapRuntimeCluster2(infra, config);
+  const mgmt = bootstrapMgmtCluster(infra, config, build.lokiEndpoint, build.argoMetricsEndpoint, cf, runtime.ksmEndpoint);
 
-  return { mgmt, build, runtime };
+  return { mgmt, build, runtime, runtime2 };
 }

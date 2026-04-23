@@ -24,16 +24,29 @@ import (
 // Lowercase, starts with letter, alphanumeric + hyphens, max 63 chars.
 var environmentRegex = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 
+// AppAutoscalingInput mirrors the CLI autoscaling payload (field names match
+// what the CLI deploy.ts sends — snake_case target_cpu).
+// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059).
+type AppAutoscalingInput struct {
+	Min       int `json:"min,omitempty"`
+	Max       int `json:"max,omitempty"`
+	TargetCPU int `json:"target_cpu,omitempty"`
+}
+
 // AppInput describes a single app from the CLI request.
 type AppInput struct {
-	Name      string `json:"name"`
-	Type      string `json:"type,omitempty"`       // "server", "worker", "frontend"
-	Port      int    `json:"port,omitempty"`
-	Path      string `json:"path,omitempty"`
-	Framework string `json:"framework,omitempty"`  // "express", "go", "fastapi", etc.
-	Build     string `json:"build,omitempty"`       // "dockerfile", "buildpack", "custom"
-	Rendering string `json:"rendering,omitempty"`   // "static" or "server" (Sprint 10)
-	Secrets   []string `json:"secrets,omitempty"`
+	Name      string               `json:"name"`
+	Type      string               `json:"type,omitempty"`       // "server", "worker", "frontend"
+	Port      int                  `json:"port,omitempty"`
+	Path      string               `json:"path,omitempty"`
+	Framework string               `json:"framework,omitempty"`  // "express", "go", "fastapi", etc.
+	Build     string               `json:"build,omitempty"`       // "dockerfile", "buildpack", "custom"
+	Rendering string               `json:"rendering,omitempty"`   // "static" or "server" (Sprint 10)
+	Secrets   []string             `json:"secrets,omitempty"`
+	// B15: scaling config — either Replicas OR Autoscaling (never both).
+	// Orchestrator enforces plan caps and mutual exclusion.
+	Replicas    int                  `json:"replicas,omitempty"`
+	Autoscaling *AppAutoscalingInput `json:"autoscaling,omitempty"`
 }
 
 // SubmitBuildInput contains the inputs for submitting a new build via the route handler.

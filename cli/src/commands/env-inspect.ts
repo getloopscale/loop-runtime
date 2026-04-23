@@ -3,6 +3,7 @@
 
 import { ApiError } from '../api/client';
 
+import { formatErrorMessage } from '../output/error-message';
 interface EnvProject {
   name: string;
   release_id: string;
@@ -72,9 +73,13 @@ export class EnvInspectCommand {
     this.deps.writeTo('');
     this.deps.writeTo(`  Status:   ${env.status}`);
 
-    if (env.projects.length > 0) {
+    // CHG-2026-04-23-AUDIT-1: the API omits `projects` entirely when no
+    // releases exist. Before this null-safety check, `env.projects.length`
+    // crashed with a JS error visible to the user.
+    const projects = env.projects ?? [];
+    if (projects.length > 0) {
       this.deps.writeTo('  Projects:');
-      for (const proj of env.projects) {
+      for (const proj of projects) {
         this.deps.writeTo(`    ${pad(proj.name, 14)}${pad(proj.release_id, 15)}${proj.url}`);
       }
     } else {
@@ -105,10 +110,10 @@ export class EnvInspectCommand {
       if (err.statusCode === 404) {
         return this.exitWithError(opts, `Environment "${name}" not found.`, 1, 'ENV_NOT_FOUND');
       }
-      return this.exitWithError(opts, `Failed to get environment: ${err.message}. Try again.`, 1, err.code);
+      return this.exitWithError(opts, formatErrorMessage('Failed to get environment', err.message, 'Try again'), 1, err.code);
     }
     if (err instanceof Error) {
-      return this.exitWithError(opts, `Failed to get environment: ${err.message}. Try again.`, 1, 'UNEXPECTED_ERROR');
+      return this.exitWithError(opts, formatErrorMessage('Failed to get environment', err.message, 'Try again'), 1, 'UNEXPECTED_ERROR');
     }
     return this.exitWithError(opts, 'Failed to get environment. Try again later.', 1, 'UNEXPECTED_ERROR');
   }

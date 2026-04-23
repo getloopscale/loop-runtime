@@ -293,7 +293,7 @@ func TestAuthMiddleware(t *testing.T) {
 			t.Fatalf("expected 1 call after first request, got %d", validator.calls)
 		}
 
-		// Wait for cache expiry
+		// intentional: testing real-time behavior — wait for 1ms TTL cache to expire
 		time.Sleep(5 * time.Millisecond)
 
 		// Second call — cache expired, should call validator again

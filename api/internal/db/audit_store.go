@@ -9,16 +9,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
-// PostgresAuditStore implements routes.AuditStore using PostgreSQL.
+// PostgresAuditStore implements domain.AuditStore using PostgreSQL.
 type PostgresAuditStore struct {
 	DB DBTX
 }
 
 // ListAuditEntries returns paginated audit entries for a tenant with optional filters.
-func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID string, filter routes.AuditFilter) ([]routes.AuditEntryResult, int, error) {
+func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID string, filter domain.AuditFilter) ([]domain.AuditEntryResult, int, error) {
 	if s.DB == nil {
 		return nil, 0, nil
 	}
@@ -66,9 +66,9 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 	}
 	defer rows.Close()
 
-	var entries []routes.AuditEntryResult
+	var entries []domain.AuditEntryResult
 	for rows.Next() {
-		var e routes.AuditEntryResult
+		var e domain.AuditEntryResult
 		var metadataJSON []byte
 		var createdAt time.Time
 		if err := rows.Scan(&e.Action, &e.ResourceType, &e.ResourceID, &e.Actor, &e.CorrelationID, &metadataJSON, &createdAt); err != nil {
@@ -82,7 +82,7 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 	}
 
 	if entries == nil {
-		entries = []routes.AuditEntryResult{}
+		entries = []domain.AuditEntryResult{}
 	}
 	return entries, total, nil
 }

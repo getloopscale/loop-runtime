@@ -14,6 +14,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ErrInvalidToken is returned when token validation fails.
@@ -209,8 +214,17 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
 			// Validate token (with bounded cache)
-			result, err := validateWithCache(r.Context(), validator, cache, &cacheSize, token, cacheTTL)
+			ctx, span := otel.Tracer("loopzero-api").Start(r.Context(), "loopzero.api.auth.validate_token",
+				trace.WithAttributes(
+					attribute.String("loopzero.auth.result", "pending"),
+				))
+
+			result, err := validateWithCache(ctx, validator, cache, &cacheSize, token, cacheTTL)
 			if err != nil {
+				span.SetAttributes(attribute.String("loopzero.auth.result", "failure"))
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				span.End()
 				if errors.Is(err, ErrInvalidToken) {
 					writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired token")
 				} else {
@@ -218,6 +232,8 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 				}
 				return
 			}
+			span.SetAttributes(attribute.String("loopzero.auth.result", "success"))
+			span.End()
 
 			// Resolve tenant
 			memberships, err := store.GetMemberships(r.Context(), result.UserID)
@@ -259,8 +275,8 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 				}
 			}
 
-			ctx := context.WithValue(r.Context(), userContextKey, uc)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			reqCtx := context.WithValue(r.Context(), userContextKey, uc)
+			next.ServeHTTP(w, r.WithContext(reqCtx))
 		})
 	}
 }

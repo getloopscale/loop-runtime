@@ -55,15 +55,24 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 			}
 		}
 
-		result = append(result, manifests.AppManifestInput{
+		mi := manifests.AppManifestInput{
 			Name:          app.Name,
 			Type:          app.Type,
 			Rendering:     app.Rendering,
 			Port:          app.Port,
 			ImageRef:      imageRef,
 			Secrets:       app.Secrets,
+			Replicas:      app.Replicas,
 			CustomDomains: customDomains,
-		})
+		}
+		if app.Autoscaling != nil {
+			mi.Autoscaling = &manifests.AutoscalingConfig{
+				MinReplicas: app.Autoscaling.MinReplicas,
+				MaxReplicas: app.Autoscaling.MaxReplicas,
+				TargetCPU:   app.Autoscaling.TargetCPU,
+			}
+		}
+		result = append(result, mi)
 	}
 
 	return result, nil

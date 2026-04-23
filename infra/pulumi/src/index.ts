@@ -113,6 +113,7 @@ export const execution = buildExecutionState({
     mgmtCluster: infra.mgmtCluster.kubeconfig.apply((k) => !!k),
     buildCluster: infra.buildCluster.kubeconfig.apply((k) => !!k),
     runtimeCluster: infra.runtimeCluster.kubeconfig.apply((k) => !!k),
+    runtimeCluster2: infra.runtimeCluster2.kubeconfig.apply((k) => !!k),
     database: infra.database.host.apply((h) => !!h),
     storage: infra.bucketName.apply((n) => !!n),
     registry: infra.registryEndpoint.apply((e) => !!e),

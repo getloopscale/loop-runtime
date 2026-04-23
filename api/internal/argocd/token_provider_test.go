@@ -131,10 +131,17 @@ func TestFileWatchTokenProvider_BackgroundPoll(t *testing.T) {
 	// Change the file
 	_ = os.WriteFile(path, []byte("rotated"), 0644)
 
-	// Wait for poll to detect
-	time.Sleep(200 * time.Millisecond)
-
-	if p.Token() != "rotated" {
-		t.Errorf("expected 'rotated' after poll, got %q", p.Token())
+	// Poll until the background watcher detects the change.
+	deadline := time.After(5 * time.Second)
+	for {
+		if p.Token() == "rotated" {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for background poll to detect file change; token still %q", p.Token())
+		default:
+			time.Sleep(5 * time.Millisecond) // intentional: tight poll checking background file watcher
+		}
 	}
 }

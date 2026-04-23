@@ -164,6 +164,11 @@ func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
 					// When Synced + Healthy, ArgoCD calls POST /internal/argocd-callback
 					// on the API to activate the release (push-based, replaces polling).
 					"notifications.argoproj.io/subscribe.on-sync-healthy.loopzero-api": "",
+					// MEET-2026-04-22-058 (B12): skip-reconcile REMOVED. The annotation
+					// coupled two writers (operator sets, API removes via broken PATCH)
+					// and required Casbin RBAC scope that doesn't exist. Amplification
+					// risk is bounded by manual sync + self-heal=false + 3m interval.
+					// Revisit at >1k apps; see ADR on removal.
 				},
 				"finalizers": []interface{}{
 					constants.ArgoCDResourcesFinalizer,
@@ -251,6 +256,9 @@ func mergeExistingMetadata(existing, desired *unstructured.Unstructured) {
 				merged[k] = v
 			}
 		}
+		// MEET-2026-04-22-058 (B12): actively strip legacy skip-reconcile annotation
+		// from any pre-existing Application. Converges stale CRs on first reconcile.
+		delete(merged, "argocd.argoproj.io/skip-reconcile")
 		desiredMeta["annotations"] = merged
 	}
 

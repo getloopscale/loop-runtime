@@ -14,8 +14,8 @@ LABEL org.opencontainers.image.title="loopzero-clone-runner"
 
 # mc binary version and checksum — update both when upgrading.
 # Get checksum: wget -q <url> -O mc && sha256sum mc
-ARG MC_VERSION=RELEASE.2025-04-08T15-05-49Z
-ARG MC_SHA256=9e39b86bd737a1d0d10207f285cbab2be1f01f714c705c67dff8abb4a5eb9fe0
+ARG MC_VERSION=RELEASE.2025-08-13T08-35-41Z
+ARG MC_SHA256=01f866e9c5f9b87c2b09116fa5d7c06695b106242d829a8bb32990c00312e891
 
 RUN apk add --no-cache git ca-certificates \
     && wget -q "https://dl.min.io/client/mc/release/linux-amd64/archive/mc.${MC_VERSION}" \

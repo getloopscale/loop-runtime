@@ -1,152 +1,135 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import { ApiError } from '../api/client';
 import { DeployRenderer, DeployResult } from '../output/deploy-renderer';
 import {
   DEPLOY_TIMEOUT_MS,
-  MAX_ENVIRONMENT_NAME_LENGTH,
   MAX_BUNDLE_SIZE_BYTES,
 } from '../config/constants';
-import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
 import { normalizeApps } from '../adapters/app-unit';
 import { validateConfig } from '../adapters/validate-config';
+import { getTracer, SpanStatusCode } from '../tracing';
 import * as fs from 'fs';
 import * as path from 'path';
 
-interface UploadResult {
-  commit_sha: string;
-  apps: string[];
-}
+import type {
+  AppInput,
+  DeployCompletedPayload,
+  SSEConnection,
+  SSEEvent,
+} from './deploy-types';
 
-interface AppInput {
-  name: string;
-  type: string;                        // "server" | "worker" | "frontend" (always resolved)
-  port: number | null;
-  path: string;
-  framework: string;
-  build: string;                       // v2: "dockerfile" | "buildpack" | "custom"
-  dockerfile: string | null;           // v2: Dockerfile path relative to app path
-  rendering: string;                   // v2: "static" | "server" (Sprint 10)
-  env: Record<string, string>;         // v2: build-time environment variables
-  secrets: string[];
-}
+import {
+  resolveExitCode,
+  validateEnvironment,
+  mapSyncFailureReason,
+  sanitizeBuildError,
+  exitWithError,
+  handleError,
+} from './deploy-helpers';
 
-interface SubmitBuildInput {
-  project: string;
+// Re-export types so existing consumers (tests, index.ts) keep working
+export type { DeployDeps, DeployOptions } from './deploy-types';
+
+/** Result of validatePrerequisites — carries validated state needed by subsequent phases. */
+interface PrerequisiteResult {
+  config: { project: string; apps: Record<string, unknown> };
+  yamlPath: string;
   environment: string;
-  apps: AppInput[];
-  idempotencyKey: string;
-  commitSha: string;
-  noCache?: boolean;
-}
-
-interface SubmitBuildResult {
-  build_id: string;
-  stream_url: string;
-}
-
-interface SSEEvent {
-  type: string;
-  data: DeployCompletedPayload | Record<string, unknown>;
-}
-
-interface SSEConnection {
-  close: () => void;
-}
-
-interface AppResult {
-  name: string;
-  status: string;
-  url?: string;
-  custom_domain_urls?: string[]; // MEET-2026-04-05-033: Active custom domain URLs
-  build_duration_seconds: number;
-  error?: string;
-}
-
-interface DeployCompletedPayload {
-  deploy_id: string;
-  status: string;
-  duration_seconds: number;
-  apps: AppResult[];
-}
-
-interface BuildStatus {
-  status: string;
-  error_message?: string;
-}
-
-export interface DeployDeps {
-  getToken: () => string | null;
-  findLoopZeroYaml: () => LoopZeroYamlResult | null;
-  hasGitRepo: () => boolean;
-  hasUncommittedChanges: () => boolean;
-  hasLockfile: () => boolean;
-  getSourceIdentifier: () => string;
-  createSourceBundle: () => Promise<string>;
-  checkSensitiveFiles?: () => string[];
-  uploadSource: (bundlePath: string, loopzeroYamlPath: string) => Promise<UploadResult>;
-  submitBuild: (input: SubmitBuildInput) => Promise<SubmitBuildResult>;
-  connectSSE: (buildId: string, onEvent: (event: SSEEvent) => void) => SSEConnection;
-  getSecrets: (project: string, environment: string) => Promise<string[]>;
-  cleanupFile: (filePath: string) => void;
-  generateIdempotencyKey: (commitSha: string, project: string, environment: string, apps: string[]) => string;
-  /** Check build state as fallback when SSE stream breaks. */
-  getBuildStatus?: (buildId: string) => Promise<BuildStatus>;
-  writeTo: (msg: string) => void;
-  writeError: (msg: string) => void;
-  isCI: boolean;
-  isTTY?: boolean;
-}
-
-export interface DeployOptions {
-  env?: string;
-  app?: string[];
-  wait?: boolean;
-  json?: boolean;
-  noCache?: boolean;
+  selectedApps: string[];
+  appUnits: ReturnType<typeof normalizeApps>;
 }
 
 export class DeployCommand {
-  private readonly deps: DeployDeps;
+  private readonly deps: import('./deploy-types').DeployDeps;
 
-  constructor(deps: DeployDeps) {
+  constructor(deps: import('./deploy-types').DeployDeps) {
     this.deps = deps;
   }
 
-  async execute(opts: DeployOptions): Promise<number> {
+  async execute(opts: import('./deploy-types').DeployOptions): Promise<number> {
+    const tracer = getTracer();
     const environment = opts.env ?? 'production';
     const shouldWait = opts.wait !== false;
 
-    // 1. Auth check
-    if (!this.deps.getToken()) {
-      return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
+    // Phase 1: Validate all prerequisites (auth, config, env, apps, secrets)
+    const prereqResult = await this.validatePrerequisites(opts, environment);
+    if (typeof prereqResult === 'number') {
+      return prereqResult;
     }
 
-    // 2. (Removed) .git is no longer required — content hash used when git is unavailable.
+    const { config, yamlPath, selectedApps, appUnits } = prereqResult;
+
+    // Phase 2: Create source bundle and upload (traced)
+    const uploadResult = await tracer.startActiveSpan('loopzero.cli.deploy.bundle', async (span) => {
+      try {
+        const result = await this.createAndUploadBundle(opts, config, yamlPath);
+        if (typeof result === 'number') {
+          span.setStatus({ code: SpanStatusCode.ERROR, message: `exit ${result}` });
+        }
+        return result;
+      } catch (err) {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
+    if (typeof uploadResult === 'number') {
+      return uploadResult;
+    }
+
+    // Phase 3: Submit build and optionally stream SSE events (traced)
+    return tracer.startActiveSpan('loopzero.cli.deploy.stream', async (span) => {
+      try {
+        const code = await this.submitAndStreamBuild(opts, config, environment, selectedApps, appUnits, uploadResult, shouldWait);
+        if (code !== 0) {
+          span.setStatus({ code: SpanStatusCode.ERROR, message: `exit ${code}` });
+        }
+        return code;
+      } catch (err) {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
+  }
+
+  /**
+   * Phase 1: Validate auth, loopzero.yaml, environment, app selection, and secrets.
+   * Returns a PrerequisiteResult on success or an exit code on failure.
+   */
+  private async validatePrerequisites(
+    opts: import('./deploy-types').DeployOptions,
+    environment: string,
+  ): Promise<PrerequisiteResult | number> {
+    // 1. Auth check
+    if (!this.deps.getToken()) {
+      return exitWithError(this.deps, opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
+    }
 
     // 3. Find loopzero.yaml
     const yamlResult = this.deps.findLoopZeroYaml();
     if (!yamlResult) {
-      return this.exitWithError(opts, 'No loopzero.yaml found. Run: loopzero init', 1, 'MISSING_CONFIG');
+      return exitWithError(this.deps, opts, 'No loopzero.yaml found. Run: loopzero init', 1, 'MISSING_CONFIG');
     }
 
     // 3b. Check for YAML parse errors
     if (yamlResult.parseError) {
-      return this.exitWithError(opts, `Invalid loopzero.yaml: ${yamlResult.parseError}`, 1, 'INVALID_CONFIG');
+      return exitWithError(this.deps, opts, `Invalid loopzero.yaml: ${yamlResult.parseError}`, 1, 'INVALID_CONFIG');
     }
 
     const { content: config } = yamlResult;
 
     // 4. Validate loopzero.yaml — run full validation BEFORE upload (instant feedback).
-    // This catches framework mismatches, missing Dockerfiles, pod limits, etc.
-    // Filesystem checks (Dockerfile existence, path existence) only when project root exists.
     const projectRoot = path.dirname(yamlResult.path);
     const skipFs = !fs.existsSync(projectRoot);
     const { errors: validationErrors, warnings: validationWarnings } = validateConfig(config, projectRoot, { skipFilesystemChecks: skipFs });
     if (validationErrors.length > 0) {
       const errorList = validationErrors.map((e, i) => `  ${i + 1}. ${e.message}`).join('\n');
-      return this.exitWithError(
+      return exitWithError(
+        this.deps,
         opts,
         `Invalid configuration:\n\n${errorList}\n\nFix the errors above and try again.`,
         1,
@@ -161,55 +144,84 @@ export class DeployCommand {
     // 5. Validate apps exist
     const appNames = Object.keys(config.apps);
     if (appNames.length === 0) {
-      return this.exitWithError(opts, 'No apps defined in loopzero.yaml. Add at least one app to deploy.', 1, 'INVALID_CONFIG');
+      return exitWithError(this.deps, opts, 'No apps defined in loopzero.yaml. Add at least one app to deploy.', 1, 'INVALID_CONFIG');
     }
 
     // 6. Validate --env (DA-10)
-    const envError = this.validateEnvironment(environment);
+    const envError = validateEnvironment(environment);
     if (envError) {
-      return this.exitWithError(opts, envError, 1, 'INVALID_ENVIRONMENT');
+      return exitWithError(this.deps, opts, envError, 1, 'INVALID_ENVIRONMENT');
     }
 
     // 7. Validate --app flag (DA-19) — fail fast before any upload
     const selectedApps = opts.app ?? appNames;
     for (const app of selectedApps) {
       if (!appNames.includes(app)) {
-        return this.exitWithError(opts, `App "${app}" not found in loopzero.yaml. Available apps: ${appNames.join(', ')}`, 1, 'APP_NOT_FOUND');
+        return exitWithError(this.deps, opts, `App "${app}" not found in loopzero.yaml. Available apps: ${appNames.join(', ')}`, 1, 'APP_NOT_FOUND');
       }
     }
 
     // 6b. Normalize apps into AppUnits (M6: declarative contract)
-    // After this point, all apps have resolved type, build, port, env.
     const appUnits = normalizeApps(config.apps, selectedApps);
 
     // 7. Validate secrets (pre-deploy check) — scoped to selected apps only (F-02)
-    const declaredSecrets = [...new Set(appUnits.flatMap(u => u.secrets))];
-    if (declaredSecrets.length > 0) {
-      let configuredSecrets: string[];
-      try {
-        configuredSecrets = await this.deps.getSecrets(config.project, environment);
-      } catch {
-        // MOD-6: Network error during secrets check — warn and continue
-        // The build will fail if secrets are truly missing.
-        if (!opts.json) {
-          this.deps.writeTo('Warning: Could not verify secrets. Deploy will continue but may fail if secrets are missing.');
-        }
-        configuredSecrets = declaredSecrets; // skip validation
-      }
-      const missingSecrets = declaredSecrets.filter((s) => !configuredSecrets.includes(s));
-      if (missingSecrets.length > 0) {
-        const msg = `Missing secrets for env "${environment}": ${missingSecrets.join(', ')}`;
-        const hint = 'Set secrets before deploying. See: https://docs.loopzero.example/secrets';
-        if (opts.json) {
-          this.deps.writeTo(JSON.stringify({ code: 'MISSING_SECRETS', error: `${msg}. ${hint}`, exit_code: 1 }));
-        } else {
-          this.deps.writeError(msg);
-          this.deps.writeError(hint);
-        }
-        return 1;
-      }
+    const secretsError = await this.validateSecrets(opts, config, environment, appUnits);
+    if (secretsError !== null) {
+      return secretsError;
     }
 
+    return { config, yamlPath: yamlResult.path, environment, selectedApps, appUnits };
+  }
+
+  /**
+   * Validate that all declared secrets are configured on the server.
+   * Returns null on success or an exit code on failure.
+   */
+  private async validateSecrets(
+    opts: import('./deploy-types').DeployOptions,
+    config: { project: string },
+    environment: string,
+    appUnits: ReturnType<typeof normalizeApps>,
+  ): Promise<number | null> {
+    const declaredSecrets = [...new Set(appUnits.flatMap(u => u.secrets))];
+    if (declaredSecrets.length === 0) {
+      return null;
+    }
+
+    let configuredSecrets: string[];
+    try {
+      configuredSecrets = await this.deps.getSecrets(config.project, environment);
+    } catch {
+      // MOD-6: Network error during secrets check — warn and continue
+      if (!opts.json) {
+        this.deps.writeTo('Warning: Could not verify secrets. Deploy will continue but may fail if secrets are missing.');
+      }
+      return null;
+    }
+    const missingSecrets = declaredSecrets.filter((s) => !configuredSecrets.includes(s));
+    if (missingSecrets.length > 0) {
+      const msg = `Missing secrets for env "${environment}": ${missingSecrets.join(', ')}`;
+      const hint = 'Set secrets before deploying. See: https://docs.loopzero.example/secrets';
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({ code: 'MISSING_SECRETS', error: `${msg}. ${hint}`, exit_code: 1 }));
+      } else {
+        this.deps.writeError(msg);
+        this.deps.writeError(hint);
+      }
+      return 1;
+    }
+    return null;
+  }
+
+  /**
+   * Phase 2: Emit pre-upload warnings, create source bundle, validate size, and upload.
+   * Returns the UploadResult on success or an exit code on failure.
+   */
+  private async createAndUploadBundle(
+    opts: import('./deploy-types').DeployOptions,
+    config: { apps: Record<string, unknown> },
+    yamlPath: string,
+  ): Promise<import('./deploy-types').UploadResult | number> {
     // 8. Warn about uncommitted changes (only relevant for git projects)
     if (this.deps.hasGitRepo() && this.deps.hasUncommittedChanges()) {
       if (!opts.json) {
@@ -219,8 +231,7 @@ export class DeployCommand {
 
     // 8b. Warn about missing lockfile (F-03: fail-fast before upload)
     if (!this.deps.hasLockfile()) {
-      // F-04: Also check inside app paths before warning (lockfile may be in app directory, not root)
-      const appPaths = Object.values(config.apps).map(a => a.path).filter(p => p && p !== '.');
+      const appPaths = Object.values(config.apps).map((a) => (a as Record<string, unknown>).path as string).filter(p => p && p !== '.');
       const hasAppLockfile = appPaths.some(appPath => {
         return ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'].some(
           f => fs.existsSync(path.join(appPath, f))
@@ -236,7 +247,7 @@ export class DeployCommand {
     try {
       sourceVersion = this.deps.getSourceIdentifier();
     } catch {
-      return this.exitWithError(opts,
+      return exitWithError(this.deps, opts,
         'Failed to identify source version. Ensure your project has files to deploy.',
         1, 'SOURCE_ID_FAILED');
     }
@@ -262,7 +273,7 @@ export class DeployCommand {
     try {
       bundlePath = await this.deps.createSourceBundle();
     } catch (err) {
-      return this.exitWithError(opts, `Failed to create source bundle. ${(err as Error).message}`, 1, 'BUNDLE_FAILED');
+      return exitWithError(this.deps, opts, `Failed to create source bundle. ${(err as Error).message}`, 1, 'BUNDLE_FAILED');
     }
 
     // 10b. Validate bundle size before upload (MOD-5)
@@ -271,7 +282,7 @@ export class DeployCommand {
       if (stat.size > MAX_BUNDLE_SIZE_BYTES) {
         this.deps.cleanupFile(bundlePath);
         const sizeMB = Math.ceil(stat.size / (1024 * 1024));
-        return this.exitWithError(opts,
+        return exitWithError(this.deps, opts,
           `Source bundle too large (${sizeMB}MB, max 500MB). Reduce repository size or use .gitignore to exclude large files.`,
           1, 'BUNDLE_TOO_LARGE');
       }
@@ -280,17 +291,33 @@ export class DeployCommand {
     }
 
     // 11. Upload source
-    let uploadResult: UploadResult;
+    let uploadResult: import('./deploy-types').UploadResult;
     try {
-      uploadResult = await this.deps.uploadSource(bundlePath, yamlResult.path);
+      uploadResult = await this.deps.uploadSource(bundlePath, yamlPath);
     } catch (err) {
       this.deps.cleanupFile(bundlePath);
-      return this.handleError(opts, err, 'Upload rejected');
+      return handleError(this.deps, opts, err, 'Upload rejected');
     }
 
     // 12. Cleanup temp file
     this.deps.cleanupFile(bundlePath);
 
+    return uploadResult;
+  }
+
+  /**
+   * Phase 3: Submit the build and optionally connect to SSE stream for completion.
+   * Returns the CLI exit code.
+   */
+  private async submitAndStreamBuild(
+    opts: import('./deploy-types').DeployOptions,
+    config: { project: string },
+    environment: string,
+    selectedApps: string[],
+    appUnits: ReturnType<typeof normalizeApps>,
+    uploadResult: import('./deploy-types').UploadResult,
+    shouldWait: boolean,
+  ): Promise<number> {
     // 13. Generate deterministic Idempotency-Key (A-01)
     const idempotencyKey = this.deps.generateIdempotencyKey(
       uploadResult.commit_sha,
@@ -298,20 +325,37 @@ export class DeployCommand {
       environment,
       selectedApps,
     );
-    // M6: Build app inputs from normalized AppUnits (no inference at deploy time)
-    const appInputs: AppInput[] = appUnits.map((unit) => ({
-      name: unit.name,
-      type: unit.type,
-      port: unit.port,
-      path: unit.path,
-      framework: unit.framework,
-      build: unit.build,
-      dockerfile: unit.dockerfile,
-      rendering: unit.rendering,
-      env: unit.env,
-      secrets: unit.secrets,
-    }));
-    let buildResult: SubmitBuildResult;
+    // M6: Build app inputs from normalized AppUnits (no inference at deploy time).
+    // B15 (MEET-2026-04-23-059): forward scaling config so the API can enforce
+    // plan caps and render the correct Deployment / HPA. Mutual exclusion is
+    // already validated by validate-config — here we trust the AppUnit.
+    const appInputs: AppInput[] = appUnits.map((unit) => {
+      const input: AppInput = {
+        name: unit.name,
+        type: unit.type,
+        port: unit.port,
+        path: unit.path,
+        framework: unit.framework,
+        build: unit.build,
+        dockerfile: unit.dockerfile,
+        rendering: unit.rendering,
+        env: unit.env,
+        secrets: unit.secrets,
+      };
+      // Send replicas only when autoscaling is absent. Default (1) is not forwarded
+      // so the API keeps backward-compat with payloads from older CLIs.
+      if (unit.autoscaling) {
+        input.autoscaling = {
+          min: unit.autoscaling.min,
+          max: unit.autoscaling.max,
+          target_cpu: unit.autoscaling.targetCPU,
+        };
+      } else if (unit.replicas !== undefined && unit.replicas !== 1) {
+        input.replicas = unit.replicas;
+      }
+      return input;
+    });
+    let buildResult: import('./deploy-types').SubmitBuildResult;
     try {
       buildResult = await this.deps.submitBuild({
         project: config.project,
@@ -322,7 +366,7 @@ export class DeployCommand {
         noCache: opts.noCache,
       });
     } catch (err) {
-      return this.handleError(opts, err, 'Deploy rejected');
+      return handleError(this.deps, opts, err, 'Deploy rejected');
     }
 
     // 14. --no-wait: return immediately (DA-2)
@@ -340,7 +384,18 @@ export class DeployCommand {
     }
 
     // 15. Connect SSE stream and wait for completion
-    // DEPLOY_TIMEOUT_MS imported from config/constants
+    return this.streamBuildEvents(opts, buildResult, selectedApps);
+  }
+
+  /**
+   * Connect to SSE stream and wait for build completion, handling all event types.
+   * Returns the CLI exit code.
+   */
+  private streamBuildEvents(
+    opts: import('./deploy-types').DeployOptions,
+    buildResult: import('./deploy-types').SubmitBuildResult,
+    selectedApps: string[],
+  ): Promise<number> {
     const deployStartTime = Date.now();
 
     const renderer = new DeployRenderer({
@@ -370,12 +425,10 @@ export class DeployCommand {
 
       const finish = async (exitCode: number): Promise<void> => {
         if (resolved) return;
-        resolved = true; // Set immediately — no TOCTOU window before the await below
+        resolved = true;
         clearTimeout(activityTimeout);
 
         // BLOCKER-1: On stream-related failures, verify actual build state
-        // before reporting failure. The build may have completed successfully
-        // even though the stream broke.
         if (exitCode === 3 && this.deps.getBuildStatus) {
           try {
             const buildStatus = await this.deps.getBuildStatus(buildResult.build_id);
@@ -387,7 +440,6 @@ export class DeployCommand {
                 this.deps.writeError(`Build failed: ${buildStatus.error_message ?? 'unknown error'}`);
               }
             }
-            // If still RUNNING/QUEUED, keep exit code 3 (unknown)
           } catch {
             // Can't reach API either — keep original exit code
           }
@@ -399,7 +451,7 @@ export class DeployCommand {
         resolve(exitCode);
       };
 
-      // Start the activity-based timeout — resets on every SSE event
+      // Start the activity-based timeout
       resetTimeout();
 
       sseConnection = this.deps.connectSSE(buildResult.build_id, (event: SSEEvent) => {
@@ -410,238 +462,147 @@ export class DeployCommand {
         // Reset activity timeout on every received event (A-04)
         resetTimeout();
 
-        if (event.type === 'deploy.completed') {
-          const payload = event.data as DeployCompletedPayload;
-
-          // F-04: Use wall-clock time when server reports 0 duration
-          if (!payload.duration_seconds) {
-            payload.duration_seconds = Math.ceil((Date.now() - deployStartTime) / 1000);
+        const handled = this.handleSSEEvent(event, opts, buildResult, selectedApps, deployStartTime, renderer, finish);
+        if (!handled) {
+          // Render intermediate progress events via DeployRenderer
+          const progressLine = renderer.onEvent({ type: event.type, data: event.data as Record<string, unknown> });
+          if (progressLine) {
+            this.deps.writeTo(progressLine);
           }
-
-          // F-08: Normalize empty/missing URLs to null for JSON output
-          for (const app of payload.apps) {
-            if (!app.url) {
-              app.url = undefined;
-            }
-          }
-
-          if (opts.json) {
-            const jsonPayload = {
-              ...payload,
-              apps: payload.apps.map((app) => {
-                const entry: Record<string, unknown> = {
-                  ...app,
-                  url: app.url ?? null,
-                };
-                // F-04: Add build_log pointer for failed apps per spec §0.3
-                if (app.status === 'failed') {
-                  entry.build_log = `loopzero logs --build ${buildResult.build_id}`;
-                }
-                return entry;
-              }),
-            };
-            this.deps.writeTo(JSON.stringify(jsonPayload));
-            finish(this.resolveExitCode(payload, selectedApps.length));
-            return;
-          }
-
-          // LEVE-2: Use DeployRenderer for final output (single renderer, no duplication)
-          const result: DeployResult = {
-            deploy_id: payload.deploy_id,
-            status: payload.status,
-            duration_seconds: payload.duration_seconds,
-            apps: payload.apps,
-          };
-          this.deps.writeTo(renderer.renderResult(result));
-          finish(this.resolveExitCode(payload, selectedApps.length));
-          return;
-        }
-
-        if (event.type === 'build.failed') {
-          const data = event.data as Record<string, unknown>;
-          const rawReason = String(data.error ?? data.status ?? 'unknown error');
-          const reason = this.sanitizeBuildError(rawReason);
-          const suggestion = `Run: loopzero logs --build ${buildResult.build_id}`;
-          // Avoid "Build failed: Build Failed" duplication when reason already has the prefix
-          const errorMsg = /^Build\s+(failed|error)/i.test(reason) ? reason : `Build failed: ${reason}`;
-          if (opts.json) {
-            this.deps.writeTo(JSON.stringify({
-              code: 'BUILD_FAILED',
-              error: errorMsg,
-              exit_code: 2,
-              build_id: buildResult.build_id,
-              suggestion,
-            }));
-          } else {
-            this.deps.writeError(`${errorMsg}. ${suggestion}`);
-          }
-          finish(2);
-          return;
-        }
-
-        if (event.type === 'deploy.sync_failed') {
-          const data = event.data as Record<string, unknown>;
-          const rawReason = String(data.reason ?? 'sync failed');
-          const userMessage = this.mapSyncFailureReason(rawReason, buildResult.build_id);
-          if (opts.json) {
-            this.deps.writeTo(JSON.stringify({
-              code: 'DEPLOY_FAILED',
-              error: userMessage,
-              reason: rawReason,
-              exit_code: 3,
-              deploy_id: data.deploy_id ?? null,
-              build_id: buildResult.build_id,
-            }));
-          } else {
-            this.deps.writeError(userMessage);
-          }
-          finish(3); // exit code 3 = deploy failure
-          return;
-        }
-
-        if (event.type === 'stream.error') {
-          const data = event.data as Record<string, unknown>;
-          const reason = String(data.error ?? 'Stream connection failed');
-          if (opts.json) {
-            this.deps.writeTo(JSON.stringify({
-              code: 'STREAM_ERROR',
-              error: `Deploy stream error: ${reason}`,
-              exit_code: 3,
-              build_id: buildResult.build_id,
-            }));
-          } else {
-            this.deps.writeError(`Deploy stream error: ${reason}`);
-          }
-          finish(3);
-          return;
-        }
-
-        if (event.type === 'stream.closed') {
-          if (opts.json) {
-            this.deps.writeTo(JSON.stringify({
-              code: 'STREAM_CLOSED',
-              error: 'Deploy stream closed before completion. The build may still be running.',
-              exit_code: 3,
-              build_id: buildResult.build_id,
-            }));
-          } else {
-            this.deps.writeError('Deploy stream closed before completion. The build may still be running.');
-          }
-          finish(3);
-          return;
-        }
-
-        // Render intermediate progress events via DeployRenderer
-        const progressLine = renderer.onEvent({ type: event.type, data: event.data as Record<string, unknown> });
-        if (progressLine) {
-          this.deps.writeTo(progressLine);
         }
       });
     });
   }
 
-  private resolveExitCode(payload: DeployCompletedPayload, requestedAppCount: number): number {
-    if (payload.status === 'success') {
-      return 0;
-    }
+  /**
+   * Handle a single SSE event. Returns true if the event was a terminal event
+   * (deploy.completed, build.failed, etc.), false if it was a progress event.
+   */
+  private handleSSEEvent(
+    event: SSEEvent,
+    opts: import('./deploy-types').DeployOptions,
+    buildResult: import('./deploy-types').SubmitBuildResult,
+    selectedApps: string[],
+    deployStartTime: number,
+    renderer: DeployRenderer,
+    finish: (exitCode: number) => void,
+  ): boolean {
+    if (event.type === 'deploy.completed') {
+      const payload = event.data as DeployCompletedPayload;
 
-    if (payload.status === 'partial_failure') {
-      return 5;
-    }
-
-    if (payload.status === 'deploy_failed') {
-      return 3;
-    }
-
-    // status === 'failed' — build failure or deploy failure
-    // DA-3: partial failure (exit 5) only with 2+ apps
-    const failedApps = payload.apps.filter((a) => a.status === 'failed');
-    const deployedApps = payload.apps.filter((a) => a.status === 'deployed');
-
-    if (requestedAppCount >= 2 && failedApps.length > 0 && deployedApps.length > 0) {
-      return 5;
-    }
-
-    return 2;
-  }
-
-  private validateEnvironment(env: string): string | null {
-    if (!env || env.length === 0) {
-      return 'Environment name cannot be empty.';
-    }
-    if (env !== env.toLowerCase()) {
-      return `Environment names must be lowercase. Example: --env ${env.toLowerCase()}`;
-    }
-    if (!/^[a-z]/.test(env)) {
-      return 'Environment name must start with a lowercase letter. Example: --env staging';
-    }
-    if (env.length > MAX_ENVIRONMENT_NAME_LENGTH) {
-      return `Environment name too long (${env.length} chars, max ${MAX_ENVIRONMENT_NAME_LENGTH}). Use a shorter name.`;
-    }
-    if (!/^[a-z][a-z0-9-]*$/.test(env)) {
-      return 'Environment name can only contain lowercase letters, numbers, and hyphens. Example: --env staging';
-    }
-    return null;
-  }
-
-  private mapSyncFailureReason(reason: string, buildId: string): string {
-    const knownReasons: Record<string, string> = {
-      'HEALTH_PROBE_FAILED': "Service didn't become healthy in time. Check your app's /health endpoint and logs.",
-      'SYNC_TIMEOUT': 'Deploy timed out waiting for service to start. Check service logs for startup errors.',
-      'IMAGE_PULL_FAILED': 'Could not pull the built image. This is usually a temporary issue — try deploying again.',
-      'RESOURCE_QUOTA_EXCEEDED': 'Deployment exceeds resource limits. Reduce resource requests in your configuration.',
-      'CRASH_LOOP': 'Service keeps crashing on startup. Check your app logs for errors.',
-    };
-
-    const message = knownReasons[reason]
-      ?? `Deploy failed: ${reason.toLowerCase().replace(/_/g, ' ')}. Check service logs for details.`;
-
-    return `${message} Run: loopzero logs --build ${buildId}`;
-  }
-
-  private sanitizeBuildError(raw: string): string {
-    // Map internal infrastructure terms to user-facing language (Rule 3)
-    let msg = raw;
-    msg = msg.replace(/Workflow\s+(Failed|Error|Timed\s*Out)/gi, 'Build $1');
-    msg = msg.replace(/\bin\s+build\s+cluster\b/gi, '');
-    msg = msg.replace(/\bworkflow\b/gi, 'build');
-    msg = msg.replace(/\bArgo\s*CD\b/gi, 'deployment sync');
-    msg = msg.replace(/\bGitea\b/gi, 'repository');
-    msg = msg.replace(/\bMinIO\b/gi, 'storage');
-    msg = msg.replace(/\bKaniko\b/gi, 'image builder');
-    msg = msg.replace(/\bCRD\b/g, 'service configuration');
-    msg = msg.replace(/\btenant_id\b/gi, 'account');
-    msg = msg.replace(/\badvisory\s*lock\b/gi, '');
-    msg = msg.replace(/\bpg_advisory[_a-z]*/gi, '');
-    msg = msg.replace(/\bgitops[-_]push\b/gi, 'deploy');
-    msg = msg.replace(/\bkubebuilder\b/gi, '');
-    msg = msg.replace(/\benvtest\b/gi, '');
-    // Clean up extra whitespace
-    msg = msg.replace(/\s{2,}/g, ' ').trim();
-    return msg || 'unknown error';
-  }
-
-  private exitWithError(opts: DeployOptions, message: string, exitCode: number, code?: string): number {
-    if (opts.json) {
-      const payload: Record<string, unknown> = { error: message, exit_code: exitCode };
-      if (code) {
-        payload.code = code;
+      // F-04: Use wall-clock time when server reports 0 duration
+      if (!payload.duration_seconds) {
+        payload.duration_seconds = Math.ceil((Date.now() - deployStartTime) / 1000);
       }
-      this.deps.writeTo(JSON.stringify(payload));
-    } else {
-      this.deps.writeError(message);
-    }
-    return exitCode;
-  }
 
-  private handleError(opts: DeployOptions, err: unknown, context?: string): number {
-    if (err instanceof ApiError) {
-      const message = context ? `${context}: ${err.message}` : err.message;
-      return this.exitWithError(opts, message, err.exitCode, err.code);
+      // F-08: Normalize empty/missing URLs to null for JSON output
+      for (const app of payload.apps) {
+        if (!app.url) {
+          app.url = undefined;
+        }
+      }
+
+      if (opts.json) {
+        const jsonPayload = {
+          ...payload,
+          apps: payload.apps.map((app) => {
+            const entry: Record<string, unknown> = {
+              ...app,
+              url: app.url ?? null,
+            };
+            if (app.status === 'failed') {
+              entry.build_log = `loopzero logs --build ${buildResult.build_id}`;
+            }
+            return entry;
+          }),
+        };
+        this.deps.writeTo(JSON.stringify(jsonPayload));
+      } else {
+        const result: DeployResult = {
+          deploy_id: payload.deploy_id,
+          status: payload.status,
+          duration_seconds: payload.duration_seconds,
+          apps: payload.apps,
+        };
+        this.deps.writeTo(renderer.renderResult(result));
+      }
+      finish(resolveExitCode(payload, selectedApps.length));
+      return true;
     }
-    if (err instanceof Error) {
-      return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');
+
+    if (event.type === 'build.failed') {
+      const data = event.data as Record<string, unknown>;
+      const rawReason = String(data.error ?? data.status ?? 'unknown error');
+      const reason = sanitizeBuildError(rawReason);
+      const suggestion = `Run: loopzero logs --build ${buildResult.build_id}`;
+      const errorMsg = /^Build\s+(failed|error)/i.test(reason) ? reason : `Build failed: ${reason}`;
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'BUILD_FAILED',
+          error: errorMsg,
+          exit_code: 2,
+          build_id: buildResult.build_id,
+          suggestion,
+        }));
+      } else {
+        this.deps.writeError(`${errorMsg}. ${suggestion}`);
+      }
+      finish(2);
+      return true;
     }
-    return this.exitWithError(opts, 'Unexpected error. Wait for it to complete, or try again later.', 3, 'UNEXPECTED_ERROR');
+
+    if (event.type === 'deploy.sync_failed') {
+      const data = event.data as Record<string, unknown>;
+      const rawReason = String(data.reason ?? 'sync failed');
+      const userMessage = mapSyncFailureReason(rawReason, buildResult.build_id);
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'DEPLOY_FAILED',
+          error: userMessage,
+          reason: rawReason,
+          exit_code: 3,
+          deploy_id: data.deploy_id ?? null,
+          build_id: buildResult.build_id,
+        }));
+      } else {
+        this.deps.writeError(userMessage);
+      }
+      finish(3);
+      return true;
+    }
+
+    if (event.type === 'stream.error') {
+      const data = event.data as Record<string, unknown>;
+      const reason = String(data.error ?? 'Stream connection failed');
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'STREAM_ERROR',
+          error: `Deploy stream error: ${reason}`,
+          exit_code: 3,
+          build_id: buildResult.build_id,
+        }));
+      } else {
+        this.deps.writeError(`Deploy stream error: ${reason}`);
+      }
+      finish(3);
+      return true;
+    }
+
+    if (event.type === 'stream.closed') {
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'STREAM_CLOSED',
+          error: 'Deploy stream closed before completion. The build may still be running.',
+          exit_code: 3,
+          build_id: buildResult.build_id,
+        }));
+      } else {
+        this.deps.writeError('Deploy stream closed before completion. The build may still be running.');
+      }
+      finish(3);
+      return true;
+    }
+
+    return false;
   }
 }

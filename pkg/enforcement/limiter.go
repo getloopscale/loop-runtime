@@ -94,6 +94,68 @@ func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) Limi
 	return result
 }
 
+// CheckValue verifies if a REQUESTED value (not accumulated usage) is within
+// a tenant's plan cap for the given metric. Unlike CheckLimit, this answers
+// "is the user allowed to request this exact value?" — used for per-resource
+// intent checks such as replica count or secret size.
+//
+// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059).
+//
+// Semantics (matches MEET-059 Stage 2 test contract):
+//   - nil limiter / nil DB            → Allowed (dev fall-through, same as CheckLimit)
+//   - enterprise plan                 → Allowed (unlimited)
+//   - hard_limit NULL (< 0)           → Allowed (unlimited for this plan)
+//   - hard_limit == 0 (missing row)   → Denied (fail closed, logged)
+//   - requested <= hard_limit         → Allowed
+//   - requested > hard_limit          → Denied, LimitResult.Current == requested
+//
+// Reports LimitResult.Current as the REQUESTED value (not current usage),
+// so `FormatLimitError` surfaces it to the user.
+func (l *PlanLimiter) CheckValue(tenantID, metric string, requested int) LimitResult {
+	if l == nil || l.db == nil {
+		return LimitResult{Allowed: true, Plan: "dev", Metric: metric, Current: requested}
+	}
+
+	plan := l.getTenantPlan(tenantID)
+	if plan == "enterprise" {
+		return LimitResult{Allowed: true, Plan: plan, Metric: metric, Current: requested}
+	}
+
+	hardLimit, _ := l.getLimits(plan, metric)
+	if hardLimit < 0 {
+		return LimitResult{Allowed: true, Plan: plan, Metric: metric, Current: requested}
+	}
+	if hardLimit == 0 {
+		l.logger.Warn("no value limit configured (denying by default)",
+			"tenant", tenantID, "plan", plan, "metric", metric, "requested", requested,
+		)
+		return LimitResult{
+			Allowed: false,
+			Plan:    plan,
+			Metric:  metric,
+			Current: requested,
+			Limit:   0,
+		}
+	}
+
+	result := LimitResult{
+		Plan:    plan,
+		Metric:  metric,
+		Current: requested,
+		Limit:   hardLimit,
+	}
+	if requested > hardLimit {
+		result.Allowed = false
+		l.logger.Info("requested value exceeds plan cap",
+			"tenant", tenantID, "plan", plan, "metric", metric,
+			"requested", requested, "hard_limit", hardLimit,
+		)
+		return result
+	}
+	result.Allowed = true
+	return result
+}
+
 // GetBuildTimeout returns the build timeout for a tenant's plan (in seconds).
 func (l *PlanLimiter) GetBuildTimeout(tenantID string) int {
 	if l == nil || l.db == nil {

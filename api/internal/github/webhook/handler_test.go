@@ -138,14 +138,25 @@ func TestWebhook_PushEvent_DispatchesToHandler(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 
-	// Wait for async dispatch
-	time.Sleep(100 * time.Millisecond)
+	// Poll for async dispatch completion instead of sleeping.
+	deadline := time.After(5 * time.Second)
+	for {
+		mu.Lock()
+		done := received != nil
+		mu.Unlock()
+		if done {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for push handler to be called")
+		default:
+			time.Sleep(1 * time.Millisecond) // intentional: tight poll for async goroutine completion
+		}
+	}
 
 	mu.Lock()
 	defer mu.Unlock()
-	if received == nil {
-		t.Fatal("push handler not called")
-	}
 	if received.After != "abc123def456" {
 		t.Errorf("commit SHA = %q, want abc123def456", received.After)
 	}
@@ -197,13 +208,25 @@ func TestWebhook_PullRequestEvent_DispatchesToHandler(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 
-	time.Sleep(100 * time.Millisecond)
+	// Poll for async dispatch completion instead of sleeping.
+	deadline := time.After(5 * time.Second)
+	for {
+		mu.Lock()
+		done := received != nil
+		mu.Unlock()
+		if done {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for pull_request handler to be called")
+		default:
+			time.Sleep(1 * time.Millisecond) // intentional: tight poll for async goroutine completion
+		}
+	}
 
 	mu.Lock()
 	defer mu.Unlock()
-	if received == nil {
-		t.Fatal("pull_request handler not called")
-	}
 	if received.Action != "opened" {
 		t.Errorf("action = %q, want opened", received.Action)
 	}

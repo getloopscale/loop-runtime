@@ -12,8 +12,8 @@ describe('ProjectListCommand', () => {
       getToken: () => 'test-token',
       listProjects: async () => ({
         projects: [
-          { id: 'p-1', name: 'my-api', team_id: 'tn-loopzero', created_at: '2026-01-15T00:00:00Z' },
-          { id: 'p-2', name: 'my-web', team_id: 'tn-loopzero', created_at: '2026-02-20T00:00:00Z' },
+          { id: 'p-1', name: 'my-api', team: 'tn-loopzero', created_at: '2026-01-15T00:00:00Z' },
+          { id: 'p-2', name: 'my-web', team: 'tn-loopzero', created_at: '2026-02-20T00:00:00Z' },
         ],
       }),
       writeTo: (msg: string) => output.push(msg),
@@ -89,7 +89,7 @@ describe('ProjectListCommand', () => {
     it('shows singular "project" for single result', async () => {
       const cmd = new ProjectListCommand(makeDeps({
         listProjects: async () => ({
-          projects: [{ id: 'p-1', name: 'only-one', team_id: 'tn-loopzero', created_at: '2026-01-01T00:00:00Z' }],
+          projects: [{ id: 'p-1', name: 'only-one', team: 'tn-loopzero', created_at: '2026-01-01T00:00:00Z' }],
         }),
       }));
       await cmd.execute();

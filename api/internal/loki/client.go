@@ -163,6 +163,86 @@ func isValidLogParam(s string) bool {
 	return len(s) <= 128 && logParamRegex.MatchString(s)
 }
 
+// QueryBuildLogsSince queries Loki for logs newer than sinceNano (nanosecond timestamp).
+// Used by the log streaming handler for incremental polling.
+// Implements routes.StreamLogQuerier.
+//
+// The queryKey can be:
+//   - A build ID (e.g., "bld-abc123") for build logs
+//   - A runtime key "runtime:{tenant}:{env}:{project}" for runtime logs
+func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, sinceNano int64, limit int) ([]routes.LogEntry, error) {
+	var query string
+
+	// Parse runtime key format: "runtime:{tenant}:{env}:{project}"
+	if strings.HasPrefix(queryKey, "runtime:") {
+		parts := strings.SplitN(queryKey, ":", 4)
+		if len(parts) != 4 {
+			return nil, fmt.Errorf("loki: invalid runtime query key: %q", queryKey)
+		}
+		tenant, env, project := parts[1], parts[2], parts[3]
+		if !isValidLogParam(tenant) || !isValidLogParam(env) || !isValidLogParam(project) {
+			return nil, fmt.Errorf("loki: invalid runtime query parameters")
+		}
+		// Runtime logs: query by namespace (LoopZero naming convention)
+		namespace := fmt.Sprintf("loopzero-%s-%s", tenant, env)
+		query = fmt.Sprintf(`{namespace="%s", container=~".+"}`, namespace)
+	} else {
+		// Build logs: query by workflow name containing buildID
+		if !isValidLogParam(queryKey) {
+			return nil, fmt.Errorf("loki: invalid build ID: %q", queryKey)
+		}
+		query = fmt.Sprintf(`{workflow=~".*%s.*"}`, queryKey)
+	}
+
+	if limit <= 0 {
+		limit = 500
+	}
+
+	// Start time: sinceNano + 1 (to avoid re-fetching the same line)
+	startNano := sinceNano
+	if startNano > 0 {
+		startNano++
+	} else {
+		// Default: last 1 hour for streaming
+		startNano = time.Now().Add(-1 * time.Hour).UnixNano()
+	}
+
+	params := url.Values{
+		"query":     {query},
+		"limit":     {strconv.Itoa(limit)},
+		"direction": {"forward"},
+		"start":     {strconv.FormatInt(startNano, 10)},
+		"end":       {strconv.FormatInt(time.Now().UnixNano(), 10)},
+	}
+
+	reqURL := fmt.Sprintf("%s/loki/api/v1/query_range?%s", c.baseURL, params.Encode())
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("loki: create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		c.logger.Warn("loki stream query failed", "error", err, "key", queryKey)
+		return nil, fmt.Errorf("loki: query: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		c.logger.Warn("loki stream non-200 response", "status", resp.StatusCode, "body", string(body), "key", queryKey)
+		return nil, fmt.Errorf("loki: unexpected status %d", resp.StatusCode)
+	}
+
+	var lokiResp lokiQueryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&lokiResp); err != nil {
+		return nil, fmt.Errorf("loki: decode response: %w", err)
+	}
+
+	return parseLokiStreams(lokiResp), nil
+}
+
 // parseNanosecondTimestamp converts Loki's nanosecond string timestamp to RFC3339.
 func parseNanosecondTimestamp(ns string) string {
 	nsInt, err := strconv.ParseInt(ns, 10, 64)

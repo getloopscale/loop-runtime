@@ -84,15 +84,20 @@ export class BuildListCommand {
 
     this.deps.writeTo(`Builds for ${project}:`);
     this.deps.writeTo('');
+    // CHG-2026-04-23-AUDIT-5: build IDs are 22 chars (`build-` + 16 hex), so we
+    // truncate to 14 chars for display and widen the column to match. Header is
+    // "COMMIT" not "VERSION" — the content is a shortened commit SHA, not semver.
+    // Full ID remains available in --json output.
     this.deps.writeTo(
-      `  ${pad('ID', 16)}${pad('STATUS', 11)}${pad('VERSION', 9)}${pad('STARTED', 21)}DURATION`
+      `  ${pad('ID', 16)}${pad('STATUS', 11)}${pad('COMMIT', 9)}${pad('STARTED', 21)}DURATION`
     );
     for (const b of response.builds) {
       const started = formatTimestamp(b.created_at);
       const duration = b.duration_seconds != null ? `${b.duration_seconds}s` : '-';
       const sha = b.commit_sha.substring(0, 7);
+      const shortId = b.build_id.length > 14 ? b.build_id.substring(0, 14) : b.build_id;
       this.deps.writeTo(
-        `  ${pad(b.build_id, 16)}${pad(b.status, 11)}${pad(sha, 9)}${pad(started, 21)}${duration}`
+        `  ${pad(shortId, 16)}${pad(b.status, 11)}${pad(sha, 9)}${pad(started, 21)}${duration}`
       );
     }
     this.deps.writeTo('');

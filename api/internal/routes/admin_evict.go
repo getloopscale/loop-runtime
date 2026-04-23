@@ -16,6 +16,7 @@ package routes
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -76,7 +77,7 @@ func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 
 		serviceAuth := r.Header.Get("X-Service-Auth")
 		expected := os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
-		if expected == "" || serviceAuth == "" || serviceAuth != expected {
+		if expected == "" || serviceAuth == "" || subtle.ConstantTimeCompare([]byte(serviceAuth), []byte(expected)) != 1 {
 			jsonError(w, http.StatusForbidden, "FORBIDDEN", "Admin endpoint requires X-Service-Auth.")
 			return
 		}

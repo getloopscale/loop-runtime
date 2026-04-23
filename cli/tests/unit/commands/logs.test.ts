@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import { LogsCommand, LogsDeps } from '../../../src/commands/logs';
+import { LogsCommand, LogsDeps, StreamLogEvent } from '../../../src/commands/logs';
 import { ApiError } from '../../../src/api/client';
 
 function createMockDeps(overrides: Partial<LogsDeps> = {}): LogsDeps {
@@ -226,6 +226,129 @@ describe('LogsCommand', () => {
         for (const term of forbidden) {
           expect(allOutput).not.toContain(term);
         }
+      }
+    });
+  });
+
+  describe('--follow mode', () => {
+    it('should stream log events and return exit code 0 when stream closes', async () => {
+      const lines: string[] = [];
+      const deps = createMockDeps({
+        streamLogs: (buildID, onLine, _onError, onClose) => {
+          // Simulate SSE events
+          setTimeout(() => {
+            onLine({ timestamp: '2026-01-01T00:00:01Z', line: 'Building...', step: 'build' });
+            onLine({ timestamp: '2026-01-01T00:00:02Z', line: 'Done!', step: 'build' });
+            onClose();
+          }, 10);
+          return { close: jest.fn() };
+        },
+        writeTo: jest.fn((msg: string) => lines.push(msg)),
+      });
+      const cmd = new LogsCommand(deps);
+
+      const exitCode = await cmd.execute({ build: 'build-abc123', follow: true });
+
+      expect(exitCode).toBe(0);
+      expect(lines.some((l: string) => l.includes('Building...'))).toBe(true);
+      expect(lines.some((l: string) => l.includes('Done!'))).toBe(true);
+    });
+
+    it('should display timestamps and step prefixes in follow mode', async () => {
+      const lines: string[] = [];
+      const deps = createMockDeps({
+        streamLogs: (_buildID, onLine, _onError, onClose) => {
+          setTimeout(() => {
+            onLine({ timestamp: '2026-01-01T00:00:01Z', line: 'Cloning...', step: 'clone' });
+            onClose();
+          }, 10);
+          return { close: jest.fn() };
+        },
+        writeTo: jest.fn((msg: string) => lines.push(msg)),
+      });
+      const cmd = new LogsCommand(deps);
+
+      await cmd.execute({ build: 'build-abc123', follow: true });
+
+      // Should contain timestamp and step prefix
+      const output = lines.join('\n');
+      expect(output).toContain('2026-01-01T00:00:01Z');
+      expect(output).toContain('[clone]');
+      expect(output).toContain('Cloning...');
+    });
+
+    it('should output JSON events in follow + json mode', async () => {
+      const lines: string[] = [];
+      const deps = createMockDeps({
+        streamLogs: (_buildID, onLine, _onError, onClose) => {
+          setTimeout(() => {
+            onLine({ timestamp: '2026-01-01T00:00:01Z', line: 'test', step: 'build' });
+            onClose();
+          }, 10);
+          return { close: jest.fn() };
+        },
+        writeTo: jest.fn((msg: string) => lines.push(msg)),
+      });
+      const cmd = new LogsCommand(deps);
+
+      await cmd.execute({ build: 'build-abc123', follow: true, json: true });
+
+      const parsed = JSON.parse(lines[0]);
+      expect(parsed.timestamp).toBe('2026-01-01T00:00:01Z');
+      expect(parsed.line).toBe('test');
+      expect(parsed.step).toBe('build');
+    });
+
+    it('should return exit code 1 when streamLogs is not available', async () => {
+      const deps = createMockDeps({
+        streamLogs: undefined,
+      });
+      const cmd = new LogsCommand(deps);
+
+      const exitCode = await cmd.execute({ build: 'build-abc123', follow: true });
+
+      expect(exitCode).toBe(1);
+      const errorOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(errorOutput).toContain('not available');
+    });
+
+    it('should require auth in follow mode', async () => {
+      const deps = createMockDeps({
+        getToken: jest.fn().mockReturnValue(null),
+      });
+      const cmd = new LogsCommand(deps);
+
+      const exitCode = await cmd.execute({ build: 'build-abc123', follow: true });
+
+      expect(exitCode).toBe(4);
+    });
+
+    it('should not contain forbidden terms in follow mode output', async () => {
+      const forbidden = [
+        'ArgoCD', 'argocd', 'GitOps', 'gitops-push', 'CRD',
+        'tenant_id', 'advisory lock', 'pg_advisory', 'Gitea',
+        'MinIO', 'kubebuilder', 'envtest', 'Kaniko',
+        'Loki', 'Promtail', 'LogQL', 'workflow',
+      ];
+      const lines: string[] = [];
+      const deps = createMockDeps({
+        streamLogs: (_buildID, onLine, _onError, onClose) => {
+          setTimeout(() => {
+            onLine({ timestamp: '2026-01-01T00:00:01Z', line: 'Build complete', step: 'build' });
+            onClose();
+          }, 10);
+          return { close: jest.fn() };
+        },
+        writeTo: jest.fn((msg: string) => lines.push(msg)),
+        writeError: jest.fn((msg: string) => lines.push(msg)),
+      });
+      const cmd = new LogsCommand(deps);
+
+      await cmd.execute({ build: 'build-abc123', follow: true });
+
+      const allOutput = lines.join('\n');
+      for (const term of forbidden) {
+        expect(allOutput).not.toContain(term);
       }
     });
   });

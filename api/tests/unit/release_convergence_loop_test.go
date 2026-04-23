@@ -237,11 +237,20 @@ func TestReleaseConvergenceLoop_ActivatesPendingRelease(t *testing.T) {
 		},
 	)
 
-	// Act: run one tick
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	// Act: run loop and poll until the release transitions.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	go loop.Start(ctx)
-	time.Sleep(300 * time.Millisecond)
+
+	deadline := time.After(5 * time.Second)
+	for releaseStore.getStatus("rel-001") != "ACTIVE" {
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for release ACTIVE, got %q", releaseStore.getStatus("rel-001"))
+		default:
+			time.Sleep(5 * time.Millisecond) // intentional: tight poll for convergence loop tick
+		}
+	}
 
 	// Assert: release should be ACTIVE
 	if releaseStore.getStatus("rel-001") != "ACTIVE" {
@@ -285,10 +294,19 @@ func TestReleaseConvergenceLoop_TimesOutStaleRelease(t *testing.T) {
 	)
 
 	// Act
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	go loop.Start(ctx)
-	time.Sleep(300 * time.Millisecond)
+
+	deadline := time.After(5 * time.Second)
+	for releaseStore.getStatus("rel-002") != "SYNC_FAILED" {
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for SYNC_FAILED, got %q", releaseStore.getStatus("rel-002"))
+		default:
+			time.Sleep(5 * time.Millisecond) // intentional: tight poll for convergence loop tick
+		}
+	}
 
 	// Assert: release should be SYNC_FAILED
 	if releaseStore.getStatus("rel-002") != "SYNC_FAILED" {
@@ -328,11 +346,11 @@ func TestReleaseConvergenceLoop_SkipsWhenNotReady(t *testing.T) {
 		},
 	)
 
-	// Act
+	// Act — run 2 full loop iterations (100ms interval) then verify status unchanged.
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	go loop.Start(ctx)
-	time.Sleep(200 * time.Millisecond)
+	<-ctx.Done() // wait for the context to expire (loop ran at least 2 iterations)
 
 	// Assert: release stays PENDING (not activated, not failed)
 	if releaseStore.getStatus("rel-003") != "PENDING" {
@@ -371,10 +389,19 @@ func TestReleaseConvergenceLoop_TerminatesStuckOperationOnTimeout(t *testing.T) 
 	)
 
 	// Act
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	go loop.Start(ctx)
-	time.Sleep(300 * time.Millisecond)
+
+	deadline := time.After(5 * time.Second)
+	for terminatingSyncClient.getTerminateCalls() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for TerminateOperation to be called")
+		default:
+			time.Sleep(5 * time.Millisecond) // intentional: tight poll for convergence loop tick
+		}
+	}
 
 	// Assert: TerminateOperation was called
 	if terminatingSyncClient.getTerminateCalls() == 0 {
@@ -404,11 +431,11 @@ func TestReleaseConvergenceLoop_HandlesEmptyPendingList(t *testing.T) {
 		},
 	)
 
-	// Act: should not panic or error
+	// Act: should not panic or error — run for a few iterations.
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	go loop.Start(ctx)
-	time.Sleep(150 * time.Millisecond)
+	<-ctx.Done() // wait for context to expire (loop ran several iterations)
 
 	// Assert: nothing happened
 	if len(eventStore.getEvents()) != 0 {
@@ -521,11 +548,20 @@ func TestReleaseConvergenceLoop_RetriggersSyncForStalledRelease(t *testing.T) {
 		},
 	)
 
-	// Act: run a few ticks
-	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	// Act: run loop and poll until TriggerSync is called.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	go loop.Start(ctx)
-	time.Sleep(350 * time.Millisecond)
+
+	deadline := time.After(5 * time.Second)
+	for syncClient.getTriggerSyncCalls() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for TriggerSync to be called")
+		default:
+			time.Sleep(5 * time.Millisecond) // intentional: tight poll for convergence loop tick
+		}
+	}
 
 	// Assert: TriggerSync was called (retrigger for stalled release)
 	if syncClient.getTriggerSyncCalls() == 0 {
@@ -555,11 +591,11 @@ func TestReleaseConvergenceLoop_DoesNotRetriggerRecentRelease(t *testing.T) {
 		},
 	)
 
-	// Act
+	// Act — run for a few loop iterations then verify no retrigger.
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	go loop.Start(ctx)
-	time.Sleep(250 * time.Millisecond)
+	<-ctx.Done() // wait for context to expire (loop ran several iterations)
 
 	// Assert: TriggerSync NOT called (release too recent, < 30s)
 	if syncClient.triggerSyncCalls != 0 {
@@ -593,11 +629,11 @@ func TestHealthCheckActiveReleases_DetectsDivergence(t *testing.T) {
 		},
 	)
 
-	// Act: run long enough for health ticker to fire
+	// Act: run long enough for health ticker to fire.
 	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
 	defer cancel()
 	go loop.Start(ctx)
-	time.Sleep(350 * time.Millisecond)
+	<-ctx.Done() // wait for context to expire (health ticker ran several times)
 
 	// Assert: release should NOT be state-changed (observability only)
 	// The release status should remain ACTIVE — health check does not mutate state.
@@ -636,7 +672,7 @@ func TestHealthCheckActiveReleases_ClearsDivergenceWhenHealthy(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
 	defer cancel()
 	go loop.Start(ctx)
-	time.Sleep(350 * time.Millisecond)
+	<-ctx.Done() // wait for context to expire (health ticker ran several times)
 
 	// Assert: no state changes, no events (health check is observability-only)
 	if len(eventStore.getEvents()) != 0 {

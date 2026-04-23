@@ -18,7 +18,7 @@
       "type": "stat",
       "gridPos": { "h": 8, "w": 4, "x": 0, "y": 1 },
       "targets": [
-        { "expr": "loopzero_registry_canary_success", "legendFormat": "Canary" }
+        { "expr": "up{job=\"harbor\"} or vector(0)", "legendFormat": "Harbor" }
       ],
       "fieldConfig": {
         "defaults": {
