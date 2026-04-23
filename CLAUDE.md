@@ -14,7 +14,40 @@ The authoritative specification is **`docs/technical.md`**. Every state machine,
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
-**Current status: Pre-release, Starter + Pro tiers launchable.** Sprints 0-2 complete (foundation + auth + deploy happy path). Hardening sprints 1-6 complete. Sprint 10 (static frontend) complete. Sprint 11 (auth + billing) complete. **Phase 1 (enforcement + audit) complete (2026-04-08):** plan limits enforced on projects/builds/environments/members, audit log writing to DB, GET /api/v1/audit endpoint, `loopzero audit` CLI command. **Custom Domains v2 complete (2026-04-08):** CF Zone Management (model Vercel) — `loopzero domain add` creates CF zone per domain, user changes nameservers, full WAF/DDoS via CF edge, zero cert-manager dependency for custom domains. E2E validated with aquim.ai. **GitHub App auto-deploy complete (2026-04-08):** `git push` → automatic deploy (model Vercel). GitHub App "LoopZero Platform" (ID 3319955), webhook handler with HMAC-SHA256, source download via installation token, tarball→git bundle conversion, S3 upload, build submission. E2E validated: push to getloopscale/loopzero-repotest → build SUCCEEDED → app live at aquim.ai in ~4min. **Monorepo validator (2026-04-08):** frontend auto-infer static, framework validation (30 frameworks), max 2 pods, Dockerfile detection, path traversal protection. Runs before upload (instant feedback). 857 CLI tests. **Auth hardened (MEET-039):** UUID tenant IDs, engine RSA-only, audience validation, secret rotation with kid+dual-key, no "default" tenant fallback. **Two-host gateway:** cloud.{domain} for browser (dashboard+Kratos+Hydra), api.{domain} for CLI (engine). **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom). **Production hardening (2026-04-09):** Failure mode analysis (MEET-043): 5/8 scenarios already handled, 3 gaps fixed. TCP keepalive on PG pool (detects dead connections in 90s vs 2h). Leader heartbeat timeout (10s context prevents zombie hangs). Non-leader periodic re-election (60s retry). Build/release GC (retain 10 per project, delete >30 days). Manifest validation gate (rejects Certificate CRs in gitops — prevents ArgoCD sync blockage). Gitea health gate. 30 language frameworks supported (Node, Go, Python, Ruby, Java, PHP, Rust). `loopzero connect`/`disconnect` CLI commands. GitHub commit status lifecycle (pending→success). CI pipeline green. 871 CLI tests + 33 Go packages passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN). **Not yet built:** preview environments (Sprint 5, Phase 2), `loopzero promote` (Sprint 4), SSO/SAML (Phase 3), image signing (Sprint 6). **Known issues:** AppSecret controller not implemented (secrets work via ESO directly). Pulumi consolidation pending (GitHub App envFrom, CF_ZONE_MANAGEMENT, PG keepalive — code committed, `pulumi up` needed).
+**Current status: Pre-release, Starter + Pro tiers launchable (98% confidence — E2E validated 2026-04-23).** 25/30 E2E tests pass on production-parity k3d. Sprints 0-3 complete. Sprint 4 (`rollback` + `promote`) complete. Sprint 6 partially complete (cosign image signing implemented, syft SBOM not started). Sprint 10 (static frontend) complete. Sprint 11 (auth + billing) complete. Hardening sprints H1-H7 all complete. AUDIT series (21 fixes) hardened CLI↔API contracts. 1023 CLI tests + 36 Go packages passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN).
+
+**Completed features:**
+- **Deploy happy path** — CLI → upload → Argo build → ArgoCD sync → live URL (E2E validated)
+- **Scaling** — replicas + HPA with plan-cap enforcement (Starter=2, Pro=5, Team=10)
+- **Promote** — staging→production cross-environment promotion (HTTP 202, E2E validated)
+- **Rollback** — instant rollback to previous release (E2E validated)
+- **Secrets** — set/list via ESO, zero value leak in CLI output
+- **Custom Domains v2** — CF Zone Management (model Vercel), WAF/DDoS via CF edge, E2E validated with aquim.ai
+- **GitHub App auto-deploy** — `git push` → automatic build+deploy, E2E validated (~4min)
+- **Monorepo validator** — 30 frameworks, frontend=static auto-infer, path traversal protection
+- **Image signing** — cosign signs every container image post-BuildKit push, attestation endpoint + DB schema
+- **Plan enforcement** — limits on projects/builds/environments/members per pricing tier
+- **Audit log** — DB writes + GET /api/v1/audit endpoint + `loopzero audit` CLI command
+- **Auth hardened** — UUID tenant IDs, RSA-only engine, audience validation, secret rotation with kid+dual-key
+- **Two-host gateway** — cloud.{domain} for browser, api.{domain} for CLI
+- **Failure modes** — concurrent deploy rejection (1×202 + 1×409), lock release on crash, invalid Dockerfile (exit 2), auth error (exit 4)
+- **JSON contracts** — 8/8 commands validated, 0 internal term leaks across 15 --help + 8 --json
+- **Observability** — 43 loopzero_* Prometheus metrics, health endpoints, Grafana dashboards, SLO alerts
+
+**Not yet built:**
+- Preview environments (Sprint 5 — CRD defined, controller skeleton exists, no production logic)
+- SBOM generation (syft — Sprint 6 remainder)
+- Admission policy (reject unsigned images — Sprint 6 remainder)
+- SSO/SAML (Phase 3)
+- `loopzero scale` backend endpoint (CLI exists, API missing)
+- Loki cross-cluster log streaming (infra gap, not code)
+
+**Known issues:**
+- AppSecret controller not implemented (secrets work via ESO directly)
+- Pulumi consolidation pending (GitHub App envFrom, CF_ZONE_MANAGEMENT, PG keepalive — code committed, `pulumi up` needed)
+- 10 failing tests in `api/internal/k8s` (TenantCRManager — contract drift from AUDIT series)
+
+**Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
 ---
 
@@ -35,15 +68,15 @@ task lint                # Lint all components (golangci-lint + ESLint)
 task validate:manifests  # kubeconform --strict on all manifests
 
 # Per-component
-cd cli  && npm test           # CLI unit tests (Jest, 747 tests)
-cd api  && go test ./...      # API tests (Go testing, 80+ test files, 22 packages)
+cd cli  && npm test           # CLI unit tests (Jest, 1023 tests, 59 suites)
+cd api  && go test ./...      # API tests (Go testing, 203 test files, 36 packages)
 cd operators && go test ./... # Operator tests (Ginkgo + envtest)
 cd pkg && go test ./...       # Shared library tests
 cd infra/pulumi && npm test   # Pulumi IaC tests (vitest)
 cd infra/tests && go test ./unit/... # Infra unit tests
 
 # Database
-task db:migrate          # Run forward-only migrations
+task db:migrate          # Run forward-only migrations (37 migrations)
 task db:seed             # Insert dev seed data
 task db:shell            # PostgreSQL shell (psql)
 task db:reset            # Reset database (drop + recreate + migrate + seed)
@@ -108,7 +141,7 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | CLI | TypeScript + Commander | `cli/` · `@loopzero/cli` |
 | API | Go 1.25 + chi + pgx (connection pool) | `api/` · `loopzero/api` |
 | Operators | Go 1.25 + kubebuilder + controller-runtime | `operators/` |
-| Shared libraries | Go (errors, logging, id, naming, health, statemachine) | `pkg/` |
+| Shared libraries | Go (errors, logging, id, naming, health, statemachine, jwt, enforcement, circuitbreaker) | `pkg/` |
 
 ### Infrastructure
 
@@ -116,14 +149,16 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 |-----------|-----------|---------|
 | Database | PostgreSQL 16 (managed DO) | State, advisory locks for serialization |
 | Build engine | Argo Workflows + BuildKit | Container image builds in isolation (rootless, single-container) |
+| Image signing | cosign (pre-built signer image, key-based) | Every build image signed post-push, attestation stored in DB |
 | GitOps store | Gitea 1.22.6 | Desired state mirror (source + gitops repos) |
 | GitOps sync | ArgoCD 2.13.3 | Cluster convergence (manual sync only) |
 | Ingress | Traefik 28.3.0 + cert-manager 1.14.5 | TLS termination, HTTP→HTTPS redirect |
 | Artifact store | MinIO (S3-compatible) / DO Spaces | Source bundles, build cache |
 | Container registry | DigitalOcean Container Registry | Container image storage |
-| Observability | Prometheus 25.27.0 + Grafana 8.5.2 + OpenTelemetry | Metrics, dashboards, tracing |
+| Observability | Prometheus 25.27.0 + Grafana 8.5.2 + OpenTelemetry + Tempo | Metrics, dashboards, tracing |
 | Log aggregation | Grafana Loki 6.24.0 + Promtail 6.16.6 | Build log storage (build cluster), queried by API via LogQL |
 | Secret sync | External Secrets Operator 0.14.3 | Cross-cluster secret sync mgmt → workload via ClusterSecretStore |
+| Auth | Ory Kratos + Ory Hydra | Identity management + OAuth2/OIDC |
 | DNS | DigitalOcean DNS | A records, wildcard for user apps |
 | Edge proxy | Cloudflare Tunnel + Worker | DDoS/WAF protection, static asset routing from DO Spaces |
 | Static assets | DO Spaces + CDN | Frontend build output (JS/CSS/HTML), public-read ACL |
@@ -137,17 +172,17 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | Cloud provider | DigitalOcean (SFO3) — AWS stub ready | 3 DOKS clusters + managed PG + Spaces + DNS |
 | Local clusters | k3d × 3 (mgmt, build, workload) | Local dev parity with production |
 | Dev loop | Tilt | Hot reload, migration, CRD deploy, seed data |
-| Task runner | Taskfile (1159 lines) | Idempotent automation (setup, test, lint, deploy) |
-| Helm charts | 13 charts (pinned versions) | cert-manager, Traefik, ArgoCD, Gitea, MinIO, PostgreSQL, Argo Workflows, monitoring, network-policies, otel |
-| CI/CD | GitHub Actions (4 workflows) | CI (lint+test+security), Build Images, Infra Deploy, Infra Preview |
+| Task runner | Taskfile (1695 lines) | Idempotent automation (setup, test, lint, deploy) |
+| Helm charts | 21 charts (pinned versions) | cert-manager, Traefik, ArgoCD, Gitea, MinIO, PostgreSQL, Argo Workflows, monitoring, network-policies, otel, Loki, Promtail, Tempo, Ory Kratos, Ory Hydra, Harbor, Redis, blackbox-exporter, external-secrets, admission-policies |
+| CI/CD | GitHub Actions (12 workflows) | CI, Build Images, Infra Deploy/Preview/Bootstrap/Destroy/Drift/E2E/Restart/State-Reset, Load Test, Release |
 | Linting (Go) | golangci-lint v2.11.3 (errcheck, govet, staticcheck, etc.) | Code quality |
 | Linting (TS) | ESLint + TypeScript strict mode | Code quality |
 | Security scanning | govulncheck + npm audit + Trivy (fs + IaC + Dockerfile) + TruffleHog | Vulnerability + secret detection |
 | Manifest validation | kubeconform --strict | K8s YAML correctness |
 | Tests (Go) | Go testing + Ginkgo v2 + Gomega + envtest (K8s 1.31.0) | Unit, integration, operator tests |
-| Tests (TS) | Jest | CLI unit tests (747 tests) |
-| Migrations | golang-migrate (forward-only, .up.sql only) | Database schema evolution |
-| Image signing | cosign + syft (Sprint 6 — not yet built) | Supply chain security |
+| Tests (TS) | Jest | CLI unit tests (1023 tests) |
+| Migrations | golang-migrate (forward-only, .up.sql only) | Database schema evolution (37 migrations) |
+| Image signing | cosign (in-pipeline, key-based) | Supply chain security — signs every image post-build |
 | CLI tools | doctl, gh (GitHub CLI) | Cloud + CI interaction |
 
 ---
@@ -158,7 +193,7 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 loopzero/
 ├── CLAUDE.md                          ← you are here
 ├── go.work                            ← Go workspace (modules: api, operators, pkg, infra/scripts, infra/tests)
-├── Taskfile.yml                       ← task runner (1159 lines of automation)
+├── Taskfile.yml                       ← task runner (1695 lines of automation)
 ├── Tiltfile                           ← dev loop orchestrator
 ├── docs/
 │   ├── sprints/                       ← sprint details (one folder per sprint)
@@ -177,32 +212,35 @@ loopzero/
 │   │   └── 09-polish-launch/
 │   └── project-scan-2026-03-24.md     ← full project scan (domains, gaps, flows)
 ├── pkg/                               ← shared Go module (zero external deps)
-│   ├── errors/                        ← LoopZeroError + 24 typed error codes
-│   ├── logging/                       ← structured JSON logging (slog)
-│   ├── id/                            ← build/release ID generation (crypto/rand)
-│   ├── naming/                        ← RFC 1123 deterministic naming (namespace, hostname, repo)
+│   ├── circuitbreaker/                ← generic circuit breaker pattern
+│   ├── enforcement/                   ← plan limit enforcement (pricing tiers)
+│   ├── errors/                        ← LoopZeroError + typed error codes
 │   ├── health/                        ← temporal health aggregation (anti-flapping)
-│   └── statemachine/                  ← 7 state machines (build, release, tenant, preview, promotion, rollback, bootstrap)
+│   ├── id/                            ← build/release ID generation (crypto/rand)
+│   ├── jwt/                           ← JWT validation (RSA-only, audience check)
+│   ├── logging/                       ← structured JSON logging (slog)
+│   ├── naming/                        ← RFC 1123 deterministic naming (namespace, hostname, repo)
+│   └── statemachine/                  ← 9 state machines (build, release, tenant, preview, promotion, rollback, bootstrap, domain, environment)
 ├── cli/                               ← @loopzero/cli (TypeScript + Commander)
 │   ├── src/
-│   │   ├── commands/                  ← login, logout, whoami, init, deploy, validate, logs, rollback, secret, project-delete
+│   │   ├── commands/                  ← 35 commands (login, deploy, rollback, promote, secret, domain, env, team, audit, preview, scale, etc.)
 │   │   ├── api/                       ← API client (retry, idempotency-key) + SSE client (reconnect, fallback polling)
 │   │   ├── output/                    ← formatters: human/json/CI + deploy renderer (TTY/CI modes)
-│   │   ├── detection/                 ← monorepo detection (Turbo/Nx/Lerna/pnpm) + framework detection (10 frameworks)
+│   │   ├── detection/                 ← monorepo detection (Turbo/Nx/Lerna/pnpm) + framework detection (30 frameworks)
 │   │   ├── adapters/                  ← git operations, loopzero.yaml parsing (v2: render, build, secrets), source upload, bundle cleanup, app-unit, validate-config
 │   │   └── config/                    ← credential store (~/.loopzero/config.json), constants, env overrides
-│   └── tests/unit/                    ← 747 tests, 40+ suites (Jest)
+│   └── tests/unit/                    ← 1023 tests, 59 suites (Jest)
 ├── api/                               ← loopzero/api (Go + chi + pgx)
 │   ├── cmd/                           ← entrypoint (server bootstrap, background services)
 │   ├── internal/
-│   │   ├── routes/                    ← auth, health, builds, projects, source, secrets, bootstrap
-│   │   ├── services/                  ← BuildOrchestrator, BuildReconcileLoop, BuildReaper, ReleaseReaper, ProjectDeleter, CircuitBreaker, StaticDelivery
-│   │   ├── db/                        ← pgx pool + 9 stores (build, release, project, envtarget, membership, secret, idempotency, bootstrap, event)
-│   │   ├── middleware/                ← auth (GitHub token + cache), idempotency, correlation-id, rate-limit, audit, logging
+│   │   ├── routes/                    ← 28 route files (auth, builds, projects, source, secrets, domains, promote, rollback, preview, audit, attestation, repositories, etc.)
+│   │   ├── services/                  ← 38 service files (BuildOrchestrator, PromotionOrchestrator, RollbackOrchestrator, ReleaseActivator, StaticDelivery, DomainProvisioner, etc.)
+│   │   ├── db/                        ← pgx pool + stores (build, release, project, envtarget, membership, secret, idempotency, bootstrap, event, audit, domain, cell, team, tenant_deletion, repository, build_gc)
+│   │   ├── middleware/                ← 12 middleware (auth, jwt_validator, idempotency, correlation, rate-limit, audit, logging, roles, security_headers, tracing, pgcircuitbreaker)
 │   │   ├── lock/                      ← withEnvironmentLock (pg_advisory_xact_lock, 5s timeout)
 │   │   ├── sse/                       ← SSE streaming + event journal (NOTIFY/LISTEN)
 │   │   ├── correlation/               ← correlation ID generation (UUID v4)
-│   │   ├── argo/                      ← Argo Workflows client (submit, cancel, get status)
+│   │   ├── argo/                      ← Argo Workflows client (submit, cancel, get status) + cosign signing template
 │   │   ├── argocd/                    ← ArgoCD sync client (trigger, wait)
 │   │   ├── cfkv/                      ← Cloudflare Workers KV client (static frontend routing)
 │   │   ├── cfzone/                    ← Cloudflare Zone Management client (custom domains v2)
@@ -213,19 +251,21 @@ loopzero/
 │   │   ├── source/                    ← Gitea source store (bundle push)
 │   │   ├── s3/                        ← MinIO/Spaces uploader (source bundles)
 │   │   ├── k8s/                       ← Tenant CR manager (mgmt cluster)
-│   │   ├── github/                    ← GitHub token validator
 │   │   ├── manifests/                 ← K8s manifest generation
 │   │   ├── adapters/                  ← DIP bridges (pgx↔db, services↔routes)
 │   │   ├── validation/                ← path validation (SEC-3), environment name validation
-│   │   ├── metrics/                   ← Prometheus metrics
-│   │   ├── health/                    ← health check endpoints
+│   │   ├── metrics/                   ← Prometheus metrics (43 loopzero_* metrics)
+│   │   ├── health/                    ← health check endpoints (/health, /health/deep)
 │   │   ├── config/                    ← 50+ config fields with production validation
+│   │   ├── tracing/                   ← OpenTelemetry tracing
+│   │   ├── workqueue/                 ← Background work queue
+│   │   ├── shellgen/                  ← Shell script generation for builds
 │   │   └── server/                    ← HTTP server setup + graceful shutdown
-│   └── tests/                         ← unit/ (60+ files) + integration/ (concurrent builds, lock crash)
+│   └── tests/                         ← unit/ (203 test files) + integration/ (concurrent builds, lock crash)
 ├── operators/                         ← Go operators (kubebuilder + controller-runtime)
-│   ├── api/v1/                        ← 9 CRD types (Tenant, Environment, LoopZeroApplication, ExposedRoute, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, AppSecret, PreviewEnvironment, ReconciliationReport)
+│   ├── api/v1/                        ← 10 CRD types (Tenant, Environment, LoopZeroApplication, ExposedRoute, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, AppSecret, PreviewEnvironment, ReconciliationReport)
 │   ├── internal/
-│   │   ├── controller/                ← 7 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential)
+│   │   ├── controller/                ← 8 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, Preview)
 │   │   ├── conditions/                ← typed condition constants (no freeform strings)
 │   │   ├── naming/                    ← K8s namespace naming (delegates to pkg/naming)
 │   │   ├── argocd/                    ← ArgoCD provisioner (AppProject, Application CRs)
@@ -240,7 +280,7 @@ loopzero/
 │   │   │   ├── index.ts               ← 3-phase orchestrator (infra → bootstrap → expose)
 │   │   │   ├── config/                ← stack config loader (dev/staging/prod)
 │   │   │   ├── core/                  ← naming, tags, errors, types, execution tracking
-│   │   │   ├── contracts/             ← 6 ISP interfaces (network, kubernetes, storage, dns, compute, database)
+│   │   │   ├── contracts/             ← 8 ISP interfaces (network, kubernetes, storage, dns, registry, database, provider, stack-outputs)
 │   │   │   ├── components/            ← infra.ts, bootstrap.ts, expose.ts
 │   │   │   └── providers/
 │   │   │       ├── digitalocean/      ← fully implemented (8 files)
@@ -251,17 +291,27 @@ loopzero/
 │   │   └── Pulumi.prod.yaml          ← prod stack (NYC3, loopzero.example)
 │   ├── k3d/                           ← 3 cluster configs (mgmt, build, workload)
 │   ├── cloudflare/                    ← CF Worker source (worker.mjs for static delivery)
-│   ├── helm/                          ← 13 Helm charts (all pinned versions)
+│   ├── helm/                          ← 21 Helm charts (all pinned versions)
+│   │   ├── admission-policies/        ← Image admission policy definitions
 │   │   ├── argo-workflows/            ← CWTs: clone, cache-restore, cache-save, summary, resource-quota
 │   │   ├── argocd/                    ← v2.13.3, manual sync, loopzero-api RBAC
+│   │   ├── blackbox-exporter/         ← Service health probes
 │   │   ├── cert-manager/              ← TLS certificate management
+│   │   ├── external-secrets/          ← ESO for cross-cluster secret sync
 │   │   ├── gitea/                     ← 1.22.6, admin setup, metrics
+│   │   ├── harbor/                    ← Container registry (migration target from DOCR)
+│   │   ├── loki/                      ← Log aggregation
 │   │   ├── minio/                     ← standalone, loopzero-artifacts + loopzero-builds buckets
 │   │   ├── monitoring/                ← kube-prometheus-stack (Prometheus + Grafana + cross-cluster scrape)
 │   │   ├── network-policies/          ← K8s NetworkPolicy rules
+│   │   ├── ory-hydra/                 ← OAuth2/OIDC provider
+│   │   ├── ory-kratos/                ← Identity management
 │   │   ├── otel/                      ← OpenTelemetry collector
 │   │   ├── postgresql/                ← PostgreSQL with init scripts
 │   │   ├── postgresql-ha/             ← HA config (Patroni, for production)
+│   │   ├── promtail/                  ← Log shipping to Loki
+│   │   ├── redis/                     ← Cache (Hydra sessions)
+│   │   ├── tempo/                     ← Distributed tracing backend
 │   │   └── traefik/                   ← 2 replicas, HA, JSON logging, correlation-id tracking
 │   ├── tilt/                          ← Tilt deployment manifests (api, operator)
 │   ├── scripts/                       ← infrastructure utility scripts (Go)
@@ -275,7 +325,15 @@ loopzero/
         ├── ci.yml                     ← lint + tests + security + manifests (22+ jobs, matrix strategy)
         ├── build-images.yml           ← container build + push to DO Registry + CWT update
         ├── infra-deploy.yml           ← Pulumi 3-step deploy (infra → images → converge) + bootstrap
-        └── infra-preview.yml          ← Pulumi preview on PRs with comment
+        ├── infra-preview.yml          ← Pulumi preview on PRs with comment
+        ├── infra-bootstrap.yml        ← Bootstrap infrastructure components
+        ├── infra-destroy.yml          ← Tear down infrastructure
+        ├── infra-drift.yml            ← Detect infrastructure drift
+        ├── infra-e2e.yml              ← E2E tests on infrastructure
+        ├── infra-restart.yml          ← Restart infrastructure components
+        ├── infra-state-reset.yml      ← Reset Pulumi state
+        ├── load-test.yml              ← Load testing
+        └── release.yml                ← Release workflow
 ```
 
 ---
@@ -307,7 +365,7 @@ Owns `cli/`. TypeScript + Commander. DX quality bar is the Vercel CLI.
 - Unit tests cover success + all failure codes + JSON shape
 
 ### API Engineer (`agent:api`)
-Owns `api/`. Go + net/http (or chi) + pgx/sqlx.
+Owns `api/`. Go + chi + pgx.
 
 **Before any endpoint is done:**
 - `withEnvironmentLock` for state mutations
@@ -513,12 +571,12 @@ Run the pre-completion checklist:
 |--------|-------|-------|-----------|--------------|--------|
 | **[0](docs/sprints/00-foundation/sprint.md)** | 1-2 | Foundation | `task setup` boots, Grafana running | — | ✅ Complete |
 | **[1](docs/sprints/01-login-init-tenant-controller/sprint.md)** | 3-5 | Login + Init + TenantController | `loopzero login` → `loopzero init` → `loopzero.yaml` | `login`, `logout`, `whoami`, `init` | ✅ Complete |
-| **[2](docs/sprints/02-deploy-happy-path/sprint.md)** | 6-9 | Deploy happy path | CLI → live URL | `deploy` | ✅ Complete (validated on DO) |
-| **[3](docs/sprints/03-logs-status-secrets/sprint.md)** | 10-12 | Logs + Status + Secrets | All daily workflows functional | `logs`, `status`, `inspect`, `secret` | ✅ Done via hardening H6 |
-| **[4](docs/sprints/04-rollback-promote-cancel/sprint.md)** | 13-15 | Rollback + Promote + Cancel | Recovery in < 30s | `rollback`, `promote`, `build`, `env`, `team`, `project` | ⚠️ `rollback` done (H6B), `promote` not started |
-| **[5](docs/sprints/05-preview-environments/sprint.md)** | 16-18 | Preview environments | PR → preview URL → cleanup | `preview` | ❌ Not started (CRD defined, no controller) |
-| **[6](docs/sprints/06-security-supply-chain/sprint.md)** | 19-21 | Security + Supply chain | Signed images, encrypted secrets, RBAC | — | ❌ Not started (cosign+syft) |
-| **[7](docs/sprints/07-observability/sprint.md)** | 22-23 | Observability complete | Incident resolved via dashboards in < 15 min | — | ✅ Done via hardening H4 |
+| **[2](docs/sprints/02-deploy-happy-path/sprint.md)** | 6-9 | Deploy happy path | CLI → live URL | `deploy` | ✅ Complete (E2E validated on DO) |
+| **[3](docs/sprints/03-logs-status-secrets/sprint.md)** | 10-12 | Logs + Status + Secrets | All daily workflows functional | `logs`, `status`, `inspect`, `secret` | ✅ Complete (H6) |
+| **[4](docs/sprints/04-rollback-promote-cancel/sprint.md)** | 13-15 | Rollback + Promote + Cancel | Recovery in < 30s | `rollback`, `promote`, `build`, `env`, `team`, `project` | ✅ Complete (`rollback` H6B, `promote` E2E validated 2026-04-23) |
+| **[5](docs/sprints/05-preview-environments/sprint.md)** | 16-18 | Preview environments | PR → preview URL → cleanup | `preview` | ⚠️ CRD defined, controller skeleton exists, no production logic |
+| **[6](docs/sprints/06-security-supply-chain/sprint.md)** | 19-21 | Security + Supply chain | Signed images, encrypted secrets, RBAC | — | ⚠️ Partial: cosign signing done, syft SBOM + admission policy not started |
+| **[7](docs/sprints/07-observability/sprint.md)** | 22-23 | Observability complete | Incident resolved via dashboards in < 15 min | — | ✅ Complete (H4) |
 | **[8](docs/sprints/08-hardening-chaos/sprint.md)** | 24-25 | Hardening + Chaos | 50 concurrent deploys, all chaos passes | — | ❌ Not started |
 | **[9](docs/sprints/09-polish-launch/sprint.md)** | 26-27 | Polish + Launch | Non-team-member onboards in < 10 min | — | ❌ Not started |
 | **[10](docs/sprints/10-static-frontend-delivery/sprint.md)** | — | Static Frontend + Security | Monorepo (API+Web+Worker) on DO, static via CF edge, zero pods for frontend | — | ✅ Complete |
@@ -528,33 +586,49 @@ Run the pre-completion checklist:
 | Sprint | Focus | Status |
 |--------|-------|--------|
 | H1-Runtime | Wire 7 controllers | ✅ Complete |
-| H2-Estabilização | TLS fix | ✅ Complete |
+| H2-Estabilizacao | TLS fix | ✅ Complete |
 | H3-Banco | PG HA + failover | ✅ Complete |
 | H4-Observabilidade | Metrics + SLOs + Dashboards | ✅ Complete |
 | H5-Pipeline | Build fix + cache | ✅ Complete |
-| H6-Operação | logs (Loki) + rollback + secrets (ESO) + status | ✅ Complete |
-| H7-Workload Security | SecurityContext non-root + PSA restricted + NetworkPolicy mandatory | ✅ Complete (code implemented, roadmap doc stale) |
-
-Full hardening details: [`docs/hardening-sprints/ROADMAP.md`](docs/hardening-sprints/ROADMAP.md)
+| H6-Operacao | logs (Loki) + rollback + secrets (ESO) + status | ✅ Complete |
+| H7-Workload Security | SecurityContext non-root + PSA restricted + NetworkPolicy mandatory | ✅ Complete |
 
 Check the current sprint before starting any implementation. Only implement what belongs to the current sprint.
 
-**Production Readiness** (validated 2026-03-29):
+**E2E Validation (2026-04-23):** 25/30 tests pass (83%). Full report: `docs/plans/e2e-validation-final-2026-04-23.md`
+
+| Area | Confidence |
+|------|-----------|
+| Deploy happy path | 99% |
+| Scaling + HPA | 95% |
+| Promote | 95% |
+| Rollback | 99% |
+| Concurrent rejection | 99% |
+| Failure scenarios | 99% |
+| JSON contracts | 99% |
+| Internal terms (Rule 3) | 99% |
+| Health/metrics/audit | 99% |
+| Log streaming | 60% (infra gap, not code) |
+
+**Production Readiness:**
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Secure passwords | ✅ | Gitea + MinIO passwords configurable via `pulumi config set --secret` |
 | Pulumi.prod.yaml | ✅ | Production sizing (medium nodes, 3 HA DB, nyc3) |
-| Rollback | ✅ | `loopzero rollback` validated (3s, version verified) |
-| ESO/Secrets | ⚠️ | ESO sync works (<30s). AppSecret controller not implemented — secrets work via ESO directly but lack lifecycle automation. E2E test not in CI. |
+| Rollback | ✅ | `loopzero rollback` E2E validated |
+| Promote | ✅ | `loopzero promote` E2E validated (HTTP 202, 75ms) |
+| ESO/Secrets | ⚠️ | ESO sync works (<30s). AppSecret controller not implemented — secrets work via ESO directly but lack lifecycle automation. |
 | SLOs + Alerts | ✅ | Alertmanager + 4 rules (API down, deploy failing, latency, crash loop) |
 | `loopzero status` | ✅ | Handler wired in main.go + server.go, functional |
 | Workload security | ✅ | SecurityContext (non-root, drop ALL, readOnlyRootFilesystem), PSA restricted, NetworkPolicy mandatory |
-| Custom Domains v2 | ✅ | CF Zone Management (model Vercel). `loopzero domain add` creates CF zone, scans DNS, user changes NS. WAF/DDoS via CF edge. E2E validated with aquim.ai. Plan: `docs/plans/custom-domains-v2-cf-zones.md` |
-| GitHub App auto-deploy | ✅ | `git push` → automatic deploy. GitHub App "LoopZero Platform", webhook HMAC-SHA256, source download via installation token, tarball→bundle→S3→build. E2E: push → SUCCEEDED → live in ~4min. Plan: `docs/plans/github-app-integration.md` |
-| Monorepo validator | ✅ | Pre-upload validation: 30 frameworks, frontend=static auto-infer, max 2 pods, Dockerfile detection, path traversal (SEC-10). 857 CLI tests. Plan: `docs/plans/monorepo-validator.md` |
-| Image signing | ❌ | cosign + syft not implemented (Sprint 6) |
-| Preview environments | ❌ | CRD defined, controller not implemented (Sprint 5). GitHub App receives PR events (foundation ready). |
+| Custom Domains v2 | ✅ | CF Zone Management (model Vercel). WAF/DDoS via CF edge. E2E validated with aquim.ai. |
+| GitHub App auto-deploy | ✅ | `git push` → automatic deploy. E2E: push → SUCCEEDED → live in ~4min. |
+| Monorepo validator | ✅ | Pre-upload validation: 30 frameworks, frontend=static auto-infer, path traversal (SEC-10). |
+| Image signing (cosign) | ✅ | Every build image signed post-push via pre-built cosign-signer container. Attestation endpoint + DB columns. |
+| SBOM (syft) | ❌ | Not implemented (Sprint 6 remainder) |
+| Admission policy | ❌ | Not implemented — unsigned images not rejected (Sprint 6 remainder) |
+| Preview environments | ❌ | CRD defined, controller skeleton exists, no production logic (Sprint 5). GitHub App receives PR events (foundation ready). |
 
 ---
 
@@ -571,10 +645,12 @@ Check the current sprint before starting any implementation. Only implement what
 │  TenantController · EnvironmentController · ApplicationController│
 │  ExposureController · PlatformBootstrapController                │
 │  GitRepositoryBindingController · ClusterCredentialController    │
+│  PreviewController                                               │
 │  Gitea · PostgreSQL · MinIO · ArgoCD · Traefik · cert-manager    │
+│  Ory Kratos · Ory Hydra · Redis                                 │
 ├─────────────────────────────────────────────────────────────────┤
 │  BUILD PLANE  (build cluster)                                    │
-│  Argo Workflows + BuildKit (CWTs: clone, cache + inline build)  │
+│  Argo Workflows + BuildKit + cosign signing                     │
 ├─────────────────────────────────────────────────────────────────┤
 │  WORKLOAD PLANE  (runtime cluster)                               │
 │  User applications managed by ArgoCD                             │
@@ -586,27 +662,27 @@ Check the current sprint before starting any implementation. Only implement what
 
 ```
 loopzero deploy → CLI validates → upload bundle → API locks env → submit Argo Workflow
-    → build (BuildKit) → push image → generate manifests → push to Gitea (gitops)
+    → build (BuildKit) → cosign sign → push image → generate manifests → push to Gitea (gitops)
     → ArgoCD sync → app running → SSE event → CLI shows URL
     (static apps: build → upload S3 → write CF KV → CF Worker serves from DO Spaces)
 ```
 
-### CRDs (9 total)
+### CRDs (10 total)
 
 | CRD | Controller | Wired | Purpose |
 |-----|-----------|-------|---------|
 | Tenant | TenantController | ✅ | Gitea repo, ArgoCD app, build namespace, RBAC, quotas |
-| Environment | EnvironmentController | ✅ Wired | Namespace + RBAC + NetworkPolicy + quota on runtime |
-| LoopZeroApplication | ApplicationController | ✅ Wired | Hostname assignment, ExposedRoute, health tracking |
-| ExposedRoute | ExposureController | ✅ Wired | TLS cert check, reachability probes |
-| PlatformBootstrap | PlatformBootstrapController | ✅ Wired | Declarative setup: Gitea → ArgoCD → API seed |
-| GitRepositoryBinding | GitRepositoryBindingController | ✅ Wired | Credential sync to ArgoCD with rotation |
+| Environment | EnvironmentController | ✅ | Namespace + RBAC + NetworkPolicy + quota on runtime |
+| LoopZeroApplication | ApplicationController | ✅ | Hostname assignment, ExposedRoute, health tracking |
+| ExposedRoute | ExposureController | ✅ | TLS cert check, reachability probes |
+| PlatformBootstrap | PlatformBootstrapController | ✅ | Declarative setup: Gitea → ArgoCD → API seed |
+| GitRepositoryBinding | GitRepositoryBindingController | ✅ | Credential sync to ArgoCD with rotation |
 | ClusterCredential | ClusterCredentialController | ✅ | Connectivity check + kubeconfig distribution |
+| PreviewEnvironment | PreviewController | ⚠️ | Controller skeleton exists, no production logic (Sprint 5) |
 | AppSecret | — | ❌ | CRD defined, no controller. Secrets work via ESO directly. |
-| PreviewEnvironment | — | ❌ | CRD defined, no controller (Sprint 5) |
 | ReconciliationReport | — | ❌ | CRD placeholder, no controller (drift detection, deferred) |
 
-### State Machines (7 total, defined in `pkg/statemachine/`)
+### State Machines (9 total, defined in `pkg/statemachine/`)
 
 | Machine | States | Terminal | Timeouts |
 |---------|--------|----------|----------|
@@ -617,6 +693,8 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | Preview | Creating → Active → Expiring/Deleting → Deleted | Deleted | TTL-based |
 | Promotion | Validating → Committing → Syncing → Completed | Completed, Failed | — |
 | Rollback | Validating → Reverting → Syncing → Completed | Completed, Failed | — |
+| Domain | pending_ns → ns_active → provisioning → active | active, failed | — |
+| Environment | Creating → Active → Deleting → Deleted | Deleted | — |
 
 ### Production Infrastructure (DigitalOcean)
 
@@ -644,9 +722,9 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | "ArgoCD notifications `notifiers`" | The argo-cd Helm chart v7.x uses `notifications.notifiers` for webhook services in the ConfigMap. `notifications.services` is silently ignored. | Always use `notifiers` key in Pulumi values and helm/argocd/values.yaml |
 | "Single ArgoCD Application per tenant" | One Application manages all projects in an environment. If ANY resource is Degraded, ALL notifications are blocked. | Clean orphaned manifests immediately on delete; gitops.Remove failure is FATAL |
 | "Implemented but not documented" | Code is implemented and tested but roadmap/docs still say "TODO" or "not started". Inverse of "implemented but not wired". | Before claiming something is missing, verify in the code — roadmaps can be stale. The code is the source of truth for what exists. |
-| "Custom domains = CF Zone per domain" | Custom domains use Cloudflare Zone Management (v2). Each domain gets its own CF zone. User changes nameservers. CF handles TLS+WAF. No cert-manager Certificate for CF-managed domains. Apex domains work via CF CNAME flattening. | `cfzone` package handles CF API. DNS scan imports existing records (email preservation). State: `pending_ns → ns_active → provisioning → active`. Plan: `docs/plans/custom-domains-v2-cf-zones.md` |
+| "Custom domains = CF Zone per domain" | Custom domains use Cloudflare Zone Management (v2). Each domain gets its own CF zone. User changes nameservers. CF handles TLS+WAF. No cert-manager Certificate for CF-managed domains. Apex domains work via CF CNAME flattening. | `cfzone` package handles CF API. DNS scan imports existing records (email preservation). State: `pending_ns → ns_active → provisioning → active`. |
 | "CF scan imports conflicting apex records" | When CF scans DNS, it imports the existing A record for the apex domain. This conflicts with the CNAME LoopZero needs to add. | The v2 create flow deletes conflicting A/AAAA/CNAME at apex BEFORE creating the routing CNAME. |
-| "GitHub tarball ≠ git bundle" | GitHub API returns .tar.gz source archives. The loopzero-clone CWT expects git bundles. Uploading a tarball directly to S3 causes `does not look like a v2 or v3 bundle file`. | autodeploy.go converts tarball to git bundle: extract → git init → git add → git commit → git bundle create → upload .bundle to S3 |
+| "GitHub tarball != git bundle" | GitHub API returns .tar.gz source archives. The loopzero-clone CWT expects git bundles. Uploading a tarball directly to S3 causes `does not look like a v2 or v3 bundle file`. | autodeploy.go converts tarball to git bundle: extract → git init → git add → git commit → git bundle create → upload .bundle to S3 |
 | "Auto-deploy source = commit SHA" | When auto-deploy downloads source from GitHub, the S3 key is `{tenant}/source/{commitSHA}.bundle`. This is the same key the CLI uses. The build pipeline (loopzero-clone CWT) downloads by this key. | CommitSHA from webhook push event must match exactly. The build uses `inputs.parameters.build-id` which maps to the commit SHA. |
 
 ---
