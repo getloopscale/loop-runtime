@@ -7,6 +7,7 @@ import { ProjectListCommand } from '../commands/project-list';
 import { ProjectInspectCommand } from '../commands/project-inspect';
 import { ProjectCreateCommand } from '../commands/project-create';
 import { API_REQUEST_TIMEOUT_MS } from '../config/constants';
+import { promptConfirm } from '../output/prompt-confirm';
 import { CommandDeps } from './types';
 
 export function registerProjectCommands(deps: CommandDeps): void {
@@ -37,19 +38,8 @@ export function registerProjectCommands(deps: CommandDeps): void {
             cancelled_builds: number;
           }>(path);
         },
-        confirm: async (message: string) => {
-          const readline = await import('readline');
-          const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-          return new Promise<boolean>((resolve) => {
-            rl.question(message + ' ', (answer) => {
-              rl.close();
-              resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-            });
-          });
-        },
+        // CHG-2026-04-23-AUDIT-9: shared promptConfirm with non-TTY safety.
+        confirm: (message: string) => promptConfirm(message + ' '),
         writeTo,
         writeError,
         isCI,

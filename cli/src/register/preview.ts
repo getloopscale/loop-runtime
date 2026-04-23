@@ -13,6 +13,7 @@ import {
 import { API_REQUEST_TIMEOUT_MS } from '../config/constants';
 import { getGitRoot } from '../adapters/git';
 import { findLoopZeroYaml } from '../adapters/loopzero-yaml';
+import { promptConfirm } from '../output/prompt-confirm';
 import { CommandDeps } from './types';
 
 export function registerPreviewCommands(deps: CommandDeps): void {
@@ -125,16 +126,9 @@ function createPreviewDeps(
     deletePreview: async (project: string, id: string) => {
       return apiClient.del<PreviewDeleteApiResponse>(`/api/v1/projects/${encodeURIComponent(project)}/previews/${encodeURIComponent(id)}`);
     },
-    confirm: async (message: string) => {
-      const readline = await import('readline');
-      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      return new Promise<boolean>((resolve) => {
-        rl.question(message, (answer) => {
-          rl.close();
-          resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-        });
-      });
-    },
+    // CHG-2026-04-23-AUDIT-9: use shared promptConfirm that is safe on non-TTY
+    // stdin. The old inline readline.question hung indefinitely on pipes.
+    confirm: promptConfirm,
     writeTo,
     writeError,
     isCI,

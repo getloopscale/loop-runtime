@@ -7,6 +7,7 @@ import { LogoutCommand } from '../commands/logout';
 import { WhoamiCommand } from '../commands/whoami';
 import { executeDeviceCodeFlow } from '../auth/device-flow';
 import { openBrowser } from '../auth/open-browser';
+import { promptConfirm } from '../output/prompt-confirm';
 import { CommandDeps } from './types';
 
 export function registerAuthCommands(deps: CommandDeps): void {
@@ -103,16 +104,8 @@ export function registerAuthCommands(deps: CommandDeps): void {
       const logoutCmd = new LogoutCommand({
         clearToken: () => configStore.clearToken(),
         writeTo,
-        confirm: async (message: string) => {
-          const readline = await import('readline');
-          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-          return new Promise<boolean>((resolve) => {
-            rl.question(message + ' ', (answer) => {
-              rl.close();
-              resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-            });
-          });
-        },
+        // CHG-2026-04-23-AUDIT-9: shared promptConfirm with non-TTY safety.
+        confirm: (message: string) => promptConfirm(message + ' '),
         isCI: process.env.CI === 'true',
       });
 
