@@ -589,15 +589,20 @@ export class DeployCommand {
     }
 
     if (event.type === 'stream.closed') {
+      // CHG-2026-04-23-AUDIT-32: point the operator at the canonical
+      // source of truth for build state instead of making a claim
+      // about unknown state ("may still be running"). The CLI already
+      // knows build_id — surface it in the actionable hint.
+      const actionable = `Deploy stream closed before completion. Check \`loopzero build inspect ${buildResult.build_id}\` for current state.`;
       if (opts.json) {
         this.deps.writeTo(JSON.stringify({
           code: 'STREAM_CLOSED',
-          error: 'Deploy stream closed before completion. The build may still be running.',
+          error: actionable,
           exit_code: 3,
           build_id: buildResult.build_id,
         }));
       } else {
-        this.deps.writeError('Deploy stream closed before completion. The build may still be running.');
+        this.deps.writeError(actionable);
       }
       finish(3);
       return true;

@@ -1964,6 +1964,44 @@ describe('DeployCommand', () => {
       expect(parsed.exit_code).toBe(3);
       expect(parsed.build_id).toBe('build-deadbeef');
     });
+
+    // CHG-2026-04-23-AUDIT-32: stream.closed error must guide the user
+    // to the canonical source of truth for build state (loopzero build
+    // inspect) instead of making a claim about unknown state ("may
+    // still be running"). Same class of bug as AUDIT-31 for logs.
+    it('stream.closed message points to loopzero build inspect (not "may be running")', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({ type: 'stream.closed', data: {} });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+
+      await cmd.execute({ json: true });
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.error).not.toContain('may still be running');
+      expect(parsed.error).toContain('loopzero build inspect');
+      expect(parsed.error).toContain('build-deadbeef');
+    });
+
+    it('stream.closed human-mode also suggests loopzero build inspect', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({ type: 'stream.closed', data: {} });
+            return { close: jest.fn() };
+          }
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+      await cmd.execute({});
+      const errs = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errs).not.toContain('may still be running');
+      expect(errs).toContain('loopzero build inspect');
+    });
   });
 
   describe('worker app display', () => {
