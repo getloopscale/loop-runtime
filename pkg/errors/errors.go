@@ -413,6 +413,17 @@ func NewEnvironmentNotFound(name string) *LoopZeroError {
 	}
 }
 
+// NewDomainNotFound creates a DOMAIN_NOT_FOUND error with domain context.
+// CHG-2026-04-23-AUDIT-13: brings domains handler into parity with other
+// NewXNotFound factories (uniform JSON shape {code, message}).
+func NewDomainNotFound(domain string) *LoopZeroError {
+	return &LoopZeroError{
+		Code:       "DOMAIN_NOT_FOUND",
+		Message:    fmt.Sprintf("domain '%s' not found", domain),
+		HTTPStatus: 404,
+	}
+}
+
 // ErrForbidden is returned when an operation is not permitted.
 var ErrForbidden = &LoopZeroError{
 	Code:       "FORBIDDEN",

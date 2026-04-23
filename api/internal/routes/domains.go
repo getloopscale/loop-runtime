@@ -188,11 +188,12 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
 	if err != nil {
 		slog.ErrorContext(ctx, "domain lookup failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		// CHG-2026-04-23-AUDIT-13: typed error shape for contract uniformity.
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if d == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "domain not found"})
+		writeLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
 		return
 	}
 
@@ -266,7 +267,8 @@ func (h *DomainHandler) List(w http.ResponseWriter, r *http.Request) {
 	domains, total, err := h.store.ListByTenant(ctx, uc.TenantID, filter)
 	if err != nil {
 		slog.ErrorContext(ctx, "domain list failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		// CHG-2026-04-23-AUDIT-13: typed error shape.
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
