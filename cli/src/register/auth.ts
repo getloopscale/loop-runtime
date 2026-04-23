@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import { ApiClient } from '../api/client';
+import { ApiClient, ApiError } from '../api/client';
 import { LoginCommand } from '../commands/login';
 import { LogoutCommand } from '../commands/logout';
 import { WhoamiCommand } from '../commands/whoami';
@@ -128,15 +128,22 @@ export function registerAuthCommands(deps: CommandDeps): void {
         getEmail: () => configStore.getEmail(),
         getTeam: () => configStore.getTeam(),
         verifyToken: async (token: string) => {
+          const client = new ApiClient({ baseURL: apiUrl, token });
           try {
-            const client = new ApiClient({ baseURL: apiUrl, token });
             // AUDIT-10: forward username so the command can fall back when
             // email is empty (service-account tokens).
             const result = await client.get<{ email: string; username?: string; team: string }>('/api/v1/auth/whoami');
             return { email: result.email, username: result.username, team: result.team };
-          } catch {
-            // API unreachable or token invalid -- return null
-            return null;
+          } catch (err) {
+            // CHG-2026-04-23-AUDIT-22: only collapse to null for genuine
+            // auth failures (401/403). Network / DNS / timeout / 5xx are
+            // re-thrown so whoami can say "cannot reach API" instead of
+            // the misleading "token expired". Prior `catch { return null }`
+            // made any connection error look like a credential problem.
+            if (err instanceof ApiError && (err.statusCode === 401 || err.statusCode === 403)) {
+              return null;
+            }
+            throw err;
           }
         },
         writeTo,
