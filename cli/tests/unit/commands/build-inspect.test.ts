@@ -3,7 +3,7 @@ import { ApiError } from '../../../src/api/client';
 
 const sampleBuild = {
   build_id: 'bld-abc12345',
-  project: 'my-project',
+  project_id: 'my-project',
   environment: 'production',
   status: 'SUCCEEDED',
   commit_sha: 'f3c9a01abcdef1234567890abcdef1234567890a',
@@ -18,7 +18,7 @@ const sampleBuild = {
 
 const failedBuild = {
   build_id: 'bld-failed123',
-  project: 'my-project',
+  project_id: 'my-project',
   environment: 'production',
   status: 'FAILED',
   commit_sha: 'b2a8c12abcdef1234567890abcdef1234567890b',
@@ -56,6 +56,10 @@ describe('BuildInspectCommand', () => {
       expect(output).toContain('production');
       expect(output).toContain('f3c9a01');
       expect(output).toContain('24s');
+      // CHG-2026-04-23-AUDIT-34: regression guard. The human render
+      // reads build.project_id (not build.project). A field name
+      // drift makes it undefined and renders "Project: undefined".
+      expect(output).not.toContain('undefined');
     });
 
     it('should show apps list', async () => {
@@ -107,7 +111,8 @@ describe('BuildInspectCommand', () => {
       const output = (deps.writeTo as jest.Mock).mock.calls[0][0];
       const parsed = JSON.parse(output);
       expect(parsed.build_id).toBe('bld-abc12345');
-      expect(parsed.project).toBe('my-project');
+      // CHG-2026-04-23-AUDIT-34: API uses project_id.
+      expect(parsed.project_id).toBe('my-project');
       expect(parsed.status).toBe('SUCCEEDED');
       expect(parsed.apps).toHaveLength(2);
     });
