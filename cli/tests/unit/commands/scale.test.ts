@@ -232,6 +232,41 @@ describe('ScaleCommand', () => {
     });
   });
 
+  // CHG-2026-04-23-AUDIT-27: the `/scale` backend endpoint is not yet
+  // implemented. A generic 404 with code=NOT_FOUND was confusing users
+  // into thinking they'd typed the wrong URL. We surface a dedicated
+  // SCALE_NOT_AVAILABLE code + "Scaling is not yet available" message.
+  // Resource-404 (PROJECT_NOT_FOUND etc.) still passes through.
+  describe('Feature unavailable 404 (AUDIT-27)', () => {
+    it('generic NOT_FOUND from router maps to SCALE_NOT_AVAILABLE', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockRejectedValue(
+          new ApiError('The requested endpoint does not exist.', 3, 404, 'NOT_FOUND'),
+        ),
+      });
+      const cmd = new ScaleCommand(deps);
+      const exitCode = await cmd.execute({ app: 'api', replicas: 3, json: true });
+      expect(exitCode).toBe(3);
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.code).toBe('SCALE_NOT_AVAILABLE');
+      expect(parsed.error).toMatch(/Scaling is not yet available/i);
+    });
+
+    it('resource-specific 404 (PROJECT_NOT_FOUND) is preserved unchanged', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockRejectedValue(
+          new ApiError("project 'web' not found", 3, 404, 'PROJECT_NOT_FOUND'),
+        ),
+      });
+      const cmd = new ScaleCommand(deps);
+      const exitCode = await cmd.execute({ app: 'api', replicas: 3, json: true });
+      expect(exitCode).toBe(3);
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.code).toBe('PROJECT_NOT_FOUND');
+      expect(parsed.error).toContain("project 'web' not found");
+    });
+  });
+
   // CHG-2026-04-23-AUDIT-25: network errors now carry code=API_UNREACHABLE
   // so CI scripts can match a single predicate across all commands.
   describe('API unreachable (AUDIT-25)', () => {

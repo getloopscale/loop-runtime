@@ -194,6 +194,20 @@ export class ScaleCommand {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
       if (err.statusCode === 404) {
+        // CHG-2026-04-23-AUDIT-27: differentiate "feature not deployed"
+        // (generic router 404 with code=NOT_FOUND) from "resource not
+        // found" (specific codes like PROJECT_NOT_FOUND). Without this
+        // users see "The requested endpoint does not exist." and
+        // conclude they typed the wrong URL, when in fact the /scale
+        // backend is not yet available on this server.
+        if (err.code === 'NOT_FOUND') {
+          return this.exitWithError(
+            opts,
+            'Scaling is not yet available on this server.',
+            3,
+            'SCALE_NOT_AVAILABLE',
+          );
+        }
         return this.exitWithError(opts, err.message, 3, err.code);
       }
       if (err.statusCode === 409) {
