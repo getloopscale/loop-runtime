@@ -14,11 +14,11 @@ function createMockDeps(overrides: Partial<StatusDeps> = {}): StatusDeps {
     getStatus: jest.fn().mockResolvedValue({
       environment: 'production',
       last_build: {
-        build_id: 'build-a1b2c3d4',
+        id: 'build-a1b2c3d4',
         status: 'SUCCEEDED',
         finished_at: '2026-03-25T12:30:00Z',
       },
-      release: {
+      active_release: {
         release_id: 'rel-e5f6g7h8',
         state: 'ACTIVE',
         activated_at: '2026-03-25T12:30:00Z',
@@ -91,7 +91,7 @@ describe('StatusCommand', () => {
       const deps = createMockDeps({
         getStatus: jest.fn().mockResolvedValue({
           environment: 'production',
-          last_build: { build_id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-03-25T12:30:00Z' },
+          last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-03-25T12:30:00Z' },
           sync_status: 'OutOfSync',
         }),
       });
@@ -105,7 +105,7 @@ describe('StatusCommand', () => {
       const deps = createMockDeps({
         getStatus: jest.fn().mockResolvedValue({
           environment: 'production',
-          last_build: { build_id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-03-25T12:30:00Z' },
+          last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-03-25T12:30:00Z' },
           sync_status: 'Progressing',
         }),
       });
@@ -134,11 +134,11 @@ describe('StatusCommand', () => {
       const apiResponse = {
         environment: 'production',
         last_build: {
-          build_id: 'build-a1b2c3d4',
+          id: 'build-a1b2c3d4',
           status: 'SUCCEEDED',
           finished_at: '2026-03-25T12:30:00Z',
         },
-        release: {
+        active_release: {
           release_id: 'rel-e5f6g7h8',
           state: 'ACTIVE',
           activated_at: '2026-03-25T12:30:00Z',
@@ -157,8 +157,8 @@ describe('StatusCommand', () => {
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
       const parsed = JSON.parse(output);
       expect(parsed.environment).toBe('production');
-      expect(parsed.last_build.build_id).toBe('build-a1b2c3d4');
-      expect(parsed.release.release_id).toBe('rel-e5f6g7h8');
+      expect(parsed.last_build.id).toBe('build-a1b2c3d4');
+      expect(parsed.active_release.release_id).toBe('rel-e5f6g7h8');
       expect(parsed.url).toBe('https://my-app.dev.loopzero.example');
     });
 
@@ -352,6 +352,68 @@ describe('StatusCommand', () => {
           expect(allOutput).not.toContain(term);
         }
       }
+    });
+  });
+
+  // CHG-2026-04-23-AUDIT-2: CLI formerly expected last_build.build_id, release,
+  // and displayed literal "unknown" for sync_status. Actual API returns
+  // last_build.id, active_release, and sync_status="unknown" when unknown.
+  describe('API contract alignment (AUDIT-2)', () => {
+    it('renders last_build.id (not build_id) so users see the real build ID', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: {
+            id: 'build-95cb34790df47867',
+            status: 'SUCCEEDED',
+            finished_at: '2026-04-23T14:30:31Z',
+          },
+          active_release: null,
+          sync_status: 'unknown',
+          url: 'https://e2e-test-hello-production.loopzero.local',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({ env: 'production' });
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('build-95cb34790df47867');
+      expect(output).not.toContain('undefined');
+    });
+
+    it('does not display "Sync: unknown" literal when sync_status is unknown', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-04-23T14:30:31Z' },
+          active_release: null,
+          sync_status: 'unknown',
+          url: 'https://e2e-test-hello-production.loopzero.local',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({ env: 'production' });
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).not.toMatch(/Sync:\s+unknown/);
+    });
+
+    it('renders active_release (not release) so release info is visible', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-04-23T14:30:31Z' },
+          active_release: {
+            release_id: 'rel-deadbeef',
+            state: 'ACTIVE',
+            activated_at: '2026-04-23T14:30:31Z',
+          },
+          sync_status: 'Synced',
+          url: 'https://app.loopzero.local',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({ env: 'production' });
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('rel-deadbeef');
     });
   });
 });
