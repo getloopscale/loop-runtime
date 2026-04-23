@@ -3,12 +3,17 @@
 
 package middleware
 
-import "strings"
+import (
+	"log/slog"
+	"strings"
+)
 
 // deriveAction maps HTTP method + path to a human-readable audit action.
 // CHG-2026-04-23-AUDIT-17: domain branches added to the POST/DELETE switches
 // so audit entries follow the repo-wide resource.verb_past convention
 // (previously fell through to "DELETE.domains" / "POST.domains").
+// CHG-2026-04-23-AUDIT-18: source.uploaded branch + fail-loud slog.Warn
+// on unknown fallthroughs so dashboards can filter action LIKE 'unknown.%'.
 func deriveAction(method, path string) string {
 	segment := extractSegment(path)
 	switch method {
@@ -38,6 +43,10 @@ func deriveAction(method, path string) string {
 			if strings.Contains(path, "/domains/") {
 				return "domain.verified"
 			}
+		case "upload":
+			if strings.Contains(path, "/source/") {
+				return "source.uploaded"
+			}
 		}
 	case "DELETE":
 		switch segment {
@@ -59,11 +68,16 @@ func deriveAction(method, path string) string {
 	case "PUT":
 		return segment + ".updated"
 	}
-	return method + "." + segment
+	// AUDIT-18: fail-loud. If we reached here, a new endpoint was added
+	// without a branch — log it so operators notice and filter in dashboards.
+	slog.Warn("audit: unmapped action (add a branch in deriveAction)",
+		"method", method, "path", path, "segment", segment)
+	return "unknown." + method + "." + segment
 }
 
 // extractResourceType returns the primary resource type from a URL path.
 // CHG-2026-04-23-AUDIT-17: domain added.
+// CHG-2026-04-23-AUDIT-18: source added (for /source/upload audit rows).
 func extractResourceType(path string) string {
 	segment := extractSegment(path)
 	switch segment {
@@ -83,6 +97,8 @@ func extractResourceType(path string) string {
 		return "domain"
 	case "checkout", "billing", "portal":
 		return "billing"
+	case "source", "upload":
+		return "source"
 	default:
 		return segment
 	}
@@ -133,6 +149,8 @@ var knownCollections = map[string]bool{
 	"status":       true,
 	"audit":        true,
 	"verify":       true,
+	"source":       true,
+	"upload":       true,
 }
 
 // extractSegment returns the last meaningful URL segment for action/resource mapping.

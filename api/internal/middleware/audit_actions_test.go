@@ -60,3 +60,32 @@ func TestExtractResourceID_Domain(t *testing.T) {
 		t.Errorf("extractResourceID for domains = %q, want %q", got, "my.example.com")
 	}
 }
+
+// CHG-2026-04-23-AUDIT-18: source upload previously fell through to
+// "POST.upload". Source bundles are part of the deploy flow and must
+// be auditable under the repo-wide resource.verb_past convention.
+func TestDeriveAction_SourceUpload(t *testing.T) {
+	got := deriveAction("POST", "/api/v1/source/upload")
+	if got != "source.uploaded" {
+		t.Errorf("deriveAction(POST, /api/v1/source/upload) = %q, want %q", got, "source.uploaded")
+	}
+}
+
+// AUDIT-18: unknown actions must be prefixed with "unknown." so
+// dashboards can alert on regressions (e.g., new endpoint added
+// without a branch). Silent "METHOD.segment" allowed DELETE.domains
+// to live undetected — this guard prevents a repeat.
+func TestDeriveAction_UnknownFallback_PrefixedWithUnknown(t *testing.T) {
+	got := deriveAction("POST", "/api/v1/totally-new-endpoint")
+	if got != "unknown.POST.totally-new-endpoint" {
+		t.Errorf("deriveAction(POST, /api/v1/totally-new-endpoint) = %q, want %q",
+			got, "unknown.POST.totally-new-endpoint")
+	}
+}
+
+// AUDIT-18: extractResourceType should return "source" for /source/upload.
+func TestExtractResourceType_Source(t *testing.T) {
+	if got := extractResourceType("/api/v1/source/upload"); got != "source" {
+		t.Errorf("extractResourceType for source = %q, want %q", got, "source")
+	}
+}
