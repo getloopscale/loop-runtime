@@ -194,6 +194,37 @@ func TestTeams_Remove_HappyPath(t *testing.T) {
 	}
 }
 
+// CHG-2026-04-23-AUDIT-6: Remove must return 404 when the target user is not
+// a team member. Previously returned 200 {"removed":"<username>"} even for
+// fabricated usernames — CLI then showed "Removed <user> from team" (false).
+func TestTeams_Remove_NotMember_Returns404(t *testing.T) {
+	store := &fakeTeamStore{
+		getMemberFn: func(_, userID string) (*TeamMemberInfo, error) {
+			if userID == "github-testuser" {
+				return &TeamMemberInfo{Username: "testuser", Role: "owner"}, nil
+			}
+			// target "fake-user" → not a member
+			return nil, nil
+		},
+	}
+	h := NewTeamHandler(store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/teams/members/fake-user", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "username", "fake-user")
+	w := httptest.NewRecorder()
+
+	h.Remove(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("want 404 for non-member, got %d body=%s", w.Code, w.Body.String())
+	}
+	// Response must NOT contain {"removed":"..."} — that would be silent success.
+	if bytes.Contains(w.Body.Bytes(), []byte(`"removed"`)) {
+		t.Errorf("response must not claim removal for non-member: %s", w.Body.String())
+	}
+}
+
 func TestTeams_Remove_CannotRemoveOwner(t *testing.T) {
 	store := &fakeTeamStore{
 		getMemberFn: func(_, userID string) (*TeamMemberInfo, error) {

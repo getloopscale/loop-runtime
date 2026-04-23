@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -197,14 +198,27 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// CHG-2026-04-23-AUDIT-6: fail fast with 404 when user is not a team
+	// member. Previously the handler fell through to store.RemoveMember which
+	// is a SQL no-op for missing rows — returning 200 {"removed":"<name>"}
+	// silently, so the CLI printed a misleading "Removed <user> from team".
+	if targetMember == nil {
+		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			"TEAM_MEMBER_NOT_FOUND",
+			fmt.Sprintf("User %q is not a team member.", username),
+			http.StatusNotFound,
+		))
+		return
+	}
+
 	// Owner protection: cannot remove the owner
-	if targetMember != nil && targetMember.Role == "owner" {
+	if targetMember.Role == "owner" {
 		writeLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("the team owner cannot be removed"))
 		return
 	}
 
 	// Admin cannot remove another admin (only owner can)
-	if callerMember.Role == "admin" && targetMember != nil && targetMember.Role == "admin" {
+	if callerMember.Role == "admin" && targetMember.Role == "admin" {
 		writeLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("admins cannot remove other admins — only the owner can"))
 		return
 	}
