@@ -12,7 +12,14 @@ export interface EnvDeleteDeps {
 }
 
 export interface EnvDeleteOptions {
+  /** Legacy safety flag: must repeat the env name ("type the name" pattern). */
   confirm?: string;
+  /**
+   * CHG-2026-04-23-AUDIT-11: UX consistency with the other destructive ops
+   * (project/preview/domain/secret delete). Skips confirmation prompt and
+   * bypasses the --confirm requirement. Production guard still applies.
+   */
+  yes?: boolean;
   json?: boolean;
 }
 
@@ -55,18 +62,19 @@ export class EnvDeleteCommand {
       );
     }
 
-    // 4. Confirm flag required
-    if (!opts.confirm) {
+    // 4. Confirmation required — either --yes (UX consistency with peers)
+    // or --confirm <name> (safer "type the name" pattern).
+    if (!opts.yes && !opts.confirm) {
       return this.exitWithError(
         opts,
-        `Confirmation required. Run: loopzero env delete ${name} --confirm ${name}`,
+        `Confirmation required. Run: loopzero env delete ${name} --yes   (or --confirm ${name} for extra safety)`,
         1,
         'CONFIRMATION_REQUIRED',
       );
     }
 
-    // 5. Confirm must match name
-    if (opts.confirm !== name) {
+    // 5. If --confirm is provided, it must match the name (safety check preserved).
+    if (opts.confirm && opts.confirm !== name) {
       return this.exitWithError(
         opts,
         `Confirmation name "${opts.confirm}" does not match "${name}". Run: loopzero env delete ${name} --confirm ${name}`,
