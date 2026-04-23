@@ -1,5 +1,6 @@
 import { ApiError } from '../api/client';
 
+import { formatErrorMessage } from '../output/error-message';
 interface CancelApiResponse {
   status: string;
 }
@@ -86,10 +87,10 @@ export class CancelCommand {
       if (err.statusCode === 409) {
         return this.exitWithError(opts, `Build ${buildId} has already completed. Nothing to cancel.`, 3, 'BUILD_ALREADY_COMPLETED');
       }
-      return this.exitWithError(opts, `Cancel failed: ${err.message}. Try again.`, 3, err.code);
+      return this.exitWithError(opts, formatErrorMessage('Cancel failed', err.message, 'Try again'), 3, err.code);
     }
     if (err instanceof Error) {
-      return this.exitWithError(opts, `Cancel failed: ${err.message}. Try again.`, 3, 'UNEXPECTED_ERROR');
+      return this.exitWithError(opts, formatErrorMessage('Cancel failed', err.message, 'Try again'), 3, 'UNEXPECTED_ERROR');
     }
     return this.exitWithError(opts, 'Cancel failed. Try again later.', 3, 'UNEXPECTED_ERROR');
   }

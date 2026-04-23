@@ -3,6 +3,7 @@
 
 import { ApiError } from '../api/client';
 
+import { formatErrorMessage } from '../output/error-message';
 interface ProjectCreateResponse {
   id: string;
   name: string;
@@ -102,10 +103,10 @@ export class ProjectCreateCommand {
         }
         return 0;
       }
-      return this.exitWithError(opts, `Failed to create project: ${err.message}. Try again.`, 1, err.code);
+      return this.exitWithError(opts, formatErrorMessage('Failed to create project', err.message, 'Try again'), 1, err.code);
     }
     if (err instanceof Error) {
-      return this.exitWithError(opts, `Failed to create project: ${err.message}. Try again.`, 1, 'UNEXPECTED_ERROR');
+      return this.exitWithError(opts, formatErrorMessage('Failed to create project', err.message, 'Try again'), 1, 'UNEXPECTED_ERROR');
     }
     return this.exitWithError(opts, 'Failed to create project. Try again later.', 1, 'UNEXPECTED_ERROR');
   }

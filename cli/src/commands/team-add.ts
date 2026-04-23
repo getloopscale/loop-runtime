@@ -3,6 +3,7 @@
 
 import { ApiError } from '../api/client';
 
+import { formatErrorMessage } from '../output/error-message';
 export interface TeamAddDeps {
   getToken: () => string | null;
   addMember: (username: string, role: string) => Promise<{ username: string; role: string }>;
@@ -115,10 +116,10 @@ export class TeamAddCommand {
         }
         return 0;
       }
-      return this.exitWithError(opts, `Failed to add member: ${err.message}. Try again.`, 3, err.code);
+      return this.exitWithError(opts, formatErrorMessage('Failed to add member', err.message, 'Try again'), 3, err.code);
     }
     if (err instanceof Error) {
-      return this.exitWithError(opts, `Failed to add member: ${err.message}. Try again.`, 3, 'UNEXPECTED_ERROR');
+      return this.exitWithError(opts, formatErrorMessage('Failed to add member', err.message, 'Try again'), 3, 'UNEXPECTED_ERROR');
     }
     return this.exitWithError(opts, 'Failed to add member. Try again later.', 3, 'UNEXPECTED_ERROR');
   }

@@ -3,6 +3,7 @@
 
 import { ApiError } from '../api/client';
 
+import { formatErrorMessage } from '../output/error-message';
 interface EnvProject {
   name: string;
   release_id: string;
@@ -109,10 +110,10 @@ export class EnvInspectCommand {
       if (err.statusCode === 404) {
         return this.exitWithError(opts, `Environment "${name}" not found.`, 1, 'ENV_NOT_FOUND');
       }
-      return this.exitWithError(opts, `Failed to get environment: ${err.message}. Try again.`, 1, err.code);
+      return this.exitWithError(opts, formatErrorMessage('Failed to get environment', err.message, 'Try again'), 1, err.code);
     }
     if (err instanceof Error) {
-      return this.exitWithError(opts, `Failed to get environment: ${err.message}. Try again.`, 1, 'UNEXPECTED_ERROR');
+      return this.exitWithError(opts, formatErrorMessage('Failed to get environment', err.message, 'Try again'), 1, 'UNEXPECTED_ERROR');
     }
     return this.exitWithError(opts, 'Failed to get environment. Try again later.', 1, 'UNEXPECTED_ERROR');
   }

@@ -3,6 +3,7 @@
 
 import { ApiError } from '../api/client';
 
+import { formatErrorMessage } from '../output/error-message';
 export interface TeamRoleDeps {
   getToken: () => string | null;
   changeRole: (username: string, role: string) => Promise<{ username: string; role: string }>;
@@ -107,10 +108,10 @@ export class TeamRoleCommand {
       if (err.statusCode === 404) {
         return this.exitWithError(opts, `${username} is not a team member.`, 1, 'MEMBER_NOT_FOUND');
       }
-      return this.exitWithError(opts, `Failed to change role: ${err.message}. Try again.`, 3, err.code);
+      return this.exitWithError(opts, formatErrorMessage('Failed to change role', err.message, 'Try again'), 3, err.code);
     }
     if (err instanceof Error) {
-      return this.exitWithError(opts, `Failed to change role: ${err.message}. Try again.`, 3, 'UNEXPECTED_ERROR');
+      return this.exitWithError(opts, formatErrorMessage('Failed to change role', err.message, 'Try again'), 3, 'UNEXPECTED_ERROR');
     }
     return this.exitWithError(opts, 'Failed to change role. Try again later.', 3, 'UNEXPECTED_ERROR');
   }

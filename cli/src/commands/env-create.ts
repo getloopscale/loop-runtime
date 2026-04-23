@@ -3,6 +3,7 @@
 
 import { ApiError } from '../api/client';
 
+import { formatErrorMessage } from '../output/error-message';
 interface EnvCreateResponse {
   name: string;
   status: string;
@@ -119,10 +120,10 @@ export class EnvCreateCommand {
         }
         return 0;
       }
-      return this.exitWithError(opts, `Failed to create environment: ${err.message}. Try again.`, 1, err.code);
+      return this.exitWithError(opts, formatErrorMessage('Failed to create environment', err.message, 'Try again'), 1, err.code);
     }
     if (err instanceof Error) {
-      return this.exitWithError(opts, `Failed to create environment: ${err.message}. Try again.`, 1, 'UNEXPECTED_ERROR');
+      return this.exitWithError(opts, formatErrorMessage('Failed to create environment', err.message, 'Try again'), 1, 'UNEXPECTED_ERROR');
     }
     return this.exitWithError(opts, 'Failed to create environment. Try again later.', 1, 'UNEXPECTED_ERROR');
   }

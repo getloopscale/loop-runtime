@@ -3,6 +3,7 @@
 
 import { ApiError } from '../api/client';
 
+import { formatErrorMessage } from '../output/error-message';
 export interface EnvDeleteDeps {
   getToken: () => string | null;
   deleteEnvironment: (name: string) => Promise<void>;
@@ -110,10 +111,10 @@ export class EnvDeleteCommand {
       if (err.statusCode === 404) {
         return this.exitWithError(opts, `Environment "${name}" not found.`, 1, 'ENV_NOT_FOUND');
       }
-      return this.exitWithError(opts, `Failed to delete environment: ${err.message}. Try again.`, 3, err.code);
+      return this.exitWithError(opts, formatErrorMessage('Failed to delete environment', err.message, 'Try again'), 3, err.code);
     }
     if (err instanceof Error) {
-      return this.exitWithError(opts, `Failed to delete environment: ${err.message}. Try again.`, 3, 'DELETE_FAILED');
+      return this.exitWithError(opts, formatErrorMessage('Failed to delete environment', err.message, 'Try again'), 3, 'DELETE_FAILED');
     }
     return this.exitWithError(opts, 'Failed to delete environment. Try again later.', 3, 'DELETE_FAILED');
   }
