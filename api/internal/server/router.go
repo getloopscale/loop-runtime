@@ -87,7 +87,9 @@ func NewRouter(cfg Config) *chi.Mux {
 			r.Use(middleware.AuditLog(cfg.Logger, cfg.AuditWriter))
 
 			// Auth routes
-			auth := routes.NewAuthHandler()
+			// AUDIT-10: pass UsernameLookup so Whoami can resolve display-friendly
+			// username from the users.username column (populated by migration 000037).
+			auth := routes.NewAuthHandler(cfg.AuthUserLookup)
 			r.Get("/api/v1/auth/whoami", auth.Whoami)
 
 			// Rate limiting middleware chain — used for all mutation routes.

@@ -56,6 +56,12 @@ func (f *fakeTeamStore) GetUserByUsername(_ context.Context, username string) (*
 	return f.user, nil
 }
 
+// AUDIT-10: no test exercises this on the teams handler; provide a trivial
+// impl so *fakeTeamStore continues to satisfy domain.TeamStore.
+func (f *fakeTeamStore) GetUsernameByID(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+
 // --- Tests ---
 
 func TestTeams_List_HappyPath(t *testing.T) {

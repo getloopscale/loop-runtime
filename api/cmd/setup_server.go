@@ -114,7 +114,11 @@ func buildServerConfig(
 
 	if dbAdapter != nil {
 		sc.IdempotencyStore = &db.PostgresIdempotencyStore{DB: dbAdapter}
-		sc.TeamHandler = routes.NewTeamHandler(&db.PostgresTeamStore{DB: dbAdapter})
+		// AUDIT-10: single PostgresTeamStore instance serves both team admin
+		// endpoints and /whoami username lookup.
+		teamStore := &db.PostgresTeamStore{DB: dbAdapter}
+		sc.TeamHandler = routes.NewTeamHandler(teamStore)
+		sc.AuthUserLookup = teamStore
 		sc.AuditHandler = routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter})
 		sc.AdminEvictor = buildAdminEvictor(cfg, dbAdapter)
 		sc.AuditWriter = func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {

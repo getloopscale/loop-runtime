@@ -130,8 +130,10 @@ export function registerAuthCommands(deps: CommandDeps): void {
         verifyToken: async (token: string) => {
           try {
             const client = new ApiClient({ baseURL: apiUrl, token });
-            const result = await client.get<{ email: string; team: string }>('/api/v1/auth/whoami');
-            return { email: result.email, team: result.team };
+            // AUDIT-10: forward username so the command can fall back when
+            // email is empty (service-account tokens).
+            const result = await client.get<{ email: string; username?: string; team: string }>('/api/v1/auth/whoami');
+            return { email: result.email, username: result.username, team: result.team };
           } catch {
             // API unreachable or token invalid -- return null
             return null;

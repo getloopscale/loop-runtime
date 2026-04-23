@@ -131,6 +131,21 @@ func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID stri
 	}, nil
 }
 
+// GetUsernameByID returns the display-friendly username for an opaque user_id.
+// Returns "" (no error) if the user is not found. AUDIT-10: used by /whoami
+// to show a meaningful identity when the token has no email claim.
+func (s *PostgresTeamStore) GetUsernameByID(ctx context.Context, userID string) (string, error) {
+	row := s.DB.QueryRow(ctx, `SELECT username FROM users WHERE id = $1`, userID)
+	var username string
+	if err := row.Scan(&username); err != nil {
+		if err.Error() == ErrNoRows.Error() {
+			return "", nil
+		}
+		return "", fmt.Errorf("team store: get username by id failed: %w", err)
+	}
+	return username, nil
+}
+
 // GetUserByUsername finds a user by their username (provider-agnostic).
 // Returns nil if not found. AUDIT-7: no longer assumes "github-" id prefix;
 // queries the `users.username` column populated by migration 000037.

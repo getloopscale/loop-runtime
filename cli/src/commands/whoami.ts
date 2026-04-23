@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// CHG-2026-04-23-AUDIT-10: API now returns `username` (from users.username
+// column, migration 000037). Used as display fallback when email is empty —
+// common for OAuth2 client_credentials tokens (service accounts have no
+// email claim). Field is optional; older servers that don't return it still
+// work (humans typically have email populated).
 export interface WhoamiApiResult {
   email: string;
+  username?: string;
   team: string;
 }
 
@@ -44,15 +50,22 @@ export class WhoamiCommand {
     if (token && this.deps.verifyToken) {
       const apiResult = await this.deps.verifyToken(token);
       if (apiResult) {
-        // API confirmed — use server-side data (authoritative)
+        // API confirmed — use server-side data (authoritative).
+        // CHG-2026-04-23-AUDIT-10: fall back to username when email is empty
+        // (service-account tokens have no email claim).
+        const identity = apiResult.email || apiResult.username || '';
         if (opts.json) {
-          this.deps.writeTo(JSON.stringify({
+          const payload: Record<string, unknown> = {
             authenticated: true,
             email: apiResult.email,
             team: apiResult.team,
-          }));
+          };
+          if (apiResult.username) {
+            payload.username = apiResult.username;
+          }
+          this.deps.writeTo(JSON.stringify(payload));
         } else {
-          this.deps.writeTo(`Authenticated as: ${apiResult.email}`);
+          this.deps.writeTo(`Authenticated as: ${identity}`);
           if (apiResult.team) {
             this.deps.writeTo(`Team: ${apiResult.team}`);
           }

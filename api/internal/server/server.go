@@ -68,6 +68,9 @@ type Config struct {
 	SecretK8sSync           routes.SecretK8sSync
 	EnvironmentHandler      *routes.EnvironmentHandler
 	TeamHandler             *routes.TeamHandler
+	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
+	// omits username field). Implemented by db.PostgresTeamStore.
+	AuthUserLookup          routes.UsernameLookup
 	DomainHandler           *routes.DomainHandler
 	GitHubWebhookHandler    http.Handler
 	RepositoryHandler       *routes.RepositoryHandler

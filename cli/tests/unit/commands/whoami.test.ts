@@ -101,6 +101,53 @@ describe('WhoamiCommand', () => {
     });
   });
 
+  // CHG-2026-04-23-AUDIT-10: service-account tokens (Hydra client_credentials)
+  // have no email claim. API returns empty email but populates `username` from
+  // the users.username column (migration 000037). CLI must use username as
+  // display fallback — previously showed "Authenticated as: " with no value.
+  describe('service account identity (AUDIT-10)', () => {
+    it('displays username when email is empty', async () => {
+      const deps = createMockDeps({
+        getToken: jest.fn().mockReturnValue('bearer-token'),
+        verifyToken: jest.fn().mockResolvedValue({
+          email: '', username: 'loopzero-e2e', team: 'e2e-tenant',
+        }),
+      });
+      const cmd = new WhoamiCommand(deps);
+      await cmd.execute();
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Authenticated as: loopzero-e2e');
+      expect(output).not.toMatch(/Authenticated as: $/m);
+    });
+
+    it('prefers email over username when both present', async () => {
+      const deps = createMockDeps({
+        getToken: jest.fn().mockReturnValue('bearer-token'),
+        verifyToken: jest.fn().mockResolvedValue({
+          email: 'me@example.com', username: 'me', team: 'my-team',
+        }),
+      });
+      const cmd = new WhoamiCommand(deps);
+      await cmd.execute();
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Authenticated as: me@example.com');
+    });
+
+    it('JSON output includes username when API returns it', async () => {
+      const deps = createMockDeps({
+        getToken: jest.fn().mockReturnValue('bearer-token'),
+        verifyToken: jest.fn().mockResolvedValue({
+          email: '', username: 'loopzero-e2e', team: 'e2e-tenant',
+        }),
+      });
+      const cmd = new WhoamiCommand(deps);
+      await cmd.execute({ json: true });
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.authenticated).toBe(true);
+      expect(parsed.username).toBe('loopzero-e2e');
+    });
+  });
+
   describe('not authenticated', () => {
     it('should return exit code 4 when no token and no email', async () => {
       const deps = createMockDeps({
