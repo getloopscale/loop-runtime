@@ -65,7 +65,63 @@ describe('BuildListCommand', () => {
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
       expect(output).toContain('ID');
       expect(output).toContain('STATUS');
-      expect(output).toContain('VERSION');
+      // CHG-2026-04-23-AUDIT-5: rename header "VERSION" → "COMMIT" (real content
+      // is a truncated commit_sha, not a semver).
+      expect(output).toContain('COMMIT');
+      expect(output).not.toContain('VERSION');
+    });
+  });
+
+  // CHG-2026-04-23-AUDIT-5: build IDs are 22 chars (build-<16 hex>), but the
+  // column pad is 16 — causing alignment to break. Display should truncate.
+  // Full ID is still available via --json.
+  describe('ID column layout (AUDIT-5)', () => {
+    it('truncates long build_id in human output so table alignment is preserved', async () => {
+      const deps = createMockDeps({
+        listBuilds: jest.fn().mockResolvedValue({
+          builds: [
+            {
+              build_id: 'build-95cb34790df47867',
+              project_id: 'e2e-test-hello',
+              environment: 'production',
+              status: 'SUCCEEDED',
+              commit_sha: '3792658fac8e66da9fcfac910882091d3978059e',
+              created_by: 'loopzero-e2e',
+              created_at: '2026-04-23T14:27:23Z',
+              duration_seconds: 187,
+            },
+          ],
+          total: 1,
+        }),
+      });
+      const cmd = new BuildListCommand(deps);
+      await cmd.execute();
+      const lines = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]);
+      const dataLine = lines.find((l: string) => /build-/.test(l) && /SUCCEEDED/.test(l))!;
+      expect(dataLine).toBeDefined();
+      // Header row should align with data row: STATUS should start at the same column.
+      const headerLine = lines.find((l: string) => l.includes('ID') && l.includes('STATUS'))!;
+      const headerStatusCol = headerLine.indexOf('STATUS');
+      const dataStatusCol = dataLine.indexOf('SUCCEEDED');
+      expect(dataStatusCol).toBe(headerStatusCol);
+    });
+
+    it('keeps full build_id available in --json output', async () => {
+      const fullId = 'build-95cb34790df47867';
+      const deps = createMockDeps({
+        listBuilds: jest.fn().mockResolvedValue({
+          builds: [{
+            build_id: fullId,
+            project_id: 'p', environment: 'production', status: 'SUCCEEDED',
+            commit_sha: 'deadbeef', created_by: 'u', created_at: '2026-04-23T00:00:00Z',
+          }],
+          total: 1,
+        }),
+      });
+      const cmd = new BuildListCommand(deps);
+      await cmd.execute({ json: true });
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.builds[0].build_id).toBe(fullId);
     });
   });
 
