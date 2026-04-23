@@ -5,6 +5,8 @@ package argocd
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -60,4 +62,34 @@ func TestSyncClient_WaitForSyncTimeout(t *testing.T) {
 		t.Fatal("expected error for non-existent application")
 	}
 	t.Logf("expected error: %v", err)
+}
+
+// B11 (CHG-2026-04-23): TerminateOperation must send Content-Type: application/json.
+// ArgoCD rejects DELETE /applications/{name}/operation with HTTP 415
+// "Invalid content type" when the header is missing. Without this, stuck
+// sync operations cannot be terminated and release convergence blocks.
+func TestSyncClient_TerminateOperation_SendsContentType(t *testing.T) {
+	var capturedContentType string
+	var capturedMethod string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedContentType = r.Header.Get("Content-Type")
+		capturedMethod = r.Method
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewSyncClient(SyncClientConfig{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	})
+	if err := client.TerminateOperation(context.Background(), "some-app"); err != nil {
+		t.Fatalf("TerminateOperation: %v", err)
+	}
+
+	if capturedMethod != http.MethodDelete {
+		t.Errorf("method: got %q, want DELETE", capturedMethod)
+	}
+	if capturedContentType != "application/json" {
+		t.Errorf("Content-Type: got %q, want %q", capturedContentType, "application/json")
+	}
 }

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Scaling config (`replicas` + `autoscaling`) wired end-to-end and plan-capped** (CHG-2026-04-23-B15 / MEET-2026-04-23-059 / ADR-0011): previously the CLI recognised, persisted, and rendered scaling config but no plan-cap enforcement existed; users on any plan could request any replica count, and the CLI validator warned "Unknown field 'apps.api.replicas' -- ignored". This release closes the chain from `loopzero.yaml` → CLI validator → CLI payload → API route DTO → adapter → orchestrator → persisted spec. Mutual exclusion between `replicas` and `autoscaling` is now enforced at both CLI and API boundaries (`SCALING_AMBIGUOUS`, HTTP 422). Per-service replica cap enforced via new `max_replicas_per_service` plan metric: Starter=2, Pro=5, Team=10, Enterprise=unlimited (`REPLICAS_EXCEED_PLAN`, HTTP 422). The authoritative enforcement point is `BuildOrchestrator.SubmitBuild` so both the CLI deploy path and the GitHub App auto-deploy webhook are covered by the same gate.
+
+### Fixed
+- **False "Unknown field" warning on `replicas`/`autoscaling`** (CHG-2026-04-23-B15): CLI validator `knownFields` allow-list extended.
+- **CLI parser silently dropped invalid scaling values** (CHG-2026-04-23-B15): `parseLoopZeroYaml` now preserves all numeric values so `validate-config.ts` can reject them explicitly with actionable messages naming the field and constraint.
+- **Pre-existing duplicate `TestMiddleware_EmptyTenantPasses` symbol in `pkg/enforcement`** (CHG-2026-04-23-B15 unblocker): build failure inherited from `develop` that blocked enforcement tests. Duplicate in `limiter_test.go` removed; identical test remains in `middleware_test.go`.
+
 ### Added
 - **`loopzero promote` command** — promote a release from one environment to another without re-building. API endpoint `POST /api/v1/projects/{name}/promote`, PromotionOrchestrator service, CLI command with `--from`/`--to` flags and `--json` output. Uses existing promotion state machine. Locks target environment via `withEnvironmentLock`. 28 new tests (6 service + 8 route handler + 15 CLI).
 

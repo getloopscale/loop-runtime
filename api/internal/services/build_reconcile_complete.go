@@ -64,13 +64,14 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 
 	// Generate manifests in the API (C-02 fix: control plane generates manifests)
 	renderedManifests := manifests.Render(manifests.RenderInput{
-		TenantID:    build.TenantID,
-		ProjectID:   build.ProjectID,
-		Environment: build.Environment,
-		BuildID:     build.ID,
-		ReleaseID:   "",
-		BaseDomain:  r.cfg.BaseDomain,
-		Apps:        manifestApps,
+		TenantID:          build.TenantID,
+		ProjectID:         build.ProjectID,
+		Environment:       build.Environment,
+		BuildID:           build.ID,
+		ReleaseID:         "",
+		BaseDomain:        r.cfg.BaseDomain,
+		ClusterIssuerName: r.cfg.ClusterIssuer, // B14
+		Apps:              manifestApps,
 	})
 
 	// Ensure LoopZeroApplication CRs exist on mgmt cluster (non-fatal).

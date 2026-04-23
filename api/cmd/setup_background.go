@@ -180,9 +180,10 @@ func setupDomains(
 		stores.DomainStore, stores.ReleaseStore, stores.BuildStore,
 		workflows.GitOpsPusher, stores.Locker, logger,
 		services.DomainProvisionerConfig{
-			Interval:    30 * time.Second,
-			BaseDomain:  cfg.BaseDomain,
-			RegistryURL: cfg.RegistryURL,
+			Interval:      30 * time.Second,
+			BaseDomain:    cfg.BaseDomain,
+			RegistryURL:   cfg.RegistryURL,
+			ClusterIssuer: cfg.ClusterIssuer, // B14 (MEET-2026-04-23-058)
 		},
 	)
 	if cfg.CFZoneManagement && cfZoneClient != nil {
@@ -237,6 +238,7 @@ func createCoreLoops(
 			Interval:           cfg.ReconcileInterval,
 			RegistryURL:        cfg.RegistryURL,
 			BaseDomain:         cfg.BaseDomain,
+			ClusterIssuer:      cfg.ClusterIssuer, // B14 (MEET-2026-04-23-058)
 			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 		},
 	)

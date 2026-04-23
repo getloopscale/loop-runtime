@@ -37,6 +37,10 @@ type BuildReconcileLoopConfig struct {
 	RegistryURL string
 	// BaseDomain is the base domain for app hostnames (e.g., "loopzero.local").
 	BaseDomain string
+	// ClusterIssuer is the cert-manager ClusterIssuer used for TLS Certificates.
+	// B14 (MEET-2026-04-23-058): required, no fallback default. Sourced from
+	// Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER).
+	ClusterIssuer string
 	// MaxConcurrent is the maximum number of builds reconciled concurrently.
 	// Bounds pressure on the Kubernetes API and Argo Workflow queries.
 	// Default: 10.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import type { LoopZeroYamlApp, LoopZeroYamlAutoscaling, BuildStrategy } from './loopzero-yaml';
+import type { LoopZeroYamlApp, BuildStrategy } from './loopzero-yaml';
 
 /**
  * AppUnit is a fully resolved app — all fields required, ready for build plan generation.

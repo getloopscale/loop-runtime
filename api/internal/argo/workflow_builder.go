@@ -137,7 +137,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 				inlineTemplates = append(inlineTemplates, b.uploadAssetsTemplate(spec, appPlan))
 			} else {
 				inlineTemplates = append(inlineTemplates, b.buildkitTemplateFromPlan(spec, appPlan))
-				inlineTemplates = append(inlineTemplates, cosignSignTemplate(appPlan.AppName, appPlan.ImageTag))
+				inlineTemplates = append(inlineTemplates, cosignSignTemplate(appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure))
 				if b.infraParams.HarborRegistryURL != "" {
 					harborTag := naming.ImageTag(b.infraParams.HarborRegistryURL, spec.TenantID, spec.ProjectID, appPlan.AppName, spec.CommitSHA)
 					inlineTemplates = append(inlineTemplates, harborMirrorTemplate(appPlan.AppName, appPlan.ImageTag, harborTag))
@@ -148,7 +148,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		for _, app := range spec.Apps {
 			inlineTemplates = append(inlineTemplates, b.buildkitTemplateForApp(spec, app))
 			imageTag := naming.ImageTag(b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
-			inlineTemplates = append(inlineTemplates, cosignSignTemplate(app.Name, imageTag))
+			inlineTemplates = append(inlineTemplates, cosignSignTemplate(app.Name, imageTag, b.infraParams.RegistryInsecure))
 			if b.infraParams.HarborRegistryURL != "" {
 				harborTag := naming.ImageTag(b.infraParams.HarborRegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
 				inlineTemplates = append(inlineTemplates, harborMirrorTemplate(app.Name, imageTag, harborTag))

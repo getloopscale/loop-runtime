@@ -184,3 +184,72 @@ func TestBuildApplicationObject_Labels(t *testing.T) {
 		t.Errorf("expected managed-by label 'tenant-controller', got %v", labels["loopzero.io/managed-by"])
 	}
 }
+
+// MEET-2026-04-22-058 (B12): skip-reconcile annotation must not be set by the
+// operator anymore. The ArgoCD controller reconciles apps normally; amplification
+// risk is bounded by manual sync + self-heal=false + default 3m reconcile interval.
+func TestBuildApplicationObject_HasNoSkipReconcile(t *testing.T) {
+	spec := ApplicationSpec{
+		Name:           "acme-production",
+		TenantID:       "acme",
+		RepoURL:        "http://gitea/loopzero/acme-gitops.git",
+		TargetRevision: "main",
+		Path:           "production",
+		DestinationURL: "https://workload-cluster:6443",
+		DestinationNS:  "acme-production",
+	}
+	obj := buildApplicationObject(spec)
+	meta := obj.Object["metadata"].(map[string]interface{})
+	annotations, _ := meta["annotations"].(map[string]interface{})
+	if _, present := annotations["argocd.argoproj.io/skip-reconcile"]; present {
+		t.Errorf("skip-reconcile annotation must NOT be set on new Applications; got %v", annotations)
+	}
+}
+
+// Notifications subscription MUST stay — it enables the on-sync-healthy webhook.
+func TestBuildApplicationObject_KeepsNotificationSubscription(t *testing.T) {
+	spec := ApplicationSpec{Name: "acme-production", TenantID: "acme"}
+	obj := buildApplicationObject(spec)
+	meta := obj.Object["metadata"].(map[string]interface{})
+	annotations, _ := meta["annotations"].(map[string]interface{})
+	key := "notifications.argoproj.io/subscribe.on-sync-healthy.loopzero-api"
+	if _, present := annotations[key]; !present {
+		t.Errorf("notification subscription annotation must be preserved; got %v", annotations)
+	}
+}
+
+// MEET-2026-04-22-058 (B12): convergence path — any pre-existing Application
+// with the legacy skip-reconcile annotation must have it stripped when the
+// operator reconciles.
+func TestMergeExistingMetadata_StripsSkipReconcile(t *testing.T) {
+	existing := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"annotations": map[string]interface{}{
+					"argocd.argoproj.io/skip-reconcile": "true",
+					"keep-me":                           "yes",
+				},
+			},
+		},
+	}
+	desired := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"annotations": map[string]interface{}{
+					"overlay-me": "on",
+				},
+			},
+		},
+	}
+	mergeExistingMetadata(existing, desired)
+	merged := desired.Object["metadata"].(map[string]interface{})["annotations"].(map[string]interface{})
+	if _, present := merged["argocd.argoproj.io/skip-reconcile"]; present {
+		t.Errorf("skip-reconcile must be stripped during merge; got %v", merged)
+	}
+	if merged["keep-me"] != "yes" {
+		t.Errorf("unrelated existing annotation must be preserved; got %v", merged)
+	}
+	if merged["overlay-me"] != "on" {
+		t.Errorf("desired overlay annotation must be present; got %v", merged)
+	}
+}

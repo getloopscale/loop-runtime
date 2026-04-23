@@ -1,0 +1,53 @@
+---
+# ClusterIssuer for bootstrapping the local dev CA.
+# This is local-dev-only; production uses DO Container Registry (managed TLS)
+# and does not need a self-signed CA.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: loopzero-local-selfsigned
+  labels:
+    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/component: registry-tls
+spec:
+  selfSigned: {}
+---
+# Root CA — signs the registry server cert.
+# Private key stays in Secret; only the public cert is distributed to clusters
+# via ConfigMap (loopzero-local-ca-bundle, see argo-workflows chart).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: loopzero-local-ca
+  namespace: cert-manager
+  labels:
+    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/component: registry-tls
+spec:
+  isCA: true
+  commonName: loopzero-local-ca
+  subject:
+    organizations:
+      - LoopZero (local dev)
+  secretName: loopzero-local-ca-key
+  duration: 43800h   # 5 years
+  renewBefore: 8760h # 1 year
+  privateKey:
+    algorithm: RSA
+    size: 4096
+  issuerRef:
+    name: loopzero-local-selfsigned
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# CA-backed Issuer — emits leaf certs for the registry.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: loopzero-local-ca-issuer
+  labels:
+    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/component: registry-tls
+spec:
+  ca:
+    secretName: loopzero-local-ca-key

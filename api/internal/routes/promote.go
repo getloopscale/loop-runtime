@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -151,6 +153,16 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		// Mirror mapBuildError at builds.go:402 — log unexpected errors for diagnosis.
+		// Without this, 500 responses are opaque and E2E validation is impossible.
+		slog.Error("unexpected error in promote handler",
+			"error", err.Error(),
+			"type", fmt.Sprintf("%T", err),
+			"tenant_id", uc.TenantID,
+			"project", name,
+			"from", req.From,
+			"to", req.To,
+		)
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}

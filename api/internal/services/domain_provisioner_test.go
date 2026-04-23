@@ -168,9 +168,10 @@ func TestDomainProvisioner_ProcessOnce_ProvisionVerifiedDomain(t *testing.T) {
 		store, releaseStore, buildStore, gitops, &fakeLockerProvisioner{},
 		slog.Default(),
 		DomainProvisionerConfig{
-			Interval:    time.Second,
-			BaseDomain:  "dev.loopzero.example",
-			RegistryURL: "registry.example.com",
+			Interval:      time.Second,
+			BaseDomain:    "dev.loopzero.example",
+			RegistryURL:   "registry.example.com",
+			ClusterIssuer: "test-issuer",
 		},
 	)
 
@@ -209,7 +210,7 @@ func TestDomainProvisioner_ProcessOnce_NoActiveRelease_Skips(t *testing.T) {
 	provisioner := NewDomainProvisioner(
 		store, releaseStore, &fakeDomainBuildReader{}, gitops, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second},
+		DomainProvisionerConfig{Interval: time.Second, ClusterIssuer: "test-issuer"},
 	)
 
 	// Act
@@ -249,7 +250,7 @@ func TestDomainProvisioner_ProcessOnce_GitOpsFails_StaysInProvisioning(t *testin
 	provisioner := NewDomainProvisioner(
 		store, releaseStore, buildStore, gitops, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second, BaseDomain: "dev.loopzero.example", RegistryURL: "reg.io"},
+		DomainProvisionerConfig{Interval: time.Second, BaseDomain: "dev.loopzero.example", RegistryURL: "reg.io", ClusterIssuer: "test-issuer"},
 	)
 
 	// Act
@@ -291,7 +292,7 @@ func TestDomainProvisioner_ProcessOnce_RemovesDomain(t *testing.T) {
 	provisioner := NewDomainProvisioner(
 		store, releaseStore, buildStore, gitops, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second, BaseDomain: "dev.loopzero.example", RegistryURL: "reg.io"},
+		DomainProvisionerConfig{Interval: time.Second, BaseDomain: "dev.loopzero.example", RegistryURL: "reg.io", ClusterIssuer: "test-issuer"},
 	)
 
 	// Act
@@ -323,7 +324,7 @@ func TestDomainProvisioner_ProcessOnce_RemoveNoRelease_DeletesDirectly(t *testin
 	provisioner := NewDomainProvisioner(
 		store, releaseStore, &fakeDomainBuildReader{}, gitops, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second},
+		DomainProvisionerConfig{Interval: time.Second, ClusterIssuer: "test-issuer"},
 	)
 
 	// Act
@@ -357,7 +358,7 @@ func TestDomainProvisioner_PendingNS_ZoneActive_TransitionsToNSActive(t *testing
 		store, &fakeDomainReleaseReader{}, &fakeDomainBuildReader{},
 		&fakeGitOpsProvisioner{}, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second},
+		DomainProvisionerConfig{Interval: time.Second, ClusterIssuer: "test-issuer"},
 	)
 	provisioner.WithCFZone(cfZone)
 
@@ -398,7 +399,7 @@ func TestDomainProvisioner_PendingNS_Timeout_FailsDomain(t *testing.T) {
 		store, &fakeDomainReleaseReader{}, &fakeDomainBuildReader{},
 		&fakeGitOpsProvisioner{}, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second},
+		DomainProvisionerConfig{Interval: time.Second, ClusterIssuer: "test-issuer"},
 	)
 	provisioner.WithCFZone(cfZone)
 
@@ -422,7 +423,7 @@ func TestDomainProvisioner_NoCFZone_SkipsPendingNS(t *testing.T) {
 		store, &fakeDomainReleaseReader{}, &fakeDomainBuildReader{},
 		&fakeGitOpsProvisioner{}, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second},
+		DomainProvisionerConfig{Interval: time.Second, ClusterIssuer: "test-issuer"},
 	)
 	// No WithCFZone call
 
@@ -455,7 +456,7 @@ func TestDomainProvisioner_RemoveCFManaged_DeletesZone(t *testing.T) {
 		store, releaseStore, &fakeDomainBuildReader{},
 		&fakeGitOpsProvisioner{}, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second},
+		DomainProvisionerConfig{Interval: time.Second, ClusterIssuer: "test-issuer"},
 	)
 	provisioner.WithCFZone(cfZone)
 

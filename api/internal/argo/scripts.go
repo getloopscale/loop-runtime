@@ -150,7 +150,13 @@ func scriptInstallGo(apps []services.AppSpec) string {
 
 func scriptBuildGo(apps []services.AppSpec) string {
 	paths := appPaths(apps)
-	b := shellgen.New().SetE().Cd("/workspace").MkdirP("/workspace/bin")
+	// CODE-005 (extended): set GOCACHE to writable path — same fix as scriptInstallGo.
+	// Without this, `go build` writes to default $HOME/.cache/go-build which resolves
+	// to /.cache/go-build when running as uid 1000 in the Argo container (no perms).
+	b := shellgen.New().SetE().
+		Env("GOCACHE", "/workspace/.cache/go-build").
+		MkdirP("/workspace/.cache/go-build").
+		Cd("/workspace").MkdirP("/workspace/bin")
 	for _, p := range paths {
 		dir := "/workspace/" + p
 		binName := sanitizeBinName(p)

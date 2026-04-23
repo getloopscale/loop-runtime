@@ -167,6 +167,10 @@ export function installLoopZeroAPI(
         TENANT_NAMESPACE: PLATFORM_NAMESPACE,
         LOOPZERO_ENV: config.environment === "prod" ? "production" : "development",
         BASE_DOMAIN: config.domain,
+        // B14 (MEET-2026-04-23-058): cert-manager ClusterIssuer for app TLS Certificates.
+        // Prod: letsencrypt-prod (provisioned by bootstrap-cert-ingress.ts).
+        // Previously hardcoded in api/internal/manifests/renderer.go default; now explicit.
+        LOOPZERO_CLUSTER_ISSUER: "letsencrypt-prod",
         WORKLOAD_INGRESS_URL: `https://${config.domain}`,
         GITEA_URL: `http://gitea-http.${PLATFORM_NAMESPACE}.svc.cluster.local:3000`,
         ARGOCD_URL: `http://argocd-server.${PLATFORM_NAMESPACE}.svc.cluster.local:80`,

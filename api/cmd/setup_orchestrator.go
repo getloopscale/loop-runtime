@@ -14,7 +14,23 @@ import (
 	"github.com/loopzero/loopzero/api/internal/loki"
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/loopzero/loopzero/pkg/enforcement"
 )
+
+// planLimiterCapAdapter bridges *enforcement.PlanLimiter to the
+// services.PlanCapChecker interface required by BuildOrchestrator (B15).
+// Keeps the orchestrator package free of pkg/enforcement imports (DIP).
+type planLimiterCapAdapter struct {
+	limiter *enforcement.PlanLimiter
+}
+
+func (a *planLimiterCapAdapter) CheckReplicasValue(tenantID string, requested int) (bool, string, int) {
+	if a == nil || a.limiter == nil {
+		return true, "dev", 0
+	}
+	result := a.limiter.CheckValue(tenantID, "max_replicas_per_service", requested)
+	return result.Allowed, result.Plan, result.Limit
+}
 
 // OrchestratorDeps holds the build orchestrator and related handlers.
 type OrchestratorDeps struct {
@@ -39,7 +55,15 @@ func setupOrchestrator(
 	cfg config.Config,
 	httpTransport *http.Transport,
 	logger *slog.Logger,
+	planLimiter *enforcement.PlanLimiter,
 ) *OrchestratorDeps {
+	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): wire plan-cap enforcement.
+	// A nil limiter is legal — means the DB was unavailable (dev without pool)
+	// and enforcement is off. The orchestrator also accepts a nil PlanCap.
+	var planCap services.PlanCapChecker
+	if planLimiter != nil {
+		planCap = &planLimiterCapAdapter{limiter: planLimiter}
+	}
 	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
 		BuildStore:        stores.BuildStore,
 		ReleaseStore:      stores.ReleaseStore,
@@ -54,6 +78,7 @@ func setupOrchestrator(
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
 		KVClient:          workflows.KVClient,
 		BaseDomain:        cfg.BaseDomain,
+		PlanCap:           planCap,
 	})
 
 	buildOrchestrator := &adapters.BuildOrchestratorAdapter{

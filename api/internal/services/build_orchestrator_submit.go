@@ -59,6 +59,14 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			return loopzeroerrors.ErrDeployInProgress
 		}
 
+		// Step 2.3: B15 scaling validation + plan-cap enforcement.
+		// This is the authoritative gate covering BOTH the CLI deploy path and
+		// the GitHub App auto-deploy path — bypass here means a plan-cap
+		// enforcement hole (MEET-2026-04-23-059 Constraint 6).
+		if err := enforceScaling(req.Apps, o.planCap, req.TenantID); err != nil {
+			return err
+		}
+
 		// Step 2.5: ensure project exists in projects table (idempotent).
 		// After `loopzero project delete` + redeploy, the build succeeds but the
 		// project doesn't appear in `loopzero project list` because it was hard-deleted.
@@ -197,6 +205,55 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		BuildID:   buildID,
 		StreamURL: streamURL,
 	}, nil
+}
+
+// enforceScaling rejects requests that set both `replicas` and `autoscaling`
+// (ErrScalingAmbiguous) or whose requested per-service replica count exceeds
+// the tenant's plan cap (ErrReplicasExceedPlan).
+//
+// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059) Constraint 6: the check MUST
+// live in SubmitBuild so both CLI and GitHub App auto-deploy paths are covered.
+// A nil checker disables enforcement (dev / legacy callsites).
+func enforceScaling(apps []AppSpec, checker PlanCapChecker, tenantID string) error {
+	for _, a := range apps {
+		hasReplicas := a.Replicas > 0
+		hasAutoscaling := a.Autoscaling != nil
+		if hasReplicas && hasAutoscaling {
+			// B15: observe mutual-exclusion rejections under the same metric so
+			// dashboards show a single plan-enforcement signal.
+			metrics.PlanLimitViolations.WithLabelValues("scaling_ambiguous", "").Inc()
+			return loopzeroerrors.NewLoopZeroError(
+				loopzeroerrors.ErrScalingAmbiguous.Code,
+				fmt.Sprintf("App '%s': %s", a.Name, loopzeroerrors.ErrScalingAmbiguous.Message),
+				loopzeroerrors.ErrScalingAmbiguous.HTTPStatus,
+			)
+		}
+		if checker == nil {
+			continue
+		}
+		// Determine the effective maximum replica count for cap checks.
+		// autoscaling.max is the ceiling; replicas is a fixed count.
+		var requested int
+		switch {
+		case hasAutoscaling:
+			requested = a.Autoscaling.MaxReplicas
+		case hasReplicas:
+			requested = a.Replicas
+		default:
+			continue // default replicas=1, no plan cap interaction
+		}
+		if requested <= 0 {
+			continue
+		}
+		allowed, plan, cap := checker.CheckReplicasValue(tenantID, requested)
+		if !allowed {
+			// B15 MEET-059 action #9: emit counter so dashboards/alerts can
+			// surface plan-limit friction without scraping audit logs.
+			metrics.PlanLimitViolations.WithLabelValues("max_replicas_per_service", plan).Inc()
+			return loopzeroerrors.NewReplicasExceedPlan(plan, cap, requested, a.Name)
+		}
+	}
+	return nil
 }
 
 // failQueuedBuild transitions a QUEUED build to FAILED when workflow submission

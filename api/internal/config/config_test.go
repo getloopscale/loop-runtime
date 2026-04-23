@@ -9,6 +9,54 @@ import (
 	"time"
 )
 
+// TestMain seeds LOOPZERO_CLUSTER_ISSUER for ALL tests in this package.
+// B14 (MEET-2026-04-23-058): ClusterIssuer is now required in Validate().
+// Tests exercising the missing-var behavior must call t.Setenv("LOOPZERO_CLUSTER_ISSUER", "")
+// explicitly to override.
+func TestMain(m *testing.M) {
+	_ = os.Setenv("LOOPZERO_CLUSTER_ISSUER", "test-cluster-issuer")
+	os.Exit(m.Run())
+}
+
+// B14: happy path — non-empty LOOPZERO_CLUSTER_ISSUER passes Validate().
+func TestValidate_RequiresClusterIssuer_HappyPath(t *testing.T) {
+	t.Setenv("LOOPZERO_CLUSTER_ISSUER", "letsencrypt-prod")
+	cfg := Load()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
+// B14: empty LOOPZERO_CLUSTER_ISSUER → Validate() returns error.
+func TestValidate_RejectsEmptyClusterIssuer(t *testing.T) {
+	t.Setenv("LOOPZERO_CLUSTER_ISSUER", "")
+	cfg := Load()
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error when LOOPZERO_CLUSTER_ISSUER is empty")
+	}
+	if !contains(err.Error(), "LOOPZERO_CLUSTER_ISSUER") {
+		t.Errorf("error should mention LOOPZERO_CLUSTER_ISSUER, got: %v", err)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || indexOf(s, substr) >= 0)
+}
+
+func indexOf(s, substr string) int {
+	n, m := len(s), len(substr)
+	if m == 0 {
+		return 0
+	}
+	for i := 0; i+m <= n; i++ {
+		if s[i:i+m] == substr {
+			return i
+		}
+	}
+	return -1
+}
+
 // Roadmap 02 — API Loop Extraction feature flag.
 //
 // DisableLegacyLoops is the switch that tells the API process not to run
@@ -82,8 +130,9 @@ func TestLoad_DisableLegacyLoops_NonTrueRejected(t *testing.T) {
 
 func TestValidate_RejectsMaxConnsLessThanMinConns(t *testing.T) {
 	cfg := Config{
-		DBMaxConns: 5,
-		DBMinConns: 10,
+		DBMaxConns:    5,
+		DBMinConns:    10,
+		ClusterIssuer: "test-issuer", // B14
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -96,8 +145,9 @@ func TestValidate_RejectsMaxConnsLessThanMinConns(t *testing.T) {
 
 func TestValidate_AcceptsValidPoolConfig(t *testing.T) {
 	cfg := Config{
-		DBMaxConns: 25,
-		DBMinConns: 5,
+		DBMaxConns:    25,
+		DBMinConns:    5,
+		ClusterIssuer: "test-issuer", // B14
 	}
 	err := cfg.Validate()
 	if err != nil {
@@ -107,8 +157,9 @@ func TestValidate_AcceptsValidPoolConfig(t *testing.T) {
 
 func TestValidate_AcceptsEqualPoolConfig(t *testing.T) {
 	cfg := Config{
-		DBMaxConns: 10,
-		DBMinConns: 10,
+		DBMaxConns:    10,
+		DBMinConns:    10,
+		ClusterIssuer: "test-issuer", // B14
 	}
 	err := cfg.Validate()
 	if err != nil {
@@ -117,8 +168,8 @@ func TestValidate_AcceptsEqualPoolConfig(t *testing.T) {
 }
 
 func TestValidate_AcceptsZeroPoolConfig(t *testing.T) {
-	// Zero values should not trigger validation (unset config)
-	cfg := Config{}
+	// Zero values should not trigger validation (unset config) — EXCEPT ClusterIssuer (B14)
+	cfg := Config{ClusterIssuer: "test-issuer"}
 	err := cfg.Validate()
 	if err != nil {
 		t.Fatalf("expected no error for zero config, got %v", err)
@@ -152,6 +203,7 @@ func TestValidate_WarnsReleasePendingLessThanSyncTimeout(t *testing.T) {
 	cfg := Config{
 		ReleasePendingTimeout: 1 * time.Minute,
 		ArgocdSyncTimeout:     5 * time.Minute,
+		ClusterIssuer:         "test-issuer", // B14
 	}
 	err := cfg.Validate()
 	if err != nil {

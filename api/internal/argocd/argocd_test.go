@@ -28,10 +28,11 @@ func newHTTPTestSyncClient(serverURL string) *SyncClient {
 func TestTriggerSync_HappyPath(t *testing.T) {
 	// Arrange
 	var syncCalled bool
-	var patchCalled bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// MEET-2026-04-22-058 (B12): TriggerSync must NEVER issue PATCH anymore.
+		// The operator is the sole writer of Application CR metadata.
 		if r.Method == http.MethodPatch {
-			patchCalled = true
+			t.Errorf("PATCH must not be called after skip-reconcile removal (path=%s)", r.URL.Path)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -59,9 +60,6 @@ func TestTriggerSync_HappyPath(t *testing.T) {
 	}
 	if !syncCalled {
 		t.Error("sync endpoint should have been called")
-	}
-	if !patchCalled {
-		t.Error("patch (remove skip-reconcile) should have been called")
 	}
 }
 

@@ -115,13 +115,14 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 	}
 
 	renderedManifests := manifests.Render(manifests.RenderInput{
-		TenantID:    build.TenantID,
-		ProjectID:   build.ProjectID,
-		Environment: build.Environment,
-		BuildID:     build.ID,
-		ReleaseID:   "",
-		BaseDomain:  r.cfg.BaseDomain,
-		Apps:        manifestApps,
+		TenantID:          build.TenantID,
+		ProjectID:         build.ProjectID,
+		Environment:       build.Environment,
+		BuildID:           build.ID,
+		ReleaseID:         "",
+		BaseDomain:        r.cfg.BaseDomain,
+		ClusterIssuerName: r.cfg.ClusterIssuer, // B14
+		Apps:              manifestApps,
 	})
 
 	result := BuildCallbackRequest{

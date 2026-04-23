@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/loopzero/loopzero/pkg/enforcement"
 	"github.com/loopzero/loopzero/pkg/logging"
 
 	"github.com/loopzero/loopzero/api/internal/admission"
@@ -112,7 +113,11 @@ func main() {
 			logger.Error("failed to setup workflows", "error", err)
 			os.Exit(1)
 		}
-		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger)
+		var planLimiter *enforcement.PlanLimiter
+		if dbDeps != nil {
+			planLimiter = dbDeps.PlanLimiter
+		}
+		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, planLimiter)
 		ghDeps = setupGitHub(dbAdapter, stores, orchDeps.Orchestrator, cfg, shutdownCtx, logger)
 	}
 

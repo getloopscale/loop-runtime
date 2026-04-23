@@ -51,8 +51,7 @@ func TestDomainProvisioner_NSActive_ProvisionsDomain(t *testing.T) {
 		DomainProvisionerConfig{
 			Interval:    time.Second,
 			BaseDomain:  "dev.loopzero.example",
-			RegistryURL: "registry.example.com",
-		},
+			RegistryURL: "registry.example.com", ClusterIssuer: "test-issuer"},
 	)
 	provisioner.WithCFZone(cfZone)
 
@@ -97,7 +96,7 @@ func TestDomainProvisioner_NSActive_NoRelease_Skips(t *testing.T) {
 	provisioner := NewDomainProvisioner(
 		store, releaseStore, &fakeDomainBuildReader{}, gitops, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second},
+		DomainProvisionerConfig{Interval: time.Second, ClusterIssuer: "test-issuer"},
 	)
 	provisioner.WithCFZone(cfZone)
 
@@ -131,7 +130,7 @@ func TestDomainProvisioner_PendingNS_StillPending_TriggersActivationCheck(t *tes
 		store, &fakeDomainReleaseReader{}, &fakeDomainBuildReader{},
 		&fakeGitOpsProvisioner{}, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second},
+		DomainProvisionerConfig{Interval: time.Second, ClusterIssuer: "test-issuer"},
 	)
 	provisioner.WithCFZone(cfZone)
 
@@ -161,7 +160,7 @@ func TestDomainProvisioner_PendingNS_NilZoneID_Skips(t *testing.T) {
 		store, &fakeDomainReleaseReader{}, &fakeDomainBuildReader{},
 		&fakeGitOpsProvisioner{}, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second},
+		DomainProvisionerConfig{Interval: time.Second, ClusterIssuer: "test-issuer"},
 	)
 	provisioner.WithCFZone(cfZone)
 
@@ -202,7 +201,7 @@ func TestDomainProvisioner_RemoveCFManaged_WithRelease_DeletesZone(t *testing.T)
 	provisioner := NewDomainProvisioner(
 		store, releaseStore, buildStore, gitops, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second, BaseDomain: "dev.loopzero.example", RegistryURL: "reg.io"},
+		DomainProvisionerConfig{Interval: time.Second, BaseDomain: "dev.loopzero.example", RegistryURL: "reg.io", ClusterIssuer: "test-issuer"},
 	)
 	provisioner.WithCFZone(cfZone)
 

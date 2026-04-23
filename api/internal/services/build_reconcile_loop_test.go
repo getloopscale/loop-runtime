@@ -325,6 +325,9 @@ func (f *reconcileLoopFakes) buildLoop(cfg BuildReconcileLoopConfig) *BuildRecon
 	if cfg.BaseDomain == "" {
 		cfg.BaseDomain = "test.local"
 	}
+	if cfg.ClusterIssuer == "" {
+		cfg.ClusterIssuer = "test-issuer" // B14
+	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	return NewBuildReconcileLoop(
 		f.buildStore,

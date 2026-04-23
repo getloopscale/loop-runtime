@@ -128,6 +128,7 @@ func TestValidate_DevelopmentAcceptsDefaultCredentials(t *testing.T) {
 	cfg := Config{
 		Env:            "development",
 		MinIOAccessKey: "loopzero-admin",
+		ClusterIssuer:  "loopzero-ca-issuer", // B14
 	}
 	err := cfg.Validate()
 	if err != nil {

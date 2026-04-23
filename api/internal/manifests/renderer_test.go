@@ -12,12 +12,13 @@ import (
 
 func baseInput() RenderInput {
 	return RenderInput{
-		TenantID:    "acme",
-		ProjectID:   "webapp",
-		Environment: "production",
-		BuildID:     "build-001",
-		ReleaseID:   "rel-001",
-		BaseDomain:  "loopzero.example.com",
+		TenantID:          "acme",
+		ProjectID:         "webapp",
+		Environment:       "production",
+		BuildID:           "build-001",
+		ReleaseID:         "rel-001",
+		BaseDomain:        "loopzero.example.com",
+		ClusterIssuerName: "test-issuer", // B14: required by Render panic contract
 	}
 }
 
@@ -146,9 +147,34 @@ func TestRender_IngressRouteTLS_UsesSecretName(t *testing.T) {
 	if !strings.Contains(result, "kind: Certificate") {
 		t.Error("output must contain a cert-manager Certificate CR")
 	}
-	if !strings.Contains(result, "name: letsencrypt-prod") {
-		t.Error("Certificate must reference letsencrypt-prod ClusterIssuer")
+	// B14: Certificate must use the ClusterIssuer from input, not a hardcoded default.
+	if !strings.Contains(result, "name: test-issuer") {
+		t.Errorf("Certificate must reference input.ClusterIssuerName (test-issuer):\n%s", result)
 	}
+}
+
+// B14 (MEET-2026-04-23-058): empty ClusterIssuerName is a programmer error.
+// Render must panic; Validate() at startup catches it operationally. This
+// prevents the "invisible default" pattern that produced B14.
+func TestRender_PanicsOnEmptyClusterIssuerName(t *testing.T) {
+	input := RenderInput{
+		TenantID:    "acme",
+		ProjectID:   "webapp",
+		Environment: "production",
+		BuildID:     "build-001",
+		ReleaseID:   "rel-001",
+		BaseDomain:  "loopzero.example.com",
+		// ClusterIssuerName intentionally empty
+		Apps: []AppManifestInput{
+			{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/a/b:c"},
+		},
+	}
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Render must panic when ClusterIssuerName is empty; got no panic")
+		}
+	}()
+	_ = Render(input)
 }
 
 func TestRender_WorkerApp_HasNoPortsOrProbes(t *testing.T) {

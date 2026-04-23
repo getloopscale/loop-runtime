@@ -39,6 +39,21 @@ func TestScriptBuildGo_PathQuoting(t *testing.T) {
 	}
 }
 
+// CODE-005 extended: scriptBuildGo must set GOCACHE to a writable path because
+// Argo containers run as uid 1000 and cannot write to $HOME/.cache/go-build
+// which resolves to /.cache/go-build when HOME is unset.
+func TestScriptBuildGo_SetsGOCACHE(t *testing.T) {
+	apps := []services.AppSpec{{Name: "api", Path: "."}}
+	script := scriptBuildGo(apps)
+
+	if !strings.Contains(script, "export GOCACHE='/workspace/.cache/go-build'") {
+		t.Errorf("scriptBuildGo must export GOCACHE=/workspace/.cache/go-build:\n%s", script)
+	}
+	if !strings.Contains(script, "mkdir -p '/workspace/.cache/go-build'") {
+		t.Errorf("scriptBuildGo must mkdir -p /workspace/.cache/go-build:\n%s", script)
+	}
+}
+
 func TestScriptValidateNode_ContainsFileCheck(t *testing.T) {
 	apps := []services.AppSpec{{Name: "api", Path: "apps/web"}}
 	script := scriptValidateNode(apps)

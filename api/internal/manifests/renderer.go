@@ -79,7 +79,9 @@ type RenderInput struct {
 	Apps         []AppManifestInput
 
 	// Configurable defaults (arch-cp-006). Zero values fall back to built-in defaults.
-	ClusterIssuerName    string // Default: "letsencrypt-prod"
+	// B14 (MEET-2026-04-23-058): ClusterIssuerName is REQUIRED — no fallback.
+	// Set from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER). Empty = panic.
+	ClusterIssuerName    string // Required — no default; panics if empty at render time
 	GatewayNamespace     string // Default: "platform-system"
 	DefaultCPURequest    string // Default: "100m"
 	DefaultMemoryRequest string // Default: "128Mi"
@@ -89,7 +91,14 @@ type RenderInput struct {
 
 // Render generates Kubernetes manifests (Deployment, Service, IngressRoute) for all apps.
 // Returns the combined YAML as a single string with documents separated by "---".
+//
+// B14 (MEET-2026-04-23-058): ClusterIssuerName is required. Callers MUST populate
+// it from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER). Panics on empty because
+// this is a programmer error (missing wiring), not a runtime condition.
 func Render(input RenderInput) string {
+	if input.ClusterIssuerName == "" {
+		panic("manifests.Render: ClusterIssuerName is required (B14 — wire from Config.ClusterIssuer)")
+	}
 	var docs []string
 
 	for _, app := range input.Apps {
@@ -116,10 +125,8 @@ func Render(input RenderInput) string {
 // --- Default resolution helpers (arch-cp-006) ---
 
 func (ri RenderInput) clusterIssuerName() string {
-	if ri.ClusterIssuerName != "" {
-		return ri.ClusterIssuerName
-	}
-	return "letsencrypt-prod"
+	// B14 (MEET-2026-04-23-058): no fallback. Render() already panicked if empty.
+	return ri.ClusterIssuerName
 }
 
 func (ri RenderInput) gatewayNamespace() string {

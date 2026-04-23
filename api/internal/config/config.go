@@ -64,6 +64,10 @@ type Config struct {
 	HarborRegistryURL    string // MEET-048: secondary registry for dual-push during migration. Empty = disabled.
 	WorkloadIngressURL   string
 	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
+	// B14 (MEET-2026-04-23-058): cert-manager ClusterIssuer used for all app TLS
+	// Certificates. REQUIRED per-environment (prod: letsencrypt-prod; dev: loopzero-ca-issuer).
+	// Set via LOOPZERO_CLUSTER_ISSUER env var. Empty = Validate() fatal at startup.
+	ClusterIssuer        string
 
 	// Credentials (read from env vars or K8s secrets)
 	GiteaToken         string
@@ -260,6 +264,7 @@ func Load() Config {
 		HarborRegistryURL:    os.Getenv("HARBOR_REGISTRY_URL"), // MEET-048: empty = disabled
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
 		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
+		ClusterIssuer:        os.Getenv("LOOPZERO_CLUSTER_ISSUER"),
 
 		// Credentials
 		GiteaToken:         os.Getenv("GITEA_TOKEN"),
@@ -354,6 +359,13 @@ func Load() Config {
 // security violations in production that must not be ignored.
 // Called after Load() to surface non-production configuration (C-03).
 func (c Config) Validate() error {
+	// B14 (MEET-2026-04-23-058): ClusterIssuer is required — no in-code default.
+	// Each environment (prod/staging/dev) MUST set LOOPZERO_CLUSTER_ISSUER explicitly.
+	// Prevents the "invisible default" footgun that caused B14.
+	if c.ClusterIssuer == "" {
+		return fmt.Errorf("LOOPZERO_CLUSTER_ISSUER is required (prod: letsencrypt-prod, dev: loopzero-ca-issuer)")
+	}
+
 	// MEET-2026-03-31-023 T2-13: Cross-field validation rules.
 	// These prevent silent misconfigurations that cause runtime failures.
 	if c.DBMaxConns > 0 && c.DBMinConns > 0 && c.DBMaxConns < c.DBMinConns {

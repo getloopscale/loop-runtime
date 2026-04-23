@@ -297,19 +297,36 @@ export class DeployCommand {
       environment,
       selectedApps,
     );
-    // M6: Build app inputs from normalized AppUnits (no inference at deploy time)
-    const appInputs: AppInput[] = appUnits.map((unit) => ({
-      name: unit.name,
-      type: unit.type,
-      port: unit.port,
-      path: unit.path,
-      framework: unit.framework,
-      build: unit.build,
-      dockerfile: unit.dockerfile,
-      rendering: unit.rendering,
-      env: unit.env,
-      secrets: unit.secrets,
-    }));
+    // M6: Build app inputs from normalized AppUnits (no inference at deploy time).
+    // B15 (MEET-2026-04-23-059): forward scaling config so the API can enforce
+    // plan caps and render the correct Deployment / HPA. Mutual exclusion is
+    // already validated by validate-config — here we trust the AppUnit.
+    const appInputs: AppInput[] = appUnits.map((unit) => {
+      const input: AppInput = {
+        name: unit.name,
+        type: unit.type,
+        port: unit.port,
+        path: unit.path,
+        framework: unit.framework,
+        build: unit.build,
+        dockerfile: unit.dockerfile,
+        rendering: unit.rendering,
+        env: unit.env,
+        secrets: unit.secrets,
+      };
+      // Send replicas only when autoscaling is absent. Default (1) is not forwarded
+      // so the API keeps backward-compat with payloads from older CLIs.
+      if (unit.autoscaling) {
+        input.autoscaling = {
+          min: unit.autoscaling.min,
+          max: unit.autoscaling.max,
+          target_cpu: unit.autoscaling.targetCPU,
+        };
+      } else if (unit.replicas !== undefined && unit.replicas !== 1) {
+        input.replicas = unit.replicas;
+      }
+      return input;
+    });
     let buildResult: import('./deploy-types').SubmitBuildResult;
     try {
       buildResult = await this.deps.submitBuild({

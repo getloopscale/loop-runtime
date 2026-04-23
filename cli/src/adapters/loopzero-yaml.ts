@@ -99,31 +99,34 @@ export function parseLoopZeroYaml(raw: string): LoopZeroYaml {
         ? (cfg.render as 'static' | 'server')
         : undefined;
 
-      // Replicas (must be >= 1)
-      const rawReplicas = cfg.replicas != null ? Number(cfg.replicas) : undefined;
-      const replicas = rawReplicas !== undefined && !isNaN(rawReplicas) && rawReplicas >= 1
-        ? rawReplicas
-        : undefined;
+      // B15 (MEET-2026-04-23-059): parser PRESERVES invalid values so the
+      // validator can reject them explicitly. Previously the parser silently
+      // dropped invalid ints, making errors invisible to users.
+      // Range validation (replicas >= 1, max >= min, targetCPU 1-100) lives
+      // in validate-config.ts — the single authoritative gate.
+      let replicas: number | undefined;
+      if (cfg.replicas != null) {
+        const n = Number(cfg.replicas);
+        replicas = isNaN(n) ? undefined : n;
+      }
 
-      // Autoscaling (HPA configuration)
+      // Autoscaling (HPA configuration) — preserve invalid values for validator.
       let autoscaling: LoopZeroYamlAutoscaling | undefined;
       if (cfg.autoscaling && typeof cfg.autoscaling === 'object' && !Array.isArray(cfg.autoscaling)) {
         const asCfg = cfg.autoscaling as Record<string, unknown>;
-        const min = asCfg.min != null ? Number(asCfg.min) : undefined;
-        const max = asCfg.max != null ? Number(asCfg.max) : undefined;
-        const targetCPU = asCfg.targetCPU != null ? Number(asCfg.targetCPU) : undefined;
-
-        // Validate: min >= 1, max >= min, targetCPU 1-100
-        const validMin = min !== undefined && !isNaN(min) && min >= 1 ? min : undefined;
-        const validMax = max !== undefined && !isNaN(max) && max >= (validMin ?? 1) ? max : undefined;
-        const validCPU = targetCPU !== undefined && !isNaN(targetCPU) && targetCPU >= 1 && targetCPU <= 100
-          ? targetCPU
-          : undefined;
+        const coerce = (v: unknown): number | undefined => {
+          if (v == null) return undefined;
+          const n = Number(v);
+          return isNaN(n) ? undefined : n;
+        };
+        const min = coerce(asCfg.min);
+        const max = coerce(asCfg.max);
+        const targetCPU = coerce(asCfg.targetCPU);
 
         autoscaling = {
-          ...(validMin !== undefined ? { min: validMin } : {}),
-          ...(validMax !== undefined ? { max: validMax } : {}),
-          ...(validCPU !== undefined ? { targetCPU: validCPU } : {}),
+          ...(min !== undefined ? { min } : {}),
+          ...(max !== undefined ? { max } : {}),
+          ...(targetCPU !== undefined ? { targetCPU } : {}),
         };
       }
 

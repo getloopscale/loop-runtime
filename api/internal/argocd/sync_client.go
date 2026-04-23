@@ -112,13 +112,11 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 }
 
 // TriggerSync initiates a sync operation on an ArgoCD Application.
-// Before syncing, removes the skip-reconcile annotation (if present) so
-// ArgoCD begins processing the app. This annotation was set during tenant
-// provisioning to prevent CPU amplification from empty repos.
+// MEET-2026-04-22-058 (B12): no annotation mutation anymore. The operator no
+// longer sets `argocd.argoproj.io/skip-reconcile`, so the API does not need
+// to remove it. Application CR metadata is owned exclusively by the operator
+// (K8s RBAC), not by the API (ArgoCD REST RBAC) — single-writer discipline.
 func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
-	// Remove skip-reconcile annotation to enable ArgoCD processing.
-	c.removeSkipReconcile(ctx, appName)
-
 	url := fmt.Sprintf("%s/api/v1/applications/%s/sync", c.baseURL, appName)
 
 	body := strings.NewReader(`{"prune": true}`)
@@ -155,25 +153,9 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	return nil
 }
 
-// removeSkipReconcile removes the argocd.argoproj.io/skip-reconcile annotation
-// from an Application. This is a best-effort operation — if it fails, TriggerSync
-// will still work (ArgoCD processes sync requests even with skip-reconcile set).
-func (c *SyncClient) removeSkipReconcile(ctx context.Context, appName string) {
-	patchURL := fmt.Sprintf("%s/api/v1/applications/%s", c.baseURL, appName)
-	// JSON Merge Patch: set annotation to null to remove it.
-	patch := strings.NewReader(`{"metadata":{"annotations":{"argocd.argoproj.io/skip-reconcile":null}}}`)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, patchURL, patch)
-	if err != nil {
-		return
-	}
-	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
-	req.Header.Set("Content-Type", "application/merge-patch+json")
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return
-	}
-	resp.Body.Close()
-}
+// MEET-2026-04-22-058 (B12): removeSkipReconcile deleted. The skip-reconcile
+// annotation is no longer set by the operator, so there is nothing to remove.
+// See ADR on skip-reconcile removal.
 
 // TerminateOperation cancels a running sync operation on an ArgoCD Application.
 // MEET-2026-03-29-019: Used when TriggerSync returns ErrSyncOperationInProgress
@@ -186,6 +168,9 @@ func (c *SyncClient) TerminateOperation(ctx context.Context, appName string) err
 		return fmt.Errorf("argocd terminate: create request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
+	// B11 (CHG-2026-04-23): ArgoCD rejects DELETE without Content-Type
+	// with HTTP 415 "Invalid content type", blocking stuck-operation recovery.
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {

@@ -170,9 +170,82 @@ export function validateConfig(
       }
     }
 
+    // B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): validate scaling fields.
+    // Plan caps (max_replicas_per_service: starter=2, pro=5, team=10, enterprise=NULL)
+    // are enforced server-side in BuildOrchestrator.SubmitBuild. The CLI only rejects
+    // values that are structurally invalid for ANY plan (< 1 or > 100).
+    const MAX_REPLICAS = 100;
+    const hasReplicas = app.replicas !== undefined && app.replicas !== null;
+    const hasAutoscaling = app.autoscaling !== undefined && app.autoscaling !== null;
+
+    if (hasReplicas) {
+      const r = app.replicas as number;
+      if (typeof r !== 'number' || !Number.isInteger(r) || r < 1) {
+        errors.push({
+          field: `apps.${name}.replicas`,
+          message: `App '${name}': replicas must be an integer >= 1 (got ${JSON.stringify(app.replicas)}).`,
+        });
+      } else if (r > MAX_REPLICAS) {
+        errors.push({
+          field: `apps.${name}.replicas`,
+          message: `App '${name}': replicas ${r} exceeds maximum of ${MAX_REPLICAS} per service.`,
+        });
+      }
+    }
+
+    if (hasAutoscaling) {
+      const as = app.autoscaling!;
+      const min = as.min;
+      const max = as.max;
+      const targetCPU = as.targetCPU;
+      if (min !== undefined && (typeof min !== 'number' || !Number.isInteger(min) || min < 1)) {
+        errors.push({
+          field: `apps.${name}.autoscaling.min`,
+          message: `App '${name}': autoscaling.min must be an integer >= 1 (got ${JSON.stringify(min)}).`,
+        });
+      }
+      if (max !== undefined && (typeof max !== 'number' || !Number.isInteger(max) || max < 1)) {
+        errors.push({
+          field: `apps.${name}.autoscaling.max`,
+          message: `App '${name}': autoscaling.max must be an integer >= 1 (got ${JSON.stringify(max)}).`,
+        });
+      }
+      if (max !== undefined && typeof max === 'number' && max > MAX_REPLICAS) {
+        errors.push({
+          field: `apps.${name}.autoscaling.max`,
+          message: `App '${name}': autoscaling.max ${max} exceeds maximum of ${MAX_REPLICAS} per service.`,
+        });
+      }
+      if (min !== undefined && max !== undefined && typeof min === 'number' && typeof max === 'number' && max < min) {
+        errors.push({
+          field: `apps.${name}.autoscaling`,
+          message: `App '${name}': autoscaling.max (${max}) must be >= autoscaling.min (${min}).`,
+        });
+      }
+      if (targetCPU !== undefined) {
+        if (typeof targetCPU !== 'number' || !Number.isInteger(targetCPU) || targetCPU < 1 || targetCPU > 100) {
+          errors.push({
+            field: `apps.${name}.autoscaling.targetCPU`,
+            message: `App '${name}': autoscaling.targetCPU must be an integer between 1 and 100 (got ${JSON.stringify(targetCPU)}).`,
+          });
+        }
+      }
+    }
+
+    // Mutual exclusion (MEET-059 Constraint 7): replicas and autoscaling set together
+    // is ambiguous — fail-fast with a message naming both fields.
+    if (hasReplicas && hasAutoscaling) {
+      errors.push({
+        field: `apps.${name}`,
+        message: `App '${name}': 'replicas' and 'autoscaling' are mutually exclusive — choose one. Use 'replicas' for a fixed count, or 'autoscaling' for HPA-driven scaling.`,
+      });
+    }
+
     // Detect unknown fields
     const knownFields = new Set([
       'path', 'framework', 'type', 'port', 'build', 'dockerfile', 'render', 'env', 'secrets', 'commands',
+      // B15: scaling fields are now known (MEET-2026-04-23-059).
+      'replicas', 'autoscaling',
     ]);
     if (typeof app === 'object' && app !== null) {
       for (const key of Object.keys(app)) {

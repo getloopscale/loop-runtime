@@ -122,20 +122,22 @@ describe('validateConfig', () => {
     expect(errors.some(e => e.message.includes("uppercase"))).toBe(true);
   });
 
+  // B15 (MEET-2026-04-23-059): `replicas` and `autoscaling` are now known.
+  // A truly unknown field (e.g. `foo`) still produces the warning.
   it('should warn for unknown fields', () => {
     const dir = tmpDir();
     fs.mkdirSync(path.join(dir, 'api'), { recursive: true });
-    const config: LoopZeroYaml = {
+    const config = {
       project: 'test',
       apps: {
         api: {
           path: 'api', framework: 'express', type: 'server', port: 3000,
-          replicas: 3,  // unknown field
-        } as unknown as LoopZeroYaml['apps'][string],
+          foo: 'bar',  // genuinely unknown field
+        },
       },
-    };
+    } as unknown as LoopZeroYaml;
     const { warnings } = validateConfig(config, dir);
-    expect(warnings.some(w => w.includes("Unknown field 'apps.api.replicas'"))).toBe(true);
+    expect(warnings.some(w => w.includes("Unknown field 'apps.api.foo'"))).toBe(true);
   });
 
   it('should error for unsupported version', () => {
@@ -764,6 +766,160 @@ describe('validateConfig', () => {
       const dfError = errors.find(e => e.message.includes('Dockerfile'));
       expect(dfError).toBeDefined();
       expect(dfError!.message).toContain('supported framework');
+    });
+  });
+
+  // B15 (CHG-2026-04-23-B15, MEET-2026-04-23-059): replicas + autoscaling
+  // are valid known fields; invalid values must be rejected with actionable errors.
+  describe('B15: replicas and autoscaling scaling fields', () => {
+    it('accepts replicas: 2 without any warning or error', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: '.', framework: 'express', type: 'server', port: 3000, replicas: 2 },
+        },
+      };
+      const { errors, warnings } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors).toHaveLength(0);
+      expect(warnings.find(w => w.includes('replicas'))).toBeUndefined();
+    });
+
+    it('accepts autoscaling: {min:1, max:3} without warning', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: 1, max: 3, targetCPU: 70 },
+          },
+        },
+      };
+      const { errors, warnings } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors).toHaveLength(0);
+      expect(warnings.find(w => w.includes('autoscaling'))).toBeUndefined();
+    });
+
+    it('rejects replicas: 0 with exit-1 error', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: '.', framework: 'express', type: 'server', port: 3000, replicas: 0 },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const repErr = errors.find(e => e.field.includes('replicas'));
+      expect(repErr).toBeDefined();
+      expect(repErr!.message).toMatch(/replicas/);
+      expect(repErr!.message).toMatch(/1/);
+    });
+
+    it('rejects replicas: 101 (over service cap)', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: { path: '.', framework: 'express', type: 'server', port: 3000, replicas: 101 },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const repErr = errors.find(e => e.field.includes('replicas'));
+      expect(repErr).toBeDefined();
+      expect(repErr!.message).toMatch(/100|exceed/i);
+    });
+
+    it('rejects autoscaling.max < autoscaling.min', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: 5, max: 2 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const asErr = errors.find(e => e.field.includes('autoscaling'));
+      expect(asErr).toBeDefined();
+      expect(asErr!.message).toMatch(/max/);
+      expect(asErr!.message).toMatch(/min/);
+    });
+
+    it('rejects autoscaling.targetCPU: 0', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: 1, max: 3, targetCPU: 0 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors.find(e => e.field.includes('targetCPU'))).toBeDefined();
+    });
+
+    it('rejects autoscaling.targetCPU: 101', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: 1, max: 3, targetCPU: 101 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(errors.find(e => e.field.includes('targetCPU'))).toBeDefined();
+    });
+
+    it('rejects both replicas AND autoscaling set (mutual exclusion)', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            replicas: 2,
+            autoscaling: { min: 1, max: 3 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      // Must cite BOTH field names so user knows what to remove.
+      const mutualErr = errors.find(
+        e => e.message.includes('replicas') && e.message.includes('autoscaling')
+      );
+      expect(mutualErr).toBeDefined();
+    });
+
+    it('still warns on genuinely unknown fields (regression)', () => {
+      const config = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            foo: 'bar', // genuinely unknown
+          },
+        },
+      } as unknown as LoopZeroYaml;
+      const { warnings } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      expect(warnings.find(w => w.includes('apps.api.foo'))).toBeDefined();
     });
   });
 });

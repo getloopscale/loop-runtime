@@ -2138,4 +2138,84 @@ describe('DeployCommand', () => {
       expect(errorOutput).toContain('compilation error in main.go');
     });
   });
+
+  // B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): scaling config must
+  // flow from loopzero.yaml through the submitBuild payload so the API can
+  // enforce plan caps and render Deployment/HPA correctly.
+  describe('B15: scaling config forwarded to submitBuild payload', () => {
+    it('forwards replicas: 3 onto the AppInput payload', async () => {
+      const deps = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue({
+          path: '/project/loopzero.yaml',
+          content: {
+            project: 'my-saas',
+            apps: {
+              api: { path: 'apps/api', framework: 'express', type: 'server', port: 3000, replicas: 3 },
+            },
+          },
+        }),
+        uploadSource: jest.fn().mockResolvedValue({ commit_sha: 'abc1234', apps: ['api'] }),
+      });
+      const cmd = new DeployCommand(deps);
+
+      await cmd.execute({ env: 'production', wait: true });
+
+      const submitCall = (deps.submitBuild as jest.Mock).mock.calls[0][0];
+      const apiApp = submitCall.apps.find((a: { name: string }) => a.name === 'api');
+      expect(apiApp).toBeDefined();
+      expect(apiApp.replicas).toBe(3);
+      expect(apiApp.autoscaling).toBeUndefined();
+    });
+
+    it('forwards autoscaling config onto the AppInput payload', async () => {
+      const deps = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue({
+          path: '/project/loopzero.yaml',
+          content: {
+            project: 'my-saas',
+            apps: {
+              api: {
+                path: 'apps/api', framework: 'express', type: 'server', port: 3000,
+                autoscaling: { min: 2, max: 5, targetCPU: 70 },
+              },
+            },
+          },
+        }),
+        uploadSource: jest.fn().mockResolvedValue({ commit_sha: 'abc1234', apps: ['api'] }),
+      });
+      const cmd = new DeployCommand(deps);
+
+      await cmd.execute({ env: 'production', wait: true });
+
+      const submitCall = (deps.submitBuild as jest.Mock).mock.calls[0][0];
+      const apiApp = submitCall.apps.find((a: { name: string }) => a.name === 'api');
+      expect(apiApp.autoscaling).toEqual({ min: 2, max: 5, target_cpu: 70 });
+      expect(apiApp.replicas).toBeUndefined();
+    });
+
+    it('omits replicas when it equals the default of 1 (additive JSON contract)', async () => {
+      // Keeps the wire payload minimal and avoids forcing older APIs to
+      // process a field they will ignore anyway.
+      const deps = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue({
+          path: '/project/loopzero.yaml',
+          content: {
+            project: 'my-saas',
+            apps: {
+              api: { path: 'apps/api', framework: 'express', type: 'server', port: 3000 },
+            },
+          },
+        }),
+        uploadSource: jest.fn().mockResolvedValue({ commit_sha: 'abc1234', apps: ['api'] }),
+      });
+      const cmd = new DeployCommand(deps);
+
+      await cmd.execute({ env: 'production', wait: true });
+
+      const submitCall = (deps.submitBuild as jest.Mock).mock.calls[0][0];
+      const apiApp = submitCall.apps.find((a: { name: string }) => a.name === 'api');
+      expect(apiApp.replicas).toBeUndefined();
+      expect(apiApp.autoscaling).toBeUndefined();
+    });
+  });
 });

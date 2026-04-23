@@ -80,6 +80,10 @@ export function registerDeployCommands(deps: CommandDeps): void {
                 ...(a.build ? { build: a.build } : {}),
                 ...(a.rendering ? { rendering: a.rendering } : {}),
                 ...(a.secrets && a.secrets.length > 0 ? { secrets: a.secrets } : {}),
+                // B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): forward scaling
+                // config so the API can enforce plan caps and render Deployment/HPA.
+                ...(a.replicas != null ? { replicas: a.replicas } : {}),
+                ...(a.autoscaling ? { autoscaling: a.autoscaling } : {}),
               })),
             },
             headers,

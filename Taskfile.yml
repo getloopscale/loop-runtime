@@ -710,6 +710,12 @@ tasks:
         kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
           env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE gitea OWNER {{.PG_USER}}"
         echo "gitea database: ensured"
+      # Redis (session/cache/queue backend for Gitea HA) — StatefulSet + PDB + NetworkPolicy.
+      # Gitea values.yaml hardcodes `gitea-redis:6379` as session/cache/queue addr; without this
+      # Service the gitea pod CrashLoopBackOffs on `cache.Init failed: lookup gitea-redis ... no such host`.
+      # Applied BEFORE `helm install gitea` so the Service is reachable when the pod boots.
+      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/gitea/templates/redis.yaml
+      - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout status statefulset/gitea-redis --timeout=3m
       - >-
         helm upgrade --install gitea gitea-charts/gitea
         --kube-context {{.MGMT_CONTEXT}}
@@ -860,17 +866,22 @@ tasks:
       - >-
         kubectl --context {{.MGMT_CONTEXT}}
         apply -f infra/helm/loki/nodeport-service.yaml
+      # Promtail DaemonSet — scrape config filters for Argo Workflow pods ONLY (`workflows_argoproj_io_workflow` label).
+      # At setup time, no workflows exist yet, so promtail's `/ready` endpoint returns 500 ("Unable to find any logs to tail").
+      # `--wait` would timeout every bootstrap; readiness converges automatically once the first build runs.
       - >-
         helm upgrade --install promtail grafana/promtail
         --kube-context {{.BUILD_CONTEXT}}
         --namespace monitoring --create-namespace
         --version 6.16.6
         -f infra/helm/promtail/values.yaml
-        --wait --timeout 3m
+        --timeout 3m
 
   dashboards:install:
     desc: Install LoopZero Grafana dashboards and ServiceMonitors
     cmds:
+      # Server-side apply — dashboard bundle exceeds 256KB `last-applied-configuration` annotation limit.
+      # `--force-conflicts` ensures ownership transfer across reruns (field manager: loopzero-task).
       - >-
         kubectl --context {{.MGMT_CONTEXT}} -n monitoring
         create configmap loopzero-grafana-dashboards
@@ -878,7 +889,8 @@ tasks:
         --dry-run=client -o yaml |
         kubectl --context {{.MGMT_CONTEXT}} label -f - --local --dry-run=client -o yaml
         grafana_dashboard=1 |
-        kubectl --context {{.MGMT_CONTEXT}} apply -f -
+        kubectl --context {{.MGMT_CONTEXT}} apply --server-side --force-conflicts
+        --field-manager=loopzero-task -f -
       # ServiceMonitors for mgmt cluster components (loopzero-api, gitea, minio, tenant-controller)
       - >-
         kubectl --context {{.MGMT_CONTEXT}} apply
@@ -900,15 +912,23 @@ tasks:
         -f infra/helm/monitoring/manifests/prometheusrule-warning.yaml
 
   infra:install:monitoring-crds:
-    desc: Install Prometheus CRDs + monitoring namespace (required before charts that create ServiceMonitors)
+    desc: Install Prometheus CRDs + monitoring namespace on ALL clusters (required before charts that create ServiceMonitors/PodMonitors/PrometheusRules)
     deps: [helm:repos]
     cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} create namespace monitoring --dry-run=client -o yaml | kubectl --context {{.MGMT_CONTEXT}} apply -f -
-      - >-
-        kubectl --context {{.MGMT_CONTEXT}} apply --server-side
-        -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
-        -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
-        -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
+      # CRDs must exist in every cluster where a chart creates a ServiceMonitor / PrometheusRule / PodMonitor.
+      # mgmt → kube-prometheus-stack owners; workload → cert-manager + traefik; build → argo-workflows.
+      # Prometheus Operator CRs are cluster-scoped by kind but reference objects in specific clusters,
+      # so each cluster needs the type registered independently before its charts install.
+      - |
+        for CTX in {{.MGMT_CONTEXT}} {{.BUILD_CONTEXT}} {{.WORKLOAD_CONTEXT}}; do
+          echo "=== Installing Prometheus CRDs + monitoring namespace on $CTX ==="
+          kubectl --context "$CTX" create namespace monitoring --dry-run=client -o yaml \
+            | kubectl --context "$CTX" apply -f -
+          kubectl --context "$CTX" apply --server-side \
+            -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml \
+            -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml \
+            -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
+        done
 
   infra:install:
     desc: Install all platform components via Helm

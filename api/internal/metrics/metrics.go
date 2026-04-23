@@ -447,4 +447,13 @@ var (
 		Name: "loopzero_pg_circuit_breaker_tripped_total",
 		Help: "Mutation requests rejected due to PG pool saturation.",
 	}, []string{"method"})
+
+	// PlanLimitViolations tracks per-metric per-plan enforcement rejections.
+	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059 action #9).
+	// Emitted when BuildOrchestrator.SubmitBuild rejects a request via
+	// ErrReplicasExceedPlan or ErrScalingAmbiguous.
+	PlanLimitViolations = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_plan_limit_violation_total",
+		Help: "Plan-limit enforcement rejections by metric and plan.",
+	}, []string{"metric", "plan"})
 )

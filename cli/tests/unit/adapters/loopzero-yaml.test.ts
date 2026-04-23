@@ -213,7 +213,9 @@ describe('parseLoopZeroYaml', () => {
     expect(result.apps.api.replicas).toBe(3);
   });
 
-  it('should ignore replicas less than 1', () => {
+  // B15 (MEET-2026-04-23-059): parser must PRESERVE invalid values so the
+  // validator can reject them explicitly. Silent-drop made errors invisible.
+  it('should preserve invalid replicas (< 1) for the validator to reject', () => {
     const yaml = [
       'project: my-app',
       'apps:',
@@ -223,7 +225,24 @@ describe('parseLoopZeroYaml', () => {
       '    replicas: 0',
     ].join('\n');
     const result = parseLoopZeroYaml(yaml);
-    expect(result.apps.api.replicas).toBeUndefined();
+    expect(result.apps.api.replicas).toBe(0);
+  });
+
+  it('should preserve autoscaling.max < min for the validator to reject (B15)', () => {
+    const yaml = [
+      'project: my-app',
+      'apps:',
+      '  api:',
+      '    path: .',
+      '    port: 3000',
+      '    autoscaling:',
+      '      min: 5',
+      '      max: 2',
+    ].join('\n');
+    const result = parseLoopZeroYaml(yaml);
+    expect(result.apps.api.autoscaling).toBeDefined();
+    expect(result.apps.api.autoscaling!.min).toBe(5);
+    expect(result.apps.api.autoscaling!.max).toBe(2);
   });
 
   it('should parse autoscaling configuration', () => {
@@ -263,7 +282,9 @@ describe('parseLoopZeroYaml', () => {
     expect(result.apps.api.autoscaling!.targetCPU).toBeUndefined();
   });
 
-  it('should reject targetCPU outside 1-100 range', () => {
+  // B15 (MEET-2026-04-23-059): parser must PRESERVE invalid targetCPU for the
+  // validator to reject. The validator owns all range decisions.
+  it('should preserve invalid targetCPU for the validator to reject', () => {
     const yaml = [
       'project: my-app',
       'apps:',
@@ -275,7 +296,7 @@ describe('parseLoopZeroYaml', () => {
     ].join('\n');
     const result = parseLoopZeroYaml(yaml);
     expect(result.apps.api.autoscaling).toBeDefined();
-    expect(result.apps.api.autoscaling!.targetCPU).toBeUndefined();
+    expect(result.apps.api.autoscaling!.targetCPU).toBe(150);
   });
 
   it('should not include autoscaling when not specified', () => {

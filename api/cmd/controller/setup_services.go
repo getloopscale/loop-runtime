@@ -137,6 +137,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 			Interval:           cfg.ReconcileInterval,
 			RegistryURL:        cfg.RegistryURL,
 			BaseDomain:         cfg.BaseDomain,
+			ClusterIssuer:      cfg.ClusterIssuer, // B14 (MEET-2026-04-23-058)
 			MaxConcurrent:      cfg.MaxConcurrentBuildsPerCell,
 			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 			CellID:             cellID(cfg),

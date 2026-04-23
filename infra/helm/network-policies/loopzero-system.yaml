@@ -82,6 +82,32 @@ spec:
       ports:
         - port: 8080
           protocol: TCP
+    # Hydra (in-namespace) — JWKS fetch (4444) + token introspection/admin (4445).
+    # CHG-2026-04-22-001 B5: added after MEET-039 B3 moved engine to RSA-only with
+    # live JWKS fetch. Without this rule, api → hydra is blocked by default-deny,
+    # JWKS retrieval fails, and ALL authenticated requests return 401.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: hydra
+      ports:
+        - port: 4444
+          protocol: TCP
+        - port: 4445
+          protocol: TCP
+    # Loki (monitoring namespace) — loopzero logs queries build pipeline stdout/stderr.
+    # Without this rule, `loopzero logs --build <id>` returns "No logs available" with
+    # API log: "loki query failed: connection refused". Found during E2E 2026-04-23.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loki
+      ports:
+        - port: 3100
+          protocol: TCP
     # External HTTPS — GitHub API for token validation, any external webhook
     - ports:
         - port: 443
@@ -291,6 +317,61 @@ spec:
         - port: 53
           protocol: UDP
         - port: 53
+          protocol: TCP
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Hydra: ingress from loopzero-api (JWKS fetch + token introspection) + egress for DB + DNS
+# CHG-2026-04-22-001 B5: added after MEET-039 B3. The `allow-api` egress rule alone
+# is not sufficient — `default-deny-ingress` on loopzero-system blocks inbound to hydra
+# unless an explicit ingress policy for hydra exists. Without this, JWKS fetch
+# from loopzero-api fails with Connection refused and all authenticated requests 401.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-hydra
+  namespace: loopzero-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: hydra
+  ingress:
+    # loopzero-api and tenant-controller need JWKS + token introspection
+    - from:
+        - podSelector:
+            matchLabels:
+              app: loopzero-api
+        - podSelector:
+            matchLabels:
+              app: tenant-controller
+      ports:
+        - port: 4444
+          protocol: TCP
+        - port: 4445
+          protocol: TCP
+    # hydra-maester (Hydra's OAuth2 client operator) talks to admin API
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: hydra-maester
+      ports:
+        - port: 4445
+          protocol: TCP
+  egress:
+    # DNS
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # PostgreSQL (Hydra persists consent/session state)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
           protocol: TCP
   policyTypes:
     - Ingress

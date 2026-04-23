@@ -659,33 +659,8 @@ func TestMiddleware_NilLimiter_Passes(t *testing.T) {
 	}
 }
 
-func TestMiddleware_EmptyTenantPasses(t *testing.T) {
-	innerCalled := false
-	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		innerCalled = true
-		w.WriteHeader(http.StatusOK)
-	})
-
-	limiter := &PlanLimiter{db: nil}
-	mw := Middleware(
-		limiter,
-		OperationCheck{
-			Metric:  "projects",
-			CountFn: func(tenantID string) int { return 999 },
-		},
-		func(r *http.Request) string { return "" },
-		"",
-	)
-
-	handler := mw(inner)
-	req := httptest.NewRequest("POST", "/api/v1/projects", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if !innerCalled {
-		t.Error("empty tenant should pass through")
-	}
-}
+// TestMiddleware_EmptyTenantPasses lives in middleware_test.go — removed here
+// to fix a pre-existing duplicate-symbol compile error that blocked B15 tests.
 
 func TestMiddleware_BlocksOverLimit_402(t *testing.T) {
 	db, mock, err := sqlmock.New()
@@ -836,6 +811,145 @@ func TestCountBuildsThisMonth_NilDB(t *testing.T) {
 	count := fn("tn-test")
 	if count != 0 {
 		t.Errorf("nil DB count = %d, want 0", count)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CheckValue — B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059)
+// ---------------------------------------------------------------------------
+// Unlike CheckLimit (which answers "is this operation within limits given
+// current usage?"), CheckValue answers "is this REQUESTED value within the
+// plan cap?". Used for per-resource intent checks like replica counts.
+
+func TestCheckValue_NilLimiter_Allowed(t *testing.T) {
+	var limiter *PlanLimiter
+	result := limiter.CheckValue("tn-test", "max_replicas_per_service", 999)
+	if !result.Allowed {
+		t.Error("nil limiter should allow everything")
+	}
+}
+
+func TestCheckValue_EnterprisePlan_AlwaysAllowed(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT plan FROM subscriptions").
+		WithArgs("tn-ent").
+		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("enterprise"))
+
+	limiter := NewPlanLimiter(db, testLogger())
+	result := limiter.CheckValue("tn-ent", "max_replicas_per_service", 1000)
+
+	if !result.Allowed {
+		t.Error("enterprise plan should always be allowed")
+	}
+}
+
+func TestCheckValue_StarterCap2_Requested2_Allowed(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT plan FROM subscriptions").
+		WithArgs("tn-starter").
+		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("starter"))
+
+	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
+		WithArgs("starter", "max_replicas_per_service").
+		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(2, nil))
+
+	limiter := NewPlanLimiter(db, testLogger())
+	result := limiter.CheckValue("tn-starter", "max_replicas_per_service", 2)
+
+	if !result.Allowed {
+		t.Errorf("requested==cap should be allowed, got %+v", result)
+	}
+	if result.Limit != 2 {
+		t.Errorf("Limit = %d, want 2", result.Limit)
+	}
+	if result.Current != 2 {
+		t.Errorf("Current (= requested value) = %d, want 2", result.Current)
+	}
+}
+
+func TestCheckValue_StarterCap2_Requested3_Blocked(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT plan FROM subscriptions").
+		WithArgs("tn-starter").
+		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("starter"))
+
+	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
+		WithArgs("starter", "max_replicas_per_service").
+		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(2, nil))
+
+	limiter := NewPlanLimiter(db, testLogger())
+	result := limiter.CheckValue("tn-starter", "max_replicas_per_service", 3)
+
+	if result.Allowed {
+		t.Error("requested > cap should be blocked")
+	}
+	if result.Limit != 2 || result.Current != 3 {
+		t.Errorf("expected Limit=2 Current=3, got %+v", result)
+	}
+	if result.Plan != "starter" {
+		t.Errorf("Plan = %q, want starter", result.Plan)
+	}
+}
+
+func TestCheckValue_NullHardLimit_Unlimited(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT plan FROM subscriptions").
+		WithArgs("tn-team").
+		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("team"))
+
+	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
+		WithArgs("team", "max_replicas_per_service").
+		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(nil, nil))
+
+	limiter := NewPlanLimiter(db, testLogger())
+	result := limiter.CheckValue("tn-team", "max_replicas_per_service", 100)
+
+	if !result.Allowed {
+		t.Error("NULL hard_limit should mean unlimited")
+	}
+}
+
+func TestCheckValue_MissingPlanLimitsRow_DenyByDefault(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT plan FROM subscriptions").
+		WithArgs("tn-starter").
+		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("starter"))
+
+	// No row returned → hardLimit==0 per getLimits contract → fail closed.
+	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
+		WithArgs("starter", "max_replicas_per_service").
+		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}))
+
+	limiter := NewPlanLimiter(db, testLogger())
+	result := limiter.CheckValue("tn-starter", "max_replicas_per_service", 5)
+
+	if result.Allowed {
+		t.Error("missing plan_limits row should deny by default (fail closed)")
 	}
 }
 

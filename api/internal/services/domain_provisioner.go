@@ -55,23 +55,25 @@ type DomainBuildReader interface {
 // MEET-2026-04-05-033: Background service — verify endpoint is DNS-only, provisioning is async.
 // MEET-2026-04-06-034: Full implementation with manifest rendering and gitops push.
 type DomainProvisioner struct {
-	store        DomainProvisionerStore
-	releaseStore DomainReleaseReader
-	buildStore   DomainBuildReader
-	gitops       GitOpsPusher
-	locker       EnvironmentLocker
-	logger       *slog.Logger
-	baseDomain   string
-	registryURL  string
-	interval     time.Duration
-	cfZone       CFZoneStatusChecker // nil = v1 only, non-nil = v2 CF Zone polling
+	store          DomainProvisionerStore
+	releaseStore   DomainReleaseReader
+	buildStore     DomainBuildReader
+	gitops         GitOpsPusher
+	locker         EnvironmentLocker
+	logger         *slog.Logger
+	baseDomain     string
+	registryURL    string
+	clusterIssuer  string // B14 (MEET-2026-04-23-058): required for manifest rendering
+	interval       time.Duration
+	cfZone         CFZoneStatusChecker // nil = v1 only, non-nil = v2 CF Zone polling
 }
 
 // DomainProvisionerConfig holds configuration for the domain provisioner.
 type DomainProvisionerConfig struct {
-	Interval    time.Duration
-	BaseDomain  string
-	RegistryURL string
+	Interval      time.Duration
+	BaseDomain    string
+	RegistryURL   string
+	ClusterIssuer string // B14: ClusterIssuer for Certificate CRs
 }
 
 // DefaultDomainProvisionerConfig returns sensible defaults.
@@ -96,15 +98,16 @@ func NewDomainProvisioner(
 		interval = 30 * time.Second
 	}
 	return &DomainProvisioner{
-		store:        store,
-		releaseStore: releaseStore,
-		buildStore:   buildStore,
-		gitops:       gitops,
-		locker:       locker,
-		logger:       logger,
-		baseDomain:   cfg.BaseDomain,
-		registryURL:  cfg.RegistryURL,
-		interval:     interval,
+		store:         store,
+		releaseStore:  releaseStore,
+		buildStore:    buildStore,
+		gitops:        gitops,
+		locker:        locker,
+		logger:        logger,
+		baseDomain:    cfg.BaseDomain,
+		registryURL:   cfg.RegistryURL,
+		clusterIssuer: cfg.ClusterIssuer, // B14
+		interval:      interval,
 	}
 }
 
@@ -313,13 +316,14 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 		}
 
 		rendered = manifests.Render(manifests.RenderInput{
-			TenantID:    d.TenantID,
-			ProjectID:   d.ProjectName,
-			Environment: d.Environment,
-			BuildID:     release.BuildID,
-			ReleaseID:   release.ID,
-			BaseDomain:  p.baseDomain,
-			Apps:        manifestApps,
+			TenantID:          d.TenantID,
+			ProjectID:         d.ProjectName,
+			Environment:       d.Environment,
+			BuildID:           release.BuildID,
+			ReleaseID:         release.ID,
+			BaseDomain:        p.baseDomain,
+			ClusterIssuerName: p.clusterIssuer, // B14
+			Apps:              manifestApps,
 		})
 
 		pushOpts = GitOpsPushOpts{
@@ -431,13 +435,14 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDom
 		}
 
 		rendered := manifests.Render(manifests.RenderInput{
-			TenantID:    d.TenantID,
-			ProjectID:   d.ProjectName,
-			Environment: d.Environment,
-			BuildID:     release.BuildID,
-			ReleaseID:   release.ID,
-			BaseDomain:  p.baseDomain,
-			Apps:        manifestApps,
+			TenantID:          d.TenantID,
+			ProjectID:         d.ProjectName,
+			Environment:       d.Environment,
+			BuildID:           release.BuildID,
+			ReleaseID:         release.ID,
+			BaseDomain:        p.baseDomain,
+			ClusterIssuerName: p.clusterIssuer, // B14
+			Apps:              manifestApps,
 		})
 
 		pushOpts = GitOpsPushOpts{

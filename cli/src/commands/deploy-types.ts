@@ -8,6 +8,15 @@ export interface UploadResult {
   apps: string[];
 }
 
+// B15 (MEET-2026-04-23-059): scaling config sent to API.
+// Either `replicas` OR `autoscaling` — never both (enforced by CLI validator
+// and API orchestrator). Matches services.AppAutoscalingSpec field names.
+export interface AppAutoscaling {
+  min: number;
+  max: number;
+  target_cpu: number;
+}
+
 export interface AppInput {
   name: string;
   type: string;                        // "server" | "worker" | "frontend" (always resolved)
@@ -19,6 +28,8 @@ export interface AppInput {
   rendering: string;                   // v2: "static" | "server" (Sprint 10)
   env: Record<string, string>;         // v2: build-time environment variables
   secrets: string[];
+  replicas?: number;                   // B15: fixed replica count (omit when autoscaling is set)
+  autoscaling?: AppAutoscaling;        // B15: HPA config (omit when replicas is set)
 }
 
 export interface SubmitBuildInput {

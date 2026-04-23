@@ -163,6 +163,17 @@ type ProjectEnsurer interface {
 	EnsureProject(ctx context.Context, tx db.DBTX, tenantID, name, createdBy string) error
 }
 
+// PlanCapChecker is the minimal contract the orchestrator needs to enforce
+// per-service replica caps (B15, CHG-2026-04-23-B15 / MEET-2026-04-23-059).
+// A nil checker means enforcement is disabled (dev / legacy callsites).
+//
+// CheckReplicasValue returns (allowed, planName, cap) for the given tenant
+// and requested replica count. Callers map (allowed=false, plan, cap) into
+// ErrReplicasExceedPlan with full context for the user.
+type PlanCapChecker interface {
+	CheckReplicasValue(tenantID string, requested int) (allowed bool, plan string, limit int)
+}
+
 type BuildOrchestratorDeps struct {
 	BuildStore     db.BuildStore
 	ReleaseStore   db.ReleaseStore
@@ -180,6 +191,8 @@ type BuildOrchestratorDeps struct {
 	ArgocdSyncTimeout  time.Duration // 0 = default 120s
 	KVClient           StaticRoutingClient // CF KV client for static frontend routing (nil = disabled)
 	BaseDomain         string              // Base domain for app hostnames
+	// B15: plan-cap enforcement for per-service replica count. nil = disabled.
+	PlanCap PlanCapChecker
 }
 
 // BuildOrchestrator orchestrates the entire deploy flow:
@@ -210,6 +223,7 @@ type BuildOrchestrator struct {
 	argocdSyncTimeout time.Duration
 	kvClient          StaticRoutingClient // CF KV client for static frontend routing
 	baseDomain        string
+	planCap           PlanCapChecker // B15: nil = enforcement disabled
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
@@ -258,6 +272,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		argocdSyncTimeout: syncTimeout,
 		kvClient:          deps.KVClient,
 		baseDomain:        deps.BaseDomain,
+		planCap:           deps.PlanCap, // B15: optional plan-cap enforcement
 	}
 }
 
