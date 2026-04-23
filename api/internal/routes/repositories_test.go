@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -184,6 +185,34 @@ func TestRepositories_Disconnect_HappyPath(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// CHG-2026-04-23-AUDIT-21: DELETE /projects/{name}/connect must return 404
+// when the project has no linked repository. Previously it returned 200 OK
+// (silent success) because UnlinkRepository ignored RowsAffected=0. Same
+// bug class as AUDIT-6 (team member remove) and AUDIT-12 (environment
+// delete).
+func TestRepositories_Disconnect_NotLinked_Returns404(t *testing.T) {
+	store := &fakeRepoStore{
+		unlinkErr: errors.New("repository store: no repository linked to project"),
+	}
+	h := NewRepositoryHandler(store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/my-api/connect", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Disconnect(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("want 404 (not linked), got %d body=%s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if body["code"] != "REPOSITORY_NOT_LINKED" {
+		t.Errorf("want code=REPOSITORY_NOT_LINKED, got %v", body["code"])
 	}
 }
 

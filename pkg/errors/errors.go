@@ -424,6 +424,20 @@ func NewDomainNotFound(domain string) *LoopZeroError {
 	}
 }
 
+// NewRepositoryNotLinked is returned by DELETE /projects/{name}/connect when
+// the project has no linked repository to disconnect.
+// CHG-2026-04-23-AUDIT-21: fixes silent-success anti-pattern — without this,
+// the endpoint returned 200 OK even when there was nothing to disconnect,
+// identical to the bug fixed in AUDIT-6 (team member remove) and AUDIT-12
+// (environment delete).
+func NewRepositoryNotLinked(project string) *LoopZeroError {
+	return &LoopZeroError{
+		Code:       "REPOSITORY_NOT_LINKED",
+		Message:    fmt.Sprintf("no repository linked to project '%s'", project),
+		HTTPStatus: 404,
+	}
+}
+
 // ErrForbidden is returned when an operation is not permitted.
 var ErrForbidden = &LoopZeroError{
 	Code:       "FORBIDDEN",
