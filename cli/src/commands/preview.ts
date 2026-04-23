@@ -3,6 +3,7 @@
 
 import { ApiError } from '../api/client';
 import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
+import { classifyNetworkError } from '../output/error-message';
 
 export interface PreviewListItem {
   id: string;
@@ -167,6 +168,11 @@ export class PreviewListCommand {
       }
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
     }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
+    }
     if (err instanceof Error) {
       return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');
     }
@@ -264,6 +270,11 @@ export class PreviewInspectCommand {
       }
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
     }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
+    }
     if (err instanceof Error) {
       return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');
     }
@@ -359,6 +370,11 @@ export class PreviewDeleteCommand {
         return this.exitWithError(opts, `Preview ${id} is already being deleted.`, 3, 'ALREADY_DELETING');
       }
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');

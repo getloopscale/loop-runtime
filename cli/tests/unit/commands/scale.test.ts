@@ -232,6 +232,24 @@ describe('ScaleCommand', () => {
     });
   });
 
+  // CHG-2026-04-23-AUDIT-25: network errors now carry code=API_UNREACHABLE
+  // so CI scripts can match a single predicate across all commands.
+  describe('API unreachable (AUDIT-25)', () => {
+    it('network error produces API_UNREACHABLE code + Check LOOPZERO_URL hint', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockRejectedValue(new Error('fetch failed')),
+      });
+      const cmd = new ScaleCommand(deps);
+
+      const exitCode = await cmd.execute({ app: 'api', replicas: 3, json: true });
+
+      expect(exitCode).toBe(3);
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.code).toBe('API_UNREACHABLE');
+      expect(parsed.error).toContain('Check LOOPZERO_URL');
+    });
+  });
+
   describe('no internal terms', () => {
     it('should not contain forbidden terms in any output', async () => {
       const forbidden = [
