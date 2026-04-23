@@ -108,6 +108,24 @@ describe('EnvInspectCommand', () => {
       expect(allOutput).toContain('Projects: none');
     });
 
+    // CHG-2026-04-23-AUDIT-1: the API can return {name, status} without a
+    // `projects` field entirely when no releases exist — not just empty array.
+    // Previously the CLI crashed with "Cannot read properties of undefined
+    // (reading 'length')" and exposed a JS runtime error to the user.
+    it('shows "none" when API response omits projects field entirely', async () => {
+      const cmd = new EnvInspectCommand(makeDeps({
+        getEnvironment: async (name: string) => ({
+          name,
+          status: 'active',
+        } as unknown as { name: string; status: string; projects: never[] }),
+      }));
+      const exit = await cmd.execute('staging');
+      expect(exit).toBe(0);
+      const allOutput = output.join('\n');
+      expect(allOutput).toContain('Projects: none');
+      expect(errors.join('\n')).not.toContain('Cannot read properties');
+    });
+
     it('shows error message on auth failure', async () => {
       const cmd = new EnvInspectCommand(makeDeps({ getToken: () => null }));
       await cmd.execute('staging');

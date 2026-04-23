@@ -72,9 +72,13 @@ export class EnvInspectCommand {
     this.deps.writeTo('');
     this.deps.writeTo(`  Status:   ${env.status}`);
 
-    if (env.projects.length > 0) {
+    // CHG-2026-04-23-AUDIT-1: the API omits `projects` entirely when no
+    // releases exist. Before this null-safety check, `env.projects.length`
+    // crashed with a JS error visible to the user.
+    const projects = env.projects ?? [];
+    if (projects.length > 0) {
       this.deps.writeTo('  Projects:');
-      for (const proj of env.projects) {
+      for (const proj of projects) {
         this.deps.writeTo(`    ${pad(proj.name, 14)}${pad(proj.release_id, 15)}${proj.url}`);
       }
     } else {
