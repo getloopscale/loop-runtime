@@ -38,7 +38,7 @@ import { installLoopZeroAPI, installLoopZeroController } from "./mgmt-api";
 import { installTenantController } from "./mgmt-tenant-controller";
 import { createPlatformIngressRoutes, createAPIGatewayRoute, createCloudGatewayRoute } from "./mgmt-ingress";
 import { createPlatformNetworkPolicies, registerRuntimeCluster } from "./mgmt-network";
-import { installPrometheus, installGrafana, installTempo, installOtelCollector, provisionGrafanaDashboards } from "./mgmt-observability";
+import { installPrometheus, installGrafana, installTempo, installOtelCollector, provisionGrafanaDashboards, installBlackboxExporter } from "./mgmt-observability";
 import { installHarbor } from "./harbor-bootstrap";
 
 // ---------------------------------------------------------------------------
@@ -166,6 +166,8 @@ export function bootstrapMgmtCluster(
   const tempo = installTempo(provider, ns, config, infra.spacesEndpoint);
   const otelCollector = installOtelCollector(provider, ns, tempo);
   void otelCollector;
+  const blackbox = installBlackboxExporter(provider, ns);
+  void blackbox;
 
   // Application services
   bootstrapGitea(provider, ns, gitea, config);

@@ -11,6 +11,7 @@ process.on('warning', (warning) => {
 });
 
 import { Command } from 'commander';
+import { initTracing, shutdownTracing, getTracer, SpanStatusCode } from './tracing';
 
 import { ConfigStore } from './config/store';
 import { getDefaultApiUrl, getCloudUrl } from './config/constants';
@@ -194,22 +195,44 @@ export function createProgram(): Command {
 export const program = createProgram();
 
 if (require.main === module) {
+  // Initialize OTel tracing (opt-in via LOOPZERO_TRACING_ENABLED=true).
+  initTracing();
+
+  process.on('beforeExit', async () => {
+    await shutdownTracing();
+  });
+
   program.exitOverride();
 
-  program.parseAsync(process.argv).catch((err: unknown) => {
-    const isJSON = process.argv.includes('--json');
-    const message = err instanceof Error ? err.message : String(err);
-    const exitCode = (err as { exitCode?: number }).exitCode || 1;
+  // Root span wrapping the entire CLI command execution.
+  const commandName = process.argv.slice(2).find(a => !a.startsWith('-')) ?? 'unknown';
+  const tracer = getTracer();
+  tracer.startActiveSpan('loopzero.cli.command', (rootSpan) => {
+    rootSpan.setAttribute('loopzero.cli.command_name', commandName);
+    rootSpan.setAttribute('loopzero.cli.args', process.argv.slice(2).join(' '));
 
-    if (isJSON) {
-      process.stdout.write(JSON.stringify({
-        error: message,
-        exit_code: exitCode,
-        code: 'COMMAND_VALIDATION_ERROR',
-      }) + '\n');
-    } else {
-      process.stderr.write(`Error: ${message}\n`);
-    }
-    process.exitCode = exitCode;
+    program.parseAsync(process.argv)
+      .then(() => {
+        rootSpan.end();
+      })
+      .catch((err: unknown) => {
+        const isJSON = process.argv.includes('--json');
+        const message = err instanceof Error ? err.message : String(err);
+        const exitCode = (err as { exitCode?: number }).exitCode || 1;
+
+        rootSpan.setStatus({ code: SpanStatusCode.ERROR, message });
+        rootSpan.end();
+
+        if (isJSON) {
+          process.stdout.write(JSON.stringify({
+            error: message,
+            exit_code: exitCode,
+            code: 'COMMAND_VALIDATION_ERROR',
+          }) + '\n');
+        } else {
+          process.stderr.write(`Error: ${message}\n`);
+        }
+        process.exitCode = exitCode;
+      });
   });
 }

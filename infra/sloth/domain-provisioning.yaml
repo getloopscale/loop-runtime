@@ -1,0 +1,29 @@
+# SLO: Domain Provisioning Success Rate
+# Measures successful domain provisioning (CF zone creation + DNS + TLS).
+# Target: 99% — domain provisioning should be reliable.
+version: "prometheus/v1"
+service: "loopzero-domains"
+labels:
+  owner: "platform-team"
+  tier: "product"
+slos:
+  - name: "domain-provisioning-success"
+    objective: 99
+    description: "Percentage of custom domain provisions that complete successfully."
+    sli:
+      events:
+        error_query: sum(rate(loopzero_domain_provisioning_duration_seconds_count{result!="success"}[{{.window}}]))
+        total_query: sum(rate(loopzero_domain_provisioning_duration_seconds_count[{{.window}}]))
+    alerting:
+      name: LoopZeroDomainProvisioningBudgetBurn
+      labels:
+        category: domains
+      annotations:
+        summary: "Domain provisioning error budget burn rate is too high."
+        runbook: "Check Cloudflare API errors. Verify DNS propagation. Review zone creation logs."
+      page_alert:
+        labels:
+          severity: critical
+      ticket_alert:
+        labels:
+          severity: warning

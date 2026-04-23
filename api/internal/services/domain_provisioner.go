@@ -13,6 +13,10 @@ import (
 	"github.com/loopzero/loopzero/api/internal/manifests"
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/routes"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // DomainProvisionerStore abstracts the domain persistence needed by the provisioner.
@@ -266,6 +270,13 @@ func (p *DomainProvisioner) processVerified(ctx context.Context) {
 // F-002 fix: Lock (fetch + render) → Unlock → Push → Update status.
 // Pattern matches deploy flow in ContainerDeliveryActivator.
 func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.CustomDomain) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.domain.provision",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", d.TenantID),
+			attribute.String("loopzero.domain", d.Domain),
+		))
+	defer span.End()
+
 	log := p.logger.With("domain", d.Domain, "tenant", d.TenantID, "project", d.ProjectName, "app", d.AppName, "env", d.Environment)
 	start := time.Now()
 
@@ -341,6 +352,7 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 
 	if lockErr != nil {
 		log.Error("domain provisioner: lock/render failed", "error", lockErr)
+		metrics.DomainProvisioningDuration.WithLabelValues("failure").Observe(time.Since(start).Seconds())
 		if err2 := p.store.UpdateFailure(ctx, d.Domain, "failed", fmt.Sprintf("Provisioning failed: %v", lockErr)); err2 != nil {
 			log.Error("domain provisioner: failed to record failure", "error", err2)
 		}
@@ -354,6 +366,7 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 
 	if _, err := p.gitops.Push(pushCtx, pushOpts); err != nil {
 		log.Warn("domain provisioner: gitops push failed, will retry", "error", err)
+		metrics.DomainProvisioningDuration.WithLabelValues("failure").Observe(time.Since(start).Seconds())
 		return // stay in provisioning — F-006 timeout handles permanent failures
 	}
 
@@ -389,6 +402,13 @@ func (p *DomainProvisioner) processRemoving(ctx context.Context) {
 // removeDomain re-renders manifests WITHOUT the removed domain, pushes to gitops,
 // then deletes the DB row. F-002 fix: uses withEnvironmentLock for render phase.
 func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDomain) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.domain.remove",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", d.TenantID),
+			attribute.String("loopzero.domain", d.Domain),
+		))
+	defer span.End()
+
 	log := p.logger.With("domain", d.Domain, "tenant", d.TenantID, "project", d.ProjectName, "env", d.Environment)
 
 	// Pre-check: is there an active release?

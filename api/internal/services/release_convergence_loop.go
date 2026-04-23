@@ -438,6 +438,8 @@ func (r *ReleaseConvergenceLoop) healthCheckActiveReleases(ctx context.Context) 
 		if !healthy {
 			metrics.ReleaseStateDivergence.WithLabelValues(rel.TenantID, rel.ProjectID, rel.Environment).Set(1)
 			metrics.DriftDetected.WithLabelValues(rel.TenantID, rel.Environment).Set(1)
+			// Phase 4A: False success — release was ACTIVE but is now unhealthy.
+			metrics.FalseSuccessTotal.WithLabelValues(rel.TenantID, rel.Environment).Inc()
 			r.logger.Warn("health check: ACTIVE release is unhealthy in ArgoCD",
 				"release_id", rel.ID, "tenant", rel.TenantID,
 				"project", rel.ProjectID, "env", rel.Environment)

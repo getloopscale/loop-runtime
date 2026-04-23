@@ -11,6 +11,10 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ArgoCallbackPayload is the webhook payload sent by ArgoCD Notifications.
@@ -72,6 +76,14 @@ func (h *ArgoCallbackHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	_, span := otel.Tracer("loopzero-api").Start(r.Context(), "loopzero.api.argocd.callback_received",
+		trace.WithAttributes(
+			attribute.String("loopzero.argocd.app_name", payload.AppName),
+			attribute.String("loopzero.argocd.sync_status", payload.SyncStatus),
+			attribute.String("loopzero.argocd.health_status", payload.HealthStatus),
+		))
+	defer span.End()
 
 	h.logger.Info("argocd callback received",
 		"app", payload.AppName,

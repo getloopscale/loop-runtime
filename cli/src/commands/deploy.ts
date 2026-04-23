@@ -8,6 +8,7 @@ import {
 } from '../config/constants';
 import { normalizeApps } from '../adapters/app-unit';
 import { validateConfig } from '../adapters/validate-config';
+import { getTracer, SpanStatusCode } from '../tracing';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -47,6 +48,7 @@ export class DeployCommand {
   }
 
   async execute(opts: import('./deploy-types').DeployOptions): Promise<number> {
+    const tracer = getTracer();
     const environment = opts.env ?? 'production';
     const shouldWait = opts.wait !== false;
 
@@ -58,14 +60,40 @@ export class DeployCommand {
 
     const { config, yamlPath, selectedApps, appUnits } = prereqResult;
 
-    // Phase 2: Create source bundle and upload
-    const uploadResult = await this.createAndUploadBundle(opts, config, yamlPath);
+    // Phase 2: Create source bundle and upload (traced)
+    const uploadResult = await tracer.startActiveSpan('loopzero.cli.deploy.bundle', async (span) => {
+      try {
+        const result = await this.createAndUploadBundle(opts, config, yamlPath);
+        if (typeof result === 'number') {
+          span.setStatus({ code: SpanStatusCode.ERROR, message: `exit ${result}` });
+        }
+        return result;
+      } catch (err) {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
     if (typeof uploadResult === 'number') {
       return uploadResult;
     }
 
-    // Phase 3: Submit build and optionally stream SSE events
-    return this.submitAndStreamBuild(opts, config, environment, selectedApps, appUnits, uploadResult, shouldWait);
+    // Phase 3: Submit build and optionally stream SSE events (traced)
+    return tracer.startActiveSpan('loopzero.cli.deploy.stream', async (span) => {
+      try {
+        const code = await this.submitAndStreamBuild(opts, config, environment, selectedApps, appUnits, uploadResult, shouldWait);
+        if (code !== 0) {
+          span.setStatus({ code: SpanStatusCode.ERROR, message: `exit ${code}` });
+        }
+        return code;
+      } catch (err) {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
   }
 
   /**

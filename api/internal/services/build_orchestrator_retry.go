@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -23,6 +24,9 @@ func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *d
 	if build.Status != string(statemachine.BuildReleasing) {
 		return fmt.Errorf("retry release activation: build %s is in %s state, expected RELEASING", build.ID, build.Status)
 	}
+
+	// Phase 4A: Track retry amplification for release activation retries.
+	metrics.RetryAmplificationTotal.WithLabelValues("release_activation").Inc()
 
 	activationErr := o.delivery.Activate(ctx, build, result)
 	if activationErr != nil {

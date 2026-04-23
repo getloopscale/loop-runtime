@@ -1632,6 +1632,55 @@ tasks:
     cmds:
       - bash infra/scripts/break-glass.sh {{.CONTEXT}} {{.TTL}} "{{.REASON}}"
 
+  # ===========================================================================
+  # Observability — Blackbox, pprof, Sloth
+  # ===========================================================================
+
+  pprof:api:
+    desc: Port-forward to API pprof endpoint (http://localhost:6060/debug/pprof/)
+    cmds:
+      - kubectl --context {{.MGMT_CONTEXT}} -n platform-system port-forward deploy/loopzero-api 6060:6060
+
+  pprof:operators:
+    desc: Port-forward to Operator pprof endpoint (http://localhost:6061/debug/pprof/)
+    cmds:
+      - kubectl --context {{.MGMT_CONTEXT}} -n platform-system port-forward deploy/loopzero-controller 6061:6061
+
+  blackbox:status:
+    desc: Check blackbox exporter health and probe results
+    cmds:
+      - |
+        echo "=== Blackbox Pod ==="
+        kubectl --context {{.MGMT_CONTEXT}} -n platform-system get pods -l app.kubernetes.io/name=prometheus-blackbox-exporter 2>/dev/null || echo "Blackbox pod not found"
+        echo ""
+        echo "=== Probe CRDs ==="
+        kubectl --context {{.MGMT_CONTEXT}} -n monitoring get probes 2>/dev/null || echo "No Probe resources found"
+        echo ""
+        echo "=== PrometheusRules ==="
+        kubectl --context {{.MGMT_CONTEXT}} -n monitoring get prometheusrules loopzero-probe-alerts 2>/dev/null || echo "PrometheusRule not found"
+
+  sloth:generate:
+    desc: Generate PrometheusRules from Sloth SLO specs
+    preconditions:
+      - sh: command -v sloth
+        msg: "sloth CLI not found. Install: go install github.com/slok/sloth/cmd/sloth@latest"
+    cmds:
+      - sloth generate -i infra/sloth/*.yaml -o infra/helm/monitoring/manifests/prometheusrule-slo-generated.yaml
+      - echo "✅ SLO rules generated at infra/helm/monitoring/manifests/prometheusrule-slo-generated.yaml"
+
+  sloth:validate:
+    desc: Validate Sloth SLO spec files
+    preconditions:
+      - sh: command -v sloth
+        msg: "sloth CLI not found. Install: go install github.com/slok/sloth/cmd/sloth@latest"
+    cmds:
+      - |
+        for f in infra/sloth/*.yaml; do
+          echo "Validating $f..."
+          sloth validate -i "$f"
+        done
+        echo "✅ All SLO specs valid"
+
   tempo:status:
     desc: Check Tempo health, ServiceMonitor, and PrometheusRules (MEET-020)
     cmds:

@@ -9,6 +9,11 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // RollbackReleaseStore abstracts release persistence for the rollback orchestrator (DIP).
@@ -91,6 +96,14 @@ func NewRollbackOrchestrator(deps RollbackOrchestratorDeps) *RollbackOrchestrato
 // 6. Reactivate target release: SUPERSEDED/ROLLED_BACK → ACTIVE
 // 7. Update environment target pointers
 func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest) (*RollbackResult, error) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.rollback.execute",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", req.TenantID),
+			attribute.String("loopzero.project", req.ProjectID),
+			attribute.String("loopzero.environment", req.Environment),
+		))
+	defer span.End()
+
 	logger := o.deps.Logger.With(
 		"tenant_id", req.TenantID,
 		"project_id", req.ProjectID,
@@ -141,6 +154,8 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		return nil
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 

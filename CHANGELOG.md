@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Pre-existing duplicate `TestMiddleware_EmptyTenantPasses` symbol in `pkg/enforcement`** (CHG-2026-04-23-B15 unblocker): build failure inherited from `develop` that blocked enforcement tests. Duplicate in `limiter_test.go` removed; identical test remains in `middleware_test.go`.
 
 ### Added
+- **Observability gaps resolution** — comprehensive observability improvements across all components
+  - **Blackbox probes**: blackbox_exporter with HTTP, DNS, TCP modules. Probes API, Gitea, Traefik, ArgoCD. Alerts for probe failure, TLS cert expiry, slow probes
+  - **Deploy E2E trace**: 12 new OTel spans covering auth, idempotency, ArgoCD sync/callback, release activation, rollback, domain provisioning, build reconcile, webhook, auto-deploy
+  - **Sloth SLOs**: 7 formal SLO specs (deploy success 99.5%, deploy latency 95%<5min, rollback 99.9%, tenant availability 99.9%, API availability 99.9%, build pipeline 99%, domain provisioning 99%) with multi-window multi-burn-rate alerts
+  - **Business metrics**: `loopzero_deploy_lead_time_seconds`, `loopzero_false_success_total`, `loopzero_retry_amplification_total`
+  - **CLI tracing**: OpenTelemetry SDK in CLI with W3C TraceContext propagation to API. CLI spans become parent of API spans for E2E traces
+  - **pprof endpoints**: on-demand profiling via `kubectl port-forward` on API (:6060) and operators (:6061)
+  - **Telemetry pipeline observability**: ServiceMonitor for OTel Collector, alerts for span drop rate and export failures
+  - **Dashboards**: Executive Summary (SLO error budgets, burn rates, deploy trends, lead time) and Blackbox Probes (probe status, latency, TLS, DNS)
 - **`loopzero promote` command** — promote a release from one environment to another without re-building. API endpoint `POST /api/v1/projects/{name}/promote`, PromotionOrchestrator service, CLI command with `--from`/`--to` flags and `--json` output. Uses existing promotion state machine. Locks target environment via `withEnvironmentLock`. 28 new tests (6 service + 8 route handler + 15 CLI).
 
 ### Fixed

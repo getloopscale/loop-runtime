@@ -15,6 +15,11 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/pkg/statemachine"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // OnReleaseActivated is an optional callback invoked AFTER a release transitions to ACTIVE.
@@ -98,11 +103,21 @@ func ActivateReleaseKernel(
 	durationSecs int,
 	logger *slog.Logger,
 ) error {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.release.activate",
+		trace.WithAttributes(
+			attribute.String("loopzero.tenant", release.TenantID),
+			attribute.String("loopzero.environment", release.Environment),
+			attribute.String("loopzero.release_id", release.ID),
+		))
+	defer span.End()
+
 	// MEET-2026-03-31-023 T0-1: Idempotency guard — re-fetch release inside the lock
 	// to prevent duplicate activation when SyncCallbackActivator and
 	// ReleaseConvergenceLoop race on the same release.
 	current, err := releaseStore.GetByIDTx(ctx, tx, release.ID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("activate release: re-fetch inside lock: %w", err)
 	}
 	if current.Status != string(statemachine.ReleasePending) {
@@ -129,6 +144,9 @@ func ActivateReleaseKernel(
 	// End-to-end deploy duration: build creation → release ACTIVE.
 	// durationSecs is computed by callers as time.Since(build.CreatedAt).
 	metrics.DeployDuration.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
+
+	// Phase 4A: Deploy lead time — same value, separate histogram for executive SLO tracking.
+	metrics.DeployLeadTime.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
 
 	// Step 3: Emit deploy.live SSE event.
 	liveData := safeJSONMarshal(map[string]interface{}{

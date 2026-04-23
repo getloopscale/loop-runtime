@@ -39,6 +39,7 @@ export const HELM_VERSIONS = {
   oryHydra: "0.61.0",
   metricsServer: "3.12.1",
   kubeStateMetrics: "5.25.1",
+  blackboxExporter: "9.2.0",
 } as const;
 
 // ---------------------------------------------------------------------------

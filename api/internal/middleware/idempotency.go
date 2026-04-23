@@ -14,6 +14,10 @@ import (
 	"net/http"
 
 	"github.com/loopzero/loopzero/api/internal/metrics"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // IdempotencyRecord holds a cached idempotent response.
@@ -86,19 +90,30 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 			}
 
 			// Check for existing key (scoped by tenant to prevent cross-tenant replay)
-			existing, err := store.Get(r.Context(), key, tenantID)
+			ctx, span := otel.Tracer("loopzero-api").Start(r.Context(), "loopzero.api.idempotency.check",
+				trace.WithAttributes(
+					attribute.String("loopzero.idempotency.key", key),
+				))
+
+			existing, err := store.Get(ctx, key, tenantID)
 			if err != nil {
+				span.SetAttributes(attribute.Bool("loopzero.idempotency.hit", false))
+				span.End()
 				writeIdempotencyError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to check idempotency key")
 				return
 			}
 
 			if existing != nil {
 				if existing.RequestHash != hash {
+					span.SetAttributes(attribute.Bool("loopzero.idempotency.hit", false))
+					span.End()
 					writeIdempotencyError(w, http.StatusUnprocessableEntity, "IDEMPOTENCY_MISMATCH",
 						"Idempotency key already used with a different request payload")
 					return
 				}
 				// Same key, same payload → return cached response
+				span.SetAttributes(attribute.Bool("loopzero.idempotency.hit", true))
+				span.End()
 				metrics.IdempotencyHits.WithLabelValues(r.URL.Path).Inc()
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(existing.ResponseStatus)
@@ -106,7 +121,9 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 				return
 			}
 
-				metrics.IdempotencyMisses.WithLabelValues(r.URL.Path).Inc()
+			span.SetAttributes(attribute.Bool("loopzero.idempotency.hit", false))
+			span.End()
+			metrics.IdempotencyMisses.WithLabelValues(r.URL.Path).Inc()
 			// New key → process request and capture response
 			capture := &responseCapture{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(capture, r)

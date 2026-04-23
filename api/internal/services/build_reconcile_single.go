@@ -11,6 +11,10 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/pkg/statemachine"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // reconcileBuild reconciles a single build against its Argo Workflow state.
@@ -20,6 +24,12 @@ import (
 // interrupted (pod crash, rollout, Gitea/ArgoCD failure). The reconcile loop
 // retries Phase 2 automatically.
 func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.reconcile",
+		trace.WithAttributes(
+			attribute.String("loopzero.build_id", build.ID),
+		))
+	defer span.End()
+
 	// RELEASING builds: Phase 1 done, Phase 2 needs retry (MEET-2026-03-26-008)
 	if build.Status == string(statemachine.BuildReleasing) {
 		r.retryReleaseActivation(ctx, build)
