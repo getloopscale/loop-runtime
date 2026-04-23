@@ -15,14 +15,15 @@ import (
 // --- Fake TeamStore ---
 
 type fakeTeamStore struct {
-	members     []TeamMemberInfo
-	member      *TeamMemberInfo
-	user        *TeamUserInfo
-	addErr      error
-	removeErr   error
-	updateErr   error
-	listErr     error
-	getMemberFn func(tenantID, userID string) (*TeamMemberInfo, error)
+	members          []TeamMemberInfo
+	member           *TeamMemberInfo
+	user             *TeamUserInfo
+	addErr           error
+	removeErr        error
+	updateErr        error
+	listErr          error
+	getMemberFn      func(tenantID, userID string) (*TeamMemberInfo, error)
+	getUserFn        func(username string) (*TeamUserInfo, error)
 }
 
 func (f *fakeTeamStore) ListMembers(_ context.Context, _ string) ([]TeamMemberInfo, error) {
@@ -48,7 +49,10 @@ func (f *fakeTeamStore) GetMember(_ context.Context, tenantID, userID string) (*
 	return f.member, nil
 }
 
-func (f *fakeTeamStore) GetUserByUsername(_ context.Context, _ string) (*TeamUserInfo, error) {
+func (f *fakeTeamStore) GetUserByUsername(_ context.Context, username string) (*TeamUserInfo, error) {
+	if f.getUserFn != nil {
+		return f.getUserFn(username)
+	}
 	return f.user, nil
 }
 
@@ -172,7 +176,15 @@ func TestTeams_Add_UserNotFound(t *testing.T) {
 }
 
 func TestTeams_Remove_HappyPath(t *testing.T) {
+	// AUDIT-7: identity no longer constructed as "github-" + username;
+	// test supplies getUserFn returning the opaque id directly.
 	store := &fakeTeamStore{
+		getUserFn: func(username string) (*TeamUserInfo, error) {
+			if username == "bob" {
+				return &TeamUserInfo{ID: "bob-id", Email: "b@t", DisplayName: "bob"}, nil
+			}
+			return nil, nil
+		},
 		getMemberFn: func(_, userID string) (*TeamMemberInfo, error) {
 			if userID == "github-testuser" {
 				return &TeamMemberInfo{Username: "testuser", Role: "owner"}, nil
@@ -199,11 +211,13 @@ func TestTeams_Remove_HappyPath(t *testing.T) {
 // fabricated usernames — CLI then showed "Removed <user> from team" (false).
 func TestTeams_Remove_NotMember_Returns404(t *testing.T) {
 	store := &fakeTeamStore{
+		// AUDIT-7: user lookup returns nil for unknown usernames,
+		// triggering the 404 before member lookup.
+		getUserFn: func(_ string) (*TeamUserInfo, error) { return nil, nil },
 		getMemberFn: func(_, userID string) (*TeamMemberInfo, error) {
 			if userID == "github-testuser" {
 				return &TeamMemberInfo{Username: "testuser", Role: "owner"}, nil
 			}
-			// target "fake-user" → not a member
 			return nil, nil
 		},
 	}
@@ -227,6 +241,12 @@ func TestTeams_Remove_NotMember_Returns404(t *testing.T) {
 
 func TestTeams_Remove_CannotRemoveOwner(t *testing.T) {
 	store := &fakeTeamStore{
+		getUserFn: func(username string) (*TeamUserInfo, error) {
+			if username == "targetowner" {
+				return &TeamUserInfo{ID: "targetowner-id", Email: "o@t", DisplayName: "targetowner"}, nil
+			}
+			return nil, nil
+		},
 		getMemberFn: func(_, userID string) (*TeamMemberInfo, error) {
 			if userID == "github-testuser" {
 				return &TeamMemberInfo{Username: "testuser", Role: "owner"}, nil
@@ -251,6 +271,12 @@ func TestTeams_Remove_CannotRemoveOwner(t *testing.T) {
 
 func TestTeams_UpdateRole_HappyPath(t *testing.T) {
 	store := &fakeTeamStore{
+		getUserFn: func(username string) (*TeamUserInfo, error) {
+			if username == "bob" {
+				return &TeamUserInfo{ID: "bob-id", Email: "b@t", DisplayName: "bob"}, nil
+			}
+			return nil, nil
+		},
 		getMemberFn: func(_, userID string) (*TeamMemberInfo, error) {
 			if userID == "github-testuser" {
 				return &TeamMemberInfo{Username: "testuser", Role: "owner"}, nil

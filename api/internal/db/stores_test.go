@@ -1657,23 +1657,9 @@ func TestTeamStore_GetUserByUsername_NotFound(t *testing.T) {
 	}
 }
 
-func TestStripGitHubPrefix(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"github-paulohenriquevn", "paulohenriquevn"},
-		{"paulohenriquevn", "paulohenriquevn"},
-		{"github-", ""},
-		{"", ""},
-	}
-	for _, tt := range tests {
-		result := stripGitHubPrefix(tt.input)
-		if result != tt.expected {
-			t.Errorf("stripGitHubPrefix(%q) = %q, want %q", tt.input, result, tt.expected)
-		}
-	}
-}
+// CHG-2026-04-23-AUDIT-7: TestStripGitHubPrefix removed along with the
+// helper it tested. Username is now a column on users, not derived from
+// the id. See migration 000037 and team_store.go.
 
 // =============================================================================
 // Membership Store tests

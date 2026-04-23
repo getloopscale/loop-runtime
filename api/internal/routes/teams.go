@@ -189,8 +189,23 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up the target member
-	targetUserID := "github-" + username
+	// Look up target user (AUDIT-7: provider-agnostic — no "github-" assumption)
+	targetUser, err := h.store.GetUserByUsername(ctx, username)
+	if err != nil {
+		slog.Error("failed to look up target user", "error", err.Error())
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+	if targetUser == nil {
+		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			"TEAM_MEMBER_NOT_FOUND",
+			fmt.Sprintf("User %q is not a team member.", username),
+			http.StatusNotFound,
+		))
+		return
+	}
+	targetUserID := targetUser.ID
+
 	targetMember, err := h.store.GetMember(ctx, uc.TenantID, targetUserID)
 	if err != nil {
 		slog.Error("failed to get target member", "error", err.Error())
@@ -198,10 +213,7 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// CHG-2026-04-23-AUDIT-6: fail fast with 404 when user is not a team
-	// member. Previously the handler fell through to store.RemoveMember which
-	// is a SQL no-op for missing rows — returning 200 {"removed":"<name>"}
-	// silently, so the CLI printed a misleading "Removed <user> from team".
+	// AUDIT-6: fail fast with 404 when user exists but is not a team member.
 	if targetMember == nil {
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"TEAM_MEMBER_NOT_FOUND",
@@ -285,8 +297,24 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Look up target user (AUDIT-7: provider-agnostic — no "github-" assumption)
+	targetUser, err := h.store.GetUserByUsername(ctx, username)
+	if err != nil {
+		slog.Error("failed to look up target user", "error", err.Error())
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+	if targetUser == nil {
+		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			Code:       "MEMBER_NOT_FOUND",
+			Message:    "member '" + username + "' not found in this team",
+			HTTPStatus: http.StatusNotFound,
+		})
+		return
+	}
+	targetUserID := targetUser.ID
+
 	// Owner protection: cannot change the owner's role
-	targetUserID := "github-" + username
 	targetMember, err := h.store.GetMember(ctx, uc.TenantID, targetUserID)
 	if err != nil {
 		slog.Error("failed to get target member", "error", err.Error())

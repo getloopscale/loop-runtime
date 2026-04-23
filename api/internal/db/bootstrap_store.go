@@ -38,11 +38,16 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req domain.Boots
 	anyCreated := false
 
 	// 1. INSERT user (ON CONFLICT by id → DO NOTHING)
+	// AUDIT-7: username is the provider-agnostic identity column. For GitHub
+	// bootstrap, it equals the admin login (same as display_name here, but
+	// they are conceptually different: display_name can change, username
+	// cannot because it is UNIQUE and used for lookups).
 	res, err := db.Exec(ctx,
-		`INSERT INTO users (id, email, github_id, display_name)
-		 VALUES ($1, $2, $3, $4)
+		`INSERT INTO users (id, username, email, github_id, display_name)
+		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (id) DO NOTHING`,
 		userID,
+		req.AdminLogin,
 		fmt.Sprintf("%s@users.noreply.github.com", req.AdminLogin),
 		req.AdminGitHubID,
 		req.AdminLogin,
