@@ -9,6 +9,11 @@ import { classifyNetworkError } from '../output/error-message';
 // API returns `last_build.id` (not build_id) and `active_release` (not release).
 // Prior test fixtures used invented field names; this interface now matches
 // what api/internal/routes/status.go actually produces.
+// CHG-2026-04-23-AUDIT-33: active_release shape follows the API
+// (api/internal/routes/status.go activeReleaseResponse): id,
+// status, git_commit, created_at. Previous code read release_id /
+// state / activated_at — all undefined at runtime, causing
+// `state.toLowerCase()` to crash.
 interface StatusApiResponse {
   environment: string;
   last_build?: {
@@ -17,9 +22,10 @@ interface StatusApiResponse {
     finished_at: string;
   };
   active_release?: {
-    release_id: string;
-    state: string;
-    activated_at: string;
+    id: string;
+    status: string;
+    git_commit?: string;
+    created_at: string;
   } | null;
   sync_status?: string;
   url?: string;
@@ -95,7 +101,7 @@ export class StatusCommand {
     this.deps.writeTo(`Last deploy:  ${buildSummary} — ${status.last_build.status}`);
 
     if (status.active_release) {
-      this.deps.writeTo(`Release:      ${status.active_release.release_id} (${status.active_release.state.toLowerCase()} since ${this.formatTime(status.active_release.activated_at)})`);
+      this.deps.writeTo(`Release:      ${status.active_release.id} (${status.active_release.status.toLowerCase()} since ${this.formatTime(status.active_release.created_at)})`);
     }
 
     // CHG-2026-04-23-AUDIT-2: API returns literal "unknown" when sync state is

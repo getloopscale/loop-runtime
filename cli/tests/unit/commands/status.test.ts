@@ -18,10 +18,14 @@ function createMockDeps(overrides: Partial<StatusDeps> = {}): StatusDeps {
         status: 'SUCCEEDED',
         finished_at: '2026-03-25T12:30:00Z',
       },
+      // CHG-2026-04-23-AUDIT-33: shape matches API
+      // (api/internal/routes/status.go activeReleaseResponse):
+      // id, status, git_commit, created_at.
       active_release: {
-        release_id: 'rel-e5f6g7h8',
-        state: 'ACTIVE',
-        activated_at: '2026-03-25T12:30:00Z',
+        id: 'rel-e5f6g7h8',
+        status: 'ACTIVE',
+        git_commit: 'deadbeef',
+        created_at: '2026-03-25T12:30:00Z',
       },
       sync_status: 'Synced',
       url: 'https://my-app.dev.loopzero.example',
@@ -139,9 +143,10 @@ describe('StatusCommand', () => {
           finished_at: '2026-03-25T12:30:00Z',
         },
         active_release: {
-          release_id: 'rel-e5f6g7h8',
-          state: 'ACTIVE',
-          activated_at: '2026-03-25T12:30:00Z',
+          id: 'rel-e5f6g7h8',
+          status: 'ACTIVE',
+          git_commit: 'deadbeef',
+          created_at: '2026-03-25T12:30:00Z',
         },
         sync_status: 'Synced',
         url: 'https://my-app.dev.loopzero.example',
@@ -158,7 +163,8 @@ describe('StatusCommand', () => {
       const parsed = JSON.parse(output);
       expect(parsed.environment).toBe('production');
       expect(parsed.last_build.id).toBe('build-a1b2c3d4');
-      expect(parsed.active_release.release_id).toBe('rel-e5f6g7h8');
+      expect(parsed.active_release.id).toBe('rel-e5f6g7h8');
+      expect(parsed.active_release.status).toBe('ACTIVE');
       expect(parsed.url).toBe('https://my-app.dev.loopzero.example');
     });
 
@@ -431,9 +437,10 @@ describe('StatusCommand', () => {
           environment: 'production',
           last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-04-23T14:30:31Z' },
           active_release: {
-            release_id: 'rel-deadbeef',
-            state: 'ACTIVE',
-            activated_at: '2026-04-23T14:30:31Z',
+            id: 'rel-deadbeef',
+            status: 'ACTIVE',
+            git_commit: 'beefcafe',
+            created_at: '2026-04-23T14:30:31Z',
           },
           sync_status: 'Synced',
           url: 'https://app.loopzero.local',
@@ -443,6 +450,34 @@ describe('StatusCommand', () => {
       await cmd.execute({ env: 'production' });
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
       expect(output).toContain('rel-deadbeef');
+    });
+
+    // CHG-2026-04-23-AUDIT-33: active_release uses API field names
+    // (id, status) — previous interface declared release_id + state,
+    // causing `state.toLowerCase()` to crash at runtime against the
+    // real API response. Regression guard.
+    it('does NOT crash on toLowerCase when reading active_release.status', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { id: 'b-2', status: 'SUCCEEDED', finished_at: '2026-04-23T21:00:00Z' },
+          active_release: {
+            id: 'rel-abc',
+            status: 'ACTIVE',
+            git_commit: 'deadbeef',
+            created_at: '2026-04-23T21:00:00Z',
+          },
+          sync_status: 'Synced',
+          url: 'https://x.loopzero.local',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await expect(cmd.execute({ env: 'production' })).resolves.toBe(0);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('rel-abc');
+      expect(output).toContain('active');  // lowercase rendering
+      const errs = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(errs).not.toContain('Cannot read properties');
     });
   });
 });
