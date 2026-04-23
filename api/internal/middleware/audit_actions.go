@@ -111,6 +111,9 @@ func extractResourceType(path string) string {
 		return "secret"
 	case "rollback", "promote":
 		return "release"
+	case "cancel":
+		// CHG-2026-04-23-AUDIT-35: /builds/{id}/cancel acts on a build.
+		return "build"
 	case "domains", "verify":
 		return "domain"
 	case "checkout", "billing", "portal":

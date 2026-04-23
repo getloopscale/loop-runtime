@@ -120,7 +120,14 @@ export class LogsCommand {
     this.deps.writeTo('');
 
     if (response.entries.length === 0) {
-      this.deps.writeTo('No logs available. Build may still be starting.');
+      // CHG-2026-04-23-AUDIT-31: differentiate by status — "Build may
+      // still be starting" is a lie when status is already terminal.
+      const terminal = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
+      if (terminal.has(response.status)) {
+        this.deps.writeTo('No logs available. Logs were not captured or have been pruned.');
+      } else {
+        this.deps.writeTo('No logs available. Build may still be starting.');
+      }
       return 0;
     }
 
@@ -140,6 +147,11 @@ export class LogsCommand {
     }
 
     return new Promise<number>((resolve) => {
+      // CHG-2026-04-23-AUDIT-37: track if the stream errored so close
+      // can resolve with exit 3 instead of 0. Previously an SSE error
+      // followed by close always reported success, silently masking
+      // failures from scripts that check exit code.
+      let streamErrored = false;
       const stream = this.deps.streamLogs!(
         opts.build!,
         (event: StreamLogEvent) => {
@@ -152,15 +164,17 @@ export class LogsCommand {
           }
         },
         (err: Error) => {
+          streamErrored = true;
           this.deps.writeError(`Stream error: ${err.message}`);
         },
         () => {
-          // Stream closed (build completed or server closed)
-          resolve(0);
+          // Stream closed (build completed or server closed).
+          // Exit 3 if we saw an error during the stream; 0 otherwise.
+          resolve(streamErrored ? 3 : 0);
         },
       );
 
-      // Handle SIGINT gracefully
+      // Handle SIGINT gracefully — user cancellation is exit 0 regardless.
       const cleanup = () => {
         stream.close();
         resolve(0);

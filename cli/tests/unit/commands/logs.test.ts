@@ -63,7 +63,7 @@ describe('LogsCommand', () => {
       expect(deps.getLogs).toHaveBeenCalledWith('build-abc123', { tail: undefined, step: 'clone' });
     });
 
-    it('should show message when no logs available', async () => {
+    it('should show message when no logs available (non-terminal status)', async () => {
       const deps = createMockDeps({
         getLogs: jest.fn().mockResolvedValue({
           build_id: 'build-abc123',
@@ -79,6 +79,45 @@ describe('LogsCommand', () => {
       expect(exitCode).toBe(0);
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
       expect(output).toContain('No logs available');
+      // non-terminal → "Build may still be starting" hint is honest
+      expect(output).toContain('Build may still be starting');
+    });
+
+    // CHG-2026-04-23-AUDIT-31: for terminal statuses (SUCCEEDED/FAILED/
+    // CANCELLED) the "Build may still be starting" hint is contradictory
+    // and misleading. Surface a status-appropriate hint instead.
+    it('terminal status (SUCCEEDED) shows pruned/uncaptured hint, not "starting"', async () => {
+      const deps = createMockDeps({
+        getLogs: jest.fn().mockResolvedValue({
+          build_id: 'build-done',
+          status: 'SUCCEEDED',
+          entries: [],
+          total_lines: 0,
+        }),
+      });
+      const cmd = new LogsCommand(deps);
+
+      const exitCode = await cmd.execute({ build: 'build-done' });
+
+      expect(exitCode).toBe(0);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).not.toContain('Build may still be starting');
+      expect(output).toMatch(/not captured|pruned/i);
+    });
+
+    it('terminal status (FAILED) also avoids the "starting" hint', async () => {
+      const deps = createMockDeps({
+        getLogs: jest.fn().mockResolvedValue({
+          build_id: 'build-failed',
+          status: 'FAILED',
+          entries: [],
+          total_lines: 0,
+        }),
+      });
+      const cmd = new LogsCommand(deps);
+      await cmd.execute({ build: 'build-failed' });
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).not.toContain('Build may still be starting');
     });
   });
 
@@ -231,6 +270,29 @@ describe('LogsCommand', () => {
   });
 
   describe('--follow mode', () => {
+    // CHG-2026-04-23-AUDIT-37: stream error must produce exit 3, not 0.
+    // Previously the error handler printed to stderr and the close
+    // handler blindly resolved 0, masking failures from scripts like
+    // `loopzero logs --follow --build X | tee log.txt || alert`.
+    it('returns exit 3 when stream errors before close', async () => {
+      const deps = createMockDeps({
+        streamLogs: (_buildID, _onLine, onError, onClose) => {
+          setTimeout(() => {
+            onError(new Error('SSE connection reset'));
+            onClose();
+          }, 5);
+          return { close: jest.fn() };
+        },
+      });
+      const cmd = new LogsCommand(deps);
+
+      const exitCode = await cmd.execute({ build: 'build-abc123', follow: true });
+
+      expect(exitCode).toBe(3);
+      const errs = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errs).toContain('Stream error');
+    });
+
     it('should stream log events and return exit code 0 when stream closes', async () => {
       const lines: string[] = [];
       const deps = createMockDeps({

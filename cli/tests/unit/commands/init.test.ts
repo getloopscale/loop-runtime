@@ -482,7 +482,7 @@ describe('InitCommand', () => {
   });
 
   describe('API unavailable', () => {
-    it('should still generate loopzero.yaml and warn when API fails', async () => {
+    it('should still generate loopzero.yaml and warn when API fails (network)', async () => {
       const deps = createMockDeps(tmpDir, {
         createProject: jest.fn().mockRejectedValue(new Error('ECONNREFUSED')),
       });
@@ -490,6 +490,7 @@ describe('InitCommand', () => {
 
       const exitCode = await cmd.execute({ yes: true });
 
+      // Network error is transient — exit 0, let deploy retry.
       expect(exitCode).toBe(0);
       const yamlPath = path.join(tmpDir, 'loopzero.yaml');
       expect(fs.existsSync(yamlPath)).toBe(true);
@@ -500,6 +501,49 @@ describe('InitCommand', () => {
 
       const stdOutput = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
       expect(stdOutput).toContain('Generated loopzero.yaml');
+    });
+
+    // CHG-2026-04-23-AUDIT-36: 4xx from backend (plan limit, validation)
+    // must surface exit 5 (partial failure per Rule 4). loopzero.yaml is
+    // still generated for inspection. Previously returned 0, masking
+    // the failure from `loopzero init && loopzero deploy` scripts.
+    it('returns exit 5 when backend rejects with 4xx non-409', async () => {
+      const deps = createMockDeps(tmpDir, {
+        createProject: jest.fn().mockRejectedValue(
+          new ApiError(
+            'Plan limit reached: Starter allows 1 projects (current: 2). Upgrade your plan to continue.',
+            1,
+            422,
+            'PLAN_LIMIT_EXCEEDED',
+          ),
+        ),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(5);
+      const yamlPath = path.join(tmpDir, 'loopzero.yaml');
+      expect(fs.existsSync(yamlPath)).toBe(true);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(errOutput).toContain('Plan limit');
+      // Must NOT suggest "run loopzero deploy" after a confirmed 4xx.
+      const stdOutput = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(stdOutput).not.toMatch(/then run: loopzero deploy$/m);
+      expect(stdOutput).toContain('Address the error');
+    });
+
+    it('409 (already registered) remains exit 0 — idempotent', async () => {
+      const deps = createMockDeps(tmpDir, {
+        createProject: jest.fn().mockRejectedValue(
+          new ApiError('Project already exists', 3, 409),
+        ),
+      });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(0);
     });
   });
 
