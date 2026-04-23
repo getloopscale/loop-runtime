@@ -309,6 +309,35 @@ describe('StatusCommand', () => {
     });
   });
 
+  // CHG-2026-04-23-AUDIT-24: network errors now carry code=API_UNREACHABLE
+  // with "Cannot reach API: ... Check LOOPZERO_URL." so operators spot config
+  // errors instead of retrying blindly. Exit code stays 3 (contract).
+  describe('API unreachable (AUDIT-24)', () => {
+    it('network error produces API_UNREACHABLE code + Check LOOPZERO_URL hint', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockRejectedValue(new Error('fetch failed')),
+      });
+      const cmd = new StatusCommand(deps);
+      const exitCode = await cmd.execute({ json: true });
+      expect(exitCode).toBe(3);
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.code).toBe('API_UNREACHABLE');
+      expect(parsed.error).toContain('Cannot reach API');
+      expect(parsed.error).toContain('Check LOOPZERO_URL');
+    });
+
+    it('non-network Error keeps UNEXPECTED_ERROR code', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockRejectedValue(new Error('arbitrary failure')),
+      });
+      const cmd = new StatusCommand(deps);
+      const exitCode = await cmd.execute({ json: true });
+      expect(exitCode).toBe(3);
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.code).toBe('UNEXPECTED_ERROR');
+    });
+  });
+
   describe('no internal terms', () => {
     it('should not contain forbidden terms in any output', async () => {
       const forbidden = [

@@ -76,4 +76,69 @@ describe('AuditCommand', () => {
     const code = await cmd.run({});
     expect(code).toBe(1);
   });
+
+  // CHG-2026-04-23-AUDIT-23: every error branch of `loopzero audit --json` must
+  // emit machine-parseable JSON on stdout (Rule 5 / J5.1 stability contract).
+  // Previously only the initial "not authenticated" branch honored --json;
+  // network / 403 / null-data branches wrote plain text via writeError,
+  // breaking `loopzero audit --json 2>&1 | jq`.
+  describe('JSON contract (AUDIT-23)', () => {
+    it('network error in --json produces JSON on stdout (not text on stderr)', async () => {
+      const out: string[] = [];
+      const errs: string[] = [];
+      const cmd = new AuditCommand(makeDeps({
+        getAudit: async () => { throw new Error('fetch failed'); },
+        writeTo: (m: string) => out.push(m),
+        writeError: (m: string) => errs.push(m),
+      }));
+
+      const code = await cmd.run({ json: true });
+
+      expect(code).toBe(1);
+      expect(errs).toHaveLength(0); // no plain-text stderr in JSON mode
+      expect(out).toHaveLength(1);
+      const parsed = JSON.parse(out[0]);
+      expect(parsed.exit_code).toBe(1);
+      expect(parsed.error).toContain('fetch failed');
+      // AUDIT-23 aligns with AUDIT-22: network failures get API_UNREACHABLE.
+      expect(parsed.code).toBe('API_UNREACHABLE');
+    });
+
+    it('403 in --json produces JSON (not plain-text writeError)', async () => {
+      const out: string[] = [];
+      const errs: string[] = [];
+      const cmd = new AuditCommand(makeDeps({
+        getAudit: async () => { throw new ApiError('Forbidden', 4, 403, 'FORBIDDEN'); },
+        writeTo: (m: string) => out.push(m),
+        writeError: (m: string) => errs.push(m),
+      }));
+
+      const code = await cmd.run({ json: true });
+
+      expect(code).toBe(4);
+      expect(errs).toHaveLength(0);
+      expect(out).toHaveLength(1);
+      const parsed = JSON.parse(out[0]);
+      expect(parsed.exit_code).toBe(4);
+      expect(parsed.code).toBeDefined();
+    });
+
+    it('null data in --json produces JSON (not plain-text writeError)', async () => {
+      const out: string[] = [];
+      const errs: string[] = [];
+      const cmd = new AuditCommand(makeDeps({
+        getAudit: async () => null,
+        writeTo: (m: string) => out.push(m),
+        writeError: (m: string) => errs.push(m),
+      }));
+
+      const code = await cmd.run({ json: true });
+
+      expect(code).toBe(1);
+      expect(errs).toHaveLength(0);
+      expect(out).toHaveLength(1);
+      const parsed = JSON.parse(out[0]);
+      expect(parsed.exit_code).toBe(1);
+    });
+  });
 });

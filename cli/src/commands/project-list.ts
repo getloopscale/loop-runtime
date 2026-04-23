@@ -3,7 +3,7 @@
 
 import { ApiError } from '../api/client';
 
-import { formatErrorMessage } from '../output/error-message';
+import { formatErrorMessage, classifyNetworkError } from '../output/error-message';
 interface ProjectItem {
   id: string;
   name: string;
@@ -100,6 +100,11 @@ export class ProjectListCommand {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
       return this.exitWithError(opts, formatErrorMessage('Failed to list projects', err.message, 'Try again'), 1, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-24: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 1, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, formatErrorMessage('Failed to list projects', err.message, 'Try again'), 1, 'UNEXPECTED_ERROR');

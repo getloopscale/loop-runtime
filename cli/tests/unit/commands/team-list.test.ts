@@ -144,6 +144,44 @@ describe('TeamListCommand', () => {
     });
   });
 
+  // CHG-2026-04-23-AUDIT-24: network failures were being reported as generic
+  // "Failed to list team members: fetch failed. Try again." with
+  // code=UNEXPECTED_ERROR — same hint as a transient server error, no
+  // indication to check LOOPZERO_URL. Now matches whoami / audit pattern.
+  describe('API unreachable (AUDIT-24)', () => {
+    it('network error produces API_UNREACHABLE code + Check LOOPZERO_URL hint', async () => {
+      const cmd = new TeamListCommand(makeDeps({
+        listMembers: async () => { throw new Error('fetch failed'); },
+      }));
+      const code = await cmd.execute({ json: true });
+      expect(code).toBe(1);
+      const parsed = JSON.parse(output[0]);
+      expect(parsed.code).toBe('API_UNREACHABLE');
+      expect(parsed.error).toContain('Cannot reach API');
+      expect(parsed.error).toContain('Check LOOPZERO_URL');
+    });
+
+    it('ECONNREFUSED classified as API_UNREACHABLE', async () => {
+      const cmd = new TeamListCommand(makeDeps({
+        listMembers: async () => { throw new Error('connect ECONNREFUSED 127.0.0.1:8080'); },
+      }));
+      const code = await cmd.execute({ json: true });
+      expect(code).toBe(1);
+      const parsed = JSON.parse(output[0]);
+      expect(parsed.code).toBe('API_UNREACHABLE');
+    });
+
+    it('non-network Error keeps UNEXPECTED_ERROR code', async () => {
+      const cmd = new TeamListCommand(makeDeps({
+        listMembers: async () => { throw new Error('some business logic'); },
+      }));
+      const code = await cmd.execute({ json: true });
+      expect(code).toBe(1);
+      const parsed = JSON.parse(output[0]);
+      expect(parsed.code).toBe('UNEXPECTED_ERROR');
+    });
+  });
+
   describe('no internal terms', () => {
     const FORBIDDEN_TERMS = [
       'ArgoCD', 'argocd', 'GitOps', 'gitops-push', 'CRD', 'tenant_id',

@@ -148,6 +148,45 @@ describe('WhoamiCommand', () => {
     });
   });
 
+  // CHG-2026-04-23-AUDIT-22: previously whoami reported "Token is invalid or
+  // expired" for ANY verifyToken failure — including ECONNREFUSED / timeouts.
+  // This misled users (they'd run `loopzero login` which would fail for the same
+  // reason). Now verifyToken re-throws non-auth errors, and whoami renders a
+  // distinct "cannot reach API" message with a specific error code.
+  describe('API unreachable (AUDIT-22)', () => {
+    it('does NOT say "Token is invalid or expired" when verifyToken throws a network error', async () => {
+      const deps = createMockDeps({
+        verifyToken: jest.fn().mockRejectedValue(new Error('fetch failed: ECONNREFUSED 127.0.0.1:8080')),
+      });
+      const cmd = new WhoamiCommand(deps);
+
+      const exitCode = await cmd.execute();
+
+      expect(exitCode).toBe(4);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput).not.toContain('invalid or expired');
+      expect(errOutput).toMatch(/reach|unreachable|connect|network|ECONNREFUSED/i);
+      expect(errOutput).toMatch(/LOOPZERO_URL|URL|check/i);
+    });
+
+    it('JSON output uses a distinct code for unreachable (not AUTH_EXPIRED)', async () => {
+      const deps = createMockDeps({
+        verifyToken: jest.fn().mockRejectedValue(new Error('fetch failed')),
+      });
+      const cmd = new WhoamiCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(4);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.authenticated).toBe(false);
+      expect(parsed.code).toBe('API_UNREACHABLE');
+      // Error message must NOT falsely diagnose token.
+      expect(parsed.error).not.toContain('invalid or expired');
+    });
+  });
+
   describe('not authenticated', () => {
     it('should return exit code 4 when no token and no email', async () => {
       const deps = createMockDeps({
