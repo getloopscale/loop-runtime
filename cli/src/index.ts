@@ -113,6 +113,8 @@ export function createProgram(): Command {
   };
 
   // Token refresh callback — used by ApiClient when a 401 is received.
+  // CHG-2026-04-23-AUDIT-16: ensureFreshToken no longer writes to stderr;
+  // caller handles error presentation (json/human) after receiving null.
   const handleUnauthorized = async (): Promise<string | null> => {
     return ensureFreshToken({
       getToken: () => configStore.getToken(),
@@ -122,7 +124,6 @@ export function createProgram(): Command {
       getEmail: () => configStore.getEmail(),
       getTeam: () => configStore.getTeam(),
       fetchFn: fetch,
-      writeError,
     });
   };
 
