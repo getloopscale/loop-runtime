@@ -120,7 +120,14 @@ export class LogsCommand {
     this.deps.writeTo('');
 
     if (response.entries.length === 0) {
-      this.deps.writeTo('No logs available. Build may still be starting.');
+      // CHG-2026-04-23-AUDIT-31: differentiate by status — "Build may
+      // still be starting" is a lie when status is already terminal.
+      const terminal = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
+      if (terminal.has(response.status)) {
+        this.deps.writeTo('No logs available. Logs were not captured or have been pruned.');
+      } else {
+        this.deps.writeTo('No logs available. Build may still be starting.');
+      }
       return 0;
     }
 
