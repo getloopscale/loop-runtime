@@ -196,7 +196,11 @@ describe('PreviewInspectCommand', () => {
   });
 
   describe('not found', () => {
-    it('should return exit code 3 when preview not found', async () => {
+    // CHG-2026-04-23-AUDIT-15: Rule 4 mandates exit 1 for usage errors
+    // (including NOT_FOUND on lookups). Exit 3 is "deploy failure" — wrong
+    // semantics for "preview doesn't exist". Other NOT_FOUND commands in the
+    // CLI (project inspect, env inspect, build inspect) use exit 1.
+    it('should return exit code 1 when preview not found', async () => {
       const deps = createMockDeps({
         inspectPreview: jest.fn().mockRejectedValue(new ApiError('Not found', 3, 404, 'NOT_FOUND')),
       });
@@ -204,7 +208,7 @@ describe('PreviewInspectCommand', () => {
 
       const exitCode = await cmd.execute('prev-nonexistent');
 
-      expect(exitCode).toBe(3);
+      expect(exitCode).toBe(1);
       const errorOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
       expect(errorOutput).toContain('not found');
     });
@@ -291,7 +295,8 @@ describe('PreviewDeleteCommand', () => {
   });
 
   describe('API errors', () => {
-    it('should return exit code 3 for 404 not found', async () => {
+    // CHG-2026-04-23-AUDIT-15: 404 NOT_FOUND → exit 1 (Rule 4 usage error).
+    it('should return exit code 1 for 404 not found', async () => {
       const deps = createMockDeps({
         deletePreview: jest.fn().mockRejectedValue(new ApiError('Not found', 3, 404, 'NOT_FOUND')),
       });
@@ -299,7 +304,7 @@ describe('PreviewDeleteCommand', () => {
 
       const exitCode = await cmd.execute('prev-nonexistent', { yes: true });
 
-      expect(exitCode).toBe(3);
+      expect(exitCode).toBe(1);
       const errorOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
       expect(errorOutput).toContain('not found');
     });

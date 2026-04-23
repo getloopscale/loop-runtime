@@ -260,7 +260,7 @@ export class PreviewInspectCommand {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
       if (err.statusCode === 404) {
-        return this.exitWithError(opts, `Preview ${id} not found.`, 3, 'PREVIEW_NOT_FOUND');
+        return this.exitWithError(opts, `Preview ${id} not found.`, 1, 'PREVIEW_NOT_FOUND');
       }
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
     }
@@ -353,7 +353,7 @@ export class PreviewDeleteCommand {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
       if (err.statusCode === 404) {
-        return this.exitWithError(opts, `Preview ${id} not found.`, 3, 'PREVIEW_NOT_FOUND');
+        return this.exitWithError(opts, `Preview ${id} not found.`, 1, 'PREVIEW_NOT_FOUND');
       }
       if (err.statusCode === 409) {
         return this.exitWithError(opts, `Preview ${id} is already being deleted.`, 3, 'ALREADY_DELETING');
