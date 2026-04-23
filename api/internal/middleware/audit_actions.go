@@ -14,6 +14,11 @@ import (
 // (previously fell through to "DELETE.domains" / "POST.domains").
 // CHG-2026-04-23-AUDIT-18: source.uploaded branch + fail-loud slog.Warn
 // on unknown fallthroughs so dashboards can filter action LIKE 'unknown.%'.
+// CHG-2026-04-23-AUDIT-19: promote / connect / disconnect branches.
+// These sub-resource verbs were silently recorded as "project.created"
+// / "project.deleted" (the parent collection's CRUD action), corrupting
+// audit forensics. Each is now a typed action on its true resource
+// (release / repository).
 func deriveAction(method, path string) string {
 	segment := extractSegment(path)
 	switch method {
@@ -47,6 +52,14 @@ func deriveAction(method, path string) string {
 			if strings.Contains(path, "/source/") {
 				return "source.uploaded"
 			}
+		case "promote":
+			if strings.Contains(path, "/projects/") {
+				return "release.promoted"
+			}
+		case "connect":
+			if strings.Contains(path, "/projects/") {
+				return "repository.connected"
+			}
 		}
 	case "DELETE":
 		switch segment {
@@ -60,6 +73,10 @@ func deriveAction(method, path string) string {
 			return "secret.deleted"
 		case "domains":
 			return "domain.removed"
+		case "connect":
+			if strings.Contains(path, "/projects/") {
+				return "repository.disconnected"
+			}
 		}
 	case "PATCH":
 		if segment == "members" {
@@ -78,6 +95,7 @@ func deriveAction(method, path string) string {
 // extractResourceType returns the primary resource type from a URL path.
 // CHG-2026-04-23-AUDIT-17: domain added.
 // CHG-2026-04-23-AUDIT-18: source added (for /source/upload audit rows).
+// CHG-2026-04-23-AUDIT-19: promote → release, connect → repository.
 func extractResourceType(path string) string {
 	segment := extractSegment(path)
 	switch segment {
@@ -91,7 +109,7 @@ func extractResourceType(path string) string {
 		return "member"
 	case "secrets":
 		return "secret"
-	case "rollback":
+	case "rollback", "promote":
 		return "release"
 	case "domains", "verify":
 		return "domain"
@@ -99,6 +117,8 @@ func extractResourceType(path string) string {
 		return "billing"
 	case "source", "upload":
 		return "source"
+	case "connect":
+		return "repository"
 	default:
 		return segment
 	}
@@ -151,6 +171,8 @@ var knownCollections = map[string]bool{
 	"verify":       true,
 	"source":       true,
 	"upload":       true,
+	"promote":      true,
+	"connect":      true,
 }
 
 // extractSegment returns the last meaningful URL segment for action/resource mapping.

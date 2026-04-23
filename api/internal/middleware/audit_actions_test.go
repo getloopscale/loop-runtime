@@ -89,3 +89,57 @@ func TestExtractResourceType_Source(t *testing.T) {
 		t.Errorf("extractResourceType for source = %q, want %q", got, "source")
 	}
 }
+
+// CHG-2026-04-23-AUDIT-19: promote/connect/disconnect previously fell
+// back to the parent "projects" segment, recording wrong CRUD actions
+// ("project.created" / "project.deleted") for what are actually release
+// and repository operations. This misleads audit forensics.
+func TestDeriveAction_PromoteConnectDisconnect(t *testing.T) {
+	cases := []struct {
+		method, path, want string
+	}{
+		{"POST", "/api/v1/projects/myapp/promote", "release.promoted"},
+		{"POST", "/api/v1/projects/myapp/connect", "repository.connected"},
+		{"DELETE", "/api/v1/projects/myapp/connect", "repository.disconnected"},
+	}
+	for _, tc := range cases {
+		got := deriveAction(tc.method, tc.path)
+		if got != tc.want {
+			t.Errorf("deriveAction(%s, %s) = %q, want %q", tc.method, tc.path, got, tc.want)
+		}
+	}
+}
+
+// AUDIT-19: extractResourceType for /promote and /connect paths must
+// expose the true resource (release, repository) — not the parent
+// collection ("project"). Dashboards group by resource_type.
+func TestExtractResourceType_PromoteConnect(t *testing.T) {
+	cases := []struct {
+		path, want string
+	}{
+		{"/api/v1/projects/myapp/promote", "release"},
+		{"/api/v1/projects/myapp/connect", "repository"},
+	}
+	for _, tc := range cases {
+		if got := extractResourceType(tc.path); got != tc.want {
+			t.Errorf("extractResourceType(%s) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
+// AUDIT-19: extractResourceID on these paths should still return the
+// project name (positioned after "projects"), so audit trails remain
+// queryable by project. Regression guard.
+func TestExtractResourceID_PromoteConnect(t *testing.T) {
+	cases := []struct {
+		path, want string
+	}{
+		{"/api/v1/projects/myapp/promote", "myapp"},
+		{"/api/v1/projects/myapp/connect", "myapp"},
+	}
+	for _, tc := range cases {
+		if got := extractResourceID(tc.path); got != tc.want {
+			t.Errorf("extractResourceID(%s) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
