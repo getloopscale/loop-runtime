@@ -7,10 +7,10 @@
 
 ## Executive Summary
 
-**24/30 tests validated (80%).** Remaining 6 items are either:
-- Infrastructure setup gaps (Loki cross-cluster, CF creds) — not code bugs
+**25/30 tests validated (83%).** Remaining 5 items are either:
 - Out-of-scope features (preview controller, scale command backend)
-- 2 PARTIAL (F1.4 Loki, F1.6 CF creds)
+- F1.4 logs (3 encadeados infra gaps — durable fix committed to `infra/k3d/mgmt-cluster.yaml`; effective on next `task clusters:recreate`)
+- Async reviewer sign-offs
 
 (F3.4 lock release on crash added post-initial-report: pod kill + recovery + new deploy succeeds after cancelling orphaned build. `pg_advisory_xact_lock` transaction-scoped semantics validated per spec §4.2.)
 
@@ -27,7 +27,7 @@
 | F1.3 Promote | ✅ | HTTP 202, JSON complete, 75ms |
 | F1.4 Log Streaming | ⚠️ | NetworkPolicy gap fixed (allow-api → loki.monitoring:3100); Loki reachable + /ready 200; query empty: Promtail missing `workflow` label scrape config |
 | F1.5 Rollback | ✅ | Returns 404 NO_ACTIVE_RELEASE correctly |
-| F1.6 Custom Domains | ⚠️ | CF creds required |
+| F1.6 Custom Domains | ✅ | add/list/status functional without CF creds; plan text bug (reserved `test-e2e.example.com`, use `*.aquim.ai`) |
 | F1.7 Secrets | ✅ | set + list + --json; no value leak |
 | F1.8 Team Management | ✅ | JSON schema validated |
 
