@@ -126,6 +126,25 @@ describe('PreviewListCommand', () => {
     });
   });
 
+  // CHG-2026-04-23-AUDIT-28: Sprint-5 preview controller not implemented.
+  // Generic NOT_FOUND from the router was misread as "URL typo"; surface
+  // a distinct code that tells operators the feature isn't deployed yet.
+  describe('Feature unavailable 404 (AUDIT-28)', () => {
+    it('generic NOT_FOUND from router maps to PREVIEW_NOT_AVAILABLE', async () => {
+      const deps = createMockDeps({
+        listPreviews: jest.fn().mockRejectedValue(
+          new ApiError('The requested endpoint does not exist.', 1, 404, 'NOT_FOUND'),
+        ),
+      });
+      const cmd = new PreviewListCommand(deps);
+      const exitCode = await cmd.execute({ json: true });
+      expect(exitCode).toBe(1);
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.code).toBe('PREVIEW_NOT_AVAILABLE');
+      expect(parsed.error).toMatch(/Preview environments are not yet available/i);
+    });
+  });
+
   describe('no internal terms', () => {
     it('should not contain forbidden terms in any output', async () => {
       const forbidden = [

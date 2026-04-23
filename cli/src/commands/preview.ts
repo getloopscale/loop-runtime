@@ -166,6 +166,19 @@ export class PreviewListCommand {
       if (err.exitCode === 4) {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
+      // CHG-2026-04-23-AUDIT-28: mirror of AUDIT-27 for scale.
+      // Generic router 404 (Sprint-5 controller not deployed) reads as
+      // "URL typo" to the user. Surface PREVIEW_NOT_AVAILABLE so it's
+      // clear the feature is the gap, not their command. Resource 404s
+      // keep their specific codes (PREVIEW_NOT_FOUND).
+      if (err.statusCode === 404 && err.code === 'NOT_FOUND') {
+        return this.exitWithError(
+          opts,
+          'Preview environments are not yet available on this server.',
+          1,
+          'PREVIEW_NOT_AVAILABLE',
+        );
+      }
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
     }
     // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
