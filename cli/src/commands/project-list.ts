@@ -6,7 +6,7 @@ import { ApiError } from '../api/client';
 interface ProjectItem {
   id: string;
   name: string;
-  team_id: string;
+  team: string;
   created_at: string;
 }
 

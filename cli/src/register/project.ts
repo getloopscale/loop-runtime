@@ -80,7 +80,7 @@ export function registerProjectCommands(deps: CommandDeps): void {
       const cmd = new ProjectListCommand({
         getToken: () => configStore.getToken(),
         listProjects: async () => {
-          return apiClient.get<{ projects: Array<{ id: string; name: string; team_id: string; created_at: string }> }>('/api/v1/projects');
+          return apiClient.get<{ projects: Array<{ id: string; name: string; team: string; created_at: string }> }>('/api/v1/projects');
         },
         writeTo,
         writeError,
@@ -110,7 +110,7 @@ export function registerProjectCommands(deps: CommandDeps): void {
       const cmd = new ProjectInspectCommand({
         getToken: () => configStore.getToken(),
         getProject: async (projectName: string) => {
-          return apiClient.get<{ id: string; name: string; team_id: string; created_at: string; created_by?: string }>(
+          return apiClient.get<{ id: string; name: string; team: string; created_at: string; created_by?: string }>(
             `/api/v1/projects/${encodeURIComponent(projectName)}`
           );
         },
@@ -142,7 +142,7 @@ export function registerProjectCommands(deps: CommandDeps): void {
       const cmd = new ProjectCreateCommand({
         getToken: () => configStore.getToken(),
         createProject: async (projectName: string) => {
-          return apiClient.post<{ id: string; name: string; team_id: string; created_at: string }>(
+          return apiClient.post<{ id: string; name: string; team: string; created_at: string }>(
             '/api/v1/projects',
             { name: projectName }
           );
