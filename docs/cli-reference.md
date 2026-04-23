@@ -484,6 +484,7 @@ Sweep: 16 commands × 4 canais (`--help`, `--json` happy, human, `--json` erro) 
 | `NO_PREVIOUS_RELEASE` | Rollback sem release anterior | base |
 | `NOT_CONNECTED` | Disconnect sem conexão | base |
 | `BUILD_ALREADY_COMPLETED` | Cancel de build já finalizado | base |
+| `RELEASE_NOT_FOUND` | Rollback/promote para release específica inexistente | base |
 | `UNEXPECTED_ERROR` | Fallback genérico | base |
 
 ---
@@ -505,8 +506,57 @@ Commits auditáveis em branch `develop`:
 | 28 | preview list 404 = PREVIEW_NOT_AVAILABLE | ✅ a46b2ff |
 | 29 | **Node deploy restaurado** (loopzero-packs-runner Go rewrite) | ✅ 3751c29 |
 | 30 | `loopzero build cancel` discoverability | ✅ 5f56a0c |
+| 31 | `loopzero logs` message respects terminal build status | ✅ 72eb363 |
+| 32 | `loopzero deploy` stream.closed guides to `loopzero build inspect` | ✅ 703aeb5 |
+| 33 | **`loopzero status` crash on active_release fields** (contract drift) | ✅ 465e620 |
+| 34 | **`loopzero build inspect` Project: undefined** (contract drift `project`→`project_id`) | ✅ 71b5179 |
+| 35 | audit log `resource_type="build"` for `/builds/*/cancel` | ✅ 1a8be8b |
+| 36 | `loopzero init` exit 5 on 4xx (Rule 4 partial failure) | ✅ 564f79b |
+| 37 | `loopzero logs --follow` exit 3 on stream error | ✅ 4e7b66c |
 
 ---
 
-**Última atualização:** 2026-04-23 (sessão de validação E2E completa).
+## Padrões sistêmicos encontrados e mitigados
+
+Três classes de bug-pattern emergiram durante a validação E2E 2026-04-23.
+Cada classe tem múltiplos AUDITs e heurística de detecção reutilizável.
+
+### Classe 1: contract drift CLI↔API
+
+**Heurística de detecção:** testar render humano do command (não só `--json`).
+Interfaces TypeScript inventadas nos testes passam; API real produz undefined
+nos campos e crash/render sujo.
+
+**Ocorrências:** AUDIT-2 (status.last_build), AUDIT-33 (status.active_release),
+AUDIT-34 (build inspect project_id).
+
+**Regression guard padrão:** `expect(output).not.toContain('undefined')`.
+
+### Classe 2: exit code não reflete erro visível
+
+**Heurística:** verificar exit code isolado do output para cada command.
+Especial atenção a commands que seguem depois de ver erro (init, logs --follow).
+
+**Ocorrências:** AUDIT-36 (init com plan limit exit 0), AUDIT-37 (logs --follow
+exit 0 após stream error).
+
+**Regression guard padrão:** assertar `expect(exitCode).toBe(N)` explicitamente
+para cada branch de erro.
+
+### Classe 3: mensagem contradiz estado conhecido
+
+**Heurística:** mensagens com "may", "still", "probably", "endpoint not
+found" quando o CLI já conhece o estado real. Substituir por guia acionável.
+
+**Ocorrências:** AUDIT-22 (whoami token-vs-unreachable), AUDIT-27 (scale
+feature-missing), AUDIT-28 (preview feature-missing), AUDIT-31 (logs terminal
+build), AUDIT-32 (deploy stream closed).
+
+**Regression guard padrão:** `expect(msg).not.toContain('may')` + assertar
+o novo guia (`Check LOOPZERO_URL`, `loopzero build inspect`, etc.).
+
+---
+
+**Última atualização:** 2026-04-23 (sessão de validação E2E completa — 21 AUDITs,
+1059 testes unit passing, 0 regressões, 57+ commits na branch develop).
 **Autor:** agente automatizado em Ralph loop contra k3d production-parity (mgmt / build / workload clusters).
