@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+import { ApiError } from '../api/client';
+
 export interface AuditEntry {
   action: string;
   resource_type: string;
@@ -48,7 +50,37 @@ export class AuditCommand {
       return 4;
     }
 
-    const data = await this.deps.getAudit(opts.action, opts.since);
+    // CHG-2026-04-23-AUDIT-14: catch ApiError explicitly so auth failures
+    // from the API (expired token) map to exit 4 per Rule 4. Previously the
+    // error escaped and the register's withTimeout .catch returned 3.
+    let data: AuditResponse | null;
+    try {
+      data = await this.deps.getAudit(opts.action, opts.since);
+    } catch (err) {
+      if (err instanceof ApiError && (err.exitCode === 4 || err.statusCode === 401)) {
+        if (opts.json) {
+          this.deps.writeTo(JSON.stringify({
+            error: 'Authentication failed. Run: loopzero login',
+            exit_code: 4,
+            code: 'AUTH_REQUIRED',
+          }));
+        } else {
+          this.deps.writeError('Authentication failed. Run: loopzero login');
+        }
+        return 4;
+      }
+      if (err instanceof ApiError && err.statusCode === 403) {
+        this.deps.writeError('Failed to fetch audit log. You may not have permission (requires admin or owner role).');
+        return 4;
+      }
+      if (err instanceof Error) {
+        this.deps.writeError(`Failed to fetch audit log: ${err.message}`);
+        return 1;
+      }
+      this.deps.writeError('Failed to fetch audit log. Try again later.');
+      return 1;
+    }
+
     if (!data) {
       this.deps.writeError('Failed to fetch audit log. You may not have permission (requires admin or owner role).');
       return 1;
