@@ -30,6 +30,12 @@ ports:
   - port: 30093:30093
     nodeFilters:
       - loadbalancer
+  # 30094 exposes loki-cross-cluster so Promtail (build cluster) can ship workflow
+  # pod logs to Loki (mgmt cluster). Without this, `loopzero logs --build <id>` works
+  # only if logs arrive via another path. F1.4 E2E validation 2026-04-23.
+  - port: 30094:30094
+    nodeFilters:
+      - loadbalancer
 network: k3d-loopzero
 registries:
   use:
