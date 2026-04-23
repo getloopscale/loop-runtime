@@ -16,7 +16,7 @@ import (
 
 func TestWhoamiRoute(t *testing.T) {
 	t.Run("returns 200 with user info when authenticated", func(t *testing.T) {
-		handler := routes.NewAuthHandler()
+		handler := routes.NewAuthHandler(nil)
 
 		uc := &middleware.UserContext{
 			UserID:   "github-lucas",
@@ -52,7 +52,7 @@ func TestWhoamiRoute(t *testing.T) {
 	})
 
 	t.Run("returns 401 when no UserContext (middleware not applied)", func(t *testing.T) {
-		handler := routes.NewAuthHandler()
+		handler := routes.NewAuthHandler(nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil)
 		rec := httptest.NewRecorder()
@@ -65,7 +65,7 @@ func TestWhoamiRoute(t *testing.T) {
 	})
 
 	t.Run("returns noreply email when GitHub email is empty", func(t *testing.T) {
-		handler := routes.NewAuthHandler()
+		handler := routes.NewAuthHandler(nil)
 
 		uc := &middleware.UserContext{
 			UserID:   "github-getloopscale",
@@ -92,7 +92,7 @@ func TestWhoamiRoute(t *testing.T) {
 	})
 
 	t.Run("response has Correlation-ID header when present in request", func(t *testing.T) {
-		handler := routes.NewAuthHandler()
+		handler := routes.NewAuthHandler(nil)
 
 		uc := &middleware.UserContext{
 			UserID: "github-lucas", Email: "lucas@acme.dev", TenantID: "acme", Role: "owner",

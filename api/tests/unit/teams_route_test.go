@@ -114,6 +114,15 @@ func (f *fakeTeamStore) GetUserByUsername(_ context.Context, username string) (*
 	return u, nil
 }
 
+// CHG-2026-04-23-AUDIT-20: trivial stub — GetUsernameByID was added to
+// the TeamStore domain interface in AUDIT-10 (migration 000037 backs it
+// with users.username column) but this fake was never updated, silently
+// breaking the whole tests/unit build. Return the id as-is; tests that
+// need specific behavior can override via a future mapped field.
+func (f *fakeTeamStore) GetUsernameByID(_ context.Context, id string) (string, error) {
+	return id, nil
+}
+
 func stripGitHubPrefix(id string) string {
 	if len(id) > 7 && id[:7] == "github-" {
 		return id[7:]
@@ -121,18 +130,33 @@ func stripGitHubPrefix(id string) string {
 	return id
 }
 
-// --- Helper to set up a store with an owner ---
+// --- Helpers to set up a store with an owner ---
+//
+// CHG-2026-04-23-AUDIT-20: addMember mirrors each TeamMember entry into
+// the users map so GetUserByUsername (introduced in AUDIT-7 to replace
+// the github- prefix strip) can resolve the user id during Remove and
+// UpdateRole. Previously only members was populated, which silently
+// broke once the handlers started routing username→id through the
+// users table.
+
+func addMember(s *fakeTeamStore, tenantID, userID, role string) {
+	username := stripGitHubPrefix(userID)
+	s.members[tenantID] = append(s.members[tenantID], routes.TeamMemberInfo{
+		Username: username,
+		Email:    userID + "@test.com",
+		Role:     role,
+		JoinedAt: time.Now().UTC().Format(time.RFC3339),
+	})
+	s.users[username] = &routes.TeamUserInfo{
+		ID:          userID,
+		Email:       userID + "@test.com",
+		DisplayName: username,
+	}
+}
 
 func storeWithOwner(tenantID, ownerUserID string) *fakeTeamStore {
 	s := newFakeTeamStore()
-	s.members[tenantID] = []routes.TeamMemberInfo{
-		{
-			Username: stripGitHubPrefix(ownerUserID),
-			Email:    ownerUserID + "@test.com",
-			Role:     "owner",
-			JoinedAt: time.Now().UTC().Format(time.RFC3339),
-		},
-	}
+	addMember(s, tenantID, ownerUserID, "owner")
 	s.users["newuser"] = &routes.TeamUserInfo{
 		ID:          "github-newuser",
 		Email:       "newuser@test.com",
@@ -143,23 +167,13 @@ func storeWithOwner(tenantID, ownerUserID string) *fakeTeamStore {
 
 func storeWithOwnerAndAdmin(tenantID, ownerUserID, adminUserID string) *fakeTeamStore {
 	s := storeWithOwner(tenantID, ownerUserID)
-	s.members[tenantID] = append(s.members[tenantID], routes.TeamMemberInfo{
-		Username: stripGitHubPrefix(adminUserID),
-		Email:    adminUserID + "@test.com",
-		Role:     "admin",
-		JoinedAt: time.Now().UTC().Format(time.RFC3339),
-	})
+	addMember(s, tenantID, adminUserID, "admin")
 	return s
 }
 
 func storeWithOwnerAndMember(tenantID, ownerUserID, memberUserID string) *fakeTeamStore {
 	s := storeWithOwner(tenantID, ownerUserID)
-	s.members[tenantID] = append(s.members[tenantID], routes.TeamMemberInfo{
-		Username: stripGitHubPrefix(memberUserID),
-		Email:    memberUserID + "@test.com",
-		Role:     "member",
-		JoinedAt: time.Now().UTC().Format(time.RFC3339),
-	})
+	addMember(s, tenantID, memberUserID, "member")
 	return s
 }
 
@@ -380,13 +394,7 @@ func TestTeamAdd(t *testing.T) {
 func TestTeamRemove(t *testing.T) {
 	t.Run("DELETE /api/v1/teams/members/{username} → 200 when admin removes member", func(t *testing.T) {
 		store := storeWithOwnerAndAdmin("acme", "github-lucas", "github-admin")
-		// Add a regular member to remove
-		store.members["acme"] = append(store.members["acme"], routes.TeamMemberInfo{
-			Username: "bob",
-			Email:    "bob@test.com",
-			Role:     "member",
-			JoinedAt: time.Now().UTC().Format(time.RFC3339),
-		})
+		addMember(store, "acme", "github-bob", "member")
 		handler := routes.NewTeamHandler(store)
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/teams/members/bob", nil)
@@ -444,12 +452,7 @@ func TestTeamRemove(t *testing.T) {
 
 	t.Run("DELETE /api/v1/teams/members/{username} → 403 when admin removes another admin", func(t *testing.T) {
 		store := storeWithOwnerAndAdmin("acme", "github-lucas", "github-admin1")
-		store.members["acme"] = append(store.members["acme"], routes.TeamMemberInfo{
-			Username: "admin2",
-			Email:    "admin2@test.com",
-			Role:     "admin",
-			JoinedAt: time.Now().UTC().Format(time.RFC3339),
-		})
+		addMember(store, "acme", "github-admin2", "admin")
 		handler := routes.NewTeamHandler(store)
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/teams/members/admin2", nil)
