@@ -6,6 +6,9 @@ package middleware
 import "strings"
 
 // deriveAction maps HTTP method + path to a human-readable audit action.
+// CHG-2026-04-23-AUDIT-17: domain branches added to the POST/DELETE switches
+// so audit entries follow the repo-wide resource.verb_past convention
+// (previously fell through to "DELETE.domains" / "POST.domains").
 func deriveAction(method, path string) string {
 	segment := extractSegment(path)
 	switch method {
@@ -29,6 +32,12 @@ func deriveAction(method, path string) string {
 			return "rollback.executed"
 		case "checkout":
 			return "billing.checkout_started"
+		case "domains":
+			return "domain.added"
+		case "verify":
+			if strings.Contains(path, "/domains/") {
+				return "domain.verified"
+			}
 		}
 	case "DELETE":
 		switch segment {
@@ -40,6 +49,8 @@ func deriveAction(method, path string) string {
 			return "member.removed"
 		case "secrets":
 			return "secret.deleted"
+		case "domains":
+			return "domain.removed"
 		}
 	case "PATCH":
 		if segment == "members" {
@@ -52,6 +63,7 @@ func deriveAction(method, path string) string {
 }
 
 // extractResourceType returns the primary resource type from a URL path.
+// CHG-2026-04-23-AUDIT-17: domain added.
 func extractResourceType(path string) string {
 	segment := extractSegment(path)
 	switch segment {
@@ -67,6 +79,8 @@ func extractResourceType(path string) string {
 		return "secret"
 	case "rollback":
 		return "release"
+	case "domains", "verify":
+		return "domain"
 	case "checkout", "billing", "portal":
 		return "billing"
 	default:
@@ -84,7 +98,7 @@ func extractResourceID(path string) string {
 	// /api/v1/teams/members/{username} → username at index 4
 	// /api/v1/secrets/{name} → name at index 3
 	for i, p := range parts {
-		if p == "projects" || p == "secrets" || p == "environments" || p == "builds" {
+		if p == "projects" || p == "secrets" || p == "environments" || p == "builds" || p == "domains" {
 			if i+1 < len(parts) && parts[i+1] != "" {
 				return parts[i+1]
 			}
@@ -118,6 +132,7 @@ var knownCollections = map[string]bool{
 	"callback":     true,
 	"status":       true,
 	"audit":        true,
+	"verify":       true,
 }
 
 // extractSegment returns the last meaningful URL segment for action/resource mapping.
