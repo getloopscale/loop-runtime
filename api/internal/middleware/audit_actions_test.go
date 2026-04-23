@@ -90,6 +90,16 @@ func TestExtractResourceType_Source(t *testing.T) {
 	}
 }
 
+// CHG-2026-04-23-AUDIT-35: extractResourceType should return "build"
+// for /builds/{id}/cancel — the cancel verb acts on a build resource.
+// Previously fell through to the default branch returning "cancel"
+// literally, polluting audit dashboards that group by resource_type.
+func TestExtractResourceType_Cancel(t *testing.T) {
+	if got := extractResourceType("/api/v1/builds/build-abc/cancel"); got != "build" {
+		t.Errorf("extractResourceType for cancel = %q, want %q", got, "build")
+	}
+}
+
 // CHG-2026-04-23-AUDIT-19: promote/connect/disconnect previously fell
 // back to the parent "projects" segment, recording wrong CRUD actions
 // ("project.created" / "project.deleted") for what are actually release
