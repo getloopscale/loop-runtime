@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     cd operators && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-tenant-controller ./cmd/main.go
 
-FROM alpine:3.21.6
+FROM alpine:3.22
 
 LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 LABEL org.opencontainers.image.title="loopzero-tenant-controller"

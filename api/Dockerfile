@@ -17,12 +17,12 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     cd api && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-api ./cmd/ \
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-controller ./cmd/controller/
 
-FROM alpine:3.21.6 AS migrate-dl
+FROM alpine:3.22 AS migrate-dl
 RUN apk add --no-cache curl && \
     curl -L https://github.com/golang-migrate/migrate/releases/download/v4.19.1/migrate.linux-amd64.tar.gz | tar xz && \
     mv migrate /migrate
 
-FROM alpine:3.21.6
+FROM alpine:3.22
 
 LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 LABEL org.opencontainers.image.title="loopzero-api"
