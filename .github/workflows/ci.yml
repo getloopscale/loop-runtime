@@ -7,7 +7,10 @@ on:
   push:
     branches: [main, develop, homolog]
   pull_request:
+    # Only run on PRs from external branches — NOT when head is develop/main/homolog
+    # (those already trigger via push). Prevents duplicate runs.
     branches: [main, develop, homolog]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -20,8 +23,10 @@ env:
   GOPRIVATE: 'github.com/getloopscale/*'
   GONOSUMCHECK: 'github.com/getloopscale/*'
 
+# Same group for push and PR on same branch — prevents duplicate runs.
+# push to develop and PR develop→main share the same group key.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
