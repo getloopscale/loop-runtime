@@ -5,7 +5,7 @@
 #   --set loopzero-api.secrets.databaseUrl=... or -f secrets-prod.yaml (gitignored)
 
 global:
-  registry: registry.digitalocean.com/loopzero-infra-registry
+  registry: registry.digitalocean.com/loopzero-system
   imagePullSecrets:
     - name: docr-registry-secret
 

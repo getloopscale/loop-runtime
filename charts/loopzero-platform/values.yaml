@@ -1,5 +1,5 @@
 global:
-  registry: registry.digitalocean.com/loopzero-infra-registry
+  registry: registry.digitalocean.com/loopzero-system
   imagePullSecrets: []
 
 # Sub-chart enable/disable toggles

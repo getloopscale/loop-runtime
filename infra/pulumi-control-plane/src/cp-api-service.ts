@@ -119,7 +119,7 @@ export function installLoopZeroAPI(
   );
 
   // ServiceAccount + RBAC for Tenant CR management
-  const registrySecretName = "loopzero-infra-registry";
+  const registrySecretName = "loopzero-system";
   const apiSA = new k8s.core.v1.ServiceAccount(
     "loopzero-api-sa",
     {

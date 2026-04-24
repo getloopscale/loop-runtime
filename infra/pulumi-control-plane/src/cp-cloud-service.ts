@@ -13,7 +13,7 @@ export function installCloudService(
   infra: InfraOutputs,
   config: PlatformStackConfig,
 ): void {
-  const registrySecretName = "loopzero-infra-registry";
+  const registrySecretName = "loopzero-system";
   const imageTag = config.environment || "dev";
 
   // ConfigMap — non-sensitive environment variables
@@ -93,7 +93,7 @@ export function installCloudService(
             imagePullSecrets: [{ name: registrySecretName }],
             containers: [{
               name: "cloud",
-              image: `registry.digitalocean.com/loopzero-infra-registry/loopzero-cloud:${imageTag}`,
+              image: `registry.digitalocean.com/loopzero-system/loopzero-cloud:${imageTag}`,
               imagePullPolicy: "Always",
               ports: [{ containerPort: 13002 }],
               envFrom: [
@@ -148,7 +148,7 @@ export function installCloudService(
             imagePullSecrets: [{ name: registrySecretName }],
             containers: [{
               name: "dashboard",
-              image: `registry.digitalocean.com/loopzero-infra-registry/loopzero-dashboard:${imageTag}`,
+              image: `registry.digitalocean.com/loopzero-system/loopzero-dashboard:${imageTag}`,
               imagePullPolicy: "Always",
               ports: [{ containerPort: 80 }],
               resources: {

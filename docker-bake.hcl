@@ -3,7 +3,7 @@
 // CI: docker buildx bake --push --set "*.tags=${REGISTRY}/${name}:${TAG}"
 
 variable "REGISTRY" {
-  default = "registry.digitalocean.com/loopzero-infra-registry"
+  default = "registry.digitalocean.com/loopzero-system"
 }
 
 variable "TAG" {

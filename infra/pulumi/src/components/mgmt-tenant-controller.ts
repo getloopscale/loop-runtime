@@ -28,7 +28,7 @@ export function installTenantController(
     "tenant-controller-sa",
     {
       metadata: { name: "tenant-controller", namespace: PLATFORM_NAMESPACE },
-      imagePullSecrets: [{ name: "loopzero-infra-registry" }],
+      imagePullSecrets: [{ name: "loopzero-system" }],
     },
     { provider, dependsOn: [ns] },
   );
@@ -192,7 +192,7 @@ export function installTenantController(
           spec: {
             serviceAccountName: "tenant-controller",
             securityContext: { runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000, seccompProfile: { type: "RuntimeDefault" } },
-            imagePullSecrets: [{ name: "loopzero-infra-registry" }],
+            imagePullSecrets: [{ name: "loopzero-system" }],
             volumes: [{ name: "kubeconfigs", secret: { secretName: "tenant-controller-kubeconfig" } }],
             containers: [{
               name: "controller",

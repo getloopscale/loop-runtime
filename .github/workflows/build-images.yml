@@ -47,7 +47,7 @@ permissions:
   packages: write
 
 env:
-  REGISTRY: registry.digitalocean.com/loopzero-infra-registry
+  REGISTRY: registry.digitalocean.com/loopzero-system
 
 concurrency:
   group: build-images-${{ github.ref }}

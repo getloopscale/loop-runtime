@@ -1563,9 +1563,9 @@ tasks:
         echo "  Context:  {{.CONTEXT}}"
         echo ""
         echo "Building API image..."
-        docker build -f api/Dockerfile -t registry.digitalocean.com/loopzero-infra-registry/loopzero-api:{{.TAG}} .
+        docker build -f api/Dockerfile -t registry.digitalocean.com/loopzero-system/loopzero-api:{{.TAG}} .
         echo "Pushing..."
-        docker push registry.digitalocean.com/loopzero-infra-registry/loopzero-api:{{.TAG}}
+        docker push registry.digitalocean.com/loopzero-system/loopzero-api:{{.TAG}}
         echo "Rolling out..."
         kubectl --context={{.CONTEXT}} -n loopzero-system rollout restart deploy/loopzero-api
         kubectl --context={{.CONTEXT}} -n loopzero-system rollout restart deploy/loopzero-controller

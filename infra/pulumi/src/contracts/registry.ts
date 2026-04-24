@@ -10,7 +10,7 @@ import * as pulumi from "@pulumi/pulumi";
  */
 
 export interface ContainerRegistrySpec {
-  /** Registry name (e.g., "loopzero-infra-registry") */
+  /** Registry name (e.g., "loopzero-system") */
   name: string;
 
   /** Subscription tier (e.g., "professional", "starter", "basic") */
@@ -21,7 +21,7 @@ export interface ContainerRegistrySpec {
 }
 
 export interface ContainerRegistryOutput {
-  /** The registry endpoint URL (e.g., "registry.digitalocean.com/loopzero-infra-registry") */
+  /** The registry endpoint URL (e.g., "registry.digitalocean.com/loopzero-system") */
   endpoint: pulumi.Output<string>;
 
   /** The registry name */

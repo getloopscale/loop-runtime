@@ -12,7 +12,7 @@ on:
       - "charts/**"
 
 env:
-  OCI_REGISTRY: oci://registry.digitalocean.com/loopzero-infra-registry/helm
+  OCI_REGISTRY: oci://registry.digitalocean.com/loopzero-system/helm
 
 permissions:
   contents: read

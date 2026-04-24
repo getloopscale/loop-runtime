@@ -115,7 +115,7 @@ export function installPolicyController(
  * by GitHub Actions in the loopzero/loopzero repository. This prevents
  * accepting images signed by arbitrary GitHub workflows.
  *
- * @param registryEndpoint - e.g. "registry.digitalocean.com/loopzero-infra-registry"
+ * @param registryEndpoint - e.g. "registry.digitalocean.com/loopzero-system"
  */
 export function createClusterImagePolicy(
   prefix: string,

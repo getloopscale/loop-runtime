@@ -75,7 +75,7 @@ export function createBuildSecrets(
   );
 
   // Workflow ServiceAccount with Helm annotations
-  const registrySecretName = "loopzero-infra-registry";
+  const registrySecretName = "loopzero-system";
   void buildRegistryPullSecret;
 
   const buildSA = new k8s.core.v1.ServiceAccount(

@@ -17,7 +17,7 @@ export function installCloudService(
   config: PlatformStackConfig,
   serviceAuthSecret: random.RandomPassword,
 ): void {
-  const registrySecretName = "loopzero-infra-registry";
+  const registrySecretName = "loopzero-system";
   const imageTag = config.environment || "dev";
 
   const configMap = new k8s.core.v1.ConfigMap(
@@ -98,7 +98,7 @@ export function installCloudService(
             imagePullSecrets: [{ name: registrySecretName }],
             containers: [{
               name: "cloud",
-              image: `registry.digitalocean.com/loopzero-infra-registry/loopzero-cloud:${imageTag}`,
+              image: `registry.digitalocean.com/loopzero-system/loopzero-cloud:${imageTag}`,
               imagePullPolicy: "Always",
               ports: [{ containerPort: 13002 }],
               envFrom: [
@@ -168,7 +168,7 @@ export function installCloudService(
             imagePullSecrets: [{ name: registrySecretName }],
             containers: [{
               name: "dashboard",
-              image: `registry.digitalocean.com/loopzero-infra-registry/loopzero-dashboard:${imageTag}`,
+              image: `registry.digitalocean.com/loopzero-system/loopzero-dashboard:${imageTag}`,
               imagePullPolicy: "Always",
               ports: [{ containerPort: 8080 }],
               resources: {

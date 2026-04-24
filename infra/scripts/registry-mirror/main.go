@@ -16,7 +16,7 @@
 //
 // Usage:
 //
-//	SOURCE_REGISTRY=registry.digitalocean.com/loopzero-infra-registry \
+//	SOURCE_REGISTRY=registry.digitalocean.com/loopzero-system \
 //	DEST_REGISTRY=harbor.dev.loopzero.example/loopzero-platform \
 //	go run infra/scripts/registry-mirror/main.go
 //

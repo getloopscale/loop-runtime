@@ -82,8 +82,8 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	// Pods use this SA with automountServiceAccountToken=false.
 	//
 	// imagePullSecrets provisioning (bug #24 fix — L2 race condition):
-	//   1. Copy the docker config from loopzero-infra-registry-source in loopzero-system
-	//      (seeded once at platform bootstrap) into this namespace as loopzero-infra-registry.
+	//   1. Copy the docker config from loopzero-system-source in loopzero-system
+	//      (seeded once at platform bootstrap) into this namespace as loopzero-system.
 	//   2. Attach it to loopzero-app SA.
 	if err := r.ensurePullSecret(ctx, nsName); err != nil {
 		// Non-fatal: pod may still pull if another mechanism (doctl integration,
@@ -116,12 +116,12 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		falseVal := false
 		appSA.AutomountServiceAccountToken = &falseVal
 		appSA.ImagePullSecrets = []corev1.LocalObjectReference{
-			{Name: "loopzero-infra-registry"},
+			{Name: "loopzero-system"},
 		}
 		var defaultSA corev1.ServiceAccount
 		if err := r.RuntimeClient.Get(ctx, client.ObjectKey{Namespace: nsName, Name: "default"}, &defaultSA); err == nil {
 			for _, ref := range defaultSA.ImagePullSecrets {
-				if ref.Name == "loopzero-infra-registry" {
+				if ref.Name == "loopzero-system" {
 					continue
 				}
 				appSA.ImagePullSecrets = append(appSA.ImagePullSecrets, ref)
@@ -138,14 +138,14 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 // ensurePullSecret copies the registry pull secret from loopzero-system into the tenant namespace.
 func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, nsName string) error {
 	var src corev1.Secret
-	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: "loopzero-infra-registry"}
+	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: "loopzero-system"}
 	if err := r.Client.Get(ctx, srcKey, &src); err != nil {
-		return fmt.Errorf("source pull secret loopzero-system/loopzero-infra-registry: %w", err)
+		return fmt.Errorf("source pull secret loopzero-system/loopzero-system: %w", err)
 	}
 
 	dst := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-infra-registry",
+			Name:      "loopzero-system",
 			Namespace: nsName,
 		},
 	}
@@ -159,7 +159,7 @@ func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, nsName str
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("destination pull secret %s/loopzero-infra-registry: %w", nsName, err)
+		return fmt.Errorf("destination pull secret %s/loopzero-system: %w", nsName, err)
 	}
 	return nil
 }

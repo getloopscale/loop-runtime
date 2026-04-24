@@ -26,7 +26,7 @@ spec:
         # SEC-004: Custom image with mc + git baked in (no runtime downloads).
         # Built from: infra/images/clone-runner/Dockerfile
         # CI builds via build-images.yml, local via task images:build.
-        image: {{ .Values.images.cloneRunner | default "registry.digitalocean.com/loopzero-infra-registry/loopzero-clone-runner:v0.1.0" }}
+        image: {{ .Values.images.cloneRunner | default "registry.digitalocean.com/loopzero-system/loopzero-clone-runner:v0.1.0" }}
         env:
           - name: HOME
             value: /tmp

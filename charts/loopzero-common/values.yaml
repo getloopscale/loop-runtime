@@ -5,7 +5,7 @@
 # Dependent charts should define these values in their own values.yaml:
 #
 # global:
-#   registry: ""              # Container registry (e.g., registry.digitalocean.com/loopzero-infra-registry)
+#   registry: ""              # Container registry (e.g., registry.digitalocean.com/loopzero-system)
 #   imagePullSecrets: []
 #
 # image:

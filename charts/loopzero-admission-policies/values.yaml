@@ -6,7 +6,7 @@ policies:
   restrictRegistries:
     enabled: true
     allowedRegistries:
-      - "registry.digitalocean.com/loopzero-infra-registry/*"
+      - "registry.digitalocean.com/loopzero-system/*"
       - "k3d-loopzero-registry:5000/*"
   requireImageSignature:
     enabled: true
