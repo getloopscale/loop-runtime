@@ -41,3 +41,25 @@ spec:
           port: 80
         - protocol: TCP
           port: 443
+    # Fix 6 (CHG-2026-04-24-INSTALLER-E2E): Platform control-plane services.
+    # Without these, loopzero-api running in loopzero-system (same namespace as build
+    # pods because podSelector: {}) cannot reach Gitea (3000), Hydra public
+    # (4444), Hydra admin (4445), PostgreSQL (5432), or ArgoCD server (8080).
+    # Result was connection refused from every loopzero-api pod despite services
+    # resolving via DNS. These are internal control-plane ports; external
+    # egress to them would be blocked anyway by namespace-level ingress rules
+    # on those target services.
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 3000   # Gitea HTTP
+        - protocol: TCP
+          port: 4444   # Ory Hydra public
+        - protocol: TCP
+          port: 4445   # Ory Hydra admin
+        - protocol: TCP
+          port: 5432   # PostgreSQL (CNPG rw/ro/r services)
+        - protocol: TCP
+          port: 8080   # ArgoCD server (insecure mode) + loopzero-api health
+        - protocol: TCP
+          port: 8443   # ArgoCD server (TLS) + webhook receivers

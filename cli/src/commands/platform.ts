@@ -27,6 +27,10 @@ import {
   createHydraClient,
   createMinioCredentialsSecret,
   createAuthDatabases,
+  createClusterIssuer,
+  ensureMinioBucket,
+  grantTableOwnership,
+  createBuildSecrets,
 } from '../installer';
 
 export interface PlatformDeps {
@@ -159,13 +163,27 @@ export async function platformInstall(
   writeTo('  ✓ Databases ready (loopzero, kratos, hydra)');
   writeTo('');
 
-  // ── Step 5: Install CRDs ──────────────────────────────────────────
-  writeTo('Step 5/10: Installing CRDs...');
+  // ── Step 5: Install CRDs + ClusterIssuer ──────────────────────────
+  writeTo('Step 5/10: Installing CRDs and cert-manager ClusterIssuer...');
   try {
     installCRDs(writeTo);
   } catch (err) {
     writeError(`CRD installation failed: ${err}`);
     return 1;
+  }
+
+  // Fix 1 (CHG-2026-04-24-INSTALLER-E2E): cert-manager ClusterIssuer.
+  // Without this, ExposedRoute Certificate requeues forever with
+  // "certificate not ready" and `loopzero deploy` hangs at health verification.
+  //
+  // For profile=minimal we provision a self-signed issuer named
+  // "loopzero-ca-issuer" to match the default loopzero-controller expects in dev.
+  // For profile=production the customer provides the issuer via
+  // config.clusterIssuer (ACME / enterprise CA) — we never create self-signed.
+  if (config.profile !== 'production') {
+    createClusterIssuer(config.clusterIssuer || 'loopzero-ca-issuer', writeTo);
+  } else {
+    writeTo(`  ⚠ Production profile — ClusterIssuer "${config.clusterIssuer}" must already exist.`);
   }
   writeTo('');
 
@@ -207,8 +225,8 @@ export async function platformInstall(
   };
   writeTo('');
 
-  // ── Step 7: Runtime secrets ───────────────────────────────────────
-  writeTo('Step 7/10: Creating runtime secrets...');
+  // ── Step 7: Runtime secrets + build infrastructure ────────────────
+  writeTo('Step 7/10: Creating runtime secrets and build infrastructure...');
 
   // Kubeconfigs for multi-cluster access
   createKubeconfigs(config, writeTo);
@@ -231,6 +249,21 @@ export async function platformInstall(
     minioCreds.secretKey,
     writeTo,
   );
+
+  // Fix 2 (CHG-2026-04-24-INSTALLER-E2E): loopzero-builds bucket.
+  // MinIO chart creates only a single bucket (the one passed via buckets[0]).
+  // Build CWTs hardcode "loopzero-builds" as target for source bundles — without
+  // it, clone-repo fails with "Bucket `loopzero-builds` does not exist".
+  ensureMinioBucket(config.storage.bucket || 'loopzero-artifacts', minioCreds.accessKey, minioCreds.secretKey, writeTo);
+  ensureMinioBucket('loopzero-builds', minioCreds.accessKey, minioCreds.secretKey, writeTo);
+
+  // Fix 5 (CHG-2026-04-24-INSTALLER-E2E): buildkit-registry-config +
+  // cosign-signing-key secrets. BuildKit needs credentials to push images to
+  // the registry; cosign-signer needs a keypair to sign published images.
+  // For profile=minimal we generate self-signed keypair with empty password
+  // (dev/test only — rotate before production; see ADR-0012 BYO boundary).
+  createBuildSecrets(config, writeTo);
+
   writeTo('');
 
   // ── Step 8: Install LoopZero platform ─────────────────────────────────
@@ -254,6 +287,12 @@ export async function platformInstall(
   // Run migrations after API pod is up
   writeTo('  Running database migrations...');
   runMigrations(dbUrl, writeTo);
+
+  // Fix 3 (CHG-2026-04-24-INSTALLER-E2E): migrations run as admin via
+  // the API pod's migrate binary, which leaves tables owned by `postgres`.
+  // loopzero-api connects as role `loopzero` and gets permission denied. Reassign
+  // ownership after migration so runtime queries succeed.
+  grantTableOwnership(dbUrl, 'loopzero', writeTo);
   writeTo('');
 
   // ── Step 10: Validate ─────────────────────────────────────────────

@@ -173,3 +173,42 @@ instead of a silent one.
 The follow-up is intentionally separate so this ADR stays narrow on the
 Bitnami regression and the follow-up can be reviewed on its own merits
 (UX of error messages, wording of README guidance, exact YAML contract).
+
+---
+
+## Addendum 2026-04-24 — Implementation gaps closed (CHG-2026-04-24-INSTALLER-E2E)
+
+End-to-end validation of this ADR on a fresh k3d cluster surfaced 8
+remaining gaps between "install reaches Step 10/10" and "`loopzero deploy`
+produces an ACTIVE release". All were dev-env / chart-level issues
+that the original ADR scope (CNPG + Gitea SQLite) did not cover but
+which also block the promise of "10 steps, zero manual intervention".
+
+A follow-up T2 change (`CHG-2026-04-24-INSTALLER-E2E`) closes them:
+
+1. **ClusterIssuer auto-provision** — self-signed `loopzero-ca-issuer` for
+   `profile=minimal` (production profile still requires customer-provided
+   issuer). Unblocks ExposedRoute Certificate.
+2. **MinIO `loopzero-builds` bucket** — created alongside `loopzero-artifacts`
+   (MinIO chart only auto-creates one bucket; build CWTs need both).
+3. **Table ownership reassignment** post-migration (`ALTER TABLE ... OWNER
+   TO loopzero` via CNPG primary kubectl-exec).
+4. **Hydra OAuth2 client creation** rewritten to use `withPortForward`
+   + curl (previous wget path failed HTTP 400).
+5. **Build-time secrets** `buildkit-registry-config` + `cosign-signing-key`
+   provisioned in Step 7 (cosign keypair generated locally for
+   `profile=minimal`; BYO for production via
+   `config.signing.existingSecret`).
+6. **NetworkPolicy egress allowlist** expanded with ports 3000/4444/4445/
+   5432/8080/8443 (chart `loopzero-build-cwts`).
+7. **MinIO endpoint `http://` prefix** in `components.ts buildPlatformValues`.
+8. **Image tag overrides** for `loopzero-packs-runner` (`20260424`) and
+   `loopzero-cosign-signer` (`dev`) via `LOOPZERO_PACKS_IMAGE` / `LOOPZERO_COSIGN_IMAGE`
+   env vars passed to loopzero-api chart values.
+
+See CHANGELOG `[Unreleased]` → "Self-hosted installer E2E gap closure"
+for per-fix file paths and rationale.
+
+The BYO boundary documented above still holds: fixes (1) and (5) only
+auto-provision for `profile=minimal` and explicitly require customer-
+managed alternatives for `profile=production`.

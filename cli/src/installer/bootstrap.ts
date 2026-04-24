@@ -328,63 +328,80 @@ export function extractMinioCredentials(
 
 /**
  * Create Hydra OAuth2 client for loopzero-cli.
- * Uses kubectl exec to call Hydra admin API (no port-forward needed).
+ *
+ * Uses `withPortForward` + curl rather than `kubectl exec wget` because:
+ * - `wget --post-data=@-` has quoting edge cases that produced HTTP 400
+ *   when the JSON payload contained special characters.
+ * - Port-forward + curl from host is already the canonical pattern for
+ *   installer → in-cluster API calls (see bootstrapGitea).
+ *
+ * Idempotent: lists existing clients first; returns existing client_id
+ * if `loopzero-cli` is already registered.
+ *
+ * Returns the client_id (or empty string on failure — non-fatal, caller
+ * may proceed, CLI login can be configured post-install).
  */
 export function createHydraClient(log: (msg: string) => void): string {
   log('  Creating OAuth2 client...');
 
-  // Call Hydra admin API via kubectl exec (pod-to-pod, no port-forward)
-  const hydraAdminUrl = 'http://ory-hydra-admin.ory.svc.cluster.local:4445';
+  return withPortForward(
+    'ory', 'svc/ory-hydra-admin', 4445,
+    (adminUrl) => {
+      const ready = waitForHttp(`${adminUrl}/health/ready`, 30, log);
+      if (!ready) {
+        log('  ⚠ Hydra admin not ready — skipping OAuth2 client');
+        return '';
+      }
 
-  try {
-    // Check if client already exists
-    const existingResp = execSync(
-      `kubectl exec -n ory deploy/ory-hydra -- wget -q -O - '${hydraAdminUrl}/admin/clients' 2>/dev/null || echo '[]'`,
-      { encoding: 'utf-8', timeout: 15_000 },
-    );
-    const clients = JSON.parse(existingResp.trim() || '[]') as { client_id: string; client_name: string }[];
-    const existing = clients.find((c) => c.client_name === 'loopzero-cli');
-    if (existing) {
-      log(`  ✓ OAuth2 client exists: ${existing.client_id}`);
-      return existing.client_id;
-    }
-  } catch {
-    // If listing fails, proceed to create
-  }
+      // Check if client already exists
+      try {
+        const existingResp = execSync(
+          `curl -sf --max-time 5 '${adminUrl}/admin/clients'`,
+          { encoding: 'utf-8', timeout: 10_000 },
+        );
+        const clients = JSON.parse(existingResp.trim() || '[]') as { client_id: string; client_name: string }[];
+        const existing = clients.find((c) => c.client_name === 'loopzero-cli');
+        if (existing) {
+          log(`  ✓ OAuth2 client exists: ${existing.client_id}`);
+          return existing.client_id;
+        }
+      } catch {
+        // List failed — proceed to create
+      }
 
-  try {
-    const clientConfig = JSON.stringify({
-      client_name: 'loopzero-cli',
-      grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'],
-      scope: 'openid offline_access',
-      redirect_uris: ['http://localhost:11811/callback'],
-      audience: ['loopzero-engine'],
-      token_endpoint_auth_method: 'none',
-    });
+      const clientConfig = JSON.stringify({
+        client_name: 'loopzero-cli',
+        grant_types: ['client_credentials'],
+        response_types: [],
+        scope: 'openid offline_access',
+        audience: ['loopzero-engine'],
+        token_endpoint_auth_method: 'client_secret_post',
+      });
 
-    // Write config to a temp file in the pod, then POST it
-    const resp = execSync(
-      `kubectl exec -n ory deploy/ory-hydra -- sh -c ` +
-      `'echo '"'"'${clientConfig}'"'"' | wget -q -O - --post-data=@- ` +
-      `--header="Content-Type: application/json" ` +
-      `${hydraAdminUrl}/admin/clients'`,
-      { encoding: 'utf-8', timeout: 15_000 },
-    );
-    const parsed = JSON.parse(resp.trim());
-    const clientId = parsed.client_id || '';
-    if (clientId) {
-      log(`  ✓ OAuth2 client created: ${clientId}`);
-    } else {
-      log('  ⚠ OAuth2 client created but client_id missing');
-    }
-    return clientId;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log(`  ⚠ OAuth2 client creation failed: ${msg.slice(0, 80)}`);
-    log('    This can be created manually after install');
-    return '';
-  }
+      try {
+        const resp = execSync(
+          `curl -sf -X POST --max-time 10 ` +
+          `-H 'Content-Type: application/json' ` +
+          `--data '${clientConfig.replace(/'/g, "'\\''")}' ` +
+          `'${adminUrl}/admin/clients'`,
+          { encoding: 'utf-8', timeout: 15_000 },
+        );
+        const parsed = JSON.parse(resp.trim());
+        const clientId = (parsed.client_id as string) || '';
+        if (clientId) {
+          log(`  ✓ OAuth2 client created: ${clientId}`);
+        } else {
+          log('  ⚠ OAuth2 client response missing client_id');
+        }
+        return clientId;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log(`  ⚠ OAuth2 client creation failed: ${msg.slice(0, 120)}`);
+        log('    Non-fatal — can be created manually after install');
+        return '';
+      }
+    },
+  );
 }
 
 // ─── Runtime secrets ────────────────────────────────────────────────────────
@@ -447,23 +464,55 @@ export function createKubeconfigs(
     // A production install should override via env (BUILD_KUBE_CONTEXT,
     // RUNTIME_KUBE_CONTEXT) in the chart values to match customer-named
     // contexts.
+    //
+    // Use the IN-CLUSTER API server hostname (kubernetes.default.svc)
+    // rather than whatever `kubectl config view` shows, because the pods
+    // that consume this kubeconfig run INSIDE the cluster. The host's
+    // kubeconfig often points at k3d's external loopback (`0.0.0.0:6443`)
+    // which is not reachable from inside pods. kubernetes.default.svc is
+    // always resolvable from any namespace via coredns.
     try {
-      const apiServer = execSync(
-        `kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'`,
-        { encoding: 'utf-8', timeout: 5_000 },
-      ).trim();
+      // In-cluster pods reach the API server via the built-in `kubernetes`
+      // Service in the `default` namespace. kubernetes.default.svc is
+      // always resolvable and ACLs are handled by the SA mounted token.
+      //
+      // NOTE: if pods hit "connection refused" here on certain CNIs
+      // (observed on k3s+flannel when a namespace-wide NetworkPolicy with
+      // `podSelector: {}` matches the pod), add port 443 to the policy
+      // egress allowlist — already done in loopzero-build-cwts chart for
+      // ports 443/8080/8443 (Fix 6 of CHG-2026-04-24-INSTALLER-E2E).
+      const apiServer = 'https://kubernetes.default.svc.cluster.local:443';
 
+      // Use the SA token mounted at /var/run/secrets/... via `tokenFile`
+      // so the client re-reads it on each request (handles projected
+      // BoundServiceAccountToken rotation). No static token in ConfigMap —
+      // avoids 24h expiry AND avoids leaking a long-lived token into
+      // cluster state.
       const kubeconfig = JSON.stringify({
         apiVersion: 'v1',
         kind: 'Config',
         clusters: [
-          { name: 'local', cluster: { server: apiServer, 'insecure-skip-tls-verify': true } },
+          {
+            name: 'local',
+            cluster: {
+              server: apiServer,
+              'insecure-skip-tls-verify': true,
+            },
+          },
+        ],
+        users: [
+          {
+            name: 'sa',
+            user: {
+              tokenFile: '/var/run/secrets/kubernetes.io/serviceaccount/token',
+            },
+          },
         ],
         contexts: [
-          { name: 'k3d-loopzero-mgmt', context: { cluster: 'local' } },
-          { name: 'k3d-loopzero-build', context: { cluster: 'local' } },
-          { name: 'k3d-loopzero-workload', context: { cluster: 'local' } },
-          { name: 'local', context: { cluster: 'local' } },
+          { name: 'k3d-loopzero-mgmt', context: { cluster: 'local', user: 'sa' } },
+          { name: 'k3d-loopzero-build', context: { cluster: 'local', user: 'sa' } },
+          { name: 'k3d-loopzero-workload', context: { cluster: 'local', user: 'sa' } },
+          { name: 'local', context: { cluster: 'local', user: 'sa' } },
         ],
         'current-context': 'local',
       });
@@ -625,6 +674,258 @@ export function seedAdminUser(
     log(`  ✓ Admin user seeded: ${adminEmail}`);
   } catch {
     log('  ⚠ Admin user seeding skipped — will be created on first login');
+  }
+}
+
+// ─── Cluster issuer (self-signed for minimal profile) ──────────────────────
+
+/**
+ * Create a self-signed `ClusterIssuer` (cert-manager.io/v1) named
+ * `loopzero-ca-issuer`. Required for `profile=minimal` so the ExposedRoute
+ * Certificate CR can complete issuance — without it, cert-manager keeps
+ * requeueing with `certificate not ready`, and `loopzero deploy` blocks
+ * forever at "Verifying service health".
+ *
+ * Self-signed certificates are **not** trusted by public browsers. This
+ * is acceptable for dev/test; production installs must override via
+ * `config.clusterIssuer` (ACME / enterprise CA).
+ *
+ * Idempotent via `kubectl apply`.
+ */
+export function createClusterIssuer(
+  name: string,
+  log: (msg: string) => void,
+): void {
+  log(`  Creating ClusterIssuer ${name} (self-signed)...`);
+  const manifest = `apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: ${name}
+spec:
+  selfSigned: {}
+`;
+  try {
+    execSync(
+      `cat <<'YAML' | kubectl apply -f -\n${manifest}YAML`,
+      { stdio: 'pipe', timeout: 15_000, shell: '/bin/bash' } as any,
+    );
+    log(`  ✓ ClusterIssuer ${name} ready`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`  ⚠ ClusterIssuer creation failed: ${msg.slice(0, 120)}`);
+  }
+}
+
+// ─── MinIO bucket ensure ────────────────────────────────────────────────────
+
+/**
+ * Ensure the given bucket exists in the MinIO deployment. Idempotent —
+ * `mc mb --ignore-existing` is a no-op if present.
+ *
+ * Runs `mc` inside the MinIO pod itself (not from host) so we don't need
+ * port-forward, and the `mc` binary is already present in the MinIO image.
+ * Needed because:
+ *   - `minio` chart auto-creates the bucket passed in `buckets[0].name` only
+ *     (single-bucket API as of chart v5.4.0).
+ *   - LoopZero needs TWO buckets: `loopzero-artifacts` (config) and `loopzero-builds`
+ *     (hardcoded in build CWTs). Without `loopzero-builds`, clone-repo fails.
+ */
+export function ensureMinioBucket(
+  bucket: string,
+  accessKey: string,
+  secretKey: string,
+  log: (msg: string) => void,
+): void {
+  log(`  Ensuring MinIO bucket "${bucket}"...`);
+  try {
+    const minioPod = execSync(
+      `kubectl get pod -n loopzero-system -l app=minio ` +
+      `-o jsonpath='{.items[0].metadata.name}' 2>/dev/null`,
+      { encoding: 'utf-8', timeout: 10_000 },
+    ).trim();
+    if (!minioPod) {
+      log(`  ⚠ MinIO pod not found — skipping bucket ${bucket}`);
+      return;
+    }
+    // Use single-quoted heredoc-style: mc alias set + mc mb --ignore-existing
+    execSync(
+      `kubectl exec -n loopzero-system ${minioPod} -- sh -c ` +
+      `"mc alias set local http://localhost:9000 '${accessKey}' '${secretKey}' >/dev/null 2>&1 && ` +
+      `mc mb local/${bucket} --ignore-existing >/dev/null 2>&1"`,
+      { stdio: 'pipe', timeout: 15_000 },
+    );
+    log(`  ✓ MinIO bucket ${bucket} ready`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`  ⚠ MinIO bucket ${bucket} failed: ${msg.slice(0, 100)}`);
+  }
+}
+
+// ─── Post-migration table ownership ─────────────────────────────────────────
+
+/**
+ * Ensure all tables/sequences in the `loopzero` database are owned by the
+ * `loopzero` role. When migrations run against the admin `postgres` role
+ * (for example via the API pod's `migrate` binary before CNPG finishes
+ * granting), the tables end up owned by `postgres` and the `loopzero` user
+ * gets permission denied on any SELECT/UPDATE.
+ *
+ * Idempotent via DO block + loop over pg_tables.
+ *
+ * Ignored silently when `config.database.external=true` (customer owns
+ * DB lifecycle in that mode).
+ */
+export function grantTableOwnership(
+  databaseUrl: string,
+  targetRole: string,
+  log: (msg: string) => void,
+): void {
+  const isInternal = databaseUrl.includes('postgresql-cluster-rw')
+    || databaseUrl.includes('postgresql.loopzero-system');
+  if (!isInternal) {
+    log('  ⚠ External database — skipping table ownership reassignment.');
+    log('    Customer must ensure migrations grant the configured role.');
+    return;
+  }
+
+  log(`  Reassigning table ownership to ${targetRole}...`);
+
+  const primaryPod = findCnpgPrimaryPod();
+  if (!primaryPod) {
+    log('  ✗ CNPG primary pod not found — cannot set ownership');
+    return;
+  }
+
+  const sql = `DO $$ DECLARE r RECORD; BEGIN ` +
+    `FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' LOOP ` +
+    `EXECUTE 'ALTER TABLE public.'||quote_ident(r.tablename)||' OWNER TO ${targetRole}'; ` +
+    `END LOOP; ` +
+    `FOR r IN SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema='public' LOOP ` +
+    `EXECUTE 'ALTER SEQUENCE public.'||quote_ident(r.sequence_name)||' OWNER TO ${targetRole}'; ` +
+    `END LOOP; ` +
+    `END $$;`;
+
+  try {
+    execSync(
+      `kubectl exec -n loopzero-system ${primaryPod} -c postgres -- ` +
+      `psql -U postgres -d loopzero -c "${sql.replace(/"/g, '\\"')}"`,
+      { stdio: 'pipe', timeout: 20_000 },
+    );
+    log(`  ✓ Table ownership set to ${targetRole}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`  ⚠ Table ownership reassignment failed: ${msg.slice(0, 120)}`);
+  }
+}
+
+/**
+ * Helper: find the CNPG primary pod in loopzero-system namespace.
+ */
+function findCnpgPrimaryPod(): string {
+  try {
+    return execSync(
+      `kubectl get pods -n loopzero-system ` +
+      `-l cnpg.io/cluster=postgresql-cluster,cnpg.io/instanceRole=primary ` +
+      `-o jsonpath='{.items[0].metadata.name}' 2>/dev/null`,
+      { encoding: 'utf-8', timeout: 10_000 },
+    ).trim();
+  } catch {
+    return '';
+  }
+}
+
+// ─── Build-time secrets (registry config + cosign key) ─────────────────────
+
+/**
+ * Create the two secrets required by the build pipeline in the `argo`
+ * namespace:
+ *   - `buildkit-registry-config`: docker config.json, mounted at
+ *     `/home/user/.docker/` in the buildkitd pod so BuildKit can push
+ *     to the configured registry.
+ *   - `cosign-signing-key`: cosign-format keypair (cosign.key, cosign.pub,
+ *     cosign.password) mounted into the cosign-signer step.
+ *
+ * For `profile=minimal` (dev/test), the keypair is generated locally with
+ * an EMPTY password. This is explicitly not a production story:
+ *   - Keys live on the operator's laptop for the duration of install.
+ *   - No rotation story.
+ *   - ADR-0012 §"BYO vs LoopZero-internal" requires production profile to
+ *     set `config.signing.existingSecret` (customer-managed KMS).
+ *
+ * Docker config is reused from `~/.docker/config.json` (operator must have
+ * run `doctl registry login` or equivalent before invoking the installer).
+ *
+ * Idempotent: `kubectl apply --dry-run=client | apply` for both.
+ */
+export function createBuildSecrets(
+  config: PlatformConfig,
+  log: (msg: string) => void,
+): void {
+  const home = process.env.HOME || '/root';
+  const dockerConfig = `${home}/.docker/config.json`;
+
+  // ── buildkit-registry-config ──
+  try {
+    execSync(
+      `kubectl create secret generic buildkit-registry-config ` +
+      `--namespace argo ` +
+      `--from-file=config.json=${dockerConfig} ` +
+      `--dry-run=client -o yaml | kubectl apply -f -`,
+      { stdio: 'pipe', timeout: 10_000 },
+    );
+    log('  ✓ buildkit-registry-config secret ready');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`  ⚠ buildkit-registry-config failed: ${msg.slice(0, 100)}`);
+    log('    Run: doctl registry login (or equivalent) and re-run install.');
+  }
+
+  // ── cosign-signing-key ──
+  // In production profile, expect customer-managed key via
+  // config.signing.existingSecret. We check for it; if present, trust and
+  // skip generation. Otherwise (minimal profile) generate one.
+  const signingCfg = (config as { signing?: { existingSecret?: string } }).signing;
+  if (signingCfg?.existingSecret) {
+    log(`  ✓ cosign-signing-key: using existing secret "${signingCfg.existingSecret}"`);
+    return;
+  }
+
+  // Check if secret already exists (idempotent re-run)
+  try {
+    execSync(`kubectl get secret -n argo cosign-signing-key`, {
+      stdio: 'pipe', timeout: 5_000,
+    });
+    log('  ✓ cosign-signing-key already exists (reusing)');
+    return;
+  } catch {
+    // Proceed to generate
+  }
+
+  // Generate cosign keypair with empty password (dev/test only)
+  const keyDir = `/tmp/loopzero-cosign-${Date.now()}`;
+  try {
+    execSync(`mkdir -p ${keyDir}`, { stdio: 'pipe' });
+    execSync(
+      `cd ${keyDir} && COSIGN_PASSWORD='' cosign generate-key-pair`,
+      { stdio: 'pipe', timeout: 20_000 },
+    );
+    execSync(
+      `kubectl create secret generic cosign-signing-key ` +
+      `--namespace argo ` +
+      `--from-file=cosign.key=${keyDir}/cosign.key ` +
+      `--from-file=cosign.pub=${keyDir}/cosign.pub ` +
+      `--from-literal=cosign.password='' ` +
+      `--dry-run=client -o yaml | kubectl apply -f -`,
+      { stdio: 'pipe', timeout: 10_000 },
+    );
+    // Clean up the tmp key directory (content is now in the Secret)
+    execSync(`rm -rf ${keyDir}`, { stdio: 'pipe' });
+    log('  ✓ cosign-signing-key generated (self-signed, minimal profile)');
+    log('    NOTE: rotate before production use — see ADR-0012 BYO boundary.');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`  ⚠ cosign-signing-key generation failed: ${msg.slice(0, 100)}`);
+    log('    Install cosign binary (https://docs.sigstore.dev) and re-run.');
   }
 }
 

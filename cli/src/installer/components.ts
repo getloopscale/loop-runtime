@@ -98,6 +98,35 @@ export function installCRDs(log: (msg: string) => void): void {
 }
 
 /**
+ * Compute env-var overrides for the build-time image tags that the
+ * loopzero-api Go binary defaults to. See Fix 8 comment in buildPlatformValues.
+ *
+ * Customer may set `config.images.packsRunner` and/or
+ * `config.images.cosignSigner` (full image ref including tag). Otherwise
+ * we fall back to tags that are known to exist in the DOCR as of v0.2.0.
+ * When the publish pipeline is fixed to emit `v0.1.0` (or current version)
+ * for both images, this function becomes a no-op.
+ */
+function imageTagOverrides(config: PlatformConfig): Record<string, string> {
+  const out: Record<string, string> = {};
+  const imgCfg = (config as { images?: { packsRunner?: string; cosignSigner?: string } }).images;
+
+  const packs = imgCfg?.packsRunner
+    || 'registry.digitalocean.com/loopzero-system/loopzero-packs-runner:20260424';
+  const cosign = imgCfg?.cosignSigner
+    || 'registry.digitalocean.com/loopzero-system/loopzero-cosign-signer:dev';
+
+  // These env vars are read by api/internal/argo/languages.go loopzeroPacks() and
+  // api/internal/argo/cosign.go loopzeroCosign() to override imageLoopZeroPacks /
+  // imageCosignSigner constants.
+  out['loopzero-api.env.LOOPZERO_PACKS_IMAGE'] = packs;
+  out['loopzero-api.env.LOOPZERO_COSIGN_IMAGE'] = cosign;
+  out['loopzero-controller.env.LOOPZERO_PACKS_IMAGE'] = packs;
+  out['loopzero-controller.env.LOOPZERO_COSIGN_IMAGE'] = cosign;
+  return out;
+}
+
+/**
  * Build Helm values for the platform chart based on customer config + bootstrap tokens.
  *
  * This is the central function that wires all runtime configuration.
@@ -123,7 +152,7 @@ function buildPlatformValues(
     'loopzero-api.config.baseDomain': config.domain,
     'loopzero-api.config.giteaUrl': 'http://gitea-http.gitea.svc.cluster.local:3000',
     'loopzero-api.config.argocdUrl': 'http://argocd-server.argocd.svc.cluster.local:80',
-    'loopzero-api.config.minioEndpoint': 'minio.loopzero-system.svc.cluster.local:9000',
+    'loopzero-api.config.minioEndpoint': 'http://minio.loopzero-system.svc.cluster.local:9000',
     'loopzero-api.config.registryUrl': config.registry.endpoint,
     'loopzero-api.config.jwksUrl': 'http://ory-hydra-public.ory.svc.cluster.local:4444/.well-known/jwks.json',
     'loopzero-api.config.jwtIssuer': 'http://ory-hydra-public.ory.svc.cluster.local:4444/',
@@ -142,15 +171,20 @@ function buildPlatformValues(
     'loopzero-controller.config.baseDomain': config.domain,
     'loopzero-controller.config.giteaUrl': 'http://gitea-http.gitea.svc.cluster.local:3000',
     'loopzero-controller.config.argocdUrl': 'http://argocd-server.argocd.svc.cluster.local:80',
-    'loopzero-controller.config.minioEndpoint': 'minio.loopzero-system.svc.cluster.local:9000',
+    'loopzero-controller.config.minioEndpoint': 'http://minio.loopzero-system.svc.cluster.local:9000',
     'loopzero-controller.config.registryUrl': config.registry.endpoint,
     'loopzero-controller.config.argoNamespace': 'argo',
     'loopzero-controller.config.argocdNamespace': 'argocd',
     // LOOPZERO_CLUSTER_ISSUER: cert-manager ClusterIssuer for TLS. Customer can
     // override via config.clusterIssuer; default production "letsencrypt-prod"
     // assumes cert-manager is wired to Let's Encrypt. For self-signed or
-    // internal-only installs, customer should point to a custom issuer.
-    'loopzero-controller.config.clusterIssuer': config.clusterIssuer || 'letsencrypt-prod',
+    // internal-only installs, the installer provisions "loopzero-ca-issuer"
+    // automatically (Step 5, profile=minimal). Chart v0.2.0 reads this as
+    // an env var, not config — set both paths so either chart layout works.
+    'loopzero-controller.config.clusterIssuer': config.clusterIssuer
+      || (config.profile === 'production' ? 'letsencrypt-prod' : 'loopzero-ca-issuer'),
+    'loopzero-controller.env.LOOPZERO_CLUSTER_ISSUER': config.clusterIssuer
+      || (config.profile === 'production' ? 'letsencrypt-prod' : 'loopzero-ca-issuer'),
     'loopzero-controller.secrets.databaseUrl': config.database.url || 'postgres://loopzero:loopzero@postgresql.loopzero-system.svc:5432/loopzero?sslmode=disable',
     'loopzero-controller.secrets.giteaToken': tokens.giteaToken,
     'loopzero-controller.secrets.argocdToken': tokens.argocdPassword,
@@ -167,6 +201,19 @@ function buildPlatformValues(
     // CWT templates reference loopzero-minio-credentials secret directly
     // (created separately by createMinioCredentialsSecret)
     'loopzero-build-cwts.minio.insecure': 'true',
+
+    // Fix 8 (CHG-2026-04-24-INSTALLER-E2E): loopzero-packs-runner and
+    // loopzero-cosign-signer image tags. The source-of-truth for the tag used
+    // at runtime is the `loopzero-api` container (which renders the build
+    // workflow) via env vars LOOPZERO_PACKS_IMAGE / LOOPZERO_COSIGN_IMAGE. Chart
+    // v0.2.0 hardcodes tag v0.1.0 in the Go binary (api/internal/argo/
+    // constants.go); the image publish pipeline tags differently
+    // (loopzero-packs-runner currently only has date-stamped tags like
+    // 20260424; loopzero-cosign-signer has "dev"). Until the publish pipeline
+    // emits v0.1.0/v0.2.0 for both, let the installer inject the actual
+    // tag via loopzero-api env. Customer overrides via values.yaml
+    // images.packsRunner / images.cosignSigner.
+    ...imageTagOverrides(config),
 
     // ── Network policies ──────────────────────────────────────────────────
     // Disable for initial install — cross-namespace egress requires known endpoints.

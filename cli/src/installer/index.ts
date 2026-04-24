@@ -21,6 +21,10 @@ export {
   createMinioCredentialsSecret,
   seedAdminUser,
   createAuthDatabases,
+  createClusterIssuer,
+  ensureMinioBucket,
+  grantTableOwnership,
+  createBuildSecrets,
 } from './bootstrap';
 export {
   ensureImagePullSecret,
