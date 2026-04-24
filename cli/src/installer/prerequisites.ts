@@ -2,6 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import { execSync } from 'child_process';
+import * as crypto from 'crypto';
 import { HelmRelease, PlatformConfig } from './types';
 import { installOrUpgrade, releaseExists } from './helm';
 
@@ -126,14 +127,31 @@ export function buildPrerequisites(config: PlatformConfig): HelmRelease[] {
 
   // 6. Ory (bundled auth)
   if (config.auth.type === 'bundled') {
+    const dbBase = config.database.url
+      ? config.database.url.replace(/\/[^/]*(\?.*)?$/, '')
+      : 'postgres://loopzero:loopzero@postgresql.loopzero-system.svc:5432';
+    const sslSuffix = config.database.url?.includes('sslmode=') ? '' : '?sslmode=disable';
+
+    // Generate or use provided system secret (must be 32+ chars)
+    const configAuth = config.auth as { type: string; systemSecret?: string };
+    const systemSecret = configAuth.systemSecret
+      || crypto.randomBytes(24).toString('base64url');
+
     releases.push({
       name: 'ory-kratos',
       chart: 'ory/kratos',
       version: VERSIONS.oryKratos,
       namespace: 'ory',
       createNamespace: true,
+      values: {
+        'kratos.config.dsn': `${dbBase}/kratos${sslSuffix}`,
+        'kratos.config.selfservice.default_browser_return_url': `https://cloud.${config.domain}`,
+        'kratos.config.identity.schemas[0].id': 'default',
+        'kratos.config.identity.schemas[0].url': 'base64://ewogICIkaWQiOiAiZGVmYXVsdCIsCiAgIiRzY2hlbWEiOiAiaHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNy9zY2hlbWEjIiwKICAidGl0bGUiOiAiVXNlciIsCiAgInR5cGUiOiAib2JqZWN0IiwKICAicHJvcGVydGllcyI6IHsKICAgICJ0cmFpdHMiOiB7CiAgICAgICJ0eXBlIjogIm9iamVjdCIsCiAgICAgICJwcm9wZXJ0aWVzIjogewogICAgICAgICJlbWFpbCI6IHsKICAgICAgICAgICJ0eXBlIjogInN0cmluZyIsCiAgICAgICAgICAiZm9ybWF0IjogImVtYWlsIiwKICAgICAgICAgICJvcnkuc2gva3JhdG9zIjogewogICAgICAgICAgICAiY3JlZGVudGlhbHMiOiB7CiAgICAgICAgICAgICAgInBhc3N3b3JkIjogewogICAgICAgICAgICAgICAgImlkZW50aWZpZXIiOiB0cnVlCiAgICAgICAgICAgICAgfQogICAgICAgICAgICB9CiAgICAgICAgICB9CiAgICAgICAgfQogICAgICB9LAogICAgICAicmVxdWlyZWQiOiBbImVtYWlsIl0KICAgIH0KICB9Cn0=',
+        'kratos.automigration.enabled': 'true',
+      },
       waitReady: true,
-      timeout: '3m',
+      timeout: '5m',
       order: 60,
     });
     releases.push({
@@ -141,8 +159,16 @@ export function buildPrerequisites(config: PlatformConfig): HelmRelease[] {
       chart: 'ory/hydra',
       version: VERSIONS.oryHydra,
       namespace: 'ory',
+      values: {
+        'hydra.config.dsn': `${dbBase}/hydra${sslSuffix}`,
+        'hydra.config.urls.self.issuer': 'http://ory-hydra-public.ory.svc.cluster.local:4444/',
+        'hydra.config.strategies.access_token': 'jwt',
+        'hydra.config.secrets.system[0]': systemSecret,
+        'hydra.dev': 'true',
+        'hydra.automigration.enabled': 'true',
+      },
       waitReady: true,
-      timeout: '3m',
+      timeout: '5m',
       order: 61,
     });
   }

@@ -12,7 +12,7 @@ image:
 
 # The controller entrypoint within the loopzero-api image.
 command: ["/loopzero-controller"]
-args: ["-health-port=9091"]
+args: []
 
 replicaCount: 1
 revisionHistoryLimit: 3

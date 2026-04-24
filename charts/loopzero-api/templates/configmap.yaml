@@ -15,7 +15,7 @@ data:
   REGISTRY_INSECURE: {{ .Values.config.registryInsecure | quote }}
   LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   LOOPZERO_DISABLE_LEGACY_LOOPS: {{ .Values.config.disableLegacyLoops | quote }}
-  JWKS_ENDPOINT: {{ .Values.config.jwksUrl | quote }}
+  JWKS_URL: {{ .Values.config.jwksUrl | quote }}
   JWT_ISSUER: {{ .Values.config.jwtIssuer | quote }}
   LOOPZERO_CLUSTER_ISSUER: {{ .Values.config.clusterIssuer | quote }}
   ARGO_NAMESPACE: {{ .Values.config.argoNamespace | quote }}

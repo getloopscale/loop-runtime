@@ -15,6 +15,12 @@ import {
   validateInstallation,
   waitForPods,
   getPlatformStatus,
+  runMigrations,
+  bootstrapGitea,
+  bootstrapArgoCD,
+  createKubeconfigs,
+  createHydraClient,
+  createAuthDatabases,
 } from '../installer';
 
 export interface PlatformDeps {
@@ -26,6 +32,7 @@ export interface PlatformDeps {
  * `loopzero platform install -f values.yaml [--profile minimal|production]`
  *
  * Installs the complete LoopZero platform on the current Kubernetes cluster.
+ * Zero manual intervention — all prerequisites, bootstrap, and config automated.
  */
 export async function platformInstall(
   deps: PlatformDeps,
@@ -56,8 +63,8 @@ export async function platformInstall(
   writeTo('  =======================');
   writeTo('');
 
-  // Step 1: Validate cluster
-  writeTo('Step 1/7: Validating cluster...');
+  // ── Step 1: Validate cluster ──────────────────────────────────────
+  writeTo('Step 1/10: Validating cluster...');
   const validation = validateCluster();
   for (const check of validation.checks) {
     writeTo(`  ${check.ok ? '✓' : '✗'} ${check.name}: ${check.detail}`);
@@ -68,8 +75,8 @@ export async function platformInstall(
   }
   writeTo('');
 
-  // Step 2: Prerequisites
-  writeTo('Step 2/7: Installing prerequisites...');
+  // ── Step 2: Install prerequisites ─────────────────────────────────
+  writeTo('Step 2/10: Installing prerequisites...');
   const prereqResults = installPrerequisites(config, writeTo);
   const prereqFailed = prereqResults.some((r) => r.status === 'failed');
   if (prereqFailed) {
@@ -78,8 +85,8 @@ export async function platformInstall(
   }
   writeTo('');
 
-  // Step 3: Registry credentials
-  writeTo('Step 3/8: Configuring registry credentials...');
+  // ── Step 3: Registry credentials ──────────────────────────────────
+  writeTo('Step 3/10: Configuring registry credentials...');
   try {
     ensureImagePullSecret('loopzero-system', writeTo);
   } catch (err) {
@@ -88,8 +95,14 @@ export async function platformInstall(
   }
   writeTo('');
 
-  // Step 4: CRDs
-  writeTo('Step 4/8: Installing CRDs...');
+  // ── Step 4: Database setup ────────────────────────────────────────
+  writeTo('Step 4/10: Setting up databases...');
+  const dbUrl = config.database.url || 'postgres://loopzero:loopzero@postgresql.loopzero-system.svc:5432/loopzero?sslmode=disable';
+  createAuthDatabases(dbUrl, writeTo);
+  writeTo('');
+
+  // ── Step 5: Install CRDs ──────────────────────────────────────────
+  writeTo('Step 5/10: Installing CRDs...');
   try {
     installCRDs(writeTo);
   } catch (err) {
@@ -98,8 +111,30 @@ export async function platformInstall(
   }
   writeTo('');
 
-  // Step 5: Platform
-  writeTo('Step 5/8: Installing LoopZero platform...');
+  // ── Step 6: Bootstrap services ────────────────────────────────────
+  writeTo('Step 6/10: Bootstrapping services...');
+
+  // Gitea
+  const giteaToken = bootstrapGitea(
+    'http://gitea-http.gitea.svc.cluster.local:3000',
+    'loopzero-admin', 'loopzero-gitea-pass',
+    writeTo,
+  );
+
+  // ArgoCD
+  bootstrapArgoCD('argocd', writeTo);
+
+  // Hydra OAuth2 client
+  createHydraClient(writeTo);
+
+  // Kubeconfigs
+  createKubeconfigs(config, writeTo);
+  writeTo('');
+
+  // ── Step 7: Install LoopZero platform ─────────────────────────────────
+  writeTo('Step 7/10: Installing LoopZero platform...');
+  // Inject bootstrap tokens into config for the Helm install
+  if (giteaToken) config.storage = { ...config.storage, giteaToken } as typeof config.storage & { giteaToken: string };
   try {
     installPlatform(config, writeTo);
   } catch (err) {
@@ -108,8 +143,13 @@ export async function platformInstall(
   }
   writeTo('');
 
-  // Step 6: Wait for pods
-  writeTo('Step 6/8: Waiting for pods...');
+  // ── Step 8: Run migrations ────────────────────────────────────────
+  writeTo('Step 8/10: Running database migrations...');
+  runMigrations(dbUrl, writeTo);
+  writeTo('');
+
+  // ── Step 9: Wait for pods ─────────────────────────────────────────
+  writeTo('Step 9/10: Waiting for pods...');
   const podsReady = waitForPods(writeTo);
   if (!podsReady) {
     writeError('Pods did not become ready. Check: kubectl get pods -n loopzero-system');
@@ -117,13 +157,13 @@ export async function platformInstall(
   }
   writeTo('');
 
-  // Step 7: Health checks
-  writeTo('Step 7/8: Running health checks...');
+  // ── Step 10: Validate ─────────────────────────────────────────────
+  writeTo('Step 10/10: Running health checks...');
   validateInstallation(writeTo);
   writeTo('');
 
-  // Step 8: Done
-  writeTo('Step 8/8: Done!');
+  // ── Done ──────────────────────────────────────────────────────────
+  writeTo('Installation complete!');
   writeTo('');
   writeTo(`  Platform URL:    https://${config.domain}`);
   writeTo(`  Dashboard:       https://cloud.${config.domain}`);
@@ -131,8 +171,7 @@ export async function platformInstall(
   writeTo('');
   writeTo('  Next steps:');
   writeTo(`  1. Configure DNS: *.${config.domain} → <ingress-ip>`);
-  writeTo('  2. Create first user: loopzero admin create-user --email admin@example.com');
-  writeTo(`  3. Login: loopzero login --api-url https://api.${config.domain}`);
+  writeTo(`  2. Login: loopzero login --api-url https://api.${config.domain}`);
   writeTo('');
 
   return 0;
@@ -189,7 +228,13 @@ export async function platformUpgrade(
 
   writeTo(`Upgrading to v${version}...`);
   try {
-    upgradePlatform(version, config || { domain: '', profile: 'minimal', database: { external: true }, registry: { type: 'docr', endpoint: '' }, auth: { type: 'bundled' }, storage: { endpoint: '', bucket: '' } }, writeTo);
+    upgradePlatform(version, config || {
+      domain: '', profile: 'minimal',
+      database: { external: true },
+      registry: { type: 'docr', endpoint: '' },
+      auth: { type: 'bundled' },
+      storage: { endpoint: '', bucket: '' },
+    }, writeTo);
     const podsReady = waitForPods(writeTo);
     if (!podsReady) {
       writeError('Upgrade may have failed — pods not ready');

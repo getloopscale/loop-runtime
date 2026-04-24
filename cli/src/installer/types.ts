@@ -24,6 +24,20 @@ export interface PlatformConfig {
     type: 'bundled' | 'external';
     issuer?: string;
     clientId?: string;
+    systemSecret?: string;  // Auto-generated if empty (32 chars, for Hydra JWT signing)
+  };
+
+  // Cluster mode
+  clusters?: {
+    mode: 'single' | 'multi';
+    build?: { kubeconfigPath?: string };
+    workload?: { kubeconfigPath?: string };
+  };
+
+  // Admin account (created during install)
+  admin?: {
+    email: string;
+    password?: string;
   };
 
   storage: {
