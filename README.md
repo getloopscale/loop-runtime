@@ -6,6 +6,7 @@
   <p align="center">
     <a href="#project-status">Status</a> &bull;
     <a href="#quickstart">Quickstart</a> &bull;
+    <a href="#self-hosted-installation">Self-Hosted</a> &bull;
     <a href="#cli-reference">CLI Reference</a> &bull;
     <a href="#how-it-works">How It Works</a> &bull;
     <a href="#development">Development</a>
@@ -390,6 +391,7 @@ helm upgrade --install loopzero oci://registry.digitalocean.com/loopzero-system/
 | `loopzero status` | Show project status, active release, URL |
 | `loopzero logs` | Show build logs (auto-detects last build) |
 | `loopzero rollback` | Revert to previous release (~3s) |
+| `loopzero promote --from staging --to production` | Promote release across environments (no rebuild) |
 | `loopzero cancel <build-id>` | Cancel a running build |
 | `loopzero validate` | Validate `loopzero.yaml` locally |
 
@@ -453,6 +455,15 @@ Custom domains use the **Vercel model**: LoopZero creates a Cloudflare zone per 
 | Command | Purpose |
 |---------|---------|
 | `loopzero audit` | View audit log (filterable by action, timestamp) |
+
+### Platform (Self-Hosted)
+
+| Command | Purpose |
+|---------|---------|
+| `loopzero platform install -f values.yaml` | Install LoopZero on a Kubernetes cluster (10-step automated) |
+| `loopzero platform status` | Show platform health, component versions, endpoints |
+| `loopzero platform upgrade --version <v>` | Upgrade platform to a new chart version |
+| `loopzero platform uninstall` | Remove platform (preserves CRDs and data) |
 
 ### Session
 
