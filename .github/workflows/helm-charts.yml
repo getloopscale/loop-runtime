@@ -262,6 +262,7 @@ jobs:
 
       - name: Verify published charts
         run: |
+          mkdir -p /tmp/helm-verify
           for chart in charts/*/; do
             name=$(yq '.name' "$chart/Chart.yaml")
             version=$(yq '.version' "$chart/Chart.yaml")
@@ -272,3 +273,4 @@ jobs:
             helm pull "${{ env.OCI_REGISTRY }}/$name" --version "$version" --destination /tmp/helm-verify/
           done
           echo "All charts verified"
+          ls -la /tmp/helm-verify/
