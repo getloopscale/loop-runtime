@@ -2,7 +2,7 @@ apiVersion: v2
 name: loopzero-tenant-controller
 description: LoopZero PaaS tenant controller (kubebuilder operator)
 type: application
-version: 0.1.2
+version: 0.1.3
 appVersion: "dev"
 home: https://github.com/loopzero/loopzero
 sources:
