@@ -3,6 +3,10 @@ global:
   imagePullSecrets: []
 
 # Sub-chart enable/disable toggles
+# Set loopzero-crds.enabled=false when CRDs are installed separately
+loopzero-crds:
+  enabled: true
+
 loopzero-api:
   enabled: true
 

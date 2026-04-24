@@ -18,7 +18,7 @@ dependencies:
   - name: loopzero-crds
     version: ">=0.1.0 <1.0.0"
     repository: "file://../loopzero-crds"
-    # CRDs always installed — no condition
+    condition: loopzero-crds.enabled
   - name: loopzero-api
     version: ">=0.1.0 <1.0.0"
     repository: "file://../loopzero-api"
