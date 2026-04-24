@@ -202,11 +202,7 @@ jobs:
               continue
             fi
 
-            # Skip library charts for OCI push (they're embedded in dependents)
-            if [ "$(yq '.type' "$chart/Chart.yaml")" = "library" ]; then
-              echo "Skipping library chart: $name"
-              continue
-            fi
+            # Library charts ARE published — umbrella needs them via OCI refs
 
             # Immutability guard
             if helm pull "${{ env.OCI_REGISTRY }}/$name" --version "$version" 2>/dev/null; then

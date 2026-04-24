@@ -2,7 +2,7 @@ apiVersion: v2
 name: loopzero-api
 description: LoopZero PaaS API server
 type: application
-version: 0.1.1
+version: 0.1.2
 appVersion: "dev"
 home: https://github.com/loopzero/loopzero
 sources:
