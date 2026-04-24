@@ -5,6 +5,7 @@ export { PlatformConfig, PlatformStatus, ComponentStatus } from './types';
 export { validateCluster } from './validator';
 export { installPrerequisites } from './prerequisites';
 export {
+  ensureImagePullSecret,
   installCRDs,
   installPlatform,
   upgradePlatform,

@@ -7,6 +7,7 @@ import {
   PlatformConfig,
   validateCluster,
   installPrerequisites,
+  ensureImagePullSecret,
   installCRDs,
   installPlatform,
   upgradePlatform,
@@ -77,8 +78,18 @@ export async function platformInstall(
   }
   writeTo('');
 
-  // Step 3: CRDs
-  writeTo('Step 3/7: Installing CRDs...');
+  // Step 3: Registry credentials
+  writeTo('Step 3/8: Configuring registry credentials...');
+  try {
+    ensureImagePullSecret('loopzero-system', writeTo);
+  } catch (err) {
+    writeError(`Failed to create image pull secret: ${err}`);
+    return 1;
+  }
+  writeTo('');
+
+  // Step 4: CRDs
+  writeTo('Step 4/8: Installing CRDs...');
   try {
     installCRDs(writeTo);
   } catch (err) {
@@ -87,8 +98,8 @@ export async function platformInstall(
   }
   writeTo('');
 
-  // Step 4: Platform
-  writeTo('Step 4/7: Installing LoopZero platform...');
+  // Step 5: Platform
+  writeTo('Step 5/8: Installing LoopZero platform...');
   try {
     installPlatform(config, writeTo);
   } catch (err) {
@@ -97,8 +108,8 @@ export async function platformInstall(
   }
   writeTo('');
 
-  // Step 5: Wait for pods
-  writeTo('Step 5/7: Waiting for pods...');
+  // Step 6: Wait for pods
+  writeTo('Step 6/8: Waiting for pods...');
   const podsReady = waitForPods(writeTo);
   if (!podsReady) {
     writeError('Pods did not become ready. Check: kubectl get pods -n loopzero-system');
@@ -106,13 +117,13 @@ export async function platformInstall(
   }
   writeTo('');
 
-  // Step 6: Health checks
-  writeTo('Step 6/7: Running health checks...');
+  // Step 7: Health checks
+  writeTo('Step 7/8: Running health checks...');
   validateInstallation(writeTo);
   writeTo('');
 
-  // Step 7: Done
-  writeTo('Step 7/7: Done!');
+  // Step 8: Done
+  writeTo('Step 8/8: Done!');
   writeTo('');
   writeTo(`  Platform URL:    https://${config.domain}`);
   writeTo(`  Dashboard:       https://cloud.${config.domain}`);

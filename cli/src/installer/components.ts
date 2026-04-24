@@ -9,7 +9,66 @@ import { installOrUpgrade, uninstall, test as helmTest, releaseExists } from './
  * OCI registry for LoopZero Helm charts.
  */
 const CHART_REGISTRY = 'oci://registry.digitalocean.com/loopzero-system/helm';
-const CHART_VERSION = '0.1.3';
+const CHART_VERSION = '0.1.4';
+const IMAGE_PULL_SECRET_NAME = 'loopzero-system-pull';
+
+/**
+ * Ensure DOCR imagePullSecret exists in the target namespace.
+ * Uses doctl to generate a docker config, or falls back to existing docker config.
+ */
+export function ensureImagePullSecret(namespace: string, log: (msg: string) => void): void {
+  try {
+    // Check if secret already exists
+    execSync(`kubectl get secret ${IMAGE_PULL_SECRET_NAME} -n ${namespace}`, {
+      stdio: 'pipe', timeout: 5_000,
+    });
+    log(`  ✓ Image pull secret exists`);
+    return;
+  } catch {
+    // Secret doesn't exist — create it
+  }
+
+  // Try doctl registry login first (refreshes docker config)
+  try {
+    execSync('doctl registry login --expiry-seconds 3600', { stdio: 'pipe', timeout: 30_000 });
+  } catch {
+    // doctl may not be available — try with existing docker config
+  }
+
+  // Find docker config
+  const home = process.env.HOME || '/root';
+  const dockerConfigPaths = [
+    `${home}/.docker/config.json`,
+    '/root/.docker/config.json',
+  ];
+
+  let dockerConfig = '';
+  for (const p of dockerConfigPaths) {
+    try {
+      execSync(`test -f ${p}`, { stdio: 'pipe' });
+      dockerConfig = p;
+      break;
+    } catch {
+      continue;
+    }
+  }
+
+  if (dockerConfig) {
+    // Create from docker config file
+    execSync(
+      `kubectl create secret generic ${IMAGE_PULL_SECRET_NAME} ` +
+      `--namespace ${namespace} ` +
+      `--from-file=.dockerconfigjson=${dockerConfig} ` +
+      `--type=kubernetes.io/dockerconfigjson ` +
+      `--dry-run=client -o yaml | kubectl apply -f -`,
+      { stdio: 'pipe', timeout: 10_000 },
+    );
+    log(`  ✓ Image pull secret created from docker config`);
+  } else {
+    log(`  ⚠ No docker config found — pods may fail to pull images`);
+    log(`    Run: doctl registry login && loopzero platform install ...`);
+  }
+}
 
 /**
  * Install LoopZero CRDs (lifecycle independent, installed first).
@@ -43,6 +102,13 @@ export function installCRDs(log: (msg: string) => void): void {
 function buildPlatformValues(config: PlatformConfig): Record<string, unknown> {
   const values: Record<string, unknown> = {
     'global.registry': 'registry.digitalocean.com/loopzero-system',
+    'global.imagePullSecrets[0].name': IMAGE_PULL_SECRET_NAME,
+    // CRDs installed separately — disable in umbrella
+    'loopzero-crds.enabled': 'false',
+    // Disable components that need external CRDs (Argo Workflows, Prometheus Operator, VAP)
+    'loopzero-monitoring.enabled': 'false',
+    'loopzero-admission-policies.enabled': 'false',
+    'loopzero-build-cwts.enabled': 'false',
   };
 
   // API config
