@@ -1165,14 +1165,20 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 			Expect(k8sClient.Update(ctx, &ns)).To(Succeed())
 
 			// Trigger re-reconcile via annotation on tenant (NOT spec change, so generation stays same)
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: tenantName, Namespace: "default",
-			}, &t)).To(Succeed())
-			if t.Annotations == nil {
-				t.Annotations = make(map[string]string)
-			}
-			t.Annotations["test.loopzero.io/trigger"] = "re-reconcile"
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			// Retry update with conflict resolution (409 is expected in envtest
+			// when concurrent reconciles modify the same object).
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, types.NamespacedName{
+					Name: tenantName, Namespace: "default",
+				}, &t); err != nil {
+					return err
+				}
+				if t.Annotations == nil {
+					t.Annotations = make(map[string]string)
+				}
+				t.Annotations["test.loopzero.io/trigger"] = "re-reconcile"
+				return k8sClient.Update(ctx, &t)
+			}, timeout, interval).Should(Succeed())
 
 			// Wait for controller to process the re-reconcile (no hardcoded sleep)
 			Eventually(func() int {
