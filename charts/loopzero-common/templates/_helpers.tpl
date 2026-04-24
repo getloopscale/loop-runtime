@@ -193,17 +193,13 @@ podAntiAffinity — auto-enabled when replicaCount > 1.
 Prefer spread across nodes (soft, not hard).
 */}}
 {{- define "loopzero-common.affinity" -}}
+{{- $antiAffinityEnabled := false }}
 {{- if and .Values.affinity .Values.affinity.podAntiAffinity .Values.affinity.podAntiAffinity.enabled }}
-affinity:
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchLabels:
-              {{- include "loopzero-common.selectorLabels" . | nindent 14 }}
-          topologyKey: kubernetes.io/hostname
+  {{- $antiAffinityEnabled = true }}
 {{- else if and (gt (int (default 1 .Values.replicaCount)) 1) (not .Values.affinity) }}
+  {{- $antiAffinityEnabled = true }}
+{{- end }}
+{{- if $antiAffinityEnabled }}
 affinity:
   podAntiAffinity:
     preferredDuringSchedulingIgnoredDuringExecution:
@@ -213,11 +209,6 @@ affinity:
             matchLabels:
               {{- include "loopzero-common.selectorLabels" . | nindent 14 }}
           topologyKey: kubernetes.io/hostname
-{{- else if .Values.affinity }}
-{{- if not (and .Values.affinity.podAntiAffinity .Values.affinity.podAntiAffinity.enabled) }}
-affinity:
-  {{- toYaml .Values.affinity | nindent 2 }}
-{{- end }}
 {{- end }}
 {{- end }}
 
