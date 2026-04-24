@@ -187,11 +187,44 @@ jobs:
             fi
           done
 
-      - name: Rewrite umbrella refs (file:// -> oci://)
+      - name: Package and push sub-charts (before umbrella)
+        run: |
+          mkdir -p /tmp/helm-packages
+
+          # Step 1: Push all sub-charts FIRST (umbrella depends on them in OCI)
+          for chart in charts/*/; do
+            name=$(yq '.name' "$chart/Chart.yaml")
+            version=$(yq '.version' "$chart/Chart.yaml")
+
+            # Skip umbrella — it's published last after rewrite
+            if [ "$name" = "loopzero-platform" ]; then
+              echo "Deferring umbrella chart (published last)"
+              continue
+            fi
+
+            # Skip library charts for OCI push (they're embedded in dependents)
+            if [ "$(yq '.type' "$chart/Chart.yaml")" = "library" ]; then
+              echo "Skipping library chart: $name"
+              continue
+            fi
+
+            # Immutability guard
+            if helm pull "${{ env.OCI_REGISTRY }}/$name" --version "$version" 2>/dev/null; then
+              echo "::notice::$name:$version already exists — skipping"
+              continue
+            fi
+
+            echo "::group::Package + push $name:$version"
+            helm package "$chart" --destination /tmp/helm-packages/
+            helm push "/tmp/helm-packages/${name}-${version}.tgz" "${{ env.OCI_REGISTRY }}"
+            echo "::endgroup::"
+          done
+
+      - name: Rewrite umbrella refs and push
         run: |
           OCI_REGISTRY="${{ env.OCI_REGISTRY }}"
 
-          # Rewrite all file:// refs to oci:// via yq
+          # Rewrite all file:// refs to oci:// via yq (NOT sed)
           yq -i '(.dependencies[] | select(.repository == "file://*")).repository = "'"$OCI_REGISTRY"'"' \
             charts/loopzero-platform/Chart.yaml
 
@@ -203,35 +236,17 @@ jobs:
               charts/loopzero-platform/Chart.yaml 2>/dev/null || true
           done
 
-          # Regenerate Chart.lock after rewrite
+          # Regenerate Chart.lock with OCI refs (sub-charts already in registry)
           helm dependency update charts/loopzero-platform
 
-      - name: Package and push charts
-        run: |
-          for chart in charts/*/; do
-            name=$(yq '.name' "$chart/Chart.yaml")
-            version=$(yq '.version' "$chart/Chart.yaml")
-
-            # Skip library charts for OCI push
-            if [ "$(yq '.type' "$chart/Chart.yaml")" = "library" ]; then
-              echo "Skipping library chart: $name"
-              continue
-            fi
-
-            # Immutability guard
-            if helm pull "${{ env.OCI_REGISTRY }}/$name" --version "$version" 2>/dev/null; then
-              echo "::error::$name:$version already exists in registry. Bump the version."
-              exit 1
-            fi
-
-            echo "::group::Packaging $name:$version"
-            helm package "$chart" --destination /tmp/helm-packages/
-            echo "::endgroup::"
-
-            echo "::group::Pushing $name:$version"
-            helm push "/tmp/helm-packages/${name}-${version}.tgz" "${{ env.OCI_REGISTRY }}"
-            echo "::endgroup::"
-          done
+          # Package and push umbrella
+          VERSION=$(yq '.version' charts/loopzero-platform/Chart.yaml)
+          if helm pull "$OCI_REGISTRY/loopzero-platform" --version "$VERSION" 2>/dev/null; then
+            echo "::notice::loopzero-platform:$VERSION already exists — skipping"
+          else
+            helm package charts/loopzero-platform --destination /tmp/helm-packages/
+            helm push "/tmp/helm-packages/loopzero-platform-${VERSION}.tgz" "$OCI_REGISTRY"
+          fi
 
       - name: Sign charts with cosign
         env:
