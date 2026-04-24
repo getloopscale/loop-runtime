@@ -11,7 +11,7 @@ import { promptConfirm } from '../output/prompt-confirm';
 import { CommandDeps } from './types';
 
 export function registerAuthCommands(deps: CommandDeps): void {
-  const { program, configStore, isCI, writeTo, writeError, getGlobalOpts, apiUrl, cloudUrl, handleUnauthorized } = deps;
+  const { program, configStore, isCI, writeTo, writeError, getGlobalOpts, apiUrl, cloudUrl, handleUnauthorized: _handleUnauthorized } = deps;
 
   // --- login ---
   program

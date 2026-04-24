@@ -1,6 +1,7 @@
 module github.com/loopzero/loopzero/api
 
 go 1.25.0
+
 toolchain go1.25.9
 
 require (

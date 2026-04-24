@@ -107,7 +107,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: ${{ matrix.component }}/go.sum
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@4afd733a84b2f1a21c9e1a4c9d47ab7a091bd4bb # v7.0.0
+        uses: golangci/golangci-lint-action@v6
         with:
           version: v2.11.3
           working-directory: ${{ matrix.component }}
@@ -220,7 +220,7 @@ jobs:
           cache-dependency-path: operators/go.sum
       - name: Install envtest binaries
         run: |
-          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.21.0
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
           echo "KUBEBUILDER_ASSETS=$(setup-envtest use ${{ env.ENVTEST_K8S_VERSION }} -p path)" >> $GITHUB_ENV
       - name: Run operator tests
         working-directory: operators
@@ -358,7 +358,7 @@ jobs:
       - name: Validate NetworkPolicies
         run: kubeconform --strict infra/helm/network-policies/loopzero-system.yaml
       - name: Validate monitoring manifests
-        run: kubeconform --strict --skip ServiceMonitor,PrometheusRule infra/helm/monitoring/manifests/
+        run: kubeconform --strict --skip ServiceMonitor,PrometheusRule,Probe infra/helm/monitoring/manifests/
 
   # ─────────────────────────────────────────────
   # MIGRATION SAFETY (Roadmap 01 Correction B + forward-only rule)
@@ -511,7 +511,7 @@ jobs:
       # ignore-unfixed: don't block on vulnerabilities without available patches.
       # trivyignores: suppress known false positives (see .trivyignore).
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a3 # v0.35.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -522,7 +522,7 @@ jobs:
           trivyignores: .trivyignore
           skip-dirs: infra/tests/e2e/fixtures,examples,loopzero-packs,loopzero-forge,referencias
       - name: Trivy Dockerfile scan (api)
-        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a3 # v0.35.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: config
           scan-ref: api
@@ -530,7 +530,7 @@ jobs:
           exit-code: 1
           format: table
       - name: Trivy Dockerfile scan (operators)
-        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a3 # v0.35.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: config
           scan-ref: operators

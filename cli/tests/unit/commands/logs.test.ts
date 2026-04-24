@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import { LogsCommand, LogsDeps, StreamLogEvent } from '../../../src/commands/logs';
+import { LogsCommand, LogsDeps } from '../../../src/commands/logs';
 import { ApiError } from '../../../src/api/client';
 
 function createMockDeps(overrides: Partial<LogsDeps> = {}): LogsDeps {
