@@ -683,18 +683,29 @@ export function seedAdminUser(
   }
 }
 
-// ─── Cluster issuer (self-signed for minimal profile) ──────────────────────
+// ─── Cluster issuer (mkcert CA preferred, self-signed fallback) ───────────
 
 /**
- * Create a self-signed `ClusterIssuer` (cert-manager.io/v1) named
- * `loopzero-ca-issuer`. Required for `profile=minimal` so the ExposedRoute
- * Certificate CR can complete issuance — without it, cert-manager keeps
- * requeueing with `certificate not ready`, and `loopzero deploy` blocks
- * forever at "Verifying service health".
+ * Create a `ClusterIssuer` (cert-manager.io/v1) for TLS certificate issuance.
  *
- * Self-signed certificates are **not** trusted by public browsers. This
- * is acceptable for dev/test; production installs must override via
- * `config.clusterIssuer` (ACME / enterprise CA).
+ * STRATEGY (CHG-2026-04-25-E2E Phase 3):
+ *
+ * **Preferred path:** if `mkcert` is on PATH and has been initialized
+ * (`mkcert -install` adds the local CA to the OS trust store), we extract
+ * the CA cert+key, create a K8s Secret in `cert-manager` namespace, and
+ * configure ClusterIssuer of type `ca` pointing at that secret. Result:
+ * cert-manager issues certs signed by the mkcert CA, browsers/curl trust
+ * them automatically (because the OS trust store knows the CA root).
+ * No `-k` flags. Production-parity flow (CA → cert-manager → Certificate).
+ *
+ * **Fallback path:** if mkcert is missing, fall back to a `selfSigned`
+ * ClusterIssuer. Certificates emit OK (cert-manager Certificate goes
+ * Ready), but browsers will warn / curl needs `-k`. Acceptable for
+ * E2E tests on CI where no human consumes the URL.
+ *
+ * Production profile: customer must provide their own ClusterIssuer
+ * (ACME / enterprise CA) via `config.clusterIssuer` — installer skips
+ * the auto-provision path entirely.
  *
  * Idempotent via `kubectl apply`.
  */
@@ -702,7 +713,20 @@ export function createClusterIssuer(
   name: string,
   log: (msg: string) => void,
 ): void {
-  log(`  Creating ClusterIssuer ${name} (self-signed)...`);
+  // Try mkcert first
+  const mkcertPath = findMkcert();
+  if (mkcertPath) {
+    if (createClusterIssuerFromMkcert(name, mkcertPath, log)) {
+      return;
+    }
+    log('  ⚠ mkcert path failed — falling back to self-signed');
+  } else {
+    log('  ⚠ mkcert not found — falling back to self-signed (browser will warn)');
+    log('    For browser-trusted certs, install mkcert and re-run:');
+    log('      curl -sL https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64 -o ~/.local/bin/mkcert && chmod +x ~/.local/bin/mkcert && mkcert -install');
+  }
+
+  log(`  Creating ClusterIssuer ${name} (self-signed fallback)...`);
   const manifest = `apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -715,11 +739,118 @@ spec:
       `cat <<'YAML' | kubectl apply -f -\n${manifest}YAML`,
       { stdio: 'pipe', timeout: 15_000, shell: '/bin/bash' } as any,
     );
-    log(`  ✓ ClusterIssuer ${name} ready`);
+    log(`  ✓ ClusterIssuer ${name} ready (self-signed)`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log(`  ⚠ ClusterIssuer creation failed: ${msg.slice(0, 120)}`);
   }
+}
+
+/**
+ * Find a usable `mkcert` binary on the operator's system. Checks the
+ * conventional locations (PATH, ~/.local/bin) before giving up.
+ *
+ * Returns the full path to mkcert or empty string if not available.
+ */
+function findMkcert(): string {
+  const home = process.env.HOME || '/root';
+  const candidates = [
+    'mkcert', // PATH
+    `${home}/.local/bin/mkcert`,
+    '/usr/local/bin/mkcert',
+    '/opt/homebrew/bin/mkcert', // macOS arm64
+  ];
+  for (const c of candidates) {
+    try {
+      execSync(`${c} -version`, { stdio: 'pipe', timeout: 3_000 });
+      return c;
+    } catch {
+      // try next
+    }
+  }
+  return '';
+}
+
+/**
+ * Configure cert-manager to use the local mkcert CA as a CA-issuing
+ * ClusterIssuer. Steps:
+ *   1. Read CAROOT directory via `mkcert -CAROOT`.
+ *   2. Verify `rootCA.pem` and `rootCA-key.pem` exist (operator ran
+ *      `mkcert -install` previously).
+ *   3. Create a K8s Secret of type `tls` in cert-manager namespace
+ *      containing the CA cert and key.
+ *   4. Create ClusterIssuer of `kind: CA` pointing at that secret.
+ *
+ * Returns true on success, false if any step fails (caller falls back
+ * to self-signed).
+ */
+function createClusterIssuerFromMkcert(
+  name: string,
+  mkcertPath: string,
+  log: (msg: string) => void,
+): boolean {
+  log(`  Creating ClusterIssuer ${name} (mkcert CA — browser-trusted)...`);
+  let caRoot = '';
+  try {
+    caRoot = execSync(`${mkcertPath} -CAROOT`, {
+      encoding: 'utf-8',
+      timeout: 3_000,
+    }).trim();
+  } catch {
+    log('  ⚠ mkcert -CAROOT failed');
+    return false;
+  }
+
+  const caCertPath = `${caRoot}/rootCA.pem`;
+  const caKeyPath = `${caRoot}/rootCA-key.pem`;
+  try {
+    execSync(`test -f '${caCertPath}' && test -f '${caKeyPath}'`, {
+      stdio: 'pipe',
+      timeout: 3_000,
+    });
+  } catch {
+    log(`  ⚠ mkcert CA files missing at ${caRoot}. Run: ${mkcertPath} -install`);
+    return false;
+  }
+
+  // Create the TLS secret with the CA cert/key (cert-manager needs
+  // type=kubernetes.io/tls with `tls.crt` and `tls.key` keys).
+  try {
+    execSync(
+      `kubectl create secret tls mkcert-ca-key-pair ` +
+      `--namespace cert-manager ` +
+      `--cert='${caCertPath}' --key='${caKeyPath}' ` +
+      `--dry-run=client -o yaml | kubectl apply -f -`,
+      { stdio: 'pipe', timeout: 10_000 },
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`  ⚠ Failed to create mkcert-ca-key-pair secret: ${msg.slice(0, 100)}`);
+    return false;
+  }
+
+  const manifest = `apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: ${name}
+spec:
+  ca:
+    secretName: mkcert-ca-key-pair
+`;
+  try {
+    execSync(
+      `cat <<'YAML' | kubectl apply -f -\n${manifest}YAML`,
+      { stdio: 'pipe', timeout: 15_000, shell: '/bin/bash' } as any,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`  ⚠ Failed to create ClusterIssuer: ${msg.slice(0, 100)}`);
+    return false;
+  }
+
+  log(`  ✓ ClusterIssuer ${name} ready (mkcert CA at ${caRoot})`);
+  log('    Browser/curl will trust certs issued by this issuer (no -k needed).');
+  return true;
 }
 
 // ─── MinIO bucket ensure ────────────────────────────────────────────────────
