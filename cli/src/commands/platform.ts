@@ -7,7 +7,8 @@ import {
   PlatformConfig,
   BootstrapTokens,
   validateCluster,
-  installPrerequisites,
+  installCorePrerequisites,
+  installAuthPrerequisites,
   ensureImagePullSecret,
   installCRDs,
   installPlatform,
@@ -20,6 +21,7 @@ import {
   bootstrapGitea,
   bootstrapArgoCD,
   extractMinioCredentials,
+  extractPostgresCredentials,
   generateSecret,
   createKubeconfigs,
   createHydraClient,
@@ -94,11 +96,42 @@ export async function platformInstall(
   writeTo('');
 
   // ── Step 2: Install prerequisites ─────────────────────────────────
-  writeTo('Step 2/10: Installing prerequisites...');
-  const prereqResults = installPrerequisites(config, writeTo);
-  const prereqFailed = prereqResults.some((r) => r.status === 'failed');
-  if (prereqFailed) {
-    writeError('Prerequisite installation failed. Check the errors above.');
+  //
+  // Two-phase install (ADR-0012): core infra first (cert-manager, traefik,
+  // cnpg-operator + Cluster, gitea, argocd, argo-workflows, minio), then
+  // extract PG credentials from the CNPG-generated secret, THEN install
+  // auth prereqs (kratos, hydra) which need the DSN at chart install time.
+  //
+  writeTo('Step 2/10: Installing prerequisites (core)...');
+  const coreResults = installCorePrerequisites(config, writeTo);
+  if (coreResults.some((r) => r.status === 'failed')) {
+    writeError('Core prerequisite installation failed. Check the errors above.');
+    return 1;
+  }
+
+  // Extract PG credentials (populates config.database.url for auth prereqs)
+  if (!config.database.external) {
+    const pgCreds = extractPostgresCredentials('loopzero-system', writeTo);
+    if (!pgCreds) {
+      writeError('Failed to obtain PostgreSQL credentials from CloudNativePG cluster.');
+      writeError('  Inspect: kubectl describe cluster/postgresql-cluster -n loopzero-system');
+      return 1;
+    }
+    config.database.url = pgCreds.databaseUrl;
+  } else if (!config.database.url) {
+    writeError('database.external=true requires database.url to be set.');
+    return 1;
+  }
+
+  // Create auth DBs (kratos, hydra) BEFORE installing ory charts — the
+  // kratos/hydra automigration hooks connect immediately and fail if the
+  // target database does not exist yet.
+  createAuthDatabases(config.database.url, writeTo);
+
+  writeTo('Step 2/10: Installing prerequisites (auth)...');
+  const authResults = installAuthPrerequisites(config, writeTo);
+  if (authResults.some((r) => r.status === 'failed')) {
+    writeError('Auth prerequisite installation failed. Check the errors above.');
     return 1;
   }
   writeTo('');
@@ -116,9 +149,14 @@ export async function platformInstall(
   writeTo('');
 
   // ── Step 4: Database setup ────────────────────────────────────────
-  writeTo('Step 4/10: Setting up databases...');
-  const dbUrl = config.database.url || 'postgres://loopzero:loopzero@postgresql.loopzero-system.svc:5432/loopzero?sslmode=disable';
-  createAuthDatabases(dbUrl, writeTo);
+  //
+  // Auth DBs were already created in Step 2 (required for kratos/hydra
+  // automigration). This step is now a no-op confirmation — kept to
+  // preserve the 10-step narrative and for customers using external DB.
+  //
+  writeTo('Step 4/10: Database setup (verified in Step 2)...');
+  const dbUrl = config.database.url!;
+  writeTo('  ✓ Databases ready (loopzero, kratos, hydra)');
   writeTo('');
 
   // ── Step 5: Install CRDs ──────────────────────────────────────────

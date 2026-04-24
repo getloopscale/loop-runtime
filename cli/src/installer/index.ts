@@ -3,13 +3,18 @@
 
 export { PlatformConfig, PlatformStatus, ComponentStatus } from './types';
 export { validateCluster } from './validator';
-export { installPrerequisites } from './prerequisites';
+export {
+  installPrerequisites,
+  installCorePrerequisites,
+  installAuthPrerequisites,
+} from './prerequisites';
 export type { BootstrapTokens } from './bootstrap';
 export {
   runMigrations,
   bootstrapGitea,
   bootstrapArgoCD,
   extractMinioCredentials,
+  extractPostgresCredentials,
   generateSecret,
   createKubeconfigs,
   createHydraClient,

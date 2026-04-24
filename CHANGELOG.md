@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **CloudNativePG replaces bitnami/postgresql in self-hosted installer** (CHG-2026-04-24-INSTALLER-CNPG / ADR-0012): Bitnami removed public images from `docker.io/bitnami/*` in September 2025, causing `loopzero platform install` to fail at Step 2/10 with `ImagePullBackOff`. The installer now provisions PostgreSQL via **CloudNativePG** — a CNCF Graduated operator (Feb/2024) — using two Helm releases: `cnpg/cloudnative-pg` (operator + CRDs) and `cnpg/cluster` (Cluster CR). CNPG provides HA via streaming replication, automatic failover (<30s RTO), and eliminates vendor lock-in. Credentials are generated randomly per install into a Kubernetes Secret (`postgresql-cluster-app`); the installer reads them via the new `extractPostgresCredentials()` helper. `config.database.external=true` (BYO managed PG) path is unchanged.
+- **Gitea switched to SQLite mode in self-hosted installer** (CHG-2026-04-24-INSTALLER-CNPG / ADR-0012): Gitea HA subcharts (`postgresql-ha`, `redis-cluster`, `valkey`) depended on the same deprecated Bitnami images. Since Gitea is an internal GitOps mirror (not user-facing traffic), SQLite + in-memory cache/session/queue is sufficient and removes all Bitnami transitive dependencies.
+
 ### Added
+- **`extractPostgresCredentials(namespace)`** in `cli/src/installer/bootstrap.ts`: waits for CNPG Cluster CR to reach healthy state, then extracts `databaseUrl`/`username`/`password` from the auto-generated `<cluster-name>-app` secret. Returns `null` on timeout or missing secret so caller can fail fast.
 - **Self-hosted installer runtime bootstrap** — `loopzero platform install` now automates ALL runtime configuration: Gitea org + API token (Gitea 1.25 scopes), ArgoCD password extraction, MinIO credential discovery, Hydra OAuth2 client creation, kubeconfig secrets (single/multi cluster), Argo callback secret generation, MinIO credentials secret for build CWTs. Zero manual kubectl required.
 - **`BootstrapTokens` interface** — typed contract for tokens generated during bootstrap, injected into umbrella chart via `--set` values so Helm manages the K8s Secrets lifecycle.
 - **`createMinioCredentialsSecret()`** — creates `loopzero-minio-credentials` K8s Secret in argo namespace, required by CWT templates (loopzero-clone, cache-save, cache-restore).

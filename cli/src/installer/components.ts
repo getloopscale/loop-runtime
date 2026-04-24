@@ -146,6 +146,11 @@ function buildPlatformValues(
     'loopzero-controller.config.registryUrl': config.registry.endpoint,
     'loopzero-controller.config.argoNamespace': 'argo',
     'loopzero-controller.config.argocdNamespace': 'argocd',
+    // LOOPZERO_CLUSTER_ISSUER: cert-manager ClusterIssuer for TLS. Customer can
+    // override via config.clusterIssuer; default production "letsencrypt-prod"
+    // assumes cert-manager is wired to Let's Encrypt. For self-signed or
+    // internal-only installs, customer should point to a custom issuer.
+    'loopzero-controller.config.clusterIssuer': config.clusterIssuer || 'letsencrypt-prod',
     'loopzero-controller.secrets.databaseUrl': config.database.url || 'postgres://loopzero:loopzero@postgresql.loopzero-system.svc:5432/loopzero?sslmode=disable',
     'loopzero-controller.secrets.giteaToken': tokens.giteaToken,
     'loopzero-controller.secrets.argocdToken': tokens.argocdPassword,
