@@ -297,10 +297,8 @@ func parseSSEEvents(body string) []testSSEEvent {
 				ev.eventType = strings.TrimPrefix(line, "event: ")
 			} else if strings.HasPrefix(line, "data: ") {
 				ev.data = strings.TrimPrefix(line, "data: ")
-			} else if strings.HasPrefix(line, ":") {
-				// comment/heartbeat
-				continue
 			}
+			// lines starting with ":" are SSE comments/heartbeats — skip
 		}
 		if ev.eventType != "" || ev.data != "" {
 			events = append(events, ev)

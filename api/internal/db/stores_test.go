@@ -1673,7 +1673,7 @@ func TestMembershipStore_GetMemberships_Empty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if memberships != nil && len(memberships) != 0 {
+	if len(memberships) != 0 {
 		t.Error("expected nil or empty slice")
 	}
 }

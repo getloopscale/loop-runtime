@@ -61,7 +61,5 @@ func TestIsDNSNotFound_NonDNSError_Other(t *testing.T) {
 
 func TestDNSVerifier_Exists(t *testing.T) {
 	v := &DNSVerifier{}
-	if v == nil {
-		t.Fatal("expected non-nil verifier")
-	}
+	_ = v // struct is non-nil by construction
 }

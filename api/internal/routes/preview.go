@@ -49,10 +49,12 @@ func (h *PreviewHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	if err := json.NewEncoder(w).Encode(map[string]any{
 		"previews": previews,
 		"total":    len(previews),
-	})
+	}); err != nil {
+		h.logger.Error("encode previews response failed", "error", err)
+	}
 }
 
 // Get returns a specific preview environment.
@@ -77,7 +79,9 @@ func (h *PreviewHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(preview)
+	if err := json.NewEncoder(w).Encode(preview); err != nil {
+		h.logger.Error("encode preview response failed", "error", err)
+	}
 }
 
 // Delete requests deletion of a preview environment.
@@ -102,8 +106,10 @@ func (h *PreviewHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status":  "deleting",
 		"message": "Preview environment deletion requested",
-	})
+	}); err != nil {
+		h.logger.Error("encode delete preview response failed", "error", err)
+	}
 }

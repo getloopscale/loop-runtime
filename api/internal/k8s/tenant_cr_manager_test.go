@@ -27,8 +27,13 @@ var tenantGVR = schema.GroupVersionResource{
 // getDynamicClient returns a dynamic client for integration tests.
 // It tries in-cluster config first, then falls back to kubeconfig.
 // Returns nil if no cluster is available.
+// Skips when -short is set (these are integration tests requiring a live cluster).
 func getDynamicClient(t *testing.T) dynamic.Interface {
 	t.Helper()
+
+	if testing.Short() {
+		t.Skip("skipping: integration test requires a live Kubernetes cluster (-short flag set)")
+	}
 
 	config, err := rest.InClusterConfig()
 	if err != nil {

@@ -239,10 +239,10 @@ func buildkitEntrypointScript(socketPath string, insecure bool, registryURL stri
 	if insecure {
 		buildkitdArgs += " --oci-worker-snapshotter native"
 		buildkitdArgs += " --allow-insecure-entitlement security.insecure"
-		tomlBuilder.WriteString(fmt.Sprintf(`[registry."%s"]
+		fmt.Fprintf(&tomlBuilder, `[registry."%s"]
   http = true
   insecure = true
-`, registryURL))
+`, registryURL)
 	}
 
 	b.Blank().

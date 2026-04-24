@@ -100,7 +100,7 @@ func (f *fakeBuildStoreRL) UpdateStatus(_ context.Context, _ db.DBTX, id string,
 
 func safeTransitionRL(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (statemachine.State, error) {
 	defer func() {
-		recover() // absorb panics from state machine
+		_ = recover() // absorb panics from state machine
 	}()
 	ns := m.Transition(current, event)
 	return ns, nil
