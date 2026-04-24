@@ -1,0 +1,52 @@
+{{- if .Values.policies.restrictRegistries.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: loopzero-restrict-image-registries
+spec:
+  failurePolicy: Ignore
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+    namespaceSelector:
+      matchLabels:
+        loopzero.io/managed-by: environment-controller
+  validations:
+    - expression: >-
+        object.spec.containers.all(c,
+        {{- range $i, $reg := .Values.policies.restrictRegistries.allowedRegistries }}
+          {{ if $i }}||{{ end }} c.image.startsWith('{{ $reg | trimSuffix "/*" }}/')
+        {{- end }})
+      message: "All containers must use images from an approved registry"
+    - expression: >-
+        !has(object.spec.initContainers) ||
+        object.spec.initContainers.all(c,
+        {{- range $i, $reg := .Values.policies.restrictRegistries.allowedRegistries }}
+          {{ if $i }}||{{ end }} c.image.startsWith('{{ $reg | trimSuffix "/*" }}/')
+        {{- end }})
+      message: "All init containers must use images from an approved registry"
+    - expression: >-
+        !has(object.spec.ephemeralContainers) ||
+        object.spec.ephemeralContainers.all(c,
+        {{- range $i, $reg := .Values.policies.restrictRegistries.allowedRegistries }}
+          {{ if $i }}||{{ end }} c.image.startsWith('{{ $reg | trimSuffix "/*" }}/')
+        {{- end }})
+      message: "All ephemeral containers must use images from an approved registry"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: loopzero-restrict-image-registries-binding
+spec:
+  policyName: loopzero-restrict-image-registries
+  validationActions:
+    - Deny
+    - Audit
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        loopzero.io/managed-by: environment-controller
+{{- end }}

@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 3 }}
+  selector:
+    matchLabels:
+      {{- include "loopzero-common.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.service.port | quote }}
+        prometheus.io/path: "/metrics"
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "loopzero-common.selectorLabels" . | nindent 8 }}
+        loopzero.io/component: control-plane
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range .Values.global.imagePullSecrets }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      serviceAccountName: {{ include "loopzero-common.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken | default false }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds | default 60 }}
+      securityContext:
+        {{- include "loopzero-common.podSecurityContext" . | nindent 8 }}
+      {{- include "loopzero-common.priorityClassName" . | nindent 6 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "loopzero-common.affinity" . | nindent 6 }}
+      {{- include "loopzero-common.topologySpreadConstraints" . | nindent 6 }}
+      containers:
+        - name: controller
+          image: {{ include "loopzero-common.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: {{ .Values.command | toJson }}
+          {{- with .Values.args }}
+          args: {{ . | toJson }}
+          {{- end }}
+          securityContext:
+            {{- include "loopzero-common.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: health
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "loopzero-common.fullname" . }}
+            - secretRef:
+                {{- if .Values.secrets.existingSecret }}
+                name: {{ .Values.secrets.existingSecret }}
+                {{- else }}
+                name: {{ include "loopzero-common.fullname" . }}
+                {{- end }}
+          env:
+            # Pod name for PG claim holder identity (leader election fencing).
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if .Values.kubeconfig.build.existingConfigMap }}
+            - name: BUILD_KUBECONFIG
+              value: /etc/loopzero/build-kubeconfig
+            {{- end }}
+          {{- include "loopzero-common.startupProbe" . | nindent 10 }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.kubeconfig.build.existingConfigMap }}
+            - name: build-kubeconfig
+              mountPath: /etc/loopzero/build-kubeconfig
+              subPath: config
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        {{- if .Values.kubeconfig.build.existingConfigMap }}
+        - name: build-kubeconfig
+          configMap:
+            name: {{ .Values.kubeconfig.build.existingConfigMap }}
+            items:
+              - key: config
+                path: config
+        {{- end }}

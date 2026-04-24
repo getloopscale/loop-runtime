@@ -1,0 +1,53 @@
+apiVersion: v2
+name: loopzero-platform
+description: LoopZero PaaS platform umbrella chart — installs all components
+type: application
+version: 0.1.0
+appVersion: "dev"
+home: https://github.com/loopzero/loopzero
+sources:
+  - https://github.com/loopzero/loopzero
+maintainers:
+  - name: LoopZero Team
+    url: https://loopzero.example
+icon: https://loopzero.example/icon.png
+dependencies:
+  - name: loopzero-common
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-common"
+  - name: loopzero-crds
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-crds"
+    # CRDs always installed — no condition
+  - name: loopzero-api
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-api"
+    condition: loopzero-api.enabled
+  - name: loopzero-tenant-controller
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-tenant-controller"
+    condition: loopzero-tenant-controller.enabled
+  - name: loopzero-controller
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-controller"
+    condition: loopzero-controller.enabled
+  - name: loopzero-cloud
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-cloud"
+    condition: loopzero-cloud.enabled
+  - name: loopzero-dashboard
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-dashboard"
+    condition: loopzero-dashboard.enabled
+  - name: loopzero-build-cwts
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-build-cwts"
+    condition: loopzero-build-cwts.enabled
+  - name: loopzero-monitoring
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-monitoring"
+    condition: loopzero-monitoring.enabled
+  - name: loopzero-admission-policies
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-admission-policies"
+    condition: loopzero-admission-policies.enabled

@@ -1,0 +1,85 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+rules:
+  # --- LoopZero CRDs (full CRUD needed for reconciliation) ---
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants", "appsecrets", "clustercredentials", "previewenvironments", "reconciliationreports", "environments", "exposedroutes", "gitrepositorybindings", "platformbootstraps", "loopzeroapplications"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants/status", "appsecrets/status", "clustercredentials/status", "previewenvironments/status", "reconciliationreports/status", "environments/status", "exposedroutes/status", "gitrepositorybindings/status", "platformbootstraps/status", "loopzeroapplications/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants/finalizers", "clustercredentials/finalizers", "previewenvironments/finalizers", "environments/finalizers", "loopzeroapplications/finalizers"]
+    verbs: ["update"]
+
+  # --- Namespaces: create/manage tenant namespaces ---
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+
+  # --- ResourceQuotas + LimitRanges: enforce tenant resource limits ---
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- RBAC: create Roles/RoleBindings in tenant namespaces ---
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- ServiceAccounts: create in tenant namespaces ---
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch", "create"]
+
+  # --- NetworkPolicies: tenant network isolation ---
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies", "ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # --- Secrets: kubeconfig secrets for ClusterCredentialController ---
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # --- PriorityClasses: cluster-scoped, needed for tenant workload priorities ---
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- Workload resources: required for RBAC escalation prevention ---
+  - apiGroups: [""]
+    resources: ["configmaps", "services"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch"]
+
+  # --- Backward compat: old rbacRulesForPlan used combined APIGroups ---
+  - apiGroups: [""]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["configmaps", "services"]
+    verbs: ["get", "list", "create", "update", "patch"]
+
+  # --- ArgoCD: create/manage Applications and AppProjects ---
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "appprojects"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # --- Events: emit Kubernetes events for observability ---
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+
+  # --- Leader election: coordination lease for HA ---
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+{{- end }}

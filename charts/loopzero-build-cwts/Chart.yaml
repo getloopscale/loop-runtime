@@ -1,0 +1,12 @@
+apiVersion: v2
+name: loopzero-build-cwts
+description: ClusterWorkflowTemplates for LoopZero build pipeline
+type: application
+version: 0.1.0
+appVersion: "dev"
+home: https://github.com/loopzero/loopzero
+sources:
+  - https://github.com/loopzero/loopzero
+maintainers:
+  - name: LoopZero Team
+    url: https://loopzero.example

@@ -1,0 +1,24 @@
+prometheusRules:
+  enabled: true
+  # Individual rules can be disabled
+  capacity:
+    enabled: true
+  critical:
+    enabled: true
+  warning:
+    enabled: true
+  database:
+    enabled: true
+  domains:
+    enabled: true
+  registry:
+    enabled: true
+  otelPipeline:
+    enabled: true
+  probes:
+    enabled: true
+  tracing:
+    enabled: true
+
+dashboards:
+  enabled: true

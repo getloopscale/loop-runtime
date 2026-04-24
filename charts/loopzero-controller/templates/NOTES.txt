@@ -1,0 +1,20 @@
+LoopZero Controller has been deployed.
+
+The controller runs background reconciliation loops (build reconcile, release
+convergence, reapers, event pruning, idempotency cleanup). It uses the same
+Docker image as loopzero-api but with the /loopzero-controller entrypoint.
+
+1. Verify the deployment:
+  kubectl get pods -l "app.kubernetes.io/name={{ include "loopzero-common.name" . }}" -n {{ .Release.Namespace }}
+
+2. Check health:
+{{- if eq .Values.service.type "ClusterIP" }}
+  kubectl port-forward svc/{{ include "loopzero-common.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  curl http://localhost:{{ .Values.service.port }}/healthz
+{{- end }}
+
+3. View metrics:
+  curl http://localhost:{{ .Values.service.port }}/metrics
+
+4. Run the Helm test:
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

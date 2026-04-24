@@ -1,0 +1,22 @@
+policies:
+  requireResourceLimits:
+    enabled: true
+  disallowLatestTag:
+    enabled: true
+  restrictRegistries:
+    enabled: true
+    allowedRegistries:
+      - "registry.digitalocean.com/loopzero-infra-registry/*"
+      - "k3d-loopzero-registry:5000/*"
+  requireImageSignature:
+    enabled: true
+  argocdManagedBy:
+    enabled: true
+  protectPlatformNetworkpolicies:
+    enabled: true
+
+namespaceSelector:
+  matchExpressions:
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values: ["kube-system", "kube-public"]

@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "loopzero-common.fullname" . }}-test-connection"
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+    - name: curl
+      image: curlimages/curl:8.7.1
+      command:
+        - sh
+        - -c
+        - |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --timeout 10 \
+            "http://{{ include "loopzero-common.fullname" . }}:{{ .Values.service.port }}/")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "FAIL: / returned $HTTP_CODE (expected 200)"
+            exit 1
+          fi
+          echo "PASS: dashboard responded 200"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+  restartPolicy: Never
+  automountServiceAccountToken: false

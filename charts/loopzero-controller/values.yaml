@@ -1,0 +1,144 @@
+global:
+  registry: registry.digitalocean.com/loopzero-infra-registry
+  imagePullSecrets: []
+
+image:
+  # Uses the SAME Docker image as loopzero-api. The loopzero-api binary ships both
+  # the HTTP server and the controller entrypoint (/loopzero-controller) in a
+  # single image. The command override below selects the controller mode.
+  repository: loopzero-api
+  tag: dev
+  pullPolicy: IfNotPresent
+
+# The controller entrypoint within the loopzero-api image.
+command: ["/loopzero-controller"]
+args: ["-health-port=9091"]
+
+replicaCount: 1
+revisionHistoryLimit: 3
+priorityClassName: system-cluster-critical
+
+# Graceful shutdown: allow background loops to drain work items.
+terminationGracePeriodSeconds: 60
+
+nameOverride: ""
+fullnameOverride: ""
+
+podLabels: {}
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  # Single port for health checks and Prometheus metrics.
+  port: 9091
+
+config:
+  baseDomain: ""
+  giteaUrl: "http://gitea-http.gitea.svc.cluster.local:3000"
+  giteaCrossClusterUrl: ""
+  argocdUrl: "http://argocd-server.argocd.svc.cluster.local:80"
+  minioEndpoint: "minio.loopzero-system.svc.cluster.local:9000"
+  minioCrossClusterEndpoint: ""
+  registryUrl: ""
+  registryInsecure: "false"
+  logLevel: "info"
+  usePgClaims: "true"
+  argoNamespace: "argo"
+  argocdNamespace: "argocd"
+  workloadIngressUrl: ""
+
+secrets:
+  create: true
+  existingSecret: ""
+  databaseUrl: ""
+  giteaToken: ""
+  argocdToken: ""
+  minioAccessKey: ""
+  minioSecretKey: ""
+
+kubeconfig:
+  build:
+    existingConfigMap: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+serviceAccount:
+  create: true
+  name: ""
+  # The controller needs K8s API access for Tenant and ClusterCredential CRDs.
+  automountServiceAccountToken: true
+
+rbac:
+  create: true
+
+startupProbe:
+  enabled: true
+  path: /healthz
+  port: health
+  failureThreshold: 30
+  periodSeconds: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: health
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: health
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+
+metrics:
+  serviceMonitor:
+    enabled: false
+    port: health
+    interval: 15s
+    scrapeTimeout: 10s
+
+networkPolicy:
+  enabled: true
+  ingress:
+    # Allow Prometheus to scrape metrics.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9091
+  extraEgress:
+    # PostgreSQL
+    - ports:
+        - protocol: TCP
+          port: 5432
+      to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+    # Kubernetes API server
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+
+topologySpreadConstraints:
+  enabled: false
+
+affinity: {}
+
+tolerations: []
+nodeSelector: {}

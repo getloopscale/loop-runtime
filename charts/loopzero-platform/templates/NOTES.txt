@@ -1,0 +1,27 @@
+LoopZero Platform has been installed in namespace {{ .Release.Namespace }}.
+
+Components:
+{{- if index .Values "loopzero-api" "enabled" }}
+  - loopzero-api (API server)
+{{- end }}
+{{- if index .Values "loopzero-tenant-controller" "enabled" }}
+  - loopzero-tenant-controller (operator)
+{{- end }}
+{{- if index .Values "loopzero-controller" "enabled" }}
+  - loopzero-controller (background loops)
+{{- end }}
+{{- if index .Values "loopzero-cloud" "enabled" }}
+  - loopzero-cloud (auth/billing)
+{{- end }}
+{{- if index .Values "loopzero-dashboard" "enabled" }}
+  - loopzero-dashboard (frontend)
+{{- end }}
+{{- if index .Values "loopzero-build-cwts" "enabled" }}
+  - loopzero-build-cwts (build pipeline templates)
+{{- end }}
+
+CRDs: always installed (10 LoopZero CRDs)
+
+To verify installation:
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+  kubectl get crd | grep loopzero.io

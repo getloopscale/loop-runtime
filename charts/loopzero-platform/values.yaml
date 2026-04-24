@@ -1,0 +1,28 @@
+global:
+  registry: registry.digitalocean.com/loopzero-infra-registry
+  imagePullSecrets: []
+
+# Sub-chart enable/disable toggles
+loopzero-api:
+  enabled: true
+
+loopzero-tenant-controller:
+  enabled: true
+
+loopzero-controller:
+  enabled: true
+
+loopzero-cloud:
+  enabled: true
+
+loopzero-dashboard:
+  enabled: true
+
+loopzero-build-cwts:
+  enabled: true
+
+loopzero-monitoring:
+  enabled: true
+
+loopzero-admission-policies:
+  enabled: true

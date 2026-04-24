@@ -1,0 +1,40 @@
+# LoopZero Platform — Development profile (k3d)
+# Usage: helm install loopzero charts/loopzero-platform -n loopzero-system -f charts/loopzero-platform/profiles/dev.yaml
+
+global:
+  registry: k3d-loopzero-registry:5000
+  imagePullSecrets: []
+
+loopzero-api:
+  service:
+    type: NodePort
+  replicaCount: 1
+  config:
+    registryInsecure: "true"
+  networkPolicy:
+    enabled: false
+  metrics:
+    serviceMonitor:
+      enabled: false
+
+loopzero-controller:
+  replicaCount: 1
+  metrics:
+    serviceMonitor:
+      enabled: false
+
+loopzero-tenant-controller:
+  replicaCount: 1
+  metrics:
+    serviceMonitor:
+      enabled: false
+
+loopzero-cloud:
+  service:
+    type: NodePort
+  replicaCount: 1
+
+loopzero-dashboard:
+  service:
+    type: NodePort
+  replicaCount: 1
