@@ -38,3 +38,17 @@ loopzero-dashboard:
   service:
     type: NodePort
   replicaCount: 1
+
+# CRDs installed separately via loopzero-crds release (lifecycle independent)
+loopzero-crds:
+  enabled: false
+
+# Disabled in dev — requires Argo Workflows CRDs / Prometheus Operator / VAP support
+loopzero-build-cwts:
+  enabled: false
+
+loopzero-monitoring:
+  enabled: false
+
+loopzero-admission-policies:
+  enabled: false

@@ -1776,8 +1776,8 @@ tasks:
   helm:install:dev:
     desc: Install umbrella chart with dev profile on k3d
     cmds:
-      - helm install loopzero-crds charts/loopzero-crds -n loopzero-system --create-namespace
-      - helm install loopzero charts/loopzero-platform -n loopzero-system -f charts/loopzero-platform/profiles/dev.yaml
+      - helm upgrade --install loopzero-crds charts/loopzero-crds -n loopzero-system --create-namespace
+      - helm upgrade --install loopzero charts/loopzero-platform -n loopzero-system -f charts/loopzero-platform/profiles/dev.yaml
 
   helm:install:test:
     desc: Run helm test hooks post-install
