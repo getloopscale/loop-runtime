@@ -49,7 +49,7 @@ func TestCheckLimit_EnterprisePlan_AlwaysAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// getTenantPlan returns "enterprise"
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
@@ -79,7 +79,7 @@ func TestCheckLimit_StarterPlan_UnderLimit_Allowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-starter").
@@ -108,7 +108,7 @@ func TestCheckLimit_StarterPlan_AtLimit_Blocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-starter").
@@ -141,7 +141,7 @@ func TestCheckLimit_ProPlan_UnderLimit_Allowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-pro").
@@ -164,7 +164,7 @@ func TestCheckLimit_ProPlan_AtLimit_Blocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-pro").
@@ -191,7 +191,7 @@ func TestCheckLimit_BuildsPerMonth_Enforced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-test").
@@ -221,7 +221,7 @@ func TestCheckLimit_SeatsLimit_Enforced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-team").
@@ -248,7 +248,7 @@ func TestCheckLimit_EnvironmentsLimit_Enforced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-test").
@@ -271,7 +271,7 @@ func TestCheckLimit_EnvironmentsLimit_UnderLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-test").
@@ -298,7 +298,7 @@ func TestCheckLimit_SoftLimit_OverageAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-team").
@@ -329,7 +329,7 @@ func TestCheckLimit_NegativeHardLimit_Unlimited(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-test").
@@ -357,7 +357,7 @@ func TestCheckLimit_MissingSubscription_FallbackStarter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// No subscription row
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
@@ -395,7 +395,7 @@ func TestCheckLimit_MissingLimitsRow_DeniedByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-test").
@@ -439,7 +439,7 @@ func TestGetBuildTimeout_FromDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-pro").
@@ -462,7 +462,7 @@ func TestGetBuildTimeout_MissingRow_Default(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-test").
@@ -498,7 +498,7 @@ func TestGetRateLimit_FromDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-team").
@@ -521,7 +521,7 @@ func TestGetRateLimit_MissingRow_Default(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-test").
@@ -667,7 +667,7 @@ func TestMiddleware_BlocksOverLimit_402(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-blocked").
@@ -715,7 +715,7 @@ func TestMiddleware_PassesUnderLimit_200(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-ok").
@@ -782,7 +782,7 @@ func TestCountRows_ReturnsCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT COUNT").
 		WithArgs("tn-test").
@@ -834,7 +834,7 @@ func TestCheckValue_EnterprisePlan_AlwaysAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-ent").
@@ -853,7 +853,7 @@ func TestCheckValue_StarterCap2_Requested2_Allowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-starter").
@@ -882,7 +882,7 @@ func TestCheckValue_StarterCap2_Requested3_Blocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-starter").
@@ -911,7 +911,7 @@ func TestCheckValue_NullHardLimit_Unlimited(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-team").
@@ -934,7 +934,7 @@ func TestCheckValue_MissingPlanLimitsRow_DenyByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
 		WithArgs("tn-starter").
@@ -958,7 +958,7 @@ func TestCountBuildsThisMonth_ReturnsCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT COUNT").
 		WithArgs("tn-test", sqlmock.AnyArg()). // period start is dynamic

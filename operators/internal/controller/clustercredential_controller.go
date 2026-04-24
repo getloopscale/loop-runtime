@@ -250,8 +250,6 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 	caData := ""
 	if len(restConfig.CAData) > 0 {
 		caData = string(restConfig.CAData)
-	} else if len(restConfig.TLSClientConfig.CAData) > 0 {
-		caData = string(restConfig.TLSClientConfig.CAData)
 	}
 
 	// Fail-fast if no authentication mechanism found.

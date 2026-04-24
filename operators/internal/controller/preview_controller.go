@@ -25,7 +25,8 @@ import (
 
 const previewFinalizer = "loopzero.io/preview-cleanup"
 
-var previewSM = statemachine.NewPreviewMachine()
+// previewSM will be used when preview environment logic is implemented (Sprint 5).
+var _ = statemachine.NewPreviewMachine
 
 // PreviewReconciler reconciles PreviewEnvironment CRs.
 // Creates temporary namespaces on the runtime cluster for PR previews.

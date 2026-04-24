@@ -1,0 +1,51 @@
+# Integration Tests — requires PostgreSQL, runs separately from CI.
+# Triggered manually or on schedule. Not blocking for PRs.
+name: Integration Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: "Component to test"
+        required: true
+        type: choice
+        options:
+          - all
+          - api
+  schedule:
+    # Run nightly at 03:00 UTC
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.25.9'
+  GOPRIVATE: 'github.com/getloopscale/*'
+  GONOSUMCHECK: 'github.com/getloopscale/*'
+
+jobs:
+  integration-api:
+    name: API Integration (PG)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: loopzero_test
+          POSTGRES_PASSWORD: loopzero_test_pass
+          POSTGRES_DB: loopzero_test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: api/go.sum
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgres://loopzero_test:loopzero_test_pass@localhost:5432/loopzero_test?sslmode=disable
+        run: cd api && go test ./tests/integration/... -v -race -timeout 10m

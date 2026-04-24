@@ -139,7 +139,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, nsName string) error {
 	var src corev1.Secret
 	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: "loopzero-system"}
-	if err := r.Client.Get(ctx, srcKey, &src); err != nil {
+	if err := r.Get(ctx, srcKey, &src); err != nil {
 		return fmt.Errorf("source pull secret loopzero-system/loopzero-system: %w", err)
 	}
 
