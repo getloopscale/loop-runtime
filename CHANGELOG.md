@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Self-hosted installer runtime bootstrap** — `loopzero platform install` now automates ALL runtime configuration: Gitea org + API token (Gitea 1.25 scopes), ArgoCD password extraction, MinIO credential discovery, Hydra OAuth2 client creation, kubeconfig secrets (single/multi cluster), Argo callback secret generation, MinIO credentials secret for build CWTs. Zero manual kubectl required.
+- **`BootstrapTokens` interface** — typed contract for tokens generated during bootstrap, injected into umbrella chart via `--set` values so Helm manages the K8s Secrets lifecycle.
+- **`createMinioCredentialsSecret()`** — creates `loopzero-minio-credentials` K8s Secret in argo namespace, required by CWT templates (loopzero-clone, cache-save, cache-restore).
+- **`extractMinioCredentials()`** — extracts MinIO root credentials from K8s secret created by Helm chart.
+- **`extractExistingTokens()`** — reads existing tokens from K8s secrets during `loopzero platform upgrade` (avoids regeneration).
+- **Argo Workflows** added to prerequisites list (order 55, between ArgoCD and Ory).
+- **`ARGOCD_INSECURE`** added to loopzero-api configmap (code reads it but chart was missing it).
+
+### Fixed
+- **`JWKS_ENDPOINT` → `JWKS_URL` alignment** — `api/internal/config/config.go` now reads `JWKS_URL` matching both `setup_auth.go` and the Helm chart configmap. Previously config.go read `JWKS_ENDPOINT` which was never set.
+- **Gitea token 403 on Gitea 1.25** — bootstrap now uses explicit scopes (`write:organization`, `write:repository`, etc.) instead of `["all"]` which is not valid in Gitea 1.25+. Tokens created via HTTP API with basic auth.
+- **`buildPlatformValues()` missing token injection** — umbrella chart values now include all service credentials (GITEA_TOKEN, ARGOCD_TOKEN, MINIO_ACCESS_KEY, etc.) for all 3 controllers.
+- **NetworkPolicies blocking cross-namespace egress** — disabled by default during install (enabled for production profile). Cross-namespace egress rules require known endpoints.
+
 ### Changed
 - **Scaling config (`replicas` + `autoscaling`) wired end-to-end and plan-capped** (CHG-2026-04-23-B15 / MEET-2026-04-23-059 / ADR-0011): previously the CLI recognised, persisted, and rendered scaling config but no plan-cap enforcement existed; users on any plan could request any replica count, and the CLI validator warned "Unknown field 'apps.api.replicas' -- ignored". This release closes the chain from `loopzero.yaml` → CLI validator → CLI payload → API route DTO → adapter → orchestrator → persisted spec. Mutual exclusion between `replicas` and `autoscaling` is now enforced at both CLI and API boundaries (`SCALING_AMBIGUOUS`, HTTP 422). Per-service replica cap enforced via new `max_replicas_per_service` plan metric: Starter=2, Pro=5, Team=10, Enterprise=unlimited (`REPLICAS_EXCEED_PLAN`, HTTP 422). The authoritative enforcement point is `BuildOrchestrator.SubmitBuild` so both the CLI deploy path and the GitHub App auto-deploy webhook are covered by the same gate.
 

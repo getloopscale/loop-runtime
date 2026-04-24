@@ -20,3 +20,4 @@ data:
   LOOPZERO_CLUSTER_ISSUER: {{ .Values.config.clusterIssuer | quote }}
   ARGO_NAMESPACE: {{ .Values.config.argoNamespace | quote }}
   ARGOCD_NAMESPACE: {{ .Values.config.argocdNamespace | quote }}
+  ARGOCD_INSECURE: {{ .Values.config.argocdInsecure | default "true" | quote }}

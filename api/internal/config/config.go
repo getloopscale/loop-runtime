@@ -331,7 +331,7 @@ func Load() Config {
 		CORSAllowedOrigin: os.Getenv("CORS_ALLOWED_ORIGIN"),
 
 		// JWT Authentication (Sprint 11 — when set, enables dual JWT + PAT validation)
-		JWKSEndpoint: os.Getenv("JWKS_ENDPOINT"),
+		JWKSEndpoint: os.Getenv("JWKS_URL"),
 		JWTIssuer:    os.Getenv("JWT_ISSUER"),
 
 		// Roadmap 02 — API Loop Extraction. When true, the API does not run

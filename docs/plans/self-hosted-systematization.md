@@ -1,6 +1,6 @@
 # Plano: Sistematizacao Self-Hosted — Zero Gaps
 
-> **Status:** Proposto
+> **Status:** Implementado (code complete, pending E2E validation)
 > **Data:** 2026-04-24
 > **Classificacao:** T2 (Contratos + Operacao)
 > **Contexto:** Droplet E2E revelou 16 gaps entre "charts instalados" e "plataforma funcional". Nenhum cliente conseguiria instalar sem intervencao manual.
@@ -285,21 +285,21 @@ networkPolicies:
 
 ## Ordem de implementacao
 
-| # | Task | Tipo | Esforco | Impacto |
-|---|---|---|---|---|
-| 1 | Fix chart loopzero-api: `JWKS_URL` + `JWT_ISSUER` no configmap | Chart | Baixo | A2, A3 |
-| 2 | Fix chart loopzero-api: secret ref para GITEA_TOKEN | Chart | Baixo | A4 |
-| 3 | Fix chart loopzero-build-cwts: SA + RBAC | Chart | Baixo | A5, A6 |
-| 4 | Installer: step migrations (via API pod) | Installer | Medio | B1 |
-| 5 | Installer: step bootstrap Gitea (org + token) | Installer | Medio | B2 |
-| 6 | Installer: step bootstrap ArgoCD (token) | Installer | Medio | B3 |
-| 7 | Installer: Hydra config (system secret + jwt strategy) | Installer | Medio | B4, B5 |
-| 8 | Installer: kubeconfig secrets (auto-detect single/multi) | Installer | Medio | B6 |
-| 9 | Installer: seed admin user | Installer | Baixo | B8 |
-| 10 | Installer: Kratos identity + Hydra OAuth2 client | Installer | Medio | Auth flow |
-| 11 | Chart loopzero-api: NetworkPolicy com egress parametrizavel | Chart | Medio | A1 |
-| 12 | Publicar charts v0.2.0 (com todos os fixes) | CI | Baixo | Release |
-| 13 | E2E completo: droplet clean install → loopzero deploy → app running | Validacao | Alto | Prova |
+| # | Task | Tipo | Esforco | Impacto | Status |
+|---|---|---|---|---|---|
+| 1 | Fix chart loopzero-api: `JWKS_URL` + `JWT_ISSUER` no configmap | Chart | Baixo | A2, A3 | ✅ Done (prev session) |
+| 2 | Fix chart loopzero-api: secret ref para GITEA_TOKEN | Chart | Baixo | A4 | ✅ Done (secret.yaml) |
+| 3 | Fix chart loopzero-build-cwts: SA + RBAC | Chart | Baixo | A5, A6 | ✅ Done (prev session) |
+| 4 | Installer: step migrations (via API pod) | Installer | Medio | B1 | ✅ Done (bootstrap.ts) |
+| 5 | Installer: step bootstrap Gitea (org + token) | Installer | Medio | B2 | ✅ Done (Gitea 1.25 scopes) |
+| 6 | Installer: step bootstrap ArgoCD (token) | Installer | Medio | B3 | ✅ Done (bootstrap.ts) |
+| 7 | Installer: Hydra config (system secret + jwt strategy) | Installer | Medio | B4, B5 | ✅ Done (prerequisites.ts) |
+| 8 | Installer: kubeconfig secrets (auto-detect single/multi) | Installer | Medio | B6 | ✅ Done (bootstrap.ts) |
+| 9 | Installer: seed admin user | Installer | Baixo | B8 | ✅ Done (bootstrap.ts) |
+| 10 | Installer: Kratos identity + Hydra OAuth2 client | Installer | Medio | Auth flow | ✅ Done (bootstrap.ts) |
+| 11 | Chart loopzero-api: NetworkPolicy com egress parametrizavel | Chart | Medio | A1 | ✅ Done (disabled by default, enabled for production profile) |
+| 12 | Publicar charts v0.2.0 (com todos os fixes) | CI | Baixo | Release | ⏳ Pending: push + CI |
+| 13 | E2E completo: droplet clean install → loopzero deploy → app running | Validacao | Alto | Prova | ⏳ Pending |
 
 ---
 

@@ -125,6 +125,23 @@ export function buildPrerequisites(config: PlatformConfig): HelmRelease[] {
     order: 50,
   });
 
+  // 5b. Argo Workflows (build pipeline)
+  releases.push({
+    name: 'argo-workflows',
+    chart: 'argo/argo-workflows',
+    version: VERSIONS.argoWorkflows,
+    namespace: 'argo',
+    createNamespace: true,
+    values: {
+      'server.serviceType': 'ClusterIP',
+      'controller.workflowWorkers': '32',
+      'controller.podWorkers': '32',
+    },
+    waitReady: true,
+    timeout: '3m',
+    order: 55,
+  });
+
   // 6. Ory (bundled auth)
   if (config.auth.type === 'bundled') {
     const dbBase = config.database.url

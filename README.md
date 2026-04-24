@@ -112,7 +112,7 @@ The platform has all building blocks for large-scale operation. Current focus is
 | Feature | Sprint | Notes |
 |---------|--------|-------|
 | Preview environments (PR → temp URL → cleanup) | Sprint 5 | CRD defined, controller not implemented. GitHub App receives PR events (foundation ready) |
-| `loopzero promote` (staging → production) | Sprint 4 | Not started |
+| `loopzero promote` (staging → production) | Sprint 4 | E2E validated (2026-04-23) |
 | Chaos engineering (full suite) | Sprint 8 | 7 chaos tests implemented, full suite pending |
 | AppSecret controller | — | CRD defined, no reconciler. Secrets work via ESO directly |
 
@@ -120,7 +120,7 @@ The platform has all building blocks for large-scale operation. Current focus is
 
 | Component | Tests | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 852 | Passing |
+| CLI (Jest) | 1,059 | Passing |
 | API + Shared libs (Go) | 44 packages | Passing |
 | Operators (Ginkgo + envtest) | — | Passing |
 | Infra (Pulumi + vitest) | — | Passing |
@@ -210,6 +210,166 @@ loopzero deploy
 That's it. TLS, health checks, ingress routing, and zero-downtime rolling updates are automatic. After connecting, every `git push` deploys automatically.
 
 **Auto-detected frameworks:** Express, NestJS, Fastify, Next.js, Vite, Remix, Astro, Angular, Svelte, Vue, React, Go (Gin), Python (FastAPI, Django), Node.js, and any Dockerfile.
+
+---
+
+## Self-Hosted Installation
+
+Run LoopZero on your own Kubernetes cluster. One command, zero kubectl.
+
+### Prerequisites
+
+- Kubernetes cluster (1.28+) with default StorageClass
+- `kubectl` configured and connected to your cluster
+- `helm` v3.14+
+- `doctl` authenticated (for pulling images from DigitalOcean Container Registry)
+
+### 1. Create a values file
+
+```yaml
+# customer-values.yaml
+domain: "paas.yourcompany.com"
+
+database:
+  external: false              # true = bring your own PG, false = installer provisions one
+
+registry:
+  type: "docr"                 # docr | harbor | ecr | gcr
+  endpoint: "registry.digitalocean.com/loopzero-system"
+
+auth:
+  type: "bundled"              # bundled = Ory Kratos + Hydra, external = your OIDC provider
+  systemSecret: ""             # auto-generated if empty (32 chars, for JWT signing)
+
+storage:
+  endpoint: "minio.loopzero-system.svc.cluster.local:9000"
+  bucket: "loopzero-artifacts"
+
+clusters:
+  mode: "single"               # single = same cluster for mgmt/build/workload
+  # mode: "multi"              # multi = separate clusters (production recommended)
+  # build:
+  #   kubeconfigPath: "/path/to/build-kubeconfig"
+  # workload:
+  #   kubeconfigPath: "/path/to/workload-kubeconfig"
+
+profile: "minimal"             # minimal | production (production = 2 replicas, network policies)
+```
+
+### 2. Install
+
+```bash
+loopzero platform install -f customer-values.yaml
+```
+
+The installer runs 10 automated steps:
+
+```
+Step  1/10: Validating cluster...
+  ✓ kubectl: v1.32    ✓ helm: v3.17    ✓ nodes: 3    ✓ storageclass: local-path
+
+Step  2/10: Installing prerequisites...
+  ✓ cert-manager v1.14.5    ✓ traefik v28.3.0    ✓ postgresql v16.6.1
+  ✓ gitea v10.6.0           ✓ argocd v7.3.11     ✓ argo-workflows v1.0.5
+  ✓ ory-kratos v0.61.0      ✓ ory-hydra v0.61.0  ✓ minio v5.4.0
+
+Step  3/10: Configuring registry credentials...
+  ✓ Image pull secret created
+
+Step  4/10: Setting up databases...
+  ✓ Auth databases ready (kratos, hydra)
+
+Step  5/10: Installing CRDs...
+  ✓ 10 LoopZero CRDs installed
+
+Step  6/10: Bootstrapping services...
+  ✓ Gitea org "loopzero" created
+  ✓ Gitea API token generated
+  ✓ ArgoCD admin password extracted
+  ✓ MinIO credentials extracted
+  ✓ OAuth2 client created
+  ✓ Argo callback secret generated
+
+Step  7/10: Creating runtime secrets...
+  ✓ Kubeconfig configmaps created (single-cluster mode)
+  ✓ MinIO credentials secret created in argo
+  ✓ MinIO credentials secret created in loopzero-system
+
+Step  8/10: Installing LoopZero platform...
+  ✓ LoopZero platform installed
+
+Step  9/10: Waiting for pods...
+  ✓ All 5 pods Ready (42s)
+
+Step 10/10: Running health checks...
+  ✓ All health checks passed
+
+Installation complete!
+
+  Platform URL:    https://paas.yourcompany.com
+  Dashboard:       https://cloud.paas.yourcompany.com
+  API:             https://api.paas.yourcompany.com
+
+  Next steps:
+  1. Configure DNS: *.paas.yourcompany.com → <ingress-ip>
+  2. Login: loopzero login --api-url https://api.paas.yourcompany.com
+```
+
+### What the installer automates
+
+Everything that would otherwise require manual `kubectl` and `curl` commands:
+
+| Step | What | Why |
+|------|------|-----|
+| Gitea org + API token | Creates "loopzero" org and generates scoped token (Gitea 1.25+) | API needs token to create repos for source code and GitOps manifests |
+| ArgoCD password | Extracts initial admin secret | API needs credentials to trigger ArgoCD syncs |
+| MinIO credentials | Extracts root user/password from Helm secret | API uploads source bundles, CWTs download them during builds |
+| Hydra OAuth2 client | Registers `loopzero-cli` client with PKCE + refresh tokens | CLI login flow requires a registered OIDC client |
+| Kubeconfig secrets | Creates ConfigMaps with cluster access for single/multi cluster mode | Controllers need to reach build and workload clusters |
+| MinIO credentials secret | Creates `loopzero-minio-credentials` in argo namespace | Build workflow templates (CWTs) reference this secret by name |
+| Database migrations | Runs forward-only schema migrations via API pod | API requires schema to exist before serving requests |
+| Argo callback secret | Generates 32-char secret shared between API and Argo Workflows | Build callbacks authenticate with this shared secret |
+
+### Platform management
+
+```bash
+loopzero platform status     # Show component health, versions, endpoints
+loopzero platform upgrade --version 0.3.0 -f customer-values.yaml
+loopzero platform uninstall  # Removes platform (preserves CRDs and data)
+```
+
+### Helm charts (OCI)
+
+All LoopZero Helm charts are published as OCI artifacts to DigitalOcean Container Registry:
+
+```
+oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform    # Umbrella chart
+oci://registry.digitalocean.com/loopzero-system/helm/loopzero-crds         # CRDs (separate lifecycle)
+oci://registry.digitalocean.com/loopzero-system/helm/loopzero-api          # API server
+oci://registry.digitalocean.com/loopzero-system/helm/loopzero-controller   # Background controller
+oci://registry.digitalocean.com/loopzero-system/helm/loopzero-tenant-controller
+oci://registry.digitalocean.com/loopzero-system/helm/loopzero-cloud        # OAuth2 proxy
+oci://registry.digitalocean.com/loopzero-system/helm/loopzero-dashboard    # Web dashboard
+oci://registry.digitalocean.com/loopzero-system/helm/loopzero-build-cwts   # Build pipeline templates
+oci://registry.digitalocean.com/loopzero-system/helm/loopzero-common       # Library chart (shared helpers)
+```
+
+For advanced users who prefer direct Helm:
+
+```bash
+# Pull and inspect
+helm pull oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform --version 0.2.0
+helm show values oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform --version 0.2.0
+
+# Install manually (advanced — prefer `loopzero platform install`)
+helm upgrade --install loopzero oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform \
+  --version 0.2.0 \
+  --namespace loopzero-system --create-namespace \
+  --set loopzero-api.config.baseDomain=paas.yourcompany.com \
+  --set loopzero-api.secrets.databaseUrl="postgres://..." \
+  --set loopzero-api.secrets.giteaToken="..." \
+  --wait --timeout 5m
+```
 
 ---
 
@@ -468,7 +628,7 @@ task doctor      # Verify everything is healthy
 
 ```bash
 task test              # All tests (unit + lint + manifests)
-cd cli && npm test     # CLI tests (Jest, 852 tests)
+cd cli && npm test     # CLI tests (Jest, 1059 tests)
 go test ./api/...      # API tests (Go testing)
 go test ./operators/...# Operator tests (Ginkgo + envtest)
 go test ./pkg/...      # Shared library tests

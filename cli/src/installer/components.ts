@@ -3,6 +3,7 @@
 
 import { execSync } from 'child_process';
 import { PlatformConfig, PlatformStatus, ComponentStatus } from './types';
+import { BootstrapTokens } from './bootstrap';
 import { installOrUpgrade, uninstall, test as helmTest, releaseExists } from './helm';
 
 /**
@@ -97,41 +98,96 @@ export function installCRDs(log: (msg: string) => void): void {
 }
 
 /**
- * Build Helm values for the platform chart based on customer config.
+ * Build Helm values for the platform chart based on customer config + bootstrap tokens.
+ *
+ * This is the central function that wires all runtime configuration.
+ * Every token, credential, and URL needed by every component is set here.
  */
-function buildPlatformValues(config: PlatformConfig): Record<string, unknown> {
+function buildPlatformValues(
+  config: PlatformConfig,
+  tokens: BootstrapTokens,
+): Record<string, unknown> {
   const values: Record<string, unknown> = {
+    // ── Global ────────────────────────────────────────────────────────────
     'global.registry': 'registry.digitalocean.com/loopzero-system',
     'global.imagePullSecrets[0].name': IMAGE_PULL_SECRET_NAME,
+
     // CRDs installed separately — disable in umbrella
     'loopzero-crds.enabled': 'false',
-    // Disable components that need external CRDs (Argo Workflows, Prometheus Operator, VAP)
+
+    // Disable components that need external CRDs not yet available
     'loopzero-monitoring.enabled': 'false',
     'loopzero-admission-policies.enabled': 'false',
-    'loopzero-build-cwts.enabled': 'false',
+
+    // ── loopzero-api ──────────────────────────────────────────────────────────
+    'loopzero-api.config.baseDomain': config.domain,
+    'loopzero-api.config.giteaUrl': 'http://gitea-http.gitea.svc.cluster.local:3000',
+    'loopzero-api.config.argocdUrl': 'http://argocd-server.argocd.svc.cluster.local:80',
+    'loopzero-api.config.minioEndpoint': 'minio.loopzero-system.svc.cluster.local:9000',
+    'loopzero-api.config.registryUrl': config.registry.endpoint,
+    'loopzero-api.config.jwksUrl': 'http://ory-hydra-public.ory.svc.cluster.local:4444/.well-known/jwks.json',
+    'loopzero-api.config.jwtIssuer': 'http://ory-hydra-public.ory.svc.cluster.local:4444/',
+    'loopzero-api.config.argoNamespace': 'argo',
+    'loopzero-api.config.argocdNamespace': 'argocd',
+
+    // API secrets (Helm creates the K8s Secret with these values)
+    'loopzero-api.secrets.databaseUrl': config.database.url || 'postgres://loopzero:loopzero@postgresql.loopzero-system.svc:5432/loopzero?sslmode=disable',
+    'loopzero-api.secrets.giteaToken': tokens.giteaToken,
+    'loopzero-api.secrets.argocdToken': tokens.argocdPassword,
+    'loopzero-api.secrets.minioAccessKey': tokens.minioAccessKey,
+    'loopzero-api.secrets.minioSecretKey': tokens.minioSecretKey,
+    'loopzero-api.secrets.argoCallbackSecret': tokens.argoCallbackSecret,
+
+    // ── loopzero-controller ───────────────────────────────────────────────────
+    'loopzero-controller.config.baseDomain': config.domain,
+    'loopzero-controller.config.giteaUrl': 'http://gitea-http.gitea.svc.cluster.local:3000',
+    'loopzero-controller.config.argocdUrl': 'http://argocd-server.argocd.svc.cluster.local:80',
+    'loopzero-controller.config.minioEndpoint': 'minio.loopzero-system.svc.cluster.local:9000',
+    'loopzero-controller.config.registryUrl': config.registry.endpoint,
+    'loopzero-controller.config.argoNamespace': 'argo',
+    'loopzero-controller.config.argocdNamespace': 'argocd',
+    'loopzero-controller.secrets.databaseUrl': config.database.url || 'postgres://loopzero:loopzero@postgresql.loopzero-system.svc:5432/loopzero?sslmode=disable',
+    'loopzero-controller.secrets.giteaToken': tokens.giteaToken,
+    'loopzero-controller.secrets.argocdToken': tokens.argocdPassword,
+    'loopzero-controller.secrets.minioAccessKey': tokens.minioAccessKey,
+    'loopzero-controller.secrets.minioSecretKey': tokens.minioSecretKey,
+
+    // ── loopzero-tenant-controller ────────────────────────────────────────────
+    'loopzero-tenant-controller.config.giteaUrl': 'http://gitea-http.gitea.svc.cluster.local:3000',
+    'loopzero-tenant-controller.config.baseDomain': config.domain,
+    'loopzero-tenant-controller.config.argocdNamespace': 'argocd',
+    'loopzero-tenant-controller.secrets.giteaToken': tokens.giteaToken,
+
+    // ── loopzero-build-cwts ───────────────────────────────────────────────────
+    // CWT templates reference loopzero-minio-credentials secret directly
+    // (created separately by createMinioCredentialsSecret)
+    'loopzero-build-cwts.minio.insecure': 'true',
+
+    // ── Network policies ──────────────────────────────────────────────────
+    // Disable for initial install — cross-namespace egress requires known endpoints.
+    // Can be enabled after all services are up via `loopzero platform upgrade`.
+    'loopzero-api.networkPolicy.enabled': 'false',
+    'loopzero-controller.networkPolicy.enabled': 'false',
+    'loopzero-tenant-controller.networkPolicy.enabled': 'false',
   };
 
-  // API config
-  values['loopzero-api.config.baseDomain'] = config.domain;
-  values['loopzero-api.config.giteaUrl'] = `http://gitea-http.gitea.svc.cluster.local:3000`;
-  values['loopzero-api.config.argocdUrl'] = `http://argocd-server.argocd.svc.cluster.local:80`;
-  values['loopzero-api.config.minioEndpoint'] = `minio.loopzero-system.svc.cluster.local:9000`;
-  values['loopzero-api.config.registryUrl'] = config.registry.endpoint;
-
-  // Database
-  if (config.database.external && config.database.url) {
-    values['loopzero-api.secrets.databaseUrl'] = config.database.url;
-    values['loopzero-controller.secrets.databaseUrl'] = config.database.url;
+  // ── Kubeconfig (single-cluster mode) ──────────────────────────────────
+  if (!config.clusters || config.clusters.mode === 'single') {
+    values['loopzero-api.kubeconfig.build.existingConfigMap'] = 'loopzero-build-kubeconfig';
+    values['loopzero-api.kubeconfig.runtime.existingConfigMap'] = 'loopzero-runtime-kubeconfig';
+    values['loopzero-controller.kubeconfig.build.existingConfigMap'] = 'loopzero-build-kubeconfig';
+    values['loopzero-tenant-controller.kubeconfig.build.existingConfigMap'] = 'loopzero-build-kubeconfig';
+    values['loopzero-tenant-controller.kubeconfig.runtime.existingConfigMap'] = 'loopzero-runtime-kubeconfig';
   }
 
-  // Profile-based sizing
+  // ── Profile-based sizing ──────────────────────────────────────────────
   if (config.profile === 'production') {
     values['loopzero-api.replicaCount'] = '2';
     values['loopzero-cloud.replicaCount'] = '2';
     values['loopzero-dashboard.replicaCount'] = '2';
     values['loopzero-api.networkPolicy.enabled'] = 'true';
-    values['loopzero-cloud.networkPolicy.enabled'] = 'true';
-    values['loopzero-dashboard.networkPolicy.enabled'] = 'true';
+    values['loopzero-controller.networkPolicy.enabled'] = 'true';
+    values['loopzero-tenant-controller.networkPolicy.enabled'] = 'true';
   }
 
   return values;
@@ -140,8 +196,12 @@ function buildPlatformValues(config: PlatformConfig): Record<string, unknown> {
 /**
  * Install LoopZero platform components via umbrella chart.
  */
-export function installPlatform(config: PlatformConfig, log: (msg: string) => void): void {
-  const values = buildPlatformValues(config);
+export function installPlatform(
+  config: PlatformConfig,
+  tokens: BootstrapTokens,
+  log: (msg: string) => void,
+): void {
+  const values = buildPlatformValues(config, tokens);
 
   log('  Installing LoopZero platform...');
   installOrUpgrade({
@@ -160,8 +220,13 @@ export function installPlatform(config: PlatformConfig, log: (msg: string) => vo
 /**
  * Upgrade LoopZero platform to a new version.
  */
-export function upgradePlatform(version: string, config: PlatformConfig, log: (msg: string) => void): void {
-  const values = buildPlatformValues(config);
+export function upgradePlatform(
+  version: string,
+  config: PlatformConfig,
+  tokens: BootstrapTokens,
+  log: (msg: string) => void,
+): void {
+  const values = buildPlatformValues(config, tokens);
 
   log(`  Upgrading to v${version}...`);
 
@@ -215,9 +280,10 @@ export function validateInstallation(log: (msg: string) => void): boolean {
 /**
  * Wait for all pods in loopzero-system to be Ready.
  */
-export function waitForPods(log: (msg: string) => void, timeoutSec = 120): boolean {
+export function waitForPods(log: (msg: string) => void, timeoutSec = 180): boolean {
   log('  Waiting for pods...');
-  const deadline = Date.now() + timeoutSec * 1000;
+  const start = Date.now();
+  const deadline = start + timeoutSec * 1000;
 
   while (Date.now() < deadline) {
     try {
@@ -228,13 +294,27 @@ export function waitForPods(log: (msg: string) => void, timeoutSec = 120): boole
       const statuses = output.split(' ').filter(Boolean);
       const allReady = statuses.length > 0 && statuses.every((s) => s === 'True');
       if (allReady) {
-        log(`  ✓ All ${statuses.length} pods Ready (${Math.round((Date.now() - (deadline - timeoutSec * 1000)) / 1000)}s)`);
+        const elapsed = Math.round((Date.now() - start) / 1000);
+        log(`  ✓ All ${statuses.length} pods Ready (${elapsed}s)`);
         return true;
       }
     } catch {
       // kubectl may fail transiently
     }
-    execSync('sleep 3');
+    execSync('sleep 5');
+  }
+
+  // Show which pods aren't ready for debugging
+  try {
+    const notReady = execSync(
+      `kubectl get pods -n loopzero-system --field-selector=status.phase!=Running --no-headers 2>/dev/null || true`,
+      { encoding: 'utf-8', timeout: 5_000 },
+    ).trim();
+    if (notReady) {
+      log(`  Pods not ready:\n${notReady}`);
+    }
+  } catch {
+    // ignore
   }
 
   log('  ✗ Timeout waiting for pods');

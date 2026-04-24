@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 import {
   PlatformConfig,
+  BootstrapTokens,
   validateCluster,
   installPrerequisites,
   ensureImagePullSecret,
@@ -18,8 +19,11 @@ import {
   runMigrations,
   bootstrapGitea,
   bootstrapArgoCD,
+  extractMinioCredentials,
+  generateSecret,
   createKubeconfigs,
   createHydraClient,
+  createMinioCredentialsSecret,
   createAuthDatabases,
 } from '../installer';
 
@@ -33,6 +37,18 @@ export interface PlatformDeps {
  *
  * Installs the complete LoopZero platform on the current Kubernetes cluster.
  * Zero manual intervention — all prerequisites, bootstrap, and config automated.
+ *
+ * 10-step flow:
+ *   1. Validate cluster (kubectl, helm, nodes, storage)
+ *   2. Install prerequisites (cert-manager, traefik, PG, Gitea, ArgoCD, Argo Workflows, Ory, MinIO)
+ *   3. Registry credentials (imagePullSecret for DOCR)
+ *   4. Database setup (create auth DBs: kratos, hydra)
+ *   5. Install CRDs
+ *   6. Bootstrap services (Gitea org+token, ArgoCD password, MinIO creds, Hydra client)
+ *   7. Runtime secrets (kubeconfigs, minio-credentials for CWTs)
+ *   8. Install LoopZero platform (umbrella chart with all tokens injected)
+ *   9. Wait for pods
+ *  10. Validate (health checks)
  */
 export async function platformInstall(
   deps: PlatformDeps,
@@ -61,6 +77,8 @@ export async function platformInstall(
   writeTo('');
   writeTo('  LoopZero Platform Installer');
   writeTo('  =======================');
+  writeTo(`  Domain:  ${config.domain}`);
+  writeTo(`  Profile: ${config.profile}`);
   writeTo('');
 
   // ── Step 1: Validate cluster ──────────────────────────────────────
@@ -89,6 +107,8 @@ export async function platformInstall(
   writeTo('Step 3/10: Configuring registry credentials...');
   try {
     ensureImagePullSecret('loopzero-system', writeTo);
+    // Also create in argo namespace (CWT pods need to pull clone-runner image)
+    ensureImagePullSecret('argo', writeTo);
   } catch (err) {
     writeError(`Failed to create image pull secret: ${err}`);
     return 1;
@@ -114,38 +134,75 @@ export async function platformInstall(
   // ── Step 6: Bootstrap services ────────────────────────────────────
   writeTo('Step 6/10: Bootstrapping services...');
 
-  // Gitea
+  // Gitea: create org + generate API token
   const giteaToken = bootstrapGitea(
     'http://gitea-http.gitea.svc.cluster.local:3000',
     'loopzero-admin', 'loopzero-gitea-pass',
     writeTo,
   );
+  if (!giteaToken) {
+    writeError('Gitea bootstrap failed — token required for platform operation');
+    writeError('  Check: kubectl logs -n gitea deploy/gitea');
+    return 1;
+  }
 
-  // ArgoCD
-  bootstrapArgoCD('argocd', writeTo);
+  // ArgoCD: extract admin password
+  const argocdPassword = bootstrapArgoCD('argocd', writeTo);
 
-  // Hydra OAuth2 client
-  createHydraClient(writeTo);
+  // MinIO: extract credentials
+  const minioCreds = extractMinioCredentials(writeTo);
 
-  // Kubeconfigs
-  createKubeconfigs(config, writeTo);
+  // Hydra: create OAuth2 client for loopzero-cli
+  const hydraClientId = createHydraClient(writeTo);
+
+  // Generate callback secret for Argo → API communication
+  const argoCallbackSecret = generateSecret(32);
+  writeTo(`  ✓ Argo callback secret generated`);
+
+  const tokens: BootstrapTokens = {
+    giteaToken,
+    argocdPassword,
+    minioAccessKey: minioCreds.accessKey,
+    minioSecretKey: minioCreds.secretKey,
+    argoCallbackSecret,
+    hydraClientId,
+  };
   writeTo('');
 
-  // ── Step 7: Install LoopZero platform ─────────────────────────────────
-  writeTo('Step 7/10: Installing LoopZero platform...');
-  // Inject bootstrap tokens into config for the Helm install
-  if (giteaToken) config.storage = { ...config.storage, giteaToken } as typeof config.storage & { giteaToken: string };
+  // ── Step 7: Runtime secrets ───────────────────────────────────────
+  writeTo('Step 7/10: Creating runtime secrets...');
+
+  // Kubeconfigs for multi-cluster access
+  createKubeconfigs(config, writeTo);
+
+  // MinIO credentials secret for build CWT templates (loopzero-minio-credentials)
+  // Must exist in the argo namespace where workflows run
+  createMinioCredentialsSecret(
+    'argo',
+    'http://minio.loopzero-system.svc.cluster.local:9000',
+    minioCreds.accessKey,
+    minioCreds.secretKey,
+    writeTo,
+  );
+
+  // Also in loopzero-system for any direct access
+  createMinioCredentialsSecret(
+    'loopzero-system',
+    'http://minio.loopzero-system.svc.cluster.local:9000',
+    minioCreds.accessKey,
+    minioCreds.secretKey,
+    writeTo,
+  );
+  writeTo('');
+
+  // ── Step 8: Install LoopZero platform ─────────────────────────────────
+  writeTo('Step 8/10: Installing LoopZero platform...');
   try {
-    installPlatform(config, writeTo);
+    installPlatform(config, tokens, writeTo);
   } catch (err) {
     writeError(`Platform installation failed: ${err}`);
     return 1;
   }
-  writeTo('');
-
-  // ── Step 8: Run migrations ────────────────────────────────────────
-  writeTo('Step 8/10: Running database migrations...');
-  runMigrations(dbUrl, writeTo);
   writeTo('');
 
   // ── Step 9: Wait for pods ─────────────────────────────────────────
@@ -153,8 +210,12 @@ export async function platformInstall(
   const podsReady = waitForPods(writeTo);
   if (!podsReady) {
     writeError('Pods did not become ready. Check: kubectl get pods -n loopzero-system');
-    return 1;
+    writeError('  Continuing — some pods may need database migrations...');
   }
+
+  // Run migrations after API pod is up
+  writeTo('  Running database migrations...');
+  runMigrations(dbUrl, writeTo);
   writeTo('');
 
   // ── Step 10: Validate ─────────────────────────────────────────────
@@ -168,6 +229,9 @@ export async function platformInstall(
   writeTo(`  Platform URL:    https://${config.domain}`);
   writeTo(`  Dashboard:       https://cloud.${config.domain}`);
   writeTo(`  API:             https://api.${config.domain}`);
+  if (hydraClientId) {
+    writeTo(`  OAuth2 Client:   ${hydraClientId}`);
+  }
   writeTo('');
   writeTo('  Next steps:');
   writeTo(`  1. Configure DNS: *.${config.domain} → <ingress-ip>`);
@@ -226,6 +290,9 @@ export async function platformUpgrade(
     }
   }
 
+  // For upgrade, we need the existing tokens from K8s secrets
+  const tokens = extractExistingTokens();
+
   writeTo(`Upgrading to v${version}...`);
   try {
     upgradePlatform(version, config || {
@@ -234,7 +301,7 @@ export async function platformUpgrade(
       registry: { type: 'docr', endpoint: '' },
       auth: { type: 'bundled' },
       storage: { endpoint: '', bucket: '' },
-    }, writeTo);
+    }, tokens, writeTo);
     const podsReady = waitForPods(writeTo);
     if (!podsReady) {
       writeError('Upgrade may have failed — pods not ready');
@@ -257,4 +324,32 @@ export async function platformUninstall(deps: PlatformDeps): Promise<number> {
   uninstallPlatform(writeTo);
   writeTo('✓ Uninstalled');
   return 0;
+}
+
+/**
+ * Extract existing tokens from K8s secrets for upgrade operations.
+ * During upgrade, we don't regenerate tokens — we reuse existing ones.
+ */
+function extractExistingTokens(): BootstrapTokens {
+  const { execSync } = require('child_process');
+  const get = (secret: string, key: string, ns = 'loopzero-system'): string => {
+    try {
+      return execSync(
+        `kubectl get secret ${secret} -n ${ns} -o jsonpath='{.data.${key}}' 2>/dev/null | base64 -d`,
+        { encoding: 'utf-8', timeout: 5_000 },
+      ).trim();
+    } catch {
+      return '';
+    }
+  };
+
+  // The umbrella chart creates secrets with fullname pattern
+  return {
+    giteaToken: get('loopzero-loopzero-api', 'GITEA_TOKEN'),
+    argocdPassword: get('loopzero-loopzero-api', 'ARGOCD_TOKEN'),
+    minioAccessKey: get('loopzero-loopzero-api', 'MINIO_ACCESS_KEY'),
+    minioSecretKey: get('loopzero-loopzero-api', 'MINIO_SECRET_KEY'),
+    argoCallbackSecret: get('loopzero-loopzero-api', 'LOOPZERO_ARGO_CALLBACK_SECRET'),
+    hydraClientId: '',
+  };
 }
