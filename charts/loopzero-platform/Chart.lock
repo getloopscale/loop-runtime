@@ -1,33 +1,33 @@
 dependencies:
 - name: loopzero-common
   repository: file://../loopzero-common
-  version: 0.1.0
+  version: 0.1.1
 - name: loopzero-crds
   repository: file://../loopzero-crds
-  version: 0.1.0
+  version: 0.1.1
 - name: loopzero-api
   repository: file://../loopzero-api
-  version: 0.1.0
+  version: 0.1.1
 - name: loopzero-tenant-controller
   repository: file://../loopzero-tenant-controller
-  version: 0.1.0
+  version: 0.1.1
 - name: loopzero-controller
   repository: file://../loopzero-controller
-  version: 0.1.0
+  version: 0.1.1
 - name: loopzero-cloud
   repository: file://../loopzero-cloud
-  version: 0.1.0
+  version: 0.1.1
 - name: loopzero-dashboard
   repository: file://../loopzero-dashboard
-  version: 0.1.0
+  version: 0.1.1
 - name: loopzero-build-cwts
   repository: file://../loopzero-build-cwts
-  version: 0.1.0
+  version: 0.1.1
 - name: loopzero-monitoring
   repository: file://../loopzero-monitoring
-  version: 0.1.0
+  version: 0.1.1
 - name: loopzero-admission-policies
   repository: file://../loopzero-admission-policies
-  version: 0.1.0
-digest: sha256:d8aadd96d55dcc0d449d2bf55faddf923c23a3a4775ba818289a5d92c6befd26
-generated: "2026-04-23T21:27:01.03478778-03:00"
+  version: 0.1.1
+digest: sha256:eec5ef60f69183edd4a4ce4f1c745fafe34b46c2801f8e414c0d0ec5a0f063c6
+generated: "2026-04-24T04:20:54.382316543-03:00"

@@ -2,7 +2,7 @@ apiVersion: v2
 name: loopzero-cloud
 description: LoopZero PaaS auth and billing service
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "dev"
 home: https://github.com/loopzero/loopzero
 sources:
