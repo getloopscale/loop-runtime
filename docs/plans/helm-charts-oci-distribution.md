@@ -37,6 +37,146 @@ Estes principios guiam toda decisao de design dos charts:
 
 ---
 
+## Namespace Strategy (CNCF Standard)
+
+### Principio: separacao por trust boundary
+
+**Padrao CNCF:** Cada projeto tem seu namespace `{project}-system`. Projetos de terceiros mantem seus namespaces upstream. NUNCA renomear namespace de terceiro com seu prefixo — quebra documentacao, troubleshooting, e expectativas de operadores.
+
+**Exemplos de referencia:**
+
+| Projeto CNCF | Namespace | Tipo |
+|-------------|-----------|------|
+| Istio | `istio-system` | Proprio |
+| Crossplane | `crossplane-system` | Proprio |
+| Linkerd | `linkerd` | Proprio |
+| ArgoCD | `argocd` | Proprio (terceiro para nos) |
+| cert-manager | `cert-manager` | Proprio (terceiro para nos) |
+
+### Situacao atual (inconsistente — pre-producao)
+
+O sistema ainda NAO esta em producao. Estas inconsistencias devem ser corrigidas ANTES do primeiro deploy.
+
+| Componente | Dev local (Tilt) | Prod (Pulumi) | Correto CNCF |
+|-----------|-----------------|---------------|-------------|
+| LoopZero API, Cloud, Dashboard | `loopzero-system` | `platform-system` | `loopzero-system` |
+| Tenant Controller | `loopzero-system` | `platform-system` | `loopzero-system` |
+| PostgreSQL, MinIO | `loopzero-system` | `platform-system` | `loopzero-system` (data store privado) |
+| ArgoCD | `loopzero-system` (via Taskfile) | `platform-system` | **`argocd`** (upstream) |
+| Gitea | `loopzero-system` | `platform-system` | **`gitea`** (upstream) |
+| Ory Kratos + Hydra | `loopzero-system` | `platform-system` | **`ory`** (agrupado por funcao) |
+| Traefik | `traefik` (local) | `platform-system` (prod) | **`traefik`** (upstream) |
+| cert-manager | `cert-manager` | `cert-manager` | **`cert-manager`** (ja correto) |
+| Prometheus + Grafana | `monitoring` (via Taskfile) | `platform-system` | **`monitoring`** (upstream kube-prometheus-stack) |
+| Loki + Promtail | `monitoring` | `monitoring` | **`monitoring`** (mesma stack) |
+| Argo Workflows | `argo` | `argo` | **`argo`** (upstream, ja correto) |
+| ESO | `external-secrets` | `external-secrets` | **`external-secrets`** (ja correto) |
+
+### Decisao: mapa de namespaces por cluster
+
+#### mgmt cluster
+
+| Namespace | Componentes | Dono | Justificativa |
+|-----------|------------|------|---------------|
+| **`loopzero-system`** | loopzero-api, loopzero-cloud, loopzero-dashboard, loopzero-tenant-controller, loopzero-controller, PostgreSQL, MinIO | **LoopZero (Helm charts)** | Componentes LoopZero + data stores privados que so LoopZero usa. PG e MinIO aqui porque sao internal implementation detail, nao servicos compartilhados. |
+| **`argocd`** | ArgoCD server, application-controller, repo-server | **Upstream chart** | ArgoCD tem seu proprio RBAC, dashboard, e documentacao que assume `argocd`. Namespace upstream. |
+| **`gitea`** | Gitea server | **Upstream chart** | Gitea e um servico independente com admin UI e API propria. Namespace upstream facilita troubleshooting. |
+| **`ory`** | Ory Kratos, Ory Hydra, Redis (sessoes) | **Upstream charts** | Stack de auth agrupada. Lifecycle independente da platform (pode upgradar Kratos sem tocar LoopZero). |
+| **`traefik`** | Traefik ingress controller | **Upstream chart** | Ingress e cross-namespace por natureza. Namespace upstream. |
+| **`cert-manager`** | cert-manager controller | **Upstream chart** | Ja usa namespace correto. |
+| **`monitoring`** | Prometheus, Grafana, AlertManager, kube-state-metrics, Tempo, OTEL | **Upstream kube-prometheus-stack** | Stack de observability padrao. `loopzero-monitoring` chart instala PrometheusRules e dashboards NESTE namespace (nao cria namespace proprio). |
+
+#### build cluster
+
+| Namespace | Componentes | Dono | Justificativa |
+|-----------|------------|------|---------------|
+| **`argo`** | Argo Workflows controller, ServiceAccount `loopzero-workflow-submitter` | **Upstream chart** | Namespace upstream do Argo Workflows. |
+| **`loopzero-{tenant}-build`** | Per-tenant Argo Workflows, BuildKit, resource quotas | **TenantController** | Isolacao de build por tenant. Trust boundary diferente. |
+| **`monitoring`** | Loki, Promtail | **Upstream charts** | Log aggregation no build cluster. |
+
+#### workload cluster
+
+| Namespace | Componentes | Dono | Justificativa |
+|-----------|------------|------|---------------|
+| **`loopzero-{tenant}-{env}`** | User apps, Services, Ingress, NetworkPolicies | **TenantController** | Namespace dinamico por tenant+environment. |
+| **`traefik`** | Traefik ingress controller | **Upstream chart** | Ingress no workload cluster. |
+| **`cert-manager`** | cert-manager controller | **Upstream chart** | TLS no workload cluster. |
+| **`external-secrets`** | ESO controller, ClusterSecretStore | **Upstream chart** | Secret sync cross-cluster. |
+
+### Service discovery (FQDNs)
+
+Com componentes em namespaces separados, service URLs DEVEM usar FQDN (nao short names). Os defaults no codigo devem refletir isso:
+
+```yaml
+# Antes (tudo no mesmo namespace — short names):
+GITEA_URL: "http://gitea-http:3000"
+ARGOCD_URL: "http://argocd-server:80"
+MINIO_ENDPOINT: "minio:9000"
+
+# Depois (namespaces separados — FQDN obrigatorio):
+GITEA_URL: "http://gitea-http.gitea.svc.cluster.local:3000"
+ARGOCD_URL: "http://argocd-server.argocd.svc.cluster.local:80"
+MINIO_ENDPOINT: "minio.loopzero-system.svc.cluster.local:9000"
+JWKS_ENDPOINT: "http://ory-hydra-public.ory.svc.cluster.local:4444/.well-known/jwks.json"
+JWT_ISSUER: "http://ory-hydra-public.ory.svc.cluster.local:4444/"
+```
+
+> MinIO fica em `loopzero-system` (mesmo namespace que a API), entao short name funciona. Mas usar FQDN para todos e mais robusto e consistente.
+
+### Convergencia necessaria antes dos Helm charts (Fase 0)
+
+O sistema NAO esta em producao. Todas estas mudancas devem ser aplicadas ANTES do primeiro deploy.
+
+| # | Arquivo | Mudanca | Tipo |
+|---|---------|---------|------|
+| 1 | `infra/pulumi/src/components/bootstrap-shared.ts` | `PLATFORM_NAMESPACE = "platform-system"` → `"loopzero-system"` | Constante |
+| 2 | `operators/internal/constants/ports.go` | `NamespacePlatformSystem = "platform-system"` → `"loopzero-system"` | Constante |
+| 3 | `infra/pulumi-control-plane/src/mgmt-control-plane-services.ts` | `PLATFORM_NAMESPACE` → importar de bootstrap-shared (DRY) | DRY |
+| 4 | `api/internal/config/config.go:255` | `gitea-http.loopzero-system` → `gitea-http.gitea` | FQDN |
+| 5 | `api/internal/config/config.go:259` | `minio.loopzero-system` → `minio.loopzero-system` (ja correto, mesmo ns) | OK |
+| 6 | `api/internal/config/config.go:139` | `ory-hydra-public.loopzero-system` → `ory-hydra-public.ory` | FQDN |
+| 7 | `api/internal/config/config.go:142` | `ory-hydra-public.loopzero-system` → `ory-hydra-public.ory` | FQDN |
+| 8 | `operators/api/v1/platformbootstrap_types.go:100` | `gitea-http.platform-system` → `gitea-http.gitea` | CRD default |
+| 9 | `operators/api/v1/platformbootstrap_types.go:149,156` | `loopzero-api.platform-system` → `loopzero-api.loopzero-system` | CRD default |
+| 10 | `operators/internal/constants/resources.go:148` | `gitea-http.loopzero-system` → `gitea-http.gitea` | Constante |
+| 11 | `operators/config/crd/bases/*.yaml` | Regenerar CRDs apos mudancas em types.go (`make generate manifests`) | CRD YAML |
+| 12 | `operators/operatortest/setup.go:88` | `gitea.loopzero-system` → `gitea.gitea` | Test fixture |
+| 13 | `operators/api/v1/*_test.go` | `platform-system` → namespaces corretos nos testes | Testes |
+| 14 | `Taskfile.yml` (gitea install) | `--namespace loopzero-system` → `--namespace gitea` | Namespace |
+| 15 | `Taskfile.yml` (ory install) | `--namespace loopzero-system` → `--namespace ory` | Namespace |
+| 16 | `Taskfile.yml` (argocd install) | `--namespace loopzero-system` → `--namespace argocd` (se aplicavel) | Namespace |
+| 17 | `Tiltfile` | Service probes atualizados para namespaces corretos | Dev loop |
+| 18 | `infra/pulumi/` (todos componentes) | Separar deploys de terceiros em seus namespaces | Pulumi |
+| 19 | `infra/helm/network-policies/` | Atualizar NetworkPolicies para cross-namespace | NetPol |
+
+### Helm chart values (service URLs configuraveis)
+
+Nos Helm charts, as URLs de servicos de terceiros sao configuraveis via values (NAO hardcoded):
+
+```yaml
+# charts/loopzero-api/values.yaml
+config:
+  giteaUrl: "http://gitea-http.gitea.svc.cluster.local:3000"         # Gitea namespace upstream
+  argocdUrl: "http://argocd-server.argocd.svc.cluster.local:80"      # ArgoCD namespace upstream
+  minioEndpoint: "minio.loopzero-system.svc.cluster.local:9000"          # MinIO no mesmo namespace
+  jwksEndpoint: "http://ory-hydra-public.ory.svc.cluster.local:4444/.well-known/jwks.json"
+  jwtIssuer: "http://ory-hydra-public.ory.svc.cluster.local:4444/"
+```
+
+Profiles (dev/prod) podem override estes valores se os namespaces forem diferentes.
+
+### Criterios de aceite
+
+- [ ] ZERO ocorrencias de `platform-system` no codebase (exceto git history)
+- [ ] Todos os service URLs usam FQDN com namespace correto
+- [ ] Componentes LoopZero em `loopzero-system`, terceiros em namespaces upstream
+- [ ] `helm template` de todos os charts renderiza `namespace: loopzero-system`
+- [ ] NetworkPolicies permitem trafego cross-namespace (loopzero-system ↔ gitea, argocd, ory, monitoring)
+- [ ] Tilt dev loop funciona com namespaces separados
+- [ ] Namespaces dinamicos mantém padrao `loopzero-{tenant}-{env}`
+
+---
+
 ## Estrutura final
 
 ```
@@ -52,7 +192,7 @@ charts/
   │       ├── pdb.yaml                 <- Condicional em replicaCount > 1
   │       └── tests/
   │           └── test-connection.yaml <- helm test hook
-  ├── tenant-controller/        <- Operator kubebuilder (Go), depende de loopzero-crds
+  ├── loopzero-tenant-controller/    <- Operator kubebuilder (Go), depende de loopzero-crds
   ├── loopzero-controller/          <- Background loops (usa imagem loopzero-api)
   ├── loopzero-cloud/               <- Auth/billing service (Go)
   ├── loopzero-dashboard/           <- Frontend (Vite React)
@@ -78,7 +218,7 @@ charts/
 oci://registry.digitalocean.com/loopzero-infra-registry/helm/
   ├── loopzero-crds:0.1.0               <- NOVO: CRDs separados
   ├── loopzero-api:0.1.0
-  ├── tenant-controller:0.1.0
+  ├── loopzero-tenant-controller:0.1.0
   ├── loopzero-controller:0.1.0
   ├── loopzero-cloud:0.1.0
   ├── loopzero-dashboard:0.1.0
@@ -318,7 +458,7 @@ controllerGenVersion: "v0.17.2"
 - `clusterrolebinding.yaml`
 - `configmap.yaml` — env vars nao-secretas (PORT, BASE_DOMAIN, GITEA_URL, ARGOCD_URL, etc.)
 - `secret.yaml` — DATABASE_URL, MINIO keys, tokens (com `existingSecret` alternativo)
-- `networkpolicy.yaml` — ingress: allow from traefik (port 3001), allow from loopzero-controller (port 3001); egress: allow to postgresql, gitea, minio, argocd
+- `networkpolicy.yaml` — ingress: allow from traefik/`traefik` ns (port 3001), allow from loopzero-controller/`loopzero-system` ns (port 3001); egress: allow to postgresql/`loopzero-system`, gitea/`gitea` ns, minio/`loopzero-system`, argocd/`argocd` ns, ory/`ory` ns (cross-namespace, FQDNs)
 - `servicemonitor.yaml` — condicional em `metrics.serviceMonitor.enabled`, scrape port 9090
 - `pdb.yaml` — condicional em `replicaCount > 1`, `minAvailable: 1`
 - `tests/test-connection.yaml` — helm test hook: wget health endpoint
@@ -519,14 +659,16 @@ spec:
 
 ---
 
-### Task 1.4: `tenant-controller` chart
+### Task 1.4: `loopzero-tenant-controller` chart
 
 **O que:** Chart para o operator kubebuilder. NAO contem CRDs (estao no `loopzero-crds`). Declara dependencia no `loopzero-crds`.
+
+> **Nota sobre naming:** O chart se chama `loopzero-tenant-controller` (consistencia com `loopzero-*`). Os recursos Kubernetes internos (ServiceAccount, ClusterRole, Deployment) podem usar `fullnameOverride: tenant-controller` se necessario para compatibilidade com manifests Tilt/Pulumi existentes.
 
 **Chart.yaml:**
 ```yaml
 apiVersion: v2
-name: tenant-controller
+name: loopzero-tenant-controller
 description: LoopZero tenant controller operator (kubebuilder)
 type: application
 version: 0.1.0
@@ -543,7 +685,7 @@ dependencies:
     repository: "file://../loopzero-common"
 ```
 
-> CRDs NAO estao neste chart. Estao no `loopzero-crds`. O umbrella garante que `loopzero-crds` e instalado antes do `tenant-controller` via hook-weight.
+> CRDs NAO estao neste chart. Estao no `loopzero-crds`. O umbrella garante que `loopzero-crds` e instalado antes do `loopzero-tenant-controller` via hook-weight.
 
 **Templates:**
 - `deployment.yaml` — args: --leader-elect, --health-probe-bind-address, --metrics-bind-address. Inclui startupProbe (leader election pode demorar), priorityClassName, revisionHistoryLimit, podAntiAffinity, podLabels/podAnnotations.
@@ -562,7 +704,7 @@ dependencies:
 
 **Criterios de aceite:**
 - [ ] ZERO CRDs neste chart (estao no loopzero-crds)
-- [ ] `helm lint charts/tenant-controller` passa
+- [ ] `helm lint charts/loopzero-tenant-controller` passa
 - [ ] `values.schema.json` valida campos obrigatorios
 - [ ] ClusterRole tem TODAS as regras de `infra/tilt/operator-deployment.yaml`
 - [ ] Leader election configuravel via values
@@ -791,10 +933,10 @@ dependencies:
     version: ">=0.1.0 <1.0.0"
     repository: "file://../loopzero-crds"
     # Sem condition — CRDs sempre instalados
-  - name: tenant-controller
+  - name: loopzero-tenant-controller
     version: ">=0.1.0 <1.0.0"
-    repository: "file://../tenant-controller"
-    condition: tenant-controller.enabled
+    repository: "file://../loopzero-tenant-controller"
+    condition: loopzero-tenant-controller.enabled
   - name: loopzero-api
     version: ">=0.1.0 <1.0.0"
     repository: "file://../loopzero-api"
@@ -876,7 +1018,7 @@ loopzero-controller:
     serviceMonitor:
       enabled: false
 
-tenant-controller:
+loopzero-tenant-controller:
   replicaCount: 1
   metrics:
     serviceMonitor:
@@ -942,11 +1084,11 @@ loopzero-controller:
     serviceMonitor:
       enabled: true
 
-tenant-controller:
+loopzero-tenant-controller:
   replicaCount: 1         # Leader-elected
   secrets:
     create: false
-    existingSecret: "tenant-controller-secrets"
+    existingSecret: "loopzero-tenant-controller-secrets"
   metrics:
     serviceMonitor:
       enabled: true
@@ -1345,7 +1487,7 @@ spec:
 |-----------|-----------------|-------|
 | loopzero-crds | PARCIAL | Novos campos OK (ignorados por pods antigos). Campos removidos = BREAKING. Policy: nunca remover. |
 | loopzero-api | SIM | Deployment rollback padrao |
-| tenant-controller | SIM | Stateless, leader-elected |
+| loopzero-tenant-controller | SIM | Stateless, leader-elected |
 | loopzero-controller | SIM | Stateless |
 | loopzero-cloud | SIM | Stateless |
 | loopzero-dashboard | SIM | Stateless |
@@ -1413,14 +1555,22 @@ helm install {{ template "chart.name" . }} oci://registry.digitalocean.com/loopz
 ## Dependencias entre tasks
 
 ```
-Task 1.1 (loopzero-common) ─────────┐
-                                 ├──► Task 1.3 (loopzero-api)
-                                 ├──► Task 1.4 (tenant-controller)
-                                 ├──► Task 1.5 (loopzero-controller)
-                                 ├──► Task 1.6 (loopzero-cloud)
-                                 └──► Task 1.7 (loopzero-dashboard)
+Fase 0 (namespace convergence) ──── PRE-REQUISITO para tudo
+  platform-system → loopzero-system (Pulumi + operators/constants)
+  Gitea → namespace `gitea` (Taskfile + Pulumi + service URLs)
+  Ory → namespace `ory` (Taskfile + Pulumi + service URLs)
+  ArgoCD → namespace `argocd` (ja correto na maioria dos refs)
+  Service URLs → FQDN com namespaces corretos (api/config, operators/types)
 
-Task 1.2 (loopzero-crds) ──────────── independente de 1.1, pode rodar em paralelo
+Fase 0 completa ─┐
+                  ├──► Task 1.1 (loopzero-common) ─────────┐
+                  │                                      ├──► Task 1.3 (loopzero-api)
+                  │                                      ├──► Task 1.4 (loopzero-tenant-controller)
+                  │                                      ├──► Task 1.5 (loopzero-controller)
+                  │                                      ├──► Task 1.6 (loopzero-cloud)
+                  │                                      └──► Task 1.7 (loopzero-dashboard)
+                  │
+                  └──► Task 1.2 (loopzero-crds) ──── independente de 1.1, pode rodar em paralelo
 
 Tasks 2.1-2.3 (migracoes) ──────── independentes entre si, independentes da Fase 1
 
@@ -1463,6 +1613,9 @@ Task 4.7 (docs) ──────────── apos todas as outras
 | CRD stored version migration | Task 1.2 — v1alpha1 unica stored version. Conversion webhook adiado para GA. Documentado na policy. |
 | Platform pods evicted por pressure | Todos os charts — `priorityClassName: system-cluster-critical` garante scheduling priority sobre workloads de usuario |
 | Pod killed durante startup lento | Charts com startup lento — `startupProbe` com failureThreshold=30 evita liveness kill prematuro |
+| Namespace diverge entre dev e prod | Fase 0: convergencia para `loopzero-system` (LoopZero) + namespaces upstream (terceiros). `platform-system` eliminado. Padrao CNCF `{project}-system`. |
+| Service discovery com namespaces separados | Todos os service URLs usam FQDN (`svc.cluster.local`). NetworkPolicies cross-namespace explicitamente permitidas. |
+| Terceiros em namespaces upstream | ArgoCD em `argocd`, Gitea em `gitea`, Ory em `ory`. Respeita upstream, facilita troubleshooting com documentacao oficial. |
 
 ---
 
