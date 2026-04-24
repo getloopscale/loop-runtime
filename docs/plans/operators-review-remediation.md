@@ -346,10 +346,10 @@ Teste unitário que exercita o path completo: cleanup falha → retryCount incre
 **Tier:** T0
 
 **O que fazer:**
-Substituir `"platform-system"` por `constants.NamespacePlatformSystem`.
+Substituir `"loopzero-system"` por `constants.NamespacePlatformSystem`.
 
 **Critérios de aceite:**
-- [ ] Nenhuma ocorrência de string literal `"platform-system"` em `environment_controller.go`
+- [ ] Nenhuma ocorrência de string literal `"loopzero-system"` em `environment_controller.go`
 - [ ] Usa `constants.NamespacePlatformSystem` no lugar
 
 **DoD:**

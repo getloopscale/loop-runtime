@@ -251,6 +251,7 @@ spec:
                 - Provisioning
                 - Active
                 - Suspended
+                - PendingDeletion
                 - Deleting
                 type: string
             type: object

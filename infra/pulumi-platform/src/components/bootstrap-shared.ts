@@ -14,7 +14,7 @@ type PlatformStackConfig = any;
  * Platform namespace — all LoopZero platform services live here.
  * Workload namespaces are separate, created by operators.
  */
-export const PLATFORM_NAMESPACE = "platform-system";
+export const PLATFORM_NAMESPACE = "loopzero-system";
 
 /**
  * Pinned Helm chart versions for deterministic provisioning.
@@ -410,7 +410,7 @@ export function createClusterIssuer(
       ];
 
   // ROOT CAUSE FIX: The "http: server gave HTTP response to HTTPS client" error was
-  // caused by the default-deny-ingress NetworkPolicy in platform-system blocking the
+  // caused by the default-deny-ingress NetworkPolicy in loopzero-system blocking the
   // K8s API server from reaching the cert-manager webhook pod. The allow-cert-manager-webhook
   // NetworkPolicy in mgmt-bootstrap.ts fixes this by allowing ingress on port 10250.
   //

@@ -121,11 +121,11 @@ namespaces "loopzero-system" not found
 ```
 
 ### Causa raiz
-`api/internal/k8s/tenant_cr_manager.go:27` default para `TENANT_NAMESPACE` env var = `"loopzero-system"` (local dev). Em DO prod o namespace é `platform-system`. O `loopzero-api-config` ConfigMap **deveria** setar, e o código Pulumi tem (`mgmt-control-plane-services.ts:735`: `TENANT_NAMESPACE: PLATFORM_NAMESPACE`) — mas devido ao drift, não estava aplicado no cluster.
+`api/internal/k8s/tenant_cr_manager.go:27` default para `TENANT_NAMESPACE` env var = `"loopzero-system"` (local dev). Em DO prod o namespace é `loopzero-system`. O `loopzero-api-config` ConfigMap **deveria** setar, e o código Pulumi tem (`mgmt-control-plane-services.ts:735`: `TENANT_NAMESPACE: PLATFORM_NAMESPACE`) — mas devido ao drift, não estava aplicado no cluster.
 
 ### Fix aplicado
-1. `kubectl set env deploy/loopzero-api deploy/loopzero-controller TENANT_NAMESPACE=platform-system`
-2. `kubectl patch cm loopzero-api-config --type merge -p '{"data":{"TENANT_NAMESPACE":"platform-system"}}'`
+1. `kubectl set env deploy/loopzero-api deploy/loopzero-controller TENANT_NAMESPACE=loopzero-system`
+2. `kubectl patch cm loopzero-api-config --type merge -p '{"data":{"TENANT_NAMESPACE":"loopzero-system"}}'`
 
 ### Aprendizado
 **"Código existe mas infra não" — versão drift edition.** Esse bug é clássico exemplo de como o state drift mascara regressões. O fix está no código Pulumi há commits e não foi aplicado. Sem visibilidade do drift, esse bug ficaria "invisível" até manifestar-se em runtime.
@@ -138,7 +138,7 @@ namespaces "loopzero-system" not found
 ```
 cell router: no ClusterCredentials found, falling back to StaticRouter
 load_err: clustercredentials.loopzero.io is forbidden:
-  User "system:serviceaccount:platform-system:loopzero-api"
+  User "system:serviceaccount:loopzero-system:loopzero-api"
   cannot list resource "clustercredentials" in API group "loopzero.io"
 ```
 
@@ -156,7 +156,7 @@ kubectl patch clusterrole loopzero-api --type=json -p='[
 ]'
 ```
 
-**Validação:** `kubectl auth can-i list clustercredentials.loopzero.io --as=system:serviceaccount:platform-system:loopzero-api` → `yes`.
+**Validação:** `kubectl auth can-i list clustercredentials.loopzero.io --as=system:serviceaccount:loopzero-system:loopzero-api` → `yes`.
 
 ### Consequência não-fix
 Antes do fix, DynamicRouter caía em `StaticRouter (cell-default)` — OK para single-cell L1-L4, mas bloquearia L5 (multi-cell) que requer descoberta dinâmica de cells.
@@ -301,7 +301,7 @@ Cloudflare (DNS/Proxy)
   [Explicit] → DO Traefik LB (24.144.71.120)
   [Wildcard] → CF Tunnel → cloudflared pod [AUSENTE] → 404
     ↓
-  Traefik (platform-system)
+  Traefik (loopzero-system)
     ↓
   IngressRoutes → Services (harbor-core, gitea, grafana, etc.)
 ```

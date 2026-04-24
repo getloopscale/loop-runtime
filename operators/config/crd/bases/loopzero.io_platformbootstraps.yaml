@@ -55,7 +55,7 @@ spec:
                 description: API configures the API bootstrap endpoint for DB seeding.
                 properties:
                   bootstrapEndpoint:
-                    default: http://loopzero-api.platform-system.svc.cluster.local:8080/internal/bootstrap
+                    default: http://loopzero-api.loopzero-system.svc.cluster.local:8080/internal/bootstrap
                     description: |-
                       BootstrapEndpoint is the internal URL for the bootstrap endpoint.
                       SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
@@ -75,7 +75,7 @@ spec:
                     - name
                     type: object
                   healthEndpoint:
-                    default: http://loopzero-api.platform-system.svc.cluster.local:8080/api/v1/health
+                    default: http://loopzero-api.loopzero-system.svc.cluster.local:8080/api/v1/health
                     description: |-
                       HealthEndpoint is the internal URL for the API health check.
                       SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
@@ -143,7 +143,7 @@ spec:
                     - name
                     type: object
                   internalURL:
-                    default: http://gitea-http.platform-system.svc.cluster.local:3000
+                    default: http://gitea-http.gitea.svc.cluster.local:3000
                     description: |-
                       InternalURL is the cluster-internal URL for Gitea HTTP API.
                       SEC-004: Validated to prevent SSRF via arbitrary URL redirection.

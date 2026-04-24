@@ -166,11 +166,11 @@ pulumi up --stack homolog --yes
 
 ```bash
 # 1. ClusterCredentials Connected
-kubectl get clustercredential -n platform-system
+kubectl get clustercredential -n loopzero-system
 # Espera: 2 CRs, ambos Connected=true
 
 # 2. DynamicRouter descobre 2 cells
-kubectl logs deploy/loopzero-api -n platform-system | grep "cell list refreshed"
+kubectl logs deploy/loopzero-api -n loopzero-system | grep "cell list refreshed"
 # Espera: count: 2
 
 # 3. Health deep reports cells

@@ -28,7 +28,7 @@ K6_SCRIPT="${1:-scripts/l1-10-tenants.js}"
 K6_SEED_LEVEL="${2:-l1}"
 K6_SEED_COUNT="${3:-10}"
 
-NAMESPACE="platform-system"
+NAMESPACE="loopzero-system"
 JOB_NAME="k6-runner"
 
 echo "── k6 runner ──"

@@ -15,7 +15,7 @@
 
 set -uo pipefail
 
-NAMESPACE="${NAMESPACE:-platform-system}"
+NAMESPACE="${NAMESPACE:-loopzero-system}"
 BASE_DOMAIN="${BASE_DOMAIN:-dev.loopzero.example}"
 FAILURES=0
 CHECKS=0

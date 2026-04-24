@@ -82,7 +82,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	// Pods use this SA with automountServiceAccountToken=false.
 	//
 	// imagePullSecrets provisioning (bug #24 fix — L2 race condition):
-	//   1. Copy the docker config from loopzero-infra-registry-source in platform-system
+	//   1. Copy the docker config from loopzero-infra-registry-source in loopzero-system
 	//      (seeded once at platform bootstrap) into this namespace as loopzero-infra-registry.
 	//   2. Attach it to loopzero-app SA.
 	if err := r.ensurePullSecret(ctx, nsName); err != nil {
@@ -135,12 +135,12 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	return nil
 }
 
-// ensurePullSecret copies the registry pull secret from platform-system into the tenant namespace.
+// ensurePullSecret copies the registry pull secret from loopzero-system into the tenant namespace.
 func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, nsName string) error {
 	var src corev1.Secret
 	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: "loopzero-infra-registry"}
 	if err := r.Client.Get(ctx, srcKey, &src); err != nil {
-		return fmt.Errorf("source pull secret platform-system/loopzero-infra-registry: %w", err)
+		return fmt.Errorf("source pull secret loopzero-system/loopzero-infra-registry: %w", err)
 	}
 
 	dst := &corev1.Secret{

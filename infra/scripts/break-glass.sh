@@ -22,7 +22,7 @@ set -euo pipefail
 CONTEXT=${1:?Usage: break-glass.sh <kubectl-context> [ttl_hours] [reason]}
 TTL_HOURS=${2:-4}
 REASON=${3:-"no reason provided"}
-NAMESPACE="platform-system"
+NAMESPACE="loopzero-system"
 SA_NAME="break-glass-$(date +%s)"
 TTL_SECONDS=$((TTL_HOURS * 3600))
 OPERATOR=$(whoami)
@@ -138,7 +138,7 @@ echo "  SA:         $SA_NAME"
 echo ""
 echo "  Usage:"
 echo "    export KUBECONFIG=$KUBECONFIG_FILE"
-echo "    kubectl get pods -n platform-system"
+echo "    kubectl get pods -n loopzero-system"
 echo ""
 echo "  ⚠️  Reconcile ALL changes into Pulumi within 24h"
 echo "  ⚠️  Auto-cleanup Job will revoke access in ${TTL_HOURS}h"

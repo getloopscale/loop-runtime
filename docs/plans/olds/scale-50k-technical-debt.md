@@ -106,7 +106,7 @@ Estes fixes foram aplicados manualmente via comandos ad-hoc durante execução d
 while true; do
   for ns in $(kubectl get ns -l loopzero.io/type=tenant -o name); do
     kubectl get secret loopzero-infra-registry -n $ns 2>/dev/null || \
-      kubectl get secret loopzero-infra-registry -n platform-system -o json | \
+      kubectl get secret loopzero-infra-registry -n loopzero-system -o json | \
         jq '.metadata.namespace=$ns' | kubectl apply -f -
     kubectl patch sa loopzero-app -n $ns -p '{"imagePullSecrets":[{"name":"loopzero-infra-registry"}]}'
   done
@@ -123,7 +123,7 @@ Opção A — **TenantController cria o secret ao provisionar namespace** (prefe
 // operators/internal/controller/tenant_controller.go
 func (r *TenantReconciler) ensureImagePullSecret(ctx, ns string) error {
     src := &corev1.Secret{}
-    r.mgmtClient.Get(ctx, types.NamespacedName{Namespace: "platform-system", Name: "loopzero-infra-registry"}, src)
+    r.mgmtClient.Get(ctx, types.NamespacedName{Namespace: "loopzero-system", Name: "loopzero-infra-registry"}, src)
     target := src.DeepCopy()
     target.Namespace = ns
     target.ResourceVersion = ""

@@ -16,7 +16,7 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
   name: pg-network-latency
-  namespace: platform-system
+  namespace: loopzero-system
   annotations:
     loopzero.io/roadmap: "04"
     loopzero.io/hypothesis: "500ms PG latency degrades gracefully, no 500s, no deadlocks"
@@ -32,7 +32,7 @@ spec:
   mode: all
   selector:
     namespaces:
-      - platform-system
+      - loopzero-system
     labelSelectors:
       "app": "loopzero-api"
   delay:
@@ -46,7 +46,7 @@ spec:
     mode: all
     selector:
       namespaces:
-        - platform-system
+        - loopzero-system
       labelSelectors:
         "app": "loopzero-api"
   direction: to

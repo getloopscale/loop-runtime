@@ -33,7 +33,7 @@ import { Grafana } from "./services/grafana";
 import { Tempo, OtelCollector } from "./services/tempo";
 
 const config = loadPlatformConfig();
-const NAMESPACE = "platform-system";
+const NAMESPACE = "loopzero-system";
 
 // --- K8s Providers (one per cluster, from StackReference) ---
 const mgmtProvider = new k8s.Provider("mgmt-k8s", { kubeconfig: refs.mgmtKubeconfig });
@@ -41,7 +41,7 @@ const buildProvider = new k8s.Provider("build-k8s", { kubeconfig: refs.buildKube
 const runtimeProvider = new k8s.Provider("runtime-k8s", { kubeconfig: refs.runtimeKubeconfig });
 
 // --- Platform namespace (mgmt cluster) ---
-const mgmtNs = new k8s.core.v1.Namespace("mgmt-platform-system", {
+const mgmtNs = new k8s.core.v1.Namespace("mgmt-loopzero-system", {
   metadata: {
     name: NAMESPACE,
     labels: {
@@ -55,7 +55,7 @@ const mgmtNs = new k8s.core.v1.Namespace("mgmt-platform-system", {
 }, { provider: mgmtProvider });
 
 // --- Platform namespace (runtime cluster) ---
-const runtimeNs = new k8s.core.v1.Namespace("runtime-platform-system", {
+const runtimeNs = new k8s.core.v1.Namespace("runtime-loopzero-system", {
   metadata: {
     name: NAMESPACE,
     labels: {

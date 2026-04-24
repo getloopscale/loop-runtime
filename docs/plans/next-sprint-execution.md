@@ -177,7 +177,7 @@ kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n monitoring \
 
 **Acao:**
 ```bash
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   get secret tenant-controller-kubeconfig -o jsonpath='{.data}' | jq 'keys'
 ```
 
@@ -264,11 +264,11 @@ npx pulumi up --stack dev --yes
 **Acao:**
 ```bash
 # Verificar CR status
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   get clustercredential -o wide
 
 # Verificar conditions
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   describe clustercredential runtime-sfo3-01
 
 # Verificar ArgoCD cluster secret criado
@@ -291,15 +291,15 @@ kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n argocd \
 **Acao:**
 ```bash
 # Habilitar DynamicRouter temporariamente
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   set env deployment/loopzero-api LOOPZERO_DYNAMIC_ROUTER=true
 
 # Verificar logs
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   logs -l app=loopzero-api --tail=20 | grep "cell"
 
 # Verificar metrica
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   port-forward svc/loopzero-api-metrics 19090:9090 &
 curl -s http://localhost:19090/metrics | grep loopzero_cell_discovery_count
 ```
@@ -313,7 +313,7 @@ curl -s http://localhost:19090/metrics | grep loopzero_cell_discovery_count
 
 ```bash
 # Reverter (sera feito permanente no S3)
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   set env deployment/loopzero-api LOOPZERO_DYNAMIC_ROUTER-
 ```
 
@@ -380,7 +380,7 @@ DynamicRouter: os.Getenv("LOOPZERO_DYNAMIC_ROUTER") != "false",
 **Acao:**
 ```bash
 # Atualizar deployment para usar nova imagem
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   set image deployment/loopzero-api loopzero-api=<registry>/<image>:<tag>
 
 # Ou via Pulumi/Helm se o deployment e managed
@@ -419,14 +419,14 @@ kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
 **Acao:** Testar `LOOPZERO_SINGLE_CELL=true` como escape hatch:
 ```bash
 # Simular problema: setar single-cell mode
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   set env deployment/loopzero-api LOOPZERO_SINGLE_CELL=true
 
 # Verificar: StaticRouter ativo
 kubectl logs -l app=loopzero-api --tail=5 | grep "single-cell"
 
 # Reverter
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   set env deployment/loopzero-api LOOPZERO_SINGLE_CELL-
 ```
 
@@ -457,7 +457,7 @@ kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
 **Acao:**
 ```bash
 # Port-forwards
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   port-forward svc/loopzero-api-metrics 19090:9090 &
 kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n argocd \
   port-forward svc/argocd-metrics 18082:8082 &

@@ -85,7 +85,7 @@ func waitForPodReady(namespace, labelSelector string, timeout time.Duration) err
 
 // checkAPIHealth verifies the API is responding to health checks.
 func checkAPIHealth() error {
-	out, err := kubectl("exec", "-n", "platform-system",
+	out, err := kubectl("exec", "-n", "loopzero-system",
 		"deploy/loopzero-api", "--", "wget", "-qO-", "-T", "5",
 		"http://localhost:8080/api/v1/health")
 	if err != nil {
@@ -96,7 +96,7 @@ func checkAPIHealth() error {
 
 // checkMetricExists verifies a Prometheus metric is registered.
 func checkMetricExists(metricName string) {
-	out, err := kubectl("exec", "-n", "platform-system",
+	out, err := kubectl("exec", "-n", "loopzero-system",
 		"deploy/loopzero-api", "--",
 		"wget", "-qO-", "-T", "5", "http://localhost:8080/metrics")
 	Expect(err).NotTo(HaveOccurred(), "failed to fetch metrics")
@@ -122,7 +122,7 @@ var _ = Describe("Chaos Engineering", func() {
 			time.Sleep(15 * time.Second)
 
 			// The replacement pod should become ready.
-			err := waitForPodReady("platform-system", "app=loopzero-api", 120*time.Second)
+			err := waitForPodReady("loopzero-system", "app=loopzero-api", 120*time.Second)
 			Expect(err).NotTo(HaveOccurred(), "API pod did not recover within 120s")
 
 			// Verify health.
@@ -135,13 +135,13 @@ var _ = Describe("Chaos Engineering", func() {
 
 			// Kill leader pod — the advisory lock (session-scoped on dedicated conn)
 			// is released when the PG connection closes.
-			out, err := kubectl("delete", "pod", "-n", "platform-system",
+			out, err := kubectl("delete", "pod", "-n", "loopzero-system",
 				"-l", "app=loopzero-api", "--wait=false")
 			Expect(err).NotTo(HaveOccurred(), "failed to delete API pod: %s", out)
 
 			// Wait for new pod to become leader (up to 90s for election).
 			time.Sleep(15 * time.Second)
-			err = waitForPodReady("platform-system", "app=loopzero-api", 90*time.Second)
+			err = waitForPodReady("loopzero-system", "app=loopzero-api", 90*time.Second)
 			Expect(err).NotTo(HaveOccurred(), "replacement API pod did not become ready")
 		})
 	})
@@ -161,11 +161,11 @@ var _ = Describe("Chaos Engineering", func() {
 			// Wait for fault + recovery.
 			time.Sleep(10 * time.Second)
 
-			err := waitForPodReady("platform-system", "app=loopzero-controller", 120*time.Second)
+			err := waitForPodReady("loopzero-system", "app=loopzero-controller", 120*time.Second)
 			Expect(err).NotTo(HaveOccurred(), "controller pod did not recover within 120s")
 
 			// Verify leader lease was re-acquired.
-			out, err := kubectl("logs", "-n", "platform-system",
+			out, err := kubectl("logs", "-n", "loopzero-system",
 				"-l", "app=loopzero-controller", "--tail=30")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out).To(ContainSubstring("leader"),
@@ -340,9 +340,9 @@ var _ = Describe("Chaos Engineering", func() {
 			skipUnlessChaos()
 
 			// Kill both simultaneously.
-			out1, err1 := kubectl("delete", "pod", "-n", "platform-system",
+			out1, err1 := kubectl("delete", "pod", "-n", "loopzero-system",
 				"-l", "app=loopzero-api", "--wait=false")
-			out2, err2 := kubectl("delete", "pod", "-n", "platform-system",
+			out2, err2 := kubectl("delete", "pod", "-n", "loopzero-system",
 				"-l", "app=loopzero-controller", "--wait=false")
 
 			Expect(err1).NotTo(HaveOccurred(), "API kill failed: %s", out1)
@@ -353,10 +353,10 @@ var _ = Describe("Chaos Engineering", func() {
 			// Both should recover within 3 minutes.
 			start := time.Now()
 
-			err := waitForPodReady("platform-system", "app=loopzero-api", 180*time.Second)
+			err := waitForPodReady("loopzero-system", "app=loopzero-api", 180*time.Second)
 			Expect(err).NotTo(HaveOccurred(), "API did not recover within 3min")
 
-			err = waitForPodReady("platform-system", "app=loopzero-controller", 180*time.Second)
+			err = waitForPodReady("loopzero-system", "app=loopzero-controller", 180*time.Second)
 			Expect(err).NotTo(HaveOccurred(), "controller did not recover within 3min")
 
 			recoveryTime := time.Since(start)

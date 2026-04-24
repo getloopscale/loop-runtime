@@ -136,10 +136,10 @@ type Config struct {
 	// JWT Authentication (Sprint 11 — Ory Hydra integration)
 	// When set, enables dual validation: JWT (via JWKS) + GitHub PAT (legacy).
 	// When empty, only GitHub PAT validation is used (backward compatible).
-	// Env: JWKS_ENDPOINT (e.g., "http://ory-hydra-public.loopzero-system:4444/.well-known/jwks.json")
+	// Env: JWKS_ENDPOINT (e.g., "http://ory-hydra-public.ory.svc.cluster.local:4444/.well-known/jwks.json")
 	JWKSEndpoint string
 	// JWTIssuer is the expected issuer in JWT tokens (must match Hydra config).
-	// Env: JWT_ISSUER (e.g., "http://ory-hydra-public.loopzero-system:4444/")
+	// Env: JWT_ISSUER (e.g., "http://ory-hydra-public.ory.svc.cluster.local:4444/")
 	JWTIssuer string
 
 	// Roadmap 02 — API Loop Extraction feature flag.
@@ -252,7 +252,7 @@ func Load() Config {
 		RuntimeKubeContext: envOr("RUNTIME_KUBE_CONTEXT", "k3d-loopzero-workload"),
 
 		// Service URLs
-		GiteaURL:             envOr("GITEA_URL", "http://gitea-http.loopzero-system.svc.cluster.local:3000"),
+		GiteaURL:             envOr("GITEA_URL", "http://gitea-http.gitea.svc.cluster.local:3000"),
 		GiteaCrossClusterURL: envOr("GITEA_CROSS_CLUSTER_URL", ""),
 		APICrossClusterURL:   envOr("API_CROSS_CLUSTER_URL", "http://loopzero-api.loopzero-system.svc.cluster.local:3001"),
 		ArgocdURL:            envOr("ARGOCD_URL", "http://argocd-server.argocd.svc.cluster.local:80"),

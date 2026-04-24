@@ -22,7 +22,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHAOS_DIR="$(cd "$SCRIPT_DIR/../chaos/manifests" && pwd)"
-PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus-server.platform-system.svc.cluster.local/api/v1/query}"
+PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus-server.loopzero-system.svc.cluster.local/api/v1/query}"
 
 # shellcheck source=./safety.sh
 . "$SCRIPT_DIR/safety.sh"
@@ -110,7 +110,7 @@ echo
 
 # Run the query via kubectl proxy (simpler than port-forward)
 PROM_RESULT=$(kubectl run prom-query-$$ --rm -i --restart=Never \
-  --image=curlimages/curl:latest -n platform-system -- \
+  --image=curlimages/curl:latest -n loopzero-system -- \
   sh -c "curl -sG --data-urlencode 'query=${SLO_QUERY}' '${PROMETHEUS_URL}'" \
   2>&1 | tail -1)
 

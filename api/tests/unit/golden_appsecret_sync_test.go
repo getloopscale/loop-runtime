@@ -148,7 +148,7 @@ func (f *FakeSecretSyncer) CreateSecret(_ context.Context, input SecretSyncInput
 
 	mgmt := &MgmtSecret{
 		Name:      mgmtSecretName,
-		Namespace: "platform-system",
+		Namespace: "loopzero-system",
 		Labels: map[string]string{
 			"loopzero.io/tenant":     input.TenantID,
 			"loopzero.io/project":    input.ProjectID,
@@ -210,7 +210,7 @@ func (f *FakeSecretSyncer) DeleteSecret(_ context.Context, tenantID, env, app, n
 // is created with the expected data.
 //
 // LoopZero adaptation: When `loopzero secret set` is called, the API creates a K8s
-// Secret on the mgmt cluster in the platform-system namespace. This Secret
+// Secret on the mgmt cluster in the loopzero-system namespace. This Secret
 // becomes the source for ESO to sync into the runtime cluster.
 // ---------------------------------------------------------------------------
 func TestSecretSync_CreatesK8sSecretOnMgmtCluster(t *testing.T) {
@@ -232,7 +232,7 @@ func TestSecretSync_CreatesK8sSecretOnMgmtCluster(t *testing.T) {
 				Value:       "postgres://host:5432/db",
 			},
 			wantName: "secret-acme-api-database-url",
-			wantNS:   "platform-system",
+			wantNS:   "loopzero-system",
 			wantData: map[string]string{"value": "postgres://host:5432/db"},
 		},
 		{
@@ -246,7 +246,7 @@ func TestSecretSync_CreatesK8sSecretOnMgmtCluster(t *testing.T) {
 				Value:       "redis://cache:6379",
 			},
 			wantName: "secret-tenant-1-worker-redis-cache-url",
-			wantNS:   "platform-system",
+			wantNS:   "loopzero-system",
 			wantData: map[string]string{"value": "redis://cache:6379"},
 		},
 		{
@@ -260,7 +260,7 @@ func TestSecretSync_CreatesK8sSecretOnMgmtCluster(t *testing.T) {
 				Value:       "postgres://other:5432/db",
 			},
 			wantName: "secret-other-tenant-api-database-url",
-			wantNS:   "platform-system",
+			wantNS:   "loopzero-system",
 			wantData: map[string]string{"value": "postgres://other:5432/db"},
 		},
 	}
@@ -717,7 +717,7 @@ func TestSecretSync_NamespaceNamingConvention(t *testing.T) {
 //
 // LoopZero adaptation: ALL ExternalSecrets reference "loopzero-mgmt-store" as a
 // ClusterSecretStore. This is the single store that has credentials to read
-// from the mgmt cluster's platform-system namespace. Using ClusterSecretStore
+// from the mgmt cluster's loopzero-system namespace. Using ClusterSecretStore
 // (not SecretStore) means the store is shared across all tenant namespaces,
 // with namespace isolation enforced by the store's conditions.
 // ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ set -euo pipefail
 MGMT_CTX="${1:-do-nyc3-loopzero-infra-homolog-nyc3-mgmt}"
 BUILD_CTX="${2:-do-nyc3-loopzero-infra-homolog-nyc3-build}"
 RUNTIME_CTX="${3:-do-nyc3-loopzero-infra-homolog-nyc3-runtime}"
-NS="platform-system"
+NS="loopzero-system"
 
 PASS=0
 FAIL=0

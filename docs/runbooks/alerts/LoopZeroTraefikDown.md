@@ -12,23 +12,23 @@
 ## Triage (copy-paste commands)
 ```bash
 # 1. Check Traefik pods
-kubectl --context mgmt -n platform-system get pods -l app.kubernetes.io/name=traefik
-kubectl --context mgmt -n platform-system describe pods -l app.kubernetes.io/name=traefik
+kubectl --context mgmt -n loopzero-system get pods -l app.kubernetes.io/name=traefik
+kubectl --context mgmt -n loopzero-system describe pods -l app.kubernetes.io/name=traefik
 
 # 2. Check Traefik logs
-kubectl --context mgmt -n platform-system logs -l app.kubernetes.io/name=traefik --tail=50
+kubectl --context mgmt -n loopzero-system logs -l app.kubernetes.io/name=traefik --tail=50
 
 # 3. Check PDB (minAvailable: 1)
-kubectl --context mgmt -n platform-system get pdb -l app.kubernetes.io/name=traefik
+kubectl --context mgmt -n loopzero-system get pdb -l app.kubernetes.io/name=traefik
 
 # 4. Check node health (Traefik needs healthy nodes)
 kubectl --context mgmt get nodes
 
 # 5. Check LoadBalancer service
-kubectl --context mgmt -n platform-system get svc -l app.kubernetes.io/name=traefik
+kubectl --context mgmt -n loopzero-system get svc -l app.kubernetes.io/name=traefik
 
 # 6. Check events
-kubectl --context mgmt -n platform-system get events --sort-by=.lastTimestamp \
+kubectl --context mgmt -n loopzero-system get events --sort-by=.lastTimestamp \
   | grep -i traefik | tail -10
 ```
 
@@ -36,11 +36,11 @@ kubectl --context mgmt -n platform-system get events --sort-by=.lastTimestamp \
 1. **Pods in CrashLoopBackOff or Pending:**
    ```bash
    # Check resource constraints or config errors
-   kubectl --context mgmt -n platform-system describe pods -l app.kubernetes.io/name=traefik \
+   kubectl --context mgmt -n loopzero-system describe pods -l app.kubernetes.io/name=traefik \
      | grep -A5 "Last State\|Reason\|OOMKilled"
    # Restart
-   kubectl --context mgmt -n platform-system rollout restart deployment/traefik
-   kubectl --context mgmt -n platform-system rollout status deployment/traefik --timeout=120s
+   kubectl --context mgmt -n loopzero-system rollout restart deployment/traefik
+   kubectl --context mgmt -n loopzero-system rollout status deployment/traefik --timeout=120s
    ```
 
 2. **Node issues (all nodes NotReady):**
@@ -52,7 +52,7 @@ kubectl --context mgmt -n platform-system get events --sort-by=.lastTimestamp \
 
 3. **LoadBalancer external IP lost:**
    ```bash
-   kubectl --context mgmt -n platform-system get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0]}'
+   kubectl --context mgmt -n loopzero-system get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0]}'
    # If empty, check cloud controller manager
    kubectl --context mgmt -n kube-system logs -l app=digitalocean-cloud-controller-manager --tail=20
    ```
@@ -70,7 +70,7 @@ kubectl --context mgmt -n platform-system get events --sort-by=.lastTimestamp \
 ## Verification
 ```bash
 # Verify Traefik pods running
-kubectl --context mgmt -n platform-system get pods -l app.kubernetes.io/name=traefik
+kubectl --context mgmt -n loopzero-system get pods -l app.kubernetes.io/name=traefik
 
 # Verify external access
 curl -sk https://api.dev.loopzero.example/healthz

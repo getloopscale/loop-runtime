@@ -174,7 +174,7 @@ Além do fix de SHA, aproveitei para atualizar cosign para a versão atual (v3.0
 
 **Sintoma:** Builds OK, ArgoCD sync cria pods, mas pods ficam `ImagePullBackOff` com 401 Unauthorized.
 
-**Causa raiz:** Tenant namespaces no runtime cluster não tinham o secret `loopzero-infra-registry`. O secret existia apenas em `platform-system` (mgmt). Também descobri que o SA padrão é `loopzero-app`, não `default`.
+**Causa raiz:** Tenant namespaces no runtime cluster não tinham o secret `loopzero-infra-registry`. O secret existia apenas em `loopzero-system` (mgmt). Também descobri que o SA padrão é `loopzero-app`, não `default`.
 
 **Fix:**
 1. Copiar secret `loopzero-infra-registry` de mgmt para **todos** os namespaces `loopzero-tn-lt-*` no runtime.
@@ -292,7 +292,7 @@ Bug #2.14 (callback race) ocorreu porque o observador lia estado não-estável.
    - `loopzero-infra-registry` secret + SA patch no TenantController
 4. 🔜 **Phase 0.1** — `LOOPZERO_DISABLE_LEGACY_LOOPS=true` ativado em prod
 5. 🔜 **Phase 0.4** — `LOOPZERO_ADMISSION_CONTROL=true` ativado
-6. 🔜 **Corrigir "namespace loopzero-system not found"** no controller DO (deveria ser `platform-system`)
+6. 🔜 **Corrigir "namespace loopzero-system not found"** no controller DO (deveria ser `loopzero-system`)
 
 ---
 

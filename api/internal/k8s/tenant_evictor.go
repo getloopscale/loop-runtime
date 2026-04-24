@@ -81,7 +81,7 @@ func NewTenantK8sEvictor(
 		return nil, fmt.Errorf("runtime client: %w", err)
 	}
 	if mgmtNamespace == "" {
-		mgmtNamespace = "platform-system"
+		mgmtNamespace = "loopzero-system"
 	}
 	if buildNamespace == "" {
 		buildNamespace = "argo"

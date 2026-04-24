@@ -82,7 +82,7 @@ type RenderInput struct {
 	// B14 (MEET-2026-04-23-058): ClusterIssuerName is REQUIRED — no fallback.
 	// Set from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER). Empty = panic.
 	ClusterIssuerName    string // Required — no default; panics if empty at render time
-	GatewayNamespace     string // Default: "platform-system"
+	GatewayNamespace     string // Default: "loopzero-system"
 	DefaultCPURequest    string // Default: "100m"
 	DefaultMemoryRequest string // Default: "128Mi"
 	DefaultCPULimit      string // Default: "500m"
@@ -133,7 +133,7 @@ func (ri RenderInput) gatewayNamespace() string {
 	if ri.GatewayNamespace != "" {
 		return ri.GatewayNamespace
 	}
-	return "platform-system"
+	return "loopzero-system"
 }
 
 // leanResourcesEnabled reports whether the LOOPZERO_LEAN_RESOURCES env var

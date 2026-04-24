@@ -5,7 +5,7 @@
 # dangerous. The guard checks two things:
 #
 #   1. The current kubectl context name does NOT contain "prod".
-#   2. The cluster's platform-system namespace does NOT have the
+#   2. The cluster's loopzero-system namespace does NOT have the
 #      loopzero.io/environment=production label (double check).
 #
 # If either check fails, the script exits non-zero and prints a
@@ -34,12 +34,12 @@ loopzero_safety_check() {
 
   # Double-check: read the namespace label from the API server.
   local env_label
-  env_label=$(kubectl get ns platform-system \
+  env_label=$(kubectl get ns loopzero-system \
     -o jsonpath='{.metadata.labels.loopzero\.io/environment}' 2>/dev/null || true)
 
   if [[ "$env_label" == "production" ]]; then
     echo "╔══════════════════════════════════════════════════════╗" >&2
-    echo "║  REFUSING to run tests: platform-system namespace" >&2
+    echo "║  REFUSING to run tests: loopzero-system namespace" >&2
     echo "║  is labeled loopzero.io/environment=production." >&2
     echo "║  Chaos/load experiments are NEVER allowed here." >&2
     echo "╚══════════════════════════════════════════════════════╝" >&2

@@ -39,7 +39,7 @@ type EnvironmentReconciler struct {
 	client.Client
 	RuntimeClient    client.Client
 	Scheme           *runtime.Scheme
-	IngressNamespace string // Namespace where ingress controller (Traefik) runs. Default: platform-system.
+	IngressNamespace string // Namespace where ingress controller (Traefik) runs. Default: loopzero-system.
 }
 
 // Reconcile handles the reconciliation loop for Environment resources.

@@ -150,14 +150,14 @@ cert-manager tem um **approver controller** que aprova `CertificateRequest` auto
 
 ```
 admission webhook "webhook.cert-manager.io" denied the request:
-status.conditions: Forbidden: user "system:serviceaccount:platform-system:mgmt-cert-manager"
+status.conditions: Forbidden: user "system:serviceaccount:loopzero-system:mgmt-cert-manager"
 does not have permissions to set approved/denied conditions for issuer
 {cloudflare-origin-ca OriginIssuer cert-manager.k8s.cloudflare.com}
 ```
 
 ### Fix
 
-O upstream origin-ca-issuer fornece um `role-approver.yaml` com ClusterRoleBinding. **Default subject é `cert-manager/cert-manager` (SA) — se seu cert-manager usa outro SA (ex: `platform-system/mgmt-cert-manager`), PATCH o binding.**
+O upstream origin-ca-issuer fornece um `role-approver.yaml` com ClusterRoleBinding. **Default subject é `cert-manager/cert-manager` (SA) — se seu cert-manager usa outro SA (ex: `loopzero-system/mgmt-cert-manager`), PATCH o binding.**
 
 ```bash
 kubectl patch clusterrolebinding cert-manager-controller-approve:cert-manager-k8s-cloudflare-com \
@@ -165,7 +165,7 @@ kubectl patch clusterrolebinding cert-manager-controller-approve:cert-manager-k8
     "op":"replace","path":"/subjects","value":[{
       "kind":"ServiceAccount",
       "name":"mgmt-cert-manager",
-      "namespace":"platform-system"
+      "namespace":"loopzero-system"
     }]
   }]'
 ```
@@ -217,7 +217,7 @@ Após mudar cert (delete secret → cert-manager recria), esperava precisar rest
 ### Verificação
 ```bash
 # Before: old cert
-kubectl delete secret tls-argocd-secret -n platform-system
+kubectl delete secret tls-argocd-secret -n loopzero-system
 sleep 10
 # After: new cert, zero downtime
 echo | openssl s_client -connect argocd.dev.loopzero.example:443 -servername argocd.dev.loopzero.example 2>/dev/null | \

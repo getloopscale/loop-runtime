@@ -40,8 +40,8 @@ else
 
   echo "Removing finalizers from CRDs, ClusterIssuers, cert-manager resources..."
   for RESOURCE in applications appprojects tenants clustercredentials appsecrets previewenvironments reconciliationreports; do
-    kubectl -n platform-system get "$RESOURCE" -o name 2>/dev/null | \
-      xargs -I{} kubectl -n platform-system patch {} --type=json \
+    kubectl -n loopzero-system get "$RESOURCE" -o name 2>/dev/null | \
+      xargs -I{} kubectl -n loopzero-system patch {} --type=json \
         -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
   done
 
@@ -54,16 +54,16 @@ else
       -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
 
   for TYPE in certificates certificaterequests orders challenges; do
-    kubectl -n platform-system get "$TYPE" -o name 2>/dev/null | \
-      xargs -I{} kubectl -n platform-system patch {} --type=json \
+    kubectl -n loopzero-system get "$TYPE" -o name 2>/dev/null | \
+      xargs -I{} kubectl -n loopzero-system patch {} --type=json \
         -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
   done
 
   echo "Deleting Helm release secrets..."
-  kubectl -n platform-system delete secrets -l owner=helm 2>/dev/null || true
+  kubectl -n loopzero-system delete secrets -l owner=helm 2>/dev/null || true
 
   echo "Force-deleting namespaces on mgmt cluster..."
-  for NS in platform-system argo; do
+  for NS in loopzero-system argo; do
     kubectl delete ns "$NS" --force --grace-period=0 --timeout=30s 2>/dev/null || true
   done
 
@@ -254,7 +254,7 @@ if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
     RUNTIME_KUBECONFIG=$(pulumi stack output runtimeKubeconfig --show-secrets --stack "$STACK" 2>/dev/null)
     if [ -n "$RUNTIME_KUBECONFIG" ]; then
       echo "$RUNTIME_KUBECONFIG" > /tmp/runtime-kc.yaml
-      kubectl --kubeconfig=/tmp/runtime-kc.yaml -n platform-system scale deployment cloudflared --replicas=0 2>/dev/null || true
+      kubectl --kubeconfig=/tmp/runtime-kc.yaml -n loopzero-system scale deployment cloudflared --replicas=0 2>/dev/null || true
       echo "  Scaled cloudflared to 0 — waiting 30s..."
       sleep 30
       rm -f /tmp/runtime-kc.yaml

@@ -276,7 +276,7 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
   }
 
   // --- Container registry (platform images = DOCR) ---
-  // DOCR for platform images (loopzero-api, tenant-controller, etc.)
+  // DOCR for platform images (loopzero-api, loopzero-tenant-controller, loopzero-cloud, loopzero-dashboard)
   // Harbor for tenant images — deployed separately in bootstrap phase.
   const registry = factory.createContainerRegistry({
     name: `${config.project}-registry`,

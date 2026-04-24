@@ -193,8 +193,8 @@ pulumi up --stack homolog --yes
 
 ### Validação Multi-Cell
 ```bash
-kubectl get clustercredential -n platform-system              # 2 CRs, Connected=true
-kubectl logs deploy/loopzero-api -n platform-system | grep "cell" # count: 2
+kubectl get clustercredential -n loopzero-system              # 2 CRs, Connected=true
+kubectl logs deploy/loopzero-api -n loopzero-system | grep "cell" # count: 2
 curl -s https://api.homolog.loopzero.example/api/v1/health/deep    # "cells": "2 discovered"
 ```
 

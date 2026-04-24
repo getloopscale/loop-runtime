@@ -15,7 +15,7 @@ resources.limits.memory: 512Mi   # ← pequeno
 resources.limits.cpu: 500m       # ← pequeno
 persistence.size: 10Gi
 
-Single pod: platform-system/minio-695f68c677-w4nk9
+Single pod: loopzero-system/minio-695f68c677-w4nk9
 PVC único: 10Gi do-block-storage
 Buckets: loopzero-artifacts, loopzero-builds, loopzero-logs
 ```
@@ -76,24 +76,24 @@ extraEnvVars:
 ```bash
 cd /home/paulo/loopzero
 helm upgrade minio infra/helm/minio \
-  --namespace platform-system \
+  --namespace loopzero-system \
   --reuse-values \
   -f infra/helm/minio/values.yaml \
   --wait --timeout 5m
 
 # Validar
-kubectl -n platform-system get pods -l app=minio
-kubectl -n platform-system exec deploy/minio -- mc admin info local
+kubectl -n loopzero-system get pods -l app=minio
+kubectl -n loopzero-system exec deploy/minio -- mc admin info local
 ```
 
 ### 1.3 — Smoke test
 
 ```bash
 # Exec into mc client
-kubectl -n platform-system run mc-test --rm -it --image=minio/mc --restart=Never -- sh
+kubectl -n loopzero-system run mc-test --rm -it --image=minio/mc --restart=Never -- sh
 
 # Dentro do pod:
-mc alias set local http://minio.platform-system.svc:9000 loopzero-admin <password>
+mc alias set local http://minio.loopzero-system.svc:9000 loopzero-admin <password>
 mc admin info local
 mc ls local/loopzero-artifacts/ | head -5
 ```
@@ -119,16 +119,16 @@ spec:
 ### 2.1 — Instalar mc client
 
 ```bash
-kubectl -n platform-system run mc-backup --image=minio/mc --restart=Never --command -- sleep 3600
-kubectl -n platform-system exec mc-backup -- mc alias set source \
-  http://minio.platform-system.svc:9000 loopzero-admin <password>
+kubectl -n loopzero-system run mc-backup --image=minio/mc --restart=Never --command -- sleep 3600
+kubectl -n loopzero-system exec mc-backup -- mc alias set source \
+  http://minio.loopzero-system.svc:9000 loopzero-admin <password>
 ```
 
 ### 2.2 — Dump buckets críticos
 
 ```bash
 # loopzero-artifacts (source bundles): CRITICAL
-kubectl -n platform-system exec mc-backup -- mc mirror --watch \
+kubectl -n loopzero-system exec mc-backup -- mc mirror --watch \
   source/loopzero-artifacts \
   /backup/loopzero-artifacts &
 
@@ -136,7 +136,7 @@ kubectl -n platform-system exec mc-backup -- mc mirror --watch \
 # loopzero-logs: NÃO crítico, pular
 
 # Copy backup para fora do cluster
-kubectl cp platform-system/mc-backup:/backup /tmp/minio-backup-$(date +%Y%m%d)
+kubectl cp loopzero-system/mc-backup:/backup /tmp/minio-backup-$(date +%Y%m%d)
 
 # Validar tamanho
 du -sh /tmp/minio-backup-*/loopzero-artifacts
@@ -152,7 +152,7 @@ apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshot
 metadata:
   name: minio-pre-migration-$(date +%Y%m%d)
-  namespace: platform-system
+  namespace: loopzero-system
 spec:
   volumeSnapshotClassName: do-block-storage
   source:
@@ -160,7 +160,7 @@ spec:
 EOF
 
 kubectl apply -f /tmp/minio-snapshot.yaml
-kubectl -n platform-system get volumesnapshot
+kubectl -n loopzero-system get volumesnapshot
 ```
 
 **Esforço Fase 2:** 1h (depende do tamanho dos dados). **Não pular — é contrato com o passado.**
@@ -223,27 +223,27 @@ buckets: []
 
 ```bash
 helm install minio-dist infra/helm/minio \
-  --namespace platform-system \
+  --namespace loopzero-system \
   -f infra/helm/minio/values-distributed.yaml \
   --wait --timeout 10m
 
 # Validar
-kubectl -n platform-system get sts minio-dist
-kubectl -n platform-system get pods -l app=minio-dist
+kubectl -n loopzero-system get sts minio-dist
+kubectl -n loopzero-system get pods -l app=minio-dist
 # Esperado: 4/4 pods Ready
 
 # Validar erasure coding
-kubectl -n platform-system exec minio-dist-0 -- mc admin info local
+kubectl -n loopzero-system exec minio-dist-0 -- mc admin info local
 # Deve mostrar: "EC:2" (2 parity blocks)
 ```
 
 ### 3.2 — Sync data standalone → distributed
 
 ```bash
-kubectl -n platform-system exec mc-backup -- sh <<EOF
+kubectl -n loopzero-system exec mc-backup -- sh <<EOF
 # Setup aliases
-mc alias set old http://minio.platform-system.svc:9000 loopzero-admin <password>
-mc alias set new http://minio-dist.platform-system.svc:9000 loopzero-admin <password>
+mc alias set old http://minio.loopzero-system.svc:9000 loopzero-admin <password>
+mc alias set new http://minio-dist.loopzero-system.svc:9000 loopzero-admin <password>
 
 # Create buckets no new cluster
 mc mb new/loopzero-artifacts
@@ -267,7 +267,7 @@ EOF
 
 ```bash
 # Upload teste
-kubectl -n platform-system exec mc-backup -- sh -c '
+kubectl -n loopzero-system exec mc-backup -- sh -c '
   echo "migration-test-$(date)" > /tmp/test.txt
   mc cp /tmp/test.txt new/loopzero-artifacts/migration-test.txt
   mc ls new/loopzero-artifacts/migration-test.txt
@@ -275,24 +275,24 @@ kubectl -n platform-system exec mc-backup -- sh -c '
 '
 
 # Performance test
-kubectl -n platform-system exec mc-backup -- \
+kubectl -n loopzero-system exec mc-backup -- \
   mc admin speedtest new/ --duration 30s
 # Esperado: >100 MiB/s PUT, >200 MiB/s GET (distributed é 2-4× mais rápido que standalone)
 ```
 
 ### 3.4 — Cutover atômico (DNS swap)
 
-**Estratégia:** renomear Service atual, apontar `minio.platform-system.svc` para novo cluster.
+**Estratégia:** renomear Service atual, apontar `minio.loopzero-system.svc` para novo cluster.
 
 ```bash
 # 1. Save old service manifest
-kubectl -n platform-system get svc minio -o yaml > /tmp/minio-old-svc.yaml
+kubectl -n loopzero-system get svc minio -o yaml > /tmp/minio-old-svc.yaml
 
 # 2. Delete old service (mantém old StatefulSet/pods rodando como backup)
-kubectl -n platform-system delete svc minio
+kubectl -n loopzero-system delete svc minio
 
 # 3. Rename new service
-kubectl -n platform-system patch svc minio-dist -p '{"metadata":{"name":"minio"}}' \
+kubectl -n loopzero-system patch svc minio-dist -p '{"metadata":{"name":"minio"}}' \
   --type=strategic
 # Isso não funciona — Services não suportam rename em K8s.
 
@@ -302,7 +302,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: minio
-  namespace: platform-system
+  namespace: loopzero-system
 spec:
   selector:
     app.kubernetes.io/instance: minio-dist
@@ -328,7 +328,7 @@ cd /home/paulo/loopzero/infra/tests/load
 LOOPZERO_API_URL=... ./run-tests.sh l1
 
 # Validar buckets acessíveis
-curl -I https://minio.platform-system.svc:9000/loopzero-artifacts/
+curl -I https://minio.loopzero-system.svc:9000/loopzero-artifacts/
 # 200 OK = success
 ```
 
@@ -339,11 +339,11 @@ curl -I https://minio.platform-system.svc:9000/loopzero-artifacts/
 # para permitir rollback rápido.
 
 # Após 24h sem incidentes:
-helm uninstall minio --namespace platform-system
+helm uninstall minio --namespace loopzero-system
 
 # Delete old PVC (cuidado — irreversível!)
-kubectl -n platform-system delete pvc minio
-kubectl -n platform-system delete volumesnapshot minio-pre-migration-YYYYMMDD
+kubectl -n loopzero-system delete pvc minio
+kubectl -n loopzero-system delete volumesnapshot minio-pre-migration-YYYYMMDD
 ```
 
 **Esforço total Fase 3:** 4-6h.
@@ -355,14 +355,14 @@ kubectl -n platform-system delete volumesnapshot minio-pre-migration-YYYYMMDD
 ### Rollback Fase 1 (env vars)
 ```bash
 git revert <commit-fase-1>
-helm upgrade minio infra/helm/minio -n platform-system -f values.yaml
+helm upgrade minio infra/helm/minio -n loopzero-system -f values.yaml
 # Tempo: ~2min
 ```
 
 ### Rollback Fase 3 (durante migração)
 
 **Se `mc mirror` falhar:**
-1. Não fez cutover ainda → só destruir `minio-dist`: `helm uninstall minio-dist -n platform-system`
+1. Não fez cutover ainda → só destruir `minio-dist`: `helm uninstall minio-dist -n loopzero-system`
 2. Apps continuam no standalone. Sem impacto.
 
 **Se cutover foi feito e apps falhando:**
@@ -376,7 +376,7 @@ kubectl apply -f /tmp/minio-old-svc.yaml
 **Se dados perdidos (catastrophic):**
 1. Restore from backup:
 ```bash
-kubectl -n platform-system exec mc-backup -- \
+kubectl -n loopzero-system exec mc-backup -- \
   mc mirror /backup/loopzero-artifacts old/loopzero-artifacts
 ```
 2. Recreate standalone PVC from snapshot if needed:
@@ -387,7 +387,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: minio-restored
-  namespace: platform-system
+  namespace: loopzero-system
 spec:
   storageClassName: do-block-storage
   dataSource:
@@ -447,7 +447,7 @@ Para scale 50k: trivial vs custo de outage ou migração tardia sob pressão.
 ## Critérios de sucesso (DoD)
 
 1. ✅ L3 passa 100/100 (Bug #35 eliminado)
-2. ✅ `minio.platform-system.svc` aponta para 4 pods distributed
+2. ✅ `minio.loopzero-system.svc` aponta para 4 pods distributed
 3. ✅ `mc admin info` mostra `EC:2` (erasure coding ativo)
 4. ✅ L1 + L2 + L3 regression tests passam após cutover
 5. ✅ Chaos test: `kubectl delete pod minio-dist-0` → buckets continuam acessíveis

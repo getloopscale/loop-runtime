@@ -18,14 +18,14 @@ Gitea p95 auth latency > 2s por 5min. Leading indicator de CPU saturation — hi
 
 ```bash
 # 1. CPU e replicas atuais
-kubectl --context mgmt -n platform-system get hpa gitea
+kubectl --context mgmt -n loopzero-system get hpa gitea
 
 # 2. Pods Gitea (top + ages)
-kubectl --context mgmt -n platform-system top pods -l app=gitea
-kubectl --context mgmt -n platform-system get pods -l app=gitea
+kubectl --context mgmt -n loopzero-system top pods -l app=gitea
+kubectl --context mgmt -n loopzero-system get pods -l app=gitea
 
 # 3. Logs de auth recente
-kubectl --context mgmt -n platform-system logs -l app=gitea --tail=50 | grep -iE "401|auth|slow"
+kubectl --context mgmt -n loopzero-system logs -l app=gitea --tail=50 | grep -iE "401|auth|slow"
 ```
 
 ## Decisão
@@ -47,7 +47,7 @@ kubectl --context mgmt -n platform-system logs -l app=gitea --tail=50 | grep -iE
 
 1. Validar latência voltou (<2s p95 em 5min):
    ```
-   kubectl --context mgmt -n platform-system exec -it deploy/prometheus-server -c prometheus-server -- \
+   kubectl --context mgmt -n loopzero-system exec -it deploy/prometheus-server -c prometheus-server -- \
      sh -c 'wget -q -O- "http://localhost:9090/api/v1/query?query=histogram_quantile(0.95,sum by (le) (rate(gitea_http_request_duration_seconds_bucket[5m])))"'
    ```
 2. Documentar incidente em `docs/plans/capacity-baselines.md` se thresholds precisam ajuste permanente.

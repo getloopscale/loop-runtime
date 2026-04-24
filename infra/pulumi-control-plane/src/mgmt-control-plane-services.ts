@@ -12,7 +12,7 @@ import * as random from "@pulumi/random";
 // Shared constants
 // ---------------------------------------------------------------------------
 
-export const PLATFORM_NAMESPACE = "platform-system";
+export const PLATFORM_NAMESPACE = "loopzero-system";
 
 // Type aliases for migration — avoids importing from monolith
 export type InfraOutputs = any;

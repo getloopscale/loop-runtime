@@ -58,12 +58,12 @@ kubectl --context="$CTX_BUILD" -n argo delete wf --all \
 # ---- Step 3: Delete tenant CRs (triggers operator deletionTimestamp) ----
 echo "[2/6] Deleting L3/loadtest CRs (finalizers may block)..."
 for CRD in tenants environments loopzeroapplications exposedroutes; do
-  COUNT=$(kubectl --context="$CTX_MGMT" -n platform-system get "$CRD" --no-headers 2>/dev/null | grep -c "$RES_PREFIX" || true)
+  COUNT=$(kubectl --context="$CTX_MGMT" -n loopzero-system get "$CRD" --no-headers 2>/dev/null | grep -c "$RES_PREFIX" || true)
   if [ "$COUNT" -gt 0 ]; then
     echo "  $CRD: deleting $COUNT"
-    kubectl --context="$CTX_MGMT" -n platform-system get "$CRD" --no-headers \
+    kubectl --context="$CTX_MGMT" -n loopzero-system get "$CRD" --no-headers \
       | grep "$RES_PREFIX" | awk '{print $1}' \
-      | xargs -r kubectl --context="$CTX_MGMT" -n platform-system delete "$CRD" \
+      | xargs -r kubectl --context="$CTX_MGMT" -n loopzero-system delete "$CRD" \
           --wait=false --grace-period=0 2>&1 | tail -1 || true
   fi
 done
@@ -72,9 +72,9 @@ done
 echo "[3/6] Force-null finalizers (3 passes)..."
 for i in 1 2 3; do
   for CRD in tenants environments loopzeroapplications exposedroutes applications.argoproj.io; do
-    kubectl --context="$CTX_MGMT" -n platform-system get "$CRD" --no-headers 2>/dev/null \
+    kubectl --context="$CTX_MGMT" -n loopzero-system get "$CRD" --no-headers 2>/dev/null \
       | grep "$RES_PREFIX" | awk '{print $1}' | while read -r name; do
-      kubectl --context="$CTX_MGMT" -n platform-system patch "$CRD" "$name" \
+      kubectl --context="$CTX_MGMT" -n loopzero-system patch "$CRD" "$name" \
         --type=json -p='[{"op":"replace","path":"/metadata/finalizers","value":null}]' \
         2>/dev/null || true
     done
@@ -94,7 +94,7 @@ done
 
 # ---- Step 6: Database cleanup (atomic transaction with FK order) ----
 echo "[5/6] Database cleanup..."
-DB_URL=$(kubectl --context="$CTX_MGMT" -n platform-system get secret loopzero-api-secrets -o json \
+DB_URL=$(kubectl --context="$CTX_MGMT" -n loopzero-system get secret loopzero-api-secrets -o json \
   | jq -r '.data.DATABASE_URL' | base64 -d)
 CLEAN_URL="${DB_URL%%\?*}?sslmode=require"
 
@@ -112,7 +112,7 @@ DELETE FROM tenants WHERE id LIKE '${PATTERN}'; \
 COMMIT; \
 SELECT 'tenants_remaining', COUNT(*) FROM tenants WHERE id LIKE '${PATTERN}';"
 
-kubectl --context="$CTX_MGMT" -n platform-system run "$JOB" --rm -i --restart=Never \
+kubectl --context="$CTX_MGMT" -n loopzero-system run "$JOB" --rm -i --restart=Never \
   --image=postgres:16-alpine --timeout=120s \
   --overrides="{\"spec\":{\"securityContext\":{\"runAsNonRoot\":true,\"runAsUser\":999,\"seccompProfile\":{\"type\":\"RuntimeDefault\"}},\"containers\":[{\"name\":\"$JOB\",\"image\":\"postgres:16-alpine\",\"command\":[\"psql\",\"$CLEAN_URL\",\"-c\",\"$SQL\"],\"securityContext\":{\"allowPrivilegeEscalation\":false,\"capabilities\":{\"drop\":[\"ALL\"]},\"readOnlyRootFilesystem\":false}}]}}" \
   2>&1 | tail -8
@@ -120,7 +120,7 @@ kubectl --context="$CTX_MGMT" -n platform-system run "$JOB" --rm -i --restart=Ne
 # ---- Final verification ----
 echo "[6/6] Verification..."
 echo -n "  Mgmt CRs remaining: "
-kubectl --context="$CTX_MGMT" -n platform-system get tenants,environments,loopzeroapplications,exposedroutes,applications.argoproj.io --no-headers 2>/dev/null | grep -c "$RES_PREFIX" || echo 0
+kubectl --context="$CTX_MGMT" -n loopzero-system get tenants,environments,loopzeroapplications,exposedroutes,applications.argoproj.io --no-headers 2>/dev/null | grep -c "$RES_PREFIX" || echo 0
 echo -n "  Runtime ns remaining: "
 kubectl --context="$CTX_RUNTIME" get ns --no-headers 2>/dev/null | grep -c "$NS_PREFIX" || echo 0
 echo "=== DONE ==="

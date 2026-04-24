@@ -414,7 +414,7 @@
       },
       "targets": [
         {
-          "expr": "increase(kube_pod_container_status_restarts_total{namespace=\"platform-system\"}[15m]) > 0",
+          "expr": "increase(kube_pod_container_status_restarts_total{namespace=\"loopzero-system\"}[15m]) > 0",
           "legendFormat": "{{pod}}/{{container}}",
           "refId": "A"
         }
@@ -452,7 +452,7 @@
           "refId": "A"
         },
         {
-          "expr": "kube_job_status_failed{namespace=\"platform-system\", job_name=~\"harbor-canary.*\"}",
+          "expr": "kube_job_status_failed{namespace=\"loopzero-system\", job_name=~\"harbor-canary.*\"}",
           "legendFormat": "Canary failed: {{job_name}}",
           "refId": "B"
         }

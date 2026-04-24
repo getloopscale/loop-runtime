@@ -256,7 +256,7 @@ in `infra/tests/capacity/`. These tests produce JSON results to
 
 ```bash
 # Set up port-forwards for metrics endpoints
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system \
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system \
   port-forward svc/loopzero-api-metrics 19090:9090 &
 kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n argocd \
   port-forward svc/argocd-metrics 18082:8082 &
@@ -304,7 +304,7 @@ of the single-fixture 50 Mi guess. Frameworks are sourced from
 ```bash
 # mgmt cluster
 kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt top nodes
-kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n platform-system top pods
+kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-mgmt -n loopzero-system top pods
 
 # build + runtime clusters
 kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-build top nodes
@@ -314,7 +314,7 @@ kubectl --context=do-sfo3-loopzero-infra-dev-sfo3-runtime top nodes
 doctl kubernetes cluster node-pool list <cluster-id> --format Name,Size,Count
 
 # PG max_connections and live activity (run from inside mgmt cluster)
-kubectl -n platform-system run pgstat --rm -i --restart=Never \
+kubectl -n loopzero-system run pgstat --rm -i --restart=Never \
   --image=postgres:16-alpine -- sh -c \
   'psql "$DATABASE_URL" -c "SHOW max_connections" \
                         -c "SELECT count(*), state FROM pg_stat_activity GROUP BY state"'

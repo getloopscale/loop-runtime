@@ -88,7 +88,7 @@ export function installPrometheus(
                   },
                   {
                     alert: "LoopZeroPodCrashLooping",
-                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopzero-.*|platform-system"}[15m]) > 0',
+                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopzero-.*|loopzero-system"}[15m]) > 0',
                     for: "5m",
                     labels: { severity: "warning" },
                     annotations: {

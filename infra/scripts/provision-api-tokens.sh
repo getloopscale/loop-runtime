@@ -14,8 +14,8 @@ set -euo pipefail
 MGMT_CTX="k3d-loopzero-mgmt"
 BUILD_CTX="k3d-loopzero-build"
 WORKLOAD_CTX="k3d-loopzero-workload"
-# REVIEW-2026-03-30: Fixes MED-12 — was "loopzero-system" but Pulumi uses "platform-system".
-# Local dev uses loopzero-system, production uses platform-system.
+# REVIEW-2026-03-30: Fixes MED-12 — was "loopzero-system" but Pulumi uses "loopzero-system".
+# Local dev uses loopzero-system, production uses loopzero-system.
 NAMESPACE="${LOOPZERO_NAMESPACE:-loopzero-system}"
 
 # REVIEW-2026-03-30: Fixes HIGH-06 — was "loopzero-admin", now "gitea_admin" to match Pulumi Helm config.

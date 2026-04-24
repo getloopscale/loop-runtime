@@ -7,7 +7,7 @@ import "fmt"
 
 // renderStaticFrontendApp generates IngressRoute + Middleware + Certificate for a
 // static frontend served from S3 via nginx-s3-gateway proxy.
-// NO Deployment, NO Service (uses shared static-assets Service in platform-system).
+// NO Deployment, NO Service (uses shared static-assets Service in loopzero-system).
 //
 // Architecture (MEET-2026-03-26-011):
 //
@@ -68,7 +68,7 @@ func renderStaticFrontendApp(ri RenderInput, app AppManifestInput) []string {
 		},
 	}
 
-	// IngressRoute: routes to shared nginx-s3-gateway in platform-system namespace.
+	// IngressRoute: routes to shared nginx-s3-gateway in loopzero-system namespace.
 	ingress := traefikIngressRoute{
 		APIVersion: "traefik.io/v1alpha1",
 		Kind:       "IngressRoute",

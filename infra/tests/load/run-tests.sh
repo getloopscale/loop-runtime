@@ -40,7 +40,7 @@ PF_PID=""
 if [[ -n "${LOOPZERO_USE_PORT_FORWARD:-}" ]]; then
   CONTEXT="${LOOPZERO_MGMT_CONTEXT:-do-sfo3-loopzero-infra-dev-sfo3-mgmt}"
   echo "  Starting port-forward (context: $CONTEXT)..."
-  kubectl --context="$CONTEXT" -n platform-system port-forward svc/loopzero-api 18080:8080 &
+  kubectl --context="$CONTEXT" -n loopzero-system port-forward svc/loopzero-api 18080:8080 &
   PF_PID=$!
   sleep 3
   export LOOPZERO_API_URL="http://localhost:18080"

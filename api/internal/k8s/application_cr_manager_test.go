@@ -15,7 +15,7 @@ import (
 )
 
 func TestBuildLoopZeroApplicationCR(t *testing.T) {
-	cr := buildLoopZeroApplicationCR("platform-system", LoopZeroApplicationInput{
+	cr := buildLoopZeroApplicationCR("loopzero-system", LoopZeroApplicationInput{
 		TenantID:    "tn-loopzero",
 		Project:     "my-project",
 		Environment: "production",
@@ -43,8 +43,8 @@ func TestBuildLoopZeroApplicationCR(t *testing.T) {
 	}
 
 	// Verify namespace
-	if cr.GetNamespace() != "platform-system" {
-		t.Errorf("expected namespace platform-system, got %s", cr.GetNamespace())
+	if cr.GetNamespace() != "loopzero-system" {
+		t.Errorf("expected namespace loopzero-system, got %s", cr.GetNamespace())
 	}
 
 	// Verify spec fields
@@ -76,7 +76,7 @@ func TestBuildLoopZeroApplicationCR(t *testing.T) {
 }
 
 func TestBuildLoopZeroApplicationCR_DefaultPort(t *testing.T) {
-	cr := buildLoopZeroApplicationCR("platform-system", LoopZeroApplicationInput{
+	cr := buildLoopZeroApplicationCR("loopzero-system", LoopZeroApplicationInput{
 		TenantID:    "tn-loopzero",
 		Project:     "web-app",
 		Environment: "staging",
@@ -164,7 +164,7 @@ func newFakeDynamicClient(objects ...runtime.Object) *dynamicfake.FakeDynamicCli
 
 func TestEnsureLoopZeroApplication_CreateWhenNotFound(t *testing.T) {
 	client := newFakeDynamicClient()
-	mgr := NewApplicationCRManager(client, "platform-system")
+	mgr := NewApplicationCRManager(client, "loopzero-system")
 
 	input := LoopZeroApplicationInput{
 		TenantID:    "tn-loopzero",
@@ -182,7 +182,7 @@ func TestEnsureLoopZeroApplication_CreateWhenNotFound(t *testing.T) {
 
 	// Verify CR was created
 	crName := loopzeroApplicationCRName("tn-loopzero", "my-project", "api", "production")
-	got, err := client.Resource(loopzeroApplicationGVR).Namespace("platform-system").Get(
+	got, err := client.Resource(loopzeroApplicationGVR).Namespace("loopzero-system").Get(
 		context.Background(), crName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get CR after create: %v", err)
@@ -198,7 +198,7 @@ func TestEnsureLoopZeroApplication_CreateWhenNotFound(t *testing.T) {
 
 func TestEnsureLoopZeroApplication_UpdateWhenExists(t *testing.T) {
 	// Pre-populate with a CR that has port 80
-	existing := buildLoopZeroApplicationCR("platform-system", LoopZeroApplicationInput{
+	existing := buildLoopZeroApplicationCR("loopzero-system", LoopZeroApplicationInput{
 		TenantID:    "tn-loopzero",
 		Project:     "my-project",
 		Environment: "production",
@@ -207,7 +207,7 @@ func TestEnsureLoopZeroApplication_UpdateWhenExists(t *testing.T) {
 		ServicePort: 80,
 	})
 	client := newFakeDynamicClient(existing)
-	mgr := NewApplicationCRManager(client, "platform-system")
+	mgr := NewApplicationCRManager(client, "loopzero-system")
 
 	// Update to port 3001
 	input := LoopZeroApplicationInput{
@@ -225,7 +225,7 @@ func TestEnsureLoopZeroApplication_UpdateWhenExists(t *testing.T) {
 
 	// Verify CR was updated
 	crName := loopzeroApplicationCRName("tn-loopzero", "my-project", "api", "production")
-	got, err := client.Resource(loopzeroApplicationGVR).Namespace("platform-system").Get(
+	got, err := client.Resource(loopzeroApplicationGVR).Namespace("loopzero-system").Get(
 		context.Background(), crName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get CR after update: %v", err)
@@ -238,7 +238,7 @@ func TestEnsureLoopZeroApplication_UpdateWhenExists(t *testing.T) {
 
 func TestEnsureLoopZeroApplication_IdempotentCreate(t *testing.T) {
 	client := newFakeDynamicClient()
-	mgr := NewApplicationCRManager(client, "platform-system")
+	mgr := NewApplicationCRManager(client, "loopzero-system")
 
 	input := LoopZeroApplicationInput{
 		TenantID:    "tn-loopzero",
@@ -259,7 +259,7 @@ func TestEnsureLoopZeroApplication_IdempotentCreate(t *testing.T) {
 
 	// Verify only one CR exists
 	crName := loopzeroApplicationCRName("tn-loopzero", "web", "frontend", "staging")
-	list, err := client.Resource(loopzeroApplicationGVR).Namespace("platform-system").List(
+	list, err := client.Resource(loopzeroApplicationGVR).Namespace("loopzero-system").List(
 		context.Background(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("List CRs: %v", err)

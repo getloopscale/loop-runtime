@@ -88,7 +88,7 @@ kubectl --context do-sfo3-loopzero-infra-dev-sfo3-mgmt \
 
 # 5. Migrate a Certificate (example: tls-argocd)
 kubectl --context do-sfo3-loopzero-infra-dev-sfo3-mgmt \
-  -n platform-system patch certificate tls-argocd --type=json -p='[
+  -n loopzero-system patch certificate tls-argocd --type=json -p='[
     {"op":"replace","path":"/spec/issuerRef","value":{
       "group":"cert-manager.k8s.cloudflare.com",
       "kind":"ClusterOriginIssuer",
@@ -119,7 +119,7 @@ Origin CA depends on (1) Cloudflare API available, (2) `origin-ca-issuer` operat
 2. **Temporary fallback to `letsencrypt-prod`** (for UIs that must be up NOW):
    ```bash
    # Patch the specific Certificate to use LE Prod
-   kubectl -n platform-system patch certificate <cert-name> --type=json -p='[
+   kubectl -n loopzero-system patch certificate <cert-name> --type=json -p='[
      {"op":"replace","path":"/spec/issuerRef","value":{
        "name":"letsencrypt-prod",
        "kind":"ClusterIssuer"

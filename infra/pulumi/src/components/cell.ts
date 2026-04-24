@@ -99,7 +99,7 @@ export interface CellOutput {
  *
  * What it creates:
  *   1. DOKS cluster in the shared VPC
- *   2. platform-system namespace
+ *   2. loopzero-system namespace
  *   3. cert-manager (Let's Encrypt DNS-01 via Cloudflare)
  *   4. Traefik ingress (LoadBalancer service)
  *   5. ArgoCD (connected to shared Gitea via repo-creds)
@@ -187,7 +187,7 @@ export function createCell(
   // we use the Traefik Service resource name and look up via kubectl
   // in the bootstrap Job. For now, return a known-good placeholder;
   // the actual LB IP is discoverable post-deploy via:
-  //   kubectl --kubeconfig=<cell> -n platform-system get svc traefik
+  //   kubectl --kubeconfig=<cell> -n loopzero-system get svc traefik
   const ingressIp = traefik.status.apply((_) => "pending-lb-ip");
 
   // --- 5. ArgoCD ---

@@ -24,7 +24,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: k6-scripts
-  namespace: platform-system
+  namespace: loopzero-system
   labels:
     app.kubernetes.io/name: k6-runner
     app.kubernetes.io/part-of: loopzero
@@ -43,7 +43,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: k6-fixture-builder
-  namespace: platform-system
+  namespace: loopzero-system
 data:
   build-bundle.sh: |
     #!/bin/sh
@@ -94,7 +94,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: k6-seed-sql
-  namespace: platform-system
+  namespace: loopzero-system
 data:
   seed.sh: |
     #!/bin/sh
@@ -141,7 +141,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: k6-runner
-  namespace: platform-system
+  namespace: loopzero-system
   labels:
     app.kubernetes.io/name: k6-runner
     app.kubernetes.io/part-of: loopzero
@@ -194,7 +194,7 @@ spec:
             - "${K6_SCRIPT}"
           env:
             - name: K6_API_URL
-              value: "http://loopzero-api.platform-system.svc.cluster.local:8080"
+              value: "http://loopzero-api.loopzero-system.svc.cluster.local:8080"
             - name: K6_SVC_AUTH
               valueFrom:
                 secretKeyRef:
@@ -203,7 +203,7 @@ spec:
             - name: K6_BUNDLE_PATH
               value: "/fixtures/bundle.bin"
             - name: K6_PROMETHEUS_RW_SERVER_URL
-              value: "http://prometheus-server.platform-system.svc.cluster.local/api/v1/write"
+              value: "http://prometheus-server.loopzero-system.svc.cluster.local/api/v1/write"
             - name: K6_PROMETHEUS_RW_TREND_STATS
               value: "p(50),p(95),p(99)"
             - name: K6_PROMETHEUS_RW_PUSH_INTERVAL

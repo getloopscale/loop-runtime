@@ -72,7 +72,7 @@ func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) routes.Tenan
 		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
 		cfg.BuildKubeconfig, cfg.BuildKubeContext,
 		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,
-		"", "", // default namespaces (platform-system, argo)
+		"", "", // default namespaces (loopzero-system, argo)
 	)
 	if err != nil {
 		slog.Warn("admin evict: K8s teardown disabled — falling back to DB-only",

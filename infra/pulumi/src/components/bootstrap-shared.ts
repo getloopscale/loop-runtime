@@ -16,7 +16,7 @@ import { PlatformStackConfig } from "../config/stack";
  * Platform namespace — all LoopZero platform services live here.
  * Workload namespaces are separate, created by operators.
  */
-export const PLATFORM_NAMESPACE = "platform-system";
+export const PLATFORM_NAMESPACE = "loopzero-system";
 
 /**
  * Pinned Helm chart versions for deterministic provisioning.

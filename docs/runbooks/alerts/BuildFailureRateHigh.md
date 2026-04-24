@@ -29,7 +29,7 @@ kubectl --context build -n argo get wf -o json \
   | sort | uniq -c | sort -rn
 
 # 3. DB: últimos 5 builds FAILED + error_message
-kubectl --context mgmt -n platform-system run psql-failures --rm -i --restart=Never \
+kubectl --context mgmt -n loopzero-system run psql-failures --rm -i --restart=Never \
   --image=postgres:16-alpine --timeout=30s \
   -- psql "$DB_URL" -c "SELECT id, tenant_id, error_message, finished_at FROM builds WHERE status='FAILED' ORDER BY finished_at DESC LIMIT 5;"
 ```

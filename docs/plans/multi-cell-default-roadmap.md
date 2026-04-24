@@ -111,13 +111,13 @@ apiVersion: platform.loopzero.io/v1
 kind: ClusterCredential
 metadata:
   name: runtime-sfo3-01
-  namespace: platform-system
+  namespace: loopzero-system
 spec:
   clusterName: loopzero-infra-runtime
   apiServer: "<runtime-api-server>"
   secretRef:
     name: runtime-cell-kubeconfig
-    namespace: platform-system
+    namespace: loopzero-system
   scope: { argocd: true, operators: true }
   tls: { insecure: false }
   cellID: cell-default

@@ -42,11 +42,11 @@ target "operator" {
   dockerfile = "operators/Dockerfile"
   context    = "."
   tags = compact([
-    "${REGISTRY}/tenant-controller:${TAG}",
-    SHA != "" ? "${REGISTRY}/tenant-controller:${SHA}" : "",
+    "${REGISTRY}/loopzero-tenant-controller:${TAG}",
+    SHA != "" ? "${REGISTRY}/loopzero-tenant-controller:${SHA}" : "",
   ])
-  cache-from = ["type=registry,ref=${REGISTRY}/tenant-controller:cache"]
-  cache-to   = ["type=registry,ref=${REGISTRY}/tenant-controller:cache,mode=max"]
+  cache-from = ["type=registry,ref=${REGISTRY}/loopzero-tenant-controller:cache"]
+  cache-to   = ["type=registry,ref=${REGISTRY}/loopzero-tenant-controller:cache,mode=max"]
   platforms  = ["linux/amd64"]
   args = {
     SOURCE_DATE_EPOCH = "${SOURCE_DATE_EPOCH}"

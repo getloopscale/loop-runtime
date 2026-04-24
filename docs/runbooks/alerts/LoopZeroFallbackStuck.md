@@ -17,18 +17,18 @@
 curl -s 'http://localhost:9090/api/v1/query?query=loopzero_fallback_active==1' | jq .
 
 # 2. Check the stuck release
-kubectl --context mgmt -n platform-system logs deploy/loopzero-api --tail=50 \
+kubectl --context mgmt -n loopzero-system logs deploy/loopzero-api --tail=50 \
   | grep -i "fallback\|emergency\|mirror"
 
 # 3. Check ArgoCD app status (should be OutOfSync if fallback bypassed gitops)
 kubectl --context mgmt -n argocd get applications -o wide | grep -v "Synced"
 
 # 4. Check Gitea (root cause of mirror failure)
-kubectl --context mgmt -n platform-system exec deploy/loopzero-api -- \
-  curl -s http://gitea-http.platform-system:3000/api/v1/version
+kubectl --context mgmt -n loopzero-system exec deploy/loopzero-api -- \
+  curl -s http://gitea-http.loopzero-system:3000/api/v1/version
 
 # 5. Check current release state in DB
-kubectl --context mgmt -n platform-system exec deploy/loopzero-api -- \
+kubectl --context mgmt -n loopzero-system exec deploy/loopzero-api -- \
   curl -s http://localhost:8080/api/v1/internal/releases?tenant=<tenant>\&env=<env> | jq .
 ```
 
@@ -40,7 +40,7 @@ kubectl --context mgmt -n platform-system exec deploy/loopzero-api -- \
    ```bash
    # Mirror sync will retry automatically on next reconcile cycle
    # Force a reconcile by restarting the API
-   kubectl --context mgmt -n platform-system rollout restart deployment/loopzero-api
+   kubectl --context mgmt -n loopzero-system rollout restart deployment/loopzero-api
    ```
 
 3. **If mirror succeeds, fallback clears automatically:**
@@ -56,7 +56,7 @@ kubectl --context mgmt -n platform-system exec deploy/loopzero-api -- \
 5. **Manual activate if release is stuck:**
    ```bash
    # Check build/release state
-   kubectl --context mgmt -n platform-system logs deploy/loopzero-api --tail=20 \
+   kubectl --context mgmt -n loopzero-system logs deploy/loopzero-api --tail=20 \
      | grep -i "release\|activate"
    # If a release is stuck in PENDING, it may need manual transition
    # (requires direct DB intervention as last resort)

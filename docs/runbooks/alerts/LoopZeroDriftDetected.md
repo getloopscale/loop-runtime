@@ -30,7 +30,7 @@ kubectl --context mgmt -n argocd get application $DRIFTED_APP -o json \
   | jq '.status.operationState'
 
 # 5. Check API drift metric details
-kubectl --context mgmt -n platform-system logs deploy/loopzero-api --tail=30 \
+kubectl --context mgmt -n loopzero-system logs deploy/loopzero-api --tail=30 \
   | grep -i "drift"
 ```
 
@@ -47,8 +47,8 @@ kubectl --context mgmt -n platform-system logs deploy/loopzero-api --tail=30 \
    kubectl --context mgmt -n argocd get application $DRIFTED_APP -o json \
      | jq '.status.operationState.message'
    # Check Gitea for the offending manifest
-   kubectl --context mgmt -n platform-system exec deploy/loopzero-api -- \
-     curl -s "http://gitea-http.platform-system:3000/api/v1/repos/<org>/<repo>/contents/" \
+   kubectl --context mgmt -n loopzero-system exec deploy/loopzero-api -- \
+     curl -s "http://gitea-http.loopzero-system:3000/api/v1/repos/<org>/<repo>/contents/" \
      -H "Authorization: token $GITEA_TOKEN"
    ```
 

@@ -18,15 +18,15 @@ Workqueue de um dos 4 controllers core acima de 50 items por 5min.
 
 ```bash
 # 1. Qual controller?
-kubectl --context mgmt -n platform-system logs -l app=tenant-controller --tail=100 \
+kubectl --context mgmt -n loopzero-system logs -l app=tenant-controller --tail=100 \
   | grep -iE "reconcile|requeue|queue"
 
 # 2. Throughput atual (reconciles/s)
-kubectl --context mgmt -n platform-system port-forward deploy/prometheus-server 9090 &
+kubectl --context mgmt -n loopzero-system port-forward deploy/prometheus-server 9090 &
 curl -s "localhost:9090/api/v1/query?query=rate(controller_runtime_reconcile_total%5B1m%5D)" | jq
 
 # 3. Leader ativo?
-kubectl --context mgmt -n platform-system get lease -o wide | grep controller
+kubectl --context mgmt -n loopzero-system get lease -o wide | grep controller
 ```
 
 ## Decisão
@@ -51,10 +51,10 @@ Documentado em `docs/plans/50k-immediate-focus.md` gap #3. Sharding via workqueu
 
 ```bash
 # Bump controller CPU temporariamente
-kubectl --context mgmt -n platform-system set resources deploy/<controller> \
+kubectl --context mgmt -n loopzero-system set resources deploy/<controller> \
   --limits=cpu=2000m,memory=1Gi --requests=cpu=500m,memory=256Mi
 
 # Watch queue drain
-kubectl --context mgmt -n platform-system port-forward deploy/prometheus-server 9090 &
+kubectl --context mgmt -n loopzero-system port-forward deploy/prometheus-server 9090 &
 watch "curl -s 'localhost:9090/api/v1/query?query=workqueue_depth' | jq"
 ```

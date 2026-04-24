@@ -70,7 +70,7 @@ grafana:
     - name: Tempo
       type: tempo
       uid: tempo
-      url: http://tempo.platform-system:3200
+      url: http://tempo.loopzero-system:3200
       access: proxy
       isDefault: false
   sidecar:

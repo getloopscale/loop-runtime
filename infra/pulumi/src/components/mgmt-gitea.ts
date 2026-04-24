@@ -23,9 +23,9 @@ export function installNfsProvisioner(
   ns: k8s.core.v1.Namespace,
 ): k8s.helm.v3.Release {
   // NFS server needs DAC_READ_SEARCH + SYS_RESOURCE capabilities which violate
-  // the `baseline` PSA profile on platform-system. Deploy in a dedicated namespace
+  // the `baseline` PSA profile on loopzero-system. Deploy in a dedicated namespace
   // with `privileged` PSA — the StorageClass is cluster-wide, so any namespace
-  // (including platform-system) can create NFS-backed RWX PVCs.
+  // (including loopzero-system) can create NFS-backed RWX PVCs.
   const nfsNs = new k8s.core.v1.Namespace(
     "nfs-system",
     {

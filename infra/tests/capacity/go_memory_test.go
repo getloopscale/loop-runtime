@@ -31,7 +31,7 @@ import (
 //
 // Run:
 //
-//	kubectl --context=$LOOPZERO_MGMT_CONTEXT -n platform-system port-forward svc/loopzero-api-metrics 19090:9090 &
+//	kubectl --context=$LOOPZERO_MGMT_CONTEXT -n loopzero-system port-forward svc/loopzero-api-metrics 19090:9090 &
 //
 //	LOOPZERO_CAPACITY=1 \
 //	LOOPZERO_API_URL=https://api.dev.loopzero.example \
@@ -104,7 +104,7 @@ func TestCapacityGoMemory(t *testing.T) {
 	// Gap 2: Multi-replica baseline via kubectl top.
 	var baselineKubeMi int64
 	if mgmtCtx != "" {
-		pods, err := KubectlTopPods(ctx, mgmtCtx, "platform-system", "app=loopzero-api")
+		pods, err := KubectlTopPods(ctx, mgmtCtx, "loopzero-system", "app=loopzero-api")
 		if err != nil {
 			t.Logf("  warning: kubectl top baseline: %v (continuing with metrics-only)", err)
 		} else {
@@ -212,7 +212,7 @@ func TestCapacityGoMemory(t *testing.T) {
 	// Gap 2: Multi-replica post-load via kubectl top.
 	var postKubeMi int64
 	if mgmtCtx != "" {
-		pods, err := KubectlTopPods(ctx, mgmtCtx, "platform-system", "app=loopzero-api")
+		pods, err := KubectlTopPods(ctx, mgmtCtx, "loopzero-system", "app=loopzero-api")
 		if err == nil {
 			postKubeMi = TotalMemoryMi(pods)
 			t.Logf("  kubectl top post-load: %d Mi across %d replicas", postKubeMi, len(pods))

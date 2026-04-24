@@ -19,7 +19,7 @@ loki:
       ruler: loopzero-logs
       admin: loopzero-logs
     s3:
-      endpoint: minio.platform-system:9000
+      endpoint: minio.loopzero-system:9000
       bucketnames: loopzero-logs
       access_key_id: loopzero-admin
       secret_access_key: loopzero-dev-password   # LOCAL DEV ONLY — override for production

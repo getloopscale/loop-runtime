@@ -16,7 +16,7 @@
 curl -s 'http://localhost:9090/api/v1/query?query=loopzero_break_glass_sessions_active' | jq .
 
 # 2. Check audit log for break-glass events
-kubectl --context mgmt -n platform-system logs deploy/loopzero-api --tail=100 \
+kubectl --context mgmt -n loopzero-system logs deploy/loopzero-api --tail=100 \
   | grep -i "break.glass\|emergency.access\|elevated"
 
 # 3. Check K8s audit logs for direct cluster access
@@ -56,7 +56,7 @@ kubectl --context mgmt get events --sort-by=.lastTimestamp | tail -20
    # 1. Revoke the break-glass binding
    kubectl --context mgmt delete clusterrolebinding break-glass-<user>
    # 2. Rotate service account tokens
-   kubectl --context mgmt -n platform-system delete secret <sa-token>
+   kubectl --context mgmt -n loopzero-system delete secret <sa-token>
    # 3. Refresh kubeconfig
    doctl kubernetes cluster kubeconfig save <cluster-id>
    ```

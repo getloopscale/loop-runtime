@@ -161,7 +161,7 @@ export function installTenantController(
             containers: [
               {
                 name: "controller",
-                image: pulumi.interpolate`${infra.registryEndpoint}/tenant-controller:${config.environment}`,
+                image: pulumi.interpolate`${infra.registryEndpoint}/loopzero-tenant-controller:${config.environment}`,
                 imagePullPolicy: "Always",
                 args: ["--leader-elect=true"],
                 ports: [

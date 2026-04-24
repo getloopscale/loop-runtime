@@ -38,7 +38,7 @@ func TestRuntimeNamespaceMatches(t *testing.T) {
 		{"loopzero-<tenant>-<env>", "loopzero-tn-lt-l3-01-production", []string{"tn-lt-l3-01"}, true},
 		{"loopzero-<tenant> bare", "loopzero-tn-lt-l3-01", []string{"tn-lt-l3-01"}, true},
 		{"missing loopzero- prefix", "tn-lt-l3-01-production", []string{"tn-lt-l3-01"}, false},
-		{"matching tenant prefix but non-loopzero ns", "platform-system", []string{"tn-lt-l3-01"}, false},
+		{"matching tenant prefix but non-loopzero ns", "loopzero-system", []string{"tn-lt-l3-01"}, false},
 		{"different tenant", "loopzero-tn-other-production", []string{"tn-lt-l3-01"}, false},
 	}
 	for _, tc := range tests {

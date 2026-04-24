@@ -23,7 +23,7 @@ import (
 )
 
 // tenantNamespace is the Kubernetes namespace where Tenant CRs live.
-// Local dev: loopzero-system (Tilt/k3d). Production: platform-system (Pulumi/DO).
+// Local dev and production: loopzero-system.
 // Configurable via TENANT_NAMESPACE env var.
 var tenantNamespace = func() string {
 	if ns := os.Getenv("TENANT_NAMESPACE"); ns != "" {

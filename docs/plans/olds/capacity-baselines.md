@@ -15,9 +15,9 @@ go test ./infra/tests/capacity/ -run TestCapacityLoopZeroAPI -v \
   -args -rps=50 -duration=60s -workers=20
 
 # Gitea auth
-export LOOPZERO_GITEA_URL=http://gitea-http.platform-system.svc.cluster.local:3000
+export LOOPZERO_GITEA_URL=http://gitea-http.loopzero-system.svc.cluster.local:3000
 export LOOPZERO_GITEA_USER=loopzero-admin
-export LOOPZERO_GITEA_PASS=$(kubectl --context mgmt -n platform-system get secret gitea-admin-secret -o jsonpath='{.data.password}' | base64 -d)
+export LOOPZERO_GITEA_PASS=$(kubectl --context mgmt -n loopzero-system get secret gitea-admin-secret -o jsonpath='{.data.password}' | base64 -d)
 go test ./infra/tests/capacity/ -run TestCapacityGiteaAuth -v \
   -args -rps=100 -duration=60s -workers=50
 ```

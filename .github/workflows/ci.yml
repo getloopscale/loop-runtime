@@ -41,6 +41,7 @@ jobs:
       cli: ${{ steps.filter.outputs.cli }}
       pulumi: ${{ steps.filter.outputs.pulumi }}
       manifests: ${{ steps.filter.outputs.manifests }}
+      charts: ${{ steps.filter.outputs.charts }}
       docs-only: ${{ steps.filter.outputs.docs-only }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -69,6 +70,8 @@ jobs:
               - 'operators/config/**'
               - 'infra/helm/**'
               - 'infra/tilt/**'
+            charts:
+              - 'charts/**'
             docs-only:
               - '!**/*.go'
               - '!**/*.ts'
@@ -542,6 +545,53 @@ jobs:
           extra_args: --only-verified --results=verified,unknown
 
   # ─────────────────────────────────────────────
+  # HELM CHARTS — lint + validate
+  # ─────────────────────────────────────────────
+
+  lint-charts:
+    name: Lint Helm Charts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: changes
+    if: needs.changes.outputs.charts == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+      - name: Update chart dependencies
+        run: |
+          for chart in charts/*/; do
+            if [ -f "$chart/Chart.yaml" ] && grep -q "dependencies:" "$chart/Chart.yaml"; then
+              helm dependency update "$chart"
+            fi
+          done
+      - name: Lint all charts
+        run: |
+          FAILED=0
+          for chart in charts/*/; do
+            if ! helm lint "$chart"; then FAILED=1; fi
+          done
+          [ "$FAILED" -eq 0 ] || exit 1
+      - name: Validate templates with kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.6/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+          for chart in charts/*/; do
+            if grep -q "type: library" "$chart/Chart.yaml" 2>/dev/null; then continue; fi
+            helm template "$(basename "$chart")" "$chart" 2>/dev/null | \
+              kubeconform --strict --ignore-missing-schemas --kubernetes-version 1.31.0 --summary
+          done
+      - name: CRD sync check
+        run: |
+          SRC=$(ls operators/config/crd/bases/loopzero.io_*.yaml | wc -l)
+          DST=$(ls charts/loopzero-crds/templates/*.yaml | wc -l)
+          if [ "$SRC" -ne "$DST" ]; then
+            echo "::error::CRD count mismatch: source=$SRC chart=$DST. Run 'task helm:sync-crds'"
+            exit 1
+          fi
+
+  # ─────────────────────────────────────────────
   # GATE — All checks must pass
   # ─────────────────────────────────────────────
 
@@ -563,6 +613,7 @@ jobs:
       - test-pulumi
       - integration-tests
       - validate-manifests
+      - lint-charts
       - migration-safety
       - security
     steps:
@@ -581,6 +632,7 @@ jobs:
           echo "  test-pulumi:        ${{ needs.test-pulumi.result }}"
           echo "  integration-tests:  ${{ needs.integration-tests.result }}"
           echo "  validate-manifests: ${{ needs.validate-manifests.result }}"
+          echo "  lint-charts:        ${{ needs.lint-charts.result }}"
           echo "  migration-safety:   ${{ needs.migration-safety.result }}"
           echo "  security:           ${{ needs.security.result }}"
 

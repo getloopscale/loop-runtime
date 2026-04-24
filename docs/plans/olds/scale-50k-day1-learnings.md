@@ -205,7 +205,7 @@ Durante o L1 real, descobrimos que as credenciais DOCR precisam estar presentes 
 ### 5.1 ArgoCD migrou de namespace
 
 **Doc anterior:** ArgoCD em `namespace: argocd`.
-**Realidade atual:** ArgoCD em `namespace: platform-system` (mgmt cluster).
+**Realidade atual:** ArgoCD em `namespace: loopzero-system` (mgmt cluster).
 
 Consequência: vários scripts de bootstrap e skills (`sre-guardian`, `argocd-expert`) têm paths desatualizados.
 
@@ -234,7 +234,7 @@ Observações:
 - Grafana admin: `admin / GMZGLoZEpXKd4SYC22u90SWFNDjtIjTActzT3fDO`
 - ArgoCD admin: `admin / H-eyCS7M2yIM0mpu`
 
-Ambos em secrets K8s no mgmt cluster (`platform-system` namespace).
+Ambos em secrets K8s no mgmt cluster (`loopzero-system` namespace).
 
 ---
 

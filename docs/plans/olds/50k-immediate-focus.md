@@ -112,7 +112,7 @@ seção "Cell-Based Architecture — Ready vs Deployed" (commit c1c5c09).
 ### Tarefas
 
 - [ ] 1.1 Pre-flight: confirmar clean slate
-  - `kubectl --context mgmt get tenants,environments,app,exposedroutes,loopzeroapplications -n platform-system | grep -c tn-lt` → 0
+  - `kubectl --context mgmt get tenants,environments,app,exposedroutes,loopzeroapplications -n loopzero-system | grep -c tn-lt` → 0
   - `kubectl --context runtime get ns | grep -c loopzero-tn-lt` → 0
   - DB: `SELECT COUNT(*) FROM tenants WHERE id LIKE 'tn-lt-%'` → 0
 - [ ] 1.2 Disparar L3 v8 com c=30, fixture default
@@ -272,7 +272,7 @@ Entre L3 v1 e v8 rodamos 8 vezes o teste completo de 100 tenants para descobrir 
 
 | Critério | Valor |
 |---|---|
-| 6 HPAs criados | Listar em `kubectl get hpa -n platform-system` |
+| 6 HPAs criados | Listar em `kubectl get hpa -n loopzero-system` |
 | Pulumi source atualizado | Diff em `mgmt-bootstrap.ts` inclui todos 6 |
 | Resources baseline OK | Nenhum pod ficou Pending após apply |
 | HPA behavior aplicado | scaleUp fast (30s), scaleDown slow (300s) — consistente com Gitea HPA |
@@ -397,7 +397,7 @@ Dos 11 bugs descobertos em L3, zero foram alertados proativamente. Test descobri
 
 | Critério | Valor |
 |---|---|
-| 6 alerts ativos | `kubectl get prometheusrule -n platform-system` |
+| 6 alerts ativos | `kubectl get prometheusrule -n loopzero-system` |
 | Dashboard published | Grafana UID "capacity-elasticity" |
 | Validação | Re-rodar L3 e confirmar alerts disparam antes do test reportar failure |
 

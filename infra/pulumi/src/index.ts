@@ -68,8 +68,8 @@ if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
     environment: config.environment,
     baseDomain: config.domain,
     runtimeProvider: cfRuntimeProvider,
-    namespace: "platform-system",
-    traefikService: "https://runtime-traefik.platform-system.svc:443",
+    namespace: "loopzero-system",
+    traefikService: "https://runtime-traefik.loopzero-system.svc:443",
     importIds: {
       tunnel: orphans.tunnelImportId,
       dnsRecord: orphans.dnsRecordImportId,
@@ -205,15 +205,15 @@ export const cfWorkerName = staticDelivery?.workerName;
 // --- Wiring outputs (connection details for operators) ---
 export const wiring = pulumi.output({
   gitea: {
-    internalUrl: "http://gitea-http.platform-system.svc.cluster.local:3000",
+    internalUrl: "http://gitea-http.loopzero-system.svc.cluster.local:3000",
     publicUrl: `https://git.${config.domain}`,
   },
   grafana: {
-    internalUrl: "http://grafana.platform-system.svc.cluster.local:3000",
+    internalUrl: "http://grafana.loopzero-system.svc.cluster.local:3000",
     publicUrl: `https://grafana.${config.domain}`,
   },
   prometheus: {
-    internalUrl: "http://prometheus-server.platform-system.svc.cluster.local:80",
+    internalUrl: "http://prometheus-server.loopzero-system.svc.cluster.local:80",
   },
   registry: {
     endpoint: infra.registryEndpoint,

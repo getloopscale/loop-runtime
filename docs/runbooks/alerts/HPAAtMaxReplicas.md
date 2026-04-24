@@ -18,13 +18,13 @@ HPA pegged em maxReplicas por 5min+. Ceiling atingido.
 
 ```bash
 # 1. Qual HPA?
-kubectl --context mgmt -n platform-system get hpa
+kubectl --context mgmt -n loopzero-system get hpa
 
 # 2. Utilização atual + histórico
-kubectl --context mgmt -n platform-system describe hpa <name>
+kubectl --context mgmt -n loopzero-system describe hpa <name>
 
 # 3. Pods executando — todos saturados ou só alguns?
-kubectl --context mgmt -n platform-system top pods -l <label-from-hpa-target>
+kubectl --context mgmt -n loopzero-system top pods -l <label-from-hpa-target>
 ```
 
 ## Decisão
