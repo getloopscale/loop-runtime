@@ -155,7 +155,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
-      - uses: digitalocean/action-doctl@v2.7.0
+      - uses: digitalocean/action-doctl@v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
       - run: doctl registry login --expiry-seconds 600
@@ -201,7 +201,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
-      - uses: digitalocean/action-doctl@v2.7.0
+      - uses: digitalocean/action-doctl@v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
       - run: doctl registry login --expiry-seconds 600
@@ -247,7 +247,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
-      - uses: digitalocean/action-doctl@v2.7.0
+      - uses: digitalocean/action-doctl@v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
       - run: doctl registry login --expiry-seconds 600
@@ -293,7 +293,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
-      - uses: digitalocean/action-doctl@v2.7.0
+      - uses: digitalocean/action-doctl@v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
       - run: doctl registry login --expiry-seconds 600
@@ -341,7 +341,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
-      - uses: digitalocean/action-doctl@v2.7.0
+      - uses: digitalocean/action-doctl@v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
       - run: doctl registry login --expiry-seconds 600
@@ -424,7 +424,7 @@ jobs:
 
       - name: Install doctl
         if: matrix.result == 'success' && matrix.digest != ''
-        uses: digitalocean/action-doctl@v2.7.0
+        uses: digitalocean/action-doctl@v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
