@@ -1,6 +1,6 @@
 dependencies:
 - name: loopzero-common
   repository: file://../loopzero-common
-  version: 0.1.3
-digest: sha256:9dfe95f0ce73a8668576fc0e31eca60de78ca8b803f0799152c12625a83603d4
-generated: "2026-04-24T04:36:10.338453667-03:00"
+  version: 0.1.4
+digest: sha256:dec09915760f219a1f8c7367fa65282ca0c9a6c2dceb0ec247e5e41ee668ac42
+generated: "2026-04-24T08:25:00.780770565-03:00"
