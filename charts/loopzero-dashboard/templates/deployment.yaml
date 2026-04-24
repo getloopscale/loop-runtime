@@ -86,9 +86,17 @@ spec:
               mountPath: /var/cache/nginx
             - name: nginx-run
               mountPath: /var/run
+            # CHG-2026-04-25-E2E (Gap 7): __config.js MUST be mounted from a
+            # ConfigMap, not an emptyDir. With emptyDir + subPath, containerd
+            # fails with "not a directory" on mount because the source
+            # emptyDir has no file at path __config.js. The previous design
+            # likely assumed an initContainer would write the file, but no
+            # such initContainer exists. Switching to a ConfigMap volume
+            # provides the file content at chart install time.
             - name: html-config
               mountPath: /usr/share/nginx/html/__config.js
               subPath: __config.js
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
@@ -97,4 +105,8 @@ spec:
         - name: nginx-run
           emptyDir: {}
         - name: html-config
-          emptyDir: {}
+          configMap:
+            name: {{ include "loopzero-common.fullname" . }}-config
+            items:
+              - key: __config.js
+                path: __config.js

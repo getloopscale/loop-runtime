@@ -166,6 +166,11 @@ function buildPlatformValues(
     'loopzero-api.secrets.minioAccessKey': tokens.minioAccessKey,
     'loopzero-api.secrets.minioSecretKey': tokens.minioSecretKey,
     'loopzero-api.secrets.argoCallbackSecret': tokens.argoCallbackSecret,
+    // CHG-2026-04-25-E2E (Gap 2): bootstrap + service-auth secrets that the
+    // chart now templates. Without bootstrapSecret, POST /internal/bootstrap
+    // returns 401 and the install can't seed the first admin user.
+    'loopzero-api.secrets.bootstrapSecret': tokens.bootstrapSecret,
+    'loopzero-api.secrets.serviceAuthSecret': tokens.serviceAuthSecret,
 
     // ── loopzero-controller ───────────────────────────────────────────────────
     'loopzero-controller.config.baseDomain': config.domain,

@@ -46,6 +46,11 @@ secrets:
   minioAccessKey: ""
   minioSecretKey: ""
   argoCallbackSecret: ""
+  # CHG-2026-04-25-E2E (Gap 2): authentication secrets that the chart
+  # previously omitted but the runtime requires.
+  bootstrapSecret: ""           # POST /internal/bootstrap auth
+  encryptionKey: ""             # LOOPZERO_SECRET_ENCRYPTION_KEY (SEC-001)
+  serviceAuthSecret: ""         # cloud→engine X-Service-Auth shared secret
 
 kubeconfig:
   build:

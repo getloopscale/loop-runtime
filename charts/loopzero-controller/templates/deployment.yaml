@@ -81,6 +81,14 @@ spec:
             - name: BUILD_KUBECONFIG
               value: /etc/loopzero/build-kubeconfig
             {{- end }}
+            # CHG-2026-04-25-E2E (Gap 9): allow caller to inject arbitrary env vars
+            # via Helm values (e.g. for image tag overrides, debug toggles, future
+            # config keys not yet promoted to .Values.config). The .Values.env map
+            # has shape { KEY: value } and is rendered as a flat list of envvars.
+            {{- range $key, $val := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
           {{- include "loopzero-common.startupProbe" . | nindent 10 }}
           {{- with .Values.livenessProbe }}
           livenessProbe:

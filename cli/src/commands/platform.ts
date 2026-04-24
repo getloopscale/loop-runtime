@@ -215,6 +215,13 @@ export async function platformInstall(
   const argoCallbackSecret = generateSecret(32);
   writeTo(`  ✓ Argo callback secret generated`);
 
+  // CHG-2026-04-25-E2E (Gap 2): generate bootstrap + service-auth secrets.
+  // bootstrapSecret authenticates POST /internal/bootstrap (admin seeding).
+  // serviceAuthSecret authorizes cloud→engine X-Service-Auth proxy calls.
+  const bootstrapSecret = generateSecret(32);
+  const serviceAuthSecret = generateSecret(32);
+  writeTo(`  ✓ Bootstrap + service-auth secrets generated`);
+
   const tokens: BootstrapTokens = {
     giteaToken,
     argocdPassword,
@@ -222,6 +229,8 @@ export async function platformInstall(
     minioSecretKey: minioCreds.secretKey,
     argoCallbackSecret,
     hydraClientId,
+    bootstrapSecret,
+    serviceAuthSecret,
   };
   writeTo('');
 
@@ -310,9 +319,16 @@ export async function platformInstall(
     writeTo(`  OAuth2 Client:   ${hydraClientId}`);
   }
   writeTo('');
+  writeTo('  Bootstrap secret (save this — needed to seed first admin):');
+  writeTo(`    ${bootstrapSecret}`);
+  writeTo('');
   writeTo('  Next steps:');
   writeTo(`  1. Configure DNS: *.${config.domain} → <ingress-ip>`);
-  writeTo(`  2. Login: loopzero login --api-url https://api.${config.domain}`);
+  writeTo(`  2. Seed admin:`);
+  writeTo(`     curl -X POST -H "Authorization: Bearer ${bootstrapSecret}" \\`);
+  writeTo(`       https://api.${config.domain}/internal/bootstrap \\`);
+  writeTo(`       -d '{"admin_github_id":"<id>","admin_login":"<login>","admin_email":"<email>","tenant_slug":"<team>","tenant_display_name":"<Display>"}'`);
+  writeTo(`  3. Login: loopzero login --api-url https://api.${config.domain}`);
   writeTo('');
 
   return 0;
@@ -428,5 +444,7 @@ function extractExistingTokens(): BootstrapTokens {
     minioSecretKey: get('loopzero-loopzero-api', 'MINIO_SECRET_KEY'),
     argoCallbackSecret: get('loopzero-loopzero-api', 'LOOPZERO_ARGO_CALLBACK_SECRET'),
     hydraClientId: '',
+    bootstrapSecret: get('loopzero-loopzero-api', 'LOOPZERO_BOOTSTRAP_SECRET'),
+    serviceAuthSecret: get('loopzero-loopzero-api', 'LOOPZERO_SERVICE_AUTH_SECRET'),
   };
 }

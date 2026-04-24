@@ -16,6 +16,12 @@ export interface BootstrapTokens {
   minioSecretKey: string;
   argoCallbackSecret: string;
   hydraClientId: string;
+  // CHG-2026-04-25-E2E (Gap 2): authentication secrets that the chart now
+  // accepts. Generated fresh per install via generateSecret() — caller is
+  // responsible for surfacing them to the operator (e.g. via loopzero platform
+  // status output) so the operator can later call /internal/bootstrap.
+  bootstrapSecret: string;
+  serviceAuthSecret: string;
 }
 
 // ─── Database migrations ────────────────────────────────────────────────────

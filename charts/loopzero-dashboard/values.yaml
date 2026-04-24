@@ -27,6 +27,9 @@ config:
   # VITE_* env vars injected at runtime via docker-entrypoint.sh
   viteApiUrl: ""
   viteCloudUrl: ""
+  # CHG-2026-04-25-E2E (Gap 7): rendered into __config.js ConfigMap and
+  # mounted at /usr/share/nginx/html/__config.js. SPA reads it at page load.
+  baseDomain: ""
 
 resources:
   requests:

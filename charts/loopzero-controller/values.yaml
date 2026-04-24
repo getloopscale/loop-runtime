@@ -46,6 +46,24 @@ config:
   argoNamespace: "argo"
   argocdNamespace: "argocd"
   workloadIngressUrl: ""
+  # CHG-2026-04-25-E2E (Gap 1): keys consumed by api/internal/config/config.go
+  # but missing from chart. Without these, controller pod fails validation
+  # with "LOOPZERO_CLUSTER_ISSUER is required".
+  clusterIssuer: ""              # REQUIRED. loopzero-ca-issuer (dev) | letsencrypt-prod (prod)
+  argocdInsecure: "false"        # If "true", talk to ArgoCD over HTTP (dev only)
+  jwksUrl: ""                    # JWKS URL for JWT validation (Hydra public)
+  jwtIssuer: ""                  # Expected JWT issuer claim
+  disableLegacyLoops: "false"    # H1 toggle
+  admissionControl: "false"      # Sprint 6 admission policy enforcement
+  maxConcurrentBuildsPerCell: "100"
+  maxTenantsPerCell: "1000"
+  maxConcurrentBuildsPerTenant: "10"
+
+# CHG-2026-04-25-E2E (Gap 9): map of arbitrary env vars to inject into the
+# controller pod. Used by the installer to override constants like
+# LOOPZERO_PACKS_IMAGE / LOOPZERO_COSIGN_IMAGE without modifying the chart code.
+# Empty by default — installer or customer values.yaml may populate.
+env: {}
 
 secrets:
   create: true
