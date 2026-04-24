@@ -2,7 +2,7 @@ apiVersion: v2
 name: loopzero-controller
 description: LoopZero PaaS background loops controller (build reconcile, release convergence, reapers, event pruning)
 type: application
-version: 0.1.4
+version: 0.1.5
 appVersion: "dev"
 home: https://github.com/loopzero/loopzero
 sources:

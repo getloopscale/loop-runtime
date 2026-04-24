@@ -2,7 +2,7 @@ apiVersion: v2
 name: loopzero-admission-policies
 description: LoopZero platform ValidatingAdmissionPolicies for workload security
 type: application
-version: 0.1.4
+version: 0.1.5
 appVersion: "dev"
 home: https://github.com/loopzero/loopzero
 sources:
