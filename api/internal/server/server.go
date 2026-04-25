@@ -64,6 +64,7 @@ type Config struct {
 	RollbackHandler         *routes.RollbackHandler
 	PromoteHandler          *routes.PromoteHandler
 	StatusHandler           *routes.StatusHandler
+	ScaleHandler            *routes.ScaleHandler
 	BuildListHandler        *routes.BuildListHandler
 	SecretK8sSync           routes.SecretK8sSync
 	EnvironmentHandler      *routes.EnvironmentHandler

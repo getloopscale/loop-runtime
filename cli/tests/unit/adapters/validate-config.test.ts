@@ -1072,5 +1072,24 @@ describe('validateConfig', () => {
       const cdErr = errors.find(e => e.field.includes('cooldown'));
       expect(cdErr).toBeUndefined();
     });
+
+    it('warns on unknown autoscaling sub-field', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: 1, max: 5, targetCPU: 80, bogusField: 42 } as any,
+          },
+        },
+      };
+      const { warnings } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const w = warnings.find(w => w.includes('bogusField'));
+      expect(w).toBeDefined();
+      expect(w).toContain('autoscaling.bogusField');
+    });
   });
 });

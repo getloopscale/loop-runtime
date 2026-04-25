@@ -31,6 +31,15 @@ type StatusBuild struct {
 	FinishedAt      *time.Time
 	DurationSeconds *int
 	ErrorMessage    string
+	Scaling         *StatusBuildScaling // Autoscaling config from the build's app spec (nil = no autoscaling)
+}
+
+// StatusBuildScaling holds the autoscaling configuration extracted from the build's
+// apps_spec. Used to populate the scaling field in the status response.
+// Replicas = MinReplicas (configured baseline); actual count requires K8s API (future).
+type StatusBuildScaling struct {
+	MinReplicas int
+	MaxReplicas int
 }
 
 // StatusReleaseStore abstracts active release retrieval for the status handler (DIP).
@@ -189,6 +198,24 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 			CreatedAt: release.CreatedAt.UTC().Format(time.RFC3339),
 		}
 		resp.SyncStatus = "synced"
+	}
+
+	// Scaling info — extracted from the last build's app spec.
+	// Uses configured min/max replicas. Actual replica count requires K8s API (future).
+	if resp.LastBuild != nil {
+		for i := range builds {
+			if builds[i].Environment == env && builds[i].Scaling != nil {
+				s := builds[i].Scaling
+				replicas := s.MinReplicas
+				resp.Scaling = &scalingStatusResponse{
+					Replicas:     replicas,
+					Min:          s.MinReplicas,
+					Max:          s.MaxReplicas,
+					ScaledToZero: s.MinReplicas == 0 && s.MaxReplicas > 0,
+				}
+				break
+			}
+		}
 	}
 
 	// Build URL

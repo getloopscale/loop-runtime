@@ -247,6 +247,16 @@ export function validateConfig(
           });
         }
       }
+
+      // Detect unknown autoscaling sub-fields
+      const knownAutoscalingFields = new Set(['min', 'max', 'targetCPU', 'cooldown']);
+      if (typeof as === 'object' && as !== null) {
+        for (const key of Object.keys(as)) {
+          if (!knownAutoscalingFields.has(key)) {
+            warnings.push(`Unknown field 'apps.${name}.autoscaling.${key}' -- ignored`);
+          }
+        }
+      }
     }
 
     // Mutual exclusion (MEET-059 Constraint 7): replicas and autoscaling set together

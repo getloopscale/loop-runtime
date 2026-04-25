@@ -20,6 +20,7 @@ import {
   createDockerRegistryPullSecret,
 } from "./bootstrap-shared";
 import { installESO } from "./runtime-eso";
+import { installKeda, installKedaHttpAddon } from "./runtime-keda";
 import { installRuntimeMonitoring } from "./runtime-monitoring";
 
 // ---------------------------------------------------------------------------
@@ -81,6 +82,10 @@ export function bootstrapRuntimeCluster(
 
   // External Secrets Operator
   installESO(provider, infra);
+
+  // KEDA — event-driven autoscaler for scale-to-zero tenant apps
+  const keda = installKeda("runtime", provider, ns);
+  installKedaHttpAddon("runtime", provider, keda);
 
   // ESO writer RBAC for loopzero-api
   const esoWriterRole = new k8s.rbac.v1.ClusterRole(
@@ -172,6 +177,10 @@ export function bootstrapRuntimeCluster2(
     provider,
     { write: false, dependsOn: [ns] },
   );
+
+  // KEDA — event-driven autoscaler for scale-to-zero tenant apps
+  const keda2 = installKeda("runtime-2", provider, ns);
+  installKedaHttpAddon("runtime-2", provider, keda2);
 
   return {
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),
