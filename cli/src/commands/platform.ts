@@ -165,11 +165,11 @@ export async function platformInstall(
   writeTo('');
 
   // ── Step 5: Install CRDs + ClusterIssuer ──────────────────────────
-  writeTo('Step 5/10: Installing CRDs and cert-manager ClusterIssuer...');
+  writeTo('Step 5/10: Installing platform resources and TLS issuer...');
   try {
     installCRDs(writeTo);
   } catch (err) {
-    writeError(`CRD installation failed: ${err}`);
+    writeError(`Platform resource installation failed: ${err}`);
     return 1;
   }
 
@@ -198,8 +198,8 @@ export async function platformInstall(
     writeTo,
   );
   if (!giteaToken) {
-    writeError('Gitea bootstrap failed — token required for platform operation');
-    writeError('  Check: kubectl logs -n gitea deploy/gitea');
+    writeError('Platform bootstrap failed — internal service token required for operation.');
+    writeError('  Check platform logs: kubectl logs -n loopzero-system deploy/loopzero-git');
     return 1;
   }
 

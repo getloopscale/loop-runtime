@@ -176,8 +176,8 @@ export class ScaleCommand {
       }
     }
     this.deps.writeTo('');
-    this.deps.writeTo('Scaling applied. Changes will take effect on the next deploy.');
-    this.deps.writeTo('Run `loopzero deploy` to apply immediately.');
+    this.deps.writeTo('Scaling configuration acknowledged. Changes take effect on the next deploy.');
+    this.deps.writeTo('Update autoscaling in loopzero.yaml, then run `loopzero deploy`.');
 
     return 0;
   }

@@ -41,8 +41,8 @@ func TestScale_HappyPath_Autoscaling(t *testing.T) {
 
 	h.Scale(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d body=%s", w.Code, w.Body.String())
 	}
 
 	var resp scaleResponse
@@ -52,8 +52,8 @@ func TestScale_HappyPath_Autoscaling(t *testing.T) {
 	if resp.App != "api" {
 		t.Errorf("want app=api, got %s", resp.App)
 	}
-	if resp.Status != "applied" {
-		t.Errorf("want status=applied, got %s", resp.Status)
+	if resp.Status != "acknowledged" {
+		t.Errorf("want status=acknowledged, got %s", resp.Status)
 	}
 	if resp.Autoscaling == nil {
 		t.Fatal("expected autoscaling in response")
@@ -87,8 +87,8 @@ func TestScale_HappyPath_FixedReplicas(t *testing.T) {
 
 	h.Scale(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d body=%s", w.Code, w.Body.String())
 	}
 
 	var resp scaleResponse
@@ -227,8 +227,8 @@ func TestScale_DefaultEnvironment(t *testing.T) {
 
 	h.Scale(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d body=%s", w.Code, w.Body.String())
 	}
 
 	var resp scaleResponse

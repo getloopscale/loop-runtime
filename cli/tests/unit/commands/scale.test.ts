@@ -11,7 +11,7 @@ function createMockDeps(overrides: Partial<ScaleDeps> = {}): ScaleDeps {
     scale: jest.fn().mockResolvedValue({
       app: 'api',
       replicas: 3,
-      status: 'applied',
+      status: 'acknowledged',
     }),
     writeTo: jest.fn(),
     writeError: jest.fn(),
@@ -50,7 +50,7 @@ describe('ScaleCommand', () => {
         scale: jest.fn().mockResolvedValue({
           app: 'api',
           autoscaling: { min: 2, max: 10, cpu_target: 80 },
-          status: 'applied',
+          status: 'acknowledged',
         }),
       });
       const cmd = new ScaleCommand(deps);
@@ -78,7 +78,7 @@ describe('ScaleCommand', () => {
       expect(parsed.app).toBe('api');
       expect(parsed.environment).toBe('production');
       expect(parsed.replicas).toBe(3);
-      expect(parsed.status).toBe('applied');
+      expect(parsed.status).toBe('acknowledged');
     });
 
     it('should return JSON with autoscaling config', async () => {
@@ -86,7 +86,7 @@ describe('ScaleCommand', () => {
         scale: jest.fn().mockResolvedValue({
           app: 'api',
           autoscaling: { min: 2, max: 10, cpu_target: 80 },
-          status: 'applied',
+          status: 'acknowledged',
         }),
       });
       const cmd = new ScaleCommand(deps);
@@ -329,7 +329,7 @@ describe('ScaleCommand', () => {
         scale: jest.fn().mockResolvedValue({
           app: 'api',
           autoscaling: { min: 0, max: 5, cpu_target: 80, cooldown: 300 },
-          status: 'applied',
+          status: 'acknowledged',
         }),
       });
       const cmd = new ScaleCommand(deps);
@@ -345,7 +345,7 @@ describe('ScaleCommand', () => {
         scale: jest.fn().mockResolvedValue({
           app: 'api',
           autoscaling: { min: 0, max: 5, cpu_target: 80, cooldown: 600 },
-          status: 'applied',
+          status: 'acknowledged',
         }),
       });
       const cmd = new ScaleCommand(deps);
@@ -363,7 +363,7 @@ describe('ScaleCommand', () => {
         scale: jest.fn().mockResolvedValue({
           app: 'api',
           autoscaling: { min: 1, max: 5, cpu_target: 80 },
-          status: 'applied',
+          status: 'acknowledged',
         }),
       });
       const cmd = new ScaleCommand(deps);
@@ -379,7 +379,7 @@ describe('ScaleCommand', () => {
         scale: jest.fn().mockResolvedValue({
           app: 'api',
           autoscaling: { min: 0, max: 5, cpu_target: 80, cooldown: 300 },
-          status: 'applied',
+          status: 'acknowledged',
         }),
       });
       const cmd = new ScaleCommand(deps);

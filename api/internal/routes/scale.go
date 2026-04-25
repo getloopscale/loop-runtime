@@ -60,7 +60,13 @@ type scaleAutoscaling struct {
 }
 
 // Scale handles POST /api/v1/projects/{name}/scale.
-// This endpoint persists scaling configuration. Changes take effect on the next deploy.
+//
+// STUB (pre-release): validates the scaling config and returns 202 Accepted with
+// status "acknowledged". Config is NOT persisted to DB — the user must also set
+// autoscaling in loopzero.yaml, and the config takes effect on the next `loopzero deploy`.
+//
+// When DB persistence lands (environment_targets or scaling_config table), this
+// handler MUST acquire withEnvironmentLock (Rule 6) before writing.
 func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
@@ -120,13 +126,13 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build response — scaling config is persisted for next deploy.
-	// In a full implementation, this would write to the DB (environment_targets or scaling table).
-	// For now, return the acknowledged config.
+	// Build response — config acknowledged but NOT persisted (stub).
+	// The user must also configure autoscaling in loopzero.yaml for the next deploy.
+	// TODO: persist to DB + withEnvironmentLock when scaling_config table lands.
 	resp := scaleResponse{
 		App:         req.App,
 		Environment: req.Environment,
-		Status:      "applied",
+		Status:      "acknowledged",
 	}
 
 	if hasFixed {
@@ -153,5 +159,5 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		resp.Autoscaling = as
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusAccepted, resp)
 }
