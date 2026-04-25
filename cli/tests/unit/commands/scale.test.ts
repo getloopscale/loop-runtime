@@ -322,4 +322,74 @@ describe('ScaleCommand', () => {
       }
     });
   });
+
+  describe('scale-to-zero (KEDA)', () => {
+    it('should accept --min 0 --max 5', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockResolvedValue({
+          app: 'api',
+          autoscaling: { min: 0, max: 5, cpu_target: 80, cooldown: 300 },
+          status: 'applied',
+        }),
+      });
+      const cmd = new ScaleCommand(deps);
+
+      const exitCode = await cmd.execute({ app: 'api', min: 0, max: 5, cpu: 80 });
+
+      expect(exitCode).toBe(0);
+      expect(deps.scale).toHaveBeenCalledWith('my-app', 'production', 'api', { min: 0, max: 5, cpu: 80 });
+    });
+
+    it('should show scale-to-zero info when min is 0', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockResolvedValue({
+          app: 'api',
+          autoscaling: { min: 0, max: 5, cpu_target: 80, cooldown: 600 },
+          status: 'applied',
+        }),
+      });
+      const cmd = new ScaleCommand(deps);
+
+      await cmd.execute({ app: 'api', min: 0, max: 5, cpu: 80 });
+
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Scale-to-zero: enabled');
+      expect(output).toContain('cooldown: 600s');
+      expect(output).toContain('cold start');
+    });
+
+    it('should not show scale-to-zero info when min > 0', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockResolvedValue({
+          app: 'api',
+          autoscaling: { min: 1, max: 5, cpu_target: 80 },
+          status: 'applied',
+        }),
+      });
+      const cmd = new ScaleCommand(deps);
+
+      await cmd.execute({ app: 'api', min: 1, max: 5, cpu: 80 });
+
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).not.toContain('Scale-to-zero');
+    });
+
+    it('should not mention KEDA in any output', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockResolvedValue({
+          app: 'api',
+          autoscaling: { min: 0, max: 5, cpu_target: 80, cooldown: 300 },
+          status: 'applied',
+        }),
+      });
+      const cmd = new ScaleCommand(deps);
+
+      await cmd.execute({ app: 'api', min: 0, max: 5, cpu: 80 });
+
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).not.toContain('KEDA');
+      expect(output).not.toContain('ScaledObject');
+      expect(output).not.toContain('HTTPScaledObject');
+    });
+  });
 });

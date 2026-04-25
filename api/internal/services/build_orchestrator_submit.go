@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/metrics"
@@ -64,7 +65,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		// This is the authoritative gate covering BOTH the CLI deploy path and
 		// the GitHub App auto-deploy path — bypass here means a plan-cap
 		// enforcement hole (MEET-2026-04-23-059 Constraint 6).
-		if err := enforceScaling(req.Apps, o.planCap, req.TenantID); err != nil {
+		if err := enforceScaling(req.Apps, o.planCap, req.TenantID, o.kedaEnabled); err != nil {
 			return err
 		}
 
@@ -224,10 +225,20 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 // B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059) Constraint 6: the check MUST
 // live in SubmitBuild so both CLI and GitHub App auto-deploy paths are covered.
 // A nil checker disables enforcement (dev / legacy callsites).
-func enforceScaling(apps []AppSpec, checker PlanCapChecker, tenantID string) error {
+func enforceScaling(apps []AppSpec, checker PlanCapChecker, tenantID string, kedaEnabled bool) error {
 	for _, a := range apps {
 		hasReplicas := a.Replicas > 0
 		hasAutoscaling := a.Autoscaling != nil
+
+		// KEDA gate: scale-to-zero (min=0) requires KEDA to be enabled on the cluster.
+		if hasAutoscaling && a.Autoscaling.MinReplicas == 0 && a.Autoscaling.MaxReplicas > 0 && !kedaEnabled {
+			return loopzeroerrors.NewLoopZeroError(
+				"SCALE_TO_ZERO_UNAVAILABLE",
+				fmt.Sprintf("App '%s': scale-to-zero is not available on this cluster. Use min >= 1 for autoscaling, or contact support to enable scale-to-zero.", a.Name),
+				http.StatusBadRequest,
+			)
+		}
+
 		if hasReplicas && hasAutoscaling {
 			// B15: observe mutual-exclusion rejections under the same metric so
 			// dashboards show a single plan-enforcement signal.

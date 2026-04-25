@@ -58,6 +58,19 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 		},
 	}
 
+	// When scale-to-zero is enabled, route traffic through the KEDA HTTP Add-on
+	// interceptor proxy. The interceptor holds requests while scaling from 0→1,
+	// then proxies to the real app service once the pod is ready.
+	// When scale-to-zero is NOT enabled, route directly to the app service.
+	serviceTarget := traefikRouteService{Name: app.Name, Port: port}
+	if isScaleToZero(app.Autoscaling) {
+		serviceTarget = traefikRouteService{
+			Name:      "keda-add-ons-http-interceptor-proxy",
+			Namespace: "keda",
+			Port:      8080,
+		}
+	}
+
 	ingress := traefikIngressRoute{
 		APIVersion: "traefik.io/v1alpha1",
 		Kind:       "IngressRoute",
@@ -72,7 +85,7 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 				{
 					Match:    fmt.Sprintf("Host(`%s`)", hostname),
 					Kind:     "Rule",
-					Services: []traefikRouteService{{Name: app.Name, Port: port}},
+					Services: []traefikRouteService{serviceTarget},
 				},
 			},
 			TLS: &traefikTLS{SecretName: tlsSecretName},
@@ -114,6 +127,16 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 		}
 
 		// IngressRoute always needed — Traefik must match Host() for routing
+		// Custom domain IngressRoute also routes through interceptor for scale-to-zero
+		cdServiceTarget := traefikRouteService{Name: app.Name, Port: port}
+		if isScaleToZero(app.Autoscaling) {
+			cdServiceTarget = traefikRouteService{
+				Name:      "keda-add-ons-http-interceptor-proxy",
+				Namespace: "keda",
+				Port:      8080,
+			}
+		}
+
 		cdIngress := traefikIngressRoute{
 			APIVersion: "traefik.io/v1alpha1",
 			Kind:       "IngressRoute",
@@ -131,7 +154,7 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 					{
 						Match:    fmt.Sprintf("Host(`%s`)", cd.Domain),
 						Kind:     "Rule",
-						Services: []traefikRouteService{{Name: app.Name, Port: port}},
+						Services: []traefikRouteService{cdServiceTarget},
 					},
 				},
 			},

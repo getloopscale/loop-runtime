@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025-2026 The LoopZero Authors
+#
+# KEDA production overrides (DigitalOcean workload cluster).
+# Usage: helm upgrade --install keda loopzero-keda -f values.yaml -f values.production.yaml
+
+keda:
+  # ---------------------------------------------------------------------------
+  # Operator -- HA (2 replicas with leader election)
+  # ---------------------------------------------------------------------------
+  operator:
+    replicaCount: 2
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "1000m"
+        memory: "512Mi"
+
+  # ---------------------------------------------------------------------------
+  # Metrics Server -- HA (2 replicas)
+  # ---------------------------------------------------------------------------
+  metricsServer:
+    replicaCount: 2
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+
+  # ---------------------------------------------------------------------------
+  # Webhooks -- production sizing
+  # ---------------------------------------------------------------------------
+  webhooks:
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+
+  # ---------------------------------------------------------------------------
+  # PodDisruptionBudgets -- ensure availability during node drains
+  # ---------------------------------------------------------------------------
+  podDisruptionBudget:
+    operator:
+      enabled: true
+      minAvailable: 1
+    metricServer:
+      enabled: true
+      minAvailable: 1

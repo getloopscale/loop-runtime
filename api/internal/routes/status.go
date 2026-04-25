@@ -88,14 +88,23 @@ type activeReleaseResponse struct {
 	CreatedAt string `json:"created_at"`
 }
 
+// scalingStatusResponse is the scaling info in the status response.
+type scalingStatusResponse struct {
+	Replicas     int  `json:"replicas"`
+	Min          int  `json:"min"`
+	Max          int  `json:"max"`
+	ScaledToZero bool `json:"scaled_to_zero"`
+}
+
 // statusResponse is the JSON response for GET /api/v1/projects/{name}/status.
 type statusResponse struct {
-	Project       string                `json:"project"`
-	Environment   string                `json:"environment"`
-	LastBuild     *lastBuildResponse    `json:"last_build"`
+	Project       string                 `json:"project"`
+	Environment   string                 `json:"environment"`
+	LastBuild     *lastBuildResponse     `json:"last_build"`
 	ActiveRelease *activeReleaseResponse `json:"active_release"`
-	SyncStatus    string                `json:"sync_status"`
-	URL           string                `json:"url"`
+	SyncStatus    string                 `json:"sync_status"`
+	URL           string                 `json:"url"`
+	Scaling       *scalingStatusResponse `json:"scaling,omitempty"`
 }
 
 // Get handles GET /api/v1/projects/{name}/status?env={env}.

@@ -198,10 +198,18 @@ export function validateConfig(
       const min = as.min;
       const max = as.max;
       const targetCPU = as.targetCPU;
-      if (min !== undefined && (typeof min !== 'number' || !Number.isInteger(min) || min < 1)) {
+      if (min !== undefined && (typeof min !== 'number' || !Number.isInteger(min) || min < 0)) {
         errors.push({
           field: `apps.${name}.autoscaling.min`,
-          message: `App '${name}': autoscaling.min must be an integer >= 1 (got ${JSON.stringify(min)}).`,
+          message: `App '${name}': autoscaling.min must be an integer >= 0 (got ${JSON.stringify(min)}).`,
+        });
+      }
+      // Scale-to-zero (min: 0) is not supported for workers — they don't receive
+      // HTTP traffic, so there's no trigger to wake them up.
+      if (min === 0 && appType === 'worker') {
+        errors.push({
+          field: `apps.${name}.autoscaling.min`,
+          message: `App '${name}': autoscaling.min = 0 (scale-to-zero) is not supported for workers. Workers don't receive HTTP traffic for wake-up. Use min >= 1.`,
         });
       }
       if (max !== undefined && (typeof max !== 'number' || !Number.isInteger(max) || max < 1)) {
@@ -227,6 +235,15 @@ export function validateConfig(
           errors.push({
             field: `apps.${name}.autoscaling.targetCPU`,
             message: `App '${name}': autoscaling.targetCPU must be an integer between 1 and 100 (got ${JSON.stringify(targetCPU)}).`,
+          });
+        }
+      }
+      const cooldown = as.cooldown;
+      if (cooldown !== undefined) {
+        if (typeof cooldown !== 'number' || !Number.isInteger(cooldown) || cooldown < 30 || cooldown > 3600) {
+          errors.push({
+            field: `apps.${name}.autoscaling.cooldown`,
+            message: `App '${name}': autoscaling.cooldown must be an integer between 30 and 3600 seconds (got ${JSON.stringify(cooldown)}).`,
           });
         }
       }

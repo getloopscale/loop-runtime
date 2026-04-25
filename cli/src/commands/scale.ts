@@ -12,6 +12,7 @@ interface ScaleApiResponse {
     min: number;
     max: number;
     cpu_target: number;
+    cooldown?: number;
   };
   status: string;
 }
@@ -169,6 +170,10 @@ export class ScaleCommand {
     if (response.autoscaling) {
       this.deps.writeTo(`  Autoscaling: ${response.autoscaling.min}-${response.autoscaling.max} replicas`);
       this.deps.writeTo(`  CPU target:  ${response.autoscaling.cpu_target}%`);
+      if (response.autoscaling.min === 0) {
+        this.deps.writeTo(`  Scale-to-zero: enabled (cooldown: ${response.autoscaling.cooldown ?? 300}s)`);
+        this.deps.writeTo('  Note: First request after idle will take ~5-10s (cold start).');
+      }
     }
     this.deps.writeTo('');
     this.deps.writeTo('Scaling applied. Changes will take effect on the next deploy.');
