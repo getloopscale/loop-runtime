@@ -73,6 +73,30 @@ rules:
     resources: ["applications", "appprojects"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
+  # CHG-2026-04-25-E2E: K8s RBAC escalation prevention requires that
+  # any SA granting permissions to another SA must itself hold those
+  # permissions. The tenant-controller creates the per-build-namespace
+  # `argo-workflow-executor` Role with verbs on pods, pods/log, and
+  # workflowtaskresults — without these rules at the cluster scope the
+  # Role creation is rejected by the K8s admission with:
+  #   "user X is attempting to grant RBAC permissions not currently held"
+  # Result: BuildNamespaceReady stays False forever, the tenant Phase
+  # is stuck Provisioning, and the Environment CR never gets created
+  # → the runtime namespace doesn't exist → ArgoCD sync fails with
+  # "namespaces not found".
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "watch", "patch", "list"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflowtaskresults", "workflowtasksets"]
+    verbs: ["create", "patch", "get", "list"]
+  # Required to grant the per-tenant `loopzero-workflow-submitter` Role
+  # (created by tenant-controller in the build-{tenant} namespace) the
+  # ability to submit and reconcile Argo Workflows.
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows", "workflowtemplates", "clusterworkflowtemplates"]
+    verbs: ["create", "get", "list", "watch", "patch", "update", "delete"]
+
   # --- Events: emit Kubernetes events for observability ---
   - apiGroups: [""]
     resources: ["events"]

@@ -14,6 +14,7 @@ export {
   bootstrapGitea,
   bootstrapArgoCD,
   patchArgocdInsecure,
+  createArgoCDRepoCredentials,
   extractMinioCredentials,
   extractPostgresCredentials,
   generateSecret,

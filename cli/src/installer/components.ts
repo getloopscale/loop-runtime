@@ -11,7 +11,13 @@ import { installOrUpgrade, uninstall, test as helmTest, releaseExists } from './
  */
 const CHART_REGISTRY = 'oci://registry.digitalocean.com/loopzero-system/helm';
 const CHART_VERSION = '0.2.0';
-const IMAGE_PULL_SECRET_NAME = 'loopzero-system-pull';
+// CHG-2026-04-25-E2E: the EnvironmentController copies a pull secret named
+// EXACTLY `loopzero-system` from the `loopzero-system` namespace into each tenant
+// runtime namespace (operators/internal/controller/environment_rbac.go).
+// Using a different name here breaks image pulls in tenant namespaces with
+// "FailedToRetrieveImagePullSecret" → ImagePullBackOff, blocking deploys
+// with no actionable hint. Keep this in sync with the operator constant.
+const IMAGE_PULL_SECRET_NAME = 'loopzero-system';
 
 /**
  * For E2E smoke testing of in-flight chart changes that haven't been
@@ -174,6 +180,13 @@ function buildPlatformValues(
     'loopzero-api.config.jwtIssuer': 'http://ory-hydra-public.ory.svc.cluster.local:4444/',
     'loopzero-api.config.argoNamespace': 'argo',
     'loopzero-api.config.argocdNamespace': 'argocd',
+    // CHG-2026-04-25-E2E: LOOPZERO_CLUSTER_ISSUER must match the issuer
+    // provisioned by the installer (Step 5). Chart default is
+    // `letsencrypt-prod` which doesn't exist in dev/local clusters,
+    // causing every Certificate to get stuck on a non-existent issuer
+    // → no TLS → ingress unreachable → release never goes ACTIVE.
+    'loopzero-api.config.clusterIssuer': config.clusterIssuer
+      || (config.profile === 'production' ? 'letsencrypt-prod' : 'loopzero-ca-issuer'),
 
     // API secrets (Helm creates the K8s Secret with these values)
     'loopzero-api.secrets.databaseUrl': config.database.url || 'postgres://loopzero:loopzero@postgresql.loopzero-system.svc:5432/loopzero?sslmode=disable',

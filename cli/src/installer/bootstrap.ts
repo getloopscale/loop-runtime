@@ -280,9 +280,15 @@ export function patchArgocdInsecure(log: (msg: string) => void): void {
       `kubectl rollout restart deploy -n argocd argocd-server`,
       { stdio: 'pipe', timeout: 10_000 },
     );
-    // Wait briefly for the rollout to start (the new pod takes ~10-15s
-    // to be Ready; we don't block here, downstream waitForPods covers it).
-    execSync('sleep 5', { stdio: 'pipe' });
+    // Block until the new pod is Ready. Without this, downstream
+    // bootstrapArgoCD() races the rollout — POSTs /api/v1/session
+    // against an empty/restarting backend → "Unexpected end of JSON
+    // input" → falls back to admin password as Bearer token →
+    // controller fails with DEPLOY_SERVICE_AUTH_FAILED.
+    execSync(
+      `kubectl rollout status deploy -n argocd argocd-server --timeout=120s`,
+      { stdio: 'pipe', timeout: 130_000 },
+    );
     log('  ✓ ArgoCD insecure mode applied (HTTP on :8080, no TLS redirect)');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -320,30 +326,102 @@ export function bootstrapArgoCD(namespace: string, log: (msg: string) => void): 
   return withPortForward(
     'argocd', 'svc/argocd-server', 80,
     (localUrl) => {
-      try {
-        const body = JSON.stringify({ username: 'admin', password: pass });
-        const resp = execSync(
-          `curl -sf -X POST --max-time 10 ` +
-          `-H 'Content-Type: application/json' ` +
-          `--data '${body.replace(/'/g, "'\\''")}' ` +
-          `'${localUrl}/api/v1/session'`,
-          { encoding: 'utf-8', timeout: 15_000 },
-        );
-        const parsed = JSON.parse(resp);
-        const jwt = (parsed.token as string) || '';
-        if (jwt) {
-          log('  ✓ ArgoCD JWT obtained (Bearer-ready)');
-          return jwt;
+      // Retry the session exchange — even after rollout-status reports
+      // ready, the dex/server stack inside the pod may take a few extra
+      // seconds to accept POSTs against /api/v1/session. We retry up to
+      // 8 times × 3s = ~24s before falling back.
+      const body = JSON.stringify({ username: 'admin', password: pass });
+      const maxAttempts = 8;
+      let lastErr = '';
+      for (let i = 1; i <= maxAttempts; i++) {
+        try {
+          const resp = execSync(
+            `curl -sf -X POST --max-time 10 ` +
+            `-H 'Content-Type: application/json' ` +
+            `--data '${body.replace(/'/g, "'\\''")}' ` +
+            `'${localUrl}/api/v1/session'`,
+            { encoding: 'utf-8', timeout: 15_000 },
+          );
+          const parsed = JSON.parse(resp);
+          const jwt = (parsed.token as string) || '';
+          if (jwt) {
+            log(`  ✓ ArgoCD JWT obtained (attempt ${i}, Bearer-ready)`);
+            return jwt;
+          }
+          lastErr = 'session response missing token';
+        } catch (err) {
+          lastErr = err instanceof Error ? err.message.slice(0, 80) : String(err);
         }
-        log('  ⚠ ArgoCD session response missing token — falling back to password');
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        log(`  ⚠ ArgoCD session login failed: ${msg.slice(0, 100)}`);
+        if (i < maxAttempts) {
+          execSync('sleep 3', { stdio: 'pipe' });
+        }
       }
+      log(`  ⚠ ArgoCD session login failed after ${maxAttempts} attempts: ${lastErr}`);
       log('  ⚠ Returning password as fallback — controller may fail with DEPLOY_SERVICE_AUTH_FAILED');
       return pass;
     },
   );
+}
+
+/**
+ * Create an ArgoCD credential template that allows the in-cluster ArgoCD
+ * repo-server to clone any Gitea repo under `<giteaURL>/<org>/*` using the
+ * supplied admin token.
+ *
+ * Why this exists: when the operator (TenantController) creates an
+ * ArgoCD Application referencing a private Gitea repo, ArgoCD's repo-server
+ * tries to clone it on the next reconcile. Without credentials in the
+ * argocd namespace, the clone fails with "authentication required" and
+ * the Application stays in SYNC_UNKNOWN forever — the release never
+ * reaches ACTIVE.
+ *
+ * ArgoCD recognizes a Secret as a credential template when it has the
+ * label `argocd.argoproj.io/secret-type: repo-creds`. Any repository whose
+ * URL has the `url:` field as prefix will reuse these credentials. We
+ * register the template at the in-cluster Gitea service URL (not the
+ * external ROOT_URL) because the operator's Gitea provisioner now returns
+ * service-internal URLs (see operators/internal/gitea/real_provisioner.go).
+ *
+ * Idempotent: `kubectl create … --dry-run=client | kubectl apply` semantics.
+ */
+export function createArgoCDRepoCredentials(
+  giteaURL: string,
+  giteaUsername: string,
+  giteaToken: string,
+  log: (msg: string) => void,
+): void {
+  log('  Creating ArgoCD credential template for Gitea...');
+  // Strip trailing slash so the URL acts as a prefix match in ArgoCD.
+  const url = giteaURL.replace(/\/+$/, '');
+  const manifest = JSON.stringify({
+    apiVersion: 'v1',
+    kind: 'Secret',
+    metadata: {
+      name: 'loopzero-gitea-repo-creds',
+      namespace: 'argocd',
+      labels: {
+        'argocd.argoproj.io/secret-type': 'repo-creds',
+        'app.kubernetes.io/managed-by': 'loopzero-installer',
+      },
+    },
+    type: 'Opaque',
+    stringData: {
+      type: 'git',
+      url,
+      username: giteaUsername,
+      password: giteaToken,
+    },
+  });
+  try {
+    execSync(
+      `echo '${manifest.replace(/'/g, "'\\''")}' | kubectl apply -f -`,
+      { stdio: 'pipe', timeout: 10_000 },
+    );
+    log(`  ✓ ArgoCD credential template registered for ${url}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`  ⚠ Could not create ArgoCD credential template: ${msg.slice(0, 100)}`);
+  }
 }
 
 // ─── PostgreSQL (CloudNativePG) credentials ────────────────────────────────

@@ -32,7 +32,12 @@ DOMAIN="${DOMAIN:-test.local}"
 LOG_DIR="${LOG_DIR:-/tmp/loopzero-e2e-logs}"
 VALUES_FILE="${VALUES_FILE:-/tmp/loopzero-e2e-values.yaml}"
 APP_FIXTURE="${APP_FIXTURE:-$(cd "$(dirname "$0")/fixtures/hello-server" && pwd)}"
-APP_DOMAIN="hello.${DOMAIN}"
+# Hostname format derived from manifests/renderer.go:
+#   {tenant_id}-{project_id}-{app_name}-{environment}.{domain}
+# For the e2e fixture: tenant=tn-e2e, project=e2e-project, app=api,
+# environment=production. The ExposedRoute reports a different short form
+# (e2e-project-production.test.local) but Traefik matches the full one.
+APP_DOMAIN="tn-e2e-e2e-project-api-production.${DOMAIN}"
 
 # Expected response body from the hello-server fixture (index.js returns "ok")
 EXPECTED_BODY="${EXPECTED_BODY:-ok}"
@@ -240,6 +245,42 @@ cp -r "$APP_FIXTURE/." "$WORK/"
 cd "$WORK"
 git init -q
 git add . && git commit -q -m "init"
+
+# Register project via API: this triggers EnsureTenant on the server,
+# which creates the Tenant CR in K8s → TenantController creates the
+# ArgoCD Application CR. Without this, the deploy submits a build but
+# the gitops sync target never exists and the release stays PENDING.
+#
+# We POST directly (not `loopzero init`) so we don't overwrite the fixture's
+# loopzero.yaml — the fixture defines the apps explicitly (api on port 3000).
+PROJECT_RESP="$(curl -sf -X POST -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  "$API_URL/api/v1/projects" \
+  -d '{"name":"e2e-project","apps":[{"name":"api","type":"server","framework":"node","port":3000}]}' 2>&1 || true)"
+if echo "$PROJECT_RESP" | grep -qE '"id"|"name"|"team"'; then
+  log "  ✓ Project 'e2e-project' registered (Tenant CR will be created)"
+elif echo "$PROJECT_RESP" | grep -q "already exists\|conflict"; then
+  log "  ✓ Project 'e2e-project' already exists (idempotent)"
+else
+  log "  ✗ Project registration failed: $PROJECT_RESP"
+  fail "could not register project before deploy" 3
+fi
+
+# Wait for Tenant CR + ArgoCD Application to materialize before deploy.
+# Without this gate, the deploy may race the operator and trigger a sync
+# against an Application that doesn't exist yet (404 → PENDING retry).
+log "  Waiting for Tenant CR + ArgoCD Application..."
+deadline=$(( $(date +%s) + 60 ))
+while [ "$(date +%s)" -lt "$deadline" ]; do
+  if kubectl get application -n argocd "tn-e2e-production" >/dev/null 2>&1; then
+    log "  ✓ ArgoCD Application 'tn-e2e-production' ready"
+    break
+  fi
+  sleep 3
+done
+if ! kubectl get application -n argocd "tn-e2e-production" >/dev/null 2>&1; then
+  log "  ⚠ ArgoCD Application did not appear in 60s — will rely on convergence loop"
+fi
 
 DEPLOY_LOG="$LOG_DIR/deploy.log"
 if timeout "$DEPLOY_TIMEOUT_SEC" sh -c "cd '$WORK' && LOOPZERO_URL='$API_URL' loopzero deploy" > "$DEPLOY_LOG" 2>&1; then

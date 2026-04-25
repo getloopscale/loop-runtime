@@ -21,6 +21,7 @@ import {
   bootstrapGitea,
   bootstrapArgoCD,
   patchArgocdInsecure,
+  createArgoCDRepoCredentials,
   extractMinioCredentials,
   extractPostgresCredentials,
   generateSecret,
@@ -211,6 +212,19 @@ export async function platformInstall(
 
   // ArgoCD: extract admin password
   const argocdPassword = bootstrapArgoCD('argocd', writeTo);
+
+  // ArgoCD repo-creds template: lets ArgoCD's repo-server clone Gitea
+  // repos using the API token we just minted. Without this, ArgoCD gets
+  // "authentication required" cloning private GitOps repos and the
+  // release stays in SYNC_UNKNOWN forever. The URL is the in-cluster
+  // service address — same prefix the operator now uses (see
+  // operators/internal/gitea/real_provisioner.go).
+  createArgoCDRepoCredentials(
+    'http://gitea-http.gitea.svc.cluster.local:3000',
+    'loopzero-admin',
+    giteaToken,
+    writeTo,
+  );
 
   // MinIO: extract credentials
   const minioCreds = extractMinioCredentials(writeTo);
