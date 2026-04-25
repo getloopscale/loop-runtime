@@ -99,6 +99,28 @@ k3d cluster create "$CLUSTER_NAME" \
 kubectl get nodes >/dev/null || fail "cluster not reachable after creation" 1
 log "  ✓ Cluster up: 1 server + 1 agent"
 
+# Pre-import the Docker Hub base images that the build CWTs reference.
+# Anonymous Docker Hub pulls have a tight rate limit (100 / 6h / IP)
+# that the build pipeline trips on cold k3d clusters. Importing from
+# the host's Docker daemon avoids the in-cluster pull entirely
+# (kubelet image policy IfNotPresent → no Hub fetch).
+# If the host doesn't have these images cached either, the import
+# will pull them once and reuse for subsequent runs.
+log "  Pre-importing Docker Hub base images (rate-limit guard)..."
+HUB_IMAGES=(
+  "node:20.11.1-alpine"
+  "minio/mc:RELEASE.2025-08-13T08-35-41Z"
+)
+for img in "${HUB_IMAGES[@]}"; do
+  if ! docker image inspect "$img" >/dev/null 2>&1; then
+    log "    Pulling $img to host..."
+    docker pull "$img" >/dev/null 2>&1 || log "    ⚠ docker pull $img failed (Hub rate-limit?) — build may stall"
+  fi
+  k3d image import "$img" -c "$CLUSTER_NAME" >/dev/null 2>&1 \
+    && log "    ✓ Imported $img" \
+    || log "    ⚠ k3d image import $img failed — kubelet will fall back to Hub"
+done
+
 # ──────────────────────────────────────────────────────────────────────
 # Phase 2: loopzero platform install
 # ──────────────────────────────────────────────────────────────────────

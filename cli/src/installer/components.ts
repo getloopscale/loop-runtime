@@ -50,9 +50,13 @@ export function ensureImagePullSecret(namespace: string, log: (msg: string) => v
     // Secret doesn't exist — create it
   }
 
-  // Try doctl registry login first (refreshes docker config)
+  // Try doctl registry login first (refreshes docker config).
+  // CHG-2026-04-25-E2E: 1h TTL was insufficient — long builds (>1h
+  // wall clock, e.g. cold buildkit + many apps) outlived the token and
+  // failed mid-pipeline with `401 Unauthorized` on subsequent steps.
+  // 24h is enough for any single deploy; the token rotates each install.
   try {
-    execSync('doctl registry login --expiry-seconds 3600', { stdio: 'pipe', timeout: 30_000 });
+    execSync('doctl registry login --expiry-seconds 86400', { stdio: 'pipe', timeout: 30_000 });
   } catch {
     // doctl may not be available — try with existing docker config
   }
