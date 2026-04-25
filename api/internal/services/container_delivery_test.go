@@ -425,3 +425,200 @@ func TestContainerDelivery_Rollback_GitOpsPushFails(t *testing.T) {
 		t.Fatal("expected error when gitops push fails during rollback")
 	}
 }
+
+// CHG-2026-04-25-ATTESTATION-WIRE Phase 5 (AC-5.1):
+// when AppRelease[0] carries signature data, phaseACreateRelease must
+// persist all three columns on the release row.
+func TestPhaseACreateRelease_PersistsSignatureColumns(t *testing.T) {
+	rs := newFakeReleaseStoreContainer()
+	signedAt := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+
+	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
+		ReleaseStore:   rs,
+		EnvTargetStore: newFakeEnvTargetStoreContainer(),
+		EventStore:     &fakeEventStoreContainer{},
+		Sync:           &fakeSyncContainer{},
+		Locker:         &fakeLockerContainer{},
+		GitOps:         &fakeGitOpsContainer{commitSHA: "gitcommit123"},
+	})
+
+	build := &db.Build{
+		ID: "build-sig", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", CreatedBy: "user-1",
+	}
+	result := BuildCallbackRequest{
+		Status: "succeeded",
+		Apps: []AppRelease{
+			{
+				Name:              "api",
+				Type:              "server",
+				ImageDigestSHA256: "sha256:deadbeef",
+				ImageSignature:    "registry/api:abc@sha256:deadbeef",
+				ImageSignedAt:     &signedAt,
+			},
+		},
+		Manifests: "apiVersion: v1",
+	}
+
+	err := activator.Activate(context.Background(), build, result)
+	if err != nil {
+		t.Fatalf("Activate: %v", err)
+	}
+
+	rel, ok := rs.releases["rel-build-sig"]
+	if !ok {
+		t.Fatal("release not created")
+	}
+	if rel.ImageDigest == nil || *rel.ImageDigest != "sha256:deadbeef" {
+		t.Errorf("ImageDigest: got %v, want sha256:deadbeef", rel.ImageDigest)
+	}
+	if rel.ImageSignature == nil || *rel.ImageSignature != "registry/api:abc@sha256:deadbeef" {
+		t.Errorf("ImageSignature: got %v", rel.ImageSignature)
+	}
+	if rel.ImageSignedAt == nil || !rel.ImageSignedAt.Equal(signedAt) {
+		t.Errorf("ImageSignedAt: got %v, want %v", rel.ImageSignedAt, signedAt)
+	}
+}
+
+// AC-5.2: legacy/missing AppRelease signature fields must produce a
+// release row with all three columns NULL. The deploy must succeed.
+func TestPhaseACreateRelease_LegacyAppRelease_NullColumns(t *testing.T) {
+	rs := newFakeReleaseStoreContainer()
+
+	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
+		ReleaseStore:   rs,
+		EnvTargetStore: newFakeEnvTargetStoreContainer(),
+		EventStore:     &fakeEventStoreContainer{},
+		Sync:           &fakeSyncContainer{},
+		Locker:         &fakeLockerContainer{},
+		GitOps:         &fakeGitOpsContainer{commitSHA: "gitcommit123"},
+	})
+
+	build := &db.Build{
+		ID: "build-legacy", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", CreatedBy: "user-1",
+	}
+	// AppRelease has legacy ImageDigest (the tag) but no signature fields.
+	result := BuildCallbackRequest{
+		Status: "succeeded",
+		Apps: []AppRelease{
+			{Name: "api", Type: "server", ImageDigest: "registry/api:abc"},
+		},
+		Manifests: "apiVersion: v1",
+	}
+
+	err := activator.Activate(context.Background(), build, result)
+	if err != nil {
+		t.Fatalf("Activate: %v", err)
+	}
+
+	rel := rs.releases["rel-build-legacy"]
+	if rel.ImageDigest != nil {
+		t.Errorf("ImageDigest must be NULL for legacy release: got %v", rel.ImageDigest)
+	}
+	if rel.ImageSignature != nil {
+		t.Errorf("ImageSignature must be NULL: got %v", rel.ImageSignature)
+	}
+	if rel.ImageSignedAt != nil {
+		t.Errorf("ImageSignedAt must be NULL: got %v", rel.ImageSignedAt)
+	}
+}
+
+// AC-5.3: digest without signature must NOT set ImageSignedAt — the
+// timestamp without the signature reference is meaningless.
+func TestPhaseACreateRelease_DigestWithoutSignature_NoSignedAt(t *testing.T) {
+	rs := newFakeReleaseStoreContainer()
+	signedAt := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+
+	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
+		ReleaseStore:   rs,
+		EnvTargetStore: newFakeEnvTargetStoreContainer(),
+		EventStore:     &fakeEventStoreContainer{},
+		Sync:           &fakeSyncContainer{},
+		Locker:         &fakeLockerContainer{},
+		GitOps:         &fakeGitOpsContainer{commitSHA: "gitcommit123"},
+	})
+
+	build := &db.Build{
+		ID: "build-partial", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", CreatedBy: "user-1",
+	}
+	// Digest is set, but Signature is NOT (cosign step missing/skipped).
+	// SignedAt is provided — but must be ignored because Signature is empty.
+	result := BuildCallbackRequest{
+		Status: "succeeded",
+		Apps: []AppRelease{
+			{
+				Name:              "api",
+				ImageDigestSHA256: "sha256:abc",
+				ImageSignedAt:     &signedAt,
+			},
+		},
+		Manifests: "apiVersion: v1",
+	}
+
+	err := activator.Activate(context.Background(), build, result)
+	if err != nil {
+		t.Fatalf("Activate: %v", err)
+	}
+
+	rel := rs.releases["rel-build-partial"]
+	if rel.ImageDigest == nil || *rel.ImageDigest != "sha256:abc" {
+		t.Errorf("ImageDigest should be populated: got %v", rel.ImageDigest)
+	}
+	if rel.ImageSignature != nil {
+		t.Errorf("ImageSignature must be NULL: got %v", rel.ImageSignature)
+	}
+	if rel.ImageSignedAt != nil {
+		t.Errorf("ImageSignedAt must be NULL when Signature is empty: got %v", rel.ImageSignedAt)
+	}
+}
+
+// AC-5.4: in multi-app builds, only Apps[0]'s signature is persisted.
+// The current schema has ONE set of signature columns per release —
+// per-app attestation requires a sidecar table (out of scope per ADR-0014).
+func TestPhaseACreateRelease_MultiApp_PrimaryOnly(t *testing.T) {
+	rs := newFakeReleaseStoreContainer()
+	signedAt := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+
+	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
+		ReleaseStore:   rs,
+		EnvTargetStore: newFakeEnvTargetStoreContainer(),
+		EventStore:     &fakeEventStoreContainer{},
+		Sync:           &fakeSyncContainer{},
+		Locker:         &fakeLockerContainer{},
+		GitOps:         &fakeGitOpsContainer{commitSHA: "gitcommit123"},
+	})
+
+	build := &db.Build{
+		ID: "build-multi", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", CreatedBy: "user-1",
+	}
+	result := BuildCallbackRequest{
+		Status: "succeeded",
+		Apps: []AppRelease{
+			{
+				Name:              "api",
+				ImageDigestSHA256: "sha256:apidigest",
+				ImageSignature:    "registry/api:abc@sha256:apidigest",
+				ImageSignedAt:     &signedAt,
+			},
+			{
+				Name:              "web",
+				ImageDigestSHA256: "sha256:webdigest",
+				ImageSignature:    "registry/web:abc@sha256:webdigest",
+			},
+		},
+		Manifests: "apiVersion: v1",
+	}
+
+	err := activator.Activate(context.Background(), build, result)
+	if err != nil {
+		t.Fatalf("Activate: %v", err)
+	}
+
+	rel := rs.releases["rel-build-multi"]
+	if rel.ImageDigest == nil || *rel.ImageDigest != "sha256:apidigest" {
+		t.Errorf("expected primary (Apps[0]) digest, got %v", rel.ImageDigest)
+	}
+}

@@ -60,6 +60,12 @@ func buildServerConfig(
 		SecretK8sSync:                k8sDeps.SecretK8sSync,
 		DomainHandler:                domainHandler,
 		BuildHandler:                 buildHandler,
+		// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: wire concrete
+		// PostgresAttestationStore so /api/v1/builds/{id}/attestation
+		// returns real data (was always 404 because the store was nil).
+		BuildAttestationHandler: routes.NewBuildAttestationHandler(
+			db.NewPostgresAttestationStore(dbAdapter), logger,
+		),
 		EnvironmentHandler:           routes.NewEnvironmentHandler(k8sDeps.TenantCRMgr),
 		ShutdownCtx:                  shutdownCtx,
 		ShutdownCancel:               shutdownCancel,

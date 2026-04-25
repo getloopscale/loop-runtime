@@ -161,6 +161,13 @@ export function buildCorePrerequisites(config: PlatformConfig): HelmRelease[] {
   });
 
   // 5. ArgoCD
+  // CHG-2026-04-25-E2E: ArgoCD must run in --insecure mode in dev so that
+  // loopzero-controller can call it over HTTP (not HTTPS) without TLS verify.
+  // The chart values key has a literal dot (`server.insecure`) inside
+  // `configs.params`. Helm `--set` doesn't escape this consistently across
+  // shells. We use --set-string with a YAML-style override file in the
+  // installer's helm.ts; here we declare both paths and post-install we
+  // patch the configmap directly to guarantee `server.insecure: "true"`.
   releases.push({
     name: 'argocd',
     chart: 'argo/argo-cd',
@@ -169,7 +176,6 @@ export function buildCorePrerequisites(config: PlatformConfig): HelmRelease[] {
     createNamespace: true,
     values: {
       'server.insecure': 'true',
-      'configs.params.server\\.insecure': 'true',
     },
     waitReady: true,
     timeout: '5m',

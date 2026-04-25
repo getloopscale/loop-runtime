@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
@@ -209,9 +210,43 @@ func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, bu
 			Apps:        appsJSON,
 			Artifacts:   artifactsJSON,
 		}
+
+		// CHG-2026-04-25-ATTESTATION-WIRE Phase 5: persist supply-chain
+		// attestation columns from the first app's enriched data
+		// (Phase 4). Multi-app builds: only Apps[0] flows to the release
+		// row — multi-app per-release attestation is out of scope until
+		// admission policy needs it. Documented in ADR-0014.
+		// Defensive: only set ImageSignedAt when ImageSignature is also
+		// present (a timestamp without a signature reference is
+		// meaningless for verification).
+		if len(result.Apps) > 0 {
+			first := result.Apps[0]
+			if first.ImageDigestSHA256 != "" {
+				digest := first.ImageDigestSHA256
+				release.ImageDigest = &digest
+			}
+			if first.ImageSignature != "" {
+				sig := first.ImageSignature
+				release.ImageSignature = &sig
+			}
+			if first.ImageSignedAt != nil && first.ImageSignature != "" {
+				release.ImageSignedAt = first.ImageSignedAt
+			}
+		}
+
 		if err := c.releaseStore.Create(ctx, tx, release); err != nil {
 			return fmt.Errorf("activate release: create release: %w", err)
 		}
+
+		// CHG-2026-04-25-ATTESTATION-WIRE Phase 7: emit observability
+		// metric so dashboards can detect signing regressions even when
+		// the deploy itself stays green (signature missing != deploy
+		// failure, by design — see Phase 5 non-fatal contract).
+		signed := "false"
+		if release.ImageSignedAt != nil {
+			signed = "true"
+		}
+		metrics.ReleaseSignedTotal.WithLabelValues(build.TenantID, build.Environment, signed).Inc()
 
 		return nil
 	})

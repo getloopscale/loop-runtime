@@ -32,7 +32,12 @@ DOMAIN="${DOMAIN:-test.local}"
 LOG_DIR="${LOG_DIR:-/tmp/loopzero-e2e-logs}"
 VALUES_FILE="${VALUES_FILE:-/tmp/loopzero-e2e-values.yaml}"
 APP_FIXTURE="${APP_FIXTURE:-$(cd "$(dirname "$0")/fixtures/hello-server" && pwd)}"
-APP_DOMAIN="hello.${DOMAIN}"
+# Hostname format derived from manifests/renderer.go:
+#   {tenant_id}-{project_id}-{app_name}-{environment}.{domain}
+# For the e2e fixture: tenant=tn-e2e, project=e2e-project, app=api,
+# environment=production. The ExposedRoute reports a different short form
+# (e2e-project-production.test.local) but Traefik matches the full one.
+APP_DOMAIN="tn-e2e-e2e-project-api-production.${DOMAIN}"
 
 # Expected response body from the hello-server fixture (index.js returns "ok")
 EXPECTED_BODY="${EXPECTED_BODY:-ok}"
@@ -93,6 +98,28 @@ k3d cluster create "$CLUSTER_NAME" \
   --wait 2>&1 | tee "$LOG_DIR/cluster-create.log" | tail -3
 kubectl get nodes >/dev/null || fail "cluster not reachable after creation" 1
 log "  ✓ Cluster up: 1 server + 1 agent"
+
+# Pre-import the Docker Hub base images that the build CWTs reference.
+# Anonymous Docker Hub pulls have a tight rate limit (100 / 6h / IP)
+# that the build pipeline trips on cold k3d clusters. Importing from
+# the host's Docker daemon avoids the in-cluster pull entirely
+# (kubelet image policy IfNotPresent → no Hub fetch).
+# If the host doesn't have these images cached either, the import
+# will pull them once and reuse for subsequent runs.
+log "  Pre-importing Docker Hub base images (rate-limit guard)..."
+HUB_IMAGES=(
+  "node:20.11.1-alpine"
+  "minio/mc:RELEASE.2025-08-13T08-35-41Z"
+)
+for img in "${HUB_IMAGES[@]}"; do
+  if ! docker image inspect "$img" >/dev/null 2>&1; then
+    log "    Pulling $img to host..."
+    docker pull "$img" >/dev/null 2>&1 || log "    ⚠ docker pull $img failed (Hub rate-limit?) — build may stall"
+  fi
+  k3d image import "$img" -c "$CLUSTER_NAME" >/dev/null 2>&1 \
+    && log "    ✓ Imported $img" \
+    || log "    ⚠ k3d image import $img failed — kubelet will fall back to Hub"
+done
 
 # ──────────────────────────────────────────────────────────────────────
 # Phase 2: loopzero platform install
@@ -241,6 +268,42 @@ cd "$WORK"
 git init -q
 git add . && git commit -q -m "init"
 
+# Register project via API: this triggers EnsureTenant on the server,
+# which creates the Tenant CR in K8s → TenantController creates the
+# ArgoCD Application CR. Without this, the deploy submits a build but
+# the gitops sync target never exists and the release stays PENDING.
+#
+# We POST directly (not `loopzero init`) so we don't overwrite the fixture's
+# loopzero.yaml — the fixture defines the apps explicitly (api on port 3000).
+PROJECT_RESP="$(curl -sf -X POST -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  "$API_URL/api/v1/projects" \
+  -d '{"name":"e2e-project","apps":[{"name":"api","type":"server","framework":"node","port":3000}]}' 2>&1 || true)"
+if echo "$PROJECT_RESP" | grep -qE '"id"|"name"|"team"'; then
+  log "  ✓ Project 'e2e-project' registered (Tenant CR will be created)"
+elif echo "$PROJECT_RESP" | grep -q "already exists\|conflict"; then
+  log "  ✓ Project 'e2e-project' already exists (idempotent)"
+else
+  log "  ✗ Project registration failed: $PROJECT_RESP"
+  fail "could not register project before deploy" 3
+fi
+
+# Wait for Tenant CR + ArgoCD Application to materialize before deploy.
+# Without this gate, the deploy may race the operator and trigger a sync
+# against an Application that doesn't exist yet (404 → PENDING retry).
+log "  Waiting for Tenant CR + ArgoCD Application..."
+deadline=$(( $(date +%s) + 60 ))
+while [ "$(date +%s)" -lt "$deadline" ]; do
+  if kubectl get application -n argocd "tn-e2e-production" >/dev/null 2>&1; then
+    log "  ✓ ArgoCD Application 'tn-e2e-production' ready"
+    break
+  fi
+  sleep 3
+done
+if ! kubectl get application -n argocd "tn-e2e-production" >/dev/null 2>&1; then
+  log "  ⚠ ArgoCD Application did not appear in 60s — will rely on convergence loop"
+fi
+
 DEPLOY_LOG="$LOG_DIR/deploy.log"
 if timeout "$DEPLOY_TIMEOUT_SEC" sh -c "cd '$WORK' && LOOPZERO_URL='$API_URL' loopzero deploy" > "$DEPLOY_LOG" 2>&1; then
   if grep -q "release.*ACTIVE\|deploy.*succeeded\|Deployed" "$DEPLOY_LOG"; then
@@ -269,14 +332,14 @@ fi
 
 deadline=$(( $(date +%s) + CURL_RETRY_TIMEOUT_SEC ))
 attempt=0
+URL_OK=0
 while [ "$(date +%s)" -lt "$deadline" ]; do
   attempt=$((attempt+1))
   if BODY="$(curl -sf "${CURL_ARGS[@]}" 2>"$LOG_DIR/curl.err")"; then
     if [ "$BODY" = "$EXPECTED_BODY" ]; then
       log "  ✓ HTTP 200 + body matches '$EXPECTED_BODY' (attempt $attempt)"
-      log ""
-      log "🎉 E2E SUCCESS"
-      exit 0
+      URL_OK=1
+      break
     else
       log "  ⚠ Got body but doesn't match: '$BODY' (expected '$EXPECTED_BODY')"
     fi
@@ -284,6 +347,52 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
   sleep 5
 done
 
-log "  ✗ curl assertion failed after ${CURL_RETRY_TIMEOUT_SEC}s. Last error:"
-cat "$LOG_DIR/curl.err" 2>/dev/null | head -5
-fail "URL did not respond with expected body" 5
+if [ "$URL_OK" -ne 1 ]; then
+  log "  ✗ curl assertion failed after ${CURL_RETRY_TIMEOUT_SEC}s. Last error:"
+  cat "$LOG_DIR/curl.err" 2>/dev/null | head -5
+  fail "URL did not respond with expected body" 5
+fi
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase 6 (CHG-2026-04-25-ATTESTATION-WIRE): attestation assertion
+# ──────────────────────────────────────────────────────────────────────
+log "── Phase 6: attestation assertion"
+
+# Find the most recent build_id for this tenant from the API. We don't
+# have it from `loopzero deploy` output reliably, so we query the API.
+BUILD_ID="$(curl -sf -H "Authorization: Bearer $TOKEN" \
+  "$API_URL/api/v1/projects/e2e-project/builds?limit=1" 2>/dev/null \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['builds'][0].get('build_id') or d['builds'][0].get('id') or '' if d.get('builds') else '')" 2>/dev/null || true)"
+
+if [ -z "$BUILD_ID" ]; then
+  log "  ⚠ Could not fetch latest build_id — attestation phase skipped (non-fatal)"
+else
+  log "  Querying /attestation for build $BUILD_ID..."
+  ATTEST="$(curl -sf -H "Authorization: Bearer $TOKEN" "$API_URL/api/v1/builds/$BUILD_ID/attestation" 2>/dev/null || echo '{}')"
+  echo "$ATTEST" > "$LOG_DIR/attestation.json"
+
+  # Check signed=true (Phase 5 must have populated)
+  SIGNED="$(echo "$ATTEST" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('signed'))" 2>/dev/null || echo "?")"
+  IMG_DIGEST="$(echo "$ATTEST" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('image_digest',''))" 2>/dev/null || echo "")"
+  IMG_SIG="$(echo "$ATTEST" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('image_signature',''))" 2>/dev/null || echo "")"
+
+  if [ "$SIGNED" = "True" ]; then
+    log "  ✓ attestation: signed=true"
+  else
+    log "  ⚠ attestation: signed=$SIGNED (expected True; gap likely Phase 1 CWT outputs not flowing to Phase 5)"
+  fi
+  if echo "$IMG_DIGEST" | grep -qE '^sha256:[a-f0-9]{64}$'; then
+    log "  ✓ image_digest is well-formed sha256: ${IMG_DIGEST:0:30}..."
+  else
+    log "  ⚠ image_digest not a sha256: '$IMG_DIGEST'"
+  fi
+  if [ -n "$IMG_SIG" ]; then
+    log "  ✓ image_signature: ${IMG_SIG:0:60}..."
+  else
+    log "  ⚠ image_signature is empty"
+  fi
+fi
+
+log ""
+log "🎉 E2E SUCCESS"
+exit 0

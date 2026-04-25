@@ -67,7 +67,7 @@ func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build
 
 	switch status.Phase {
 	case "Succeeded":
-		r.onWorkflowSucceeded(ctx, build)
+		r.onWorkflowSucceeded(ctx, build, status)
 	case "Failed", "Error":
 		// Only treat Failed/Error as terminal when the workflow has actually
 		// finished (FinishedAt set). Argo Workflows can transiently report

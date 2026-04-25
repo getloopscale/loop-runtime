@@ -187,12 +187,14 @@ func makeBuildRowValues(b Build) []any {
 }
 
 // makeReleaseRowValues creates a release row values slice matching scanRelease order.
+// CHG-2026-04-25-ATTESTATION-WIRE: includes the 3 nullable signature columns.
 func makeReleaseRowValues(r Release) []any {
 	return []any{
 		r.ID, r.BuildID, r.TenantID, r.ProjectID, r.Environment,
 		r.Status, r.CorrelationID, r.CreatedBy,
 		r.CreatedAt, r.GitCommit, r.GitMirrorStatus,
 		r.Apps, r.Artifacts, r.SideEffects,
+		r.ImageDigest, r.ImageSignature, r.ImageSignedAt,
 	}
 }
 

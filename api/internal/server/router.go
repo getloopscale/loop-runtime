@@ -229,6 +229,13 @@ func registerProtectedRoutes(
 		r.With(rateLimitMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
 	}
 
+	// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: supply-chain attestation
+	// endpoint. Returns the cosign signature reference + sha256 digest
+	// for a build's release. Behind requireAuth (parent group middleware).
+	if cfg.BuildAttestationHandler != nil {
+		r.Get("/api/v1/builds/{id}/attestation", cfg.BuildAttestationHandler.Get)
+	}
+
 	if cfg.LogsHandler != nil {
 		r.Get("/api/v1/builds/{id}/logs", cfg.LogsHandler.Get)
 	}

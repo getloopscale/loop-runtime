@@ -16,6 +16,14 @@ import (
 type WorkflowStatus struct {
 	Phase      string // "Succeeded", "Failed", "Running", "Pending", ""
 	FinishedAt string // RFC3339 timestamp when workflow reached terminal state; empty while in-flight.
+
+	// CHG-2026-04-25-ATTESTATION-WIRE: per-step output parameters captured
+	// from `status.nodes[*].outputs.parameters[]` on the Argo Workflow CR.
+	// Outer key is the node displayName (which equals the step template
+	// name, e.g., "sign-image-api", "build-image-api"). Inner key is the
+	// parameter name (e.g., "signature", "digest"). Empty/nil if the
+	// workflow declared no outputs (legacy or non-build workflows).
+	Outputs map[string]map[string]string
 }
 
 // WorkflowSubmitter abstracts Argo Workflows submission (DIP -- no direct coupling).
@@ -108,11 +116,20 @@ type GitOpsRemoveOpts struct {
 // AppRelease describes a built app with its image digest and URL.
 type AppRelease struct {
 	Name        string `json:"name"`
-	ImageDigest string `json:"image_digest"`
+	ImageDigest string `json:"image_digest"` // legacy: this is actually the image TAG (e.g., registry/org/app:commit), NOT the cryptographic digest. See ImageDigestSHA256 below for the real sha256.
 	URL         string `json:"url"`
 	Type        string `json:"type,omitempty"`      // "server", "worker", "frontend"
 	Rendering   string `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
 	DurationMs  int    `json:"duration_ms"`
+
+	// CHG-2026-04-25-ATTESTATION-WIRE: supply-chain attestation fields
+	// surfaced from Argo workflow output parameters by the reconciler.
+	// Empty/nil when the workflow declared no outputs (legacy or
+	// non-build workflows). The deploy must NOT fail when these are
+	// missing — they are observability data, not control data.
+	ImageDigestSHA256 string     `json:"image_digest_sha256,omitempty"`
+	ImageSignature    string     `json:"image_signature,omitempty"`
+	ImageSignedAt     *time.Time `json:"image_signed_at,omitempty"`
 }
 
 // SyncClient abstracts ArgoCD sync operations (DIP).

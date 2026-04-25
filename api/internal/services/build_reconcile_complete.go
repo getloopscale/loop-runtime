@@ -16,7 +16,13 @@ import (
 
 // onWorkflowSucceeded handles a completed build workflow by creating a release
 // and activating it through the standard flow (gitops push → ArgoCD sync).
-func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.Build) {
+//
+// CHG-2026-04-25-ATTESTATION-WIRE: takes the WorkflowStatus (which carries
+// per-step outputs from the Argo Workflow CR) and enriches each AppRelease
+// with the cryptographic digest + cosign signature reference. Missing
+// outputs are tolerated — workflows pre-this-change still produce valid
+// callbacks with empty signature fields.
+func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.Build, status *WorkflowStatus) {
 	r.logger.Info("reconcile loop: workflow succeeded, processing build completion",
 		"build_id", build.ID, "workflow_id", build.WorkflowID)
 
@@ -44,6 +50,14 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 			build.CommitSHA, build.Environment, r.cfg.BaseDomain, app.Type, app.Rendering,
 		))
 	}
+
+	// CHG-2026-04-25-ATTESTATION-WIRE: enrich AppRelease entries with the
+	// signature data the workflow produced. The displayName of each step
+	// follows the deterministic pattern "sign-image-{appName}" /
+	// "build-image-{appName}", established in argo/cosign.go and
+	// argo/buildkit.go. We use API insert time (not workflow finish time)
+	// for SignedAt because pod clocks are not authoritative.
+	enrichAppReleasesWithAttestation(buildApps, status)
 
 	// F-010: shared manifest building function (includes custom domains).
 	// CODE-002: errors are fatal — prevents silent IngressRoute erasure.
@@ -161,6 +175,56 @@ func (r *BuildReconcileLoop) ensureApplicationCRs(ctx context.Context, build *db
 			r.logger.Info("reconcile loop: LoopZeroApplication CR ensured",
 				"build_id", build.ID, "app", app.Name,
 				"tenant", build.TenantID, "environment", build.Environment)
+		}
+	}
+}
+
+// enrichAppReleasesWithAttestation walks `buildApps` in place and
+// populates the cosign signature + image digest fields from the
+// workflow's per-step outputs.
+//
+// CHG-2026-04-25-ATTESTATION-WIRE Phase 4:
+//   - Each app's `sign-image-{name}` step is expected to emit `signature`
+//     (the pinned image reference, e.g., registry/org/app:tag@sha256:...)
+//     and `digest` (the bare sha256:... value).
+//   - Each app's `build-image-{name}` step also emits `digest` as a
+//     defense-in-depth source.
+//   - When the signature output is present and non-empty, ImageSignedAt
+//     is set to the current API server time (NOT workflow finish time —
+//     pod clocks are not authoritative).
+//   - All fields stay at their zero value when outputs are missing
+//     (legacy workflows pre-CHG-2026-04-25-ATTESTATION-WIRE). Callers
+//     downstream (phaseACreateRelease) must handle empty fields by
+//     leaving the corresponding DB columns NULL.
+func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus) {
+	if status == nil || len(status.Outputs) == 0 {
+		return
+	}
+	for i, app := range apps {
+		signStep := "sign-image-" + app.Name
+		buildStep := "build-image-" + app.Name
+
+		if signOutputs, ok := status.Outputs[signStep]; ok {
+			if sig := signOutputs["signature"]; sig != "" {
+				apps[i].ImageSignature = sig
+				now := time.Now().UTC()
+				apps[i].ImageSignedAt = &now
+			}
+			// cosign.go writes the bare sha256 too — prefer this over
+			// build-image's digest because it was the actual input to
+			// `cosign sign`.
+			if dig := signOutputs["digest"]; dig != "" {
+				apps[i].ImageDigestSHA256 = dig
+			}
+		}
+		// Fallback: if cosign step was skipped or missing, fall back
+		// to build-image digest.
+		if apps[i].ImageDigestSHA256 == "" {
+			if buildOutputs, ok := status.Outputs[buildStep]; ok {
+				if dig := buildOutputs["digest"]; dig != "" {
+					apps[i].ImageDigestSHA256 = dig
+				}
+			}
 		}
 	}
 }

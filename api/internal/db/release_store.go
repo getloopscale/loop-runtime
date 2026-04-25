@@ -36,7 +36,28 @@ type Release struct {
 	Apps            json.RawMessage `json:"apps,omitempty"`
 	Artifacts       json.RawMessage `json:"artifacts,omitempty"`
 	SideEffects     json.RawMessage `json:"side_effects,omitempty"`
+
+	// CHG-2026-04-25-ATTESTATION-WIRE: supply-chain attestation fields.
+	// All three are populated by phaseACreateRelease when the build
+	// workflow surfaced cosign+digest outputs (Phase 1+2 of the change).
+	// NULL on legacy releases (workflows pre-this-change). Never set
+	// SignedAt without Signature — the timestamp without the signature
+	// reference is meaningless. ImageDigest is the cryptographic sha256,
+	// distinct from the legacy `image_digest` aliasing the tag in
+	// AppRelease.ImageDigest.
+	ImageDigest    *string    `json:"image_digest,omitempty"`
+	ImageSignature *string    `json:"image_signature,omitempty"`
+	ImageSignedAt  *time.Time `json:"image_signed_at,omitempty"`
 }
+
+// releaseSelectColumns is the canonical column list for SELECTs that
+// return a Release. Centralized so adding a column doesn't require
+// editing 9+ scattered query strings (CHG-2026-04-25-ATTESTATION-WIRE).
+const releaseSelectColumns = `id, build_id, tenant_id, project_id, environment, status, correlation_id,
+	        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
+	        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
+	        COALESCE(side_effects, 'null'::jsonb),
+	        image_digest, image_signature, image_signed_at`
 
 // ReleaseStore defines the interface for release persistence operations.
 type ReleaseStore interface {
@@ -84,11 +105,16 @@ func (s *PostgresReleaseStore) Create(ctx context.Context, tx DBTX, release *Rel
 	}
 	release.Status = string(statemachine.ReleaseReady)
 
+	// CHG-2026-04-25-ATTESTATION-WIRE: persist signature columns when
+	// the caller populated them (Phase 5 in container_delivery). nil
+	// pointers are passed through pgx as NULL; legacy callers that
+	// don't set them still get a working insert.
 	_, err := tx.Exec(ctx,
-		`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, apps, artifacts)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, apps, artifacts, image_digest, image_signature, image_signed_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		release.ID, release.BuildID, release.TenantID, release.ProjectID,
 		release.Environment, release.Status, release.CorrelationID, release.CreatedBy, release.Apps, release.Artifacts,
+		release.ImageDigest, release.ImageSignature, release.ImageSignedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("release store: insert failed: %w", err)
@@ -104,7 +130,8 @@ func (s *PostgresReleaseStore) GetByID(ctx context.Context, releaseID string) (*
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases WHERE id = $1`,
 		releaseID,
 	))
@@ -123,7 +150,8 @@ func (s *PostgresReleaseStore) GetByIDTx(ctx context.Context, tx DBTX, releaseID
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases WHERE id = $1`,
 		releaseID,
 	))
@@ -144,7 +172,8 @@ func (s *PostgresReleaseStore) UpdateStatus(ctx context.Context, tx DBTX, releas
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases WHERE id = $1`,
 		releaseID,
 	))
@@ -195,7 +224,8 @@ func (s *PostgresReleaseStore) GetActiveByEnv(ctx context.Context, tenantID, pro
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases
 		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND status = 'ACTIVE'
 		 ORDER BY created_at DESC
@@ -218,7 +248,8 @@ func (s *PostgresReleaseStore) GetActiveByEnvTx(ctx context.Context, tx DBTX, te
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases
 		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND status = 'ACTIVE'
 		 ORDER BY created_at ASC
@@ -242,7 +273,8 @@ func (s *PostgresReleaseStore) GetPreviousRelease(ctx context.Context, tenantID,
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases
 		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
 		   AND status IN ('SUPERSEDED', 'ROLLED_BACK')
@@ -266,7 +298,8 @@ func (s *PostgresReleaseStore) GetByIDForTenant(ctx context.Context, tenantID, r
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases WHERE id = $1 AND tenant_id = $2`,
 		releaseID, tenantID,
 	))
@@ -286,7 +319,8 @@ func (s *PostgresReleaseStore) ListByEnv(ctx context.Context, tenantID, projectI
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases
 		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
 		   AND status IN ('ACTIVE', 'SUPERSEDED', 'ROLLED_BACK')
@@ -302,12 +336,7 @@ func (s *PostgresReleaseStore) ListByEnv(ctx context.Context, tenantID, projectI
 	var releases []Release
 	for rows.Next() {
 		var r Release
-		if err := rows.Scan(
-			&r.ID, &r.BuildID, &r.TenantID, &r.ProjectID, &r.Environment,
-			&r.Status, &r.CorrelationID, &r.CreatedBy,
-			&r.CreatedAt, &r.GitCommit, &r.GitMirrorStatus,
-			&r.Apps, &r.Artifacts, &r.SideEffects,
-		); err != nil {
+		if err := scanReleaseFields(rows, &r); err != nil {
 			return nil, fmt.Errorf("release store: scan release in list: %w", err)
 		}
 		releases = append(releases, r)
@@ -322,7 +351,8 @@ func (s *PostgresReleaseStore) GetLatestByBuildID(ctx context.Context, buildID s
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases WHERE build_id = $1
 		 ORDER BY created_at DESC LIMIT 1`,
 		buildID,
@@ -350,7 +380,8 @@ func (s *PostgresReleaseStore) FindPendingReleases(ctx context.Context, cellID s
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases
 		 WHERE cell_id = $1
 		   AND status = 'PENDING'
@@ -366,12 +397,7 @@ func (s *PostgresReleaseStore) FindPendingReleases(ctx context.Context, cellID s
 	var releases []Release
 	for rows.Next() {
 		var r Release
-		if err := rows.Scan(
-			&r.ID, &r.BuildID, &r.TenantID, &r.ProjectID, &r.Environment,
-			&r.Status, &r.CorrelationID, &r.CreatedBy,
-			&r.CreatedAt, &r.GitCommit, &r.GitMirrorStatus,
-			&r.Apps, &r.Artifacts, &r.SideEffects,
-		); err != nil {
+		if err := scanReleaseFields(rows, &r); err != nil {
 			return nil, fmt.Errorf("release store: scan pending release: %w", err)
 		}
 		releases = append(releases, r)
@@ -396,7 +422,8 @@ func (s *PostgresReleaseStore) FindActiveReleases(ctx context.Context, cellID st
 		        id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases
 		 WHERE cell_id = $1
 		   AND status = 'ACTIVE'
@@ -412,12 +439,7 @@ func (s *PostgresReleaseStore) FindActiveReleases(ctx context.Context, cellID st
 	var releases []Release
 	for rows.Next() {
 		var r Release
-		if err := rows.Scan(
-			&r.ID, &r.BuildID, &r.TenantID, &r.ProjectID, &r.Environment,
-			&r.Status, &r.CorrelationID, &r.CreatedBy,
-			&r.CreatedAt, &r.GitCommit, &r.GitMirrorStatus,
-			&r.Apps, &r.Artifacts, &r.SideEffects,
-		); err != nil {
+		if err := scanReleaseFields(rows, &r); err != nil {
 			return nil, fmt.Errorf("release store: scan active release: %w", err)
 		}
 		releases = append(releases, r)
@@ -435,7 +457,8 @@ func (s *PostgresReleaseStore) FindPendingReleasesByTenantEnv(ctx context.Contex
 		`SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id,
 		        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
 		        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-		        COALESCE(side_effects, 'null'::jsonb)
+		        COALESCE(side_effects, 'null'::jsonb),
+		        image_digest, image_signature, image_signed_at
 		 FROM releases
 		 WHERE status = 'PENDING' AND tenant_id = $1 AND environment = $2
 		 ORDER BY created_at ASC`,
@@ -449,12 +472,7 @@ func (s *PostgresReleaseStore) FindPendingReleasesByTenantEnv(ctx context.Contex
 	var releases []Release
 	for rows.Next() {
 		var r Release
-		if err := rows.Scan(
-			&r.ID, &r.BuildID, &r.TenantID, &r.ProjectID, &r.Environment,
-			&r.Status, &r.CorrelationID, &r.CreatedBy,
-			&r.CreatedAt, &r.GitCommit, &r.GitMirrorStatus,
-			&r.Apps, &r.Artifacts, &r.SideEffects,
-		); err != nil {
+		if err := scanReleaseFields(rows, &r); err != nil {
 			return nil, fmt.Errorf("release store: scan pending release by tenant+env: %w", err)
 		}
 		releases = append(releases, r)
@@ -465,16 +483,26 @@ func (s *PostgresReleaseStore) FindPendingReleasesByTenantEnv(ctx context.Contex
 	return releases, nil
 }
 
-// scanRelease scans a single release row.
-// Returns ErrReleaseNotFound if the row contains no data.
-func (s *PostgresReleaseStore) scanRelease(row Row) (*Release, error) {
-	var r Release
-	err := row.Scan(
+// scanReleaseFields is the shared scan target list for any code path
+// that returns a *Release. Centralizing avoids drift across the 9+
+// SELECTs in this file (CHG-2026-04-25-ATTESTATION-WIRE).
+// The three signature columns are scanned at the end and stay nil for
+// legacy rows where they are NULL.
+func scanReleaseFields(row interface{ Scan(...any) error }, r *Release) error {
+	return row.Scan(
 		&r.ID, &r.BuildID, &r.TenantID, &r.ProjectID, &r.Environment,
 		&r.Status, &r.CorrelationID, &r.CreatedBy,
 		&r.CreatedAt, &r.GitCommit, &r.GitMirrorStatus,
 		&r.Apps, &r.Artifacts, &r.SideEffects,
+		&r.ImageDigest, &r.ImageSignature, &r.ImageSignedAt,
 	)
+}
+
+// scanRelease scans a single release row.
+// Returns ErrReleaseNotFound if the row contains no data.
+func (s *PostgresReleaseStore) scanRelease(row Row) (*Release, error) {
+	var r Release
+	err := scanReleaseFields(row, &r)
 	if err != nil {
 		if errors.Is(err, ErrNoRows) {
 			return nil, loopzeroerrors.ErrReleaseNotFound
