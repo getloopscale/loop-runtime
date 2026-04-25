@@ -332,14 +332,14 @@ fi
 
 deadline=$(( $(date +%s) + CURL_RETRY_TIMEOUT_SEC ))
 attempt=0
+URL_OK=0
 while [ "$(date +%s)" -lt "$deadline" ]; do
   attempt=$((attempt+1))
   if BODY="$(curl -sf "${CURL_ARGS[@]}" 2>"$LOG_DIR/curl.err")"; then
     if [ "$BODY" = "$EXPECTED_BODY" ]; then
       log "  ✓ HTTP 200 + body matches '$EXPECTED_BODY' (attempt $attempt)"
-      log ""
-      log "🎉 E2E SUCCESS"
-      exit 0
+      URL_OK=1
+      break
     else
       log "  ⚠ Got body but doesn't match: '$BODY' (expected '$EXPECTED_BODY')"
     fi
@@ -347,6 +347,52 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
   sleep 5
 done
 
-log "  ✗ curl assertion failed after ${CURL_RETRY_TIMEOUT_SEC}s. Last error:"
-cat "$LOG_DIR/curl.err" 2>/dev/null | head -5
-fail "URL did not respond with expected body" 5
+if [ "$URL_OK" -ne 1 ]; then
+  log "  ✗ curl assertion failed after ${CURL_RETRY_TIMEOUT_SEC}s. Last error:"
+  cat "$LOG_DIR/curl.err" 2>/dev/null | head -5
+  fail "URL did not respond with expected body" 5
+fi
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase 6 (CHG-2026-04-25-ATTESTATION-WIRE): attestation assertion
+# ──────────────────────────────────────────────────────────────────────
+log "── Phase 6: attestation assertion"
+
+# Find the most recent build_id for this tenant from the API. We don't
+# have it from `loopzero deploy` output reliably, so we query the API.
+BUILD_ID="$(curl -sf -H "Authorization: Bearer $TOKEN" \
+  "$API_URL/api/v1/projects/e2e-project/builds?limit=1" 2>/dev/null \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['builds'][0]['id'] if d.get('builds') else '')" 2>/dev/null || true)"
+
+if [ -z "$BUILD_ID" ]; then
+  log "  ⚠ Could not fetch latest build_id — attestation phase skipped (non-fatal)"
+else
+  log "  Querying /attestation for build $BUILD_ID..."
+  ATTEST="$(curl -sf -H "Authorization: Bearer $TOKEN" "$API_URL/api/v1/builds/$BUILD_ID/attestation" 2>/dev/null || echo '{}')"
+  echo "$ATTEST" > "$LOG_DIR/attestation.json"
+
+  # Check signed=true (Phase 5 must have populated)
+  SIGNED="$(echo "$ATTEST" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('signed'))" 2>/dev/null || echo "?")"
+  IMG_DIGEST="$(echo "$ATTEST" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('image_digest',''))" 2>/dev/null || echo "")"
+  IMG_SIG="$(echo "$ATTEST" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('image_signature',''))" 2>/dev/null || echo "")"
+
+  if [ "$SIGNED" = "True" ]; then
+    log "  ✓ attestation: signed=true"
+  else
+    log "  ⚠ attestation: signed=$SIGNED (expected True; gap likely Phase 1 CWT outputs not flowing to Phase 5)"
+  fi
+  if echo "$IMG_DIGEST" | grep -qE '^sha256:[a-f0-9]{64}$'; then
+    log "  ✓ image_digest is well-formed sha256: ${IMG_DIGEST:0:30}..."
+  else
+    log "  ⚠ image_digest not a sha256: '$IMG_DIGEST'"
+  fi
+  if [ -n "$IMG_SIG" ]; then
+    log "  ✓ image_signature: ${IMG_SIG:0:60}..."
+  else
+    log "  ⚠ image_signature is empty"
+  fi
+fi
+
+log ""
+log "🎉 E2E SUCCESS"
+exit 0

@@ -132,6 +132,17 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 		// "--" is $0, "buildctl" is $1, rest of buildctlArgs become $2+.
 		Command: []string{"rootlesskit", "sh", "-c", buildkitEntrypointScript(socketPath, b.infraParams.RegistryInsecure, b.infraParams.RegistryURL), "--"},
 		Args:    append([]string{"buildctl"}, buildctlArgs...),
+		// CHG-2026-04-25-ATTESTATION-WIRE: surface the image digest as a
+		// workflow output parameter so the API can persist it on the
+		// release row. The entrypoint script writes /tmp/build-digest.txt
+		// post-build (defensive — missing file ⇒ empty output, deploy
+		// still succeeds).
+		Outputs: []forge.Parameter{
+			{
+				Name:      "digest",
+				ValueFrom: &model.ValueFrom{Path: "/tmp/build-digest.txt"},
+			},
+		},
 		Env: []forge.EnvBuilder{
 			forge.Env{Name: "HOME", Value: "/home/user"},
 		},
@@ -273,6 +284,21 @@ func buildkitEntrypointScript(socketPath string, insecure bool, registryURL stri
 		Comment("Capture exit code BEFORE killing daemon.").
 		Raw(`"$@"`).
 		Raw(`BUILD_EXIT=$?`).
+		Blank().
+		Comment("CHG-2026-04-25-ATTESTATION-WIRE: extract image digest from").
+		Comment("BuildKit metadata file and write to the workflow output").
+		Comment("path so Argo can capture it post-pod-termination.").
+		Comment("Defensive: missing/malformed metadata MUST NOT fail the").
+		Comment("build — the digest is observability data; the deploy is").
+		Comment("the source of truth.").
+		Raw(`if [ "$BUILD_EXIT" -eq 0 ]; then`).
+		Raw(`  for f in /workspace/metadata-*.json; do`).
+		Raw(`    if [ -f "$f" ]; then`).
+		Raw(`      sed -n 's/.*"containerimage.digest":[[:space:]]*"\([^"]*\)".*/\1/p' "$f" > /tmp/build-digest.txt 2>/dev/null || true`).
+		Raw(`      break`).
+		Raw(`    fi`).
+		Raw(`  done`).
+		Raw(`fi`).
 		Blank().
 		Comment("Graceful daemon shutdown — exit code is already captured").
 		Raw(`kill $DAEMON_PID 2>/dev/null || true`).

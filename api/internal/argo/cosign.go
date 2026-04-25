@@ -37,9 +37,25 @@ func cosignSignTemplate(appName, imageTag string, insecureRegistry bool) *forge.
 		insecureFlag = " --allow-http-registry --allow-insecure-registry"
 	}
 
+	// CHG-2026-04-25-ATTESTATION-WIRE: the script MUST write the
+	// signature reference and the cryptographic digest to two
+	// container-local files. Argo captures them as workflow output
+	// parameters via the Outputs declaration below, so the API can
+	// persist them on the release row even after this pod terminates.
+	//
+	// Trust model: both paths live in the cosign container's OWN /tmp
+	// filesystem. They are NOT on the shared /workspace volume — a
+	// non-cosign container in the same pod (e.g., BuildKit) cannot
+	// forge a signature by writing to these paths.
+	const (
+		outSignaturePath = "/tmp/cosign-sig.txt"
+		outDigestPath    = "/tmp/cosign-digest.txt"
+	)
+
 	// Shell script that:
 	// 1. Extracts the image digest from BuildKit metadata using sed
 	// 2. Signs the image by digest using the pre-installed cosign binary
+	// 3. Writes the pinned reference + digest to the workflow output paths
 	// The COSIGN_PASSWORD env var is injected from the secret.
 	script := fmt.Sprintf(`set -e
 # Extract digest from BuildKit metadata using sed.
@@ -57,13 +73,31 @@ cosign sign --yes%s --key %s/cosign.key \
   -a "app=%s" \
   "%s@${DIGEST}"
 
+# Persist the signature reference and digest as Argo workflow outputs.
+# These files are read AFTER cosign returns 0; if cosign fails, the
+# script exits earlier and the outputs stay unset (Argo reports the
+# pod failed and downstream sees no signature).
+printf '%%s' "%s@${DIGEST}" > %s
+printf '%%s' "${DIGEST}"   > %s
+
 echo "Image signed successfully"
-`, metadataFile, imageTag, insecureFlag, cosignKeyMountPath, appName, imageTag)
+`, metadataFile, imageTag, insecureFlag, cosignKeyMountPath, appName, imageTag,
+		imageTag, outSignaturePath, outDigestPath)
 
 	return &forge.Container{
 		Name:    fmt.Sprintf("sign-image-%s", appName),
 		Image:   imageCosignSigner,
 		Command: []string{"sh", "-c", script},
+		Outputs: []forge.Parameter{
+			{
+				Name:      "signature",
+				ValueFrom: &model.ValueFrom{Path: outSignaturePath},
+			},
+			{
+				Name:      "digest",
+				ValueFrom: &model.ValueFrom{Path: outDigestPath},
+			},
+		},
 		Env: []forge.EnvBuilder{
 			// Bug #39: cosign needs HOME writable for TUF cache (/.sigstore).
 			// /home/user is non-writable in the signer image under PSA restricted.

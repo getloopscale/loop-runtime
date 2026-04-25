@@ -242,5 +242,79 @@ func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID
 		phase = "Succeeded"
 	}
 
-	return &services.WorkflowStatus{Phase: phase, FinishedAt: status.FinishedAt}, nil
+	return &services.WorkflowStatus{
+		Phase:      phase,
+		FinishedAt: status.FinishedAt,
+		Outputs:    extractStepOutputs(wf.Object),
+	}, nil
+}
+
+// extractStepOutputs walks `status.nodes[*]` on a workflow CR and
+// returns each Pod node's output parameters keyed by displayName.
+//
+// Argo writes per-node outputs at `status.nodes.<nodeId>.outputs.parameters`,
+// each entry being `{name, value}`. The `displayName` of the node is what
+// callers use to address steps (it matches the template name like
+// "sign-image-api"), so we key by displayName, not nodeId.
+//
+// CHG-2026-04-25-ATTESTATION-WIRE: this is the bridge between the CWT
+// outputs declared in cosign.go / buildkit.go and the API's persistence
+// layer. Defensive: any malformed node is skipped, never panics.
+func extractStepOutputs(wfObject map[string]interface{}) map[string]map[string]string {
+	if wfObject == nil {
+		return nil
+	}
+	status, ok := wfObject["status"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	nodes, ok := status["nodes"].(map[string]interface{})
+	if !ok || len(nodes) == 0 {
+		return nil
+	}
+
+	out := make(map[string]map[string]string)
+	for _, raw := range nodes {
+		node, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		// Only Pod-type nodes have actual outputs (Steps/DAG nodes
+		// aggregate from children but don't declare their own).
+		if t, _ := node["type"].(string); t != "Pod" {
+			continue
+		}
+		display, _ := node["displayName"].(string)
+		if display == "" {
+			continue
+		}
+		outputs, ok := node["outputs"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		params, ok := outputs["parameters"].([]interface{})
+		if !ok {
+			continue
+		}
+		paramMap := make(map[string]string)
+		for _, p := range params {
+			pm, ok := p.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			name, _ := pm["name"].(string)
+			value, _ := pm["value"].(string)
+			if name == "" {
+				continue
+			}
+			paramMap[name] = value
+		}
+		if len(paramMap) > 0 {
+			out[display] = paramMap
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

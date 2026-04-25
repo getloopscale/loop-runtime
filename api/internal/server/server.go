@@ -47,6 +47,10 @@ type Config struct {
 	ShutdownCtx        context.Context
 	ShutdownCancel     context.CancelFunc
 	BuildHandler       *routes.BuildHandler
+	// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: handler for
+	// GET /api/v1/builds/{id}/attestation. Wired in api/cmd/setup_routes.go
+	// against PostgresAttestationStore.
+	BuildAttestationHandler *routes.BuildAttestationHandler
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 	RateLimiter        *middleware.RateLimiter
 	// HTTP server timeouts (configurable via env vars)

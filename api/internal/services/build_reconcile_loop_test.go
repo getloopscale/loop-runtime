@@ -565,7 +565,7 @@ func TestOnWorkflowSucceeded_GetBuildAppsFails_BuildFailed(t *testing.T) {
 	loop := fakes.buildLoop(BuildReconcileLoopConfig{})
 
 	// Act
-	loop.onWorkflowSucceeded(context.Background(), b)
+	loop.onWorkflowSucceeded(context.Background(), b, &WorkflowStatus{Phase: "Succeeded"})
 
 	// Assert: build should be FAILED (GetBuildApps failed)
 	current := fakes.buildStore.builds[b.ID]
@@ -589,7 +589,7 @@ func TestOnWorkflowSucceeded_HappyPath(t *testing.T) {
 	loop := fakes.buildLoop(BuildReconcileLoopConfig{})
 
 	// Act
-	loop.onWorkflowSucceeded(context.Background(), b)
+	loop.onWorkflowSucceeded(context.Background(), b, &WorkflowStatus{Phase: "Succeeded"})
 
 	// Assert: orch.OnBuildCompleted should have been called
 	fakes.orch.mu.Lock()
@@ -971,7 +971,7 @@ func TestOnWorkflowSucceeded_CompletionFailsMaxAttempts_FailsBuild(t *testing.T)
 	loop.completionAttempts.Store(b.ID, maxActivationAttempts-1)
 
 	// Act: this is the Nth attempt that triggers failure
-	loop.onWorkflowSucceeded(context.Background(), b)
+	loop.onWorkflowSucceeded(context.Background(), b, &WorkflowStatus{Phase: "Succeeded"})
 
 	// Assert: build should be FAILED
 	current := fakes.buildStore.builds[b.ID]

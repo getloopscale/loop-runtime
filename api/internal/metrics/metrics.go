@@ -73,6 +73,18 @@ var (
 		Help: "Total number of deploy attempts by final status.",
 	}, []string{"tenant", "environment", "status"})
 
+	// CHG-2026-04-25-ATTESTATION-WIRE Phase 7: counts releases by
+	// whether their image was signed at release-creation time. Lets
+	// dashboards/alerts notice when signing silently regresses (e.g.,
+	// CWT outputs missing or cosign step failing without breaking
+	// the workflow).
+	//   signed="true"  → release row has image_signed_at populated
+	//   signed="false" → release row has image_signed_at NULL
+	ReleaseSignedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_release_signed_total",
+		Help: "Releases created, partitioned by whether the image was signed.",
+	}, []string{"tenant", "environment", "signed"})
+
 	DeployDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "loopzero_deploy_duration_seconds",
 		Help:    "End-to-end deploy duration from build creation to release ACTIVE.",
