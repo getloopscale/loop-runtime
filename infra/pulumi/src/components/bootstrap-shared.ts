@@ -40,6 +40,8 @@ export const HELM_VERSIONS = {
   metricsServer: "3.12.1",
   kubeStateMetrics: "5.25.1",
   blackboxExporter: "9.2.0",
+  keda: "2.16.1",
+  kedaHttpAddon: "0.8.0",
 } as const;
 
 // ---------------------------------------------------------------------------

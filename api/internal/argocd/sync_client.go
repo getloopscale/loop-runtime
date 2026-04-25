@@ -105,7 +105,7 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("validate token: ArgoCD unreachable: %w", err)
+		return fmt.Errorf("validate token: deployment sync service unreachable: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 

@@ -51,9 +51,10 @@ type WorkflowSpec struct {
 // This is the raw input -- use NormalizeApp() to resolve into a fully populated AppUnit.
 // AppAutoscalingSpec holds HPA configuration from loopzero.yaml.
 type AppAutoscalingSpec struct {
-	MinReplicas int `json:"min,omitempty"`
-	MaxReplicas int `json:"max,omitempty"`
-	TargetCPU   int `json:"target_cpu,omitempty"`
+	MinReplicas    int `json:"min,omitempty"`
+	MaxReplicas    int `json:"max,omitempty"`
+	TargetCPU      int `json:"target_cpu,omitempty"`
+	CooldownPeriod int `json:"cooldown,omitempty"` // Seconds before scale-to-zero (default: 300)
 }
 
 type AppSpec struct {
@@ -193,6 +194,8 @@ type BuildOrchestratorDeps struct {
 	BaseDomain         string              // Base domain for app hostnames
 	// B15: plan-cap enforcement for per-service replica count. nil = disabled.
 	PlanCap PlanCapChecker
+	// KEDAEnabled gates scale-to-zero (MinReplicas=0). When false, min:0 is rejected.
+	KEDAEnabled bool
 }
 
 // BuildOrchestrator orchestrates the entire deploy flow:
@@ -224,6 +227,7 @@ type BuildOrchestrator struct {
 	kvClient          StaticRoutingClient // CF KV client for static frontend routing
 	baseDomain        string
 	planCap           PlanCapChecker // B15: nil = enforcement disabled
+	kedaEnabled       bool           // gates scale-to-zero (min=0)
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
@@ -273,6 +277,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		kvClient:          deps.KVClient,
 		baseDomain:        deps.BaseDomain,
 		planCap:           deps.PlanCap, // B15: optional plan-cap enforcement
+		kedaEnabled:       deps.KEDAEnabled,
 	}
 }
 

@@ -166,6 +166,139 @@ func TestStatus_Get_Unauthenticated(t *testing.T) {
 	}
 }
 
+func TestStatus_Get_ScalingScaleToZero(t *testing.T) {
+	now := time.Now()
+	projects := &fakeStatusProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api"},
+	}
+	builds := &fakeStatusBuildStore{
+		builds: []StatusBuild{
+			{
+				ID:          "bld-1",
+				Environment: "production",
+				Status:      "SUCCEEDED",
+				CreatedAt:   now,
+				Scaling:     &StatusBuildScaling{MinReplicas: 0, MaxReplicas: 5},
+			},
+		},
+	}
+	releases := &fakeStatusReleaseStore{
+		release: &StatusRelease{
+			ID: "rel-1", Status: "ACTIVE", GitCommit: "abc", CreatedAt: now,
+		},
+	}
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp statusResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Scaling == nil {
+		t.Fatal("expected scaling field for scale-to-zero build")
+	}
+	if resp.Scaling.Min != 0 {
+		t.Errorf("want min=0, got %d", resp.Scaling.Min)
+	}
+	if resp.Scaling.Max != 5 {
+		t.Errorf("want max=5, got %d", resp.Scaling.Max)
+	}
+	if !resp.Scaling.ScaledToZero {
+		t.Error("want scaled_to_zero=true when min=0")
+	}
+	if resp.Scaling.Replicas != 0 {
+		t.Errorf("want replicas=0 for scale-to-zero, got %d", resp.Scaling.Replicas)
+	}
+}
+
+func TestStatus_Get_ScalingHPA(t *testing.T) {
+	now := time.Now()
+	projects := &fakeStatusProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api"},
+	}
+	builds := &fakeStatusBuildStore{
+		builds: []StatusBuild{
+			{
+				ID:          "bld-1",
+				Environment: "production",
+				Status:      "SUCCEEDED",
+				CreatedAt:   now,
+				Scaling:     &StatusBuildScaling{MinReplicas: 2, MaxReplicas: 10},
+			},
+		},
+	}
+	releases := &fakeStatusReleaseStore{
+		release: &StatusRelease{
+			ID: "rel-1", Status: "ACTIVE", GitCommit: "abc", CreatedAt: now,
+		},
+	}
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Get(w, req)
+
+	var resp statusResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Scaling == nil {
+		t.Fatal("expected scaling field for HPA build")
+	}
+	if resp.Scaling.Min != 2 {
+		t.Errorf("want min=2, got %d", resp.Scaling.Min)
+	}
+	if resp.Scaling.Max != 10 {
+		t.Errorf("want max=10, got %d", resp.Scaling.Max)
+	}
+	if resp.Scaling.ScaledToZero {
+		t.Error("want scaled_to_zero=false for min >= 1")
+	}
+	if resp.Scaling.Replicas != 2 {
+		t.Errorf("want replicas=2 (minReplicas) for HPA, got %d", resp.Scaling.Replicas)
+	}
+}
+
+func TestStatus_Get_NoScaling(t *testing.T) {
+	now := time.Now()
+	projects := &fakeStatusProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api"},
+	}
+	builds := &fakeStatusBuildStore{
+		builds: []StatusBuild{
+			{
+				ID: "bld-1", Environment: "production", Status: "SUCCEEDED", CreatedAt: now,
+				// Scaling is nil — no autoscaling configured
+			},
+		},
+	}
+	h := NewStatusHandler(projects, builds, &fakeStatusReleaseStore{}, "dev.loopzero.example")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Get(w, req)
+
+	var resp statusResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Scaling != nil {
+		t.Errorf("expected no scaling field when autoscaling is not configured, got %+v", resp.Scaling)
+	}
+}
+
 func TestStatus_Get_NoBuildsNoRelease(t *testing.T) {
 	h := NewStatusHandler(
 		&fakeStatusProjectStore{project: &ProjectResult{ID: "p1", Name: "my-api"}},

@@ -209,6 +209,16 @@ type Config struct {
 	// triggers rotation alerts on long-running processes).
 	// Env: LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT
 	ServiceAuthSecretCreatedAt time.Time
+
+	// KEDAEnabled is a feature gate for KEDA-based scale-to-zero support.
+	//
+	// When false (default), the API rejects autoscaling requests with
+	// min:0 replicas — scale-to-zero is not supported without KEDA.
+	// When true, the API allows min:0 and expects KEDA ScaledObjects
+	// to manage the zero-to-one scaling transition.
+	//
+	// Env: LOOPZERO_KEDA_ENABLED
+	KEDAEnabled bool
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -352,6 +362,9 @@ func Load() Config {
 
 		// WS.1: Service auth secret rotation monitoring.
 		ServiceAuthSecretCreatedAt: envTime("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT"),
+
+		// KEDA scale-to-zero feature gate.
+		KEDAEnabled: os.Getenv("LOOPZERO_KEDA_ENABLED") == "true",
 	}
 }
 
@@ -427,6 +440,10 @@ func (c Config) Validate() error {
 	// H1: DATABASE_URL with sslmode=disable in production sends credentials and data in plaintext.
 	if c.DatabaseURL != "" && c.IsProduction() && strings.Contains(c.DatabaseURL, "sslmode=disable") {
 		return fmt.Errorf("DATABASE_URL contains sslmode=disable which is forbidden in production — use sslmode=require or sslmode=verify-full")
+	}
+	// KEDA feature gate — informational log when enabled.
+	if c.KEDAEnabled {
+		slog.Warn("KEDA feature gate is enabled — scale-to-zero (min:0) autoscaling requests will be accepted")
 	}
 	return nil
 }

@@ -328,3 +328,364 @@ func TestRenderDeployment_HPA_HasLabels(t *testing.T) {
 		t.Errorf("HPA label 'loopzero.io/tenant': got %q, want acme", hpa.Metadata.Labels["loopzero.io/tenant"])
 	}
 }
+
+// --- Scale-to-zero (KEDA) tests ---
+
+// parseScaledObject extracts the first KEDA ScaledObject from rendered output.
+func parseScaledObject(t *testing.T, rendered string) kedaScaledObject {
+	t.Helper()
+	docs := splitDocs(rendered)
+	for _, doc := range docs {
+		var resource struct {
+			Kind string `json:"kind"`
+		}
+		if err := sigsyaml.Unmarshal([]byte(doc), &resource); err != nil {
+			continue
+		}
+		if resource.Kind == "ScaledObject" {
+			var so kedaScaledObject
+			if err := sigsyaml.Unmarshal([]byte(doc), &so); err != nil {
+				t.Fatalf("failed to parse ScaledObject: %v", err)
+			}
+			return so
+		}
+	}
+	t.Fatal("no ScaledObject found in rendered output")
+	return kedaScaledObject{}
+}
+
+// hasScaledObject checks whether a KEDA ScaledObject exists in rendered output.
+func hasScaledObject(rendered string) bool {
+	docs := splitDocs(rendered)
+	for _, doc := range docs {
+		var resource struct {
+			Kind string `json:"kind"`
+		}
+		if err := sigsyaml.Unmarshal([]byte(doc), &resource); err != nil {
+			continue
+		}
+		if resource.Kind == "ScaledObject" {
+			return true
+		}
+	}
+	return false
+}
+
+// parseHTTPScaledObject extracts the first KEDA HTTPScaledObject from rendered output.
+func parseHTTPScaledObject(t *testing.T, rendered string) kedaHTTPScaledObject {
+	t.Helper()
+	docs := splitDocs(rendered)
+	for _, doc := range docs {
+		var resource struct {
+			Kind string `json:"kind"`
+		}
+		if err := sigsyaml.Unmarshal([]byte(doc), &resource); err != nil {
+			continue
+		}
+		if resource.Kind == "HTTPScaledObject" {
+			var hso kedaHTTPScaledObject
+			if err := sigsyaml.Unmarshal([]byte(doc), &hso); err != nil {
+				t.Fatalf("failed to parse HTTPScaledObject: %v", err)
+			}
+			return hso
+		}
+	}
+	t.Fatal("no HTTPScaledObject found in rendered output")
+	return kedaHTTPScaledObject{}
+}
+
+// hasHTTPScaledObject checks whether a KEDA HTTPScaledObject exists in rendered output.
+func hasHTTPScaledObject(rendered string) bool {
+	docs := splitDocs(rendered)
+	for _, doc := range docs {
+		var resource struct {
+			Kind string `json:"kind"`
+		}
+		if err := sigsyaml.Unmarshal([]byte(doc), &resource); err != nil {
+			continue
+		}
+		if resource.Kind == "HTTPScaledObject" {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRenderDeployment_ScaleToZero_GeneratesScaledObject(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "api",
+			Type:     "server",
+			Port:     8080,
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			Autoscaling: &AutoscalingConfig{
+				MinReplicas: 0,
+				MaxReplicas: 5,
+				TargetCPU:   80,
+			},
+		},
+	}
+
+	result := Render(input)
+
+	if !hasScaledObject(result) {
+		t.Fatal("expected ScaledObject to be generated when MinReplicas == 0")
+	}
+	if hasHPA(result) {
+		t.Error("HPA should NOT be generated when MinReplicas == 0 (KEDA generates HPA internally)")
+	}
+
+	so := parseScaledObject(t, result)
+	if so.APIVersion != "keda.sh/v1alpha1" {
+		t.Errorf("ScaledObject apiVersion: got %q, want keda.sh/v1alpha1", so.APIVersion)
+	}
+	if so.Spec.MinReplicaCount != 0 {
+		t.Errorf("ScaledObject minReplicaCount: got %d, want 0", so.Spec.MinReplicaCount)
+	}
+	if so.Spec.MaxReplicaCount != 5 {
+		t.Errorf("ScaledObject maxReplicaCount: got %d, want 5", so.Spec.MaxReplicaCount)
+	}
+	if so.Spec.ScaleTargetRef.Name != "api" {
+		t.Errorf("ScaledObject scaleTargetRef.name: got %q, want api", so.Spec.ScaleTargetRef.Name)
+	}
+}
+
+func TestRenderDeployment_ScaleToZero_GeneratesHTTPScaledObject(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "api",
+			Type:     "server",
+			Port:     8080,
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			Autoscaling: &AutoscalingConfig{
+				MinReplicas: 0,
+				MaxReplicas: 5,
+				TargetCPU:   80,
+			},
+		},
+	}
+
+	result := Render(input)
+
+	if !hasHTTPScaledObject(result) {
+		t.Fatal("expected HTTPScaledObject for server app with MinReplicas == 0")
+	}
+
+	hso := parseHTTPScaledObject(t, result)
+	if hso.APIVersion != "http.keda.sh/v1alpha1" {
+		t.Errorf("HTTPScaledObject apiVersion: got %q, want http.keda.sh/v1alpha1", hso.APIVersion)
+	}
+
+	expectedHost := "acme-webapp-api-production.loopzero.example.com"
+	if len(hso.Spec.Hosts) == 0 || hso.Spec.Hosts[0] != expectedHost {
+		t.Errorf("HTTPScaledObject hosts: got %v, want [%s]", hso.Spec.Hosts, expectedHost)
+	}
+	if hso.Spec.ScaleTargetRef.Name != "api" {
+		t.Errorf("HTTPScaledObject scaleTargetRef.name: got %q, want api", hso.Spec.ScaleTargetRef.Name)
+	}
+	if hso.Spec.ScaleTargetRef.Port != 8080 {
+		t.Errorf("HTTPScaledObject scaleTargetRef.port: got %d, want 8080", hso.Spec.ScaleTargetRef.Port)
+	}
+	if hso.Spec.Replicas == nil {
+		t.Fatal("HTTPScaledObject replicas should not be nil")
+	}
+	if hso.Spec.Replicas.Min != 0 {
+		t.Errorf("HTTPScaledObject replicas.min: got %d, want 0", hso.Spec.Replicas.Min)
+	}
+	if hso.Spec.Replicas.Max != 5 {
+		t.Errorf("HTTPScaledObject replicas.max: got %d, want 5", hso.Spec.Replicas.Max)
+	}
+}
+
+func TestRenderDeployment_ScaleToZero_WorkerNoHTTPScaledObject(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "processor",
+			Type:     "worker",
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			Autoscaling: &AutoscalingConfig{
+				MinReplicas: 0,
+				MaxReplicas: 5,
+				TargetCPU:   80,
+			},
+		},
+	}
+
+	result := Render(input)
+
+	if !hasScaledObject(result) {
+		t.Error("expected ScaledObject for worker with MinReplicas == 0")
+	}
+	if hasHTTPScaledObject(result) {
+		t.Error("HTTPScaledObject should NOT be generated for workers (no HTTP traffic)")
+	}
+}
+
+func TestRenderDeployment_ScaleToZero_DeploymentReplicasZero(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "api",
+			Type:     "server",
+			Port:     8080,
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			Autoscaling: &AutoscalingConfig{
+				MinReplicas: 0,
+				MaxReplicas: 5,
+				TargetCPU:   80,
+			},
+		},
+	}
+
+	dep := parseDeployment(t, Render(input))
+
+	if dep.Spec.Replicas != 0 {
+		t.Errorf("with scale-to-zero, deployment replicas should be 0: got %d", dep.Spec.Replicas)
+	}
+}
+
+func TestRenderDeployment_ScaleToZero_ServerDocCount(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "api",
+			Type:     "server",
+			Port:     8080,
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			Autoscaling: &AutoscalingConfig{
+				MinReplicas: 0,
+				MaxReplicas: 5,
+				TargetCPU:   80,
+			},
+		},
+	}
+
+	result := Render(input)
+	docs := splitDocs(result)
+
+	// Deployment + PDB + Service + Certificate + IngressRoute + ScaledObject + HTTPScaledObject = 7
+	if len(docs) != 7 {
+		t.Fatalf("expected 7 YAML documents for server with scale-to-zero, got %d", len(docs))
+	}
+}
+
+func TestRenderDeployment_MinOne_StillGeneratesHPA(t *testing.T) {
+	// Backward compatibility: min >= 1 still uses native HPA, not KEDA
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "api",
+			Type:     "server",
+			Port:     8080,
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			Autoscaling: &AutoscalingConfig{
+				MinReplicas: 1,
+				MaxReplicas: 5,
+				TargetCPU:   80,
+			},
+		},
+	}
+
+	result := Render(input)
+
+	if !hasHPA(result) {
+		t.Error("expected HPA for MinReplicas >= 1")
+	}
+	if hasScaledObject(result) {
+		t.Error("ScaledObject should NOT be generated when MinReplicas >= 1")
+	}
+	if hasHTTPScaledObject(result) {
+		t.Error("HTTPScaledObject should NOT be generated when MinReplicas >= 1")
+	}
+}
+
+func TestRenderDeployment_ScaleToZero_CooldownDefault(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "api",
+			Type:     "server",
+			Port:     8080,
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			Autoscaling: &AutoscalingConfig{
+				MinReplicas: 0,
+				MaxReplicas: 3,
+				TargetCPU:   80,
+				// CooldownPeriod: 0 → should default to 300
+			},
+		},
+	}
+
+	so := parseScaledObject(t, Render(input))
+
+	if so.Spec.CooldownPeriod != 300 {
+		t.Errorf("ScaledObject default cooldownPeriod: got %d, want 300", so.Spec.CooldownPeriod)
+	}
+}
+
+func TestRenderDeployment_ScaleToZero_CooldownCustom(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "api",
+			Type:     "server",
+			Port:     8080,
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			Autoscaling: &AutoscalingConfig{
+				MinReplicas:    0,
+				MaxReplicas:    3,
+				TargetCPU:      80,
+				CooldownPeriod: 600,
+			},
+		},
+	}
+
+	so := parseScaledObject(t, Render(input))
+
+	if so.Spec.CooldownPeriod != 600 {
+		t.Errorf("ScaledObject custom cooldownPeriod: got %d, want 600", so.Spec.CooldownPeriod)
+	}
+}
+
+func TestRenderDeployment_ScaleToZero_CustomDomains(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{
+		{
+			Name:     "api",
+			Type:     "server",
+			Port:     8080,
+			ImageRef: "reg:5000/acme/webapp:abc123",
+			Autoscaling: &AutoscalingConfig{
+				MinReplicas: 0,
+				MaxReplicas: 5,
+				TargetCPU:   80,
+			},
+			CustomDomains: []CustomDomainInput{
+				{Domain: "api.mycompany.com", ID: "dom-1", CFManaged: true},
+			},
+		},
+	}
+
+	hso := parseHTTPScaledObject(t, Render(input))
+
+	expectedHost := "acme-webapp-api-production.loopzero.example.com"
+	customHost := "api.mycompany.com"
+
+	if len(hso.Spec.Hosts) != 2 {
+		t.Fatalf("HTTPScaledObject hosts: expected 2 (auto + custom), got %d: %v", len(hso.Spec.Hosts), hso.Spec.Hosts)
+	}
+
+	hostsSet := make(map[string]bool)
+	for _, h := range hso.Spec.Hosts {
+		hostsSet[h] = true
+	}
+	if !hostsSet[expectedHost] {
+		t.Errorf("HTTPScaledObject missing auto hostname %q", expectedHost)
+	}
+	if !hostsSet[customHost] {
+		t.Errorf("HTTPScaledObject missing custom domain %q", customHost)
+	}
+}

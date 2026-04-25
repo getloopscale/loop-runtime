@@ -39,10 +39,12 @@ type CustomDomainInput struct {
 
 // AutoscalingConfig defines horizontal pod autoscaler settings.
 // When present on an app, an HPA resource is generated alongside the Deployment.
+// When MinReplicas is 0, KEDA ScaledObject is generated instead of HPA for scale-to-zero.
 type AutoscalingConfig struct {
-	MinReplicas int // Minimum replicas (default: 1)
-	MaxReplicas int // Maximum replicas (default: 3)
-	TargetCPU   int // Target CPU utilization percentage (default: 80)
+	MinReplicas    int // Minimum replicas (default: 1, 0 = scale-to-zero via KEDA)
+	MaxReplicas    int // Maximum replicas (default: 3)
+	TargetCPU      int // Target CPU utilization percentage (default: 80)
+	CooldownPeriod int // Seconds before scale-to-zero (default: 300, only when MinReplicas = 0)
 }
 
 // AppManifestInput contains everything needed to generate manifests for a single app.

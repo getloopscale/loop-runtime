@@ -92,16 +92,21 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 	}
 
 	// Determine replica count:
-	//   - If autoscaling is set, use minReplicas as baseline (HPA manages scaling)
+	//   - If scale-to-zero (KEDA): replicas = 0 (KEDA manages lifecycle)
+	//   - If autoscaling with MinReplicas >= 1: use minReplicas as baseline (HPA manages scaling)
 	//   - If explicit replicas configured, use that
 	//   - Otherwise default to 1
 	replicas := 1
 	if app.Autoscaling != nil {
-		minR := app.Autoscaling.MinReplicas
-		if minR < 1 {
-			minR = 1
+		if isScaleToZero(app.Autoscaling) {
+			replicas = 0
+		} else {
+			minR := app.Autoscaling.MinReplicas
+			if minR < 1 {
+				minR = 1
+			}
+			replicas = minR
 		}
-		replicas = minR
 	} else if app.Replicas > 0 {
 		replicas = app.Replicas
 	}
@@ -201,6 +206,96 @@ func buildHPA(ri RenderInput, app AppManifestInput) k8sHPA {
 					},
 				},
 			},
+		},
+	}
+}
+
+// buildScaledObject creates a KEDA ScaledObject for scale-to-zero apps.
+// Only called when app.Autoscaling.MinReplicas == 0.
+// KEDA manages the HPA internally — do NOT generate both HPA and ScaledObject.
+func buildScaledObject(ri RenderInput, app AppManifestInput) kedaScaledObject {
+	as := app.Autoscaling
+	maxR := as.MaxReplicas
+	if maxR < 1 {
+		maxR = 3
+	}
+	targetCPU := as.TargetCPU
+	if targetCPU < 1 {
+		targetCPU = 80
+	}
+	cooldown := as.CooldownPeriod
+	if cooldown < 1 {
+		cooldown = 300
+	}
+
+	return kedaScaledObject{
+		APIVersion: "keda.sh/v1alpha1",
+		Kind:       "ScaledObject",
+		Metadata: k8sMetadata{
+			Name:      app.Name + "-scaledobject",
+			Namespace: namespace(ri.TenantID, ri.Environment),
+			Labels:    commonLabels(ri, app),
+		},
+		Spec: kedaScaledObjectSpec{
+			ScaleTargetRef:  kedaScaleTargetRef{Name: app.Name},
+			MinReplicaCount: 0,
+			MaxReplicaCount: maxR,
+			CooldownPeriod:  cooldown,
+			PollingInterval: 30,
+			Triggers: []kedaTrigger{
+				{
+					Type: "cpu",
+					Metadata: map[string]string{
+						"type":  "Utilization",
+						"value": fmt.Sprintf("%d", targetCPU),
+					},
+				},
+			},
+		},
+	}
+}
+
+// buildHTTPScaledObject creates a KEDA HTTP Add-on interceptor for cold start.
+// Only called for server/frontend apps with scale-to-zero (workers don't receive HTTP).
+func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledObject {
+	maxR := app.Autoscaling.MaxReplicas
+	if maxR < 1 {
+		maxR = 3
+	}
+	port := app.Port
+	if port == 0 {
+		port = 3000
+	}
+
+	// Collect all hostnames: auto-generated + custom domains
+	hosts := []string{appHostname(ri.TenantID, ri.ProjectID, app.Name, ri.Environment, ri.BaseDomain)}
+	for _, cd := range app.CustomDomains {
+		hosts = append(hosts, cd.Domain)
+	}
+
+	cooldown := app.Autoscaling.CooldownPeriod
+	if cooldown < 1 {
+		cooldown = 300
+	}
+
+	return kedaHTTPScaledObject{
+		APIVersion: "http.keda.sh/v1alpha1",
+		Kind:       "HTTPScaledObject",
+		Metadata: k8sMetadata{
+			Name:      app.Name + "-httpso",
+			Namespace: namespace(ri.TenantID, ri.Environment),
+			Labels:    commonLabels(ri, app),
+		},
+		Spec: kedaHTTPScaledObjectSpec{
+			Hosts:                 hosts,
+			TargetPendingRequests: 100,
+			ScaleTargetRef: kedaHTTPScaleTargetRef{
+				Name:    app.Name,
+				Service: app.Name,
+				Port:    port,
+			},
+			Replicas:        &kedaHTTPReplicas{Min: 0, Max: maxR},
+			ScaledownPeriod: cooldown,
 		},
 	}
 }
