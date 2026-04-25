@@ -307,3 +307,61 @@ type traefikRouteMiddleware struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace,omitempty"` // cross-namespace reference
 }
+
+// --- KEDA types (scale-to-zero) ---
+
+// kedaScaledObject represents a KEDA ScaledObject CRD.
+// Generated instead of HPA when AutoscalingConfig.MinReplicas == 0.
+type kedaScaledObject struct {
+	APIVersion string              `json:"apiVersion"` // keda.sh/v1alpha1
+	Kind       string              `json:"kind"`       // ScaledObject
+	Metadata   k8sMetadata         `json:"metadata"`
+	Spec       kedaScaledObjectSpec `json:"spec"`
+}
+
+type kedaScaledObjectSpec struct {
+	ScaleTargetRef  kedaScaleTargetRef `json:"scaleTargetRef"`
+	MinReplicaCount int                `json:"minReplicaCount"`
+	MaxReplicaCount int                `json:"maxReplicaCount"`
+	CooldownPeriod  int                `json:"cooldownPeriod,omitempty"`
+	PollingInterval int                `json:"pollingInterval,omitempty"`
+	Triggers        []kedaTrigger      `json:"triggers"`
+}
+
+type kedaScaleTargetRef struct {
+	Name string `json:"name"`
+	Kind string `json:"kind,omitempty"`
+}
+
+type kedaTrigger struct {
+	Type     string            `json:"type"`
+	Metadata map[string]string `json:"metadata"`
+}
+
+// kedaHTTPScaledObject represents a KEDA HTTP Add-on HTTPScaledObject CRD.
+// Provides cold-start interceptor for scale-to-zero apps that receive HTTP traffic.
+type kedaHTTPScaledObject struct {
+	APIVersion string                   `json:"apiVersion"` // http.keda.sh/v1alpha1
+	Kind       string                   `json:"kind"`       // HTTPScaledObject
+	Metadata   k8sMetadata              `json:"metadata"`
+	Spec       kedaHTTPScaledObjectSpec  `json:"spec"`
+}
+
+type kedaHTTPScaledObjectSpec struct {
+	Hosts                []string               `json:"hosts"`
+	TargetPendingRequests int                    `json:"targetPendingRequests,omitempty"`
+	ScaleTargetRef       kedaHTTPScaleTargetRef  `json:"scaleTargetRef"`
+	Replicas             *kedaHTTPReplicas       `json:"replicas,omitempty"`
+	ScaledownPeriod      int                     `json:"scaledownPeriod,omitempty"`
+}
+
+type kedaHTTPScaleTargetRef struct {
+	Name    string `json:"name"`
+	Service string `json:"service"`
+	Port    int    `json:"port"`
+}
+
+type kedaHTTPReplicas struct {
+	Min int `json:"min"`
+	Max int `json:"max"`
+}

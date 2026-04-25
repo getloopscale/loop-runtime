@@ -246,6 +246,9 @@ func registerProtectedRoutes(
 	if cfg.StatusHandler != nil {
 		r.Get("/api/v1/projects/{name}/status", cfg.StatusHandler.Get)
 	}
+	if cfg.ScaleHandler != nil {
+		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/scale", cfg.ScaleHandler.Scale)
+	}
 	if cfg.BuildListHandler != nil {
 		r.Get("/api/v1/projects/{name}/builds", cfg.BuildListHandler.List)
 	}

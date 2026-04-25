@@ -29,6 +29,12 @@ interface StatusApiResponse {
   } | null;
   sync_status?: string;
   url?: string;
+  scaling?: {
+    replicas: number;
+    min: number;
+    max: number;
+    scaled_to_zero: boolean;
+  };
 }
 
 export interface StatusDeps {
@@ -102,6 +108,15 @@ export class StatusCommand {
 
     if (status.active_release) {
       this.deps.writeTo(`Release:      ${status.active_release.id} (${status.active_release.status.toLowerCase()} since ${this.formatTime(status.active_release.created_at)})`);
+    }
+
+    if (status.scaling) {
+      if (status.scaling.scaled_to_zero) {
+        this.deps.writeTo(`Scaling:      sleeping (0/${status.scaling.max} replicas)`);
+        this.deps.writeTo(`              First request wakes up in ~5-10s`);
+      } else {
+        this.deps.writeTo(`Scaling:      ${status.scaling.replicas}/${status.scaling.max} replicas`);
+      }
     }
 
     // CHG-2026-04-23-AUDIT-2: API returns literal "unknown" when sync state is

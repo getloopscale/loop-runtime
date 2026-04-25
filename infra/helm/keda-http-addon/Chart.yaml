@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025-2026 The LoopZero Authors
+#
+# KEDA HTTP Add-on for workload cluster.
+# Provides HTTPScaledObject CRD for zero-to-N autoscaling of tenant HTTP
+# services based on incoming request rate. Works with KEDA core.
+
+apiVersion: v2
+name: loopzero-keda-http-addon
+description: KEDA HTTP Add-on for zero-to-N HTTP autoscaling in LoopZero workload cluster
+type: application
+version: 0.1.0
+appVersion: "0.8.0"
+
+dependencies:
+  - name: http-add-on
+    version: "0.8.0"
+    repository: "https://kedacore.github.io/charts"

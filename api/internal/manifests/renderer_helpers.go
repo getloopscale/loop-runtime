@@ -57,12 +57,31 @@ func marshalResource(v interface{}) string {
 	return strings.TrimSpace(string(data))
 }
 
-// maybeHPA appends an HPA document if autoscaling is configured for the app.
-func maybeHPA(docs []string, ri RenderInput, app AppManifestInput) []string {
-	if app.Autoscaling != nil {
-		docs = append(docs, marshalResource(buildHPA(ri, app)))
+// maybeAutoscaler appends HPA or KEDA ScaledObject depending on min replicas.
+// Scale-to-zero (KEDA) is only triggered when MinReplicas == 0 AND MaxReplicas > 0,
+// because the caller must explicitly configure both to opt into scale-to-zero.
+// A zero-value AutoscalingConfig (all fields 0) uses native HPA with defaults.
+func maybeAutoscaler(docs []string, ri RenderInput, app AppManifestInput) []string {
+	if app.Autoscaling == nil {
+		return docs
 	}
+	if isScaleToZero(app.Autoscaling) {
+		docs = append(docs, marshalResource(buildScaledObject(ri, app)))
+		if app.Type == "server" || app.Type == "frontend" || app.Type == "" {
+			docs = append(docs, marshalResource(buildHTTPScaledObject(ri, app)))
+		}
+		return docs
+	}
+	docs = append(docs, marshalResource(buildHPA(ri, app)))
 	return docs
+}
+
+// isScaleToZero returns true when autoscaling is explicitly configured for
+// scale-to-zero. MinReplicas must be 0 AND MaxReplicas must be > 0 (explicitly set).
+// A zero-value AutoscalingConfig (all 0s) is treated as HPA with defaults, not KEDA.
+// Returns false for nil AutoscalingConfig (no autoscaling configured).
+func isScaleToZero(as *AutoscalingConfig) bool {
+	return as != nil && as.MinReplicas == 0 && as.MaxReplicas > 0
 }
 
 // renderServerApp generates Deployment + Service + IngressRoute for a server app.
@@ -83,7 +102,7 @@ func renderServerApp(ri RenderInput, app AppManifestInput) []string {
 		marshalResource(service),
 	}
 	docs = append(docs, ingressResources...)
-	docs = maybeHPA(docs, ri, app)
+	docs = maybeAutoscaler(docs, ri, app)
 	return docs
 }
 
@@ -92,7 +111,7 @@ func renderWorkerApp(ri RenderInput, app AppManifestInput) []string {
 	deployment := buildDeployment(ri, app, 0)
 	pdb := buildPDB(ri, app)
 	docs := []string{marshalResource(deployment), marshalResource(pdb)}
-	docs = maybeHPA(docs, ri, app)
+	docs = maybeAutoscaler(docs, ri, app)
 	return docs
 }
 
@@ -115,6 +134,6 @@ func renderFrontendApp(ri RenderInput, app AppManifestInput) []string {
 		marshalResource(service),
 	}
 	docs = append(docs, ingressResources...)
-	docs = maybeHPA(docs, ri, app)
+	docs = maybeAutoscaler(docs, ri, app)
 	return docs
 }

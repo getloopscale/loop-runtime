@@ -39,7 +39,7 @@ Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, 
 - SBOM generation (syft — Sprint 6 remainder)
 - Admission policy (reject unsigned images — Sprint 6 remainder)
 - SSO/SAML (Phase 3)
-- `loopzero scale` backend endpoint (CLI exists, API missing)
+- `loopzero scale` backend persistence (endpoint returns 202 acknowledged as stub; DB persistence pending — use loopzero.yaml + loopzero deploy)
 - Loki cross-cluster log streaming (infra gap, not code)
 
 **Known issues:**

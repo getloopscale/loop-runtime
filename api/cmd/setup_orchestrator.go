@@ -41,6 +41,7 @@ type OrchestratorDeps struct {
 	RollbackHandler   *routes.RollbackHandler
 	PromoteHandler    *routes.PromoteHandler
 	StatusHandler     *routes.StatusHandler
+	ScaleHandler      *routes.ScaleHandler
 	BuildListHandler  *routes.BuildListHandler
 	ProjectDeleter    routes.ProjectDeleter
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
@@ -134,6 +135,9 @@ func setupOrchestrator(
 	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
 	statusHandler := routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain)
 
+	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate)
+	scaleHandler := routes.NewScaleHandler(projectStore, cfg.KEDAEnabled)
+
 	// Build list handler — lists builds for a project with optional env filter
 	buildListHandler := routes.NewBuildListHandler(&adapters.BuildListStoreAdapter{Store: stores.BuildStore})
 
@@ -164,6 +168,7 @@ func setupOrchestrator(
 		RollbackHandler:     rollbackHandler,
 		PromoteHandler:      promoteHandler,
 		StatusHandler:       statusHandler,
+		ScaleHandler:        scaleHandler,
 		BuildListHandler:    buildListHandler,
 		ProjectDeleter:      projectDeleter,
 		ArgoCallbackHandler: argoCallbackHandler,

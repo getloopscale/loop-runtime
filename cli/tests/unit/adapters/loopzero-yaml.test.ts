@@ -311,4 +311,42 @@ describe('parseLoopZeroYaml', () => {
     expect(result.apps.api.autoscaling).toBeUndefined();
     expect(result.apps.api.replicas).toBeUndefined();
   });
+
+  it('should parse autoscaling with cooldown field', () => {
+    const yaml = [
+      'project: my-app',
+      'apps:',
+      '  api:',
+      '    path: .',
+      '    port: 3000',
+      '    autoscaling:',
+      '      min: 0',
+      '      max: 5',
+      '      targetCPU: 80',
+      '      cooldown: 600',
+    ].join('\n');
+    const result = parseLoopZeroYaml(yaml);
+    expect(result.apps.api.autoscaling).toEqual({
+      min: 0,
+      max: 5,
+      targetCPU: 80,
+      cooldown: 600,
+    });
+  });
+
+  it('should parse autoscaling without cooldown (undefined)', () => {
+    const yaml = [
+      'project: my-app',
+      'apps:',
+      '  api:',
+      '    path: .',
+      '    port: 3000',
+      '    autoscaling:',
+      '      min: 0',
+      '      max: 5',
+    ].join('\n');
+    const result = parseLoopZeroYaml(yaml);
+    expect(result.apps.api.autoscaling).toBeDefined();
+    expect(result.apps.api.autoscaling!.cooldown).toBeUndefined();
+  });
 });
