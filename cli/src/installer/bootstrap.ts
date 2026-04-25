@@ -27,6 +27,69 @@ export interface BootstrapTokens {
 // ─── Database migrations ────────────────────────────────────────────────────
 
 /**
+ * Run migrations BEFORE the platform helm install, by piping SQL files from
+ * the local repo directly into the CNPG primary pod via kubectl exec.
+ *
+ * Why this exists: loopzero-controller needs `leader_generations` table at
+ * startup (leader election fence). The chart's `helm --wait` blocks until
+ * controller is Ready. But controller can't be Ready without the table.
+ * Without this function, install times out at Step 8 with controller
+ * crashlooping on `relation "leader_generations" does not exist`.
+ *
+ * Idempotent: SQL files use IF NOT EXISTS. Re-running is safe.
+ *
+ * `migrationsDir` defaults to the repo path; when running outside the repo
+ * (loopzero CLI installed standalone), the caller must supply a path.
+ */
+export function runMigrationsViaCnpgPod(
+  migrationsDir: string,
+  log: (msg: string) => void,
+): boolean {
+  log('  Running database migrations (pre-install via CNPG pod)...');
+
+  const primaryPod = findCnpgPrimaryPod();
+  if (!primaryPod) {
+    log('  ✗ CNPG primary pod not found — migrations skipped');
+    return false;
+  }
+
+  let files: string[];
+  try {
+    files = execSync(`ls ${migrationsDir}/*.up.sql 2>/dev/null | sort`, {
+      encoding: 'utf-8',
+      timeout: 5_000,
+    }).trim().split('\n').filter(Boolean);
+  } catch {
+    log(`  ✗ No migration files in ${migrationsDir}`);
+    return false;
+  }
+
+  if (files.length === 0) {
+    log(`  ✗ migrationsDir ${migrationsDir} has no *.up.sql files`);
+    return false;
+  }
+
+  for (const file of files) {
+    const name = file.split('/').pop() || file;
+    try {
+      execSync(
+        `kubectl exec -n loopzero-system ${primaryPod} -c postgres -i -- ` +
+        `psql -U postgres -d loopzero < '${file}'`,
+        { stdio: 'pipe', timeout: 60_000, shell: '/bin/bash' } as any,
+      );
+      log(`  ✓ Applied ${name}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log(`  ⚠ ${name} failed: ${msg.slice(0, 100)}`);
+      // Don't abort — some statements (CREATE TABLE IF NOT EXISTS) may
+      // succeed even though the script returns non-zero on later inserts.
+    }
+  }
+
+  return true;
+}
+
+/**
  * Run database migrations using the API pod's built-in migrate binary.
  * Falls back to psql if the API pod is not yet running.
  */
@@ -933,25 +996,30 @@ export function grantTableOwnership(
     return;
   }
 
-  const sql = `DO $$ DECLARE r RECORD; BEGIN ` +
-    `FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' LOOP ` +
-    `EXECUTE 'ALTER TABLE public.'||quote_ident(r.tablename)||' OWNER TO ${targetRole}'; ` +
-    `END LOOP; ` +
-    `FOR r IN SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema='public' LOOP ` +
-    `EXECUTE 'ALTER SEQUENCE public.'||quote_ident(r.sequence_name)||' OWNER TO ${targetRole}'; ` +
-    `END LOOP; ` +
-    `END $$;`;
+  // Pass SQL via stdin instead of -c "<sql>" — bash interprets $$ in the
+  // DO block as the shell PID. Stdin is byte-faithful.
+  const sql = `DO $$ DECLARE r RECORD; BEGIN
+    FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' LOOP
+      EXECUTE 'ALTER TABLE public.'||quote_ident(r.tablename)||' OWNER TO ${targetRole}';
+    END LOOP;
+    FOR r IN SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema='public' LOOP
+      EXECUTE 'ALTER SEQUENCE public.'||quote_ident(r.sequence_name)||' OWNER TO ${targetRole}';
+    END LOOP;
+  END $$;
+  GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ${targetRole};
+  GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ${targetRole};
+  `;
 
   try {
     execSync(
-      `kubectl exec -n loopzero-system ${primaryPod} -c postgres -- ` +
-      `psql -U postgres -d loopzero -c "${sql.replace(/"/g, '\\"')}"`,
-      { stdio: 'pipe', timeout: 20_000 },
+      `kubectl exec -i -n loopzero-system ${primaryPod} -c postgres -- ` +
+      `psql -U postgres -d loopzero`,
+      { stdio: ['pipe', 'pipe', 'pipe'], timeout: 20_000, input: sql } as any,
     );
     log(`  ✓ Table ownership set to ${targetRole}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    log(`  ⚠ Table ownership reassignment failed: ${msg.slice(0, 120)}`);
+    log(`  ⚠ Table ownership reassignment failed: ${msg.slice(0, 200)}`);
   }
 }
 

@@ -25,6 +25,7 @@ export {
   ensureMinioBucket,
   grantTableOwnership,
   createBuildSecrets,
+  runMigrationsViaCnpgPod,
 } from './bootstrap';
 export {
   ensureImagePullSecret,

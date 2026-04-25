@@ -31,6 +31,7 @@ import {
   ensureMinioBucket,
   grantTableOwnership,
   createBuildSecrets,
+  runMigrationsViaCnpgPod,
 } from '../installer';
 
 export interface PlatformDeps {
@@ -274,6 +275,23 @@ export async function platformInstall(
   createBuildSecrets(config, writeTo);
 
   writeTo('');
+
+  // ── Step 7.5: Pre-install migrations ──────────────────────────────
+  // CHG-2026-04-25-E2E: loopzero-controller fails leader-acquire at startup
+  // if `leader_generations` table doesn't exist. Helm `--wait` then blocks
+  // forever waiting for controller Ready. Solution: apply migrations
+  // BEFORE the helm install, piping SQL files directly into CNPG primary
+  // via kubectl exec. LOOPZERO_LOCAL_CHARTS env exposes the repo root, from
+  // which we derive migrations dir.
+  const repoRoot = process.env.LOOPZERO_LOCAL_CHARTS
+    ? process.env.LOOPZERO_LOCAL_CHARTS.replace(/\/charts\/?$/, '')
+    : '';
+  if (repoRoot) {
+    const migrationsDir = `${repoRoot}/api/internal/db/migrations`;
+    runMigrationsViaCnpgPod(migrationsDir, writeTo);
+    grantTableOwnership(config.database.url!, 'loopzero', writeTo);
+    writeTo('');
+  }
 
   // ── Step 8: Install LoopZero platform ─────────────────────────────────
   writeTo('Step 8/10: Installing LoopZero platform...');

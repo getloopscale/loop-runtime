@@ -121,6 +121,15 @@ EOF
 doctl registry login >/dev/null
 log "  ✓ DOCR login fresh"
 
+# CHG-2026-04-25-E2E: until v0.2.1 charts are published to OCI, the
+# installer must use local chart paths. We export LOOPZERO_LOCAL_CHARTS
+# pointing at this repo's charts/ directory; loopzero platform install picks
+# this up via the chartRef() helper in cli/src/installer/components.ts.
+# In production the env var is unset and OCI is used (Rule 10).
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+export LOOPZERO_LOCAL_CHARTS="$REPO_ROOT/charts"
+log "  Using LOCAL charts: $LOOPZERO_LOCAL_CHARTS (set LOOPZERO_LOCAL_CHARTS empty to use OCI)"
+
 INSTALL_LOG="$LOG_DIR/install.log"
 log "  Starting install (logs: $INSTALL_LOG)"
 if timeout "$INSTALL_TIMEOUT_SEC" loopzero platform install -f "$VALUES_FILE" > "$INSTALL_LOG" 2>&1; then

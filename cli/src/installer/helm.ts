@@ -44,9 +44,15 @@ export function installOrUpgrade(opts: {
 }): void {
   const args = [
     `upgrade --install ${opts.name} ${opts.chart}`,
-    `--version ${opts.version}`,
     `-n ${opts.namespace}`,
   ];
+  // CHG-2026-04-25-E2E: empty version means caller is using a local chart
+  // path (helm reads version from Chart.yaml). Used for E2E test runs
+  // against in-flight chart fixes not yet published to OCI. Production
+  // path always supplies an explicit version.
+  if (opts.version) {
+    args.push(`--version ${opts.version}`);
+  }
 
   if (opts.createNamespace) args.push('--create-namespace');
   if (opts.wait !== false) args.push('--wait');

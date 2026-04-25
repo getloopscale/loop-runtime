@@ -14,6 +14,21 @@ const CHART_VERSION = '0.2.0';
 const IMAGE_PULL_SECRET_NAME = 'loopzero-system-pull';
 
 /**
+ * For E2E smoke testing of in-flight chart changes that haven't been
+ * published yet, set LOOPZERO_LOCAL_CHARTS=/path/to/loopzero/charts. The installer
+ * will resolve loopzero-platform / loopzero-crds from that path instead of pulling
+ * from OCI. This is ONLY for development; production installs always use
+ * OCI for reproducibility.
+ */
+function chartRef(name: string): { chart: string; version?: string } {
+  const localPath = process.env.LOOPZERO_LOCAL_CHARTS;
+  if (localPath) {
+    return { chart: `${localPath}/${name}` };
+  }
+  return { chart: `${CHART_REGISTRY}/${name}`, version: CHART_VERSION };
+}
+
+/**
  * Ensure DOCR imagePullSecret exists in the target namespace.
  * Uses doctl to generate a docker config, or falls back to existing docker config.
  */
@@ -76,10 +91,11 @@ export function ensureImagePullSecret(namespace: string, log: (msg: string) => v
  */
 export function installCRDs(log: (msg: string) => void): void {
   log('  Installing CRDs...');
+  const { chart, version } = chartRef('loopzero-crds');
   installOrUpgrade({
     name: 'loopzero-crds',
-    chart: `${CHART_REGISTRY}/loopzero-crds`,
-    version: CHART_VERSION,
+    chart,
+    version: version || '',
     namespace: 'loopzero-system',
     createNamespace: true,
     wait: true,
@@ -261,17 +277,24 @@ export function installPlatform(
   const values = buildPlatformValues(config, tokens);
 
   log('  Installing LoopZero platform...');
+  const platformRef = chartRef('loopzero-platform');
+  // CHG-2026-04-25-E2E: don't `--wait` for pods here. The Helm release
+  // applies manifests in seconds; pod readiness then takes 60-120s for
+  // leader election + DB connection pools to converge. Step 9 is the
+  // dedicated wait-for-pods step (uses `kubectl wait` with longer timeout
+  // and per-pod diagnostics on failure). Keeping --wait here just doubles
+  // the time and makes failures less debuggable.
   installOrUpgrade({
     name: 'loopzero',
-    chart: `${CHART_REGISTRY}/loopzero-platform`,
-    version: CHART_VERSION,
+    chart: platformRef.chart,
+    version: platformRef.version || '',
     namespace: 'loopzero-system',
     createNamespace: true,
     values,
-    wait: true,
-    timeout: '5m',
+    wait: false,
+    timeout: '2m',
   });
-  log('  ✓ LoopZero platform installed');
+  log('  ✓ LoopZero platform manifests applied (pod readiness awaited in Step 9)');
 }
 
 /**
