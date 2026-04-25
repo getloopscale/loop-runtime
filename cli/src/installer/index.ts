@@ -13,6 +13,7 @@ export {
   runMigrations,
   bootstrapGitea,
   bootstrapArgoCD,
+  patchArgocdInsecure,
   extractMinioCredentials,
   extractPostgresCredentials,
   generateSecret,

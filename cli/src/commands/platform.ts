@@ -20,6 +20,7 @@ import {
   runMigrations,
   bootstrapGitea,
   bootstrapArgoCD,
+  patchArgocdInsecure,
   extractMinioCredentials,
   extractPostgresCredentials,
   generateSecret,
@@ -202,6 +203,11 @@ export async function platformInstall(
     writeError('  Check: kubectl logs -n gitea deploy/gitea');
     return 1;
   }
+
+  // CHG-2026-04-25-E2E: ArgoCD chart's `--set` doesn't reliably apply
+  // `configs.params.server\.insecure=true` (dot escape eaten by shell).
+  // Patch the configmap directly so server starts in HTTP-only mode.
+  patchArgocdInsecure(writeTo);
 
   // ArgoCD: extract admin password
   const argocdPassword = bootstrapArgoCD('argocd', writeTo);

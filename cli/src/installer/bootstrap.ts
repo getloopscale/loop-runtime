@@ -253,25 +253,97 @@ export function bootstrapGitea(
 // ─── ArgoCD bootstrap ───────────────────────────────────────────────────────
 
 /**
+ * Patch the argocd-cmd-params-cm ConfigMap so the argocd-server pod reads
+ * `server.insecure: "true"` and serves HTTP (not HTTPS) on port 8080.
+ *
+ * Helm `--set 'configs.params.server\.insecure=true'` produces inconsistent
+ * results across shells (the dot escape may be eaten before reaching helm).
+ * The chart's templates default the param to `"false"`, so we override
+ * post-install via kubectl patch + rollout restart.
+ *
+ * Without this, loopzero-controller calls argocd-server over HTTP but ArgoCD
+ * 301-redirects to HTTPS — the controller's HTTP client follows redirects
+ * and hits a self-signed cert it doesn't trust → "x509: certificate signed
+ * by unknown authority" → release stuck in SYNC_FAILED.
+ *
+ * Idempotent: kubectl patch + rollout are no-ops when already applied.
+ */
+export function patchArgocdInsecure(log: (msg: string) => void): void {
+  log('  Patching ArgoCD to insecure HTTP mode...');
+  try {
+    execSync(
+      `kubectl patch cm -n argocd argocd-cmd-params-cm --type=merge ` +
+      `-p '{"data":{"server.insecure":"true"}}'`,
+      { stdio: 'pipe', timeout: 10_000 },
+    );
+    execSync(
+      `kubectl rollout restart deploy -n argocd argocd-server`,
+      { stdio: 'pipe', timeout: 10_000 },
+    );
+    // Wait briefly for the rollout to start (the new pod takes ~10-15s
+    // to be Ready; we don't block here, downstream waitForPods covers it).
+    execSync('sleep 5', { stdio: 'pipe' });
+    log('  ✓ ArgoCD insecure mode applied (HTTP on :8080, no TLS redirect)');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`  ⚠ ArgoCD insecure patch failed: ${msg.slice(0, 100)}`);
+  }
+}
+
+/**
  * Bootstrap ArgoCD: extract initial admin password from K8s secret.
  */
 export function bootstrapArgoCD(namespace: string, log: (msg: string) => void): string {
-  log('  Extracting ArgoCD admin credentials...');
+  log('  Extracting ArgoCD admin credentials + obtaining JWT...');
+  let pass = '';
   try {
-    const pass = execSync(
+    pass = execSync(
       `kubectl get secret -n ${namespace} argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d`,
       { encoding: 'utf-8', timeout: 10_000 },
     ).trim();
-    if (pass) {
-      log('  ✓ ArgoCD admin password extracted');
-    } else {
+    if (!pass) {
       log('  ⚠ ArgoCD admin password is empty');
+      return '';
     }
-    return pass;
   } catch {
     log('  ⚠ ArgoCD admin secret not found — ArgoCD may not be installed');
     return '';
   }
+
+  // CHG-2026-04-25-E2E: previous version returned the PASSWORD as the
+  // "token". loopzero-controller and loopzero-api use Bearer auth to call
+  // ArgoCD's REST API, which expects a JWT (not a basic-auth password).
+  // We POST to /api/v1/session with the password to exchange it for a
+  // JWT, then return the JWT. Fallback to the raw password if the
+  // session endpoint isn't reachable (older ArgoCD versions or partial
+  // install).
+  return withPortForward(
+    'argocd', 'svc/argocd-server', 80,
+    (localUrl) => {
+      try {
+        const body = JSON.stringify({ username: 'admin', password: pass });
+        const resp = execSync(
+          `curl -sf -X POST --max-time 10 ` +
+          `-H 'Content-Type: application/json' ` +
+          `--data '${body.replace(/'/g, "'\\''")}' ` +
+          `'${localUrl}/api/v1/session'`,
+          { encoding: 'utf-8', timeout: 15_000 },
+        );
+        const parsed = JSON.parse(resp);
+        const jwt = (parsed.token as string) || '';
+        if (jwt) {
+          log('  ✓ ArgoCD JWT obtained (Bearer-ready)');
+          return jwt;
+        }
+        log('  ⚠ ArgoCD session response missing token — falling back to password');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log(`  ⚠ ArgoCD session login failed: ${msg.slice(0, 100)}`);
+      }
+      log('  ⚠ Returning password as fallback — controller may fail with DEPLOY_SERVICE_AUTH_FAILED');
+      return pass;
+    },
+  );
 }
 
 // ─── PostgreSQL (CloudNativePG) credentials ────────────────────────────────
