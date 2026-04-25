@@ -193,9 +193,9 @@ Ajusta replicas fixas ou autoscaling.
 | `--max <n>` | int | — | Max replicas (HPA) |
 | `--cpu <n>` | int | — | CPU target % (HPA) |
 
-**Status:** ❌ Backend `/scale` endpoint **não implementado**. CLI retorna `code=SCALE_NOT_AVAILABLE` (AUDIT-27) com mensagem "Scaling is not yet available on this server." em vez do genérico NOT_FOUND.
+**Status:** ⚠️ Backend `/scale` endpoint retorna `202 Accepted` com `status: "acknowledged"` (stub — config validada mas não persistida no DB). Para aplicar scaling, declare `autoscaling` em `loopzero.yaml` e execute `loopzero deploy`. Scale-to-zero (`min: 0`) requer KEDA habilitado no cluster (`LOOPZERO_KEDA_ENABLED=true`).
 
-**Workaround funcional**: declare `replicas: N` em `loopzero.yaml` e execute `loopzero deploy`. Validado com replicas=2 → 2 pods Running. (F1.2 PASS via path declarativo.)
+**Path declarativo (recomendado)**: configure `autoscaling: { min: 0, max: 5, targetCPU: 80 }` em `loopzero.yaml` e execute `loopzero deploy`.
 
 ---
 
