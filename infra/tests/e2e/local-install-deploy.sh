@@ -362,7 +362,7 @@ log "── Phase 6: attestation assertion"
 # have it from `loopzero deploy` output reliably, so we query the API.
 BUILD_ID="$(curl -sf -H "Authorization: Bearer $TOKEN" \
   "$API_URL/api/v1/projects/e2e-project/builds?limit=1" 2>/dev/null \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['builds'][0]['id'] if d.get('builds') else '')" 2>/dev/null || true)"
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['builds'][0].get('build_id') or d['builds'][0].get('id') or '' if d.get('builds') else '')" 2>/dev/null || true)"
 
 if [ -z "$BUILD_ID" ]; then
   log "  ⚠ Could not fetch latest build_id — attestation phase skipped (non-fatal)"
