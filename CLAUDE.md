@@ -14,7 +14,7 @@ The authoritative specification is **`docs/technical.md`**. Every state machine,
 
 Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, exit gates, and spec references.
 
-**Current status: Pre-release, Starter + Pro tiers launchable (98% confidence — E2E validated 2026-04-23).** 25/30 E2E tests pass on production-parity k3d. Sprints 0-3 complete. Sprint 4 (`rollback` + `promote`) complete. Sprint 6 partially complete (cosign image signing implemented, syft SBOM not started). Sprint 10 (static frontend) complete. Sprint 11 (auth + billing) complete. Hardening sprints H1-H7 all complete. AUDIT series (21 fixes) hardened CLI↔API contracts. 1023 CLI tests + 36 Go packages passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN).
+**Current status: Pre-release, Starter + Pro tiers launchable (98% confidence — E2E validated 2026-04-23).** 25/30 E2E tests pass on production-parity k3d. Sprints 0-4 complete. Sprint 6 partially complete (cosign image signing implemented, syft SBOM not started). Sprint 10 (static frontend) complete. Sprint 11 (auth + billing) complete. Hardening sprints H1-H7 all complete. AUDIT series (21 fixes) hardened CLI↔API contracts. KEDA scale-to-zero fully implemented (code + Helm + Pulumi). 1079 CLI tests + 41 Go packages passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN).
 
 **Completed features:**
 - **Deploy happy path** — CLI → upload → Argo build → ArgoCD sync → live URL (E2E validated)
@@ -33,6 +33,8 @@ Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, 
 - **Failure modes** — concurrent deploy rejection (1×202 + 1×409), lock release on crash, invalid Dockerfile (exit 2), auth error (exit 4)
 - **JSON contracts** — 8/8 commands validated, 0 internal term leaks across 15 --help + 8 --json
 - **Observability** — 43 loopzero_* Prometheus metrics, health endpoints, Grafana dashboards, SLO alerts
+- **Scale-to-zero (KEDA)** — manifest generation (ScaledObject + HTTPScaledObject), CLI validation (min:0, cooldown), Helm charts, Pulumi bootstrap, Traefik interceptor routing, feature gate (LOOPZERO_KEDA_ENABLED)
+- **Cell architecture (Phase 0+1 complete)** — cell_id on all tables (triggers auto-populate), PlacementEngine (RoundRobin + TOCTOU advisory lock), DynamicRouter (periodic CRD refresh), StaticRouter (fallback), K8sCellStore (reads ClusterCredential CRDs), CrossCellAggregator (parallel fan-out), CellService, leader generation fencing (cell-scoped PK), build admission gate (cell+tenant caps), PG processing claims (CAS dedup), distributed work queue (SELECT FOR UPDATE SKIP LOCKED, 6 queues), cell-aware build reconcile dispatch. Pulumi cell.ts provisions full DOKS cells. Capacity test suite (10 tests). Cell budget documented with measured values.
 
 **Not yet built:**
 - Preview environments (Sprint 5 — CRD defined, controller skeleton exists, no production logic)
@@ -41,6 +43,7 @@ Sprint details are in **`docs/sprints/`** — one folder per sprint with tasks, 
 - SSO/SAML (Phase 3)
 - `loopzero scale` backend persistence (endpoint returns 202 acknowledged as stub; DB persistence pending — use loopzero.yaml + loopzero deploy)
 - Loki cross-cluster log streaming (infra gap, not code)
+- Cell architecture Phase 2b activation (code 100% complete; Pulumi.dev.yaml missing multi-cell config to invoke createCell())
 
 **Known issues:**
 - AppSecret controller not implemented (secrets work via ESO directly)
@@ -68,15 +71,15 @@ task lint                # Lint all components (golangci-lint + ESLint)
 task validate:manifests  # kubeconform --strict on all manifests
 
 # Per-component
-cd cli  && npm test           # CLI unit tests (Jest, 1023 tests, 59 suites)
-cd api  && go test ./...      # API tests (Go testing, 203 test files, 36 packages)
+cd cli  && npm test           # CLI unit tests (Jest, 1079 tests, 59 suites)
+cd api  && go test ./...      # API tests (Go testing, 41 packages)
 cd operators && go test ./... # Operator tests (Ginkgo + envtest)
 cd pkg && go test ./...       # Shared library tests
 cd infra/pulumi && npm test   # Pulumi IaC tests (vitest)
 cd infra/tests && go test ./unit/... # Infra unit tests
 
 # Database
-task db:migrate          # Run forward-only migrations (37 migrations)
+task db:migrate          # Run forward-only migrations (2 consolidated + 37 archived)
 task db:seed             # Insert dev seed data
 task db:shell            # PostgreSQL shell (psql)
 task db:reset            # Reset database (drop + recreate + migrate + seed)
@@ -163,6 +166,7 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | Edge proxy | Cloudflare Tunnel + Worker | DDoS/WAF protection, static asset routing from DO Spaces |
 | Static assets | DO Spaces + CDN | Frontend build output (JS/CSS/HTML), public-read ACL |
 | Routing table | Cloudflare Workers KV | Static app routing: subdomain → build-id + S3 prefix |
+| Autoscaling | KEDA 2.16.1 + HTTP Add-on 0.8.0 | Scale-to-zero for tenant apps (workload cluster) |
 
 ### Development & Operations
 
@@ -173,15 +177,15 @@ Same Helm charts, same operators, same build pipeline. No Docker Compose shortcu
 | Local clusters | k3d × 3 (mgmt, build, workload) | Local dev parity with production |
 | Dev loop | Tilt | Hot reload, migration, CRD deploy, seed data |
 | Task runner | Taskfile (1695 lines) | Idempotent automation (setup, test, lint, deploy) |
-| Helm charts | 21 charts (pinned versions) | cert-manager, Traefik, ArgoCD, Gitea, MinIO, PostgreSQL, Argo Workflows, monitoring, network-policies, otel, Loki, Promtail, Tempo, Ory Kratos, Ory Hydra, Harbor, Redis, blackbox-exporter, external-secrets, admission-policies |
-| CI/CD | GitHub Actions (12 workflows) | CI, Build Images, Infra Deploy/Preview/Bootstrap/Destroy/Drift/E2E/Restart/State-Reset, Load Test, Release |
+| Helm charts | 22 charts (pinned versions) | cert-manager, Traefik, ArgoCD, Gitea, MinIO, PostgreSQL, Argo Workflows, monitoring, network-policies, otel, Loki, Promtail, Tempo, Ory Kratos, Ory Hydra, Harbor, Redis, blackbox-exporter, external-secrets, admission-policies, KEDA, KEDA HTTP Add-on |
+| CI/CD | GitHub Actions (14 workflows) | CI, Build Images, Infra Deploy/Preview/Bootstrap/Destroy/Drift/E2E/Restart/State-Reset, Load Test, Release |
 | Linting (Go) | golangci-lint v2.11.3 (errcheck, govet, staticcheck, etc.) | Code quality |
 | Linting (TS) | ESLint + TypeScript strict mode | Code quality |
 | Security scanning | govulncheck + npm audit + Trivy (fs + IaC + Dockerfile) + TruffleHog | Vulnerability + secret detection |
 | Manifest validation | kubeconform --strict | K8s YAML correctness |
 | Tests (Go) | Go testing + Ginkgo v2 + Gomega + envtest (K8s 1.31.0) | Unit, integration, operator tests |
-| Tests (TS) | Jest | CLI unit tests (1023 tests) |
-| Migrations | golang-migrate (forward-only, .up.sql only) | Database schema evolution (37 migrations) |
+| Tests (TS) | Jest | CLI unit tests (1079 tests) |
+| Migrations | golang-migrate (forward-only, .up.sql only) | Database schema evolution (2 consolidated + 37 archived) |
 | Image signing | cosign (in-pipeline, key-based) | Supply chain security — signs every image post-build |
 | CLI tools | doctl, gh (GitHub CLI) | Cloud + CI interaction |
 
@@ -223,7 +227,7 @@ loopzero/
 │   └── statemachine/                  ← 9 state machines (build, release, tenant, preview, promotion, rollback, bootstrap, domain, environment)
 ├── cli/                               ← @loopzero/cli (TypeScript + Commander)
 │   ├── src/
-│   │   ├── commands/                  ← 35 commands (login, deploy, rollback, promote, secret, domain, env, team, audit, preview, scale, etc.)
+│   │   ├── commands/                  ← 36 commands (login, deploy, rollback, promote, secret, domain, env, team, audit, preview, scale, platform, etc.)
 │   │   ├── api/                       ← API client (retry, idempotency-key) + SSE client (reconnect, fallback polling)
 │   │   ├── output/                    ← formatters: human/json/CI + deploy renderer (TTY/CI modes)
 │   │   ├── detection/                 ← monorepo detection (Turbo/Nx/Lerna/pnpm) + framework detection (30 frameworks)
@@ -291,7 +295,7 @@ loopzero/
 │   │   └── Pulumi.prod.yaml          ← prod stack (NYC3, loopzero.example)
 │   ├── k3d/                           ← 3 cluster configs (mgmt, build, workload)
 │   ├── cloudflare/                    ← CF Worker source (worker.mjs for static delivery)
-│   ├── helm/                          ← 21 Helm charts (all pinned versions)
+│   ├── helm/                          ← 22 Helm charts (all pinned versions)
 │   │   ├── admission-policies/        ← Image admission policy definitions
 │   │   ├── argo-workflows/            ← CWTs: clone, cache-restore, cache-save, summary, resource-quota
 │   │   ├── argocd/                    ← v2.13.3, manual sync, loopzero-api RBAC
@@ -308,10 +312,11 @@ loopzero/
 │   │   ├── ory-kratos/                ← Identity management
 │   │   ├── otel/                      ← OpenTelemetry collector
 │   │   ├── postgresql/                ← PostgreSQL with init scripts
-│   │   ├── postgresql-ha/             ← HA config (Patroni, for production)
 │   │   ├── promtail/                  ← Log shipping to Loki
 │   │   ├── redis/                     ← Cache (Hydra sessions)
 │   │   ├── tempo/                     ← Distributed tracing backend
+│   │   ├── keda/                      ← KEDA event-driven autoscaler (scale-to-zero)
+│   │   ├── keda-http-addon/           ← KEDA HTTP Add-on (cold-start interceptor)
 │   │   └── traefik/                   ← 2 replicas, HA, JSON logging, correlation-id tracking
 │   ├── tilt/                          ← Tilt deployment manifests (api, operator)
 │   ├── scripts/                       ← infrastructure utility scripts (Go)
@@ -654,7 +659,7 @@ Check the current sprint before starting any implementation. Only implement what
 ├─────────────────────────────────────────────────────────────────┤
 │  WORKLOAD PLANE  (runtime cluster)                               │
 │  User applications managed by ArgoCD                             │
-│  Traefik ingress + cert-manager TLS                              │
+│  Traefik ingress + cert-manager TLS + KEDA autoscaling           │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -776,3 +781,9 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | Test contracts by layer | §20 |
 | CLI reference (all commands) | §25 |
 | `loopzero.yaml` complete spec | §26 |
+
+### Maturity Assessment
+
+**Score: 3.2/5** — Full assessment: `docs/maturity-assessment.md`
+
+Path to 4.0: Preview Environments (Sprint 5) + Polish/Onboarding (Sprint 9) + Cell-2 activation + 1 external early adopter.
