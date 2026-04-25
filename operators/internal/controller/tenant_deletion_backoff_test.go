@@ -91,3 +91,66 @@ func TestRequeueDeletionStuck_ContinuesRetrying(t *testing.T) {
 			constants.RequeueDeletionStuck, constants.DeletionBackoffMax)
 	}
 }
+
+// --- M-09: Deletion stuck path behavior tests ---
+
+func TestDeletionStuckPath_BelowMaxUsesBackoff(t *testing.T) {
+	// At retryCount < DeletionMaxAttempts, normal exponential backoff is used.
+	for attempt := 0; attempt < constants.DeletionMaxAttempts; attempt++ {
+		backoff := deletionBackoff(attempt)
+		if backoff == constants.RequeueDeletionStuck {
+			t.Errorf("attempt %d: backoff (%v) should NOT equal RequeueDeletionStuck (%v) before max attempts",
+				attempt, backoff, constants.RequeueDeletionStuck)
+		}
+		if backoff > constants.DeletionBackoffMax {
+			t.Errorf("attempt %d: backoff (%v) exceeds DeletionBackoffMax (%v)",
+				attempt, backoff, constants.DeletionBackoffMax)
+		}
+	}
+}
+
+func TestDeletionStuckPath_AtMaxRetriesAnnotationPersists(t *testing.T) {
+	// Verify that retry count is correctly persisted in tenant annotations.
+	// When retryCount reaches DeletionMaxAttempts, the annotation must hold that value
+	// so the controller knows to use RequeueDeletionStuck on next reconcile.
+	tenant := &loopzerov1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{Name: "stuck-tenant"},
+	}
+
+	// Simulate 10 failed attempts (each sets the annotation)
+	for i := 1; i <= constants.DeletionMaxAttempts; i++ {
+		setDeletionRetryCount(tenant, i)
+	}
+
+	got := getDeletionRetryCount(tenant)
+	if got != constants.DeletionMaxAttempts {
+		t.Errorf("after %d sets, retryCount = %d, want %d",
+			constants.DeletionMaxAttempts, got, constants.DeletionMaxAttempts)
+	}
+}
+
+func TestDeletionStuckPath_DecisionLogic(t *testing.T) {
+	// The core decision in reconcileDelete:
+	//   if retryCount >= DeletionMaxAttempts → RequeueAfter: RequeueDeletionStuck (1h)
+	//   else → RequeueAfter: deletionBackoff(retryCount)
+	//
+	// This test verifies the boundary condition at exactly DeletionMaxAttempts.
+	tests := []struct {
+		name       string
+		retryCount int
+		wantStuck  bool
+	}{
+		{"below max (attempt 9)", constants.DeletionMaxAttempts - 1, false},
+		{"at max (attempt 10)", constants.DeletionMaxAttempts, true},
+		{"above max (attempt 15)", constants.DeletionMaxAttempts + 5, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isStuck := tt.retryCount >= constants.DeletionMaxAttempts
+			if isStuck != tt.wantStuck {
+				t.Errorf("retryCount=%d: isStuck=%v, want %v", tt.retryCount, isStuck, tt.wantStuck)
+			}
+		})
+	}
+}

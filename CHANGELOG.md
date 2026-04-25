@@ -21,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - **(6) NetworkPolicy egress allowlist** (`charts/loopzero-build-cwts/templates/network-policy.yaml`): added ports 3000 (Gitea), 4444/4445 (Hydra public+admin), 5432 (PostgreSQL CNPG services), 8080 (ArgoCD insecure), 8443 (ArgoCD TLS). Without these, loopzero-api pods in loopzero-system (covered by the same `podSelector: {}`) could not reach any control-plane service, even with DNS resolving correctly.
   - **(7) MinIO endpoint `http://` prefix** (`components.ts:buildPlatformValues`): Go S3 client in loopzero-api was interpreting hostname-only `minio.loopzero-system.svc.cluster.local:9000` as the scheme, producing `unsupported protocol scheme` on every upload. Now passes the full URL.
   - **(8) Image tag overrides for packs-runner + cosign-signer** (`components.ts:imageTagOverrides`): until the publish pipeline emits `v0.1.0`/`v0.2.0` for these two runner images, the installer injects the actually-published tags (`20260424` and `dev`) via `LOOPZERO_PACKS_IMAGE` / `LOOPZERO_COSIGN_IMAGE` env overrides that the loopzero-api Go binary already supports. Customer may override via `config.images.{packsRunner,cosignSigner}` in values.yaml.
-
 - **`extractPostgresCredentials(namespace)`** in `cli/src/installer/bootstrap.ts`: waits for CNPG Cluster CR to reach healthy state, then extracts `databaseUrl`/`username`/`password` from the auto-generated `<cluster-name>-app` secret. Returns `null` on timeout or missing secret so caller can fail fast.
 - **Self-hosted installer runtime bootstrap** — `loopzero platform install` now automates ALL runtime configuration: Gitea org + API token (Gitea 1.25 scopes), ArgoCD password extraction, MinIO credential discovery, Hydra OAuth2 client creation, kubeconfig secrets (single/multi cluster), Argo callback secret generation, MinIO credentials secret for build CWTs. Zero manual kubectl required.
 - **`BootstrapTokens` interface** — typed contract for tokens generated during bootstrap, injected into umbrella chart via `--set` values so Helm manages the K8s Secrets lifecycle.
@@ -30,7 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`extractExistingTokens()`** — reads existing tokens from K8s secrets during `loopzero platform upgrade` (avoids regeneration).
 - **Argo Workflows** added to prerequisites list (order 55, between ArgoCD and Ory).
 - **`ARGOCD_INSECURE`** added to loopzero-api configmap (code reads it but chart was missing it).
-
 - **Observability gaps resolution** — comprehensive observability improvements across all components
   - **Blackbox probes**: blackbox_exporter with HTTP, DNS, TCP modules. Probes API, Gitea, Traefik, ArgoCD. Alerts for probe failure, TLS cert expiry, slow probes
   - **Deploy E2E trace**: 12 new OTel spans covering auth, idempotency, ArgoCD sync/callback, release activation, rollback, domain provisioning, build reconcile, webhook, auto-deploy
@@ -41,13 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - **Telemetry pipeline observability**: ServiceMonitor for OTel Collector, alerts for span drop rate and export failures
   - **Dashboards**: Executive Summary (SLO error budgets, burn rates, deploy trends, lead time) and Blackbox Probes (probe status, latency, TLS, DNS)
 - **`loopzero promote` command** — promote a release from one environment to another without re-building. API endpoint `POST /api/v1/projects/{name}/promote`, PromotionOrchestrator service, CLI command with `--from`/`--to` flags and `--json` output. Uses existing promotion state machine. Locks target environment via `withEnvironmentLock`. 28 new tests (6 service + 8 route handler + 15 CLI).
-
 - **CircuitBreaker for MinIO provisioner** (operators-review): Wraps MinIO CredentialProvisioner with same CB pattern as Gitea/ArgoCD. Prevents retry storms on MinIO outage.
 - **CircuitBreaker for Harbor client** (operators-review): Wraps Harbor Client with CB pattern. Preserves nil-guard behavior.
 - **Type tests for 5 CRDs** (operators-review): Added type-level tests for LoopZeroApplication, Environment, ExposedRoute, GitRepositoryBinding, PlatformBootstrap (~40 new tests).
 - **Ginkgo fake provisioner Reset()** (operators-review): Added `BeforeEach` in suite_test.go to reset fake provisioner state between test Contexts. Prevents state leakage between tests.
 - **PlatformBootstrap ownership check** (operators-review): Validates `managed-by` label before deleting platform-tokens secret during cleanup.
-
 - **Tenant deletion lifecycle — Phases 0-5** (MEET-052): Full tenant deletion lifecycle implementation. Meeting record: MEET-2026-04-17-052.
   - Phase 0: DeleteApplications NotFound idempotency fix (prevents retry storms)
   - Phase 1: MaxConcurrentReconciles=5, exponential backoff (5s-5min, 10 max), PendingDeletion state machine
@@ -55,14 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Phase 3: DB migration (tenants_pending_deletion + tenant_tombstones), LOOPZERO_ADMIN_API_KEY middleware with dual-key rotation, DELETE /api/v1/tenants/:id endpoint (soft-delete + 202), POST /api/v1/tenants/:id/restore (grace period cancel), IDOR protection
   - Phase 5: Per-step deletion metrics (loopzero_tenant_deletion_step_duration_seconds, loopzero_tenant_deletion_stuck_total, loopzero_tenant_cb_state)
 - **Meeting record MEET-052** (MEET-052): Tenant Lifecycle & Deletion design review. TenantReaper rejected, controller-native approved. 3 security vetoes resolved, 21 mandatory actions.
-
 - **Platform hardening v2 — E2E workflow** (hardening-v2): Weekly scheduled `infra-e2e.yml` validates full destroy→up→bootstrap→health cycle. `health-check.sh` validates 30+ deployments, services, tunnel, nodes, external endpoints.
 - **OTel instrumentation — operators/** (hardening-v2): Custom Prometheus metrics (reconcile_duration, reconcile_errors, provisioner_duration). Child spans on all 7 controllers for provisioner calls (Gitea, ArgoCD, Harbor, MinIO). Error recording on spans. TraceExtractor for pkg/logging.
 - **OTel instrumentation — cloud/** (hardening-v2): TracerProvider + OTLP exporter. otelhttp on all HTTP clients (Hydra, Kratos, Stripe). Prometheus metrics replacing atomic counters. trace_id in slog.
 - **pkg/logging context propagation** (hardening-v2): `TraceExtractor` interface + `FromContext()` for trace_id/span_id injection without OTel dependency.
 - **State integrity check** (hardening-v2): Post-deploy step in `infra-deploy.yml` detects duplicate URNs in Pulumi state.
 - **Infra pre-merge checklist** (hardening-v2): `docs/checklists/infra-pre-merge.md` with 15 validation items.
-
 - **Supply chain security — image signing** (Sprint 6): cosign sign + syft SBOM + cosign attest for all 4 platform images in CI pipeline. New `sign-and-attest` job with matrix strategy in `build-images.yml`. Trivy post-build scan on final images. SBOM artifacts retained 90 days.
 - **Supply chain security — user image signing** (Sprint 6): Argo Workflow DAG now includes `sign-image-{app}` step after each `build-image-{app}`. Uses `gcr.io/projectsigstore/cosign:v2.4.1` with key mounted from `cosign-signing-key` K8s Secret.
 - **Image signature admission policy** (Sprint 6): `vap-require-image-signature` ValidatingAdmissionPolicy requires digest references (`@sha256:`) for all container images in tenant namespaces. Starts in Audit mode.
@@ -72,7 +66,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Distributed tracing — PG query tracing** (Sprint 6): `otelpgx` tracer hooks into pgx pool, creating spans for every database query with statement and duration.
 - **Distributed tracing — operator instrumentation** (Sprint 6): OTel SDK added to operators with spans on all 7 controller reconcile loops (`loopzero.operator.{name}.reconcile`).
 - **Cross-plane trace propagation** (Sprint 6): Argo Workflow annotations carry `loopzero.io/trace-id` and `loopzero.io/span-id` for end-to-end deploy trace correlation.
-
 - **Harbor container registry** (MEET-048): Minimal deployment (core×2, registry×2, jobservice×1, Redis×1) with Helm chart, PDB, NetworkPolicy. Trivy/Notary/Portal disabled.
 - **Harbor Pulumi provider** (MEET-048): `HarborRegistryProvider` implements `IProviderRegistry` ISP contract. Conditional `registryType` config (docr/harbor) with backward compatibility.
 - **Container images bucket** (MEET-048): DO Spaces bucket `loopzero-*-container-images` provisioned via Pulumi for Harbor S3 storage backend.
@@ -85,7 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Harbor dual-push for tenant builds** (MEET-048): `HARBOR_REGISTRY_URL` env var enables crane-based mirror step in Argo Workflow DAG. Best-effort (continueOn.failed=true). DOCR remains primary.
 - **Harbor init automation** (MEET-048): Dockerfile + Helm post-install Job (`harbor-init`) + CI build step. Zero manual intervention after `pulumi up`.
 - **Harbor canary CronJob** (MEET-048): Runs every 5min, checks health + API access. Failure detected via kube-state-metrics alert.
-
 - **DO PostgreSQL tuning** (`DatabasePostgresqlConfig`): pg_stat_statements=all, slow query logging >1s, idle transaction timeout 10min, shared_buffers 25%
 - **DO Database role separation** (`DatabaseUser` + `DatabaseConnectionPool`): API connects as `loopzero_api` (DML only) through managed PGBouncer pool (transaction mode, 20 conns)
 - **DO UptimeCheck**: External health monitoring of API from 3 regions (us_east, us_west, eu_west)
@@ -103,7 +95,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **L4/L5 load tests** (Roadmap 08): `TestL4_500Tenants` (500 tenants, 2 cells, 20 concurrent) and `TestL5_1000Tenants_MultiCell` (1000 tenants, multi-cell, 50 concurrent) with pass criteria: >99% success, p99 < 10min.
 - **Chaos test suite** (Roadmap 08): 7 implemented chaos tests replacing 6 PIt stubs. Covers: API pod restart, controller crash recovery, PG pool exhaustion, ArgoCD crash, PG failover, cell network partition.
 - **Admission control metrics**: `loopzero_build_admission_admitted_total`, `loopzero_build_admission_rejected_total`, `loopzero_pg_circuit_breaker_tripped_total`.
-
 - **Declarative multi-cluster topology** (`pulumi-infra/src/topology/`): Config-driven N clusters per role. TopologyConfig schema, parser+validator, generic provisioner keyed by stable `clusterId`, ClusterRegistry output for StackReference. Cell factory (`createCell/createCells`) associates cellId→runtime cluster. 10 topology test cases. Legacy fallback from singleton config.
 - **Distributed work queue** (`api/internal/workqueue/`): PG-backed queue with `SELECT ... FOR UPDATE SKIP LOCKED`. Enables non-leader pods to process background work. Queue/Consumer abstraction for all 6 reconcile loops.
 - **Dynamic cell router** (`api/internal/placement/dynamic_router.go`): Periodically refreshes cell list from CellStore. K8sCellStore reads ClusterCredential CRDs for multi-cell Phase 2 routing.
@@ -157,12 +148,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - **CloudNativePG replaces bitnami/postgresql in self-hosted installer** (CHG-2026-04-24-INSTALLER-CNPG / ADR-0012): Bitnami removed public images from `docker.io/bitnami/*` in September 2025, causing `loopzero platform install` to fail at Step 2/10 with `ImagePullBackOff`. The installer now provisions PostgreSQL via **CloudNativePG** — a CNCF Graduated operator (Feb/2024) — using two Helm releases: `cnpg/cloudnative-pg` (operator + CRDs) and `cnpg/cluster` (Cluster CR). CNPG provides HA via streaming replication, automatic failover (<30s RTO), and eliminates vendor lock-in. Credentials are generated randomly per install into a Kubernetes Secret (`postgresql-cluster-app`); the installer reads them via the new `extractPostgresCredentials()` helper. `config.database.external=true` (BYO managed PG) path is unchanged.
 - **Gitea switched to SQLite mode in self-hosted installer** (CHG-2026-04-24-INSTALLER-CNPG / ADR-0012): Gitea HA subcharts (`postgresql-ha`, `redis-cluster`, `valkey`) depended on the same deprecated Bitnami images. Since Gitea is an internal GitOps mirror (not user-facing traffic), SQLite + in-memory cache/session/queue is sufficient and removes all Bitnami transitive dependencies.
-
 - **Scaling config (`replicas` + `autoscaling`) wired end-to-end and plan-capped** (CHG-2026-04-23-B15 / MEET-2026-04-23-059 / ADR-0011): previously the CLI recognised, persisted, and rendered scaling config but no plan-cap enforcement existed; users on any plan could request any replica count, and the CLI validator warned "Unknown field 'apps.api.replicas' -- ignored". This release closes the chain from `loopzero.yaml` → CLI validator → CLI payload → API route DTO → adapter → orchestrator → persisted spec. Mutual exclusion between `replicas` and `autoscaling` is now enforced at both CLI and API boundaries (`SCALING_AMBIGUOUS`, HTTP 422). Per-service replica cap enforced via new `max_replicas_per_service` plan metric: Starter=2, Pro=5, Team=10, Enterprise=unlimited (`REPLICAS_EXCEED_PLAN`, HTTP 422). The authoritative enforcement point is `BuildOrchestrator.SubmitBuild` so both the CLI deploy path and the GitHub App auto-deploy webhook are covered by the same gate.
-
 - **Pipeline simplification** (MEET-049, MEET-050): Rewrote infra pipeline from 1 monolithic workflow (1539 lines) to 5 focused workflows (~470 lines total). `infra-deploy.yml` (Pulumi up only), `infra-bootstrap.yml` (idempotent tokens/secrets/seed), `infra-destroy.yml` (stack-scoped with approval), `infra-restart.yml` (CI-gated pod restart), `infra-state-reset.yml` (break-glass emergency). Zero `pulumi cancel`/`state delete` in deploy path. Stack-scoped destroy prevents cross-environment deletion.
 - **Pulumi idempotency** (hardening-v2): `resolve-build-node-ip` trigger changed from `Date.now()` to cluster endpoint. `gitea-bootstrap` Job: `ignoreChanges` on status/labels.
-
 - **Image build optimization** (Sprint 6+): Comprehensive build pipeline modernization:
   - All Dockerfiles use `--mount=type=cache` for Go modules and build cache (~30-50% faster rebuilds)
   - All Go builds use `-trimpath -ldflags="-s -w"` (smaller binaries, no path metadata)
@@ -181,23 +169,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - CI: Trivy `--ignore-unfixed` + `.trivyignore` for false positive management
   - Semver release workflow (`.github/workflows/release.yml`)
   - ADR-0003 updated: Kaniko → BuildKit (reflects actual architecture)
-
 - **Harbor values.yaml aligned with Pulumi** (MEET-048): Replicas now 1 for dev (matches `harbor-bootstrap.ts`). PDB conditional on `replicas > 1`.
 - **Harbor HarborProjectReady is now required** (MEET-048): Tenant cannot transition to Active without HarborProjectReady=True when HarborClient is configured. Backward compatible with DOCR mode.
 - **Harbor robot secret self-healing** (MEET-048): If K8s Secret is manually deleted, next reconcile forces robot recreation to obtain new credentials. Prevents 22-hour blind window.
 - **Harbor Docker config.json uses json.Marshal** (MEET-048): Replaced manual `quote()` with `json.Marshal` for correct escaping of all JSON special characters.
-
 - **Git operations centralized in `internal/gitclient`**: Eliminates duplicated gitCmd/sanitize/ensureRepo across source, gitops, and github packages. Single GitRunner with exec.CommandContext + token sanitization.
 - **Build scripts generated via type-safe `internal/shellgen`**: All 15 script functions in argo/scripts.go migrated to ScriptBuilder. User-supplied paths escaped via ShellQuote (POSIX single-quote). Zero fmt.Sprintf for shell in scripts.go.
 - **BuildKit entrypoint uses ShellQuote**: socketPath escaped via ShellQuote, registryURL validated before TOML injection.
 - **Source store go-git implementation**: `source/gogit_store.go` mirrors gitops/gogit_pusher pattern. GitRunner only for `git bundle create`.
-
 - **CI dual-push** (MEET-048): `build-images.yml` and `infra-deploy.yml` push platform images to both DOCR and Harbor during transition period. Harbor steps conditional on `HARBOR_ROBOT_PASSWORD` secret.
 - **Registry admission policy** (MEET-048): `vap-restrict-registries` updated to allow both DOCR and Harbor prefixes during dual-push transition.
 - **Registry token expiry** reduced from 3600s to 600s in CI pipeline (SEC-002 compliance).
-
 - **CI/CD pipeline optimization**: Build Images only triggers on app code changes (`api/`, `operators/`, `cloud/`, `pkg/`). Infra Deploy only triggers on infra changes (`infra/`). New images trigger lightweight pod restart (~2min) instead of full `pulumi up` (~15min). Eliminates 25min polling loop.
-
 - IaC: admission policy `vap-require-resource-limits` de `Audit` para `Deny` — enforcement real em tenant namespaces
 - IaC: Traefik com 2 réplicas, PDB (minAvailable: 1), topologySpreadConstraints e JSON logging
 - IaC: PSA `enforce: baseline` + `warn: restricted` em todos os namespaces gerenciados (platform-system, argo, monitoring, external-secrets)
@@ -212,11 +195,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Gitea token 403 on Gitea 1.25** — bootstrap now uses explicit scopes (`write:organization`, `write:repository`, etc.) instead of `["all"]` which is not valid in Gitea 1.25+. Tokens created via HTTP API with basic auth.
 - **`buildPlatformValues()` missing token injection** — umbrella chart values now include all service credentials (GITEA_TOKEN, ARGOCD_TOKEN, MINIO_ACCESS_KEY, etc.) for all 3 controllers.
 - **NetworkPolicies blocking cross-namespace egress** — disabled by default during install (enabled for production profile). Cross-namespace egress rules require known endpoints.
-
 - **False "Unknown field" warning on `replicas`/`autoscaling`** (CHG-2026-04-23-B15): CLI validator `knownFields` allow-list extended.
 - **CLI parser silently dropped invalid scaling values** (CHG-2026-04-23-B15): `parseLoopZeroYaml` now preserves all numeric values so `validate-config.ts` can reject them explicitly with actionable messages naming the field and constraint.
 - **Pre-existing duplicate `TestMiddleware_EmptyTenantPasses` symbol in `pkg/enforcement`** (CHG-2026-04-23-B15 unblocker): build failure inherited from `develop` that blocked enforcement tests. Duplicate in `limiter_test.go` removed; identical test remains in `middleware_test.go`.
-
 - **Tenant deletion stuck with no recovery** (operators-review): After DeletionMaxAttempts, controller now requeues every 1h instead of stopping entirely. Allows self-healing if dependencies recover. Metric `loopzero_tenant_deletion_stuck_total` still emitted for alerting.
 - **MinIO error matching fragility** (operators-review): Replaced custom `contains()`/`searchString()` with `strings.Contains()` in minio provisioner. Added regression test `TestIsNotFoundError`.
 - **Gitea EnsureOrg swallowed verification errors** (operators-review): On 422 + verification failure, now returns error instead of nil. Prevents silent org creation failures.
@@ -224,9 +205,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **EnvironmentController pull secret failures invisible** (operators-review): Added `PullSecretReady` condition (informational, non-blocking) so operators can detect pull secret provisioning failures via `kubectl describe environment`.
 - **Hardcoded "platform-system" string** (operators-review): Replaced with `constants.NamespacePlatformSystem` in `environment_controller.go`.
 - **Grafana tenant-workloads dashboard showing no data**: Installed kube-state-metrics on runtime cluster with cross-cluster NodePort (30092) scrape from mgmt Prometheus. Dashboard queries use `job="runtime-kube-state-metrics"` which now resolves to real metrics. Also fixes tenant-ecosystem dashboard.
-
 - **DeleteApplications NotFound idempotency** (MEET-052): ArgoCD DeleteApplications now handles NotFound errors during concurrent deletion, preventing infinite requeue loops that caused retry storms on bulk tenant deletion.
-
 - **Environment state machine: Failed state added** (H8): `EnvironmentFailed` state now reachable via `ProvisionFailed` event from `Pending`, with `Retry` path back to `Pending` and `DeleteRequested` exit.
 - **Release state machine: cancel paths added** (M35): `GIT_MIRROR_FAILED`, `SYNC_FAILED`, `DRIFT_ALERT`, `ROLLBACK_FAILED` states now have `ReleaseCancelled` exit path.
 - **Domain state machine: v2 degraded from provisioning** (M36): Added `DomainDegrade` transition from `DomainProvisioning` to `DomainDegraded` for CNAME loss during v2 setup.
@@ -251,9 +230,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Build namespace DNS egress scoped to kube-system** (LOW): DNS egress rule restricted to `kube-system` namespace, preventing DNS tunneling from build pods.
 - **ArgoCD AppProject namespace glob removed** (M32): Glob fallback `loopzero-{tenant}-*` replaced with fail-closed empty destinations list. Deploys blocked until EnvironmentController provides explicit namespaces.
 - **ArgoCD cluster secret scope reduced** (M33): Full kubeconfig no longer stored in ArgoCD cluster secret. Only bearer token + CA certificate extracted and stored in `config` field.
-
 - **Harbor PDB blocking node drain** (MEET-048): PDB with `minAvailable: 1` on single replica blocked `kubectl drain`. Now conditional on `replicas > 1`.
-
 - **Manifest gate is YAML-document-aware** (Roadmap 01, Correction G). Previously a
   no-op after MEET-2026-04-09-042 reverted the substring-matching gate that blocked
   all new tenant deploys (Certificate CRs with `issuerRef.kind: ClusterIssuer` matched
@@ -273,17 +250,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 - **TLS verification enforced in production** (operators-review, SEC-001): Added `OPERATOR_INSECURE_SKIP_TLS=false` to Pulumi production config and explicit `true` for dev. Previously defaulted to skip (insecure).
-
 - **COOKIE_SECRET rotated to RandomPassword** (C1): Kratos UI cookie secret replaced from hardcoded string to Pulumi-managed `RandomPassword`. Eliminates session cookie forgery risk from source code access.
 - **LOOPZERO_SERVICE_AUTH_SECRET auto-generated** (H12): Service-to-service auth secret now auto-generates via `RandomPassword` when not explicitly configured. Removes `dev-service-auth-secret-default` fallback.
 - **Database and DOKS clusters protected** (C3): Added `protect: true` and `retainOnDelete: true` to PostgreSQL cluster and `protect: true` to all DOKS clusters. Prevents accidental `pulumi destroy` data loss.
 - **RBAC escalate verb removed** (H15): Removed `escalate` verb from tenant controller ClusterRole on `clusterroles`/`clusterrolebindings`. Prevents privilege escalation from compromised controller pod.
 - **RBAC loopzero.io wildcard replaced** (M42): Replaced `resources: ["*"]` with explicit CRD enumeration in tenant controller ClusterRole. New CRDs require explicit RBAC review.
-
 - **Fixed unsafe tar extraction in GitHub auto-deploy**: Added symlink rejection, path traversal protection, and decompression size limits via SafeExtractTarGz. Previously extracted tarballs without any validation.
 - **Shell script generation uses POSIX-safe quoting**: All interpolated values in build container scripts quoted via ShellQuote, preventing injection via crafted loopzero.yaml paths.
 - **autodeploy.go uses exec.CommandContext**: Git commands in tarballToGitBundle now respect context cancellation (previously used exec.Command without context).
-
 - **Per-tenant image isolation** (MEET-048): Harbor robot accounts scoped per-project prevent cross-tenant image access. Previously only naming convention.
 - **Harbor admin API restricted** (MEET-048): NetworkPolicy limits Harbor core access to Traefik ingress and loopzero-system namespace.
 
