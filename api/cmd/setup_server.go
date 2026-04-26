@@ -67,6 +67,17 @@ func buildServerConfig(
 		BuildAttestationHandler: routes.NewBuildAttestationHandler(
 			db.NewPostgresAttestationStore(dbAdapter), logger,
 		),
+		// Sprint 6 / T1.2: per-app SBOM endpoint. The store is the
+		// release_app_attestations sidecar (T0.1). The presigner is
+		// the existing S3 uploader (loopzero-static-assets bucket / sbom/
+		// prefix). When stores.ObjUploader is nil (no S3 in dev), the
+		// handler still serves metadata but omits download_url.
+		BuildSBOMHandler: routes.NewBuildSBOMHandler(
+			newAppSBOMStoreAdapter(dbAdapter),
+			toSBOMURLGenerator(stores),
+			cfg.SourceBucket,
+			logger,
+		),
 		EnvironmentHandler:           routes.NewEnvironmentHandler(k8sDeps.TenantCRMgr),
 		ShutdownCtx:                  shutdownCtx,
 		ShutdownCancel:               shutdownCancel,
@@ -174,4 +185,52 @@ func buildServerConfig(
 	}
 
 	return sc
+}
+
+// appSBOMStoreAdapter bridges the per-app attestation store
+// (db.PostgresAppAttestationStore) into routes.AppSBOMStore by projecting
+// AppAttestationInfo onto the routes-shape AppSBOMInfo. The adapter
+// keeps the routes layer decoupled from db types.
+//
+// Sprint 6 / T1.2.
+type appSBOMStoreAdapter struct {
+	inner *db.PostgresAppAttestationStore
+}
+
+func newAppSBOMStoreAdapter(d *db.PgxAdapter) *appSBOMStoreAdapter {
+	return &appSBOMStoreAdapter{inner: db.NewPostgresAppAttestationStore(d)}
+}
+
+func (a *appSBOMStoreAdapter) GetBuildAppSBOMs(
+	ctx context.Context, tenantID, buildID string,
+) ([]routes.AppSBOMInfo, error) {
+	infos, err := a.inner.GetBuildAppAttestations(ctx, tenantID, buildID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]routes.AppSBOMInfo, 0, len(infos))
+	for _, in := range infos {
+		out = append(out, routes.AppSBOMInfo{
+			AppName:            in.AppName,
+			SBOMS3Key:          in.SBOMS3Key,
+			SBOMFormat:         in.SBOMFormat,
+			SBOMComponentCount: in.SBOMComponentCount,
+			SBOMGeneratedAt:    in.SBOMGeneratedAt,
+			Signed:             in.Signed,
+		})
+	}
+	return out, nil
+}
+
+// toSBOMURLGenerator returns a SBOMURLGenerator if the configured
+// uploader supports presigning, else nil. When nil, the SBOM endpoint
+// returns metadata-only (no download_url).
+func toSBOMURLGenerator(stores *StoreDeps) routes.SBOMURLGenerator {
+	if stores == nil {
+		return nil
+	}
+	if g, ok := stores.ObjUploader.(routes.SBOMURLGenerator); ok {
+		return g
+	}
+	return nil
 }

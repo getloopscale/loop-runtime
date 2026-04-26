@@ -6,6 +6,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -180,22 +181,21 @@ func (r *BuildReconcileLoop) ensureApplicationCRs(ctx context.Context, build *db
 }
 
 // enrichAppReleasesWithAttestation walks `buildApps` in place and
-// populates the cosign signature + image digest fields from the
-// workflow's per-step outputs.
+// populates the cosign signature + image digest fields, plus Sprint 6
+// SBOM metadata, from the workflow's per-step outputs.
 //
-// CHG-2026-04-25-ATTESTATION-WIRE Phase 4:
-//   - Each app's `sign-image-{name}` step is expected to emit `signature`
-//     (the pinned image reference, e.g., registry/org/app:tag@sha256:...)
-//     and `digest` (the bare sha256:... value).
-//   - Each app's `build-image-{name}` step also emits `digest` as a
-//     defense-in-depth source.
-//   - When the signature output is present and non-empty, ImageSignedAt
-//     is set to the current API server time (NOT workflow finish time —
-//     pod clocks are not authoritative).
-//   - All fields stay at their zero value when outputs are missing
-//     (legacy workflows pre-CHG-2026-04-25-ATTESTATION-WIRE). Callers
-//     downstream (phaseACreateRelease) must handle empty fields by
-//     leaving the corresponding DB columns NULL.
+// CHG-2026-04-25-ATTESTATION-WIRE Phase 4 (signature/digest):
+//   - `sign-image-{name}` emits `signature` (pinned reference) + `digest`
+//     (bare sha256:...). When `signature` is present, ImageSignedAt is
+//     set to the API server's current time (pod clocks are not trusted).
+//   - `build-image-{name}` is a fallback source for `digest`.
+//
+// Sprint 6 / T3.1 (SBOM):
+//   - `sbom-{name}` emits `sbom_s3_key`, `sbom_format`, `sbom_component_count`.
+//   - The SBOM step is best-effort (continueOn.failed at the DAG level),
+//     so absence of these outputs is normal and must not be treated as
+//     an error.
+//   - All fields stay at their zero value when outputs are missing.
 func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus) {
 	if status == nil || len(status.Outputs) == 0 {
 		return
@@ -203,6 +203,7 @@ func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus)
 	for i, app := range apps {
 		signStep := "sign-image-" + app.Name
 		buildStep := "build-image-" + app.Name
+		sbomStep := "sbom-" + app.Name
 
 		if signOutputs, ok := status.Outputs[signStep]; ok {
 			if sig := signOutputs["signature"]; sig != "" {
@@ -223,6 +224,21 @@ func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus)
 			if buildOutputs, ok := status.Outputs[buildStep]; ok {
 				if dig := buildOutputs["digest"]; dig != "" {
 					apps[i].ImageDigestSHA256 = dig
+				}
+			}
+		}
+
+		// Sprint 6 / T3.1: SBOM outputs (graceful degradation when absent).
+		if sbomOutputs, ok := status.Outputs[sbomStep]; ok {
+			if k := sbomOutputs["sbom_s3_key"]; k != "" {
+				apps[i].SBOMS3Key = k
+			}
+			if f := sbomOutputs["sbom_format"]; f != "" {
+				apps[i].SBOMFormat = f
+			}
+			if cs := sbomOutputs["sbom_component_count"]; cs != "" {
+				if n, err := strconv.Atoi(cs); err == nil && n >= 0 {
+					apps[i].SBOMComponentCount = n
 				}
 			}
 		}

@@ -85,6 +85,25 @@ var (
 		Help: "Releases created, partitioned by whether the image was signed.",
 	}, []string{"tenant", "environment", "signed"})
 
+	// Sprint 6 / T3.2: per-app supply-chain attestation metric. Surfaces
+	// signing health at the granularity admission policy enforces. Multi-app
+	// builds emit one increment per app; ALL must be signed=true for the
+	// runtime cluster's policy-controller (D5) to admit.
+	ReleaseAppAttestationTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_release_app_attestation_total",
+		Help: "Per-app release attestations recorded, partitioned by whether the image was signed.",
+	}, []string{"tenant", "environment", "app", "signed"})
+
+	// Sprint 6 / T3.2: SBOM generation metric. One increment per release
+	// that includes at least one SBOM (tag value: tenant + environment).
+	// Useful for tracking syft adoption across tenants and detecting
+	// regressions where the SBOM step starts failing silently
+	// (continueOn.failed at the DAG level swallows step errors).
+	SBOMGeneratedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_sbom_generated_total",
+		Help: "Releases that produced an SBOM (syft step), per (tenant, environment).",
+	}, []string{"tenant", "environment"})
+
 	DeployDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "loopzero_deploy_duration_seconds",
 		Help:    "End-to-end deploy duration from build creation to release ACTIVE.",

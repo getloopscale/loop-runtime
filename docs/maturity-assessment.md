@@ -22,7 +22,7 @@ LoopZero has a strong technical foundation -- 4-plane architecture, cell-based s
 | **Core Deploy Flow** | 4.5/5 | `loopzero deploy` -> live URL works E2E on DO. Rollback ~3s. Promote cross-env. GitHub App auto-deploy (~4min). Real, validated, competitive. |
 | **DX / CLI** | 4.2/5 | 36 commands, `--json` on all, standardized exit codes, 1079 tests. Preview environments now wired (`loopzero preview list/inspect/delete` against real API since Sprint 5 / T4.1). Still missing: onboarding < 10 min (Sprint 9). |
 | **Infrastructure / Operations** | 3.5/5 | 3 DO clusters, CF Tunnel, 43 Prometheus metrics, SLO alerts, Loki. But: cross-cluster logs have gaps, KEDA not activated on real cluster, cell-2 not activated. Infra exists, day-2 ops not validated under real pressure. |
-| **Security** | 3.0/5 | cosign signing, PSA restricted, NetworkPolicy, non-root, RSA-only JWT, secret rotation. But: syft SBOM missing, admission policy doesn't reject unsigned images, `platform.ts` (495 LOC installer) has zero tests. |
+| **Security** | 3.5/5 | cosign signing + **syft SBOM (CycloneDX) generated per release & persisted in S3 with presigned URL endpoint** (CHG-2026-04-26-SPRINT6-IMPL), **policy-controller Audit mode active in runtime cluster** (key-based verification — flips to Deny after 2 weeks of clean logs per D4), per-app attestation sidecar table (ADR-0014 fix), PSA restricted, NetworkPolicy, non-root, RSA-only JWT, secret rotation, 5 PrometheusRules + 3 runbooks for the policy webhook. Still: `platform.ts` (495 LOC installer) has zero tests; admission policy is Audit-only, not yet Deny-mode (intentional, D4 — flip pending 2-week observation window). |
 | **Scale / Multi-tenancy** | 3.0/5 | Cell architecture code 96% complete (impressive). But: never ran with 2+ real cells. Zero chaos tests. Zero load tests above L3. Architecture is solid on paper -- no empirical validation above ~100 apps. |
 | **Product Completeness** | 3.4/5 | Sprint 5 / Preview Environments — **ALL 14 plan tasks complete** with ACs + DoDs validated. 12 lifecycle E2E specs passing against live k3d cluster (PR opened→preview, synchronize→UPSERT, concurrent PRs, PR closed→soft-delete, plus 8 CLI contract specs). ~110 unit tests + 12 envtest specs + 7 SQL constraint tests + live ciclo CRUD against real Postgres. Still missing: `loopzero scale` persistence, SBOM, admission policy, chaos suite, polish/onboarding. A user paying $29/mo now gets preview envs (table-stakes feature shipped) but still needs 5-min onboarding. |
 | **Tests / Confidence** | 3.5/5 | 1079 CLI + 41 Go packages + 186 Ginkgo specs. Good happy-path coverage. Gaps: `platform.ts` zero tests, concurrent reconcile test partial, 10 failing tests in `api/internal/k8s`. |
@@ -37,7 +37,7 @@ LoopZero has a strong technical foundation -- 4-plane architecture, cell-based s
 
 3. **Scale validation is loopzeroretical.** Cell architecture is in code, but never ran with 2 cells, never had a real chaos test, never processed 1000 concurrent deploys. Confidence is based on design, not evidence.
 
-4. **Supply chain is incomplete.** cosign without syft + without admission policy = half the story. It's like having the lock but not locking the door.
+4. ~~**Supply chain is incomplete.** cosign without syft + without admission policy = half the story. It's like having the lock but not locking the door.~~ **(Closed by CHG-2026-04-26-SPRINT6-IMPL — syft SBOM generated per release, policy-controller in Audit mode verifying every tenant image. Deny-mode flip pending 2-week observation window.)**
 
 ## What Justifies 3.4 (Not Lower)
 
@@ -62,8 +62,8 @@ LoopZero has a strong technical foundation -- 4-plane architecture, cell-based s
 ## Path to 5.0
 
 Everything above, plus:
-- syft SBOM generation
-- Admission policy (reject unsigned images)
+- ~~syft SBOM generation~~ — DONE (CHG-2026-04-26-SPRINT6-IMPL)
+- ~~Admission policy (reject unsigned images)~~ — Audit mode DONE; Deny-mode flip pending 2-week observation window (CHG-2026-04-26-SPRINT6-IMPL)
 - Full chaos engineering suite
 - 50+ real tenants
 - Published SLA
@@ -105,8 +105,8 @@ Everything above, plus:
 | Observability | Done | 43 metrics, dashboards, SLO alerts |
 | JSON contracts | Done | 8/8 commands, 0 internal term leaks |
 | Preview environments | Done | Sprint 5 / CHG-2026-04-26-PREVIEW-IMPL: all 14 plan tasks complete + E2E validated against live k3d (PR opened→preview→synchronize UPSERT→closed soft-delete). DB migration 000004 + store + service + API + GitHub PR webhook (PreviewDeployer) + comment + controller workload (NP/Quota/LR + condition-wait flow with grace period) + cleanup retry/CLEANUP_FAILED + 12 envtest specs + 12 E2E specs. |
-| SBOM (syft) | Not done | Sprint 6 remainder |
-| Admission policy | Not done | Sprint 6 remainder |
+| SBOM (syft) | Done | Sprint 6 / CHG-2026-04-26-SPRINT6-IMPL: CycloneDX JSON per release, persisted in S3, queryable via `GET /api/v1/builds/:id/sbom` with presigned URL. loopzero-syft-scanner image baked + DAG step `sbom-{app}` after `sign-image-{app}` (continueOn.failed=true so SBOM never blocks deploys). |
+| Admission policy | Done (Audit) | Sprint 6 / CHG-2026-04-26-SPRINT6-IMPL: sigstore policy-controller activated on runtime cluster, key-based verification of every tenant image. Currently in Audit mode (D4) — violations logged, not denied. Manual flip to Deny pending 2-week observation window with `loopzero_release_app_attestation_total{signed="false"}=0`. |
 | `loopzero scale` persistence | Not done | Stub (202 acknowledged) |
 | Chaos engineering | Not done | Sprint 8 |
 | Onboarding polish | Not done | Sprint 9 |

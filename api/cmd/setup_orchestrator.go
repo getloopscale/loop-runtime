@@ -80,6 +80,8 @@ func setupOrchestrator(
 		KVClient:          workflows.KVClient,
 		BaseDomain:        cfg.BaseDomain,
 		PlanCap:           planCap,
+		// Sprint 6 / T3.1: per-app attestation persistence (signature + SBOM).
+		AppAttestationStore: db.NewPostgresAppAttestationStore(dbAdapter),
 	})
 
 	buildOrchestrator := &adapters.BuildOrchestratorAdapter{

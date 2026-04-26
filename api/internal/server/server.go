@@ -51,6 +51,9 @@ type Config struct {
 	// GET /api/v1/builds/{id}/attestation. Wired in api/cmd/setup_routes.go
 	// against PostgresAttestationStore.
 	BuildAttestationHandler *routes.BuildAttestationHandler
+	// Sprint 6 / T1.2: handler for GET /api/v1/builds/{id}/sbom. Returns
+	// per-app SBOM metadata + presigned download URLs from S3.
+	BuildSBOMHandler *routes.BuildSBOMHandler
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 	RateLimiter        *middleware.RateLimiter
 	// HTTP server timeouts (configurable via env vars)

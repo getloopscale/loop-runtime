@@ -30,6 +30,14 @@ func GeneratePreviewID() string {
 	return fmt.Sprintf("prev-%s", randomHex(8))
 }
 
+// GenerateAppAttestationID returns a unique per-app attestation identifier in
+// the format "raa-{16hex}". The "raa-" prefix is enforced by the
+// release_app_attestations table CHECK constraint (migration 000005).
+// Sprint 6 / T0.1 — sidecar table for multi-app attestation (ADR-0014).
+func GenerateAppAttestationID() string {
+	return fmt.Sprintf("raa-%s", randomHex(8))
+}
+
 // randomHex generates a random hex string of n*2 characters from n random bytes.
 func randomHex(n int) string {
 	b := make([]byte, n)

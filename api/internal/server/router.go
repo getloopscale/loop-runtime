@@ -236,6 +236,13 @@ func registerProtectedRoutes(
 		r.Get("/api/v1/builds/{id}/attestation", cfg.BuildAttestationHandler.Get)
 	}
 
+	// Sprint 6 / T1.2: per-app SBOM endpoint. Returns metadata + presigned
+	// download URL for the CycloneDX/SPDX SBOM of every signed image in
+	// the build. Behind requireAuth (parent group middleware).
+	if cfg.BuildSBOMHandler != nil {
+		r.Get("/api/v1/builds/{id}/sbom", cfg.BuildSBOMHandler.Get)
+	}
+
 	if cfg.LogsHandler != nil {
 		r.Get("/api/v1/builds/{id}/logs", cfg.LogsHandler.Get)
 	}

@@ -165,3 +165,119 @@ func TestEnrichAppReleasesWithAttestation_FallsBackToBuildkitDigest(t *testing.T
 		t.Error("SignedAt must be nil when no cosign signature was captured")
 	}
 }
+
+// =============================================================================
+// Sprint 6 / T3.1 — SBOM extraction
+// =============================================================================
+
+func TestEnrichAppReleases_WithSBOM(t *testing.T) {
+	apps := []AppRelease{{Name: "api"}}
+	status := &WorkflowStatus{
+		Phase: "Succeeded",
+		Outputs: map[string]map[string]string{
+			"sign-image-api": {
+				"signature": "registry/api:abc@sha256:dead",
+				"digest":    "sha256:dead",
+			},
+			"sbom-api": {
+				"sbom_s3_key":          "sbom/tn-1/proj/abc/api.cdx.json",
+				"sbom_format":          "cyclonedx-json",
+				"sbom_component_count": "142",
+			},
+		},
+	}
+	enrichAppReleasesWithAttestation(apps, status)
+
+	if apps[0].SBOMS3Key != "sbom/tn-1/proj/abc/api.cdx.json" {
+		t.Errorf("SBOMS3Key = %q", apps[0].SBOMS3Key)
+	}
+	if apps[0].SBOMFormat != "cyclonedx-json" {
+		t.Errorf("SBOMFormat = %q", apps[0].SBOMFormat)
+	}
+	if apps[0].SBOMComponentCount != 142 {
+		t.Errorf("SBOMComponentCount = %d, want 142", apps[0].SBOMComponentCount)
+	}
+	// Signature still works alongside SBOM.
+	if apps[0].ImageSignature == "" {
+		t.Error("signature must still be populated when SBOM is also present")
+	}
+}
+
+// SBOM step is best-effort. When absent (continueOn.failed at the DAG
+// level + scan failure), the apps array must still be valid and signatures
+// preserved. No error, no panic.
+func TestEnrichAppReleases_SBOMMissing_GracefulDegradation(t *testing.T) {
+	apps := []AppRelease{{Name: "api"}}
+	status := &WorkflowStatus{
+		Phase: "Succeeded",
+		Outputs: map[string]map[string]string{
+			"sign-image-api": {
+				"signature": "registry/api:abc@sha256:dead",
+				"digest":    "sha256:dead",
+			},
+			// no sbom-api key at all
+		},
+	}
+	enrichAppReleasesWithAttestation(apps, status)
+
+	if apps[0].SBOMS3Key != "" {
+		t.Errorf("SBOMS3Key should be empty, got %q", apps[0].SBOMS3Key)
+	}
+	if apps[0].SBOMComponentCount != 0 {
+		t.Errorf("SBOMComponentCount should be 0, got %d", apps[0].SBOMComponentCount)
+	}
+	if apps[0].ImageSignature == "" {
+		t.Error("signature must remain populated even without SBOM")
+	}
+}
+
+// Bad component count (non-integer) must not corrupt the AppRelease.
+func TestEnrichAppReleases_SBOMInvalidCount_SafeDefault(t *testing.T) {
+	apps := []AppRelease{{Name: "api"}}
+	status := &WorkflowStatus{
+		Phase: "Succeeded",
+		Outputs: map[string]map[string]string{
+			"sbom-api": {
+				"sbom_s3_key":          "sbom/key",
+				"sbom_format":          "cyclonedx-json",
+				"sbom_component_count": "garbage",
+			},
+		},
+	}
+	enrichAppReleasesWithAttestation(apps, status)
+
+	if apps[0].SBOMComponentCount != 0 {
+		t.Errorf("invalid count must default to 0, got %d", apps[0].SBOMComponentCount)
+	}
+	if apps[0].SBOMS3Key != "sbom/key" {
+		t.Errorf("S3 key still extracted: %q", apps[0].SBOMS3Key)
+	}
+}
+
+// SBOM enriches multi-app builds independently per app.
+func TestEnrichAppReleases_BothSignatureAndSBOM_MultiApp(t *testing.T) {
+	apps := []AppRelease{
+		{Name: "api"},
+		{Name: "worker"},
+	}
+	status := &WorkflowStatus{
+		Phase: "Succeeded",
+		Outputs: map[string]map[string]string{
+			"sign-image-api":    {"signature": "registry/api:abc@sha256:a", "digest": "sha256:a"},
+			"sign-image-worker": {"signature": "registry/worker:abc@sha256:w", "digest": "sha256:w"},
+			"sbom-api":          {"sbom_s3_key": "k-api", "sbom_format": "cyclonedx-json", "sbom_component_count": "10"},
+			// worker SBOM is intentionally missing — should not affect api
+		},
+	}
+	enrichAppReleasesWithAttestation(apps, status)
+
+	if apps[0].SBOMS3Key != "k-api" {
+		t.Errorf("api SBOMS3Key = %q", apps[0].SBOMS3Key)
+	}
+	if apps[1].SBOMS3Key != "" {
+		t.Errorf("worker SBOMS3Key should be empty, got %q", apps[1].SBOMS3Key)
+	}
+	if apps[1].ImageSignature == "" {
+		t.Error("worker signature must still be populated")
+	}
+}

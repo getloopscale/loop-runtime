@@ -374,6 +374,57 @@ jobs:
           echo "- \`${{ env.REGISTRY }}/harbor-init:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
+  # Sprint 6 / T0.2: loopzero-syft-scanner pipeline image.
+  # Generates CycloneDX SBOMs in the Argo Workflow sbom-{app} step.
+  # SEC-006: syft binary is checksum-verified at build time (no runtime downloads).
+  build-syft-scanner:
+    name: Build loopzero-syft-scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: resolve
+    # Build only when api or operator code changes — pipeline tooling tracks API release.
+    if: needs.resolve.outputs.build_api == 'true' || needs.resolve.outputs.build_operator == 'true' || github.event_name == 'workflow_dispatch'
+    environment: ${{ needs.resolve.outputs.environment }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      - run: doctl registry login --expiry-seconds 600
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+      - run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
+      - name: Build and push loopzero-syft-scanner
+        id: build
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          # Pipeline image is also tagged with a stable v0.1.0 tag matching
+          # api/internal/argo/constants.go imageSyftScanner.
+          docker buildx build -f infra/images/syft-scanner/Dockerfile \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-syft-scanner:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-syft-scanner:cache,mode=max \
+            -t ${{ env.REGISTRY }}/loopzero-syft-scanner:${TAG} \
+            -t ${{ env.REGISTRY }}/loopzero-syft-scanner:${SHA} \
+            -t ${{ env.REGISTRY }}/loopzero-syft-scanner:v0.1.0 \
+            --push infra/images/syft-scanner/
+
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-syft-scanner:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/loopzero-syft-scanner" >> "$GITHUB_OUTPUT"
+
+          echo "### loopzero-syft-scanner" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-syft-scanner:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-syft-scanner:v0.1.0\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
   # ─────────────────────────────────────────────
   # SIGN + ATTEST — cosign sign, syft SBOM, cosign attest, Trivy scan
   # ─────────────────────────────────────────────

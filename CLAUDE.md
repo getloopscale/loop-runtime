@@ -8,13 +8,13 @@ LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. Vercel-qua
 
 The authoritative specification is **`docs/cli-reference.md`**. If this file and the system design conflict, the system design wins.
 
-**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence — E2E validated 2026-04-23). 25/30 E2E tests pass. Sprints 0-5, 7, 10, 11 complete. Sprint 6 partial (cosign done, syft + admission policy not). Sprint 5 (preview envs) — **ALL 14 plan tasks done** with E2E validated against live k3d cluster (12 lifecycle + CLI specs passing 2026-04-26 / CHG-2026-04-26-PREVIEW-IMPL): PR opened webhook→preview→synchronize UPSERT→PR closed soft-delete, plus controller workload (NP/Quota/LR + condition-wait flow), retry/CLEANUP_FAILED, 12 envtest specs. Sprints 8-9 not started. Hardening H1-H7 complete. AUDIT series (21 fixes) hardened CLI↔API contracts. KEDA scale-to-zero done. Cell architecture Phase 0+1 complete. 1079 CLI tests + 41 Go packages + 200+ envtest specs passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN).
+**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence — E2E validated 2026-04-23). 25/30 E2E tests pass. Sprints 0-7, 10, 11 complete. Sprint 6 (security + supply chain) — **fully shipped** 2026-04-26 (CHG-2026-04-26-SPRINT6-IMPL): cosign + syft SBOM (CycloneDX per release in S3 with presigned URL endpoint) + sigstore policy-controller activated on runtime cluster (Audit mode, key-based verification, Deny-flip pending 2-week observation). Sprint 5 (preview envs) — **ALL 14 plan tasks done** with E2E validated against live k3d (CHG-2026-04-26-PREVIEW-IMPL). Sprints 8-9 not started. Hardening H1-H7 complete. AUDIT series (21 fixes) hardened CLI↔API contracts. KEDA scale-to-zero done. Cell architecture Phase 0+1 complete. 1079 CLI tests + 41 Go packages + 200+ envtest specs passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN).
 
 **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
 **Completed:** deploy happy path, scaling+HPA (Starter=2/Pro=5/Team=10), promote staging→prod, rollback, secrets via ESO, custom domains v2 (CF Zone Mgmt, model Vercel), GitHub App auto-deploy (~4min), monorepo validator (30 frameworks), cosign image signing, plan enforcement, audit log, RSA-only JWT auth, two-host gateway, concurrent deploy rejection (1×202+1×409), JSON contracts (8/8), observability (43 loopzero_* metrics + Grafana + SLO alerts), KEDA scale-to-zero, cell architecture (Phase 0+1).
 
-**Not built:** SBOM (syft), admission policy (reject unsigned images), SSO/SAML, `loopzero scale` DB persistence (stub returns 202 acknowledged — use loopzero.yaml + loopzero deploy), Loki cross-cluster streaming (infra gap, not code), Cell Phase 2b activation (code 100%, Pulumi.dev.yaml multi-cell config missing). Sprint 5 / Preview Environments **fully shipped** (CHG-2026-04-26-PREVIEW-IMPL).
+**Not built:** SSO/SAML, `loopzero scale` DB persistence (stub returns 202 acknowledged — use loopzero.yaml + loopzero deploy), Loki cross-cluster streaming (infra gap, not code), Cell Phase 2b activation (code 100%, Pulumi.dev.yaml multi-cell config missing). Sprint 5 / Preview Environments **fully shipped** (CHG-2026-04-26-PREVIEW-IMPL). Sprint 6 / Supply chain **fully shipped** (CHG-2026-04-26-SPRINT6-IMPL — Audit mode active; Deny-mode flip pending 2-week observation window).
 
 **Known issues:** AppSecret controller not implemented (ESO works directly, no lifecycle automation); Pulumi consolidation pending (GitHub App envFrom, CF_ZONE_MANAGEMENT, PG keepalive); 10 failing tests in `api/internal/k8s` (TenantCRManager — contract drift from AUDIT series).
 
@@ -161,7 +161,7 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 | 3 | Logs + Status + Secrets | ✅ (H6) |
 | 4 | Rollback + Promote + Cancel | ✅ (E2E 2026-04-23) |
 | 5 | Preview environments | ✅ ALL 14 tasks done. E2E validated live (12 specs pass against k3d). |
-| 6 | Security + Supply chain | ⚠️ cosign done, syft+admission not |
+| 6 | Security + Supply chain | ✅ cosign + syft SBOM + policy-controller (Audit mode) shipped 2026-04-26 (CHG-2026-04-26-SPRINT6-IMPL); Deny-mode flip pending 2-week observation |
 | 7 | Observability | ✅ (H4) |
 | 8 | Hardening + Chaos | ❌ |
 | 9 | Polish + Launch | ❌ |

@@ -1245,7 +1245,7 @@ tasks:
   # S0.13: Build pipeline tooling images
   # ---------------------------------------------------------------------------
   images:build:
-    desc: Build and push tooling images (clone-runner, packs-runner) to local k3d registry
+    desc: Build and push tooling images (clone-runner, packs-runner, syft-scanner) to local k3d registry
     cmds:
       - |
         echo "=== Building loopzero-clone-runner ==="
@@ -1257,6 +1257,11 @@ tasks:
         docker build -t localhost:5000/loopzero-packs-runner:latest infra/images/packs-runner/
         docker push localhost:5000/loopzero-packs-runner:latest
         echo "  Pushed: localhost:5000/loopzero-packs-runner:latest"
+      - |
+        echo "=== Building loopzero-syft-scanner (Sprint 6 / T0.2) ==="
+        docker build -t localhost:5000/loopzero-syft-scanner:latest infra/images/syft-scanner/
+        docker push localhost:5000/loopzero-syft-scanner:latest
+        echo "  Pushed: localhost:5000/loopzero-syft-scanner:latest"
 
   # ---------------------------------------------------------------------------
   # S0.14: Composite tasks

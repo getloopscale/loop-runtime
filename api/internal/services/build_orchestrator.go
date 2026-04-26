@@ -130,6 +130,14 @@ type AppRelease struct {
 	ImageDigestSHA256 string     `json:"image_digest_sha256,omitempty"`
 	ImageSignature    string     `json:"image_signature,omitempty"`
 	ImageSignedAt     *time.Time `json:"image_signed_at,omitempty"`
+
+	// Sprint 6 / T3.1: SBOM fields surfaced from the syft step. The SBOM
+	// blob lives in S3; here we keep only metadata so per-app responses
+	// stay light. SBOM step is best-effort (continueOn.failed) so absence
+	// of these fields never blocks a deploy.
+	SBOMS3Key          string `json:"sbom_s3_key,omitempty"`
+	SBOMFormat         string `json:"sbom_format,omitempty"`
+	SBOMComponentCount int    `json:"sbom_component_count,omitempty"`
 }
 
 // SyncClient abstracts ArgoCD sync operations (DIP).
@@ -213,6 +221,10 @@ type BuildOrchestratorDeps struct {
 	PlanCap PlanCapChecker
 	// KEDAEnabled gates scale-to-zero (MinReplicas=0). When false, min:0 is rejected.
 	KEDAEnabled bool
+	// Sprint 6 / T3.1: per-app attestation store. When non-nil, the
+	// container delivery activator persists per-app signature + SBOM
+	// metadata to release_app_attestations.
+	AppAttestationStore db.AppAttestationStore
 }
 
 // BuildOrchestrator orchestrates the entire deploy flow:
@@ -268,13 +280,14 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 	delivery := deps.Delivery
 	if delivery == nil {
 		delivery = NewContainerDeliveryActivator(ContainerDeliveryDeps{
-			ReleaseStore:      deps.ReleaseStore,
-			EnvTargetStore:    deps.EnvTargetStore,
-			EventStore:        deps.EventStore,
-			Sync:              deps.Sync,
-			Locker:            deps.Locker,
-			GitOps:            deps.GitOps,
-			ArgocdSyncTimeout: syncTimeout,
+			ReleaseStore:        deps.ReleaseStore,
+			EnvTargetStore:      deps.EnvTargetStore,
+			EventStore:          deps.EventStore,
+			Sync:                deps.Sync,
+			Locker:              deps.Locker,
+			GitOps:              deps.GitOps,
+			ArgocdSyncTimeout:   syncTimeout,
+			AppAttestationStore: deps.AppAttestationStore, // Sprint 6 / T3.1
 		})
 	}
 

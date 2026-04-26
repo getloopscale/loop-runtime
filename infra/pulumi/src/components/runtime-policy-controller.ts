@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// WS.2: Cosign policy-controller for image signature verification.
+// Sprint 6 / T2.2: Cosign policy-controller for image signature verification.
 //
 // Deploys sigstore/policy-controller on runtime clusters to enforce that
 // all container images in tenant namespaces are signed. The webhook only
@@ -9,36 +9,48 @@
 // loopzero.io/managed-by=environment-controller), leaving system namespaces
 // unaffected.
 //
-// This file is T2 (new infrastructure component). Code is prepared but
-// not wired into runtime-bootstrap.ts until a governance meeting approves
-// activation. To activate:
-//   1. Import installPolicyController in runtime-bootstrap.ts
-//   2. Call it after installESO
-//   3. Run `pulumi up`
+// D3: KEY-BASED verification (not keyless / Fulcio / Rekor). The build
+// cluster signs with cosignPrivateKeyB64; the runtime cluster verifies
+// with cosignPublicKeyB64. Keyless would require an OIDC provider on
+// the build cluster, which doesn't exist yet.
+//
+// D4: AUDIT mode first. failurePolicy: Ignore + validationActions: [Audit].
+// Pre-Sprint-6 images (un-signed) are admitted but logged. After 2 weeks
+// of clean logs the operator MANUALLY flips to failurePolicy: Fail.
 
 import * as k8s from "@pulumi/kubernetes";
 import * as pulumi from "@pulumi/pulumi";
 
 const POLICY_CONTROLLER_NAMESPACE = "cosign-system";
 const POLICY_CONTROLLER_VERSION = "0.9.0";
+const COSIGN_PUBLIC_KEY_SECRET = "cosign-public-key";
 
 export interface PolicyControllerOutputs {
   readonly ready: pulumi.Output<boolean>;
   readonly namespace: string;
+  readonly publicKeySecret?: k8s.core.v1.Secret;
 }
 
 /**
  * Install sigstore policy-controller for image signature verification.
  *
- * The webhook is configured with failurePolicy: Fail so unsigned images
- * are rejected (not silently admitted). The namespaceSelector ensures
- * only tenant workload namespaces are checked — system namespaces are
- * excluded by default since they lack the loopzero.io/managed-by label.
+ * D4 — Audit mode. The webhook is configured with failurePolicy: Ignore
+ * (fail-open). Pre-Sprint-6 images are admitted but logged. After 2 weeks
+ * of clean logs, the operator updates the Helm release to set
+ * failurePolicy: Fail.
+ *
+ * @param prefix              Resource name prefix (per-cluster).
+ * @param provider            K8s Pulumi provider.
+ * @param ns                  Optional namespace dependency (cluster bootstrap).
+ * @param cosignPublicKeyB64  Base64 cosign public key (PEM). When empty,
+ *                             the Secret is NOT created — caller must seed it
+ *                             externally before activating the policy.
  */
 export function installPolicyController(
   prefix: string,
   provider: k8s.Provider,
-  ns: k8s.core.v1.Namespace,
+  ns: k8s.core.v1.Namespace | undefined,
+  cosignPublicKeyB64?: string,
 ): PolicyControllerOutputs {
   const policyNs = new k8s.core.v1.Namespace(
     `${prefix}-cosign-system`,
@@ -51,8 +63,33 @@ export function installPolicyController(
         },
       },
     },
-    { provider, dependsOn: [ns] },
+    { provider, dependsOn: ns ? [ns] : undefined },
   );
+
+  // D3 — Public key Secret. policy-controller reads the PEM from the
+  // 'cosign.pub' key. Created only when caller provided the key; an
+  // empty key would silently allow ALL images.
+  let publicKeySecret: k8s.core.v1.Secret | undefined;
+  if (cosignPublicKeyB64 && cosignPublicKeyB64.length > 0) {
+    const pem = Buffer.from(cosignPublicKeyB64, "base64").toString("utf-8");
+    publicKeySecret = new k8s.core.v1.Secret(
+      `${prefix}-cosign-public-key`,
+      {
+        metadata: {
+          name: COSIGN_PUBLIC_KEY_SECRET,
+          namespace: POLICY_CONTROLLER_NAMESPACE,
+          labels: {
+            "loopzero.io/component": "policy-controller",
+            "loopzero.io/sprint": "6",
+          },
+        },
+        stringData: {
+          "cosign.pub": pem,
+        },
+      },
+      { provider, dependsOn: [policyNs] },
+    );
+  }
 
   const policyController = new k8s.helm.v3.Release(
     `${prefix}-policy-controller`,
@@ -66,8 +103,9 @@ export function installPolicyController(
       namespace: POLICY_CONTROLLER_NAMESPACE,
       values: {
         webhook: {
-          // Fail-closed: reject pods that cannot be verified.
-          failurePolicy: "Fail",
+          // D4 — Audit mode: fail-open. Pre-Sprint-6 images are admitted.
+          // Flip to "Fail" after 2 weeks of clean logs.
+          failurePolicy: "Ignore",
           // Only intercept tenant namespaces managed by EnvironmentController.
           // System namespaces (kube-system, loopzero-system, cosign-system, etc.)
           // do not carry this label and are therefore excluded.
@@ -104,18 +142,20 @@ export function installPolicyController(
   return {
     ready: policyController.status.apply((s) => s.status === "deployed"),
     namespace: POLICY_CONTROLLER_NAMESPACE,
+    publicKeySecret,
   };
 }
 
 /**
- * Create a ClusterImagePolicy that requires all images from the LoopZero
- * registry to be signed via Sigstore keyless (Fulcio + Rekor).
+ * Create a ClusterImagePolicy that requires images from the LoopZero registry
+ * to be signed via cosign key-based signing (D3). The public key is read
+ * from Secret cosign-public-key in the cosign-system namespace.
  *
- * The identity constraint limits accepted signatures to those issued
- * by GitHub Actions in the loopzero/loopzero repository. This prevents
- * accepting images signed by arbitrary GitHub workflows.
+ * D4 — validationActions: [Audit]. Violations are logged via the
+ * policy-controller webhook event recorder; the admission decision is
+ * NOT denied. Flip to [Deny] after the 2-week observation window.
  *
- * @param registryEndpoint - e.g. "registry.digitalocean.com/loopzero-system"
+ * @param registryEndpoint - e.g. "registry.digitalocean.com/loopzero-infra-registry"
  */
 export function createClusterImagePolicy(
   prefix: string,
@@ -123,6 +163,11 @@ export function createClusterImagePolicy(
   registryEndpoint: string | pulumi.Output<string>,
   policyControllerOutputs: PolicyControllerOutputs,
 ): k8s.apiextensions.CustomResource {
+  const dependsOn: pulumi.Resource[] = [];
+  if (policyControllerOutputs.publicKeySecret) {
+    dependsOn.push(policyControllerOutputs.publicKeySecret);
+  }
+
   return new k8s.apiextensions.CustomResource(
     `${prefix}-loopzero-verify-signatures`,
     {
@@ -130,8 +175,16 @@ export function createClusterImagePolicy(
       kind: "ClusterImagePolicy",
       metadata: {
         name: "loopzero-verify-signatures",
+        labels: {
+          "loopzero.io/component": "policy-controller",
+          "loopzero.io/sprint": "6",
+        },
       },
       spec: {
+        // D4 — Audit mode. Images that fail verification are logged but
+        // admitted. To enforce, change to ["Deny"] (or remove field;
+        // default is Deny). DO NOT mix Audit + Deny — pick one.
+        validationActions: ["Audit"],
         images: [
           {
             glob: pulumi.interpolate`${registryEndpoint}/**`,
@@ -139,28 +192,17 @@ export function createClusterImagePolicy(
         ],
         authorities: [
           {
-            keyless: {
-              url: "https://fulcio.sigstore.dev",
-              identities: [
-                {
-                  issuerRegExp: ".*github\\.com.*",
-                  subjectRegExp: ".*loopzero/loopzero.*",
-                },
-              ],
-            },
-            ctlog: {
-              url: "https://rekor.sigstore.dev",
+            // D3 — Key-based: read public key from Secret cosign-public-key.
+            key: {
+              secretRef: {
+                name: COSIGN_PUBLIC_KEY_SECRET,
+                namespace: POLICY_CONTROLLER_NAMESPACE,
+              },
             },
           },
         ],
       },
     },
-    {
-      provider,
-      dependsOn: [
-        // Wait for policy-controller CRDs to be available.
-        ...(policyControllerOutputs.ready ? [] : []),
-      ],
-    },
+    { provider, dependsOn },
   );
 }
