@@ -218,6 +218,13 @@ spec:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            # T4.4 / INFRA-006: dev-prod parity — production Pulumi already
+            # drops ALL capabilities and applies RuntimeDefault seccomp.
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
       volumes:
         - name: tmp
           emptyDir: {}

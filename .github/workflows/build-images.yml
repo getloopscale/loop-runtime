@@ -16,17 +16,17 @@
 
 name: "Build: Container Images"
 
+# T1.5 / INFRA-000: build-images is gated on CI success via workflow_run.
+# Previously: push triggered both CI and build-images independently, racing.
+# A commit with failing operator tests could push a broken image to DOCR.
+# Now: build-images only runs after the CI workflow ("CI") completes
+# successfully. workflow_dispatch preserves manual override for incident
+# response. Tag-based releases continue via release.yml.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [develop, homolog, main]
-    paths:
-      - 'api/**'
-      - 'operators/**'
-      - 'cloud/**'
-      - 'pkg/**'
-      - 'go.work'
-      - 'go.work.sum'
-      - '**/Dockerfile'
 
   workflow_dispatch:
     inputs:
@@ -59,6 +59,9 @@ jobs:
   # ─────────────────────────────────────────────
   resolve:
     name: Resolve build targets
+    # T1.5 / INFRA-000: when triggered via workflow_run (CI gate), only
+    # proceed if CI succeeded. workflow_dispatch path is unrestricted.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
