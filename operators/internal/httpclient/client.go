@@ -20,23 +20,23 @@ import (
 )
 
 // skipTLSVerify reads the OPERATOR_INSECURE_SKIP_TLS environment variable.
-// Returns true (skip verification) unless the env var is explicitly set to "false" or "0".
-// Default is true for backward compatibility with self-signed internal certificates.
+// Returns true (skip verification) ONLY when the env var is explicitly set
+// to "true" or "1". Default is false (secure — verify TLS) per T2.5 / SEC-001.
 //
-// SEC-001/CODE-007: When internal services get proper cert-manager issued certificates,
-// set OPERATOR_INSECURE_SKIP_TLS=false to enforce TLS verification.
+// COMP-007 / SEC-001 / T2.5: previously this was inverted (default skip=true),
+// which meant every operator HTTP client silently disabled TLS verification
+// out of the box. Now: secure-by-default; opt in to skip via OPERATOR_INSECURE_SKIP_TLS=true
+// when running against self-signed internal certs that haven't yet been
+// migrated to cert-manager.
 func skipTLSVerify() bool {
 	v := strings.ToLower(os.Getenv("OPERATOR_INSECURE_SKIP_TLS"))
-	if v == "false" || v == "0" {
-		return false
-	}
-	return true
+	return v == "true" || v == "1"
 }
 
 // New returns an HTTP client configured for internal cluster communication.
-// TLS verification is controlled by OPERATOR_INSECURE_SKIP_TLS env var (default: true).
-// When internal services get proper cert-manager issued certificates, set
-// OPERATOR_INSECURE_SKIP_TLS=false to enforce certificate verification.
+// TLS verification is enabled by default; set OPERATOR_INSECURE_SKIP_TLS=true
+// to opt in to skip-verify (e.g., for dev environments using self-signed certs
+// not yet rotated to cert-manager-issued ones).
 func New() *http.Client {
 	return NewWithTimeout(constants.HTTPTimeoutDefault)
 }
