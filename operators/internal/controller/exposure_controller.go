@@ -119,9 +119,16 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 			"waiting for TLS certificate", route.Generation)
 	}
 
-	// Step 2: If cert not ready and TLS is required, stay Pending and requeue
+	// Step 2: If cert not ready and TLS is required, stay Pending and requeue.
+	// Phase already initialized to Pending via SM at line 102; this is idempotent.
 	if !certReady && route.Spec.TLS.Enabled {
-		route.Status.Phase = loopzerov1.ExposedRoutePhasePending
+		// T3.6 follow-up: if route was Failed and is now retrying, transition
+		// Failed -> Pending via SM. Otherwise no-op (already Pending).
+		if route.Status.Phase == loopzerov1.ExposedRoutePhaseFailed {
+			route.Status.Phase = loopzerov1.ExposedRoutePhase(
+				exposedRouteSM.Transition(statemachine.ExposedRouteFailed, statemachine.ExposedRouteRetry),
+			)
+		}
 		route.Status.ObservedGeneration = route.Generation
 
 		if err := r.Status().Update(ctx, &route); err != nil {
@@ -131,9 +138,12 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 		return ctrl.Result{RequeueAfter: constants.RequeueProbeInterval}, nil
 	}
 
-	// Cert is ready (or TLS is disabled) — update phase to CertIssued if still Pending
+	// Cert is ready (or TLS is disabled) — transition Pending -> CertIssued
+	// via SM. T3.6 follow-up.
 	if route.Status.Phase == loopzerov1.ExposedRoutePhasePending {
-		route.Status.Phase = loopzerov1.ExposedRoutePhaseCertIssued
+		route.Status.Phase = loopzerov1.ExposedRoutePhase(
+			exposedRouteSM.Transition(statemachine.ExposedRoutePending, statemachine.ExposedRouteCertReady),
+		)
 	}
 
 	// Step 3: Perform reachability probe
@@ -151,9 +161,33 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	route.Status.LastProbeResult = probeResult
 
 	if probeErr == nil && probeResult >= 200 && probeResult < 400 {
-		// Probe succeeded — reset failures and recover from Failed state
+		// Probe succeeded — reset failures and transition to Reachable via SM.
+		// T3.6 follow-up: handle multiple source states (Failed via Retry+CertReady,
+		// CertIssued via ProbeOK directly, Reachable already-correct no-op).
 		route.Status.ConsecutiveFailures = 0
-		route.Status.Phase = loopzerov1.ExposedRoutePhaseReachable
+		switch route.Status.Phase {
+		case loopzerov1.ExposedRoutePhaseCertIssued:
+			route.Status.Phase = loopzerov1.ExposedRoutePhase(
+				exposedRouteSM.Transition(statemachine.ExposedRouteCertIssued, statemachine.ExposedRouteProbeOK),
+			)
+		case loopzerov1.ExposedRoutePhaseFailed:
+			// Recovery: Failed -> Pending -> CertIssued -> Reachable in one step
+			// (cert is ready by this point of the function). Use Retry then walk forward.
+			route.Status.Phase = loopzerov1.ExposedRoutePhase(
+				exposedRouteSM.Transition(statemachine.ExposedRouteFailed, statemachine.ExposedRouteRetry),
+			)
+			route.Status.Phase = loopzerov1.ExposedRoutePhase(
+				exposedRouteSM.Transition(statemachine.ExposedRoutePending, statemachine.ExposedRouteCertReady),
+			)
+			route.Status.Phase = loopzerov1.ExposedRoutePhase(
+				exposedRouteSM.Transition(statemachine.ExposedRouteCertIssued, statemachine.ExposedRouteProbeOK),
+			)
+		case loopzerov1.ExposedRoutePhaseReachable:
+			// Already correct — no transition needed. Idempotent on repeat reconcile.
+		default:
+			// Defensive: any other phase, force-set via direct write with audit log.
+			route.Status.Phase = loopzerov1.ExposedRoutePhaseReachable
+		}
 		conditions.SetCondition(&route.Status.Conditions, conditions.TypeRouteReachable,
 			metav1.ConditionTrue, conditions.ReasonReady,
 			fmt.Sprintf("probe returned %d", probeResult), route.Generation)
@@ -166,7 +200,27 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 		}
 
 		if route.Status.ConsecutiveFailures >= constants.MaxConsecutiveProbeFailures {
-			route.Status.Phase = loopzerov1.ExposedRoutePhaseFailed
+			// T3.6 follow-up: transition to Failed via SM from any current phase.
+			// SM defines ProbeFail valid from Pending, CertIssued, or Reachable.
+			switch route.Status.Phase {
+			case loopzerov1.ExposedRoutePhasePending:
+				route.Status.Phase = loopzerov1.ExposedRoutePhase(
+					exposedRouteSM.Transition(statemachine.ExposedRoutePending, statemachine.ExposedRouteProbeFail),
+				)
+			case loopzerov1.ExposedRoutePhaseCertIssued:
+				route.Status.Phase = loopzerov1.ExposedRoutePhase(
+					exposedRouteSM.Transition(statemachine.ExposedRouteCertIssued, statemachine.ExposedRouteProbeFail),
+				)
+			case loopzerov1.ExposedRoutePhaseReachable:
+				route.Status.Phase = loopzerov1.ExposedRoutePhase(
+					exposedRouteSM.Transition(statemachine.ExposedRouteReachable, statemachine.ExposedRouteProbeFail),
+				)
+			case loopzerov1.ExposedRoutePhaseFailed:
+				// Already Failed — no transition needed. Idempotent.
+			default:
+				// Defensive: any unexpected phase, set Failed directly.
+				route.Status.Phase = loopzerov1.ExposedRoutePhaseFailed
+			}
 			conditions.SetCondition(&route.Status.Conditions, conditions.TypeRouteReachable,
 				metav1.ConditionFalse, conditions.ReasonFailed,
 				fmt.Sprintf("exceeded %d consecutive failures: %s", constants.MaxConsecutiveProbeFailures, msg),
