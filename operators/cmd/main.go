@@ -351,6 +351,17 @@ func setupControllers(setupLog logr.Logger, mgr ctrl.Manager, deps provisionerDe
 		setupLog.Error(err, "unable to setup PlatformBootstrapController")
 		os.Exit(1)
 	}
+
+	// T2.1 / COMP-001: previously SetupPreviewController was implemented
+	// in operators/internal/controller/preview_controller.go but never
+	// invoked from setupControllers. PreviewEnvironment CRs were not
+	// reconciled at runtime. Per ADR D6, this wires the existing skeleton
+	// (namespace + TTL + cleanup) without implementing full Sprint 5
+	// workload deployment.
+	if err := controller.SetupPreviewController(mgr, deps.runtimeClient, baseDomain); err != nil {
+		setupLog.Error(err, "unable to setup PreviewController")
+		os.Exit(1)
+	}
 }
 
 // pprofEnabled checks LOOPZERO_PPROF_ENABLED. Default: false (safe for production).

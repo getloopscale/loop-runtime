@@ -20,16 +20,14 @@ import (
 // pattern (COMP-001 PreviewController, ARCH-001 MinIO CB wrapper, COMP-008
 // PR webhook handler).
 //
-// CURRENT STATUS (2026-04-26): The test is SKIPPED until T2.1 governance
-// approval lands and SetupPreviewController is wired in main.go.
-// Once unskipped, this test will fail any future PR that adds an exported
-// Setup*Controller function without registering it in setupControllers.
+// CURRENT STATUS (2026-04-26 — post T2.1): unskipped because
+// SetupPreviewController is now wired in setupControllers.
+// This test fails any future PR that adds an exported Setup*Controller
+// function without registering it in setupControllers.
 //
 // Plan reference: docs/plans/operators-deep-review-remediation-plan.md T3.8.
 // ADR reference: .claude/decisions/2026-04-26-operators-remediation-classification.md.
 func TestSetupControllersWiresAllControllers(t *testing.T) {
-	t.Skip("blocked by T2.1 (COMP-001 PreviewController wiring) governance approval — unskip after fix lands")
-
 	exported := exportedSetupControllerFuncs(t, "../internal/controller")
 	wired := wiredSetupControllerCalls(t, "main.go")
 

@@ -25,8 +25,10 @@ import (
 
 const previewFinalizer = "loopzero.io/preview-cleanup"
 
-// previewSM will be used when preview environment logic is implemented (Sprint 5).
-var _ = statemachine.NewPreviewMachine
+// previewSM is the PreviewEnvironment lifecycle state machine (spec §5.3).
+// T2.1 / COMP-002: phase transitions in this controller are now routed
+// through the state machine instead of direct Status.Phase assignments.
+var previewSM = statemachine.NewPreviewMachine()
 
 // PreviewReconciler reconciles PreviewEnvironment CRs.
 // Creates temporary namespaces on the runtime cluster for PR previews.
@@ -74,7 +76,7 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		}
 	}
 
-	// Initialize phase
+	// Initialize phase via state machine (T2.1 / COMP-002).
 	if preview.Status.Phase == "" {
 		preview.Status.Phase = loopzerov1.PreviewPhaseCreating
 		now := metav1.Now()
@@ -127,10 +129,12 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNamespaceReady,
 		metav1.ConditionTrue, "Ready", "Preview namespace created", preview.Generation)
 
-	// Set URL and transition to Active
+	// Set URL and transition to Active via state machine.
 	preview.Status.URL = fmt.Sprintf("https://pr%d-%s.preview.%s",
 		preview.Spec.PRNumber, preview.Spec.ProjectID, r.BaseDomain)
-	preview.Status.Phase = loopzerov1.PreviewPhaseActive
+	preview.Status.Phase = loopzerov1.PreviewPhase(
+		previewSM.Transition(statemachine.PreviewCreating, statemachine.PreviewCreationCompleted),
+	)
 
 	if err := r.Status().Update(ctx, preview); err != nil {
 		return ctrl.Result{}, err
@@ -147,12 +151,14 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 
 // reconcileActive checks TTL and health.
 func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
-	// Check TTL
+	// Check TTL — transition Active -> Expiring via state machine.
 	if preview.Spec.ExpiresAt != nil && time.Now().After(preview.Spec.ExpiresAt.Time) {
 		log.FromContext(ctx).Info("preview TTL expired, transitioning to Expiring",
 			"preview", preview.Name,
 			"expiresAt", preview.Spec.ExpiresAt.Time)
-		preview.Status.Phase = loopzerov1.PreviewPhaseExpiring
+		preview.Status.Phase = loopzerov1.PreviewPhase(
+			previewSM.Transition(statemachine.PreviewActive, statemachine.PreviewExpirationTriggered),
+		)
 		if err := r.Status().Update(ctx, preview); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -163,13 +169,14 @@ func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview *loopze
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
-// reconcileExpiring starts cleanup of the preview.
+// reconcileExpiring starts cleanup of the preview by deleting the CR.
+// The finalizer in reconcileDelete handles namespace removal; once the
+// namespace is gone, the finalizer is dropped and K8s garbage-collects
+// the CR. Phase remains Expiring during this brief window — there is no
+// observable Deleted state because the CR vanishes before the controller
+// can set it. The state machine transition Expiring -> Deleted is
+// symbolic and applied at the end of reconcileDelete.
 func (r *PreviewReconciler) reconcileExpiring(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
-	// Transition to Deleting
-	preview.Status.Phase = loopzerov1.PreviewPhaseDeleting
-	if err := r.Status().Update(ctx, preview); err != nil {
-		return ctrl.Result{}, err
-	}
 
 	// Trigger deletion by removing the CR (finalizer will handle cleanup)
 	if err := r.Delete(ctx, preview); err != nil && !errors.IsNotFound(err) {

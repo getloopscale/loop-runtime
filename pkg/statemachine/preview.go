@@ -4,14 +4,20 @@
 package statemachine
 
 // PreviewEnvironment states as defined in spec section 5.3.
+//
+// T2.1 / COMP-001: string values aligned with operators/api/v1
+// PreviewPhase constants ("Creating", "Active", etc.) so the cast
+// loopzerov1.PreviewPhase(sm.Transition(...)) used by PreviewController
+// works without a translation layer — matching the TenantMachine
+// pattern that already aligns with loopzerov1.TenantPhase.
 const (
-	PreviewCreating      State = "CREATING"
-	PreviewActive        State = "ACTIVE"
-	PreviewExpiring      State = "EXPIRING"
-	PreviewDeleted       State = "DELETED"
-	PreviewFailed        State = "FAILED"
-	PreviewDeleting      State = "DELETING"
-	PreviewCleanupFailed State = "CLEANUP_FAILED"
+	PreviewCreating      State = "Creating"
+	PreviewActive        State = "Active"
+	PreviewExpiring      State = "Expiring"
+	PreviewDeleted       State = "Deleted"
+	PreviewFailed        State = "Failed"
+	PreviewDeleting      State = "Deleting"
+	PreviewCleanupFailed State = "CleanupFailed"
 )
 
 // PreviewEnvironment events as defined in spec section 5.3.
