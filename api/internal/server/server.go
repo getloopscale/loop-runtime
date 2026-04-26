@@ -79,6 +79,7 @@ type Config struct {
 	DomainHandler           *routes.DomainHandler
 	GitHubWebhookHandler    http.Handler
 	RepositoryHandler       *routes.RepositoryHandler
+	PreviewHandler          *routes.PreviewHandler // Sprint 5 / T2.3 — preview environments
 	IsProduction            bool
 	AuditWriter             middleware.AuditWriter
 	AuditHandler            *routes.AuditHandler

@@ -14,6 +14,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/server"
+	"github.com/loopzero/loopzero/api/internal/services"
 )
 
 // setupHealthServices creates deep health checkers for critical dependencies.
@@ -142,6 +143,27 @@ func buildServerConfig(
 			stat := dbAdapter.Pool.Stat()
 			return stat.AcquiredConns(), stat.MaxConns()
 		}
+		// Sprint 5 / T2.3 + T1.1 — Preview environments handler + service.
+		// The handler exposes /api/v1/projects/{project}/previews; the
+		// service drives the dual-write (CR + DB) per ADR D7. When the
+		// BuildOrchestrator is available (always, post-Sprint-2), the
+		// service can submit builds for previews (best-effort).
+		previewStore := db.NewPostgresPreviewStore(dbAdapter, dbAdapter)
+		var previewService *services.PreviewService
+		if orchDeps != nil && orchDeps.Orchestrator != nil {
+			ps, perr := services.NewPreviewService(services.PreviewServiceDeps{
+				Store:      previewStore,
+				Builds:     orchDeps.Orchestrator,
+				BaseDomain: cfg.BaseDomain,
+				Logger:     logger,
+			})
+			if perr != nil {
+				logger.Error("preview service init failed (read-only mode)", "error", perr)
+			} else {
+				previewService = ps
+			}
+		}
+		sc.PreviewHandler = routes.NewPreviewHandler(previewStore, previewService, logger)
 		sc.CellPlacement = func() routes.CellPlacementEngine {
 			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
 			return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))

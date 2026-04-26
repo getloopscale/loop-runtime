@@ -126,22 +126,25 @@ describe('PreviewListCommand', () => {
     });
   });
 
-  // CHG-2026-04-23-AUDIT-28: Sprint-5 preview controller not implemented.
-  // Generic NOT_FOUND from the router was misread as "URL typo"; surface
-  // a distinct code that tells operators the feature isn't deployed yet.
-  describe('Feature unavailable 404 (AUDIT-28)', () => {
-    it('generic NOT_FOUND from router maps to PREVIEW_NOT_AVAILABLE', async () => {
+  // Sprint 5 / T4.1: Preview API is now wired. Generic NOT_FOUND from
+  // the router is no longer translated to PREVIEW_NOT_AVAILABLE — it now
+  // surfaces the original API error code so the user sees the actual
+  // problem (project missing, etc.).
+  describe('NOT_FOUND surfacing (post-T4.1)', () => {
+    it('NOT_FOUND from API surfaces the original code (no PREVIEW_NOT_AVAILABLE remap)', async () => {
       const deps = createMockDeps({
         listPreviews: jest.fn().mockRejectedValue(
-          new ApiError('The requested endpoint does not exist.', 1, 404, 'NOT_FOUND'),
+          new ApiError('Project not found.', 1, 404, 'NOT_FOUND'),
         ),
       });
       const cmd = new PreviewListCommand(deps);
       const exitCode = await cmd.execute({ json: true });
       expect(exitCode).toBe(1);
       const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
-      expect(parsed.code).toBe('PREVIEW_NOT_AVAILABLE');
-      expect(parsed.error).toMatch(/Preview environments are not yet available/i);
+      // Code is preserved as-is (NOT remapped).
+      expect(parsed.code).toBe('NOT_FOUND');
+      // Message is preserved.
+      expect(parsed.error).toMatch(/project not found/i);
     });
   });
 

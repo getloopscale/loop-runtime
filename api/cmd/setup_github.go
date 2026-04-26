@@ -177,23 +177,22 @@ func setupGitHub(
 
 		return nil
 	})
-	wh.OnPullRequest(func(event ghwebhook.PullRequestEvent) error {
-		// COMP-008 / T2.2: previously this handler returned nil with a TODO,
-		// silently acknowledging PR webhooks while no preview environment was
-		// created. That created a trust gap (TC-2): users believed PRs deployed.
-		// Until Sprint 5 lands, log an explicit WARN and return a sentinel error
-		// so the no-op is visible in Loki and assertable in tests.
-		logger.Warn("github webhook: pull_request received but preview environments not yet implemented (Sprint 5 in progress)",
-			"repo", event.Repository.FullName,
-			"action", event.Action,
-			"pr", event.Number,
-			"branch", event.PullRequest.Head.Ref,
-			"feature", "preview-environments",
-			"status", "not-implemented",
-			"plan_ref", "docs/plans/operators-deep-review-remediation-plan.md#T2.1",
-		)
-		return ErrPreviewNotImplemented
+	// Sprint 5 / T3.1 — wire PreviewDeployer.HandlePR. Replaces the
+	// COMP-008 stub (ErrPreviewNotImplemented). The deployer dispatches
+	// by event.Action: opened/synchronize/reopened → CreatePreview;
+	// closed → DeletePreviewByPR. Auto-deploy guard enforced inside.
+	previewStore := db.NewPostgresPreviewStore(dbAdapter, dbAdapter)
+	previewSvc, psErr := services.NewPreviewService(services.PreviewServiceDeps{
+		Store:      previewStore,
+		Builds:     orch,
+		BaseDomain: cfg.BaseDomain,
+		Logger:     logger,
 	})
+	if psErr != nil {
+		logger.Error("preview service init failed (PR webhooks will be no-op)", "error", psErr)
+	}
+	previewDeployer := github.NewPreviewDeployer(previewSvc, repoStore, logger)
+	wh.OnPullRequest(previewDeployer.HandlePR)
 	wh.OnInstallation(func(event ghwebhook.InstallationEvent) error {
 		logger.Info("github webhook: installation event",
 			"action", event.Action,

@@ -125,6 +125,14 @@ var (
 		HTTPStatus: 404,
 	}
 
+	// ErrPreviewNotFound is returned when a referenced preview environment
+	// does not exist or has been soft-deleted (Sprint 5).
+	ErrPreviewNotFound = &LoopZeroError{
+		Code:       "PREVIEW_NOT_FOUND",
+		Message:    "preview environment not found",
+		HTTPStatus: 404,
+	}
+
 	// ErrNoActiveRelease is returned when rollback is attempted but no release is active.
 	ErrNoActiveRelease = &LoopZeroError{
 		Code:       "NO_ACTIVE_RELEASE",

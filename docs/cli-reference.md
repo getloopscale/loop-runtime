@@ -412,11 +412,11 @@ Sem flags.
 
 Sem flags adicionais.
 
-**Status:** ❌ Sprint 5 controller não implementado. CLI retorna `code=PREVIEW_NOT_AVAILABLE` (AUDIT-28) com mensagem "Preview environments are not yet available on this server."
+**Status:** ✅ Sprint 5 / T4.1 — API wired (`/api/v1/projects/{project}/previews`). Lista previews ativos do projeto corrente. Ordenação: created_at DESC.
 
 ### `loopzero preview inspect <id>`, `loopzero preview delete <id> [--yes]`
 
-**Status:** ❌ Mesmo gap. AUDIT-15: exit 1 `PREVIEW_NOT_FOUND` se ID específico inexistente (uma vez o controller existir).
+**Status:** ✅ Sprint 5. `inspect` retorna detalhes (id, pr_number, branch, status, url, ttl_expires_at). `delete` faz soft-delete (status='deleting'); o controller no mgmt cluster reconcilia o teardown do namespace. AUDIT-15: exit 1 `PREVIEW_NOT_FOUND` quando o ID não existe ou pertence a outro projeto.
 
 ---
 
@@ -471,7 +471,7 @@ Sweep: 16 commands × 4 canais (`--help`, `--json` happy, human, `--json` erro) 
 | `PLAN_LIMIT_EXCEEDED` | Limite do plano | Phase 1 |
 | `DEPLOY_IN_PROGRESS` | Lock concorrente | base |
 | `SCALE_NOT_AVAILABLE` | Feature não deployada | AUDIT-27 |
-| `PREVIEW_NOT_AVAILABLE` | Feature não deployada | AUDIT-28 |
+| ~~`PREVIEW_NOT_AVAILABLE`~~ | _Removido em Sprint 5 / T4.1 — preview API agora wirada. NOT_FOUND surface o code original._ | AUDIT-28 (deprecated) |
 | `PROJECT_NOT_FOUND` | Resource 404 | base |
 | `ENV_NOT_FOUND` | Resource 404 | AUDIT-12 |
 | `SECRET_NOT_FOUND` | Resource 404 | base |

@@ -64,8 +64,23 @@ const (
 // preview_controller.go:119,127. Defined as a separate constant from
 // TypeEnvNamespaceReady because Preview's NamespaceReady has different
 // semantics (per-PR namespace lifecycle).
+//
+// Sprint 5 / T1.2 (preview-environments-plan): adds the workload-readiness
+// conditions the controller will set as it reconciles namespace + workload
+// deployment. The deny-all + allow-ingress + allow-egress NetworkPolicy
+// triplet, the ResourceQuota, and the LimitRange each get their own
+// condition for finer-grained operator UX (`kubectl describe pe` shows
+// exactly which resource failed).
 const (
-	TypePreviewNamespaceReady = "NamespaceReady"
+	TypePreviewNamespaceReady       = "NamespaceReady"
+	TypePreviewNetworkPolicyReady   = "NetworkPolicyReady"
+	TypePreviewResourceQuotaReady   = "ResourceQuotaReady"
+	TypePreviewLimitRangeReady      = "LimitRangeReady"
+	TypePreviewBuildSubmitted       = "BuildSubmitted"
+	TypePreviewBuildCompleted       = "BuildCompleted"
+	TypePreviewWorkloadHealthy      = "WorkloadHealthy"
+	TypePreviewApplicationDeleted   = "ApplicationDeleted"
+	TypePreviewNamespaceDeleted     = "NamespaceDeleted"
 )
 
 // --- Tenant deletion conditions ---

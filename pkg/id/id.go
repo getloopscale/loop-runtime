@@ -23,6 +23,13 @@ func GenerateReleaseID() string {
 	return fmt.Sprintf("rel-%s", randomHex(8))
 }
 
+// GeneratePreviewID returns a unique preview environment identifier in the
+// format "prev-{16hex}". The "prev-" prefix is enforced by the
+// preview_environments table CHECK constraint (migration 000003).
+func GeneratePreviewID() string {
+	return fmt.Sprintf("prev-%s", randomHex(8))
+}
+
 // randomHex generates a random hex string of n*2 characters from n random bytes.
 func randomHex(n int) string {
 	b := make([]byte, n)

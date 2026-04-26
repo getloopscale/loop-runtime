@@ -299,6 +299,17 @@ func registerProtectedRoutes(
 		r.Get("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.GetConnection)
 	}
 
+	// Preview environment routes (Sprint 5 / T2.3).
+	// URL shape matches the CLI: /api/v1/projects/{project}/previews[...].
+	// POST is rate-limited and idempotent (creating the same PR twice
+	// upserts into the same row). DELETE is rate-limited.
+	if cfg.PreviewHandler != nil {
+		r.Get("/api/v1/projects/{project}/previews", cfg.PreviewHandler.List)
+		r.Get("/api/v1/projects/{project}/previews/{id}", cfg.PreviewHandler.Get)
+		r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{project}/previews/{id}", cfg.PreviewHandler.Delete)
+		r.With(append(idempotentMiddlewares, rateLimitMiddlewares...)...).Post("/api/v1/projects/{project}/previews", cfg.PreviewHandler.Create)
+	}
+
 	if cfg.AuditHandler != nil {
 		r.Get("/api/v1/audit", cfg.AuditHandler.List)
 	}

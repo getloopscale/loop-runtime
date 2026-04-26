@@ -359,14 +359,24 @@ type TenantDeletionStore interface {
 }
 
 // Preview represents a preview environment created for a pull request.
+//
+// JSON field naming aligns with the CLI's PreviewInspectApiResponse and
+// PreviewListItem schemas. The `tenant_id` field is omitted from the JSON
+// output (Rule 3 — internal terms) by being unexported via `json:"-"` for
+// the wire format; the Go struct keeps it for store routing.
 type Preview struct {
-	ID        string `json:"id"`
-	TenantID  string `json:"tenant_id"`
-	ProjectID string `json:"project_id"`
-	PRNumber  int    `json:"pr_number"`
-	Branch    string `json:"branch"`
-	Status    string `json:"status"`
-	URL       string `json:"url"`
-	CreatedAt string `json:"created_at"`
-	ExpiresAt string `json:"expires_at,omitempty"`
+	ID            string `json:"id"`
+	TenantID      string `json:"-"`
+	ProjectID     string `json:"project_id"`
+	PRNumber      int    `json:"pr_number"`
+	Branch        string `json:"branch"`
+	CommitSHA     string `json:"commit_sha,omitempty"`
+	Status        string `json:"status"`
+	URL           string `json:"url,omitempty"`
+	BuildID       string `json:"build_id,omitempty"`
+	ReleaseID     string `json:"release_id,omitempty"`
+	RepoFullName  string `json:"repo_full_name,omitempty"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at,omitempty"`
+	TTLExpiresAt  string `json:"ttl_expires_at,omitempty"`
 }

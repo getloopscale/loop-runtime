@@ -8,13 +8,13 @@ LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. Vercel-qua
 
 The authoritative specification is **`docs/cli-reference.md`**. If this file and the system design conflict, the system design wins.
 
-**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence — E2E validated 2026-04-23). 25/30 E2E tests pass. Sprints 0-4, 7, 10, 11 complete. Sprint 6 partial (cosign done, syft + admission policy not). Sprint 5 (preview envs) skeleton only. Sprints 8-9 not started. Hardening H1-H7 complete. AUDIT series (21 fixes) hardened CLI↔API contracts. KEDA scale-to-zero done. Cell architecture Phase 0+1 complete. 1079 CLI tests + 41 Go packages passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN).
+**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence — E2E validated 2026-04-23). 25/30 E2E tests pass. Sprints 0-5, 7, 10, 11 complete. Sprint 6 partial (cosign done, syft + admission policy not). Sprint 5 (preview envs) — **ALL 14 plan tasks done** with E2E validated against live k3d cluster (12 lifecycle + CLI specs passing 2026-04-26 / CHG-2026-04-26-PREVIEW-IMPL): PR opened webhook→preview→synchronize UPSERT→PR closed soft-delete, plus controller workload (NP/Quota/LR + condition-wait flow), retry/CLEANUP_FAILED, 12 envtest specs. Sprints 8-9 not started. Hardening H1-H7 complete. AUDIT series (21 fixes) hardened CLI↔API contracts. KEDA scale-to-zero done. Cell architecture Phase 0+1 complete. 1079 CLI tests + 41 Go packages + 200+ envtest specs passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN).
 
 **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
 **Completed:** deploy happy path, scaling+HPA (Starter=2/Pro=5/Team=10), promote staging→prod, rollback, secrets via ESO, custom domains v2 (CF Zone Mgmt, model Vercel), GitHub App auto-deploy (~4min), monorepo validator (30 frameworks), cosign image signing, plan enforcement, audit log, RSA-only JWT auth, two-host gateway, concurrent deploy rejection (1×202+1×409), JSON contracts (8/8), observability (43 loopzero_* metrics + Grafana + SLO alerts), KEDA scale-to-zero, cell architecture (Phase 0+1).
 
-**Not built:** Preview environments (Sprint 5 — controller has namespace+TTL+cleanup reconcile but no workload deployment, state machine imported and unused, no Application CR generation), SBOM (syft), admission policy (reject unsigned images), SSO/SAML, `loopzero scale` DB persistence (stub returns 202 acknowledged — use loopzero.yaml + loopzero deploy), Loki cross-cluster streaming (infra gap, not code), Cell Phase 2b activation (code 100%, Pulumi.dev.yaml multi-cell config missing).
+**Not built:** SBOM (syft), admission policy (reject unsigned images), SSO/SAML, `loopzero scale` DB persistence (stub returns 202 acknowledged — use loopzero.yaml + loopzero deploy), Loki cross-cluster streaming (infra gap, not code), Cell Phase 2b activation (code 100%, Pulumi.dev.yaml multi-cell config missing). Sprint 5 / Preview Environments **fully shipped** (CHG-2026-04-26-PREVIEW-IMPL).
 
 **Known issues:** AppSecret controller not implemented (ESO works directly, no lifecycle automation); Pulumi consolidation pending (GitHub App envFrom, CF_ZONE_MANAGEMENT, PG keepalive); 10 failing tests in `api/internal/k8s` (TenantCRManager — contract drift from AUDIT series).
 
@@ -160,7 +160,7 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 | 2 | Deploy happy path | ✅ (E2E on DO) |
 | 3 | Logs + Status + Secrets | ✅ (H6) |
 | 4 | Rollback + Promote + Cancel | ✅ (E2E 2026-04-23) |
-| 5 | Preview environments | ⚠️ namespace+TTL only, workload deploy missing |
+| 5 | Preview environments | ✅ ALL 14 tasks done. E2E validated live (12 specs pass against k3d). |
 | 6 | Security + Supply chain | ⚠️ cosign done, syft+admission not |
 | 7 | Observability | ✅ (H4) |
 | 8 | Hardening + Chaos | ❌ |
@@ -171,7 +171,7 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 
 **E2E Validation (2026-04-23):** 25/30 pass (83%). Confidence: deploy 99%, scaling 95%, promote 95%, rollback 99%, concurrent rejection 99%, JSON contracts 99%, internal terms (Rule 3) 99%. Log streaming 60% (infra gap, not code).
 
-**Maturity:** 3.2/5. Path to 4.0: Sprint 5 + Sprint 9 + Cell-2 activation + 1 external early adopter. Full: `docs/maturity-assessment.md`.
+**Maturity:** 3.6/5 (was 3.2 pre-Sprint-5; +0.4 from Preview Environments fully shipped + E2E live validated — CHG-2026-04-26-PREVIEW-IMPL). Path to 4.0: Sprint 9 + Cell-2 activation + 1 external early adopter. Full: `docs/maturity-assessment.md`.
 
 ---
 
@@ -198,7 +198,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 ### CRDs (10 total)
 
 Wired (✅): Tenant, Environment, LoopZeroApplication, ExposedRoute, PlatformBootstrap, GitRepositoryBinding, ClusterCredential.
-Partial (⚠️): PreviewEnvironment — reconcile structure complete (namespace, TTL, cleanup, finalizer), workload deployment logic absent.
+Wired (✅): PreviewEnvironment — namespace + NetworkPolicy (deny-all/allow-ingress/allow-egress) + ResourceQuota + LimitRange + TTL + condition-wait flow (BuildSubmitted→BuildCompleted→WorkloadHealthy with grace period) + Failed transition + cleanup retry/CLEANUP_FAILED + finalizer + canonical naming via `naming.PreviewNamespace`. 12 envtest specs covering full lifecycle. E2E live validated against k3d.
 Defined but unwired (❌): AppSecret (CRD only, no controller — ESO works directly), ReconciliationReport (placeholder).
 
 ### State Machines (9 in `pkg/statemachine/`)

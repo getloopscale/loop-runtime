@@ -45,7 +45,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 > **Phase: Pre-release.** Production infrastructure running on DigitalOcean (3 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. Not yet open to external users.
 >
-> **Maturity: 3.2/5** -- strong technical foundation, commercially unvalidated. See [full assessment](docs/maturity-assessment.md).
+> **Maturity: 3.6/5** -- strong technical foundation, commercially unvalidated. (was 3.2 pre-Sprint-5; +0.4 from Preview Environments fully shipped + E2E live validated against k3d 2026-04-26 / CHG-2026-04-26-PREVIEW-IMPL.) See [full assessment](docs/maturity-assessment.md).
 
 ### What Works (E2E Validated on DigitalOcean)
 
@@ -87,7 +87,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 | Feature | Impact | Notes |
 |---------|--------|-------|
-| Preview environments (PR -> temp URL -> cleanup) | High | CRD defined, controller skeleton exists. GitHub App receives PR events. Sprint 5. |
+| ~~Preview environments~~ | ~~High~~ | ✅ Shipped 2026-04-26 (Sprint 5 / CHG-2026-04-26-PREVIEW-IMPL). All 14 plan tasks done, E2E validated against live k3d (12 specs pass: PR opened→preview, synchronize→UPSERT, concurrent PRs, PR closed→cleanup + 8 CLI specs). |
 | SBOM generation (syft) | Medium | cosign signing done, syft not started. Sprint 6 remainder. |
 | Admission policy (reject unsigned images) | Medium | Sprint 6 remainder. |
 | `loopzero scale` persistence (DB) | Low | Endpoint returns 202 acknowledged as stub. Use loopzero.yaml + loopzero deploy. |
@@ -109,9 +109,9 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 | Component | Count | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 1,079 | Passing (59 suites) |
-| API + Shared libs (Go) | 41 packages | Passing |
-| Operators (Ginkgo + envtest) | 186 specs | Passing |
+| CLI (Jest) | 1,079 | Passing (59 suites; 7 skipped) |
+| API + Shared libs (Go) | 41 packages | Passing (preview store/service/handler/webhook/comment +60 unit tests added 2026-04-26) |
+| Operators (Ginkgo + envtest) | 188+ specs | Passing (+2 preview unit tests) |
 | CI pipeline | 14 workflows | Green |
 
 ---
@@ -133,7 +133,7 @@ LoopZero gives you Vercel-quality DX for everything Vercel can't deploy.
 | Promote across environments | -- | Yes (no rebuild) |
 | Secrets per environment | Yes | Yes (encrypted, ESO sync) |
 | Custom domains (apex + subdomain) | Yes | Yes (CF Zone, WAF/DDoS) |
-| Preview environments per PR | Yes | Not yet (Sprint 5) |
+| Preview environments per PR | Yes | Yes (Sprint 5 fully shipped — PR open/synchronize/close webhooks → preview lifecycle, 12 E2E specs pass live) |
 | Scale-to-zero | Yes | Yes (KEDA, pending cluster setup) |
 | Image signing | -- | Yes (cosign) |
 | CLI-first | Yes | Yes |
@@ -382,7 +382,7 @@ cd pkg && go test ./...       # Shared library tests
 - **Database migrations** -- LoopZero deploys code, not schema changes.
 - **Custom domains without nameserver change** -- Users must change nameservers to Cloudflare.
 - **Multi-region** -- Single-region in v1.
-- **Preview environments** -- Planned for Sprint 5.
+- *(item removido — preview environments shipped no Sprint 5)*
 - **GPU/AI workloads** -- Not planned.
 
 ---
@@ -407,5 +407,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Every PR starts with a failing test.
 ## Links
 
 - [CLI Reference](docs/cli-reference.md) -- authoritative specification (commands, exit codes, JSON schemas, contracts)
-- [Maturity Assessment](docs/maturity-assessment.md) -- honest 3.2/5 self-assessment with path to 4.0 and 5.0
+- [Maturity Assessment](docs/maturity-assessment.md) -- honest 3.6/5 self-assessment (post Sprint 5 preview-envs full shipment + live E2E) with path to 4.0 and 5.0
 - [Changelog](CHANGELOG.md)
