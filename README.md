@@ -1,14 +1,14 @@
 <p align="center">
   <h1 align="center">LoopZero</h1>
   <p align="center">
-    <strong>The deployment platform for teams who outgrew Vercel but don't want to manage Kubernetes.</strong>
+    <strong>CLI-first Kubernetes PaaS for monorepo deployments.</strong>
   </p>
   <p align="center">
     <a href="#project-status">Status</a> &bull;
     <a href="#quickstart">Quickstart</a> &bull;
-    <a href="#self-hosted-installation">Self-Hosted</a> &bull;
-    <a href="#cli-reference">CLI Reference</a> &bull;
-    <a href="#how-it-works">How It Works</a> &bull;
+    <a href="#self-hosted">Self-Hosted</a> &bull;
+    <a href="#cli-reference">CLI</a> &bull;
+    <a href="#architecture">Architecture</a> &bull;
     <a href="#development">Development</a>
   </p>
 </p>
@@ -28,133 +28,115 @@ git push         # every push deploys automatically
 $ git push origin main
 
 # LoopZero deploys automatically:
-✓ Building api...    [24s]
-✓ Building web...    [18s]
-✓ Deploying...       [15s]
+  Building api...    [24s]
+  Building web...    [18s]
+  Deploying...       [15s]
 
 Live:
-  api    → https://acme-my-saas-api-production.loopzero.example
-  web    → https://acme-my-saas-web-production.loopzero.example (CDN)
+  api    -> https://acme-my-saas-api-production.loopzero.example
+  web    -> https://acme-my-saas-web-production.loopzero.example (CDN)
 ```
 
-No Kubernetes. No Helm. No Dockerfile required. Just push.
+No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 ---
 
 ## Project Status
 
-> **Phase: Pre-release → Scale Validation.** Infrastructure validated on production (DigitalOcean). Entering scale validation phase targeting 50,000 fullstack applications.
+> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (3 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. Not yet open to external users.
 >
-> **🏆 Milestone 2026-04-16: L1 DoD achieved — 10/10 apps deployed and verified LIVE (HTTP 200) on DO real infrastructure.** End-to-end validation of the full pipeline: bundle → BuildKit → cosign sign → DO Registry → GitOps → ArgoCD sync → pod → HTTP 200. Avg deploy: 3m26s, best: 2m43s. 15 production bugs discovered and fixed. See [scale-50k-day1-learnings.md](docs/plans/scale-50k-day1-learnings.md).
->
-> Last validation: 2026-04-16 — Supply chain security (cosign + syft + SLSA provenance). Harbor container registry. Distributed tracing (Tempo). Pipeline simplification (11 workflows). Leader-generation fencing. PG-backed processing claims. Distributed work queue. Build admission gate. PG circuit breaker. 852 CLI tests, 44 Go test packages, CI green.
+> **Maturity: 3.2/5** -- strong technical foundation, commercially unvalidated. See [full assessment](docs/maturity-assessment.md).
 
-### Scale Readiness (4 / 5)
+### What Works (E2E Validated on DigitalOcean)
 
-The platform has all building blocks for large-scale operation. Current focus is wiring and validating them end-to-end.
-
-| Domain | Score | Status |
-|--------|:-----:|--------|
-| Control plane decoupling | 3.5/5 | Controller binary ready, generation fencing implemented, loops still run in API by default |
-| Cell isolation | 3/5 | All components exist (DynamicRouter, K8sCellStore, PlacementEngine, cell.ts), not yet wired as default |
-| Backpressure / admission | 4.5/5 | Build gate, PG circuit breaker, rate limiter, SSE limits — all wired and tested |
-| Consistency model | 4/5 | Leader fencing, PG claims, work queue — implemented and tested, loops not yet migrated |
-| Scale contracts | 4.5/5 | Cell budget published, **L1 10/10 live validated on DO (2026-04-16)**, L2-L5 tests scaffolded |
-| **Target** | **5/5** | **50,000 fullstack apps across multiple cells — see [Scale Plan](docs/plans/scale-50k-plan.md)** |
-
-### What Works (Validated on DigitalOcean)
-
-| Capability | Status | Evidence |
-|------------|:------:|----------|
-| `loopzero login` / `logout` / `whoami` | **Working** | Device Code Flow + Ory Hydra OIDC (GitHub/Google/email) |
-| `loopzero init` (monorepo detection) | **Working** | Turbo/Nx/Lerna/pnpm + 15 frameworks |
-| `loopzero deploy` (full pipeline) | **Working** | 24s build, pod Running, health OK |
-| `loopzero deploy` (static frontends) | **Working** | S3 upload + CF Worker KV routing + CDN delivery |
-| `loopzero rollback` | **Working** | ~3s revert, version verified |
-| `loopzero logs` | **Working** | Loki cross-cluster, real-time streaming |
-| `loopzero status` | **Working** | Project status with active release + URL |
-| `loopzero secret set/list/delete` | **Working** | ESO sync <30s, values never exposed |
-| `loopzero cancel` | **Working** | Cancels running/queued builds |
-| `loopzero project create/list/inspect/delete` | **Working** | Full CRUD with clean resource removal |
-| `loopzero env create/list/inspect/delete` | **Working** | Production env protected from deletion |
-| `loopzero team list/add/remove/role` | **Working** | RBAC: owner/admin/member roles |
-| `loopzero build list/inspect` | **Working** | Build history with env filter |
-| `loopzero validate` | **Working** | Local loopzero.yaml validation |
-| `loopzero connect` / `disconnect` | **Working** | Link/unlink GitHub repo |
-| `loopzero audit` | **Working** | Audit log with action/timestamp filters |
-| `loopzero billing` | **Working** | Stripe checkout, webhooks, plan upgrades, metering |
-| Auto-deploy on `git push` | **Working** | GitHub App "LoopZero Platform" — push → build + deploy (~4min) |
-| `loopzero domain add/status/dns/remove` | **Working** | CF Zone Management — apex + subdomain, WAF/DDoS, auto TLS |
-| Plan enforcement (Starter/Pro/Team) | **Working** | Limits on projects/builds/environments/members. 402 on quota exceeded |
-| Auth (Device Code Flow + JWT) | **Working** | Ory Hydra OIDC, GitHub/Google/email, RSA JWT, token refresh |
-| TLS (HTTPS) | **Working** | CF Universal SSL for custom domains, Let's Encrypt DNS-01 for platform |
-| Observability | **Working** | Prometheus + Grafana + Loki + Tempo + OTel + 4 SLO alert rules |
-| Distributed tracing | **Working** | End-to-end trace propagation (API → operator → Argo → DB) via Tempo |
-| Concurrent deploy protection | **Working** | `pg_advisory_xact_lock` → 409 on conflict |
-| Idempotency | **Working** | Retry-safe via `Idempotency-Key` header |
-| Supply chain security | **Working** | cosign signing, syft SBOM, SLSA provenance attestation |
-| Image signature admission | **Working** | ValidatingAdmissionPolicy requires `@sha256:` digests |
-| Harbor container registry | **Working** | Per-tenant isolation, robot accounts, quota enforcement |
-| SecurityContext (non-root pods) | **Working** | `runAsNonRoot: true`, `drop: ALL`, `readOnlyRootFilesystem` |
-| PodSecurity Admission | **Working** | `restricted` profile on all tenant namespaces |
-| NetworkPolicy | **Working** | Mandatory deny-all + allow-ingress + allow-egress |
-| Build admission gate | **Working** | Cell-level + per-tenant concurrent build limits (429 on capacity) |
-| PG pool circuit breaker | **Working** | 503 + Retry-After on pool saturation |
-| Leader-generation fencing | **Working** | Stale leader writes no-op via monotonic generation ID. 18 tests |
-| PG-backed processing claims | **Working** | CAS dedup for multi-replica safety. 14 tests + 2 stress |
-| Distributed work queue | **Working** | PG-backed SELECT FOR UPDATE SKIP LOCKED. 6 queue types |
-| Controller binary (extracted) | **Ready** | Separate binary with generation fencing. Behind `LOOPZERO_DISABLE_LEGACY_LOOPS` flag |
-| Multi-cell components | **Ready** | DynamicRouter, K8sCellStore, PlacementEngine (RoundRobin), CrossCellAggregator, cell.ts provisioner. Not yet wired as default |
-| IaC destroy + recreate | **Working** | Full pipeline via GitHub Actions |
-| CF edge security | **Working** | WAF (OWASP + CF managed), rate limiting, Zero Trust Access |
+| Capability | Evidence |
+|------------|----------|
+| `loopzero login` / `logout` / `whoami` | Device Code Flow + Ory Hydra OIDC |
+| `loopzero init` (monorepo detection) | Turbo/Nx/Lerna/pnpm + 30 frameworks |
+| `loopzero deploy` (full pipeline) | CLI -> upload -> BuildKit -> cosign sign -> ArgoCD sync -> live URL (~4min) |
+| `loopzero deploy` (static frontends) | S3 upload + CF Worker KV routing + DO Spaces CDN |
+| `loopzero rollback` | Instant revert to previous release (~3s) |
+| `loopzero promote --from staging --to production` | Cross-environment promotion (HTTP 202, no rebuild) |
+| `loopzero logs` | Loki cross-cluster streaming |
+| `loopzero status` | Project status with active release, URL, scaling info |
+| `loopzero secret set/list/delete` | ESO sync <30s, values never exposed in CLI output |
+| `loopzero cancel` | Cancel running/queued builds |
+| `loopzero project create/list/inspect/delete` | Full CRUD with clean resource removal |
+| `loopzero env create/list/inspect/delete` | Multi-environment with protected production |
+| `loopzero team list/add/remove/role` | RBAC: owner/admin/member roles |
+| `loopzero build list/inspect` | Build history with env filter |
+| `loopzero domain add/status/dns/list/remove` | CF Zone Management -- apex + subdomain, WAF/DDoS, auto TLS |
+| `loopzero connect` / `disconnect` | GitHub App auto-deploy on push (~4min E2E) |
+| `loopzero audit` | Audit log with action/timestamp filters |
+| `loopzero validate` | Local loopzero.yaml validation |
+| `loopzero scale` | Scaling configuration (stub -- 202 acknowledged, apply via loopzero.yaml) |
+| Plan enforcement (Starter/Pro/Team) | Limits on projects/builds/environments/members/replicas |
+| Concurrent deploy protection | `pg_advisory_xact_lock` -> exactly one 202, others get 409 |
+| Idempotency | Retry-safe via `Idempotency-Key` header |
+| Image signing (cosign) | Every container image signed post-build |
+| Scale-to-zero (KEDA) | Manifest generation + Helm charts + Pulumi bootstrap (cluster KEDA pending) |
+| Cell architecture (Phase 0+1) | PlacementEngine, DynamicRouter, cell-scoped queries, leader fencing, build admission gate, PG work queue, capacity tests. Pulumi cell.ts provisions full cells. Phase 2b activation pending (config only). |
+| SecurityContext (non-root pods) | `runAsNonRoot`, `drop: ALL`, `readOnlyRootFilesystem` |
+| PodSecurity Admission | `restricted` profile on all tenant namespaces |
+| NetworkPolicy | Mandatory deny-all + explicit allow rules |
+| Observability | 43 Prometheus metrics + Grafana dashboards + 4 SLO alert rules |
+| Auth hardened | UUID tenant IDs, RSA-only JWT, audience validation, secret rotation |
+| JSON contracts | 8/8 commands validated, 0 internal term leaks |
 
 ### What's Not Built Yet
 
-| Feature | Sprint | Notes |
+| Feature | Impact | Notes |
 |---------|--------|-------|
-| Preview environments (PR → temp URL → cleanup) | Sprint 5 | CRD defined, controller not implemented. GitHub App receives PR events (foundation ready) |
-| `loopzero promote` (staging → production) | Sprint 4 | E2E validated (2026-04-23) |
-| Chaos engineering (full suite) | Sprint 8 | 7 chaos tests implemented, full suite pending |
-| AppSecret controller | — | CRD defined, no reconciler. Secrets work via ESO directly |
+| Preview environments (PR -> temp URL -> cleanup) | High | CRD defined, controller skeleton exists. GitHub App receives PR events. Sprint 5. |
+| SBOM generation (syft) | Medium | cosign signing done, syft not started. Sprint 6 remainder. |
+| Admission policy (reject unsigned images) | Medium | Sprint 6 remainder. |
+| `loopzero scale` persistence (DB) | Low | Endpoint returns 202 acknowledged as stub. Use loopzero.yaml + loopzero deploy. |
+| Cell-2 activation (multi-cell prod) | Low | Code 100% complete. Missing: Pulumi.dev.yaml config to invoke createCell(). |
+| Chaos engineering suite | Medium | Sprint 8 -- not started. |
+| Polish + onboarding (< 10 min) | High | Sprint 9 -- not started. |
+| SSO/SAML | Low | Phase 3. |
+
+### Pricing Tiers
+
+| Tier | Price | Projects | Builds/mo | Max Replicas |
+|------|-------|----------|-----------|-------------|
+| Starter | Free | 1 | 100 | 2 |
+| Pro | $29/mo | 3 | 500 | 5 |
+| Team | $79/mo | 10 | 2000 | 10 |
+| Enterprise | Custom | Unlimited | Unlimited | Unlimited |
 
 ### Test Suite
 
-| Component | Tests | Status |
+| Component | Count | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 1,059 | Passing |
-| API + Shared libs (Go) | 44 packages | Passing |
-| Operators (Ginkgo + envtest) | — | Passing |
-| Infra (Pulumi + vitest) | — | Passing |
-| Load tests (L3/L4/L5) | 4 scenarios | Passing |
-| Chaos tests | 7 scenarios | Passing |
-| CI pipeline | 11 workflows | Green |
+| CLI (Jest) | 1,079 | Passing (59 suites) |
+| API + Shared libs (Go) | 41 packages | Passing |
+| Operators (Ginkgo + envtest) | 186 specs | Passing |
+| CI pipeline | 14 workflows | Green |
 
 ---
 
 ## Why LoopZero
 
-You have a monorepo with an API, a frontend, and workers. Vercel handles the frontend beautifully — but the rest is a mess of Dockerfiles, Helm charts, and CI pipelines that only one person understands.
+You have a monorepo with an API, a frontend, and workers. Vercel handles the frontend -- but the rest requires Dockerfiles, Helm charts, and CI pipelines that only one person understands.
 
 LoopZero gives you Vercel-quality DX for everything Vercel can't deploy.
 
 | | Vercel | LoopZero |
 |---|:---:|:---:|
-| Auto-deploy on `git push` | Yes | Yes (~4min, GitHub App) |
+| Auto-deploy on `git push` | Yes | Yes (~4min) |
 | Static frontends (React, Vite) | Yes | Yes (CDN via CF Worker) |
-| API servers (Express, Go, Python, etc.) | Serverless only | Any framework (15 supported) |
-| Background workers | — | Yes |
-| Multiple services per repo | — | Yes (monorepo-native) |
+| API servers (Express, Go, Python) | Serverless only | Any framework (30 supported) |
+| Background workers | -- | Yes |
+| Multiple services per repo | -- | Yes (monorepo-native) |
 | Rollback in seconds | Yes | Yes (~3s) |
+| Promote across environments | -- | Yes (no rebuild) |
 | Secrets per environment | Yes | Yes (encrypted, ESO sync) |
-| Custom domains (apex + subdomain) | Yes | Yes (CF Zone Management, WAF/DDoS) |
+| Custom domains (apex + subdomain) | Yes | Yes (CF Zone, WAF/DDoS) |
 | Preview environments per PR | Yes | Not yet (Sprint 5) |
+| Scale-to-zero | Yes | Yes (KEDA, pending cluster setup) |
+| Image signing | -- | Yes (cosign) |
 | CLI-first | Yes | Yes |
-| Team management + RBAC | Yes | Yes |
-| Billing (Stripe) | Yes | Yes |
-| Real-time build logs | Yes | Yes (Loki) |
-| Image signing + SBOM | — | Yes (cosign + syft + SLSA) |
-| Per-tenant container isolation | — | Yes (Harbor, scoped robot accounts) |
-| Distributed tracing | — | Yes (OTel + Tempo, end-to-end) |
 
 ---
 
@@ -173,7 +155,7 @@ cd my-monorepo
 loopzero init
 ```
 
-LoopZero detects your monorepo structure (Turborepo, Nx, pnpm workspaces) and frameworks, then generates `loopzero.yaml`:
+LoopZero detects your monorepo structure and frameworks, then generates `loopzero.yaml`:
 
 ```yaml
 version: 1
@@ -208,168 +190,48 @@ loopzero connect
 loopzero deploy
 ```
 
-That's it. TLS, health checks, ingress routing, and zero-downtime rolling updates are automatic. After connecting, every `git push` deploys automatically.
+TLS, health checks, ingress routing, and zero-downtime rolling updates are automatic. After connecting, every `git push` deploys automatically.
 
-**Auto-detected frameworks:** Express, NestJS, Fastify, Next.js, Vite, Remix, Astro, Angular, Svelte, Vue, React, Go (Gin), Python (FastAPI, Django), Node.js, and any Dockerfile.
+**Scale-to-zero** (optional):
+
+```yaml
+apps:
+  api:
+    path: apps/api
+    framework: express
+    port: 3000
+    autoscaling:
+      min: 0        # scale-to-zero when idle
+      max: 5
+      targetCPU: 80
+      cooldown: 300  # seconds before sleeping
+```
 
 ---
 
-## Self-Hosted Installation
+## Self-Hosted
 
-Run LoopZero on your own Kubernetes cluster. One command, zero kubectl.
+Run LoopZero on your own Kubernetes cluster.
 
 ### Prerequisites
 
 - Kubernetes cluster (1.28+) with default StorageClass
-- `kubectl` configured and connected to your cluster
-- `helm` v3.14+
-- `doctl` authenticated (for pulling images from DigitalOcean Container Registry)
+- `kubectl` + `helm` v3.14+ + `doctl`
 
-### 1. Create a values file
-
-```yaml
-# customer-values.yaml
-domain: "paas.yourcompany.com"
-
-database:
-  external: false              # true = bring your own PG, false = installer provisions one
-
-registry:
-  type: "docr"                 # docr | harbor | ecr | gcr
-  endpoint: "registry.digitalocean.com/loopzero-system"
-
-auth:
-  type: "bundled"              # bundled = Ory Kratos + Hydra, external = your OIDC provider
-  systemSecret: ""             # auto-generated if empty (32 chars, for JWT signing)
-
-storage:
-  endpoint: "minio.loopzero-system.svc.cluster.local:9000"
-  bucket: "loopzero-artifacts"
-
-clusters:
-  mode: "single"               # single = same cluster for mgmt/build/workload
-  # mode: "multi"              # multi = separate clusters (production recommended)
-  # build:
-  #   kubeconfigPath: "/path/to/build-kubeconfig"
-  # workload:
-  #   kubeconfigPath: "/path/to/workload-kubeconfig"
-
-profile: "minimal"             # minimal | production (production = 2 replicas, network policies)
-```
-
-### 2. Install
+### Install
 
 ```bash
 loopzero platform install -f customer-values.yaml
 ```
 
-The installer runs 10 automated steps:
+10-step automated installer: validates cluster, installs all dependencies (CloudNativePG, Gitea, ArgoCD, Argo Workflows, Ory Kratos/Hydra, MinIO, cert-manager, Traefik), bootstraps credentials, runs migrations, and verifies health.
 
-```
-Step  1/10: Validating cluster...
-  ✓ kubectl: v1.32    ✓ helm: v3.17    ✓ nodes: 3    ✓ storageclass: local-path
-
-Step  2/10: Installing prerequisites...
-  ✓ cert-manager v1.14.5    ✓ traefik v28.3.0    ✓ postgresql v16.6.1
-  ✓ gitea v10.6.0           ✓ argocd v7.3.11     ✓ argo-workflows v1.0.5
-  ✓ ory-kratos v0.61.0      ✓ ory-hydra v0.61.0  ✓ minio v5.4.0
-
-Step  3/10: Configuring registry credentials...
-  ✓ Image pull secret created
-
-Step  4/10: Setting up databases...
-  ✓ Auth databases ready (kratos, hydra)
-
-Step  5/10: Installing CRDs...
-  ✓ 10 LoopZero CRDs installed
-
-Step  6/10: Bootstrapping services...
-  ✓ Gitea org "loopzero" created
-  ✓ Gitea API token generated
-  ✓ ArgoCD admin password extracted
-  ✓ MinIO credentials extracted
-  ✓ OAuth2 client created
-  ✓ Argo callback secret generated
-
-Step  7/10: Creating runtime secrets...
-  ✓ Kubeconfig configmaps created (single-cluster mode)
-  ✓ MinIO credentials secret created in argo
-  ✓ MinIO credentials secret created in loopzero-system
-
-Step  8/10: Installing LoopZero platform...
-  ✓ LoopZero platform installed
-
-Step  9/10: Waiting for pods...
-  ✓ All 5 pods Ready (42s)
-
-Step 10/10: Running health checks...
-  ✓ All health checks passed
-
-Installation complete!
-
-  Platform URL:    https://paas.yourcompany.com
-  Dashboard:       https://cloud.paas.yourcompany.com
-  API:             https://api.paas.yourcompany.com
-
-  Next steps:
-  1. Configure DNS: *.paas.yourcompany.com → <ingress-ip>
-  2. Login: loopzero login --api-url https://api.paas.yourcompany.com
-```
-
-### What the installer automates
-
-Everything that would otherwise require manual `kubectl` and `curl` commands:
-
-| Step | What | Why |
-|------|------|-----|
-| Gitea org + API token | Creates "loopzero" org and generates scoped token (Gitea 1.25+) | API needs token to create repos for source code and GitOps manifests |
-| ArgoCD password | Extracts initial admin secret | API needs credentials to trigger ArgoCD syncs |
-| MinIO credentials | Extracts root user/password from Helm secret | API uploads source bundles, CWTs download them during builds |
-| Hydra OAuth2 client | Registers `loopzero-cli` client with PKCE + refresh tokens | CLI login flow requires a registered OIDC client |
-| Kubeconfig secrets | Creates ConfigMaps with cluster access for single/multi cluster mode | Controllers need to reach build and workload clusters |
-| MinIO credentials secret | Creates `loopzero-minio-credentials` in argo namespace | Build workflow templates (CWTs) reference this secret by name |
-| Database migrations | Runs forward-only schema migrations via API pod | API requires schema to exist before serving requests |
-| Argo callback secret | Generates 32-char secret shared between API and Argo Workflows | Build callbacks authenticate with this shared secret |
-
-### Platform management
+### Management
 
 ```bash
-loopzero platform status     # Show component health, versions, endpoints
-loopzero platform upgrade --version 0.3.0 -f customer-values.yaml
-loopzero platform uninstall  # Removes platform (preserves CRDs and data)
-```
-
-### Helm charts (OCI)
-
-All LoopZero Helm charts are published as OCI artifacts to DigitalOcean Container Registry:
-
-```
-oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform    # Umbrella chart
-oci://registry.digitalocean.com/loopzero-system/helm/loopzero-crds         # CRDs (separate lifecycle)
-oci://registry.digitalocean.com/loopzero-system/helm/loopzero-api          # API server
-oci://registry.digitalocean.com/loopzero-system/helm/loopzero-controller   # Background controller
-oci://registry.digitalocean.com/loopzero-system/helm/loopzero-tenant-controller
-oci://registry.digitalocean.com/loopzero-system/helm/loopzero-cloud        # OAuth2 proxy
-oci://registry.digitalocean.com/loopzero-system/helm/loopzero-dashboard    # Web dashboard
-oci://registry.digitalocean.com/loopzero-system/helm/loopzero-build-cwts   # Build pipeline templates
-oci://registry.digitalocean.com/loopzero-system/helm/loopzero-common       # Library chart (shared helpers)
-```
-
-For advanced users who prefer direct Helm:
-
-```bash
-# Pull and inspect
-helm pull oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform --version 0.2.0
-helm show values oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform --version 0.2.0
-
-# Install manually (advanced — prefer `loopzero platform install`)
-helm upgrade --install loopzero oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform \
-  --version 0.2.0 \
-  --namespace loopzero-system --create-namespace \
-  --set loopzero-api.config.baseDomain=paas.yourcompany.com \
-  --set loopzero-api.secrets.databaseUrl="postgres://..." \
-  --set loopzero-api.secrets.giteaToken="..." \
-  --wait --timeout 5m
+loopzero platform status     # Component health, versions, endpoints
+loopzero platform upgrade    # Upgrade to new version
+loopzero platform uninstall  # Remove platform (preserves data)
 ```
 
 ---
@@ -380,99 +242,32 @@ helm upgrade --install loopzero oci://registry.digitalocean.com/loopzero-system/
 
 | Command | Purpose |
 |---------|---------|
-| `loopzero login` | Authenticate (Device Code Flow — GitHub, Google, or email) |
+| `loopzero login` | Authenticate (Device Code Flow) |
 | `loopzero init` | Detect monorepo, generate `loopzero.yaml` |
-| `loopzero connect` | Link GitHub repo for auto-deploy on push |
-| `loopzero disconnect` | Unlink GitHub repo |
+| `loopzero connect` / `disconnect` | Link/unlink GitHub repo for auto-deploy |
 | `loopzero deploy` | Build and deploy all apps |
-| `loopzero deploy --env staging` | Deploy to a specific environment |
-| `loopzero deploy --app api` | Deploy a single app |
-| `loopzero deploy --no-wait` | Submit and return immediately |
-| `loopzero status` | Show project status, active release, URL |
-| `loopzero logs` | Show build logs (auto-detects last build) |
+| `loopzero status` | Show project status, active release, scaling, URL |
+| `loopzero logs` | Show build logs |
 | `loopzero rollback` | Revert to previous release (~3s) |
-| `loopzero promote --from staging --to production` | Promote release across environments (no rebuild) |
+| `loopzero promote --from staging --to production` | Promote release (no rebuild) |
 | `loopzero cancel <build-id>` | Cancel a running build |
 | `loopzero validate` | Validate `loopzero.yaml` locally |
 
-### Project & Environment Management
+### Resources
 
 | Command | Purpose |
 |---------|---------|
-| `loopzero project list` | List all projects |
-| `loopzero project inspect <name>` | Show project details |
-| `loopzero project create <name>` | Create a new project |
-| `loopzero project delete <name>` | Delete project and all resources |
-| `loopzero env list` | List environments |
-| `loopzero env create <name>` | Create a new environment |
-| `loopzero env inspect <name>` | Show environment details |
-| `loopzero env delete <name>` | Delete environment (with `--confirm`) |
+| `loopzero project list/inspect/create/delete` | Project management |
+| `loopzero env list/inspect/create/delete` | Environment management |
+| `loopzero team list/add/remove/role` | Team + RBAC management |
+| `loopzero secret set/list/delete` | Encrypted secrets (ESO sync) |
+| `loopzero build list/inspect` | Build history |
+| `loopzero domain add/status/dns/list/remove` | Custom domains (CF Zone) |
+| `loopzero scale --app api --min 0 --max 5` | Scaling configuration |
+| `loopzero audit` | Audit log |
+| `loopzero whoami` / `loopzero logout` | Session management |
 
-### Team Management
-
-| Command | Purpose |
-|---------|---------|
-| `loopzero team list` | List team members and roles |
-| `loopzero team add <user>` | Add a member (`--role admin` or `--role member`) |
-| `loopzero team remove <user>` | Remove a member |
-| `loopzero team role <user> <role>` | Change a member's role (owner only) |
-
-### Secrets
-
-| Command | Purpose |
-|---------|---------|
-| `loopzero secret set KEY=value` | Set a secret (encrypted at rest, synced via ESO) |
-| `loopzero secret list` | List secret names (values never exposed) |
-| `loopzero secret delete KEY` | Delete a secret |
-
-### Build Management
-
-| Command | Purpose |
-|---------|---------|
-| `loopzero build list` | List recent builds |
-| `loopzero build inspect <id>` | Show build details |
-
-### Custom Domains
-
-| Command | Purpose |
-|---------|---------|
-| `loopzero domain add <domain>` | Register a custom domain (creates CF zone, scans DNS, returns nameservers) |
-| `loopzero domain status <domain>` | Check domain status (NS propagation, TLS, WAF) |
-| `loopzero domain dns <domain>` | List DNS records for a Cloudflare-managed domain |
-| `loopzero domain list` | List all custom domains |
-| `loopzero domain remove <domain>` | Remove domain and CF zone (requires `--confirm`) |
-
-Custom domains use the **Vercel model**: LoopZero creates a Cloudflare zone per domain, automatically imports existing DNS records (preserving email), and adds a proxied CNAME for routing. The user only changes nameservers at their registrar. Apex domains work via Cloudflare CNAME flattening. WAF/DDoS protection is automatic.
-
-### Billing
-
-| Command | Purpose |
-|---------|---------|
-| `loopzero billing` | Manage subscription (Stripe checkout, plan upgrades) |
-
-### Audit
-
-| Command | Purpose |
-|---------|---------|
-| `loopzero audit` | View audit log (filterable by action, timestamp) |
-
-### Platform (Self-Hosted)
-
-| Command | Purpose |
-|---------|---------|
-| `loopzero platform install -f values.yaml` | Install LoopZero on a Kubernetes cluster (10-step automated) |
-| `loopzero platform status` | Show platform health, component versions, endpoints |
-| `loopzero platform upgrade --version <v>` | Upgrade platform to a new chart version |
-| `loopzero platform uninstall` | Remove platform (preserves CRDs and data) |
-
-### Session
-
-| Command | Purpose |
-|---------|---------|
-| `loopzero whoami` | Show authenticated user and team |
-| `loopzero logout` | Remove stored credentials |
-
-Every command supports `--json` for CI/CD integration. JSON output is a **stability contract** — field names never change without a major version bump.
+Every command supports `--json` for CI/CD integration. JSON field names are a stability contract.
 
 ### Exit Codes
 
@@ -483,141 +278,76 @@ Every command supports `--json` for CI/CD integration. JSON output is a **stabil
 | `2` | Build failure |
 | `3` | Deploy/operation failure |
 | `4` | Authentication error |
-| `5` | Partial failure (some apps failed) |
+| `5` | Partial failure |
 
 ---
 
-## How It Works
+## Architecture
 
-From the developer's perspective: `git push` → URL. Everything below is invisible.
+Four-plane separation:
 
 ```
-                    ┌──────────────────────────────────────────┐
-  git push ────────►│  GitHub (webhook)                        │
-                    │  • Push event → LoopZero API                 │
-                    └────────────┬─────────────────────────────┘
-                                 │
-                    ┌────────────▼─────────────────────────────┐
-  (or loopzero deploy)─►│  LoopZero API                                │
-                    │  • Download source from GitHub            │
-                    │  • Lock environment (advisory lock)       │
-                    │  • Submit build to Argo Workflows         │
-                    └────────────┬─────────────────────────────┘
-                                 │
-                    ┌────────────▼─────────────────────────────┐
-                    │  Build Cluster                            │
-                    │  • BuildKit (rootless, single-container)  │
-                    │  • Push image to Harbor registry          │
-                    │  • Sign image (cosign) + generate SBOM    │
-                    └────────────┬─────────────────────────────┘
-                                 │
-              ┌──────────────────┼──────────────────┐
-              ▼                  ▼                   ▼
-        Server apps        Static apps         Worker apps
-        (API, Go, etc)     (Vite, React)       (BullMQ, etc)
-              │                  │                   │
-     ArgoCD sync          Upload to S3 +       ArgoCD sync
-     → K8s Deployment     CF Worker KV         → K8s Deployment
-     → Health check       → CDN delivery       → (no ingress)
-              │                  │                   │
-              ▼                  ▼                   ▼
-          Live URL           Live URL           Running
+Developer Plane     CLI (TypeScript) <-> API (Go)
+Control Plane       Operators, Gitea, PostgreSQL, ArgoCD, Ory Kratos/Hydra
+Build Plane         Argo Workflows + BuildKit (rootless) + cosign signing
+Workload Plane      User applications managed by ArgoCD + KEDA autoscaling
 ```
 
-### Platform Guarantees
+### Deploy Flow
 
-- **Serialization** — No two operations can mutate the same environment concurrently. Concurrent deploys get `409`.
-- **Idempotency** — Retrying any operation produces the same result.
-- **Isolation** — Tenants are isolated at compute, network, build, and registry levels.
-- **Consistency** — A release is marked active only after cluster confirmation.
-- **Rollback** — Every deploy creates a rollback point. `loopzero rollback` reverts in ~3 seconds.
-- **Clean delete** — `loopzero project delete` removes manifests, triggers prune, verifies pods are gone.
-- **Security** — Pods run as non-root, drop all capabilities, PSA restricted. Images signed with cosign.
-- **Traceability** — End-to-end distributed tracing from CLI to database via OpenTelemetry + Tempo.
-- **Admission control** — Cell-level and per-tenant build limits prevent resource exhaustion.
-- **Supply chain** — Image signing (cosign), SBOM (syft), SLSA provenance attestation on every build.
+```
+loopzero deploy (or git push)
+  -> CLI validates loopzero.yaml + uploads bundle
+  -> API locks environment (pg_advisory_xact_lock)
+  -> Submit Argo Workflow (BuildKit build + cosign sign)
+  -> Generate K8s manifests + push to Gitea (GitOps)
+  -> ArgoCD sync -> app running
+  -> SSE event -> CLI shows URL
 
-### Architecture
-
-Four-plane separation with dedicated Kubernetes clusters:
-
-| Plane | Cluster | Purpose |
-|-------|---------|---------|
-| Developer | — | CLI (TypeScript) + API (Go) + Dashboard (Go + React) |
-| Control | mgmt | Operators, Gitea, PostgreSQL, Harbor, ArgoCD, Traefik, cert-manager |
-| Build | build | Argo Workflows + BuildKit (rootless) + cosign signing |
-| Workload | workload | User applications managed by ArgoCD |
+  Static apps: build -> upload DO Spaces -> write CF KV -> CF Worker serves from CDN
+```
 
 ### Stack
 
 | Layer | Technology |
 |-------|-----------|
-| CLI | TypeScript + Commander |
-| API | Go + chi + pgx (connection pool) |
-| Dashboard | Go + React (nginx-unprivileged) |
-| Auth | Ory Kratos (identity) + Ory Hydra (OAuth2/OIDC) + Device Code Flow |
-| Billing | Stripe (subscriptions, webhooks, metering) |
-| Operators | Go + kubebuilder + controller-runtime (10 CRDs, 7 controllers) |
-| Shared libraries | Go — errors, logging, naming, health, statemachine, id (pkg/) |
-| Build engine | Argo Workflows + BuildKit (rootless, single-container) |
-| Supply chain | cosign (signing) + syft (SBOM) + SLSA provenance |
+| CLI | TypeScript + Commander (36 commands) |
+| API | Go 1.25 + chi + pgx (connection pool) |
+| Operators | Go + kubebuilder + controller-runtime (10 CRDs, 8 controllers) |
+| Shared libs | Go -- errors, logging, naming, health, statemachine, jwt, enforcement, circuitbreaker |
+| Auth | Ory Kratos (identity) + Ory Hydra (OAuth2/OIDC) |
+| Build engine | Argo Workflows + BuildKit (rootless) |
 | GitOps | ArgoCD (manual sync) + Gitea |
-| Database | PostgreSQL 16 (managed, advisory locks, leader-generation fencing) |
-| Container registry | Harbor (per-tenant projects, robot accounts, quota enforcement) |
+| Database | PostgreSQL 16 (CloudNativePG in self-hosted, managed DO in cloud) |
+| Autoscaling | KEDA + HTTP Add-on (scale-to-zero) + HPA (min >= 1) |
 | Secrets | External Secrets Operator |
-| Git integration | GitHub App (auto-deploy on push, commit status lifecycle) |
-| Edge proxy | Cloudflare Tunnel + Worker + KV + Zone Management |
-| Custom domains | Cloudflare for Platforms (per-domain zones, WAF/DDoS, Universal SSL) |
-| Edge security | CF WAF (OWASP + managed), rate limiting, Zero Trust Access |
+| Edge | Cloudflare Tunnel + Worker + KV + Zone Management |
 | Static assets | DigitalOcean Spaces + CDN |
-| Monitoring | Prometheus + Grafana + Loki + Alertmanager |
-| Tracing | OpenTelemetry + Grafana Tempo (cross-plane trace propagation) |
-| IaC | Pulumi (TypeScript) — DigitalOcean + Cloudflare |
-| CI/CD | GitHub Actions (11 workflows: CI, Build Images, Infra Deploy/Destroy/Preview, Bootstrap, E2E, Restart, State Reset, Release) |
+| Monitoring | Prometheus + Grafana + Loki + Tempo + OpenTelemetry |
+| IaC | Pulumi (TypeScript) -- DigitalOcean + Cloudflare |
+| CI/CD | GitHub Actions (14 workflows) |
+| Helm charts | 22 charts (all pinned versions) |
 
 ### Production Infrastructure (DigitalOcean)
 
 | Resource | Configuration |
 |----------|---------------|
-| 3 DOKS clusters | v1.32.13, SFO3 (dev) / NYC3 (prod) |
-| PostgreSQL | v16, managed, HA (3 nodes in prod), tuned (pg_stat_statements, slow query logging) |
-| Harbor registry | Per-tenant projects, robot accounts (TTL ≤ 24h), plan-based quotas, canary probe |
-| Edge proxy | Cloudflare Tunnel (DDoS/WAF, zero public IPs) |
+| 3 DOKS clusters | v1.32, 2 nodes each, SFO3 |
+| PostgreSQL | v16, managed |
+| Container Registry | DigitalOcean (Professional) |
+| Edge proxy | Cloudflare Tunnel (zero public IPs, WAF/DDoS) |
 | Static delivery | CF Worker + DO Spaces CDN |
-| DNS | `*.dev.loopzero.example` (dev), `*.loopzero.example` (prod) |
-| State backend | DO Spaces (S3-compatible) for Pulumi state |
-| External monitoring | DO UptimeCheck from 3 regions |
-| Logging | Loki + Promtail (cross-cluster) |
+| DNS | `*.dev.loopzero.example` via CF Tunnel |
 
----
+### Platform Guarantees
 
-## Configuration
-
-The only file you write is `loopzero.yaml`. Generated by `loopzero init`.
-
-```yaml
-version: 1
-project: my-saas
-
-apps:
-  api:
-    path: apps/api
-    framework: express
-    type: server
-    build: buildpack
-    port: 3000
-
-  web:
-    path: apps/web
-    framework: vite
-    type: frontend
-    build: buildpack
-
-  worker:
-    path: apps/worker
-    type: worker
-    build: buildpack
-```
+- **Serialization** -- No two operations mutate the same environment concurrently (409 on conflict)
+- **Idempotency** -- Retrying any operation produces the same result
+- **Isolation** -- Tenants isolated at compute, network, and build levels
+- **Consistency** -- Release marked active only after cluster confirmation
+- **Rollback** -- Every deploy creates a rollback point (~3s revert)
+- **Clean delete** -- Project deletion removes manifests, triggers prune, verifies pods gone
+- **Security** -- Pods run non-root, drop all capabilities, PSA restricted, images signed
 
 ---
 
@@ -638,135 +368,31 @@ task doctor      # Verify everything is healthy
 ### Tests
 
 ```bash
-task test              # All tests (unit + lint + manifests)
-cd cli && npm test     # CLI tests (Jest, 1059 tests)
-go test ./api/...      # API tests (Go testing)
-go test ./operators/...# Operator tests (Ginkgo + envtest)
-go test ./pkg/...      # Shared library tests
-```
-
-### Local Observability
-
-| Tool | URL |
-|------|-----|
-| Grafana | [localhost:3002](http://localhost:3002) |
-| Prometheus | [localhost:9090](http://localhost:9090) |
-| ArgoCD | [localhost:30082](http://localhost:30082) |
-
----
-
-## Partial Failure Handling
-
-Apps build and deploy independently. A failing app does not block siblings.
-
-```
-$ loopzero deploy
-✓ api     → deployed
-✗ worker  → build failed (run: loopzero logs --build b-4a2c)
-
-Exit code: 5 (partial failure)
+task test                     # All tests
+cd cli && npm test            # CLI tests (Jest, 1079 tests)
+cd api && go test ./...       # API tests
+cd operators && go test ./... # Operator tests (Ginkgo + envtest)
+cd pkg && go test ./...       # Shared library tests
 ```
 
 ---
 
 ## What LoopZero Does Not Solve
 
-- **Database migrations** — LoopZero deploys code, not schema changes.
-- **Application data repair** — If a bug corrupted data, that's on you.
-- **Custom domains without nameserver change** — Users must change nameservers to Cloudflare (same model as Vercel). CNAME for subdomains works with any provider.
-- **Multi-region** — Single-region in v1.
-- **Preview environments** — Planned for Sprint 5, not yet implemented.
+- **Database migrations** -- LoopZero deploys code, not schema changes.
+- **Custom domains without nameserver change** -- Users must change nameservers to Cloudflare.
+- **Multi-region** -- Single-region in v1.
+- **Preview environments** -- Planned for Sprint 5.
+- **GPU/AI workloads** -- Not planned.
 
 ---
 
 ## Stability Contract
 
-- Commands are permanent — no removal without 6-month deprecation + major version bump.
-- Flags are permanent — semantics don't change.
-- `--json` output is a contract — shape doesn't change without major version.
+- Commands are permanent -- no removal without major version bump.
+- `--json` output shape doesn't change without major version.
 - Exit codes are permanent.
 - Default behavior is frozen.
-
----
-
-## Appendix A: Competitive Landscape (April 2026)
-
-> Research snapshot as of 2026-04-17. The PaaS market moves fast — validate before citing.
-
-### Market Context
-
-- The global PaaS market is projected to grow from $168B (2025) to $506B (2032) at 17.1% CAGR.
-- **Heroku is dead.** Salesforce announced "sustaining engineering model" in Feb/2026 — no new enterprise contracts, no new features. The space Heroku occupied is officially open.
-- **PaaS-first is the new default.** The "Kubernetes-first" era ended for most companies. If cloud bill < $2M/year, raw K8s doesn't justify the complexity. 80% of software orgs will have platform teams by end of 2026 (Gartner).
-- **BYOC (Bring Your Own Cloud)** is a growing differentiator — Qovery, Northflank, Porter, Flightcontrol all offer deploy on the customer's cloud account.
-- **AI-native platforms** are emerging — auto-scaling, auto-detect, prompt-to-deploy (Zeabur, Kuberns, Emergent.sh).
-- **Consolidation via acquisition** — Koyeb acquired by Mistral AI (Feb/2026). SST paused development to focus on OpenCode (AI coding agent).
-
-### Tier 1 — Direct Competitors
-
-| Platform | Funding | Model | Key Differentiator | LoopZero Advantage |
-|----------|---------|-------|--------------------|----------------|
-| [Railway](https://railway.com) | $100M Series B (Jan/2026) | Usage-based, managed | Best-in-class DX, $5/mo hobby | Multi-cluster isolation, cell architecture |
-| [Render](https://render.com) | ~$100M+ | Fixed pricing, managed | "Modern Heroku", $7/mo start | Monorepo-native, GitOps-backed consistency |
-| [Fly.io](https://fly.io) | ~$90M+ | Edge VMs, 35+ DCs | Global low-latency, GPU support | Simpler DX, multi-tenant isolation |
-| [Northflank](https://northflank.com) | Undisclosed | K8s abstraction, BYOC | "Best overall PaaS 2026", enterprise | Cell architecture for 50k+ scale |
-| [Qovery](https://qovery.com) | $19.3M | BYOC (AWS/GCP/Azure) | SOC2 Type 2, Gateway API | CLI-first, no cloud account required |
-
-### Tier 2 — Indirect Competitors
-
-| Platform | Model | Overlap with LoopZero |
-|----------|-------|-------------------|
-| [Flightcontrol](https://flightcontrol.dev) | Deploy on customer's AWS (YC-backed) | AWS-only, no multi-cluster |
-| [Zeabur](https://zeabur.com) | AI-powered deploy, drag-and-drop (Taiwan) | Innovative DX but small scale |
-| [Koyeb](https://koyeb.com) | Serverless + GPU (acquired by Mistral AI, Feb/2026) | Pivoted to AI/ML inference |
-| [Porter](https://porter.run) | K8s on customer's cloud, template-based | BYOC but less DX polish |
-| [SST (Ion/v3)](https://sst.dev) | IaC serverless via Pulumi+Terraform | Serverless-only, development paused |
-| [Coolify](https://coolify.io) | Open-source self-hosted (40k+ GitHub stars) | Docker-only, no multi-cluster |
-
-### Tier 3 — Self-Hosted / Open Source
-
-| Platform | GitHub Stars | Model | Notes |
-|----------|:-----------:|-------|-------|
-| [Coolify](https://coolify.io) | 40k+ | Self-hosted, Docker-native | Fast-growing community, different audience (DIY) |
-| [Dokploy](https://dokploy.com) | 15k+ | Self-hosted, Docker-first | Simpler, no K8s support |
-| [Dokku](https://dokku.com) | 29k+ | CLI-only, Heroku-like | Mature but limited |
-| [Kubero](https://kubero.dev) | ~2k | Self-hosted K8s PaaS | Niche |
-| [CapRover](https://caprover.com) | 13k+ | Docker Swarm | Older architecture |
-| [Canine](https://canine.sh) | New | K8s PaaS + MCP/AI integration | Integrates with Claude Code |
-
-### Tier 4 — New Entrants (2025-2026)
-
-| Platform | What It Does | Status |
-|----------|-------------|--------|
-| [Emergent.sh](https://emergent.sh) | Full-stack "vibe coding" — prompt to production app | New, AI-native |
-| [Sherpa.sh](https://sherpa.sh) | `git push` deploy, claims -80% cost vs Vercel | New, aggressive pricing |
-| [Kuberns](https://kuberns.com) | AI-powered auto-scaling, usage-based (India) | New, innovative pricing |
-| [Stormkit](https://stormkit.io) | Self-hosted enterprise deploys, preview envs | Niche enterprise |
-| [DanubeData](https://danubedata.ro) | EU-first PaaS (GDPR data residency) | Niche European market |
-| DollarDeploy | Deploy apps on your own server | Early stage |
-
-### Where LoopZero Is Unique
-
-| Capability | Railway | Render | Fly.io | Northflank | LoopZero |
-|------------|:-------:|:------:|:------:|:----------:|:----:|
-| CLI-first DX | Yes | Partial | Partial | Partial | **Yes** |
-| Multi-cluster (mgmt/build/workload) | No | No | No | Partial | **Yes** |
-| Cell-based architecture (50k+ apps) | No | No | Different | No | **Yes** |
-| Monorepo-native (API+Web+Worker) | Partial | Partial | No | Partial | **Yes** |
-| GitOps-backed (invisible to user) | No | No | No | No | **Yes** |
-| Supply chain security (cosign+SBOM+SLSA) | No | No | No | No | **Yes** |
-| Per-tenant container isolation (Harbor) | No | No | No | Partial | **Yes** |
-| Distributed tracing (end-to-end) | No | No | No | Partial | **Yes** |
-
-### Market Gaps to Watch
-
-| Trend | Who Offers It | LoopZero Status |
-|-------|--------------|-------------|
-| Preview environments (PR → temp URL) | Railway, Render, Vercel, Northflank | Sprint 5 — not started |
-| BYOC (deploy on customer's cloud) | Northflank, Qovery, Flightcontrol, Porter | Not planned |
-| GPU/AI workloads | Koyeb, Fly.io, Kuberns, TrueFoundry | Not planned |
-| AI-powered DX (auto-detect, prompt-deploy) | Zeabur, Canine, Kuberns, Emergent.sh | Not planned |
-| EU data residency | DanubeData | Not planned |
 
 ---
 
@@ -780,11 +406,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Every PR starts with a failing test.
 
 ## Links
 
-- [System Design](docs/technical.md) — authoritative specification
-- [Scale Plan: 50k Apps](docs/plans/scale-50k-plan.md) — active plan to validate 50,000 fullstack applications
-- [Load Test Plan](docs/plans/load-test-plan.md) — L0-L7 progressive load test scenarios
-- [Cell Capacity Budget](docs/capacity/cell-budget.md) — measured capacity limits per cell
+- [System Design](docs/technical.md) -- authoritative specification
+- [Maturity Assessment](docs/maturity-assessment.md) -- honest 3.2/5 self-assessment with path to 4.0 and 5.0
 - [Sprint Roadmap](docs/sprints/ROADMAP.md)
 - [Changelog](CHANGELOG.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security Policy](SECURITY.md)
