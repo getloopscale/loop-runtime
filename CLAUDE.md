@@ -14,7 +14,7 @@ The authoritative specification is **`docs/cli-reference.md`**. If this file and
 
 **Completed:** deploy happy path, scaling+HPA (Starter=2/Pro=5/Team=10), promote staging→prod, rollback, secrets via ESO, custom domains v2 (CF Zone Mgmt, model Vercel), GitHub App auto-deploy (~4min), monorepo validator (30 frameworks), cosign image signing, plan enforcement, audit log, RSA-only JWT auth, two-host gateway, concurrent deploy rejection (1×202+1×409), JSON contracts (8/8), observability (43 loopzero_* metrics + Grafana + SLO alerts), KEDA scale-to-zero, cell architecture (Phase 0+1).
 
-**Not built:** Preview environments (Sprint 5, controller skeleton only), SBOM (syft), admission policy (reject unsigned images), SSO/SAML, `loopzero scale` DB persistence (stub returns 202 acknowledged — use loopzero.yaml + loopzero deploy), Loki cross-cluster streaming (infra gap, not code), Cell Phase 2b activation (code 100%, Pulumi.dev.yaml multi-cell config missing).
+**Not built:** Preview environments (Sprint 5 — controller has namespace+TTL+cleanup reconcile but no workload deployment, state machine imported and unused, no Application CR generation), SBOM (syft), admission policy (reject unsigned images), SSO/SAML, `loopzero scale` DB persistence (stub returns 202 acknowledged — use loopzero.yaml + loopzero deploy), Loki cross-cluster streaming (infra gap, not code), Cell Phase 2b activation (code 100%, Pulumi.dev.yaml multi-cell config missing).
 
 **Known issues:** AppSecret controller not implemented (ESO works directly, no lifecycle automation); Pulumi consolidation pending (GitHub App envFrom, CF_ZONE_MANAGEMENT, PG keepalive); 10 failing tests in `api/internal/k8s` (TenantCRManager — contract drift from AUDIT series).
 
@@ -101,7 +101,7 @@ loopzero/
 ├── docs/                  ← cli-reference.md (spec), maturity-assessment.md, meetings/, runbooks/, strategy/
 ├── pkg/                   ← shared Go: statemachine, errors, jwt, naming, health, id, logging, enforcement, circuitbreaker
 ├── cli/                   ← @loopzero/cli — TS + Commander, 36 commands, 1079 tests
-├── api/internal/          ← routes (28), services (38), db, middleware (12), lock, sse, argo, argocd, cfkv, cfzone, github, gitops, source, s3, k8s, manifests, validation, metrics, health, config
+├── api/internal/          ← routes (53), services (76), db, middleware (20), lock, sse, argo, argocd, cfkv, cfzone, github, gitops, source, s3, k8s, manifests, validation, metrics, health, config
 ├── operators/             ← 8 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, Preview), 10 CRDs
 ├── infra/
 │   ├── pulumi/            ← IaC (TS), providers: digitalocean/, cloudflare/, aws/(stub)
@@ -160,7 +160,7 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 | 2 | Deploy happy path | ✅ (E2E on DO) |
 | 3 | Logs + Status + Secrets | ✅ (H6) |
 | 4 | Rollback + Promote + Cancel | ✅ (E2E 2026-04-23) |
-| 5 | Preview environments | ⚠️ skeleton only |
+| 5 | Preview environments | ⚠️ namespace+TTL only, workload deploy missing |
 | 6 | Security + Supply chain | ⚠️ cosign done, syft+admission not |
 | 7 | Observability | ✅ (H4) |
 | 8 | Hardening + Chaos | ❌ |
@@ -198,8 +198,8 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 ### CRDs (10 total)
 
 Wired (✅): Tenant, Environment, LoopZeroApplication, ExposedRoute, PlatformBootstrap, GitRepositoryBinding, ClusterCredential.
-Skeleton (⚠️): PreviewEnvironment (Sprint 5).
-Defined but unwired (❌): AppSecret (ESO works directly), ReconciliationReport (placeholder).
+Partial (⚠️): PreviewEnvironment — reconcile structure complete (namespace, TTL, cleanup, finalizer), workload deployment logic absent.
+Defined but unwired (❌): AppSecret (CRD only, no controller — ESO works directly), ReconciliationReport (placeholder).
 
 ### State Machines (9 in `pkg/statemachine/`)
 

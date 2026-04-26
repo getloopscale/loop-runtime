@@ -406,7 +406,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Every PR starts with a failing test.
 
 ## Links
 
-- [System Design](docs/technical.md) -- authoritative specification
+- [CLI Reference](docs/cli-reference.md) -- authoritative specification (commands, exit codes, JSON schemas, contracts)
 - [Maturity Assessment](docs/maturity-assessment.md) -- honest 3.2/5 self-assessment with path to 4.0 and 5.0
-- [Sprint Roadmap](docs/sprints/ROADMAP.md)
 - [Changelog](CHANGELOG.md)
