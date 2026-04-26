@@ -154,6 +154,28 @@ jobs:
           done
           exit $FAILED
 
+  # T3.2 / INFRA-004: detect drift between kubebuilder-generated CRDs in
+  # operators/config/crd/bases/ and Helm chart templates in
+  # charts/loopzero-crds/templates/. Fails CI if the source-of-truth diverges
+  # from the chart shipped to clusters.
+  crd-drift:
+    name: CRD schema drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    needs: changes
+    if: >-
+      needs.changes.outputs.go-operators == 'true' ||
+      needs.changes.outputs.helm == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+      - name: Run drift check
+        run: bash scripts/check-crd-drift.sh
+
   # ─────────────────────────────────────────────
   # UNIT TESTS — fast, no external deps
   # ─────────────────────────────────────────────
