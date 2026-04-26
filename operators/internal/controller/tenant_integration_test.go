@@ -236,6 +236,16 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 				return len(nsList.Items), len(policies.Items), len(quotas.Items)
 			}
 
+			// Wait until Environment-derived resources are settled (race: TenantPhaseActive
+			// is set before EnvironmentController finishes creating NPs/quotas in the runtime
+			// namespace). The 3 expected NPs come from environment_network.go (DenyAll +
+			// AllowIngress + AllowEgress) and the quota from environment_quota.go.
+			Eventually(func(g Gomega) {
+				_, pol, q := countResources()
+				g.Expect(pol).To(Equal(3), "expected 3 NetworkPolicies (DenyAll, AllowIngress, AllowEgress)")
+				g.Expect(q).To(BeNumerically(">=", 1), "expected at least 1 ResourceQuota")
+			}, timeout, interval).Should(Succeed())
+
 			ns1, pol1, q1 := countResources()
 
 			// Trigger 2 more reconciles via spec updates (retry on conflict)
