@@ -116,7 +116,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 		ns.Labels["pod-security.kubernetes.io/warn"] = "restricted"
 		return nil
 	}); err != nil {
-		conditions.SetCondition(&preview.Status.Conditions, "NamespaceReady",
+		conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNamespaceReady,
 			metav1.ConditionFalse, "CreateFailed", err.Error(), preview.Generation)
 		if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
 			logger.Error(statusErr, "failed to update preview status")
@@ -124,7 +124,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 		return ctrl.Result{}, err
 	}
 
-	conditions.SetCondition(&preview.Status.Conditions, "NamespaceReady",
+	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNamespaceReady,
 		metav1.ConditionTrue, "Ready", "Preview namespace created", preview.Generation)
 
 	// Set URL and transition to Active

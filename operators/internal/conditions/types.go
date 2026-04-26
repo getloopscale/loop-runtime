@@ -59,6 +59,23 @@ const (
 	TypeConnected      = "Connected"
 )
 
+// --- Preview conditions ---
+// T4.1 / ARCH-003: previously freeform "NamespaceReady" string in
+// preview_controller.go:119,127. Defined as a separate constant from
+// TypeEnvNamespaceReady because Preview's NamespaceReady has different
+// semantics (per-PR namespace lifecycle).
+const (
+	TypePreviewNamespaceReady = "NamespaceReady"
+)
+
+// --- Tenant deletion conditions ---
+// T4.1 / ARCH-003: previously freeform "EnvironmentCleanup" string in
+// tenant_deletion.go:88. Used by Phase 1 of the deletion lifecycle to
+// surface per-environment Delete failures.
+const (
+	TypeTenantEnvironmentCleanup = "EnvironmentCleanup"
+)
+
 // Reason constants are enumerated, not freeform. All condition reasons
 // must use one of these constants to ensure consistency across controllers.
 const (

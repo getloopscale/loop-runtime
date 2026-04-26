@@ -257,6 +257,20 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 		return fmt.Errorf("kubeconfig has no bearer token or client certificate — exec-based auth not supported for ArgoCD cluster secrets")
 	}
 
+	// T4.6 / SEC-005: emit structured WARN when a ClusterCredential opts in
+	// to TLS bypass. Lets SREs find every cluster operating without TLS
+	// verification via Loki search on tls_insecure=true.
+	if cr.Spec.TLS.Insecure {
+		log.FromContext(ctx).Info("cluster credential reconciling with TLS verification disabled",
+			"cluster", cr.Spec.ClusterName,
+			"resource", cr.Name,
+			"namespace", cr.Namespace,
+			"tls_insecure", true,
+			"audit", "tls_bypass_active",
+			"finding_ref", "SEC-005",
+		)
+	}
+
 	argoConfig := argoCDClusterConfig{
 		BearerToken: token,
 		TLSClientConfig: argoCDTLSConfig{
