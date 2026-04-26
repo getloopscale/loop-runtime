@@ -156,7 +156,7 @@ func setupProvisioners(setupLog logr.Logger, mgr ctrl.Manager) provisionerDeps {
 	buildClient := createClusterClient(setupLog, "BUILD_KUBECONFIG", "build")
 	runtimeClient := createClusterClient(setupLog, "RUNTIME_KUBECONFIG", "runtime")
 
-	minIOProvisioner, minIOEndpoint := setupMinIO(setupLog)
+	minIOProvisioner, minIOEndpoint := setupMinIO(setupLog, cbStateLogger)
 	harborClient, harborRegistryHost := setupHarbor(setupLog, cbStateLogger)
 
 	doToken := os.Getenv("DIGITALOCEAN_TOKEN")
@@ -205,8 +205,12 @@ func createClusterClient(setupLog logr.Logger, envVar, clusterName string) clien
 	return c
 }
 
-// setupMinIO creates the MinIO admin provisioner if all credentials are provided.
-func setupMinIO(setupLog logr.Logger) (miniop.CredentialProvisioner, string) {
+// setupMinIO creates the MinIO admin provisioner wrapped with circuit breaker
+// protection if all credentials are provided. The CB matches the pattern used
+// for Gitea (line 133), ArgoCD (line 149), and Harbor (line 253) — preventing
+// retry storms when MinIO is saturated. Closes ARCH-001 / TC-3 from the
+// deep review (docs/plans/operators-deep-review-remediation-plan.md T1.4).
+func setupMinIO(setupLog logr.Logger, cbStateLogger func(string, cb.State, cb.State)) (miniop.CredentialProvisioner, string) {
 	minIOEndpoint := os.Getenv("MINIO_ENDPOINT")
 	minIOAccessKey := os.Getenv("MINIO_ACCESS_KEY")
 	minIOSecretKey := os.Getenv("MINIO_SECRET_KEY")
@@ -218,7 +222,7 @@ func setupMinIO(setupLog logr.Logger) (miniop.CredentialProvisioner, string) {
 		return nil, minIOEndpoint
 	}
 
-	provisioner, err := miniop.NewAdminProvisioner(miniop.AdminConfig{
+	rawProvisioner, err := miniop.NewAdminProvisioner(miniop.AdminConfig{
 		Endpoint:  minIOEndpoint,
 		AccessKey: minIOAccessKey,
 		SecretKey: minIOSecretKey,
@@ -227,7 +231,14 @@ func setupMinIO(setupLog logr.Logger) (miniop.CredentialProvisioner, string) {
 		setupLog.Error(err, "failed to create MinIO admin provisioner")
 		os.Exit(1)
 	}
-	setupLog.Info("minio per-tenant provisioner enabled", "endpoint", minIOEndpoint)
+
+	minIOCB := cb.New(cb.Config{
+		Name: "minio", OpenThreshold: 5, CloseThreshold: 1,
+		RetryInterval: 120 * time.Second,
+	}, cbStateLogger)
+	provisioner := miniop.NewCircuitBreakerProvisioner(rawProvisioner, minIOCB, slog.Default())
+
+	setupLog.Info("minio per-tenant provisioner enabled (circuit breaker active)", "endpoint", minIOEndpoint)
 	return provisioner, minIOEndpoint
 }
 

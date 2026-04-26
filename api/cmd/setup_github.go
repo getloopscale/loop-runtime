@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,6 +19,12 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/services"
 )
+
+// ErrPreviewNotImplemented is returned by the GitHub PR webhook handler
+// while preview environments (Sprint 5 / T2.1 / COMP-001) are still in
+// progress. Closes COMP-008 trust gap by making the silent no-op visible
+// in logs and assertable in tests.
+var ErrPreviewNotImplemented = errors.New("preview environments not yet implemented")
 
 // GitHubDeps holds GitHub App integration components.
 type GitHubDeps struct {
@@ -171,14 +178,21 @@ func setupGitHub(
 		return nil
 	})
 	wh.OnPullRequest(func(event ghwebhook.PullRequestEvent) error {
-		logger.Info("github webhook: pull_request received",
+		// COMP-008 / T2.2: previously this handler returned nil with a TODO,
+		// silently acknowledging PR webhooks while no preview environment was
+		// created. That created a trust gap (TC-2): users believed PRs deployed.
+		// Until Sprint 5 lands, log an explicit WARN and return a sentinel error
+		// so the no-op is visible in Loki and assertable in tests.
+		logger.Warn("github webhook: pull_request received but preview environments not yet implemented (Sprint 5 in progress)",
 			"repo", event.Repository.FullName,
 			"action", event.Action,
 			"pr", event.Number,
 			"branch", event.PullRequest.Head.Ref,
+			"feature", "preview-environments",
+			"status", "not-implemented",
+			"plan_ref", "docs/plans/operators-deep-review-remediation-plan.md#T2.1",
 		)
-		// TODO: Preview environments — deploy PR branch
-		return nil
+		return ErrPreviewNotImplemented
 	})
 	wh.OnInstallation(func(event ghwebhook.InstallationEvent) error {
 		logger.Info("github webhook: installation event",

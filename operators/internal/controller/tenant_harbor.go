@@ -188,12 +188,15 @@ func (r *TenantReconciler) deleteHarborProject(ctx context.Context, tenant *loop
 // ensureHarborRegistrySecret creates or updates the BuildKit registry config Secret
 // with Harbor robot credentials in Docker config.json format.
 func (r *TenantReconciler) ensureHarborRegistrySecret(ctx context.Context, namespace, tenantName string, creds *harbor.RobotCredentials) error {
-	dockerConfigJSON := buildDockerConfigJSON(r.HarborRegistryHost, creds.Username, creds.Secret)
+	dockerConfigJSON, err := buildDockerConfigJSON(r.HarborRegistryHost, creds.Username, creds.Secret)
+	if err != nil {
+		return fmt.Errorf("ensureHarborRegistrySecret: %w", err)
+	}
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: k.SecretHarborRegistryConfig, Namespace: namespace},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
 		secret.Labels = map[string]string{
 			k.LabelTenant:    tenantName,
 			k.LabelComponent: k.ComponentBuild,
@@ -215,12 +218,15 @@ func (r *TenantReconciler) ensureHarborRegistrySecret(ctx context.Context, names
 // ensureHarborPullSecret creates or updates the imagePullSecret in a workload namespace
 // with Harbor pull-only robot credentials.
 func (r *TenantReconciler) ensureHarborPullSecret(ctx context.Context, namespace, tenantName string, creds *harbor.RobotCredentials) error {
-	dockerConfigJSON := buildDockerConfigJSON(r.HarborRegistryHost, creds.Username, creds.Secret)
+	dockerConfigJSON, err := buildDockerConfigJSON(r.HarborRegistryHost, creds.Username, creds.Secret)
+	if err != nil {
+		return fmt.Errorf("ensureHarborPullSecret: %w", err)
+	}
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: k.SecretHarborPullCredentials, Namespace: namespace},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, secret, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, secret, func() error {
 		secret.Labels = map[string]string{
 			k.LabelTenant:    tenantName,
 			k.LabelManagedBy: k.ManagedByTenantController,
@@ -254,7 +260,12 @@ type harborDockerAuth struct {
 
 // buildDockerConfigJSON builds a Docker config.json string for registry authentication.
 // Uses json.Marshal for correct escaping of all JSON special characters.
-func buildDockerConfigJSON(registryHost, username, password string) string {
+//
+// CODE-002 / T2.3: previously panicked on json.Marshal failure (which amplified
+// TC-1 toxic combination — panic in reconcile hot path with cluster-wide RBAC
+// during recovery). Now returns the marshal error so the reconciler can requeue
+// with backoff instead of crashing the goroutine.
+func buildDockerConfigJSON(registryHost, username, password string) (string, error) {
 	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
 	cfg := harborDockerConfig{
 		Auths: map[string]harborDockerAuth{
@@ -267,10 +278,9 @@ func buildDockerConfigJSON(registryHost, username, password string) string {
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
-		// This should never happen with string fields, but fail loud if it does.
-		panic(fmt.Sprintf("harbor: marshal docker config: %v", err))
+		return "", fmt.Errorf("harbor: marshal docker config: %w", err)
 	}
-	return string(data)
+	return string(data), nil
 }
 
 // harborQuotaForPlan returns the Harbor storage quota in bytes for a given plan tier.

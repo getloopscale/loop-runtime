@@ -42,7 +42,7 @@ spec:
             runbook: "Check Argo Workflows controller capacity. Consider scaling workflow workers."
 
         - alert: LoopZeroReconcilerUnhealthy
-          expr: increase(loopzero_reconciler_errors_total[5m]) > 5
+          expr: increase(loopzero_operator_reconcile_errors_total[5m]) > 5
           labels:
             severity: warning
           annotations:
