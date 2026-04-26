@@ -29,12 +29,13 @@ type GitRepositoryBinding struct {
 // GitRepositoryBindingSpec defines the desired state of a GitRepositoryBinding.
 type GitRepositoryBindingSpec struct {
 	// RepoURL is the Git repository URL to register with the consumer.
-	// SEC-003 / T3.5: must be an HTTPS URL or SSH git URL. Prevents SSRF
-	// via arbitrary URL schemes (file://, gopher://, etc.) reaching the
-	// HTTP client used by GitRepositoryBindingController.
+	// SEC-003 / T3.5: must be an HTTP(S) URL or SSH git URL. Prevents SSRF
+	// via arbitrary URL schemes (file://, gopher://, javascript:, etc.) reaching
+	// the HTTP client used by GitRepositoryBindingController. Plain http://
+	// is allowed for in-cluster Gitea services (e.g., http://gitea.loopzero-system.svc:3000).
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
-	// +kubebuilder:validation:Pattern=`^(https://[^\s]+|ssh://git@[^\s]+|git@[^\s:]+:[^\s]+)$`
+	// +kubebuilder:validation:Pattern=`^(https?://[^\s]+|ssh://git@[^\s]+|git@[^\s:]+:[^\s]+)$`
 	RepoURL string `json:"repoURL"`
 
 	// CredentialSecretRef references the Secret containing the Git credential.

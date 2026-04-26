@@ -107,7 +107,7 @@ spec:
                   HTTP client used by GitRepositoryBindingController.
                 maxLength: 2048
                 minLength: 1
-                pattern: ^(https://[^\s]+|ssh://git@[^\s]+|git@[^\s:]+:[^\s]+)$
+                pattern: ^(https?://[^\s]+|ssh://git@[^\s]+|git@[^\s:]+:[^\s]+)$
                 type: string
             required:
             - consumer

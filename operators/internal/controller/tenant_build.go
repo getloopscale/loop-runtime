@@ -460,6 +460,35 @@ func (r *TenantReconciler) reconcileBuildNetworkPolicy(ctx context.Context, name
 			k.LabelComponent: k.ComponentBuild,
 			k.LabelManagedBy: k.ManagedByTenantController,
 		}
+		// T2.9 / COMP-005: MinIO and K8s API egress rules now carry destination
+		// selectors. Previously they had only Ports{}, which let build pods
+		// reach any external host on those ports — a confirmed exfiltration
+		// vector. The DNS rule (kube-system) and registry rule (RegistryCIDRs
+		// IPBlock) remain unchanged.
+		minioEgress := networkingv1.NetworkPolicyEgressRule{
+			To: []networkingv1.NetworkPolicyPeer{{
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"kubernetes.io/metadata.name": "loopzero-system"},
+				},
+				PodSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "minio"},
+				},
+			}},
+			Ports: []networkingv1.NetworkPolicyPort{
+				{Protocol: &protoTCP, Port: &minioPort},
+			},
+		}
+		k8sAPIEgress := networkingv1.NetworkPolicyEgressRule{
+			To: []networkingv1.NetworkPolicyPeer{{
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"kubernetes.io/metadata.name": "default"},
+				},
+			}},
+			Ports: []networkingv1.NetworkPolicyPort{
+				{Protocol: &protoTCP, Port: &k8sAPIPort},
+			},
+		}
+
 		np.Spec = networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{},
 			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
@@ -475,13 +504,9 @@ func (r *TenantReconciler) reconcileBuildNetworkPolicy(ctx context.Context, name
 						{Protocol: &protoTCP, Port: &dnsPort},
 					},
 				},
-				{Ports: []networkingv1.NetworkPolicyPort{
-					{Protocol: &protoTCP, Port: &minioPort},
-				}},
+				minioEgress,
 				registryRule,
-				{Ports: []networkingv1.NetworkPolicyPort{
-					{Protocol: &protoTCP, Port: &k8sAPIPort},
-				}},
+				k8sAPIEgress,
 			},
 		}
 		return nil
