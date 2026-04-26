@@ -174,7 +174,39 @@ jobs:
           sudo chmod +x /usr/local/bin/yq
           yq --version
       - name: Run drift check
-        run: bash scripts/check-crd-drift.sh
+        run: |
+          set -euo pipefail
+          BASES_DIR="operators/config/crd/bases"
+          CHART_DIR="charts/loopzero-crds/templates"
+          drift_found=0
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "${tmp_dir}"' EXIT
+          for base_file in "${BASES_DIR}"/loopzero.io_*.yaml; do
+            base_name="$(basename "${base_file}")"
+            plural="${base_name#loopzero.io_}"
+            chart_file="${CHART_DIR}/${plural}"
+            if [[ ! -f "${chart_file}" ]]; then
+              echo "::error::DRIFT: ${base_name} has no chart counterpart at ${chart_file}"
+              drift_found=1
+              continue
+            fi
+            base_spec="${tmp_dir}/${base_name}.base.yaml"
+            chart_spec="${tmp_dir}/${plural}.chart.yaml"
+            yq eval '.spec.versions' "${base_file}" > "${base_spec}"
+            yq eval '.spec.versions' "${chart_file}" > "${chart_spec}"
+            if ! diff -q "${base_spec}" "${chart_spec}" >/dev/null 2>&1; then
+              echo "::error::DRIFT in ${plural}:"
+              diff -u "${base_spec}" "${chart_spec}" || true
+              drift_found=1
+            fi
+          done
+          if [[ "${drift_found}" -eq 1 ]]; then
+            echo ""
+            echo "CRD schema drift detected. Run 'cd operators && make manifests'"
+            echo "to regenerate bases/, then sync charts/loopzero-crds/templates/."
+            exit 1
+          fi
+          echo "CRD schema drift check: OK (all pairs aligned)"
 
   # ─────────────────────────────────────────────
   # UNIT TESTS — fast, no external deps
