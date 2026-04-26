@@ -155,7 +155,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
-      - uses: digitalocean/action-doctl@v2.5.2
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
       - run: doctl registry login --expiry-seconds 600
@@ -201,7 +201,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
-      - uses: digitalocean/action-doctl@v2.5.2
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
       - run: doctl registry login --expiry-seconds 600
@@ -247,7 +247,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
-      - uses: digitalocean/action-doctl@v2.5.2
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
       - run: doctl registry login --expiry-seconds 600
@@ -293,7 +293,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
-      - uses: digitalocean/action-doctl@v2.5.2
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
       - run: doctl registry login --expiry-seconds 600
@@ -341,7 +341,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
-      - uses: digitalocean/action-doctl@v2.5.2
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
       - run: doctl registry login --expiry-seconds 600
@@ -424,7 +424,7 @@ jobs:
 
       - name: Install doctl
         if: matrix.result == 'success' && matrix.digest != ''
-        uses: digitalocean/action-doctl@v2.5.2
+        uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -434,7 +434,7 @@ jobs:
 
       - name: Install cosign
         if: matrix.result == 'success' && matrix.digest != ''
-        uses: sigstore/cosign-installer@v4.1.1
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
 
       - name: Install syft
         if: matrix.result == 'success' && matrix.digest != ''
@@ -442,7 +442,7 @@ jobs:
 
       - name: Scan image with Trivy
         if: matrix.result == 'success' && matrix.digest != ''
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           scan-type: image
           image-ref: "${{ matrix.image }}@${{ matrix.digest }}"

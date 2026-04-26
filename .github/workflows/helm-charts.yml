@@ -170,7 +170,7 @@ jobs:
           chmod +x /usr/local/bin/yq
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
 
       - name: Login to DOCR
         run: |
