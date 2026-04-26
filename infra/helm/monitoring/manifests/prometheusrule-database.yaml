@@ -34,8 +34,10 @@ spec:
             runbook: "Check pg_stat_statements for top queries by mean_exec_time. Look for sequential scans on large tables. Verify advisory lock contention via loopzero_lock_hold_duration_seconds."
 
         # Track C Rule 4: Long-running transactions — active transaction older than 30s
+        # T1.2 / VAL-001: loopzero_postgres_longest_transaction_seconds not emitted
+        # by any Go code; needs PG exporter integration.
         - alert: LoopZeroDBLongTransaction
-          expr: loopzero_postgres_longest_transaction_seconds > 30
+          expr: vector(0) > 1  # ORPHAN: loopzero_postgres_longest_transaction_seconds not emitted
           for: 1m
           labels:
             severity: warning
@@ -45,8 +47,10 @@ spec:
             runbook: "Identify the long transaction via pg_stat_activity. Check if a build orchestration is stuck. If the API pod crashed mid-transaction, the connection should be reclaimed by pgx pool timeout."
 
         # Track C Rule 6: RLS denial detection — queries returning 0 rows when > 0 expected
+        # T1.2 / VAL-001: loopzero_postgres_rls_denial_total not emitted (RLS
+        # not implemented in operators scope).
         - alert: LoopZeroDBRLSDenialDetected
-          expr: increase(loopzero_postgres_rls_denial_total[5m]) > 0
+          expr: vector(0) > 1  # ORPHAN: loopzero_postgres_rls_denial_total not emitted
           for: 1m
           labels:
             severity: warning
@@ -69,8 +73,10 @@ spec:
             runbook: "Immediate action: check for leaked connections (pg_stat_activity idle in transaction). Kill long-running idle transactions if safe. Scale down non-critical API consumers. If pool is legitimately full, increase max_connections and pool size."
 
         # Track C Rule 5: Query error rate spike — sudden increase in PG errors
+        # T1.2 / VAL-001: loopzero_postgres_errors_total not emitted (PG exporter
+        # not configured; api/internal/db doesn't track aggregate error counter).
         - alert: LoopZeroDBErrorRateSpike
-          expr: increase(loopzero_postgres_errors_total[5m]) > 10
+          expr: vector(0) > 1  # ORPHAN: loopzero_postgres_errors_total not emitted
           for: 1m
           labels:
             severity: critical
@@ -80,8 +86,10 @@ spec:
             runbook: "Check PostgreSQL pod logs for error details. Verify disk usage (PVC). Check if a migration ran recently. If connection errors, verify network between API and PostgreSQL. If permission errors, check role grants."
 
         # Compound: Pool exhausted AND long transactions — likely deadlock or stuck build
+        # T1.2 / VAL-001: depends on loopzero_postgres_longest_transaction_seconds
+        # which is not emitted. Compound rule disabled until histogram lands.
         - alert: LoopZeroDBPoolExhaustedWithLongTx
-          expr: (loopzero_postgres_connections_active / 25 > 0.95) and (loopzero_postgres_longest_transaction_seconds > 60)
+          expr: vector(0) > 1  # ORPHAN: loopzero_postgres_longest_transaction_seconds not emitted
           for: 1m
           labels:
             severity: critical

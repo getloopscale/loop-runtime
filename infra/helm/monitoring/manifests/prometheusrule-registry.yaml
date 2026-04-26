@@ -13,8 +13,10 @@ spec:
       rules:
         # Canary probe: a lightweight push/pull cycle run by a separate CronJob.
         # The metric loopzero_registry_canary_success is exposed by the canary probe (not this rule).
+        # T1.2 / VAL-001: registry canary CronJob not deployed yet;
+        # loopzero_registry_canary_success not emitted by any code.
         - alert: LoopZeroRegistryHealthFailed
-          expr: loopzero_registry_canary_success == 0
+          expr: vector(0) > 1  # ORPHAN: loopzero_registry_canary_success not emitted
           for: 2m
           labels:
             severity: critical

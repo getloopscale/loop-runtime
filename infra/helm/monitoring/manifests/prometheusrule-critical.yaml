@@ -61,8 +61,10 @@ spec:
             description: "Gitea has been unreachable for more than 2 minutes. Builds cannot clone source code. GitOps pushes will fail."
             runbook: "Check Gitea pod status. Verify PVC is bound. Check pod logs. If data loss, restore from MinIO backup (RPO: 6h)."
 
+        # T1.2 / VAL-001: loopzero_gitea_last_backup_timestamp not emitted
+        # (Gitea backup cron lacks Prometheus exporter integration).
         - alert: LoopZeroGiteaBackupStale
-          expr: time() - loopzero_gitea_last_backup_timestamp > 25200
+          expr: vector(0) > 1  # ORPHAN: loopzero_gitea_last_backup_timestamp not emitted
           for: 0m
           labels:
             severity: critical
@@ -81,8 +83,10 @@ spec:
             description: "ArgoCD health gate tripped after 3 consecutive failures. New deployments are rejected with 503."
             runbook: "Check ArgoCD server and controller health. Once ArgoCD recovers, circuit will close after 2 consecutive successful checks."
 
+        # T1.2 / VAL-001: depends on loopzero_git_desired_state_divergence and
+        # loopzero_git_mirror_status — neither emitted by any code.
         - alert: LoopZeroGitMirrorExhausted
-          expr: loopzero_git_desired_state_divergence == 1 and on(tenant, env) loopzero_git_mirror_status{status="FAILED"} == 1
+          expr: vector(0) > 1  # ORPHAN: loopzero_git_desired_state_divergence + loopzero_git_mirror_status not emitted
           for: 3h
           labels:
             severity: critical
@@ -91,8 +95,10 @@ spec:
             description: "Git desired state diverges AND mirror has been FAILED for 3+ hours. All retries exhausted."
             runbook: "Fix Gitea. Then trigger manual mirror sync via API. If Gitea is up, investigate why mirror push fails."
 
+        # T1.2 / VAL-001: depends on loopzero_fallback_active and
+        # loopzero_git_mirror_status — neither emitted. Fallback feature deferred.
         - alert: LoopZeroFallbackStuck
-          expr: loopzero_fallback_active == 1 and on(tenant, env) loopzero_git_mirror_status{status="FAILED"} == 1
+          expr: vector(0) > 1  # ORPHAN: loopzero_fallback_active + loopzero_git_mirror_status not emitted
           for: 3h
           labels:
             severity: critical
@@ -101,8 +107,11 @@ spec:
             description: "Emergency fallback deployment is active but Git mirror has been FAILED for 3+ hours."
             runbook: "Fix Gitea. Retry mirror. Once mirror succeeds, auto-sync re-enables and fallback clears automatically."
 
+        # T1.2 / VAL-001: loopzero_build_egress_connectivity not emitted —
+        # build NP creation reconcile would need to register and emit.
+        # See ADR D5(b) for plan to wire emission alongside build NP.
         - alert: LoopZeroBuildEgressStale
-          expr: loopzero_build_egress_connectivity == 0
+          expr: vector(0) > 1  # ORPHAN: loopzero_build_egress_connectivity not emitted
           for: 5m
           labels:
             severity: critical
@@ -111,8 +120,10 @@ spec:
             description: "Build pods failing DNS/connection to Gitea/MinIO/registry for 5+ minutes."
             runbook: "Check NetworkPolicy in build namespace. Verify Service endpoints for Gitea, MinIO, and registry."
 
+        # T1.2 / VAL-001: break-glass session feature not implemented;
+        # loopzero_break_glass_sessions_active not emitted by any code.
         - alert: LoopZeroBreakGlassAccess
-          expr: loopzero_break_glass_sessions_active > 0
+          expr: vector(0) > 1  # ORPHAN: loopzero_break_glass_sessions_active not emitted
           for: 0m
           labels:
             severity: critical

@@ -154,6 +154,52 @@ jobs:
           done
           exit $FAILED
 
+  # T1.2 / VAL-001: detect orphan alert rules — alerts that reference
+  # Prometheus metrics not registered anywhere in Go source. Prevents
+  # the recurring "alert dark zone" pattern where rules fire on metrics
+  # that no code emits. The vector(0) literal is the documented opt-out
+  # for intentionally-disabled rules awaiting future feature work.
+  alert-orphans:
+    name: Alert metric orphan check
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    needs: changes
+    if: >-
+      needs.changes.outputs.helm == 'true' ||
+      needs.changes.outputs.go-api == 'true' ||
+      needs.changes.outputs.go-operators == 'true' ||
+      needs.changes.outputs.go-pkg == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cross-reference alert metrics vs Go registrations
+        run: |
+          set -euo pipefail
+          # Extract metric names from PrometheusRule expr fields, excluding
+          # rules that contain "ORPHAN" (intentionally disabled) or vector(0).
+          ALERT_METRICS=$(
+            cat infra/helm/monitoring/manifests/prometheusrule-*.yaml \
+              | grep -v "ORPHAN" \
+              | awk '/expr:/{gsub(/.*\(/,""); gsub(/[^a-zA-Z_]+/,"\n"); print}' \
+              | grep "^loopzero_" | sort -u
+          )
+          # Extract registered metric names from Go source.
+          REGISTERED_METRICS=$(
+            grep -rE 'Name: "loopzero_' operators/internal/metrics/ api/internal/metrics/ pkg/ 2>/dev/null \
+              | sed -nE 's/.*Name: "(loopzero_[a-z_]+)".*/\1/p' \
+              | sort -u
+          )
+          ORPHANS=$(comm -23 <(echo "$ALERT_METRICS") <(echo "$REGISTERED_METRICS"))
+          if [[ -n "$ORPHANS" ]]; then
+            echo "::error::Alert rules reference metrics not registered in Go:"
+            echo "$ORPHANS" | while read -r m; do echo "  - $m"; done
+            echo ""
+            echo "Either implement the metric (prometheus.NewCounter/Gauge/Histogram"
+            echo "+ MustRegister) or disable the rule via 'expr: vector(0) > 1' with"
+            echo "an inline ORPHAN comment per T1.2."
+            exit 1
+          fi
+          echo "Alert orphan check: OK (all alert metrics are registered)"
+
   # T3.2 / INFRA-004: detect drift between kubebuilder-generated CRDs in
   # operators/config/crd/bases/ and Helm chart templates in
   # charts/loopzero-crds/templates/. Fails CI if the source-of-truth diverges
