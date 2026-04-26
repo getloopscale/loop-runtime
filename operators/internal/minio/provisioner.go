@@ -232,8 +232,17 @@ func (p *AdminProvisioner) attachPolicy(ctx context.Context, policyName, accessK
 
 // isNotFoundError checks if an error indicates a resource was not found.
 // madmin-go errors don't have a typed not-found; we check the message.
-// NOTE: This is fragile — if madmin-go changes error messages, this breaks.
-// Regression test TestIsNotFoundError covers known messages.
+//
+// FRAGILITY CONTRACT (T3.4 / CODE-004):
+//   - The version of madmin-go is pinned in go.mod (currently v3.0.110).
+//   - TestIsNotFoundError_MatchesKnownMessages in provisioner_test.go is
+//     the regression test that protects this matcher.
+//   - When bumping madmin-go, run the regression test FIRST against the
+//     new version. If it fails, the new version's error messages have
+//     drifted; either update the substrings here or open an upstream
+//     issue to add typed not-found errors to madmin-go.
+//   - If a typed error path becomes available upstream, replace this
+//     string-matching with type assertions.
 func isNotFoundError(err error) bool {
 	if err == nil {
 		return false

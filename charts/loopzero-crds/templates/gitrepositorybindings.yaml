@@ -100,9 +100,14 @@ spec:
                 - namespace
                 type: object
               repoURL:
-                description: RepoURL is the Git repository URL to register with the
-                  consumer.
+                description: |-
+                  RepoURL is the Git repository URL to register with the consumer.
+                  SEC-003 / T3.5: must be an HTTPS URL or SSH git URL. Prevents SSRF
+                  via arbitrary URL schemes (file://, gopher://, etc.) reaching the
+                  HTTP client used by GitRepositoryBindingController.
+                maxLength: 2048
                 minLength: 1
+                pattern: ^(https://[^\s]+|ssh://git@[^\s]+|git@[^\s:]+:[^\s]+)$
                 type: string
             required:
             - consumer

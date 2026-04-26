@@ -84,9 +84,19 @@ type TenantSpec struct {
 // ARCH-004: Renamed from EnvironmentSpec to resolve naming collision with EnvironmentCRSpec.
 type TenantEnvironmentEntry struct {
 	// Name is the environment name (e.g., "production", "staging").
+	// SEC-002 / T3.5: RFC 1123 label — alphanumeric + hyphens, must start
+	// with alphanumeric, length 1-63. Prevents injection vectors via
+	// environment names propagated to namespace and label values.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Name string `json:"name"`
 
 	// Cluster is the target cluster for this environment.
+	// SEC-002 / T3.5: RFC 1123 label, same constraints as Name.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Cluster string `json:"cluster"`
 }
 
