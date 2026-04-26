@@ -26,7 +26,13 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/httpclient"
 	"github.com/loopzero/loopzero/pkg/naming"
+	"github.com/loopzero/loopzero/pkg/statemachine"
 )
+
+// exposedRouteSM is the ExposedRoute lifecycle state machine (T3.6 / ARCH-002).
+// Currently used to enforce valid initial state. Per-transition refactor
+// (each Status.Phase write goes through SM) is a follow-up.
+var exposedRouteSM = statemachine.NewExposedRouteMachine()
 
 const (
 	// exposureFinalizer is the finalizer name for ExposedRoute cleanup.
@@ -92,9 +98,11 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 		}
 	}
 
-	// Initialize phase if empty
+	// Initialize phase via state machine (T3.6 / ARCH-002).
 	if route.Status.Phase == "" {
-		route.Status.Phase = loopzerov1.ExposedRoutePhasePending
+		route.Status.Phase = loopzerov1.ExposedRoutePhase(
+			exposedRouteSM.Transition(statemachine.ExposedRouteEmpty, statemachine.ExposedRouteCreate),
+		)
 	}
 
 	// Step 1: Check certificate readiness

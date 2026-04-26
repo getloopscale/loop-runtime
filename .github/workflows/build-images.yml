@@ -444,6 +444,7 @@ jobs:
         uses: anchore/sbom-action/download-syft@v0.24.0
 
       - name: Scan image with Trivy
+        id: trivy
         if: matrix.result == 'success' && matrix.digest != ''
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
@@ -457,6 +458,20 @@ jobs:
         env:
           TRIVY_USERNAME: ${{ secrets.DIGITALOCEAN_TOKEN }}
           TRIVY_PASSWORD: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      # T3.3 / INFRA-005 (partial): if Trivy scan failed AFTER the image was
+      # pushed to DOCR, immediately delete the manifest so the vulnerable
+      # image is not exposed for pull. Reduces vulnerability window from
+      # ~10 min (before someone notices) to seconds. Full pre-push restructure
+      # (--push -> --load + scan + push) is a deferred follow-up T2.
+      - name: Auto-delete vulnerable image from DOCR
+        if: failure() && matrix.result == 'success' && matrix.digest != '' && steps.trivy.conclusion == 'failure'
+        run: |
+          REPO="${{ matrix.image }}"
+          REPO_NAME="${REPO#registry.digitalocean.com/loopzero-system/}"
+          DIGEST="${{ matrix.digest }}"
+          echo "::warning::Trivy scan failed for ${REPO}@${DIGEST}; deleting manifest from DOCR"
+          doctl registry repository delete-manifest "loopzero-system/${REPO_NAME}" "${DIGEST}" --force || true
 
       - name: Generate SBOM with syft
         if: matrix.result == 'success' && matrix.digest != ''
