@@ -43,9 +43,16 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "delete"]
 
   # --- Secrets: kubeconfig secrets for ClusterCredentialController ---
+  # T1.1 / INFRA-001: removed cluster-wide `delete` verb (was the root
+  # of toxic combinations TC-1 / TC-4 / TC-5 — operator could delete
+  # any Secret cluster-wide including kube-system). Delete is now
+  # namespace-scoped via Role manifests:
+  #   - role-loopzero-system.yaml: delete on platform-tokens Secret only
+  #   - role-argocd.yaml:      delete on argocd-* Secrets in argocd ns
+  # Full per-tenant dynamic Role provisioning is a follow-up T2.
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "delete"]
+    verbs: ["get", "list", "watch", "create", "update"]
 
   # --- PriorityClasses: cluster-scoped, needed for tenant workload priorities ---
   - apiGroups: ["scheduling.k8s.io"]
