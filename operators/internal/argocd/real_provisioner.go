@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/util/retry"
 
 	"github.com/loopzero/loopzero/operators/internal/constants"
 )
@@ -202,9 +203,14 @@ func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
 }
 
 // EnsureApplication creates or updates an ArgoCD Application CR.
+//
+// T4.3 / CODE-005: the Update path is wrapped in retry.RetryOnConflict so
+// concurrent reconciles updating the same Application do not surface 409
+// Conflict errors to the controller queue. Each retry re-fetches the
+// resource to obtain a fresh resourceVersion.
 func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec ApplicationSpec) error {
-	app := buildApplicationObject(spec)
-	app.Object["metadata"].(map[string]interface{})["namespace"] = p.namespace
+	desired := buildApplicationObject(spec)
+	desired.Object["metadata"].(map[string]interface{})["namespace"] = p.namespace
 
 	// Try to get existing application
 	existing, err := p.client.Resource(applicationGVR).Namespace(p.namespace).Get(ctx, spec.Name, metav1.GetOptions{})
@@ -213,25 +219,33 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 			return fmt.Errorf("argocd: get application %s: %w", spec.Name, err)
 		}
 		// Resource does not exist — create it.
-		_, err = p.client.Resource(applicationGVR).Namespace(p.namespace).Create(ctx, app, metav1.CreateOptions{})
+		_, err = p.client.Resource(applicationGVR).Namespace(p.namespace).Create(ctx, desired, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("argocd: create application %s: %w", spec.Name, err)
 		}
 		return nil
 	}
 
-	// Update existing — preserve resourceVersion
-	app.SetResourceVersion(existing.GetResourceVersion())
-
-	// Preserve existing metadata that we don't manage (e.g., notifications annotations, finalizers).
-	mergeExistingMetadata(existing, app)
-
-	_, err = p.client.Resource(applicationGVR).Namespace(p.namespace).Update(ctx, app, metav1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("argocd: update application %s: %w", spec.Name, err)
-	}
-
-	return nil
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Re-fetch on each attempt for a fresh resourceVersion.
+		current, getErr := p.client.Resource(applicationGVR).Namespace(p.namespace).Get(ctx, spec.Name, metav1.GetOptions{})
+		if getErr != nil {
+			if errors.IsNotFound(getErr) {
+				// Disappeared between Get and retry — treat as success
+				// (caller will see eventual consistency on next reconcile).
+				_ = existing
+				return nil
+			}
+			return fmt.Errorf("argocd: refetch application %s: %w", spec.Name, getErr)
+		}
+		desired.SetResourceVersion(current.GetResourceVersion())
+		mergeExistingMetadata(current, desired)
+		_, updateErr := p.client.Resource(applicationGVR).Namespace(p.namespace).Update(ctx, desired, metav1.UpdateOptions{})
+		if updateErr != nil {
+			return updateErr
+		}
+		return nil
+	})
 }
 
 // mergeExistingMetadata preserves annotations, labels, and finalizers from the existing

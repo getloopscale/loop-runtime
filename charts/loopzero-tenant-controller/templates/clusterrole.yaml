@@ -60,13 +60,10 @@ rules:
     resources: ["deployments"]
     verbs: ["get", "list", "create", "update", "patch"]
 
-  # --- Backward compat: old rbacRulesForPlan used combined APIGroups ---
-  - apiGroups: [""]
-    resources: ["deployments"]
-    verbs: ["get", "list", "create", "update", "patch"]
-  - apiGroups: ["apps"]
-    resources: ["configmaps", "services"]
-    verbs: ["get", "list", "create", "update", "patch"]
+  # T4.5 / INFRA-008: removed two rules that referenced non-existent
+  # (apiGroup, resource) combinations — `core/v1 deployments` and
+  # `apps/v1 configmaps,services`. K8s API silently ignored both; they
+  # added no permissions and noised audit logs.
 
   # --- ArgoCD: create/manage Applications and AppProjects ---
   - apiGroups: ["argoproj.io"]
