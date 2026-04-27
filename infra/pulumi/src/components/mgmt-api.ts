@@ -360,6 +360,11 @@ export function installLoopZeroController(
                 { name: "HARBOR_ADMIN_USERNAME", value: "admin" },
                 { name: "HARBOR_ADMIN_PASSWORD", value: config.harborAdminPassword ?? "Harbor12345" },
                 { name: "BASE_DOMAIN", value: config.domain },
+                // Sprint 8 v3.2 fix 2026-04-27: loopzero-controller refused to start
+                // with `invalid config: LOOPZERO_CLUSTER_ISSUER is required`. Mirrors
+                // the value set on loopzero-api (mgmt-api.ts:173). Both binaries share
+                // the same image and config validation, so they must agree.
+                { name: "LOOPZERO_CLUSTER_ISSUER", value: "letsencrypt-prod" },
                 { name: "BUILD_KUBECONFIG", value: "/etc/loopzero/build-kubeconfig" },
                 { name: "BUILD_KUBE_CONTEXT", value: "build" },
                 { name: "MGMT_KUBECONFIG", value: "/etc/loopzero/mgmt-kubeconfig" },

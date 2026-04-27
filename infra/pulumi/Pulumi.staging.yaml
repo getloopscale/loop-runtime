@@ -7,19 +7,19 @@ config:
   loopzero-infra:infraVersion: v1
 
   # Management cluster — platform services
-  loopzero-infra:mgmtK8sVersion: "1.32.13-do.2"
+  loopzero-infra:mgmtK8sVersion: "1.33.9-do.3"
   loopzero-infra:mgmtNodeClass: small
   loopzero-infra:mgmtMinNodes: "2"
   loopzero-infra:mgmtMaxNodes: "3"
 
   # Runtime cluster — user applications
-  loopzero-infra:runtimeK8sVersion: "1.32.13-do.2"
+  loopzero-infra:runtimeK8sVersion: "1.33.9-do.3"
   loopzero-infra:runtimeNodeClass: small
   loopzero-infra:runtimeMinNodes: "2"
   loopzero-infra:runtimeMaxNodes: "3"
 
   # Build cluster — Argo Workflows + BuildKit
-  loopzero-infra:buildK8sVersion: "1.32.13-do.2"
+  loopzero-infra:buildK8sVersion: "1.33.9-do.3"
   loopzero-infra:buildNodeClass: small
   loopzero-infra:buildMinNodes: "2"
   loopzero-infra:buildMaxNodes: "3"

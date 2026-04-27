@@ -54,10 +54,16 @@ export function installKeda(
           metricServer: { runAsNonRoot: true },
           webhooks: { runAsNonRoot: true },
         },
+        // Prometheus Operator (which provides ServiceMonitor CRD) lives on the mgmt
+        // cluster, NOT on runtime/runtime-2. Enabling serviceMonitor here breaks
+        // bootstrap with `no matches for kind "ServiceMonitor" in version
+        // "monitoring.coreos.com/v1"`. KEDA metrics are scraped cross-cluster from
+        // mgmt Prometheus via Service endpoint discovery (kube-state-metrics +
+        // remote_write). Sprint 8 v3.2 fix 2026-04-27.
         prometheus: {
-          operator: { enabled: true, serviceMonitor: { enabled: true, additionalLabels: { release: "monitoring" } } },
-          metricServer: { enabled: true, serviceMonitor: { enabled: true, additionalLabels: { release: "monitoring" } } },
-          webhooks: { enabled: true, serviceMonitor: { enabled: true, additionalLabels: { release: "monitoring" } } },
+          operator: { enabled: false },
+          metricServer: { enabled: false },
+          webhooks: { enabled: false },
         },
       },
     },
@@ -78,7 +84,10 @@ export function installKedaHttpAddon(
   return new k8s.helm.v3.Release(
     `${role}-keda-http-addon`,
     {
-      chart: "http-add-on",
+      // Chart name in KEDA upstream Helm repo is `keda-add-ons-http`, not
+      // `http-add-on`. Sprint 8 v3.2 fix 2026-04-27 — was rejecting bootstrap
+      // with `chart "http-add-on" version "0.8.0" not found`.
+      chart: "keda-add-ons-http",
       version: HELM_VERSIONS.kedaHttpAddon,
       repositoryOpts: { repo: "https://kedacore.github.io/charts" },
       namespace: PLATFORM_NAMESPACE,
@@ -86,6 +95,19 @@ export function installKedaHttpAddon(
       waitForJobs: true,
       timeout: 300,
       values: {
+        // Sprint 8 v3.2 fix 2026-04-27: keda-add-ons-http 0.8.0 chart defaults
+        // images.kubeRbacProxy.name to `gcr.io/kubebuilder/kube-rbac-proxy:v0.13.0`
+        // which has been DEPRECATED and removed from gcr.io. Override to the
+        // maintained quay.io image (same upstream project, same maintainer,
+        // same API). Fixes ImagePullBackOff on controller-manager pod.
+        // Path verified against keda-add-ons-http-0.8.0/values.yaml at
+        // https://kedacore.github.io/charts/keda-add-ons-http-0.8.0.tgz.
+        images: {
+          kubeRbacProxy: {
+            name: "quay.io/brancz/kube-rbac-proxy",
+            tag: "v0.18.1",
+          },
+        },
         interceptor: {
           replicas: { min: 1, max: 1 },
           resources: {

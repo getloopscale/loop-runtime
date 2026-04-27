@@ -102,6 +102,16 @@ export class ApiError extends Error {
           4, status, 'AUTH_SERVICE_UNAVAILABLE',
         );
       }
+      // Sprint 8 v3.2 / CHG-002a / D-7 — explicit MAINTENANCE_MODE handling.
+      // Distinct from generic 503 because the CLI should NOT silently retry
+      // (operator-initiated, can last minutes for PG resize). Show the
+      // operator's message verbatim so users understand the planned downtime.
+      if (serverCode === 'MAINTENANCE_MODE') {
+        return new ApiError(
+          serverMessage || 'LoopZero is in maintenance mode. Mutations are temporarily disabled.',
+          3, status, 'MAINTENANCE_MODE',
+        );
+      }
       return new ApiError(
         serverMessage || 'Service unavailable. Try again in a moment.',
         3, status, serverCode ?? 'SERVICE_UNAVAILABLE',
@@ -246,6 +256,14 @@ export class ApiClient {
           }
 
           const apiError = this.mapError(res.status, errorBody);
+
+          // Sprint 8 v3.2 / CHG-002a / D-7: MAINTENANCE_MODE is operator-initiated
+          // and can persist for minutes during PG resize / mgmt rolling upgrade.
+          // Skip the retry loop — surface the message immediately so the user
+          // understands the planned downtime instead of seeing 5 silent retries.
+          if (apiError.code === 'MAINTENANCE_MODE') {
+            throw apiError;
+          }
 
           // Only retry on transient server errors (502, 503, 504)
           if (RETRYABLE_STATUS_CODES.has(res.status) && attempt < this.maxRetries) {

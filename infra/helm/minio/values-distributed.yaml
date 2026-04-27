@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: Apache-2.0
+# Sprint 8 v3.2 / CHG-002a / T2.3 — MinIO distributed mode (4 drives EC:2).
+# Used during Phase D cutover from standalone (`values.yaml`) to distributed.
+# See `docs/runbooks/minio-distributed-migration.md` for the full procedure.
+#
+# Differences vs values.yaml (standalone):
+# - mode: distributed (was: standalone)
+# - statefulset.replicaCount: 4 (was: 1)
+# - statefulset.drivesPerNode: 1 (1 drive per pod, 4 pods = 4 drives EC:2)
+# - podAntiAffinity: requiredDuringScheduling on hostname (forces 4 distinct nodes)
+# - persistence.size: 50Gi per drive (200Gi total raw, ~100Gi useful with EC:2)
+
+# PRODUCTION WARNING: Override ALL passwords before deploying to production.
+# Default values are for local development only.
+mode: distributed
+
+rootUser: loopzero-admin
+rootPassword: loopzero-dev-password  # LOCAL DEV ONLY — override in CI
+
+statefulset:
+  replicaCount: 4
+  drivesPerNode: 1
+  # Anti-affinity ensures the 4 pods land on 4 distinct nodes — pod kill on
+  # one node still leaves 3/4 drives online (EC:2 = 2 parity, survives loss
+  # of 2 drives simultaneously).
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: minio
+        topologyKey: kubernetes.io/hostname
+
+livenessProbe:
+  enabled: true
+readinessProbe:
+  enabled: true
+
+# Higher resources than standalone — distributed mode has overhead from
+# erasure coding + inter-node coordination. Sized for L3 (100 tenants).
+resources:
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+  requests:
+    cpu: "500m"
+    memory: "2Gi"
+
+# PSA restricted compliance (Sprint 8 v3.2 standard).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: true
+
+persistence:
+  size: 50Gi  # per drive; 200Gi total raw
+
+# Performance tuning identical to standalone — copies values.yaml settings.
+extraEnvVars:
+  - name: MINIO_API_REQUESTS_MAX
+    value: "10000"
+  - name: MINIO_API_REQUESTS_DEADLINE
+    value: "30s"
+  - name: MINIO_SCANNER_SPEED
+    value: "slowest"
+  # Distributed-specific: heal interval. Erasure coding heals in background;
+  # speed up healing during chaos test recovery (CHG-002c T5.1).
+  - name: MINIO_HEAL_MAX_IO
+    value: "30"
+
+service:
+  type: ClusterIP  # Internal only — workloads access via Service DNS.
+                   # Standalone used NodePort for k3d local dev; distributed in DO is internal.
+
+consoleService:
+  type: ClusterIP
+
+# Same buckets as standalone (matched in CWTs cwt-cache-{save,restore}.yaml).
+buckets:
+  - name: loopzero-artifacts
+    policy: none
+  - name: loopzero-builds
+    policy: none
+  - name: loopzero-logs
+    policy: none
+
+# NetworkPolicy: only loopzero-system namespace can talk to MinIO.
+# Build cluster reaches via egress NetworkPolicy in loopzero-build CWTs.
+networkPolicy:
+  enabled: true
+  allowExternal: false
+  flavor: kubernetes

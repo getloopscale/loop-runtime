@@ -278,8 +278,16 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
   // --- Container registry (platform images = DOCR) ---
   // DOCR for platform images (loopzero-api, loopzero-tenant-controller, loopzero-cloud, loopzero-dashboard)
   // Harbor for tenant images — deployed separately in bootstrap phase.
+  //
+  // ADR-0015: Adopt-or-Create policy for live stateful resources. DO allows ONE
+  // registry per account, so we adopt whatever name already exists rather than
+  // recreating with a project-derived name. `lookupExistingRegistry()` returns
+  // the live registry name (e.g. "loopzero-system") which the provider uses as both
+  // the resource name and Pulumi import ID. Falls back to the canonical
+  // "loopzero-system" name for fresh accounts (matches bootstrap-registry.ts:44
+  // imagePullSecret name).
   const registry = factory.createContainerRegistry({
-    name: `${config.project}-registry`,
+    name: orphans?.registryImportId ?? "loopzero-system",
     tier: "professional",
     region: config.region,
   });

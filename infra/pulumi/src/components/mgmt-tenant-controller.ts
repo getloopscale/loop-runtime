@@ -213,6 +213,12 @@ export function installTenantController(
                 { name: "SPACES_ACCESS_KEY_ID", valueFrom: { secretKeyRef: { name: "tenant-controller-credentials", key: "SPACES_ACCESS_KEY_ID" } } },
                 { name: "SPACES_SECRET_ACCESS_KEY", valueFrom: { secretKeyRef: { name: "tenant-controller-credentials", key: "SPACES_SECRET_ACCESS_KEY" } } },
                 { name: "DIGITALOCEAN_TOKEN", valueFrom: { secretKeyRef: { name: "tenant-controller-credentials", key: "DIGITALOCEAN_TOKEN" } } },
+                // Sprint 8 v3.2 fix 2026-04-27: tenant-controller refused to start
+                // with `invalid config: LOOPZERO_CLUSTER_ISSUER is required (prod:
+                // letsencrypt-prod, dev: loopzero-ca-issuer)`. Mirror the value used
+                // by loopzero-api (mgmt-api.ts:173) so cert-manager Certificate
+                // generation aligns across the platform.
+                { name: "LOOPZERO_CLUSTER_ISSUER", value: "letsencrypt-prod" },
               ],
               resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "500m", memory: "256Mi" } },
               livenessProbe: { httpGet: { path: "/healthz", port: 8081 }, initialDelaySeconds: 15 },

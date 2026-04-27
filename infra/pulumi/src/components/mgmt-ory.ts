@@ -178,6 +178,20 @@ export function installOryKratos(
         template: {
           metadata: { labels: { app: "kratos-ui" } },
           spec: {
+            // PodSecurity restricted:latest compliance (mgmt cluster baseline policy).
+            // Sprint 8 v3.2 fix 2026-04-27: pin runAsUser/runAsGroup to 10000 to
+            // match the image's owner of /.npm. Verified via `crane config
+            // oryd/kratos-selfservice-ui-node:v1.3.0` → User=10000. Forcing 65532
+            // (initial guess) caused EACCES on npm cache. Forcing 1000 caused
+            // EROFS. The image's built-in user 10000 owns /usr/src/app and
+            // /home/node — runAsNonRoot satisfied without permission errors.
+            securityContext: {
+              runAsNonRoot: true,
+              runAsUser: 10000,
+              runAsGroup: 10000,
+              fsGroup: 10000,
+              seccompProfile: { type: "RuntimeDefault" },
+            },
             containers: [{
               name: "ui",
               image: kratosUiImage,
@@ -190,15 +204,40 @@ export function installOryKratos(
                 { name: "SECURITY_MODE", value: "" },
                 { name: "COOKIE_SECRET", value: cookieSecret.result },
                 { name: "CSRF_COOKIE_NAME", value: "loopzero_csrf" },
+                // Sprint 8 v3.2 fix 2026-04-27: kratos-selfservice-ui-node@0.21.3
+                // refuses to boot without CSRF_COOKIE_SECRET (required env var).
+                // Reuse the same cookieSecret resource to avoid generating a 2nd
+                // RandomPassword (would force replace on next pulumi up).
+                { name: "CSRF_COOKIE_SECRET", value: cookieSecret.result },
               ],
+              // OOMKilled at 64Mi during bootstrap (Sprint 8 v3.2 finding 2026-04-27).
+              // oryd/kratos-selfservice-ui-node:v1.3.0 is a Node.js app that needs >=128Mi
+              // for stable runtime. Scaled to 256Mi limit for safety margin under L1+ load.
               resources: {
-                requests: { cpu: "20m", memory: "32Mi" },
-                limits: { cpu: "100m", memory: "64Mi" },
+                requests: { cpu: "50m", memory: "128Mi" },
+                limits: { cpu: "300m", memory: "256Mi" },
+              },
+              securityContext: {
+                allowPrivilegeEscalation: false,
+                // readOnlyRootFilesystem: false — npm requires writable /.npm cache
+                // (EROFS: read-only file system, mkdir '/.npm' on first start).
+                // Sprint 8 v3.2 fix 2026-04-27. Could be re-enabled with emptyDir
+                // mounts at /.npm and /tmp, but kratos-ui is dev tooling — simpler
+                // to leave RW. Other PSA fields (runAsNonRoot, drop ALL caps,
+                // seccompProfile RuntimeDefault) remain enforced.
+                capabilities: { drop: ["ALL"] },
               },
               readinessProbe: {
                 httpGet: { path: "/health/alive", port: 3000 },
-                initialDelaySeconds: 5,
+                initialDelaySeconds: 10,
                 periodSeconds: 10,
+                failureThreshold: 6,
+              },
+              livenessProbe: {
+                httpGet: { path: "/health/alive", port: 3000 },
+                initialDelaySeconds: 30,
+                periodSeconds: 30,
+                failureThreshold: 3,
               },
             }],
           },

@@ -1,0 +1,91 @@
+# Sprint 8 v3.2 / CHG-002a / T0.3 — Chaos Mesh hardened values.
+# ADR-0016 D-4 satisfied: hardened RBAC (no cluster-admin default), Audit/Deny
+# alignment with Sprint 6 policy-controller (chaos namespace included in
+# policy-controller dry-run window per CHG-002c pre-condition).
+#
+# Deployed to mgmt + build + runtime + runtime-2 clusters via:
+#   helm upgrade --install loopzero-chaos-mesh infra/helm/chaos-mesh \
+#     --kube-context <ctx> -n chaos-mesh --create-namespace
+#
+# Chaos test manifests live in infra/tests/chaos/manifests/ (9 scenarios).
+
+chaos-mesh:
+  # Namespace for the controller; chaos resources can target other namespaces
+  # via experiment selector. Default is chaos-mesh — keep it isolated.
+  controllerManager:
+    # Hardened RBAC per Security veto MEET-2026-04-27-061: no cluster-admin
+    # default. The controller only needs Pod/Deployment/StatefulSet/Service
+    # patch + node taint permissions for the documented chaos scenarios.
+    # Users granted RBAC explicitly via `clusterScoped: true` + scoped Roles.
+    clusterScoped: true
+    # Resource limits — controller-manager is lightweight unless many
+    # experiments run concurrently (Phase 5 runs 9 sequential, not parallel).
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+    # PSA restricted compliance.
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      readOnlyRootFilesystem: true
+
+  # Daemon (chaos-daemon) runs as DaemonSet on every node; needs more permissions
+  # to perform process-level injection (PID namespace, network namespace).
+  # These are LOCKED to the daemon-only ServiceAccount, not granted broadly.
+  chaosDaemon:
+    runtime: containerd
+    socketPath: /run/containerd/containerd.sock
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+    # Chaos daemon DOES require privileged context to perform syscall-level
+    # chaos (kill, stress, network delay). This is intentional and scoped to
+    # this DaemonSet only. Sprint 6 policy-controller includes chaos-mesh
+    # namespace in its Audit→Deny dry-run window so privileged daemon won't
+    # be blocked, but is observable.
+    privileged: true
+    podSecurityPolicy: false
+
+  # Dashboard UI — DISABLED by default. Operator port-forwards or uses kubectl
+  # to manage experiments. UI is an attack surface (privileged ops over HTTP).
+  dashboard:
+    create: false
+
+  # DNS chaos webhook — disabled, not used by current 9 scenarios.
+  dnsServer:
+    create: false
+
+  webhook:
+    # PSA compliance for the validating webhook pod.
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      readOnlyRootFilesystem: true
+
+  # Prometheus integration — runs on mgmt cluster, but this chart deploys to
+  # all 4 clusters. Disable ServiceMonitor here (same reason as runtime-keda
+  # in CHG-001 — Prometheus Operator only on mgmt). Cross-cluster scrape
+  # works via Service endpoint discovery + remote-write.
+  prometheus:
+    create: false
+    serviceMonitor: false

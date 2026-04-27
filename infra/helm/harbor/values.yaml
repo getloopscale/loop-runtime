@@ -40,11 +40,11 @@ harbor:
     replicas: 0
 
   # ---------------------------------------------------------------------------
-  # Core — dev: 1 replica (matches Pulumi harbor-bootstrap.ts).
-  # Prod override: set replicas: 2 via Pulumi stack config (Pulumi.prod.yaml).
+  # Core — Sprint 8 v3.2 / CHG-002a / T2.2: HA 2 replicas per ADR-0010 #4.
+  # Anti-affinity below distributes pods across mgmt nodes.
   # ---------------------------------------------------------------------------
   core:
-    replicas: 1
+    replicas: 2
     resources:
       requests:
         cpu: 100m
@@ -70,11 +70,10 @@ harbor:
     robotTokenDuration: 1440
 
   # ---------------------------------------------------------------------------
-  # Registry — dev: 1 replica (matches Pulumi harbor-bootstrap.ts).
-  # Prod override: set replicas: 2 via Pulumi stack config (Pulumi.prod.yaml).
+  # Registry — Sprint 8 v3.2 / CHG-002a / T2.2: HA 2 replicas per ADR-0010 #4.
   # ---------------------------------------------------------------------------
   registry:
-    replicas: 1
+    replicas: 2
     resources:
       requests:
         cpu: 100m
@@ -141,8 +140,16 @@ harbor:
       maxIdleConns: 5
 
   # ---------------------------------------------------------------------------
-  # Redis — Internal (single replica, job queue only)
-  # ---------------------------------------------------------------------------
+  # Redis — Sprint 8 v3.2 / CHG-002a / T2.2 transition note:
+  # Per ADR-0016 D-6 the target is external Redis with password via
+  # ExternalSecret (NEVER literal in Helm values — Security veto). However,
+  # provisioning DO managed Redis is a Pulumi work item that depends on
+  # mgmt-redis-ha component which doesn't exist yet. To unblock T2.2 HA core
+  # /registry replicas (the deliverable of ADR-0010 #4), Redis stays internal
+  # for now with a single instance shared between the 2 core + 2 registry
+  # replicas. Internal Redis is NOT a SPOF for Harbor's primary contract
+  # (image push/pull) — only sessions + job queue cache cold-restart. ESO+
+  # external Redis migration deferred to CHG-002b post-L3-stable.
   redis:
     type: internal
     internal:

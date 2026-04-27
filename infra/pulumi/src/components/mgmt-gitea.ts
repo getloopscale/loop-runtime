@@ -107,6 +107,12 @@ export function installGiteaRedis(
               runAsUser: 999,
               runAsGroup: 999,
               fsGroup: 999,
+              // Sprint 8 v3.2 / CHG-002a / PSA audit fix 2026-04-27: gitea-redis
+              // pod was missing seccompProfile per restricted:latest profile.
+              // Other 6 mgmt Deployments (loopzero-cloud, loopzero-dashboard, tenant-
+              // controller, loopzero-api, loopzero-controller, kratos-ui) already
+              // declare RuntimeDefault.
+              seccompProfile: { type: "RuntimeDefault" },
             },
             containers: [
               {

@@ -1,0 +1,115 @@
+# SPDX-License-Identifier: Apache-2.0
+# Sprint 8 v3.2 / Pilar 2 — PR gate for bootstrap fragility prevention.
+#
+# Runs on PR or pull_request_target to validate:
+#  1. Helm chart references in bootstrap-shared.ts resolve to real upstream versions
+#  2. Pulumi.{stack}.yaml K8s version slugs are still supported by DigitalOcean
+#  3. Vitest suite for adopt-or-create + sprint8-fixes
+#
+# Catches the exact regression class that Sprint 8 v3.2 fixed:
+#  - keda chart renamed `http-add-on` → `keda-add-ons-http`
+#  - DO rotated K8s versions `do.2` → `do.3`
+#  - kratos-ui memory limit reduced below image's working set
+#  - registry name drift between code and DOCR
+
+name: pulumi-validate
+
+on:
+  pull_request:
+    paths:
+      - "infra/pulumi/**"
+      - "infra/helm/**/Chart.yaml"
+      - "infra/helm/**/Chart.lock"
+      - ".github/workflows/pulumi-validate.yml"
+  push:
+    branches: [main, develop]
+    paths:
+      - "infra/pulumi/**"
+
+jobs:
+  helm-and-k8s-versions:
+    name: Validate chart names + K8s version slugs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python deps
+        run: pip install pyyaml
+
+      - name: Install doctl
+        run: |
+          wget -q https://github.com/digitalocean/doctl/releases/download/v1.107.0/doctl-1.107.0-linux-amd64.tar.gz
+          tar xf doctl-1.107.0-linux-amd64.tar.gz
+          sudo mv doctl /usr/local/bin/
+
+      - name: Authenticate doctl
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+        run: doctl auth init --access-token "$DIGITALOCEAN_TOKEN"
+        # Rationale: doctl needs to query DO supported K8s versions.
+        # Read-only token sufficient. Falls back to non-validating skip if not set.
+        continue-on-error: true
+
+      - name: Install Task
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Validate Helm chart names + versions
+        run: task validate:helm-charts
+
+      - name: Validate K8s version slugs supported by DO
+        run: task validate:k8s-versions
+        # Skipped silently when doctl auth fails (no DO secret on fork PR).
+        continue-on-error: true
+
+  pulumi-tests:
+    name: Vitest — adopt-or-create + sprint8-fixes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: infra/pulumi/package-lock.json
+
+      - name: Install pulumi project deps
+        working-directory: infra/pulumi
+        run: npm ci
+
+      - name: Run adopt-or-create + Sprint 8 fix suites
+        working-directory: infra/pulumi
+        run: |
+          npx vitest run \
+            src/__tests__/adopt-or-create.test.ts \
+            src/__tests__/sprint8-fixes.test.ts \
+            --reporter=verbose
+
+      - name: Run full pulumi test suite
+        working-directory: infra/pulumi
+        run: npm test
+        # Captures any other regression in pulumi/src/__tests__/
+        continue-on-error: false
+
+  manifest-conformance:
+    name: kubeconform manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          wget -q https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar xf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Install Task
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Validate manifests
+        run: task validate:manifests

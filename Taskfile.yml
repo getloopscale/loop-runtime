@@ -1495,6 +1495,220 @@ tasks:
       # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate
 
   # ---------------------------------------------------------------------------
+  # Sprint 8 v3.2 — bootstrap regression prevention
+  # ---------------------------------------------------------------------------
+
+  validate:helm-charts:
+    desc: |
+      Validates every Pulumi-referenced Helm chart resolves to its declared version
+      in the upstream repo index. Catches deprecated chart names and renames before
+      bootstrap. Sprint 8 v3.2 / Pilar 2 / Mandatory CI gate.
+    cmds:
+      - |
+        python3 << 'PYEOF'
+        import re
+        import sys
+        import urllib.request
+        import yaml as _y
+        try:
+            import yaml
+        except ImportError:
+            print("Install pyyaml: pip install --user pyyaml", file=sys.stderr)
+            sys.exit(1)
+
+        # Parse HELM_VERSIONS from bootstrap-shared.ts
+        ts = open("infra/pulumi/src/components/bootstrap-shared.ts").read()
+        versions = {}
+        in_block = False
+        for line in ts.split("\n"):
+            if "HELM_VERSIONS" in line and "=" in line:
+                in_block = True
+            elif in_block:
+                m = re.match(r'^\s*(\w+):\s*"([^"]+)"', line)
+                if m:
+                    versions[m.group(1)] = m.group(2)
+                if line.strip().startswith("}"):
+                    break
+
+        # Map TS key → (helm-repo, chart-name)
+        # When upstream renames a chart, this is the SINGLE PLACE to update.
+        chart_repos = {
+            "keda": ("https://kedacore.github.io/charts", "keda"),
+            "kedaHttpAddon": ("https://kedacore.github.io/charts", "keda-add-ons-http"),
+            "promtail": ("https://grafana.github.io/helm-charts", "promtail"),
+            "loki": ("https://grafana.github.io/helm-charts", "loki"),
+            "grafana": ("https://grafana.github.io/helm-charts", "grafana"),
+            "tempo": ("https://grafana.github.io/helm-charts", "tempo"),
+            "kratos": ("https://k8s.ory.sh/helm/charts", "kratos"),
+            "hydra": ("https://k8s.ory.sh/helm/charts", "hydra"),
+            "kratosSelfserviceUiNode": ("https://k8s.ory.sh/helm/charts", "kratos-selfservice-ui-node"),
+            "argoCd": ("https://argoproj.github.io/argo-helm", "argo-cd"),
+            "argoWorkflows": ("https://argoproj.github.io/argo-helm", "argo-workflows"),
+            "certManager": ("https://charts.jetstack.io", "cert-manager"),
+            "traefik": ("https://traefik.github.io/charts", "traefik"),
+            "prometheus": ("https://prometheus-community.github.io/helm-charts", "prometheus"),
+            "blackboxExporter": ("https://prometheus-community.github.io/helm-charts", "prometheus-blackbox-exporter"),
+            "kubeStateMetrics": ("https://prometheus-community.github.io/helm-charts", "kube-state-metrics"),
+            "openTelemetryCollector": ("https://open-telemetry.github.io/opentelemetry-helm-charts", "opentelemetry-collector"),
+            "redis": ("https://charts.bitnami.com/bitnami", "redis"),
+            "postgresql": ("https://charts.bitnami.com/bitnami", "postgresql"),
+            "minio": ("https://charts.min.io", "minio"),
+            "gitea": ("https://dl.gitea.com/charts", "gitea"),
+            "harbor": ("https://helm.goharbor.io", "harbor"),
+            "externalSecrets": ("https://charts.external-secrets.io", "external-secrets"),
+            "policyController": ("https://sigstore.github.io/helm-charts", "policy-controller"),
+            "metricsServer": ("https://kubernetes-sigs.github.io/metrics-server/", "metrics-server"),
+            "nfsServer": ("https://kvaps.github.io/charts", "nfs-server-provisioner"),
+        }
+
+        cache = {}
+        def fetch_index(repo: str):
+            if repo in cache:
+                return cache[repo]
+            url = repo.rstrip("/") + "/index.yaml"
+            try:
+                with urllib.request.urlopen(url, timeout=15) as r:
+                    cache[repo] = yaml.safe_load(r.read())
+                return cache[repo]
+            except Exception as e:
+                return {"_error": str(e)}
+
+        failed = []
+        skipped = []
+        for ts_key, version in versions.items():
+            mapping = chart_repos.get(ts_key)
+            if not mapping:
+                skipped.append(f"  - {ts_key}: no upstream-repo mapping defined")
+                continue
+            repo, chart_name = mapping
+            idx = fetch_index(repo)
+            if "_error" in idx:
+                skipped.append(f"  - {ts_key}: repo {repo} unreachable ({idx['_error']})")
+                continue
+            entries = idx.get("entries", {}).get(chart_name, [])
+            avail = [e.get("version") for e in entries]
+            if version in avail:
+                print(f"OK  {ts_key:30} → {chart_name}@{version}")
+            else:
+                latest = sorted(avail, reverse=True)[:3] if avail else ["<none>"]
+                failed.append(f"  - {ts_key} ({chart_name}@{version}): not in repo {repo}. Latest 3: {latest}")
+
+        if skipped:
+            print("\nSkipped (no mapping or unreachable):")
+            print("\n".join(skipped))
+        if failed:
+            print("\nFAIL: Helm chart references stale or wrong:")
+            print("\n".join(failed))
+            sys.exit(2)
+        print(f"\n✓ {len(versions) - len(skipped)} chart references valid")
+        PYEOF
+
+  validate:k8s-versions:
+    desc: |
+      Validates that K8s versions in Pulumi.{stack}.yaml are still supported by
+      DigitalOcean. DOKS rotates patch versions ~quarterly — catches stale slugs
+      before bootstrap fails with 422 invalid version slug. Sprint 8 v3.2 / Pilar 2.
+    cmds:
+      - |
+        python3 << 'PYEOF'
+        import json
+        import subprocess
+        import sys
+        import yaml
+
+        try:
+            supported_raw = subprocess.check_output(
+                ["doctl", "kubernetes", "options", "versions", "-o", "json"],
+                stderr=subprocess.DEVNULL, timeout=30,
+            )
+            supported = {v["slug"] for v in json.loads(supported_raw)}
+        except Exception as e:
+            print(f"FAIL: doctl unavailable or unauthenticated: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"DO supports: {sorted(supported)}")
+
+        failed = []
+        for stack_yaml in ["Pulumi.dev.yaml", "Pulumi.staging.yaml", "Pulumi.homolog.yaml", "Pulumi.prod.yaml"]:
+            path = f"infra/pulumi/{stack_yaml}"
+            try:
+                cfg = yaml.safe_load(open(path)).get("config", {})
+            except FileNotFoundError:
+                print(f"  - {stack_yaml}: missing (skipped)")
+                continue
+            for key in ["mgmtK8sVersion", "runtimeK8sVersion", "buildK8sVersion"]:
+                slug = cfg.get(f"loopzero-infra:{key}")
+                if not slug:
+                    continue
+                if slug in supported:
+                    print(f"OK  {stack_yaml} {key} = {slug}")
+                else:
+                    failed.append(f"  - {stack_yaml} {key}: {slug} NOT in supported set")
+
+        if failed:
+            print("\nFAIL: Stale K8s versions detected:")
+            print("\n".join(failed))
+            sys.exit(2)
+        print("\n✓ All K8s version slugs supported by DO")
+        PYEOF
+
+  chaos:install:
+    desc: |
+      Sprint 8 v3.2 / CHG-002a / T0.3 — Install Chaos Mesh 2.7.0 in all 4 DOKS
+      clusters (mgmt + build + runtime + runtime-2). ADR-0016 D-4 hardening:
+      hardened RBAC (no cluster-admin default), Audit/Deny alignment with
+      Sprint 6 policy-controller. Idempotent — safe to re-run.
+    cmds:
+      - |
+        set -e
+        cd infra/helm/chaos-mesh
+        helm dependency update
+        cd /home/paulo/loopzero
+        for KCFG in ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-mgmt.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-build.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime-2.yaml; do
+          [ -f "$KCFG" ] || { echo "skip: $KCFG not found"; continue; }
+          NAME=$(basename "$KCFG" .yaml | sed 's/loopzero-//')
+          echo "=== Installing Chaos Mesh in $NAME ==="
+          KUBECONFIG=$KCFG helm upgrade --install loopzero-chaos-mesh infra/helm/chaos-mesh \
+            -n chaos-mesh --create-namespace \
+            -f infra/helm/chaos-mesh/values.yaml \
+            --wait --timeout 5m
+          echo ""
+          echo "verify CRDs:"
+          KUBECONFIG=$KCFG kubectl get crd podchaos.chaos-mesh.org stresschaos.chaos-mesh.org networkchaos.chaos-mesh.org 2>&1 | head -5
+        done
+
+  chaos:uninstall:
+    desc: |
+      Uninstall Chaos Mesh from all 4 clusters. Use only after CHG-002c chaos
+      validation completes. CRDs are NOT deleted by uninstall — must `kubectl
+      delete crd` separately if full removal is desired.
+    cmds:
+      - |
+        for KCFG in ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-mgmt.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-build.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime-2.yaml; do
+          [ -f "$KCFG" ] || continue
+          NAME=$(basename "$KCFG" .yaml)
+          echo "=== Uninstalling Chaos Mesh from $NAME ==="
+          KUBECONFIG=$KCFG helm uninstall loopzero-chaos-mesh -n chaos-mesh 2>&1 | head -3
+        done
+
+  validate:bootstrap:
+    desc: |
+      Composite Sprint 8 validation — runs all three Sprint 8 v3.2 checks
+      (helm-charts, k8s-versions, manifests) plus pulumi vitest suite.
+      Use as PR gate. Sprint 8 v3.2 / Pilar 2.
+    cmds:
+      - task: validate:helm-charts
+      - task: validate:k8s-versions
+      - task: validate:manifests
+      - cd infra/pulumi && npx vitest run src/__tests__/adopt-or-create.test.ts src/__tests__/sprint8-fixes.test.ts
+
+  # ---------------------------------------------------------------------------
   # Monitoring
   # ---------------------------------------------------------------------------
   monitoring:install:

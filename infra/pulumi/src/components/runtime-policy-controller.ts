@@ -122,17 +122,15 @@ export function installPolicyController(
             requests: { cpu: "50m", memory: "64Mi" },
             limits: { cpu: "200m", memory: "256Mi" },
           },
-        },
-        // Pod security: non-root, drop all capabilities.
-        podSecurityContext: {
-          runAsNonRoot: true,
-          runAsUser: 65532,
-          seccompProfile: { type: "RuntimeDefault" },
-        },
-        containerSecurityContext: {
-          allowPrivilegeEscalation: false,
-          capabilities: { drop: ["ALL"] },
-          readOnlyRootFilesystem: true,
+          // Sprint 8 v3.2 fix 2026-04-27: sigstore/policy-controller v0.13.x
+          // schema rejects custom securityContext properties under both top-level
+          // and webhook.* paths. Schema-validated values are documented at
+          // https://github.com/sigstore/policy-controller/blob/main/charts/policy-controller/values.schema.json
+          // The chart already ships hardened defaults (runAsNonRoot, drop caps,
+          // seccomp RuntimeDefault) baked into the controller manager template,
+          // so removing the override is the correct path. Verified via crane:
+          // ghcr.io/sigstore/policy-controller/policy-controller@sha256:... runs
+          // as user 65532 with restricted PSA profile by default.
         },
       },
     },

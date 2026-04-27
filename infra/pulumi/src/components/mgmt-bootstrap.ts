@@ -40,6 +40,7 @@ import { createPlatformIngressRoutes, createAPIGatewayRoute, createCloudGatewayR
 import { createPlatformNetworkPolicies, registerRuntimeCluster } from "./mgmt-network";
 import { installPrometheus, installGrafana, installTempo, installOtelCollector, provisionGrafanaDashboards, installBlackboxExporter } from "./mgmt-observability";
 import { installHarbor } from "./harbor-bootstrap";
+import { installMgmtRedisHa } from "./mgmt-redis-ha";
 
 // ---------------------------------------------------------------------------
 // Management cluster bootstrap
@@ -188,8 +189,12 @@ export function bootstrapMgmtCluster(
   createAPIGatewayRoute(provider, config, traefik, clusterIssuer);
   createCloudGatewayRoute(provider, config, traefik, clusterIssuer);
 
-  // Network + Harbor
+  // Network + Harbor + Managed Valkey for Harbor HA (Sprint 8 v3.2 / CHG-002a / T2.2 / D-6)
   createPlatformNetworkPolicies(provider, ns);
+  // Provision Valkey BEFORE Harbor so harbor-redis-credentials Secret exists
+  // when Helm renders the Harbor release values (envFrom secretRef on core +
+  // registry + jobservice). Harbor depends on this Secret being present.
+  installMgmtRedisHa(provider, ns, infra, config);
   installHarbor(provider, ns, infra, config, certManager, traefik);
 
   return {
