@@ -13,16 +13,6 @@ import (
 	"testing"
 )
 
-// testCFKVClient creates a Client that uses the test server URL.
-func testCFKVClient(serverURL string) *Client {
-	return &Client{
-		accountID:   "test-account",
-		namespaceID: "test-namespace",
-		apiToken:    "test-token",
-		httpClient:  &http.Client{},
-	}
-}
-
 func TestClient_Put_Integration_HTTPTest(t *testing.T) {
 	// Arrange
 	var capturedMethod string

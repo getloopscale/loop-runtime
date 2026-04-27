@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+import { ApiError } from '../api/client';
+
 export interface AuditEntry {
   action: string;
   resource_type: string;
@@ -40,18 +42,57 @@ export class AuditCommand {
   async run(opts: AuditOptions): Promise<number> {
     // Auth guard
     if (!this.deps.getToken()) {
-      if (opts.json) {
-        this.deps.writeTo(JSON.stringify({ error: 'Not authenticated. Run: loopzero login', exit_code: 4, code: 'AUTH_REQUIRED' }));
-      } else {
-        this.deps.writeError('Not authenticated. Run: loopzero login');
-      }
-      return 4;
+      return this.writeFailure(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
 
-    const data = await this.deps.getAudit(opts.action, opts.since);
+    // CHG-2026-04-23-AUDIT-14: catch ApiError explicitly so auth failures
+    // from the API (expired token) map to exit 4 per Rule 4. Previously the
+    // error escaped and the register's withTimeout .catch returned 3.
+    // CHG-2026-04-23-AUDIT-23: every error branch now routes through
+    // writeFailure so --json always emits machine-parseable JSON
+    // (previously 403/network/null-data used writeError text, breaking
+    // `loopzero audit --json 2>&1 | jq`). Network errors also get
+    // API_UNREACHABLE code aligned with AUDIT-22 whoami.
+    let data: AuditResponse | null;
+    try {
+      data = await this.deps.getAudit(opts.action, opts.since);
+    } catch (err) {
+      if (err instanceof ApiError && (err.exitCode === 4 || err.statusCode === 401)) {
+        return this.writeFailure(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
+      }
+      if (err instanceof ApiError && err.statusCode === 403) {
+        return this.writeFailure(
+          opts,
+          'Failed to fetch audit log. You may not have permission (requires admin or owner role).',
+          4,
+          'FORBIDDEN',
+        );
+      }
+      if (err instanceof Error) {
+        // Distinguish API-unreachable (network / DNS / timeout) from other
+        // errors. ApiError means the server responded with a non-OK status;
+        // a plain Error with "fetch failed" / ECONNREFUSED means the server
+        // did not respond at all. Same classification as AUDIT-22.
+        if (!(err instanceof ApiError)) {
+          return this.writeFailure(
+            opts,
+            `Cannot reach API: ${err.message}. Check LOOPZERO_URL.`,
+            1,
+            'API_UNREACHABLE',
+          );
+        }
+        return this.writeFailure(opts, `Failed to fetch audit log: ${err.message}`, 1, 'UNEXPECTED_ERROR');
+      }
+      return this.writeFailure(opts, 'Failed to fetch audit log. Try again later.', 1, 'UNEXPECTED_ERROR');
+    }
+
     if (!data) {
-      this.deps.writeError('Failed to fetch audit log. You may not have permission (requires admin or owner role).');
-      return 1;
+      return this.writeFailure(
+        opts,
+        'Failed to fetch audit log. You may not have permission (requires admin or owner role).',
+        1,
+        'FORBIDDEN',
+      );
     }
 
     if (opts.json) {
@@ -72,6 +113,18 @@ export class AuditCommand {
     }
 
     return 0;
+  }
+
+  // CHG-2026-04-23-AUDIT-23: centralizes error formatting so every branch
+  // honors opts.json (Rule 5 / J5.1). Shape mirrors other commands (secret,
+  // project, whoami) so scripts parse uniformly.
+  private writeFailure(opts: AuditOptions, message: string, exitCode: number, code: string): number {
+    if (opts.json) {
+      this.deps.writeTo(JSON.stringify({ error: message, exit_code: exitCode, code }));
+    } else {
+      this.deps.writeError(message);
+    }
+    return exitCode;
   }
 }
 

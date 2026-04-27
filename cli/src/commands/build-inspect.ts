@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client';
+import { classifyNetworkError } from '../output/error-message';
 
 import { formatErrorMessage } from '../output/error-message';
 interface BuildDetailApp {
@@ -7,15 +8,22 @@ interface BuildDetailApp {
   type?: string;
 }
 
+// CHG-2026-04-23-AUDIT-34: API returns project_id, not project
+// (see api/internal/routes/builds.go buildInspectResponse). Previous
+// `project: string` resolved to undefined at runtime, producing
+// "Project: undefined" in the human output. Same class as AUDIT-2
+// (last_build) and AUDIT-33 (active_release).
 interface BuildDetail {
   build_id: string;
-  project: string;
+  project_id: string;
   environment: string;
   status: string;
   commit_sha: string;
   created_at: string;
+  started_at?: string;
   finished_at?: string;
   duration_seconds?: number;
+  created_by?: string;
   apps?: BuildDetailApp[];
   error?: string;
 }
@@ -75,7 +83,7 @@ export class BuildInspectCommand {
 
     this.deps.writeTo(`Build ${build.build_id}`);
     this.deps.writeTo('');
-    this.deps.writeTo(`  Project:      ${build.project}`);
+    this.deps.writeTo(`  Project:      ${build.project_id}`);
     this.deps.writeTo(`  Environment:  ${build.environment}`);
     this.deps.writeTo(`  Status:       ${build.status}`);
     this.deps.writeTo(`  Version:      ${build.commit_sha.substring(0, 15)}`);
@@ -131,6 +139,11 @@ export class BuildInspectCommand {
         return this.exitWithError(opts, `Build ${buildId} not found.`, 1, 'BUILD_NOT_FOUND');
       }
       return this.exitWithError(opts, formatErrorMessage('Failed to get build', err.message, 'Try again'), 1, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 1, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, formatErrorMessage('Failed to get build', err.message, 'Try again'), 1, 'UNEXPECTED_ERROR');

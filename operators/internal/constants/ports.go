@@ -26,7 +26,7 @@ const (
 	NamespaceDefault = "default"
 
 	// NamespacePlatformSystem is the LoopZero platform system namespace.
-	NamespacePlatformSystem = "platform-system"
+	NamespacePlatformSystem = "loopzero-system"
 )
 
 // --- Build Resource Defaults ---

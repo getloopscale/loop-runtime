@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -204,6 +205,13 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.envMgr.RemoveEnvironment(ctx, uc.TenantID, name); err != nil {
+		// AUDIT-12: map "not found" to 404 instead of silent success.
+		// EnvironmentManager returns a sentinel that we match by message suffix
+		// — keeping routes package free of direct k8s import dependencies.
+		if strings.Contains(err.Error(), "environment not found in tenant CR") {
+			writeLoopZeroError(w, loopzeroerrors.NewEnvironmentNotFound(name))
+			return
+		}
 		slog.Error("failed to delete environment",
 			"tenant_id", uc.TenantID,
 			"environment", name,

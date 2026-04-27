@@ -14,6 +14,7 @@ package adapters
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -307,9 +308,32 @@ func (a *StatusBuildStoreAdapter) ListByProject(ctx context.Context, tenantID, p
 			FinishedAt:      b.FinishedAt,
 			DurationSeconds: b.DurationSeconds,
 			ErrorMessage:    b.ErrorMessage,
+			Scaling:         extractScalingFromAppsSpec(b.AppsSpec),
 		}
 	}
 	return result, nil
+}
+
+// extractScalingFromAppsSpec parses the first app's autoscaling config from the
+// build's apps_spec JSON. Returns nil if no autoscaling is configured.
+func extractScalingFromAppsSpec(appsSpec json.RawMessage) *routes.StatusBuildScaling {
+	if len(appsSpec) == 0 {
+		return nil
+	}
+	var apps []db.BuildAppSpec
+	if err := json.Unmarshal(appsSpec, &apps); err != nil {
+		return nil
+	}
+	// Use the first app with autoscaling configured (matches Apps[0] pattern).
+	for _, app := range apps {
+		if app.Autoscaling != nil && app.Autoscaling.MaxReplicas > 0 {
+			return &routes.StatusBuildScaling{
+				MinReplicas: app.Autoscaling.MinReplicas,
+				MaxReplicas: app.Autoscaling.MaxReplicas,
+			}
+		}
+	}
+	return nil
 }
 
 // --- BuildListStoreAdapter: bridges db.BuildStore to routes.BuildListStore ---

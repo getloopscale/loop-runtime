@@ -18,10 +18,14 @@ function createMockDeps(overrides: Partial<StatusDeps> = {}): StatusDeps {
         status: 'SUCCEEDED',
         finished_at: '2026-03-25T12:30:00Z',
       },
+      // CHG-2026-04-23-AUDIT-33: shape matches API
+      // (api/internal/routes/status.go activeReleaseResponse):
+      // id, status, git_commit, created_at.
       active_release: {
-        release_id: 'rel-e5f6g7h8',
-        state: 'ACTIVE',
-        activated_at: '2026-03-25T12:30:00Z',
+        id: 'rel-e5f6g7h8',
+        status: 'ACTIVE',
+        git_commit: 'deadbeef',
+        created_at: '2026-03-25T12:30:00Z',
       },
       sync_status: 'Synced',
       url: 'https://my-app.dev.loopzero.example',
@@ -139,9 +143,10 @@ describe('StatusCommand', () => {
           finished_at: '2026-03-25T12:30:00Z',
         },
         active_release: {
-          release_id: 'rel-e5f6g7h8',
-          state: 'ACTIVE',
-          activated_at: '2026-03-25T12:30:00Z',
+          id: 'rel-e5f6g7h8',
+          status: 'ACTIVE',
+          git_commit: 'deadbeef',
+          created_at: '2026-03-25T12:30:00Z',
         },
         sync_status: 'Synced',
         url: 'https://my-app.dev.loopzero.example',
@@ -158,7 +163,8 @@ describe('StatusCommand', () => {
       const parsed = JSON.parse(output);
       expect(parsed.environment).toBe('production');
       expect(parsed.last_build.id).toBe('build-a1b2c3d4');
-      expect(parsed.active_release.release_id).toBe('rel-e5f6g7h8');
+      expect(parsed.active_release.id).toBe('rel-e5f6g7h8');
+      expect(parsed.active_release.status).toBe('ACTIVE');
       expect(parsed.url).toBe('https://my-app.dev.loopzero.example');
     });
 
@@ -309,6 +315,35 @@ describe('StatusCommand', () => {
     });
   });
 
+  // CHG-2026-04-23-AUDIT-24: network errors now carry code=API_UNREACHABLE
+  // with "Cannot reach API: ... Check LOOPZERO_URL." so operators spot config
+  // errors instead of retrying blindly. Exit code stays 3 (contract).
+  describe('API unreachable (AUDIT-24)', () => {
+    it('network error produces API_UNREACHABLE code + Check LOOPZERO_URL hint', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockRejectedValue(new Error('fetch failed')),
+      });
+      const cmd = new StatusCommand(deps);
+      const exitCode = await cmd.execute({ json: true });
+      expect(exitCode).toBe(3);
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.code).toBe('API_UNREACHABLE');
+      expect(parsed.error).toContain('Cannot reach API');
+      expect(parsed.error).toContain('Check LOOPZERO_URL');
+    });
+
+    it('non-network Error keeps UNEXPECTED_ERROR code', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockRejectedValue(new Error('arbitrary failure')),
+      });
+      const cmd = new StatusCommand(deps);
+      const exitCode = await cmd.execute({ json: true });
+      expect(exitCode).toBe(3);
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.code).toBe('UNEXPECTED_ERROR');
+    });
+  });
+
   describe('no internal terms', () => {
     it('should not contain forbidden terms in any output', async () => {
       const forbidden = [
@@ -402,9 +437,10 @@ describe('StatusCommand', () => {
           environment: 'production',
           last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-04-23T14:30:31Z' },
           active_release: {
-            release_id: 'rel-deadbeef',
-            state: 'ACTIVE',
-            activated_at: '2026-04-23T14:30:31Z',
+            id: 'rel-deadbeef',
+            status: 'ACTIVE',
+            git_commit: 'beefcafe',
+            created_at: '2026-04-23T14:30:31Z',
           },
           sync_status: 'Synced',
           url: 'https://app.loopzero.local',
@@ -414,6 +450,116 @@ describe('StatusCommand', () => {
       await cmd.execute({ env: 'production' });
       const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
       expect(output).toContain('rel-deadbeef');
+    });
+
+    // CHG-2026-04-23-AUDIT-33: active_release uses API field names
+    // (id, status) — previous interface declared release_id + state,
+    // causing `state.toLowerCase()` to crash at runtime against the
+    // real API response. Regression guard.
+    it('does NOT crash on toLowerCase when reading active_release.status', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { id: 'b-2', status: 'SUCCEEDED', finished_at: '2026-04-23T21:00:00Z' },
+          active_release: {
+            id: 'rel-abc',
+            status: 'ACTIVE',
+            git_commit: 'deadbeef',
+            created_at: '2026-04-23T21:00:00Z',
+          },
+          sync_status: 'Synced',
+          url: 'https://x.loopzero.local',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await expect(cmd.execute({ env: 'production' })).resolves.toBe(0);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('rel-abc');
+      expect(output).toContain('active');  // lowercase rendering
+      const errs = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(errs).not.toContain('Cannot read properties');
+    });
+  });
+
+  // KEDA scale-to-zero: scaling field in status response
+  describe('scaling display (KEDA scale-to-zero)', () => {
+    it('shows "sleeping" when scaled_to_zero is true', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-04-25T10:00:00Z' },
+          active_release: { id: 'rel-1', status: 'ACTIVE', git_commit: 'abc', created_at: '2026-04-25T10:00:00Z' },
+          scaling: { replicas: 0, min: 0, max: 5, scaled_to_zero: true },
+          url: 'https://my-app-production.dev.loopzero.example',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      const exitCode = await cmd.execute({});
+      expect(exitCode).toBe(0);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('sleeping');
+      expect(output).toContain('0/5 replicas');
+      expect(output).toContain('wakes up in ~5-10s');
+    });
+
+    it('shows normal replica count when not scaled to zero', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-04-25T10:00:00Z' },
+          active_release: { id: 'rel-1', status: 'ACTIVE', git_commit: 'abc', created_at: '2026-04-25T10:00:00Z' },
+          scaling: { replicas: 3, min: 1, max: 10, scaled_to_zero: false },
+          url: 'https://my-app-production.dev.loopzero.example',
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      const exitCode = await cmd.execute({});
+      expect(exitCode).toBe(0);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('3/10 replicas');
+      expect(output).not.toContain('sleeping');
+      expect(output).not.toContain('wakes up');
+    });
+
+    it('does not show scaling section when scaling is absent', async () => {
+      const deps = createMockDeps();
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({});
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).not.toContain('sleeping');
+      expect(output).not.toContain('replicas');
+    });
+
+    it('includes scaling in --json output', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          scaling: { replicas: 0, min: 0, max: 5, scaled_to_zero: true },
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({ json: true });
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.scaling).toBeDefined();
+      expect(parsed.scaling.scaled_to_zero).toBe(true);
+      expect(parsed.scaling.replicas).toBe(0);
+      expect(parsed.scaling.max).toBe(5);
+    });
+
+    it('does not contain internal terms (KEDA, ScaledObject, HTTPScaledObject)', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-04-25T10:00:00Z' },
+          scaling: { replicas: 0, min: 0, max: 5, scaled_to_zero: true },
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({});
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).not.toContain('KEDA');
+      expect(output).not.toContain('ScaledObject');
+      expect(output).not.toContain('HTTPScaledObject');
     });
   });
 });

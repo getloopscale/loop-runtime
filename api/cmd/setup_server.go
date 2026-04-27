@@ -14,6 +14,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/server"
+	"github.com/loopzero/loopzero/api/internal/services"
 )
 
 // setupHealthServices creates deep health checkers for critical dependencies.
@@ -60,6 +61,23 @@ func buildServerConfig(
 		SecretK8sSync:                k8sDeps.SecretK8sSync,
 		DomainHandler:                domainHandler,
 		BuildHandler:                 buildHandler,
+		// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: wire concrete
+		// PostgresAttestationStore so /api/v1/builds/{id}/attestation
+		// returns real data (was always 404 because the store was nil).
+		BuildAttestationHandler: routes.NewBuildAttestationHandler(
+			db.NewPostgresAttestationStore(dbAdapter), logger,
+		),
+		// Sprint 6 / T1.2: per-app SBOM endpoint. The store is the
+		// release_app_attestations sidecar (T0.1). The presigner is
+		// the existing S3 uploader (loopzero-static-assets bucket / sbom/
+		// prefix). When stores.ObjUploader is nil (no S3 in dev), the
+		// handler still serves metadata but omits download_url.
+		BuildSBOMHandler: routes.NewBuildSBOMHandler(
+			newAppSBOMStoreAdapter(dbAdapter),
+			toSBOMURLGenerator(stores),
+			cfg.SourceBucket,
+			logger,
+		),
 		EnvironmentHandler:           routes.NewEnvironmentHandler(k8sDeps.TenantCRMgr),
 		ShutdownCtx:                  shutdownCtx,
 		ShutdownCancel:               shutdownCancel,
@@ -103,6 +121,7 @@ func buildServerConfig(
 		sc.RollbackHandler = orchDeps.RollbackHandler
 		sc.PromoteHandler = orchDeps.PromoteHandler
 		sc.StatusHandler = orchDeps.StatusHandler
+		sc.ScaleHandler = orchDeps.ScaleHandler
 		sc.BuildListHandler = orchDeps.BuildListHandler
 		sc.ProjectDeleter = orchDeps.ProjectDeleter
 	}
@@ -114,7 +133,11 @@ func buildServerConfig(
 
 	if dbAdapter != nil {
 		sc.IdempotencyStore = &db.PostgresIdempotencyStore{DB: dbAdapter}
-		sc.TeamHandler = routes.NewTeamHandler(&db.PostgresTeamStore{DB: dbAdapter})
+		// AUDIT-10: single PostgresTeamStore instance serves both team admin
+		// endpoints and /whoami username lookup.
+		teamStore := &db.PostgresTeamStore{DB: dbAdapter}
+		sc.TeamHandler = routes.NewTeamHandler(teamStore)
+		sc.AuthUserLookup = teamStore
 		sc.AuditHandler = routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter})
 		sc.AdminEvictor = buildAdminEvictor(cfg, dbAdapter)
 		sc.AuditWriter = func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {
@@ -131,6 +154,27 @@ func buildServerConfig(
 			stat := dbAdapter.Pool.Stat()
 			return stat.AcquiredConns(), stat.MaxConns()
 		}
+		// Sprint 5 / T2.3 + T1.1 — Preview environments handler + service.
+		// The handler exposes /api/v1/projects/{project}/previews; the
+		// service drives the dual-write (CR + DB) per ADR D7. When the
+		// BuildOrchestrator is available (always, post-Sprint-2), the
+		// service can submit builds for previews (best-effort).
+		previewStore := db.NewPostgresPreviewStore(dbAdapter, dbAdapter)
+		var previewService *services.PreviewService
+		if orchDeps != nil && orchDeps.Orchestrator != nil {
+			ps, perr := services.NewPreviewService(services.PreviewServiceDeps{
+				Store:      previewStore,
+				Builds:     orchDeps.Orchestrator,
+				BaseDomain: cfg.BaseDomain,
+				Logger:     logger,
+			})
+			if perr != nil {
+				logger.Error("preview service init failed (read-only mode)", "error", perr)
+			} else {
+				previewService = ps
+			}
+		}
+		sc.PreviewHandler = routes.NewPreviewHandler(previewStore, previewService, logger)
 		sc.CellPlacement = func() routes.CellPlacementEngine {
 			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
 			return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))
@@ -141,4 +185,52 @@ func buildServerConfig(
 	}
 
 	return sc
+}
+
+// appSBOMStoreAdapter bridges the per-app attestation store
+// (db.PostgresAppAttestationStore) into routes.AppSBOMStore by projecting
+// AppAttestationInfo onto the routes-shape AppSBOMInfo. The adapter
+// keeps the routes layer decoupled from db types.
+//
+// Sprint 6 / T1.2.
+type appSBOMStoreAdapter struct {
+	inner *db.PostgresAppAttestationStore
+}
+
+func newAppSBOMStoreAdapter(d *db.PgxAdapter) *appSBOMStoreAdapter {
+	return &appSBOMStoreAdapter{inner: db.NewPostgresAppAttestationStore(d)}
+}
+
+func (a *appSBOMStoreAdapter) GetBuildAppSBOMs(
+	ctx context.Context, tenantID, buildID string,
+) ([]routes.AppSBOMInfo, error) {
+	infos, err := a.inner.GetBuildAppAttestations(ctx, tenantID, buildID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]routes.AppSBOMInfo, 0, len(infos))
+	for _, in := range infos {
+		out = append(out, routes.AppSBOMInfo{
+			AppName:            in.AppName,
+			SBOMS3Key:          in.SBOMS3Key,
+			SBOMFormat:         in.SBOMFormat,
+			SBOMComponentCount: in.SBOMComponentCount,
+			SBOMGeneratedAt:    in.SBOMGeneratedAt,
+			Signed:             in.Signed,
+		})
+	}
+	return out, nil
+}
+
+// toSBOMURLGenerator returns a SBOMURLGenerator if the configured
+// uploader supports presigning, else nil. When nil, the SBOM endpoint
+// returns metadata-only (no download_url).
+func toSBOMURLGenerator(stores *StoreDeps) routes.SBOMURLGenerator {
+	if stores == nil {
+		return nil
+	}
+	if g, ok := stores.ObjUploader.(routes.SBOMURLGenerator); ok {
+		return g
+	}
+	return nil
 }

@@ -285,12 +285,28 @@ func TestRepositoryStore_LinkRepository_Error(t *testing.T) {
 }
 
 func TestRepositoryStore_UnlinkRepository_Success(t *testing.T) {
-	fake := &fakeDBTX{}
+	// AUDIT-21: success requires RowsAffected > 0. Zero rows -> ErrRepositoryNotLinked.
+	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
 	store := &PostgresRepositoryStore{DB: fake}
 
 	err := store.UnlinkRepository(context.Background(), "tn-acme", "myapp")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// CHG-2026-04-23-AUDIT-21: previously UnlinkRepository returned nil regardless
+// of whether any row was deleted, causing DELETE /projects/{name}/connect to
+// return 200 OK even when there was nothing to disconnect. Now the store
+// returns ErrRepositoryNotLinked when RowsAffected == 0, letting the handler
+// surface 404 instead of a misleading success.
+func TestRepositoryStore_UnlinkRepository_NotLinked(t *testing.T) {
+	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
+	store := &PostgresRepositoryStore{DB: fake}
+
+	err := store.UnlinkRepository(context.Background(), "tn-acme", "myapp")
+	if !errors.Is(err, ErrRepositoryNotLinked) {
+		t.Fatalf("want ErrRepositoryNotLinked, got %v", err)
 	}
 }
 

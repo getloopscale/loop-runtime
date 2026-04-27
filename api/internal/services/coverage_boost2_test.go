@@ -289,23 +289,6 @@ func TestReleaseConvergenceLoop_CellID_Custom(t *testing.T) {
 }
 
 // =============================================================================
-// failQueuedBuild — cover error path
-// =============================================================================
-
-type fakeFailBuildStore struct {
-	db.BuildStore
-	updateErr error
-}
-
-func (f *fakeFailBuildStore) UpdateStatus(_ context.Context, _ db.DBTX, _ string, _ string) (*db.Build, error) {
-	return nil, f.updateErr
-}
-
-func (f *fakeFailBuildStore) SetErrorMessage(_ context.Context, _ db.DBTX, _, _ string) error {
-	return nil
-}
-
-// =============================================================================
 // release_activator — emitActivationFailure and releaseAppsToActivationApps
 // =============================================================================
 

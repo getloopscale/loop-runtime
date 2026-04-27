@@ -141,7 +141,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: controller
-          image: tenant-controller
+          image: loopzero-tenant-controller
           args:
             - "--leader-elect=false"
             - "--health-probe-bind-address=:8081"
@@ -174,7 +174,7 @@ spec:
             # Production MUST set OPERATOR_INSECURE_SKIP_TLS=false (SEC-001).
             - name: OPERATOR_INSECURE_SKIP_TLS
               value: "true"
-            # Local dev: Traefik is in 'traefik' namespace (production: platform-system)
+            # Local dev: Traefik is in 'traefik' namespace (production: loopzero-system)
             - name: INGRESS_NAMESPACE
               value: "traefik"
           ports:
@@ -218,6 +218,13 @@ spec:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            # T4.4 / INFRA-006: dev-prod parity — production Pulumi already
+            # drops ALL capabilities and applies RuntimeDefault seccomp.
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
       volumes:
         - name: tmp
           emptyDir: {}

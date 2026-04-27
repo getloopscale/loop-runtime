@@ -34,6 +34,28 @@ Runbooks pendentes. Prometheus rules já ativos:
 Runbooks pendentes para:
 - `LoopZeroAPIDown`, `LoopZeroDeployFailing`, `HarborCanaryFailing` (etc)
 
+### Top 10 critical alerts (T2.7 / VAL-002 — added 2026-04-26)
+
+Runbooks adicionados para fechar parte do gap de VAL-002 (33 de 47 alertas sem runbook):
+
+| Alert | Severity | File |
+|-------|:--------:|------|
+| LoopZeroDBPoolSaturation | warning | [loopzero-db-pool-saturation.md](loopzero-db-pool-saturation.md) |
+| LoopZeroReconcilerUnhealthy | warning | [loopzero-reconciler-unhealthy.md](loopzero-reconciler-unhealthy.md) |
+| LoopZeroAppCrashLoop | warning | [loopzero-app-crash-loop.md](loopzero-app-crash-loop.md) |
+| LoopZeroAppDeployStuck | warning | [loopzero-app-deploy-stuck.md](loopzero-app-deploy-stuck.md) |
+| LoopZeroBuildCircuitBreakerOpen | warning | [loopzero-build-cb-open.md](loopzero-build-cb-open.md) |
+| LoopZeroTenantDeletionStuck | warning | [loopzero-tenant-deletion-stuck.md](loopzero-tenant-deletion-stuck.md) |
+| LoopZeroPlatformBootstrapStuck | warning | [loopzero-platformbootstrap-stuck.md](loopzero-platformbootstrap-stuck.md) |
+| LoopZeroArgoCDSyncFailed | warning | [loopzero-argocd-sync-failed.md](loopzero-argocd-sync-failed.md) |
+| LoopZeroCertRenewalFailed | warning | [loopzero-cert-renewal-failed.md](loopzero-cert-renewal-failed.md) |
+| LoopZeroPulumiDrift | warning | [loopzero-pulumi-drift.md](loopzero-pulumi-drift.md) |
+
+> **Observabilidade nota (T2.6 / OBS-001):** LoopZeroReconcilerUnhealthy referenciava
+> métrica `loopzero_reconciler_errors_total` que nunca era emitida. O runbook
+> referencia o nome correto `loopzero_operator_reconcile_errors_total`. A correção
+> no `prometheusrule-warning.yaml` aguarda governance approval (T2.6 bloqueado).
+
 ## Princípios
 
 1. **Tudo o que dispara deve ter runbook.** Zero-runbook é technical debt operacional.

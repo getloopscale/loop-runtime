@@ -20,7 +20,7 @@ spec:
           annotations:
             summary: "Grafana Tempo is down"
             description: "Tempo trace backend unreachable for 2+ minutes. Traces are being lost."
-            runbook: "Check pod status: kubectl -n platform-system get pods -l app.kubernetes.io/name=tempo"
+            runbook: "Check pod status: kubectl -n loopzero-system get pods -l app.kubernetes.io/name=tempo"
 
         - alert: LoopZeroTempoStorageHigh
           expr: |
@@ -42,7 +42,7 @@ spec:
           annotations:
             summary: "OTel Collector is down"
             description: "OTel Collector unreachable for 2+ minutes. All traces and OTel metrics are being lost."
-            runbook: "Check pod: kubectl -n platform-system get pods -l app.kubernetes.io/name=opentelemetry-collector"
+            runbook: "Check pod: kubectl -n loopzero-system get pods -l app.kubernetes.io/name=opentelemetry-collector"
 
         - alert: LoopZeroCollectorExportErrors
           expr: 'increase(otelcol_exporter_send_failed_spans_total[5m]) > 0'

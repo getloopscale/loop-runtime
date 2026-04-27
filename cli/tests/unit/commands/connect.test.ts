@@ -84,6 +84,19 @@ describe('ConnectCommand', () => {
     const all = deps.writeTo.mock.calls.map((c: string[]) => c[0]).join('\n');
     expect(all).toContain('github.com/apps/loopzero-platform');
   });
+
+  // CHG-2026-04-23-AUDIT-25: network errors carry code=API_UNREACHABLE.
+  it('network error produces API_UNREACHABLE with Check LOOPZERO_URL hint', async () => {
+    const deps = createMockDeps({
+      connectRepo: jest.fn().mockRejectedValue(new Error('fetch failed')),
+    });
+    const cmd = new ConnectCommand(deps);
+    const exit = await cmd.execute({ json: true });
+    expect(exit).toBe(3);
+    const parsed = JSON.parse(deps.writeTo.mock.calls[0][0]);
+    expect(parsed.code).toBe('API_UNREACHABLE');
+    expect(parsed.error).toContain('Check LOOPZERO_URL');
+  });
 });
 
 describe('DisconnectCommand', () => {
@@ -108,5 +121,18 @@ describe('DisconnectCommand', () => {
     await cmd.execute({ json: true });
     const parsed = JSON.parse(deps.writeTo.mock.calls[0][0]);
     expect(parsed.ok).toBe(true);
+  });
+
+  // CHG-2026-04-23-AUDIT-25: network errors carry code=API_UNREACHABLE.
+  it('network error produces API_UNREACHABLE with Check LOOPZERO_URL hint', async () => {
+    const deps = createMockDeps({
+      disconnectRepo: jest.fn().mockRejectedValue(new Error('ECONNREFUSED 127.0.0.1:8080')),
+    });
+    const cmd = new DisconnectCommand(deps);
+    const exit = await cmd.execute({ json: true });
+    expect(exit).toBe(3);
+    const parsed = JSON.parse(deps.writeTo.mock.calls[0][0]);
+    expect(parsed.code).toBe('API_UNREACHABLE');
+    expect(parsed.error).toContain('Check LOOPZERO_URL');
   });
 });

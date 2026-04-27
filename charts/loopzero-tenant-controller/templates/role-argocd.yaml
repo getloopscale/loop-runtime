@@ -1,0 +1,38 @@
+{{- if .Values.rbac.create }}
+# T1.1 / INFRA-001: namespace-scoped Role for the operator in the
+# argocd namespace. Grants `delete` on Secrets in argocd ns only —
+# matches the legitimate use cases:
+#   - gitrepositorybinding_controller deletes argocd-repo-* (line 312)
+#   - clustercredential_controller deletes argocd cluster secrets (line 333)
+# Both are scoped to the argocd namespace by the controller code.
+# resourceNames is not used because argocd-repo-* names are dynamic
+# (per-tenant). Namespace scope alone is sufficient because the operator
+# does not legitimately delete other Secrets here.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}-secrets-argocd
+  namespace: argocd
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}-secrets-argocd
+  namespace: argocd
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "loopzero-common.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "loopzero-common.fullname" . }}-secrets-argocd
+{{- end }}

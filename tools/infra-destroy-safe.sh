@@ -154,7 +154,7 @@ if [ "$SKIP_BACKUPS" -eq 0 ]; then
   if kubectl --context "$CTX_MGMT" cluster-info >/dev/null 2>&1; then
     echo "  [b] K8s CRs export (mgmt)..."
     kubectl --context "$CTX_MGMT" get tenants,environments,loopzeroapplications,exposedroutes \
-      -n platform-system -o yaml > "$BACKUP_DIR/k8s-crs-mgmt.yaml" 2>/dev/null || true
+      -n loopzero-system -o yaml > "$BACKUP_DIR/k8s-crs-mgmt.yaml" 2>/dev/null || true
     kubectl --context "$CTX_MGMT" get applications.argoproj.io -n argocd -o yaml \
       > "$BACKUP_DIR/argocd-apps.yaml" 2>/dev/null || true
     echo "       → $BACKUP_DIR/k8s-crs-mgmt.yaml + argocd-apps.yaml"
@@ -230,9 +230,9 @@ echo "════════════════════════�
 CTX_MGMT="${CTX_MGMT:-do-sfo3-loopzero-infra-${STACK}-sfo3-mgmt}"
 if kubectl --context "$CTX_MGMT" cluster-info >/dev/null 2>&1; then
   # Suspend CronJobs
-  echo "  Suspending CronJobs in platform-system..."
-  kubectl --context "$CTX_MGMT" -n platform-system get cronjob -o name 2>/dev/null \
-    | xargs -r -I {} kubectl --context "$CTX_MGMT" -n platform-system patch {} -p '{"spec":{"suspend":true}}' 2>&1 | head -5 || true
+  echo "  Suspending CronJobs in loopzero-system..."
+  kubectl --context "$CTX_MGMT" -n loopzero-system get cronjob -o name 2>/dev/null \
+    | xargs -r -I {} kubectl --context "$CTX_MGMT" -n loopzero-system patch {} -p '{"spec":{"suspend":true}}' 2>&1 | head -5 || true
 
   # Scale API to 0 (optional; stops new deploys from accepting)
   echo "  ⚠️  Skipping API scale-to-0 (destroy will handle cluster teardown)"

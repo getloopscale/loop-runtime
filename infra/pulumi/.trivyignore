@@ -1,0 +1,4 @@
+
+# protobufjs — Trivy reports CVE on transitive dep metadata. npm ls shows
+# 7.5.5 (patched) but Trivy may see stale metadata in some lock files.
+CVE-2026-41242

@@ -21,8 +21,10 @@ spec:
             description: "API request latency (p99) has been above 5 seconds for 5 minutes."
             runbook: "Check downstream dependencies (Gitea, Argo, PostgreSQL). Scaling API pods only helps if API itself is the bottleneck."
 
+        # T1.2 / VAL-001: loopzero_tenant_quota_usage_ratio not registered in Go.
+        # Alert disabled via vector(0) until quota usage metric is implemented.
         - alert: LoopZeroTenantQuotaNearLimit
-          expr: loopzero_tenant_quota_usage_ratio > 0.9
+          expr: vector(0) > 1  # ORPHAN: loopzero_tenant_quota_usage_ratio not emitted
           for: 10m
           labels:
             severity: warning
@@ -42,7 +44,7 @@ spec:
             runbook: "Check Argo Workflows controller capacity. Consider scaling workflow workers."
 
         - alert: LoopZeroReconcilerUnhealthy
-          expr: increase(loopzero_reconciler_errors_total[5m]) > 5
+          expr: increase(loopzero_operator_reconcile_errors_total[5m]) > 5
           labels:
             severity: warning
           annotations:
@@ -50,8 +52,10 @@ spec:
             description: "StateReconciler is producing errors at an elevated rate."
             runbook: "Check reconciler pod logs. Verify connectivity to ArgoCD and Gitea."
 
+        # T1.2 / VAL-001: AppSecret controller not implemented (CRD only).
+        # Alert disabled until controller emits loopzero_secret_sync_hash_mismatch_total.
         - alert: LoopZeroSecretSyncFailed
-          expr: increase(loopzero_secret_sync_hash_mismatch_total[15m]) > 3
+          expr: vector(0) > 1  # ORPHAN: loopzero_secret_sync_hash_mismatch_total not emitted
           labels:
             severity: warning
           annotations:
@@ -59,8 +63,10 @@ spec:
             description: "3+ secret sync hash mismatches in 15 minutes."
             runbook: "AppSecretOperator failed to sync secret to workload namespace 3+ times in 15 min. Check operator logs, workload cluster connectivity, and namespace RBAC."
 
+        # T1.2 / VAL-001: loopzero_tenant_pods_pending_duration_seconds histogram
+        # not emitted (kube-state-metrics integration incomplete).
         - alert: LoopZeroTenantPodsStarved
-          expr: histogram_quantile(0.99, loopzero_tenant_pods_pending_duration_seconds) > 300
+          expr: vector(0) > 1  # ORPHAN: loopzero_tenant_pods_pending_duration_seconds not emitted
           labels:
             severity: warning
           annotations:
@@ -68,8 +74,11 @@ spec:
             description: "Pods for tenant {{ $labels.tenant }} (plan: {{ $labels.plan }}) have been pending for more than 5 minutes (p99)."
             runbook: "Check cluster capacity. Higher-priority tenants may be consuming resources. Consider scaling or suggesting plan upgrade."
 
+        # T1.2 / VAL-001: loopzero_git_mirror_status not emitted (gitops pusher
+        # would need to register and emit). Disabled until gitops_pusher
+        # integration lands.
         - alert: LoopZeroMirrorSyncStale
-          expr: loopzero_git_mirror_status{status="FAILED"} == 1
+          expr: vector(0) > 1  # ORPHAN: loopzero_git_mirror_status not emitted
           for: 1h
           labels:
             severity: warning
@@ -78,8 +87,10 @@ spec:
             description: "Gitea mirror has been in FAILED state for more than 1 hour."
             runbook: "Check Gitea health. If Gitea is up, trigger manual mirror sync via API. If Gitea is down, resolve Gitea first."
 
+        # T1.2 / VAL-001: loopzero_git_desired_state_divergence not emitted.
+        # Drift detection feature not yet built; alert disabled.
         - alert: LoopZeroGitDesiredStateDivergence
-          expr: loopzero_git_desired_state_divergence == 1 and on(tenant, env) loopzero_git_mirror_status{status="FAILED"} == 0 and on(tenant, env) loopzero_git_mirror_status{status="PENDING"} == 0
+          expr: vector(0) > 1  # ORPHAN: loopzero_git_desired_state_divergence not emitted
           for: 10m
           labels:
             severity: warning
@@ -176,8 +187,11 @@ spec:
             runbook: "docs/runbooks/service-auth-rotation.md"
 
         # MEET-020 F-01: Build stuck in RUNNING beyond reaper timeout
+        # T1.2 / VAL-001: loopzero_build_started_timestamp + loopzero_build_status not
+        # emitted. Build reaper relies on DB query, not Prometheus metric.
+        # Alert disabled until BuildOrchestrator emits these timestamps.
         - alert: LoopZeroBuildStuckRunning
-          expr: (time() - loopzero_build_started_timestamp) > 2100 and loopzero_build_status == 1
+          expr: vector(0) > 1  # ORPHAN: loopzero_build_started_timestamp + loopzero_build_status not emitted
           for: 5m
           labels:
             severity: critical
@@ -401,8 +415,11 @@ spec:
             description: "{{ $value | humanizePercentage }} of pool connections are active for 5+ minutes. Approaching exhaustion."
             runbook: "Check loopzero_postgres_pool_acquire_duration_seconds for increased wait times. If sustained, increase DB_MAX_CONNS or investigate slow queries via pg_stat_statements."
 
+        # T1.2 / VAL-001: loopzero_postgres_pool_acquire_duration_seconds_bucket
+        # histogram not registered (only loopzero_pgxpool_acquired_conns emitted).
+        # Disabled until histogram is added or alert reformulated.
         - alert: LoopZeroDBPoolAcquireLatency
-          expr: histogram_quantile(0.95, rate(loopzero_postgres_pool_acquire_duration_seconds_bucket[5m])) > 0.1
+          expr: vector(0) > 1  # ORPHAN: loopzero_postgres_pool_acquire_duration_seconds_bucket not emitted
           for: 3m
           labels:
             severity: warning

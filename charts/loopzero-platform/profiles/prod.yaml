@@ -1,0 +1,83 @@
+# LoopZero Platform — Production profile (DigitalOcean)
+# Usage: helm install loopzero oci://registry.../helm/loopzero-platform -n loopzero-system -f prod.yaml
+#
+# IMPORTANT: Secrets are NOT included here. Provide via:
+#   --set loopzero-api.secrets.databaseUrl=... or -f secrets-prod.yaml (gitignored)
+
+global:
+  registry: registry.digitalocean.com/loopzero-system
+  imagePullSecrets:
+    - name: docr-registry-secret
+
+loopzero-api:
+  replicaCount: 2
+  service:
+    type: ClusterIP
+  config:
+    registryInsecure: "false"
+  secrets:
+    create: false
+    existingSecret: "loopzero-api-secrets"
+  networkPolicy:
+    enabled: true
+  metrics:
+    serviceMonitor:
+      enabled: true
+      interval: 15s
+  topologySpreadConstraints:
+    enabled: true
+  affinity:
+    podAntiAffinity:
+      enabled: true
+  resources:
+    requests:
+      cpu: 200m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+loopzero-controller:
+  replicaCount: 1
+  secrets:
+    create: false
+    existingSecret: "loopzero-controller-secrets"
+  metrics:
+    serviceMonitor:
+      enabled: true
+
+loopzero-tenant-controller:
+  replicaCount: 1
+  secrets:
+    create: false
+    existingSecret: "loopzero-tenant-controller-secrets"
+  metrics:
+    serviceMonitor:
+      enabled: true
+
+loopzero-cloud:
+  replicaCount: 2
+  service:
+    type: ClusterIP
+  networkPolicy:
+    enabled: true
+  metrics:
+    serviceMonitor:
+      enabled: true
+  topologySpreadConstraints:
+    enabled: true
+  affinity:
+    podAntiAffinity:
+      enabled: true
+
+loopzero-dashboard:
+  replicaCount: 2
+  service:
+    type: ClusterIP
+  networkPolicy:
+    enabled: true
+  topologySpreadConstraints:
+    enabled: true
+  affinity:
+    podAntiAffinity:
+      enabled: true

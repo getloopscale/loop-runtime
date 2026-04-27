@@ -29,6 +29,7 @@ import { registerDomainCommands } from './register/domain';
 import { registerInfraCommands } from './register/infra';
 import { registerPreviewCommands } from './register/preview';
 import { registerScaleCommands } from './register/scale';
+import { registerPlatformCommands } from './register/platform';
 import type { CommandDeps } from './register/types';
 
 // --- Cleanup registry for graceful signal handling (B-09) ---
@@ -113,6 +114,8 @@ export function createProgram(): Command {
   };
 
   // Token refresh callback — used by ApiClient when a 401 is received.
+  // CHG-2026-04-23-AUDIT-16: ensureFreshToken no longer writes to stderr;
+  // caller handles error presentation (json/human) after receiving null.
   const handleUnauthorized = async (): Promise<string | null> => {
     return ensureFreshToken({
       getToken: () => configStore.getToken(),
@@ -122,7 +125,6 @@ export function createProgram(): Command {
       getEmail: () => configStore.getEmail(),
       getTeam: () => configStore.getTeam(),
       fetchFn: fetch,
-      writeError,
     });
   };
 
@@ -157,6 +159,7 @@ export function createProgram(): Command {
   registerInfraCommands(deps);
   registerPreviewCommands(deps);
   registerScaleCommands(deps);
+  registerPlatformCommands(deps);
 
   // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)
   program.argument('[args...]');

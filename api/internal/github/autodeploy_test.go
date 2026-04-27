@@ -242,18 +242,6 @@ apps:
 
 // --- Fakes for HandlePush dependencies ---
 
-type fakeSourcePusher struct {
-	pushedTenantID    string
-	pushedProjectName string
-	err               error
-}
-
-func (f *fakeSourcePusher) PushTarball(ctx context.Context, tenantID, projectName string, tarball io.Reader) (string, error) {
-	f.pushedTenantID = tenantID
-	f.pushedProjectName = projectName
-	return "source-id-123", f.err
-}
-
 type fakeObjectUploader struct {
 	uploadedBucket string
 	uploadedKey    string

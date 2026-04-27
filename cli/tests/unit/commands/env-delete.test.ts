@@ -59,6 +59,24 @@ describe('EnvDeleteCommand', () => {
       expect(code).toBe(1);
     });
 
+    // CHG-2026-04-23-AUDIT-11: --yes is UX-consistent with other destructive
+    // ops (project delete, preview delete, domain remove, secret delete).
+    it('returns 0 when --yes is provided (no --confirm needed)', async () => {
+      let called = false;
+      const cmd = new EnvDeleteCommand(makeDeps({
+        deleteEnvironment: async () => { called = true; },
+      }));
+      const code = await cmd.execute('staging', { yes: true });
+      expect(code).toBe(0);
+      expect(called).toBe(true);
+    });
+
+    it('still refuses to delete production even with --yes', async () => {
+      const cmd = new EnvDeleteCommand(makeDeps());
+      const code = await cmd.execute('production', { yes: true });
+      expect(code).toBe(1);
+    });
+
     it('returns 3 on delete failure', async () => {
       const cmd = new EnvDeleteCommand(makeDeps({
         deleteEnvironment: async () => { throw new Error('server error'); },

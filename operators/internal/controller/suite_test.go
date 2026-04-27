@@ -141,6 +141,12 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
+	// Sprint 5 / T1.2 + T1.3: PreviewController envtest registration.
+	// Re-uses runtimeClient (envtest pretends both clusters share an API
+	// server) and a stable BaseDomain for URL assertions.
+	err = controller.SetupPreviewController(mgr, runtimeClient, "preview-test.example")
+	Expect(err).NotTo(HaveOccurred())
+
 	// ADR-0006: LoopZeroBuild and LoopZeroRelease CRDs removed.
 	// Build state owned by PostgreSQL, Release state owned by PostgreSQL.
 	// Controllers were stubs — no reconciliation logic to preserve.

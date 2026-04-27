@@ -18,7 +18,7 @@ func TestGitRepositoryBinding_SpecFields(t *testing.T) {
 			Namespace: "loopzero-system",
 		},
 		Spec: GitRepositoryBindingSpec{
-			RepoURL: "http://gitea-http.platform-system.svc.cluster.local:3000/loopzero/acme-gitops.git",
+			RepoURL: "http://gitea-http.gitea.svc.cluster.local:3000/loopzero/acme-gitops.git",
 			CredentialSecretRef: CredentialSecretRef{
 				Name:      "acme-git-token",
 				Key:       "token",
@@ -31,7 +31,7 @@ func TestGitRepositoryBinding_SpecFields(t *testing.T) {
 		},
 	}
 
-	if grb.Spec.RepoURL != "http://gitea-http.platform-system.svc.cluster.local:3000/loopzero/acme-gitops.git" {
+	if grb.Spec.RepoURL != "http://gitea-http.gitea.svc.cluster.local:3000/loopzero/acme-gitops.git" {
 		t.Errorf("expected RepoURL to match, got %q", grb.Spec.RepoURL)
 	}
 	if grb.Spec.CredentialSecretRef.Name != "acme-git-token" {

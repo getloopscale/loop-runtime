@@ -1,6 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+//go:build legacy_migration_stubs
+// +build legacy_migration_stubs
+
+// PRE-EXISTING DEAD CODE: this file references `000003_deploy_support.up.sql`
+// which DOES NOT EXIST. The build_apps table + partial unique index +
+// releases.apps column it asserts on were consolidated into
+// `000001_initial_schema.up.sql`. The tests below were stubs prepared for
+// a 000003 migration that never landed; the slot is now reserved for a
+// future deploy_support migration (per the existing test infra). They
+// have been gated behind a build tag so the rest of the api/tests/unit
+// package compiles. Sprint 5 added `000004_preview_environments.up.sql`
+// (skipping 000003 to honor the reserved slot). To re-enable: either
+// rewrite to assert against 000001, or delete.
+// Tracking: pre-dates Sprint 5 / Preview Environments (CHG-2026-04-26-PREVIEW-IMPL).
 package unit
 
 import (

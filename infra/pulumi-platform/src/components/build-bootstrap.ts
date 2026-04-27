@@ -82,7 +82,7 @@ export function bootstrapBuildCluster(
   // on the default SA. Workflow pods use loopzero-build-sa, so we must also reference it here.
   // Without this, workflow pods get 401 Unauthorized when pulling private images
   // (loopzero-clone-runner, loopzero-packs-runner) from the DO container registry.
-  const registrySecretName = "loopzero-infra-registry";
+  const registrySecretName = "loopzero-system";
 
   const buildSA = new k8s.core.v1.ServiceAccount(
     "loopzero-build-sa",

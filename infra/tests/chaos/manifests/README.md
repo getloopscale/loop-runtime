@@ -40,7 +40,7 @@ helm install chaos-mesh chaos-mesh/chaos-mesh \
 kubectl apply -f pod-kill-controller.yaml
 
 # Watch the experiment status
-kubectl describe podchaos pod-kill-controller -n platform-system
+kubectl describe podchaos pod-kill-controller -n loopzero-system
 
 # Delete when done
 kubectl delete -f pod-kill-controller.yaml

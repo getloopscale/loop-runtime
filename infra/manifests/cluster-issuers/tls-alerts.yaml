@@ -17,7 +17,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: tls-loopzero-alerts
-  namespace: platform-system
+  namespace: loopzero-system
   labels:
     app: loopzero
     role: alert-rules

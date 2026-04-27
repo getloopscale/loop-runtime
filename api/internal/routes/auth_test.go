@@ -4,6 +4,7 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,8 +13,21 @@ import (
 	"github.com/loopzero/loopzero/api/internal/middleware"
 )
 
+// fakeUsernameLookup implements UsernameLookup for tests (AUDIT-10).
+type fakeUsernameLookup struct {
+	byID map[string]string
+	err  error
+}
+
+func (f *fakeUsernameLookup) GetUsernameByID(_ context.Context, userID string) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.byID[userID], nil
+}
+
 func TestAuth_Whoami_HappyPath(t *testing.T) {
-	h := NewAuthHandler()
+	h := NewAuthHandler(&fakeUsernameLookup{byID: map[string]string{"github-testuser": "testuser"}})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil)
 	req = withAuth(req, defaultUserContext())
@@ -41,10 +55,13 @@ func TestAuth_Whoami_HappyPath(t *testing.T) {
 	if resp["role"] != "owner" {
 		t.Fatalf("want role owner, got %s", resp["role"])
 	}
+	if resp["username"] != "testuser" {
+		t.Fatalf("want username testuser, got %s", resp["username"])
+	}
 }
 
 func TestAuth_Whoami_Unauthenticated(t *testing.T) {
-	h := NewAuthHandler()
+	h := NewAuthHandler(nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil)
 	w := httptest.NewRecorder()
@@ -57,7 +74,7 @@ func TestAuth_Whoami_Unauthenticated(t *testing.T) {
 }
 
 func TestAuth_Whoami_PrivateEmail_DeriveNoreply(t *testing.T) {
-	h := NewAuthHandler()
+	h := NewAuthHandler(nil)
 
 	uc := &middleware.UserContext{
 		UserID:   "github-jdoe",
@@ -82,5 +99,38 @@ func TestAuth_Whoami_PrivateEmail_DeriveNoreply(t *testing.T) {
 	}
 	if resp["email"] != "jdoe@users.noreply.github.com" {
 		t.Fatalf("want noreply email, got %s", resp["email"])
+	}
+}
+
+// AUDIT-10: service accounts (OAuth2 client_credentials) have no email claim
+// and no "github-" prefix. Previous handler returned email="" without fallback.
+// Now username comes from users.username column (populated by migration 000037).
+func TestAuth_Whoami_ServiceAccount_UsesUsername(t *testing.T) {
+	h := NewAuthHandler(&fakeUsernameLookup{byID: map[string]string{"loopzero-e2e": "loopzero-e2e"}})
+
+	uc := &middleware.UserContext{
+		UserID:   "loopzero-e2e", // no github- prefix
+		Email:    "",         // no email for client_credentials
+		TenantID: "e2e-tenant",
+		Role:     "owner",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil)
+	req = withAuth(req, uc)
+	w := httptest.NewRecorder()
+
+	h.Whoami(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp["username"] != "loopzero-e2e" {
+		t.Fatalf("want username loopzero-e2e, got %q", resp["username"])
+	}
+	if resp["email"] != "" {
+		t.Fatalf("service account must not invent an email, got %q", resp["email"])
 	}
 }

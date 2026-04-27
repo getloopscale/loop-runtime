@@ -1,24 +1,24 @@
 ---
 # ServiceAccount for the PlatformBootstrap controller.
-# Runs in platform-system namespace with least-privilege RBAC.
+# Runs in loopzero-system namespace with least-privilege RBAC.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: platformbootstrap-controller
-  namespace: platform-system
+  namespace: loopzero-system
   labels:
     app.kubernetes.io/name: platformbootstrap-controller
     app.kubernetes.io/part-of: loopzero
     app.kubernetes.io/component: operator
 
 ---
-# Role: platform-system namespace permissions.
+# Role: loopzero-system namespace permissions.
 # Grants access to PlatformBootstrap CRs (namespaced), Secrets, ConfigMaps, and Events.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: platformbootstrap-controller
-  namespace: platform-system
+  namespace: loopzero-system
   labels:
     app.kubernetes.io/name: platformbootstrap-controller
     app.kubernetes.io/part-of: loopzero
@@ -71,12 +71,12 @@ rules:
       - patch
 
 ---
-# RoleBinding: bind the Role to the ServiceAccount in platform-system.
+# RoleBinding: bind the Role to the ServiceAccount in loopzero-system.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: platformbootstrap-controller
-  namespace: platform-system
+  namespace: loopzero-system
   labels:
     app.kubernetes.io/name: platformbootstrap-controller
     app.kubernetes.io/part-of: loopzero
@@ -88,7 +88,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: platformbootstrap-controller
-    namespace: platform-system
+    namespace: loopzero-system
 
 ---
 # Role: argocd namespace permissions.
@@ -132,7 +132,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: platformbootstrap-controller
-    namespace: platform-system
+    namespace: loopzero-system
 
 ---
 # ClusterRole: cluster-scoped access to PlatformBootstrap CRD.
@@ -173,4 +173,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: platformbootstrap-controller
-    namespace: platform-system
+    namespace: loopzero-system

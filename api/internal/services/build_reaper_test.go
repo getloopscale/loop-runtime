@@ -21,7 +21,6 @@ type fakeBuildStoreReaper struct {
 	builds       map[string]*db.Build
 	lastStatus   map[string]string
 	lastError    map[string]string
-	cancelledIDs []string
 }
 
 func newFakeBuildStoreReaper() *fakeBuildStoreReaper {

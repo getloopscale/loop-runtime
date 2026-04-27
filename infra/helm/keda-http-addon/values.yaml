@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025-2026 The LoopZero Authors
+#
+# KEDA HTTP Add-on values -- LOCAL DEVELOPMENT (k3d workload cluster) only.
+# Production overrides: values.production.yaml
+#
+# Requires: KEDA core (infra/helm/keda/) must be installed first.
+
+http-add-on:
+  # ---------------------------------------------------------------------------
+  # Interceptor -- reverse proxy that counts in-flight requests
+  # ---------------------------------------------------------------------------
+  interceptor:
+    replicas:
+      min: 1
+      max: 1
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+
+  # ---------------------------------------------------------------------------
+  # Operator -- watches HTTPScaledObject CRDs
+  # ---------------------------------------------------------------------------
+  operator:
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+
+  # ---------------------------------------------------------------------------
+  # Scaler -- serves external metrics to KEDA
+  # ---------------------------------------------------------------------------
+  scaler:
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+
+  # ---------------------------------------------------------------------------
+  # Security context (non-root)
+  # ---------------------------------------------------------------------------
+  podSecurityContext:
+    runAsNonRoot: true

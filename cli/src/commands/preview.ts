@@ -3,6 +3,7 @@
 
 import { ApiError } from '../api/client';
 import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
+import { classifyNetworkError } from '../output/error-message';
 
 export interface PreviewListItem {
   id: string;
@@ -165,7 +166,16 @@ export class PreviewListCommand {
       if (err.exitCode === 4) {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
+      // Sprint 5 / T4.1: PREVIEW_NOT_AVAILABLE removed — preview API is
+      // now wired (api/internal/routes/preview.go is registered with the
+      // PostgresPreviewStore in setup_server.go). 404 with NOT_FOUND now
+      // means the project itself is missing, not the feature.
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');
@@ -260,9 +270,14 @@ export class PreviewInspectCommand {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
       if (err.statusCode === 404) {
-        return this.exitWithError(opts, `Preview ${id} not found.`, 3, 'PREVIEW_NOT_FOUND');
+        return this.exitWithError(opts, `Preview ${id} not found.`, 1, 'PREVIEW_NOT_FOUND');
       }
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');
@@ -353,12 +368,17 @@ export class PreviewDeleteCommand {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
       if (err.statusCode === 404) {
-        return this.exitWithError(opts, `Preview ${id} not found.`, 3, 'PREVIEW_NOT_FOUND');
+        return this.exitWithError(opts, `Preview ${id} not found.`, 1, 'PREVIEW_NOT_FOUND');
       }
       if (err.statusCode === 409) {
         return this.exitWithError(opts, `Preview ${id} is already being deleted.`, 3, 'ALREADY_DELETING');
       }
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');

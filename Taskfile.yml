@@ -1245,7 +1245,7 @@ tasks:
   # S0.13: Build pipeline tooling images
   # ---------------------------------------------------------------------------
   images:build:
-    desc: Build and push tooling images (clone-runner, packs-runner) to local k3d registry
+    desc: Build and push tooling images (clone-runner, packs-runner, syft-scanner) to local k3d registry
     cmds:
       - |
         echo "=== Building loopzero-clone-runner ==="
@@ -1257,6 +1257,11 @@ tasks:
         docker build -t localhost:5000/loopzero-packs-runner:latest infra/images/packs-runner/
         docker push localhost:5000/loopzero-packs-runner:latest
         echo "  Pushed: localhost:5000/loopzero-packs-runner:latest"
+      - |
+        echo "=== Building loopzero-syft-scanner (Sprint 6 / T0.2) ==="
+        docker build -t localhost:5000/loopzero-syft-scanner:latest infra/images/syft-scanner/
+        docker push localhost:5000/loopzero-syft-scanner:latest
+        echo "  Pushed: localhost:5000/loopzero-syft-scanner:latest"
 
   # ---------------------------------------------------------------------------
   # S0.14: Composite tasks
@@ -1563,15 +1568,15 @@ tasks:
         echo "  Context:  {{.CONTEXT}}"
         echo ""
         echo "Building API image..."
-        docker build -f api/Dockerfile -t registry.digitalocean.com/loopzero-infra-registry/loopzero-api:{{.TAG}} .
+        docker build -f api/Dockerfile -t registry.digitalocean.com/loopzero-system/loopzero-api:{{.TAG}} .
         echo "Pushing..."
-        docker push registry.digitalocean.com/loopzero-infra-registry/loopzero-api:{{.TAG}}
+        docker push registry.digitalocean.com/loopzero-system/loopzero-api:{{.TAG}}
         echo "Rolling out..."
-        kubectl --context={{.CONTEXT}} -n platform-system rollout restart deploy/loopzero-api
-        kubectl --context={{.CONTEXT}} -n platform-system rollout restart deploy/loopzero-controller
+        kubectl --context={{.CONTEXT}} -n loopzero-system rollout restart deploy/loopzero-api
+        kubectl --context={{.CONTEXT}} -n loopzero-system rollout restart deploy/loopzero-controller
         echo ""
         echo "✅ Hotfix applied. Rollout status:"
-        kubectl --context={{.CONTEXT}} -n platform-system rollout status deploy/loopzero-api --timeout=120s
+        kubectl --context={{.CONTEXT}} -n loopzero-system rollout status deploy/loopzero-api --timeout=120s
         echo ""
         echo "⚠️  Do NOT use 'kubectl set image'. This task is the sanctioned fast-path."
 
@@ -1639,19 +1644,19 @@ tasks:
   pprof:api:
     desc: Port-forward to API pprof endpoint (http://localhost:6060/debug/pprof/)
     cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} -n platform-system port-forward deploy/loopzero-api 6060:6060
+      - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system port-forward deploy/loopzero-api 6060:6060
 
   pprof:operators:
     desc: Port-forward to Operator pprof endpoint (http://localhost:6061/debug/pprof/)
     cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} -n platform-system port-forward deploy/loopzero-controller 6061:6061
+      - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system port-forward deploy/loopzero-controller 6061:6061
 
   blackbox:status:
     desc: Check blackbox exporter health and probe results
     cmds:
       - |
         echo "=== Blackbox Pod ==="
-        kubectl --context {{.MGMT_CONTEXT}} -n platform-system get pods -l app.kubernetes.io/name=prometheus-blackbox-exporter 2>/dev/null || echo "Blackbox pod not found"
+        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pods -l app.kubernetes.io/name=prometheus-blackbox-exporter 2>/dev/null || echo "Blackbox pod not found"
         echo ""
         echo "=== Probe CRDs ==="
         kubectl --context {{.MGMT_CONTEXT}} -n monitoring get probes 2>/dev/null || echo "No Probe resources found"
@@ -1686,10 +1691,100 @@ tasks:
     cmds:
       - |
         echo "=== Tempo Pod ==="
-        kubectl --context k3d-loopzero-mgmt -n platform-system get pods -l app.kubernetes.io/name=tempo 2>/dev/null || echo "Tempo pod not found"
+        kubectl --context k3d-loopzero-mgmt -n loopzero-system get pods -l app.kubernetes.io/name=tempo 2>/dev/null || echo "Tempo pod not found"
         echo ""
         echo "=== ServiceMonitor ==="
         kubectl --context k3d-loopzero-mgmt -n monitoring get servicemonitor loopzero-tempo 2>/dev/null || echo "ServiceMonitor not found"
         echo ""
         echo "=== PrometheusRules ==="
         kubectl --context k3d-loopzero-mgmt -n monitoring get prometheusrules loopzero-tracing 2>/dev/null || echo "PrometheusRule not found"
+
+  # ---------------------------------------------------------------------------
+  # Helm chart operations (charts/)
+  # ---------------------------------------------------------------------------
+
+  helm:lint:
+    desc: Lint all Helm charts
+    cmds:
+      - |
+        FAILED=0
+        for chart in charts/*/; do
+          echo "Linting $chart..."
+          if ! helm lint "$chart" 2>&1; then
+            FAILED=1
+          fi
+        done
+        if [ "$FAILED" -ne 0 ]; then
+          echo "FAILED: one or more charts failed lint"
+          exit 1
+        fi
+        echo "All charts passed lint"
+
+  helm:template:
+    desc: Render all chart templates (dry-run)
+    cmds:
+      - helm template loopzero charts/loopzero-platform
+
+  helm:template:dev:
+    desc: Render templates with dev profile
+    cmds:
+      - helm template loopzero charts/loopzero-platform -f charts/loopzero-platform/profiles/dev.yaml
+
+  helm:template:prod:
+    desc: Render templates with prod profile
+    cmds:
+      - helm template loopzero charts/loopzero-platform -f charts/loopzero-platform/profiles/prod.yaml
+
+  helm:dep:update:
+    desc: Update dependencies for all charts (regenerates Chart.lock)
+    cmds:
+      - |
+        for chart in charts/*/; do
+          if [ -f "$chart/Chart.yaml" ] && grep -q "dependencies:" "$chart/Chart.yaml"; then
+            echo "Updating deps for $chart..."
+            helm dependency update "$chart"
+          fi
+        done
+        echo "All dependencies updated"
+
+  helm:sync-crds:
+    desc: Sync CRDs from operators/config/crd/bases/ to charts/loopzero-crds/templates/
+    cmds:
+      - |
+        SRC="operators/config/crd/bases"
+        DST="charts/loopzero-crds/templates"
+        COUNT=0
+        for crd_file in "$SRC"/loopzero.io_*.yaml; do
+          base=$(basename "$crd_file" .yaml)
+          short=${base#loopzero.io_}
+          template_file="$DST/${short}.yaml"
+          crd_name=$(grep "^  name:" "$crd_file" | head -1 | awk '{print $2}')
+          spec_content=$(sed -n '/^spec:/,$p' "$crd_file")
+          cat > "$template_file" << TMPL_EOF
+        {{- if .Values.crds.${short}.enabled }}
+        apiVersion: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        metadata:
+          name: ${crd_name}
+          labels:
+            {{- include "loopzero-common.labels" . | nindent 4 }}
+          annotations:
+            "helm.sh/resource-policy": keep
+            controller-gen.kubebuilder.io/version: {{ .Values.controllerGenVersion | default "v0.17.2" }}
+        ${spec_content}
+        {{- end }}
+        TMPL_EOF
+          COUNT=$((COUNT + 1))
+        done
+        echo "Synced $COUNT CRDs from $SRC to $DST"
+
+  helm:install:dev:
+    desc: Install umbrella chart with dev profile on k3d
+    cmds:
+      - helm upgrade --install loopzero-crds charts/loopzero-crds -n loopzero-system --create-namespace
+      - helm upgrade --install loopzero charts/loopzero-platform -n loopzero-system -f charts/loopzero-platform/profiles/dev.yaml
+
+  helm:install:test:
+    desc: Run helm test hooks post-install
+    cmds:
+      - helm test loopzero -n loopzero-system

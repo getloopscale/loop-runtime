@@ -109,15 +109,15 @@ jobs:
 
           START=$(date +%s)
           for deploy in loopzero-api loopzero-controller tenant-controller loopzero-cloud loopzero-dashboard; do
-            if kubectl get deploy "$deploy" -n platform-system >/dev/null 2>&1; then
-              kubectl rollout restart deploy "$deploy" -n platform-system
+            if kubectl get deploy "$deploy" -n loopzero-system >/dev/null 2>&1; then
+              kubectl rollout restart deploy "$deploy" -n loopzero-system
               echo "Restarted: $deploy"
             fi
           done
 
           echo "Waiting for rollouts..."
           for deploy in loopzero-api loopzero-controller tenant-controller; do
-            kubectl rollout status deploy "$deploy" -n platform-system --timeout=120s
+            kubectl rollout status deploy "$deploy" -n loopzero-system --timeout=120s
           done
           DURATION=$(( $(date +%s) - START ))
 

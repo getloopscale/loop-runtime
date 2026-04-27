@@ -1,0 +1,32 @@
+global:
+  registry: registry.digitalocean.com/loopzero-system
+  imagePullSecrets: []
+
+# Sub-chart enable/disable toggles
+# Set loopzero-crds.enabled=false when CRDs are installed separately
+loopzero-crds:
+  enabled: true
+
+loopzero-api:
+  enabled: true
+
+loopzero-tenant-controller:
+  enabled: true
+
+loopzero-controller:
+  enabled: true
+
+loopzero-cloud:
+  enabled: true
+
+loopzero-dashboard:
+  enabled: true
+
+loopzero-build-cwts:
+  enabled: true
+
+loopzero-monitoring:
+  enabled: true
+
+loopzero-admission-policies:
+  enabled: true

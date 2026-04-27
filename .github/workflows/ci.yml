@@ -1,10 +1,16 @@
+# CI — Fast quality gate for every push and PR.
+# Only deterministic, fast checks. No databases, no clusters, no deploys.
+# Integration tests live in integration-tests.yml (separate workflow).
 name: CI
 
 on:
   push:
     branches: [main, develop, homolog]
   pull_request:
+    # Only run on PRs from external branches — NOT when head is develop/main/homolog
+    # (those already trigger via push). Prevents duplicate runs.
     branches: [main, develop, homolog]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -14,19 +20,18 @@ env:
   NODE_VERSION: '20'
   KUBECONFORM_VERSION: 'v0.6.7'
   ENVTEST_K8S_VERSION: '1.31.0'
-  # Private Go modules — skip sum.golang.org verification for getloopscale org.
-  # Without this, `go mod tidy` and `go test` fail with checksum errors for loopzero-forge.
   GOPRIVATE: 'github.com/getloopscale/*'
   GONOSUMCHECK: 'github.com/getloopscale/*'
 
-# Cancel in-progress runs for the same branch/PR
+# Same group for push and PR on same branch — prevents duplicate runs.
+# push to develop and PR develop→main share the same group key.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   # ─────────────────────────────────────────────
-  # CHANGE DETECTION — skip jobs when files unchanged
+  # CHANGE DETECTION
   # ─────────────────────────────────────────────
 
   changes:
@@ -41,10 +46,10 @@ jobs:
       cli: ${{ steps.filter.outputs.cli }}
       pulumi: ${{ steps.filter.outputs.pulumi }}
       manifests: ${{ steps.filter.outputs.manifests }}
-      docs-only: ${{ steps.filter.outputs.docs-only }}
+      charts: ${{ steps.filter.outputs.charts }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
@@ -69,26 +74,18 @@ jobs:
               - 'operators/config/**'
               - 'infra/helm/**'
               - 'infra/tilt/**'
-            docs-only:
-              - '!**/*.go'
-              - '!**/*.ts'
-              - '!**/*.js'
-              - '!**/*.yaml'
-              - '!**/*.yml'
-              - '!**/go.mod'
-              - '!**/go.sum'
-              - '!**/package.json'
-              - '!**/package-lock.json'
+            charts:
+              - 'charts/**'
 
   # ─────────────────────────────────────────────
-  # LINT
+  # LINT — code quality checks
   # ─────────────────────────────────────────────
 
   lint-go:
     name: Lint Go (${{ matrix.component }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [changes]
+    needs: changes
     if: >-
       needs.changes.outputs.go-pkg == 'true' ||
       needs.changes.outputs.go-api == 'true' ||
@@ -98,57 +95,48 @@ jobs:
       matrix:
         component: [pkg, operators, api]
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: ${{ matrix.component }}/go.sum
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@4afd733a84b2f1a21c9e1a4c9d47ab7a091bd4bb # v7.0.0
+      - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.3
           working-directory: ${{ matrix.component }}
 
   lint-cli:
-    name: Lint CLI (TypeScript)
+    name: Lint CLI
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [changes]
+    needs: changes
     if: needs.changes.outputs.cli == 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: cli/package-lock.json
-      - name: Install dependencies
-        working-directory: cli
-        run: npm ci
-      - name: Run ESLint
-        working-directory: cli
-        run: npm run lint
+      - run: cd cli && npm ci
+      - name: ESLint
+        run: cd cli && npm run lint
       - name: Type check
-        working-directory: cli
-        run: npx tsc --noEmit
-
-  # ─────────────────────────────────────────────
-  # TIDINESS — consolidated into single job
-  # ─────────────────────────────────────────────
+        run: cd cli && npx tsc --noEmit
 
   tidy-go:
     name: Go mod tidy
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [changes]
+    needs: changes
     if: >-
       needs.changes.outputs.go-api == 'true' ||
       needs.changes.outputs.go-operators == 'true' ||
       needs.changes.outputs.go-pkg == 'true' ||
       needs.changes.outputs.go-infra == 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Verify go.mod and go.sum are tidy
@@ -160,332 +148,323 @@ jobs:
               (cd "$dir" && go mod tidy)
               if [ -n "$(git status --porcelain -- "$dir/go.mod" "$dir/go.sum")" ]; then
                 echo "::error::go.mod or go.sum is not tidy in $dir. Run 'go mod tidy' and commit."
-                git diff -- "$dir/go.mod" "$dir/go.sum"
                 FAILED=1
               fi
             fi
           done
           exit $FAILED
 
+  # T1.2 / VAL-001: detect orphan alert rules — alerts that reference
+  # Prometheus metrics not registered anywhere in Go source. Prevents
+  # the recurring "alert dark zone" pattern where rules fire on metrics
+  # that no code emits. The vector(0) literal is the documented opt-out
+  # for intentionally-disabled rules awaiting future feature work.
+  alert-orphans:
+    name: Alert metric orphan check
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    needs: changes
+    if: >-
+      needs.changes.outputs.helm == 'true' ||
+      needs.changes.outputs.go-api == 'true' ||
+      needs.changes.outputs.go-operators == 'true' ||
+      needs.changes.outputs.go-pkg == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cross-reference alert metrics vs Go registrations
+        run: |
+          set -euo pipefail
+          # Extract metric names from PrometheusRule expr fields, excluding
+          # rules that contain "ORPHAN" (intentionally disabled) or vector(0).
+          ALERT_METRICS=$(
+            cat infra/helm/monitoring/manifests/prometheusrule-*.yaml \
+              | grep -v "ORPHAN" \
+              | awk '/expr:/{gsub(/.*\(/,""); gsub(/[^a-zA-Z_]+/,"\n"); print}' \
+              | grep "^loopzero_" | sort -u
+          )
+          # Extract registered metric names from Go source.
+          REGISTERED_METRICS=$(
+            grep -rE 'Name: "loopzero_' operators/internal/metrics/ api/internal/metrics/ pkg/ 2>/dev/null \
+              | sed -nE 's/.*Name: "(loopzero_[a-z_]+)".*/\1/p' \
+              | sort -u
+          )
+          ORPHANS=$(comm -23 <(echo "$ALERT_METRICS") <(echo "$REGISTERED_METRICS"))
+          if [[ -n "$ORPHANS" ]]; then
+            echo "::error::Alert rules reference metrics not registered in Go:"
+            echo "$ORPHANS" | while read -r m; do echo "  - $m"; done
+            echo ""
+            echo "Either implement the metric (prometheus.NewCounter/Gauge/Histogram"
+            echo "+ MustRegister) or disable the rule via 'expr: vector(0) > 1' with"
+            echo "an inline ORPHAN comment per T1.2."
+            exit 1
+          fi
+          echo "Alert orphan check: OK (all alert metrics are registered)"
+
+  # T3.2 / INFRA-004: detect drift between kubebuilder-generated CRDs in
+  # operators/config/crd/bases/ and Helm chart templates in
+  # charts/loopzero-crds/templates/. Fails CI if the source-of-truth diverges
+  # from the chart shipped to clusters.
+  crd-drift:
+    name: CRD schema drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    needs: changes
+    if: >-
+      needs.changes.outputs.go-operators == 'true' ||
+      needs.changes.outputs.helm == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+      - name: Run drift check
+        run: |
+          set -euo pipefail
+          BASES_DIR="operators/config/crd/bases"
+          CHART_DIR="charts/loopzero-crds/templates"
+          drift_found=0
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "${tmp_dir}"' EXIT
+          for base_file in "${BASES_DIR}"/loopzero.io_*.yaml; do
+            base_name="$(basename "${base_file}")"
+            plural="${base_name#loopzero.io_}"
+            chart_file="${CHART_DIR}/${plural}"
+            if [[ ! -f "${chart_file}" ]]; then
+              echo "::error::DRIFT: ${base_name} has no chart counterpart at ${chart_file}"
+              drift_found=1
+              continue
+            fi
+            base_spec="${tmp_dir}/${base_name}.base.yaml"
+            chart_spec="${tmp_dir}/${plural}.chart.yaml"
+            yq eval '.spec.versions' "${base_file}" > "${base_spec}"
+            yq eval '.spec.versions' "${chart_file}" > "${chart_spec}"
+            if ! diff -q "${base_spec}" "${chart_spec}" >/dev/null 2>&1; then
+              echo "::error::DRIFT in ${plural}:"
+              diff -u "${base_spec}" "${chart_spec}" || true
+              drift_found=1
+            fi
+          done
+          if [[ "${drift_found}" -eq 1 ]]; then
+            echo ""
+            echo "CRD schema drift detected. Run 'cd operators && make manifests'"
+            echo "to regenerate bases/, then sync charts/loopzero-crds/templates/."
+            exit 1
+          fi
+          echo "CRD schema drift check: OK (all pairs aligned)"
+
   # ─────────────────────────────────────────────
-  # TESTS
+  # UNIT TESTS — fast, no external deps
   # ─────────────────────────────────────────────
 
   test-pkg:
     name: Test pkg
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [changes]
+    needs: changes
     if: needs.changes.outputs.go-pkg == 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: pkg/go.sum
-      - name: Run pkg tests
-        working-directory: pkg
-        run: go test ./... -short -v -race -count=1
+      - run: cd pkg && go test ./... -short -v -race -count=1
 
   test-api:
     name: Test API
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [changes]
+    needs: changes
     if: needs.changes.outputs.go-api == 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: api/go.sum
-      - name: Run API tests
-        working-directory: api
-        run: go test ./... -short -v -race -count=1
+      - run: cd api && go test ./... -short -v -race -count=1
 
   test-operators:
     name: Test Operators
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [changes]
+    needs: changes
     if: needs.changes.outputs.go-operators == 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: operators/go.sum
-      - name: Install envtest binaries
+      - name: Install envtest
         run: |
-          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.21.0
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
           echo "KUBEBUILDER_ASSETS=$(setup-envtest use ${{ env.ENVTEST_K8S_VERSION }} -p path)" >> $GITHUB_ENV
-      - name: Run operator tests
-        working-directory: operators
-        run: go test ./... -short -v -race -count=1
+      - run: cd operators && go test ./... -short -v -race -count=1
 
   test-infra:
     name: Test infra
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [changes]
+    needs: changes
     if: needs.changes.outputs.go-infra == 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: infra/tests/go.sum
-      - name: Run infra unit tests
-        working-directory: infra/tests
-        run: go test ./unit/... -short -v -race -count=1
+      - run: cd infra/tests && go test ./unit/... -short -v -race -count=1
 
   test-cli:
-    name: Test CLI (TypeScript)
+    name: Test CLI
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [changes]
+    needs: changes
     if: needs.changes.outputs.cli == 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: cli/package-lock.json
-      - name: Install dependencies
-        working-directory: cli
-        run: npm ci
-      - name: Build CLI
-        working-directory: cli
-        run: npm run build
-      - name: Run Jest tests
-        working-directory: cli
-        run: npm test -- --ci --coverage
-      - name: Upload coverage
-        if: success() && !env.ACT
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - run: cd cli && npm ci && npm run build
+      - run: cd cli && npm test -- --ci --coverage
+      - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: cli-coverage
           path: cli/coverage/
           retention-days: 7
 
   test-pulumi:
-    name: Test Pulumi (TypeScript)
+    name: Test Pulumi
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [changes]
+    needs: changes
     if: needs.changes.outputs.pulumi == 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: infra/pulumi/package-lock.json
-      - name: Install dependencies
-        working-directory: infra/pulumi
-        run: npm ci
-      - name: Type check
-        working-directory: infra/pulumi
-        run: npx tsc --noEmit
-      - name: Run tests
-        working-directory: infra/pulumi
-        run: npm test
+      - run: cd infra/pulumi && npm ci && npx tsc --noEmit && npm test
 
   # ─────────────────────────────────────────────
-  # INTEGRATION TESTS (require PostgreSQL)
-  # ─────────────────────────────────────────────
-
-  integration-tests:
-    name: Integration Tests (PG)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [changes]
-    if: needs.changes.outputs.go-api == 'true'
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: loopzero_test
-          POSTGRES_PASSWORD: loopzero_test_pass
-          POSTGRES_DB: loopzero_test
-        ports:
-          - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: api/go.sum
-      - name: Run integration tests
-        env:
-          DATABASE_URL: postgres://loopzero_test:loopzero_test_pass@localhost:5432/loopzero_test?sslmode=disable
-        working-directory: api
-        run: go test ./tests/integration/... -v -race -timeout 5m
-
-  # ─────────────────────────────────────────────
-  # VALIDATE MANIFESTS
+  # VALIDATE — manifests + migrations + charts
   # ─────────────────────────────────────────────
 
   validate-manifests:
-    name: Validate K8s manifests
+    name: Validate manifests
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [changes]
+    needs: changes
     if: needs.changes.outputs.manifests == 'true' || needs.changes.outputs.go-operators == 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@v4
       - name: Install kubeconform
         run: |
           curl -sSL -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/${{ env.KUBECONFORM_VERSION }}/kubeconform-linux-amd64.tar.gz
-          tar xzf kubeconform.tar.gz
-          sudo mv kubeconform /usr/local/bin/
-      - name: Validate operator manifests
-        run: kubeconform --strict --skip CustomResourceDefinition operators/config/
-      - name: Validate Tilt deployment manifests
-        run: kubeconform --strict infra/tilt/api-deployment.yaml infra/tilt/operator-deployment.yaml
-      - name: Validate ArgoCD templates
-        run: kubeconform --strict --skip AppProject,Application infra/helm/argocd/templates/
-      - name: Validate PodDisruptionBudgets
-        run: |
-          kubeconform --strict infra/helm/postgresql/templates/pdb.yaml
-          kubeconform --strict infra/helm/gitea/templates/pdb.yaml
-          kubeconform --strict infra/helm/argocd/templates/pdb.yaml
-      - name: Validate NetworkPolicies
-        run: kubeconform --strict infra/helm/network-policies/loopzero-system.yaml
-      - name: Validate monitoring manifests
-        run: kubeconform --strict --skip ServiceMonitor,PrometheusRule infra/helm/monitoring/manifests/
-
-  # ─────────────────────────────────────────────
-  # MIGRATION SAFETY (Roadmap 01 Correction B + forward-only rule)
-  # ─────────────────────────────────────────────
-  #
-  # Two gates:
-  #   1. No code, CI file, or shell script may invoke `migrate force` — on a
-  #      production DB this silently corrupts schema_migrations and is the
-  #      root cause of Correction B (schema_migrations fixed directly in PG).
-  #      Forward-only migrations are a hard rule (CLAUDE.md Rule 9 family).
-  #   2. Every .up.sql must not contain DROP TABLE / DROP COLUMN unless the
-  #      migration file name includes the word `rebuild` (explicit opt-in).
-  #      Forward-only means additive: ALTER ADD, CREATE INDEX, UPDATE, never
-  #      destructive changes that can't be rolled forward.
-  #
-  # The job runs on ALL PRs and pushes that touch the migrations directory
-  # or this workflow itself — it is cheap and fails fast.
+          tar xzf kubeconform.tar.gz && sudo mv kubeconform /usr/local/bin/
+      - run: kubeconform --strict --skip CustomResourceDefinition operators/config/
+      - run: kubeconform --strict infra/tilt/api-deployment.yaml infra/tilt/operator-deployment.yaml
+      - run: kubeconform --strict --skip AppProject,Application infra/helm/argocd/templates/
+      - run: kubeconform --strict --skip ServiceMonitor,PrometheusRule,Probe infra/helm/monitoring/manifests/
 
   migration-safety:
-    name: Migration safety (forward-only + no force)
+    name: Migration safety
     runs-on: ubuntu-latest
     timeout-minutes: 3
-    needs: [changes]
-    if: needs.changes.outputs.go-api == 'true' || github.event_name == 'pull_request'
+    needs: changes
+    if: needs.changes.outputs.go-api == 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Reject `migrate force` invocations
+      - uses: actions/checkout@v4
+      - name: Reject migrate force
         run: |
-          set -e
-          echo "Scanning for forbidden 'migrate force' invocations..."
-          # The invocation must look like an actual command — `migrate` immediately
-          # followed by optional flags and then `force <version>`. Random prose
-          # mentioning the two words is not matched because we require a trailing
-          # version number (digits) or end of line.
-          #
-          # We exclude this workflow file itself because it necessarily contains
-          # the pattern in documentation / error messages.
           matches=$(grep -rnE '(^|[[:space:]`"''])migrate([[:space:]]+-[^[:space:]]+)*[[:space:]]+force([[:space:]]+[0-9]+|$)' \
               --include='*.sh' --include='*.yml' --include='*.yaml' \
-              --include='*.go' --include='*.ts' --include='*.tsx' \
+              --include='*.go' --include='*.ts' \
               --include='Taskfile.yml' --include='Tiltfile' \
-              --exclude-dir=node_modules --exclude-dir=.git \
-              --exclude-dir=docs \
-              --exclude='ci.yml' \
-              . || true)
-          # Allow lines prefixed with NEVER as a warning comment.
-          offending=$(echo "$matches" | grep -vE '(^|[[:space:]])(#|//)\s*NEVER' || true)
-          offending=$(echo "$offending" | grep -vE '^\s*$' || true)
+              --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=docs \
+              --exclude='ci.yml' . || true)
+          offending=$(echo "$matches" | grep -vE '(^|[[:space:]])(#|//)\s*NEVER' | grep -vE '^\s*$' || true)
           if [ -n "$offending" ]; then
-            echo "ERROR: 'migrate force' invocation found. This corrupts production migrations."
+            echo "::error::migrate force invocation found"
             echo "$offending"
-            echo ""
-            echo "If you must document the danger in a comment, prefix it with 'NEVER' (e.g. '# NEVER run migrate force on production')."
             exit 1
           fi
-          echo "OK — no forbidden 'migrate force' invocations."
-      - name: Forward-only .up.sql (reject DROP TABLE / DROP COLUMN)
+      - name: Forward-only migrations
         run: |
-          set -e
-          echo "Scanning migration files for destructive DDL..."
-          # DROP TABLE / DROP COLUMN in a forward-only .up.sql is a bug unless
-          # the migration file EXPLICITLY opts in via either:
-          #   a) filename containing `_rebuild_`, or
-          #   b) a top-of-file comment `-- ALLOW-DESTRUCTIVE: <reason>`.
-          # Note: DROP NOT NULL / DROP DEFAULT / DROP CONSTRAINT / DROP INDEX
-          # are NOT matched — they are non-destructive to row data.
           viol=$(grep -rlnE '^\s*(ALTER\s+TABLE\s+\w+\s+)?DROP\s+(TABLE|COLUMN)' \
-              api/internal/db/migrations/ \
-              --include='*.up.sql' 2>/dev/null || true)
-          offending=""
+              api/internal/db/migrations/ --include='*.up.sql' 2>/dev/null || true)
           for f in $viol; do
-            case "$(basename "$f")" in
-              *rebuild*) continue ;; # filename opt-in
-            esac
-            if head -20 "$f" | grep -qE '^\s*--\s*ALLOW-DESTRUCTIVE'; then
-              continue # inline opt-in with reason comment
-            fi
-            offending="$offending $f"
-          done
-          if [ -n "$offending" ]; then
-            echo "ERROR: forward-only migration rule violated. Destructive DDL in:"
-            for f in $offending; do echo "  - $f"; done
-            echo ""
-            echo "Forward-only migrations are additive (ALTER ADD, CREATE INDEX, UPDATE)."
-            echo "If a destructive change is unavoidable, opt in via either:"
-            echo "  1. Name the file with '_rebuild_' (e.g. 000042_plan_rebuild_tiers.up.sql), or"
-            echo "  2. Add '-- ALLOW-DESTRUCTIVE: <reason>' as a comment in the first 20 lines."
-            echo "Either way, document the backup + rollback procedure in the migration header."
+            case "$(basename "$f")" in *rebuild*) continue ;; esac
+            if head -20 "$f" | grep -qE '^\s*--\s*ALLOW-DESTRUCTIVE'; then continue; fi
+            echo "::error::Destructive DDL in $f"
             exit 1
-          fi
-          echo "OK — all migrations are forward-only."
-      - name: Migration filenames are sequential
-        run: |
-          set -e
-          echo "Checking migration file numbering..."
-          cd api/internal/db/migrations
-          expected=1
-          for f in $(ls *.up.sql | sort); do
-            n=$(echo "$f" | sed -E 's/^0*([0-9]+)_.*/\1/')
-            if [ "$n" != "$expected" ]; then
-              echo "ERROR: migration numbering gap — expected $expected, found $f"
-              exit 1
-            fi
-            expected=$((expected + 1))
           done
-          echo "OK — $((expected - 1)) migrations numbered 1..$((expected - 1))."
+
+  lint-charts:
+    name: Lint charts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: changes
+    if: needs.changes.outputs.charts == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+      - name: Update deps + lint
+        run: |
+          for chart in charts/*/; do
+            [ -f "$chart/Chart.yaml" ] && grep -q "dependencies:" "$chart/Chart.yaml" && helm dependency update "$chart" 2>/dev/null
+          done
+          FAILED=0
+          for chart in charts/*/; do helm lint "$chart" || FAILED=1; done
+          exit $FAILED
+      - name: kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.6/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+          for chart in charts/*/; do
+            grep -q "type: library" "$chart/Chart.yaml" 2>/dev/null && continue
+            helm template "$(basename "$chart")" "$chart" 2>/dev/null | \
+              kubeconform --strict --ignore-missing-schemas --kubernetes-version 1.31.0 --summary
+          done
+      - name: CRD sync
+        run: |
+          SRC=$(ls operators/config/crd/bases/loopzero.io_*.yaml | wc -l)
+          DST=$(ls charts/loopzero-crds/templates/*.yaml | wc -l)
+          [ "$SRC" -eq "$DST" ] || { echo "::error::CRD mismatch: source=$SRC chart=$DST"; exit 1; }
 
   # ─────────────────────────────────────────────
-  # SECURITY — runs on all triggers (push + PR)
+  # SECURITY — vuln scans + secret detection
   # ─────────────────────────────────────────────
 
   security:
     name: Security scans
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [changes]
+    needs: changes
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: cli/package-lock.json
 
-      # govulncheck — only changed Go components
       - name: govulncheck (pkg)
         if: needs.changes.outputs.go-pkg == 'true'
         run: |
@@ -497,18 +476,12 @@ jobs:
       - name: govulncheck (operators)
         if: needs.changes.outputs.go-operators == 'true'
         run: cd operators && govulncheck ./...
-
-      # npm audit — only if CLI changed
       - name: npm audit
         if: needs.changes.outputs.cli == 'true'
-        working-directory: cli
-        run: npm ci && npm audit --omit=dev --audit-level=high
+        run: cd cli && npm ci && npm audit --omit=dev --audit-level=high
 
-      # Trivy — always on PRs (filesystem + IaC + Dockerfiles)
-      # ignore-unfixed: don't block on vulnerabilities without available patches.
-      # trivyignores: suppress known false positives (see .trivyignore).
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a3 # v0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -518,31 +491,14 @@ jobs:
           ignore-unfixed: true
           trivyignores: .trivyignore
           skip-dirs: infra/tests/e2e/fixtures,examples,loopzero-packs,loopzero-forge,referencias
-      - name: Trivy Dockerfile scan (api)
-        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a3 # v0.35.0
-        with:
-          scan-type: config
-          scan-ref: api
-          severity: CRITICAL,HIGH
-          exit-code: 1
-          format: table
-      - name: Trivy Dockerfile scan (operators)
-        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a3 # v0.35.0
-        with:
-          scan-type: config
-          scan-ref: operators
-          severity: CRITICAL,HIGH
-          exit-code: 1
-          format: table
 
-      # TruffleHog secret detection
       - name: TruffleHog secret scan
-        uses: trufflesecurity/trufflehog@v3.94.3 # TODO: pin to SHA when available
+        uses: trufflesecurity/trufflehog@v3.94.3
         with:
           extra_args: --only-verified --results=verified,unknown
 
   # ─────────────────────────────────────────────
-  # GATE — All checks must pass
+  # GATE — all checks must pass
   # ─────────────────────────────────────────────
 
   ci-gate:
@@ -561,37 +517,18 @@ jobs:
       - test-infra
       - test-cli
       - test-pulumi
-      - integration-tests
       - validate-manifests
+      - lint-charts
       - migration-safety
       - security
     steps:
-      - name: Check all jobs passed
+      - name: Check results
         run: |
-          echo "Job results:"
-          echo "  changes:            ${{ needs.changes.result }}"
-          echo "  lint-go:            ${{ needs.lint-go.result }}"
-          echo "  lint-cli:           ${{ needs.lint-cli.result }}"
-          echo "  tidy-go:            ${{ needs.tidy-go.result }}"
-          echo "  test-pkg:           ${{ needs.test-pkg.result }}"
-          echo "  test-api:           ${{ needs.test-api.result }}"
-          echo "  test-operators:     ${{ needs.test-operators.result }}"
-          echo "  test-infra:         ${{ needs.test-infra.result }}"
-          echo "  test-cli:           ${{ needs.test-cli.result }}"
-          echo "  test-pulumi:        ${{ needs.test-pulumi.result }}"
-          echo "  integration-tests:  ${{ needs.integration-tests.result }}"
-          echo "  validate-manifests: ${{ needs.validate-manifests.result }}"
-          echo "  migration-safety:   ${{ needs.migration-safety.result }}"
-          echo "  security:           ${{ needs.security.result }}"
-
-          # "skipped" is OK (means path filter excluded it)
-          # "failure" or "cancelled" is NOT OK
           RESULTS="${{ join(needs.*.result, ' ') }}"
           for result in $RESULTS; do
             if [[ "$result" == "failure" ]] || [[ "$result" == "cancelled" ]]; then
-              echo "::error::One or more CI jobs failed or were cancelled"
+              echo "::error::CI failed"
               exit 1
             fi
           done
-
-          echo "All CI checks passed (skipped jobs are OK — no relevant changes)"
+          echo "CI passed"

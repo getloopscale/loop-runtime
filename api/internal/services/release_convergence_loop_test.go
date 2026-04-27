@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 // --- Test doubles for ReleaseConvergenceLoop ---
 
 type fakeConvergenceReleaseStore struct {
+	mu          sync.Mutex
 	pending     []db.Release
 	active      []db.Release
 	releases    map[string]*db.Release
@@ -33,12 +35,18 @@ func newFakeConvergenceReleaseStore() *fakeConvergenceReleaseStore {
 }
 
 func (f *fakeConvergenceReleaseStore) FindPendingReleases(_ context.Context, _ string) ([]db.Release, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.pending, nil
 }
 func (f *fakeConvergenceReleaseStore) FindActiveReleases(_ context.Context, _ string) ([]db.Release, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.active, nil
 }
 func (f *fakeConvergenceReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX, id, event string) (*db.Release, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.lastStatus[id] = event
 	if r, ok := f.releases[id]; ok {
 		return r, nil
@@ -46,10 +54,21 @@ func (f *fakeConvergenceReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX,
 	return nil, nil
 }
 func (f *fakeConvergenceReleaseStore) GetActiveByEnvTx(_ context.Context, _ db.DBTX, tenant, project, env string) (*db.Release, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.activeByEnv[tenant+"-"+project+"-"+env], nil
 }
 func (f *fakeConvergenceReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.releases[id], nil
+}
+
+// getStatus safely reads lastStatus under lock.
+func (f *fakeConvergenceReleaseStore) getStatus(id string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lastStatus[id]
 }
 
 type fakeConvergenceEnvTargetStore struct {
@@ -103,14 +122,28 @@ func (f *fakeConvergenceSyncClient) GetAppStatus(_ context.Context, _ string, _ 
 }
 
 type fakeConvergenceEventStore struct {
+	mu     sync.Mutex
 	events []struct{ BuildID, EventType string }
 	nextID int64
 }
 
 func (f *fakeConvergenceEventStore) Append(_ context.Context, buildID, eventType string, _ json.RawMessage) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.nextID++
 	f.events = append(f.events, struct{ BuildID, EventType string }{buildID, eventType})
 	return f.nextID, nil
+}
+
+func (f *fakeConvergenceEventStore) hasEvent(eventType string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, e := range f.events {
+		if e.EventType == eventType {
+			return true
+		}
+	}
+	return false
 }
 
 type fakeConvergenceLocker struct{}
@@ -168,12 +201,18 @@ func TestReleaseConvergenceLoop_PendingRelease_SyncedAndHealthy_Activates(t *tes
 	// Act
 	loop.tick(context.Background())
 
-	// Wait for goroutine to complete
-	time.Sleep(100 * time.Millisecond)
+	// Poll until goroutine completes (race-safe)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if s := rs.getStatus("rel-1"); s != "" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	// Assert: release should be activated (SyncCompleted event)
-	if rs.lastStatus["rel-1"] != string(statemachine.ReleaseSyncCompleted) {
-		t.Errorf("expected SyncCompleted, got %q", rs.lastStatus["rel-1"])
+	if got := rs.getStatus("rel-1"); got != string(statemachine.ReleaseSyncCompleted) {
+		t.Errorf("expected SyncCompleted, got %q", got)
 	}
 }
 
@@ -200,21 +239,23 @@ func TestReleaseConvergenceLoop_PendingRelease_TimedOut_FailsRelease(t *testing.
 
 	// Act
 	loop.tick(context.Background())
-	time.Sleep(100 * time.Millisecond)
+
+	// Poll until goroutine completes (race-safe)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if s := rs.getStatus("rel-old"); s != "" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	// Assert: release should be failed (SyncFailed event)
-	if rs.lastStatus["rel-old"] != string(statemachine.ReleaseSyncFailed_) {
-		t.Errorf("expected SyncFailed, got %q", rs.lastStatus["rel-old"])
+	if got := rs.getStatus("rel-old"); got != string(statemachine.ReleaseSyncFailed_) {
+		t.Errorf("expected SyncFailed, got %q", got)
 	}
 
 	// Should emit deploy.sync_failed event
-	found := false
-	for _, e := range es.events {
-		if e.EventType == "deploy.sync_failed" {
-			found = true
-		}
-	}
-	if !found {
+	if !es.hasEvent("deploy.sync_failed") {
 		t.Error("expected deploy.sync_failed event")
 	}
 }
@@ -242,11 +283,11 @@ func TestReleaseConvergenceLoop_PendingRelease_NotReady_Retries(t *testing.T) {
 
 	// Act
 	loop.tick(context.Background())
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond) // Allow goroutine to run
 
 	// Assert: no status change (not activated, not failed — will retry next tick)
-	if _, ok := rs.lastStatus["rel-new"]; ok {
-		t.Errorf("expected no status change for not-ready release, got %q", rs.lastStatus["rel-new"])
+	if got := rs.getStatus("rel-new"); got != "" {
+		t.Errorf("expected no status change for not-ready release, got %q", got)
 	}
 }
 

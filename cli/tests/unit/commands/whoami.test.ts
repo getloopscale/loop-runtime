@@ -101,6 +101,92 @@ describe('WhoamiCommand', () => {
     });
   });
 
+  // CHG-2026-04-23-AUDIT-10: service-account tokens (Hydra client_credentials)
+  // have no email claim. API returns empty email but populates `username` from
+  // the users.username column (migration 000037). CLI must use username as
+  // display fallback — previously showed "Authenticated as: " with no value.
+  describe('service account identity (AUDIT-10)', () => {
+    it('displays username when email is empty', async () => {
+      const deps = createMockDeps({
+        getToken: jest.fn().mockReturnValue('bearer-token'),
+        verifyToken: jest.fn().mockResolvedValue({
+          email: '', username: 'loopzero-e2e', team: 'e2e-tenant',
+        }),
+      });
+      const cmd = new WhoamiCommand(deps);
+      await cmd.execute();
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Authenticated as: loopzero-e2e');
+      expect(output).not.toMatch(/Authenticated as: $/m);
+    });
+
+    it('prefers email over username when both present', async () => {
+      const deps = createMockDeps({
+        getToken: jest.fn().mockReturnValue('bearer-token'),
+        verifyToken: jest.fn().mockResolvedValue({
+          email: 'me@example.com', username: 'me', team: 'my-team',
+        }),
+      });
+      const cmd = new WhoamiCommand(deps);
+      await cmd.execute();
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Authenticated as: me@example.com');
+    });
+
+    it('JSON output includes username when API returns it', async () => {
+      const deps = createMockDeps({
+        getToken: jest.fn().mockReturnValue('bearer-token'),
+        verifyToken: jest.fn().mockResolvedValue({
+          email: '', username: 'loopzero-e2e', team: 'e2e-tenant',
+        }),
+      });
+      const cmd = new WhoamiCommand(deps);
+      await cmd.execute({ json: true });
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.authenticated).toBe(true);
+      expect(parsed.username).toBe('loopzero-e2e');
+    });
+  });
+
+  // CHG-2026-04-23-AUDIT-22: previously whoami reported "Token is invalid or
+  // expired" for ANY verifyToken failure — including ECONNREFUSED / timeouts.
+  // This misled users (they'd run `loopzero login` which would fail for the same
+  // reason). Now verifyToken re-throws non-auth errors, and whoami renders a
+  // distinct "cannot reach API" message with a specific error code.
+  describe('API unreachable (AUDIT-22)', () => {
+    it('does NOT say "Token is invalid or expired" when verifyToken throws a network error', async () => {
+      const deps = createMockDeps({
+        verifyToken: jest.fn().mockRejectedValue(new Error('fetch failed: ECONNREFUSED 127.0.0.1:8080')),
+      });
+      const cmd = new WhoamiCommand(deps);
+
+      const exitCode = await cmd.execute();
+
+      expect(exitCode).toBe(4);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput).not.toContain('invalid or expired');
+      expect(errOutput).toMatch(/reach|unreachable|connect|network|ECONNREFUSED/i);
+      expect(errOutput).toMatch(/LOOPZERO_URL|URL|check/i);
+    });
+
+    it('JSON output uses a distinct code for unreachable (not AUTH_EXPIRED)', async () => {
+      const deps = createMockDeps({
+        verifyToken: jest.fn().mockRejectedValue(new Error('fetch failed')),
+      });
+      const cmd = new WhoamiCommand(deps);
+
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(4);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(output);
+      expect(parsed.authenticated).toBe(false);
+      expect(parsed.code).toBe('API_UNREACHABLE');
+      // Error message must NOT falsely diagnose token.
+      expect(parsed.error).not.toContain('invalid or expired');
+    });
+  });
+
   describe('not authenticated', () => {
     it('should return exit code 4 when no token and no email', async () => {
       const deps = createMockDeps({

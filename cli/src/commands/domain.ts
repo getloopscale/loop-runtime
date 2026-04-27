@@ -5,6 +5,7 @@
 // MEET-2026-04-05-033: Custom Domains feature.
 
 import { ApiError } from '../api/client';
+import { classifyNetworkError } from '../output/error-message';
 
 // --- API Response types ---
 
@@ -121,6 +122,11 @@ function handleApiError(
       return exitWithError(deps, json, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
     return exitWithError(deps, json, `${action}: ${err.message}`, 3, err.code);
+  }
+  // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+  const net = classifyNetworkError(err);
+  if (net.isNetwork) {
+    return exitWithError(deps, json, net.message, 3, 'API_UNREACHABLE');
   }
   if (err instanceof Error) {
     return exitWithError(deps, json, `${action}: ${err.message}`, 3, 'UNEXPECTED_ERROR');

@@ -84,10 +84,10 @@ jobs:
       - name: Validate bootstrap health
         run: |
           echo "Checking Gitea..."
-          kubectl exec deploy/gitea -n platform-system -c gitea -- wget -qO- http://localhost:3000/api/healthz
+          kubectl exec deploy/gitea -n loopzero-system -c gitea -- wget -qO- http://localhost:3000/api/healthz
           echo ""
           echo "Checking ArgoCD..."
-          kubectl get pods -n platform-system -l app.kubernetes.io/name=argocd-server --no-headers | grep Running
+          kubectl get pods -n loopzero-system -l app.kubernetes.io/name=argocd-server --no-headers | grep Running
           echo "Bootstrap health: OK"
 
       # Registry integration + CWT updates — moved from build-images.yml

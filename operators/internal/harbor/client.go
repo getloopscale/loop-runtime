@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/loopzero/loopzero/operators/internal/httpclient"
 )
 
 // renewalThreshold is the minimum remaining TTL before a robot account is
@@ -55,14 +57,17 @@ type RobotCredentials struct {
 
 // NewClient creates a Harbor API client.
 // The baseURL should be the root URL of the Harbor instance (e.g. "https://harbor.example.com").
+//
+// T4.2 / CODE-003: uses the shared httpclient package so Harbor inherits
+// the secure-by-default TLS configuration controlled by
+// OPERATOR_INSECURE_SKIP_TLS (T2.5 / SEC-001). Use NewClientWithHTTP for
+// custom transport requirements.
 func NewClient(baseURL, username, password string) *Client {
 	return &Client{
-		baseURL:  strings.TrimRight(baseURL, "/"),
-		username: username,
-		password: password,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		username:   username,
+		password:   password,
+		httpClient: httpclient.NewWithTimeout(30 * time.Second),
 	}
 }
 

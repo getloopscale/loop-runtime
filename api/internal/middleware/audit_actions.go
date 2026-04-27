@@ -3,9 +3,22 @@
 
 package middleware
 
-import "strings"
+import (
+	"log/slog"
+	"strings"
+)
 
 // deriveAction maps HTTP method + path to a human-readable audit action.
+// CHG-2026-04-23-AUDIT-17: domain branches added to the POST/DELETE switches
+// so audit entries follow the repo-wide resource.verb_past convention
+// (previously fell through to "DELETE.domains" / "POST.domains").
+// CHG-2026-04-23-AUDIT-18: source.uploaded branch + fail-loud slog.Warn
+// on unknown fallthroughs so dashboards can filter action LIKE 'unknown.%'.
+// CHG-2026-04-23-AUDIT-19: promote / connect / disconnect branches.
+// These sub-resource verbs were silently recorded as "project.created"
+// / "project.deleted" (the parent collection's CRUD action), corrupting
+// audit forensics. Each is now a typed action on its true resource
+// (release / repository).
 func deriveAction(method, path string) string {
 	segment := extractSegment(path)
 	switch method {
@@ -29,6 +42,24 @@ func deriveAction(method, path string) string {
 			return "rollback.executed"
 		case "checkout":
 			return "billing.checkout_started"
+		case "domains":
+			return "domain.added"
+		case "verify":
+			if strings.Contains(path, "/domains/") {
+				return "domain.verified"
+			}
+		case "upload":
+			if strings.Contains(path, "/source/") {
+				return "source.uploaded"
+			}
+		case "promote":
+			if strings.Contains(path, "/projects/") {
+				return "release.promoted"
+			}
+		case "connect":
+			if strings.Contains(path, "/projects/") {
+				return "repository.connected"
+			}
 		}
 	case "DELETE":
 		switch segment {
@@ -40,6 +71,12 @@ func deriveAction(method, path string) string {
 			return "member.removed"
 		case "secrets":
 			return "secret.deleted"
+		case "domains":
+			return "domain.removed"
+		case "connect":
+			if strings.Contains(path, "/projects/") {
+				return "repository.disconnected"
+			}
 		}
 	case "PATCH":
 		if segment == "members" {
@@ -48,10 +85,17 @@ func deriveAction(method, path string) string {
 	case "PUT":
 		return segment + ".updated"
 	}
-	return method + "." + segment
+	// AUDIT-18: fail-loud. If we reached here, a new endpoint was added
+	// without a branch — log it so operators notice and filter in dashboards.
+	slog.Warn("audit: unmapped action (add a branch in deriveAction)",
+		"method", method, "path", path, "segment", segment)
+	return "unknown." + method + "." + segment
 }
 
 // extractResourceType returns the primary resource type from a URL path.
+// CHG-2026-04-23-AUDIT-17: domain added.
+// CHG-2026-04-23-AUDIT-18: source added (for /source/upload audit rows).
+// CHG-2026-04-23-AUDIT-19: promote → release, connect → repository.
 func extractResourceType(path string) string {
 	segment := extractSegment(path)
 	switch segment {
@@ -65,10 +109,19 @@ func extractResourceType(path string) string {
 		return "member"
 	case "secrets":
 		return "secret"
-	case "rollback":
+	case "rollback", "promote":
 		return "release"
+	case "cancel":
+		// CHG-2026-04-23-AUDIT-35: /builds/{id}/cancel acts on a build.
+		return "build"
+	case "domains", "verify":
+		return "domain"
 	case "checkout", "billing", "portal":
 		return "billing"
+	case "source", "upload":
+		return "source"
+	case "connect":
+		return "repository"
 	default:
 		return segment
 	}
@@ -84,7 +137,7 @@ func extractResourceID(path string) string {
 	// /api/v1/teams/members/{username} → username at index 4
 	// /api/v1/secrets/{name} → name at index 3
 	for i, p := range parts {
-		if p == "projects" || p == "secrets" || p == "environments" || p == "builds" {
+		if p == "projects" || p == "secrets" || p == "environments" || p == "builds" || p == "domains" {
 			if i+1 < len(parts) && parts[i+1] != "" {
 				return parts[i+1]
 			}
@@ -118,6 +171,11 @@ var knownCollections = map[string]bool{
 	"callback":     true,
 	"status":       true,
 	"audit":        true,
+	"verify":       true,
+	"source":       true,
+	"upload":       true,
+	"promote":      true,
+	"connect":      true,
 }
 
 // extractSegment returns the last meaningful URL segment for action/resource mapping.

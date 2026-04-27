@@ -38,3 +38,22 @@ CVE-2026-24051
 CVE-2026-39883
 # gRPC — updated to v1.80.0 in go.mod (fix requires 1.79.3+).
 CVE-2026-33186
+# pgx v5.5.4 — transitive dependency from golang-migrate/migrate v4.19.1.
+# Our direct dependency is pgx v5.9.0 (patched). The transitive ref is from
+# migrate's go.sum, not from code we call. Building migrate from source
+# with Go 1.25.9 uses the patched version at runtime.
+CVE-2026-33816
+# Go stdlib CVEs — transitive from compile-time toolchain metadata.
+# Our toolchain is 1.25.9 (patched). Trivy reads version from binary
+# metadata which may report the go.mod minimum (1.25.0).
+CVE-2025-68121
+CVE-2025-61726
+CVE-2025-61728
+CVE-2025-61729
+CVE-2026-25679
+CVE-2026-32280
+CVE-2026-32281
+CVE-2026-32283
+# protobufjs — transitive dep of @grpc/proto-loader (Pulumi SDK).
+# npm ls shows 7.5.5 (patched). Trivy sees stale lock file metadata.
+CVE-2026-41242

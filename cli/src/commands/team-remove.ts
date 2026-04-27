@@ -2,6 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import { ApiError } from '../api/client';
+import { classifyNetworkError } from '../output/error-message';
 
 export interface TeamRemoveDeps {
   getToken: () => string | null;
@@ -94,6 +95,11 @@ export class TeamRemoveCommand {
         return this.exitWithError(opts, `${username} is not a team member.`, 1, 'MEMBER_NOT_FOUND');
       }
       return this.exitWithError(opts, `Failed to remove member: ${err.message}. Try again.`, 3, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, `Failed to remove member: ${err.message}. Try again.`, 3, 'UNEXPECTED_ERROR');

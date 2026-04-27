@@ -18,7 +18,7 @@ set -euo pipefail
 TARGET_TENANTS=${1:-5000}
 CONCURRENCY=${2:-50}
 LOOPZERO_API_URL=${LOOPZERO_API_URL:-https://api.homolog.loopzero.example}
-LOOPZERO_SERVICE_AUTH=${LOOPZERO_SERVICE_AUTH:-$(kubectl --context=do-nyc3-loopzero-infra-homolog-nyc3-mgmt -n platform-system get secret loopzero-api-secrets -o jsonpath='{.data.LOOPZERO_SERVICE_AUTH_SECRET}' | base64 -d)}
+LOOPZERO_SERVICE_AUTH=${LOOPZERO_SERVICE_AUTH:-$(kubectl --context=do-nyc3-loopzero-infra-homolog-nyc3-mgmt -n loopzero-system get secret loopzero-api-secrets -o jsonpath='{.data.LOOPZERO_SERVICE_AUTH_SECRET}' | base64 -d)}
 STACKS_DIR="/tmp/loopzero-stacks/templates"
 BOOTSTRAP_SECRET="loopzero-dev-bootstrap-secret"
 

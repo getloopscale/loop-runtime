@@ -19,7 +19,7 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: PodChaos
 metadata:
   name: kill-loopzero-api-leader
-  namespace: platform-system
+  namespace: loopzero-system
   annotations:
     loopzero.io/roadmap: "01"
     loopzero.io/dod-test: "Non-leader pod restart count = 0 during 30 min"
@@ -35,7 +35,7 @@ spec:
   mode: one
   selector:
     namespaces:
-      - platform-system
+      - loopzero-system
     labelSelectors:
       "app": "loopzero-api"
   duration: "30s"

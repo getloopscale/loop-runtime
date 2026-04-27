@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,6 +20,12 @@ import (
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
+// ErrPreviewNotImplemented is returned by the GitHub PR webhook handler
+// while preview environments (Sprint 5 / T2.1 / COMP-001) are still in
+// progress. Closes COMP-008 trust gap by making the silent no-op visible
+// in logs and assertable in tests.
+var ErrPreviewNotImplemented = errors.New("preview environments not yet implemented")
+
 // GitHubDeps holds GitHub App integration components.
 type GitHubDeps struct {
 	WebhookHandler http.Handler
@@ -28,7 +35,14 @@ type GitHubDeps struct {
 
 // setupGitHub configures the GitHub App webhook handler, auto-deployer,
 // commit status callbacks, and repository handler.
-// Returns nil if GITHUB_WEBHOOK_SECRET is not set.
+//
+// CHG-2026-04-23-AUDIT-20: returns a non-nil GitHubDeps whenever dbAdapter
+// is present. The RepositoryHandler (connect/disconnect CRUD) does not
+// depend on GITHUB_WEBHOOK_SECRET or the GitHub App client — it only needs
+// the repository store. The webhook handler is created only if the secret
+// is set; without it, WebhookHandler is left nil (router already guards
+// with `if cfg.GitHubWebhookHandler != nil`). This restores Rule 10
+// ("Local equals production") for the connect/disconnect flow.
 func setupGitHub(
 	dbAdapter *db.PgxAdapter,
 	stores *StoreDeps,
@@ -37,13 +51,13 @@ func setupGitHub(
 	shutdownCtx context.Context,
 	logger *slog.Logger,
 ) *GitHubDeps {
-	githubWebhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
-	if githubWebhookSecret == "" {
-		logger.Info("github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled")
-		return nil
-	}
+	// Repository store for webhook lookups and CRUD. Required for the
+	// RepositoryHandler — always created when the DB is reachable.
+	repoStore := &db.PostgresRepositoryStore{DB: dbAdapter}
+	repoHandler := routes.NewRepositoryHandler(&repoStoreAdapter{store: repoStore})
 
-	// GitHub App client for API calls (source download, commit status, PR comments)
+	// GitHub App client for API calls (source download, commit status, PR comments).
+	// Optional — only needed when GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY are set.
 	var ghAppClient *github.AppClient
 	appIDStr := os.Getenv("GITHUB_APP_ID")
 	appPrivateKey := os.Getenv("GITHUB_APP_PRIVATE_KEY")
@@ -62,8 +76,30 @@ func setupGitHub(
 		}
 	}
 
-	// Repository store for webhook lookups
-	repoStore := &db.PostgresRepositoryStore{DB: dbAdapter}
+	// Register commit status callbacks if GitHub App client is available —
+	// these are orthogonal to the webhook handler: they push statuses when
+	// builds succeed/fail, independent of incoming webhook delivery.
+	if ghAppClient != nil {
+		statusNotifier := github.NewStatusNotifier(ghAppClient, &repoLookupAdapter{store: repoStore}, &buildLookupAdapter{store: stores.BuildStore}, cfg.BaseDomain, logger)
+		if statusNotifier != nil {
+			services.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
+			services.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
+			logger.Info("github: commit status callbacks registered (global)")
+		}
+	}
+
+	// Webhook handler — requires the HMAC secret to validate inbound deliveries.
+	// Without it, WebhookHandler stays nil and the /webhooks/github route is not
+	// registered (router guards with `if cfg.GitHubWebhookHandler != nil`).
+	githubWebhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
+	if githubWebhookSecret == "" {
+		logger.Info("github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled (RepositoryHandler still active)")
+		return &GitHubDeps{
+			WebhookHandler: nil,
+			RepoHandler:    repoHandler,
+			AppClient:      ghAppClient,
+		}
+	}
 
 	// Auto-deployer — handles push → download source → upload S3 → submit build
 	var buildSub github.BuildSubmitter
@@ -141,16 +177,22 @@ func setupGitHub(
 
 		return nil
 	})
-	wh.OnPullRequest(func(event ghwebhook.PullRequestEvent) error {
-		logger.Info("github webhook: pull_request received",
-			"repo", event.Repository.FullName,
-			"action", event.Action,
-			"pr", event.Number,
-			"branch", event.PullRequest.Head.Ref,
-		)
-		// TODO: Preview environments — deploy PR branch
-		return nil
+	// Sprint 5 / T3.1 — wire PreviewDeployer.HandlePR. Replaces the
+	// COMP-008 stub (ErrPreviewNotImplemented). The deployer dispatches
+	// by event.Action: opened/synchronize/reopened → CreatePreview;
+	// closed → DeletePreviewByPR. Auto-deploy guard enforced inside.
+	previewStore := db.NewPostgresPreviewStore(dbAdapter, dbAdapter)
+	previewSvc, psErr := services.NewPreviewService(services.PreviewServiceDeps{
+		Store:      previewStore,
+		Builds:     orch,
+		BaseDomain: cfg.BaseDomain,
+		Logger:     logger,
 	})
+	if psErr != nil {
+		logger.Error("preview service init failed (PR webhooks will be no-op)", "error", psErr)
+	}
+	previewDeployer := github.NewPreviewDeployer(previewSvc, repoStore, logger)
+	wh.OnPullRequest(previewDeployer.HandlePR)
 	wh.OnInstallation(func(event ghwebhook.InstallationEvent) error {
 		logger.Info("github webhook: installation event",
 			"action", event.Action,
@@ -177,18 +219,7 @@ func setupGitHub(
 		return nil
 	})
 
-	repoHandler := routes.NewRepositoryHandler(&repoStoreAdapter{store: repoStore})
 	logger.Info("github webhook: handler registered", "endpoint", "/api/v1/webhooks/github")
-
-	// Register commit status callbacks (global — covers ALL activation paths)
-	if ghAppClient != nil {
-		statusNotifier := github.NewStatusNotifier(ghAppClient, &repoLookupAdapter{store: repoStore}, &buildLookupAdapter{store: stores.BuildStore}, cfg.BaseDomain, logger)
-		if statusNotifier != nil {
-			services.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
-			services.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
-			logger.Info("github: commit status callbacks registered (global)")
-		}
-	}
 
 	return &GitHubDeps{
 		WebhookHandler: wh,

@@ -59,7 +59,16 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	if err := r.List(ctx, &envList, client.InNamespace(tenant.Namespace)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("listing child Environment CRs: %w", err)
 	}
+	// CODE-006 / VAL-005 / T2.4: collect per-environment Delete errors so we
+	// can return an aggregate error after the best-effort loop. Previously,
+	// failures were logged + condition-set but never returned, so the
+	// reconciler used the standard requeue interval and never engaged the
+	// exponential backoff machinery wired in MEET-052. Now: best-effort try
+	// to delete every child, but return the first error (with count) so the
+	// reconcile retries with backoff.
 	childEnvCount := 0
+	var deleteErrs []error
+	var firstFailedEnv string
 	for i := range envList.Items {
 		env := &envList.Items[i]
 		isChild := false
@@ -76,14 +85,27 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		if env.DeletionTimestamp.IsZero() {
 			if err := r.Delete(ctx, env); err != nil {
 				logger.Error(err, "failed to delete child Environment CR", "environment", env.Name)
-				conditions.SetCondition(&tenant.Status.Conditions, "EnvironmentCleanup",
+				conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeTenantEnvironmentCleanup,
 					metav1.ConditionFalse, "DeleteFailed",
 					fmt.Sprintf("failed to delete environment %s: %v", env.Name, err),
 					tenant.Generation)
+				deleteErrs = append(deleteErrs, err)
+				if firstFailedEnv == "" {
+					firstFailedEnv = env.Name
+				}
 			} else {
 				logger.Info("deleted child Environment CR", "environment", env.Name)
 			}
 		}
+	}
+	if len(deleteErrs) > 0 {
+		// Persist condition before returning so observers can see the
+		// failure even while the reconciler retries with backoff.
+		if statusErr := r.Status().Update(ctx, tenant); statusErr != nil {
+			logger.Error(statusErr, "failed to persist EnvironmentCleanup condition")
+		}
+		return ctrl.Result{}, fmt.Errorf("phase 1: delete %d/%d child environments failed (first: %s): %w",
+			len(deleteErrs), childEnvCount, firstFailedEnv, deleteErrs[0])
 	}
 	if childEnvCount > 0 {
 		logger.Info("waiting for child Environment CRs to be deleted", "remaining", childEnvCount)

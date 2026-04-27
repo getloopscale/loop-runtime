@@ -1,0 +1,12 @@
+apiVersion: v2
+name: loopzero-monitoring
+description: LoopZero platform PrometheusRules and Grafana dashboards
+type: application
+version: 0.2.0
+appVersion: "dev"
+home: https://github.com/loopzero/loopzero
+sources:
+  - https://github.com/loopzero/loopzero
+maintainers:
+  - name: LoopZero Team
+    url: https://loopzero.example

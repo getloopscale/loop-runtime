@@ -582,18 +582,18 @@ func TestValidator_JWKSRefreshOnUnknownKid(t *testing.T) {
 
 func TestParseRSAPublicKey_ValidInput(t *testing.T) {
 	key := generateRSAKey(t)
-	nStr := base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes())
-	eStr := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.PublicKey.E)).Bytes())
+	nStr := base64.RawURLEncoding.EncodeToString(key.N.Bytes())
+	eStr := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes())
 
 	pub, err := parseRSAPublicKey(nStr, eStr)
 	if err != nil {
 		t.Fatalf("parseRSAPublicKey failed: %v", err)
 	}
-	if pub.N.Cmp(key.PublicKey.N) != 0 {
+	if pub.N.Cmp(key.N) != 0 {
 		t.Error("N mismatch")
 	}
-	if pub.E != key.PublicKey.E {
-		t.Errorf("E = %d, want %d", pub.E, key.PublicKey.E)
+	if pub.E != key.E {
+		t.Errorf("E = %d, want %d", pub.E, key.E)
 	}
 }
 
@@ -606,7 +606,7 @@ func TestParseRSAPublicKey_InvalidN(t *testing.T) {
 
 func TestParseRSAPublicKey_InvalidE(t *testing.T) {
 	key := generateRSAKey(t)
-	nStr := base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes())
+	nStr := base64.RawURLEncoding.EncodeToString(key.N.Bytes())
 	_, err := parseRSAPublicKey(nStr, "!!!invalid!!!")
 	if err == nil {
 		t.Error("invalid E should return error")
@@ -884,7 +884,7 @@ func TestNewValidator_DefaultFields(t *testing.T) {
 func TestFetchJWKS_InvalidJSON_ReturnsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, "not json")
+		_, _ = fmt.Fprint(w, "not json")
 	}))
 	t.Cleanup(srv.Close)
 
@@ -900,7 +900,7 @@ func TestFetchJWKS_SkipsNonRSAKeys(t *testing.T) {
 	payload := `{"keys":[{"kid":"ec-key","kty":"EC","use":"sig","crv":"P-256","x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU","y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"}]}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, payload)
+		_, _ = fmt.Fprint(w, payload)
 	}))
 	t.Cleanup(srv.Close)
 

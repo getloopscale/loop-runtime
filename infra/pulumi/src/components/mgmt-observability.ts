@@ -84,7 +84,7 @@ export function installPrometheus(
   metrics_path: /metrics
   static_configs:
     - targets:
-        - "harbor-exporter.platform-system.svc.cluster.local:8001"
+        - "harbor-exporter.loopzero-system.svc.cluster.local:8001"
       labels:
         cluster: mgmt
         component: harbor
@@ -95,7 +95,7 @@ export function installPrometheus(
   metrics_path: /metrics
   static_configs:
     - targets:
-        - "gitea-http.platform-system.svc.cluster.local:3000"
+        - "gitea-http.loopzero-system.svc.cluster.local:3000"
       labels:
         cluster: mgmt
         component: gitea
@@ -154,7 +154,7 @@ export function installPrometheus(
                   },
                   {
                     alert: "LoopZeroPodCrashLooping",
-                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopzero-.*|platform-system"}[15m]) > 0',
+                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopzero-.*"}[15m]) > 0',
                     for: "5m",
                     labels: { severity: "warning" },
                     annotations: {
@@ -214,7 +214,7 @@ export function installPrometheus(
                   },
                   {
                     alert: "HarborCanaryFailing",
-                    expr: 'kube_job_status_failed{namespace="platform-system",job_name=~"harbor-canary.*"} > 0',
+                    expr: 'kube_job_status_failed{namespace="loopzero-system",job_name=~"harbor-canary.*"} > 0',
                     for: "10m",
                     labels: { severity: "critical" },
                     annotations: {

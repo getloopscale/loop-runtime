@@ -21,7 +21,7 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: PodChaos
 metadata:
   name: kill-loopzero-controller
-  namespace: platform-system
+  namespace: loopzero-system
   annotations:
     loopzero.io/roadmap: "02"
     loopzero.io/dod-test: "TestController_CrashRecovery"
@@ -37,7 +37,7 @@ spec:
   mode: one
   selector:
     namespaces:
-      - platform-system
+      - loopzero-system
     labelSelectors:
       "app": "loopzero-controller"
   # Kill every 60s, twice, so we see recovery twice.

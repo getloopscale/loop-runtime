@@ -16,7 +16,7 @@ import * as path from "path";
 import { InfraOutputs } from "./infra";
 import { PlatformStackConfig } from "../config/stack";
 
-const PLATFORM_NAMESPACE = "platform-system";
+const PLATFORM_NAMESPACE = "loopzero-system";
 
 export interface HarborBootstrapOutputs {
   readonly harborReady: pulumi.Output<boolean>;
@@ -161,7 +161,7 @@ export function installHarbor(
           // Prometheus (chart `prometheus`), which does NOT ship the Prometheus
           // Operator / `monitoring.coreos.com/v1` CRDs. Scrape is instead wired
           // via `extraScrapeConfigs` in mgmt-observability.ts → installPrometheus,
-          // targeting harbor-exporter.platform-system.svc:8001.
+          // targeting harbor-exporter.loopzero-system.svc:8001.
           metrics: {
             enabled: true,
             serviceMonitor: {

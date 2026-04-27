@@ -17,12 +17,14 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     cd api && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-api ./cmd/ \
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-controller ./cmd/controller/
 
-FROM alpine:3.21.6 AS migrate-dl
-RUN apk add --no-cache curl && \
-    curl -L https://github.com/golang-migrate/migrate/releases/download/v4.19.1/migrate.linux-amd64.tar.gz | tar xz && \
-    mv migrate /migrate
+# Build migrate from source (same Go toolchain) to avoid CVEs in pre-compiled binary.
+FROM golang:1.25.9-alpine3.22 AS migrate-builder
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go install -tags 'postgres' -trimpath -ldflags="-s -w" \
+    github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
 
-FROM alpine:3.21.6
+FROM alpine:3.22
 
 LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 LABEL org.opencontainers.image.title="loopzero-api"
@@ -31,7 +33,7 @@ LABEL org.opencontainers.image.description="LoopZero PaaS API server"
 RUN apk add --no-cache ca-certificates git && adduser -D -u 1000 loopzero
 COPY --from=builder /loopzero-api /loopzero-api
 COPY --from=builder /loopzero-controller /loopzero-controller
-COPY --from=migrate-dl /migrate /usr/local/bin/migrate
+COPY --from=migrate-builder /go/bin/migrate /usr/local/bin/migrate
 COPY --from=builder /workspace/api/internal/db/migrations/ /migrations/
 USER 1000
 EXPOSE 8080 9090 9091

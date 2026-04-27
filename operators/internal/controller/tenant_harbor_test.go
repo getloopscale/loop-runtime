@@ -36,7 +36,10 @@ func TestHarborQuotaForPlan(t *testing.T) {
 }
 
 func TestBuildDockerConfigJSON(t *testing.T) {
-	got := buildDockerConfigJSON("harbor.example.com", "robot$build-acme", "s3cr3t")
+	got, err := buildDockerConfigJSON("harbor.example.com", "robot$build-acme", "s3cr3t")
+	if err != nil {
+		t.Fatalf("buildDockerConfigJSON returned error: %v", err)
+	}
 	// Must be valid JSON
 	if !json.Valid([]byte(got)) {
 		t.Fatalf("buildDockerConfigJSON produced invalid JSON: %s", got)
@@ -76,7 +79,10 @@ func TestBuildDockerConfigJSON_SpecialChars(t *testing.T) {
 	}
 	for _, tc := range specialCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := buildDockerConfigJSON("harbor.example.com", "robot$test", tc.password)
+			got, err := buildDockerConfigJSON("harbor.example.com", "robot$test", tc.password)
+			if err != nil {
+				t.Fatalf("buildDockerConfigJSON returned error for password %q: %v", tc.password, err)
+			}
 			if !json.Valid([]byte(got)) {
 				t.Fatalf("invalid JSON for password %q: %s", tc.password, got)
 			}

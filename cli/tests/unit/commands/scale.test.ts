@@ -11,7 +11,7 @@ function createMockDeps(overrides: Partial<ScaleDeps> = {}): ScaleDeps {
     scale: jest.fn().mockResolvedValue({
       app: 'api',
       replicas: 3,
-      status: 'applied',
+      status: 'acknowledged',
     }),
     writeTo: jest.fn(),
     writeError: jest.fn(),
@@ -50,7 +50,7 @@ describe('ScaleCommand', () => {
         scale: jest.fn().mockResolvedValue({
           app: 'api',
           autoscaling: { min: 2, max: 10, cpu_target: 80 },
-          status: 'applied',
+          status: 'acknowledged',
         }),
       });
       const cmd = new ScaleCommand(deps);
@@ -78,7 +78,7 @@ describe('ScaleCommand', () => {
       expect(parsed.app).toBe('api');
       expect(parsed.environment).toBe('production');
       expect(parsed.replicas).toBe(3);
-      expect(parsed.status).toBe('applied');
+      expect(parsed.status).toBe('acknowledged');
     });
 
     it('should return JSON with autoscaling config', async () => {
@@ -86,7 +86,7 @@ describe('ScaleCommand', () => {
         scale: jest.fn().mockResolvedValue({
           app: 'api',
           autoscaling: { min: 2, max: 10, cpu_target: 80 },
-          status: 'applied',
+          status: 'acknowledged',
         }),
       });
       const cmd = new ScaleCommand(deps);
@@ -232,6 +232,59 @@ describe('ScaleCommand', () => {
     });
   });
 
+  // CHG-2026-04-23-AUDIT-27: the `/scale` backend endpoint is not yet
+  // implemented. A generic 404 with code=NOT_FOUND was confusing users
+  // into thinking they'd typed the wrong URL. We surface a dedicated
+  // SCALE_NOT_AVAILABLE code + "Scaling is not yet available" message.
+  // Resource-404 (PROJECT_NOT_FOUND etc.) still passes through.
+  describe('Feature unavailable 404 (AUDIT-27)', () => {
+    it('generic NOT_FOUND from router maps to SCALE_NOT_AVAILABLE', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockRejectedValue(
+          new ApiError('The requested endpoint does not exist.', 3, 404, 'NOT_FOUND'),
+        ),
+      });
+      const cmd = new ScaleCommand(deps);
+      const exitCode = await cmd.execute({ app: 'api', replicas: 3, json: true });
+      expect(exitCode).toBe(3);
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.code).toBe('SCALE_NOT_AVAILABLE');
+      expect(parsed.error).toMatch(/Scaling is not yet available/i);
+    });
+
+    it('resource-specific 404 (PROJECT_NOT_FOUND) is preserved unchanged', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockRejectedValue(
+          new ApiError("project 'web' not found", 3, 404, 'PROJECT_NOT_FOUND'),
+        ),
+      });
+      const cmd = new ScaleCommand(deps);
+      const exitCode = await cmd.execute({ app: 'api', replicas: 3, json: true });
+      expect(exitCode).toBe(3);
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.code).toBe('PROJECT_NOT_FOUND');
+      expect(parsed.error).toContain("project 'web' not found");
+    });
+  });
+
+  // CHG-2026-04-23-AUDIT-25: network errors now carry code=API_UNREACHABLE
+  // so CI scripts can match a single predicate across all commands.
+  describe('API unreachable (AUDIT-25)', () => {
+    it('network error produces API_UNREACHABLE code + Check LOOPZERO_URL hint', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockRejectedValue(new Error('fetch failed')),
+      });
+      const cmd = new ScaleCommand(deps);
+
+      const exitCode = await cmd.execute({ app: 'api', replicas: 3, json: true });
+
+      expect(exitCode).toBe(3);
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.code).toBe('API_UNREACHABLE');
+      expect(parsed.error).toContain('Check LOOPZERO_URL');
+    });
+  });
+
   describe('no internal terms', () => {
     it('should not contain forbidden terms in any output', async () => {
       const forbidden = [
@@ -267,6 +320,76 @@ describe('ScaleCommand', () => {
           expect(allOutput).not.toContain(term);
         }
       }
+    });
+  });
+
+  describe('scale-to-zero (KEDA)', () => {
+    it('should accept --min 0 --max 5', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockResolvedValue({
+          app: 'api',
+          autoscaling: { min: 0, max: 5, cpu_target: 80, cooldown: 300 },
+          status: 'acknowledged',
+        }),
+      });
+      const cmd = new ScaleCommand(deps);
+
+      const exitCode = await cmd.execute({ app: 'api', min: 0, max: 5, cpu: 80 });
+
+      expect(exitCode).toBe(0);
+      expect(deps.scale).toHaveBeenCalledWith('my-app', 'production', 'api', { min: 0, max: 5, cpu: 80 });
+    });
+
+    it('should show scale-to-zero info when min is 0', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockResolvedValue({
+          app: 'api',
+          autoscaling: { min: 0, max: 5, cpu_target: 80, cooldown: 600 },
+          status: 'acknowledged',
+        }),
+      });
+      const cmd = new ScaleCommand(deps);
+
+      await cmd.execute({ app: 'api', min: 0, max: 5, cpu: 80 });
+
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Scale-to-zero: enabled');
+      expect(output).toContain('cooldown: 600s');
+      expect(output).toContain('cold start');
+    });
+
+    it('should not show scale-to-zero info when min > 0', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockResolvedValue({
+          app: 'api',
+          autoscaling: { min: 1, max: 5, cpu_target: 80 },
+          status: 'acknowledged',
+        }),
+      });
+      const cmd = new ScaleCommand(deps);
+
+      await cmd.execute({ app: 'api', min: 1, max: 5, cpu: 80 });
+
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).not.toContain('Scale-to-zero');
+    });
+
+    it('should not mention KEDA in any output', async () => {
+      const deps = createMockDeps({
+        scale: jest.fn().mockResolvedValue({
+          app: 'api',
+          autoscaling: { min: 0, max: 5, cpu_target: 80, cooldown: 300 },
+          status: 'acknowledged',
+        }),
+      });
+      const cmd = new ScaleCommand(deps);
+
+      await cmd.execute({ app: 'api', min: 0, max: 5, cpu: 80 });
+
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).not.toContain('KEDA');
+      expect(output).not.toContain('ScaledObject');
+      expect(output).not.toContain('HTTPScaledObject');
     });
   });
 });

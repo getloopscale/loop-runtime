@@ -208,7 +208,7 @@ function installESO(
 
   // REVIEW-2026-03-30: Fixes HIGH-04 — was using admin kubeconfig token.
   // Now creates a dedicated ServiceAccount on mgmt cluster with read-only
-  // access to Secrets in platform-system namespace only.
+  // access to Secrets in loopzero-system namespace only.
   const mgmtProvider = new k8s.Provider("eso-mgmt-k8s", {
     kubeconfig: infra.mgmtCluster.kubeconfig,
   });
@@ -225,7 +225,7 @@ function installESO(
     {
       metadata: { name: esoSaName, namespace: PLATFORM_NAMESPACE },
       rules: [
-        // ESO only needs to read Secrets from platform-system namespace
+        // ESO only needs to read Secrets from loopzero-system namespace
         { apiGroups: [""], resources: ["secrets"], verbs: ["get", "list", "watch"] },
       ],
     },

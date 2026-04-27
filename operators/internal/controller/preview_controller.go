@@ -20,11 +20,15 @@ import (
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
 const previewFinalizer = "loopzero.io/preview-cleanup"
 
+// previewSM is the PreviewEnvironment lifecycle state machine (spec §5.3).
+// T2.1 / COMP-002: phase transitions in this controller are now routed
+// through the state machine instead of direct Status.Phase assignments.
 var previewSM = statemachine.NewPreviewMachine()
 
 // PreviewReconciler reconciles PreviewEnvironment CRs.
@@ -73,7 +77,7 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		}
 	}
 
-	// Initialize phase
+	// Initialize phase via state machine (T2.1 / COMP-002).
 	if preview.Status.Phase == "" {
 		preview.Status.Phase = loopzerov1.PreviewPhaseCreating
 		now := metav1.Now()
@@ -94,10 +98,32 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	}
 }
 
+// previewNamespaceName returns the namespace name for the preview using
+// the canonical naming.PreviewNamespace helper. Format:
+// {tenantSlug}-{projectSlug}-pr-{prNumber}. Returns an error if any input
+// is invalid (T0.2 / D6).
+func (r *PreviewReconciler) previewNamespaceName(preview *loopzerov1.PreviewEnvironment) (string, error) {
+	return naming.PreviewNamespace(
+		preview.Spec.TenantID,
+		preview.Spec.ProjectID,
+		preview.Spec.PRNumber,
+	)
+}
+
 // reconcileCreating provisions the preview namespace and route.
 func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	nsName := fmt.Sprintf("preview-%s-pr%d", preview.Spec.TenantID, preview.Spec.PRNumber)
+	nsName, err := r.previewNamespaceName(preview)
+	if err != nil {
+		conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNamespaceReady,
+			metav1.ConditionFalse, "InvalidNaming", err.Error(), preview.Generation)
+		if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
+			logger.Error(statusErr, "failed to update preview status")
+		}
+		// Naming is input validation — requeue is pointless without a Spec
+		// change, but we surface the condition and let the user fix the CR.
+		return ctrl.Result{}, nil
+	}
 
 	// Create namespace on runtime cluster
 	ns := &corev1.Namespace{
@@ -115,7 +141,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 		ns.Labels["pod-security.kubernetes.io/warn"] = "restricted"
 		return nil
 	}); err != nil {
-		conditions.SetCondition(&preview.Status.Conditions, "NamespaceReady",
+		conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNamespaceReady,
 			metav1.ConditionFalse, "CreateFailed", err.Error(), preview.Generation)
 		if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
 			logger.Error(statusErr, "failed to update preview status")
@@ -123,13 +149,68 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 		return ctrl.Result{}, err
 	}
 
-	conditions.SetCondition(&preview.Status.Conditions, "NamespaceReady",
+	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNamespaceReady,
 		metav1.ConditionTrue, "Ready", "Preview namespace created", preview.Generation)
 
-	// Set URL and transition to Active
+	// Sprint 5 / T1.2 — namespace hardening (NetworkPolicy + ResourceQuota +
+	// LimitRange). Each is its own condition for finer-grained observability.
+	if npErr := r.reconcilePreviewNetworkPolicies(ctx, nsName); npErr != nil {
+		conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNetworkPolicyReady,
+			metav1.ConditionFalse, "ApplyFailed", npErr.Error(), preview.Generation)
+		if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
+			logger.Error(statusErr, "failed to update preview status (NP failure)")
+		}
+		return ctrl.Result{}, npErr
+	}
+	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNetworkPolicyReady,
+		metav1.ConditionTrue, "Ready", "Preview network policies applied (deny-all + allow-ingress + allow-egress)", preview.Generation)
+
+	if quotaErr := r.reconcilePreviewQuota(ctx, nsName); quotaErr != nil {
+		conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewResourceQuotaReady,
+			metav1.ConditionFalse, "ApplyFailed", quotaErr.Error(), preview.Generation)
+		if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
+			logger.Error(statusErr, "failed to update preview status (quota failure)")
+		}
+		return ctrl.Result{}, quotaErr
+	}
+	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewResourceQuotaReady,
+		metav1.ConditionTrue, "Ready", "Preview resource quota applied", preview.Generation)
+	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewLimitRangeReady,
+		metav1.ConditionTrue, "Ready", "Preview limit range applied", preview.Generation)
+
+	// Set URL eagerly so it's visible while the workload comes up.
 	preview.Status.URL = fmt.Sprintf("https://pr%d-%s.preview.%s",
 		preview.Spec.PRNumber, preview.Spec.ProjectID, r.BaseDomain)
-	preview.Status.Phase = loopzerov1.PreviewPhaseActive
+
+	// Sprint 5 / T1.2 — workload-readiness gating. After the namespace and
+	// isolation primitives are in place, wait for the build/release flow
+	// (driven externally by the API per ADR D4) to signal that the
+	// workload is healthy before transitioning to Active. Three
+	// conditions are observed in order:
+	//
+	//   BuildSubmitted   — set by API when SubmitBuild succeeds
+	//   BuildCompleted   — set by API on build callback (True=succeeded, False=failed)
+	//   WorkloadHealthy  — set by API/controller when ArgoCD reports Healthy
+	//
+	// If a condition is missing, the controller requeues. After
+	// `previewBuildGracePeriod` without BuildSubmitted appearing, the
+	// controller falls through to Active anyway — this preserves
+	// backward-compatibility for callers that pre-date the build-hook
+	// integration (and for tests that exercise the namespace-only path).
+	gateResult, gated := r.evaluateWorkloadGate(preview)
+	if gated {
+		// Persist conditions/phase changes the gate may have set, then
+		// honor its requeue/error.
+		if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
+			logger.Error(statusErr, "failed to update preview status while gating on workload conditions")
+			return ctrl.Result{}, statusErr
+		}
+		return gateResult, nil
+	}
+
+	preview.Status.Phase = loopzerov1.PreviewPhase(
+		previewSM.Transition(statemachine.PreviewCreating, statemachine.PreviewCreationCompleted),
+	)
 
 	if err := r.Status().Update(ctx, preview); err != nil {
 		return ctrl.Result{}, err
@@ -144,14 +225,105 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
+// previewBuildGracePeriod is how long the controller waits for the
+// BuildSubmitted condition to appear before falling through to Active.
+// Below this threshold, missing BuildSubmitted means the build hook
+// hasn't reached the CR yet (race with the webhook handler) — keep
+// requeuing. Beyond it, the controller assumes there is no build flow
+// for this CR (e.g., test, manual creation) and proceeds.
+const (
+	previewBuildGracePeriod          = 90 * time.Second
+	previewBuildSubmittedRequeueWait = 30 * time.Second
+	previewBuildCompletedRequeueWait = 30 * time.Second
+	previewWorkloadHealthyRequeueWait = 10 * time.Second
+)
+
+// evaluateWorkloadGate checks the three workload-readiness conditions
+// and decides whether to proceed (gated=false) or requeue (gated=true,
+// with the appropriate Result).
+//
+// Side effects: may set preview.Status.Phase to Failed via the state
+// machine if BuildCompleted=False. Caller is responsible for persisting
+// the Status with r.Status().Update.
+func (r *PreviewReconciler) evaluateWorkloadGate(preview *loopzerov1.PreviewEnvironment) (ctrl.Result, bool) {
+	now := time.Now()
+
+	submitted := findCondition(preview.Status.Conditions, conditions.TypePreviewBuildSubmitted)
+	if submitted == nil {
+		// No build hook reached the CR yet. Use grace period to decide
+		// whether to wait for it or proceed anyway.
+		if !previewWithinGracePeriod(preview, now) {
+			// Grace expired — assume no build flow, proceed.
+			return ctrl.Result{}, false
+		}
+		return ctrl.Result{RequeueAfter: previewBuildSubmittedRequeueWait}, true
+	}
+	if submitted.Status != metav1.ConditionTrue {
+		// API set BuildSubmitted=False — surface as build failure.
+		preview.Status.Phase = loopzerov1.PreviewPhase(
+			previewSM.Transition(statemachine.PreviewCreating, statemachine.PreviewCreationFailed),
+		)
+		return ctrl.Result{}, true
+	}
+
+	completed := findCondition(preview.Status.Conditions, conditions.TypePreviewBuildCompleted)
+	if completed == nil {
+		return ctrl.Result{RequeueAfter: previewBuildCompletedRequeueWait}, true
+	}
+	if completed.Status != metav1.ConditionTrue {
+		preview.Status.Phase = loopzerov1.PreviewPhase(
+			previewSM.Transition(statemachine.PreviewCreating, statemachine.PreviewCreationFailed),
+		)
+		return ctrl.Result{}, true
+	}
+
+	healthy := findCondition(preview.Status.Conditions, conditions.TypePreviewWorkloadHealthy)
+	if healthy == nil || healthy.Status != metav1.ConditionTrue {
+		return ctrl.Result{RequeueAfter: previewWorkloadHealthyRequeueWait}, true
+	}
+
+	// All three conditions are True — proceed to Active.
+	return ctrl.Result{}, false
+}
+
+// previewWithinGracePeriod reports whether the preview is still within
+// the build-submission grace window. Anchored at preview.Status.CreatedAt
+// (set on first reconcile); falls back to ObjectMeta.CreationTimestamp
+// when CreatedAt is nil.
+func previewWithinGracePeriod(preview *loopzerov1.PreviewEnvironment, now time.Time) bool {
+	anchor := time.Time{}
+	if preview.Status.CreatedAt != nil {
+		anchor = preview.Status.CreatedAt.Time
+	} else if !preview.CreationTimestamp.IsZero() {
+		anchor = preview.CreationTimestamp.Time
+	}
+	if anchor.IsZero() {
+		// No anchor — be conservative, treat as within grace.
+		return true
+	}
+	return now.Sub(anchor) < previewBuildGracePeriod
+}
+
+// findCondition returns the named condition or nil if absent.
+func findCondition(conds []metav1.Condition, name string) *metav1.Condition {
+	for i := range conds {
+		if conds[i].Type == name {
+			return &conds[i]
+		}
+	}
+	return nil
+}
+
 // reconcileActive checks TTL and health.
 func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
-	// Check TTL
+	// Check TTL — transition Active -> Expiring via state machine.
 	if preview.Spec.ExpiresAt != nil && time.Now().After(preview.Spec.ExpiresAt.Time) {
 		log.FromContext(ctx).Info("preview TTL expired, transitioning to Expiring",
 			"preview", preview.Name,
 			"expiresAt", preview.Spec.ExpiresAt.Time)
-		preview.Status.Phase = loopzerov1.PreviewPhaseExpiring
+		preview.Status.Phase = loopzerov1.PreviewPhase(
+			previewSM.Transition(statemachine.PreviewActive, statemachine.PreviewExpirationTriggered),
+		)
 		if err := r.Status().Update(ctx, preview); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -162,13 +334,14 @@ func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview *loopze
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
-// reconcileExpiring starts cleanup of the preview.
+// reconcileExpiring starts cleanup of the preview by deleting the CR.
+// The finalizer in reconcileDelete handles namespace removal; once the
+// namespace is gone, the finalizer is dropped and K8s garbage-collects
+// the CR. Phase remains Expiring during this brief window — there is no
+// observable Deleted state because the CR vanishes before the controller
+// can set it. The state machine transition Expiring -> Deleted is
+// symbolic and applied at the end of reconcileDelete.
 func (r *PreviewReconciler) reconcileExpiring(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
-	// Transition to Deleting
-	preview.Status.Phase = loopzerov1.PreviewPhaseDeleting
-	if err := r.Status().Update(ctx, preview); err != nil {
-		return ctrl.Result{}, err
-	}
 
 	// Trigger deletion by removing the CR (finalizer will handle cleanup)
 	if err := r.Delete(ctx, preview); err != nil && !errors.IsNotFound(err) {
@@ -178,7 +351,31 @@ func (r *PreviewReconciler) reconcileExpiring(ctx context.Context, preview *loop
 	return ctrl.Result{}, nil
 }
 
+// previewCleanupAnnotation tracks how many cleanup attempts the controller
+// has made. After previewMaxCleanupAttempts the preview transitions to
+// CLEANUP_FAILED so the operator can intervene rather than loop forever.
+const (
+	previewCleanupAnnotation   = "loopzero.io/preview-cleanup-attempts"
+	previewMaxCleanupAttempts  = 3
+	previewCleanupRequeueDelay = 5 * time.Second
+)
+
 // reconcileDelete handles cleanup when the CR is being deleted.
+//
+// Sprint 5 / T1.3 — adds:
+//   - per-step conditions (ApplicationDeleted, NamespaceDeleted) for
+//     finer-grained operator UX
+//   - retry counter persisted as an annotation on the CR (so the count
+//     survives reconcile restarts)
+//   - CLEANUP_FAILED state transition after previewMaxCleanupAttempts
+//
+// Application CR cleanup: the controller has no direct ArgoCD client (it
+// runs on the mgmt cluster but does not own the ArgoCD types). The
+// Application CR for a preview is created by the API (PreviewService /
+// gitops flow). When it exists, the API is responsible for deleting it
+// before the controller drops the finalizer; here we only confirm the
+// LoopZero-side namespace is gone. (Per ADR D7 — controller owns operational
+// state in the runtime cluster; API owns gitops + Application CRs.)
 func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -186,20 +383,80 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 		return ctrl.Result{}, nil
 	}
 
-	// Delete namespace on runtime cluster
-	nsName := fmt.Sprintf("preview-%s-pr%d", preview.Spec.TenantID, preview.Spec.PRNumber)
-	ns := &corev1.Namespace{}
-	if err := r.RuntimeClient.Get(ctx, client.ObjectKey{Name: nsName}, ns); err == nil {
-		if ns.DeletionTimestamp.IsZero() {
-			if err := r.RuntimeClient.Delete(ctx, ns); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, err
-			}
+	// Delete namespace on runtime cluster (T0.2 / D6: canonical naming).
+	nsName, err := r.previewNamespaceName(preview)
+	if err != nil {
+		// Naming inputs invalid — drop finalizer to avoid infinite loop on
+		// a malformed CR. The namespace, if any, was never created with a
+		// valid name we can target.
+		logger.Error(err, "preview cleanup: invalid naming inputs, dropping finalizer", "preview", preview.Name)
+		controllerutil.RemoveFinalizer(preview, previewFinalizer)
+		if updErr := r.Update(ctx, preview); updErr != nil {
+			return ctrl.Result{}, updErr
 		}
-		// Namespace still exists, requeue
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{}, nil
 	}
 
-	// Namespace gone — remove finalizer
+	// Phase 1 — namespace deletion attempt.
+	ns := &corev1.Namespace{}
+	getErr := r.RuntimeClient.Get(ctx, client.ObjectKey{Name: nsName}, ns)
+	if getErr == nil {
+		// Namespace still exists.
+		if ns.DeletionTimestamp.IsZero() {
+			delErr := r.RuntimeClient.Delete(ctx, ns)
+			if delErr != nil && !errors.IsNotFound(delErr) {
+				attempts := r.bumpCleanupAttempts(preview)
+				logger.Error(delErr, "preview cleanup: namespace delete failed",
+					"namespace", nsName, "attempts", attempts)
+
+				conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNamespaceDeleted,
+					metav1.ConditionFalse, "DeleteFailed", delErr.Error(), preview.Generation)
+
+				if attempts >= previewMaxCleanupAttempts {
+					// Symbolic SM transition: cleanup failed.
+					preview.Status.Phase = loopzerov1.PreviewPhase(
+						previewSM.Transition(statemachine.PreviewExpiring, statemachine.PreviewCleanupFailed_),
+					)
+					if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
+						logger.Error(statusErr, "preview cleanup: failed to update CleanupFailed status")
+					}
+					// Persist the bumped annotation BEFORE returning so the
+					// next reconcile sees the latest count.
+					if updateErr := r.Update(ctx, preview); updateErr != nil {
+						logger.Error(updateErr, "preview cleanup: failed to persist attempt counter")
+					}
+					return ctrl.Result{}, delErr
+				}
+
+				if updateErr := r.Update(ctx, preview); updateErr != nil {
+					logger.Error(updateErr, "preview cleanup: failed to persist attempt counter")
+				}
+				return ctrl.Result{RequeueAfter: previewCleanupRequeueDelay}, delErr
+			}
+		}
+		// Namespace exists (either we just issued Delete or its DeletionTimestamp
+		// is set). Requeue until it's actually gone.
+		return ctrl.Result{RequeueAfter: previewCleanupRequeueDelay}, nil
+	}
+	if !errors.IsNotFound(getErr) {
+		// Transient API error during Get — retry.
+		return ctrl.Result{RequeueAfter: previewCleanupRequeueDelay}, getErr
+	}
+
+	// Phase 2 — namespace gone. Mark the conditions, drop the finalizer.
+	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNamespaceDeleted,
+		metav1.ConditionTrue, "Deleted", "Preview namespace removed", preview.Generation)
+	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewApplicationDeleted,
+		metav1.ConditionTrue, "Deleted",
+		"Application CR deletion is owned by the API (best-effort). Namespace cascade removed in-cluster workload.",
+		preview.Generation)
+
+	// Status update is best-effort here — even if it fails, dropping the
+	// finalizer must succeed or the CR is stuck forever.
+	if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
+		logger.Error(statusErr, "preview cleanup: status update failed (continuing)")
+	}
+
 	controllerutil.RemoveFinalizer(preview, previewFinalizer)
 	if err := r.Update(ctx, preview); err != nil {
 		return ctrl.Result{}, err
@@ -207,6 +464,22 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 
 	logger.Info("preview cleanup complete", "preview", preview.Name)
 	return ctrl.Result{}, nil
+}
+
+// bumpCleanupAttempts increments the cleanup attempt counter stored on
+// the CR as an annotation and returns the new value. Annotations survive
+// reconcile restarts so the count is durable.
+func (r *PreviewReconciler) bumpCleanupAttempts(preview *loopzerov1.PreviewEnvironment) int {
+	if preview.Annotations == nil {
+		preview.Annotations = make(map[string]string)
+	}
+	current := 0
+	if raw, ok := preview.Annotations[previewCleanupAnnotation]; ok {
+		fmt.Sscanf(raw, "%d", &current)
+	}
+	current++
+	preview.Annotations[previewCleanupAnnotation] = fmt.Sprintf("%d", current)
+	return current
 }
 
 // SetupPreviewController registers the PreviewController with the manager.

@@ -4,106 +4,277 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
-// PreviewStore is the persistence interface for preview environments.
+// PreviewStore is the persistence interface used by the preview HTTP handler.
+//
+// Mirrors db.PreviewStore (read-only subset). The handler does not write —
+// creation/updates flow through PreviewService (Sprint 5 / T1.1).
 type PreviewStore interface {
-	ListByTenant(tenantID string) ([]domain.Preview, error)
-	GetByID(tenantID, previewID string) (*domain.Preview, error)
-	RequestDeletion(tenantID, previewID string) error
+	ListByTenant(ctx context.Context, tenantID string) ([]domain.Preview, error)
+	ListByProject(ctx context.Context, tenantID, projectID string) ([]domain.Preview, error)
+	GetByID(ctx context.Context, tenantID, previewID string) (*domain.Preview, error)
+	RequestDeletion(ctx context.Context, tenantID, previewID string) error
+}
+
+// PreviewService is the optional service used by the Create handler. When
+// nil, POST routes are not registered (the GitHub PR webhook is the
+// primary creation path; manual POST is mostly for tests/admin).
+type PreviewService interface {
+	CreatePreview(ctx context.Context, req CreatePreviewRequest) (*domain.Preview, error)
+}
+
+// CreatePreviewRequest is the JSON payload accepted by the Create handler.
+// Field names match the CLI's preview shape and the github.PullRequestEvent
+// fields used by the webhook handler (T3.1).
+//
+// tenantID is private and never read from the request body — it is injected
+// by the handler from the authenticated user context to prevent
+// cross-tenant creations.
+type CreatePreviewRequest struct {
+	ProjectID      string `json:"project_id"`
+	PRNumber       int    `json:"pr_number"`
+	Branch         string `json:"branch"`
+	CommitSHA      string `json:"commit_sha"`
+	RepoFullName   string `json:"repo_full_name,omitempty"`
+	InstallationID int64  `json:"installation_id,omitempty"`
+	TTLHours       int    `json:"ttl_hours,omitempty"` // 0 = use default (72h)
+
+	tenantID string // injected from middleware; never deserialized
 }
 
 // PreviewHandler handles preview environment API endpoints.
 type PreviewHandler struct {
-	store  PreviewStore
-	logger *slog.Logger
+	store   PreviewStore
+	service PreviewService
+	logger  *slog.Logger
 }
 
-// NewPreviewHandler creates a new PreviewHandler.
-func NewPreviewHandler(store PreviewStore, logger *slog.Logger) *PreviewHandler {
-	return &PreviewHandler{store: store, logger: logger}
+// NewPreviewHandler creates a new PreviewHandler. service may be nil if
+// only read/delete endpoints should be exposed.
+func NewPreviewHandler(store PreviewStore, service PreviewService, logger *slog.Logger) *PreviewHandler {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &PreviewHandler{store: store, service: service, logger: logger}
 }
 
-// List returns all preview environments for the authenticated tenant.
-// GET /api/v1/previews
+// requestTimeout is applied to every preview HTTP handler. Generous enough
+// for slow PG, tight enough that idle requests don't block forever.
+const previewRequestTimeout = 30 * time.Second
+
+// Auth + project URL parameter extraction. Returns (tenantID, projectName,
+// ok). When ok=false, an error response has already been written.
+func (h *PreviewHandler) authAndProject(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+	uc := middleware.GetUserContext(r.Context())
+	if uc == nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		return "", "", false
+	}
+	project := chi.URLParam(r, "project")
+	if strings.TrimSpace(project) == "" {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project is required"))
+		return "", "", false
+	}
+	return uc.TenantID, project, true
+}
+
+// List returns all preview environments for the authenticated tenant
+// scoped to the project in the URL.
+//
+// GET /api/v1/projects/{project}/previews
 func (h *PreviewHandler) List(w http.ResponseWriter, r *http.Request) {
-	user := middleware.GetUserContext(r.Context())
-	if user == nil {
-		jsonError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+	ctx, cancel := context.WithTimeout(r.Context(), previewRequestTimeout)
+	defer cancel()
+
+	tenantID, projectID, ok := h.authAndProject(w, r)
+	if !ok {
 		return
 	}
 
-	previews, err := h.store.ListByTenant(user.TenantID)
+	previews, err := h.store.ListByProject(ctx, tenantID, projectID)
 	if err != nil {
-		h.logger.Error("list previews failed", "error", err, "tenant", user.TenantID)
-		jsonError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list preview environments")
+		h.logger.Error("preview list failed",
+			"error", err,
+			"tenant", tenantID,
+			"project", projectID,
+		)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"previews": previews,
-		"total":    len(previews),
+		"count":    len(previews),
+		"total":    len(previews), // legacy alias used by older CLI builds
 	})
 }
 
 // Get returns a specific preview environment.
-// GET /api/v1/previews/{id}
+//
+// GET /api/v1/projects/{project}/previews/{id}
 func (h *PreviewHandler) Get(w http.ResponseWriter, r *http.Request) {
-	user := middleware.GetUserContext(r.Context())
-	if user == nil {
-		jsonError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+	ctx, cancel := context.WithTimeout(r.Context(), previewRequestTimeout)
+	defer cancel()
+
+	tenantID, projectID, ok := h.authAndProject(w, r)
+	if !ok {
 		return
 	}
 
 	previewID := chi.URLParam(r, "id")
-	if previewID == "" {
-		jsonError(w, http.StatusBadRequest, "MISSING_ID", "Preview ID required")
+	if strings.TrimSpace(previewID) == "" {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("preview id is required"))
 		return
 	}
 
-	preview, err := h.store.GetByID(user.TenantID, previewID)
+	preview, err := h.store.GetByID(ctx, tenantID, previewID)
 	if err != nil {
-		jsonError(w, http.StatusNotFound, "NOT_FOUND", "Preview environment not found")
+		if errors.Is(err, loopzeroerrors.ErrPreviewNotFound) {
+			writeLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
+			return
+		}
+		h.logger.Error("preview get failed", "error", err, "preview", previewID)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(preview)
+	// Defense in depth: the store filters by tenant, but if a preview were
+	// for a different project under the same tenant, return 404 — never
+	// leak across project boundaries.
+	if preview.ProjectID != projectID {
+		writeLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, preview)
 }
 
-// Delete requests deletion of a preview environment.
-// DELETE /api/v1/previews/{id}
+// Delete requests deletion of a preview environment (soft-delete).
+// The PreviewController observes the change and tears down the namespace.
+//
+// DELETE /api/v1/projects/{project}/previews/{id}
 func (h *PreviewHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	user := middleware.GetUserContext(r.Context())
-	if user == nil {
-		jsonError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+	ctx, cancel := context.WithTimeout(r.Context(), previewRequestTimeout)
+	defer cancel()
+
+	tenantID, projectID, ok := h.authAndProject(w, r)
+	if !ok {
 		return
 	}
 
 	previewID := chi.URLParam(r, "id")
-	if previewID == "" {
-		jsonError(w, http.StatusBadRequest, "MISSING_ID", "Preview ID required")
+	if strings.TrimSpace(previewID) == "" {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("preview id is required"))
 		return
 	}
 
-	if err := h.store.RequestDeletion(user.TenantID, previewID); err != nil {
-		h.logger.Error("delete preview failed", "error", err, "preview", previewID)
-		jsonError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to request preview deletion")
+	// Confirm cross-project access is rejected.
+	preview, err := h.store.GetByID(ctx, tenantID, previewID)
+	if err != nil {
+		if errors.Is(err, loopzeroerrors.ErrPreviewNotFound) {
+			writeLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
+			return
+		}
+		h.logger.Error("preview lookup before delete failed", "error", err)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+	if preview.ProjectID != projectID {
+		writeLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"status":  "deleting",
-		"message": "Preview environment deletion requested",
+	if err := h.store.RequestDeletion(ctx, tenantID, previewID); err != nil {
+		if errors.Is(err, loopzeroerrors.ErrPreviewNotFound) {
+			writeLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
+			return
+		}
+		h.logger.Error("preview delete failed", "error", err, "preview", previewID)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"id":     previewID,
+		"status": "deleting",
 	})
 }
+
+// Create handles manual / webhook-driven preview creation.
+//
+// POST /api/v1/projects/{project}/previews
+func (h *PreviewHandler) Create(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), previewRequestTimeout)
+	defer cancel()
+
+	tenantID, projectID, ok := h.authAndProject(w, r)
+	if !ok {
+		return
+	}
+
+	if h.service == nil {
+		// No PreviewService wired — feature isn't fully online yet.
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("preview service not available"))
+		return
+	}
+
+	var body CreatePreviewRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("malformed JSON: "+err.Error()))
+		return
+	}
+	// URL project takes precedence over body field (URL is canonical).
+	body.ProjectID = projectID
+
+	if body.PRNumber <= 0 {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("pr_number must be positive"))
+		return
+	}
+	if strings.TrimSpace(body.Branch) == "" {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("branch is required"))
+		return
+	}
+	if strings.TrimSpace(body.CommitSHA) == "" {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("commit_sha is required"))
+		return
+	}
+
+	// Inject tenant from authenticated context — never trust client.
+	body.tenantID = tenantID
+
+	preview, err := h.service.CreatePreview(ctx, body)
+	if err != nil {
+		var te *loopzeroerrors.LoopZeroError
+		if errors.As(err, &te) {
+			writeLoopZeroError(w, te)
+			return
+		}
+		h.logger.Error("preview create failed", "error", err)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, preview)
+}
+
+// tenantID accessor — kept private so the API surface for outside callers
+// stays JSON-driven; PreviewService consumes it via the same struct in-package.
+func (req *CreatePreviewRequest) TenantID() string { return req.tenantID }
+
+// SetTenantID allows trusted internal callers (webhook handler) to inject
+// the resolved tenant before forwarding to the service.
+func (req *CreatePreviewRequest) SetTenantID(t string) { req.tenantID = t }

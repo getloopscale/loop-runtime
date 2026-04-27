@@ -2,6 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import { ApiError } from '../api/client';
+import { classifyNetworkError } from '../output/error-message';
 import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
 
 interface ScaleApiResponse {
@@ -11,6 +12,7 @@ interface ScaleApiResponse {
     min: number;
     max: number;
     cpu_target: number;
+    cooldown?: number;
   };
   status: string;
 }
@@ -168,10 +170,14 @@ export class ScaleCommand {
     if (response.autoscaling) {
       this.deps.writeTo(`  Autoscaling: ${response.autoscaling.min}-${response.autoscaling.max} replicas`);
       this.deps.writeTo(`  CPU target:  ${response.autoscaling.cpu_target}%`);
+      if (response.autoscaling.min === 0) {
+        this.deps.writeTo(`  Scale-to-zero: enabled (cooldown: ${response.autoscaling.cooldown ?? 300}s)`);
+        this.deps.writeTo('  Note: First request after idle will take ~5-10s (cold start).');
+      }
     }
     this.deps.writeTo('');
-    this.deps.writeTo('Scaling applied. Changes will take effect on the next deploy.');
-    this.deps.writeTo('Run `loopzero deploy` to apply immediately.');
+    this.deps.writeTo('Scaling configuration acknowledged. Changes take effect on the next deploy.');
+    this.deps.writeTo('Update autoscaling in loopzero.yaml, then run `loopzero deploy`.');
 
     return 0;
   }
@@ -193,6 +199,20 @@ export class ScaleCommand {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
       if (err.statusCode === 404) {
+        // CHG-2026-04-23-AUDIT-27: differentiate "feature not deployed"
+        // (generic router 404 with code=NOT_FOUND) from "resource not
+        // found" (specific codes like PROJECT_NOT_FOUND). Without this
+        // users see "The requested endpoint does not exist." and
+        // conclude they typed the wrong URL, when in fact the /scale
+        // backend is not yet available on this server.
+        if (err.code === 'NOT_FOUND') {
+          return this.exitWithError(
+            opts,
+            'Scaling is not yet available on this server.',
+            3,
+            'SCALE_NOT_AVAILABLE',
+          );
+        }
         return this.exitWithError(opts, err.message, 3, err.code);
       }
       if (err.statusCode === 409) {
@@ -202,6 +222,11 @@ export class ScaleCommand {
         return this.exitWithError(opts, err.message, 1, err.code);
       }
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');

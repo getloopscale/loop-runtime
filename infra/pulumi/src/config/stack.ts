@@ -50,6 +50,13 @@ export interface PlatformStackConfig {
   // cosignPassword: password used during cosign generate-key-pair
   readonly cosignPrivateKeyB64?: string;
   readonly cosignPassword?: string;
+  // Cosign PUBLIC key for runtime cluster verification (Sprint 6 / T2.1).
+  // Generated from the private key:  cosign public-key --key cosign.key | base64 -w0
+  // Distributed to the runtime cluster as Secret cosign-public-key
+  // (namespace cosign-system) so policy-controller can verify signatures
+  // without holding the private key. NOT secret per se — public keys are
+  // safe to commit — but stored alongside cosignPrivateKeyB64 for symmetry.
+  readonly cosignPublicKeyB64?: string;
 
   // Cloudflare — static frontend delivery (Sprint 10)
   // Optional: when set, enables CF Worker + KV routing for static frontends.
@@ -260,5 +267,10 @@ export function loadStackConfig(): PlatformStackConfig {
     // Cosign signing key — stored encrypted via: pulumi config set --secret cosignPrivateKeyB64 $(base64 -w0 cosign.key)
     cosignPrivateKeyB64: config.get("cosignPrivateKeyB64") ?? undefined,
     cosignPassword: config.get("cosignPassword") ?? undefined,
+    // Cosign public key — Sprint 6 / T2.1. Distributed to the runtime cluster
+    // as Secret cosign-public-key (namespace cosign-system) so policy-controller
+    // can verify image signatures. Set via:
+    //   pulumi config set cosignPublicKeyB64 $(cosign public-key --key cosign.key | base64 -w0)
+    cosignPublicKeyB64: config.get("cosignPublicKeyB64") ?? undefined,
   };
 }

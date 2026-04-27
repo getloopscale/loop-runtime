@@ -2,6 +2,8 @@ module github.com/loopzero/loopzero/operators
 
 go 1.25.0
 
+toolchain go1.25.9
+
 require (
 	github.com/go-logr/logr v1.4.3
 	github.com/minio/madmin-go/v3 v3.0.110

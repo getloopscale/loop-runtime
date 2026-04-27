@@ -922,4 +922,174 @@ describe('validateConfig', () => {
       expect(warnings.find(w => w.includes('apps.api.foo'))).toBeDefined();
     });
   });
+
+  // KEDA scale-to-zero validation
+  describe('scale-to-zero (KEDA)', () => {
+    it('accepts autoscaling.min: 0 for server apps', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: 0, max: 5, targetCPU: 80 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const minErr = errors.find(e => e.field.includes('autoscaling.min'));
+      expect(minErr).toBeUndefined();
+    });
+
+    it('accepts autoscaling.min: 0 for frontend apps', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          web: {
+            path: '.',
+            framework: 'react',
+            type: 'frontend',
+            port: 80,
+            autoscaling: { min: 0, max: 3, targetCPU: 80 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const minErr = errors.find(e => e.field.includes('autoscaling.min'));
+      expect(minErr).toBeUndefined();
+    });
+
+    it('rejects autoscaling.min: 0 for workers (no HTTP wake-up)', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          processor: {
+            path: '.',
+            framework: 'express',
+            type: 'worker',
+            port: null,
+            autoscaling: { min: 0, max: 5, targetCPU: 80 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const minErr = errors.find(e => e.field.includes('autoscaling.min'));
+      expect(minErr).toBeDefined();
+      expect(minErr!.message).toContain('scale-to-zero');
+      expect(minErr!.message).toContain('worker');
+    });
+
+    it('rejects autoscaling.min: -1', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: -1, max: 5, targetCPU: 80 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const minErr = errors.find(e => e.field.includes('autoscaling.min'));
+      expect(minErr).toBeDefined();
+    });
+
+    it('accepts cooldown: 300 (valid)', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: 0, max: 5, targetCPU: 80, cooldown: 300 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const cdErr = errors.find(e => e.field.includes('cooldown'));
+      expect(cdErr).toBeUndefined();
+    });
+
+    it('rejects cooldown: 10 (below minimum 30)', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: 0, max: 5, targetCPU: 80, cooldown: 10 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const cdErr = errors.find(e => e.field.includes('cooldown'));
+      expect(cdErr).toBeDefined();
+      expect(cdErr!.message).toContain('30');
+      expect(cdErr!.message).toContain('3600');
+    });
+
+    it('rejects cooldown: 5000 (above maximum 3600)', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: 0, max: 5, targetCPU: 80, cooldown: 5000 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const cdErr = errors.find(e => e.field.includes('cooldown'));
+      expect(cdErr).toBeDefined();
+    });
+
+    it('accepts missing cooldown (defaults to 300 server-side)', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: 0, max: 5, targetCPU: 80 },
+          },
+        },
+      };
+      const { errors } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const cdErr = errors.find(e => e.field.includes('cooldown'));
+      expect(cdErr).toBeUndefined();
+    });
+
+    it('warns on unknown autoscaling sub-field', () => {
+      const config: LoopZeroYaml = {
+        project: 'test',
+        apps: {
+          api: {
+            path: '.',
+            framework: 'express',
+            type: 'server',
+            port: 3000,
+            autoscaling: { min: 1, max: 5, targetCPU: 80, bogusField: 42 } as any,
+          },
+        },
+      };
+      const { warnings } = validateConfig(config, '/tmp', { skipFilesystemChecks: true });
+      const w = warnings.find(w => w.includes('bogusField'));
+      expect(w).toBeDefined();
+      expect(w).toContain('autoscaling.bogusField');
+    });
+  });
 });

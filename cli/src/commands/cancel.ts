@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client';
+import { classifyNetworkError } from '../output/error-message';
 
 import { formatErrorMessage } from '../output/error-message';
 interface CancelApiResponse {
@@ -88,6 +89,11 @@ export class CancelCommand {
         return this.exitWithError(opts, `Build ${buildId} has already completed. Nothing to cancel.`, 3, 'BUILD_ALREADY_COMPLETED');
       }
       return this.exitWithError(opts, formatErrorMessage('Cancel failed', err.message, 'Try again'), 3, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, formatErrorMessage('Cancel failed', err.message, 'Try again'), 3, 'UNEXPECTED_ERROR');

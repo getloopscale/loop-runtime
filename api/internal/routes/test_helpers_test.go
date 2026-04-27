@@ -26,16 +26,6 @@ func withChiParam(r *http.Request, key, value string) *http.Request {
 	return r.WithContext(ctx)
 }
 
-// withChiParams sets multiple chi URL parameters on the request for tests.
-func withChiParams(r *http.Request, params map[string]string) *http.Request {
-	rctx := chi.NewRouteContext()
-	for k, v := range params {
-		rctx.URLParams.Add(k, v)
-	}
-	ctx := context.WithValue(r.Context(), chi.RouteCtxKey, rctx)
-	return r.WithContext(ctx)
-}
-
 // defaultUserContext returns a standard authenticated user for tests.
 func defaultUserContext() *middleware.UserContext {
 	return &middleware.UserContext{

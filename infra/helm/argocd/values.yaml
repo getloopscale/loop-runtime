@@ -160,11 +160,11 @@ notifications:
   # IMPORTANT: argo-cd chart v7.x uses "notifiers" key (not "services")
   notifiers:
     service.webhook.loopzero-api: |
-      # NOTE (infra-arch-012): This URL uses platform-system namespace which is correct for
+      # NOTE (infra-arch-012): This URL uses loopzero-system namespace which is correct for
       # production (where ArgoCD and loopzero-api share the namespace). In local dev (k3d),
       # ArgoCD lives in the 'argocd' namespace so this cross-namespace DNS name still
       # resolves correctly — K8s DNS handles {svc}.{ns}.svc.cluster.local across namespaces.
-      url: http://loopzero-api.platform-system.svc.cluster.local:8080/internal/argocd-callback
+      url: http://loopzero-api.loopzero-system.svc.cluster.local:8080/internal/argocd-callback
       headers:
       - name: Content-Type
         value: application/json

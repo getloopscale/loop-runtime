@@ -18,7 +18,7 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: PodChaos
 metadata:
   name: argocd-crash
-  namespace: platform-system
+  namespace: loopzero-system
   annotations:
     loopzero.io/roadmap: "08"
     loopzero.io/hypothesis: "ArgoCD crash does not affect running workloads; breaker records degradation"
@@ -33,7 +33,7 @@ spec:
   mode: all
   selector:
     namespaces:
-      - platform-system
+      - loopzero-system
     labelSelectors:
       "app.kubernetes.io/name": "argocd-server"
   duration: "90s"

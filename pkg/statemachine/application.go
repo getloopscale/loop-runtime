@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package statemachine
+
+// T3.6 / ARCH-002: LoopZeroApplication lifecycle state machine.
+//
+// String values match operators/api/v1.ApplicationPhase constants
+// (Progressing, Serving, Reachable, Degraded, Down) so the controller
+// can cast Transition results directly to ApplicationPhase.
+//
+// Unlike most LoopZero state machines (Build, Tenant, Preview), the
+// Application machine is CYCLIC — apps can move Reachable → Degraded
+// → Reachable across many reconciles in their lifetime. It has no
+// terminal state.
+//
+// States:
+//   Progressing — newly created or rolling update in progress
+//   Serving     — endpoints ready, ingress configured, route NOT yet reachable
+//   Reachable   — route probe succeeded; the app is user-facing
+//   Degraded    — was Reachable, now route probe fails; recoverable
+//   Down        — was Serving/Reachable, endpoints dropped to zero
+const (
+	ApplicationEmpty       State = ""
+	ApplicationProgressing State = "Progressing"
+	ApplicationServing     State = "Serving"
+	ApplicationReachable   State = "Reachable"
+	ApplicationDegraded    State = "Degraded"
+	ApplicationDown        State = "Down"
+)
+
+// LoopZeroApplication events.
+const (
+	ApplicationCreate           Event = "Create"           // initial reconcile
+	ApplicationEndpointsReady   Event = "EndpointsReady"   // Service has ≥1 ready endpoint
+	ApplicationEndpointsLost    Event = "EndpointsLost"    // Service has 0 ready endpoints
+	ApplicationRouteOK          Event = "RouteOK"          // ExposedRoute is Reachable
+	ApplicationRouteFail        Event = "RouteFail"        // ExposedRoute probe failed
+	ApplicationUpdate           Event = "Update"           // Spec changed, rolling update
+)
+
+// NewApplicationMachine returns the LoopZeroApplication state machine.
+//
+// Lifecycle (typical):
+//   Empty → Progressing → Serving → Reachable
+//
+// Cycles:
+//   Reachable ↔ Degraded (probe flapping)
+//   Reachable/Serving → Down (all endpoints lost)
+//   Down → Progressing (recovery via reconcile)
+//   Reachable/Degraded → Progressing (Update event, rolling deploy)
+//
+// No terminal state — application lives until CR is deleted.
+func NewApplicationMachine() *Machine {
+	return NewMachine(MachineConfig{
+		Name: "LoopZeroApplication",
+		Transitions: []transition{
+			// Initial creation
+			{From: ApplicationEmpty, Event: ApplicationCreate, To: ApplicationProgressing},
+
+			// Progressing → Serving (endpoints ready)
+			{From: ApplicationProgressing, Event: ApplicationEndpointsReady, To: ApplicationServing},
+			{From: ApplicationProgressing, Event: ApplicationEndpointsLost, To: ApplicationDown},
+
+			// Serving → Reachable (route probe ok)
+			{From: ApplicationServing, Event: ApplicationRouteOK, To: ApplicationReachable},
+			{From: ApplicationServing, Event: ApplicationEndpointsLost, To: ApplicationDown},
+			{From: ApplicationServing, Event: ApplicationUpdate, To: ApplicationProgressing},
+
+			// Reachable: probe flapping → Degraded; endpoints loss → Down
+			{From: ApplicationReachable, Event: ApplicationRouteFail, To: ApplicationDegraded},
+			{From: ApplicationReachable, Event: ApplicationEndpointsLost, To: ApplicationDown},
+			{From: ApplicationReachable, Event: ApplicationUpdate, To: ApplicationProgressing},
+
+			// Degraded → Reachable (probe recovered) or Down (endpoints lost)
+			{From: ApplicationDegraded, Event: ApplicationRouteOK, To: ApplicationReachable},
+			{From: ApplicationDegraded, Event: ApplicationEndpointsLost, To: ApplicationDown},
+			{From: ApplicationDegraded, Event: ApplicationUpdate, To: ApplicationProgressing},
+
+			// Down → Progressing (recovery — endpoints came back)
+			{From: ApplicationDown, Event: ApplicationEndpointsReady, To: ApplicationProgressing},
+			{From: ApplicationDown, Event: ApplicationUpdate, To: ApplicationProgressing},
+		},
+		// No terminal state — apps cycle until deletion.
+	})
+}

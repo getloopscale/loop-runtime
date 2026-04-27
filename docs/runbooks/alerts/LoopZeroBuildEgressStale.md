@@ -14,7 +14,7 @@
 ```bash
 # 1. Check DNS resolution from build namespace
 kubectl --context build -n argo run dns-test --rm -i --restart=Never \
-  --image=busybox:1.36 -- nslookup gitea-http.platform-system.svc.cluster.local
+  --image=busybox:1.36 -- nslookup gitea-http.loopzero-system.svc.cluster.local
 
 # 2. Check NetworkPolicy in build namespace
 kubectl --context build -n argo get networkpolicy
@@ -40,8 +40,8 @@ curl -s 'http://localhost:9090/api/v1/query?query=loopzero_build_egress_connecti
    # List policies and check egress rules
    kubectl --context build -n argo get networkpolicy -o yaml | grep -A20 "egress"
    # Verify required egress targets are allowed:
-   # - Gitea (platform-system, port 3000)
-   # - MinIO (platform-system, port 9000)
+   # - Gitea (loopzero-system, port 3000)
+   # - MinIO (loopzero-system, port 9000)
    # - Container registry (port 443)
    # - DNS (kube-system, port 53)
    ```
@@ -76,7 +76,7 @@ curl -s 'http://localhost:9090/api/v1/query?query=loopzero_build_egress_connecti
 ```bash
 # Verify DNS works
 kubectl --context build -n argo run dns-verify --rm -i --restart=Never \
-  --image=busybox:1.36 -- nslookup gitea-http.platform-system.svc.cluster.local
+  --image=busybox:1.36 -- nslookup gitea-http.loopzero-system.svc.cluster.local
 
 # Verify connectivity metric recovered
 curl -s 'http://localhost:9090/api/v1/query?query=loopzero_build_egress_connectivity' \

@@ -41,7 +41,7 @@ export function createDockerRegistryPullSecret(
     resourceName,
     {
       metadata: {
-        name: "loopzero-infra-registry",
+        name: "loopzero-system",
         namespace,
         annotations: { "pulumi.com/patchForce": "true" },
       },

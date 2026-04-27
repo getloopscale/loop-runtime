@@ -79,7 +79,7 @@ kubectl apply -f https://raw.githubusercontent.com/grafana/k6-operator/main/bund
 
 # Run L2 suite
 kubectl apply -f job-template.yaml
-kubectl logs -n platform-system -l app=k6-runner -f
+kubectl logs -n loopzero-system -l app=k6-runner -f
 ```
 
 ### Continuous monitoring (soak test)

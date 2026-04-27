@@ -114,7 +114,7 @@ func setupCellRouter(
 	}
 
 	if cfg.DynamicRouter {
-		k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, "platform-system")
+		k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, "loopzero-system")
 		if k8sErr == nil {
 			dynRouter := placement.NewDynamicRouter(k8sCellStore, 60*time.Second, logger)
 			cells, loadErr := k8sCellStore.LoadCells(context.Background())

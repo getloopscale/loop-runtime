@@ -47,6 +47,13 @@ type Config struct {
 	ShutdownCtx        context.Context
 	ShutdownCancel     context.CancelFunc
 	BuildHandler       *routes.BuildHandler
+	// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: handler for
+	// GET /api/v1/builds/{id}/attestation. Wired in api/cmd/setup_routes.go
+	// against PostgresAttestationStore.
+	BuildAttestationHandler *routes.BuildAttestationHandler
+	// Sprint 6 / T1.2: handler for GET /api/v1/builds/{id}/sbom. Returns
+	// per-app SBOM metadata + presigned download URLs from S3.
+	BuildSBOMHandler *routes.BuildSBOMHandler
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 	RateLimiter        *middleware.RateLimiter
 	// HTTP server timeouts (configurable via env vars)
@@ -64,13 +71,18 @@ type Config struct {
 	RollbackHandler         *routes.RollbackHandler
 	PromoteHandler          *routes.PromoteHandler
 	StatusHandler           *routes.StatusHandler
+	ScaleHandler            *routes.ScaleHandler
 	BuildListHandler        *routes.BuildListHandler
 	SecretK8sSync           routes.SecretK8sSync
 	EnvironmentHandler      *routes.EnvironmentHandler
 	TeamHandler             *routes.TeamHandler
+	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
+	// omits username field). Implemented by db.PostgresTeamStore.
+	AuthUserLookup          routes.UsernameLookup
 	DomainHandler           *routes.DomainHandler
 	GitHubWebhookHandler    http.Handler
 	RepositoryHandler       *routes.RepositoryHandler
+	PreviewHandler          *routes.PreviewHandler // Sprint 5 / T2.3 — preview environments
 	IsProduction            bool
 	AuditWriter             middleware.AuditWriter
 	AuditHandler            *routes.AuditHandler

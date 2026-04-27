@@ -7,9 +7,17 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 )
+
+// ErrRepositoryNotLinked is returned by UnlinkRepository when no link row
+// exists for the (tenant, project) pair. CHG-2026-04-23-AUDIT-21 — mirrors
+// the sentinel pattern in k8s.ErrEnvironmentNotFound (AUDIT-12), replacing
+// the silent-success behaviour where DELETE returned nil regardless of
+// whether any row was affected.
+var ErrRepositoryNotLinked = errors.New("repository store: no repository linked to project")
 
 // ProjectRepository links a LoopZero project to a GitHub repository.
 type ProjectRepository struct {
@@ -109,13 +117,19 @@ func (s *PostgresRepositoryStore) LinkRepository(ctx context.Context, tenantID, 
 }
 
 // UnlinkRepository disconnects a project from its GitHub repository.
+// CHG-2026-04-23-AUDIT-21: returns ErrRepositoryNotLinked if no row was
+// affected, so the caller can surface 404 to the user instead of a
+// misleading 200 "disconnected".
 func (s *PostgresRepositoryStore) UnlinkRepository(ctx context.Context, tenantID, projectName string) error {
-	_, err := s.DB.Exec(ctx,
+	tag, err := s.DB.Exec(ctx,
 		`DELETE FROM project_repositories WHERE tenant_id = $1 AND project_name = $2`,
 		tenantID, projectName,
 	)
 	if err != nil {
 		return fmt.Errorf("repository store: unlink repository: %w", err)
+	}
+	if tag.RowsAffected == 0 {
+		return ErrRepositoryNotLinked
 	}
 	return nil
 }

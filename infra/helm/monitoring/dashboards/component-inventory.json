@@ -235,7 +235,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_pod_container_info{namespace=\"platform-system\"}",
+          "expr": "kube_pod_container_info{namespace=\"loopzero-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -243,7 +243,7 @@
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_pod_container_status_restarts_total{namespace=\"platform-system\"}",
+          "expr": "kube_pod_container_status_restarts_total{namespace=\"loopzero-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -357,7 +357,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_deployment_spec_replicas{namespace=\"platform-system\"}",
+          "expr": "kube_deployment_spec_replicas{namespace=\"loopzero-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -365,7 +365,7 @@
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_deployment_status_replicas_ready{namespace=\"platform-system\"}",
+          "expr": "kube_deployment_status_replicas_ready{namespace=\"loopzero-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -500,7 +500,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_statefulset_replicas{namespace=\"platform-system\"}",
+          "expr": "kube_statefulset_replicas{namespace=\"loopzero-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -508,7 +508,7 @@
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_statefulset_status_replicas_ready{namespace=\"platform-system\"}",
+          "expr": "kube_statefulset_status_replicas_ready{namespace=\"loopzero-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -593,7 +593,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "count(kube_pod_container_status_waiting{namespace=\"platform-system\"} == 1) or vector(0)",
+          "expr": "count(kube_pod_container_status_waiting{namespace=\"loopzero-system\"} == 1) or vector(0)",
           "legendFormat": "Waiting",
           "refId": "A"
         }
@@ -628,7 +628,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "count(kube_pod_container_status_waiting_reason{namespace=\"platform-system\",reason=\"CrashLoopBackOff\"} == 1) or vector(0)",
+          "expr": "count(kube_pod_container_status_waiting_reason{namespace=\"loopzero-system\",reason=\"CrashLoopBackOff\"} == 1) or vector(0)",
           "legendFormat": "CrashLoop",
           "refId": "A"
         }
@@ -663,7 +663,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "count(kube_pod_container_status_waiting_reason{namespace=\"platform-system\",reason=\"ImagePullBackOff\"} == 1) or vector(0)",
+          "expr": "count(kube_pod_container_status_waiting_reason{namespace=\"loopzero-system\",reason=\"ImagePullBackOff\"} == 1) or vector(0)",
           "legendFormat": "ImagePull",
           "refId": "A"
         }
@@ -699,7 +699,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"platform-system\"}[1h])) or vector(0)",
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"loopzero-system\"}[1h])) or vector(0)",
           "legendFormat": "Restarts",
           "refId": "A"
         }
@@ -752,7 +752,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(kube_pod_container_status_restarts_total{namespace=\"platform-system\"}[5m])",
+          "expr": "increase(kube_pod_container_status_restarts_total{namespace=\"loopzero-system\"}[5m])",
           "legendFormat": "{{container}}",
           "refId": "A"
         }

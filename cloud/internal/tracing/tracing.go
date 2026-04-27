@@ -27,7 +27,7 @@ import (
 
 const (
 	// DefaultEndpoint is the in-cluster OTel Collector address.
-	DefaultEndpoint = "otel-collector.platform-system.svc:4317"
+	DefaultEndpoint = "otel-collector.loopzero-system.svc.cluster.local:4317"
 
 	// exportTimeout is the maximum time for an export attempt.
 	exportTimeout = 1 * time.Second

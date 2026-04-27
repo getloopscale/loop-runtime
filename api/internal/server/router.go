@@ -87,7 +87,9 @@ func NewRouter(cfg Config) *chi.Mux {
 			r.Use(middleware.AuditLog(cfg.Logger, cfg.AuditWriter))
 
 			// Auth routes
-			auth := routes.NewAuthHandler()
+			// AUDIT-10: pass UsernameLookup so Whoami can resolve display-friendly
+			// username from the users.username column (populated by migration 000037).
+			auth := routes.NewAuthHandler(cfg.AuthUserLookup)
 			r.Get("/api/v1/auth/whoami", auth.Whoami)
 
 			// Rate limiting middleware chain — used for all mutation routes.
@@ -227,6 +229,20 @@ func registerProtectedRoutes(
 		r.With(rateLimitMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
 	}
 
+	// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: supply-chain attestation
+	// endpoint. Returns the cosign signature reference + sha256 digest
+	// for a build's release. Behind requireAuth (parent group middleware).
+	if cfg.BuildAttestationHandler != nil {
+		r.Get("/api/v1/builds/{id}/attestation", cfg.BuildAttestationHandler.Get)
+	}
+
+	// Sprint 6 / T1.2: per-app SBOM endpoint. Returns metadata + presigned
+	// download URL for the CycloneDX/SPDX SBOM of every signed image in
+	// the build. Behind requireAuth (parent group middleware).
+	if cfg.BuildSBOMHandler != nil {
+		r.Get("/api/v1/builds/{id}/sbom", cfg.BuildSBOMHandler.Get)
+	}
+
 	if cfg.LogsHandler != nil {
 		r.Get("/api/v1/builds/{id}/logs", cfg.LogsHandler.Get)
 	}
@@ -236,6 +252,9 @@ func registerProtectedRoutes(
 	}
 	if cfg.StatusHandler != nil {
 		r.Get("/api/v1/projects/{name}/status", cfg.StatusHandler.Get)
+	}
+	if cfg.ScaleHandler != nil {
+		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/scale", cfg.ScaleHandler.Scale)
 	}
 	if cfg.BuildListHandler != nil {
 		r.Get("/api/v1/projects/{name}/builds", cfg.BuildListHandler.List)
@@ -285,6 +304,17 @@ func registerProtectedRoutes(
 		r.Post("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Connect)
 		r.Delete("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Disconnect)
 		r.Get("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.GetConnection)
+	}
+
+	// Preview environment routes (Sprint 5 / T2.3).
+	// URL shape matches the CLI: /api/v1/projects/{project}/previews[...].
+	// POST is rate-limited and idempotent (creating the same PR twice
+	// upserts into the same row). DELETE is rate-limited.
+	if cfg.PreviewHandler != nil {
+		r.Get("/api/v1/projects/{project}/previews", cfg.PreviewHandler.List)
+		r.Get("/api/v1/projects/{project}/previews/{id}", cfg.PreviewHandler.Get)
+		r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{project}/previews/{id}", cfg.PreviewHandler.Delete)
+		r.With(append(idempotentMiddlewares, rateLimitMiddlewares...)...).Post("/api/v1/projects/{project}/previews", cfg.PreviewHandler.Create)
 	}
 
 	if cfg.AuditHandler != nil {

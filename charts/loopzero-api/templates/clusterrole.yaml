@@ -1,0 +1,38 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+rules:
+  # CHG-2026-04-25-E2E (Gap 3): loopzero-api needs broad RBAC to drive deploys.
+  # Previously only Tenant CRs were granted, but the runtime also creates:
+  #   - LoopZeroApplication / ExposedRoute / PreviewEnvironment CRs (per deploy)
+  #   - Argo Workflows in the `argo` namespace (build pipeline)
+  #   - ClusterCredentials (multi-cluster mode)
+  #   - PlatformBootstrap (dev seed)
+  # Without these, `loopzero deploy` fails at submit-workflow with 403 Forbidden.
+  - apiGroups: ["loopzero.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["*/status"]
+    verbs: ["get", "update", "patch"]
+  # Argo Workflows — submitting builds + reading status for SSE event stream
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows", "workflows/status", "workflowtemplates", "clusterworkflowtemplates"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Namespaces (creating tenant build/runtime namespaces)
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create"]
+  # Secrets + ConfigMaps in tenant namespaces (ESO sync, app config)
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # Services + Pods read access (health checks, log collection)
+  - apiGroups: [""]
+    resources: ["services", "pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+{{- end }}

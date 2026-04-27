@@ -8,12 +8,12 @@
 
 1. Check ClusterCredential CRs:
    ```bash
-   kubectl --context=$MGMT_CONTEXT get clustercredentials -n platform-system -o wide
+   kubectl --context=$MGMT_CONTEXT get clustercredentials -n loopzero-system -o wide
    ```
 
 2. If CRs exist but `Connected=False`:
    ```bash
-   kubectl --context=$MGMT_CONTEXT describe clustercredential <name> -n platform-system
+   kubectl --context=$MGMT_CONTEXT describe clustercredential <name> -n loopzero-system
    # Check Conditions for error details
    ```
 
@@ -23,19 +23,19 @@
 
 4. Check kubeconfig Secret:
    ```bash
-   kubectl --context=$MGMT_CONTEXT get secret runtime-cell-kubeconfig -n platform-system
+   kubectl --context=$MGMT_CONTEXT get secret runtime-cell-kubeconfig -n loopzero-system
    ```
 
 5. Check DynamicRouter logs:
    ```bash
-   kubectl --context=$MGMT_CONTEXT logs -n platform-system -l app=loopzero-api --tail=50 | grep "cell"
+   kubectl --context=$MGMT_CONTEXT logs -n loopzero-system -l app=loopzero-api --tail=50 | grep "cell"
    ```
 
 ## Immediate Remediation
 
 ### Option 1: Rollback to single-cell mode
 ```bash
-kubectl --context=$MGMT_CONTEXT set env deployment/loopzero-api -n platform-system LOOPZERO_SINGLE_CELL=true
+kubectl --context=$MGMT_CONTEXT set env deployment/loopzero-api -n loopzero-system LOOPZERO_SINGLE_CELL=true
 # API restarts with StaticRouter — bypasses cell discovery entirely
 ```
 
@@ -52,7 +52,7 @@ kubectl --context=$MGMT_CONTEXT apply -f docs/plans/multi-cell-default-roadmap.m
 # If DO kubeconfig expired, refresh:
 doctl kubernetes cluster kubeconfig show <cluster-id> > /tmp/runtime-kubeconfig
 kubectl --context=$MGMT_CONTEXT create secret generic runtime-cell-kubeconfig \
-  -n platform-system --from-file=kubeconfig=/tmp/runtime-kubeconfig \
+  -n loopzero-system --from-file=kubeconfig=/tmp/runtime-kubeconfig \
   --dry-run=client -o yaml | kubectl apply -f -
 # Controller will detect Secret change within 5 minutes (or immediately with Secret watch)
 ```
@@ -60,7 +60,7 @@ kubectl --context=$MGMT_CONTEXT create secret generic runtime-cell-kubeconfig \
 ## Post-Incident
 
 - Verify alert resolves: `loopzero_cell_discovery_count > 0`
-- Remove `LOOPZERO_SINGLE_CELL=true` if set: `kubectl set env deployment/loopzero-api -n platform-system LOOPZERO_SINGLE_CELL-`
+- Remove `LOOPZERO_SINGLE_CELL=true` if set: `kubectl set env deployment/loopzero-api -n loopzero-system LOOPZERO_SINGLE_CELL-`
 - Run a test deploy to confirm end-to-end works
 
 ## Escalation

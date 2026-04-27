@@ -1,5 +1,6 @@
 import { ApiError } from '../api/client';
 import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
+import { classifyNetworkError } from '../output/error-message';
 
 interface SecretListResponse {
   secrets: Array<{ name: string; environment: string; app: string }>;
@@ -127,6 +128,11 @@ export class SecretSetCommand {
     if (err instanceof ApiError) {
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
     }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
+    }
     return this.exitWithError(opts, 'Unexpected error. Try again later.', 3, 'UNEXPECTED_ERROR');
   }
 }
@@ -190,6 +196,11 @@ export class SecretListCommand {
   private handleError(opts: SecretListOptions, err: unknown): number {
     if (err instanceof ApiError) {
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
     }
     return this.exitWithError(opts, 'Unexpected error. Try again later.', 3, 'UNEXPECTED_ERROR');
   }
@@ -268,6 +279,11 @@ export class SecretDeleteCommand {
   private handleError(opts: SecretDeleteOptions, err: unknown): number {
     if (err instanceof ApiError) {
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
     }
     return this.exitWithError(opts, 'Unexpected error. Try again later.', 3, 'UNEXPECTED_ERROR');
   }

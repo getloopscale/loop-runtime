@@ -39,5 +39,5 @@ spec:
   matchResources:
     namespaceSelector:
       matchLabels:
-        # Only enforce in the platform-system namespace (where ArgoCD lives)
+        # Only enforce in the loopzero-system namespace (where ArgoCD lives)
         app.kubernetes.io/part-of: loopzero-platform

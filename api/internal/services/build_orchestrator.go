@@ -16,6 +16,14 @@ import (
 type WorkflowStatus struct {
 	Phase      string // "Succeeded", "Failed", "Running", "Pending", ""
 	FinishedAt string // RFC3339 timestamp when workflow reached terminal state; empty while in-flight.
+
+	// CHG-2026-04-25-ATTESTATION-WIRE: per-step output parameters captured
+	// from `status.nodes[*].outputs.parameters[]` on the Argo Workflow CR.
+	// Outer key is the node displayName (which equals the step template
+	// name, e.g., "sign-image-api", "build-image-api"). Inner key is the
+	// parameter name (e.g., "signature", "digest"). Empty/nil if the
+	// workflow declared no outputs (legacy or non-build workflows).
+	Outputs map[string]map[string]string
 }
 
 // WorkflowSubmitter abstracts Argo Workflows submission (DIP -- no direct coupling).
@@ -51,9 +59,10 @@ type WorkflowSpec struct {
 // This is the raw input -- use NormalizeApp() to resolve into a fully populated AppUnit.
 // AppAutoscalingSpec holds HPA configuration from loopzero.yaml.
 type AppAutoscalingSpec struct {
-	MinReplicas int `json:"min,omitempty"`
-	MaxReplicas int `json:"max,omitempty"`
-	TargetCPU   int `json:"target_cpu,omitempty"`
+	MinReplicas    int `json:"min,omitempty"`
+	MaxReplicas    int `json:"max,omitempty"`
+	TargetCPU      int `json:"target_cpu,omitempty"`
+	CooldownPeriod int `json:"cooldown,omitempty"` // Seconds before scale-to-zero (default: 300)
 }
 
 type AppSpec struct {
@@ -107,11 +116,28 @@ type GitOpsRemoveOpts struct {
 // AppRelease describes a built app with its image digest and URL.
 type AppRelease struct {
 	Name        string `json:"name"`
-	ImageDigest string `json:"image_digest"`
+	ImageDigest string `json:"image_digest"` // legacy: this is actually the image TAG (e.g., registry/org/app:commit), NOT the cryptographic digest. See ImageDigestSHA256 below for the real sha256.
 	URL         string `json:"url"`
 	Type        string `json:"type,omitempty"`      // "server", "worker", "frontend"
 	Rendering   string `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
 	DurationMs  int    `json:"duration_ms"`
+
+	// CHG-2026-04-25-ATTESTATION-WIRE: supply-chain attestation fields
+	// surfaced from Argo workflow output parameters by the reconciler.
+	// Empty/nil when the workflow declared no outputs (legacy or
+	// non-build workflows). The deploy must NOT fail when these are
+	// missing — they are observability data, not control data.
+	ImageDigestSHA256 string     `json:"image_digest_sha256,omitempty"`
+	ImageSignature    string     `json:"image_signature,omitempty"`
+	ImageSignedAt     *time.Time `json:"image_signed_at,omitempty"`
+
+	// Sprint 6 / T3.1: SBOM fields surfaced from the syft step. The SBOM
+	// blob lives in S3; here we keep only metadata so per-app responses
+	// stay light. SBOM step is best-effort (continueOn.failed) so absence
+	// of these fields never blocks a deploy.
+	SBOMS3Key          string `json:"sbom_s3_key,omitempty"`
+	SBOMFormat         string `json:"sbom_format,omitempty"`
+	SBOMComponentCount int    `json:"sbom_component_count,omitempty"`
 }
 
 // SyncClient abstracts ArgoCD sync operations (DIP).
@@ -193,6 +219,12 @@ type BuildOrchestratorDeps struct {
 	BaseDomain         string              // Base domain for app hostnames
 	// B15: plan-cap enforcement for per-service replica count. nil = disabled.
 	PlanCap PlanCapChecker
+	// KEDAEnabled gates scale-to-zero (MinReplicas=0). When false, min:0 is rejected.
+	KEDAEnabled bool
+	// Sprint 6 / T3.1: per-app attestation store. When non-nil, the
+	// container delivery activator persists per-app signature + SBOM
+	// metadata to release_app_attestations.
+	AppAttestationStore db.AppAttestationStore
 }
 
 // BuildOrchestrator orchestrates the entire deploy flow:
@@ -224,6 +256,7 @@ type BuildOrchestrator struct {
 	kvClient          StaticRoutingClient // CF KV client for static frontend routing
 	baseDomain        string
 	planCap           PlanCapChecker // B15: nil = enforcement disabled
+	kedaEnabled       bool           // gates scale-to-zero (min=0)
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
@@ -247,13 +280,14 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 	delivery := deps.Delivery
 	if delivery == nil {
 		delivery = NewContainerDeliveryActivator(ContainerDeliveryDeps{
-			ReleaseStore:      deps.ReleaseStore,
-			EnvTargetStore:    deps.EnvTargetStore,
-			EventStore:        deps.EventStore,
-			Sync:              deps.Sync,
-			Locker:            deps.Locker,
-			GitOps:            deps.GitOps,
-			ArgocdSyncTimeout: syncTimeout,
+			ReleaseStore:        deps.ReleaseStore,
+			EnvTargetStore:      deps.EnvTargetStore,
+			EventStore:          deps.EventStore,
+			Sync:                deps.Sync,
+			Locker:              deps.Locker,
+			GitOps:              deps.GitOps,
+			ArgocdSyncTimeout:   syncTimeout,
+			AppAttestationStore: deps.AppAttestationStore, // Sprint 6 / T3.1
 		})
 	}
 
@@ -273,6 +307,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		kvClient:          deps.KVClient,
 		baseDomain:        deps.BaseDomain,
 		planCap:           deps.PlanCap, // B15: optional plan-cap enforcement
+		kedaEnabled:       deps.KEDAEnabled,
 	}
 }
 

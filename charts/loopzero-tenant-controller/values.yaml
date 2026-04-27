@@ -1,0 +1,146 @@
+global:
+  registry: registry.digitalocean.com/loopzero-system
+  imagePullSecrets: []
+
+image:
+  repository: loopzero-tenant-controller
+  tag: dev
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+revisionHistoryLimit: 3
+priorityClassName: system-cluster-critical
+
+nameOverride: ""
+fullnameOverride: ""
+
+podLabels: {}
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  healthPort: 8081
+  metricsPort: 8443
+
+# Operator configuration (environment variables via ConfigMap)
+config:
+  giteaUrl: "http://gitea-http.gitea.svc.cluster.local:3000"
+  baseDomain: ""
+  argocdNamespace: "argocd"
+  workloadClusterUrl: ""
+  ingressNamespace: "traefik"
+  insecureSkipTls: "false"
+
+# Secrets (environment variables via Secret)
+secrets:
+  create: true
+  existingSecret: ""
+  giteaToken: ""
+
+# Kubeconfig for multi-cluster access
+kubeconfig:
+  build:
+    existingConfigMap: ""
+  runtime:
+    existingConfigMap: ""
+
+# Operator binary arguments
+args:
+  leaderElect: true
+  healthProbeBindAddress: ":8081"
+  metricsBindAddress: ":8443"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: true
+
+rbac:
+  create: true
+
+startupProbe:
+  enabled: true
+  path: /healthz
+  port: health
+  failureThreshold: 30
+  periodSeconds: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: health
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: health
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+
+metrics:
+  serviceMonitor:
+    enabled: false
+    port: metrics
+    interval: 30s
+    scrapeTimeout: 10s
+
+networkPolicy:
+  enabled: true
+  ingress:
+    # Prometheus scraping metrics
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8443
+  extraEgress:
+    # Kubernetes API server
+    - ports:
+        - protocol: TCP
+          port: 6443
+    # Gitea
+    - ports:
+        - protocol: TCP
+          port: 3000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gitea
+    # ArgoCD
+    - ports:
+        - protocol: TCP
+          port: 8080
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+    # MinIO
+    - ports:
+        - protocol: TCP
+          port: 9000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loopzero-system
+
+topologySpreadConstraints:
+  enabled: false
+
+affinity: {}
+
+tolerations: []
+nodeSelector: {}

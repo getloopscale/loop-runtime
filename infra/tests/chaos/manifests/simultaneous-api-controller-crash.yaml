@@ -20,7 +20,7 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: PodChaos
 metadata:
   name: simultaneous-api-controller-crash
-  namespace: platform-system
+  namespace: loopzero-system
   annotations:
     loopzero.io/roadmap: "scale-50k-plan"
     loopzero.io/dod-test: "TestChaos_SimultaneousCrash"
@@ -30,7 +30,7 @@ spec:
   mode: all
   selector:
     namespaces:
-      - platform-system
+      - loopzero-system
     labelSelectors:
       "loopzero.io/component": "control-plane"
   duration: "10s"

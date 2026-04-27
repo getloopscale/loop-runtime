@@ -300,3 +300,151 @@ func TestParseStatusAndAllPodNodesExitedZero_NoPods(t *testing.T) {
 		t.Error("expected false when no Pod-type nodes exist")
 	}
 }
+
+// CHG-2026-04-25-ATTESTATION-WIRE Phase 2 (AC-2.1): the parser must
+// extract `status.nodes[*].outputs.parameters[]` keyed by displayName
+// so the API can correlate signature/digest values back to the app
+// they belong to.
+func TestExtractStepOutputs_ParsesCosignAndBuildkitOutputs(t *testing.T) {
+	wf := map[string]interface{}{
+		"status": map[string]interface{}{
+			"nodes": map[string]interface{}{
+				"loopzero-build-build-abc-sign-1": map[string]interface{}{
+					"type":        "Pod",
+					"displayName": "sign-image-api",
+					"outputs": map[string]interface{}{
+						"parameters": []interface{}{
+							map[string]interface{}{"name": "signature", "value": "registry.example.com/org/api:abc@sha256:deadbeef"},
+							map[string]interface{}{"name": "digest", "value": "sha256:deadbeef"},
+						},
+					},
+				},
+				"loopzero-build-build-abc-build-1": map[string]interface{}{
+					"type":        "Pod",
+					"displayName": "build-image-api",
+					"outputs": map[string]interface{}{
+						"parameters": []interface{}{
+							map[string]interface{}{"name": "digest", "value": "sha256:deadbeef"},
+						},
+					},
+				},
+				"loopzero-build-build-abc-clone-1": map[string]interface{}{
+					"type":        "Pod",
+					"displayName": "clone-repo",
+					// No outputs declared — must be skipped.
+				},
+				"loopzero-build-build-abc": map[string]interface{}{
+					// Workflow root — DAG-type, NOT Pod. Must be skipped
+					// even if it has aggregate outputs.
+					"type":        "DAG",
+					"displayName": "loopzero-build",
+				},
+			},
+		},
+	}
+
+	got := extractStepOutputs(wf)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 steps with outputs, got %d: %#v", len(got), got)
+	}
+
+	signOutputs, ok := got["sign-image-api"]
+	if !ok {
+		t.Fatal("missing sign-image-api in extracted outputs")
+	}
+	if signOutputs["signature"] != "registry.example.com/org/api:abc@sha256:deadbeef" {
+		t.Errorf("sign-image-api signature: got %q", signOutputs["signature"])
+	}
+	if signOutputs["digest"] != "sha256:deadbeef" {
+		t.Errorf("sign-image-api digest: got %q", signOutputs["digest"])
+	}
+
+	buildOutputs, ok := got["build-image-api"]
+	if !ok {
+		t.Fatal("missing build-image-api in extracted outputs")
+	}
+	if buildOutputs["digest"] != "sha256:deadbeef" {
+		t.Errorf("build-image-api digest: got %q", buildOutputs["digest"])
+	}
+
+	if _, ok := got["clone-repo"]; ok {
+		t.Error("clone-repo (no outputs) should not appear in result")
+	}
+	if _, ok := got["loopzero-build"]; ok {
+		t.Error("DAG-type root node should not appear in result (only Pod nodes have real outputs)")
+	}
+}
+
+// AC-2.2: legacy/missing inputs MUST NOT panic, MUST return nil
+// (so callers can `len() == 0` and degrade gracefully).
+func TestExtractStepOutputs_DefensiveAgainstMissingFields(t *testing.T) {
+	cases := []struct {
+		name string
+		obj  map[string]interface{}
+	}{
+		{"nil object", nil},
+		{"no status", map[string]interface{}{"spec": map[string]interface{}{}}},
+		{"status not a map", map[string]interface{}{"status": "running"}},
+		{"no nodes", map[string]interface{}{"status": map[string]interface{}{"phase": "Succeeded"}}},
+		{"empty nodes", map[string]interface{}{"status": map[string]interface{}{"nodes": map[string]interface{}{}}}},
+		{
+			"node missing outputs",
+			map[string]interface{}{
+				"status": map[string]interface{}{
+					"nodes": map[string]interface{}{
+						"n1": map[string]interface{}{"type": "Pod", "displayName": "step1"},
+					},
+				},
+			},
+		},
+		{
+			"node outputs not a map",
+			map[string]interface{}{
+				"status": map[string]interface{}{
+					"nodes": map[string]interface{}{
+						"n1": map[string]interface{}{"type": "Pod", "displayName": "step1", "outputs": "string"},
+					},
+				},
+			},
+		},
+		{
+			"parameter missing name",
+			map[string]interface{}{
+				"status": map[string]interface{}{
+					"nodes": map[string]interface{}{
+						"n1": map[string]interface{}{
+							"type":        "Pod",
+							"displayName": "step1",
+							"outputs": map[string]interface{}{
+								"parameters": []interface{}{
+									map[string]interface{}{"value": "x"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extractStepOutputs(tc.obj)
+			if got != nil && len(got) != 0 {
+				t.Errorf("expected nil/empty for %q, got %#v", tc.name, got)
+			}
+		})
+	}
+}
+
+// AC-2.3: GetStatus consumers must compile (the new field is additive).
+// This test is a compile-time guard: if WorkflowStatus.Outputs is
+// removed or renamed, this won't build.
+func TestWorkflowStatus_OutputsField_CompileGuard(t *testing.T) {
+	var s services.WorkflowStatus
+	s.Outputs = map[string]map[string]string{
+		"sign-image-api": {"signature": "x"},
+	}
+	if s.Outputs["sign-image-api"]["signature"] != "x" {
+		t.Fatal("compile guard inconsistent")
+	}
+}

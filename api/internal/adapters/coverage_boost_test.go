@@ -16,16 +16,6 @@ import (
 // TenantDBDeleterAdapter tests
 // =============================================================================
 
-// fakeTenantStore implements the DeleteTenantsFKOrdered interface.
-type fakeTenantStore struct {
-	counts db.TenantDeletionCounts
-	err    error
-}
-
-func (f *fakeTenantStore) DeleteTenantsFKOrdered(_ context.Context, _ []string) (db.TenantDeletionCounts, error) {
-	return f.counts, f.err
-}
-
 func TestTenantDBDeleterAdapter_DeleteTenantsFKOrdered_MapsFields(t *testing.T) {
 	store := &db.PostgresTenantStore{}
 	// We can't call the real store without DB, so test the adapter wiring by

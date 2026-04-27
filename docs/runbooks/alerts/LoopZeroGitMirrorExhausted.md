@@ -14,20 +14,20 @@
 ## Triage (copy-paste commands)
 ```bash
 # 1. Check Gitea connectivity from API
-kubectl --context mgmt -n platform-system exec deploy/loopzero-api -- \
-  curl -s http://gitea-http.platform-system:3000/api/v1/version
+kubectl --context mgmt -n loopzero-system exec deploy/loopzero-api -- \
+  curl -s http://gitea-http.loopzero-system:3000/api/v1/version
 
 # 2. Check API logs for mirror push errors
-kubectl --context mgmt -n platform-system logs deploy/loopzero-api --tail=50 \
+kubectl --context mgmt -n loopzero-system logs deploy/loopzero-api --tail=50 \
   | grep -i "mirror\|gitops\|push"
 
 # 3. Check build status for affected tenant
-kubectl --context mgmt -n platform-system logs deploy/loopzero-api --tail=50 \
+kubectl --context mgmt -n loopzero-system logs deploy/loopzero-api --tail=50 \
   | grep -i "RELEASING\|gitops"
 
 # 4. Check Gitea repo status
-kubectl --context mgmt -n platform-system exec deploy/loopzero-api -- \
-  curl -s "http://gitea-http.platform-system:3000/api/v1/repos/search?limit=10" \
+kubectl --context mgmt -n loopzero-system exec deploy/loopzero-api -- \
+  curl -s "http://gitea-http.loopzero-system:3000/api/v1/repos/search?limit=10" \
   -H "Authorization: token $GITEA_TOKEN" | jq '.[].full_name'
 
 # 5. Check Prometheus metrics
@@ -41,18 +41,18 @@ curl -s 'http://localhost:9090/api/v1/query?query=loopzero_git_mirror_status{sta
 2. **Gitea is up but push fails (auth/permission):**
    ```bash
    # Verify Gitea admin token
-   kubectl --context mgmt -n platform-system get secret gitea-admin-secret -o jsonpath='{.data.token}' | base64 -d
+   kubectl --context mgmt -n loopzero-system get secret gitea-admin-secret -o jsonpath='{.data.token}' | base64 -d
 
    # Test push manually
-   kubectl --context mgmt -n platform-system exec deploy/loopzero-api -- \
-     git ls-remote http://gitea-http.platform-system:3000/<org>/<repo>.git
+   kubectl --context mgmt -n loopzero-system exec deploy/loopzero-api -- \
+     git ls-remote http://gitea-http.loopzero-system:3000/<org>/<repo>.git
    ```
 
 3. **Retry gitops push via API (trigger a new build):**
    ```bash
    # The next successful build for this tenant/env will attempt gitops push
    # Alternatively, trigger a manual retry if the build is stuck in RELEASING
-   kubectl --context mgmt -n platform-system exec deploy/loopzero-api -- \
+   kubectl --context mgmt -n loopzero-system exec deploy/loopzero-api -- \
      curl -s -X POST http://localhost:8080/api/v1/internal/retry-mirror \
      -H "Content-Type: application/json" \
      -d '{"tenant":"<tenant>","environment":"<env>"}'
@@ -61,9 +61,9 @@ curl -s 'http://localhost:9090/api/v1/query?query=loopzero_git_mirror_status{sta
 4. **Verify manifests are valid:**
    ```bash
    # Clone and inspect the gitops repo
-   kubectl --context mgmt -n platform-system run git-check --rm -i --restart=Never \
+   kubectl --context mgmt -n loopzero-system run git-check --rm -i --restart=Never \
      --image=bitnami/git:latest -- \
-     git clone http://gitea-http.platform-system:3000/<org>/<repo>.git /tmp/check
+     git clone http://gitea-http.loopzero-system:3000/<org>/<repo>.git /tmp/check
    ```
 
 ## Escalation

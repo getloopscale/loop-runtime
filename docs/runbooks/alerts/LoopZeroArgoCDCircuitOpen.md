@@ -22,7 +22,7 @@ kubectl --context mgmt -n argocd exec deploy/argocd-server -- \
   curl -s http://localhost:8080/healthz
 
 # 3. Check circuit breaker state in API logs
-kubectl --context mgmt -n platform-system logs deploy/loopzero-api --tail=30 \
+kubectl --context mgmt -n loopzero-system logs deploy/loopzero-api --tail=30 \
   | grep -i "circuit\|argocd"
 
 # 4. Check ArgoCD Application sync status
@@ -51,7 +51,7 @@ kubectl --context mgmt -n argocd get applications -o wide
 4. **If circuit stays open after ArgoCD is healthy:**
    ```bash
    # Restart API to reset circuit state
-   kubectl --context mgmt -n platform-system rollout restart deployment/loopzero-api
+   kubectl --context mgmt -n loopzero-system rollout restart deployment/loopzero-api
    ```
 
 ## Escalation
@@ -68,7 +68,7 @@ curl -s 'http://localhost:9090/api/v1/query?query=loopzero_argocd_circuit_state'
   | jq '.data.result[0].value[1]'
 
 # Verify deploys work (try a build)
-kubectl --context mgmt -n platform-system logs deploy/loopzero-api --tail=10 | grep -i "circuit"
+kubectl --context mgmt -n loopzero-system logs deploy/loopzero-api --tail=10 | grep -i "circuit"
 ```
 
 ## Post-Incident

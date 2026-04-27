@@ -1,0 +1,109 @@
+# Custom images used by CWT templates.
+# Override for local dev: task images:build pushes to k3d-loopzero-registry:5000.
+# Production: CI builds and pushes to registry.digitalocean.com/loopzero-system.
+images:
+  cloneRunner: "registry.digitalocean.com/loopzero-system/loopzero-clone-runner:v0.1.0"
+
+# S3 bucket name for source bundles and build cache.
+# Must match SOURCE_BUCKET env var in loopzero-api and the bucket created by Pulumi.
+sourceBucket: "loopzero-builds"
+
+controller:
+  securityContext:
+    runAsNonRoot: true
+  # Parallelism limits to prevent scheduler pressure under high concurrency.
+  # workflowWorkers: max concurrent workflow reconciliations.
+  # podWorkers: max concurrent pod reconciliations.
+  # These prevent 100 simultaneous builds from overwhelming the build cluster.
+  workflowWorkers: 32
+  podWorkers: 32
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 6060
+    initialDelaySeconds: 30
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 6060
+    initialDelaySeconds: 10
+    periodSeconds: 15
+  # REVIEW-MOD-1: Increased from 500m/256Mi to 2/1Gi. With 32 workflowWorkers
+  # and 50+ concurrent builds (each generating ~8 pods), the controller needs
+  # headroom for workflow reconciliation, pod scheduling, and CRD watch events.
+  resources:
+    limits:
+      cpu: "2"
+      memory: "1Gi"
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+  metricsConfig:
+    enabled: true
+    port: 9090
+    path: /metrics
+
+# Workflow execution ServiceAccount and RBAC.
+# The WorkflowTemplate (loopzero-build-nodejs-v1) specifies serviceAccountName: loopzero-build-sa.
+# This SA is created by Helm with RBAC for workflow task results.
+# The controller creates pods using its own ClusterRole — the workflow SA just needs to exist
+# and have workflowtaskresults permissions so step pods can report back.
+workflow:
+  serviceAccount:
+    create: true
+    name: loopzero-build-sa
+  rbac:
+    create: true
+
+# MinIO object storage configuration.
+# Used by clone step (source bundles) and cache steps (dependency cache).
+# IMPORTANT: Set insecure=false in production overlays. This flag disables
+# TLS verification for the MinIO endpoint and is only appropriate for local
+# development with k3d (MinIO without TLS).
+#
+# BLOCKER-1 fix: Gitea section removed. Source code is now fetched from MinIO
+# (where the CLI uploads it) instead of cloning from Gitea cross-cluster.
+# Gitea is only used for GitOps manifests (ArgoCD watches it).
+minio:
+  insecure: true   # DEV ONLY — allows HTTP MinIO (no TLS)
+
+# Pod retention for log collection — Promtail needs time to ship logs to Loki
+# before pods are garbage collected. 4h is sufficient for all build durations.
+workflowDefaults:
+  spec:
+    podGC:
+      strategy: OnWorkflowCompletion
+      deleteDelayDuration: 4h
+    # P1-6: Auto-delete PVCs from completed/failed workflows.
+    # Without this, workspace PVCs accumulate from failed builds (audit: 4x 20Gi orphaned).
+    volumeClaimGC:
+      strategy: OnWorkflowCompletion
+
+server:
+  securityContext:
+    runAsNonRoot: true
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 2746
+    initialDelaySeconds: 10
+    periodSeconds: 20
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 2746
+    initialDelaySeconds: 10
+    periodSeconds: 20
+  resources:
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+  # REVIEW-SEC: Changed from NodePort to ClusterIP. The Argo Server UI gives
+  # full admin access to all workflows. Use `kubectl port-forward` when needed.
+  # Previously exposed on NodePort 30081 which was accessible to any host process.
+  service:
+    type: ClusterIP

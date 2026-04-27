@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -168,6 +169,14 @@ func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 	projectName := chi.URLParam(r, "name")
 
 	if err := h.store.UnlinkRepository(ctx, uc.TenantID, projectName); err != nil {
+		// AUDIT-21: map "not linked" to 404 instead of silent success.
+		// RepositoryStore returns a sentinel we match by message suffix
+		// to keep routes free of a direct db package dependency (same
+		// pattern used in AUDIT-12 for environments).
+		if strings.Contains(err.Error(), "no repository linked to project") {
+			writeLoopZeroError(w, loopzeroerrors.NewRepositoryNotLinked(projectName))
+			return
+		}
 		slog.ErrorContext(ctx, "unlink repository failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to disconnect"})
 		return

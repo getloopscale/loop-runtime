@@ -10,14 +10,14 @@ metadata:
     release: monitoring
 spec:
   prober:
-    url: blackbox-exporter.platform-system.svc:9115
+    url: blackbox-exporter.loopzero-system.svc:9115
   module: http_2xx
   targets:
     staticConfig:
       static:
-        - http://loopzero-api.platform-system.svc:3000/api/v1/health
-        - http://gitea-http.platform-system.svc:3000/api/v1/version
-        - http://traefik.platform-system.svc:9000/ping
+        - http://loopzero-api.loopzero-system.svc:3000/api/v1/health
+        - http://gitea-http.loopzero-system.svc:3000/api/v1/version
+        - http://traefik.loopzero-system.svc:9000/ping
   interval: 30s
   scrapeTimeout: 15s
 ---
@@ -30,7 +30,7 @@ metadata:
     release: monitoring
 spec:
   prober:
-    url: blackbox-exporter.platform-system.svc:9115
+    url: blackbox-exporter.loopzero-system.svc:9115
   module: http_2xx
   targets:
     staticConfig:

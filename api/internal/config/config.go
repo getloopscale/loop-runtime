@@ -136,10 +136,10 @@ type Config struct {
 	// JWT Authentication (Sprint 11 — Ory Hydra integration)
 	// When set, enables dual validation: JWT (via JWKS) + GitHub PAT (legacy).
 	// When empty, only GitHub PAT validation is used (backward compatible).
-	// Env: JWKS_ENDPOINT (e.g., "http://ory-hydra-public.loopzero-system:4444/.well-known/jwks.json")
+	// Env: JWKS_ENDPOINT (e.g., "http://ory-hydra-public.ory.svc.cluster.local:4444/.well-known/jwks.json")
 	JWKSEndpoint string
 	// JWTIssuer is the expected issuer in JWT tokens (must match Hydra config).
-	// Env: JWT_ISSUER (e.g., "http://ory-hydra-public.loopzero-system:4444/")
+	// Env: JWT_ISSUER (e.g., "http://ory-hydra-public.ory.svc.cluster.local:4444/")
 	JWTIssuer string
 
 	// Roadmap 02 — API Loop Extraction feature flag.
@@ -209,6 +209,16 @@ type Config struct {
 	// triggers rotation alerts on long-running processes).
 	// Env: LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT
 	ServiceAuthSecretCreatedAt time.Time
+
+	// KEDAEnabled is a feature gate for KEDA-based scale-to-zero support.
+	//
+	// When false (default), the API rejects autoscaling requests with
+	// min:0 replicas — scale-to-zero is not supported without KEDA.
+	// When true, the API allows min:0 and expects KEDA ScaledObjects
+	// to manage the zero-to-one scaling transition.
+	//
+	// Env: LOOPZERO_KEDA_ENABLED
+	KEDAEnabled bool
 }
 
 // Load reads all configuration from environment variables with sensible defaults.
@@ -252,7 +262,7 @@ func Load() Config {
 		RuntimeKubeContext: envOr("RUNTIME_KUBE_CONTEXT", "k3d-loopzero-workload"),
 
 		// Service URLs
-		GiteaURL:             envOr("GITEA_URL", "http://gitea-http.loopzero-system.svc.cluster.local:3000"),
+		GiteaURL:             envOr("GITEA_URL", "http://gitea-http.gitea.svc.cluster.local:3000"),
 		GiteaCrossClusterURL: envOr("GITEA_CROSS_CLUSTER_URL", ""),
 		APICrossClusterURL:   envOr("API_CROSS_CLUSTER_URL", "http://loopzero-api.loopzero-system.svc.cluster.local:3001"),
 		ArgocdURL:            envOr("ARGOCD_URL", "http://argocd-server.argocd.svc.cluster.local:80"),
@@ -331,7 +341,7 @@ func Load() Config {
 		CORSAllowedOrigin: os.Getenv("CORS_ALLOWED_ORIGIN"),
 
 		// JWT Authentication (Sprint 11 — when set, enables dual JWT + PAT validation)
-		JWKSEndpoint: os.Getenv("JWKS_ENDPOINT"),
+		JWKSEndpoint: os.Getenv("JWKS_URL"),
 		JWTIssuer:    os.Getenv("JWT_ISSUER"),
 
 		// Roadmap 02 — API Loop Extraction. When true, the API does not run
@@ -352,6 +362,9 @@ func Load() Config {
 
 		// WS.1: Service auth secret rotation monitoring.
 		ServiceAuthSecretCreatedAt: envTime("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT"),
+
+		// KEDA scale-to-zero feature gate.
+		KEDAEnabled: os.Getenv("LOOPZERO_KEDA_ENABLED") == "true",
 	}
 }
 
@@ -427,6 +440,10 @@ func (c Config) Validate() error {
 	// H1: DATABASE_URL with sslmode=disable in production sends credentials and data in plaintext.
 	if c.DatabaseURL != "" && c.IsProduction() && strings.Contains(c.DatabaseURL, "sslmode=disable") {
 		return fmt.Errorf("DATABASE_URL contains sslmode=disable which is forbidden in production — use sslmode=require or sslmode=verify-full")
+	}
+	// KEDA feature gate — informational log when enabled.
+	if c.KEDAEnabled {
+		slog.Warn("KEDA feature gate is enabled — scale-to-zero (min:0) autoscaling requests will be accepted")
 	}
 	return nil
 }

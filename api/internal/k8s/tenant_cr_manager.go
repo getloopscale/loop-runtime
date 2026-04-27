@@ -6,6 +6,7 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -22,7 +23,7 @@ import (
 )
 
 // tenantNamespace is the Kubernetes namespace where Tenant CRs live.
-// Local dev: loopzero-system (Tilt/k3d). Production: platform-system (Pulumi/DO).
+// Local dev and production: loopzero-system.
 // Configurable via TENANT_NAMESPACE env var.
 var tenantNamespace = func() string {
 	if ns := os.Getenv("TENANT_NAMESPACE"); ns != "" {
@@ -171,8 +172,15 @@ func (m *TenantCRManager) AddEnvironment(ctx context.Context, tenantID, envName 
 	})
 }
 
+// ErrEnvironmentNotFound is returned by RemoveEnvironment when the named
+// environment is not present in the Tenant CR. Callers can map to HTTP 404.
+// AUDIT-12 (CHG-2026-04-23-AUDIT-12): previously this was silently idempotent,
+// causing `loopzero env delete nonexistent` to return "deleted" misleadingly.
+var ErrEnvironmentNotFound = errors.New("k8s: environment not found in tenant CR")
+
 // RemoveEnvironment removes an environment entry from the Tenant CR spec.environments[].
-// Idempotent: if the environment does not exist, it returns nil without changes.
+// Returns ErrEnvironmentNotFound if the environment is not present — callers
+// should treat as HTTP 404 rather than silent success.
 // Returns an error if removing would leave zero environments (MinItems=1).
 func (m *TenantCRManager) RemoveEnvironment(ctx context.Context, tenantID, envName string) error {
 	resource := m.Client.Resource(tenantCRGVR).Namespace(tenantNamespace)
@@ -198,9 +206,9 @@ func (m *TenantCRManager) RemoveEnvironment(ctx context.Context, tenantID, envNa
 			}
 		}
 
-		// If nothing was removed, the env didn't exist — idempotent
+		// AUDIT-12: not found → explicit error (no more silent idempotence).
 		if len(filtered) == len(envs) {
-			return nil
+			return ErrEnvironmentNotFound
 		}
 
 		// Guard: cannot remove if it would leave zero environments

@@ -2,6 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 import { ApiError } from '../api/client';
+import { classifyNetworkError } from '../output/error-message';
 
 import { formatErrorMessage } from '../output/error-message';
 interface ProjectCreateResponse {
@@ -104,6 +105,11 @@ export class ProjectCreateCommand {
         return 0;
       }
       return this.exitWithError(opts, formatErrorMessage('Failed to create project', err.message, 'Try again'), 1, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 1, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, formatErrorMessage('Failed to create project', err.message, 'Try again'), 1, 'UNEXPECTED_ERROR');

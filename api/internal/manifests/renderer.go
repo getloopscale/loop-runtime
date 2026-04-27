@@ -39,10 +39,12 @@ type CustomDomainInput struct {
 
 // AutoscalingConfig defines horizontal pod autoscaler settings.
 // When present on an app, an HPA resource is generated alongside the Deployment.
+// When MinReplicas is 0, KEDA ScaledObject is generated instead of HPA for scale-to-zero.
 type AutoscalingConfig struct {
-	MinReplicas int // Minimum replicas (default: 1)
-	MaxReplicas int // Maximum replicas (default: 3)
-	TargetCPU   int // Target CPU utilization percentage (default: 80)
+	MinReplicas    int // Minimum replicas (default: 1, 0 = scale-to-zero via KEDA)
+	MaxReplicas    int // Maximum replicas (default: 3)
+	TargetCPU      int // Target CPU utilization percentage (default: 80)
+	CooldownPeriod int // Seconds before scale-to-zero (default: 300, only when MinReplicas = 0)
 }
 
 // AppManifestInput contains everything needed to generate manifests for a single app.
@@ -82,7 +84,7 @@ type RenderInput struct {
 	// B14 (MEET-2026-04-23-058): ClusterIssuerName is REQUIRED — no fallback.
 	// Set from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER). Empty = panic.
 	ClusterIssuerName    string // Required — no default; panics if empty at render time
-	GatewayNamespace     string // Default: "platform-system"
+	GatewayNamespace     string // Default: "loopzero-system"
 	DefaultCPURequest    string // Default: "100m"
 	DefaultMemoryRequest string // Default: "128Mi"
 	DefaultCPULimit      string // Default: "500m"
@@ -133,7 +135,7 @@ func (ri RenderInput) gatewayNamespace() string {
 	if ri.GatewayNamespace != "" {
 		return ri.GatewayNamespace
 	}
-	return "platform-system"
+	return "loopzero-system"
 }
 
 // leanResourcesEnabled reports whether the LOOPZERO_LEAN_RESOURCES env var

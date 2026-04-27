@@ -145,7 +145,7 @@ const (
 
 const (
 	// DefaultGiteaURL is the default in-cluster Gitea HTTP URL.
-	DefaultGiteaURL = "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+	DefaultGiteaURL = "http://gitea-http.gitea.svc.cluster.local:3000"
 
 	// DefaultArgoCDNamespace is the default namespace where ArgoCD is installed.
 	DefaultArgoCDNamespace = "argocd"

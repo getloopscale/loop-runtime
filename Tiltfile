@@ -124,7 +124,7 @@ k8s_resource(
 # TenantController operator — build and deploy
 # ---------------------------------------------------------------------------
 docker_build(
-    "tenant-controller",
+    "loopzero-tenant-controller",
     context=".",
     dockerfile="operators/Dockerfile",
     only=["operators/", "pkg/", "go.work", "go.work.sum", "api/go.mod", "api/go.sum", "infra/tests/go.mod", "infra/tests/go.sum", "infra/scripts/"],
@@ -132,7 +132,7 @@ docker_build(
 
 k8s_yaml("infra/tilt/operator-deployment.yaml")
 k8s_resource(
-    "tenant-controller",
+    "tenant-controller",  # K8s resource name (from deployment manifest)
     resource_deps=["crds", "loopzero-api", "gitea", "minio"],
     labels=["loopzero"],
 )

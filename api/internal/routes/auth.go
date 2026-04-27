@@ -4,7 +4,9 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -12,16 +14,32 @@ import (
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
-// AuthHandler provides HTTP handlers for authentication-related routes.
-type AuthHandler struct{}
+// UsernameLookup is the narrow contract AuthHandler.Whoami needs to enrich
+// the response with a display-friendly username (AUDIT-10). Implemented by
+// db.PostgresTeamStore.GetUsernameByID. A nil lookup is legal — the handler
+// simply omits the username field.
+type UsernameLookup interface {
+	GetUsernameByID(ctx context.Context, userID string) (string, error)
+}
 
-// NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler() *AuthHandler {
-	return &AuthHandler{}
+// AuthHandler provides HTTP handlers for authentication-related routes.
+type AuthHandler struct {
+	userLookup UsernameLookup
+}
+
+// NewAuthHandler creates a new AuthHandler. `userLookup` may be nil — when
+// absent, the response will not carry a `username` field (callers fall back
+// to email/user_id).
+func NewAuthHandler(userLookup UsernameLookup) *AuthHandler {
+	return &AuthHandler{userLookup: userLookup}
 }
 
 // Whoami returns the authenticated user's information.
 // GET /api/v1/auth/whoami
+//
+// AUDIT-10: response now includes `username` when available. Consumers can
+// use it as display identity when `email` is empty (OAuth2 client_credentials
+// tokens have no email claim).
 func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
@@ -38,12 +56,29 @@ func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// AUDIT-10: look up username column populated by migration 000037.
+	// Non-fatal on lookup error — we still return the rest of the identity.
+	var username string
+	if h.userLookup != nil {
+		u, err := h.userLookup.GetUsernameByID(r.Context(), uc.UserID)
+		if err != nil {
+			slog.Warn("whoami: username lookup failed (non-fatal)",
+				"user_id", uc.UserID, "error", err.Error())
+		} else {
+			username = u
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	payload := map[string]string{
 		"user_id": uc.UserID,
 		"email":   email,
 		"team":    uc.TenantID,
 		"role":    uc.Role,
-	})
+	}
+	if username != "" {
+		payload["username"] = username
+	}
+	_ = json.NewEncoder(w).Encode(payload)
 }

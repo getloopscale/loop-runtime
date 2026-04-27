@@ -4,7 +4,7 @@
 import { injectTraceContext } from '../../../src/tracing/propagation';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
-import { context, trace, propagation } from '@opentelemetry/api';
+import { trace, propagation } from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 
 describe('injectTraceContext', () => {

@@ -20,7 +20,9 @@ import {
   createDockerRegistryPullSecret,
 } from "./bootstrap-shared";
 import { installESO } from "./runtime-eso";
+import { installKeda, installKedaHttpAddon } from "./runtime-keda";
 import { installRuntimeMonitoring } from "./runtime-monitoring";
+import { createClusterImagePolicy, installPolicyController } from "./runtime-policy-controller";
 
 // ---------------------------------------------------------------------------
 // Runtime cluster bootstrap
@@ -81,6 +83,34 @@ export function bootstrapRuntimeCluster(
 
   // External Secrets Operator
   installESO(provider, infra);
+
+  // Sprint 6 / T2.2: sigstore policy-controller. Verifies cosign signatures
+  // on tenant images before admission. D4 — Audit mode: failurePolicy: Ignore
+  // and validationActions: [Audit], so unsigned/legacy images are LOGGED but
+  // not rejected for the first 2 weeks. Operator flips to Deny manually.
+  // D3 — Key-based verification: cosignPublicKeyB64 is the public half of
+  // the cosignPrivateKeyB64 used by the build cluster.
+  const policyController = installPolicyController(
+    "runtime",
+    provider,
+    ns,
+    config.cosignPublicKeyB64,
+  );
+  // Only attach the policy when a public key is configured. Without it,
+  // the ClusterImagePolicy would reference a non-existent Secret and the
+  // webhook would reject (or in Audit mode, log) every image.
+  if (config.cosignPublicKeyB64 && config.cosignPublicKeyB64.length > 0) {
+    createClusterImagePolicy(
+      "runtime",
+      provider,
+      infra.registryEndpoint,
+      policyController,
+    );
+  }
+
+  // KEDA — event-driven autoscaler for scale-to-zero tenant apps
+  const keda = installKeda("runtime", provider, ns);
+  installKedaHttpAddon("runtime", provider, keda);
 
   // ESO writer RBAC for loopzero-api
   const esoWriterRole = new k8s.rbac.v1.ClusterRole(
@@ -172,6 +202,10 @@ export function bootstrapRuntimeCluster2(
     provider,
     { write: false, dependsOn: [ns] },
   );
+
+  // KEDA — event-driven autoscaler for scale-to-zero tenant apps
+  const keda2 = installKeda("runtime-2", provider, ns);
+  installKedaHttpAddon("runtime-2", provider, keda2);
 
   return {
     ingressReady: traefik.status.apply((s) => s.status === "deployed"),

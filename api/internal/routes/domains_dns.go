@@ -42,11 +42,12 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
 	if err != nil {
 		slog.ErrorContext(ctx, "domain lookup failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		// CHG-2026-04-23-AUDIT-13: typed error shape.
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if d == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "domain not found"})
+		writeLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
 		return
 	}
 
@@ -91,7 +92,8 @@ func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
 	domainName := chi.URLParam(r, "domain")
 	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
 	if err != nil || d == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "domain not found"})
+		// CHG-2026-04-23-AUDIT-13: typed error shape.
+		writeLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
 		return
 	}
 
@@ -135,7 +137,8 @@ func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
 	domainName := chi.URLParam(r, "domain")
 	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
 	if err != nil || d == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "domain not found"})
+		// CHG-2026-04-23-AUDIT-13: typed error shape.
+		writeLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
 		return
 	}
 

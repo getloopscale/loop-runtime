@@ -125,6 +125,14 @@ var (
 		HTTPStatus: 404,
 	}
 
+	// ErrPreviewNotFound is returned when a referenced preview environment
+	// does not exist or has been soft-deleted (Sprint 5).
+	ErrPreviewNotFound = &LoopZeroError{
+		Code:       "PREVIEW_NOT_FOUND",
+		Message:    "preview environment not found",
+		HTTPStatus: 404,
+	}
+
 	// ErrNoActiveRelease is returned when rollback is attempted but no release is active.
 	ErrNoActiveRelease = &LoopZeroError{
 		Code:       "NO_ACTIVE_RELEASE",
@@ -409,6 +417,31 @@ func NewEnvironmentNotFound(name string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:       "ENVIRONMENT_NOT_FOUND",
 		Message:    fmt.Sprintf("environment '%s' not found", name),
+		HTTPStatus: 404,
+	}
+}
+
+// NewDomainNotFound creates a DOMAIN_NOT_FOUND error with domain context.
+// CHG-2026-04-23-AUDIT-13: brings domains handler into parity with other
+// NewXNotFound factories (uniform JSON shape {code, message}).
+func NewDomainNotFound(domain string) *LoopZeroError {
+	return &LoopZeroError{
+		Code:       "DOMAIN_NOT_FOUND",
+		Message:    fmt.Sprintf("domain '%s' not found", domain),
+		HTTPStatus: 404,
+	}
+}
+
+// NewRepositoryNotLinked is returned by DELETE /projects/{name}/connect when
+// the project has no linked repository to disconnect.
+// CHG-2026-04-23-AUDIT-21: fixes silent-success anti-pattern — without this,
+// the endpoint returned 200 OK even when there was nothing to disconnect,
+// identical to the bug fixed in AUDIT-6 (team member remove) and AUDIT-12
+// (environment delete).
+func NewRepositoryNotLinked(project string) *LoopZeroError {
+	return &LoopZeroError{
+		Code:       "REPOSITORY_NOT_LINKED",
+		Message:    fmt.Sprintf("no repository linked to project '%s'", project),
 		HTTPStatus: 404,
 	}
 }

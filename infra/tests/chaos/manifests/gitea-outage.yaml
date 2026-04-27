@@ -17,7 +17,7 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
   name: gitea-outage
-  namespace: platform-system
+  namespace: loopzero-system
   annotations:
     loopzero.io/roadmap: "08"
     loopzero.io/hypothesis: "Gitea outage = fast-fail builds, typed errors, no stuck state, no deadlocks"
@@ -32,7 +32,7 @@ spec:
   mode: all
   selector:
     namespaces:
-      - platform-system
+      - loopzero-system
     labelSelectors:
       "app": "loopzero-api"
   direction: to
@@ -40,7 +40,7 @@ spec:
     mode: all
     selector:
       namespaces:
-        - platform-system
+        - loopzero-system
       labelSelectors:
         "app.kubernetes.io/name": "gitea"
   duration: "120s"

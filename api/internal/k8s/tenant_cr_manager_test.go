@@ -5,6 +5,7 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 
@@ -26,8 +27,13 @@ var tenantGVR = schema.GroupVersionResource{
 // getDynamicClient returns a dynamic client for integration tests.
 // It tries in-cluster config first, then falls back to kubeconfig.
 // Returns nil if no cluster is available.
+// Skips when -short is set (these are integration tests requiring a live cluster).
 func getDynamicClient(t *testing.T) dynamic.Interface {
 	t.Helper()
+
+	if testing.Short() {
+		t.Skip("skipping: integration test requires a live Kubernetes cluster (-short flag set)")
+	}
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -282,7 +288,11 @@ func TestTenantCRManager_RemoveEnvironment(t *testing.T) {
 	}
 }
 
-func TestTenantCRManager_RemoveEnvironment_Idempotent(t *testing.T) {
+// CHG-2026-04-23-AUDIT-12: the previous contract was "silent idempotent" which
+// produced misleading 200 "deleted" responses for non-existing environments.
+// The new contract: removing a non-existing env returns ErrEnvironmentNotFound
+// so the handler can map to HTTP 404.
+func TestTenantCRManager_RemoveEnvironment_NonExisting_ReturnsNotFound(t *testing.T) {
 	client := getDynamicClient(t)
 	tenantID := "test-rm-env-idem"
 
@@ -296,10 +306,13 @@ func TestTenantCRManager_RemoveEnvironment_Idempotent(t *testing.T) {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 
-	// Remove a non-existing environment — should succeed (idempotent)
+	// Remove a non-existing environment — must return ErrEnvironmentNotFound.
 	err = mgr.RemoveEnvironment(context.Background(), tenantID, "does-not-exist")
-	if err != nil {
-		t.Fatalf("RemoveEnvironment (non-existing) should be idempotent, got: %v", err)
+	if err == nil {
+		t.Fatalf("RemoveEnvironment (non-existing) must not succeed silently")
+	}
+	if !errors.Is(err, ErrEnvironmentNotFound) {
+		t.Fatalf("want ErrEnvironmentNotFound, got %v", err)
 	}
 }
 

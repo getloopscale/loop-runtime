@@ -61,7 +61,7 @@ func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, runtimeKubeconfig, runtime
 	return &SecretK8sManager{
 		mgmtClient:     mgmtClient,
 		runtimeDynamic: runtimeDynamic,
-		mgmtNamespace:  "platform-system",
+		mgmtNamespace:  "loopzero-system",
 	}, nil
 }
 

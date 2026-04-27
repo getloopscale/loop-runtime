@@ -10,7 +10,7 @@
 set -euo pipefail
 
 STACK="${STACK:?STACK env var required}"
-NAMESPACE="platform-system"
+NAMESPACE="loopzero-system"
 
 # ── Helpers ──────────────────────────────────────────────
 

@@ -96,7 +96,7 @@ export class Prometheus extends pulumi.ComponentResource {
                   },
                   {
                     alert: "LoopZeroPodCrashLooping",
-                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopzero-.*|platform-system"}[15m]) > 0',
+                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopzero-.*|loopzero-system"}[15m]) > 0',
                     for: "5m",
                     labels: { severity: "warning" },
                     annotations: {
@@ -128,7 +128,7 @@ export class Prometheus extends pulumi.ComponentResource {
           },
           "kube-state-metrics": { fullnameOverride: "kube-state-metrics" },
           // node-exporter needs hostNetwork/hostPID/hostPath — incompatible with PSA baseline.
-          // Disabled in platform-system namespace. Deploy separately in kube-system if needed.
+          // Disabled in loopzero-system namespace. Deploy separately in kube-system if needed.
           "prometheus-node-exporter": { enabled: false },
         },
       },

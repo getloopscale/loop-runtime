@@ -42,7 +42,7 @@ type ApplicationCRManager struct {
 }
 
 // NewApplicationCRManager creates an ApplicationCRManager reusing an existing dynamic client.
-// If namespace is empty, defaults to tenantNamespace (platform-system in prod, loopzero-system in dev).
+// If namespace is empty, defaults to tenantNamespace (loopzero-system).
 func NewApplicationCRManager(client dynamic.Interface, namespace string) *ApplicationCRManager {
 	if namespace == "" {
 		namespace = tenantNamespace

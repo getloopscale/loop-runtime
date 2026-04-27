@@ -3,11 +3,17 @@
 
 import { ApiError } from '../api/client';
 import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
+import { classifyNetworkError } from '../output/error-message';
 
 // CHG-2026-04-23-AUDIT-2: aligned with real API shape.
 // API returns `last_build.id` (not build_id) and `active_release` (not release).
 // Prior test fixtures used invented field names; this interface now matches
 // what api/internal/routes/status.go actually produces.
+// CHG-2026-04-23-AUDIT-33: active_release shape follows the API
+// (api/internal/routes/status.go activeReleaseResponse): id,
+// status, git_commit, created_at. Previous code read release_id /
+// state / activated_at — all undefined at runtime, causing
+// `state.toLowerCase()` to crash.
 interface StatusApiResponse {
   environment: string;
   last_build?: {
@@ -16,12 +22,19 @@ interface StatusApiResponse {
     finished_at: string;
   };
   active_release?: {
-    release_id: string;
-    state: string;
-    activated_at: string;
+    id: string;
+    status: string;
+    git_commit?: string;
+    created_at: string;
   } | null;
   sync_status?: string;
   url?: string;
+  scaling?: {
+    replicas: number;
+    min: number;
+    max: number;
+    scaled_to_zero: boolean;
+  };
 }
 
 export interface StatusDeps {
@@ -94,7 +107,16 @@ export class StatusCommand {
     this.deps.writeTo(`Last deploy:  ${buildSummary} — ${status.last_build.status}`);
 
     if (status.active_release) {
-      this.deps.writeTo(`Release:      ${status.active_release.release_id} (${status.active_release.state.toLowerCase()} since ${this.formatTime(status.active_release.activated_at)})`);
+      this.deps.writeTo(`Release:      ${status.active_release.id} (${status.active_release.status.toLowerCase()} since ${this.formatTime(status.active_release.created_at)})`);
+    }
+
+    if (status.scaling) {
+      if (status.scaling.scaled_to_zero) {
+        this.deps.writeTo(`Scaling:      sleeping (0/${status.scaling.max} replicas)`);
+        this.deps.writeTo(`              First request wakes up in ~5-10s`);
+      } else {
+        this.deps.writeTo(`Scaling:      ${status.scaling.replicas}/${status.scaling.max} replicas`);
+      }
     }
 
     // CHG-2026-04-23-AUDIT-2: API returns literal "unknown" when sync state is
@@ -146,6 +168,13 @@ export class StatusCommand {
   private handleError(opts: StatusOptions, err: unknown): number {
     if (err instanceof ApiError) {
       return this.exitWithError(opts, err.message, err.exitCode, err.code);
+    }
+    // CHG-2026-04-23-AUDIT-24: surface API_UNREACHABLE for network errors so
+    // users know to check LOOPZERO_URL. Exit code stays 3 (contract) — only
+    // the code label and message change.
+    const net = classifyNetworkError(err);
+    if (net.isNetwork) {
+      return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
     }
     if (err instanceof Error) {
       return this.exitWithError(opts, `Unexpected error: ${err.message}`, 3, 'UNEXPECTED_ERROR');

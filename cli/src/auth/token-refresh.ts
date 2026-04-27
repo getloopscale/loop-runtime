@@ -12,13 +12,16 @@ export interface TokenRefreshDeps {
   getEmail: () => string | null;
   getTeam: () => string | null;
   fetchFn: (url: string, init?: RequestInit) => Promise<Response>;
-  writeError: (msg: string) => void;
 }
 
 /**
  * Ensures the access token is fresh before making API calls.
  * If the token is expired and a refresh token is available,
  * silently refreshes it. Returns the valid token or null.
+ *
+ * CHG-2026-04-23-AUDIT-16: does NOT write to stderr on failure. The caller
+ * (command handler) is responsible for presenting the error — writing here
+ * would pollute stdout in --json mode (scripts that do `2>&1 | jq` fail).
  */
 export async function ensureFreshToken(deps: TokenRefreshDeps): Promise<string | null> {
   const token = deps.getToken();
@@ -32,14 +35,12 @@ export async function ensureFreshToken(deps: TokenRefreshDeps): Promise<string |
   // Token is expired — try to refresh
   const refreshToken = deps.getRefreshToken();
   if (!refreshToken) {
-    deps.writeError('Session expired. Run `loopzero login` to authenticate again.');
     return null;
   }
 
   const baseURL = getCloudUrl();
   const result = await refreshAccessToken(deps.fetchFn, baseURL, refreshToken);
   if (!result) {
-    deps.writeError('Session expired. Run `loopzero login` to authenticate again.');
     return null;
   }
 

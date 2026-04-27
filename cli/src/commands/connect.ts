@@ -5,6 +5,7 @@
 // loopzero disconnect — Unlink.
 
 import { ApiError } from '../api/client';
+import { classifyNetworkError } from '../output/error-message';
 
 export interface ConnectDeps {
   getToken: () => string | null;
@@ -132,6 +133,11 @@ export class ConnectCommand {
         }
         return exitWithError(this.deps, opts.json, `Failed to connect: ${err.message}`, 3, err.code);
       }
+      // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+      const net = classifyNetworkError(err);
+      if (net.isNetwork) {
+        return exitWithError(this.deps, opts.json, net.message, 3, 'API_UNREACHABLE');
+      }
       return exitWithError(this.deps, opts.json, `Failed to connect: ${err instanceof Error ? err.message : 'unknown error'}`, 3, 'UNEXPECTED_ERROR');
     }
   }
@@ -167,6 +173,11 @@ export class DisconnectCommand {
     } catch (err) {
       if (err instanceof ApiError && err.statusCode === 404) {
         return exitWithError(this.deps, opts.json, 'No repository connected to this project.', 1, 'NOT_CONNECTED');
+      }
+      // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+      const net = classifyNetworkError(err);
+      if (net.isNetwork) {
+        return exitWithError(this.deps, opts.json, net.message, 3, 'API_UNREACHABLE');
       }
       return exitWithError(this.deps, opts.json, `Failed to disconnect: ${err instanceof Error ? err.message : 'unknown error'}`, 3, 'UNEXPECTED_ERROR');
     }

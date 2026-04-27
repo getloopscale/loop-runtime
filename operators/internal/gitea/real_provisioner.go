@@ -6,6 +6,7 @@ package gitea
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/httpclient"
@@ -17,6 +18,7 @@ var _ GitRepoProvisioner = (*RealProvisioner)(nil)
 // RealProvisioner manages Git repositories in Gitea via the typed APIClient.
 type RealProvisioner struct {
 	api     *APIClient
+	baseURL string
 	token   string
 	orgName string
 }
@@ -26,9 +28,22 @@ func NewRealProvisioner(baseURL, token, orgName string) *RealProvisioner {
 	httpClient := httpclient.NewWithTimeout(constants.HTTPTimeoutDefault)
 	return &RealProvisioner{
 		api:     NewAPIClient(baseURL, httpClient),
+		baseURL: strings.TrimRight(baseURL, "/"),
 		token:   token,
 		orgName: orgName,
 	}
+}
+
+// repoURL builds a clone URL using the provisioner's configured baseURL.
+//
+// We do NOT return Gitea's `clone_url` field because that uses Gitea's
+// configured ROOT_URL, which is the public/external hostname (e.g.,
+// https://git.test.local). ArgoCD's repo-server runs in-cluster and has
+// no external DNS, so it would fail to resolve the public hostname.
+// Building the URL from baseURL (the in-cluster service address) keeps
+// Gitea reachable from ArgoCD without requiring hairpin DNS.
+func (p *RealProvisioner) repoURL(name string) string {
+	return fmt.Sprintf("%s/%s/%s.git", p.baseURL, p.orgName, name)
 }
 
 // EnsureRepo creates a Git repository if it doesn't exist. Idempotent.
@@ -39,7 +54,7 @@ func (p *RealProvisioner) EnsureRepo(ctx context.Context, name string, branch st
 		return "", fmt.Errorf("gitea: check repo %s: %w", name, err)
 	}
 	if repo != nil {
-		return repo.CloneURL, nil
+		return p.repoURL(name), nil
 	}
 
 	// Create repo
@@ -58,7 +73,7 @@ func (p *RealProvisioner) EnsureRepo(ctx context.Context, name string, branch st
 	if created == nil {
 		return "", fmt.Errorf("gitea: create repo %s: no response", name)
 	}
-	return created.CloneURL, nil
+	return p.repoURL(name), nil
 }
 
 // RepoExists checks if a repository exists.

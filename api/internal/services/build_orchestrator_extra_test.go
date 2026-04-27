@@ -652,9 +652,8 @@ func TestBuildOrchestrator_OnBuildCompleted_QueuedBuild_ECNRace(t *testing.T) {
 	}
 
 	// Should have transitioned through QUEUED -> RUNNING -> RELEASING -> SUCCEEDED
-	if bs.lastStatus["bld-ecn"] != string(statemachine.BuildReleaseCompleted) {
-		// May also have been the final transition
-	}
+	// May also have been the final transition — either way the orchestrator completed without error.
+	_ = bs.lastStatus["bld-ecn"]
 }
 
 func TestBuildOrchestrator_RetryReleaseActivation_Success(t *testing.T) {

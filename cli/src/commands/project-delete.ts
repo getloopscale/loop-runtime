@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+import { classifyNetworkError } from '../output/error-message';
+
 export interface ProjectDeleteDeps {
   getToken: () => string | null;
   deleteProject: (name: string, env?: string) => Promise<ProjectDeleteResponse>;
@@ -82,6 +84,11 @@ export class ProjectDeleteCommand {
 
       return 0;
     } catch (err: unknown) {
+      // CHG-2026-04-23-AUDIT-25: surface API_UNREACHABLE for network errors.
+      const net = classifyNetworkError(err);
+      if (net.isNetwork) {
+        return this.exitWithError(opts, net.message, 3, 'API_UNREACHABLE');
+      }
       const apiErr = err as { message?: string; exitCode?: number; code?: string };
       const message = apiErr.message || 'Delete failed. Check project name and try again.';
       const exitCode = apiErr.exitCode || 3;

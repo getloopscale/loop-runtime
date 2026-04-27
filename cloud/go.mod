@@ -1,6 +1,7 @@
 module github.com/loopzero/loopzero/cloud
 
 go 1.25.0
+toolchain go1.25.9
 
 require (
 	github.com/go-chi/chi/v5 v5.2.5

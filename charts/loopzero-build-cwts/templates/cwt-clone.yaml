@@ -1,0 +1,85 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: loopzero-clone
+  labels:
+    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: loopzero
+spec:
+  templates:
+    - name: clone-repo
+      inputs:
+        parameters:
+          - name: tenant-id
+            description: "Tenant identifier for isolation"
+          - name: build-id
+            description: "Build identifier — maps to the source bundle path in MinIO"
+      retryStrategy:
+        limit: "2"
+        retryPolicy: "OnFailure"
+        backoff:
+          duration: "5s"
+          factor: "2"
+          maxDuration: "30s"
+      container:
+        # SEC-004: Custom image with mc + git baked in (no runtime downloads).
+        # Built from: infra/images/clone-runner/Dockerfile
+        # CI builds via build-images.yml, local via task images:build.
+        image: {{ .Values.images.cloneRunner | default "registry.digitalocean.com/loopzero-system/loopzero-clone-runner:v0.1.0" }}
+        env:
+          - name: HOME
+            value: /tmp
+        envFrom:
+          - secretRef:
+              name: loopzero-minio-credentials
+        command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+
+            BUNDLE_PATH="{{ "{{inputs.parameters.tenant-id}}" }}/source/{{ "{{inputs.parameters.build-id}}" }}.bundle"
+            echo "Downloading source bundle: ${BUNDLE_PATH}"
+
+            mc alias set loopzero "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
+              {{- if .Values.minio.insecure }}
+              --insecure \
+              {{- end }}
+              --api S3v4 >/dev/null 2>&1
+
+            mc cp \
+              {{- if .Values.minio.insecure }}
+              --insecure \
+              {{- end }}
+              "loopzero/{{ .Values.sourceBucket }}/${BUNDLE_PATH}" /tmp/source.bundle 2>&1 || {
+              echo "ERROR: Failed to download source bundle"
+              exit 1
+            }
+
+            echo "Bundle downloaded: $(stat -c%s /tmp/source.bundle) bytes"
+
+            # Clone from bundle into temp dir, then copy contents to workspace
+            # Use cp -r (not cp -a) because non-root cannot preserve ownership/timestamps
+            git clone /tmp/source.bundle /tmp/repo
+            cp -r /tmp/repo/. /workspace/
+            rm -rf /tmp/repo /tmp/source.bundle
+
+            echo "Source unpacked into /workspace"
+            ls -la /workspace
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]

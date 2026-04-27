@@ -19,7 +19,7 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: StressChaos
 metadata:
   name: pg-connection-storm
-  namespace: platform-system
+  namespace: loopzero-system
   annotations:
     loopzero.io/roadmap: "07"
     loopzero.io/dod-test: "TestPGCircuitBreaker_RejectAt90Percent"
@@ -37,7 +37,7 @@ spec:
   mode: all
   selector:
     namespaces:
-      - platform-system
+      - loopzero-system
     labelSelectors:
       "app": "loopzero-api"
   stressors:

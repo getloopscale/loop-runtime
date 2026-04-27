@@ -4,7 +4,7 @@
 # deployment that can survive pod kills and node failures. Applied on
 # top of the base values.yaml:
 #
-#   helm upgrade gitea gitea-charts/gitea -n platform-system \
+#   helm upgrade gitea gitea-charts/gitea -n loopzero-system \
 #     -f values.yaml -f values-ha.yaml
 #
 # What this changes:
@@ -19,7 +19,7 @@
 #   - No external Elasticsearch (code search remains DB-backed)
 #
 # Prerequisites:
-#   - Redis deployed in platform-system (see redis section below)
+#   - Redis deployed in loopzero-system (see redis section below)
 #   - DO Spaces bucket `gitea-storage` created (Pulumi handles this)
 #   - Spaces credentials available as K8s secret
 #
@@ -40,28 +40,28 @@ gitea:
     # through Gitea OAuth and ARE affected).
     session:
       PROVIDER: redis
-      PROVIDER_CONFIG: "redis://:@redis.platform-system.svc.cluster.local:6379/0?pool_size=100&idle_timeout=120s"
+      PROVIDER_CONFIG: "redis://:@redis.loopzero-system.svc.cluster.local:6379/0?pool_size=100&idle_timeout=120s"
 
     # ── Cache via Redis ──
     # Default is in-memory. Redis eliminates cold-start cache misses
     # and allows future multi-replica cache coherence.
     cache:
       ADAPTER: redis
-      HOST: "redis://:@redis.platform-system.svc.cluster.local:6379/1"
+      HOST: "redis://:@redis.loopzero-system.svc.cluster.local:6379/1"
 
     # ── Task queues via Redis ──
     # Without this, queues are leveldb on local disk. Crash = lost tasks.
     # Redis queues survive pod restarts.
     queue:
       TYPE: redis
-      CONN_STR: "redis://:@redis.platform-system.svc.cluster.local:6379/2"
+      CONN_STR: "redis://:@redis.loopzero-system.svc.cluster.local:6379/2"
 
     # ── Global lock via Redis ──
     # Required for multi-replica (prevents concurrent repo writes).
     # Even with 1 replica, this is a prerequisite for future scaling.
     global_lock:
       SERVICE_TYPE: redis
-      SERVICE_CONN_STR: "redis://:@redis.platform-system.svc.cluster.local:6379/5"
+      SERVICE_CONN_STR: "redis://:@redis.loopzero-system.svc.cluster.local:6379/5"
 
     # ── S3 storage for non-git data ──
     # LFS objects, avatars, attachments, packages — everything except

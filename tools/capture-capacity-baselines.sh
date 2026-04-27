@@ -18,14 +18,14 @@ mkdir -p "$OUTDIR"
 run_bench_gitea() {
   echo "=== gitea-auth baseline ==="
   local PW
-  PW=$(kubectl --context="$CTX_MGMT" -n platform-system get secret gitea-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
+  PW=$(kubectl --context="$CTX_MGMT" -n loopzero-system get secret gitea-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
   if [ -z "$PW" ]; then
     echo "ERROR: gitea-admin-secret not found — skipping"
     return 1
   fi
 
   # Port-forward in background
-  kubectl --context="$CTX_MGMT" -n platform-system port-forward svc/gitea-http 23000:3000 >/dev/null 2>&1 &
+  kubectl --context="$CTX_MGMT" -n loopzero-system port-forward svc/gitea-http 23000:3000 >/dev/null 2>&1 &
   local PF=$!
   sleep 3
 
@@ -44,7 +44,7 @@ run_bench_gitea() {
 run_bench_loopzero_api() {
   echo "=== loopzero-api-build-submit baseline ==="
   local SA
-  SA=$(kubectl --context="$CTX_MGMT" -n platform-system get secret loopzero-api-secrets -o jsonpath='{.data.LOOPZERO_SERVICE_AUTH_SECRET}' | base64 -d)
+  SA=$(kubectl --context="$CTX_MGMT" -n loopzero-system get secret loopzero-api-secrets -o jsonpath='{.data.LOOPZERO_SERVICE_AUTH_SECRET}' | base64 -d)
 
   export LOOPZERO_CAPACITY=1
   export LOOPZERO_API_URL="https://api.dev.loopzero.example"

@@ -13,7 +13,6 @@ describe('Token Refresh', () => {
       getEmail: jest.fn().mockReturnValue('user@test.com'),
       getTeam: jest.fn().mockReturnValue('acme'),
       fetchFn: jest.fn(),
-      writeError: jest.fn(),
       ...overrides,
     };
   }
@@ -53,10 +52,13 @@ describe('Token Refresh', () => {
 
     expect(token).toBe('new-token');
     expect(deps.saveToken).toHaveBeenCalledWith('new-token', 'user@test.com', 'acme', 'new-refresh', 3600);
-    expect(deps.writeError).not.toHaveBeenCalled();
   });
 
-  it('should show error when refresh fails', async () => {
+  // CHG-2026-04-23-AUDIT-16: ensureFreshToken is now a pure utility — returns
+  // null on failure without writing to stderr. This prevents stderr pollution
+  // in --json mode (scripts doing `2>&1 | jq` used to fail). Command handlers
+  // are responsible for presenting the error.
+  it('returns null when refresh fails (no stderr pollution)', async () => {
     const fetchFn = jest.fn().mockResolvedValue({
       ok: false,
       status: 401,
@@ -71,10 +73,9 @@ describe('Token Refresh', () => {
     const token = await ensureFreshToken(deps);
 
     expect(token).toBeNull();
-    expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining('Session expired'));
   });
 
-  it('should show error when expired and no refresh token', async () => {
+  it('returns null when expired and no refresh token (no stderr pollution)', async () => {
     const deps = createDeps({
       isTokenExpired: jest.fn().mockReturnValue(true),
       getRefreshToken: jest.fn().mockReturnValue(null),
@@ -83,6 +84,5 @@ describe('Token Refresh', () => {
     const token = await ensureFreshToken(deps);
 
     expect(token).toBeNull();
-    expect(deps.writeError).toHaveBeenCalledWith(expect.stringContaining('loopzero login'));
   });
 });

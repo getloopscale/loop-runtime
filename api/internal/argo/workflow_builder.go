@@ -131,6 +131,9 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 	// Per-app delivery templates: BuildKit for containers, S3 upload for static.
 	// Sprint 6: Each container build is followed by a cosign signing step.
 	// MEET-048: When HarborRegistryURL is set, add a mirror template per container app.
+	// Sprint 6 / T1.1: Each container build is followed by cosign signing
+	// AND an SBOM scan (syft). The SBOM step is non-fatal at the DAG level
+	// (continueOn.failed) — see buildMainDAG.
 	if spec.Plan != nil {
 		for _, appPlan := range spec.Plan.Apps {
 			if appPlan.DeliveryModel == "static" {
@@ -138,6 +141,10 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			} else {
 				inlineTemplates = append(inlineTemplates, b.buildkitTemplateFromPlan(spec, appPlan))
 				inlineTemplates = append(inlineTemplates, cosignSignTemplate(appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure))
+				inlineTemplates = append(inlineTemplates, syftScanTemplate(
+					spec.TenantID, spec.ProjectID, spec.CommitSHA,
+					appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure,
+				))
 				if b.infraParams.HarborRegistryURL != "" {
 					harborTag := naming.ImageTag(b.infraParams.HarborRegistryURL, spec.TenantID, spec.ProjectID, appPlan.AppName, spec.CommitSHA)
 					inlineTemplates = append(inlineTemplates, harborMirrorTemplate(appPlan.AppName, appPlan.ImageTag, harborTag))
@@ -149,6 +156,10 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			inlineTemplates = append(inlineTemplates, b.buildkitTemplateForApp(spec, app))
 			imageTag := naming.ImageTag(b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
 			inlineTemplates = append(inlineTemplates, cosignSignTemplate(app.Name, imageTag, b.infraParams.RegistryInsecure))
+			inlineTemplates = append(inlineTemplates, syftScanTemplate(
+				spec.TenantID, spec.ProjectID, spec.CommitSHA,
+				app.Name, imageTag, b.infraParams.RegistryInsecure,
+			))
 			if b.infraParams.HarborRegistryURL != "" {
 				harborTag := naming.ImageTag(b.infraParams.HarborRegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
 				inlineTemplates = append(inlineTemplates, harborMirrorTemplate(app.Name, imageTag, harborTag))
@@ -334,6 +345,13 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 				tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{"generate-dockerfile" + suffix}))
 				signTaskName := fmt.Sprintf("sign-image-%s", appPlan.AppName)
 				tasks = append(tasks, inlineTask(signTaskName, signTaskName, []string{buildTaskName}))
+				// Sprint 6 / T1.1: SBOM scan after sign. continueOn.failed so
+				// SBOM failure does NOT block the deploy (best-effort observability,
+				// not a hard gate at this point).
+				sbomTaskName := fmt.Sprintf("sbom-%s", appPlan.AppName)
+				sbomTask := inlineTask(sbomTaskName, sbomTaskName, []string{signTaskName})
+				sbomTask.ContinueOn = &model.ContinueOn{Failed: true}
+				tasks = append(tasks, sbomTask)
 				// MEET-048: dual-push mirror to Harbor (best-effort)
 				if b.infraParams.HarborRegistryURL != "" {
 					mirrorTaskName := fmt.Sprintf("mirror-harbor-%s", appPlan.AppName)
@@ -350,6 +368,12 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 			tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{"generate-dockerfile" + suffix}))
 			signTaskName := fmt.Sprintf("sign-image-%s", app.Name)
 			tasks = append(tasks, inlineTask(signTaskName, signTaskName, []string{buildTaskName}))
+			// Sprint 6 / T1.1: SBOM scan after sign. continueOn.failed so
+			// SBOM failure does NOT block the deploy.
+			sbomTaskName := fmt.Sprintf("sbom-%s", app.Name)
+			sbomTask := inlineTask(sbomTaskName, sbomTaskName, []string{signTaskName})
+			sbomTask.ContinueOn = &model.ContinueOn{Failed: true}
+			tasks = append(tasks, sbomTask)
 			// MEET-048: dual-push mirror to Harbor (best-effort)
 			if b.infraParams.HarborRegistryURL != "" {
 				mirrorTaskName := fmt.Sprintf("mirror-harbor-%s", app.Name)

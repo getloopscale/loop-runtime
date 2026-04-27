@@ -82,8 +82,9 @@ export function registerEnvCommands(deps: CommandDeps): void {
   envCmd
     .command('delete <name>')
     .description('Delete an environment and its deployed resources')
-    .option('--confirm <name>', 'Confirm deletion by repeating the environment name')
-    .action(async (name: string, cmdOpts: { confirm?: string }) => {
+    .option('--confirm <name>', 'Confirm deletion by repeating the environment name (safer)')
+    .option('--yes', 'Skip confirmation prompt (CI/scripts; consistent with other delete commands)')
+    .action(async (name: string, cmdOpts: { confirm?: string; yes?: boolean }) => {
       const globalOpts = getGlobalOpts();
       const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
@@ -99,7 +100,7 @@ export function registerEnvCommands(deps: CommandDeps): void {
       });
 
       process.exitCode = await withTimeout(
-        cmd.execute(name, { confirm: cmdOpts.confirm, json: globalOpts.json }),
+        cmd.execute(name, { confirm: cmdOpts.confirm, yes: cmdOpts.yes, json: globalOpts.json }),
         API_REQUEST_TIMEOUT_MS + 10_000,
         'Environment delete timed out. Check your connection and try again.',
       ).catch((err: Error) => {

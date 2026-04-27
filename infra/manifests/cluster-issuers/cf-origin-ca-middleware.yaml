@@ -17,7 +17,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: require-cloudflare-proxy
-  namespace: platform-system
+  namespace: loopzero-system
   annotations:
     loopzero.io/purpose: "Reject requests not proxied via Cloudflare — protects Origin CA endpoints"
 spec:
@@ -38,7 +38,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: cloudflare-ip-allowlist
-  namespace: platform-system
+  namespace: loopzero-system
 spec:
   ipAllowList:
     sourceRange:

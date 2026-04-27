@@ -1,0 +1,16 @@
+apiVersion: v2
+name: loopzero-cloud
+description: LoopZero PaaS auth and billing service
+type: application
+version: 0.2.0
+appVersion: "dev"
+home: https://github.com/loopzero/loopzero
+sources:
+  - https://github.com/loopzero/loopzero
+maintainers:
+  - name: LoopZero Team
+    url: https://loopzero.example
+dependencies:
+  - name: loopzero-common
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-common"

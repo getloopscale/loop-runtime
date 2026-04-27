@@ -1,0 +1,113 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+rules:
+  # --- LoopZero CRDs (full CRUD needed for reconciliation) ---
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants", "appsecrets", "clustercredentials", "previewenvironments", "reconciliationreports", "environments", "exposedroutes", "gitrepositorybindings", "platformbootstraps", "loopzeroapplications"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants/status", "appsecrets/status", "clustercredentials/status", "previewenvironments/status", "reconciliationreports/status", "environments/status", "exposedroutes/status", "gitrepositorybindings/status", "platformbootstraps/status", "loopzeroapplications/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants/finalizers", "clustercredentials/finalizers", "previewenvironments/finalizers", "environments/finalizers", "loopzeroapplications/finalizers"]
+    verbs: ["update"]
+
+  # --- Namespaces: create/manage tenant namespaces ---
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+
+  # --- ResourceQuotas + LimitRanges: enforce tenant resource limits ---
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- RBAC: create Roles/RoleBindings in tenant namespaces ---
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- ServiceAccounts: create in tenant namespaces ---
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch", "create"]
+
+  # --- NetworkPolicies: tenant network isolation ---
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies", "ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # --- Secrets: kubeconfig secrets for ClusterCredentialController ---
+  # T1.1 / INFRA-001: removed cluster-wide `delete` verb (was the root
+  # of toxic combinations TC-1 / TC-4 / TC-5 — operator could delete
+  # any Secret cluster-wide including kube-system). Delete is now
+  # namespace-scoped via Role manifests:
+  #   - role-loopzero-system.yaml: delete on platform-tokens Secret only
+  #   - role-argocd.yaml:      delete on argocd-* Secrets in argocd ns
+  # Full per-tenant dynamic Role provisioning is a follow-up T2.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- PriorityClasses: cluster-scoped, needed for tenant workload priorities ---
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- Workload resources: required for RBAC escalation prevention ---
+  - apiGroups: [""]
+    resources: ["configmaps", "services"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch"]
+
+  # T4.5 / INFRA-008: removed two rules that referenced non-existent
+  # (apiGroup, resource) combinations — `core/v1 deployments` and
+  # `apps/v1 configmaps,services`. K8s API silently ignored both; they
+  # added no permissions and noised audit logs.
+
+  # --- ArgoCD: create/manage Applications and AppProjects ---
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "appprojects"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # CHG-2026-04-25-E2E: K8s RBAC escalation prevention requires that
+  # any SA granting permissions to another SA must itself hold those
+  # permissions. The tenant-controller creates the per-build-namespace
+  # `argo-workflow-executor` Role with verbs on pods, pods/log, and
+  # workflowtaskresults — without these rules at the cluster scope the
+  # Role creation is rejected by the K8s admission with:
+  #   "user X is attempting to grant RBAC permissions not currently held"
+  # Result: BuildNamespaceReady stays False forever, the tenant Phase
+  # is stuck Provisioning, and the Environment CR never gets created
+  # → the runtime namespace doesn't exist → ArgoCD sync fails with
+  # "namespaces not found".
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "watch", "patch", "list"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflowtaskresults", "workflowtasksets"]
+    verbs: ["create", "patch", "get", "list"]
+  # Required to grant the per-tenant `loopzero-workflow-submitter` Role
+  # (created by tenant-controller in the build-{tenant} namespace) the
+  # ability to submit and reconcile Argo Workflows.
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows", "workflowtemplates", "clusterworkflowtemplates"]
+    verbs: ["create", "get", "list", "watch", "patch", "update", "delete"]
+
+  # --- Events: emit Kubernetes events for observability ---
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+
+  # --- Leader election: coordination lease for HA ---
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+{{- end }}

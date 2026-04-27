@@ -133,10 +133,7 @@ func TestFileWatchTokenProvider_BackgroundPoll(t *testing.T) {
 
 	// Poll until the background watcher detects the change.
 	deadline := time.After(5 * time.Second)
-	for {
-		if p.Token() == "rotated" {
-			break
-		}
+	for p.Token() != "rotated" {
 		select {
 		case <-deadline:
 			t.Fatalf("timeout waiting for background poll to detect file change; token still %q", p.Token())

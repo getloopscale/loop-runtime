@@ -5,6 +5,7 @@ import * as childProcess from 'child_process';
 import { ApiClient } from '../api/client';
 import { BuildListCommand } from '../commands/build-list';
 import { BuildInspectCommand } from '../commands/build-inspect';
+import { CancelCommand } from '../commands/cancel';
 import { SecretSetCommand, SecretListCommand, SecretDeleteCommand } from '../commands/secret';
 import { BillingCommand } from '../commands/billing';
 import { ConnectCommand, DisconnectCommand } from '../commands/connect';
@@ -93,6 +94,43 @@ export function registerInfraCommands(deps: CommandDeps): void {
           writeError(err.message);
         }
         return 1;
+      });
+      process.exitCode = exitCode;
+    });
+
+  // CHG-2026-04-23-AUDIT-30: `loopzero build cancel <id>` alias for
+  // discoverability. Modern CLIs use `<resource> <verb>`; users
+  // exploring `loopzero build --help` expect `cancel` under the build
+  // namespace alongside `list` and `inspect`. Top-level
+  // `loopzero cancel <id>` (in register/deploy.ts) is preserved for
+  // script compatibility.
+  buildCmd
+    .command('cancel <build-id>')
+    .description('Cancel a running or queued build')
+    .action(async (buildId: string) => {
+      const globalOpts = getGlobalOpts();
+      const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
+
+      const cancelCmd = new CancelCommand({
+        getToken: () => configStore.getToken(),
+        cancelBuild: async (id: string) => {
+          return apiClient.post(`/api/v1/builds/${encodeURIComponent(id)}/cancel`, {});
+        },
+        writeTo,
+        writeError,
+      });
+
+      const exitCode = await withTimeout(
+        cancelCmd.execute(buildId, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Cancel timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'CANCEL_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
       });
       process.exitCode = exitCode;
     });

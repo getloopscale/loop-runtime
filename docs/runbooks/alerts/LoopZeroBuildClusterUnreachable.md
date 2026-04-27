@@ -48,7 +48,7 @@ kubectl --context build get nodes
 3. **Network connectivity (cross-cluster):**
    ```bash
    # Verify API pod can reach build cluster
-   kubectl --context mgmt -n platform-system exec deploy/loopzero-api -- \
+   kubectl --context mgmt -n loopzero-system exec deploy/loopzero-api -- \
      curl -sk https://<build-cluster-api-endpoint>/healthz
    ```
 
