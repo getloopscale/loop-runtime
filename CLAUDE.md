@@ -8,7 +8,7 @@ LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. Vercel-qua
 
 The authoritative specification is **`docs/cli-reference.md`**. If this file and the system design conflict, the system design wins.
 
-**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence — E2E validated 2026-04-23). 25/30 E2E tests pass. Sprints 0-7, 10, 11 complete. Sprint 6 (security + supply chain) — **fully shipped** 2026-04-26 (CHG-2026-04-26-SPRINT6-IMPL): cosign + syft SBOM (CycloneDX per release in S3 with presigned URL endpoint) + sigstore policy-controller activated on runtime cluster (Audit mode, key-based verification, Deny-flip pending 2-week observation). Sprint 5 (preview envs) — **ALL 14 plan tasks done** with E2E validated against live k3d (CHG-2026-04-26-PREVIEW-IMPL). Sprints 8-9 not started. Hardening H1-H7 complete. AUDIT series (21 fixes) hardened CLI↔API contracts. KEDA scale-to-zero done. Cell architecture Phase 0+1 complete. 1079 CLI tests + 41 Go packages + 200+ envtest specs passing. Production on DigitalOcean (3 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN).
+**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence — E2E validated 2026-04-23). 25/30 E2E tests pass. Sprints 0-7, 10, 11 complete. Sprint 6 (security + supply chain) — **fully shipped** 2026-04-26 (CHG-2026-04-26-SPRINT6-IMPL): cosign + syft SBOM (CycloneDX per release in S3 with presigned URL endpoint) + sigstore policy-controller activated on runtime cluster (Audit mode, key-based verification, Deny-flip pending 2-week observation). Sprint 5 (preview envs) — **ALL 14 plan tasks done** with E2E validated against live k3d (CHG-2026-04-26-PREVIEW-IMPL). **Sprint 8 v3.2 / Phase -1 + Phase 0 + Phase 2-subset shipped 2026-04-27** (CHG-2026-04-27-001 + CHG-2026-04-27-002a, MEET-060 + MEET-061, ADR-0015 + ADR-0016, 14/14 validation matrix GREEN): 4 DOKS bootstrapped fresh on DO (mgmt + build + runtime + runtime-2 with Sprint 8 sizing — mgmt s-4vcpu-8gb-amd × 3 medium, PG db-s-2vcpu-4gb medium, Valkey managed db-amd-1vcpu-2gb), Chaos Mesh CRDs registered in 4 clusters, Gitea HA 4/4 with RWX NFS, Harbor HA core 2/2 + registry 2/2 + Valkey externo (Pulumi component `mgmt-redis-ha.ts` NEW + Secret `harbor-redis-credentials`), tenant-health Grafana dashboard, MAINTENANCE_MODE middleware, ADR-0015 adopt-or-create policy (registry/VPC/CF), 4 runbooks (sprint8-bootstrap, pulumi-state-repair, cf-tunnel-cleanup, minio-distributed-migration), 42 vitest specs (adopt-or-create + sprint8-fixes), CI gates (validate:helm-charts, validate:k8s-versions, validate:bootstrap), Taskfile chaos:install/uninstall, GitHub workflow pulumi-validate.yml. 195 healthy pods across 4 clusters. mgmt memory 36-39% idle (target ADR-0010 #6 met). Sprint 8 Phase 1+3+4+5+6 deferred to CHG-002b/c (require new T3 meeting + 24h HA stable; eligible 2026-04-28 19:55 UTC). Sprint 9 not started. Hardening H1-H7 complete. AUDIT series (21 fixes) hardened CLI↔API contracts. KEDA scale-to-zero done. Cell architecture Phase 0+1+1.5 complete (runtime-2 physically provisioned but not routed; cell-2 activation Sprint 9). 1079 CLI tests + 41 Go packages + 200+ envtest specs + 42 pulumi specs passing. Production on DigitalOcean (4 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN + Valkey managed).
 
 **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
@@ -163,7 +163,7 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 | 5 | Preview environments | ✅ ALL 14 tasks done. E2E validated live (12 specs pass against k3d). |
 | 6 | Security + Supply chain | ✅ cosign + syft SBOM + policy-controller (Audit mode) shipped 2026-04-26 (CHG-2026-04-26-SPRINT6-IMPL); Deny-mode flip pending 2-week observation |
 | 7 | Observability | ✅ (H4) |
-| 8 | Hardening + Chaos | ❌ |
+| 8 | Hardening + Chaos | 🟡 Phase -1 + Phase 0 + Phase 2 GREEN (CHG-001 + CHG-002a, MEET-060 + MEET-061, ADR-0015 + ADR-0016). Phase 1+3+4+5+6 → CHG-002b/c new meeting required |
 | 9 | Polish + Launch | ❌ |
 | 10 | Static Frontend Delivery | ✅ |
 | 11 | Auth + Billing | ✅ |
@@ -171,7 +171,7 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 
 **E2E Validation (2026-04-23):** 25/30 pass (83%). Confidence: deploy 99%, scaling 95%, promote 95%, rollback 99%, concurrent rejection 99%, JSON contracts 99%, internal terms (Rule 3) 99%. Log streaming 60% (infra gap, not code).
 
-**Maturity:** 3.6/5 (was 3.2 pre-Sprint-5; +0.4 from Preview Environments fully shipped + E2E live validated — CHG-2026-04-26-PREVIEW-IMPL). Path to 4.0: Sprint 9 + Cell-2 activation + 1 external early adopter. Full: `docs/maturity-assessment.md`.
+**Maturity:** 3.7/5 (was 3.6 pre-Sprint-8; +0.1 from Sprint 8 v3.2 Phase -1 + Phase 0 + Phase 2-subset GREEN: bootstrap reproducibility via ADR-0015 adopt-or-create + 4 runbooks + 42 tests + CI gates; PG max_connections + mgmt memory + Chaos Mesh + Gitea HA + Harbor HA + Valkey externo all delivered with runtime evidence; mgmt memory 36-39% met ADR-0010 #6 target). Path to 4.0: CHG-002b L3 stabilization + CHG-002c Gate 2a Exit + Cell-2 activation + 1 external early adopter. Full: `docs/maturity-assessment.md`.
 
 ---
 
