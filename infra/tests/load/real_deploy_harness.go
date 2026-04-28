@@ -29,8 +29,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // RealDeployHarness exercises the complete LoopZero deploy pipeline using
@@ -44,6 +47,24 @@ type RealDeployHarness struct {
 	bootstrapSecret string
 	client          *http.Client
 	bundleBytes     []byte // pre-built git bundle from fixture
+	apps            []fixtureApp // parsed from fixture's loopzero.yaml
+}
+
+// fixtureApp captures one app entry from the fixture's loopzero.yaml so the
+// harness can build a faithful POST /v1/builds payload that matches what
+// the LoopZero API would receive from a real `loopzero deploy` command.
+//
+// CHG-002b 2026-04-27: previously the harness hardcoded apps=[{api,node,3000}]
+// which silently dropped 3 of 4 apps when the fixture was dogfood-monorepo.
+// This led to ArgoCD sync succeeding for `api` only and the verify URL
+// (gateway) timing out at 240s with a misleading "app never returned 200"
+// failure message that hid the underlying scoping bug.
+type fixtureApp struct {
+	Name      string
+	Type      string // server | worker | frontend
+	Framework string // node | nestjs | express | nextjs | ...
+	Path      string // monorepo subdir; empty for single-app
+	Port      int    // 0 for worker / non-server
 }
 
 // RealDeployConfig configures the harness.
@@ -67,10 +88,22 @@ type RealDeployConfig struct {
 // the given fixture directory. The bundle is built ONCE at construction
 // time and reused for every tenant's deploy (the project name comes
 // from the upload metadata, not the bundle content).
+//
+// CHG-002b 2026-04-27: also parses the fixture's loopzero.yaml so the
+// harness can submit POST /v1/builds with the correct app set. Without
+// this, multi-app fixtures (dogfood-monorepo, multi-app) would only
+// build their first app, breaking L3-realistic verification.
 func NewRealDeployHarness(cfg RealDeployConfig) (*RealDeployHarness, error) {
 	bundle, err := PrepareFixtureBundle(cfg.FixturePath)
 	if err != nil {
 		return nil, fmt.Errorf("prepare fixture bundle from %s: %w", cfg.FixturePath, err)
+	}
+	apps, err := parseFixtureApps(cfg.FixturePath)
+	if err != nil {
+		return nil, fmt.Errorf("parse fixture loopzero.yaml at %s: %w", cfg.FixturePath, err)
+	}
+	if len(apps) == 0 {
+		return nil, fmt.Errorf("fixture %s has no apps in loopzero.yaml", cfg.FixturePath)
 	}
 	bootstrapSecret := cfg.BootstrapSecret
 	if bootstrapSecret == "" {
@@ -83,7 +116,98 @@ func NewRealDeployHarness(cfg RealDeployConfig) (*RealDeployHarness, error) {
 		bootstrapSecret: bootstrapSecret,
 		client:          &http.Client{Timeout: 300 * time.Second},
 		bundleBytes:     bundle,
+		apps:            apps,
 	}, nil
+}
+
+// buildAppsPayload converts parsed fixture apps into the JSON shape the
+// LoopZero /v1/builds endpoint expects. Render derives from app type:
+//   - server / frontend / nextjs => "server" (HTTP-fronted container)
+//   - worker => "worker" (no HTTP, no port mapping)
+//   - frontend with framework=nextjs is still "server" because Next runs
+//     as a Node server unless explicitly static-exported.
+func buildAppsPayload(apps []fixtureApp) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(apps))
+	for _, a := range apps {
+		render := "server"
+		if a.Type == "worker" {
+			render = "worker"
+		}
+		entry := map[string]interface{}{
+			"name":      a.Name,
+			"build":     "buildpack",
+			"framework": a.Framework,
+			"render":    render,
+		}
+		if render == "server" {
+			port := a.Port
+			if port == 0 {
+				port = 3000
+			}
+			entry["port"] = port
+		}
+		if a.Path != "" {
+			entry["path"] = a.Path
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+// parseFixtureApps reads <fixture>/loopzero.yaml and produces a deterministic
+// app list ordered by name. We use a tolerant parser instead of pulling in
+// the production CLI types (cli/) because the load tests live in a Go
+// module that does not import TypeScript code.
+func parseFixtureApps(fixturePath string) ([]fixtureApp, error) {
+	abs, err := filepath.Abs(fixturePath)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(abs, "loopzero.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	var raw struct {
+		Apps map[string]struct {
+			Type      string `yaml:"type"`
+			Framework string `yaml:"framework"`
+			Path      string `yaml:"path"`
+			Port      int    `yaml:"port"`
+		} `yaml:"apps"`
+	}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(raw.Apps))
+	for name := range raw.Apps {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]fixtureApp, 0, len(names))
+	for _, name := range names {
+		a := raw.Apps[name]
+		// LoopZero defaults to port 3000 for server/frontend when omitted.
+		port := a.Port
+		if port == 0 && (a.Type == "server" || a.Type == "frontend" || a.Type == "") {
+			port = 3000
+		}
+		typ := a.Type
+		if typ == "" {
+			typ = "server"
+		}
+		framework := a.Framework
+		if framework == "" {
+			framework = "node"
+		}
+		out = append(out, fixtureApp{
+			Name:      name,
+			Type:      typ,
+			Framework: framework,
+			Path:      a.Path,
+			Port:      port,
+		})
+	}
+	return out, nil
 }
 
 // PrepareFixtureBundle creates a real git bundle from a fixture directory.
@@ -475,12 +599,20 @@ apps:
 
 func (h *RealDeployHarness) submitBuild(ctx context.Context, t TenantIdentity, commitSHA string) (string, time.Duration, error) {
 	start := time.Now()
+	// CHG-002b 2026-04-27: build apps array from parsed loopzero.yaml so the
+	// payload mirrors what `loopzero deploy` would send. Previously hardcoded
+	// to [{api,node,3000}] and silently dropped 3 of 4 apps for
+	// dogfood-monorepo, breaking L3-realistic.
+	appsJSON, err := json.Marshal(buildAppsPayload(h.apps))
+	if err != nil {
+		return "", time.Since(start), fmt.Errorf("marshal apps payload: %w", err)
+	}
 	reqBody := fmt.Sprintf(`{
 		"project_id": %q,
 		"environment": "production",
 		"commit_sha": %q,
-		"apps": [{"name":"api","build":"buildpack","framework":"node","render":"server","port":3000}]
-	}`, t.ProjectName, commitSHA)
+		"apps": %s
+	}`, t.ProjectName, commitSHA, string(appsJSON))
 
 	// T-06: retry on 429 (CELL_AT_CAPACITY admission backpressure) and 503
 	// (circuit breaker). Exponential backoff 1s, 2s, 4s, 8s, 16s — mirrors
@@ -600,7 +732,18 @@ func (h *RealDeployHarness) verifyAppLive(ctx context.Context, appURL string) (b
 func (h *RealDeployHarness) appURL(t TenantIdentity) string {
 	// App URLs follow the pattern: {tenant}-{project}-{app}-{env}.{domain}
 	// For the hello-server fixture with app name "api" and env "production":
-	return fmt.Sprintf("https://%s-%s-api-production.%s", t.TenantID, t.ProjectName, h.appDomain)
+	appName := os.Getenv("LOOPZERO_VERIFY_APP_NAME")
+	if appName == "" {
+		appName = "api"
+	}
+	return h.appURLForApp(t, appName)
+}
+
+// appURLForApp returns the public URL for a specific app within a tenant's
+// project. Used by L3-realistic against multi-app fixtures (e.g.
+// dogfood-monorepo where the public entry point is `gateway`, not `api`).
+func (h *RealDeployHarness) appURLForApp(t TenantIdentity, appName string) string {
+	return fmt.Sprintf("https://%s-%s-%s-production.%s", t.TenantID, t.ProjectName, appName, h.appDomain)
 }
 
 // --- Helpers ---
