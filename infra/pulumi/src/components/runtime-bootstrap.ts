@@ -46,18 +46,42 @@ export function bootstrapRuntimeCluster(
   const traefik = installTraefik("runtime", provider, ns, certManager);
   const ingressEndpoint = lookupLoadBalancerEndpoint("runtime", provider, traefik);
 
-  // RBAC for EnvironmentController
+  // RBAC for EnvironmentController + ArgoCD remote-cluster sync.
+  //
+  // ArgoCD application-controller uses this SA's bearer token (see
+  // clustercredential_controller.go) to discover and reconcile resources
+  // across the runtime cluster. It needs cluster-wide list/watch on
+  // EVERY resource it might manage — including cluster-scoped types like
+  // PersistentVolume, Node, StorageClass — even when no Application
+  // currently references them, because Argo's resource-cache primer walks
+  // the full API surface during initial cluster sync.
+  //
+  // CHG-002b 2026-04-27 — added cluster-scoped read on `persistentvolumes`,
+  // `nodes`, `storageclasses` (storage.k8s.io). Without these, ArgoCD
+  // emits `ComparisonError: failed to load initial state of resource
+  // PersistentVolume: persistentvolumes is forbidden` and never marks
+  // any Application Healthy. This was masked previously because
+  // L1/L2 didn't exercise enough sync activity to surface the cache primer.
   const runtimeRbacRole = new k8s.rbac.v1.ClusterRole(
     "runtime-loopzero-ctrl-rbac-admin",
     {
       metadata: { name: "loopzero-ctrl-runtime-rbac-admin" },
       rules: [
+        // Tenant resource provisioning (write).
         { apiGroups: ["rbac.authorization.k8s.io"], resources: ["roles", "rolebindings"], verbs: ["get", "list", "create", "update", "patch", "delete", "bind", "escalate"] },
         { apiGroups: [""], resources: ["namespaces", "serviceaccounts", "secrets", "configmaps", "services"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
         { apiGroups: ["apps"], resources: ["deployments"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
         { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
         { apiGroups: [""], resources: ["resourcequotas", "limitranges"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
         { apiGroups: ["policy"], resources: ["poddisruptionbudgets"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
+        // ArgoCD cache primer (read). Required for any Application sync to
+        // succeed once tenant manifests reference these types.
+        { apiGroups: [""], resources: ["persistentvolumes", "nodes", "events", "endpoints", "persistentvolumeclaims", "pods"], verbs: ["get", "list", "watch"] },
+        { apiGroups: ["storage.k8s.io"], resources: ["storageclasses", "volumeattachments", "csidrivers", "csinodes"], verbs: ["get", "list", "watch"] },
+        { apiGroups: ["apps"], resources: ["replicasets", "daemonsets", "statefulsets"], verbs: ["get", "list", "watch"] },
+        { apiGroups: ["batch"], resources: ["jobs", "cronjobs"], verbs: ["get", "list", "watch"] },
+        { apiGroups: ["autoscaling"], resources: ["horizontalpodautoscalers"], verbs: ["get", "list", "watch"] },
+        { apiGroups: ["traefik.io"], resources: ["ingressroutes", "middlewares", "tlsoptions"], verbs: ["get", "list", "watch", "create", "update", "patch", "delete"] },
       ],
     },
     { provider },
@@ -168,7 +192,8 @@ export function bootstrapRuntimeCluster2(
 
   const traefik = installTraefik("runtime-2", provider, ns, certManager);
 
-  // RBAC for EnvironmentController
+  // RBAC for EnvironmentController + ArgoCD remote-cluster sync (see
+  // runtime cluster role for full rationale; CHG-002b).
   const rt2RbacRole = new k8s.rbac.v1.ClusterRole(
     "runtime-2-loopzero-ctrl-rbac-admin",
     {
@@ -180,6 +205,13 @@ export function bootstrapRuntimeCluster2(
         { apiGroups: ["networking.k8s.io"], resources: ["networkpolicies"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
         { apiGroups: [""], resources: ["resourcequotas", "limitranges"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
         { apiGroups: ["policy"], resources: ["poddisruptionbudgets"], verbs: ["get", "list", "create", "update", "patch", "delete"] },
+        // ArgoCD cache primer (read).
+        { apiGroups: [""], resources: ["persistentvolumes", "nodes", "events", "endpoints", "persistentvolumeclaims", "pods"], verbs: ["get", "list", "watch"] },
+        { apiGroups: ["storage.k8s.io"], resources: ["storageclasses", "volumeattachments", "csidrivers", "csinodes"], verbs: ["get", "list", "watch"] },
+        { apiGroups: ["apps"], resources: ["replicasets", "daemonsets", "statefulsets"], verbs: ["get", "list", "watch"] },
+        { apiGroups: ["batch"], resources: ["jobs", "cronjobs"], verbs: ["get", "list", "watch"] },
+        { apiGroups: ["autoscaling"], resources: ["horizontalpodautoscalers"], verbs: ["get", "list", "watch"] },
+        { apiGroups: ["traefik.io"], resources: ["ingressroutes", "middlewares", "tlsoptions"], verbs: ["get", "list", "watch", "create", "update", "patch", "delete"] },
       ],
     },
     { provider },

@@ -219,6 +219,26 @@ export function installTenantController(
                 // by loopzero-api (mgmt-api.ts:173) so cert-manager Certificate
                 // generation aligns across the platform.
                 { name: "LOOPZERO_CLUSTER_ISSUER", value: "letsencrypt-prod" },
+                // CHG-002b L3 fix: default MaxConcurrentReconciles=5 monopolized
+                // budget on Active tenants in 100-tenant load tests, blocking
+                // remaining 93 from progressing. Bumped to 20 — matches K8s API
+                // QPS budget and unblocks L3. Default in code remains 5
+                // (MEET-052 backpressure for bulk deletion).
+                { name: "LOOPZERO_TENANT_MAX_CONCURRENT", value: "20" },
+                // CHG-002b L3-realistic fix 2026-04-28: Harbor integration was
+                // entirely disabled (HARBOR_URL unset → setupHarbor returned
+                // nil HarborClient → ensureHarborProject silently skipped).
+                // Result: zero Harbor projects existed → mirror-harbor 401 on
+                // every build. Wire admin credentials from harbor-core Secret
+                // so tenant-controller creates per-tenant Harbor projects on
+                // tenant provisioning (matches Sprint 6 supply chain design).
+                { name: "HARBOR_URL", value: "http://harbor-core.loopzero-system.svc.cluster.local:80" },
+                { name: "HARBOR_ADMIN_USERNAME", value: "admin" },
+                {
+                  name: "HARBOR_ADMIN_PASSWORD",
+                  valueFrom: { secretKeyRef: { name: "harbor-core", key: "HARBOR_ADMIN_PASSWORD" } },
+                },
+                { name: "HARBOR_REGISTRY_HOST", value: "harbor.dev.loopzero.example" },
               ],
               resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "500m", memory: "256Mi" } },
               livenessProbe: { httpGet: { path: "/healthz", port: 8081 }, initialDelaySeconds: 15 },

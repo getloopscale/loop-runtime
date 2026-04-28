@@ -20,6 +20,17 @@ config:
       - job_name: argo-workflow-pods
         kubernetes_sd_configs:
           - role: pod
+        # CHG-002b 2026-04-27 — drop noisy Argo wait-container chatter so
+        # Loki doesn't ingest "removing directory from watcher" floods.
+        pipeline_stages:
+          - cri: {}
+          - match:
+              selector: '{container="wait"}'
+              stages:
+                - drop:
+                    expression: '.*level=info.*"removing directory from watcher".*'
+                - drop:
+                    expression: '.*EOF.*Reading from journal.*'
         relabel_configs:
           # Only collect logs from Argo Workflow pods (have workflow label)
           - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_workflow]
@@ -33,16 +44,18 @@ config:
           # Extract workflow ID as label for LogQL queries
           - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_workflow]
             target_label: workflow
-          # Extract step/node name for filtering by build step
-          - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_node_name]
-            target_label: step
           # Standard K8s metadata
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
-          - source_labels: [__meta_kubernetes_pod_name]
-            target_label: pod
           - source_labels: [__meta_kubernetes_pod_container_name]
             target_label: container
+          # CHG-002b 2026-04-27 — DROPPED `step` and `pod` labels. Each
+          # carried per-execution unique values, multiplying Loki active-
+          # stream count by ~5x. Pod identity remains accessible via
+          # filename in raw log line; step is queryable via LogQL filter
+          # over message content. Trade-off: query "logs of pod X" requires
+          # `|= "$pod_name"` instead of `{pod="X"}`. Acceptable for L3+
+          # since UI never queries by pod alone.
 
 resources:
   requests:

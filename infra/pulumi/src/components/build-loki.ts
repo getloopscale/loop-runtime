@@ -73,6 +73,23 @@ export function installBuildLoki(
           limits_config: {
             retention_period: "168h",
             max_query_series: 500,
+            // CHG-002b 2026-04-27 — L3 stream cap fix. Default 5000
+            // streams/tenant saturated within ~3 L3 cycles. New cap 100k
+            // gives headroom for L4 (500 tenants).
+            max_global_streams_per_user: 100000,
+            max_streams_per_user: 0,
+            ingestion_rate_mb: 16,
+            ingestion_burst_size_mb: 32,
+            max_entries_limit_per_query: 10000,
+            per_stream_rate_limit: "10MB",
+            per_stream_rate_limit_burst: "20MB",
+          },
+          ingester: {
+            // Flush idle chunks every 15min (default 1h) so streams release
+            // memory faster — critical for L3 churn (100 short-lived workflows).
+            chunk_idle_period: "15m",
+            chunk_target_size: 1572864,
+            max_chunk_age: "1h",
           },
           schemaConfig: {
             configs: [
@@ -91,8 +108,11 @@ export function installBuildLoki(
           replicas: 1,
           persistence: { enabled: true, size: "10Gi" },
           resources: {
-            requests: { cpu: "100m", memory: "256Mi" },
-            limits: { cpu: "500m", memory: "512Mi" },
+            // CHG-002b 2026-04-27 — was 256Mi/512Mi (sized for <100 builds/day).
+            // L3 saturated even before the stream cap due to insufficient memory
+            // for active chunks. New ceiling 2Gi gives headroom for L4.
+            requests: { cpu: "200m", memory: "512Mi" },
+            limits: { cpu: "2000m", memory: "2Gi" },
           },
         },
         read: { replicas: 0 },
