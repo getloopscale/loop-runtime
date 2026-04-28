@@ -4,6 +4,8 @@
 package controller_test
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -223,6 +225,30 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 				g.Expect(argoSecret.Data).To(HaveKey("name"))
 				g.Expect(argoSecret.Data).To(HaveKey("server"))
 				g.Expect(argoSecret.Data).To(HaveKey("config"))
+
+				// CHG-002b regression: caData must be base64-encoded PEM,
+				// not raw PEM string. ArgoCD's `tlsClientConfig.caData`
+				// expects base64 bytes; raw PEM ("-----BEGIN ...") starts
+				// with `-` which is NOT valid base64 → ArgoCD fails with
+				// `illegal base64 data at input byte 0` and emits
+				// `InvalidSpecError: unable to find destination server`
+				// for every Application managed by this credential.
+				configRaw := argoSecret.Data["config"]
+				var argoCfg struct {
+					TLSClientConfig struct {
+						CAData string `json:"caData"`
+					} `json:"tlsClientConfig"`
+				}
+				g.Expect(json.Unmarshal(configRaw, &argoCfg)).To(Succeed())
+				if argoCfg.TLSClientConfig.CAData != "" {
+					g.Expect(argoCfg.TLSClientConfig.CAData).NotTo(HavePrefix("-----BEGIN"),
+						"caData must be base64-encoded PEM, not raw PEM")
+					decoded, err := base64.StdEncoding.DecodeString(argoCfg.TLSClientConfig.CAData)
+					g.Expect(err).NotTo(HaveOccurred(),
+						"caData must be valid base64")
+					g.Expect(string(decoded)).To(HavePrefix("-----BEGIN"),
+						"decoded caData must be a PEM block")
+				}
 			}, 30*time.Second, interval).Should(Succeed())
 		})
 	})

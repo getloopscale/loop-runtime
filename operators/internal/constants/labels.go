@@ -78,6 +78,15 @@ const (
 	// Used to skip the DO API call when the token has more than DORegistryTokenRefreshBuffer remaining.
 	AnnotationTokenExpiresAt = "loopzero.io/token-expires-at"
 
+	// AnnotationHarborTokenExpiresAt stores the RFC3339 expiry timestamp for the
+	// Harbor robot account credentials currently merged into the unified
+	// `buildkit-registry-config` Secret. Distinct from AnnotationTokenExpiresAt
+	// (DOCR scope) so the two writers do not overwrite each other's cache hint
+	// — see CHG-002b 2026-04-28 incident on tn-lt-l3r-tn-39 where Harbor
+	// stomped the DOCR expiry with a `2262-11-17` maxint, causing
+	// isRegistryTokenFresh() to falsely believe the DOCR token was still cached.
+	AnnotationHarborTokenExpiresAt = "loopzero.io/harbor-token-expires-at"
+
 	// AnnotationParentGeneration propagates the parent Tenant's generation to child
 	// Environment CRs. When the Tenant reconciles, it bumps this annotation, which
 	// triggers the EnvironmentController to re-reconcile and correct drift on

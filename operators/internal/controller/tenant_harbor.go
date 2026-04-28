@@ -74,10 +74,19 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 
 	buildRobotName := "build-" + tenant.Name
 
-	// Self-healing: if the K8s Secret is missing, force-recreate the robot to get a new secret.
-	if !r.secretExists(ctx, r.BuildClient, buildNs, k.SecretHarborRegistryConfig) {
-		slog.Info("harbor build secret missing, forcing robot recreation",
-			"tenant", tenant.Name, "namespace", buildNs, "secret", k.SecretHarborRegistryConfig)
+	// Self-healing: force-recreate the build robot whenever the K8s Secret
+	// is missing OR exists but does not yet contain a Harbor auth entry for
+	// `HarborRegistryHost`. The second case appears post-CHG-002b host-scoped
+	// merge: the DOCR writer creates the Secret with only `registry.digitalocean.com`,
+	// then this function would otherwise skip rotation (because the Secret
+	// "exists") and Harbor wouldn't return the robot password (because the
+	// robot already exists with valid TTL), leaving the merged Secret
+	// permanently DOCR-only. Detecting the missing host entry forces a fresh
+	// secret on next EnsureRobotAccount call.
+	needsBuildRotation := !r.secretHasHostAuth(ctx, r.BuildClient, buildNs, k.SecretHarborRegistryConfig, r.HarborRegistryHost)
+	if needsBuildRotation {
+		slog.Info("harbor build secret missing or host entry absent, forcing robot recreation",
+			"tenant", tenant.Name, "namespace", buildNs, "secret", k.SecretHarborRegistryConfig, "host", r.HarborRegistryHost)
 		if delErr := r.HarborClient.DeleteRobotAccount(ctx, tenant.Name, buildRobotName); delErr != nil {
 			slog.Warn("harbor build robot delete failed (will attempt recreate anyway)",
 				"tenant", tenant.Name, "robot", buildRobotName, "error", delErr)
@@ -138,18 +147,34 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 	}
 
 	// Store pull credentials in each workload namespace.
+	//
+	// CHG-002b 2026-04-28 — tolerate "namespace not found". The workload
+	// namespace is created by the EnvironmentController, which runs in
+	// parallel with the TenantController. On the first reconcile pass the
+	// namespace usually doesn't exist yet; failing the entire tenant
+	// reconcile would block ALL conditions from going True (and therefore
+	// block Phase=Active). Skipping silently is safe: the pull secret will
+	// be created on the next reconcile pass, and image pulls happen well
+	// after deploy time.
 	if pullCreds.Secret != "" {
+		ensured := 0
 		for _, env := range tenant.Spec.Environments {
 			envNs, nsErr := naming.EnvironmentNamespace(tenant.Name, env.Name)
 			if nsErr != nil {
 				return fmt.Errorf("invalid namespace for env %s: %w", env.Name, nsErr)
 			}
 			if err := r.ensureHarborPullSecret(ctx, envNs, tenant.Name, pullCreds); err != nil {
+				if errors.IsNotFound(err) {
+					slog.Info("harbor pull secret skipped — workload namespace not yet ready",
+						"tenant", tenant.Name, "namespace", envNs)
+					continue
+				}
 				return fmt.Errorf("harbor pull secret for %s/%s: %w", tenant.Name, env.Name, err)
 			}
+			ensured++
 		}
 		slog.Info("harbor pull robot credentials stored",
-			"tenant", tenant.Name, "environments", len(tenant.Spec.Environments), "robot", pullCreds.Username)
+			"tenant", tenant.Name, "ensured", ensured, "total", len(tenant.Spec.Environments), "robot", pullCreds.Username)
 	}
 
 	return nil
@@ -170,6 +195,32 @@ func (r *TenantReconciler) secretExists(ctx context.Context, cl client.Client, n
 	return true
 }
 
+// secretHasHostAuth returns true when `<namespace>/<name>` exists and its
+// `config.json` data contains an `auths` entry for `host`. Returns false on
+// missing Secret, parse failure, or absent host entry — all of which warrant
+// a robot rotation. On non-NotFound transient errors the function returns
+// true (skip rotation, avoid retry storms).
+func (r *TenantReconciler) secretHasHostAuth(ctx context.Context, cl client.Client, namespace, name, host string) bool {
+	var secret corev1.Secret
+	err := cl.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &secret)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false
+		}
+		slog.Warn("harbor host-auth check failed, assuming present", "namespace", namespace, "name", name, "error", err)
+		return true
+	}
+	if secret.Data == nil {
+		return false
+	}
+	cfg, parseErr := parseDockerConfigJSON(secret.Data[k.KeyDockerConfigJSON])
+	if parseErr != nil {
+		return false
+	}
+	_, ok := cfg.Auths[host]
+	return ok
+}
+
 // deleteHarborProject removes the Harbor project during tenant deletion.
 // No-op when HarborClient is nil.
 func (r *TenantReconciler) deleteHarborProject(ctx context.Context, tenant *loopzerov1.Tenant) error {
@@ -185,12 +236,49 @@ func (r *TenantReconciler) deleteHarborProject(ctx context.Context, tenant *loop
 	return nil
 }
 
-// ensureHarborRegistrySecret creates or updates the BuildKit registry config Secret
-// with Harbor robot credentials in Docker config.json format.
+// ensureHarborRegistrySecret upserts the Harbor auth entry into the unified
+// `buildkit-registry-config` Secret while preserving any DOCR auth that may
+// already be there. The Secret is always written as `Opaque` with key
+// `config.json` (the path BuildKit, crane, and cosign mount under
+// `/home/user/.docker/config.json` and `$DOCKER_CONFIG/config.json`).
+//
+// CHG-002b 2026-04-28 — root cause: previously, `ensureBuildkitRegistrySecret`
+// (DOCR) and `ensureHarborRegistrySecret` (Harbor) were two writers that fully
+// overwrote the same Secret on every reconcile, oscillating its content
+// between DOCR-only and Harbor-only auths and changing its Type. The
+// per-pipeline-step result was non-deterministic: cosign sometimes got DOCR,
+// mirror-harbor sometimes got Harbor, and frequently one of them got 401.
+// The fix is host-scoped merge: each writer only edits its own host entry.
 func (r *TenantReconciler) ensureHarborRegistrySecret(ctx context.Context, namespace, tenantName string, creds *harbor.RobotCredentials) error {
-	dockerConfigJSON, err := buildDockerConfigJSON(r.HarborRegistryHost, creds.Username, creds.Secret)
+	if r.HarborRegistryHost == "" {
+		return fmt.Errorf("ensureHarborRegistrySecret: HarborRegistryHost is empty")
+	}
+
+	desiredType := corev1.SecretTypeOpaque
+
+	// Pre-flight: if a stale Secret exists with the legacy DockerConfigJson
+	// Type (from prior controller versions), delete it so CreateOrUpdate can
+	// recreate it as Opaque with key `config.json`.
+	existing := &corev1.Secret{}
+	getErr := r.BuildClient.Get(ctx, client.ObjectKey{Name: k.SecretHarborRegistryConfig, Namespace: namespace}, existing)
+	priorAuthsJSON := []byte(nil)
+	if getErr == nil {
+		if existing.Type != desiredType {
+			slog.Info("registry secret type mismatch, deleting for recreate",
+				"namespace", namespace, "old_type", existing.Type, "new_type", desiredType)
+			if delErr := r.BuildClient.Delete(ctx, existing); delErr != nil && !errors.IsNotFound(delErr) {
+				return fmt.Errorf("delete legacy registry secret: %w", delErr)
+			}
+		} else if existing.Data != nil {
+			priorAuthsJSON = existing.Data[k.KeyDockerConfigJSON]
+		}
+	}
+
+	mergedJSON, err := mergeAuthsByHost(priorAuthsJSON, map[string]mergedAuthEntry{
+		r.HarborRegistryHost: authEntryFromBasic(creds.Username, creds.Secret),
+	})
 	if err != nil {
-		return fmt.Errorf("ensureHarborRegistrySecret: %w", err)
+		return fmt.Errorf("ensureHarborRegistrySecret: merge auths: %w", err)
 	}
 
 	secret := &corev1.Secret{
@@ -205,10 +293,33 @@ func (r *TenantReconciler) ensureHarborRegistrySecret(ctx context.Context, names
 		if secret.Annotations == nil {
 			secret.Annotations = make(map[string]string)
 		}
-		secret.Annotations[k.AnnotationTokenExpiresAt] = creds.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
-		secret.Type = corev1.SecretTypeDockerConfigJson
+		// Use a Harbor-scoped annotation so we do NOT clobber the DOCR
+		// token expiry that ensureBuildkitRegistrySecret depends on for its
+		// cache check (isRegistryTokenFresh). The two annotations are
+		// independent: each writer owns its own.
+		secret.Annotations[k.AnnotationHarborTokenExpiresAt] = creds.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
+		secret.Type = desiredType
+		// Re-merge inside the mutator using whatever the live Secret holds
+		// right now — controllerutil.CreateOrUpdate may re-invoke this
+		// closure with refreshed state. Re-running the merge keeps it
+		// idempotent and tolerant of concurrent writes from the DOCR side.
+		live := []byte(nil)
+		if secret.Data != nil {
+			live = secret.Data[k.KeyDockerConfigJSON]
+		}
+		nextJSON, mergeErr := mergeAuthsByHost(live, map[string]mergedAuthEntry{
+			r.HarborRegistryHost: authEntryFromBasic(creds.Username, creds.Secret),
+		})
+		if mergeErr != nil {
+			return mergeErr
+		}
+		// Fall back to the pre-computed merge if the in-mutator one returned
+		// an unexpectedly empty result (defensive — should never happen).
+		if len(nextJSON) == 0 {
+			nextJSON = mergedJSON
+		}
 		secret.Data = map[string][]byte{
-			corev1.DockerConfigJsonKey: []byte(dockerConfigJSON),
+			k.KeyDockerConfigJSON: nextJSON,
 		}
 		return nil
 	})

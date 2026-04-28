@@ -47,17 +47,27 @@ func (p *RealProvisioner) repoURL(name string) string {
 }
 
 // EnsureRepo creates a Git repository if it doesn't exist. Idempotent.
+//
+// CHG-002b 2026-04-28 — when the repo already exists in archived state
+// (e.g., the tenant was previously deleted, which calls ArchiveRepo on the
+// gitops repo, and the same tenant name is recreated), unarchive it before
+// returning success. Without this, every subsequent `git-receive-pack`
+// returns 403 Forbidden, gitops push fails, releases are marked
+// GIT_MIRROR_FAILED, and builds are silently failed by the reconcile loop.
 func (p *RealProvisioner) EnsureRepo(ctx context.Context, name string, branch string) (string, error) {
-	// Check if repo exists
 	repo, err := p.api.GetRepo(ctx, p.token, p.orgName, name)
 	if err != nil {
 		return "", fmt.Errorf("gitea: check repo %s: %w", name, err)
 	}
 	if repo != nil {
+		if repo.Archived {
+			if uerr := p.api.UnarchiveRepo(ctx, p.token, p.orgName, name); uerr != nil {
+				return "", fmt.Errorf("gitea: unarchive repo %s: %w", name, uerr)
+			}
+		}
 		return p.repoURL(name), nil
 	}
 
-	// Create repo
 	if branch == "" {
 		branch = "main"
 	}
@@ -88,4 +98,9 @@ func (p *RealProvisioner) RepoExists(ctx context.Context, name string) (bool, er
 // ArchiveRepo archives (soft-deletes) a repository.
 func (p *RealProvisioner) ArchiveRepo(ctx context.Context, name string) error {
 	return p.api.ArchiveRepo(ctx, p.token, p.orgName, name)
+}
+
+// UnarchiveRepo flips a repository's archived flag back to false (idempotent).
+func (p *RealProvisioner) UnarchiveRepo(ctx context.Context, name string) error {
+	return p.api.UnarchiveRepo(ctx, p.token, p.orgName, name)
 }

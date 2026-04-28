@@ -66,3 +66,15 @@ func (p *CircuitBreakerProvisioner) ArchiveRepo(ctx context.Context, name string
 	p.cb.RecordResult(err)
 	return err
 }
+
+// UnarchiveRepo delegates to the inner provisioner with circuit breaker protection.
+func (p *CircuitBreakerProvisioner) UnarchiveRepo(ctx context.Context, name string) error {
+	if err := p.cb.PreCheck(); err != nil {
+		p.logger.WarnContext(ctx, "gitea circuit breaker open, skipping UnarchiveRepo",
+			"repo", name, "cb_state", p.cb.State().String())
+		return err
+	}
+	err := p.inner.UnarchiveRepo(ctx, name)
+	p.cb.RecordResult(err)
+	return err
+}

@@ -156,9 +156,20 @@ type harborRobot struct {
 // If the account exists and is near expiry, deletes and recreates it.
 // If the account does not exist, creates it.
 func (c *Client) EnsureRobotAccount(ctx context.Context, projectName string, opts RobotAccountOpts) (*RobotCredentials, error) {
-	existing, err := c.findRobot(ctx, opts.Name)
+	// CHG-002b 2026-04-28 — search project-scoped first (the path
+	// /projects/<name>/robots is the only endpoint that lists project-level
+	// robots reliably; the global /robots?q=name= filter silently omits
+	// them in Harbor 2.x). Falls back to the global search for legacy
+	// system-level robots.
+	existing, err := c.findRobotInProject(ctx, projectName, opts.Name)
 	if err != nil {
-		return nil, fmt.Errorf("harbor: find robot %q: %w", opts.Name, err)
+		return nil, fmt.Errorf("harbor: find robot %q in project %q: %w", opts.Name, projectName, err)
+	}
+	if existing == nil {
+		existing, err = c.findRobot(ctx, opts.Name)
+		if err != nil {
+			return nil, fmt.Errorf("harbor: find robot %q: %w", opts.Name, err)
+		}
 	}
 
 	if existing != nil {
@@ -187,13 +198,29 @@ func (c *Client) EnsureRobotAccount(ctx context.Context, projectName string, opt
 
 // DeleteRobotAccount deletes a robot account by name.
 // Idempotent: returns nil if the robot does not exist.
+//
+// CHG-002b 2026-04-28 — must search project-scoped first, mirroring
+// EnsureRobotAccount. Project-level robots in Harbor 2.x have names like
+// `robot$<project>+<name>` and the global /robots?q=name= filter does not
+// match them reliably, so an exclusively-global lookup silently returns
+// "not found" and leaves the robot in place. The result was that the
+// self-heal path believed the robot was deleted, then EnsureRobotAccount
+// found it via project scope, decided the TTL was still valid, and returned
+// a credentials object with an empty Secret — preventing the merged
+// `buildkit-registry-config` from ever receiving the Harbor auth entry.
 func (c *Client) DeleteRobotAccount(ctx context.Context, projectName string, robotName string) error {
-	existing, err := c.findRobot(ctx, robotName)
+	existing, err := c.findRobotInProject(ctx, projectName, robotName)
 	if err != nil {
-		return fmt.Errorf("harbor: find robot %q for deletion: %w", robotName, err)
+		return fmt.Errorf("harbor: find robot %q in project %q for deletion: %w", robotName, projectName, err)
 	}
 	if existing == nil {
-		slog.Info("harbor: robot not found, nothing to delete", "robot", robotName)
+		existing, err = c.findRobot(ctx, robotName)
+		if err != nil {
+			return fmt.Errorf("harbor: find robot %q for deletion: %w", robotName, err)
+		}
+	}
+	if existing == nil {
+		slog.Info("harbor: robot not found, nothing to delete", "robot", robotName, "project", projectName)
 		return nil
 	}
 
@@ -339,9 +366,68 @@ func (c *Client) updateProject(ctx context.Context, projectID int, name string, 
 	return fmt.Errorf("harbor: update project %q: status %d: %s", name, resp.StatusCode, string(respBody))
 }
 
+// findRobotInProject lists robots scoped to a Harbor project and matches the
+// caller's logical name against the wide variety of Harbor name shapes:
+//
+//	robot$<project>+<name>     ← project-level (Harbor 2.x default)
+//	robot$<name>               ← system-level
+//	<project>+<name>           ← project-level without "robot$" prefix
+//	<name>                     ← bare
+//
+// Project-scoped listing returns project robots reliably, where the global
+// /robots?q=name= filter silently omits them.
+func (c *Client) findRobotInProject(ctx context.Context, projectName, name string) (*harborRobot, error) {
+	reqURL := fmt.Sprintf("%s/api/v2.0/projects/%s/robots?page_size=100", c.baseURL, projectName)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.SetBasicAuth(c.username, c.password)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("listing project robots: %w", err)
+	}
+	defer drainAndClose(resp)
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("list project robots returned status %d", resp.StatusCode)
+	}
+
+	var robots []harborRobot
+	if err := json.NewDecoder(resp.Body).Decode(&robots); err != nil {
+		return nil, fmt.Errorf("decoding project robots: %w", err)
+	}
+	for i := range robots {
+		fullName := robots[i].Name
+		stripped := strings.TrimPrefix(fullName, "robot$")
+		// strip "<project>+" prefix if present
+		if idx := strings.Index(stripped, "+"); idx >= 0 {
+			stripped = stripped[idx+1:]
+		}
+		if stripped == name {
+			return &robots[i], nil
+		}
+	}
+	return nil, nil
+}
+
 func (c *Client) findRobot(ctx context.Context, name string) (*harborRobot, error) {
-	// Harbor robot list endpoint with query filter.
-	reqURL := fmt.Sprintf("%s/api/v2.0/robots?q=name%%3D%s", c.baseURL, name)
+	// CHG-002b 2026-04-28 — match BOTH name shapes Harbor 2.x emits:
+	//   - System-level robots:  "robot$<name>"
+	//   - Project-level robots: "<project>+<name>"  (e.g. tn-foo+build-tn-foo)
+	//
+	// The previous matcher only handled `name` and `robot$<name>`, so a
+	// project-level robot created by an earlier reconcile was never
+	// detected by EnsureRobotAccount → CreateRobot was called again →
+	// Harbor returned 409 CONFLICT → tenant reconcile loop failed forever.
+	// All builds depending on that tenant's Harbor robot then 401'd at
+	// mirror-harbor — silent supply-chain breakage, masked by
+	// ContinueOn{Failed:true}.
+	reqURL := fmt.Sprintf("%s/api/v2.0/robots?q=name%%3D%s&page_size=100", c.baseURL, name)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -363,9 +449,16 @@ func (c *Client) findRobot(ctx context.Context, name string) (*harborRobot, erro
 		return nil, fmt.Errorf("decoding robots: %w", err)
 	}
 
-	// Match by suffix — Harbor prefixes robot names with "robot$".
 	for i := range robots {
-		if robots[i].Name == name || robots[i].Name == "robot$"+name {
+		fullName := robots[i].Name
+		if fullName == name {
+			return &robots[i], nil
+		}
+		if strings.TrimPrefix(fullName, "robot$") == name {
+			return &robots[i], nil
+		}
+		// Strip "<project>+" prefix.
+		if idx := strings.Index(fullName, "+"); idx >= 0 && fullName[idx+1:] == name {
 			return &robots[i], nil
 		}
 	}

@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
@@ -205,7 +206,13 @@ func (r *TenantReconciler) ensureBuildRegistryCredentials(ctx context.Context, b
 }
 
 // isRegistryTokenFresh checks if the existing buildkit-registry-config Secret
-// has a cached token with more than DORegistryTokenRefreshBuffer remaining validity.
+// has a cached DOCR token with more than DORegistryTokenRefreshBuffer remaining
+// validity AND that the Secret currently contains a DOCR auth entry. The
+// auth-presence check is necessary because, post-CHG-002b host-scoped merge,
+// the Secret may exist (with valid annotation) but still be missing the DOCR
+// `auths` entry — for instance if the Harbor writer raced ahead and this
+// function previously short-circuited the DOCR write. Returning false in that
+// case forces a re-merge and restores the missing entry.
 func (r *TenantReconciler) isRegistryTokenFresh(ctx context.Context, namespace string) bool {
 	var secret corev1.Secret
 	key := types.NamespacedName{Name: k.SecretBuildKitRegistryConfig, Namespace: namespace}
@@ -227,8 +234,36 @@ func (r *TenantReconciler) isRegistryTokenFresh(ctx context.Context, namespace s
 		return false
 	}
 
-	remaining := time.Until(expiresAt)
-	return remaining > k.DORegistryTokenRefreshBuffer
+	if time.Until(expiresAt) <= k.DORegistryTokenRefreshBuffer {
+		return false
+	}
+
+	// Auth-presence check: the cached token annotation only matters if the
+	// DOCR auth is actually in the Secret. A Secret with only Harbor auths
+	// must not short-circuit DOCR's writer.
+	if secret.Data == nil {
+		return false
+	}
+	cfg, parseErr := parseDockerConfigJSON(secret.Data[k.KeyDockerConfigJSON])
+	if parseErr != nil || len(cfg.Auths) == 0 {
+		return false
+	}
+	for host := range cfg.Auths {
+		// DOCR returns auths under registry.digitalocean.com[/...]; we accept
+		// any host containing "digitalocean" rather than hard-coding because
+		// the API may return host variants (region-suffixed paths in DOCR v2).
+		if containsDOCRHost(host) {
+			return true
+		}
+	}
+	return false
+}
+
+// containsDOCRHost is a tiny helper to keep the host check in one place.
+// Kept package-private and minimal to avoid a heavier abstraction layer.
+func containsDOCRHost(host string) bool {
+	return host == "registry.digitalocean.com" ||
+		(len(host) > len("registry.digitalocean.com") && host[:len("registry.digitalocean.com")] == "registry.digitalocean.com")
 }
 
 // ensureBuildExecutorRBAC creates the Role and RoleBinding for Argo Workflow executor pods.
@@ -392,20 +427,47 @@ func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, n
 	return err
 }
 
-// ensureBuildkitRegistrySecret creates or updates the BuildKit registry config Secret.
-// For DO deployments, the expiry annotation is set so subsequent reconciles can skip
-// the DO API call while the token is still fresh.
+// ensureBuildkitRegistrySecret upserts the DOCR auth entries from `dockerConfig`
+// into the unified `buildkit-registry-config` Secret while preserving any
+// auths from other writers (notably Harbor — see `ensureHarborRegistrySecret`).
+//
+// CHG-002b 2026-04-28 — root cause: this used to fully overwrite the Secret
+// with DOCR-only auths, racing the Harbor writer and producing 401s on
+// `mirror-harbor-*` steps. Host-scoped merge eliminates the oscillation.
+//
+// `dockerConfig` is expected to be a Docker config.json document for DOCR.
+// All `auths` entries from it are upserted onto the merged Secret; this
+// covers cases where the DO API returns multiple registry hosts.
 func (r *TenantReconciler) ensureBuildkitRegistrySecret(ctx context.Context, namespace, tenantName, dockerConfig string) error {
+	docrCfg, err := parseDockerConfigJSON([]byte(dockerConfig))
+	if err != nil {
+		return fmt.Errorf("ensureBuildkitRegistrySecret: parse dockerConfig: %w", err)
+	}
+	docrAuths := map[string]mergedAuthEntry{}
+	for host, entry := range docrCfg.Auths {
+		docrAuths[host] = entry
+	}
+
+	desiredType := corev1.SecretTypeOpaque
+	// Pre-flight: heal stale Secrets that were created with DockerConfigJson
+	// type by a prior controller version.
+	existing := &corev1.Secret{}
+	getErr := r.BuildClient.Get(ctx, client.ObjectKey{Name: k.SecretBuildKitRegistryConfig, Namespace: namespace}, existing)
+	if getErr == nil && existing.Type != desiredType {
+		if delErr := r.BuildClient.Delete(ctx, existing); delErr != nil && !errors.IsNotFound(delErr) {
+			return fmt.Errorf("delete legacy registry secret: %w", delErr)
+		}
+	}
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: k.SecretBuildKitRegistryConfig, Namespace: namespace},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
 		secret.Labels = map[string]string{
 			k.LabelTenant:    tenantName,
 			k.LabelComponent: k.ComponentBuild,
 			k.LabelManagedBy: k.ManagedByTenantController,
 		}
-		// Set expiry annotation for DO registry token caching.
 		if r.Credentials.DOToken != "" {
 			if secret.Annotations == nil {
 				secret.Annotations = make(map[string]string)
@@ -413,10 +475,22 @@ func (r *TenantReconciler) ensureBuildkitRegistrySecret(ctx context.Context, nam
 			expiresAt := time.Now().Add(time.Duration(k.DORegistryTokenExpirySeconds) * time.Second)
 			secret.Annotations[k.AnnotationTokenExpiresAt] = expiresAt.Format(time.RFC3339)
 		}
-		secret.Type = corev1.SecretTypeOpaque
-		secret.StringData = map[string]string{
-			k.KeyDockerConfigJSON: dockerConfig,
+		secret.Type = desiredType
+
+		live := []byte(nil)
+		if secret.Data != nil {
+			live = secret.Data[k.KeyDockerConfigJSON]
 		}
+		nextJSON, mergeErr := mergeAuthsByHost(live, docrAuths)
+		if mergeErr != nil {
+			return mergeErr
+		}
+		secret.Data = map[string][]byte{
+			k.KeyDockerConfigJSON: nextJSON,
+		}
+		// StringData and Data are mutually exclusive at apply time — clear
+		// any leftover StringData from prior controller versions.
+		secret.StringData = nil
 		return nil
 	})
 	return err

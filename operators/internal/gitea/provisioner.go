@@ -10,6 +10,10 @@ type GitRepoProvisioner interface {
 	EnsureRepo(ctx context.Context, name string, branch string) (repoURL string, err error)
 	RepoExists(ctx context.Context, name string) (bool, error)
 	ArchiveRepo(ctx context.Context, name string) error
+	// UnarchiveRepo flips a repo's archived flag back to false (idempotent).
+	// CHG-002b 2026-04-28 — required so EnsureRepo can recover from
+	// the tenant-delete-then-recreate cycle.
+	UnarchiveRepo(ctx context.Context, name string) error
 }
 
 // BootstrapClient defines the Gitea operations required by PlatformBootstrap.

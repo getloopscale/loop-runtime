@@ -110,6 +110,23 @@ func (f *FakeGitProvisioner) ArchiveRepo(_ context.Context, name string) error {
 	return nil
 }
 
+// UnarchiveRepo is a no-op in the fake — repos are tracked by presence in the
+// map, so "unarchive" is just "make sure it's present". Real production
+// behavior (flipping the archived flag back to false) is exercised by
+// integration tests that hit a real Gitea.
+func (f *FakeGitProvisioner) UnarchiveRepo(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return f.Err
+	}
+	if _, ok := f.repos[name]; !ok {
+		url := fmt.Sprintf("http://gitea-http.gitea.svc.cluster.local:3000/loopzero/%s.git", name)
+		f.repos[name] = url
+	}
+	return nil
+}
+
 // FakeArgoCDProvisioner is a test double for argocd.Provisioner.
 // Tracks created applications and app projects in memory.
 type FakeArgoCDProvisioner struct {

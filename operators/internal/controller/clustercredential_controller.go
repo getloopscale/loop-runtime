@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -249,7 +250,15 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 	token := restConfig.BearerToken
 	caData := ""
 	if len(restConfig.CAData) > 0 {
-		caData = string(restConfig.CAData)
+		// CHG-002b 2026-04-27 — ArgoCD's `tlsClientConfig.caData` field is
+		// documented as base64-encoded PEM bytes (see argo-cd source:
+		// util/clusters/secret.go and the dynamic-cluster-distribution docs).
+		// Storing the raw PEM string here causes ArgoCD to attempt
+		// `base64.StdEncoding.Decode("-----BEGIN CERTIFICATE..."`) and fail
+		// with `illegal base64 data at input byte 0`, which manifests as
+		// `InvalidSpecError: unable to find destination server` on every
+		// Application managed by this cluster credential. Encode here.
+		caData = base64.StdEncoding.EncodeToString(restConfig.CAData)
 	}
 
 	// Fail-fast if no authentication mechanism found.
