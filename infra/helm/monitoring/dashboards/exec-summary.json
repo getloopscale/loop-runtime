@@ -3,7 +3,10 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -25,7 +28,7 @@
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
-      "title": "\u2190 Home",
+      "title": "← Home",
       "tooltip": "Back to System Home",
       "type": "link",
       "url": "/d/loopzero-home/loopzero-system-home"
@@ -34,293 +37,495 @@
   "panels": [
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "id": 100,
       "title": "SLO Error Budgets",
-      "type": "row"
+      "type": "row",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.005 },
-              { "color": "green", "value": 0.25 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.005
+              },
+              {
+                "color": "green",
+                "value": 0.25
+              }
             ]
           },
           "unit": "percentunit",
           "mappings": [
             {
-              "options": { "0": { "text": "No data" } },
+              "options": {
+                "0": {
+                  "text": "No data"
+                }
+              },
               "type": "value"
             }
           ]
         }
       },
-      "gridPos": { "h": 5, "w": 3, "x": 0, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      },
       "id": 1,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "title": "Deploy Success",
       "type": "stat",
       "targets": [
         {
-          "expr": "1 - slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"deploy-success-rate\"}",
-          "legendFormat": "Error Budget",
+          "expr": "sum(rate(loopzero_deploys_total{status=\"succeeded\"}[30m])) / sum(rate(loopzero_deploys_total[30m])) or vector(1)",
+          "legendFormat": "Success Rate",
           "refId": "A"
         }
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.005 },
-              { "color": "green", "value": 0.25 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.005
+              },
+              {
+                "color": "green",
+                "value": 0.25
+              }
             ]
           },
           "unit": "percentunit",
           "mappings": [
             {
-              "options": { "0": { "text": "No data" } },
+              "options": {
+                "0": {
+                  "text": "No data"
+                }
+              },
               "type": "value"
             }
           ]
         }
       },
-      "gridPos": { "h": 5, "w": 3, "x": 3, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 3,
+        "y": 1
+      },
       "id": 2,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Deploy Latency",
+      "title": "API Error Budget",
       "type": "stat",
       "targets": [
         {
-          "expr": "1 - slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"deploy-latency-5m\"}",
+          "expr": "1 - (sum(rate(loopzero_api_requests_total{status=~\"5..\"}[30m])) / sum(rate(loopzero_api_requests_total[30m]))) or vector(1)",
           "legendFormat": "Error Budget",
           "refId": "A"
         }
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.005 },
-              { "color": "green", "value": 0.25 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.005
+              },
+              {
+                "color": "green",
+                "value": 0.25
+              }
             ]
           },
           "unit": "percentunit",
           "mappings": [
             {
-              "options": { "0": { "text": "No data" } },
+              "options": {
+                "0": {
+                  "text": "No data"
+                }
+              },
               "type": "value"
             }
           ]
         }
       },
-      "gridPos": { "h": 5, "w": 3, "x": 6, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      },
       "id": 3,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "title": "Rollback",
+      "description": "SLO metrics not yet configured — requires Sloth integration",
       "type": "stat",
       "targets": [
         {
-          "expr": "1 - slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"rollback-success-rate\"}",
+          "expr": "vector(0)",
           "legendFormat": "Error Budget",
           "refId": "A"
         }
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.005 },
-              { "color": "green", "value": 0.25 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.005
+              },
+              {
+                "color": "green",
+                "value": 0.25
+              }
             ]
           },
           "unit": "percentunit",
           "mappings": [
             {
-              "options": { "0": { "text": "No data" } },
+              "options": {
+                "0": {
+                  "text": "No data"
+                }
+              },
               "type": "value"
             }
           ]
         }
       },
-      "gridPos": { "h": 5, "w": 3, "x": 9, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 9,
+        "y": 1
+      },
       "id": 4,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "title": "Tenant Avail",
+      "description": "SLO metrics not yet configured — requires Sloth integration",
       "type": "stat",
       "targets": [
         {
-          "expr": "1 - slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"tenant-url-availability\"}",
+          "expr": "vector(0)",
           "legendFormat": "Error Budget",
           "refId": "A"
         }
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.005 },
-              { "color": "green", "value": 0.25 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.005
+              },
+              {
+                "color": "green",
+                "value": 0.25
+              }
             ]
           },
           "unit": "percentunit",
           "mappings": [
             {
-              "options": { "0": { "text": "No data" } },
+              "options": {
+                "0": {
+                  "text": "No data"
+                }
+              },
               "type": "value"
             }
           ]
         }
       },
-      "gridPos": { "h": 5, "w": 3, "x": 12, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 12,
+        "y": 1
+      },
       "id": 5,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "title": "API Avail",
+      "description": "SLO metrics not yet configured — requires Sloth integration",
       "type": "stat",
       "targets": [
         {
-          "expr": "1 - slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"api-availability\"}",
+          "expr": "vector(0)",
           "legendFormat": "Error Budget",
           "refId": "A"
         }
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.005 },
-              { "color": "green", "value": 0.25 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.005
+              },
+              {
+                "color": "green",
+                "value": 0.25
+              }
             ]
           },
           "unit": "percentunit",
           "mappings": [
             {
-              "options": { "0": { "text": "No data" } },
+              "options": {
+                "0": {
+                  "text": "No data"
+                }
+              },
               "type": "value"
             }
           ]
         }
       },
-      "gridPos": { "h": 5, "w": 3, "x": 15, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 15,
+        "y": 1
+      },
       "id": 6,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Build Pipeline",
+      "title": "Build Error Budget",
       "type": "stat",
       "targets": [
         {
-          "expr": "1 - slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"build-pipeline-success\"}",
-          "legendFormat": "Error Budget",
+          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[30m])) / sum(rate(loopzero_builds_total[30m])) or vector(1)",
+          "legendFormat": "Success Rate",
           "refId": "A"
         }
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.005 },
-              { "color": "green", "value": 0.25 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.005
+              },
+              {
+                "color": "green",
+                "value": 0.25
+              }
             ]
           },
           "unit": "percentunit",
           "mappings": [
             {
-              "options": { "0": { "text": "No data" } },
+              "options": {
+                "0": {
+                  "text": "No data"
+                }
+              },
               "type": "value"
             }
           ]
         }
       },
-      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
       "id": 7,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "title": "Domains",
+      "description": "SLO metrics not yet configured — requires Sloth integration",
       "type": "stat",
       "targets": [
         {
-          "expr": "1 - slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"domain-provisioning-success\"}",
+          "expr": "vector(0)",
           "legendFormat": "Error Budget",
           "refId": "A"
         }
@@ -328,13 +533,25 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
       "id": 101,
       "title": "SLO Burn Rates",
-      "type": "row"
+      "type": "row",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -342,63 +559,71 @@
             "lineInterpolation": "smooth",
             "fillOpacity": 15,
             "pointSize": 5,
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           },
           "unit": "percentunit"
         }
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 7 },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
       "id": 10,
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Error Budget Burn Rate (30d window)",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "title": "Error Rates (30m window)",
+      "description": "SLO burn rate metrics not yet configured — showing error rates as proxy. Requires Sloth integration.",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"deploy-success-rate\"}",
-          "legendFormat": "deploy-success-rate",
+          "expr": "sum(rate(loopzero_deploys_total{status=\"failed\"}[30m])) / sum(rate(loopzero_deploys_total[30m])) or vector(0)",
+          "legendFormat": "deploy-error-rate",
           "refId": "A"
         },
         {
-          "expr": "slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"deploy-latency-5m\"}",
-          "legendFormat": "deploy-latency-5m",
+          "expr": "sum(rate(loopzero_api_requests_total{status=~\"5..\"}[30m])) / sum(rate(loopzero_api_requests_total[30m])) or vector(0)",
+          "legendFormat": "api-error-rate",
           "refId": "B"
         },
         {
-          "expr": "slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"rollback-success-rate\"}",
-          "legendFormat": "rollback-success-rate",
+          "expr": "sum(rate(loopzero_builds_total{status=\"failed\"}[30m])) / sum(rate(loopzero_builds_total[30m])) or vector(0)",
+          "legendFormat": "build-error-rate",
           "refId": "C"
-        },
-        {
-          "expr": "slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"tenant-url-availability\"}",
-          "legendFormat": "tenant-url-availability",
-          "refId": "D"
-        },
-        {
-          "expr": "slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"api-availability\"}",
-          "legendFormat": "api-availability",
-          "refId": "E"
-        },
-        {
-          "expr": "slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"build-pipeline-success\"}",
-          "legendFormat": "build-pipeline-success",
-          "refId": "F"
-        },
-        {
-          "expr": "slo:sli_error:ratio_rate30d{sloth_service=\"loopzero-deploys\",sloth_slo=\"domain-provisioning-success\"}",
-          "legendFormat": "domain-provisioning-success",
-          "refId": "G"
         }
       ]
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
       "id": 102,
       "title": "Deploy Trends",
-      "type": "row"
+      "type": "row",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -406,21 +631,42 @@
             "lineInterpolation": "smooth",
             "fillOpacity": 15,
             "pointSize": 5,
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           },
           "unit": "percentunit",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 0.95 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.95
+              }
             ]
           }
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
       "id": 20,
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
       "title": "Deploy Success Rate (7d rolling)",
       "type": "timeseries",
       "targets": [
@@ -432,7 +678,10 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -440,14 +689,29 @@
             "lineInterpolation": "smooth",
             "fillOpacity": 15,
             "pointSize": 5,
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           },
           "unit": "s"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
       "id": 21,
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
       "title": "Deploy Lead Time",
       "type": "timeseries",
       "targets": [
@@ -470,13 +734,25 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
       "id": 103,
       "title": "Reliability Signals",
-      "type": "row"
+      "type": "row",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -484,26 +760,44 @@
             "lineInterpolation": "smooth",
             "fillOpacity": 15,
             "pointSize": 5,
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           },
           "unit": "ops"
         }
       },
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 25 },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
       "id": 30,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "False Success Rate",
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "title": "Revision Mismatch Rate",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_false_success_total[1h]))",
-          "legendFormat": "False Successes",
+          "expr": "sum(rate(loopzero_release_revision_mismatch_total[1h])) or vector(0)",
+          "legendFormat": "Revision Mismatches",
           "refId": "A"
         }
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -511,20 +805,35 @@
             "lineInterpolation": "smooth",
             "fillOpacity": 15,
             "pointSize": 5,
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           },
           "unit": "ops"
         }
       },
-      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 25 },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
       "id": 31,
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Retry Amplification",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "title": "Revision Resync Rate",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_retry_amplification_total[1h])) by (operation)",
-          "legendFormat": "{{operation}}",
+          "expr": "sum(rate(loopzero_release_revision_resync_total[5m])) or vector(0)",
+          "legendFormat": "Resyncs",
           "refId": "A"
         }
       ]
@@ -532,11 +841,19 @@
   ],
   "refresh": "10s",
   "schemaVersion": 39,
-  "tags": ["loopzero", "executive", "slo"],
+  "tags": [
+    "loopzero",
+    "executive",
+    "slo"
+  ],
   "templating": {
     "list": [
       {
-        "current": { "selected": false, "text": "Prometheus", "value": "Prometheus" },
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
         "hide": 0,
         "includeAll": false,
         "name": "DS_PROMETHEUS",
@@ -547,10 +864,13 @@
       }
     ]
   },
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "browser",
-  "title": "LoopZero \u2014 Executive Summary",
+  "title": "LoopZero — Executive Summary",
   "uid": "loopzero-exec-summary",
   "version": 1
 }

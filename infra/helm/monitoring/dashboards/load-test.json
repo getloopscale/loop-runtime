@@ -1,5 +1,7 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -8,169 +10,277 @@
     {
       "title": "Deploy Rate (builds/min)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
       "targets": [
         {
-          "expr": "sum(rate(loopzero_deploys_total[1m])) * 60",
+          "expr": "sum(rate(loopzero_deploys_total[5m])) * 60 or vector(0)",
           "legendFormat": "Submitted/min"
         },
         {
-          "expr": "sum(rate(loopzero_builds_total[1m])) * 60",
+          "expr": "sum(rate(loopzero_builds_total[5m])) * 60 or vector(0)",
           "legendFormat": "Completed/min"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10
+          },
           "unit": "short"
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       }
     },
     {
       "title": "Build Queue Depth",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
       "targets": [
         {
-          "expr": "loopzero_build_queue_depth",
+          "expr": "loopzero_build_queue_depth or vector(0)",
           "legendFormat": "Queue Depth"
         },
         {
-          "expr": "loopzero_releasing_builds",
+          "expr": "loopzero_releasing_builds or vector(0)",
           "legendFormat": "Releasing"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20 },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 20
+          },
           "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 10 },
-              { "color": "red", "value": 30 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
             ]
           }
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       }
     },
     {
       "title": "API Request Latency (p50 / p95 / p99)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(loopzero_api_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, rate(loopzero_api_request_duration_seconds_bucket[5m])) or vector(0)",
           "legendFormat": "p50"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(loopzero_api_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(loopzero_api_request_duration_seconds_bucket[5m])) or vector(0)",
           "legendFormat": "p95"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(loopzero_api_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.99, rate(loopzero_api_request_duration_seconds_bucket[5m])) or vector(0)",
           "legendFormat": "p99"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": { "drawStyle": "line", "lineWidth": 2 },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2
+          },
           "unit": "s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 3 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
             ]
           }
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       }
     },
     {
       "title": "PG Connection Pool",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
       "targets": [
         {
-          "expr": "loopzero_postgres_connections_active",
+          "expr": "loopzero_postgres_connections_active or vector(0)",
           "legendFormat": "Active"
         },
         {
-          "expr": "loopzero_postgres_connections_idle",
+          "expr": "loopzero_postgres_connections_idle or vector(0)",
           "legendFormat": "Idle"
         },
         {
-          "expr": "loopzero_postgres_connections_total",
+          "expr": "loopzero_postgres_connections_total or vector(0)",
           "legendFormat": "Total"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15 },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15
+          },
           "unit": "short",
           "max": 50,
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 18 },
-              { "color": "red", "value": 23 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 18
+              },
+              {
+                "color": "red",
+                "value": 23
+              }
             ]
           }
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       }
     },
     {
       "title": "Lock Acquisition",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
       "targets": [
         {
-          "expr": "rate(loopzero_lock_acquired_total[5m]) * 60",
+          "expr": "rate(loopzero_lock_acquired_total[5m]) * 60 or vector(0)",
           "legendFormat": "Acquired/min"
         },
         {
-          "expr": "rate(loopzero_lock_acquired_total{result=\"conflict\"}[5m]) * 60",
+          "expr": "rate(loopzero_lock_acquired_total{result=\"conflict\"}[5m]) * 60 or vector(0)",
           "legendFormat": "Conflicts/min"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10
+          },
           "unit": "short"
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       }
     },
     {
       "title": "ArgoCD Sync Queue",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
       "targets": [
         {
-          "expr": "loopzero_releases_pending",
+          "expr": "loopzero_releases_pending or vector(0)",
           "legendFormat": "Pending Releases"
         },
         {
-          "expr": "loopzero_argocd_circuit_state",
+          "expr": "loopzero_argocd_circuit_state or vector(0)",
           "legendFormat": "Circuit Breaker (0=closed, 1=open)"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": { "drawStyle": "line", "lineWidth": 2 },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2
+          },
           "unit": "short"
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       }
     },
     {
       "title": "Success Rate",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 24 },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 24
+      },
       "targets": [
         {
-          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[5m])) / sum(rate(loopzero_builds_total[5m])) * 100",
+          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[5m])) / sum(rate(loopzero_builds_total[5m])) * 100 or vector(0)",
           "legendFormat": ""
         }
       ],
@@ -180,21 +290,39 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "yellow", "value": 95 },
-              { "color": "green", "value": 99 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
             ]
           }
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       }
     },
     {
       "title": "Leader Status",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 24 },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 24
+      },
       "targets": [
         {
-          "expr": "sum(loopzero_api_leader_status)",
+          "expr": "sum(loopzero_api_leader_status) or vector(0)",
           "legendFormat": ""
         }
       ],
@@ -203,20 +331,35 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       }
     },
     {
       "title": "SSE Connections",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 24 },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 24
+      },
       "targets": [
         {
-          "expr": "loopzero_sse_connections_active",
+          "expr": "loopzero_sse_connections_active or vector(0)",
           "legendFormat": ""
         }
       ],
@@ -226,21 +369,39 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 150 },
-              { "color": "red", "value": 200 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 150
+              },
+              {
+                "color": "red",
+                "value": 200
+              }
             ]
           }
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       }
     },
     {
       "title": "Drift Detected",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 24 },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 24
+      },
       "targets": [
         {
-          "expr": "sum(loopzero_drift_detected)",
+          "expr": "sum(loopzero_cfkv_drift_detected) or vector(0)",
           "legendFormat": ""
         }
       ],
@@ -249,18 +410,51 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
             ]
           }
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       }
     }
   ],
   "schemaVersion": 39,
-  "tags": ["loopzero", "load-test"],
-  "templating": { "list": [] },
-  "time": { "from": "now-1h", "to": "now" },
-  "title": "LoopZero \u2014 Load Test",
+  "tags": [
+    "loopzero",
+    "load-test"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "title": "LoopZero — Load Test",
   "uid": "loopzero-load-test"
 }

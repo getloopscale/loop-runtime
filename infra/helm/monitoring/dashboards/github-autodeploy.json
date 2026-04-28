@@ -1,5 +1,7 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -12,7 +14,7 @@
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
-      "title": "\u2190 Home",
+      "title": "← Home",
       "type": "link",
       "url": "/d/loopzero-home/loopzero-system-home"
     }
@@ -22,66 +24,190 @@
     {
       "title": "Webhook Push Events",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
       "description": "Requires GitHub App webhook to be active. Shows push events received and processed.",
       "targets": [
-        { "expr": "sum(rate(loopzero_webhook_push_total[5m])) by (result) or vector(0)", "legendFormat": "{{result}}" }
+        {
+          "expr": "sum(rate(loopzero_webhook_push_total[5m])) by (result) or vector(0)",
+          "legendFormat": "{{result}}"
+        }
       ],
-      "fieldConfig": { "defaults": { "unit": "reqps", "noValue": "No webhook activity" } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "No webhook activity"
+        }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
       "title": "Deploy Duration (end-to-end)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
       "targets": [
-        { "expr": "histogram_quantile(0.95, sum(rate(loopzero_deploy_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" },
-        { "expr": "histogram_quantile(0.50, sum(rate(loopzero_deploy_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50" }
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(loopzero_build_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(loopzero_build_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        }
       ],
-      "fieldConfig": { "defaults": { "unit": "s" } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
       "title": "Builds by Status (5m rate)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
       "targets": [
-        { "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[5m])) or vector(0)", "legendFormat": "Succeeded" },
-        { "expr": "sum(rate(loopzero_builds_total{status=\"failed\"}[5m])) or vector(0)", "legendFormat": "Failed" }
-      ]
+        {
+          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[5m])) or vector(0)",
+          "legendFormat": "Succeeded"
+        },
+        {
+          "expr": "sum(rate(loopzero_builds_total{status=\"failed\"}[5m])) or vector(0)",
+          "legendFormat": "Failed"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
       "title": "Revision Mismatches & Re-syncs",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
       "targets": [
-        { "expr": "sum(rate(loopzero_release_revision_mismatch_total[5m]))", "legendFormat": "Mismatches" },
-        { "expr": "sum(rate(loopzero_release_revision_resync_total[5m]))", "legendFormat": "Re-syncs" },
-        { "expr": "sum(rate(loopzero_release_revision_resync_failure_total[5m]))", "legendFormat": "Re-sync Failures" }
-      ]
+        {
+          "expr": "sum(rate(loopzero_release_revision_mismatch_total[5m]))",
+          "legendFormat": "Mismatches"
+        },
+        {
+          "expr": "sum(rate(loopzero_release_revision_resync_total[5m]))",
+          "legendFormat": "Re-syncs"
+        },
+        {
+          "expr": "sum(rate(loopzero_release_revision_resync_failure_total[5m]))",
+          "legendFormat": "Re-sync Failures"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
       "title": "LoopZeroApplication CR Ensures",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
       "targets": [
-        { "expr": "sum(rate(loopzero_application_cr_ensure_total[5m])) by (result)", "legendFormat": "{{result}}" }
-      ]
+        {
+          "expr": "sum(rate(loopzero_application_cr_ensure_total[5m])) by (result)",
+          "legendFormat": "{{result}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
       "title": "GitOps Operation Duration",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
       "targets": [
-        { "expr": "histogram_quantile(0.95, sum(rate(loopzero_gitops_operation_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" },
-        { "expr": "histogram_quantile(0.50, sum(rate(loopzero_gitops_operation_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50" }
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(loopzero_gitops_operation_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(loopzero_gitops_operation_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        }
       ],
-      "fieldConfig": { "defaults": { "unit": "s" } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["loopzero", "github", "autodeploy"],
-  "templating": { "list": [] },
-  "time": { "from": "now-6h", "to": "now" },
-  "title": "LoopZero \u2014 GitHub Auto-Deploy",
+  "tags": [
+    "loopzero",
+    "github",
+    "autodeploy"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "LoopZero — GitHub Auto-Deploy",
   "uid": "loopzero-github-autodeploy"
 }

@@ -1,20 +1,48 @@
 {
   "title": "Capacity Elasticity",
   "uid": "capacity-elasticity",
-  "tags": ["loopzero", "capacity", "autoscaling", "T-07"],
+  "tags": [
+    "loopzero",
+    "capacity",
+    "autoscaling",
+    "T-07"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "templating": {
     "list": [
       {
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
         "name": "namespace",
         "type": "query",
-        "datasource": "Prometheus",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "query": "label_values(kube_horizontalpodautoscaler_spec_max_replicas, namespace)",
-        "current": { "text": "loopzero-system", "value": "loopzero-system" }
+        "current": {
+          "text": "loopzero-system",
+          "value": "loopzero-system"
+        }
       }
     ]
   },
@@ -23,8 +51,16 @@
       "id": 1,
       "title": "HPA Current vs Target Replicas",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
-      "datasource": "Prometheus",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "targets": [
         {
           "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=~\"$namespace\"}",
@@ -44,8 +80,16 @@
       "id": 2,
       "title": "HPA CPU Utilization vs Target",
       "type": "timeseries",
-      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
-      "datasource": "Prometheus",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
@@ -54,8 +98,8 @@
       },
       "targets": [
         {
-          "expr": "kube_horizontalpodautoscaler_status_target_metric{metric_name=\"cpu\",namespace=~\"$namespace\"}",
-          "legendFormat": "{{horizontalpodautoscaler}} cpu %"
+          "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=~\"$namespace\"} / kube_horizontalpodautoscaler_spec_max_replicas{namespace=~\"$namespace\"} * 100",
+          "legendFormat": "{{horizontalpodautoscaler}} HPA utilization %"
         }
       ]
     },
@@ -63,8 +107,16 @@
       "id": 3,
       "title": "Pod Replicas per Deployment",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
-      "datasource": "Prometheus",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "targets": [
         {
           "expr": "kube_deployment_status_replicas_available{namespace=~\"$namespace\"}",
@@ -76,8 +128,16 @@
       "id": 4,
       "title": "HPA Scale Events (rate)",
       "type": "timeseries",
-      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
-      "datasource": "Prometheus",
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "description": "Positive = scale-up, negative = scale-down events/min",
       "targets": [
         {
@@ -90,8 +150,16 @@
       "id": 5,
       "title": "Rejections — Argo 403 + API 429 (backpressure)",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
-      "datasource": "Prometheus",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "targets": [
         {
           "expr": "rate(argo_workflows_k8s_request_total{status_code=\"403\"}[5m])",
@@ -107,17 +175,34 @@
       "id": 6,
       "title": "Workqueue Depth (Operators)",
       "type": "timeseries",
-      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
-      "datasource": "Prometheus",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "description": "Alert TenantReconcileBacklog fires on > 50",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 25 },
-              { "color": "red", "value": 50 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 25
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
             ]
           }
         }
@@ -133,17 +218,34 @@
       "id": 7,
       "title": "GitOps Operation p95 Latency (includes Gitea)",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
-      "datasource": "Prometheus",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 2 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
             ]
           }
         }
@@ -159,8 +261,16 @@
       "id": 8,
       "title": "PVC Pending (bugs #18, #40)",
       "type": "timeseries",
-      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
-      "datasource": "Prometheus",
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "description": "Alert PVCPendingSustained fires on any > 2min",
       "targets": [
         {
@@ -173,8 +283,16 @@
       "id": 9,
       "title": "Build Success Rate (moving 5m)",
       "type": "stat",
-      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 6 },
-      "datasource": "Prometheus",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "description": "Alert BuildFailureRateHigh fires when below 90%",
       "fieldConfig": {
         "defaults": {
@@ -183,9 +301,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "yellow", "value": 0.90 },
-              { "color": "green", "value": 0.99 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.9
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
             ]
           }
         }
@@ -200,8 +327,16 @@
       "id": 10,
       "title": "Active Alerts (T-07 capacity)",
       "type": "table",
-      "gridPos": { "x": 12, "y": 32, "w": 12, "h": 6 },
-      "datasource": "Prometheus",
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "targets": [
         {
           "expr": "ALERTS{alertname=~\"GiteaAuthLatencyHigh|ArgoWorkflowQuotaExceeded|HPAAtMaxReplicas|PVCPendingSustained|TenantReconcileBacklog|BuildFailureRateHigh|LoopZeroPodCrashLooping|HarborCanaryFailing|LoopZeroHighAPILatency\"}",
