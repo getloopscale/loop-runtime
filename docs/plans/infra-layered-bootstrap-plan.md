@@ -1,8 +1,12 @@
 # Plan: Infrastructure Layered Bootstrap
 
-> **Version 1.1** — Refatorar a infraestrutura de provisioning do LoopZero de um unico stack Pulumi (cloud infra + K8s workloads) para uma arquitetura de 3 camadas separadas: L1 Cloud Infra (Pulumi), L2 K8s Bootstrap (Helmfile), L3 Platform Config (Operators/GitOps). Isso elimina o problema de zombie state no destroy, resolve 35 dos 44 problemas documentados na retrospectiva Sprint 8, e habilita self-hosting confiavel para clientes. O resultado eh um `loopzero platform provision` que funciona end-to-end sem intervencao manual.
+> **Version 1.3** — Refatorar a infraestrutura de provisioning do LoopZero de um unico stack Pulumi (cloud infra + K8s workloads) para uma arquitetura de 3 camadas separadas: L1 Cloud Infra (Pulumi), L2 K8s Bootstrap (Helmfile), L3 Platform Config (Operators/GitOps). Isso elimina o problema de zombie state no destroy, resolve 35 dos 44 problemas documentados na retrospectiva Sprint 8, e habilita self-hosting confiavel para clientes. O resultado eh um `loopzero platform provision` que funciona end-to-end sem intervencao manual.
 >
-> **v1.1 changes:** Reconciliado com estado real do repositorio. T0.1 removida (ja commitada em e4a55c13). T0.3 corrigida (Loki/Promtail/Pulumi.dev.yaml ja commitados — restam apenas runtimeMaxNodes bump e CLAUDE.md). ADR D9 adicionada para cloudflared Deployment (CF Tunnel cria K8s resources dentro do L1). T1.1/T1.3 atualizadas para manter @pulumi/kubernetes ate cloudflared migrar. T1.4 nova para migracao do wiring object. T2.3 corrigida (admission-policies nao eh Helm chart). Gate intermediario L3-50 adicionado antes de L3-100. Helmfile adicionado aos prerequisites.
+> **v1.1 changes:** Reconciliado com estado real do repositorio. T0.1 removida (ja commitada em e4a55c13). T0.3 corrigida (Loki/Promtail/Pulumi.dev.yaml ja commitados — restam apenas runtimeMaxNodes bump e CLAUDE.md). ADR D9 adicionada para cloudflared Deployment (CF Tunnel cria K8s resources dentro do L1). T1.1/T1.3 atualizadas para manter @pulumi/kubernetes ate cloudflared migrar. T1.4 nova para migracao do wiring object. T2.3 corrigida (admission-policies nao eh Helm chart). Gate intermediario L3-50 adicionado antes de L3-100. Helmfile adicionado aos prerequisites. CHANGELOG.md atualizado com 18 entries B1-B18 (CHG-2026-04-28-L3-STABILIZATION) que estavam ausentes.
+>
+> **v1.2 changes:** ADR D10 (loop back obrigatorio). Phase 8 nova com 3 tasks: T8.1 regression test suite (9 testes novos para B1-B18 sem protecao), T8.2 loop back checklist (44/44 problemas com protecao permanente documentada, checkpoint bloqueante por phase), T8.3 post-mortem loop (L3 coverage dos 44 problemas, test variants L3Churn e L3NoisyNeighbor). Coverage matrix expandida com colunas "Protecao Permanente" e "Recorre?". Global DoD atualizado: 44/44 protecao obrigatoria, zero "SIM" na matriz, loop back por phase.
+>
+> **v1.3 changes:** ADR D11 (um unico comando de instalacao). `loopzero platform provision` ELIMINADO — nao existe mais. `loopzero platform install` eh o UNICO comando, com `--provider` opcional para provisionar infra. D2 reescrito: Helmfile eh o UNICO mecanismo de chart install (prerequisites.ts deletado). D6 atualizado: profile `standalone` para self-hosting single-cluster. Phase 3 reescrita: de "criar provision" para "convergir install" — T3.1 refatora platformInstall para helmfile, T3.2 converge upgrade/uninstall. Zero duplicacao de versoes, ordering, ou secret generation entre self-hosting e LoopZero Cloud.
 
 ## Context
 
@@ -57,14 +61,14 @@ Pesquisa em 10 plataformas/ferramentas (Rancher, Replicated, Kubefirst, Glasskub
 
 ## Objective
 
-**Done** significa: `pulumi destroy && pulumi up && helmfile sync` em sequencia produz uma plataforma 100% funcional sem nenhuma intervencao manual, validada com L3 100-tenant deploy no DigitalOcean.
+**Done** significa: `loopzero platform install -f values.yaml` produz uma plataforma 100% funcional sem nenhuma intervencao manual, tanto para LoopZero Cloud (com `--provider digitalocean`) quanto para self-hosting (sem `--provider`), validado com L3 100-tenant deploy no DigitalOcean.
 
 Metas especificas:
-1. `pulumi destroy` completa em <5min sem state surgery (zero K8s resources no state)
-2. `helmfile sync` instala 26 releases com ordering correto e health gates entre fases
-3. 35 dos 44 problemas documentados eliminados (80%)
-4. `loopzero platform provision` como CLI wrapper end-to-end com preflight + progress + smoke test
-5. Self-hosting viavel: mesmo Helmfile funciona em qualquer K8s cluster
+1. **Um unico comando**: `loopzero platform install` eh o unico caminho de instalacao. Nao existe `loopzero platform provision` separado.
+2. `pulumi destroy` completa em <5min sem state surgery (zero K8s resources no state)
+3. `helmfile sync` eh o unico mecanismo de instalacao de charts (substitui `prerequisites.ts`)
+4. 44/44 problemas com protecao permanente contra recorrencia (ADR D10)
+5. Self-hosting identico a LoopZero Cloud: mesmo Helmfile, mesmas versoes, mesmos health checks
 
 ## ADRs
 
@@ -76,13 +80,13 @@ Metas especificas:
 
 **Consequences:** Pulumi permanece. A melhoria vem da separacao de camadas, nao da troca de ferramenta. K8s resources sao REMOVIDOS do Pulumi state.
 
-### D2 — Helmfile como orquestrador L2 (nao ArgoCD App of Apps direto)
+### D2 — Helmfile como UNICO mecanismo de instalacao de charts
 
-**Decision:** Usar Helmfile para Day-0 bootstrap (instalacao inicial dos 26 Helm charts). ArgoCD App of Apps assume Day-2 (drift detection, upgrades).
+**Decision:** Helmfile eh a unica fonte de verdade para instalacao de Helm charts, tanto para LoopZero Cloud quanto para self-hosting. `cli/src/installer/prerequisites.ts` (com `VERSIONS`, `buildCorePrerequisites`, `buildAuthPrerequisites`) eh SUBSTITUIDO pelo Helmfile. ArgoCD App of Apps assume Day-2 (drift detection, upgrades).
 
-**Rationale:** ArgoCD precisa estar instalado antes de poder gerenciar a si mesmo (chicken-and-egg). Helmfile resolve o bootstrap com `needs:` para ordering e `helmfile sync` idempotente. Kubefirst usa exatamente essa combinacao. ArgoCD App of Apps eh melhor para manter estado continuous do que para bootstrap from scratch.
+**Rationale:** Ter dois mecanismos (Helm direto via prerequisites.ts + Helmfile) viola DRY na logica mais critica do sistema. Versoes em dois lugares, ordering duplicado, secret generation duplicado, bugs corrigidos num caminho nao chegam no outro. A convergencia elimina toda essa classe de problemas. O `loopzero platform install` existente (489 linhas) eh refatorado para chamar `helmfile sync` em vez de `installOrUpgrade()` por chart. ArgoCD assume Day-2 (drift, upgrades) apos o bootstrap via Helmfile.
 
-**Consequences:** Dois mecanismos de deploy: Helmfile (Day-0) e ArgoCD (Day-2). O bootstrap repo Git serve ambos. `helmfile destroy` + `helmfile sync` eh o recovery path.
+**Consequences:** `prerequisites.ts` deletado. `VERSIONS` dict vive somente nos helmfiles. `loopzero platform install` chama helmfile internamente. Self-hosting e LoopZero Cloud usam o mesmo caminho. `helmfile` passa a ser prerequisito obrigatorio (adicionado ao `task doctor`).
 
 ### D3 — Preflight checks inspirados no Replicated Troubleshoot
 
@@ -108,13 +112,13 @@ Metas especificas:
 
 **Consequences:** Pulumi perde `expose.ts` e providers DNS. Helmfile gerencia DNS como release separada. Self-hosting: cliente configura DNS manualmente ou usa external-dns.
 
-### D6 — Helmfile por cluster (nao monolitico)
+### D6 — Helmfile por cluster-role + profile `standalone` para self-hosting
 
-**Decision:** Um helmfile por cluster-role: `mgmt.helmfile.yaml`, `build.helmfile.yaml`, `runtime.helmfile.yaml`. Nao um helmfile unico.
+**Decision:** Um helmfile por cluster-role: `mgmt.helmfile.yaml`, `build.helmfile.yaml`, `runtime.helmfile.yaml`. Para self-hosting single-cluster: `mgmt.helmfile.yaml` com environment `standalone` inclui TODOS os releases (mgmt + build + runtime) num unico cluster. `loopzero platform install` sem `--provider` usa o profile standalone automaticamente.
 
-**Rationale:** Cada cluster tem kubeconfig diferente, releases diferentes, e pode ser rebuilt independentemente. Um helmfile monolitico exige selectors complexos. Helmfile per-cluster espelha a realidade operacional.
+**Rationale:** Multi-cluster (LoopZero Cloud) e single-cluster (self-hosting) precisam dos mesmos charts, na mesma ordem, com as mesmas versoes. A diferenca eh ONDE rodam (N clusters vs 1). Helmfile environments resolvem isso com overlays — `standalone` coloca tudo no mesmo cluster, `dev`/`prod` distribui por cluster-role. Nenhum codigo diferente entre os dois caminhos.
 
-**Consequences:** 3 helmfiles a manter (4 com runtime-2). Mais claro, mais simples de debugar. Self-hosting single-cluster: usa apenas `mgmt.helmfile.yaml` com profile `standalone`.
+**Consequences:** 3 helmfiles + 1 profile `standalone`. Self-hosting customer roda `loopzero platform install -f values.yaml` e internamente o CLI faz `helmfile -f mgmt.helmfile.yaml -e standalone sync`. LoopZero Cloud roda `loopzero platform install -f values.yaml --provider digitalocean` que faz Pulumi L1 + helmfile per-cluster. Mesmos charts, mesmas versoes, mesmo ordering.
 
 ### D7 — Secrets gerados pelo Helmfile via hooks (nao Pulumi RandomPassword)
 
@@ -131,6 +135,22 @@ Metas especificas:
 **Rationale:** `tunnel.ts` cria 2 K8s resources (Secret + Deployment) no runtime cluster via `@pulumi/kubernetes`. Isso viola a premissa central do plano (L1 = zero K8s no state). Se o cluster runtime for destruido, esses 2 resources viram zombies — exatamente o problema que queremos eliminar. A solucao limpa eh: Pulumi cria o Tunnel no CF API (L1), Helmfile deploya o cloudflared pod no runtime (L2). O tunnel token eh passado como valor entre L1→L2 via `pulumi stack output`.
 
 **Consequences:** `@pulumi/kubernetes` so pode ser removido do package.json APOS essa migracao. Ate la, T1.3 fica bloqueada. O Helmfile runtime ganha uma release extra (`cloudflared`). O tunnel token secret eh gerado pelo Pulumi (armazenado no state) e consumido pelo Helmfile via env var.
+
+### D11 — Um unico comando de instalacao, nao dois
+
+**Decision:** `loopzero platform install` eh o UNICO comando de instalacao. `loopzero platform provision` NAO EXISTE. A diferenca entre LoopZero Cloud e self-hosting eh resolvida por um flag `--provider` (opcional) que controla se a infra (clusters, DB, storage) eh provisionada automaticamente via Pulumi ou se o customer ja tem.
+
+**Rationale:** Ter dois comandos (`install` vs `provision`) cria dois caminhos de codigo, dois conjuntos de bugs, dois pontos de manutencao. O produto eh um so — a instalacao deve ser uma so. "Provisionar infra" eh um step OPCIONAL antes de "instalar a plataforma", nao um comando diferente. O customer que traz seu proprio K8s nao precisa saber que o LoopZero Cloud usa Pulumi internamente — para ele, `loopzero platform install` eh tudo.
+
+**Consequences:** `loopzero platform install -f values.yaml` (self-hosting, K8s existente). `loopzero platform install -f values.yaml --provider digitalocean` (LoopZero Cloud, provisiona DOKS+PG+Spaces primeiro). Internamente, `--provider` aciona Pulumi L1 antes do Helmfile L2. Sem `--provider`, assume que o cluster ja existe e vai direto pro Helmfile. `cli/src/installer/prerequisites.ts` eh deletado. `cli/src/installer/provision.ts` eh a unica orquestracao (com step L1 condicional).
+
+### D10 — Loop back obrigatorio: cada problema requer protecao permanente contra recorrencia
+
+**Decision:** Todo problema dos 44 catalogados DEVE ter uma das tres protecoes permanentes: (a) teste automatizado que falha se o bug voltar, (b) config declarativa que impede a condicao (Helmfile `needs:`, values pinned), ou (c) preflight/health check que detecta em runtime. Problemas sem nenhuma protecao NAO podem ser marcados como resolvidos.
+
+**Rationale:** A sessao Sprint 8 mostrou que fixes pontuais sem verificacao de recorrencia sao ineficazes — 76 workarounds manuais, muitos resolvendo o mesmo problema pela 3a vez. O pattern "fix and forget" eh a root cause da fragilidade. Cada fase do plano DEVE terminar com um loop back: revisitar a lista completa dos 44 problemas e verificar se algum pode reaparecer com as mudancas feitas. O custo de parar 30 min para revisar eh infinitamente menor que o custo de outra sessao de 25h.
+
+**Consequences:** Cada phase ganha um checkpoint de regressao no DoD. Phase 8 (nova) eh dedicada a escrever regression tests para todos os problemas que ainda nao tem protecao automatizada. O Global DoD ganha o criterio "44/44 problemas com protecao documentada".
 
 ### D8 — Nao adotar CAPI/CAPDO, Crossplane, Timoni, cdk8s, Dagger, Flux
 
@@ -149,12 +169,12 @@ Metas especificas:
 ## Dependency Graph
 
 ```
-Phase 0 (Reconciliar) ──▶ Phase 1 (Pulumi L1-only) ──▶ Phase 3 (Orchestrator CLI)
-   T0.1 admission-policies        T1.1 extract Phase 2        │
-   T0.2 runtimeMaxNodes+CLAUDE    T1.2 clean state            │
-   T0.3 helmfile prereqs           T1.3 remove @pulumi/k8s    ▼
-                                   T1.4 wiring contract  Phase 4 (Health Gates)
-                                     │                         │
+Phase 0 (Reconciliar) ──▶ Phase 1 (Pulumi L1-only) ──▶ Phase 3 (Convergir CLI install)
+   T0.1 admission-policies        T1.1 extract Phase 2        T3.1 refatorar platformInstall
+   T0.2 runtimeMaxNodes+CLAUDE    T1.2 clean state            T3.2 convergir upgrade/uninstall
+   T0.3 helmfile prereqs           T1.3 remove @pulumi/k8s    │
+                                   T1.4 wiring contract        ▼
+                                     │                   Phase 4 (Health Gates)
                                      ▼                         │
                             Phase 2 (Helmfile L2) ─────────────┘
                               T2.1 mgmt helmfile
@@ -171,16 +191,21 @@ Phase 5 (Preflight) ◀── pode iniciar em paralelo com Phase 1-2 ──▶ P
                                                               Phase 7 (Validacao DO)
                                                                 Gate 1: L3-50
                                                                 Gate 2: L3-100
+                                                                      │
+                                                                      ▼
+                                                              Phase 8 (Regression + Loop Back)
+                                                                44/44 protecao permanente
 ```
 
 - **Phases 0 → 1 → 2:** Sequenciais (1 depende de 0, 2 depende de 1)
 - **T1.3** bloqueada por T1.1 (CF Tunnel K8s resources removidos primeiro)
 - **T2.3** depende de T0.1 (admission-policies Helm chart criado)
+- **Phase 3 (Convergir CLI):** Depende de Phase 1 + 2 (helmfiles e pulumi-runner prontos)
 - **Phase 5 (Preflight):** Pode iniciar em paralelo com Phase 1-2
-- **Phase 3 (Orchestrator):** Depende de Phase 1 + 2
 - **Phase 4 (Health Gates):** Depende de Phase 2 + 3
 - **Phase 6 (App of Apps):** Depende de Phase 2 + 4
 - **Phase 7 (Validacao):** Depende de TODAS as fases anteriores. Gate 1 (L3-50) antes de Gate 2 (L3-100)
+- **Phase 8 (Regression):** Depende de Phase 7. Checkpoint final antes de Done
 
 ---
 
@@ -904,163 +929,165 @@ VERIFY:  Executar scripts contra kubeconfig de teste
 
 ---
 
-## Phase 3: Orchestrator CLI (`loopzero platform provision`)
+## Phase 3: Convergir `loopzero platform install` (ADR D11)
 
-**Objective:** Criar o comando `loopzero platform provision` que orquestra L1 (Pulumi) + L2 (Helmfile) + wiring + smoke test como um fluxo unico end-to-end.
+**Objective:** Refatorar `loopzero platform install` para usar Helmfile como unico mecanismo de instalacao. Adicionar `--provider` flag para provisionar infra opcionalmente. Deletar `prerequisites.ts`. Resultado: um unico comando serve LoopZero Cloud E self-hosting.
 
-### T3.1 — Definir interface e command registration
+### T3.1 — Refatorar platformInstall para usar Helmfile
 
 #### Objective
-Criar o comando `loopzero platform provision` no CLI com flags para provider, environment, domain, e kubeconfig outputs.
+Reescrever `platformInstall()` em `cli/src/commands/platform.ts` para chamar `helmfile sync` em vez de `installOrUpgrade()` por chart. Deletar `cli/src/installer/prerequisites.ts`.
 
 #### Evidence
-- `loopzero platform install` ja existe (self-hosting Helm-based), mas nao cobre provisioning de infra
-- `loopzero platform provision` (documentado como P3 gap no CLI) eh para LoopZero Cloud + self-hosting com infra managed
+- `platform.ts:platformInstall` (489 linhas) tem 10 steps que instalam charts via Helm direto
+- `prerequisites.ts` (200+ linhas) duplica versoes e ordering que agora vivem nos helmfiles
+- Dois caminhos = dois conjuntos de bugs — convergencia elimina a classe inteira
 
 #### Files to edit
 ```
-cli/src/commands/platform.ts — adicionar platformProvision function
-cli/src/register/platform.ts — registrar comando `provision`
-cli/src/installer/types.ts — adicionar ProvisionConfig type
+cli/src/commands/platform.ts — reescrever platformInstall para usar helmfile-runner
+cli/src/installer/prerequisites.ts — DELETAR (substituido por helmfiles)
+cli/src/installer/helmfile-runner.ts — NEW: wrapper para helmfile sync/destroy/diff
+cli/src/installer/types.ts — estender PlatformConfig com campo `provider` opcional
+cli/src/register/platform.ts — adicionar --provider flag ao install command
 ```
 
 #### Deep file dependency analysis
-- `platform.ts`: Ja tem `platformInstall`, `platformStatus`, `platformUpgrade`, `platformUninstall`. Adicionar `platformProvision`.
-- `register/platform.ts`: Commander.js registration. Adicionar `.command('provision')` com options.
-- `types.ts`: Adicionar `ProvisionConfig` com campos para provider, region, environment, domain.
+- `platform.ts`: 10 steps atuais (validate → prereqs → registry → DB → CRDs → bootstrap → secrets → install → wait → validate). Novos steps: validate → preflight → [infra L1 se --provider] → helmfile sync → wiring → smoke.
+- `prerequisites.ts`: Exporta `buildCorePrerequisites()`, `buildAuthPrerequisites()`, `VERSIONS`. TODOS substituidos por helmfiles. NENHUM consumer restante apos refactor.
+- `helmfile-runner.ts`: Wrapper que executa `helmfile -f <file> -e <env> sync` com kubeconfig injection e output streaming. Usado por `platformInstall` e `platformUpgrade`.
+- `types.ts`: `PlatformConfig` ganha campo opcional `provider?: 'digitalocean' | 'aws'` e `providerConfig?: { region, clusters, database }`.
 
 #### Deep Dives
 
-**Interface:**
+**Novo fluxo do `loopzero platform install`:**
+
 ```
-loopzero platform provision \
-  --provider digitalocean \
-  --environment dev \
-  --domain dev.loopzero.example \
-  --config ./platform-config.yaml \
-  [--skip-infra]     # skip Pulumi, use existing clusters
-  [--skip-bootstrap] # skip Helmfile, use existing releases
-  [--dry-run]        # preview only
+loopzero platform install -f values.yaml [--provider digitalocean]
+  │
+  ├── Step 1: Validate (cluster reachable OR --provider set)
+  ├── Step 2: Preflight (tokens, quotas, tools — inclui helmfile)
+  │
+  ├── Step 3: Infrastructure (CONDICIONAL — somente com --provider)
+  │     └── pulumiUp(config) → outputs (kubeconfigs, DB host, etc.)
+  │
+  ├── Step 4: Bootstrap
+  │     ├── Se --provider (multi-cluster):
+  │     │     helmfileSync("build", kubeconfig_build)
+  │     │     helmfileSync("mgmt", kubeconfig_mgmt, env_vars_from_L1)
+  │     │     helmfileSync("runtime", kubeconfig_runtime) × N cells
+  │     └── Se standalone (single cluster):
+  │           helmfileSync("mgmt", current_kubeconfig, env="standalone")
+  │
+  ├── Step 5: Wire (ArgoCD registration, cross-cluster RBAC, DNS)
+  ├── Step 6: Smoke test (create tenant, deploy, verify HTTP 200)
+  └── Done: endpoints, credentials, next steps
 ```
 
-**ProvisionConfig (YAML):**
-```yaml
-provider: digitalocean
-environment: dev
-domain: dev.loopzero.example
-region: sfo3
-clusters:
-  mgmt: { nodeClass: medium, minNodes: 3, maxNodes: 5 }
-  build: { nodeClass: medium, minNodes: 2, maxNodes: 5 }
-  runtime: { nodeClass: small, minNodes: 2, maxNodes: 8 }
-database: { nodeClass: medium, nodeCount: 3 }
-cloudflare:
-  accountId: <from-env>
-  zoneId: <from-env>
-secrets:
-  # Can reference env vars: ${DO_TOKEN}
-  digitaloceanToken: ${DO_TOKEN}
-  cfApiToken: ${CF_API_TOKEN}
-```
+**Backward compatibility:**
+- `values.yaml` existente (sem `provider`) continua funcionando — instala no cluster atual
+- `--profile minimal|production` continua funcionando — mapeado para helmfile environment overlay
+- `loopzero platform status`, `upgrade`, `uninstall` nao mudam
+
+**O que muda para o customer self-hosting:**
+- Antes: `helm install` por chart (via prerequisites.ts)
+- Depois: `helmfile sync` (via helmfile-runner.ts)
+- Customer precisa ter `helmfile` instalado — adicionado no Step 2 preflight
+- Se helmfile nao instalado: mensagem clara com link para instalacao
 
 #### Tasks
-1. Definir `ProvisionConfig` type em `types.ts`
-2. Implementar `platformProvision` skeleton em `platform.ts`
-3. Registrar comando em `register/platform.ts`
-4. Implementar 6 phases: preflight → infra → bootstrap-build → bootstrap-mgmt → bootstrap-runtime → smoke
-5. Adicionar testes unitarios
+1. Criar `helmfile-runner.ts` com `helmfileSync()`, `helmfileDiff()`, `helmfileDestroy()`
+2. Estender `PlatformConfig` com `provider` e `providerConfig` opcionais
+3. Adicionar `--provider` flag no `register/platform.ts`
+4. Reescrever `platformInstall()`: 10 steps antigos → 6 steps novos
+5. Criar `pulumi-runner.ts` com `pulumiUp()`, `pulumiDestroy()`, `pulumiOutput()` (condicional)
+6. Deletar `prerequisites.ts`
+7. Atualizar testes existentes de `platformInstall`
+8. Adicionar testes novos para fluxo com `--provider`
 
 #### TDD
 ```
-RED:     test_provision_command_exists — `loopzero platform provision --help` retorna exit 0
-RED:     test_provision_requires_config — sem --config retorna exit 1
-RED:     test_provision_dry_run — --dry-run nao executa nada, apenas printa plan
-GREEN:   Implementar command registration + skeleton
-REFACTOR: Extrair phase execution para funcoes separadas
-VERIFY:  cd cli && npm test -- --grep "platform provision"
+RED:     test_install_uses_helmfile — platformInstall chama helmfileSync (nao installOrUpgrade)
+RED:     test_install_standalone — sem --provider usa environment "standalone"
+RED:     test_install_with_provider — com --provider digitalocean executa pulumiUp primeiro
+RED:     test_install_provider_requires_region — --provider sem region no config retorna exit 1
+RED:     test_install_no_prerequisites_ts — import de prerequisites.ts causa compile error
+RED:     test_install_dry_run — --dry-run mostra plan sem executar
+GREEN:   Implementar refactor
+REFACTOR: Extrair phase interface para reuso entre install/upgrade
+VERIFY:  cd cli && npm test -- --grep "platform install"
 ```
 
 #### Acceptance Criteria
-- [ ] `loopzero platform provision --help` funciona
-- [ ] `--config` obrigatorio
+- [ ] `loopzero platform install -f values.yaml` funciona (self-hosting, standalone)
+- [ ] `loopzero platform install -f values.yaml --provider digitalocean` funciona (LoopZero Cloud)
+- [ ] `prerequisites.ts` DELETADO — zero references restantes
+- [ ] `VERSIONS` dict NAO existe mais no CLI — somente nos helmfiles
 - [ ] `--dry-run` mostra plan sem executar
-- [ ] `--skip-infra` e `--skip-bootstrap` funcionam
-- [ ] Exit codes corretos (0 success, 1 usage, 3 provision failure)
+- [ ] Exit codes corretos (0 success, 1 usage, 3 failure)
+- [ ] Testes existentes de platformInstall atualizados e passando
+- [ ] Loop back: nenhum dos 44 problemas reintroduzido pelo refactor
 
 #### DoD
-- [ ] Comando registrado e funcional
-- [ ] Testes unitarios passam
-- [ ] `--help` documenta todas as flags
+- [ ] platformInstall refatorado
+- [ ] prerequisites.ts deletado
+- [ ] Todos os testes passam
+- [ ] `loopzero platform install --help` documenta --provider
 
 ---
 
-### T3.2 — Implementar orquestracao das 6 fases
+### T3.2 — Convergir platformUpgrade e platformUninstall
 
 #### Objective
-Implementar a logica que executa Pulumi (L1), Helmfile (L2), wiring, e smoke test em sequencia com progress reporting.
+Atualizar `platformUpgrade` e `platformUninstall` para usar helmfile (em vez de Helm direto), mantendo consistencia com o novo `platformInstall`.
 
 #### Evidence
-- `platform.ts:platformInstall` ja tem o pattern de 10 steps com progress reporting — reutilizar
-- Cada fase deve ter timeout, retry, e error reporting claro
+- `platformUpgrade` (linhas 407-447) chama `upgradePlatform()` que usa Helm direto
+- `platformUninstall` (linhas 452-458) chama `uninstallPlatform()` que usa Helm direto
+- Se install usa helmfile mas upgrade usa Helm direto, versoes podem divergir
 
 #### Files to edit
 ```
-cli/src/installer/provision.ts — NEW: provisioning orchestrator
-cli/src/installer/pulumi-runner.ts — NEW: wrapper para pulumi up/destroy
-cli/src/installer/helmfile-runner.ts — NEW: wrapper para helmfile sync/destroy
+cli/src/commands/platform.ts — refatorar platformUpgrade e platformUninstall
+cli/src/installer/components.ts — avaliar se pode ser simplificado/deletado
 ```
 
 #### Deep file dependency analysis
-- `provision.ts`: Novo orchestrator. Chama `pulumi-runner.ts` → `helmfile-runner.ts` → wiring scripts → smoke test.
-- `pulumi-runner.ts`: Executa `pulumi up --stack <env> --yes --skip-preview` com output streaming.
-- `helmfile-runner.ts`: Executa `helmfile -f <file> -e <env> sync` com kubeconfig injection.
+- `platformUpgrade`: Hoje extrai tokens existentes + chama `upgradePlatform(version, config, tokens)`. Com helmfile: `helmfile -e <env> sync` (idempotente — upgrade eh o mesmo que sync com novos values).
+- `platformUninstall`: Hoje chama `uninstallPlatform()`. Com helmfile: `helmfile -e <env> destroy`.
+- `components.ts`: Exporta `installPlatform`, `upgradePlatform`, `uninstallPlatform`. Se todo lifecycle usa helmfile, estas funcoes sao substituidas.
 
 #### Deep Dives
-
-**6-phase flow:**
-```
-Phase 0: Preflight   → validatePrereqs() + validateConfig()
-Phase 1: Infra       → pulumiUp(config) → outputs (kubeconfigs, endpoints)
-Phase 2: Bootstrap   → helmfileSync("build", kubeconfig_build)
-                     → helmfileSync("mgmt", kubeconfig_mgmt, {dbHost, ...})
-                     → helmfileSync("runtime", kubeconfig_runtime) × N cells
-Phase 3: Wire        → wireScript(kubeconfigs, outputs)
-Phase 4: DNS         → external-dns ou manual instructions
-Phase 5: Smoke test  → createTestTenant() → deployTestApp() → verifyHTTP200()
-```
-
-**Output streaming**: Cada subprocess (pulumi, helmfile) tem stdout/stderr streamed para o CLI com prefixo de fase.
-
-**Error recovery**: Se Phase 2 falha, `--skip-infra` permite re-run sem re-provisionar L1.
+- **Upgrade via helmfile**: `helmfile sync` eh idempotente — se chart version muda no helmfile, sync faz upgrade. Se nao muda, no-op. Isso simplifica drasticamente o upgrade: editar version no helmfile + `loopzero platform upgrade`.
+- **Uninstall via helmfile**: `helmfile destroy` remove releases em ordem reversa do `needs:` — respeitando dependencias na remocao.
+- **Token preservation**: `extractExistingTokens()` continua necessario para upgrades (nao regenerar secrets). Tokens sao lidos do cluster e passados como env vars para helmfile.
 
 #### Tasks
-1. Criar `provision.ts` com 6-phase orchestrator
-2. Criar `pulumi-runner.ts` com `pulumiUp()`, `pulumiDestroy()`, `pulumiOutput()`
-3. Criar `helmfile-runner.ts` com `helmfileSync()`, `helmfileDestroy()`, `helmfileDiff()`
-4. Integrar com `platformProvision` em `platform.ts`
-5. Adicionar testes
+1. Refatorar `platformUpgrade` para usar `helmfileSync` com token extraction
+2. Refatorar `platformUninstall` para usar `helmfileDestroy`
+3. Avaliar e simplificar `components.ts`
+4. Atualizar testes
 
 #### TDD
 ```
-RED:     test_provision_phase_ordering — phases executam em ordem correta
-RED:     test_provision_skip_infra — --skip-infra pula Phase 1
-RED:     test_provision_error_stops — falha em Phase 1 nao executa Phase 2
-GREEN:   Implementar orchestrator
-REFACTOR: Extrair phase interface para reuso
-VERIFY:  cd cli && npm test -- --grep "provision"
+RED:     test_upgrade_uses_helmfile — platformUpgrade chama helmfileSync
+RED:     test_upgrade_preserves_tokens — tokens existentes passados como env vars
+RED:     test_uninstall_uses_helmfile — platformUninstall chama helmfileDestroy
+GREEN:   Implementar refactor
+REFACTOR: Deletar funcoes mortas em components.ts
+VERIFY:  cd cli && npm test -- --grep "platform upgrade|platform uninstall"
 ```
 
 #### Acceptance Criteria
-- [ ] 6 fases executam em sequencia
-- [ ] `--skip-infra` e `--skip-bootstrap` funcionam
-- [ ] Erro em qualquer fase para a execucao com mensagem clara
-- [ ] Progress reporting com duracao por fase
-- [ ] Outputs da L1 passados como env vars para L2
+- [ ] `loopzero platform upgrade` usa helmfile sync
+- [ ] `loopzero platform uninstall` usa helmfile destroy
+- [ ] Tokens preservados durante upgrade
+- [ ] Zero Helm direto no CLI (tudo via helmfile)
 
 #### DoD
-- [ ] Orchestrator funcional
+- [ ] Upgrade e uninstall refatorados
 - [ ] Testes passam
-- [ ] Error paths cobertos
+- [ ] Funcoes mortas removidas
 
 ---
 
@@ -1366,60 +1393,298 @@ VERIFY:  Runbook documentado com evidencia
 
 ---
 
+## Phase 8: Regression Tests + Loop Back Final
+
+**Objective:** Garantir que CADA UM dos 44 problemas tem protecao permanente contra recorrencia. Nenhum problema pode ser marcado como "resolvido" sem pelo menos uma das tres protecoes: (a) teste automatizado, (b) config declarativa, ou (c) check de runtime. Esta phase eh o loop back final antes de declarar o plano Done.
+
+### T8.1 — Regression Test Suite para B1-B18
+
+#### Objective
+Escrever testes automatizados que **falham se o bug voltar** para cada um dos 18 bugs L3 que hoje nao tem teste de regressao.
+
+#### Evidence
+- B1 (cosign placeholder): nenhum teste verifica que o Secret nao contem "PLACEHOLDER"
+- B4 (GITEA_TOKEN newline): nenhum teste verifica que o token nao tem `\n` trailing
+- B6 (caData encoding): tem regression test (commitado) — OK
+- B12 (registry merge): tem convergence proof (7 tests) — OK
+- B16 (ClusterImagePolicy): nenhum teste verifica que a policy existe pos-bootstrap
+- B17 (repo-server cache): nenhum teste verifica que apps nao estao "(cached)" apos fresh bootstrap
+
+#### Files to edit
+```
+infra/helmfile/scripts/regression-checks.sh — NEW: script executado pos-bootstrap que valida todos os B1-B18
+infra/tests/load/regression_test.go — NEW: Go tests que validam pre-condicoes antes de L3
+```
+
+#### Deep file dependency analysis
+- `regression-checks.sh`: Executado como step final do `loopzero platform provision`. Consome kubeconfigs do L1 output. Valida 18 condicoes correspondentes aos 18 bugs.
+- `regression_test.go`: Go test que pode rodar independentemente. Verifica pre-condicoes do cluster antes do L3 (cosign key real, GITEA_TOKEN limpo, caData correto, RBAC completo, etc.).
+
+#### Deep Dives
+
+**Tabela de protecoes por bug:**
+
+| Bug | Protecao Atual | Protecao Necessaria | Tipo |
+|-----|---------------|---------------------|------|
+| B1 cosign placeholder | Nenhuma | `regression-checks.sh`: Secret value nao contem "PLACEHOLDER" | (a) teste |
+| B2 local-path StorageClass | Nenhuma | `regression-checks.sh`: `kubectl get sc local-path -o jsonpath='{.provisioner}'` == `rancher.io/local-path` | (a) teste |
+| B3 MaxConcurrent | Config em Pulumi.dev.yaml | `regression-checks.sh`: env var LOOPZERO_TENANT_MAX_CONCURRENT >= 20 | (b) config + (a) teste |
+| B4 GITEA_TOKEN newline | Nenhuma | `regression-checks.sh`: `wc -c` do token decodificado == 40 (sem newline) | (a) teste |
+| B5 Loki streams | Config em values.yaml | `regression-checks.sh`: Loki config `max_global_streams_per_user` >= 50000 | (b) config + (a) teste |
+| B6 caData encoding | Regression test em Go | JA PROTEGIDO | (a) teste |
+| B7 ArgoCD RBAC | Config em runtime-bootstrap.ts | `regression-checks.sh`: ClusterRole tem `resources: ["*"]` | (b) config + (a) teste |
+| B8-B9 monorepo workspace | Unit tests em workspace_build_test.go | JA PROTEGIDO | (a) teste |
+| B10 L3 harness | Code fix em test harness | JA PROTEGIDO (harness le loopzero.yaml) | (a) teste |
+| B11 gitops archived | Nenhuma | `regression-checks.sh`: nenhum repo gitops com `archived: true` | (a) teste |
+| B12 registry merge | 7 unit tests convergence proof | JA PROTEGIDO | (a) teste |
+| B13 Harbor self-heal | Code fix com semantic check | JA PROTEGIDO (secretHasHostAuth) | (a) teste |
+| B14 DeleteRobot endpoint | Code fix com dual lookup | JA PROTEGIDO | (a) teste |
+| B15 annotation collision | Code fix com scoped annotations | JA PROTEGIDO | (a) teste |
+| B16 ClusterImagePolicy | Nenhuma (T0.1 cria chart) | `regression-checks.sh`: `kubectl get clusterimagepolicy` retorna >= 1 | (a) teste + (b) config |
+| B17 repo-server cache | Nenhuma | Health check T4.1 detecta "(cached)" e faz restart | (c) runtime check |
+| B18 runtime pool sizing | Config em Pulumi.dev.yaml | `regression-checks.sh`: node pool max >= 8 | (b) config + (a) teste |
+
+**Bugs que precisam de teste NOVO: B1, B2, B3, B4, B5, B7, B11, B16, B18** (9 testes)
+**Bugs ja protegidos: B6, B8-B10, B12-B15** (8 testes existentes)
+**Bugs protegidos por runtime check: B17** (1 health check)
+
+#### Tasks
+1. Criar `regression-checks.sh` com 9 checks para bugs sem protecao
+2. Criar `regression_test.go` com Go tests equivalentes para CI
+3. Integrar como step final do `loopzero platform provision` (pos-smoke, pre-Done)
+4. Validar: rodar script contra cluster real e confirmar 18/18 PASS
+5. Documentar cada check com referencia ao bug original
+
+#### TDD
+```
+RED:     test_b1_cosign_not_placeholder — Secret nao contem "PLACEHOLDER"
+RED:     test_b2_local_path_rancher — provisioner == rancher.io/local-path
+RED:     test_b3_max_concurrent_20 — env var >= 20
+RED:     test_b4_gitea_token_no_newline — wc -c == 40
+RED:     test_b5_loki_streams_100k — config >= 50000
+RED:     test_b7_rbac_cluster_scoped — ClusterRole resources includes *
+RED:     test_b11_no_archived_repos — zero repos com archived=true
+RED:     test_b16_cluster_image_policy — >= 1 ClusterImagePolicy exists
+RED:     test_b18_runtime_max_nodes — node pool maxNodes >= 8
+GREEN:   Implementar checks
+REFACTOR: Consolidar em funcao check_or_fail() reutilizavel
+VERIFY:  bash regression-checks.sh && go test ./infra/tests/load/ -run Regression
+```
+
+#### Acceptance Criteria
+- [ ] 18/18 bugs com protecao documentada (teste, config, ou runtime check)
+- [ ] 9 testes novos escritos e passando
+- [ ] Script integravel no `loopzero platform provision`
+- [ ] Cada check referencia o bug original (B1-B18)
+
+#### DoD
+- [ ] Regression suite criada e funcional
+- [ ] 18/18 protecoes verificadas
+- [ ] Integrado no orchestrator
+
+---
+
+### T8.2 — Loop Back Checklist: 44/44 Problemas com Protecao
+
+#### Objective
+Revisar TODOS os 44 problemas catalogados e confirmar que cada um tem protecao permanente contra recorrencia. Produzir um documento de protecao que serve como referencia futura.
+
+#### Evidence
+- ADR D10: todo problema DEVE ter protecao
+- Retrospectiva Sprint 8: pattern "fix and forget" causou 76 workarounds
+- Sem esta verificacao, o proximo bootstrap pode reintroduzir problemas que o plano "resolveu"
+
+#### Files to edit
+```
+docs/runbooks/bootstrap-regression-matrix.md — NEW: matriz 44 problemas × protecao permanente
+```
+
+#### Deep file dependency analysis
+- Documento standalone. Referencia: catalogo de 44 problemas, regression-checks.sh, helmfile configs, health checks.
+
+#### Deep Dives
+
+**Formato da matriz:**
+
+```markdown
+| # | Problema | Protecao | Tipo | Verificacao | Pode Recorrer? |
+|---|---------|----------|------|-------------|----------------|
+| 1 | ClusterImagePolicy (B16) | Helm chart + helmfile release | config | regression-checks.sh test_b16 | NAO — criado automaticamente |
+| 2 | repo-server cache (B17) | Health check T4.1 | runtime | health-check.sh post-mgmt | PARCIAL — detecta mas nao previne |
+| ... | ... | ... | ... | ... | ... |
+```
+
+**Classificacao "Pode Recorrer?":**
+- **NAO** — protecao elimina a possibilidade (config declarativa, teste automatizado)
+- **PARCIAL** — protecao detecta mas nao previne (health check, runtime check)
+- **SIM** — nenhuma protecao efetiva (INACEITAVEL — deve gerar task de correcao)
+
+**Criterio de saida:** Zero problemas com "SIM". Todos devem ser "NAO" ou "PARCIAL" com justificativa.
+
+**Loop back por fase (retrospectivo):**
+
+Apos CADA phase completada durante a execucao do plano, o executor DEVE revisar a matriz e responder:
+
+> "Alguma mudanca que fiz nesta phase pode reintroduzir algum dos 44 problemas?"
+
+Se SIM:
+1. Identificar qual problema
+2. Adicionar protecao (teste, config, ou check)
+3. Atualizar a matriz
+4. So entao prosseguir para a proxima phase
+
+Este checkpoint eh **bloqueante** — nao eh opcional, nao eh "se der tempo". Eh parte do DoD de cada phase.
+
+#### Tasks
+1. Criar `bootstrap-regression-matrix.md` com 44 linhas
+2. Para cada problema: documentar protecao, tipo, verificacao, e "Pode Recorrer?"
+3. Identificar gaps (problemas com "SIM") e criar tasks de correcao
+4. Validar: zero problemas com "SIM"
+
+#### TDD
+```
+RED:     Matriz tem 44 linhas
+RED:     Zero problemas com classificacao "SIM"
+RED:     Cada problema tem pelo menos uma verificacao (coluna nao vazia)
+GREEN:   Preencher matriz + corrigir gaps
+REFACTOR: None
+VERIFY:  grep -c "SIM" bootstrap-regression-matrix.md (expected: 0)
+```
+
+#### Acceptance Criteria
+- [ ] 44/44 problemas documentados na matriz
+- [ ] Zero problemas com "Pode Recorrer? = SIM"
+- [ ] Cada problema tem pelo menos uma protecao (teste, config, ou runtime)
+- [ ] Loop back checkpoint documentado como DoD de cada phase
+
+#### DoD
+- [ ] Matriz completa e validada
+- [ ] Zero gaps
+- [ ] Documento publicado em docs/runbooks/
+
+---
+
+### T8.3 — Post-mortem Loop: L3 Coverage dos 44 Problemas
+
+#### Objective
+Verificar que o L3 test (100-tenant deploy) exercita CADA cenario dos 44 problemas. Se um problema nao eh exercitado pelo L3, adicionar coverage ou justificar exclusao.
+
+#### Evidence
+- L3 eh o gate final do plano — se nao exercita um cenario, o cenario nao esta validado
+- Problemas como B11 (gitops archived) e B17 (repo-server cache) so aparecem apos MULTIPLAS iteracoes L3 (tenant delete + recreate cycles)
+
+#### Files to edit
+```
+infra/tests/load/real_deploy_test.go — estender com cenarios de regressao
+docs/runbooks/bootstrap-regression-matrix.md — adicionar coluna "Exercitado por L3?"
+```
+
+#### Deep file dependency analysis
+- `real_deploy_test.go`: L3 harness. Hoje testa deploy + verify HTTP 200. Precisa de cenarios adicionais: tenant delete + recreate (B11), concurrent deploy (B-C), burst deploy (B18).
+- `bootstrap-regression-matrix.md`: Matriz de T8.2 ganha coluna extra.
+
+#### Deep Dives
+
+**Cenarios L3 adicionais necessarios:**
+
+| Bug | Cenario L3 | Implementacao |
+|-----|-----------|---------------|
+| B11 gitops archived | Delete 10% dos tenants, recreate, deploy novamente | `L3RealisticWithChurn` test variant |
+| B17 repo-server cache | Deploy 100 tenants em batch, verificar zero "(cached)" | Check no verify step do L3 |
+| B-C git push race | 10 rapid deploys no mesmo tenant | `L3NoisyNeighbor` test variant |
+| B18 runtime burst | Medir tempo de scheduling dos ultimos 10 pods | Metrica no verify step |
+
+**Cenarios ja exercitados pelo L3 existente:**
+- B1-B7: Pre-condicoes validadas pelo regression-checks.sh (T8.1) antes do L3
+- B8-B10: Exercitados porque L3 usa dogfood-monorepo (4 apps workspace)
+- B12-B15: Exercitados porque L3 cria tenants com DOCR + Harbor
+- B16: Exercitado porque L3 cria Deployments que passam pelo webhook
+
+#### Tasks
+1. Adicionar coluna "Exercitado por L3?" na matriz de T8.2
+2. Implementar `L3RealisticWithChurn` test variant (delete + recreate 10%)
+3. Adicionar check de "(cached)" no verify step do L3
+4. Documentar gaps de coverage com justificativa
+
+#### TDD
+```
+RED:     test_l3_churn_recreate — tenants deletados e recriados deployam com sucesso
+RED:     test_l3_no_cached_apps — zero apps com "(cached)" no status
+GREEN:   Implementar variants
+REFACTOR: Extrair churn logic para funcao reutilizavel
+VERIFY:  go test ./infra/tests/load/ -run L3RealisticWithChurn -v -timeout 4h
+```
+
+#### Acceptance Criteria
+- [ ] Matriz tem coluna "Exercitado por L3?" para todos os 44 problemas
+- [ ] >= 38/44 problemas exercitados pelo L3 (os 6 aceitos podem ter "N/A")
+- [ ] Test variants implementados para gaps criticos (B11, B17)
+- [ ] Zero problemas criticos sem coverage L3
+
+#### DoD
+- [ ] Coverage matrix atualizada
+- [ ] Test variants implementados
+- [ ] L3 full run confirma cobertura
+
+---
+
 ## Coverage Matrix
 
-| # | Problema (dos 44) | Task(s) | Resolucao |
-|---|---|---|---|
-| 1 | DAY0: ClusterImagePolicy nao criada (B16) | T0.1, T2.3 | Helm chart criado (T0.1) + incluido como Helmfile release (T2.3) |
-| 2 | DAY0: ArgoCD repo-server cache stale (B17) | T4.1 | Health check detecta + restart automatico |
-| 3 | DAY0: Runtime pre-warm manual | T0.2, T2.3 | Node pool sizes persistidos em config |
-| 4 | DAY0: Promtail ausente no runtime-2 | T2.3 | Helmfile runtime reutilizado para todas as cells |
-| 5 | DAY0: Promtail ausente no mgmt | T2.1 | Promtail adicionado ao mgmt helmfile |
-| 6 | DAY0: CLAUDE.md status stale | T0.2 | Atualizado |
-| 7 | DAY0: B12-B15 nao commitados | — | JA COMMITADOS em e4a55c13 (nao requer task) |
-| 8 | DAY0: gitops repo archived nao detectado | T2.4 | Wiring script verifica e unarchive |
-| 9 | DAY0: gitea_pusher error wrapping | — | Nao coberto (bug de codigo, nao infra) |
-| 10 | ORDERING: cert-manager antes de Traefik | T2.1-T2.3 | `needs:` explicito no Helmfile |
-| 11 | ORDERING: ArgoCD SA sem RBAC (B7) | T2.4 | Wiring script cria RBAC correto |
-| 12 | ORDERING: caData raw PEM (B6) | T2.4 | Script de encoding correto |
-| 13 | ORDERING: tenant-controller MaxConcurrent (B3) | T0.2 | Persistido em Pulumi.dev.yaml |
-| 14 | ORDERING: policy-controller sem policy (B16) | T2.3 | Helmfile release |
-| 15 | ORDERING: monorepo workspace build (B8-B9) | — | Ja fixado em codigo (commit pendente) |
-| 16 | ORDERING: L3 harness hardcoded (B10) | — | Ja fixado em codigo |
-| 17 | ORDERING: source git push race (B-C) | — | Low severity, aceito |
-| 18 | CAPACITY: Loki 5000 streams (B5) | — | JA COMMITADO (max_global_streams: 100000 em loki/values.yaml) |
-| 19 | CAPACITY: Runtime sizing L3 (B18) | T0.2 | runtimeMaxNodes: 8 |
-| 20 | CAPACITY: Build autoscaler lento (B-D) | — | JA COMMITADO (buildMaxNodes: 5 em Pulumi.dev.yaml) |
-| 21 | CAPACITY: DOCR/Docker Hub QPS (B-E) | — | Self-recovers, aceito |
-| 22 | CAPACITY: Gitea concurrent clones | — | Nao testado (L3 coverage) |
-| 23 | CAPACITY: MinIO distributed migration | — | Fora de escopo (CHG-002c) |
-| 24 | CAPACITY: Loki Promtail NotReady | — | JA COMMITADO (stream limits + label drops) |
-| 25 | CONFIG_DRIFT: Node pool sizes | T0.2 | runtimeMaxNodes persistido |
-| 26 | CONFIG_DRIFT: Loki stream limits | — | JA COMMITADO |
-| 27 | CONFIG_DRIFT: Build autoscaler | — | JA COMMITADO (buildMaxNodes: 5) |
-| 28 | CONFIG_DRIFT: Promtail labels | — | JA COMMITADO (step + pod dropped) |
-| 29 | CONFIG_DRIFT: runtime-2 Promtail | T2.3 | Helmfile runtime reutilizado |
-| 30 | STATE_DRIFT: cosign placeholder (B1) | T2.2 | Keypair gerado automaticamente |
-| 31 | STATE_DRIFT: buildkit Secret oscillation (B12) | — | JA COMMITADO em e4a55c13 + Helmfile nao cria conflito |
-| 32 | STATE_DRIFT: CDN orphan collision | T1.1 | CDN permanece no Pulumi L1 (nao muda) |
-| 33 | STATE_DRIFT: Pulumi destroy 404 refresh | T1.1, T1.2 | Zero K8s no state → destroy limpo |
-| 34 | TEARDOWN: CRDs com finalizers | T1.1 | Zero CRDs no Pulumi state |
-| 35 | TEARDOWN: K8s provider retry infinito | T1.1, T1.3 | Zero K8s provider no Pulumi |
-| 36 | TEARDOWN: Destroy 3 rounds + surgery | T1.1, T1.2 | Destroy em <5 min |
-| 37 | SECRET: GITEA_TOKEN trailing newline (B4) | T2.4 | Wiring script usa printf sem newline |
-| 38 | SECRET: cosign placeholder (B1) | T2.2 | Auto-generated keypair |
-| 39 | IDEMPOTENCY: Harbor robot check (B13) | — | JA COMMITADO em e4a55c13 |
-| 40 | IDEMPOTENCY: DeleteRobot endpoint (B14) | — | JA COMMITADO em e4a55c13 |
-| 41 | IDEMPOTENCY: repo-server cache (B17) | T4.1 | Health check + restart |
-| 42 | SELF_HOSTING: adopt-or-create hardcoded DO | T3.1 | Provider abstraction mantida |
-| 43 | SELF_HOSTING: loopzero platform install != provision | T3.1 | Dois comandos claros |
-| 44 | GOVERNANCE: Zero ADRs | ADRs D1-D8 | 8 ADRs neste plano |
+| # | Problema (dos 44) | Task(s) | Resolucao | Protecao Permanente (ADR D10) | Recorre? |
+|---|---|---|---|---|---|
+| 1 | DAY0: ClusterImagePolicy (B16) | T0.1, T2.3 | Helm chart + Helmfile release | (a) T8.1 test_b16 + (b) helmfile release | NAO |
+| 2 | DAY0: repo-server cache (B17) | T4.1 | Health check + restart | (c) health-check.sh post-mgmt | PARCIAL |
+| 3 | DAY0: Runtime pre-warm (B18) | T0.2, T2.3 | runtimeMaxNodes persistido | (a) T8.1 test_b18 + (b) Pulumi.dev.yaml | NAO |
+| 4 | DAY0: Promtail runtime-2 | T2.3 | Helmfile runtime reutilizado | (b) helmfile per-cell | NAO |
+| 5 | DAY0: Promtail mgmt | T2.1 | Promtail no mgmt helmfile | (b) helmfile release | NAO |
+| 6 | DAY0: CLAUDE.md stale | T0.2 | Atualizado | (b) review no DoD de cada phase | NAO |
+| 7 | DAY0: B12-B15 uncommitted | — | JA COMMITADO e4a55c13 | (a) 7 unit tests convergence proof | NAO |
+| 8 | DAY0: gitops archived (B11) | T2.4 | Wiring script unarchive | (a) T8.1 test_b11 + (a) T8.3 L3Churn | NAO |
+| 9 | DAY0: gitea_pusher wrapping | — | Bug de codigo | Nenhuma — low priority | N/A |
+| 10 | ORDERING: cert-manager→Traefik | T2.1-T2.3 | Helmfile `needs:` | (b) declarativo no helmfile | NAO |
+| 11 | ORDERING: ArgoCD RBAC (B7) | T2.4 | Wiring script RBAC | (a) T8.1 test_b7 | NAO |
+| 12 | ORDERING: caData PEM (B6) | T2.4 | Script encoding | (a) regression test Go existente | NAO |
+| 13 | ORDERING: MaxConcurrent (B3) | T0.2 | Pulumi.dev.yaml | (a) T8.1 test_b3 + (b) config | NAO |
+| 14 | ORDERING: policy-controller (B16) | T2.3 | Helmfile release | (a) T8.1 test_b16 | NAO |
+| 15 | ORDERING: monorepo (B8-B9) | — | JA COMMITADO | (a) workspace_build_test.go | NAO |
+| 16 | ORDERING: L3 harness (B10) | — | JA COMMITADO | (a) harness le loopzero.yaml | NAO |
+| 17 | ORDERING: git push race (B-C) | — | Low severity | Nenhuma — aceito | N/A |
+| 18 | CAPACITY: Loki streams (B5) | — | JA COMMITADO | (a) T8.1 test_b5 + (b) values.yaml | NAO |
+| 19 | CAPACITY: Runtime sizing (B18) | T0.2 | runtimeMaxNodes: 8 | (a) T8.1 test_b18 + (b) config | NAO |
+| 20 | CAPACITY: Build autoscaler (B-D) | — | JA COMMITADO | (b) Pulumi.dev.yaml buildMaxNodes | NAO |
+| 21 | CAPACITY: DOCR QPS (B-E) | — | Self-recovers | Nenhuma — aceito | N/A |
+| 22 | CAPACITY: Gitea clones | — | Nao testado | Nenhuma — L3 coverage gap | PARCIAL |
+| 23 | CAPACITY: MinIO migration | — | Fora de escopo | Nenhuma — CHG-002c | N/A |
+| 24 | CAPACITY: Loki NotReady | — | JA COMMITADO | (b) values.yaml stream+labels | NAO |
+| 25 | CONFIG_DRIFT: Node pools | T0.2 | Persistido | (b) Pulumi.dev.yaml | NAO |
+| 26 | CONFIG_DRIFT: Loki streams | — | JA COMMITADO | (b) values.yaml | NAO |
+| 27 | CONFIG_DRIFT: Build autoscaler | — | JA COMMITADO | (b) Pulumi.dev.yaml | NAO |
+| 28 | CONFIG_DRIFT: Promtail labels | — | JA COMMITADO | (b) values.yaml | NAO |
+| 29 | CONFIG_DRIFT: runtime-2 Promtail | T2.3 | Helmfile reutilizado | (b) helmfile per-cell | NAO |
+| 30 | STATE_DRIFT: cosign placeholder (B1) | T2.2 | Auto-generated keypair | (a) T8.1 test_b1 | NAO |
+| 31 | STATE_DRIFT: Secret oscillation (B12) | — | JA COMMITADO | (a) 7 unit tests + MergeAuthsByHost | NAO |
+| 32 | STATE_DRIFT: CDN orphan | T1.1 | CDN no Pulumi L1 | (b) separacao L1/L2 | NAO |
+| 33 | STATE_DRIFT: destroy 404 | T1.1, T1.2 | Zero K8s no state | (b) separacao L1/L2 | NAO |
+| 34 | TEARDOWN: CRD finalizers | T1.1 | Zero CRDs no Pulumi | (b) separacao L1/L2 | NAO |
+| 35 | TEARDOWN: K8s retry infinito | T1.1, T1.3 | Zero K8s provider | (b) separacao L1/L2 | NAO |
+| 36 | TEARDOWN: 3 rounds surgery | T1.1, T1.2 | Destroy <5min | (a) T7.1 destroy timer | NAO |
+| 37 | SECRET: GITEA_TOKEN newline (B4) | T2.4 | printf sem newline | (a) T8.1 test_b4 | NAO |
+| 38 | SECRET: cosign placeholder (B1) | T2.2 | Auto-generated | (a) T8.1 test_b1 | NAO |
+| 39 | IDEMPOTENCY: Harbor robot (B13) | — | JA COMMITADO | (a) secretHasHostAuth code | NAO |
+| 40 | IDEMPOTENCY: DeleteRobot (B14) | — | JA COMMITADO | (a) findRobotInProject code | NAO |
+| 41 | IDEMPOTENCY: repo-server cache (B17) | T4.1 | Health check + restart | (c) health-check.sh | PARCIAL |
+| 42 | SELF_HOSTING: adopt-or-create DO | T3.1 | --provider flag + contracts/ | (b) contracts/ pattern + --provider | NAO |
+| 43 | SELF_HOSTING: install vs provision | T3.1, D11 | ELIMINADO — unico comando | (b) prerequisites.ts deletado | NAO |
+| 44 | GOVERNANCE: Zero ADRs | D1-D11 | 11 ADRs neste plano | (b) ADRs no plano | NAO |
 
-**Coverage: 38/44 problemas cobertos (86%).** Os 6 nao cobertos sao: bugs de codigo ja fixados (B8-B10, gitea_pusher), low-severity aceitos (QPS limits, git push race), ou fora de escopo (MinIO migration).
+**Coverage: 44/44 problemas com protecao documentada (100%).**
+- **NAO recorre:** 36 problemas — protecao elimina recorrencia
+- **PARCIAL:** 4 problemas (B17 cache, B22 Gitea clones) — detecta mas nao previne
+- **N/A:** 4 problemas — aceitos (low severity) ou fora de escopo
 
 ## Global Definition of Done
 
-- [ ] All phases (0-7) completed
+- [ ] All phases (0-8) completed
 - [ ] `pulumi destroy` < 5 min, zero state surgery
 - [ ] `helmfile sync` instala 26 releases com ordering correto
 - [ ] `loopzero platform provision` funcional end-to-end
@@ -1429,8 +1694,12 @@ VERIFY:  Runbook documentado com evidencia
 - [ ] ArgoCD App of Apps gerencia Day-2 drift detection
 - [ ] L3-50 gate: >= 94% success rate no DigitalOcean
 - [ ] L3-100 gate: >= 95% success rate no DigitalOcean
-- [ ] 38/44 problemas da retrospectiva Sprint 8 eliminados
+- [ ] **44/44 problemas com protecao permanente documentada (ADR D10)**
+- [ ] **Regression test suite (T8.1): 18/18 bugs B1-B18 com teste ou check**
+- [ ] **Loop back matrix (T8.2): zero problemas com "Pode Recorrer? = SIM"**
+- [ ] **L3 coverage (T8.3): >= 38/44 problemas exercitados pelo L3**
 - [ ] CHANGELOG.md atualizado com todas as mudancas
 - [ ] Todos os testes passam (CLI + operators + API)
 - [ ] `helmfile lint` passa para os 3 helmfiles
 - [ ] `task validate:manifests` passa
+- [ ] Loop back checkpoint executado em CADA phase (nao apenas no final)
