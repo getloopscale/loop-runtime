@@ -1,6 +1,8 @@
 # Plan: Infrastructure Layered Bootstrap
 
-> **Version 1.0** — Refatorar a infraestrutura de provisioning do LoopZero de um unico stack Pulumi (cloud infra + K8s workloads) para uma arquitetura de 3 camadas separadas: L1 Cloud Infra (Pulumi), L2 K8s Bootstrap (Helmfile), L3 Platform Config (Operators/GitOps). Isso elimina o problema de zombie state no destroy, resolve 35 dos 44 problemas documentados na retrospectiva Sprint 8, e habilita self-hosting confiavel para clientes. O resultado eh um `loopzero platform provision` que funciona end-to-end sem intervencao manual.
+> **Version 1.1** — Refatorar a infraestrutura de provisioning do LoopZero de um unico stack Pulumi (cloud infra + K8s workloads) para uma arquitetura de 3 camadas separadas: L1 Cloud Infra (Pulumi), L2 K8s Bootstrap (Helmfile), L3 Platform Config (Operators/GitOps). Isso elimina o problema de zombie state no destroy, resolve 35 dos 44 problemas documentados na retrospectiva Sprint 8, e habilita self-hosting confiavel para clientes. O resultado eh um `loopzero platform provision` que funciona end-to-end sem intervencao manual.
+>
+> **v1.1 changes:** Reconciliado com estado real do repositorio. T0.1 removida (ja commitada em e4a55c13). T0.3 corrigida (Loki/Promtail/Pulumi.dev.yaml ja commitados — restam apenas runtimeMaxNodes bump e CLAUDE.md). ADR D9 adicionada para cloudflared Deployment (CF Tunnel cria K8s resources dentro do L1). T1.1/T1.3 atualizadas para manter @pulumi/kubernetes ate cloudflared migrar. T1.4 nova para migracao do wiring object. T2.3 corrigida (admission-policies nao eh Helm chart). Gate intermediario L3-50 adicionado antes de L3-100. Helmfile adicionado aos prerequisites.
 
 ## Context
 
@@ -122,6 +124,14 @@ Metas especificas:
 
 **Consequences:** Dev: secrets auto-gerados, efemeros. Prod: secrets injetados via values overlay. Sem dependencia de Pulumi state para credenciais.
 
+### D9 — Cloudflared Deployment migra do Pulumi para Helmfile (runtime)
+
+**Decision:** O cloudflared Deployment + Secret (atualmente criados por `tunnel.ts` via `@pulumi/kubernetes`) migram para o `runtime.helmfile.yaml`. O Pulumi mantem SOMENTE o Tunnel resource no Cloudflare API (cloud infra legitimo de L1). O CF Worker + KV permanecem no Pulumi (sao recursos CF API, nao K8s).
+
+**Rationale:** `tunnel.ts` cria 2 K8s resources (Secret + Deployment) no runtime cluster via `@pulumi/kubernetes`. Isso viola a premissa central do plano (L1 = zero K8s no state). Se o cluster runtime for destruido, esses 2 resources viram zombies — exatamente o problema que queremos eliminar. A solucao limpa eh: Pulumi cria o Tunnel no CF API (L1), Helmfile deploya o cloudflared pod no runtime (L2). O tunnel token eh passado como valor entre L1→L2 via `pulumi stack output`.
+
+**Consequences:** `@pulumi/kubernetes` so pode ser removido do package.json APOS essa migracao. Ate la, T1.3 fica bloqueada. O Helmfile runtime ganha uma release extra (`cloudflared`). O tunnel token secret eh gerado pelo Pulumi (armazenado no state) e consumido pelo Helmfile via env var.
+
 ### D8 — Nao adotar CAPI/CAPDO, Crossplane, Timoni, cdk8s, Dagger, Flux
 
 **Decision:** Nenhuma dessas ferramentas sera adotada nesta iteracao.
@@ -139,196 +149,202 @@ Metas especificas:
 ## Dependency Graph
 
 ```
-Phase 0 (Commit Fixes) ──▶ Phase 1 (Pulumi L1-only) ──▶ Phase 3 (Orchestrator CLI)
-                                     │                           │
-                                     ▼                           ▼
-                            Phase 2 (Helmfile L2) ──────▶ Phase 4 (Health Gates)
-                                                                 │
-Phase 5 (Preflight) ◀── pode iniciar em paralelo ──────────────▶│
-                                                                 │
-                                                                 ▼
-                                                         Phase 6 (ArgoCD App of Apps)
-                                                                 │
-                                                                 ▼
-                                                         Phase 7 (Validacao DO)
+Phase 0 (Reconciliar) ──▶ Phase 1 (Pulumi L1-only) ──▶ Phase 3 (Orchestrator CLI)
+   T0.1 admission-policies        T1.1 extract Phase 2        │
+   T0.2 runtimeMaxNodes+CLAUDE    T1.2 clean state            │
+   T0.3 helmfile prereqs           T1.3 remove @pulumi/k8s    ▼
+                                   T1.4 wiring contract  Phase 4 (Health Gates)
+                                     │                         │
+                                     ▼                         │
+                            Phase 2 (Helmfile L2) ─────────────┘
+                              T2.1 mgmt helmfile
+                              T2.2 build helmfile
+                              T2.3 runtime helmfile (+cloudflared +admission-policies)
+                              T2.4 wiring scripts
+
+Phase 5 (Preflight) ◀── pode iniciar em paralelo com Phase 1-2 ──▶ Phase 4
+                                                                      │
+                                                                      ▼
+                                                              Phase 6 (ArgoCD App of Apps)
+                                                                      │
+                                                                      ▼
+                                                              Phase 7 (Validacao DO)
+                                                                Gate 1: L3-50
+                                                                Gate 2: L3-100
 ```
 
 - **Phases 0 → 1 → 2:** Sequenciais (1 depende de 0, 2 depende de 1)
+- **T1.3** bloqueada por T1.1 (CF Tunnel K8s resources removidos primeiro)
+- **T2.3** depende de T0.1 (admission-policies Helm chart criado)
 - **Phase 5 (Preflight):** Pode iniciar em paralelo com Phase 1-2
 - **Phase 3 (Orchestrator):** Depende de Phase 1 + 2
 - **Phase 4 (Health Gates):** Depende de Phase 2 + 3
 - **Phase 6 (App of Apps):** Depende de Phase 2 + 4
-- **Phase 7 (Validacao):** Depende de TODAS as fases anteriores
+- **Phase 7 (Validacao):** Depende de TODAS as fases anteriores. Gate 1 (L3-50) antes de Gate 2 (L3-100)
 
 ---
 
-## Phase 0: Commit Pending Fixes
+## Phase 0: Reconciliar Estado e Pendencias
 
-**Objective:** Persistir todos os fixes B12-B18 da sessao Sprint 8 que estao em working tree mas nao commitados. Atualizar CLAUDE.md e Pulumi.dev.yaml com a realidade.
+**Objective:** Verificar o que ja foi commitado, persistir as mudancas restantes, e atualizar documentacao. B12-B15 ja commitados em `e4a55c13`. Loki/Promtail/buildMaxNodes ja commitados. Restam: runtimeMaxNodes bump, ClusterImagePolicy no IaC, CLAUDE.md fix, e adicionar Helmfile aos prerequisites.
 
-### T0.1 — Commit B12-B15 (Registry Auth Merge)
-
-#### Objective
-Commitar os fixes de host-scoped merge do `buildkit-registry-config` Secret que resolvem a oscilacao DOCR/Harbor.
-
-#### Evidence
-- B12-B15 documentados em `docs/runbooks/sprint8-l3-stabilization.md` (linhas 107-145)
-- Retrospectiva: "arquivos modificados mas unstaged no destroy" (F6)
-- Sem commit, proximo bootstrap reintroduz bugs B12-B15
-
-#### Files to edit
-```
-operators/internal/controller/registry_auth_merge.go — NEW helper + 7 unit tests (ja criado, nao commitado)
-operators/internal/controller/tenant_harbor.go — refatorado para usar mergeAuthsByHost
-operators/internal/controller/tenant_build.go — refatorado para usar mergeAuthsByHost
-operators/internal/controller/constants/labels.go — AnnotationHarborTokenExpiresAt novo
-```
-
-#### Deep file dependency analysis
-- `registry_auth_merge.go`: Novo arquivo. Exporta `MergeAuthsByHost(existing, incoming)`. Sem downstream.
-- `tenant_harbor.go`: `ensureHarborRegistrySecret()` agora chama `MergeAuthsByHost` em vez de delete-and-recreate. Downstream: `tenant_controller.go` reconcile loop.
-- `tenant_build.go`: `ensureBuildkitRegistrySecret()` agora chama `MergeAuthsByHost`. Downstream: mesmo reconcile loop.
-- `constants/labels.go`: Nova constante `AnnotationHarborTokenExpiresAt`. Downstream: `tenant_harbor.go`, `tenant_build.go`.
-
-#### Deep Dives
-- **Convergence proof**: `MergeAuthsByHost` eh idempotente sob interleaving — testes cobrem `[A,B,A,B]` e `[B,A,B,A]` orderings.
-- **Type migration**: Secrets antigos com Type `kubernetes.io/dockerconfigjson` sao convertidos para `Opaque` com pre-flight delete.
-
-#### Tasks
-1. `git add` dos 4 arquivos modificados
-2. `git commit` com mensagem descritiva referenciando B12-B15
-3. Verificar testes passam: `cd operators && go test ./internal/controller/... -run MergeAuth`
-
-#### TDD
-```
-RED:     TestMergeAuthsByHost_DOCROnly — ja existe, ja passa
-RED:     TestMergeAuthsByHost_HarborOnly — ja existe, ja passa
-RED:     TestMergeAuthsByHost_BothHosts — ja existe, ja passa
-RED:     TestMergeAuthsByHost_Interleaving — convergence proof
-GREEN:   Codigo ja implementado (apenas commit pendente)
-REFACTOR: None expected
-VERIFY:  cd operators && go test ./internal/controller/... -run MergeAuth -v
-```
-
-#### Acceptance Criteria
-- [ ] 4 arquivos commitados na branch develop
-- [ ] Testes MergeAuth passam
-- [ ] `git diff` limpo para os 4 arquivos
-
-#### DoD
-- [ ] Commit criado com referencia B12-B15
-- [ ] Zero arquivos unstaged dos fixes
-
----
-
-### T0.2 — Commit B16 Fix (ClusterImagePolicy)
+### T0.1 — Criar ClusterImagePolicy como Helm chart (B16)
 
 #### Objective
-Persistir a ClusterImagePolicy `loopzero-images-warn` no IaC para que bootstraps futuros nao bloqueiem Deployments.
+Converter `infra/helm/admission-policies/` de raw manifests para Helm chart instalavel, e incluir a ClusterImagePolicy `loopzero-images-warn` que falta.
 
 #### Evidence
 - B16: `policy-controller deny-by-default blocks all tenant Deployments` (runbook L3 stabilization)
-- Sem policy no IaC, TODA runtime bootstrap bloqueia 100% dos pods
+- `infra/helm/admission-policies/` contem SOMENTE `manifests/` com 6 VAP YAML files + alerts — NAO eh um Helm chart (falta `Chart.yaml`, `templates/`, `values.yaml`)
+- `runtime-policy-controller.ts` cria ClusterImagePolicy via Pulumi K8s resource — precisa migrar para Helm chart para funcionar no Helmfile
 
 #### Files to edit
 ```
-infra/pulumi/src/components/runtime-policy-controller.ts — adicionar ClusterImagePolicy resource
-infra/helm/admission-policies/ — avaliar se policy deve ser Helm values vs Pulumi resource
+infra/helm/admission-policies/Chart.yaml — NEW: Helm chart metadata
+infra/helm/admission-policies/values.yaml — NEW: configurable registries, mode (warn/enforce)
+infra/helm/admission-policies/templates/ — NEW: move manifests/ content to templates/
+infra/helm/admission-policies/templates/cluster-image-policy.yaml — NEW: ClusterImagePolicy loopzero-images-warn
 ```
 
 #### Deep file dependency analysis
-- `runtime-policy-controller.ts`: Instala policy-controller Helm chart. DEVE tambem aplicar `ClusterImagePolicy/loopzero-images-warn` como K8s resource pos-install.
-- `admission-policies/`: Diretorio Helm chart existente — pode conter a policy como template. Verificar se ja tem conteudo.
+- `manifests/*.yaml`: 6 existing VAP files + alerts. Move para `templates/` com minimal templating (namespace, registry refs from values).
+- `Chart.yaml`: Define chart identity. Sera referenciado por `runtime.helmfile.yaml`.
+- `values.yaml`: Configura registries cobertas (`registry.digitalocean.com/loopzero-system/**`, `harbor.{{ .Values.domain }}/**`), mode (`warn`/`enforce`).
+- `cluster-image-policy.yaml`: Template para ClusterImagePolicy com `mode: warn` + `static.action: pass`.
 
 #### Deep Dives
-- A policy usa `mode: warn` + `static.action: pass` como temporary fallback
-- Cobre `registry.digitalocean.com/loopzero-system/**` e `harbor.dev.loopzero.example/**`
-- Futuro Sprint 9: substituir por cosign keyless verification com Fulcio
+- A ClusterImagePolicy CRD vem do policy-controller Helm chart (instalado separadamente)
+- Sem a ClusterImagePolicy, o webhook `policy.sigstore.dev` rejeita TODOS os pods com "no matching policies"
+- O mode `warn` + `static.action: pass` eh temporary fallback ate cosign keyless verification (Sprint 9)
+- Os 6 VAPs existentes (disallow-latest-tag, require-resource-limits, etc.) sao ValidatingAdmissionPolicies K8s nativas, nao CRDs do policy-controller
 
 #### Tasks
-1. Verificar se `infra/helm/admission-policies/` ja tem templates para ClusterImagePolicy
-2. Se sim: garantir que o Helm values inclui a policy warn-mode
-3. Se nao: adicionar o resource no `runtime-policy-controller.ts`
-4. Commit
+1. Criar `Chart.yaml` com `name: admission-policies`, `version: 0.1.0`
+2. Criar `values.yaml` com registries e mode configuravel
+3. Mover `manifests/*.yaml` para `templates/`, adicionando `{{ .Values }}` refs onde necessario
+4. Criar `templates/cluster-image-policy.yaml` com ClusterImagePolicy
+5. `helm lint infra/helm/admission-policies/`
+6. Commit
 
 #### TDD
 ```
-RED:     Verificar via kubeconform que o manifest ClusterImagePolicy eh valido
-GREEN:   Adicionar resource/template
+RED:     helm_lint — `helm lint infra/helm/admission-policies/` deve passar
+RED:     template_renders — `helm template admission-policies infra/helm/admission-policies/` deve incluir ClusterImagePolicy
+GREEN:   Criar Chart.yaml, values.yaml, mover manifests para templates
 REFACTOR: None expected
-VERIFY:  task validate:manifests (se aplicavel ao CRD)
+VERIFY:  helm lint infra/helm/admission-policies/ && helm template admission-policies infra/helm/admission-policies/ | grep -c ClusterImagePolicy
 ```
 
 #### Acceptance Criteria
-- [ ] ClusterImagePolicy presente no IaC (Helm ou Pulumi)
-- [ ] Proximo `pulumi up` ou `helmfile sync` cria a policy automaticamente
-- [ ] Nao requer `kubectl apply` manual pos-bootstrap
+- [ ] `infra/helm/admission-policies/` eh um Helm chart valido (Chart.yaml + templates/)
+- [ ] `helm template` renderiza ClusterImagePolicy com mode warn
+- [ ] 6 VAPs existentes preservados como templates
+- [ ] `helm lint` passa
 
 #### DoD
-- [ ] Commit criado referenciando B16
-- [ ] Policy validada contra schema
+- [ ] Chart criado e lintado
+- [ ] ClusterImagePolicy incluida
+- [ ] Commit referenciando B16
 
 ---
 
-### T0.3 — Atualizar Pulumi.dev.yaml e CLAUDE.md
+### T0.2 — Atualizar runtimeMaxNodes e CLAUDE.md
 
 #### Objective
-Persistir no codigo as configuracoes que foram alteradas manualmente durante L3 (node pools, Loki limits, tenant-controller concurrency) e corrigir status incorreto no CLAUDE.md.
+Persistir o runtime node pool sizing para L3 e corrigir status incorreto do Sprint 6 security posture no CLAUDE.md.
 
 #### Evidence
-- CONFIG_DRIFT: 5 problemas documentados (node pools, Loki streams, Promtail labels, build autoscaler, runtime sizing)
+- `Pulumi.dev.yaml` tem `runtimeMaxNodes: "3"` — insuficiente para L3 (50 vCPU, precisa 8+ nodes)
+- `buildMaxNodes: "5"` ja esta correto (commitado)
+- Loki `max_global_streams_per_user: 100000` ja commitado
+- Promtail drop labels ja commitado
 - CLAUDE.md: claims "Audit mode active" mas policy-controller estava em deny-default (B16)
 
 #### Files to edit
 ```
-infra/pulumi/Pulumi.dev.yaml — runtimeMaxNodes: 8, buildMaxNodes: 5, Loki stream config
-infra/helm/loki/values.yaml — max_global_streams_per_user: 100000
-infra/helm/promtail/values.yaml — drop high-cardinality labels (step, pod)
-CLAUDE.md — corrigir status Sprint 6 security posture
+infra/pulumi/Pulumi.dev.yaml — runtimeMaxNodes: "3" → "8" (L3 burst capacity)
+CLAUDE.md — corrigir status Sprint 6 security posture (deny-default, nao Audit mode)
 ```
 
 #### Deep file dependency analysis
-- `Pulumi.dev.yaml`: Lido por `config/stack.ts:loadStackConfig()`. Mudancas em node counts afetam `infra.ts` cluster creation.
-- `loki/values.yaml`: Usado pelo Helm release via `build-loki.ts`. Sobrevive a Helm upgrades.
-- `promtail/values.yaml`: Usado pelo Helm release via `build-loki.ts` e `runtime-monitoring.ts`.
-- `CLAUDE.md`: Lido por todos os agentes. Status incorreto causa decisoes erradas.
+- `Pulumi.dev.yaml`: Lido por `config/stack.ts:loadStackConfig()`. `runtimeMaxNodes` afeta autoscaler config do DOKS runtime cluster.
+- `CLAUDE.md`: Lido por todos os agentes. Status incorreto causa decisoes erradas sobre security posture.
 
 #### Deep Dives
-- `runtimeMaxNodes: 8` + `--auto-scale --min 4 --max 12` para suportar L3 burst (50 vCPU)
-- `buildMaxNodes: 5` para pre-warm antes de L3 (30 concurrent workflows)
-- Loki `max_global_streams_per_user: 100000` (era 5000, L3 gera ~450 streams/ciclo)
-- Promtail: drop `step` e `pod` labels reduz cardinality 10x
+- `runtimeMaxNodes: "8"` com autoscale min=2, max=8 para suportar L3 burst
+- CLAUDE.md Sprint 6 status: mudar de "Audit mode active" para "policy-controller installed; warn-mode ClusterImagePolicy required (B16); Deny-mode flip pending Sprint 9 cosign keyless"
 
 #### Tasks
-1. Editar `Pulumi.dev.yaml` com novos node pool limits
-2. Editar `infra/helm/loki/values.yaml` com stream limits
-3. Editar `infra/helm/promtail/values.yaml` com pipeline stages drop
-4. Editar `CLAUDE.md` corrigindo status do policy-controller
-5. Commit
+1. Editar `Pulumi.dev.yaml`: `runtimeMaxNodes: "8"`
+2. Editar `CLAUDE.md`: corrigir Sprint 6 security posture
+3. Commit
 
 #### TDD
 ```
-RED:     N/A (config changes, not code)
+RED:     N/A (config changes)
 GREEN:   N/A
 REFACTOR: N/A
-VERIFY:  Validar YAML syntax: `python3 -c "import yaml; yaml.safe_load(open('infra/pulumi/Pulumi.dev.yaml'))"`
+VERIFY:  python3 -c "import yaml; yaml.safe_load(open('infra/pulumi/Pulumi.dev.yaml'))"
 ```
 
 #### Acceptance Criteria
-- [ ] `Pulumi.dev.yaml` reflete sizing operacional real
-- [ ] Loki values suportam L3 sem 429
-- [ ] Promtail labels de alta cardinalidade removidos
-- [ ] CLAUDE.md status do Sprint 6 corrigido
+- [ ] `runtimeMaxNodes` = "8" no Pulumi.dev.yaml
+- [ ] CLAUDE.md Sprint 6 status corrigido
+- [ ] YAML valido
 
 #### DoD
 - [ ] Commit criado
-- [ ] YAML valido em todos os arquivos
+- [ ] YAML valido
+
+---
+
+### T0.3 — Adicionar Helmfile aos prerequisites do projeto
+
+#### Objective
+Documentar Helmfile como dependencia obrigatoria e adicionar check no `task doctor`.
+
+#### Evidence
+- Helmfile (ADR D2) eh o orquestrador L2 — deve estar documentado como prerequisite
+- `CLAUDE.md` Prerequisites section nao lista Helmfile
+- `task doctor` nao verifica Helmfile
+
+#### Files to edit
+```
+CLAUDE.md — adicionar helmfile na secao Prerequisites
+Taskfile.yml — adicionar check no target doctor
+```
+
+#### Deep file dependency analysis
+- `CLAUDE.md`: Lido por devs e agentes. Prerequisites section define o que precisa estar instalado.
+- `Taskfile.yml`: Define `task doctor` que verifica ambiente. Adicionar `helmfile version` check.
+
+#### Tasks
+1. Editar `CLAUDE.md` Prerequisites: adicionar `Helmfile v1.0+`
+2. Editar `Taskfile.yml` target `doctor`: adicionar `helmfile version` check
+3. Commit
+
+#### TDD
+```
+RED:     task doctor deve reportar helmfile status
+GREEN:   Adicionar check
+REFACTOR: None
+VERIFY:  task doctor
+```
+
+#### Acceptance Criteria
+- [ ] `helmfile` listado nos Prerequisites do CLAUDE.md
+- [ ] `task doctor` verifica helmfile
+- [ ] Commit criado
+
+#### DoD
+- [ ] Documentacao atualizada
+- [ ] Doctor check funcional
 
 ---
 
 ## Phase 1: Refatorar Pulumi para L1-Only
 
-**Objective:** Remover TODOS os recursos K8s do Pulumi state. Pulumi passa a gerenciar SOMENTE cloud resources (VPC, DOKS, PG, Spaces, Registry, CF Tunnel). Resultado: `pulumi destroy` completa em <5 min sem state surgery.
+**Objective:** Remover a vasta maioria dos recursos K8s do Pulumi state. Pulumi passa a gerenciar cloud resources (VPC, DOKS, PG, Spaces, Registry) + CF API resources (Tunnel config, Worker, KV). Os 2 K8s resources do CF Tunnel (cloudflared Secret + Deployment em `tunnel.ts`) migram para o Helmfile runtime (ADR D9). Resultado: `pulumi destroy` completa em <5 min sem state surgery.
 
 ### T1.1 — Extrair Phase 2 do index.ts
 
@@ -350,23 +366,27 @@ infra/pulumi/src/index.ts — exportar APENAS outputs de infra (kubeconfigs, end
 - **Downstream**: CLI `loopzero platform provision` consumira outputs via `pulumi stack output --json`. Helmfile consumira via environment variables.
 
 #### Deep Dives
-- **Outputs preservados**: `networkId`, `mgmtClusterName`, `mgmtKubeconfig`, `buildKubeconfig`, `runtimeKubeconfig`, `runtime2Kubeconfig`, `dbHost`, `dbUri`, `dbPassword`, `bucketName`, `bucketEndpoint`, `cdnEndpoint`, `registryEndpoint`, `cfTunnelId`, `cfKvNamespaceId`
-- **Outputs removidos**: Todos os `*Ready` booleans (pertenciam ao bootstrap), `ingressEndpoint` (pertence ao Helmfile), wiring objects
-- **Invariante**: `pulumi up` + `pulumi destroy` NAO toca em nenhum recurso K8s (zero providers `@pulumi/kubernetes`)
+- **Outputs preservados**: `networkId`, `mgmtClusterName`, `mgmtKubeconfig`, `buildKubeconfig`, `runtimeKubeconfig`, `runtime2Kubeconfig`, `dbHost`, `dbUri`, `dbPassword`, `bucketName`, `bucketEndpoint`, `cdnEndpoint`, `registryEndpoint`, `cfTunnelId`, `cfKvNamespaceId`, `cfTunnelToken` (NOVO — necessario para Helmfile cloudflared)
+- **Outputs removidos**: Todos os `*Ready` booleans (pertenciam ao bootstrap), `ingressEndpoint` (pertence ao Helmfile), wiring object (migra para ConfigMap no Helmfile — ver T1.4)
+- **CF Tunnel (ADR D9)**: `tunnel.ts` hoje cria Tunnel CF resource + 2 K8s resources (Secret + Deployment via `@pulumi/kubernetes`). Nesta task, remover os 2 K8s resources de `tunnel.ts` e exportar `cfTunnelToken` como output. O cloudflared Deployment migra para `runtime.helmfile.yaml` (T2.3). O Tunnel config no CF API permanece no Pulumi.
+- **CF Worker + KV**: Permanecem no Pulumi — sao recursos CF API, nao K8s.
+- **Invariante pos-migracao**: `pulumi up` + `pulumi destroy` NAO toca em nenhum recurso K8s
 
 #### Tasks
 1. Criar branch `feat/infra-layered-bootstrap`
 2. Copiar `index.ts` atual para `index.ts.bak` (referencia)
 3. Remover import e chamada de `bootstrapCluster`
 4. Remover import e chamada de `exposePlatform`
-5. Remover import de `@pulumi/kubernetes` (se nao usado por infra)
-6. Atualizar exports para SOMENTE outputs L1
-7. Testar: `cd infra/pulumi && npx pulumi preview --stack dev` (deve mostrar SOMENTE recursos DO/CF)
+5. Refatorar `tunnel.ts`: remover `k8s.core.v1.Secret` e `k8s.apps.v1.Deployment` (cloudflared). Manter `cloudflare.Tunnel` + `cloudflare.TunnelConfig`. Exportar `tunnelToken` como output secreto.
+6. Remover `k8s.Provider("cf-runtime-k8s", ...)` de `index.ts` (nao mais necessario)
+7. Atualizar exports para SOMENTE outputs L1 + tunnel token
+8. Testar: `cd infra/pulumi && npx pulumi preview --stack dev`
 
 #### TDD
 ```
 RED:     pulumi_preview_no_k8s_resources — preview nao deve conter nenhum resource kubernetes:*
-GREEN:   Remover Phase 2 + 3 do index.ts
+RED:     tunnel_token_exported — `pulumi stack output cfTunnelToken` retorna valor secreto
+GREEN:   Remover Phase 2 + 3 + K8s resources do tunnel.ts
 REFACTOR: Limpar imports nao utilizados
 VERIFY:  npx pulumi preview --stack dev 2>&1 | grep -c 'kubernetes:' (expected: 0)
 ```
@@ -374,13 +394,15 @@ VERIFY:  npx pulumi preview --stack dev 2>&1 | grep -c 'kubernetes:' (expected: 
 #### Acceptance Criteria
 - [ ] `pulumi preview` mostra ZERO recursos `kubernetes:*`
 - [ ] `pulumi preview` mostra ZERO recursos `helm:*`
+- [ ] `cfTunnelToken` exportado como output secreto
 - [ ] Outputs incluem kubeconfigs, DB connection, storage endpoints
-- [ ] `@pulumi/kubernetes` pode ser removido do package.json (se nao usado em L1)
+- [ ] CF Tunnel config no CF API preservado
+- [ ] CF Worker + KV preservados
 
 #### DoD
-- [ ] Phase 2 + 3 removidos do index.ts
-- [ ] Preview limpo (somente DO + CF resources)
-- [ ] Nao quebra `pulumi up` existente (preview confirma)
+- [ ] Phase 2 + 3 + tunnel K8s resources removidos
+- [ ] Preview limpo (somente DO + CF API resources)
+- [ ] Tunnel token exportado para consumo pelo Helmfile
 
 ---
 
@@ -436,50 +458,141 @@ VERIFY:  npx pulumi preview --stack dev 2>&1 | grep -c 'delete' (expected: 0 par
 ### T1.3 — Remover @pulumi/kubernetes do package.json
 
 #### Objective
-Remover a dependencia `@pulumi/kubernetes` se nao for mais necessaria apos a extracao do Phase 2.
+Remover a dependencia `@pulumi/kubernetes` apos confirmacao de que ZERO codigo L1 a utiliza.
 
 #### Evidence
 - `package.json` lista `"@pulumi/kubernetes": "4.28.0"` como dependencia
-- Se nenhum codigo L1 usa K8s provider, manter a dependencia eh dead weight e risco de usar acidentalmente
+- Apos T1.1 (que remove os K8s resources do tunnel.ts), nenhum codigo L1 deve usar `@pulumi/kubernetes`
+- **BLOQUEADA por T1.1**: tunnel.ts tinha 4 referencias a `@pulumi/kubernetes`. Essas sao removidas em T1.1. Esta task so pode executar APOS T1.1.
 
 #### Files to edit
 ```
-infra/pulumi/package.json — remover @pulumi/kubernetes se nao usado
-infra/pulumi/src/components/bootstrap-shared.ts — verificar se funcoes compartilhadas usam K8s provider
-infra/pulumi/src/components/infra.ts — verificar (nao deve usar K8s)
+infra/pulumi/package.json — remover @pulumi/kubernetes
+infra/pulumi/src/components/bootstrap-shared.ts — remover funcoes que usam K8s provider (migram para Helmfile)
 ```
 
 #### Deep file dependency analysis
-- `package.json`: Define dependencias do projeto Pulumi. Remover K8s provider impede uso acidental.
-- `bootstrap-shared.ts`: Exporta `HELM_VERSIONS`, `parseKubeconfig`, etc. Funcoes de parsing nao precisam do provider K8s. Mas `createPlatformNamespace`, `installCertManager`, etc. usam — essas funcoes migram para Helmfile.
-- `infra.ts`: Usa SOMENTE providers DO/CF. NAO usa K8s.
+- `package.json`: Remover K8s provider impede uso acidental. Tambem permite remover ~50MB de node_modules.
+- `bootstrap-shared.ts`: Apos T1.1, funcoes como `createPlatformNamespace`, `installCertManager`, `installTraefik` nao sao mais chamadas pelo Pulumi — migram conceitualmente para Helmfile. Manter apenas `HELM_VERSIONS` e `parseKubeconfig` (pure functions, sem provider).
 
 #### Deep Dives
-- **Shared code migration**: `HELM_VERSIONS` e `parseKubeconfig` sao uteis para Helmfile e CLI. Extrair para `infra/shared/versions.ts` ou duplicar em Helmfile config.
-- **Se alguma funcao L1 ainda precisar K8s** (e.g., adopt-or-create via kubectl): manter a dependencia mas isolar com lint rule
+- **Verificacao pre-remocao**: `grep -r "@pulumi/kubernetes\|from.*pulumi.*kubernetes" infra/pulumi/src/` deve retornar ZERO hits apos T1.1
+- **Shared code**: `HELM_VERSIONS` duplicado no Helmfile config (YAML). `parseKubeconfig` copiado para CLI se necessario.
+- **Risk**: Se alguma funcao L1 esquecida usar K8s, `npm install` quebra. Deteccao imediata — bom.
 
 #### Tasks
-1. `grep -r "pulumi/kubernetes" infra/pulumi/src/` para encontrar todos os usos
-2. Se zero usos em L1: remover de package.json + `npm install`
-3. Se alguns usos: avaliar se podem ser substituidos (e.g., `pulumi command` em vez de K8s provider)
-4. Mover `HELM_VERSIONS` para local acessivel pelo Helmfile
+1. Confirmar que T1.1 removeu todos os usos de `@pulumi/kubernetes`
+2. `grep -r "pulumi/kubernetes" infra/pulumi/src/` — deve retornar 0
+3. Remover de `package.json` e rodar `npm install`
+4. Limpar `bootstrap-shared.ts` — manter apenas pure functions
+5. `npx pulumi preview --stack dev` — deve funcionar
 
 #### TDD
 ```
-RED:     N/A (dependency removal)
-GREEN:   npm install sem erros
-REFACTOR: None
+RED:     grep retorna 0 hits para @pulumi/kubernetes
+GREEN:   Remover dependencia + limpar imports
+REFACTOR: Limpar bootstrap-shared.ts
 VERIFY:  cd infra/pulumi && npm install && npx pulumi preview --stack dev
 ```
 
 #### Acceptance Criteria
-- [ ] `@pulumi/kubernetes` removido do package.json (ou justificativa documentada para manter)
+- [ ] Zero referencias a `@pulumi/kubernetes` no codigo L1
+- [ ] `@pulumi/kubernetes` removido do package.json
 - [ ] `npm install` sem erros
-- [ ] `pulumi preview` funciona sem K8s provider
+- [ ] `pulumi preview` funciona
 
 #### DoD
-- [ ] Dependencia removida ou justificada
+- [ ] Dependencia removida
 - [ ] Build limpo
+- [ ] Preview funciona
+
+---
+
+### T1.4 — Migrar wiring object para contrato L1→L2
+
+#### Objective
+Definir como os outputs do Pulumi L1 (kubeconfigs, DB connection, endpoints) sao passados para o Helmfile L2 e para os componentes da plataforma (loopzero-api, operators).
+
+#### Evidence
+- `index.ts:206-243` exporta um `wiring` object consumido por loopzero-api para saber endpoints internos (Gitea URL, DB host, registry, storage, cluster endpoints)
+- Apos a separacao L1/L2, os outputs de bootstrap (e.g., `bootstrap.mgmt.ingressEndpoint`) nao existem mais no Pulumi
+- Sem essa migracao, loopzero-api perde visibilidade sobre endpoints — deploy falha
+
+#### Files to edit
+```
+infra/helmfile/scripts/create-wiring-configmap.sh — NEW: gera ConfigMap com topologia da plataforma
+infra/helmfile/mgmt.helmfile.yaml — hook pos-sync que cria ConfigMap
+cli/src/installer/provision.ts — integrar: pulumiOutput() → env vars → helmfile → wiring ConfigMap
+```
+
+#### Deep file dependency analysis
+- `wiring` object atual (`index.ts:206-243`): Contem URLs internas (gitea.svc, prometheus.svc), endpoints de infra (DB host/port, registry, storage), e endpoints de bootstrap (ingress IPs).
+- **URLs internas** (gitea, prometheus, grafana): Sao estáticas — definidas pela convencao de nomes K8s (e.g., `http://gitea-http.loopzero-system.svc.cluster.local:3000`). Podem ser hardcoded no Helm values do loopzero-api.
+- **Endpoints de infra** (DB, registry, storage): Vem do `pulumi stack output`. Passados como env vars para o Helmfile que injeta nos Helm values.
+- **Endpoints de bootstrap** (ingress IPs): So conhecidos APOS o Helmfile instalar Traefik. Resolvidos via `kubectl get svc` no wiring script.
+
+#### Deep Dives
+
+**Contrato L1 → L2:**
+```bash
+# Outputs do Pulumi consumidos pelo Helmfile
+export LOOPZERO_DB_HOST=$(pulumi stack output dbHost --stack dev)
+export LOOPZERO_DB_URI=$(pulumi stack output dbUri --stack dev --show-secrets)
+export LOOPZERO_REGISTRY_ENDPOINT=$(pulumi stack output registryEndpoint --stack dev)
+export LOOPZERO_BUCKET_NAME=$(pulumi stack output bucketName --stack dev)
+export LOOPZERO_BUCKET_ENDPOINT=$(pulumi stack output bucketEndpoint --stack dev)
+export LOOPZERO_CF_KV_NAMESPACE=$(pulumi stack output cfKvNamespaceId --stack dev)
+export LOOPZERO_CF_TUNNEL_TOKEN=$(pulumi stack output cfTunnelToken --stack dev --show-secrets)
+```
+
+**Wiring ConfigMap** (criado pos-bootstrap):
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loopzero-platform-topology
+  namespace: loopzero-system
+data:
+  GITEA_INTERNAL_URL: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+  GRAFANA_INTERNAL_URL: "http://grafana.loopzero-system.svc.cluster.local:3000"
+  PROMETHEUS_INTERNAL_URL: "http://prometheus-server.loopzero-system.svc.cluster.local:80"
+  DB_HOST: "{{ from env }}"
+  REGISTRY_ENDPOINT: "{{ from env }}"
+  STORAGE_BUCKET: "{{ from env }}"
+  STORAGE_ENDPOINT: "{{ from env }}"
+  MGMT_INGRESS_IP: "{{ from kubectl get svc }}"
+  RUNTIME_INGRESS_IP: "{{ from kubectl get svc }}"
+```
+
+**loopzero-api consome via envFrom**: O Deployment do loopzero-api referencia este ConfigMap.
+
+#### Tasks
+1. Documentar contrato L1→L2 (quais outputs, quais env vars)
+2. Criar `create-wiring-configmap.sh` que gera ConfigMap a partir de env vars + kubectl lookups
+3. Integrar como hook pos-sync no mgmt helmfile (apos Traefik estar ready)
+4. Atualizar loopzero-api Helm values para consumir ConfigMap via envFrom
+5. Testar: ConfigMap criado com valores corretos
+
+#### TDD
+```
+RED:     test_wiring_configmap_has_db_host — ConfigMap contem DB_HOST nao vazio
+RED:     test_wiring_configmap_has_ingress — ConfigMap contem MGMT_INGRESS_IP nao vazio
+GREEN:   Implementar script e hook
+REFACTOR: None expected
+VERIFY:  kubectl get cm loopzero-platform-topology -n loopzero-system -o yaml
+```
+
+#### Acceptance Criteria
+- [ ] Contrato L1→L2 documentado (outputs, env vars, ConfigMap)
+- [ ] ConfigMap criado automaticamente pos-bootstrap
+- [ ] loopzero-api consome ConfigMap (envFrom)
+- [ ] Zero outputs de bootstrap no Pulumi state
+- [ ] Wiring ConfigMap inclui todos os campos do antigo wiring object
+
+#### DoD
+- [ ] Script e hook funcionais
+- [ ] loopzero-api recebe todas as env vars necessarias
+- [ ] Teste confirma ConfigMap correto
 
 ---
 
@@ -530,7 +643,7 @@ infra/helmfile/environments/prod.yaml — NEW: values overlay para prod
 | 1 | tempo | (none) | Tracing |
 | 1 | otel-collector | tempo | Push endpoint |
 | 1 | blackbox-exporter | (none) | Probing |
-| 1 | harbor | cert-manager, traefik | Registry com TLS |
+| 2 | harbor | cert-manager, traefik, minio | Registry com TLS + S3 backend |
 | 2 | loopzero-api | argocd, gitea, minio, ory-kratos | Core API |
 | 2 | loopzero-controller | loopzero-api | Depende do API |
 | 2 | tenant-controller | loopzero-api | Depende do API |
@@ -685,13 +798,21 @@ infra/helmfile/runtime.helmfile.yaml — NEW: helmfile para runtime cluster(s)
 | 0 | policy-controller | cert-manager |
 | 0 | admission-policies | policy-controller |
 | 0 | promtail | (none) |
+| 0 | cloudflared | (none) |
 | 1 | cluster-issuer | cert-manager |
 | 1 | rbac | (none) |
 
 **ClusterImagePolicy** (resolve B16):
-- Incluida como release `admission-policies` (Helm chart em `infra/helm/admission-policies/`)
+- Incluida como release `admission-policies` (Helm chart convertido de raw manifests em T0.1)
 - `mode: warn`, `static.action: pass` para audit mode
 - Criada automaticamente — zero `kubectl apply` manual
+- **Prerequisito**: T0.1 deve estar completa (Chart.yaml + templates/ criados)
+
+**Cloudflared** (ADR D9):
+- Deployment + Secret migrados do Pulumi `tunnel.ts` (T1.1) para Helmfile release
+- Tunnel token injetado via env var `LOOPZERO_CF_TUNNEL_TOKEN` (do `pulumi stack output`)
+- Image: `cloudflare/cloudflared:2024.12.2` com probes + non-root security context
+- Replicas: 2 (HA)
 
 **Multi-cell reuse:**
 ```bash
@@ -1192,18 +1313,27 @@ docs/runbooks/layered-bootstrap-validation.md — NEW: runbook de validacao
 
 #### Deep Dives
 
-**Procedimento:**
+**Procedimento (2 gates progressivos):**
+
+**Gate 1 — L3-50 (50 tenants):**
 1. `pulumi destroy --stack dev --yes` (deve completar em <5 min)
 2. `loopzero platform provision --config platform-dev.yaml` (deve completar sem manual steps)
 3. Verificar health: `loopzero platform status` → all green
-4. Executar L3: `LOOPZERO_REAL_DEPLOY=1 LOOPZERO_LOAD_LEVEL=l3-realistic go test ./infra/tests/load/ -run L3Realistic -v -timeout 4h`
-5. Resultado: >= 95/100 tenants com app respondendo HTTP 200
+4. Executar L3-50: `LOOPZERO_REAL_DEPLOY=1 LOOPZERO_LOAD_LEVEL=l3-realistic LOOPZERO_TENANT_COUNT=50 go test ./infra/tests/load/ -run L3Realistic -v -timeout 2h`
+5. Resultado: >= 47/50 tenants (94%) com app respondendo HTTP 200
+6. Se FAIL: diagnosticar, ajustar helmfile values, re-run sem re-provisionar L1 (`--skip-infra`)
+
+**Gate 2 — L3-100 (100 tenants):**
+7. Escalar runtime pool se necessario: `doctl kubernetes cluster node-pool update ... --count 8`
+8. Executar L3-100: `LOOPZERO_REAL_DEPLOY=1 LOOPZERO_LOAD_LEVEL=l3-realistic LOOPZERO_TENANT_COUNT=100 go test ./infra/tests/load/ -run L3Realistic -v -timeout 4h`
+9. Resultado: >= 95/100 tenants com app respondendo HTTP 200
 
 **Metricas de sucesso:**
 - Destroy time: <5 min (era 60+ min com state surgery)
 - Provision time: <30 min (era 90+ min com manual steps)
 - Manual interventions: 0 (era 76)
-- L3 success rate: >= 95% (era 0%)
+- L3-50 success rate: >= 94% (gate intermediario)
+- L3-100 success rate: >= 95% (gate final, era 0%)
 
 #### Tasks
 1. Executar destroy
@@ -1240,37 +1370,37 @@ VERIFY:  Runbook documentado com evidencia
 
 | # | Problema (dos 44) | Task(s) | Resolucao |
 |---|---|---|---|
-| 1 | DAY0: ClusterImagePolicy nao criada (B16) | T0.2, T2.3 | Policy incluida como Helmfile release |
+| 1 | DAY0: ClusterImagePolicy nao criada (B16) | T0.1, T2.3 | Helm chart criado (T0.1) + incluido como Helmfile release (T2.3) |
 | 2 | DAY0: ArgoCD repo-server cache stale (B17) | T4.1 | Health check detecta + restart automatico |
-| 3 | DAY0: Runtime pre-warm manual | T0.3, T2.3 | Node pool sizes persistidos em config |
+| 3 | DAY0: Runtime pre-warm manual | T0.2, T2.3 | Node pool sizes persistidos em config |
 | 4 | DAY0: Promtail ausente no runtime-2 | T2.3 | Helmfile runtime reutilizado para todas as cells |
 | 5 | DAY0: Promtail ausente no mgmt | T2.1 | Promtail adicionado ao mgmt helmfile |
-| 6 | DAY0: CLAUDE.md status stale | T0.3 | Atualizado |
-| 7 | DAY0: B12-B15 nao commitados | T0.1 | Commitados |
+| 6 | DAY0: CLAUDE.md status stale | T0.2 | Atualizado |
+| 7 | DAY0: B12-B15 nao commitados | — | JA COMMITADOS em e4a55c13 (nao requer task) |
 | 8 | DAY0: gitops repo archived nao detectado | T2.4 | Wiring script verifica e unarchive |
 | 9 | DAY0: gitea_pusher error wrapping | — | Nao coberto (bug de codigo, nao infra) |
 | 10 | ORDERING: cert-manager antes de Traefik | T2.1-T2.3 | `needs:` explicito no Helmfile |
 | 11 | ORDERING: ArgoCD SA sem RBAC (B7) | T2.4 | Wiring script cria RBAC correto |
 | 12 | ORDERING: caData raw PEM (B6) | T2.4 | Script de encoding correto |
-| 13 | ORDERING: tenant-controller MaxConcurrent (B3) | T0.3 | Persistido em Pulumi.dev.yaml |
+| 13 | ORDERING: tenant-controller MaxConcurrent (B3) | T0.2 | Persistido em Pulumi.dev.yaml |
 | 14 | ORDERING: policy-controller sem policy (B16) | T2.3 | Helmfile release |
 | 15 | ORDERING: monorepo workspace build (B8-B9) | — | Ja fixado em codigo (commit pendente) |
 | 16 | ORDERING: L3 harness hardcoded (B10) | — | Ja fixado em codigo |
 | 17 | ORDERING: source git push race (B-C) | — | Low severity, aceito |
-| 18 | CAPACITY: Loki 5000 streams (B5) | T0.3 | Values persistidos |
-| 19 | CAPACITY: Runtime sizing L3 (B18) | T0.3 | Node pool max persistido |
-| 20 | CAPACITY: Build autoscaler lento (B-D) | T0.3 | Build max nodes persistido |
+| 18 | CAPACITY: Loki 5000 streams (B5) | — | JA COMMITADO (max_global_streams: 100000 em loki/values.yaml) |
+| 19 | CAPACITY: Runtime sizing L3 (B18) | T0.2 | runtimeMaxNodes: 8 |
+| 20 | CAPACITY: Build autoscaler lento (B-D) | — | JA COMMITADO (buildMaxNodes: 5 em Pulumi.dev.yaml) |
 | 21 | CAPACITY: DOCR/Docker Hub QPS (B-E) | — | Self-recovers, aceito |
 | 22 | CAPACITY: Gitea concurrent clones | — | Nao testado (L3 coverage) |
 | 23 | CAPACITY: MinIO distributed migration | — | Fora de escopo (CHG-002c) |
-| 24 | CAPACITY: Loki Promtail NotReady | T0.3 | Stream limits corrigidos |
-| 25 | CONFIG_DRIFT: Node pool sizes | T0.3 | Persistido em Pulumi.dev.yaml |
-| 26 | CONFIG_DRIFT: Loki stream limits | T0.3 | Persistido em values.yaml |
-| 27 | CONFIG_DRIFT: Build autoscaler | T0.3 | Persistido em Pulumi.dev.yaml |
-| 28 | CONFIG_DRIFT: Promtail labels | T0.3 | Persistido em values.yaml |
+| 24 | CAPACITY: Loki Promtail NotReady | — | JA COMMITADO (stream limits + label drops) |
+| 25 | CONFIG_DRIFT: Node pool sizes | T0.2 | runtimeMaxNodes persistido |
+| 26 | CONFIG_DRIFT: Loki stream limits | — | JA COMMITADO |
+| 27 | CONFIG_DRIFT: Build autoscaler | — | JA COMMITADO (buildMaxNodes: 5) |
+| 28 | CONFIG_DRIFT: Promtail labels | — | JA COMMITADO (step + pod dropped) |
 | 29 | CONFIG_DRIFT: runtime-2 Promtail | T2.3 | Helmfile runtime reutilizado |
 | 30 | STATE_DRIFT: cosign placeholder (B1) | T2.2 | Keypair gerado automaticamente |
-| 31 | STATE_DRIFT: buildkit Secret oscillation (B12) | T0.1 | Fix commitado + Helmfile nao cria conflito |
+| 31 | STATE_DRIFT: buildkit Secret oscillation (B12) | — | JA COMMITADO em e4a55c13 + Helmfile nao cria conflito |
 | 32 | STATE_DRIFT: CDN orphan collision | T1.1 | CDN permanece no Pulumi L1 (nao muda) |
 | 33 | STATE_DRIFT: Pulumi destroy 404 refresh | T1.1, T1.2 | Zero K8s no state → destroy limpo |
 | 34 | TEARDOWN: CRDs com finalizers | T1.1 | Zero CRDs no Pulumi state |
@@ -1278,8 +1408,8 @@ VERIFY:  Runbook documentado com evidencia
 | 36 | TEARDOWN: Destroy 3 rounds + surgery | T1.1, T1.2 | Destroy em <5 min |
 | 37 | SECRET: GITEA_TOKEN trailing newline (B4) | T2.4 | Wiring script usa printf sem newline |
 | 38 | SECRET: cosign placeholder (B1) | T2.2 | Auto-generated keypair |
-| 39 | IDEMPOTENCY: Harbor robot check (B13) | T0.1 | Fix commitado |
-| 40 | IDEMPOTENCY: DeleteRobot endpoint (B14) | T0.1 | Fix commitado |
+| 39 | IDEMPOTENCY: Harbor robot check (B13) | — | JA COMMITADO em e4a55c13 |
+| 40 | IDEMPOTENCY: DeleteRobot endpoint (B14) | — | JA COMMITADO em e4a55c13 |
 | 41 | IDEMPOTENCY: repo-server cache (B17) | T4.1 | Health check + restart |
 | 42 | SELF_HOSTING: adopt-or-create hardcoded DO | T3.1 | Provider abstraction mantida |
 | 43 | SELF_HOSTING: loopzero platform install != provision | T3.1 | Dois comandos claros |
@@ -1297,7 +1427,8 @@ VERIFY:  Runbook documentado com evidencia
 - [ ] Health checks passam apos cada fase
 - [ ] Preflight checks bloqueiam provisioning com erros claros
 - [ ] ArgoCD App of Apps gerencia Day-2 drift detection
-- [ ] L3 100-tenant deploy >= 95% success rate no DigitalOcean
+- [ ] L3-50 gate: >= 94% success rate no DigitalOcean
+- [ ] L3-100 gate: >= 95% success rate no DigitalOcean
 - [ ] 38/44 problemas da retrospectiva Sprint 8 eliminados
 - [ ] CHANGELOG.md atualizado com todas as mudancas
 - [ ] Todos os testes passam (CLI + operators + API)
