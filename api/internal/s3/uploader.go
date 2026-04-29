@@ -33,9 +33,20 @@ type Uploader struct {
 }
 
 // New creates a new S3 uploader.
+//
+// The endpoint may be supplied as a full URL ("http://host:port",
+// "https://host") or as a bare host[:port]. Without a scheme the Go
+// HTTP client rejects requests with an opaque "unsupported protocol
+// scheme" error — defensively prepend `http://` so misconfigured
+// dev environments fail with a clear upstream error instead of an
+// unhelpful client-side parse error (CHG-2026-04-29-DOGFOOD iter 9).
 func New(endpoint, accessKey, secretKey string) *Uploader {
+	endpoint = strings.TrimRight(endpoint, "/")
+	if endpoint != "" && !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		endpoint = "http://" + endpoint
+	}
 	return &Uploader{
-		endpoint:  strings.TrimRight(endpoint, "/"),
+		endpoint:  endpoint,
 		accessKey: accessKey,
 		secretKey: secretKey,
 		client: &http.Client{

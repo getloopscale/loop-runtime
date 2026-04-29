@@ -38,7 +38,6 @@ type ObjectUploader interface {
 type SourceHandler struct {
 	store        source.SourceStore
 	objStore     ObjectUploader // optional: upload bundle to object storage for build cluster access
-	isProduction bool           // when true, S3 upload failure is fatal (CODE-SILENT-S3-001 fix)
 	sourceBucket string         // S3 bucket for source bundles (default: "loopzero-builds")
 }
 
@@ -65,14 +64,6 @@ func WithSourceBucket(bucket string) func(*SourceHandler) {
 func WithObjectUploader(u ObjectUploader) func(*SourceHandler) {
 	return func(h *SourceHandler) {
 		h.objStore = u
-	}
-}
-
-// WithProductionMode marks the handler as running in production.
-// In production, S3 upload failures are fatal instead of warnings.
-func WithProductionMode() func(*SourceHandler) {
-	return func(h *SourceHandler) {
-		h.isProduction = true
 	}
 }
 
@@ -231,13 +222,19 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 			uploadReader = tmpFile
 		}
 
+		// CHG-2026-04-29-DOGFOOD iter 9 — when the object store is
+		// configured the upload is part of the build contract: the
+		// clone-repo step pulls the bundle from this exact key and a
+		// missing object causes opaque pipeline failures. The previous
+		// `non-fatal in dev` branch returned 200 to the CLI on upload
+		// failure, then the workflow failed on bundle download —
+		// silent-success is exactly what error-handling rules forbid.
+		// Local must equal production (Rule 10): the upload either
+		// succeeds or the request fails with ErrSourceUploadFailed.
 		if uploadErr := h.objStore.Upload(ctx, h.sourceBucket, objKey, uploadReader); uploadErr != nil {
-			if h.isProduction {
-				slog.Error("object store upload failed (fatal in production)", "error", uploadErr, "key", objKey)
-				writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
-				return
-			}
-			slog.Warn("object store upload failed (non-fatal in dev)", "error", uploadErr, "key", objKey)
+			slog.Error("object store upload failed", "error", uploadErr, "key", objKey)
+			writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
+			return
 		}
 	}
 

@@ -42,6 +42,13 @@ certIssuer:
 registries:
   docrPrefix: "harbor.loopzero.local/loopzero-platform/"
   harborPrefix: "harbor.loopzero.local/loopzero-platform/"
+  # CHG-2026-04-29-DOGFOOD iter 9 — k3d-loopzero-registry serves images
+  # built locally by the build pipeline (no DOCR/Harbor in dev). The
+  # tenant-id segment is intentionally NOT pinned: LoopZero names images
+  # `<registry>/<tenant>/<project>-<app>:<sha>`, so the prefix needs
+  # to cover all tenants in this k3d cluster.
+  additionalPrefixes:
+    - "k3d-loopzero-registry:5000/"
 
 loki:
   maxGlobalStreamsPerUser: 50000

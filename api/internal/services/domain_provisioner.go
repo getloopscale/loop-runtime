@@ -312,6 +312,17 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 			return fmt.Errorf("build apps lookup failed: %w", err)
 		}
 
+		// CHG-2026-04-29-DOGFOOD iter 8 — manifest builder agora exige
+		// digest per-app (supply-chain VAP rejeita tag refs). Em domain
+		// provisioner único path disponível é release.ImageDigest, que
+		// é populado por phaseACreateRelease para Apps[0] apenas (per
+		// ADR-0014). Multi-app custom domains não emitidos aqui — fail
+		// explicit em vez de produzir manifest com imagem errada.
+		appDigests := make(map[string]string, len(apps))
+		if release.ImageDigest != nil && *release.ImageDigest != "" && len(apps) > 0 {
+			appDigests[apps[0].Name] = *release.ImageDigest
+		}
+
 		// F-010: shared manifest building function
 		manifestApps, err := BuildManifestApps(ctx, BuildManifestAppsInput{
 			RegistryURL: p.registryURL,
@@ -320,6 +331,7 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 			Environment: d.Environment,
 			CommitSHA:   build.CommitSHA,
 			Apps:        apps,
+			AppDigests:  appDigests,
 			DomainStore: p.store,
 		})
 		if err != nil {
@@ -439,6 +451,15 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDom
 			return fmt.Errorf("build apps lookup failed: %w", err)
 		}
 
+		// CHG-2026-04-29-DOGFOOD iter 8 — manifest builder agora exige
+		// digest per-app (supply-chain VAP rejeita tag refs). No remove
+		// flow vale a mesma restrição do provisionDomain: o digest vem
+		// de release.ImageDigest e cobre apenas Apps[0] (per ADR-0014).
+		appDigests := make(map[string]string, len(apps))
+		if release.ImageDigest != nil && *release.ImageDigest != "" && len(apps) > 0 {
+			appDigests[apps[0].Name] = *release.ImageDigest
+		}
+
 		// F-010: shared manifest building — excludes the domain being removed
 		manifestApps, err := BuildManifestApps(ctx, BuildManifestAppsInput{
 			RegistryURL:   p.registryURL,
@@ -447,6 +468,7 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDom
 			Environment:   d.Environment,
 			CommitSHA:     build.CommitSHA,
 			Apps:          apps,
+			AppDigests:    appDigests,
 			DomainStore:   p.store,
 			ExcludeDomain: d.Domain,
 		})

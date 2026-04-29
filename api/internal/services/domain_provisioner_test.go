@@ -14,6 +14,15 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
+// validImageDigest is a 64-hex sha256 string used in DomainProvisioner
+// tests to satisfy the supply-chain VAP contract enforced by
+// BuildManifestApps (CHG-2026-04-29-DOGFOOD iter 8).
+const validImageDigest = "sha256:0eadbeefcafef00d1234567890abcdef0123456789abcdef0123456789abcdef"
+
+// strPtr returns a pointer to its argument — keeps test fixtures
+// readable when populating *string fields like db.Release.ImageDigest.
+func strPtr(s string) *string { return &s }
+
 // --- Test doubles for DomainProvisioner ---
 
 type fakeDomainProvisionerStore struct {
@@ -151,6 +160,7 @@ func TestDomainProvisioner_ProcessOnce_ProvisionVerifiedDomain(t *testing.T) {
 			"tn-1-my-app-production": {
 				ID: "rel-1", BuildID: "build-1", TenantID: "tn-1",
 				ProjectID: "my-app", Environment: "production",
+				ImageDigest: strPtr(validImageDigest),
 			},
 		},
 	}
@@ -238,6 +248,7 @@ func TestDomainProvisioner_ProcessOnce_GitOpsFails_StaysInProvisioning(t *testin
 			"tn-1-my-app-production": {
 				ID: "rel-1", BuildID: "build-1", TenantID: "tn-1",
 				ProjectID: "my-app", Environment: "production",
+				ImageDigest: strPtr(validImageDigest),
 			},
 		},
 	}
@@ -280,6 +291,7 @@ func TestDomainProvisioner_ProcessOnce_RemovesDomain(t *testing.T) {
 			"tn-1-my-app-production": {
 				ID: "rel-1", BuildID: "build-1", TenantID: "tn-1",
 				ProjectID: "my-app", Environment: "production",
+				ImageDigest: strPtr(validImageDigest),
 			},
 		},
 	}

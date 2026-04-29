@@ -610,6 +610,48 @@ func TestImageTag_deterministic(t *testing.T) {
 	}
 }
 
+// CHG-2026-04-29-DOGFOOD iter 8 — ImageDigestRef MUST produce a digest-pinned
+// reference required by the supply-chain VAP. Live discovery: pods got
+// Forbidden in standalone-multi when manifest used `image:tag`.
+func TestImageDigestRef_addsSha256Prefix(t *testing.T) {
+	const bareDigest = "8f0a1b2c3d4e5f6789abcdef0123456789abcdef0123456789abcdef01234567"
+	got := ImageDigestRef("reg.io", "tn", "p", "api", bareDigest)
+	want := "reg.io/tn/p-api@sha256:" + bareDigest
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestImageDigestRef_acceptsPrefixedDigest(t *testing.T) {
+	const prefixed = "sha256:8f0a1b2c3d4e5f6789abcdef0123456789abcdef0123456789abcdef01234567"
+	got := ImageDigestRef("reg.io", "tn", "p", "api", prefixed)
+	want := "reg.io/tn/p-api@" + prefixed
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestImageDigestRef_doesNotDoubleSha256Prefix(t *testing.T) {
+	const prefixed = "sha256:abc123"
+	got := ImageDigestRef("r", "t", "p", "a", prefixed)
+	// MUST NOT produce "sha256:sha256:abc123".
+	if want := "r/t/p-a@sha256:abc123"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestImageDigestRef_emptyDigestFailsLoud(t *testing.T) {
+	// Empty digest → reference is syntactically valid but admission
+	// rejects (no signature). Caller error, not a silent fallback.
+	got := ImageDigestRef("r", "t", "p", "a", "")
+	if got == ImageTag("r", "t", "p", "a", "") {
+		t.Errorf("empty digest must NOT collapse to ImageTag form (would lose admission protection): %q", got)
+	}
+	if !strings.Contains(got, "@sha256:") {
+		t.Errorf("empty digest fallback must still use @sha256: anchor: %q", got)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // ArgoAppName — missing edge case tests
 // ---------------------------------------------------------------------------

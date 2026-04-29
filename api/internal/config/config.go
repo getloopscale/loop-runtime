@@ -273,7 +273,14 @@ func Load() Config {
 		GiteaOrg:             envOr("GITEA_ORG", "loopzero"),
 		APICrossClusterURL:   envOr("API_CROSS_CLUSTER_URL", "http://loopzero-api.loopzero-system.svc.cluster.local:3001"),
 		ArgocdURL:            envOr("ARGOCD_URL", "http://argocd-server.argocd.svc.cluster.local:80"),
-		MinIOEndpoint:             envOr("MINIO_ENDPOINT", "minio.loopzero-system.svc.cluster.local:9000"),
+		// CHG-2026-04-29-DOGFOOD iter 9 — MUST include scheme. The s3
+		// uploader composes the URL as "<endpoint>/<bucket>/<key>" and
+		// `http.NewRequest` rejects URLs without a scheme with the
+		// opaque "unsupported protocol scheme" error. Live local
+		// dogfood discovered this when the API silently swallowed the
+		// upload error and returned 200 to the CLI, then the build
+		// pipeline failed downstream because the bundle was missing.
+		MinIOEndpoint:             envOr("MINIO_ENDPOINT", "http://minio.loopzero-system.svc.cluster.local:9000"),
 		MinIOCrossClusterEndpoint: envOr("MINIO_CROSS_CLUSTER_ENDPOINT", ""),
 		SourceBucket:              envOr("SOURCE_BUCKET", "loopzero-builds"),
 		RegistryURL:          envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),

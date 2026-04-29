@@ -23,6 +23,16 @@ type BuildManifestAppsInput struct {
 	Apps          []db.BuildAppSpec
 	DomainStore   CustomDomainQuerier // nil-safe — no custom domains when nil
 	ExcludeDomain string              // optional: domain to exclude (for removeDomain flow)
+
+	// AppDigests maps app name → sha256 digest captured by the build
+	// pipeline (cosign step output, with fallback to BuildKit digest).
+	// When present, the manifest renders use `ImageDigestRef` instead of
+	// `ImageTag` — required by the supply-chain VAP
+	// `loopzero-require-image-signature` which rejects mutable tag refs in
+	// tenant namespaces (CHG-2026-04-29-DOGFOOD iter 8: discovered live
+	// when standalone-multi pods got Forbidden by the VAP).
+	// Nil/empty map → fall back to ImageTag (legacy path).
+	AppDigests map[string]string
 }
 
 // BuildManifestApps constructs []manifests.AppManifestInput with custom domains attached.
@@ -35,7 +45,36 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 	var result []manifests.AppManifestInput
 
 	for _, app := range input.Apps {
-		imageRef := naming.ImageTag(input.RegistryURL, input.TenantID, input.ProjectID, app.Name, input.CommitSHA)
+		// CHG-2026-04-29-DOGFOOD-FB iter 1 — static frontend apps are
+		// delivered via S3 + CF Worker (Sprint 10), NOT via K8s manifests.
+		// They have no image, no digest, no Deployment. Skip the digest
+		// check and the manifest emission entirely. Skipping here means
+		// the rendered manifest set excludes static apps — which is
+		// exactly what `manifests.Render` expects (it generates Deployment
+		// + Service + IngressRoute only for entries it receives).
+		// LoopZero enforces frontend == static in app_unit.go:NormalizeApp,
+		// so we use type=frontend as the skip predicate (safer than
+		// trusting Rendering field which may be "" in legacy specs).
+		if app.Type == "frontend" {
+			continue
+		}
+
+		// CHG-2026-04-29-DOGFOOD iter 8 — supply-chain VAP enforcement.
+		// Mutable tags are rejected by `loopzero-require-image-signature` em
+		// tenant namespaces. Sem digest emitido pelo build pipeline o
+		// manifest produziria pods Forbidden no admission. Fail-loud aqui
+		// é melhor que silent failure no admission depois — caller é
+		// responsável por carregar digest (build_reconcile_complete via
+		// buildApps; domain_provisioner via attestation store).
+		// Não há fallback para ImageTag — legacy paths foram removidos.
+		dig, ok := input.AppDigests[app.Name]
+		if !ok || dig == "" {
+			return nil, fmt.Errorf("manifest_builder: missing image digest for app %q (tenant=%s project=%s); "+
+				"the supply-chain VAP rejects tag-only references and the build pipeline must emit "+
+				"the cosign digest output before manifests can be rendered",
+				app.Name, input.TenantID, input.ProjectID)
+		}
+		imageRef := naming.ImageDigestRef(input.RegistryURL, input.TenantID, input.ProjectID, app.Name, dig)
 
 		var customDomains []manifests.CustomDomainInput
 		if input.DomainStore != nil {

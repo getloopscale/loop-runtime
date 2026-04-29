@@ -96,7 +96,11 @@ func (r *PreviewReconciler) reconcilePreviewAllowIngressPolicy(ctx context.Conte
 						{
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									constants.KubeMetadataNameLabel: constants.NamespacePlatformSystem,
+									// CHG-2026-04-29-DOGFOOD-FB: must be the
+									// ingress (Traefik) namespace, not the
+									// platform system namespace. Resolved via
+									// helper to honor INGRESS_NAMESPACE override.
+									constants.KubeMetadataNameLabel: r.ingressNS(),
 								},
 							},
 						},

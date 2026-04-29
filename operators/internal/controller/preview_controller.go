@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -38,6 +39,20 @@ type PreviewReconciler struct {
 	RuntimeClient client.Client
 	Scheme        *runtime.Scheme
 	BaseDomain    string
+	// IngressNamespace is the namespace where Traefik runs.
+	// Same semantics as EnvironmentReconciler.IngressNamespace —
+	// empty string falls back to constants.NamespaceIngress (`traefik`).
+	IngressNamespace string
+}
+
+// ingressNS returns the namespace where the ingress controller runs.
+// Mirrors EnvironmentReconciler.ingressNS() to keep allow-ingress-traefik
+// NetworkPolicy semantics consistent between regular and preview envs.
+func (r *PreviewReconciler) ingressNS() string {
+	if r.IngressNamespace != "" {
+		return r.IngressNamespace
+	}
+	return constants.NamespaceIngress
 }
 
 // Reconcile handles the reconciliation loop for PreviewEnvironment resources.
@@ -484,13 +499,18 @@ func (r *PreviewReconciler) bumpCleanupAttempts(preview *loopzerov1.PreviewEnvir
 
 // SetupPreviewController registers the PreviewController with the manager.
 func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseDomain string) error {
+	// Mirror EnvironmentController's behavior: env var override falls back
+	// to constants.NamespaceIngress so allow-ingress-traefik NetworkPolicies
+	// generated for preview namespaces honor the same Traefik namespace.
+	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.PreviewEnvironment{}).
 		Named("preview").
 		Complete(&PreviewReconciler{
-			Client:        mgr.GetClient(),
-			RuntimeClient: runtimeClient,
-			Scheme:        mgr.GetScheme(),
-			BaseDomain:    baseDomain,
+			Client:           mgr.GetClient(),
+			RuntimeClient:    runtimeClient,
+			Scheme:           mgr.GetScheme(),
+			BaseDomain:       baseDomain,
+			IngressNamespace: ingressNS,
 		})
 }

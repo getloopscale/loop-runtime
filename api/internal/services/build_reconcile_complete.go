@@ -62,6 +62,18 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 
 	// F-010: shared manifest building function (includes custom domains).
 	// CODE-002: errors are fatal — prevents silent IngressRoute erasure.
+	//
+	// CHG-2026-04-29-DOGFOOD iter 8: forward digest map from buildApps
+	// (populated by enrichAppReleasesWithAttestation just above) so the
+	// manifest renders use `image@sha256:...` instead of `image:tag`.
+	// Mutable tag refs are rejected by VAP `loopzero-require-image-signature`
+	// in tenant namespaces — pods would be Forbidden at admission time.
+	digests := make(map[string]string, len(buildApps))
+	for _, ar := range buildApps {
+		if ar.ImageDigestSHA256 != "" {
+			digests[ar.Name] = ar.ImageDigestSHA256
+		}
+	}
 	manifestApps, err = BuildManifestApps(ctx, BuildManifestAppsInput{
 		RegistryURL: r.cfg.RegistryURL,
 		TenantID:    build.TenantID,
@@ -69,6 +81,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		Environment: build.Environment,
 		CommitSHA:   build.CommitSHA,
 		Apps:        apps,
+		AppDigests:  digests,
 		DomainStore: r.domainStore,
 	})
 	if err != nil {
