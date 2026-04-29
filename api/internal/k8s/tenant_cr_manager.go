@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,15 +21,14 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
-// tenantNamespace is the Kubernetes namespace where Tenant CRs live.
-// Local dev and production: loopzero-system.
-// Configurable via TENANT_NAMESPACE env var.
-var tenantNamespace = func() string {
-	if ns := os.Getenv("TENANT_NAMESPACE"); ns != "" {
-		return ns
-	}
-	return "loopzero-system"
-}()
+// tenantNamespace is the canonical namespace for all Tenant + Environment CRs.
+//
+// ADR-0018 v2 (MEET-ADR-0018 condition C1): hard-coded `const`, NOT
+// `var`/env-overridable. The previous `TENANT_NAMESPACE` env var was the
+// misplacement vector that allowed iter 7-8 of dogfood to land Tenants in
+// `default`. Removed entirely; future multi-namespace topology requires a
+// new ADR superseding this one (ADR-0018 §Constraints C3).
+const tenantNamespace = "loopzero-system"
 
 var tenantCRGVR = schema.GroupVersionResource{
 	Group:    "loopzero.io",

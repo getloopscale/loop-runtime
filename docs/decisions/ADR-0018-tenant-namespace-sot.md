@@ -1,11 +1,37 @@
 # ADR-0018 — Tenant CR Single Source of Truth: namespace `loopzero-system`
 
-> **Status:** DRAFT — pending T2 governance review
-> **Authors:** dogfood-2026-04-29 remediation iter 3
+> **Status:** APPROVED v2 (post-T2 review, MEET-ADR-0018 2026-04-29)
+> **Authors:** dogfood-2026-04-29 remediation iter 3 (v1) + iter 5 amendment per MEET-ADR-0018 (v2)
 > **Triggered by:** F-04 finding (Tenant duplicate em `default` E `loopzero-system`)
 > **Scope:** T3.1 (operator/API code) + T3.2 (ValidatingAdmissionPolicy)
 > **Related:** `docs/plans/dogfood-2026-04-29-remediation-plan.md` (ADR D3)
 > **Companion:** `infra/scripts/migrate-tenant-namespace.sh` (T1 data cleanup, already shipped)
+> **T2 Decision Record:** `docs/decisions/MEET-ADR-0018-decision.md` — APPROVED_WITH_CONDITIONS C1-C16
+> **Rollout runbook:** `docs/runbooks/adr-0018-rollout.md` (mandatory deployment order)
+> **Follow-up:** ADR-0019 (RBAC tightening, deferred to Sprint 9)
+
+## Mandatory Conditions (from MEET-ADR-0018)
+
+C1-C16 são **vinculantes** — implementação só pode prosseguir após cada uma estar coberta:
+
+| ID | Condition | Source |
+|----|-----------|--------|
+| C1 | Remove `TENANT_NAMESPACE` env var; substituir por Go `const`. CHANGELOG `[Removed]`. | platform-architect |
+| C2 | Tenant-controller startup detecta misplaced Tenants cluster-wide e emite warning event + métrica. Fail-loud. | platform-architect (= C5 em chave operacional) |
+| C3 | ADR §Constraints: future multi-namespace tenant topology requer novo ADR superseding. | platform-architect |
+| C4 | Mandatory deployment ORDER: T3.3 → T3.1 → T3.2. Encoded em runbook + Helmfile dependency. | production-design-reviewer |
+| C5 | Métrica Prometheus `loopzero_misplaced_tenant_total{namespace}` + alert ≥1 por >5min. | production-design-reviewer |
+| C6 | VAP `matchConstraints` exclui status subresource explicitamente; envtest spec verifica. | production-design-reviewer |
+| C7 | Runbook `docs/runbooks/adr-0018-rollout.md` com order, abort, rollback, DR-restore. | production-design-reviewer |
+| C8 | Customer disruption: 24h advance notice + scheduled migration window. | production-design-reviewer |
+| C9 | T3.1 inclui `cache.Options{ByObject: ...}` per-Kind: Tenant/Environment/PlatformBootstrap/GitRepositoryBinding/ClusterCredential → `loopzero-system`; LoopZeroApplication/PreviewEnvironment/ExposedRoute → cluster-wide. | k8s-controller-engineer |
+| C10 | Owner-reference topology verificada antes do merge. Documentada em §Implementation Plan. | k8s-controller-engineer |
+| C11 | Envtest: `tenant_namespace_isolation_test.go` — operator NÃO reconcilia Tenant fora de `loopzero-system`. | k8s-controller-engineer |
+| C12 | RBAC tightening DEFERRED → ADR-0019. Remove de §Positive consequences. | k8s-controller-engineer |
+| C13 | Test matrix T-01..T-11 GREEN antes do merge; T-13 antes de prod rollout. | change-validation-planner |
+| C14 | Regression test do iter 3 incident (skip-reconcile guard). | change-validation-planner |
+| C15 | CLI mapeia VAP rejection → product language (Rule 3); não vaza "loopzero-system". | orchestrator self-challenge |
+| C16 | DR/restore runbook update — restore-from-backup pode reintroduzir misplaced Tenants. | orchestrator self-challenge |
 
 ## Context
 

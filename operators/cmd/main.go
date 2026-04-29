@@ -16,12 +16,15 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -36,6 +39,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 	"github.com/loopzero/loopzero/operators/internal/harbor"
 	"github.com/loopzero/loopzero/operators/internal/httpclient"
+	"github.com/loopzero/loopzero/operators/internal/metrics"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/operators/internal/tracing"
 	cb "github.com/loopzero/loopzero/pkg/circuitbreaker"
@@ -433,6 +437,22 @@ func main() {
 		}()
 	}
 
+	// ADR-0018 v2 / C9 — Cache scoping per-Kind.
+	// Platform CRDs (Tenant, Environment, PlatformBootstrap, GitRepositoryBinding,
+	// ClusterCredential) live ONLY in `loopzero-system` and the cache must reject
+	// any other namespace. This is the operator-side enforcement that makes
+	// ADR-0018 actually deliver: the API hard-coded `const tenantNamespace =
+	// "loopzero-system"`, but the operator informer would still see arbitrary
+	// Tenant CRs in other namespaces under the previous cluster-wide watch
+	// (the same vector that allowed iter 7-8 of dogfood to misplace CRs).
+	//
+	// Workload-side CRDs (LoopZeroApplication, PreviewEnvironment, ExposedRoute)
+	// MUST remain cluster-wide because they are deployed per-tenant in
+	// `loopzero-tenant-{id}` namespaces — restricting their cache would break
+	// deploy reconciliation. C9 is explicit about this distinction.
+	platformCRDNamespaces := map[string]cache.Config{
+		constants.NamespacePlatformSystem: {},
+	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -441,6 +461,17 @@ func main() {
 		HealthProbeBindAddress: healthProbeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "loopzero-operators.loopzero.io",
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&loopzerov1.Tenant{}:                {Namespaces: platformCRDNamespaces},
+				&loopzerov1.Environment{}:           {Namespaces: platformCRDNamespaces},
+				&loopzerov1.PlatformBootstrap{}:     {Namespaces: platformCRDNamespaces},
+				&loopzerov1.GitRepositoryBinding{}:  {Namespaces: platformCRDNamespaces},
+				&loopzerov1.ClusterCredential{}:     {Namespaces: platformCRDNamespaces},
+				// LoopZeroApplication / PreviewEnvironment / ExposedRoute intentionally
+				// NOT listed — they remain cluster-wide. ADR-0018 v2 §C9.
+			},
+		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create manager")
@@ -452,6 +483,19 @@ func main() {
 
 	// Wire all controllers
 	setupControllers(setupLog, mgr, deps)
+
+	// ADR-0018 v2 / C2 (platform-architect) + C5 (production-design-reviewer)
+	// — startup misplacement scan. Uses an UNSCOPED dynamic client (separate
+	// from the manager cache, which is now restricted to `loopzero-system` per C9)
+	// to surface ANY Tenant CR outside the canonical namespace. The metric
+	// `loopzero_misplaced_tenant_total{namespace}` drives the alert
+	// `MisplacedTenantDetected` (>5min sustained = page).
+	//
+	// Fail-loud rationale: with cache scoping, the operator literally cannot
+	// see misplaced Tenants — they would be silently orphaned. The scan runs
+	// once at startup (cheap, one List call) and emits a warning event +
+	// metric. Operators can react via `task migrate:tenants -- --apply`.
+	go runMisplacedTenantScan(setupLog)
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
@@ -467,4 +511,56 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// runMisplacedTenantScan implements ADR-0018 v2 / C2+C5 (MEET-ADR-0018).
+// Cluster-wide List of Tenant CRs using an UNSCOPED dynamic client (the
+// manager cache is restricted to loopzero-system per C9 and would not see
+// misplaced CRs). Emits the metric `loopzero_misplaced_tenant_total{namespace}`
+// for each non-canonical namespace found, and a structured warning log line.
+//
+// Runs once at startup in a goroutine (fail-loud, not fail-block — operator
+// continues even if the scan errors, since misplacement detection is
+// observability, not a precondition for reconciliation).
+func runMisplacedTenantScan(log logr.Logger) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error(nil, "misplaced tenant scan panicked", "recover", r)
+		}
+	}()
+
+	cfg, err := ctrl.GetConfig()
+	if err != nil {
+		log.Error(err, "misplaced scan: cannot get rest config")
+		return
+	}
+	dyn, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		log.Error(err, "misplaced scan: cannot build dynamic client")
+		return
+	}
+
+	tenantGVR := schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "tenants"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	list, err := dyn.Resource(tenantGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Error(err, "misplaced scan: list failed")
+		return
+	}
+
+	misplaced := 0
+	for _, item := range list.Items {
+		ns := item.GetNamespace()
+		if ns == constants.NamespacePlatformSystem {
+			continue
+		}
+		misplaced++
+		metrics.MisplacedTenantTotal.WithLabelValues(ns).Inc()
+		log.Info("misplaced tenant detected (ADR-0018 invariant violated — run task migrate:tenants)",
+			"tenant", item.GetName(), "namespace", ns)
+	}
+	log.Info("misplaced tenant scan complete", "misplaced", misplaced, "total_scanned", len(list.Items))
 }

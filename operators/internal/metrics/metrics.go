@@ -77,13 +77,32 @@ var (
 	)
 
 	// TenantCircuitBreakerState tracks circuit breaker state per dependency.
-	// 0=closed, 1=open, 2=half-open.
+	// 0=closed, 1=open, 2=half-one.
 	TenantCircuitBreakerState = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "loopzero_tenant_cb_state",
 			Help: "Circuit breaker state per dependency (0=closed, 1=open, 2=half-open).",
 		},
 		[]string{"dep"},
+	)
+
+	// MisplacedTenantTotal counts Tenant CRs found outside the canonical
+	// namespace `loopzero-system` (ADR-0018 v2 / MEET-ADR-0018 condition C5).
+	// Emitted by tenant-controller startup scan + every reconcile cycle that
+	// detects a misplaced CR. Non-zero value should fire the
+	// MisplacedTenantDetected alert in Prometheus (>5 min sustained).
+	//
+	// Pre-fix this counter did not exist; misplaced CRs went undetected and
+	// were processed by the cluster-wide informer (iter 7-8 of dogfood). With
+	// C9 cache scoping the operator no longer sees them, but the startup
+	// scan uses an unscoped client to surface the gap explicitly — fail-loud
+	// per platform-architect C2.
+	MisplacedTenantTotal = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "loopzero_misplaced_tenant_total",
+			Help: "Tenant CRs found outside canonical namespace loopzero-system (ADR-0018 invariant).",
+		},
+		[]string{"namespace"},
 	)
 )
 
@@ -97,5 +116,6 @@ func init() {
 		TenantDeletionStepDuration,
 		TenantDeletionStuckTotal,
 		TenantCircuitBreakerState,
+		MisplacedTenantTotal,
 	)
 }
