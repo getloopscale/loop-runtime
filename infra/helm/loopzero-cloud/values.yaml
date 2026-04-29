@@ -1,0 +1,51 @@
+replicaCount: 1
+
+image:
+  repository: registry.digitalocean.com/loopzero-system/loopzero-cloud
+  tag: 2bc062f
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: loopzero-registry-pull
+
+wiringConfigMap: loopzero-platform-topology
+
+# B33/B35 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — loopzero-cloud needs the same
+# DATABASE_URL mapping that loopzero-api/controllers received.
+dbCredentialsSecret: loopzero-db-credentials
+
+service:
+  type: ClusterIP
+  # B50 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — loopzero-cloud binary listens on
+  # port 13002 (see startup log "addr=:13002"). The chart was configured
+  # for 3000 which caused readiness probe connection refused. Same pattern
+  # as B40 (loopzero-api). Detected on standalone bootstrap 2026-04-28.
+  port: 13002
+
+ingress:
+  enabled: true
+  tls: true
+  certIssuer: CFManaged  # Cloudflare-managed TLS at the edge
+
+domain: dev.loopzero.example
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+env:
+  # B50: PORT must match service.port. loopzero-cloud binary uses :13002 by default.
+  PORT: "13002"
+  NODE_ENV: production
+  # B49 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Ory Hydra deploys to the
+  # `loopzero-auth` namespace (separated for blast radius). Default values
+  # pointed to `loopzero-system` which fails DNS resolution. Detected on
+  # standalone bootstrap 2026-04-28.
+  HYDRA_ADMIN_URL: "http://ory-hydra-admin.loopzero-auth.svc.cluster.local:4445"
+  HYDRA_PUBLIC_URL: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444"
+  KRATOS_PUBLIC_URL: "http://ory-kratos-public.loopzero-auth.svc.cluster.local:80"
+  KRATOS_ADMIN_URL: "http://ory-kratos-admin.loopzero-auth.svc.cluster.local:80"

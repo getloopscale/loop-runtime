@@ -1,0 +1,58 @@
+# Helmfile environment: dev
+# CHG-2026-04-28-LAYERED-BOOTSTRAP — Phase 2 (T2.1/T2.2/T2.3)
+#
+# Overrides for the dev environment. Used by mgmt/build/runtime helmfiles
+# when invoked with `-e dev`.
+#
+# Convention: env vars from `pulumi stack output --stack dev` are injected
+# at runtime by `loopzero platform install --provider digitalocean` or directly
+# by the developer when running helmfile manually.
+
+# Domain
+domain: dev.loopzero.example
+dnsZone: loopzero.example
+
+# Cluster role identity (used by templates / tests).
+clusterRole: dev
+
+# Replica counts (small for dev — HA values go in prod overlay).
+replicas:
+  api: 1
+  controller: 1
+  argocd: 1
+  gitea: 1
+  harbor: 1
+
+# Resource sizing
+resources:
+  default:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# TLS issuer
+certIssuer:
+  kind: ClusterIssuer
+  name: letsencrypt-staging
+
+# Image registries (must match Pulumi outputs).
+registries:
+  docrPrefix: "registry.digitalocean.com/loopzero-system/"
+  harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
+
+# Loki capacity (B5)
+loki:
+  maxGlobalStreamsPerUser: 100000
+
+# Policy mode (B16) — `warn` for dev so test workloads are not blocked.
+policyMode: warn
+
+# In-cluster Postgres — DISABLED for LoopZero Cloud (uses DO Managed PG via Pulumi L1).
+# iter 20: explicit toggle so the postgresql release is only rendered in standalone.
+inClusterPostgres: false
+
+# B20: NFS server provisioner underlying storage class. DOKS default.
+underlyingStorageClass: do-block-storage

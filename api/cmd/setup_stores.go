@@ -53,7 +53,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, logger *slog.Logge
 	giteaSourceStore, err := source.NewGiteaSourceStore(source.GiteaSourceStoreConfig{
 		BaseURL: cfg.GiteaURL,
 		Token:   cfg.GiteaToken,
-		OrgName: "loopzero",
+		OrgName: cfg.GiteaOrg, // B77: was hardcoded "loopzero"
 	})
 	if err != nil {
 		return nil, err

@@ -1,0 +1,22 @@
+# prometheus values used by mgmt helmfile.
+server:
+  retention: 15d
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  persistentVolume:
+    enabled: true
+    size: 50Gi
+alertmanager:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+serverFiles:
+  alerting_rules.yml: {}
+  recording_rules.yml: {}

@@ -1,0 +1,217 @@
+# Runtime Cluster — Helmfile (L2 Bootstrap)
+# CHG-2026-04-28-LAYERED-BOOTSTRAP — Phase 2 / T2.3
+#
+# Replaces `infra/pulumi/src/components/runtime-bootstrap.ts` and friends.
+# Reusable for runtime, runtime-2, ..., runtime-N via KUBECONFIG override.
+#
+# Invocation:
+#   KUBECONFIG=~/.kube/loopzero-runtime.yaml \
+#     LOOPZERO_CF_TUNNEL_TOKEN="$(pulumi stack output cfTunnelToken --show-secrets)" \
+#     helmfile -f infra/helmfile/runtime.helmfile.yaml -e dev sync
+#   # repeat with KUBECONFIG=~/.kube/loopzero-runtime-2.yaml for cell-2
+
+environments:
+  dev:
+    values:
+      - environments/dev.yaml
+  prod:
+    values:
+      - environments/prod.yaml
+  standalone:
+    values:
+      - environments/standalone.yaml
+  standalone-multi:
+    # end-to-end-deploy-validation-plan T0.3 — 3 separate k3d clusters.
+    values:
+      - environments/standalone-multi.yaml
+
+---
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  atomic: false
+  createNamespace: true
+
+repositories:
+  - name: jetstack
+    url: https://charts.jetstack.io
+  - name: traefik
+    url: https://traefik.github.io/charts
+  - name: external-secrets
+    url: https://charts.external-secrets.io
+  - name: kedacore
+    url: https://kedacore.github.io/charts
+  - name: prometheus-community
+    url: https://prometheus-community.github.io/helm-charts
+  - name: sigstore
+    url: https://sigstore.github.io/helm-charts
+  - name: grafana
+    url: https://grafana.github.io/helm-charts
+  - name: metrics-server
+    url: https://kubernetes-sigs.github.io/metrics-server/
+
+# Pre-sync setup (called by the CLI orchestrator BEFORE this helmfile runs):
+#   bash infra/helmfile/scripts/generate-runtime-secrets.sh <env> <cluster-id>
+#     - cloudflared-tunnel-token in loopzero-system (ADR D9)
+#     - loopzero-eso-source for ExternalSecrets
+# Hooks moved out of helmfile so list/lint/diff work without cluster access.
+
+# ---------------------------------------------------------------------------
+# Releases
+# ---------------------------------------------------------------------------
+releases:
+  # Wave -3: Foundation
+  - name: cert-manager
+    namespace: cert-manager
+    chart: jetstack/cert-manager
+    version: v1.14.5
+    values:
+      - ../helm/cert-manager/values.yaml
+    set:
+      - name: installCRDs
+        value: "true"
+
+  # B62 (end-to-end-deploy-validation-plan T2.3) — same as B26: metrics-server
+  # is pre-installed by k3d/DOKS managed control plane. Helm install fails
+  # with "invalid ownership metadata". Default skip; opt-in for bare-metal.
+  - name: metrics-server
+    namespace: kube-system
+    chart: metrics-server/metrics-server
+    version: 3.12.1
+    installed: {{ .Values | get "installMetricsServer" false }}
+    values:
+      - ../helm/monitoring/values-metrics-server.yaml
+
+  # Wave -2: Ingress
+  - name: traefik
+    namespace: traefik
+    chart: traefik/traefik
+    version: 28.3.0
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - ../helm/traefik/values.yaml
+
+  # Wave -1: Secrets and metrics
+  - name: external-secrets
+    namespace: external-secrets
+    chart: external-secrets/external-secrets
+    version: 0.14.3
+    values:
+      - ../helm/external-secrets/values.yaml
+
+  - name: kube-state-metrics
+    namespace: monitoring
+    chart: prometheus-community/kube-state-metrics
+    version: 5.25.1
+    values:
+      - ../helm/monitoring/values-kube-state-metrics.yaml
+
+  # Wave 0: Autoscaling + admission control + tunnel
+  - name: keda
+    namespace: keda
+    chart: kedacore/keda
+    version: 2.16.1
+    values:
+      - ../helm/keda/values.yaml
+
+  - name: keda-http-addon
+    namespace: keda
+    chart: kedacore/keda-add-ons-http
+    version: 0.8.0
+    needs:
+      - keda/keda
+    values:
+      - ../helm/keda-http-addon/values.yaml
+
+  - name: policy-controller
+    namespace: cosign-system
+    chart: sigstore/policy-controller
+    # Pinned to 0.8.1 — last release in 0.8.x line. 0.9.x available but
+    # CHG-2026-04-28-LAYERED-BOOTSTRAP keeps 0.8.x compatibility.
+    # validate:helm-charts confirms this version exists in the repo index.
+    version: 0.8.1
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - ../helm/policy-controller/values.yaml
+
+  # B16 — ClusterImagePolicy (loopzero-images-warn) shipped as Helm chart per T0.1.
+  - name: admission-policies
+    namespace: cosign-system
+    chart: ../helm/admission-policies
+    needs:
+      - cosign-system/policy-controller
+    values:
+      - ../helm/admission-policies/values.yaml
+{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+      # B64 (end-to-end-deploy-validation-plan T2.3) — standalone-multi uses
+      # prometheus-community/prometheus (no Operator CRDs). Disable PrometheusRule.
+      - alerts:
+          enabled: false
+{{- end }}
+    set:
+      - name: clusterImagePolicy.mode
+        value: "{{ .Values.policyMode }}"
+      - name: domain
+        value: "{{ .Values.domain }}"
+
+  - name: promtail
+    namespace: monitoring
+    chart: grafana/promtail
+    version: 6.16.6
+    values:
+      - ../helm/promtail/values.yaml
+
+  # ADR D9 — cloudflared Deployment migrated from Pulumi tunnel.ts to Helmfile.
+  # Token comes via env var LOOPZERO_CF_TUNNEL_TOKEN (from `pulumi stack output`).
+  # B61 (end-to-end-deploy-validation-plan T2.2) — standalone-multi has no
+  # real CF Tunnel; cloudflared scaled to 0 replicas to avoid CrashLoop.
+  - name: cloudflared
+    namespace: loopzero-system
+    chart: ../helm/cloudflared
+    values:
+      - ../helm/cloudflared/values.yaml
+{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+      - replicaCount: 0
+{{- end }}
+
+  # Wave 1: ClusterIssuer + RBAC (depend on cert-manager + traefik ready)
+  - name: cluster-issuer
+    namespace: cert-manager
+    chart: ../helm/cluster-issuer
+    needs:
+      - cert-manager/cert-manager
+      - traefik/traefik
+    values:
+      - ../helm/cluster-issuer/values.yaml
+
+  - name: rbac
+    namespace: loopzero-system
+    chart: ../helm/network-policies
+    values:
+      - ../helm/network-policies/values.yaml
+
+  # B82 (end-to-end-deploy-validation-plan iter 12) — Service `static-assets`
+  # in loopzero-system is the in-cluster S3 gateway used by static-frontend
+  # IngressRoutes generated by api/internal/manifests/renderer_static.go.
+  # In standalone-multi we point at mgmt-cluster MinIO via docker bridge IP.
+  # In dev/prod we point at DO Spaces (override s3.server / s3.proto).
+  - name: static-assets
+    namespace: loopzero-system
+    chart: ../helm/static-assets
+    needs:
+      - loopzero-system/rbac
+    values:
+      - ../helm/static-assets/values.yaml
+{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+      # In standalone-multi the workload cluster cannot resolve the mgmt-cluster
+      # service DNS, so we use the docker-bridge mgmt-server-0 IP + NodePort
+      # exposed by minio (32000 → 9000). This mirrors the build cluster pattern.
+      - s3:
+          bucket: loopzero-static-assets
+          server: 172.18.0.3
+          port: 32000
+          proto: http
+{{- end }}

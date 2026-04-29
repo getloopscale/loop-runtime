@@ -125,7 +125,17 @@ func setupProvisioners(setupLog logr.Logger, mgr ctrl.Manager) provisionerDeps {
 		setupLog.Error(nil, "GITEA_TOKEN is required")
 		os.Exit(1)
 	}
-	gitProvisionerRaw := gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero")
+	// B69 (end-to-end-deploy-validation-plan iter 8) — Gitea org name was
+	// hardcoded to "loopzero", which assumed (a) an org named "loopzero" exists in
+	// Gitea, AND (b) that org owns all tenant repos. In standalone-multi
+	// the org is "loopzero-platform" (created during bootstrap). In production
+	// it varies. Make it configurable via GITEA_ORG env var. Default
+	// preserves prior behavior for backward compat.
+	giteaOrg := os.Getenv("GITEA_ORG")
+	if giteaOrg == "" {
+		giteaOrg = "loopzero"
+	}
+	gitProvisionerRaw := gitea.NewRealProvisioner(giteaURL, giteaToken, giteaOrg)
 	giteaCB := cb.New(cb.Config{
 		Name: "gitea", OpenThreshold: 5, CloseThreshold: 1,
 		RetryInterval: 120 * time.Second,

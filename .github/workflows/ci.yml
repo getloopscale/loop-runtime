@@ -47,6 +47,7 @@ jobs:
       pulumi: ${{ steps.filter.outputs.pulumi }}
       manifests: ${{ steps.filter.outputs.manifests }}
       charts: ${{ steps.filter.outputs.charts }}
+      helmfile: ${{ steps.filter.outputs.helmfile }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -76,6 +77,18 @@ jobs:
               - 'infra/tilt/**'
             charts:
               - 'charts/**'
+            helmfile:
+              - 'infra/helmfile/**'
+              - 'infra/helm/admission-policies/**'
+              - 'infra/helm/cloudflared/**'
+              - 'infra/helm/cluster-issuer/**'
+              - 'infra/helm/network-policies/**'
+              - 'infra/helm/smoke-test/**'
+              - 'infra/helm/loopzero-api/**'
+              - 'infra/helm/loopzero-cloud/**'
+              - 'infra/helm/loopzero-controller/**'
+              - 'infra/helm/tenant-controller/**'
+              - 'infra/argocd-bootstrap/**'
 
   # ─────────────────────────────────────────────
   # LINT — code quality checks
@@ -362,19 +375,45 @@ jobs:
   validate-manifests:
     name: Validate manifests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.manifests == 'true' || needs.changes.outputs.go-operators == 'true'
+    # CHG-2026-04-28-LAYERED-BOOTSTRAP — also fires on helmfile/internal-chart
+    # changes so the L2/L3 surface (helmfile templates, ArgoCD sync waves,
+    # internal Helm charts, helmfile scripts) is gated on every PR.
+    if: >-
+      needs.changes.outputs.manifests == 'true' ||
+      needs.changes.outputs.go-operators == 'true' ||
+      needs.changes.outputs.helmfile == 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Install kubeconform
         run: |
           curl -sSL -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/${{ env.KUBECONFORM_VERSION }}/kubeconform-linux-amd64.tar.gz
           tar xzf kubeconform.tar.gz && sudo mv kubeconform /usr/local/bin/
+      - name: Install helm + helm-diff + helmfile v1
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm plugin install https://github.com/databus23/helm-diff || true
+          curl -fsSL https://github.com/helmfile/helmfile/releases/download/v1.0.0/helmfile_1.0.0_linux_amd64.tar.gz | tar xz
+          sudo mv helmfile /usr/local/bin/
+          helmfile --version
+      - name: Install Task
+        run: |
+          curl -sL https://taskfile.dev/install.sh | sudo sh -s -- -b /usr/local/bin
+          task --version
       - run: kubeconform --strict --skip CustomResourceDefinition operators/config/
       - run: kubeconform --strict infra/tilt/api-deployment.yaml infra/tilt/operator-deployment.yaml
       - run: kubeconform --strict --skip AppProject,Application infra/helm/argocd/templates/
       - run: kubeconform --strict --skip ServiceMonitor,PrometheusRule,Probe infra/helm/monitoring/manifests/
+      # L2/L3 gates — CHG-2026-04-28-LAYERED-BOOTSTRAP T7.x
+      - name: Validate internal Helm charts (lint + template)
+        run: task validate:internal-charts
+      - name: Validate ArgoCD sync-wave invariants
+        run: task validate:argocd-sync-waves
+      - name: Validate helmfile shell scripts (mock kubectl)
+        run: task validate:helmfile-scripts
+      - name: Validate helmfile-rendered K8s objects (kubeconform)
+        run: task validate:helmfile-templates
 
   migration-safety:
     name: Migration safety

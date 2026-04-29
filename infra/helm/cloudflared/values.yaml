@@ -1,0 +1,22 @@
+replicaCount: 2
+
+image:
+  repository: cloudflare/cloudflared
+  tag: "2024.12.2"
+  pullPolicy: IfNotPresent
+
+# Secret containing the tunnel token (created by generate-runtime-secrets.sh).
+tokenSecret:
+  name: cloudflared-tunnel-token
+  key: token
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Metrics port (also used for liveness/readiness probes)
+metricsPort: 2000

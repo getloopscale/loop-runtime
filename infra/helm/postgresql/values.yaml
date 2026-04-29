@@ -6,7 +6,12 @@
 # Local dev uses whatever the chart default provides (currently PG 18.x).
 image:
   registry: docker.io
-  repository: bitnami/postgresql
+  # B19/B21 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Bitnami migrated free
+  # tier image tags to bitnamilegacy/* in mid-2025. Chart 18.6.2's
+  # default `bitnami/postgresql` tag may not exist on Docker Hub.
+  # Override repo to the legacy mirror, which Bitnami pledges to keep
+  # available indefinitely for users on free tier.
+  repository: bitnamilegacy/postgresql
   # tag: defaults to chart appVersion (verified available on Docker Hub)
 
 auth:
@@ -16,11 +21,22 @@ auth:
 
 # Create additional databases required by platform components.
 # The 'loopzero' database is created by auth.database above.
-# Gitea needs its own database to avoid SQLite limitations (E-06).
+#
+# B27 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Each stateful component gets
+# its own DB for blast radius isolation:
+#   - gitea  : Gitea metadata (E-06 — avoid SQLite limitations)
+#   - kratos : Ory Kratos identities + sessions
+#   - hydra  : Ory Hydra OAuth2 clients + tokens
+#   - harbor : Harbor registry metadata
+# Without these, kratos/hydra/harbor crash with "database does not exist"
+# on first start. Detected on fresh standalone bootstrap 2026-04-28.
 initdb:
   scripts:
-    create-gitea-db.sql: |
+    create-platform-dbs.sql: |
       CREATE DATABASE gitea OWNER loopzero;
+      CREATE DATABASE kratos OWNER loopzero;
+      CREATE DATABASE hydra OWNER loopzero;
+      CREATE DATABASE harbor OWNER loopzero;
 
 primary:
   livenessProbe:
@@ -47,12 +63,17 @@ primary:
 
 metrics:
   enabled: true
+  # B23 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — ServiceMonitor requires the
+  # Prometheus Operator CRDs (`monitoring.coreos.com/v1`). Our monitoring
+  # stack uses `prometheus-community/prometheus` (standalone), NOT
+  # `kube-prometheus-stack`, so the Operator and its CRDs are not present.
+  # Disable ServiceMonitor until we adopt the Operator (Sprint 9).
+  # Plain Prometheus scrape works via static config or annotations.
   serviceMonitor:
-    enabled: true
-    namespace: monitoring
-    labels:
-      release: monitoring
-    interval: 15s
+    enabled: false
+  # Bitnami legacy image mirror (B19/B21).
+  image:
+    repository: bitnamilegacy/postgres-exporter
   resources:
     limits:
       cpu: "100m"

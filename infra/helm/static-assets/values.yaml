@@ -1,0 +1,61 @@
+# Defaults target standalone-multi: nginx-s3-gateway proxying to mgmt-cluster
+# MinIO via the docker-bridge NodePort (172.18.0.3:32000).
+# CHG-2026-04-28-LAYERED-BOOTSTRAP / B82 (end-to-end-deploy-validation-plan iter 12)
+# In dev/prod overlays, override s3 to point to DO Spaces (regional endpoint).
+
+replicaCount: 1
+
+image:
+  # Upstream nginx-s3-gateway (Docker Hub, maintained by NGINX Inc).
+  # Pinned to a dated tag — `latest` would be reproducibility hostile.
+  repository: nginxinc/nginx-s3-gateway
+  tag: latest-20260420
+  pullPolicy: IfNotPresent
+
+# S3 backend configuration. Defaults match standalone-multi (mgmt cluster MinIO
+# reached via docker bridge IP + NodePort). Override per environment.
+s3:
+  bucket: loopzero-static-assets
+  server: 172.18.0.3
+  port: 32000
+  proto: http
+  region: us-east-1
+  style: path
+  allowDirectoryList: "true"
+  provideIndexPage: "true"
+  appendSlashForPossibleDirectory: "true"
+  corsEnabled: "true"
+
+# Credentials: by default we expect a Secret called `static-assets-s3` to
+# exist in the chart's namespace (loopzero-system). For standalone-multi this is
+# created by `generate-runtime-secrets.sh` from the same source as
+# loopzero-minio-credentials in the build cluster. ESO replaces this in dev/prod.
+credentialsSecret:
+  name: static-assets-s3
+  accessKeyIdKey: AWS_ACCESS_KEY_ID
+  secretAccessKeyKey: AWS_SECRET_ACCESS_KEY
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources:
+  limits:
+    cpu: "500m"
+    memory: "256Mi"
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  fsGroup: 101
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]

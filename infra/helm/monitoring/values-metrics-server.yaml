@@ -1,0 +1,13 @@
+# metrics-server values used by mgmt + runtime helmfiles.
+# Pinned conservative defaults — kube-system metrics for HPA + observability.
+args:
+  - --kubelet-insecure-tls   # k3d/dev only; production overrides via env overlay
+  - --kubelet-preferred-address-types=InternalIP
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 200Mi
+  limits:
+    cpu: 200m
+    memory: 400Mi

@@ -1,0 +1,64 @@
+# Helmfile environment: standalone-multi (3-cluster local validation)
+# end-to-end-deploy-validation-plan T0.3
+#
+# Variant of `standalone` for local E2E validation with 3 separate k3d
+# clusters (loopzero-mgmt + loopzero-build + loopzero-workload). Used by:
+#   - docs/runbooks/end-to-end-deploy-validation.md
+#   - infra/tests/e2e/deploy_e2e_test.go (TestE2EDeployHappyPath)
+#
+# Differences vs `standalone`:
+#   - clusterTopology: multi-cluster (cross-cluster service DNS via
+#     host.k3d.internal:NodePort instead of in-cluster .svc.cluster.local)
+#   - In-cluster Postgres still in mgmt; build+workload connect via NodePort
+#   - cosign-signing-key Secret in build cluster (not mgmt)
+#   - cf-tunnel-credentials in workload cluster with replicas:0 (no real CF)
+
+domain: loopzero.local
+dnsZone: loopzero.local
+
+clusterRole: standalone
+clusterTopology: multi-cluster
+
+replicas:
+  api: 1
+  controller: 1
+  argocd: 1
+  gitea: 1
+  harbor: 1
+
+resources:
+  default:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+certIssuer:
+  kind: ClusterIssuer
+  name: selfsigned-issuer
+
+registries:
+  docrPrefix: "harbor.loopzero.local/loopzero-platform/"
+  harborPrefix: "harbor.loopzero.local/loopzero-platform/"
+
+loki:
+  maxGlobalStreamsPerUser: 50000
+
+policyMode: warn
+
+# In-cluster Postgres ENABLED on mgmt only. Build+workload connect via NodePort.
+inClusterPostgres: true
+
+# Underlying storage class empty → cluster default (local-path on k3d).
+underlyingStorageClass: ""
+
+# Cross-cluster URLs (loopzero-platform-topology ConfigMap). Used by loopzero-api
+# to reach Argo, Loki, etc. across clusters via the host network.
+crossCluster:
+  argoApi: "http://host.k3d.internal:30093"
+  lokiGateway: "http://host.k3d.internal:30094"
+  giteaApi: "http://host.k3d.internal:3000"
+  harborApi: "http://host.k3d.internal:30002"
+  prometheusApi: "http://host.k3d.internal:9090"

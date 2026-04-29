@@ -48,6 +48,21 @@ export interface PlatformConfig {
   };
 
   profile: 'minimal' | 'production';
+
+  // CHG-2026-04-28-LAYERED-BOOTSTRAP / T3.1 — optional `provider` flag.
+  // When set, `loopzero platform install` provisions cloud infra (clusters, DB,
+  // storage, registry) via Pulumi L1 BEFORE running Helmfile L2.
+  // When unset, assumes the cluster already exists (self-hosting profile).
+  provider?: 'digitalocean' | 'aws' | 'k3d';
+  providerConfig?: {
+    region?: string;
+    cfAccountId?: string;
+    cfZoneId?: string;
+    cfApiToken?: string;
+    digitaloceanToken?: string;
+    spacesAccessKey?: string;
+    spacesSecretKey?: string;
+  };
 }
 
 /**

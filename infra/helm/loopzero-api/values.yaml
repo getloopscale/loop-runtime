@@ -1,0 +1,59 @@
+replicaCount: 1
+
+image:
+  repository: registry.digitalocean.com/loopzero-system/loopzero-api
+  # B31 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — CI/CD publishes immutable
+  # tags (e.g., commit-sha, release-tag), not `:latest`. Pinned to the
+  # tag last published to DO Registry. In production, Pulumi (or a
+  # GitOps-managed values overlay) sets this from CI build metadata.
+  tag: REDACTED_SECRET_061
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: loopzero-registry-pull
+
+# Pulled from the wiring ConfigMap (loopzero-platform-topology) created by T1.4.
+wiringConfigMap: loopzero-platform-topology
+
+# DB credentials (from the Secret created by generate-secrets.sh)
+dbCredentialsSecret: loopzero-db-credentials
+
+service:
+  type: ClusterIP
+  # B40 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — loopzero-api binary listens on
+  # port 3001 (see api/setup_server.go default port). The chart was
+  # configured for 8080 which caused liveness probe connection refused
+  # → CrashLoopBackOff. Detected on standalone bootstrap 2026-04-28.
+  port: 3001
+
+ingress:
+  enabled: true
+  host: "api.{{ .Values.domain }}"
+  tls: true
+  certIssuer: letsencrypt-prod
+
+domain: dev.loopzero.example
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+env:
+  LOOPZERO_API_PORT: "8080"
+  LOOPZERO_LOG_LEVEL: "info"
+  LOOPZERO_CLUSTER_ISSUER: "letsencrypt-prod"
+  # B76 (end-to-end-deploy-validation-plan iter 11) — loopzero-api default
+  # was `gitea-http.gitea.svc.cluster.local` but our Gitea installs in
+  # `loopzero-system` namespace (single helmfile mgmt — no separate `gitea`
+  # namespace). Override default to the actual service location.
+  GITEA_URL: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+  # B77 (end-to-end-deploy-validation-plan iter 11) — Gitea org where
+  # tenant gitops repos live. Default "loopzero" was hardcoded in 3 setup
+  # files (setup_workflows.go, setup_stores.go, controller/setup_services.go).
+  # Now reads from this env var via cfg.GiteaOrg; in standalone-multi the
+  # org is "loopzero-platform" (created by bootstrap scripts).
+  GITEA_ORG: "loopzero-platform"

@@ -82,13 +82,19 @@ service:
 consoleService:
   type: ClusterIP
 
-# Same buckets as standalone (matched in CWTs cwt-cache-{save,restore}.yaml).
+# B75 (end-to-end-deploy-validation-plan iter 9) — buckets required by LoopZero.
+# Source of truth aligned with values.yaml. In LoopZero Cloud production,
+# `loopzero-static-assets` lives in DO Spaces (worker.mjs), but the in-cluster
+# MinIO still creates it in case `S3_USE_INCLUSTER_MINIO=true` overrides
+# the cloud delivery path (e.g., DR scenarios).
 buckets:
-  - name: loopzero-artifacts
-    policy: none
   - name: loopzero-builds
     policy: none
+  - name: loopzero-artifacts
+    policy: none
   - name: loopzero-logs
+    policy: none
+  - name: loopzero-static-assets
     policy: none
 
 # NetworkPolicy: only loopzero-system namespace can talk to MinIO.

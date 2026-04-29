@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loopzero-cloud
+  labels:
+    app: loopzero-cloud
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    loopzero.io/component: loopzero-cloud
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: loopzero-cloud
+  template:
+    metadata:
+      labels:
+        app: loopzero-cloud
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: loopzero-cloud
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+              name: http
+          env:
+            {{- range $k, $v := .Values.env }}
+            - name: {{ $k | quote }}
+              value: {{ $v | quote }}
+            {{- end }}
+            # B35/B49 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Map secret key
+            # `uri` to env var `DATABASE_URL` because the cloud binary
+            # expects DATABASE_URL but the secret stores it as `uri`.
+            {{- if .Values.dbCredentialsSecret }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dbCredentialsSecret | quote }}
+                  key: uri
+                  optional: true
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.wiringConfigMap | quote }}
+                optional: true
+            {{- if .Values.dbCredentialsSecret }}
+            - secretRef:
+                name: {{ .Values.dbCredentialsSecret | quote }}
+                optional: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              # B50 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — loopzero-cloud binary
+              # exposes `/health` (200 OK) and `/` returns 404 by design.
+              # Path was incorrectly `/`. Detected on standalone bootstrap.
+              path: /health
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loopzero-cloud
+  labels:
+    app: loopzero-cloud
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      name: http
+  selector:
+    app: loopzero-cloud

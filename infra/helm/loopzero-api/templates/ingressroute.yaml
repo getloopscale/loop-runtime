@@ -1,0 +1,47 @@
+{{- if .Values.ingress.enabled }}
+# Traefik IngressRoute exposing loopzero-api at api.{domain}.
+# Cloudflare Tunnel routes *.{domain} to Traefik (per ADR D9 — runtime cluster);
+# in mgmt cluster the same host pattern applies for self-hosting/standalone.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: loopzero-api
+  labels:
+    app: loopzero-api
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    loopzero.io/component: loopzero-api
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`api.{{ .Values.domain }}`)
+      kind: Rule
+      services:
+        - name: loopzero-api
+          port: {{ .Values.service.port }}
+  tls:
+    {{- if eq .Values.ingress.certIssuer "CFManaged" }}
+    {}  # Cloudflare-managed TLS; no cert-manager Certificate
+    {{- else }}
+    secretName: loopzero-api-tls
+    {{- end }}
+{{- if and .Values.ingress.tls (ne .Values.ingress.certIssuer "CFManaged") }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: loopzero-api-tls
+  labels:
+    app: loopzero-api
+spec:
+  secretName: loopzero-api-tls
+  duration: 2160h     # 90d
+  renewBefore: 360h   # 15d
+  commonName: api.{{ .Values.domain }}
+  dnsNames:
+    - api.{{ .Values.domain }}
+  issuerRef:
+    name: {{ .Values.ingress.certIssuer | quote }}
+    kind: ClusterIssuer
+{{- end }}
+{{- end }}

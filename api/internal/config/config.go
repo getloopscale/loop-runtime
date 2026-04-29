@@ -54,6 +54,10 @@ type Config struct {
 	// Service URLs
 	GiteaURL             string
 	GiteaCrossClusterURL string
+	// B77 (end-to-end-deploy-validation-plan iter 11) — Gitea organization
+	// where tenant gitops repos live. Default "loopzero" preserves prior behavior;
+	// configurable via GITEA_ORG env var.
+	GiteaOrg             string
 	APICrossClusterURL   string
 	ArgocdURL            string
 	MinIOEndpoint             string
@@ -264,6 +268,7 @@ func Load() Config {
 		// Service URLs
 		GiteaURL:             envOr("GITEA_URL", "http://gitea-http.gitea.svc.cluster.local:3000"),
 		GiteaCrossClusterURL: envOr("GITEA_CROSS_CLUSTER_URL", ""),
+		GiteaOrg:             envOr("GITEA_ORG", "loopzero"),
 		APICrossClusterURL:   envOr("API_CROSS_CLUSTER_URL", "http://loopzero-api.loopzero-system.svc.cluster.local:3001"),
 		ArgocdURL:            envOr("ARGOCD_URL", "http://argocd-server.argocd.svc.cluster.local:80"),
 		MinIOEndpoint:             envOr("MINIO_ENDPOINT", "minio.loopzero-system.svc.cluster.local:9000"),

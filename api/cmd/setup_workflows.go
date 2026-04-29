@@ -96,7 +96,7 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 	gitopsPusher := gitops.NewGiteaGitOpsPusher(gitops.GiteaGitOpsPusherConfig{
 		BaseURL: cfg.GiteaURL,
 		Token:   cfg.GiteaToken,
-		OrgName: "loopzero",
+		OrgName: cfg.GiteaOrg, // B77: was hardcoded "loopzero"
 	})
 
 	// Cloudflare KV client for static frontend routing (Sprint 10).

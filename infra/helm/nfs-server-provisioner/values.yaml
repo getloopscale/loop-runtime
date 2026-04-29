@@ -1,0 +1,25 @@
+# nfs-server-provisioner values used by mgmt helmfile.
+# Provides RWX storage for Gitea HA (CHG-002a).
+#
+# B20 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — `persistence.storageClass` was
+# hardcoded to "do-block-storage", which is DO-specific. The standalone
+# profile (self-hosting on any K8s) does not have that StorageClass.
+# Helmfile now overrides this value per-environment from the env file
+# (`underlyingStorageClass` key in dev.yaml/prod.yaml/standalone.yaml).
+# Default empty → cluster default StorageClass (e.g., local-path on k3d).
+persistence:
+  enabled: true
+  size: 100Gi
+  storageClass: ""
+storageClass:
+  defaultClass: false
+  name: nfs
+  reclaimPolicy: Retain
+  allowVolumeExpansion: true
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi

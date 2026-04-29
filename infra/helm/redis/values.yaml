@@ -19,6 +19,17 @@
 
 architecture: standalone
 
+# B19 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Bitnami removed legacy image
+# tags from `docker.io/bitnami/*` in mid-2025 and migrated free tier to
+# `docker.io/bitnamilegacy/*`. The redis chart 19.6.4 references the
+# deleted tag `redis:7.2.5-debian-12-r4`. Until we migrate to chart 20.x
+# (Sprint 9 supply chain) or mirror to DO Registry, override the
+# repositories here. Detected by smoke-test on fresh k3d bootstrap
+# 2026-04-28 in this exact cluster — same failure would occur on a
+# fresh DOKS bootstrap, this fix is therefore production-bound.
+image:
+  repository: bitnamilegacy/redis
+
 auth:
   enabled: false  # Internal-only, no external exposure. Simplifies config.
 
@@ -43,6 +54,8 @@ master:
 
 metrics:
   enabled: true
+  image:
+    repository: bitnamilegacy/redis-exporter
   serviceMonitor:
     enabled: false  # Enable when Prometheus ServiceMonitor CRD is available
 

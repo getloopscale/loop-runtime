@@ -1,0 +1,27 @@
+{{- if .Values.clusterImagePolicy.enabled }}
+# ClusterImagePolicy — sigstore policy-controller (B16).
+# Deny-by-default mode rejects ALL pods if no matching policy. This policy
+# covers LoopZero-approved registries and admits with mode={{ .Values.clusterImagePolicy.mode }}.
+# Sprint 6: warn-mode + static.action: pass (audit-only).
+# Sprint 9: enforce-mode + cosign keyless (Fulcio).
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: {{ .Values.clusterImagePolicy.name }}
+  labels:
+    app.kubernetes.io/name: admission-policies
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    loopzero.io/component: policy-controller
+    loopzero.io/sprint: "6"
+spec:
+  mode: {{ .Values.clusterImagePolicy.mode | quote }}
+  images:
+    {{- range .Values.clusterImagePolicy.imageGlobs }}
+    - glob: {{ . | quote }}
+    {{- end }}
+  authorities:
+    - name: loopzero-static-pass
+      static:
+        action: {{ .Values.clusterImagePolicy.staticAction | quote }}
+{{- end }}

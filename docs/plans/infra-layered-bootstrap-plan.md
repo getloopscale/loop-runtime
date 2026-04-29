@@ -142,7 +142,7 @@ Metas especificas:
 
 **Rationale:** Ter dois comandos (`install` vs `provision`) cria dois caminhos de codigo, dois conjuntos de bugs, dois pontos de manutencao. O produto eh um so — a instalacao deve ser uma so. "Provisionar infra" eh um step OPCIONAL antes de "instalar a plataforma", nao um comando diferente. O customer que traz seu proprio K8s nao precisa saber que o LoopZero Cloud usa Pulumi internamente — para ele, `loopzero platform install` eh tudo.
 
-**Consequences:** `loopzero platform install -f values.yaml` (self-hosting, K8s existente). `loopzero platform install -f values.yaml --provider digitalocean` (LoopZero Cloud, provisiona DOKS+PG+Spaces primeiro). Internamente, `--provider` aciona Pulumi L1 antes do Helmfile L2. Sem `--provider`, assume que o cluster ja existe e vai direto pro Helmfile. `cli/src/installer/prerequisites.ts` eh deletado. `cli/src/installer/provision.ts` eh a unica orquestracao (com step L1 condicional).
+**Consequences:** `loopzero platform install -f values.yaml` (self-hosting, K8s existente). `loopzero platform install -f values.yaml --provider digitalocean` (LoopZero Cloud, provisiona DOKS+PG+Spaces primeiro). Internamente, `--provider` aciona Pulumi L1 antes do Helmfile L2. Sem `--provider`, assume que o cluster ja existe e vai direto pro Helmfile. `cli/src/installer/prerequisites.ts` eh deletado. `cli/src/commands/platform.ts:platformInstall()` eh a unica orquestracao (com step L1 condicional via `--provider`). _[iter 18 audit fix: implementação real ficou em `commands/platform.ts`, não em um arquivo `provision.ts` separado como originalmente planejado]_
 
 ### D10 — Loop back obrigatorio: cada problema requer protecao permanente contra recorrencia
 
@@ -547,7 +547,7 @@ Definir como os outputs do Pulumi L1 (kubeconfigs, DB connection, endpoints) sao
 ```
 infra/helmfile/scripts/create-wiring-configmap.sh — NEW: gera ConfigMap com topologia da plataforma
 infra/helmfile/mgmt.helmfile.yaml — hook pos-sync que cria ConfigMap
-cli/src/installer/provision.ts — integrar: pulumiOutput() → env vars → helmfile → wiring ConfigMap
+cli/src/commands/platform.ts — integrar: pulumiOutput() → env vars → helmfile → wiring ConfigMap (implementação ficou em platform.ts, não provision.ts separado — iter 18 audit correction)
 ```
 
 #### Deep file dependency analysis
@@ -1259,8 +1259,8 @@ Criar a estrutura de diretorio Git que o ArgoCD App of Apps consome para manter 
 infra/argocd-bootstrap/ — NEW: root directory for App of Apps
 infra/argocd-bootstrap/root-app.yaml — NEW: root Application pointing to apps/
 infra/argocd-bootstrap/apps/ — NEW: one Application manifest per Helm release
-infra/argocd-bootstrap/apps/cert-manager.yaml — NEW: example
-infra/argocd-bootstrap/apps/traefik.yaml — NEW: example
+infra/argocd-bootstrap/apps/mgmt-cert-manager.yaml — NEW: example (implementação real usa cluster-role prefix, e.g., mgmt-X / runtime-X / build-X)
+infra/argocd-bootstrap/apps/mgmt-traefik.yaml — NEW: example
 ... (um por release)
 ```
 

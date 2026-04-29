@@ -1,0 +1,10 @@
+# Overlay applied on top of values.yaml in the standalone-multi profile only.
+# end-to-end-deploy-validation-plan iter 11 — B77 fix requires a rebuilt loopzero-api
+# image (cmd/setup_*.go GITEA_ORG via cfg.GiteaOrg). Until next CI tag publish
+# includes the patch, standalone-multi uses the locally-built image pushed to
+# k3d-loopzero-registry. dev/prod profiles continue using values.yaml default
+# (DO Registry REDACTED_SECRET_061).
+image:
+  repository: k3d-loopzero-registry:5000/loopzero-api
+  tag: b77-fix
+  pullPolicy: IfNotPresent

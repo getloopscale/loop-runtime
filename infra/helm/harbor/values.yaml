@@ -205,7 +205,11 @@ harbor:
       path: /metrics
       port: 8001
     serviceMonitor:
-      enabled: true
+      # B23 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Disabled until we adopt
+      # Prometheus Operator (Sprint 9). Current monitoring stack is plain
+      # `prometheus-community/prometheus`, which doesn't ship the
+      # `monitoring.coreos.com/v1` ServiceMonitor CRD.
+      enabled: false
       additionalLabels:
         release: monitoring
 
