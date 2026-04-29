@@ -43,6 +43,7 @@ declare -a RESULTS=()
 
 PASS=0
 FAIL=0
+SKIP=0
 
 # log writes to stderr unless --json mode
 log() { [[ "$JSON_ONLY" -eq 1 ]] || echo "[preflight] $*" >&2; }
@@ -55,13 +56,20 @@ record() {
   local esc
   esc=$(printf '%s' "$evidence" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
   RESULTS+=("{\"id\":\"$id\",\"status\":\"$status\",\"evidence\":$esc}")
-  if [[ "$status" == "PASS" ]]; then
-    PASS=$((PASS+1))
-    log "[$id] PASS — $evidence"
-  else
-    FAIL=$((FAIL+1))
-    log "[$id] FAIL — $evidence"
-  fi
+  case "$status" in
+    PASS)
+      PASS=$((PASS+1))
+      log "[$id] PASS — $evidence"
+      ;;
+    SKIP)
+      SKIP=$((SKIP+1))
+      log "[$id] SKIP — $evidence"
+      ;;
+    *)
+      FAIL=$((FAIL+1))
+      log "[$id] FAIL — $evidence"
+      ;;
+  esac
 }
 
 require_bin() {
@@ -281,6 +289,88 @@ check_traefik_lb() {
 }
 
 # -----------------------------------------------------------------------------
+# T0.6 — NetworkPolicy `allow-ingress-traefik` aponta para namespace correto
+# -----------------------------------------------------------------------------
+# Detecta regression do bug CHG-2026-04-29-DOGFOOD-FB-INGRESSNS: operator gerava
+# ingress NetworkPolicy com namespaceSelector matchLabels={kubernetes.io/metadata.name:
+# loopzero-system}, mas Traefik vive em namespace `traefik`. Resultado: HTTP 502 em
+# todo deploy. Fix em código (constants.NamespaceIngress + ingressNS() helper).
+# Este check garante que regression não volta.
+check_networkpolicy_traefik_target() {
+  local id="T0.6"
+  # Requer Environment ativa em tn-e2etest. Se não, SKIP gracioso.
+  if ! kubectl --context "$WORKLOAD_CTX" get ns loopzero-tn-e2etest-production >/dev/null 2>&1; then
+    record "$id" "SKIP" "namespace loopzero-tn-e2etest-production absent (no active Environment)"
+    return
+  fi
+  local target
+  target=$(kubectl --context "$WORKLOAD_CTX" -n loopzero-tn-e2etest-production \
+    get networkpolicy allow-ingress-traefik \
+    -o jsonpath='{.spec.ingress[0].from[0].namespaceSelector.matchLabels.kubernetes\.io/metadata\.name}' 2>/dev/null || true)
+  if [[ -z "$target" ]]; then
+    record "$id" "FAIL" "NetworkPolicy allow-ingress-traefik missing or has empty namespaceSelector"
+    return
+  fi
+  if [[ "$target" != "traefik" ]]; then
+    record "$id" "FAIL" "NetworkPolicy targets ns=$target (expected: traefik) — operator regression, see CHG-2026-04-29-DOGFOOD-FB-INGRESSNS"
+    return
+  fi
+  record "$id" "PASS" "NetworkPolicy allow-ingress-traefik targets traefik (operator OK)"
+}
+
+# -----------------------------------------------------------------------------
+# T0.7 — LOOPZERO_SERVICE_AUTH descoberto e salvo
+# -----------------------------------------------------------------------------
+# Plano dogfood-real-e2e D8: admin commands NÃO podem ser SKIP. Sem service auth,
+# §14 admin tenants evict não testa. Esta função:
+#   1. Lê valor do env var LOOPZERO_SERVICE_AUTH_SECRET no deploy loopzero-api
+#   2. Salva em ~/.loopzero/local-service-auth.txt (chmod 600)
+#   3. Não loga valor em stdout (só hash truncado)
+check_service_auth() {
+  local id="T0.7"
+  local out_file="${HOME}/.loopzero/local-service-auth.txt"
+  local val
+  val=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
+    -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="LOOPZERO_SERVICE_AUTH_SECRET")]}{.value}{end}' 2>/dev/null || true)
+  if [[ -z "$val" ]]; then
+    record "$id" "FAIL" "LOOPZERO_SERVICE_AUTH_SECRET env not set on loopzero-api deploy"
+    return
+  fi
+  # Persist atomicamente (write tmp + mv).
+  mkdir -p "${HOME}/.loopzero"
+  local tmp="${out_file}.tmp.$$"
+  printf '%s' "$val" > "$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" "$out_file"
+  # Hash truncado para evidência (não vaza secret).
+  local hash
+  hash=$(printf '%s' "$val" | sha256sum | cut -c1-12)
+  record "$id" "PASS" "service auth written to ~/.loopzero/local-service-auth.txt (sha256:${hash}…)"
+}
+
+# -----------------------------------------------------------------------------
+# T0.8 — LOOPZERO_CLUSTER_ISSUER aponta para um ClusterIssuer existente
+# -----------------------------------------------------------------------------
+# Detecta regression do bug CHG-2026-04-29-DOGFOOD-FB-ISSUER: env var apontava
+# para `letsencrypt-prod` mas issuer real instalado é `loopzero-ca-issuer`.
+# Certs nunca emitidos → Traefik 502.
+check_cluster_issuer() {
+  local id="T0.8"
+  local issuer
+  issuer=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
+    -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="LOOPZERO_CLUSTER_ISSUER")]}{.value}{end}' 2>/dev/null || true)
+  if [[ -z "$issuer" ]]; then
+    record "$id" "FAIL" "LOOPZERO_CLUSTER_ISSUER env not set on loopzero-api deploy"
+    return
+  fi
+  if ! kubectl --context "$WORKLOAD_CTX" get clusterissuer "$issuer" >/dev/null 2>&1; then
+    record "$id" "FAIL" "ClusterIssuer '$issuer' not found in workload cluster — drift between env var and live state"
+    return
+  fi
+  record "$id" "PASS" "LOOPZERO_CLUSTER_ISSUER='$issuer' resolves to live ClusterIssuer"
+}
+
+# -----------------------------------------------------------------------------
 # Driver
 # -----------------------------------------------------------------------------
 require_bin kubectl
@@ -301,17 +391,20 @@ check_buildkit_secret
 check_minio_credentials
 check_deploy_env
 check_traefik_lb
+check_networkpolicy_traefik_target
+check_service_auth
+check_cluster_issuer
 
 elapsed=$(( $(date +%s) - start ))
 
 # Build JSON output
 joined=$(IFS=,; echo "${RESULTS[*]}")
-json="{\"phase\":0,\"results\":[${joined}],\"summary\":{\"pass\":$PASS,\"fail\":$FAIL,\"elapsed_sec\":$elapsed}}"
+json="{\"phase\":0,\"results\":[${joined}],\"summary\":{\"pass\":$PASS,\"fail\":$FAIL,\"skip\":$SKIP,\"elapsed_sec\":$elapsed}}"
 
 if [[ "$JSON_ONLY" -eq 1 ]]; then
   echo "$json"
 else
-  echo "[preflight] DONE — pass=$PASS fail=$FAIL elapsed=${elapsed}s" >&2
+  echo "[preflight] DONE — pass=$PASS fail=$FAIL skip=$SKIP elapsed=${elapsed}s" >&2
   echo "$json" | python3 -m json.tool
 fi
 

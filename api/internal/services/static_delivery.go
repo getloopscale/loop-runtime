@@ -32,6 +32,16 @@ import (
 //	C: record result (PENDING or FAILED)
 //	D: verify (HTTP probe to confirm CF Worker serves the content)
 //	E: finalize (ACTIVE or FAILED)
+// LocalStaticProvisioner provisions an in-cluster path for static assets when
+// CF KV/Worker is not configured (standalone-multi local dev). Implementations
+// typically generate a Traefik IngressRoute pointing at MinIO with path
+// rewrites that map `<host>/` → `<bucket>/<s3prefix>/index.html`. ADR-0019
+// option D: short-term local fallback that fails-loud (no silent-success).
+type LocalStaticProvisioner interface {
+	Provision(ctx context.Context, tenantID, projectID, appName, env, s3Prefix string) error
+	Remove(ctx context.Context, tenantID, projectID, appName, env string) error
+}
+
 type StaticDeliveryActivator struct {
 	releaseStore   db.ReleaseStore
 	envTargetStore db.EnvironmentTargetStore
@@ -39,8 +49,15 @@ type StaticDeliveryActivator struct {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
 	locker     EnvironmentLocker
-	kvClient   *cfkv.Client
-	baseDomain string
+	// kvClient writes routing entries to Cloudflare Workers KV. Nil only
+	// when CF credentials are unavailable (standalone-multi local dev).
+	kvClient *cfkv.Client
+	// localProvisioner is the local-dev fallback used when kvClient is nil.
+	// When BOTH are nil, phaseBDeliver fails-loud (ADR-0019). Production
+	// always sets kvClient (Pulumi outputs); standalone-multi sets
+	// localProvisioner.
+	localProvisioner LocalStaticProvisioner
+	baseDomain       string
 }
 
 // StaticDeliveryDeps holds dependencies for StaticDeliveryActivator.
@@ -50,20 +67,22 @@ type StaticDeliveryDeps struct {
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	Locker     EnvironmentLocker
-	KVClient   *cfkv.Client
-	BaseDomain        string
+	Locker           EnvironmentLocker
+	KVClient         *cfkv.Client
+	LocalProvisioner LocalStaticProvisioner // optional, ADR-0019 local fallback
+	BaseDomain       string
 }
 
 // NewStaticDeliveryActivator creates a new StaticDeliveryActivator.
 func NewStaticDeliveryActivator(deps StaticDeliveryDeps) *StaticDeliveryActivator {
 	return &StaticDeliveryActivator{
-		releaseStore:   deps.ReleaseStore,
-		envTargetStore: deps.EnvTargetStore,
-		eventStore:     deps.EventStore,
-		locker:         deps.Locker,
-		kvClient:       deps.KVClient,
-		baseDomain:     deps.BaseDomain,
+		releaseStore:     deps.ReleaseStore,
+		envTargetStore:   deps.EnvTargetStore,
+		eventStore:       deps.EventStore,
+		locker:           deps.Locker,
+		kvClient:         deps.KVClient,
+		localProvisioner: deps.LocalProvisioner,
+		baseDomain:       deps.BaseDomain,
 	}
 }
 
@@ -84,7 +103,13 @@ func (s *StaticDeliveryActivator) Activate(ctx context.Context, build *db.Build,
 		return err
 	}
 	if deliveryFailed {
-		return fmt.Errorf("static delivery failed: KV write error")
+		// Preserve the rich phaseB error (helps users distinguish CF KV
+		// network failure, missing backend per ADR-0019, etc.). Wrapping
+		// keeps the sentinel useful while exposing the cause.
+		if deliveryErr != nil {
+			return fmt.Errorf("static delivery failed: %w", deliveryErr)
+		}
+		return fmt.Errorf("static delivery failed: phase B reported failure with no error attached")
 	}
 
 	// Phase D: verify (probe the URL via CF Worker)
@@ -165,28 +190,76 @@ func (s *StaticDeliveryActivator) phaseACreateRelease(ctx context.Context, build
 	return release, nil
 }
 
+// phaseBDeliver writes the routing entry that allows assets uploaded to S3
+// to be served. ADR-0019 option D: this path NEVER returns nil silently —
+// either kvClient (production) OR localProvisioner (standalone-multi)
+// handles every static app, or the function fails-loud.
+//
+// CHG-2026-04-29-DOGFOOD-FB-STATIC: previous implementation returned nil
+// when kvClient was nil ("local dev"), which caused release to transition
+// to ACTIVE while no routing entry existed → frontend never reachable.
+// Rule 10 violation. Now resolved: nil kvClient + nil localProvisioner →
+// hard error.
 func (s *StaticDeliveryActivator) phaseBDeliver(ctx context.Context, build *db.Build, release *db.Release, result BuildCallbackRequest) error {
-	if s.kvClient == nil {
-		slog.Warn("static delivery: CF KV client not configured, skipping KV write (local dev)")
+	// Count apps that actually need static delivery so the fail-loud
+	// check below only triggers when there is real work to do.
+	staticAppCount := 0
+	for _, app := range result.Apps {
+		if app.Rendering == "static" {
+			staticAppCount++
+		}
+	}
+	if staticAppCount == 0 {
+		// Nothing to deliver via the static path — likely the orchestrator
+		// routed a non-static build here by mistake, or the apps list is
+		// pre-Sprint-10 (no Rendering field). Either way: nothing to do
+		// is the safe answer, and the orchestrator's own checks should
+		// catch the routing error separately.
 		return nil
 	}
 
-	// Write a KV entry for each static app in this build
+	if s.kvClient == nil && s.localProvisioner == nil {
+		return fmt.Errorf("static delivery: no delivery backend configured " +
+			"(CF KV credentials missing AND no LocalProvisioner). " +
+			"Production must set CFAccountID/CFKVNamespaceID/CFAPIToken; " +
+			"standalone-multi must inject a LocalProvisioner via cmd/setup_workflows.go. " +
+			"See ADR-0019 for the design contract")
+	}
+
 	for _, app := range result.Apps {
-		subdomain := cfkv.Subdomain(build.TenantID, build.ProjectID, app.Name, build.Environment)
-		entry := cfkv.RoutingEntry{
-			BuildID:  build.ID,
-			S3Prefix: fmt.Sprintf("/%s/%s/%s/%s", build.TenantID, build.ProjectID, app.Name, build.ID),
+		if app.Rendering != "static" {
+			continue
 		}
 
-		slog.Info("static delivery: writing KV entry",
-			"subdomain", subdomain,
-			"build_id", entry.BuildID,
-			"s3_prefix", entry.S3Prefix,
-		)
+		s3Prefix := fmt.Sprintf("/%s/%s/%s/%s", build.TenantID, build.ProjectID, app.Name, build.ID)
+		subdomain := cfkv.Subdomain(build.TenantID, build.ProjectID, app.Name, build.Environment)
 
-		if err := s.kvClient.Put(ctx, subdomain, entry); err != nil {
-			return fmt.Errorf("static delivery: KV put %s: %w", subdomain, err)
+		if s.kvClient != nil {
+			entry := cfkv.RoutingEntry{
+				BuildID:  build.ID,
+				S3Prefix: s3Prefix,
+			}
+			slog.Info("static delivery: writing CF KV entry",
+				"subdomain", subdomain,
+				"build_id", entry.BuildID,
+				"s3_prefix", entry.S3Prefix,
+			)
+			if err := s.kvClient.Put(ctx, subdomain, entry); err != nil {
+				return fmt.Errorf("static delivery: CF KV put %s: %w", subdomain, err)
+			}
+			continue
+		}
+
+		// localProvisioner path (ADR-0019 option A — Traefik+MinIO).
+		slog.Info("static delivery: provisioning local IngressRoute (no CF KV)",
+			"tenant", build.TenantID,
+			"project", build.ProjectID,
+			"app", app.Name,
+			"s3_prefix", s3Prefix,
+		)
+		if err := s.localProvisioner.Provision(ctx, build.TenantID, build.ProjectID, app.Name, build.Environment, s3Prefix); err != nil {
+			return fmt.Errorf("static delivery: local provisioner failed for %s/%s/%s: %w",
+				build.TenantID, build.ProjectID, app.Name, err)
 		}
 	}
 	return nil
