@@ -177,9 +177,9 @@ func registerProtectedRoutes(
 		if cfg.ObjectUploader != nil {
 			sourceOpts = append(sourceOpts, routes.WithObjectUploader(cfg.ObjectUploader))
 		}
-		if cfg.IsProduction {
-			sourceOpts = append(sourceOpts, routes.WithProductionMode())
-		}
+		// CHG-2026-04-29-DOGFOOD iter 9 — WithProductionMode removed:
+		// upload errors are now always fatal when an object store is
+		// configured. Local must equal production (Rule 10).
 		if cfg.SourceBucket != "" {
 			sourceOpts = append(sourceOpts, routes.WithSourceBucket(cfg.SourceBucket))
 		}

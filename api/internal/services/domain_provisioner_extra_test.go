@@ -35,6 +35,7 @@ func TestDomainProvisioner_NSActive_ProvisionsDomain(t *testing.T) {
 			"tn-1-my-app-production": {
 				ID: "rel-1", BuildID: "build-1", TenantID: "tn-1",
 				ProjectID: "my-app", Environment: "production",
+				ImageDigest: strPtr(validImageDigest),
 			},
 		},
 	}
@@ -188,6 +189,7 @@ func TestDomainProvisioner_RemoveCFManaged_WithRelease_DeletesZone(t *testing.T)
 			"tn-1-app-production": {
 				ID: "rel-1", BuildID: "build-1", TenantID: "tn-1",
 				ProjectID: "app", Environment: "production",
+				ImageDigest: strPtr(validImageDigest),
 			},
 		},
 	}

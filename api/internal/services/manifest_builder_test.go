@@ -29,6 +29,14 @@ func (f *fakeCustomDomainQuerier) ListActiveByApp(_ context.Context, tenant, pro
 
 // --- Tests ---
 
+// digestFor produces a deterministic 64-hex digest for a given app name —
+// keeps tests readable while satisfying the supply-chain VAP contract.
+func digestFor(app string) string {
+	// 64 hex chars, padded with the app name's bytes so each app has a
+	// distinct digest. The 'a' filler ensures hex validity.
+	return fmt.Sprintf("%-64s", app+"deadbeef0000000000000000000000000000000000000000")[:64]
+}
+
 func TestBuildManifestApps_NoDomainStore(t *testing.T) {
 	apps, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
 		RegistryURL: "registry.example.com",
@@ -39,6 +47,7 @@ func TestBuildManifestApps_NoDomainStore(t *testing.T) {
 		Apps: []db.BuildAppSpec{
 			{Name: "api", Type: "server", Port: 3000, Rendering: "container"},
 		},
+		AppDigests:  map[string]string{"api": digestFor("api")},
 		DomainStore: nil, // no domain store
 	})
 
@@ -75,6 +84,7 @@ func TestBuildManifestApps_WithCustomDomains(t *testing.T) {
 		Apps: []db.BuildAppSpec{
 			{Name: "api", Type: "server", Port: 3000},
 		},
+		AppDigests:  map[string]string{"api": digestFor("api")},
 		DomainStore: domainStore,
 	})
 
@@ -103,6 +113,7 @@ func TestBuildManifestApps_ExcludesDomain(t *testing.T) {
 		Environment:   "production",
 		CommitSHA:     "abc123",
 		Apps:          []db.BuildAppSpec{{Name: "api", Type: "server", Port: 3000}},
+		AppDigests:    map[string]string{"api": digestFor("api")},
 		DomainStore:   domainStore,
 		ExcludeDomain: "exclude.example.com",
 	})
@@ -130,6 +141,7 @@ func TestBuildManifestApps_DomainQueryError_ReturnsFatalError(t *testing.T) {
 		Environment: "production",
 		CommitSHA:   "abc123",
 		Apps:        []db.BuildAppSpec{{Name: "api", Type: "server", Port: 3000}},
+		AppDigests:  map[string]string{"api": digestFor("api")}, // valid digest so we hit the domain query path
 		DomainStore: domainStore,
 	})
 
@@ -150,14 +162,83 @@ func TestBuildManifestApps_MultipleApps(t *testing.T) {
 			{Name: "worker", Type: "worker"},
 			{Name: "web", Type: "frontend", Rendering: "static"},
 		},
+		AppDigests: map[string]string{
+			"api":    digestFor("api"),
+			"worker": digestFor("worker"),
+			// web has no digest — frontend/static is skipped (S3+CF Worker path).
+		},
 		DomainStore: nil,
 	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(apps) != 3 {
-		t.Errorf("expected 3 apps, got %d", len(apps))
+	// web is skipped (frontend/static); api + worker render manifests.
+	if len(apps) != 2 {
+		t.Errorf("expected 2 apps (api + worker; web skipped as static frontend), got %d", len(apps))
+	}
+}
+
+// CHG-2026-04-29-DOGFOOD-FB iter 1 — static frontend apps go via S3+CF Worker,
+// not K8s manifests. They have no image digest. BuildManifestApps must skip
+// them silently (return result without that entry), NOT fail-loud.
+func TestBuildManifestApps_SkipsStaticFrontend(t *testing.T) {
+	apps, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
+		RegistryURL: "registry.example.com",
+		TenantID:    "tn-1",
+		ProjectID:   "my-app",
+		Environment: "production",
+		CommitSHA:   "abc123",
+		Apps: []db.BuildAppSpec{
+			{Name: "api", Type: "server", Port: 3001},
+			{Name: "web", Type: "frontend", Rendering: "static"},
+		},
+		// Only api has a digest — web is static, no digest expected.
+		AppDigests:  map[string]string{"api": digestFor("api")},
+		DomainStore: nil,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(apps) != 1 {
+		t.Fatalf("expected 1 manifest entry (api only, web skipped), got %d: %+v", len(apps), apps)
+	}
+	if apps[0].Name != "api" {
+		t.Errorf("expected name 'api', got %q", apps[0].Name)
+	}
+}
+
+// CHG-2026-04-29-DOGFOOD iter 8 — supply-chain VAP enforcement: a manifest
+// rendered without an image digest produces pods Forbidden by the
+// `loopzero-require-image-signature` ValidatingAdmissionPolicy. We must
+// fail-loud at manifest build time instead of letting the pipeline run
+// to admission and produce an opaque error there.
+func TestBuildManifestApps_MissingDigest_FailsLoud(t *testing.T) {
+	cases := []struct {
+		name    string
+		digests map[string]string
+	}{
+		{name: "nil digest map", digests: nil},
+		{name: "empty digest map", digests: map[string]string{}},
+		{name: "digest map missing this app", digests: map[string]string{"other": digestFor("other")}},
+		{name: "explicit empty digest", digests: map[string]string{"api": ""}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
+				RegistryURL: "registry.example.com",
+				TenantID:    "tn-1",
+				ProjectID:   "my-app",
+				Environment: "production",
+				CommitSHA:   "abc123",
+				Apps:        []db.BuildAppSpec{{Name: "api", Type: "server", Port: 3000}},
+				AppDigests:  tc.digests,
+				DomainStore: nil,
+			})
+			if err == nil {
+				t.Fatal("expected error when digest is missing — VAP would reject pods")
+			}
+		})
 	}
 }
 

@@ -27,6 +27,21 @@ const (
 
 	// NamespacePlatformSystem is the LoopZero platform system namespace.
 	NamespacePlatformSystem = "loopzero-system"
+
+	// NamespaceIngress is the namespace where Traefik runs.
+	// LoopZero's helmfile (`infra/helmfile/{mgmt,runtime}.helmfile.yaml.gotmpl`)
+	// installs Traefik in `traefik` for ALL environments (dev, prod,
+	// standalone-multi) — see lines 88 (runtime) and 135 (mgmt). The
+	// operator-generated `allow-ingress-traefik` NetworkPolicy MUST allow
+	// traffic from this namespace; otherwise Traefik can't reach tenant
+	// pods → HTTP 502 in any deploy. Discovered live during
+	// CHG-2026-04-29-DOGFOOD-FB Phase 1: api pod Running 1/1 + cert ready
+	// + endpoints valid, but Traefik logged repeated 502s and "subset not
+	// found" because the deny-all + allow-ingress-from-loopzero-system policy
+	// silently dropped traffic from the real Traefik namespace. Affects
+	// production identically — DOKS CNI may or may not enforce, but the
+	// guarantee should not depend on CNI choice.
+	NamespaceIngress = "traefik"
 )
 
 // --- Build Resource Defaults ---

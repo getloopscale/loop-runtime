@@ -42,3 +42,18 @@ env:
   # `http://localhost:4444/` (default da chart). Em dev/prod o overlay
   # de Pulumi seta para a URL pública real (ex: https://auth.<domain>).
   JWT_ISSUER: "http://localhost:4444/"
+  # CHG-2026-04-29-DOGFOOD iter 9 — k3d-loopzero-registry serve plain HTTP (no
+  # TLS/auth). BuildKit precisa do flag `insecure=true` no buildkitd.toml
+  # gerado por api/internal/argo/buildkit.go; sem isso o `buildctl` faz
+  # request HTTPS contra um servidor HTTP-only e ganha
+  # `http: server gave HTTP response to HTTPS client`. Em dev/prod este
+  # overlay não é aplicado: registry é DOCR/Harbor, sempre HTTPS.
+  REGISTRY_INSECURE: "true"
+  # CHG-2026-04-29-DOGFOOD-FB iter 1 — standalone-multi usa
+  # `selfsigned-issuer` (instalado pelo bootstrap helmfile). Sem este
+  # override, manifests vinham com `letsencrypt-prod` (default da chart),
+  # cert-manager travava em "ClusterIssuer not found", Certificate
+  # nunca emitida, Traefik retornava HTTP 502 (sem TLS secret válido).
+  # Em dev/prod este overlay não é aplicado — cluster issuer real é
+  # provisionado pelo Pulumi (DOKS + Let's Encrypt prod).
+  LOOPZERO_CLUSTER_ISSUER: "loopzero-ca-issuer"

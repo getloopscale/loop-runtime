@@ -12,17 +12,21 @@ import (
 func buildService(ri RenderInput, app AppManifestInput, port int) k8sService {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
+	resName := resourceName(ri.ProjectID, app.Name)
 
 	return k8sService{
 		APIVersion: "v1",
 		Kind:       "Service",
 		Metadata: k8sMetadata{
-			Name:      app.Name,
+			Name:      resName,
 			Namespace: ns,
 			Labels:    labels,
 		},
 		Spec: k8sServiceSpec{
-			Selector: map[string]string{"app": app.Name},
+			// Selector matches the project-scoped `app` label so pods of
+			// another project (e.g., a different `api`) are never picked
+			// up. Achado #17 fix.
+			Selector: map[string]string{"app": resName},
 			Ports: []k8sServicePort{
 				{Port: port, TargetPort: port, Protocol: "TCP"},
 			},
@@ -37,8 +41,11 @@ func buildService(ri RenderInput, app AppManifestInput, port int) k8sService {
 func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []string {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
+	resName := resourceName(ri.ProjectID, app.Name)
 	hostname := appHostname(ri.TenantID, ri.ProjectID, app.Name, ri.Environment, ri.BaseDomain)
-	tlsSecretName := fmt.Sprintf("tls-%s", app.Name)
+	// Cert + IngressRoute names use the project-scoped resource name so two
+	// projects with same app name don't share a cert secret (Achado #17).
+	tlsSecretName := fmt.Sprintf("tls-%s", resName)
 
 	cert := certManagerCertificate{
 		APIVersion: "cert-manager.io/v1",
@@ -62,7 +69,7 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 	// interceptor proxy. The interceptor holds requests while scaling from 0→1,
 	// then proxies to the real app service once the pod is ready.
 	// When scale-to-zero is NOT enabled, route directly to the app service.
-	serviceTarget := traefikRouteService{Name: app.Name, Port: port}
+	serviceTarget := traefikRouteService{Name: resName, Port: port}
 	if isScaleToZero(app.Autoscaling) {
 		serviceTarget = traefikRouteService{
 			Name:      "keda-add-ons-http-interceptor-proxy",
@@ -75,7 +82,7 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 		APIVersion: "traefik.io/v1alpha1",
 		Kind:       "IngressRoute",
 		Metadata: k8sMetadata{
-			Name:      app.Name,
+			Name:      resName,
 			Namespace: ns,
 			Labels:    labels,
 		},
@@ -128,7 +135,7 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 
 		// IngressRoute always needed — Traefik must match Host() for routing
 		// Custom domain IngressRoute also routes through interceptor for scale-to-zero
-		cdServiceTarget := traefikRouteService{Name: app.Name, Port: port}
+		cdServiceTarget := traefikRouteService{Name: resName, Port: port}
 		if isScaleToZero(app.Autoscaling) {
 			cdServiceTarget = traefikRouteService{
 				Name:      "keda-add-ons-http-interceptor-proxy",

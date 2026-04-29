@@ -117,8 +117,10 @@ func TestRenderDeployment_WithHPA(t *testing.T) {
 	if hpa.Kind != "HorizontalPodAutoscaler" {
 		t.Errorf("HPA kind: got %q, want HorizontalPodAutoscaler", hpa.Kind)
 	}
-	if hpa.Metadata.Name != "api" {
-		t.Errorf("HPA name: got %q, want api", hpa.Metadata.Name)
+	// Achado #17 fix: HPA name + scaleTargetRef are project-scoped to avoid
+	// collisions when two projects in the same tenant env share an app name.
+	if hpa.Metadata.Name != "webapp-api" {
+		t.Errorf("HPA name: got %q, want webapp-api", hpa.Metadata.Name)
 	}
 	if hpa.Metadata.Namespace != "loopzero-acme-production" {
 		t.Errorf("HPA namespace: got %q, want loopzero-acme-production", hpa.Metadata.Namespace)
@@ -135,8 +137,8 @@ func TestRenderDeployment_WithHPA(t *testing.T) {
 	if hpa.Spec.ScaleTargetRef.Kind != "Deployment" {
 		t.Errorf("HPA scaleTargetRef.kind: got %q, want Deployment", hpa.Spec.ScaleTargetRef.Kind)
 	}
-	if hpa.Spec.ScaleTargetRef.Name != "api" {
-		t.Errorf("HPA scaleTargetRef.name: got %q, want api", hpa.Spec.ScaleTargetRef.Name)
+	if hpa.Spec.ScaleTargetRef.Name != "webapp-api" {
+		t.Errorf("HPA scaleTargetRef.name: got %q, want webapp-api", hpa.Spec.ScaleTargetRef.Name)
 	}
 
 	// Verify metrics
@@ -298,8 +300,8 @@ func TestRenderDeployment_WorkerWithHPA(t *testing.T) {
 	}
 
 	hpa := parseHPA(t, result)
-	if hpa.Spec.ScaleTargetRef.Name != "processor" {
-		t.Errorf("HPA scaleTargetRef.name: got %q, want processor", hpa.Spec.ScaleTargetRef.Name)
+	if hpa.Spec.ScaleTargetRef.Name != "webapp-processor" {
+		t.Errorf("HPA scaleTargetRef.name: got %q, want webapp-processor (project-scoped)", hpa.Spec.ScaleTargetRef.Name)
 	}
 }
 
@@ -321,8 +323,14 @@ func TestRenderDeployment_HPA_HasLabels(t *testing.T) {
 
 	hpa := parseHPA(t, Render(input))
 
-	if hpa.Metadata.Labels["app"] != "api" {
-		t.Errorf("HPA label 'app': got %q, want api", hpa.Metadata.Labels["app"])
+	// Achado #17: `app` label carries the project-scoped resource name so
+	// Service.spec.selector matches only this project's pods. The raw app
+	// name remains available via `loopzero.io/app-name`.
+	if hpa.Metadata.Labels["app"] != "webapp-api" {
+		t.Errorf("HPA label 'app': got %q, want webapp-api", hpa.Metadata.Labels["app"])
+	}
+	if hpa.Metadata.Labels["loopzero.io/app-name"] != "api" {
+		t.Errorf("HPA label 'loopzero.io/app-name': got %q, want api", hpa.Metadata.Labels["loopzero.io/app-name"])
 	}
 	if hpa.Metadata.Labels["loopzero.io/tenant"] != "acme" {
 		t.Errorf("HPA label 'loopzero.io/tenant': got %q, want acme", hpa.Metadata.Labels["loopzero.io/tenant"])
@@ -446,8 +454,8 @@ func TestRenderDeployment_ScaleToZero_GeneratesScaledObject(t *testing.T) {
 	if so.Spec.MaxReplicaCount != 5 {
 		t.Errorf("ScaledObject maxReplicaCount: got %d, want 5", so.Spec.MaxReplicaCount)
 	}
-	if so.Spec.ScaleTargetRef.Name != "api" {
-		t.Errorf("ScaledObject scaleTargetRef.name: got %q, want api", so.Spec.ScaleTargetRef.Name)
+	if so.Spec.ScaleTargetRef.Name != "webapp-api" {
+		t.Errorf("ScaledObject scaleTargetRef.name: got %q, want webapp-api (project-scoped)", so.Spec.ScaleTargetRef.Name)
 	}
 }
 
@@ -482,8 +490,8 @@ func TestRenderDeployment_ScaleToZero_GeneratesHTTPScaledObject(t *testing.T) {
 	if len(hso.Spec.Hosts) == 0 || hso.Spec.Hosts[0] != expectedHost {
 		t.Errorf("HTTPScaledObject hosts: got %v, want [%s]", hso.Spec.Hosts, expectedHost)
 	}
-	if hso.Spec.ScaleTargetRef.Name != "api" {
-		t.Errorf("HTTPScaledObject scaleTargetRef.name: got %q, want api", hso.Spec.ScaleTargetRef.Name)
+	if hso.Spec.ScaleTargetRef.Name != "webapp-api" {
+		t.Errorf("HTTPScaledObject scaleTargetRef.name: got %q, want webapp-api (project-scoped)", hso.Spec.ScaleTargetRef.Name)
 	}
 	if hso.Spec.ScaleTargetRef.Port != 8080 {
 		t.Errorf("HTTPScaledObject scaleTargetRef.port: got %d, want 8080", hso.Spec.ScaleTargetRef.Port)

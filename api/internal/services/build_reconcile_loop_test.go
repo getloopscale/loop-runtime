@@ -356,6 +356,34 @@ func defaultBuild(id, status string) *db.Build {
 	}
 }
 
+// succeededStatusWithDigests builds a WorkflowStatus that mimics what the
+// Argo Workflow CR reports after a successful cosign signing step. The
+// supply-chain VAP (loopzero-require-image-signature) requires manifests to
+// reference images by digest, so reconcile tests MUST surface a digest in
+// the workflow outputs — otherwise BuildManifestApps fails-loud and
+// downstream calls (OnBuildCompleted/RetryReleaseActivation) never fire.
+func succeededStatusWithDigests(appNames ...string) *WorkflowStatus {
+	// 64 hex chars — each app gets a distinct digest by varying the
+	// leading byte. Keeps assertions deterministic without needing
+	// real cryptographic hashes.
+	const fillerHex = "deadbeefcafef00d1234567890abcdef0123456789abcdef0123456789abcdef"
+	outputs := make(map[string]map[string]string, len(appNames))
+	for i, name := range appNames {
+		// nibble 0..f for up to 16 apps in one workflow — plenty.
+		leading := fmt.Sprintf("%x", i%16)
+		hex64 := leading + fillerHex[1:] // keep total length at 64
+		outputs["sign-image-"+name] = map[string]string{
+			"digest":    "sha256:" + hex64,
+			"signature": "registry.example.com/sig/" + name + "@sha256:" + hex64,
+		}
+	}
+	return &WorkflowStatus{
+		Phase:      "Succeeded",
+		FinishedAt: time.Now().UTC().Format(time.RFC3339),
+		Outputs:    outputs,
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -370,8 +398,9 @@ func TestReconcileLoop_ProcessesActiveBuilds(t *testing.T) {
 	fakes.buildStore.apps[b1.ID] = []db.BuildAppSpec{{Name: "api", Type: "server", Port: 3000}}
 	fakes.buildStore.apps[b2.ID] = []db.BuildAppSpec{{Name: "web", Type: "server", Port: 8080}}
 
-	// Workflow returns Succeeded for both
-	fakes.workflow.statusResult = &WorkflowStatus{Phase: "Succeeded", FinishedAt: time.Now().UTC().Format(time.RFC3339)}
+	// Workflow returns Succeeded with cosign digests so the manifest
+	// builder (post CHG-2026-04-29-DOGFOOD iter 8) finds a digest per app.
+	fakes.workflow.statusResult = succeededStatusWithDigests("api", "web")
 
 	loop := fakes.buildLoop(BuildReconcileLoopConfig{})
 
@@ -404,6 +433,11 @@ func TestReconcileBuild_ReleasingState_RetriesActivation(t *testing.T) {
 	fakes.buildStore.apps[b.ID] = []db.BuildAppSpec{{Name: "api", Type: "server", Port: 3000}}
 	// No existing release found
 	fakes.orch.findReleaseResult = nil
+	// CHG-2026-04-29-DOGFOOD iter 8: retry path re-fetches workflow status
+	// to enrich attestation outputs before manifest rendering. Without a
+	// digest the manifest_builder fails-loud and orch.RetryReleaseActivation
+	// is never called.
+	fakes.workflow.statusResult = succeededStatusWithDigests("api")
 
 	loop := fakes.buildLoop(BuildReconcileLoopConfig{})
 
@@ -489,7 +523,7 @@ func TestReconcileBuild_WorkflowSucceeded_CallsOnWorkflowSucceeded(t *testing.T)
 	b := defaultBuild("bld-succeeded", string(statemachine.BuildRunning))
 	fakes.buildStore.builds[b.ID] = b
 	fakes.buildStore.apps[b.ID] = []db.BuildAppSpec{{Name: "api", Type: "server", Port: 3000}}
-	fakes.workflow.statusResult = &WorkflowStatus{Phase: "Succeeded", FinishedAt: time.Now().UTC().Format(time.RFC3339)}
+	fakes.workflow.statusResult = succeededStatusWithDigests("api")
 
 	loop := fakes.buildLoop(BuildReconcileLoopConfig{})
 
@@ -588,8 +622,9 @@ func TestOnWorkflowSucceeded_HappyPath(t *testing.T) {
 
 	loop := fakes.buildLoop(BuildReconcileLoopConfig{})
 
-	// Act
-	loop.onWorkflowSucceeded(context.Background(), b, &WorkflowStatus{Phase: "Succeeded"})
+	// Act — workflow status carries the cosign digest so manifest_builder
+	// can render `image@sha256:...` (supply-chain VAP requirement).
+	loop.onWorkflowSucceeded(context.Background(), b, succeededStatusWithDigests("api"))
 
 	// Assert: orch.OnBuildCompleted should have been called
 	fakes.orch.mu.Lock()

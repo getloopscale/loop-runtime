@@ -98,6 +98,23 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		))
 	}
 
+	// CHG-2026-04-29-DOGFOOD iter 8 — re-enrich attestation outputs from
+	// the workflow status before manifest building. The retry path was
+	// previously rendering manifests with empty digests; with the
+	// supply-chain VAP active that produces pods Forbidden at admission.
+	// Re-fetching status is cheap (Argo Workflow CR read) and idempotent.
+	if r.workflow != nil && build.WorkflowID != "" {
+		if status, sErr := r.workflow.GetStatus(ctx, "argo", build.WorkflowID); sErr == nil && status != nil {
+			enrichAppReleasesWithAttestation(buildApps, status)
+		}
+	}
+	digests := make(map[string]string, len(buildApps))
+	for _, ar := range buildApps {
+		if ar.ImageDigestSHA256 != "" {
+			digests[ar.Name] = ar.ImageDigestSHA256
+		}
+	}
+
 	// F-010: shared manifest building (retry path)
 	manifestApps, err := BuildManifestApps(ctx, BuildManifestAppsInput{
 		RegistryURL: r.cfg.RegistryURL,
@@ -106,6 +123,7 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		Environment: build.Environment,
 		CommitSHA:   build.CommitSHA,
 		Apps:        apps,
+		AppDigests:  digests,
 		DomainStore: r.domainStore,
 	})
 	if err != nil {

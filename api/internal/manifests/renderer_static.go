@@ -19,9 +19,12 @@ import "fmt"
 func renderStaticFrontendApp(ri RenderInput, app AppManifestInput) []string {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
+	resName := resourceName(ri.ProjectID, app.Name)
 	// Same hostname format as container apps — NO static. prefix (DX VETO from MEET-011)
 	hostname := appHostname(ri.TenantID, ri.ProjectID, app.Name, ri.Environment, ri.BaseDomain)
-	tlsSecretName := fmt.Sprintf("tls-%s", app.Name)
+	// Achado #17: project-scoped name avoids collision when two projects in
+	// the same tenant env share an app name (e.g., both have a `web`).
+	tlsSecretName := fmt.Sprintf("tls-%s", resName)
 
 	// S3 path prefix: /{tenant}/{project}/{app}/{build-id}
 	s3PathPrefix := app.S3Prefix
@@ -57,7 +60,7 @@ func renderStaticFrontendApp(ri RenderInput, app AppManifestInput) []string {
 		APIVersion: "traefik.io/v1alpha1",
 		Kind:       "Middleware",
 		Metadata: k8sMetadata{
-			Name:      fmt.Sprintf("static-prefix-%s", app.Name),
+			Name:      fmt.Sprintf("static-prefix-%s", resName),
 			Namespace: ns,
 			Labels:    labels,
 		},
@@ -73,7 +76,7 @@ func renderStaticFrontendApp(ri RenderInput, app AppManifestInput) []string {
 		APIVersion: "traefik.io/v1alpha1",
 		Kind:       "IngressRoute",
 		Metadata: k8sMetadata{
-			Name:      app.Name,
+			Name:      resName,
 			Namespace: ns,
 			Labels:    labels,
 			Annotations: map[string]string{
@@ -90,7 +93,7 @@ func renderStaticFrontendApp(ri RenderInput, app AppManifestInput) []string {
 					Kind:  "Rule",
 					Middlewares: []traefikRouteMiddleware{
 						{
-							Name:      fmt.Sprintf("static-prefix-%s", app.Name),
+							Name:      fmt.Sprintf("static-prefix-%s", resName),
 							Namespace: ns,
 						},
 					},

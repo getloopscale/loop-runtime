@@ -254,6 +254,36 @@ func Labels(tenant, project, env string) map[string]string {
 // ARCH-001 fix: This was duplicated in 4 independent sites (buildkit.go,
 // build_plan.go, build_reconcile_loop.go x2). A format change in one site
 // would cause image mismatch → RELEASING deadlock. Now there is ONE function.
+//
+// **Supply-chain note (CHG-2026-04-29-DOGFOOD iter 8)**: callers that
+// render Pod manifests MUST prefer `ImageDigestRef` when the build pipeline
+// emitted a sha256 digest. The `loopzero-require-image-signature` VAP rejects
+// any container image reference using a mutable tag — using ImageTag here
+// is correct only for: (a) build-time pull/push (BuildKit), (b) registry
+// path debugging, (c) fallback when digest is not available. For deploy
+// manifests, see ImageDigestRef.
 func ImageTag(registry, tenant, project, app, commitSHA string) string {
 	return fmt.Sprintf("%s/%s/%s-%s:%s", registry, tenant, project, app, commitSHA)
+}
+
+// ImageDigestRef returns the container image reference pinned to a
+// cryptographic digest. Format: "{registry}/{tenant}/{project}-{app}@sha256:..."
+//
+// This is the form REQUIRED by the supply-chain VAP `loopzero-require-image-signature`
+// (admission denies mutable tag references in tenant namespaces). The build
+// pipeline captures the digest in cosign's "digest" output parameter (see
+// api/internal/services/build_reconcile_complete.go::enrichAppReleasesWithAttestation);
+// `digest` may arrive bare ("8f0a...") or already prefixed ("sha256:8f0a...");
+// this function normalizes to the prefixed form expected by container runtimes.
+func ImageDigestRef(registry, tenant, project, app, digest string) string {
+	if digest == "" {
+		// Caller error: empty digest. Return tag-style fallback so the
+		// resulting reference is at least syntactically valid; admission
+		// will reject it (which is the correct fail-loud behavior).
+		return fmt.Sprintf("%s/%s/%s-%s@sha256:", registry, tenant, project, app)
+	}
+	if !strings.HasPrefix(digest, "sha256:") {
+		digest = "sha256:" + digest
+	}
+	return fmt.Sprintf("%s/%s/%s-%s@%s", registry, tenant, project, app, digest)
 }

@@ -25,9 +25,6 @@ func TestNewSourceHandler_DefaultBucket(t *testing.T) {
 	if h.sourceBucket != "loopzero-builds" {
 		t.Errorf("expected default bucket 'loopzero-builds', got %q", h.sourceBucket)
 	}
-	if h.isProduction {
-		t.Error("expected isProduction=false by default")
-	}
 	if h.objStore != nil {
 		t.Error("expected nil objStore by default")
 	}
@@ -60,13 +57,6 @@ func TestWithObjectUploader_SetsStore(t *testing.T) {
 	h := NewSourceHandler(nil, WithObjectUploader(uploader))
 	if h.objStore == nil {
 		t.Error("expected non-nil objStore")
-	}
-}
-
-func TestWithProductionMode_SetsFlag(t *testing.T) {
-	h := NewSourceHandler(nil, WithProductionMode())
-	if !h.isProduction {
-		t.Error("expected isProduction=true")
 	}
 }
 

@@ -6,6 +6,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -148,8 +149,13 @@ func (f *fakeLockerStatic) WithLock(_ context.Context, _, _, _ string, fn func(t
 
 // --- Tests ---
 
-func TestStaticDeliveryActivator_NilKVClient_SkipsKVWrite(t *testing.T) {
-	// When kvClient is nil (local dev), phaseBDeliver should skip KV write without error.
+// TestStaticDeliveryActivator_NilKVClient_NoStaticApps_NoError verifies the
+// orchestrator-routing safety net introduced by ADR-0019: a release that
+// contains no `Rendering: static` apps must NOT trip the fail-loud branch
+// when both backends are nil. The legacy test name kept the
+// "NilKVClient_SkipsKVWrite" reading because the old apps fixture has no
+// static rendering — same input, more honest invariant.
+func TestStaticDeliveryActivator_NilKVClient_NoStaticApps_NoError(t *testing.T) {
 	rs := newFakeReleaseStoreStatic()
 	es := &fakeEventStoreStatic{}
 	ets := newFakeEnvTargetStoreStatic()
@@ -381,4 +387,170 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// CHG-2026-04-29-DOGFOOD-FB-STATIC / ADR-0019:
+// fakeLocalProvisioner exercises the LocalProvisioner branch of
+// phaseBDeliver — the standalone-multi fallback when CF KV is not
+// configured. Records every Provision call so we can assert on
+// the (tenant, project, app, env, s3Prefix) tuple that was built.
+type fakeLocalProvisioner struct {
+	calls []provisionCall
+	err   error
+}
+
+type provisionCall struct {
+	TenantID, ProjectID, AppName, Env, S3Prefix string
+}
+
+func (f *fakeLocalProvisioner) Provision(_ context.Context, tenantID, projectID, appName, env, s3Prefix string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.calls = append(f.calls, provisionCall{tenantID, projectID, appName, env, s3Prefix})
+	return nil
+}
+
+func (f *fakeLocalProvisioner) Remove(_ context.Context, _, _, _, _ string) error {
+	return nil
+}
+
+// TestStaticDelivery_FailsLoud_WhenNoBackendForStaticApps verifies the core
+// guarantee of ADR-0019: when result contains a static app and BOTH
+// kvClient and localProvisioner are nil, phaseBDeliver fails-loud
+// (no silent return). Previous behavior returned nil silently — release
+// went ACTIVE while no routing existed → frontend never reachable.
+func TestStaticDelivery_FailsLoud_WhenNoBackendForStaticApps(t *testing.T) {
+	rs := newFakeReleaseStoreStatic()
+	es := &fakeEventStoreStatic{}
+	ets := newFakeEnvTargetStoreStatic()
+
+	activator := NewStaticDeliveryActivator(StaticDeliveryDeps{
+		ReleaseStore:     rs,
+		EnvTargetStore:   ets,
+		EventStore:       es,
+		Locker:           &fakeLockerStatic{},
+		KVClient:         nil,
+		LocalProvisioner: nil,
+		BaseDomain:       "loopzero.local",
+	})
+
+	build := &db.Build{
+		ID:          "build-fail-loud",
+		TenantID:    "tn-acme",
+		ProjectID:   "web",
+		Environment: "production",
+	}
+	result := BuildCallbackRequest{
+		Status: "succeeded",
+		Apps: []AppRelease{
+			{Name: "spa", Type: "frontend", Rendering: "static"},
+		},
+	}
+
+	err := activator.Activate(context.Background(), build, result)
+	if err == nil {
+		t.Fatal("expected fail-loud error when no delivery backend configured for static app")
+	}
+	// The error should mention ADR-0019 OR the missing config explicitly.
+	if !strings.Contains(err.Error(), "no delivery backend") &&
+		!strings.Contains(err.Error(), "ADR-0019") {
+		t.Errorf("expected error mentioning the missing backend, got: %v", err)
+	}
+}
+
+// TestStaticDelivery_LocalProvisioner_HandlesEachStaticApp verifies that
+// when localProvisioner is wired (and kvClient is nil), it is invoked
+// once per static app with the correct (tenant, project, app, env,
+// s3Prefix) tuple.
+func TestStaticDelivery_LocalProvisioner_HandlesEachStaticApp(t *testing.T) {
+	rs := newFakeReleaseStoreStatic()
+	es := &fakeEventStoreStatic{}
+	ets := newFakeEnvTargetStoreStatic()
+	provisioner := &fakeLocalProvisioner{}
+
+	activator := NewStaticDeliveryActivator(StaticDeliveryDeps{
+		ReleaseStore:     rs,
+		EnvTargetStore:   ets,
+		EventStore:       es,
+		Locker:           &fakeLockerStatic{},
+		KVClient:         nil,
+		LocalProvisioner: provisioner,
+		BaseDomain:       "loopzero.local",
+	})
+
+	build := &db.Build{
+		ID:          "build-local",
+		TenantID:    "tn-acme",
+		ProjectID:   "monorepo",
+		Environment: "production",
+	}
+	result := BuildCallbackRequest{
+		Status: "succeeded",
+		Apps: []AppRelease{
+			{Name: "web", Type: "frontend", Rendering: "static"},
+			{Name: "docs", Type: "frontend", Rendering: "static"},
+		},
+	}
+
+	if err := activator.Activate(context.Background(), build, result); err != nil {
+		t.Fatalf("Activate with localProvisioner should succeed, got: %v", err)
+	}
+
+	if len(provisioner.calls) != 2 {
+		t.Fatalf("expected 2 Provision calls (one per static app), got %d", len(provisioner.calls))
+	}
+	expectedPrefixes := map[string]string{
+		"web":  "/tn-acme/monorepo/web/build-local",
+		"docs": "/tn-acme/monorepo/docs/build-local",
+	}
+	for _, c := range provisioner.calls {
+		want, ok := expectedPrefixes[c.AppName]
+		if !ok {
+			t.Errorf("unexpected app provisioned: %s", c.AppName)
+			continue
+		}
+		if c.S3Prefix != want {
+			t.Errorf("app %s: S3Prefix=%q, want %q", c.AppName, c.S3Prefix, want)
+		}
+		if c.TenantID != "tn-acme" || c.ProjectID != "monorepo" || c.Env != "production" {
+			t.Errorf("app %s: identity tuple wrong: %+v", c.AppName, c)
+		}
+	}
+}
+
+// TestStaticDelivery_NoStaticApps_NoBackendNeeded verifies the orchestrator's
+// safety net: when result has zero static apps (e.g., orchestrator routed
+// a server-only build to the static path by mistake), phaseBDeliver
+// returns nil without touching either backend — no spurious fail-loud.
+func TestStaticDelivery_NoStaticApps_NoBackendNeeded(t *testing.T) {
+	rs := newFakeReleaseStoreStatic()
+	es := &fakeEventStoreStatic{}
+	ets := newFakeEnvTargetStoreStatic()
+
+	activator := NewStaticDeliveryActivator(StaticDeliveryDeps{
+		ReleaseStore:     rs,
+		EnvTargetStore:   ets,
+		EventStore:       es,
+		Locker:           &fakeLockerStatic{},
+		KVClient:         nil,
+		LocalProvisioner: nil, // no backend at all
+		BaseDomain:       "loopzero.local",
+	})
+
+	build := &db.Build{
+		ID:          "build-no-static",
+		TenantID:    "tn-acme",
+		ProjectID:   "api-only",
+		Environment: "production",
+	}
+	result := BuildCallbackRequest{
+		Status: "succeeded",
+		// Server app with no static rendering — should NOT trip fail-loud.
+		Apps: []AppRelease{{Name: "api", Type: "server"}},
+	}
+
+	if err := activator.Activate(context.Background(), build, result); err != nil {
+		t.Fatalf("expected no error when result has zero static apps, got: %v", err)
+	}
 }

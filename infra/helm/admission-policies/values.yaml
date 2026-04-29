@@ -9,6 +9,12 @@ domain: dev.loopzero.example
 registries:
   docrPrefix: "registry.digitalocean.com/loopzero-system/"
   harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
+  # CHG-2026-04-29-DOGFOOD iter 9 — opt-in list of additional registry
+  # prefixes accepted by the registry-restriction VAP. Default: empty
+  # (production only allows DOCR + Harbor). Standalone-multi overlay
+  # sets this to ["k3d-loopzero-registry:5000/<tenant>/"] so locally-built
+  # images pass admission while keeping production semantics intact.
+  additionalPrefixes: []
 
 # ClusterImagePolicy — sigstore policy-controller resource (B16).
 # WARNING: policy-controller deny-by-default rejects ALL pods if no

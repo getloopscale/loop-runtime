@@ -158,9 +158,17 @@ func (r *EnvironmentReconciler) reconcileEnvAllowEgressPolicy(ctx context.Contex
 }
 
 // ingressNS returns the namespace where the ingress controller runs.
+//
+// Default is `traefik` (constants.NamespaceIngress) because LoopZero's
+// helmfile installs Traefik there for ALL environments (dev, prod,
+// standalone-multi). The previous default `loopzero-system` was wrong and
+// caused the `allow-ingress-traefik` NetworkPolicy to block the real
+// Traefik namespace, surfacing as silent HTTP 502s downstream. The env
+// var override (`INGRESS_NAMESPACE`) remains for clusters where
+// operators install Traefik elsewhere.
 func (r *EnvironmentReconciler) ingressNS() string {
 	if r.IngressNamespace != "" {
 		return r.IngressNamespace
 	}
-	return constants.NamespacePlatformSystem
+	return constants.NamespaceIngress
 }

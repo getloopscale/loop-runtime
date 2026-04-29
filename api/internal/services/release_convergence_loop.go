@@ -247,7 +247,14 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 		if app.Rendering == "static" {
 			continue
 		}
-		deployedAppNames = append(deployedAppNames, app.Name)
+		// Achado #20 fix: K8s Deployment name is `<project>-<app>` post
+		// Achado #17 (manifests/renderer_helpers.go:resourceName). Passing
+		// `app.Name` raw causes the per-resource health filter in
+		// argocd/sync_client.go to never match — release stuck SYNC_FAILED
+		// even when the cluster is Healthy. Discovered live during
+		// journey-06 (CHG-2026-04-29-DOGFOOD-REAL-E2E).
+		deployedAppNames = append(deployedAppNames,
+			fmt.Sprintf("%s-%s", release.ProjectID, app.Name))
 	}
 
 	synced, healthy, err := r.checkSync(ctx, argoAppName, deployedAppNames)
@@ -425,7 +432,9 @@ func (r *ReleaseConvergenceLoop) healthCheckActiveReleases(ctx context.Context) 
 			if app.Rendering == "static" {
 				continue
 			}
-			deployedAppNames = append(deployedAppNames, app.Name)
+			// Achado #20: same project-scoped resource name as above.
+			deployedAppNames = append(deployedAppNames,
+				fmt.Sprintf("%s-%s", rel.ProjectID, app.Name))
 		}
 
 		_, healthy, checkErr := r.checkSync(ctx, argoAppName, deployedAppNames)
