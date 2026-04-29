@@ -82,9 +82,9 @@ journey_log "GAP: enterprise tenant in standalone-multi — cap rejection not ex
 journey_step "HTTP 200 still OK"
 wait_http_200 "$HOST" 60 "/health" || journey_fail "HTTP 200 broke after scale"
 
-journey_step "Audit log assertion (project.created emitted for $PROJECT)"
-assert_audit_entry "project.created" "$PROJECT" \
-  || journey_fail "audit log missing project.created entry for $PROJECT"
+journey_step "Audit log assertion (build.submitted emitted on deploy)"
+assert_audit_entry "build.submitted" "" \
+  || journey_fail "audit log missing build.submitted entries"
 
 journey_step "Prova de Morte"
 "$LOOPZERO_BIN" project delete "$PROJECT" --yes --json >/dev/null 2>&1 || journey_fail "project delete failed"

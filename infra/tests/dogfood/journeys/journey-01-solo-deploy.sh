@@ -77,18 +77,17 @@ body=$(curl -sS --connect-to "${host}:443:127.0.0.1:${TRAEFIK_HOST_PORT}" -k "ht
 journey_log "GET / body: $body"
 echo "$body" | grep -q '"project":"solo-server"' || journey_fail "unexpected body: $body"
 
-journey_step "Audit log assertion"
-# Audit may take a moment to flush; allow 30s of polling.
+journey_step "Audit log assertion (build.submitted emitted on deploy)"
+# `loopzero deploy` emits build.submitted (POST /builds) and source.uploaded
+# (POST /source). Strict assert post-Achado-#26 — audit list now works.
 audit_ok=0
 for _ in 1 2 3 4 5 6; do
-  if assert_audit_entry "deploy"; then
+  if assert_audit_entry "build.submitted"; then
     audit_ok=1; break
   fi
   sleep 5
 done
-if (( audit_ok == 0 )); then
-  journey_log "WARN: audit assertion failed — recording as non-fatal gap (Phase 14 follow-up)"
-fi
+(( audit_ok == 1 )) || journey_fail "audit log missing build.submitted entries"
 
 journey_step "Prova de Morte — loopzero project delete + cleanup verify"
 "$LOOPZERO_BIN" project delete "$PROJECT" --yes --json >/tmp/journey-01-delete.json 2>&1 || \

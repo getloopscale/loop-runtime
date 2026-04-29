@@ -115,18 +115,21 @@ heartbeat=$(kubectl --context "$WORKLOAD_CTX" -n "$NS" logs "$worker_pod" --tail
 [[ "$heartbeat" -ge 1 ]] || journey_fail "worker not logging heartbeats"
 journey_log "worker emitted $heartbeat heartbeat logs"
 
-journey_step "Audit log assertion (project.created action emitted)"
-assert_audit_entry "project.created" "$PROJECT" \
-  || journey_fail "audit log missing project.created entry for $PROJECT"
+journey_step "Audit log assertion (build.submitted emitted on deploy)"
+# Note: `loopzero deploy` doesn't emit project.created (project is created
+# implicitly via build submission, not explicit POST /projects). The audit
+# trail for a deploy is source.uploaded + build.submitted.
+assert_audit_entry "build.submitted" "" \
+  || journey_fail "audit log missing build.submitted entries"
 
 journey_step "Prova de Morte"
 "$LOOPZERO_BIN" project delete "$PROJECT" --yes --json >/tmp/journey-02-delete.json 2>&1 || \
   journey_fail "project delete failed"
 prove_dead "$TENANT_ID" "$PROJECT" "$ENV" 300 || journey_fail "Prova de Morte timeout"
 
-# Audit assertion AFTER delete — project.deleted entry must be emitted.
+# project.deleted IS emitted (DELETE /projects/{name}) — strict assert.
 assert_audit_entry "project.deleted" "$PROJECT" \
-  || journey_log "WARN: project.deleted entry not visible in audit page (eventually consistent)"
+  || journey_fail "audit log missing project.deleted entry for $PROJECT"
 
 journey_log "Journey 02 GREEN — multi-server (api + worker), Achado #17 validated in runtime"
 exit 0
