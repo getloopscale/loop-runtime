@@ -81,18 +81,6 @@ HOST="${TENANT_ID}-${PROJECT}-${APP}-${ENV}.loopzero.local"
 wait_http_200 "$HOST" 300 "/health" || journey_fail "v1 HTTP 200 timeout"
 wait_version "$HOST" "v1" 180 || journey_fail "v1 version not visible"
 
-# Capture release-id of v1
-release_v1=$("$LOOPZERO_BIN" build inspect "$build_v1" --json 2>/dev/null \
-  | python3 -c "import json,sys; print(json.load(sys.stdin).get('release_id',''))" 2>/dev/null || echo "")
-if [[ -z "$release_v1" ]]; then
-  # fallback: query via /api/v1/builds
-  release_v1=$(curl -sS "${LOOPZERO_URL}/api/v1/builds/${build_v1}" \
-    -H "Authorization: Bearer ${LOOPZERO_TOKEN}" 2>/dev/null \
-    | python3 -c "import json,sys; print(json.load(sys.stdin).get('release_id',''))" 2>/dev/null || echo "")
-fi
-[[ -n "$release_v1" ]] || journey_fail "could not resolve release-id for build $build_v1"
-journey_log "v1 release_id=$release_v1"
-
 journey_step "Deploy v2"
 echo "v2" > "$WORK_DIR/src/VERSION.txt"
 build_v2=$(cd "$WORK_DIR" && "$LOOPZERO_BIN" deploy --env "$ENV" --no-wait --json 2>&1 \
@@ -103,10 +91,23 @@ final2=$(wait_build_terminal "$build_v2" 1500)
 [[ "$final2" == "SUCCEEDED" ]] || journey_fail "v2 build did not succeed: $final2"
 wait_version "$HOST" "v2" 180 || journey_fail "v2 version not visible (active release should be v2)"
 
-journey_step "loopzero rollback --to release_v1"
-( cd "$WORK_DIR" && "$LOOPZERO_BIN" rollback --to "$release_v1" --env "$ENV" --yes --json ) > /tmp/journey-06-rollback.json 2>&1 || \
+journey_step "loopzero rollback (auto — no --to, falls back to previous release)"
+# Without --to, rollback automatically targets the release immediately
+# preceding the active one. Spec §3 / cli/src/commands/rollback.ts.
+( cd "$WORK_DIR" && "$LOOPZERO_BIN" rollback --env "$ENV" --yes --json ) > /tmp/journey-06-rollback.json 2>&1 || \
   journey_fail "rollback failed: $(cat /tmp/journey-06-rollback.json)"
 journey_log "rollback issued: $(cat /tmp/journey-06-rollback.json | head -c 200)"
+# Validate CLI response shape: rolled_back_release + active_release.
+# (CLI normalizes the API's `reactivated_release` to `active_release`
+# in cli/src/commands/rollback.ts:100 — UX consistency with status output.)
+rolled_back=$(python3 -c "import json,sys; print(json.load(sys.stdin).get('rolled_back_release',''))" < /tmp/journey-06-rollback.json 2>/dev/null || echo "")
+reactivated=$(python3 -c "import json,sys; print(json.load(sys.stdin).get('active_release') or json.load(sys.stdin).get('reactivated_release',''))" < /tmp/journey-06-rollback.json 2>/dev/null || echo "")
+if [[ -z "$reactivated" ]]; then
+  reactivated=$(python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('active_release','') or d.get('reactivated_release',''))" < /tmp/journey-06-rollback.json 2>/dev/null || echo "")
+fi
+[[ -n "$rolled_back" && -n "$reactivated" ]] || \
+  journey_fail "rollback response missing rolled_back_release/active_release: $(cat /tmp/journey-06-rollback.json)"
+journey_log "rolled_back=$rolled_back active=$reactivated"
 
 journey_step "Verify rollback effective — /version returns v1"
 wait_version "$HOST" "v1" 180 || journey_fail "rollback did not flip /version back to v1"
