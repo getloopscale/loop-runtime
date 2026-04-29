@@ -52,6 +52,13 @@ func (f *fakePromotionReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX, i
 	return nil, nil
 }
 
+func (f *fakePromotionReleaseStore) SetGitCommit(_ context.Context, _ db.DBTX, id, sha string) error {
+	if r, ok := f.releases[id]; ok {
+		r.GitCommit = sha
+	}
+	return nil
+}
+
 type fakePromotionEnvTargetStore struct {
 	targets map[string]*db.EnvironmentTarget
 	desired map[string]string

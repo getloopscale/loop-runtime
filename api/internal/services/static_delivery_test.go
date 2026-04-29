@@ -64,6 +64,10 @@ func (f *fakeReleaseStoreStatic) GetByIDTx(_ context.Context, _ db.DBTX, id stri
 	return f.releases[id], nil
 }
 
+func (f *fakeReleaseStoreStatic) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
+
 func (f *fakeReleaseStoreStatic) GetPreviousRelease(_ context.Context, _, _, _ string) (*db.Release, error) {
 	return nil, nil
 }

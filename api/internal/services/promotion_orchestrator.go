@@ -7,6 +7,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
+
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
@@ -18,6 +21,10 @@ type PromotionReleaseStore interface {
 	GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*db.Release, error)
 	Create(ctx context.Context, tx db.DBTX, release *db.Release) error
 	UpdateStatus(ctx context.Context, tx db.DBTX, id string, event string) (*db.Release, error)
+	// SetGitCommit persists the gitops commit SHA so the SyncCallbackActivator
+	// can match a sync notification to this release. Without it, the activator
+	// drops the callback (revision guard).
+	SetGitCommit(ctx context.Context, tx db.DBTX, id string, commitSHA string) error
 }
 
 // PromotionEnvTargetStore abstracts environment target operations for promotion (DIP).
@@ -159,12 +166,22 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 		return nil, err
 	}
 
+	// Rewrite environment-bound fields (namespace, hostnames, env labels) so
+	// the manifests target ToEnv instead of FromEnv. Without this, ArgoCD
+	// would create resources in the FromEnv namespace and the ToEnv App
+	// would adopt-or-shadow the FromEnv workload — breaking traffic isolation
+	// and producing wrong-host IngressRoutes.
+	rewritten, rewriteErr := rewriteManifestsForEnv(string(manifests), req.TenantID, req.FromEnv, req.ToEnv, o.deps.BaseDomain)
+	if rewriteErr != nil {
+		return nil, fmt.Errorf("promote: rewrite manifests for %s: %w", req.ToEnv, rewriteErr)
+	}
+
 	// Push manifests to target environment path in gitops
 	commitSHA, err := o.deps.GitPusher.Push(ctx, GitOpsPushOpts{
 		TenantID:      req.TenantID,
 		ProjectID:     req.ProjectID,
 		Environment:   req.ToEnv,
-		Manifests:     string(manifests),
+		Manifests:     rewritten,
 		BuildID:       sourceRelease.BuildID,
 		ReleaseID:     newRelease.ID,
 		CorrelationID: req.CorrelationID,
@@ -178,6 +195,27 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 		"new_release", newRelease.ID,
 		"commit_sha", commitSHA,
 	)
+
+	// Persist the gitops commit and transition the release READY → PENDING.
+	// Without this transition the convergence loop never activates the new
+	// release (it scans only PENDING rows), so promote completes successfully
+	// at the K8s level but the DB pointer never moves and downstream commands
+	// (rollback, status, the next promote) see no ACTIVE row in the target.
+	// Mirrors container_delivery.go phaseACreateRelease post-Push behavior.
+	transitionErr := o.deps.Locker.WithLock(ctx, req.TenantID, req.ProjectID, req.ToEnv, func(tx db.DBTX) error {
+		if commitSHA != "" {
+			if err := o.deps.Releases.SetGitCommit(ctx, tx, newRelease.ID, commitSHA); err != nil {
+				return fmt.Errorf("set git commit: %w", err)
+			}
+		}
+		if _, err := o.deps.Releases.UpdateStatus(ctx, tx, newRelease.ID, string("GitMirrorCompleted")); err != nil {
+			return fmt.Errorf("transition release READY → PENDING: %w", err)
+		}
+		return nil
+	})
+	if transitionErr != nil {
+		return nil, fmt.Errorf("promote: post-push transition for %s: %w", req.ToEnv, transitionErr)
+	}
 
 	// Trigger ArgoCD sync — the sync callback will activate the release
 	appName := fmt.Sprintf("%s-%s", req.TenantID, req.ToEnv)
@@ -210,4 +248,136 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 		ToEnv:         req.ToEnv,
 		URL:           url,
 	}, nil
+}
+
+// rewriteManifestsForEnv transforms the env-specific fields embedded in
+// rendered manifests so they target `toEnv` instead of `fromEnv`. The renderer
+// (api/internal/manifests) bakes the environment into:
+//   - metadata.namespace (`loopzero-{tenant}-{env}`)
+//   - hostnames in IngressRoute spec.routes[].match (`Host(...)`) and
+//     Certificate spec.dnsNames (`{tenant}-{project}-{app}-{env}.{baseDomain}`)
+//   - the `loopzero.io/environment` label on every Deployment/Service/IngressRoute.
+//
+// We parse each YAML document, walk it recursively, and apply two rules:
+//   1. any string equal to "loopzero-{tenant}-{fromEnv}" becomes
+//      "loopzero-{tenant}-{toEnv}";
+//   2. any string ending in "-{fromEnv}.{baseDomain}" has the env suffix
+//      swapped to toEnv (only when baseDomain is non-empty);
+//   3. any string equal to fromEnv when nested under a key named
+//      "loopzero.io/environment" becomes toEnv.
+//
+// Match() route lines in IngressRoute use the full hostname, which rule 2
+// covers. We deliberately do NOT do free-form regex over the YAML text so
+// we don't accidentally rewrite an unrelated field that happens to contain
+// the fromEnv substring.
+func rewriteManifestsForEnv(manifests, tenantID, fromEnv, toEnv, baseDomain string) (string, error) {
+	if fromEnv == "" || toEnv == "" || fromEnv == toEnv {
+		return manifests, nil
+	}
+	docs := splitYAMLDocs(manifests)
+	rewritten := make([]string, 0, len(docs))
+	oldNamespace := fmt.Sprintf("loopzero-%s-%s", tenantID, fromEnv)
+	newNamespace := fmt.Sprintf("loopzero-%s-%s", tenantID, toEnv)
+	oldHostSuffix := ""
+	newHostSuffix := ""
+	if baseDomain != "" {
+		oldHostSuffix = "-" + fromEnv + "." + baseDomain
+		newHostSuffix = "-" + toEnv + "." + baseDomain
+	}
+
+	for _, doc := range docs {
+		trimmed := strings.TrimSpace(doc)
+		if trimmed == "" || trimmed == "---" {
+			continue
+		}
+		var node map[string]interface{}
+		if err := sigsyaml.Unmarshal([]byte(doc), &node); err != nil || node == nil {
+			// Doc isn't a YAML map (scalar/list/comment/empty) — leave verbatim.
+			// We only rewrite K8s objects, which are always top-level maps.
+			rewritten = append(rewritten, trimmed)
+			continue
+		}
+		rewriteEnvFields(node, oldNamespace, newNamespace, oldHostSuffix, newHostSuffix, fromEnv, toEnv, false)
+		rewriteHostInMatch(node, oldHostSuffix, newHostSuffix)
+		out, err := sigsyaml.Marshal(node)
+		if err != nil {
+			return "", fmt.Errorf("marshal rewritten doc: %w", err)
+		}
+		rewritten = append(rewritten, strings.TrimSpace(string(out)))
+	}
+	return strings.Join(rewritten, "\n---\n"), nil
+}
+
+func splitYAMLDocs(manifests string) []string {
+	parts := strings.Split(manifests, "\n---\n")
+	if len(parts) == 1 {
+		// Some renderings use leading "---"; handle leading separator too.
+		parts = strings.Split(manifests, "---\n")
+	}
+	return parts
+}
+
+// rewriteEnvFields walks the YAML node and rewrites:
+//   - exact namespace strings;
+//   - hostname strings (-{fromEnv}.{baseDomain} suffix);
+//   - values nested under "loopzero.io/environment" key (set inEnvLabel=true when descending).
+func rewriteEnvFields(node interface{}, oldNs, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv string, inEnvLabel bool) {
+	switch v := node.(type) {
+	case map[string]interface{}:
+		for k, child := range v {
+			childInLabel := inEnvLabel || k == "loopzero.io/environment"
+			if s, ok := child.(string); ok {
+				v[k] = rewriteString(s, oldNs, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv, childInLabel)
+				continue
+			}
+			rewriteEnvFields(child, oldNs, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv, childInLabel)
+		}
+	case []interface{}:
+		for i, child := range v {
+			if s, ok := child.(string); ok {
+				v[i] = rewriteString(s, oldNs, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv, inEnvLabel)
+				continue
+			}
+			rewriteEnvFields(child, oldNs, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv, inEnvLabel)
+		}
+	}
+}
+
+func rewriteString(s, oldNs, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv string, inEnvLabel bool) string {
+	if s == oldNs {
+		return newNs
+	}
+	if oldHostSuffix != "" && strings.HasSuffix(s, oldHostSuffix) {
+		return strings.TrimSuffix(s, oldHostSuffix) + newHostSuffix
+	}
+	if inEnvLabel && s == fromEnv {
+		return toEnv
+	}
+	return s
+}
+
+// rewriteHostInMatch handles the IngressRoute Match expression where the
+// hostname is embedded in a Traefik rule string like:
+//   Host(`tn-foo-app-staging.loopzero.local`)
+// rewriteString cannot match this directly because the hostname is wrapped.
+// We do a substring replace ONLY on -{fromEnv}.{baseDomain} suffix occurrences
+// inside Match strings to keep the blast radius minimal.
+func rewriteHostInMatch(node interface{}, oldHostSuffix, newHostSuffix string) {
+	if oldHostSuffix == "" || oldHostSuffix == newHostSuffix {
+		return
+	}
+	switch v := node.(type) {
+	case map[string]interface{}:
+		for k, child := range v {
+			if s, ok := child.(string); ok && k == "match" {
+				v[k] = strings.ReplaceAll(s, oldHostSuffix, newHostSuffix)
+				continue
+			}
+			rewriteHostInMatch(child, oldHostSuffix, newHostSuffix)
+		}
+	case []interface{}:
+		for _, child := range v {
+			rewriteHostInMatch(child, oldHostSuffix, newHostSuffix)
+		}
+	}
 }

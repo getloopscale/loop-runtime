@@ -76,6 +76,9 @@ func (f *fakeReleaseStoreContainer) FindActiveReleases(_ context.Context, _ stri
 func (f *fakeReleaseStoreContainer) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
 	return f.releases[id], nil
 }
+func (f *fakeReleaseStoreContainer) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
 
 type fakeEnvTargetStoreContainer struct {
 	desired map[string]string

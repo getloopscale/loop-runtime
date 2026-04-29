@@ -64,6 +64,10 @@ func (f *fakeConvergenceReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id
 	return f.releases[id], nil
 }
 
+func (f *fakeConvergenceReleaseStore) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
+
 // getStatus safely reads lastStatus under lock.
 func (f *fakeConvergenceReleaseStore) getStatus(id string) string {
 	f.mu.Lock()

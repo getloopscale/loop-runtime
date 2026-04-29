@@ -239,6 +239,10 @@ func (f *fakeReleaseStoreOrch) GetByIDTx(_ context.Context, _ db.DBTX, id string
 	return f.GetByID(context.Background(), id)
 }
 
+func (f *fakeReleaseStoreOrch) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
+
 // setActiveByEnv manually sets an active release (for test setup).
 func (f *fakeReleaseStoreOrch) setActiveByEnv(tenantID, projectID, env string, r *db.Release) {
 	key := fmt.Sprintf("%s:%s:%s", tenantID, projectID, env)

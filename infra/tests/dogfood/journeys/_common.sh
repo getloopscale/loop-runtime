@@ -116,6 +116,40 @@ wait_build_terminal() {
   return 1
 }
 
+# Wait for release tied to a SPECIFIC build to reach ACTIVE in DB.
+# Critical: prior-run releases can linger as ACTIVE because `loopzero project delete`
+# does not transition them (state machine forbids ACTIVE→CANCELLED — they're only
+# superseded via NewReleaseActivated when the convergence loop activates the next
+# release). A wait that just checks "any active release" can return immediately on
+# stale rows. We must verify the build_id matches.
+# Args: project env build_id max_seconds
+wait_release_active() {
+  local project=$1 env=$2 build_id=$3 max_seconds=${4:-180}
+  local elapsed=0 status active_build
+  journey_log "waiting for release ACTIVE in DB for build=$build_id (project=$project env=$env max ${max_seconds}s)"
+  while (( elapsed < max_seconds )); do
+    read -r status active_build <<<"$(curl -sS "${LOOPZERO_URL}/api/v1/projects/${project}/status?env=${env}" \
+      -H "Authorization: Bearer ${LOOPZERO_TOKEN}" 2>/dev/null \
+      | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    ar = d.get('active_release') or {}
+    print(ar.get('status', '_'), ar.get('build_id', '_'))
+except Exception:
+    print('_ _')
+" 2>/dev/null || echo '_ _')"
+    if [[ "$status" == "ACTIVE" && "$active_build" == "$build_id" ]]; then
+      journey_log "release ACTIVE confirmed for build=$build_id (after ${elapsed}s)"
+      return 0
+    fi
+    sleep 5
+    elapsed=$(( elapsed + 5 ))
+  done
+  journey_log "timeout — release for build=$build_id not ACTIVE after ${max_seconds}s (last status='${status}', active_build='${active_build}')"
+  return 1
+}
+
 # Assert audit log has an entry matching action filter.
 # Args: action substring [project]
 assert_audit_entry() {

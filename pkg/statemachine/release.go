@@ -49,6 +49,7 @@ const (
 	ReleaseRollbackTimeout    Event = "RollbackTimeout"
 	ReleaseManualResolve      Event = "ManualResolve"
 	ReleaseReactivated        Event = "Reactivated" // Rollback reactivates a SUPERSEDED or ROLLED_BACK release
+	ReleaseProjectDeleted     Event = "ProjectDeleted" // Cascade from `loopzero project delete`. Transitions any non-terminal state to CANCELLED so future GetActiveByEnv lookups don't return zombie rows.
 )
 
 // IsReleaseTerminal returns true if the given state is a truly terminal release state.
@@ -115,6 +116,20 @@ func NewReleaseMachine() *Machine {
 			// Rollback reactivation — reverts a SUPERSEDED or ROLLED_BACK release back to ACTIVE
 			{From: ReleaseSuperseded, Event: ReleaseReactivated, To: ReleaseActive},
 			{From: ReleaseRolledBack, Event: ReleaseReactivated, To: ReleaseActive},
+
+			// Project delete cascade — every non-terminal state transitions to CANCELLED.
+			// Required so `loopzero project delete` doesn't leave zombie ACTIVE/PENDING rows
+			// that would shadow fresh deploys via GetActiveByEnv.
+			{From: ReleaseReady, Event: ReleaseProjectDeleted, To: ReleaseCancelled},
+			{From: ReleasePending, Event: ReleaseProjectDeleted, To: ReleaseCancelled},
+			{From: ReleaseActive, Event: ReleaseProjectDeleted, To: ReleaseCancelled},
+			{From: ReleaseSuperseded, Event: ReleaseProjectDeleted, To: ReleaseCancelled},
+			{From: ReleaseRolledBack, Event: ReleaseProjectDeleted, To: ReleaseCancelled},
+			{From: ReleaseRollingBack, Event: ReleaseProjectDeleted, To: ReleaseCancelled},
+			{From: ReleaseGitMirrorFailed, Event: ReleaseProjectDeleted, To: ReleaseCancelled},
+			{From: ReleaseSyncFailed, Event: ReleaseProjectDeleted, To: ReleaseCancelled},
+			{From: ReleaseRollbackFailed, Event: ReleaseProjectDeleted, To: ReleaseCancelled},
+			{From: ReleaseDriftAlert, Event: ReleaseProjectDeleted, To: ReleaseCancelled},
 		},
 		// Only CANCELLED is truly terminal. SUPERSEDED and ROLLED_BACK can be
 		// reactivated via rollback (ReleaseReactivated event).

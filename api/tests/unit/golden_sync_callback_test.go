@@ -100,6 +100,10 @@ func (f *fakeSyncReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id string
 	return nil, fmt.Errorf("release %s not found", id)
 }
 
+func (f *fakeSyncReleaseStore) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
+
 func safeTransition(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (statemachine.State, error) {
 	defer func() {
 		// recover is needed to catch panics from invalid state machine transitions;
