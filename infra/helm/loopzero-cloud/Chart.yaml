@@ -1,6 +1,6 @@
 apiVersion: v2
 name: loopzero-cloud
-description: LoopZero dashboard — Next.js web app served behind Hydra OAuth2.
+description: LoopZero Cloud — Go auth/billing service behind Hydra OAuth2.
 type: application
 version: 0.1.0
 appVersion: "1.0.0"

@@ -424,14 +424,24 @@ export function waitForPods(log: (msg: string) => void, timeoutSec = 180): boole
 export function getPlatformStatus(): PlatformStatus {
   const components: ComponentStatus[] = [];
 
-  // Check each LoopZero component
-  const loopzeroComponents = ['loopzero-api', 'loopzero-tenant-controller', 'loopzero-controller', 'loopzero-cloud', 'loopzero-dashboard'];
+  // Check each LoopZero component — try both label conventions:
+  // charts/ uses app.kubernetes.io/name, infra/helm/ uses app=<name>
+  const loopzeroComponents = ['loopzero-api', 'tenant-controller', 'loopzero-controller', 'loopzero-cloud', 'loopzero-dashboard'];
   for (const name of loopzeroComponents) {
     try {
-      const output = execSync(
-        `kubectl get deploy -n loopzero-system -l app.kubernetes.io/name=${name} -o jsonpath="{.items[0].status.readyReplicas}/{.items[0].spec.replicas}"`,
-        { encoding: 'utf-8', timeout: 5_000 },
-      ).trim();
+      // Try standard label first, then infra/helm label
+      let output = '';
+      try {
+        output = execSync(
+          `kubectl get deploy -n loopzero-system -l app.kubernetes.io/name=${name} -o jsonpath="{.items[0].status.readyReplicas}/{.items[0].spec.replicas}"`,
+          { encoding: 'utf-8', timeout: 5_000 },
+        ).trim();
+      } catch {
+        output = execSync(
+          `kubectl get deploy -n loopzero-system -l app=${name} -o jsonpath="{.items[0].status.readyReplicas}/{.items[0].spec.replicas}"`,
+          { encoding: 'utf-8', timeout: 5_000 },
+        ).trim();
+      }
       components.push({
         name,
         status: output.startsWith('0/') || !output ? 'Pending' : 'Running',
@@ -453,8 +463,12 @@ export function getPlatformStatus(): PlatformStatus {
     // ignore
   }
 
-  // Determine phase
-  const installed = releaseExists('loopzero', 'loopzero-system');
+  // Determine phase — detect both umbrella helm release AND individual helmfile releases.
+  // Helmfile installs releases individually (loopzero-api, tenant-controller, etc.), not as
+  // a single umbrella release named "loopzero". Check if any component is detected as installed.
+  const hasUmbrellaRelease = releaseExists('loopzero', 'loopzero-system');
+  const hasHelmfileComponents = components.some((c) => c.status !== 'NotInstalled');
+  const installed = hasUmbrellaRelease || hasHelmfileComponents;
   let phase: PlatformStatus['phase'] = 'NotInstalled';
   if (installed) {
     const allRunning = components.every((c) => c.status === 'Running');

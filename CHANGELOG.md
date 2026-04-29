@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Fix CRITICAL: `generate-secrets.sh` now creates ArgoCD namespace before applying `gitea-credentials-template` Secret — was silently skipped on first install causing all tenant deploys to fail with `sync=Unknown`
+- Fix CRITICAL: Health checks are now profile-aware — skip cloudflared in standalone-multi, use ClusterIP fallback in k3d, use in-cluster URLs in standalone profiles
+- Fix CRITICAL: `loopzero platform install` now calls `preflight.ts` (11 checks) before expensive operations — was implemented but never wired
+- Fix CRITICAL: Health gates now run between L1→L2 layers and after each helmfile sync — was implemented but never called
+- Fix CRITICAL: `loopzero-platform` umbrella chart NOTES.txt referenced `loopzero-tenant-controller` (not in dependencies) causing nil pointer on `helm install` — fixed to reference `loopzero-tenant-operator`
+- Fix standalone-multi incorrectly receiving NFS + Gitea HA (2 replicas, RWX PVC) — condition `ne "standalone"` was true for "standalone-multi", now uses explicit `dev`/`prod` check
+- Fix `--skip-infra` flag — now caches Pulumi outputs to `~/.loopzero/pulumi-outputs.json` and reads from cache on retry, preventing broken L2 bootstrap
+- Fix MinIO credentials Secret not created in standalone — now generates with defaults when `LOOPZERO_SPACES_KEY` is absent
+- Fix Docker bridge IP `172.18.0.3` hardcoded for MinIO in standalone-multi — now configurable via `LOOPZERO_MGMT_BRIDGE_IP` env var
+- Fix `getPlatformStatus()` not detecting helmfile-installed components — now checks both umbrella release and individual deployments with dual label convention
+- Fix missing health probes on `infra/helm/tenant-controller` and `infra/helm/loopzero-controller` deployments — added liveness/readiness on `:8081`
+- Fix missing `readOnlyRootFilesystem: true` on `infra/helm/loopzero-cloud` container security context
+- Fix Rule 3 violation: "CRDs" removed from all user-facing CLI and Helm output — replaced with product language
+
 ### Changed
 - **Operator multi-binary split** — Decomposed monolithic `loopzero-tenant-controller` (8 controllers, 1 binary) into 4 independent binaries grouped by domain: `loopzero-tenant-operator` (Tenant+Environment), `loopzero-app-operator` (Application+Exposure), `loopzero-preview-operator` (Preview), `loopzero-platform-operator` (ClusterCredential+GitRepoBinding+PlatformBootstrap). Each binary has its own Helm chart, RBAC (least-privilege ClusterRole), Dockerfile, CI build job, leader election lease, and Tilt dev manifest. Reduces blast radius (panic in one controller no longer affects others), enables independent scaling, and applies principle of least privilege to RBAC. (ADR D1-D6, docs/plans/operator-controller-extraction-plan.md)
 

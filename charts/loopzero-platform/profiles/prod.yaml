@@ -46,11 +46,11 @@ loopzero-controller:
     serviceMonitor:
       enabled: true
 
-loopzero-tenant-controller:
+loopzero-tenant-operator:
   replicaCount: 1
   secrets:
     create: false
-    existingSecret: "loopzero-tenant-controller-secrets"
+    existingSecret: "loopzero-tenant-operator-secrets"
   metrics:
     serviceMonitor:
       enabled: true
