@@ -1,0 +1,44 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+rules:
+  # --- LoopZero CRDs: loopzeroapplications + exposedroutes ---
+  - apiGroups: ["loopzero.io"]
+    resources: ["loopzeroapplications", "exposedroutes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["loopzeroapplications/status", "exposedroutes/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["loopzeroapplications/finalizers", "exposedroutes/finalizers"]
+    verbs: ["update"]
+
+  # --- Secrets: TLS cert check only, read-only ---
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+
+  # --- Services: read-only ---
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+
+  # --- Ingresses: read-only ---
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+
+  # --- Events: emit Kubernetes events for observability ---
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+
+  # --- Leader election: coordination lease for HA ---
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+{{- end }}

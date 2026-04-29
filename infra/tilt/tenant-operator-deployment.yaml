@@ -1,0 +1,213 @@
+# Tenant Operator — manages Tenant, Environment, ClusterCredential CRDs
+# Split from monolithic operator-deployment.yaml for independent scaling and faster dev loops.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tenant-operator
+  namespace: loopzero-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tenant-operator
+rules:
+  # --- LoopZero CRDs: Tenant + Environment lifecycle ---
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants", "environments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants/status", "environments/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants/finalizers", "environments/finalizers"]
+    verbs: ["update"]
+
+  # --- Namespaces: create/manage tenant namespaces ---
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+
+  # --- ResourceQuotas + LimitRanges: enforce tenant resource limits ---
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- RBAC: create Roles/RoleBindings in tenant namespaces ---
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- ServiceAccounts: create in tenant namespaces ---
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch", "create"]
+
+  # --- NetworkPolicies: tenant network isolation ---
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # --- Secrets: kubeconfig secrets for cross-cluster access ---
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # --- PriorityClasses: tenant workload priorities ---
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- Workload resources: required for RBAC escalation prevention ---
+  - apiGroups: [""]
+    resources: ["configmaps", "services"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch"]
+
+  # --- ArgoCD: create/manage Applications and AppProjects ---
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "appprojects"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # --- Pods: needed for log streaming and status checks ---
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+
+  # --- Events: emit Kubernetes events for observability ---
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+
+  # --- Leader election: coordination lease ---
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tenant-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tenant-operator
+subjects:
+  - kind: ServiceAccount
+    name: tenant-operator
+    namespace: loopzero-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tenant-operator
+  namespace: loopzero-system
+  labels:
+    app: tenant-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tenant-operator
+  template:
+    metadata:
+      labels:
+        app: tenant-operator
+    spec:
+      serviceAccountName: tenant-operator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: operator
+          image: loopzero-tenant-operator
+          args:
+            - "--leader-elect=false"
+            - "--health-probe-bind-address=:8081"
+            - "--metrics-bind-address=:8080"
+          env:
+            - name: GITEA_URL
+              value: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+            - name: GITEA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-tokens
+                  key: gitea-token
+            - name: ARGOCD_NAMESPACE
+              value: "argocd"
+            - name: BUILD_KUBECONFIG
+              value: "/etc/loopzero/build-kubeconfig"
+            - name: RUNTIME_KUBECONFIG
+              value: "/etc/loopzero/runtime-kubeconfig"
+            - name: BASE_DOMAIN
+              value: "loopzero.local"
+            - name: WORKLOAD_CLUSTER_URL
+              value: "https://172.18.0.11:6443"
+            - name: OPERATOR_INSECURE_SKIP_TLS
+              value: "true"
+            - name: INGRESS_NAMESPACE
+              value: "traefik"
+          ports:
+            - containerPort: 8081
+              name: health
+              protocol: TCP
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: build-kubeconfig
+              mountPath: /etc/loopzero/build-kubeconfig
+              subPath: build-kubeconfig
+              readOnly: true
+            - name: runtime-kubeconfig
+              mountPath: /etc/loopzero/runtime-kubeconfig
+              subPath: runtime-kubeconfig
+              readOnly: true
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: build-kubeconfig
+          configMap:
+            name: loopzero-build-kubeconfig
+            items:
+              - key: config
+                path: build-kubeconfig
+        - name: runtime-kubeconfig
+          configMap:
+            name: loopzero-runtime-kubeconfig
+            items:
+              - key: config
+                path: runtime-kubeconfig

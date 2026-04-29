@@ -50,6 +50,14 @@ func MaintenanceMode(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Internal routes (/internal/*) are called by platform components
+		// (ArgoCD callbacks, bootstrap), not by users. Blocking them during
+		// maintenance deadlocks in-flight deploys: the ArgoCD sync callback
+		// never arrives, releases stay stuck in RELEASING until timeout.
+		if strings.HasPrefix(r.URL.Path, "/internal/") {
+			next.ServeHTTP(w, r)
+			return
+		}
 
 		retryAfter := 300 // default 5 minutes — covers managed-PG failover window
 		message := "LoopZero is in maintenance mode. Mutations are temporarily disabled while infrastructure is being resized. Try again shortly."

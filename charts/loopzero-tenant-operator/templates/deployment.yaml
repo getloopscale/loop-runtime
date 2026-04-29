@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 3 }}
+  selector:
+    matchLabels:
+      {{- include "loopzero-common.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "loopzero-common.selectorLabels" . | nindent 8 }}
+        loopzero.io/component: control-plane
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "loopzero-common.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken | default true }}
+      securityContext:
+        {{- include "loopzero-common.podSecurityContext" . | nindent 8 }}
+      {{- include "loopzero-common.priorityClassName" . | nindent 6 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "loopzero-common.affinity" . | nindent 6 }}
+      {{- include "loopzero-common.topologySpreadConstraints" . | nindent 6 }}
+      containers:
+        - name: controller
+          image: {{ include "loopzero-common.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "--leader-elect={{ .Values.args.leaderElect }}"
+            - "--health-probe-bind-address={{ .Values.args.healthProbeBindAddress }}"
+            - "--metrics-bind-address={{ .Values.args.metricsBindAddress }}"
+          securityContext:
+            {{- include "loopzero-common.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+            - name: metrics
+              containerPort: 8443
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "loopzero-common.fullname" . }}
+            - secretRef:
+                {{- if .Values.secrets.existingSecret }}
+                name: {{ .Values.secrets.existingSecret }}
+                {{- else }}
+                name: {{ include "loopzero-common.fullname" . }}
+                {{- end }}
+          {{- if or .Values.kubeconfig.build.existingConfigMap .Values.kubeconfig.runtime.existingConfigMap }}
+          env:
+            {{- if .Values.kubeconfig.build.existingConfigMap }}
+            - name: BUILD_KUBECONFIG
+              value: /etc/loopzero/build-kubeconfig
+            {{- end }}
+            {{- if .Values.kubeconfig.runtime.existingConfigMap }}
+            - name: RUNTIME_KUBECONFIG
+              value: /etc/loopzero/runtime-kubeconfig
+            {{- end }}
+          {{- end }}
+          {{- include "loopzero-common.startupProbe" . | nindent 10 }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.kubeconfig.build.existingConfigMap }}
+            - name: build-kubeconfig
+              mountPath: /etc/loopzero/build-kubeconfig
+              subPath: config
+              readOnly: true
+            {{- end }}
+            {{- if .Values.kubeconfig.runtime.existingConfigMap }}
+            - name: runtime-kubeconfig
+              mountPath: /etc/loopzero/runtime-kubeconfig
+              subPath: config
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- if .Values.kubeconfig.build.existingConfigMap }}
+        - name: build-kubeconfig
+          configMap:
+            name: {{ .Values.kubeconfig.build.existingConfigMap }}
+            items:
+              - key: config
+                path: config
+        {{- end }}
+        {{- if .Values.kubeconfig.runtime.existingConfigMap }}
+        - name: runtime-kubeconfig
+          configMap:
+            name: {{ .Values.kubeconfig.runtime.existingConfigMap }}
+            items:
+              - key: config
+                path: config
+        {{- end }}

@@ -1,0 +1,278 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Group A: Tenant + Environment controllers.
+// Heaviest operator — owns all external provisioners (Gitea, ArgoCD, Harbor, MinIO)
+// and both cross-cluster clients (build + runtime).
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log/slog"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/dynamic"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	"go.opentelemetry.io/otel/trace"
+
+	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/argocd"
+	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/operators/internal/tenant"
+	"github.com/loopzero/loopzero/operators/internal/gitea"
+	"github.com/loopzero/loopzero/operators/internal/harbor"
+	miniop "github.com/loopzero/loopzero/operators/internal/minio"
+	"github.com/loopzero/loopzero/operators/internal/shared"
+	"github.com/loopzero/loopzero/operators/internal/tracing"
+	cb "github.com/loopzero/loopzero/pkg/circuitbreaker"
+	"github.com/loopzero/loopzero/pkg/logging"
+
+	_ "github.com/loopzero/loopzero/operators/internal/metrics"
+)
+
+var scheme = runtime.NewScheme()
+
+func init() {
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		panic(fmt.Sprintf("failed to register client-go scheme: %v", err))
+	}
+	if err := loopzerov1.AddToScheme(scheme); err != nil {
+		panic(fmt.Sprintf("failed to register loopzero/v1 scheme: %v", err))
+	}
+}
+
+func cbStateLoggerFunc() func(string, cb.State, cb.State) {
+	return func(name string, from, to cb.State) {
+		slog.Info("circuit breaker state change",
+			"breaker", name, "from", from.String(), "to", to.String())
+	}
+}
+
+func main() {
+	var metricsAddr string
+	var healthProbeAddr string
+	var enableLeaderElection bool
+
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&healthProbeAddr, "health-probe-bind-address", ":8081", "The address the health probe endpoint binds to.")
+	flag.BoolVar(&enableLeaderElection, "leader-elect", true,
+		"Enable leader election for controller manager.")
+	flag.Parse()
+
+	opts := zap.Options{Development: false}
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	setupLog := ctrl.Log.WithName("setup")
+
+	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loopzero-tenant-operator")
+	if tracingErr != nil {
+		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
+	}
+	defer func() { _ = tracingShutdown(context.Background()) }()
+
+	logging.RegisterTraceExtractor(func(ctx context.Context) (string, string) {
+		sc := trace.SpanContextFromContext(ctx)
+		if !sc.IsValid() {
+			return "", ""
+		}
+		return sc.TraceID().String(), sc.SpanID().String()
+	})
+
+	if shared.PprofEnabled() {
+		shared.StartPprofServer()
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		HealthProbeBindAddress: healthProbeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "loopzero-tenant-operator.loopzero.io",
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to create manager")
+		os.Exit(1)
+	}
+
+	// --- Provisioners ---
+	cbStateLogger := cbStateLoggerFunc()
+
+	giteaURL := os.Getenv("GITEA_URL")
+	if giteaURL == "" {
+		giteaURL = constants.DefaultGiteaURL
+	}
+	giteaToken := os.Getenv("GITEA_TOKEN")
+	if giteaToken == "" {
+		setupLog.Error(nil, "GITEA_TOKEN is required")
+		os.Exit(1)
+	}
+	gitProvisionerRaw := gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero")
+	giteaCB := cb.New(cb.Config{
+		Name: "gitea", OpenThreshold: 5, CloseThreshold: 1,
+		RetryInterval: 120 * time.Second,
+	}, cbStateLogger)
+	gitProvisioner := gitea.NewCircuitBreakerProvisioner(gitProvisionerRaw, giteaCB, slog.Default())
+
+	argoCDNamespace := os.Getenv("ARGOCD_NAMESPACE")
+	if argoCDNamespace == "" {
+		argoCDNamespace = constants.DefaultArgoCDNamespace
+	}
+	dynClient, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create dynamic client for ArgoCD provisioner")
+		os.Exit(1)
+	}
+	argoCDProvisionerRaw := argocd.NewRealProvisioner(argoCDNamespace, dynClient)
+	argoCDCB := cb.New(cb.Config{
+		Name: "argocd", OpenThreshold: 5, CloseThreshold: 1,
+		RetryInterval: 120 * time.Second,
+	}, cbStateLogger)
+	argoCDProvisioner := argocd.NewCircuitBreakerProvisioner(argoCDProvisionerRaw, argoCDCB, slog.Default())
+
+	// Multi-cluster clients
+	buildKubeconfig := os.Getenv("BUILD_KUBECONFIG")
+	if buildKubeconfig == "" {
+		setupLog.Error(nil, "BUILD_KUBECONFIG is required")
+		os.Exit(1)
+	}
+	buildClient, err := shared.CreateClusterClient(setupLog, buildKubeconfig, scheme, "build")
+	if err != nil {
+		setupLog.Error(err, "failed to create build cluster client")
+		os.Exit(1)
+	}
+
+	runtimeKubeconfig := os.Getenv("RUNTIME_KUBECONFIG")
+	if runtimeKubeconfig == "" {
+		setupLog.Error(nil, "RUNTIME_KUBECONFIG is required")
+		os.Exit(1)
+	}
+	runtimeClient, err := shared.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
+	if err != nil {
+		setupLog.Error(err, "failed to create runtime cluster client")
+		os.Exit(1)
+	}
+
+	// MinIO (optional)
+	var minIOProvisioner miniop.CredentialProvisioner
+	minIOEndpoint := os.Getenv("MINIO_ENDPOINT")
+	minIOAccessKey := os.Getenv("MINIO_ACCESS_KEY")
+	minIOSecretKey := os.Getenv("MINIO_SECRET_KEY")
+	if minIOEndpoint != "" && minIOAccessKey != "" && minIOSecretKey != "" {
+		rawProvisioner, err := miniop.NewAdminProvisioner(miniop.AdminConfig{
+			Endpoint:  minIOEndpoint,
+			AccessKey: minIOAccessKey,
+			SecretKey: minIOSecretKey,
+		})
+		if err != nil {
+			setupLog.Error(err, "failed to create MinIO admin provisioner")
+			os.Exit(1)
+		}
+		minIOCB := cb.New(cb.Config{
+			Name: "minio", OpenThreshold: 5, CloseThreshold: 1,
+			RetryInterval: 120 * time.Second,
+		}, cbStateLogger)
+		minIOProvisioner = miniop.NewCircuitBreakerProvisioner(rawProvisioner, minIOCB, slog.Default())
+		setupLog.Info("minio per-tenant provisioner enabled", "endpoint", minIOEndpoint)
+	}
+
+	// Harbor (optional)
+	var harborClient harbor.Provisioner
+	var harborRegistryHost string
+	harborURL := os.Getenv("HARBOR_URL")
+	if harborURL != "" {
+		harborUser := os.Getenv("HARBOR_ADMIN_USERNAME")
+		harborPass := os.Getenv("HARBOR_ADMIN_PASSWORD")
+		if harborUser == "" || harborPass == "" {
+			setupLog.Error(nil, "HARBOR_ADMIN_USERNAME and HARBOR_ADMIN_PASSWORD required when HARBOR_URL is set")
+			os.Exit(1)
+		}
+		harborReal := harbor.NewClient(harborURL, harborUser, harborPass)
+		harborCB := cb.New(cb.Config{
+			Name: "harbor", OpenThreshold: 5, CloseThreshold: 1,
+			RetryInterval: 120 * time.Second,
+		}, cbStateLogger)
+		harborClient = harbor.NewCircuitBreakerClient(harborReal, harborCB, slog.Default())
+		harborRegistryHost = os.Getenv("HARBOR_REGISTRY_HOST")
+		if harborRegistryHost == "" {
+			harborRegistryHost = strings.TrimPrefix(strings.TrimPrefix(harborURL, "https://"), "http://")
+		}
+		setupLog.Info("harbor integration enabled", "url", harborURL)
+	}
+
+	// Registry CIDRs
+	var registryCIDRs []string
+	if cidrs := os.Getenv("REGISTRY_CIDRS"); cidrs != "" {
+		for _, c := range strings.Split(cidrs, ",") {
+			if trimmed := strings.TrimSpace(c); trimmed != "" {
+				registryCIDRs = append(registryCIDRs, trimmed)
+			}
+		}
+	}
+
+	doToken := os.Getenv("DIGITALOCEAN_TOKEN")
+	registryDockerConfig := os.Getenv("REGISTRY_DOCKER_CONFIG")
+	if doToken != "" && registryDockerConfig != "" {
+		setupLog.Error(nil, "DIGITALOCEAN_TOKEN and REGISTRY_DOCKER_CONFIG are mutually exclusive")
+		os.Exit(1)
+	}
+
+	// --- Controllers ---
+	tenantMaxConcurrent := 0
+	if v := os.Getenv("LOOPZERO_TENANT_MAX_CONCURRENT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			tenantMaxConcurrent = n
+		}
+	}
+	if err := tenant.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, tenant.TenantControllerConfig{
+		GiteaURL:                giteaURL,
+		WorkloadClusterURL:      os.Getenv("WORKLOAD_CLUSTER_URL"),
+		MinIOProvisioner:        minIOProvisioner,
+		HarborClient:            harborClient,
+		HarborRegistryHost:      harborRegistryHost,
+		RegistryCIDRs:           registryCIDRs,
+		MaxConcurrentReconciles: tenantMaxConcurrent,
+		Credentials: tenant.BuildCredentials{
+			MinIOEndpoint:         minIOEndpoint,
+			SpacesAccessKeyID:     os.Getenv("SPACES_ACCESS_KEY_ID"),
+			SpacesSecretAccessKey: os.Getenv("SPACES_SECRET_ACCESS_KEY"),
+			DOToken:               doToken,
+			RegistryDockerConfig:  registryDockerConfig,
+		},
+	}); err != nil {
+		setupLog.Error(err, "unable to setup TenantController")
+		os.Exit(1)
+	}
+
+	if err := tenant.SetupEnvironmentController(mgr, runtimeClient); err != nil {
+		setupLog.Error(err, "unable to setup EnvironmentController")
+		os.Exit(1)
+	}
+
+	// --- Health ---
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+
+	setupLog.Info("starting tenant-operator", "leaderElection", enableLeaderElection)
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
+}

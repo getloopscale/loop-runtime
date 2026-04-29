@@ -402,14 +402,6 @@ func TestDeleteRobotAccount_NotFoundIsIdempotent(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`[]`))
 
-		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2.0/projects/") && strings.HasSuffix(r.URL.Path, "/robots"):
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`[]`))
-
-		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2.0/projects/") && strings.HasSuffix(r.URL.Path, "/robots"):
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`[]`))
-
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v2.0/robots":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`[]`))
@@ -513,18 +505,6 @@ func TestEnsureRobotAccount_PullOnlyPermissions(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		// CHG-002b 2026-04-28 — project-scoped robot list (preferred path).
-		case r.Method == http.MethodGet && r.URL.Path == "/api/v2.0/projects/acme/robots":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`[]`))
-
-		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2.0/projects/") && strings.HasSuffix(r.URL.Path, "/robots"):
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`[]`))
-
-		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2.0/projects/") && strings.HasSuffix(r.URL.Path, "/robots"):
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`[]`))
-
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2.0/projects/") && strings.HasSuffix(r.URL.Path, "/robots"):
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`[]`))

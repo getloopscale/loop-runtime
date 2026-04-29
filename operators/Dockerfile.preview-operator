@@ -1,0 +1,29 @@
+FROM golang:1.25.9-alpine3.22 AS builder
+WORKDIR /workspace
+
+ENV GOWORK=off
+
+COPY pkg/go.mod ./pkg/go.mod
+COPY operators/go.mod operators/go.sum ./operators/
+
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    cd operators && go mod download
+
+COPY pkg/ ./pkg/
+COPY operators/ ./operators/
+
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd operators && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-preview-operator ./cmd/preview-operator/main.go
+
+FROM gcr.io/distroless/static-debian12:nonroot
+
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
+LABEL org.opencontainers.image.title="loopzero-preview-operator"
+LABEL org.opencontainers.image.description="LoopZero PaaS Preview Environment operator"
+
+COPY --from=builder /loopzero-preview-operator /usr/local/bin/loopzero-preview-operator
+EXPOSE 8080 8081
+
+ENTRYPOINT ["loopzero-preview-operator"]
+CMD ["--leader-elect=true"]

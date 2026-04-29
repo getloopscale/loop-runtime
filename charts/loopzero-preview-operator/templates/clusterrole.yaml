@@ -1,0 +1,44 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+rules:
+  # --- LoopZero CRDs: previewenvironments ---
+  - apiGroups: ["loopzero.io"]
+    resources: ["previewenvironments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["previewenvironments/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["previewenvironments/finalizers"]
+    verbs: ["update"]
+
+  # --- Namespaces: create/manage preview namespaces ---
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+
+  # --- ResourceQuotas + LimitRanges: enforce preview resource limits ---
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- NetworkPolicies: preview environment network isolation ---
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # --- Events: emit Kubernetes events for observability ---
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+
+  # --- Leader election: coordination lease for HA ---
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+{{- end }}

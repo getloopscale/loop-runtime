@@ -23,10 +23,22 @@ dependencies:
     version: ">=0.1.0 <1.0.0"
     repository: "file://../loopzero-api"
     condition: loopzero-api.enabled
-  - name: loopzero-tenant-controller
+  - name: loopzero-tenant-operator
     version: ">=0.1.0 <1.0.0"
-    repository: "file://../loopzero-tenant-controller"
-    condition: loopzero-tenant-controller.enabled
+    repository: "file://../loopzero-tenant-operator"
+    condition: loopzero-tenant-operator.enabled
+  - name: loopzero-app-operator
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-app-operator"
+    condition: loopzero-app-operator.enabled
+  - name: loopzero-preview-operator
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-preview-operator"
+    condition: loopzero-preview-operator.enabled
+  - name: loopzero-platform-operator
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopzero-platform-operator"
+    condition: loopzero-platform-operator.enabled
   - name: loopzero-controller
     version: ">=0.1.0 <1.0.0"
     repository: "file://../loopzero-controller"
