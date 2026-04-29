@@ -25,12 +25,21 @@ service:
   # configured for 8080 which caused liveness probe connection refused
   # → CrashLoopBackOff. Detected on standalone bootstrap 2026-04-28.
   port: 3001
+  # F-01 (CHG-2026-04-29-DOGFOOD T2.1) — opcional, ativado apenas em
+  # standalone-multi via overlay. Em dev/prod o Service permanece ClusterIP
+  # (api alcançada via Cloudflare Tunnel + Traefik websecure).
+  nodePort: null
 
 ingress:
   enabled: true
   host: "api.{{ .Values.domain }}"
   tls: true
   certIssuer: letsencrypt-prod
+  # F-01 (CHG-2026-04-29-DOGFOOD T2.1) — opt-in via overlay. Quando true,
+  # template renderiza segunda IngressRoute matching localhost / 127.0.0.1
+  # / api.loopzero.local em entry point `web` (HTTP, sem TLS). Permite que o CLI
+  # default (`localhost:13001`) funcione em standalone-multi sem `tilt up`.
+  localhost: false
 
 domain: dev.loopzero.example
 

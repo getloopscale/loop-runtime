@@ -126,17 +126,25 @@
 | 101| DAY0_MISSING      | Service `loopzero-system/static-assets` (nginx-s3-gateway) ausente do install — IngressRoute static frontend retorna 404 (B82) | end-to-end iter 12 | infra/helm/static-assets/ chart NEW (nginx-s3-gateway), registrado em runtime.helmfile.yaml.gotmpl + override standalone-multi p/ MinIO bridge IP, Secret static-assets-s3 em generate-runtime-secrets.sh, NetworkPolicy allow-static-assets em loopzero-system | (a)(b) | TestB82StaticAssetsChartExists | NÃO | SIM |
 | 102| CONFIG_DRIFT      | k3d kubeconfig server `0.0.0.0:6444` resolve a localhost dentro do pod ArgoCD do mgmt — App OutOfSync com health=Missing porque "aplica" no cluster errado (B82) | end-to-end iter 12 | scoped-kubeconfig.sh detecta padrão localhost e reescreve para o IP docker bridge do container k3d-loopzero-${CLUSTER_ID}-server-0; DOKS/cloud kubeconfigs intocados | (a)(b) | TestB82ScopedKubeconfigK3dRewrite | NÃO | SIM |
 | 103| CONFIG_DRIFT      | tenant-controller usa default `kubernetes.default.svc` para AppProject/Application em standalone-multi onde workload é cluster separado (B82) | end-to-end iter 12 | values-standalone-multi.yaml define WORKLOAD_CLUSTER_URL=https://172.18.0.10:6443 (mesmo IP que scoped-kubeconfig escreve) | (a) | TestB82WorkloadClusterURLConfigurable | NÃO | SIM |
+| 104| INFRA             | localhost:13001 sem Service backed em standalone-multi (F-01) | dogfood iter 1 | loopzero-api Service tipo NodePort (port 30001) + IngressRoute condicional matching `localhost`/`127.0.0.1`/`api.loopzero.local` em entry point web. Default values mantém ClusterIP (dev/prod intactos) | (a)(b) | TestF01LoopZeroApiNodePortInStandaloneMulti / TestF01LoopZeroApiHasLocalhostIngressRoute / TestF01DefaultProfileKeepsClusterIP | NÃO | SIM |
+| 105| CLI               | unknown command/flag retornando exit 0 (F-03) | dogfood iter 1 | program.exitOverride com whitelist de 8 codes Commander.js + writeErr seta exitCode=1 | (a) | TestF03CommanderExitOverrideRegistered | NÃO | SIM |
+| 106| CLI               | init silently-success com token inválido (F-05) | dogfood iter 1 | InitDeps.preflightAuth chamado antes de escrever loopzero.yaml; 401/403 → exit 4 sem artifacts; 5xx/network → exit 5; --offline flag para escape hatch | (a) + 6 unit tests | TestF05InitPreflightAuthDep | NÃO | SIM |
+| 107| CLI               | logout sem auth diz "Logout cancelled." (F-06) | dogfood iter 1 | LogoutDeps.hasToken para distinguir "cancelled" de "no session"; emite "Already logged out." quando hasToken=false | (a) + 4 unit tests | TestF06LogoutHasTokenDep | NÃO | SIM |
+| 108| API               | /api/v1/version retornando 404 (F-07) | dogfood iter 1 | api/internal/routes/version.go (NEW) + wire em router antes de auth middleware; ldflags injetam version/commit/build_date; runtime fields populados sempre | (a) + 3 unit tests Go | TestF07VersionEndpointRegistered | NÃO | SIM |
+| 109| OPERATOR          | "pull secret ensure failed" em loop em standalone-multi (F-09) | dogfood iter 1 | environment_rbac.go switch err.IsNotFound vs default; SourceMissing condition reason em vez de log spam | (a) | TestF09EnsurePullSecretHandlesNotFound | NÃO | SIM |
+| 110| OPERATOR          | OTel exporter RPC error a cada 30s em standalone-multi (F-10) | dogfood iter 1 | overlay-only: tenant-controller values-standalone-multi.yaml seta LOOPZERO_TRACING_ENABLED=false; default values intactos; tracing.go já honra a env | (a) | TestF10TracingDisabledInStandaloneMulti | NÃO | SIM |
+| 111| API               | Argo Workflow pods em Error acumulando na ns argo (F-13) | dogfood iter 1 | workflow_builder.go adiciona PodGC.Strategy=OnPodCompletion + DeleteDelayDuration=5m; pods de step (Success E Error) deletados 5min após completar | (a) + unit test estendido | TestF13WorkflowHasPodGC | NÃO | SIM |
 
 ---
 
 ## Coverage Summary
 
-- **Total problems:** 103 (44 originais + 31 mgmt bootstrap iter 22-27 + 8 multi-cluster bootstrap iter 1-5 + 5 product reconcile iter 7-8 + 4 build pipeline iter 9 + 5 deploy completion iter 10-11 + 6 deploy E2E iter 12 (B80/B81/B82×4))
-- **NÃO recorre (eliminada):** 78
-- **PARCIAL (detecta runtime):** 1 _(B58 — argocd-repo-server OOMKilled em low-resource k3d, esperado em DOKS production com nodes maiores)_
+- **Total problems:** 111 (44 originais + 31 mgmt bootstrap iter 22-27 + 8 multi-cluster bootstrap iter 1-5 + 5 product reconcile iter 7-8 + 4 build pipeline iter 9 + 5 deploy completion iter 10-11 + 6 deploy E2E iter 12 + 8 dogfood remediation iter 1 (F-01/F-03/F-05/F-06/F-07/F-09/F-10/F-13))
+- **NÃO recorre (eliminada):** 86
+- **PARCIAL (detecta runtime):** 1 _(B58 — argocd-repo-server OOMKilled em low-resource k3d)_
 - **N/A (low severity / out of scope):** 3 (gitea_pusher wrap, git push race, DOCR QPS)
-- **SIM (sem proteção):** 2 _(B58 partial em low-resource k3d; redesign T2 para Apps L3 com `automated.selfHeal: true` requer governance meeting)_
-- **CRITÉRIO DE SAÍDA**: para os 44 problemas originais, atingido (0 SIMs). Para os 59 novos descobertos durante execução real, 56 têm proteção permanente; 1 (B58) é environmental, não defeito de código; 2 (T2 redesign + B76 follow-up) requerem governance meeting.
+- **SIM (sem proteção):** 5 _(B58 partial; T2 redesign Apps L3 governance; F-04 Tenant SoT VAP+migration próxima iteração; F-08 /metrics docs; F-12 argocd auth_failed investigação API)_
+- **CRITÉRIO DE SAÍDA**: para os 44 problemas originais, atingido (0 SIMs). 86/111 (77%) têm proteção permanente. F-04/F-08/F-12 são carry-over honesto para próxima iteração do dogfood remediation.
 
 ## Loop Back Checkpoint (per phase)
 

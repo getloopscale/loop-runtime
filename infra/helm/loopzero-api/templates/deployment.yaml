@@ -137,5 +137,11 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+      # F-01 (CHG-2026-04-29-DOGFOOD T2.1) — fixed NodePort para que k3d-mgmt
+      # serverlb forwarde host:13001 → cluster:30001 → este Service. Permite
+      # CLI alcançar API em standalone-multi sem `tilt up` ou port-forward.
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}
   selector:
     app: loopzero-api

@@ -1731,6 +1731,15 @@ tasks:
       - cd infra/pulumi && npx vitest run 2>&1 | tail -3
       - echo "✓ All CHG-2026-04-28-LAYERED-BOOTSTRAP validations PASS"
 
+  dogfood:repro:
+    desc: |
+      CHG-2026-04-29-DOGFOOD — Reproduce all 13 dogfood findings (F-01..F-13)
+      against k3d standalone-multi. Emits JSON to stdout + summary table to
+      stderr. Exit 0 when all REPRODUCED (consistent matrix), exit 1 when at
+      least one FIXED (matrix needs update).
+    cmds:
+      - bash infra/tests/dogfood/repro-findings.sh
+
   validate:k8s-versions:
     desc: |
       Validates that K8s versions in Pulumi.{stack}.yaml are still supported by
