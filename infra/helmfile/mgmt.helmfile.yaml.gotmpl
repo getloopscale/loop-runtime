@@ -1,0 +1,385 @@
+# Management Cluster — Helmfile (L2 Bootstrap)
+# CHG-2026-04-28-LAYERED-BOOTSTRAP — Phase 2 / T2.1
+#
+# Replaces `infra/pulumi/src/components/mgmt-bootstrap.ts` and friends.
+# Pulumi (L1) provisions the cluster; this Helmfile installs all platform
+# components into the management cluster with explicit `needs:` ordering.
+#
+# Invocation:
+#   helmfile -f infra/helmfile/mgmt.helmfile.yaml -e dev sync       # LoopZero Cloud (multi-cluster)
+#   helmfile -f infra/helmfile/mgmt.helmfile.yaml -e standalone sync # Self-hosting (single cluster)
+#
+# Required env vars (injected by `loopzero platform install` from Pulumi outputs):
+#   LOOPZERO_DB_HOST, LOOPZERO_DB_PORT, LOOPZERO_DB_NAME, LOOPZERO_DB_USER, LOOPZERO_DB_PASSWORD
+#   LOOPZERO_REGISTRY_ENDPOINT, LOOPZERO_REGISTRY_NAME
+#   LOOPZERO_BUCKET_NAME, LOOPZERO_BUCKET_ENDPOINT, LOOPZERO_SPACES_KEY, LOOPZERO_SPACES_SECRET
+#   LOOPZERO_CF_KV_NAMESPACE, LOOPZERO_CF_TUNNEL_TOKEN
+
+environments:
+  dev:
+    values:
+      - environments/dev.yaml
+  prod:
+    values:
+      - environments/prod.yaml
+  standalone:
+    # Self-hosting profile — same charts, single cluster. ADR D6.
+    values:
+      - environments/standalone.yaml
+  standalone-multi:
+    # end-to-end-deploy-validation-plan T0.3 — 3 separate k3d clusters in
+    # 1 host (mgmt + build + workload). Used for local E2E validation.
+    values:
+      - environments/standalone-multi.yaml
+
+---
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  atomic: false  # avoid roll-back loops on transient errors; rely on health gates instead
+  createNamespace: true
+
+# ---------------------------------------------------------------------------
+# Repository registry (single source of truth for chart sources)
+# ---------------------------------------------------------------------------
+repositories:
+  - name: jetstack
+    url: https://charts.jetstack.io
+  - name: traefik
+    url: https://traefik.github.io/charts
+  - name: argo
+    url: https://argoproj.github.io/argo-helm
+  - name: gitea-charts
+    url: https://dl.gitea.com/charts/
+  - name: minio
+    url: https://charts.min.io/
+  - name: prometheus-community
+    url: https://prometheus-community.github.io/helm-charts
+  - name: grafana
+    url: https://grafana.github.io/helm-charts
+  - name: open-telemetry
+    url: https://open-telemetry.github.io/opentelemetry-helm-charts
+  - name: ory
+    url: https://k8s.ory.sh/helm/charts
+  - name: harbor
+    url: https://helm.goharbor.io
+  - name: nfs-ganesha
+    url: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
+  - name: metrics-server
+    url: https://kubernetes-sigs.github.io/metrics-server/
+  - name: bitnami
+    url: https://charts.bitnami.com/bitnami
+  - name: chaos-mesh
+    url: https://charts.chaos-mesh.org
+
+# ---------------------------------------------------------------------------
+# Pre-sync secret generation (called by the CLI orchestrator BEFORE this
+# helmfile runs — see `cli/src/commands/platform.ts platformInstall` Step 4).
+# Helmfile-level hooks were removed because they ran on every command (list,
+# lint, diff) and required cluster connectivity even in offline validation.
+# Required Secrets:
+#   loopzero-system/{loopzero-db-credentials,gitea-admin,minio-credentials,
+#                harbor-admin,harbor-redis-credentials,loopzero-registry-pull}
+# Apply once: bash infra/helmfile/scripts/generate-secrets.sh <env> mgmt
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Releases — ordered by sync wave via `needs:`
+# ---------------------------------------------------------------------------
+releases:
+  # Wave -3: CRDs and observability foundations (no dependencies)
+  - name: cert-manager
+    namespace: cert-manager
+    chart: jetstack/cert-manager
+    version: v1.14.5
+    values:
+      - ../helm/cert-manager/values.yaml
+    set:
+      - name: installCRDs
+        value: "true"
+
+  # B26 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — metrics-server is pre-installed
+  # by k3d (k3s built-in) and DOKS (managed control plane add-on). The Helm
+  # install fails with "invalid ownership metadata" because the cluster
+  # already owns those resources (different label scheme). Enable explicitly
+  # only on bare-metal/EKS/GKE/AKS where metrics-server is NOT pre-installed.
+  # Default: skip (assume cluster provider ships it). Override per-env via
+  # `installMetricsServer: true` in the environment values file.
+  - name: metrics-server
+    namespace: kube-system
+    chart: metrics-server/metrics-server
+    version: 3.12.1
+    installed: {{ .Values | get "installMetricsServer" false }}
+    values:
+      - ../helm/monitoring/values-metrics-server.yaml
+
+  # B45 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — LoopZero CRDs (10 kinds:
+  # Tenant/Environment/LoopZeroApplication/ExposedRoute/PlatformBootstrap/
+  # GitRepositoryBinding/ClusterCredential/PreviewEnvironment/AppSecret/
+  # ReconciliationReport). Without this release, loopzero-controller and
+  # tenant-controller crash at startup with `no matches for kind ...
+  # in version loopzero.io/v1`. Detected on standalone bootstrap 2026-04-28.
+  # Wave -3: must run BEFORE controllers register watches (loopzero-controller,
+  # tenant-controller). Lifecycle-independent: chart never deletes CRDs
+  # (helm.sh/resource-policy: keep) so re-runs are idempotent.
+  - name: loopzero-crds
+    namespace: loopzero-system
+    chart: ../../charts/loopzero-crds
+    values:
+      - {}
+    # No `needs:` — CRDs are foundational, must install first.
+
+  # Wave -2: Ingress (depends on cert-manager for TLS)
+  - name: traefik
+    namespace: traefik
+    chart: traefik/traefik
+    version: 28.3.0
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - ../helm/traefik/values.yaml
+
+  - name: nfs-server-provisioner
+    namespace: nfs-system
+    chart: nfs-ganesha/nfs-server-provisioner
+    version: 1.8.0
+    values:
+      - ../helm/nfs-server-provisioner/values.yaml
+      # B20: per-environment underlying storage class. dev/prod use
+      # `do-block-storage` (DOKS default). Standalone leaves empty so
+      # the cluster default StorageClass is selected (local-path on k3d).
+      - persistence:
+          storageClass: {{ .Values | get "underlyingStorageClass" "" | quote }}
+
+  # Wave -1: Stateful core
+  # In-cluster PostgreSQL — only for standalone profile (self-hosting).
+  # LoopZero Cloud (--provider digitalocean) uses DO Managed PG via Pulumi L1.
+  # iter 20: closes gap where standalone customers had no DB unless they
+  # brought their own. Now standalone is truly self-contained.
+  - name: postgresql
+    namespace: loopzero-system
+    chart: bitnami/postgresql
+    # B21 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Bitnami removed chart 16.0.7
+    # from the public index in 2025 (only the ~6 most recent versions are
+    # kept). Bumped to 18.6.2 (latest stable). Production DO uses managed
+    # Postgres 16 — version skew is acceptable because LoopZero schema is
+    # forward-compatible (forward-only migrations, see CLAUDE.md Rule).
+    version: 18.6.2
+    installed: {{ .Values.inClusterPostgres | default false }}
+    values:
+      - ../helm/postgresql/values.yaml
+
+  - name: gitea-redis
+    namespace: loopzero-system
+    chart: bitnami/redis
+    version: 19.6.4
+    values:
+      - ../helm/redis/values.yaml
+
+  - name: gitea
+    namespace: loopzero-system
+    chart: gitea-charts/gitea
+    version: 10.6.0
+    needs:
+{{- if ne .Environment.Name "standalone" }}
+      # B28: NFS RWX storage only required for HA gitea (Cloud profiles with
+      # multi-replica). Standalone runs single-replica with local PVC (RWO),
+      # which works on any K8s including k3d (no NFS kernel module dep).
+      - nfs-system/nfs-server-provisioner
+{{- end }}
+      - loopzero-system/gitea-redis
+      # iter 16 audit: explicit needs:traefik because Gitea uses IngressRoute.
+      # Without this, helmfile may install gitea before traefik (works by luck
+      # via NFS dependency, but fragile).
+      - traefik/traefik
+{{- if .Values.inClusterPostgres }}
+      # B22: gitea backend uses Postgres. In standalone, must wait for in-cluster PG.
+      - loopzero-system/postgresql
+{{- end }}
+    values:
+      - ../helm/gitea/values.yaml
+      # B28 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Gitea HA (2 replicas + RWX
+      # NFS) is a LoopZero Cloud production posture (CHG-002a). Self-hosting
+      # standalone runs single-replica + RWO (no NFS kernel module dep,
+      # works on any K8s). HA on a single-cluster deploy adds operational
+      # complexity without real availability gain (cluster failure = both
+      # replicas die anyway).
+{{- if ne .Environment.Name "standalone" }}
+      - ../helm/gitea/values-ha.yaml
+{{- end }}
+
+  - name: minio
+    namespace: loopzero-system
+    chart: minio/minio
+    version: 5.4.0
+    values:
+      - ../helm/minio/values.yaml
+      # B25 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Distributed mode (4 pods × 4
+      # drives EC:2) is a LoopZero Cloud production posture (CHG-002a Phase D).
+      # Self-hosting (standalone) runs single-cluster on commodity hardware;
+      # forcing 16 minio pods + 200Gi raw storage is anti-Rule-10 and causes
+      # post-install hook timeouts on k3d (4 pods × 60s init > 60s helm wait).
+      # Distributed only applies to LoopZero Cloud profiles.
+{{- if ne .Environment.Name "standalone" }}
+      - ../helm/minio/values-distributed.yaml
+{{- end }}
+
+  # Wave 0: Platform services
+  - name: argocd
+    namespace: argocd
+    chart: argo/argo-cd
+    version: 7.3.11
+    needs:
+      - cert-manager/cert-manager
+      # iter 16 audit: explicit needs:traefik because ArgoCD UI uses IngressRoute.
+      - traefik/traefik
+    values:
+      - ../helm/argocd/values.yaml
+
+  - name: prometheus
+    namespace: monitoring
+    chart: prometheus-community/prometheus
+    version: 25.27.0
+    values:
+      - ../helm/monitoring/values-prometheus.yaml
+
+  - name: grafana
+    namespace: monitoring
+    chart: grafana/grafana
+    version: 8.5.2
+    needs:
+      - monitoring/prometheus
+    values:
+      - ../helm/monitoring/values-grafana.yaml
+
+  - name: tempo
+    namespace: monitoring
+    chart: grafana/tempo
+    version: 1.14.0
+    values:
+      - ../helm/tempo/values.yaml
+
+  - name: otel-collector
+    namespace: monitoring
+    chart: open-telemetry/opentelemetry-collector
+    version: 0.96.0
+    needs:
+      - monitoring/tempo
+    values:
+      - ../helm/otel/values.yaml
+
+  - name: blackbox-exporter
+    namespace: monitoring
+    chart: prometheus-community/prometheus-blackbox-exporter
+    version: 9.2.0
+    values:
+      - ../helm/blackbox-exporter/values.yaml
+
+  - name: harbor-redis
+    namespace: loopzero-system
+    chart: bitnami/redis
+    version: 19.6.4
+    values:
+      - ../helm/redis/values.yaml
+
+  - name: harbor
+    namespace: loopzero-system
+    chart: harbor/harbor
+    version: 1.16.2
+    needs:
+      - cert-manager/cert-manager
+      - traefik/traefik
+      - loopzero-system/minio
+      - loopzero-system/harbor-redis
+    values:
+      - ../helm/harbor/values.yaml
+
+  # Wave 1: Identity (depends on database via env vars)
+  # B22 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — When inClusterPostgres=true
+  # (standalone profile), ory-kratos must wait for postgresql release to
+  # finish or its automigrate init container will retry forever resolving
+  # `postgresql.loopzero-system.svc.cluster.local`. In dev/prod the postgres
+  # is external (DO managed), so the `needs:` is conditionally rendered.
+  - name: ory-kratos
+    namespace: loopzero-auth
+    chart: ory/kratos
+    version: 0.61.0
+{{- if .Values.inClusterPostgres }}
+    needs:
+      - loopzero-system/postgresql
+{{- end }}
+    values:
+      - ../helm/ory-kratos/values.yaml
+
+  - name: ory-hydra
+    namespace: loopzero-auth
+    chart: ory/hydra
+    version: 0.61.0
+    needs:
+      - loopzero-auth/ory-kratos
+    values:
+      - ../helm/ory-hydra/values.yaml
+
+  # Wave 2: LoopZero platform
+  - name: loopzero-api
+    namespace: loopzero-system
+    chart: ../helm/loopzero-api
+    needs:
+      - argocd/argocd
+      - loopzero-system/gitea
+      - loopzero-system/minio
+      - loopzero-auth/ory-kratos
+    values:
+      - ../helm/loopzero-api/values.yaml
+      # B77 (end-to-end-deploy-validation-plan iter 11) — overlay only in
+      # standalone-multi to use locally-built image with GITEA_ORG support.
+{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+      - ../helm/loopzero-api/values-standalone-multi.yaml
+{{- end }}
+
+  - name: loopzero-controller
+    namespace: loopzero-system
+    chart: ../helm/loopzero-controller
+    needs:
+      - loopzero-system/loopzero-api
+      # B45: LoopZero CRDs must exist before controller-runtime starts watches.
+      - loopzero-system/loopzero-crds
+    values:
+      - ../helm/loopzero-controller/values.yaml
+
+  - name: tenant-controller
+    namespace: loopzero-system
+    chart: ../helm/tenant-controller
+    needs:
+      - loopzero-system/loopzero-api
+      # B45: LoopZero CRDs must exist before controller-runtime starts watches.
+      - loopzero-system/loopzero-crds
+    values:
+      - ../helm/tenant-controller/values.yaml
+      # B69 (end-to-end-deploy-validation-plan iter 8) — overlay only in
+      # standalone-multi to use locally-built image with GITEA_ORG support.
+{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+      - ../helm/tenant-controller/values-standalone-multi.yaml
+{{- end }}
+
+  - name: loopzero-cloud
+    namespace: loopzero-system
+    chart: ../helm/loopzero-cloud
+    needs:
+      - loopzero-auth/ory-hydra
+      - loopzero-system/loopzero-api
+    values:
+      - ../helm/loopzero-cloud/values.yaml
+
+  # Wave 99: Validation
+  - name: smoke-test
+    namespace: loopzero-system
+    chart: ../helm/smoke-test
+    needs:
+      - loopzero-system/loopzero-api
+      - loopzero-system/loopzero-cloud
+      - loopzero-system/loopzero-controller
+      - loopzero-system/tenant-controller
+    values:
+      - ../helm/smoke-test/values.yaml

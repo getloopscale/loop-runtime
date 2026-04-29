@@ -1,0 +1,17 @@
+# Overlay applied on top of values.yaml in the standalone-multi profile only.
+# end-to-end-deploy-validation-plan iter 8 — B69 fix requires a rebuilt image
+# (operators/cmd/main.go GITEA_ORG support). Until the next CI tag publish
+# includes the B69 patch, standalone-multi uses the locally-built image
+# pushed to k3d-loopzero-registry. dev/prod profiles continue to use values.yaml
+# default (DO Registry REDACTED_SECRET_061).
+image:
+  repository: k3d-loopzero-registry:5000/loopzero-tenant-controller
+  tag: b69-fix
+  pullPolicy: IfNotPresent
+
+# B82 (end-to-end-deploy-validation-plan iter 12 / 2026-04-29) — point
+# AppProject + ArgoCD Application destination at the k3d workload cluster
+# instead of the default in-cluster (mgmt) URL. Same docker-bridge IP that
+# scoped-kubeconfig.sh writes into the runtime kubeconfig (B82 there).
+env:
+  WORKLOAD_CLUSTER_URL: "https://172.18.0.10:6443"

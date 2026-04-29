@@ -42,11 +42,26 @@ service:
 consoleService:
   type: ClusterIP
 
-# Buckets must match names used in CWTs (cwt-cache-save.yaml, cwt-cache-restore.yaml)
+# B75 (end-to-end-deploy-validation-plan iter 9) — buckets required by LoopZero
+# platform across all profiles. SOURCE OF TRUTH: minio chart's post-install
+# job creates each bucket idempotently on every helm install/upgrade.
+#
+# Each bucket maps to a specific consumer in the codebase:
+#   loopzero-builds       → CLI uploads source bundle here (POST /source/upload)
+#                       and Argo loopzero-clone CWT downloads from here
+#                       (charts/loopzero-build-cwts/templates/cwt-clone.yaml).
+#   loopzero-artifacts    → BuildKit layer cache (cwt-cache-save/restore.yaml).
+#   loopzero-logs         → Loki long-term storage when S3 backend configured.
+#   loopzero-static-assets→ Frontend delivery + SBOMs + attestations
+#                       (api/internal/argo/constants.go:s3BucketStaticAssets).
+#                       In LoopZero Cloud this is DO Spaces (worker.mjs); in
+#                       standalone (no external S3) it MUST live in MinIO.
 buckets:
-  - name: loopzero-artifacts
-    policy: none
   - name: loopzero-builds
     policy: none
+  - name: loopzero-artifacts
+    policy: none
   - name: loopzero-logs
+    policy: none
+  - name: loopzero-static-assets
     policy: none

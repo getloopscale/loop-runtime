@@ -1,0 +1,8 @@
+# Toggle the chart subpolicies (always default-deny + on/off for each rule).
+defaultDenyIngress: true
+
+# Namespaces enforced by these policies.
+namespaces:
+  - loopzero-system
+  - loopzero-auth
+  - loopzero-build

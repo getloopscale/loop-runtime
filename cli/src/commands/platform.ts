@@ -1,80 +1,118 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
+//
+// CHG-2026-04-28-LAYERED-BOOTSTRAP — T3.1 + T3.2.
+// `loopzero platform install` is the SOLE installation entry point. The
+// optional `--provider` flag controls whether L1 (cloud infra) is
+// provisioned via Pulumi BEFORE L2 (Helmfile sync). When unset, the CLI
+// runs in standalone mode (single existing K8s cluster).
 
 import * as fs from 'fs';
+import { spawnSync } from 'child_process';
 import * as yaml from 'js-yaml';
 import {
   PlatformConfig,
-  BootstrapTokens,
   validateCluster,
-  installCorePrerequisites,
-  installAuthPrerequisites,
-  ensureImagePullSecret,
-  installCRDs,
-  installPlatform,
-  upgradePlatform,
-  uninstallPlatform,
-  validateInstallation,
-  waitForPods,
   getPlatformStatus,
-  runMigrations,
-  bootstrapGitea,
-  bootstrapArgoCD,
-  patchArgocdInsecure,
-  createArgoCDRepoCredentials,
-  extractMinioCredentials,
-  extractPostgresCredentials,
-  generateSecret,
-  createKubeconfigs,
-  createHydraClient,
-  createMinioCredentialsSecret,
-  createAuthDatabases,
-  createClusterIssuer,
-  ensureMinioBucket,
-  grantTableOwnership,
-  createBuildSecrets,
-  runMigrationsViaCnpgPod,
 } from '../installer';
+import {
+  helmfileSync,
+  helmfileDestroy,
+  ensureHelmfileAvailable,
+  resolveHelmfilePath,
+} from '../installer/helmfile-runner';
+import {
+  pulumiUp,
+  pulumiOutputs,
+  pulumiDestroy,
+  ensurePulumiAvailable,
+  resolvePulumiProjectDir,
+  resolveProjectRoot,
+} from '../installer/pulumi-runner';
 
 export interface PlatformDeps {
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
 }
 
+export interface PlatformInstallOptions {
+  valuesFile: string;
+  profile?: string;
+  provider?: 'digitalocean' | 'aws' | 'k3d';
+  dryRun?: boolean;
+  skipInfra?: boolean;
+}
+
 /**
- * `loopzero platform install -f values.yaml [--profile minimal|production]`
+ * Maps L1 Pulumi outputs to env vars consumed by Helmfile L2 + scripts.
+ */
+function pulumiOutputsToEnv(outputs: Record<string, unknown>): Record<string, string> {
+  const env: Record<string, string> = {};
+  const map: Record<string, string> = {
+    dbHost: 'LOOPZERO_DB_HOST',
+    dbPort: 'LOOPZERO_DB_PORT',
+    dbName: 'LOOPZERO_DB_NAME',
+    dbUser: 'LOOPZERO_DB_USER',
+    dbPassword: 'LOOPZERO_DB_PASSWORD',
+    dbUri: 'LOOPZERO_DB_URI',
+    bucketName: 'LOOPZERO_BUCKET_NAME',
+    bucketEndpoint: 'LOOPZERO_BUCKET_ENDPOINT',
+    registryEndpoint: 'LOOPZERO_REGISTRY_ENDPOINT',
+    registryName: 'LOOPZERO_REGISTRY_NAME',
+    cfTunnelToken: 'LOOPZERO_CF_TUNNEL_TOKEN',
+    cfKvNamespaceId: 'LOOPZERO_CF_KV_NAMESPACE',
+    harborRedisHost: 'LOOPZERO_HARBOR_REDIS_HOST',
+    harborRedisPort: 'LOOPZERO_HARBOR_REDIS_PORT',
+    harborRedisPassword: 'LOOPZERO_HARBOR_REDIS_PASSWORD',
+    mgmtKubeconfig: 'LOOPZERO_MGMT_KUBECONFIG_RAW',
+    buildKubeconfig: 'LOOPZERO_BUILD_KUBECONFIG_RAW',
+    runtimeKubeconfig: 'LOOPZERO_RUNTIME_KUBECONFIG_RAW',
+    runtime2Kubeconfig: 'LOOPZERO_RUNTIME2_KUBECONFIG_RAW',
+  };
+  for (const [k, envName] of Object.entries(map)) {
+    const v = outputs[k];
+    if (v == null) continue;
+    env[envName] = typeof v === 'string' ? v : JSON.stringify(v);
+  }
+  return env;
+}
+
+/**
+ * `loopzero platform install -f values.yaml [--profile <name>] [--provider <name>] [--dry-run]`
  *
- * Installs the complete LoopZero platform on the current Kubernetes cluster.
- * Zero manual intervention — all prerequisites, bootstrap, and config automated.
- *
- * 10-step flow:
- *   1. Validate cluster (kubectl, helm, nodes, storage)
- *   2. Install prerequisites (cert-manager, traefik, PG, Gitea, ArgoCD, Argo Workflows, Ory, MinIO)
- *   3. Registry credentials (imagePullSecret for DOCR)
- *   4. Database setup (create auth DBs: kratos, hydra)
- *   5. Install CRDs
- *   6. Bootstrap services (Gitea org+token, ArgoCD password, MinIO creds, Hydra client)
- *   7. Runtime secrets (kubeconfigs, minio-credentials for CWTs)
- *   8. Install LoopZero platform (umbrella chart with all tokens injected)
- *   9. Wait for pods
- *  10. Validate (health checks)
+ * 6 steps (post-CHG-2026-04-28-LAYERED-BOOTSTRAP):
+ *   1. Validate (config, cluster reachable OR --provider set)
+ *   2. Preflight (helmfile installed, tokens valid if --provider)
+ *   3. Infrastructure (CONDITIONAL — only with --provider)
+ *      → pulumi up → outputs (kubeconfigs, DB, registry, ...)
+ *   4. Bootstrap (helmfile sync per cluster role)
+ *      → multi-cluster: build → mgmt → runtime × N
+ *      → standalone: mgmt only with environment="standalone"
+ *   5. Wire (cross-cluster: ArgoCD register, RBAC, wiring ConfigMap)
+ *   6. Validate (smoke test, regression checks)
  */
 export async function platformInstall(
   deps: PlatformDeps,
-  valuesFile: string,
-  profile?: string,
+  optsOrFile: PlatformInstallOptions | string,
+  legacyProfile?: string,
 ): Promise<number> {
   const { writeTo, writeError } = deps;
+  // Backwards-compat: callers may pass (deps, valuesFile, profile) (old signature).
+  const opts: PlatformInstallOptions =
+    typeof optsOrFile === 'string'
+      ? { valuesFile: optsOrFile, profile: legacyProfile }
+      : optsOrFile;
 
   // Load customer values
   let config: PlatformConfig;
   try {
-    const raw = fs.readFileSync(valuesFile, 'utf-8');
+    const raw = fs.readFileSync(opts.valuesFile, 'utf-8');
     config = yaml.load(raw) as PlatformConfig;
-    if (profile) config.profile = profile as PlatformConfig['profile'];
+    if (opts.profile) config.profile = opts.profile as PlatformConfig['profile'];
     if (!config.profile) config.profile = 'minimal';
+    if (opts.provider) config.provider = opts.provider;
   } catch {
-    writeError(`Failed to read values file: ${valuesFile}`);
+    writeError(`Failed to read values file: ${opts.valuesFile}`);
     return 1;
   }
 
@@ -83,292 +121,289 @@ export async function platformInstall(
     return 1;
   }
 
+  const useInfra = !!config.provider && !opts.skipInfra;
+  const projectRoot = resolveProjectRoot();
+  // Pick environment:
+  //   --provider set + profile=production → prod
+  //   --provider set + profile=minimal    → dev
+  //   no --provider                       → standalone (single cluster)
+  const environment = !useInfra
+    ? 'standalone'
+    : config.profile === 'production'
+      ? 'prod'
+      : 'dev';
+
   writeTo('');
   writeTo('  LoopZero Platform Installer');
   writeTo('  =======================');
-  writeTo(`  Domain:  ${config.domain}`);
-  writeTo(`  Profile: ${config.profile}`);
+  writeTo(`  Domain:      ${config.domain}`);
+  writeTo(`  Profile:     ${config.profile}`);
+  writeTo(`  Provider:    ${config.provider ?? 'standalone (existing cluster)'}`);
+  writeTo(`  Environment: ${environment}`);
+  if (opts.dryRun) writeTo('  Mode:        DRY RUN (helmfile diff)');
   writeTo('');
 
-  // ── Step 1: Validate cluster ──────────────────────────────────────
-  writeTo('Step 1/10: Validating cluster...');
-  const validation = validateCluster();
-  for (const check of validation.checks) {
-    writeTo(`  ${check.ok ? '✓' : '✗'} ${check.name}: ${check.detail}`);
-  }
-  if (!validation.valid) {
-    writeError('Cluster validation failed. Fix the issues above and retry.');
-    return 1;
-  }
-  writeTo('');
-
-  // ── Step 2: Install prerequisites ─────────────────────────────────
-  //
-  // Two-phase install (ADR-0012): core infra first (cert-manager, traefik,
-  // cnpg-operator + Cluster, gitea, argocd, argo-workflows, minio), then
-  // extract PG credentials from the CNPG-generated secret, THEN install
-  // auth prereqs (kratos, hydra) which need the DSN at chart install time.
-  //
-  writeTo('Step 2/10: Installing prerequisites (core)...');
-  const coreResults = installCorePrerequisites(config, writeTo);
-  if (coreResults.some((r) => r.status === 'failed')) {
-    writeError('Core prerequisite installation failed. Check the errors above.');
-    return 1;
-  }
-
-  // Extract PG credentials (populates config.database.url for auth prereqs)
-  if (!config.database.external) {
-    const pgCreds = extractPostgresCredentials('loopzero-system', writeTo);
-    if (!pgCreds) {
-      writeError('Failed to obtain PostgreSQL credentials from CloudNativePG cluster.');
-      writeError('  Inspect: kubectl describe cluster/postgresql-cluster -n loopzero-system');
+  // ── Step 1: Validate ──────────────────────────────────────────────
+  writeTo('Step 1/6: Validating configuration...');
+  if (!useInfra) {
+    const validation = validateCluster();
+    for (const check of validation.checks) {
+      writeTo(`  ${check.ok ? '✓' : '✗'} ${check.name}: ${check.detail}`);
+    }
+    if (!validation.valid) {
+      writeError('Cluster validation failed. Either fix the cluster or pass --provider <name>.');
       return 1;
     }
-    config.database.url = pgCreds.databaseUrl;
-  } else if (!config.database.url) {
-    writeError('database.external=true requires database.url to be set.');
-    return 1;
-  }
-
-  // Create auth DBs (kratos, hydra) BEFORE installing ory charts — the
-  // kratos/hydra automigration hooks connect immediately and fail if the
-  // target database does not exist yet.
-  createAuthDatabases(config.database.url, writeTo);
-
-  writeTo('Step 2/10: Installing prerequisites (auth)...');
-  const authResults = installAuthPrerequisites(config, writeTo);
-  if (authResults.some((r) => r.status === 'failed')) {
-    writeError('Auth prerequisite installation failed. Check the errors above.');
-    return 1;
-  }
-  writeTo('');
-
-  // ── Step 3: Registry credentials ──────────────────────────────────
-  writeTo('Step 3/10: Configuring registry credentials...');
-  try {
-    ensureImagePullSecret('loopzero-system', writeTo);
-    // Also create in argo namespace (CWT pods need to pull clone-runner image)
-    ensureImagePullSecret('argo', writeTo);
-  } catch (err) {
-    writeError(`Failed to create image pull secret: ${err}`);
-    return 1;
-  }
-  writeTo('');
-
-  // ── Step 4: Database setup ────────────────────────────────────────
-  //
-  // Auth DBs were already created in Step 2 (required for kratos/hydra
-  // automigration). This step is now a no-op confirmation — kept to
-  // preserve the 10-step narrative and for customers using external DB.
-  //
-  writeTo('Step 4/10: Database setup (verified in Step 2)...');
-  const dbUrl = config.database.url!;
-  writeTo('  ✓ Databases ready (loopzero, kratos, hydra)');
-  writeTo('');
-
-  // ── Step 5: Install CRDs + ClusterIssuer ──────────────────────────
-  writeTo('Step 5/10: Installing platform resources and TLS issuer...');
-  try {
-    installCRDs(writeTo);
-  } catch (err) {
-    writeError(`Platform resource installation failed: ${err}`);
-    return 1;
-  }
-
-  // Fix 1 (CHG-2026-04-24-INSTALLER-E2E): cert-manager ClusterIssuer.
-  // Without this, ExposedRoute Certificate requeues forever with
-  // "certificate not ready" and `loopzero deploy` hangs at health verification.
-  //
-  // For profile=minimal we provision a self-signed issuer named
-  // "loopzero-ca-issuer" to match the default loopzero-controller expects in dev.
-  // For profile=production the customer provides the issuer via
-  // config.clusterIssuer (ACME / enterprise CA) — we never create self-signed.
-  if (config.profile !== 'production') {
-    createClusterIssuer(config.clusterIssuer || 'loopzero-ca-issuer', writeTo);
   } else {
-    writeTo(`  ⚠ Production profile — ClusterIssuer "${config.clusterIssuer}" must already exist.`);
+    writeTo(`  ✓ provider=${config.provider} — cluster will be provisioned`);
   }
+
+  // ── Step 2: Preflight ─────────────────────────────────────────────
+  writeTo('Step 2/6: Preflight checks...');
+  const helmfileCheck = ensureHelmfileAvailable();
+  if (!helmfileCheck.ok) {
+    writeError(`  ✗ ${helmfileCheck.error}`);
+    return 1;
+  }
+  writeTo(`  ✓ helmfile ${helmfileCheck.version}`);
+
+  if (useInfra) {
+    const pulumiCheck = ensurePulumiAvailable();
+    if (!pulumiCheck.ok) {
+      writeError(`  ✗ ${pulumiCheck.error}`);
+      return 1;
+    }
+    writeTo(`  ✓ pulumi ${pulumiCheck.version}`);
+  }
+
+  // ── Step 3: Infrastructure (CONDITIONAL — only with --provider) ────
+  let extraEnv: Record<string, string> = {};
+  if (useInfra) {
+    writeTo('Step 3/6: Provisioning cloud infrastructure (Pulumi L1)...');
+    const pulumiCtx = {
+      projectDir: resolvePulumiProjectDir(projectRoot),
+      stack: environment,
+      streamOutput: true,
+      extraEnv: {
+        ...(config.providerConfig?.digitaloceanToken
+          ? { DIGITALOCEAN_TOKEN: config.providerConfig.digitaloceanToken }
+          : {}),
+        ...(config.providerConfig?.cfApiToken
+          ? { CLOUDFLARE_API_TOKEN: config.providerConfig.cfApiToken }
+          : {}),
+      },
+    };
+    if (!opts.dryRun) {
+      const result = pulumiUp(pulumiCtx);
+      if (result.status !== 'success') {
+        writeError(`  ✗ pulumi up failed (exit ${result.exitCode})`);
+        return 3;
+      }
+      writeTo(`  ✓ pulumi up complete (${(result.durationMs / 1000).toFixed(1)}s)`);
+    } else {
+      writeTo('  (dry-run: skipping pulumi up)');
+    }
+
+    // Read outputs
+    const outputs = pulumiOutputs(pulumiCtx, true);
+    if (!outputs) {
+      writeError('  ✗ failed to read pulumi outputs');
+      return 3;
+    }
+    extraEnv = pulumiOutputsToEnv(outputs);
+    writeTo(`  ✓ stack outputs captured: ${Object.keys(extraEnv).length} env vars`);
+  } else {
+    writeTo('Step 3/6: Skipping infrastructure (no --provider) — using existing cluster');
+  }
+
+  // ── Step 4: Bootstrap (Helmfile L2) ────────────────────────────────
+  writeTo('Step 4/6: Installing platform via Helmfile...');
+  const clusterRoles: Array<'mgmt' | 'build' | 'runtime'> = useInfra
+    ? ['build', 'mgmt', 'runtime']
+    : ['mgmt']; // standalone
+
+  for (const role of clusterRoles) {
+    const filePath = resolveHelmfilePath(projectRoot, role);
+    const kubeconfig = useInfra ? `${process.env.HOME}/.kube/loopzero-${role}.yaml` : undefined;
+
+    // Pre-sync secret generation (replaces helmfile prepare hooks; idempotent).
+    if (!opts.dryRun) {
+      
+      const presyncEnv = { ...process.env, ...extraEnv, ...(kubeconfig ? { KUBECONFIG: kubeconfig } : {}) };
+      const presyncScripts: Array<{ script: string; args: string[] }> = role === 'build'
+        ? [
+            { script: 'install-local-path-provisioner.sh', args: [environment] },
+            { script: 'generate-build-secrets.sh', args: [environment] },
+          ]
+        : role === 'runtime'
+          ? [{ script: 'generate-runtime-secrets.sh', args: [environment, 'runtime'] }]
+          : [{ script: 'generate-secrets.sh', args: [environment, 'mgmt'] }];
+
+      for (const { script, args } of presyncScripts) {
+        const scriptPath = `${projectRoot}/infra/helmfile/scripts/${script}`;
+        writeTo(`  → presync ${script}`);
+        const psr = spawnSync('bash', [scriptPath, ...args], { env: presyncEnv, stdio: 'inherit' });
+        if (psr.status !== 0) {
+          writeError(`  ✗ ${script} failed`);
+          return 3;
+        }
+      }
+    }
+
+    writeTo(`  → helmfile ${role} (${environment})`);
+    const result = helmfileSync({
+      filePath,
+      environment,
+      streamOutput: true,
+      dryRun: opts.dryRun,
+      extraEnv,
+      kubeconfig,
+    });
+    if (result.status !== 'success') {
+      writeError(`  ✗ helmfile ${role} failed (exit ${result.exitCode})`);
+      return 3;
+    }
+    writeTo(`  ✓ helmfile ${role} complete (${(result.durationMs / 1000).toFixed(1)}s)`);
+  }
+
+  // ── Step 5: Wire ───────────────────────────────────────────────────
+  writeTo('Step 5/6: Wiring cross-cluster connectivity...');
+  if (useInfra && !opts.dryRun) {
+    
+    const wireScript = `${projectRoot}/infra/helmfile/scripts/wire-clusters.sh`;
+    const wireResult = spawnSync('bash', [wireScript, environment], {
+      env: { ...process.env, ...extraEnv },
+      stdio: 'inherit',
+    });
+    if (wireResult.status !== 0) {
+      writeError('  ✗ wire-clusters.sh failed');
+      return 3;
+    }
+    writeTo('  ✓ cross-cluster wiring complete');
+  } else {
+    writeTo('  (skipping cross-cluster wiring — standalone mode)');
+  }
+
+  // ── Step 6: Validate ───────────────────────────────────────────────
+  writeTo('Step 6/6: Validating installation...');
+  if (!opts.dryRun) {
+    const status = getPlatformStatus();
+    writeTo(`  Platform phase: ${status.phase}`);
+    for (const c of status.components) {
+      writeTo(`    ${c.status === 'Running' ? '✓' : '✗'} ${c.name}: ${c.status}`);
+    }
+    if (status.phase !== 'Ready' && status.phase !== 'Installing') {
+      writeError('Installation completed but platform is not Ready.');
+      return 5;
+    }
+  }
+
   writeTo('');
+  writeTo('  ✓ LoopZero platform installed.');
+  writeTo(`    Domain:    https://${config.domain}`);
+  writeTo(`    API:       https://api.${config.domain}`);
+  writeTo(`    Dashboard: https://app.${config.domain}`);
+  return 0;
+}
 
-  // ── Step 6: Bootstrap services ────────────────────────────────────
-  writeTo('Step 6/10: Bootstrapping services...');
+/**
+ * `loopzero platform secrets backup [--output <file>]`
+ *
+ * CHG-2026-04-28-LAYERED-BOOTSTRAP iter 14 — manual on-demand backup of all
+ * LoopZero-managed Secrets. Useful before destructive operations (pulumi destroy,
+ * cluster recreation, password rotation). The `generate-secrets.sh` scripts
+ * already auto-backup on every run, so this command is for ad-hoc safety.
+ */
+export async function platformSecretsBackup(
+  deps: PlatformDeps,
+  output?: string,
+): Promise<number> {
+  const { writeTo, writeError } = deps;
 
-  // Gitea: create org + generate API token
-  const giteaToken = bootstrapGitea(
-    'http://gitea-http.gitea.svc.cluster.local:3000',
-    'loopzero-admin', 'loopzero-gitea-pass',
-    writeTo,
-  );
-  if (!giteaToken) {
-    writeError('Platform bootstrap failed — internal service token required for operation.');
-    writeError('  Check platform logs: kubectl logs -n loopzero-system deploy/loopzero-git');
+  const backupDir = `${process.env.HOME}/.loopzero/backups`;
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+  }
+  const ts = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15);
+  const outFile = output ?? `${backupDir}/secrets-manual-${ts}.yaml`;
+
+  writeTo(`Backing up LoopZero-managed Secrets to ${outFile}...`);
+
+  const namespaces = ['loopzero-system', 'argo', 'external-secrets'];
+  const merged: string[] = [];
+  for (const ns of namespaces) {
+    const r = spawnSync('kubectl', ['get', 'secret', '-n', ns, '-l', 'loopzero.io/managed-by!=,', '-o', 'yaml'], {
+      encoding: 'utf-8',
+    });
+    if (r.status === 0 && r.stdout) {
+      merged.push(`# Namespace: ${ns}\n---\n${r.stdout}`);
+    }
+  }
+
+  if (merged.length === 0) {
+    writeError('No LoopZero-managed Secrets found to back up.');
     return 1;
   }
 
-  // CHG-2026-04-25-E2E: ArgoCD chart's `--set` doesn't reliably apply
-  // `configs.params.server\.insecure=true` (dot escape eaten by shell).
-  // Patch the configmap directly so server starts in HTTP-only mode.
-  patchArgocdInsecure(writeTo);
+  fs.writeFileSync(outFile, merged.join('\n'), { mode: 0o600 });
+  writeTo(`  ✓ Backup saved (${merged.length} namespaces). Restore: loopzero platform secrets restore -f ${outFile}`);
+  return 0;
+}
 
-  // ArgoCD: extract admin password
-  const argocdPassword = bootstrapArgoCD('argocd', writeTo);
+/**
+ * `loopzero platform secrets restore -f <backup-file>`
+ *
+ * CHG-2026-04-28-LAYERED-BOOTSTRAP iter 14 — restores LoopZero Secrets from a
+ * previously-saved backup. Used after `pulumi destroy`, cluster recreation,
+ * or accidental Secret deletion.
+ */
+export async function platformSecretsRestore(
+  deps: PlatformDeps,
+  backupFile: string,
+): Promise<number> {
+  const { writeTo, writeError } = deps;
 
-  // ArgoCD repo-creds template: lets ArgoCD's repo-server clone Gitea
-  // repos using the API token we just minted. Without this, ArgoCD gets
-  // "authentication required" cloning private GitOps repos and the
-  // release stays in SYNC_UNKNOWN forever. The URL is the in-cluster
-  // service address — same prefix the operator now uses (see
-  // operators/internal/gitea/real_provisioner.go).
-  createArgoCDRepoCredentials(
-    'http://gitea-http.gitea.svc.cluster.local:3000',
-    'loopzero-admin',
-    giteaToken,
-    writeTo,
-  );
-
-  // MinIO: extract credentials
-  const minioCreds = extractMinioCredentials(writeTo);
-
-  // Hydra: create OAuth2 client for loopzero-cli
-  const hydraClientId = createHydraClient(writeTo);
-
-  // Generate callback secret for Argo → API communication
-  const argoCallbackSecret = generateSecret(32);
-  writeTo(`  ✓ Argo callback secret generated`);
-
-  // CHG-2026-04-25-E2E (Gap 2): generate bootstrap + service-auth secrets.
-  // bootstrapSecret authenticates POST /internal/bootstrap (admin seeding).
-  // serviceAuthSecret authorizes cloud→engine X-Service-Auth proxy calls.
-  const bootstrapSecret = generateSecret(32);
-  const serviceAuthSecret = generateSecret(32);
-  writeTo(`  ✓ Bootstrap + service-auth secrets generated`);
-
-  const tokens: BootstrapTokens = {
-    giteaToken,
-    argocdPassword,
-    minioAccessKey: minioCreds.accessKey,
-    minioSecretKey: minioCreds.secretKey,
-    argoCallbackSecret,
-    hydraClientId,
-    bootstrapSecret,
-    serviceAuthSecret,
-  };
-  writeTo('');
-
-  // ── Step 7: Runtime secrets + build infrastructure ────────────────
-  writeTo('Step 7/10: Creating runtime secrets and build infrastructure...');
-
-  // Kubeconfigs for multi-cluster access
-  createKubeconfigs(config, writeTo);
-
-  // MinIO credentials secret for build CWT templates (loopzero-minio-credentials)
-  // Must exist in the argo namespace where workflows run
-  createMinioCredentialsSecret(
-    'argo',
-    'http://minio.loopzero-system.svc.cluster.local:9000',
-    minioCreds.accessKey,
-    minioCreds.secretKey,
-    writeTo,
-  );
-
-  // Also in loopzero-system for any direct access
-  createMinioCredentialsSecret(
-    'loopzero-system',
-    'http://minio.loopzero-system.svc.cluster.local:9000',
-    minioCreds.accessKey,
-    minioCreds.secretKey,
-    writeTo,
-  );
-
-  // Fix 2 (CHG-2026-04-24-INSTALLER-E2E): loopzero-builds bucket.
-  // MinIO chart creates only a single bucket (the one passed via buckets[0]).
-  // Build CWTs hardcode "loopzero-builds" as target for source bundles — without
-  // it, clone-repo fails with "Bucket `loopzero-builds` does not exist".
-  ensureMinioBucket(config.storage.bucket || 'loopzero-artifacts', minioCreds.accessKey, minioCreds.secretKey, writeTo);
-  ensureMinioBucket('loopzero-builds', minioCreds.accessKey, minioCreds.secretKey, writeTo);
-
-  // Fix 5 (CHG-2026-04-24-INSTALLER-E2E): buildkit-registry-config +
-  // cosign-signing-key secrets. BuildKit needs credentials to push images to
-  // the registry; cosign-signer needs a keypair to sign published images.
-  // For profile=minimal we generate self-signed keypair with empty password
-  // (dev/test only — rotate before production; see ADR-0012 BYO boundary).
-  createBuildSecrets(config, writeTo);
-
-  writeTo('');
-
-  // ── Step 7.5: Pre-install migrations ──────────────────────────────
-  // CHG-2026-04-25-E2E: loopzero-controller fails leader-acquire at startup
-  // if `leader_generations` table doesn't exist. Helm `--wait` then blocks
-  // forever waiting for controller Ready. Solution: apply migrations
-  // BEFORE the helm install, piping SQL files directly into CNPG primary
-  // via kubectl exec. LOOPZERO_LOCAL_CHARTS env exposes the repo root, from
-  // which we derive migrations dir.
-  const repoRoot = process.env.LOOPZERO_LOCAL_CHARTS
-    ? process.env.LOOPZERO_LOCAL_CHARTS.replace(/\/charts\/?$/, '')
-    : '';
-  if (repoRoot) {
-    const migrationsDir = `${repoRoot}/api/internal/db/migrations`;
-    runMigrationsViaCnpgPod(migrationsDir, writeTo);
-    grantTableOwnership(config.database.url!, 'loopzero', writeTo);
-    writeTo('');
-  }
-
-  // ── Step 8: Install LoopZero platform ─────────────────────────────────
-  writeTo('Step 8/10: Installing LoopZero platform...');
-  try {
-    installPlatform(config, tokens, writeTo);
-  } catch (err) {
-    writeError(`Platform installation failed: ${err}`);
+  if (!fs.existsSync(backupFile)) {
+    writeError(`Backup file not found: ${backupFile}`);
     return 1;
   }
-  writeTo('');
 
-  // ── Step 9: Wait for pods ─────────────────────────────────────────
-  writeTo('Step 9/10: Waiting for pods...');
-  const podsReady = waitForPods(writeTo);
-  if (!podsReady) {
-    writeError('Pods did not become ready. Check: kubectl get pods -n loopzero-system');
-    writeError('  Continuing — some pods may need database migrations...');
+  writeTo(`Restoring LoopZero Secrets from ${backupFile}...`);
+  const r = spawnSync('kubectl', ['apply', '-f', backupFile], { stdio: 'inherit' });
+  if (r.status !== 0) {
+    writeError('  ✗ kubectl apply failed');
+    return 3;
   }
+  writeTo('  ✓ Secrets restored');
+  return 0;
+}
 
-  // Run migrations after API pod is up
-  writeTo('  Running database migrations...');
-  runMigrations(dbUrl, writeTo);
-
-  // Fix 3 (CHG-2026-04-24-INSTALLER-E2E): migrations run as admin via
-  // the API pod's migrate binary, which leaves tables owned by `postgres`.
-  // loopzero-api connects as role `loopzero` and gets permission denied. Reassign
-  // ownership after migration so runtime queries succeed.
-  grantTableOwnership(dbUrl, 'loopzero', writeTo);
-  writeTo('');
-
-  // ── Step 10: Validate ─────────────────────────────────────────────
-  writeTo('Step 10/10: Running health checks...');
-  validateInstallation(writeTo);
-  writeTo('');
-
-  // ── Done ──────────────────────────────────────────────────────────
-  writeTo('Installation complete!');
-  writeTo('');
-  writeTo(`  Platform URL:    https://${config.domain}`);
-  writeTo(`  Dashboard:       https://cloud.${config.domain}`);
-  writeTo(`  API:             https://api.${config.domain}`);
-  if (hydraClientId) {
-    writeTo(`  OAuth2 Client:   ${hydraClientId}`);
+/**
+ * `loopzero platform secrets list`
+ *
+ * Lists available Secret backups in ~/.loopzero/backups/.
+ */
+export async function platformSecretsList(deps: PlatformDeps): Promise<number> {
+  const { writeTo } = deps;
+  const backupDir = `${process.env.HOME}/.loopzero/backups`;
+  if (!fs.existsSync(backupDir)) {
+    writeTo('No backups directory found.');
+    return 0;
   }
-  writeTo('');
-  writeTo('  Bootstrap secret (save this — needed to seed first admin):');
-  writeTo(`    ${bootstrapSecret}`);
-  writeTo('');
-  writeTo('  Next steps:');
-  writeTo(`  1. Configure DNS: *.${config.domain} → <ingress-ip>`);
-  writeTo(`  2. Seed admin:`);
-  writeTo(`     curl -X POST -H "Authorization: Bearer ${bootstrapSecret}" \\`);
-  writeTo(`       https://api.${config.domain}/internal/bootstrap \\`);
-  writeTo(`       -d '{"admin_github_id":"<id>","admin_login":"<login>","admin_email":"<email>","tenant_slug":"<team>","tenant_display_name":"<Display>"}'`);
-  writeTo(`  3. Login: loopzero login --api-url https://api.${config.domain}`);
-  writeTo('');
+  const files = fs
+    .readdirSync(backupDir)
+    .filter((f) => /secrets.*\.ya?ml$/.test(f))
+    .map((f) => ({ name: f, mtime: fs.statSync(`${backupDir}/${f}`).mtime }))
+    .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
+  if (files.length === 0) {
+    writeTo('No Secret backups found in ~/.loopzero/backups/.');
+    return 0;
+  }
+  writeTo(`Found ${files.length} backup(s) in ${backupDir}:`);
+  for (const f of files) {
+    writeTo(`  ${f.mtime.toISOString()}  ${f.name}`);
+  }
   return 0;
 }
 
@@ -378,35 +413,35 @@ export async function platformInstall(
 export async function platformStatus(deps: PlatformDeps): Promise<number> {
   const { writeTo } = deps;
   const status = getPlatformStatus();
-
   writeTo('');
-  writeTo(`  Phase:   ${status.phase}`);
-  writeTo(`  Version: ${status.version || 'unknown'}`);
-  writeTo(`  CRDs:    ${status.crdsInstalled}/10`);
+  writeTo(`  Phase: ${status.phase}`);
+  if (status.version) writeTo(`  Version: ${status.version}`);
+  writeTo(`  CRDs installed: ${status.crdsInstalled}`);
   writeTo('');
   writeTo('  Components:');
   for (const c of status.components) {
-    const icon = c.status === 'Running' ? '✓' : c.status === 'NotInstalled' ? '–' : '✗';
-    writeTo(`    ${icon} ${c.name}: ${c.status}${c.replicas ? ` (${c.replicas})` : ''}`);
+    const replicas = c.replicas ? ` (${c.replicas})` : '';
+    writeTo(`    ${c.status === 'Running' ? '✓' : '✗'} ${c.name}${replicas}`);
   }
-
   if (status.endpoints.api) {
     writeTo('');
     writeTo('  Endpoints:');
     writeTo(`    API:       ${status.endpoints.api}`);
-    writeTo(`    Dashboard: ${status.endpoints.dashboard}`);
+    if (status.endpoints.dashboard) writeTo(`    Dashboard: ${status.endpoints.dashboard}`);
   }
-  writeTo('');
-
   return status.phase === 'Ready' ? 0 : 1;
 }
 
 /**
- * `loopzero platform upgrade --version <version>`
+ * `loopzero platform upgrade [-f values.yaml]`
+ *
+ * CHG-2026-04-28-LAYERED-BOOTSTRAP / T3.2 — upgrade is `helmfile sync` with
+ * the latest chart versions from the helmfile. Idempotent — sync makes only
+ * the changes that differ from the current cluster state.
  */
 export async function platformUpgrade(
   deps: PlatformDeps,
-  version: string,
+  _version: string,
   valuesFile?: string,
 ): Promise<number> {
   const { writeTo, writeError } = deps;
@@ -420,69 +455,79 @@ export async function platformUpgrade(
       return 1;
     }
   }
+  const profile = config?.profile ?? 'minimal';
+  const provider = config?.provider;
+  const environment = !provider
+    ? 'standalone'
+    : profile === 'production'
+      ? 'prod'
+      : 'dev';
+  const projectRoot = resolveProjectRoot();
+  const clusterRoles: Array<'mgmt' | 'build' | 'runtime'> = provider
+    ? ['build', 'mgmt', 'runtime']
+    : ['mgmt'];
 
-  // For upgrade, we need the existing tokens from K8s secrets
-  const tokens = extractExistingTokens();
-
-  writeTo(`Upgrading to v${version}...`);
-  try {
-    upgradePlatform(version, config || {
-      domain: '', profile: 'minimal',
-      database: { external: true },
-      registry: { type: 'docr', endpoint: '' },
-      auth: { type: 'bundled' },
-      storage: { endpoint: '', bucket: '' },
-    }, tokens, writeTo);
-    const podsReady = waitForPods(writeTo);
-    if (!podsReady) {
-      writeError('Upgrade may have failed — pods not ready');
-      return 1;
+  writeTo(`Upgrading platform (env=${environment})...`);
+  for (const role of clusterRoles) {
+    writeTo(`  → helmfile ${role} sync`);
+    const result = helmfileSync({
+      filePath: resolveHelmfilePath(projectRoot, role),
+      environment,
+      streamOutput: true,
+    });
+    if (result.status !== 'success') {
+      writeError(`  ✗ helmfile ${role} failed`);
+      return 3;
     }
-    writeTo(`✓ Upgraded to v${version}`);
-    return 0;
-  } catch (err) {
-    writeError(`Upgrade failed: ${err}`);
-    return 1;
   }
-}
-
-/**
- * `loopzero platform uninstall`
- */
-export async function platformUninstall(deps: PlatformDeps): Promise<number> {
-  const { writeTo } = deps;
-  writeTo('Uninstalling LoopZero platform...');
-  uninstallPlatform(writeTo);
-  writeTo('✓ Uninstalled');
+  writeTo('  ✓ Upgrade complete');
   return 0;
 }
 
 /**
- * Extract existing tokens from K8s secrets for upgrade operations.
- * During upgrade, we don't regenerate tokens — we reuse existing ones.
+ * `loopzero platform uninstall`
+ *
+ * CHG-2026-04-28-LAYERED-BOOTSTRAP / T3.2 — uninstall is `helmfile destroy`
+ * (reverse `needs:` order) for L2, plus optional `pulumi destroy` for L1
+ * when --provider was used.
  */
-function extractExistingTokens(): BootstrapTokens {
-  const { execSync } = require('child_process');
-  const get = (secret: string, key: string, ns = 'loopzero-system'): string => {
-    try {
-      return execSync(
-        `kubectl get secret ${secret} -n ${ns} -o jsonpath='{.data.${key}}' 2>/dev/null | base64 -d`,
-        { encoding: 'utf-8', timeout: 5_000 },
-      ).trim();
-    } catch {
-      return '';
-    }
-  };
+export async function platformUninstall(deps: PlatformDeps, opts?: { provider?: string; deleteInfra?: boolean }): Promise<number> {
+  const { writeTo, writeError } = deps;
+  const projectRoot = resolveProjectRoot();
+  const provider = opts?.provider;
+  const environment = !provider ? 'standalone' : 'dev';
+  const clusterRoles: Array<'mgmt' | 'build' | 'runtime'> = provider
+    ? ['runtime', 'mgmt', 'build']
+    : ['mgmt'];
 
-  // The umbrella chart creates secrets with fullname pattern
-  return {
-    giteaToken: get('loopzero-loopzero-api', 'GITEA_TOKEN'),
-    argocdPassword: get('loopzero-loopzero-api', 'ARGOCD_TOKEN'),
-    minioAccessKey: get('loopzero-loopzero-api', 'MINIO_ACCESS_KEY'),
-    minioSecretKey: get('loopzero-loopzero-api', 'MINIO_SECRET_KEY'),
-    argoCallbackSecret: get('loopzero-loopzero-api', 'LOOPZERO_ARGO_CALLBACK_SECRET'),
-    hydraClientId: '',
-    bootstrapSecret: get('loopzero-loopzero-api', 'LOOPZERO_BOOTSTRAP_SECRET'),
-    serviceAuthSecret: get('loopzero-loopzero-api', 'LOOPZERO_SERVICE_AUTH_SECRET'),
-  };
+  writeTo('Uninstalling LoopZero platform...');
+  for (const role of clusterRoles) {
+    writeTo(`  → helmfile ${role} destroy`);
+    const result = helmfileDestroy({
+      filePath: resolveHelmfilePath(projectRoot, role),
+      environment,
+      streamOutput: true,
+    });
+    if (result.status !== 'success') {
+      writeError(`  ✗ helmfile ${role} destroy failed`);
+      return 3;
+    }
+  }
+
+  if (opts?.deleteInfra && provider) {
+    writeTo('  → pulumi destroy (cloud infrastructure)');
+    const pulumiCtx = {
+      projectDir: resolvePulumiProjectDir(projectRoot),
+      stack: environment,
+      streamOutput: true,
+    };
+    const result = pulumiDestroy(pulumiCtx);
+    if (result.status !== 'success') {
+      writeError('  ✗ pulumi destroy failed');
+      return 3;
+    }
+  }
+
+  writeTo('  ✓ Uninstalled');
+  return 0;
 }

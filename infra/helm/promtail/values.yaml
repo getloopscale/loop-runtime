@@ -64,3 +64,23 @@ resources:
   limits:
     cpu: 200m
     memory: 128Mi
+
+# B60 (end-to-end-deploy-validation-plan T1.3) — Promtail's default readiness
+# probe returns 500 when no log files match the scrape filter (filtered to
+# `workflows_argoproj_io_workflow` label only). On a fresh build cluster
+# without active workflows, this causes the DaemonSet to never reach Ready.
+# Use TCP probe instead. Must explicitly null out httpGet (chart default).
+readinessProbe:
+  httpGet: null
+  tcpSocket:
+    port: http-metrics
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  failureThreshold: 5
+livenessProbe:
+  httpGet: null
+  tcpSocket:
+    port: http-metrics
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  failureThreshold: 3

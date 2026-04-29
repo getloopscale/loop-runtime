@@ -1,0 +1,46 @@
+# Helmfile environment: prod
+# CHG-2026-04-28-LAYERED-BOOTSTRAP — Phase 2 (T2.1/T2.2/T2.3)
+#
+# HA replicas, ACME production TLS, secrets injected from external store.
+
+domain: loopzero.example
+dnsZone: loopzero.example
+
+clusterRole: prod
+
+replicas:
+  api: 3
+  controller: 2
+  argocd: 2
+  gitea: 2
+  harbor: 2
+
+resources:
+  default:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+certIssuer:
+  kind: ClusterIssuer
+  name: letsencrypt-prod
+
+registries:
+  docrPrefix: "registry.digitalocean.com/loopzero-system/"
+  harborPrefix: "harbor.loopzero.example/loopzero-platform/"
+
+loki:
+  maxGlobalStreamsPerUser: 200000
+
+# Policy mode — `enforce` once Sprint 9 cosign keyless lands. Until then,
+# prod uses warn-mode + manual review of audit log.
+policyMode: warn
+
+# In-cluster Postgres — DISABLED for LoopZero Cloud prod (uses DO Managed HA PG cluster).
+inClusterPostgres: false
+
+# B20: NFS server provisioner underlying storage class. DOKS default.
+underlyingStorageClass: do-block-storage

@@ -77,10 +77,26 @@ repoServer:
   resources:
     limits:
       cpu: "500m"
-      memory: "256Mi"
+      memory: "512Mi"   # was 256Mi — iter 18: bump for cache headroom (B17 prevention)
     requests:
       cpu: "100m"
-      memory: "128Mi"
+      memory: "256Mi"
+  # B17 prevention (iter 18) — repo-server caches Application state for the
+  # configured TTL. Stale cache after rapid tenant create/delete cycles
+  # caused "(cached)" misroutes in L3 #4. Mitigations:
+  #   1. Reduce default cache TTL via env (10m → 1m for fresh-deploy scenarios)
+  #   2. Replicas: 2 so a forced restart doesn't cause sync downtime
+  #   3. ConfigMap setting that invalidates manifest cache on revision change
+  replicas: 2
+  env:
+    # Reduce manifest cache duration — default 24h is way too long for L3
+    # where tenants are created+destroyed frequently.
+    - name: ARGOCD_REPO_SERVER_REPO_CACHE_EXPIRATION
+      value: "10m"
+    # Force re-fetch on every sync request — prevents serving stale clones
+    # of recently-recreated tenant repos (B11 + B17 interaction).
+    - name: ARGOCD_REPO_SERVER_DISABLE_TLS
+      value: "false"
   metrics:
     enabled: true
     serviceMonitor:

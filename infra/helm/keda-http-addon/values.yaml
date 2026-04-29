@@ -6,6 +6,15 @@
 #
 # Requires: KEDA core (infra/helm/keda/) must be installed first.
 
+# B63 (end-to-end-deploy-validation-plan T2.3) — gcr.io/kubebuilder/kube-rbac-proxy
+# was DEPRECATED by Google Cloud (October 2023). The image moved to
+# `quay.io/brancz/kube-rbac-proxy`. Override default to use the maintained
+# location. Same Bitnami-legacy-image-migration pattern as B19/B44/B47.
+images:
+  kubeRbacProxy:
+    name: quay.io/brancz/kube-rbac-proxy
+    tag: v0.18.0
+
 http-add-on:
   # ---------------------------------------------------------------------------
   # Interceptor -- reverse proxy that counts in-flight requests

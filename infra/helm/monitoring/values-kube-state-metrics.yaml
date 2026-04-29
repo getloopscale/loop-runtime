@@ -1,0 +1,16 @@
+# kube-state-metrics values used by runtime helmfile.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Expose metrics on a NodePort so the mgmt-cluster Prometheus can federate-scrape.
+# The exact port is fixed (30030) so Prometheus configs don't need to be regenerated
+# every time the runtime cluster is bootstrapped.
+service:
+  type: NodePort
+  nodePort: 30030
+  servicePort: 8080

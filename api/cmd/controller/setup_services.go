@@ -96,7 +96,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	gitopsPusher := gitops.NewGiteaGitOpsPusher(gitops.GiteaGitOpsPusherConfig{
 		BaseURL: cfg.GiteaURL,
 		Token:   cfg.GiteaToken,
-		OrgName: "loopzero",
+		OrgName: cfg.GiteaOrg, // B77: was hardcoded "loopzero"
 	})
 
 	// ---- k8s managers (mgmt cluster) ----

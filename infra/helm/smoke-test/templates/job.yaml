@@ -1,0 +1,185 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: loopzero-smoke-test
+  labels:
+    app: loopzero-smoke-test
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    loopzero.io/component: smoke-test
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded
+    helm.sh/hook-weight: "10"
+spec:
+  ttlSecondsAfterFinished: {{ .Values.ttlSecondsAfterFinished }}
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: loopzero-smoke-test
+    spec:
+      restartPolicy: Never
+      serviceAccountName: loopzero-smoke-test
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: smoke
+          # iter 19 fix: smoke-test must validate workload readiness via kubectl,
+          # not just curl probes. Pre-iter-19, helmfile sync would report
+          # "all releases deployed" while Pods sat in ImagePullBackOff,
+          # because helm install does NOT verify image pull. Smoke-test now:
+          #   1. Lists Deployments/StatefulSets in target namespaces
+          #   2. Asserts spec.replicas == status.readyReplicas for each
+          #   3. Detects Pods in {ImagePullBackOff, ErrImagePull, CrashLoopBackOff}
+          #   4. Reports each broken Pod with container/reason/message
+          #   5. Only THEN does the curl probes (final liveness check)
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              FAIL=0
+
+              # --- Phase 1: Workload readiness via Kubernetes API ---
+              # iter 19 — closes the gap where Pods in ImagePullBackOff went
+              # undetected by curl-only smoke probe.
+              echo "=== Phase 1: Workload readiness check ==="
+              {{- range .Values.namespaces }}
+              echo ""
+              echo "Namespace: {{ . }}"
+              # Deployments
+              for dep in $(kubectl get deploy -n {{ . }} -o name 2>/dev/null); do
+                desired=$(kubectl get $dep -n {{ . }} -o jsonpath='{.spec.replicas}')
+                ready=$(kubectl get $dep -n {{ . }} -o jsonpath='{.status.readyReplicas}')
+                ready=${ready:-0}
+                # B51: Skip workloads intentionally scaled to 0 (e.g.,
+                # loopzero-controller in standalone profile — see B32 tech debt).
+                if [ "$desired" = "0" ]; then
+                  echo "  SKIP  $dep (replicas=0)"
+                  continue
+                fi
+                if [ "$desired" = "$ready" ] && [ "$desired" -gt 0 ]; then
+                  echo "  PASS  $dep ($ready/$desired ready)"
+                else
+                  echo "  FAIL  $dep ($ready/$desired ready)"
+                  FAIL=$((FAIL+1))
+                fi
+              done
+              # StatefulSets
+              for sts in $(kubectl get sts -n {{ . }} -o name 2>/dev/null); do
+                desired=$(kubectl get $sts -n {{ . }} -o jsonpath='{.spec.replicas}')
+                ready=$(kubectl get $sts -n {{ . }} -o jsonpath='{.status.readyReplicas}')
+                ready=${ready:-0}
+                if [ "$desired" = "0" ]; then
+                  echo "  SKIP  $sts (replicas=0)"
+                  continue
+                fi
+                if [ "$desired" = "$ready" ] && [ "$desired" -gt 0 ]; then
+                  echo "  PASS  $sts ($ready/$desired ready)"
+                else
+                  echo "  FAIL  $sts ($ready/$desired ready)"
+                  FAIL=$((FAIL+1))
+                fi
+              done
+              # Detect Pods in failure states (ImagePullBackOff, CrashLoopBackOff, etc.)
+              broken=$(kubectl get pod -n {{ . }} \
+                -o 'jsonpath={range .items[*]}{.metadata.name}/{.status.containerStatuses[*].state.waiting.reason}{"\n"}{end}' \
+                2>/dev/null | grep -E "ImagePullBackOff|ErrImagePull|CrashLoopBackOff|InvalidImageName|CreateContainerConfigError" || true)
+              if [ -n "$broken" ]; then
+                echo "  BROKEN PODS:"
+                echo "$broken" | sed 's/^/    /'
+                FAIL=$((FAIL+1))
+              fi
+              {{- end }}
+
+              # --- Phase 2: Endpoint liveness via curl ---
+              echo ""
+              echo "=== Phase 2: Endpoint liveness probes ==="
+              {{- range .Values.endpoints }}
+              echo "Probing {{ .name }} ({{ .url }})..."
+              for i in $(seq 1 {{ $.Values.retries }}); do
+                if curl -sfk -m 5 "{{ .url }}" > /dev/null 2>&1; then
+                  echo "  PASS  {{ .name }} (attempt $i)"
+                  break
+                fi
+                if [ "$i" = "{{ $.Values.retries }}" ]; then
+                  echo "  FAIL  {{ .name }} after {{ $.Values.retries }} attempts"
+                  FAIL=$((FAIL+1))
+                fi
+                sleep {{ $.Values.retryIntervalSec }}
+              done
+              {{- end }}
+
+              # --- Final report ---
+              echo ""
+              if [ "$FAIL" -gt 0 ]; then
+                echo "=== Smoke FAILED — $FAIL check(s) failed ==="
+                exit 1
+              fi
+              echo "=== All smoke checks PASSED ==="
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+# RBAC for smoke-test to read Deployments/StatefulSets/Pods across namespaces.
+# Iter 19 — required for Phase 1 readiness checks via kubectl.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loopzero-smoke-test
+  labels:
+    app: loopzero-smoke-test
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded
+    helm.sh/hook-weight: "5"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loopzero-smoke-test
+  labels:
+    app: loopzero-smoke-test
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded
+    helm.sh/hook-weight: "5"
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loopzero-smoke-test
+  labels:
+    app: loopzero-smoke-test
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded
+    helm.sh/hook-weight: "5"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loopzero-smoke-test
+subjects:
+  - kind: ServiceAccount
+    name: loopzero-smoke-test
+    namespace: {{ .Release.Namespace }}

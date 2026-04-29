@@ -1,0 +1,13 @@
+# Default values for cluster-issuer chart.
+
+# Issuer kind: selfsigned | acme
+issuerKind: selfsigned
+
+# ACME-only fields
+acme:
+  email: ops@loopzero.example
+  server: https://acme-v02.api.letsencrypt.org/directory
+  privateKeySecretRef: letsencrypt-prod-account-key
+
+# LoopZero CA issuer name (always created for local dev fallback)
+loopzeroCaIssuerName: loopzero-ca-issuer

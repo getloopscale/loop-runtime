@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# CHG-2026-04-28-LAYERED-BOOTSTRAP — T2.2
+# Generates Secrets required by build cluster releases.
+#
+# IDEMPOTENT (iter 14): cosign keypair is generated ONCE and preserved across
+# re-runs. Re-builds NEVER invalidate the previous signing key — sigstore
+# verification chain stays intact for previously-signed images.
+#
+# Usage: generate-build-secrets.sh <env>
+#
+# B1 fix: cosign keypair is GENERATED via `cosign generate-key-pair` and
+#         persisted in Secret cosign-signing-key. Iter 14 adds idempotency:
+#         only regenerates if missing OR is the literal "PLACEHOLDER" string.
+# B12 fix: registry credentials Secret is host-scoped (handled by
+#          registry_auth_merge.go).
+#
+# Backup: every successful run dumps cosign-signing-key + buildkit-registry-config
+# to ~/.loopzero/backups/build-secrets-{env}-{timestamp}.yaml (chmod 600).
+set -euo pipefail
+
+ENV="${1:?usage: $0 <env>}"
+
+log() { printf '[generate-build-secrets] %s\n' "$*" >&2; }
+
+ensure_namespace() {
+  local ns="$1"
+  kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+}
+
+# is_valid_cosign_secret: returns 0 if the Secret exists, has cosign.key,
+# AND the value is not the literal "PLACEHOLDER" sentinel.
+is_valid_cosign_secret() {
+  local raw existing
+  raw=$(kubectl get secret cosign-signing-key -n argo -o 'jsonpath={.data.cosign\.key}' 2>/dev/null || true)
+  [[ -z "$raw" ]] && return 1
+  existing=$(printf '%s' "$raw" | base64 -d 2>/dev/null || true)
+  [[ -z "$existing" ]] && return 1
+  [[ "$existing" == *PLACEHOLDER* ]] && return 1
+  # Sanity: cosign private keys start with "-----BEGIN ENCRYPTED SIGSTORE PRIVATE KEY-----"
+  [[ "$existing" == *"BEGIN ENCRYPTED SIGSTORE PRIVATE KEY"* ]] || return 1
+  return 0
+}
+
+backup_build_secrets() {
+  local backup_dir="${HOME}/.loopzero/backups"
+  mkdir -p "$backup_dir"
+  chmod 700 "$backup_dir"
+  local ts
+  ts=$(date +%Y%m%d-%H%M%S)
+  local out="${backup_dir}/build-secrets-${ENV}-${ts}.yaml"
+  kubectl get secret -n argo \
+    cosign-signing-key buildkit-registry-config minio-credentials \
+    -o yaml 2>/dev/null > "$out" || true
+  if [[ -s "$out" ]]; then
+    chmod 600 "$out"
+    log "backup written: $out"
+    ls -t "${backup_dir}/build-secrets-${ENV}-"*.yaml 2>/dev/null | tail -n +11 | xargs -r rm -f
+  else
+    rm -f "$out"
+    log "backup skipped (no build secrets present yet — first install)"
+  fi
+}
+
+ensure_namespace argo
+
+# 1) cosign keypair — IDEMPOTENT (B1 + iter 14)
+COSIGN_DIR="$(mktemp -d)"
+trap 'rm -rf "$COSIGN_DIR"' EXIT
+
+if is_valid_cosign_secret; then
+  log "cosign-signing-key is valid and non-placeholder — preserving (idempotent)"
+else
+  if ! command -v cosign >/dev/null 2>&1; then
+    log "ERROR: cosign not installed. Install: https://docs.sigstore.dev/cosign/installation/"
+    exit 1
+  fi
+
+  # Reuse existing password if Secret has one (preserves rotation history).
+  EXISTING_PWD=$(kubectl get secret cosign-signing-key -n argo \
+    -o 'jsonpath={.data.cosign\.password}' 2>/dev/null | base64 -d 2>/dev/null || true)
+  COSIGN_PASSWORD="${COSIGN_PASSWORD:-${EXISTING_PWD:-$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)}}"
+  export COSIGN_PASSWORD
+
+  cd "$COSIGN_DIR"
+  cosign generate-key-pair --output-key-prefix cosign 2>&1 | grep -v "^Private key" >&2
+
+  kubectl create secret generic cosign-signing-key -n argo \
+    --from-file=cosign.key=cosign.key \
+    --from-file=cosign.pub=cosign.pub \
+    --from-literal=cosign.password="${COSIGN_PASSWORD}" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  log "cosign-signing-key generated and applied (B1 fixed permanently)"
+fi
+
+# 2) Registry credentials for BuildKit (host-scoped — B12 fix).
+# Always overwritten — values come from L1 outputs, not stable in cluster.
+if [[ -n "${LOOPZERO_REGISTRY_ENDPOINT:-}" ]]; then
+  AUTH_VALUE=$(printf '%s' "${LOOPZERO_SPACES_KEY:-}:${LOOPZERO_SPACES_SECRET:-}" | base64 -w0)
+  CONFIG=$(printf '{"auths":{"%s":{"auth":"%s"}}}' "${LOOPZERO_REGISTRY_ENDPOINT}" "${AUTH_VALUE}")
+  kubectl create secret generic buildkit-registry-config -n argo \
+    --from-literal="config.json=${CONFIG}" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  log "buildkit-registry-config applied (host-scoped)"
+fi
+
+# 3) MinIO/S3 credentials for artifact upload — passthrough from L1.
+if [[ -n "${LOOPZERO_BUCKET_NAME:-}" ]]; then
+  kubectl create secret generic minio-credentials -n argo \
+    --from-literal=accesskey="${LOOPZERO_SPACES_KEY:-}" \
+    --from-literal=secretkey="${LOOPZERO_SPACES_SECRET:-}" \
+    --from-literal=endpoint="${LOOPZERO_BUCKET_ENDPOINT:-}" \
+    --from-literal=bucket="${LOOPZERO_BUCKET_NAME}" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  log "minio-credentials applied"
+fi
+
+# 4) Backup all build-cluster Secrets for disaster recovery.
+backup_build_secrets
+
+log "build secrets generated for env=$ENV (idempotent — re-runs preserve cosign signing key)"

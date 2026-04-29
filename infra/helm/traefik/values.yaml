@@ -11,6 +11,11 @@ deployment:
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
+  # Pin to policy/v1 — policy/v1beta1 was removed in K8s 1.25.
+  # CHG-2026-04-28-LAYERED-BOOTSTRAP iter 11: kubeconform validate:helmfile-templates
+  # caught traefik 28.3.0 chart defaulting to policy/v1beta1 when Capabilities are
+  # not provided (e.g. helmfile template without live cluster).
+  apiVersion: policy/v1
 
 affinity:
   podAntiAffinity:

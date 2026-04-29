@@ -2,31 +2,39 @@
 // Copyright 2025-2026 The LoopZero Authors
 //
 // Sprint 8 v3.2 / CHG-001 — golden tests for the 6 source-level fixes that
-// surfaced during Phase -1 bootstrap. Each test asserts on the FILE CONTENT
-// to fail loud if a refactor reverts the fix without intent. This is the
-// FAANG-level regression prevention layer described in the v3.2 systematization
-// plan (Pilar 1).
+// surfaced during Phase -1 bootstrap.
 //
-// Goal: an engineer running `npm test` immediately sees that the bootstrap
-// fragility class is preserved. If any of these tests fail, read the test
-// description and the file annotation referenced — both will explain the
-// historic failure mode the fix prevents.
+// CHG-2026-04-28-LAYERED-BOOTSTRAP / T1.1 — these fixes migrated:
+//   - Pulumi `mgmt-ory.ts`, `runtime-keda.ts`, `runtime-policy-controller.ts`,
+//     `mgmt-api.ts`, `mgmt-tenant-controller.ts` were DELETED in T1.1.
+//   - Their fixes now live in:
+//       * Helmfile `runtime.helmfile.yaml` (KEDA chart name, policy-controller install)
+//       * Helm chart values (kratos-ui memory, loopzero-controller env)
+//
+// Only Fix #1 (registry adopt-or-create) remains in Pulumi (`infra.ts`) because
+// the registry is L1 cloud (DOCR), not L2 Kubernetes.
 
 import { describe, it, expect } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 
 const componentsDir = path.resolve(__dirname, "..", "components");
-const read = (name: string) => fs.readFileSync(path.join(componentsDir, name), "utf-8");
+const helmfileDir = path.resolve(__dirname, "..", "..", "..", "helmfile");
 
-describe("Sprint 8 v3.2 — Pulumi component fixes", () => {
-  describe("Fix #1: registry adopt-or-create (infra.ts:282)", () => {
+function read(relativePath: string, baseDir: string = componentsDir): string {
+  return fs.readFileSync(path.join(baseDir, relativePath), "utf-8");
+}
+
+function readIfExists(relativePath: string, baseDir: string = componentsDir): string | null {
+  const fp = path.join(baseDir, relativePath);
+  return fs.existsSync(fp) ? fs.readFileSync(fp, "utf-8") : null;
+}
+
+describe("Sprint 8 v3.2 — fixes preserved across L1/L2 split", () => {
+  describe("Fix #1: registry adopt-or-create (infra.ts) — L1 (still in Pulumi)", () => {
     const src = read("infra.ts");
 
     it("does NOT use ${config.project}-registry as the registry name", () => {
-      // The pre-fix code constructed `loopzero-infra-registry` from project name,
-      // but DO real registry is `loopzero-system`. Using project-derived name
-      // caused `Preview failed: resource 'loopzero-infra-registry' does not exist`.
       expect(src).not.toContain("`${config.project}-registry`");
       expect(src).not.toContain("'${config.project}-registry'");
     });
@@ -36,133 +44,117 @@ describe("Sprint 8 v3.2 — Pulumi component fixes", () => {
     });
 
     it("falls back to canonical 'loopzero-system' name when lookup returns undefined", () => {
-      // `bootstrap-registry.ts:44` hardcodes `loopzero-system` as the imagePullSecret name.
-      // The fallback must match for greenfield (no registry yet) bootstrap.
       expect(src).toMatch(/orphans\?\.registryImportId\s*\?\?\s*"loopzero-system"/);
     });
   });
 
-  describe("Fix #2: kratos-ui memory + securityContext + env vars (mgmt-ory.ts)", () => {
-    const src = read("mgmt-ory.ts");
-    // Extract ONLY the kratos-ui Deployment block (skip the Service which has
-    // the same identifier). Use lineStart/lineEnd window: from the Deployment
-    // constructor line to the matching `);` close at zero indent.
-    const startIdx = src.indexOf("new k8s.apps.v1.Deployment(\n    \"kratos-ui\"");
-    // Walk forward to find the matching `\n  );` (close of Deployment constructor).
-    let endIdx = startIdx;
-    if (startIdx > -1) {
-      const closeIdx = src.indexOf("\n  );", startIdx);
-      endIdx = closeIdx > -1 ? closeIdx + 5 : src.length;
-    }
-    const kratosBlock = startIdx > -1 ? src.substring(startIdx, endIdx) : "";
+  describe("Fix #2: KEDA HTTP add-on chart name — migrated to runtime.helmfile.yaml", () => {
+    const helmfile = readIfExists("runtime.helmfile.yaml", helmfileDir);
 
-    it("identifies the kratos-ui Deployment block (not the Service)", () => {
-      expect(kratosBlock).toContain("k8s.apps.v1.Deployment");
-      expect(kratosBlock).toContain("kratos-ui");
-      // Sanity: should be at least 1500 chars (full deployment block with env, resources, sec)
-      expect(kratosBlock.length).toBeGreaterThan(1500);
+    it("runtime.helmfile.yaml exists (T2.3 deliverable)", () => {
+      expect(helmfile).not.toBeNull();
     });
-
-    it("kratos-ui memory limit is at least 256Mi (was 64Mi causing OOMKilled)", () => {
-      const limitsMatch = kratosBlock.match(/limits:\s*\{[\s\S]*?memory:\s*"(\d+)Mi"/);
-      expect(limitsMatch).not.toBeNull();
-      const memoryMi = limitsMatch ? parseInt(limitsMatch[1], 10) : 0;
-      expect(memoryMi).toBeGreaterThanOrEqual(256);
-    });
-
-    it("kratos-ui sets runAsUser to 10000 (image-verified user owning /.npm)", () => {
-      expect(kratosBlock).toMatch(/runAsUser:\s*10000/);
-    });
-
-    it("kratos-ui includes CSRF_COOKIE_SECRET env var (refused boot without it)", () => {
-      expect(kratosBlock).toContain("CSRF_COOKIE_SECRET");
-    });
-
-    it("kratos-ui does NOT pin readOnlyRootFilesystem (npm needs writable /.npm)", () => {
-      expect(kratosBlock).not.toMatch(/readOnlyRootFilesystem:\s*true/);
-    });
-
-    it("kratos-ui pod-level securityContext satisfies PSA restricted profile", () => {
-      expect(kratosBlock).toMatch(/runAsNonRoot:\s*true/);
-      expect(kratosBlock).toContain("RuntimeDefault");
-      expect(kratosBlock).toContain('drop: ["ALL"]');
-    });
-  });
-
-  describe("Fix #3: KEDA HTTP add-on chart name + image override (runtime-keda.ts)", () => {
-    const src = read("runtime-keda.ts");
 
     it("uses upstream chart name 'keda-add-ons-http' (not deprecated 'http-add-on')", () => {
-      // KEDA renamed the chart upstream. Pre-fix value `http-add-on` produced
-      // `chart "http-add-on" version "0.8.0" not found in https://kedacore.github.io/charts`.
-      expect(src).toMatch(/chart:\s*"keda-add-ons-http"/);
-      expect(src).not.toMatch(/chart:\s*"http-add-on"/);
-    });
-
-    it("overrides kubeRbacProxy.image.repository to maintained quay.io image", () => {
-      // gcr.io/kubebuilder/kube-rbac-proxy was deprecated and removed.
-      // quay.io/brancz/kube-rbac-proxy is the maintained replacement (same project).
-      expect(src).toContain("quay.io/brancz/kube-rbac-proxy");
-    });
-
-    it("disables ServiceMonitor on runtime cluster (Prometheus operator runs on mgmt only)", () => {
-      // Enabling ServiceMonitor on runtime breaks bootstrap with
-      // `no matches for kind "ServiceMonitor" in version "monitoring.coreos.com/v1"`
-      // because Prometheus Operator CRDs only exist on mgmt.
-      // Greedy regex captures the prometheus block (ends at the line
-      // containing `},` after `webhooks: { enabled: false }` — i.e., the
-      // closing brace of `prometheus:`). We then assert each sub-key is false.
-      const promBlockIdx = src.indexOf("prometheus: {");
-      expect(promBlockIdx).toBeGreaterThan(-1);
-      const promBlock = src.substring(promBlockIdx, promBlockIdx + 400);
-      expect(promBlock).toMatch(/operator:\s*\{\s*enabled:\s*false/);
-      expect(promBlock).toMatch(/metricServer:\s*\{\s*enabled:\s*false/);
-      expect(promBlock).toMatch(/webhooks:\s*\{\s*enabled:\s*false/);
-      // Crucial negative assertion: must NOT enable serviceMonitor anywhere
-      // in the prometheus block (would resurface the original bootstrap bug).
-      expect(promBlock).not.toMatch(/serviceMonitor:\s*\{\s*enabled:\s*true/);
+      expect(helmfile).toMatch(/chart:\s*kedacore\/keda-add-ons-http/);
+      expect(helmfile).not.toMatch(/chart:\s*kedacore\/http-add-on/);
     });
   });
 
-  describe("Fix #4: policy-controller schema compliance (runtime-policy-controller.ts)", () => {
-    const src = read("runtime-policy-controller.ts");
+  describe("Fix #3: policy-controller helm chart — runtime.helmfile.yaml", () => {
+    const helmfile = readIfExists("runtime.helmfile.yaml", helmfileDir);
 
-    it("does NOT pass podSecurityContext or containerSecurityContext at top-level or webhook scope", () => {
-      // sigstore/policy-controller chart values.schema.json rejects these
-      // properties at every path tried (top-level, webhook.*).
-      // The chart ships hardened defaults baked into the controller manager
-      // template — overriding is rejected and unnecessary.
-      expect(src).not.toMatch(/^\s*podSecurityContext:\s*\{/m);
-      expect(src).not.toMatch(/^\s*containerSecurityContext:\s*\{/m);
+    it("policy-controller release present in runtime helmfile", () => {
+      expect(helmfile).toMatch(/name:\s*policy-controller/);
+      expect(helmfile).toMatch(/chart:\s*sigstore\/policy-controller/);
+    });
+
+    it("admission-policies release `needs:` policy-controller (B16)", () => {
+      // The order is enforced via Helmfile needs:. Without this, deploys are
+      // rejected by the deny-by-default webhook.
+      expect(helmfile).toMatch(/name:\s*admission-policies[\s\S]*?needs:[\s\S]*?cosign-system\/policy-controller/);
     });
   });
 
-  describe("Fix #5: loopzero-controller env var LOOPZERO_CLUSTER_ISSUER (mgmt-api.ts)", () => {
-    const src = read("mgmt-api.ts");
+  describe("Fix #4: cloudflared K8s objects migrated from tunnel.ts to Helmfile (ADR D9)", () => {
+    const tunnel = read(path.join("..", "providers", "cloudflare", "tunnel.ts"));
+    const helmfile = readIfExists("runtime.helmfile.yaml", helmfileDir);
 
-    it("loopzero-controller Deployment includes LOOPZERO_CLUSTER_ISSUER env var", () => {
-      // loopzero-controller refuses to start with
-      // `invalid config: LOOPZERO_CLUSTER_ISSUER is required (prod: letsencrypt-prod, dev: loopzero-ca-issuer)`.
-      // It shares the loopzero-api binary image so config validation is symmetric.
-      const controllerBlock = src.match(/"loopzero-controller",\s*\{[\s\S]*?\}\);[\s\S]*?return apiDeployment/);
-      expect(controllerBlock?.[0] ?? src).toContain("LOOPZERO_CLUSTER_ISSUER");
+    it("tunnel.ts no longer imports @pulumi/kubernetes", () => {
+      expect(tunnel).not.toMatch(/import.*\*.*from\s+["']@pulumi\/kubernetes["']/);
     });
 
-    it("LOOPZERO_CLUSTER_ISSUER value matches loopzero-api (same image, same validation)", () => {
-      // Both binaries share the same Helm image and config validation.
-      // Drift between them surfaces as silent CrashLoop.
-      const apiIssuerCount = (src.match(/LOOPZERO_CLUSTER_ISSUER/g) ?? []).length;
-      expect(apiIssuerCount).toBeGreaterThanOrEqual(2); // loopzero-api + loopzero-controller
+    it("tunnel.ts no longer creates k8s.core.v1.Secret or k8s.apps.v1.Deployment", () => {
+      expect(tunnel).not.toMatch(/k8s\.core\.v1\.Secret/);
+      expect(tunnel).not.toMatch(/k8s\.apps\.v1\.Deployment/);
+    });
+
+    it("tunnel.ts exports tunnelToken for L2 consumption", () => {
+      expect(tunnel).toMatch(/tunnelToken:\s*pulumi\.Output<string>/);
+    });
+
+    it("runtime helmfile has cloudflared release", () => {
+      expect(helmfile).toMatch(/name:\s*cloudflared/);
     });
   });
 
-  describe("Fix #6: tenant-controller env var LOOPZERO_CLUSTER_ISSUER (mgmt-tenant-controller.ts)", () => {
-    const src = read("mgmt-tenant-controller.ts");
+  describe("Fix #5: ClusterImagePolicy as Helm chart (B16) — admission-policies", () => {
+    const chartFile = path.resolve(__dirname, "..", "..", "..", "helm", "admission-policies", "Chart.yaml");
+    const valuesFile = path.resolve(__dirname, "..", "..", "..", "helm", "admission-policies", "values.yaml");
+    const cipTemplate = path.resolve(__dirname, "..", "..", "..", "helm", "admission-policies", "templates", "cluster-image-policy.yaml");
 
-    it("tenant-controller Deployment includes LOOPZERO_CLUSTER_ISSUER env var", () => {
-      // Same root cause as Fix #5 — tenant-controller shares config schema
-      // with loopzero-api/loopzero-controller. Drift = silent CrashLoop.
-      expect(src).toContain("LOOPZERO_CLUSTER_ISSUER");
+    it("Chart.yaml exists for admission-policies", () => {
+      expect(fs.existsSync(chartFile)).toBe(true);
+    });
+
+    it("values.yaml has clusterImagePolicy.enabled: true (default)", () => {
+      const v = fs.readFileSync(valuesFile, "utf-8");
+      expect(v).toMatch(/clusterImagePolicy:\s*\n\s*enabled:\s*true/);
+    });
+
+    it("template renders ClusterImagePolicy with mode 'warn'", () => {
+      const t = fs.readFileSync(cipTemplate, "utf-8");
+      expect(t).toContain("kind: ClusterImagePolicy");
+      expect(t).toMatch(/\.Values\.clusterImagePolicy\.mode/);
+    });
+  });
+
+  describe("Fix #6: @pulumi/kubernetes removed from package.json (T1.3)", () => {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "..", "package.json"), "utf-8"));
+
+    it("@pulumi/kubernetes is NOT a runtime dependency", () => {
+      expect(pkg.dependencies).not.toHaveProperty("@pulumi/kubernetes");
+    });
+
+    it("@pulumi/kubernetes is NOT a devDependency either", () => {
+      expect(pkg.devDependencies ?? {}).not.toHaveProperty("@pulumi/kubernetes");
+    });
+  });
+
+  describe("Fix #7: zero @pulumi/kubernetes imports in source (T1.1 cleanup)", () => {
+    function* walk(dir: string): Generator<string> {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fp = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name === "node_modules" || entry.name === "__tests__") continue;
+          yield* walk(fp);
+        } else if (entry.name.endsWith(".ts")) {
+          yield fp;
+        }
+      }
+    }
+
+    const srcRoot = path.resolve(__dirname, "..");
+    const offenders: string[] = [];
+    for (const fp of walk(srcRoot)) {
+      const content = fs.readFileSync(fp, "utf-8");
+      if (/@pulumi\/kubernetes/.test(content)) {
+        offenders.push(path.relative(srcRoot, fp));
+      }
+    }
+
+    it("no source file imports @pulumi/kubernetes", () => {
+      expect(offenders).toEqual([]);
     });
   });
 });

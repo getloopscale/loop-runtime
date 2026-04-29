@@ -1,0 +1,92 @@
+# Build Cluster — Helmfile (L2 Bootstrap)
+# CHG-2026-04-28-LAYERED-BOOTSTRAP — Phase 2 / T2.2
+#
+# Replaces `infra/pulumi/src/components/build-bootstrap.ts` and friends.
+#
+# Invocation:
+#   KUBECONFIG=~/.kube/loopzero-build.yaml helmfile -f infra/helmfile/build.helmfile.yaml -e dev sync
+
+environments:
+  dev:
+    values:
+      - environments/dev.yaml
+  prod:
+    values:
+      - environments/prod.yaml
+  standalone:
+    values:
+      - environments/standalone.yaml
+  standalone-multi:
+    # end-to-end-deploy-validation-plan T0.3 — 3 separate k3d clusters.
+    values:
+      - environments/standalone-multi.yaml
+
+---
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  atomic: false
+  createNamespace: true
+
+repositories:
+  - name: argo
+    url: https://argoproj.github.io/argo-helm
+  - name: grafana
+    url: https://grafana.github.io/helm-charts
+
+# ---------------------------------------------------------------------------
+# Pre-sync setup (called by the CLI orchestrator BEFORE this helmfile runs):
+#   1. bash infra/helmfile/scripts/install-local-path-provisioner.sh <env>
+#      (B2 — fixes DO API rate limit on PVC during L3 burst)
+#   2. bash infra/helmfile/scripts/generate-build-secrets.sh <env>
+#      (B1 — generates real cosign keypair, replacing placeholder Secret)
+# Hooks moved out of helmfile so list/lint/diff work without cluster access.
+
+# ---------------------------------------------------------------------------
+# Releases
+# ---------------------------------------------------------------------------
+releases:
+  # Wave 0: Argo Workflows (build engine)
+  - name: argo-workflows
+    namespace: argo
+    chart: argo/argo-workflows
+    version: 1.0.5
+    values:
+      - ../helm/argo-workflows/values.yaml
+
+  # B71 (end-to-end-deploy-validation-plan iter 9) — ClusterWorkflowTemplates
+  # (loopzero-clone, loopzero-cache-save, loopzero-cache-restore) are referenced by every
+  # build pipeline submitted via the API. Without this release, loopzero-api
+  # creates Workflow CRs that fail with "template reference loopzero-clone.clone-repo
+  # not found". In production, Pulumi build-bootstrap.ts used to deploy these;
+  # after T1.1 deletion, this Helmfile release is the sole source.
+  - name: loopzero-build-cwts
+    namespace: argo
+    chart: ../../charts/loopzero-build-cwts
+    needs:
+      - argo/argo-workflows
+    values:
+      - {}
+    # Skip ServiceAccount/RBAC duplication — argo-workflows release already
+    # creates loopzero-build-sa with the right permissions.
+    set:
+      - name: serviceAccount.create
+        value: "false"
+
+  # Wave 0: Loki for build logs (NodePort 30100 for cross-cluster scrape)
+  - name: loki
+    namespace: monitoring
+    chart: grafana/loki
+    version: 6.24.0
+    values:
+      - ../helm/loki/values.yaml
+
+  - name: promtail
+    namespace: monitoring
+    chart: grafana/promtail
+    version: 6.16.6
+    needs:
+      - monitoring/loki
+    values:
+      - ../helm/promtail/values.yaml

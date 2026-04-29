@@ -1,0 +1,9 @@
+apiVersion: v2
+name: smoke-test
+description: |
+  LoopZero platform smoke test — runs as a Job after every Helmfile sync to validate
+  end-to-end connectivity (loopzero-api health, gitea API, argocd login).
+  CHG-2026-04-28-LAYERED-BOOTSTRAP / Phase 4.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

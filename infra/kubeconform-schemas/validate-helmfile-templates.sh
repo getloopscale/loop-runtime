@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# CHG-2026-04-28-LAYERED-BOOTSTRAP iter 11 — schema-validate helmfile-rendered output.
+#
+# Renders ALL helmfile releases (mgmt 287 + build 45 + runtime 213 = 545
+# K8s objects) and validates each against its K8s schema via kubeconform.
+# Catches:
+#   - Deprecated apiVersion (e.g., policy/v1beta1 in PDBs)
+#   - Invalid spec values (additionalProperties: false strict mode)
+#   - Schema drift between chart upgrades
+#
+# Uses local CRD schemas at infra/kubeconform-schemas/ for kinds not in the
+# default kubeconform schema repository (CustomResourceDefinition).
+#
+# Why a separate script: Task uses Go templates, which conflicts with
+# kubeconform's `{{ .ResourceKind }}` placeholder syntax. Shell-only avoids
+# the conflict.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+SCHEMA_DIR="${SCRIPT_DIR}/master-standalone-strict"
+
+if [[ ! -d "$SCHEMA_DIR" ]]; then
+  echo "ERROR: schema dir not found: $SCHEMA_DIR" >&2
+  exit 2
+fi
+
+cd "$ROOT_DIR"
+
+# Pin K8s minor for chart compatibility decisions (matches Pulumi.dev.yaml).
+KUBE_VERSION="${KUBE_VERSION:-1.32}"
+
+# CRDs and other kinds that don't yet have local schemas.
+# Schemas in infra/kubeconform-schemas/master-standalone-strict/ already cover:
+#   - cert-manager (Certificate, Issuer, ClusterIssuer, CertificateRequest, Challenge, Order)
+#   - traefik (IngressRoute, IngressRouteTCP, Middleware, TLSOption, ServersTransport, ...)
+#   - sigstore (ClusterImagePolicy v1alpha1+v1beta1, TrustRoot v1alpha1)  [iter 13]
+#   - keda.sh (ScaledObject, ScaledJob, TriggerAuthentication, ClusterTriggerAuthentication, CloudEventSource)  [iter 13]
+#   - apiextensions.k8s.io/v1 CustomResourceDefinition
+# Still skipped (no local schema yet):
+#   - prometheus monitoring.coreos.com (ServiceMonitor, PrometheusRule, Probe)
+#   - admissionregistration.k8s.io VAP (validated upstream)
+#   - http.keda.sh HTTPScaledObject (chart-internal, not in standard KEDA)
+# Only kinds that genuinely have no schema available locally or in defaults.
+# VAP/VAPBinding ARE in kubeconform's default schemas (K8s native since 1.30).
+# Iter 13 added: cert-manager, traefik, KEDA, sigstore CRDs (~30 schemas).
+# Iter 15 added: prometheus-operator CRDs (Probe, ServiceMonitor, PrometheusRule,
+# Alertmanager, AlertmanagerConfig, PodMonitor, PrometheusAgent, Prometheus,
+# ScrapeConfig, ThanosRuler) — 10 schemas extracted from kube-prometheus-stack.
+# Only HTTPScaledObject remains skipped (keda-add-ons-http-specific CRD not yet
+# extracted into the local schema set).
+SKIP_KINDS="HTTPScaledObject"
+
+# kubeconform schema lookup template — local CRD schemas first, then defaults.
+LOCAL_SCHEMA_TPL='{{.ResourceKind}}-{{.Group}}-{{.ResourceAPIVersion}}.json'
+
+FAIL=0
+for hf in mgmt build runtime; do
+  echo "=== $hf helmfile ==="
+  helmfile -f "infra/helmfile/${hf}.helmfile.yaml.gotmpl" -e dev template \
+    --skip-deps \
+    --kube-version "$KUBE_VERSION" \
+    --args "--api-versions=policy/v1/PodDisruptionBudget" 2>/dev/null | \
+    kubeconform --strict --summary \
+      --schema-location 'default' \
+      --schema-location "${SCHEMA_DIR}/${LOCAL_SCHEMA_TPL}" \
+      --skip "$SKIP_KINDS" || FAIL=1
+done
+
+if [[ "$FAIL" -ne 0 ]]; then
+  echo "validate:helmfile-templates FAILED" >&2
+  exit 1
+fi
+echo "✓ All helmfile-rendered K8s resources are schema-valid"

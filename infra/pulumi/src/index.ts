@@ -1,26 +1,32 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Pulumi L1 — Cloud infrastructure ONLY.
+// CHG-2026-04-28-LAYERED-BOOTSTRAP — Phase 1 / T1.1.
+//
+// This stack manages the cloud-side resources of the LoopZero platform:
+//   - DigitalOcean: VPC, DOKS clusters (mgmt + build + runtime + runtime-2),
+//     PostgreSQL, Spaces, Container Registry
+//   - Cloudflare API: Tunnel resource + ingress config + DNS, Worker, KV
+//
+// It MUST NOT manage any Kubernetes object. Helm charts, Secrets, ConfigMaps,
+// Deployments, etc. are owned by the Helmfile layer (L2 — infra/helmfile/).
+// This separation eliminates the zombie-state problem on `pulumi destroy`.
+
 import * as pulumi from "@pulumi/pulumi";
-import * as k8s from "@pulumi/kubernetes";
 import { loadStackConfig } from "./config/stack";
 import { createInfra, resolveProvider } from "./components/infra";
-import { bootstrapCluster, CloudflareOutputs } from "./components/bootstrap";
-import { exposePlatform } from "./components/expose";
-import { buildExecutionState } from "./core/execution";
 import { createStaticDelivery, StaticDeliveryOutput } from "./providers/cloudflare/static-delivery";
 import { createTunnel, TunnelOutput } from "./providers/cloudflare/tunnel";
 import { resolveOrphans, OrphanLookupResult } from "./core/adopt-or-create";
 import { resourceName } from "./core/naming";
+import { installMgmtRedisHa } from "./components/mgmt-redis-ha";
 
 // --- Configuration ---
 const config = loadStackConfig();
-const factory = resolveProvider(config.provider, config);
+resolveProvider(config.provider, config); // factory side-effects only (provider registration)
 
-// --- Pre-flight: Adopt-or-create lookups ---
-// Detects pre-existing resources (orphans from partial destroy) and returns
-// import IDs so Pulumi can adopt them instead of failing on create conflict.
-// This makes `pulumi destroy && pulumi up` fully idempotent.
+// --- Pre-flight: Adopt-or-create lookups (idempotency) ---
 const baseName = resourceName({
   project: config.project,
   env: config.environment,
@@ -39,7 +45,6 @@ if (config.cfAccountId && config.cfZoneId) {
     cfZoneId: config.cfZoneId,
   });
 } else {
-  // No CF config — only check VPC
   const { lookupExistingVpc } = require("./core/adopt-or-create");
   orphans = { vpcId: lookupExistingVpc(`${baseName}-net`) };
 }
@@ -47,28 +52,23 @@ if (config.cfAccountId && config.cfZoneId) {
 // --- Phase 1: Base Infrastructure ---
 const infra = createInfra(config, orphans);
 
-// --- Phase 1.5: Cloudflare Resources (must exist BEFORE bootstrap) ---
-// CF resources are provisioned when cfAccountId + cfApiToken + cfZoneId are configured.
-// When absent (local dev), CF resources are skipped — cluster operates without tunnel.
-// These are created before bootstrap so that bootstrap can wire CF secrets
-// from real Pulumi outputs (single source of truth), not stale config values.
+// --- Phase 1.6: DO Managed Valkey for Harbor HA (CHG-002a / T2.2) ---
+// L1-only resource: DatabaseCluster + DatabaseFirewall. K8s Secret with the
+// credentials is created at L2 by the Helmfile generate-secrets.sh script.
+const harborRedis = installMgmtRedisHa(infra, config);
+
+// --- Phase 1.5: Cloudflare API Resources (no K8s objects) ---
 let staticDelivery: StaticDeliveryOutput | undefined;
 let tunnelOutput: TunnelOutput | undefined;
-let cfOutputs: CloudflareOutputs | undefined;
 
 if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
-  // 1. CF Tunnel — all runtime traffic via Cloudflare edge (DDoS/WAF, zero public IPs)
-  const cfRuntimeProvider = new k8s.Provider("cf-runtime-k8s", {
-    kubeconfig: infra.runtimeCluster.kubeconfig,
-  });
-
+  // 1. CF Tunnel — L1 creates the Tunnel API resource only.
+  //    The cloudflared Deployment is created at L2 (Helmfile runtime).
   tunnelOutput = createTunnel({
     accountId: config.cfAccountId,
     zoneId: config.cfZoneId,
     environment: config.environment,
     baseDomain: config.domain,
-    runtimeProvider: cfRuntimeProvider,
-    namespace: "loopzero-system",
     traefikService: "https://runtime-traefik.loopzero-system.svc:443",
     importIds: {
       tunnel: orphans.tunnelImportId,
@@ -76,7 +76,7 @@ if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
     },
   });
 
-  // 2. CF Worker + KV — static frontend routing (DO Spaces via edge)
+  // 2. CF Worker + KV — static frontend routing (DO Spaces via edge).
   staticDelivery = createStaticDelivery({
     accountId: config.cfAccountId,
     zoneId: config.cfZoneId,
@@ -89,155 +89,66 @@ if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
       workerRoute: orphans.workerRouteImportId,
     },
   });
-
-  // Pass CF outputs to bootstrap for secret wiring
-  cfOutputs = {
-    kvNamespaceId: staticDelivery.kvNamespaceId,
-  };
 }
 
-// --- Phase 2: Bootstrap Clusters ---
-const bootstrap = bootstrapCluster(infra, config, cfOutputs);
-
-// --- Phase 3: Expose Platform ---
-const expose = exposePlatform(bootstrap, infra, config, factory);
-
-// --- Execution state (operational tracking) ---
-export const execution = buildExecutionState({
-  environment: config.environment,
-  provider: config.provider,
-  infraVersion: config.infraVersion,
-  components: {
-    // Phase 1
-    network: infra.vpcId.apply((id) => !!id),
-    mgmtCluster: infra.mgmtCluster.kubeconfig.apply((k) => !!k),
-    buildCluster: infra.buildCluster.kubeconfig.apply((k) => !!k),
-    runtimeCluster: infra.runtimeCluster.kubeconfig.apply((k) => !!k),
-    runtimeCluster2: infra.runtimeCluster2.kubeconfig.apply((k) => !!k),
-    database: infra.database.host.apply((h) => !!h),
-    storage: infra.bucketName.apply((n) => !!n),
-    registry: infra.registryEndpoint.apply((e) => !!e),
-
-    // Phase 2
-    mgmtIngress: bootstrap.mgmt.ingressReady,
-    mgmtCertManager: bootstrap.mgmt.certManagerReady,
-    mgmtArgocd: bootstrap.mgmt.argoCdReady,
-    mgmtGitea: bootstrap.mgmt.giteaReady,
-    mgmtPrometheus: bootstrap.mgmt.prometheusReady,
-    mgmtGrafana: bootstrap.mgmt.grafanaReady,
-    mgmtLoopZeroApi: bootstrap.mgmt.loopzeroApiReady,
-    mgmtTenantController: bootstrap.mgmt.tenantControllerReady,
-    mgmtTls: bootstrap.mgmt.tlsConfigured,
-    buildArgoWorkflows: bootstrap.build.argoWorkflowsReady,
-    runtimeIngress: bootstrap.runtime.ingressReady,
-
-    // Phase 3
-    mgmtDns: expose.mgmtDnsConfigured,
-    runtimeDns: expose.runtimeDnsConfigured,
-  },
-});
-
-// --- Stack Outputs (stable contract) ---
+// ---------------------------------------------------------------------------
+// Stack Outputs (stable contract consumed by Helmfile L2 + loopzero-api wiring)
+// ---------------------------------------------------------------------------
 export const provider = config.provider;
 export const environment = config.environment;
 export const region = config.region;
 export const infraVersion = config.infraVersion;
 
-// Phase 1 — Network
+// Network
 export const networkId = infra.networkId;
 
-// Phase 1 — Management cluster
+// Management cluster
 export const mgmtClusterName = infra.mgmtCluster.clusterName;
 export const mgmtClusterEndpoint = infra.mgmtCluster.endpoint;
 export const mgmtKubeconfig = pulumi.secret(infra.mgmtCluster.kubeconfig);
 
-// Phase 1 — Build cluster
+// Build cluster
 export const buildClusterName = infra.buildCluster.clusterName;
 export const buildClusterEndpoint = infra.buildCluster.endpoint;
 export const buildKubeconfig = pulumi.secret(infra.buildCluster.kubeconfig);
 
-// Phase 1 — Runtime cluster
+// Runtime cluster (cell-1)
 export const runtimeClusterName = infra.runtimeCluster.clusterName;
 export const runtimeClusterEndpoint = infra.runtimeCluster.endpoint;
 export const runtimeKubeconfig = pulumi.secret(infra.runtimeCluster.kubeconfig);
 
-// Phase 2 — Gitea (runs inside mgmt cluster)
-export const giteaReady = bootstrap.mgmt.giteaReady;
+// Runtime cluster (cell-2) — physically provisioned, activation handled at L2.
+export const runtime2ClusterName = infra.runtimeCluster2.clusterName;
+export const runtime2ClusterEndpoint = infra.runtimeCluster2.endpoint;
+export const runtime2Kubeconfig = pulumi.secret(infra.runtimeCluster2.kubeconfig);
 
-// Phase 1 — Database
+// Database
 export const dbHost = infra.database.privateHost;
 export const dbPort = infra.database.port;
 export const dbUri = pulumi.secret(infra.database.uri);
 export const dbPassword = pulumi.secret(infra.database.password);
+export const dbName = infra.database.database;
+export const dbUser = infra.database.user;
 
-// Phase 1 — Storage
+// Storage (Spaces / S3)
 export const bucketName = infra.bucketName;
 export const bucketEndpoint = infra.bucketEndpoint;
+export const staticBucketEndpoint = infra.staticBucketEndpoint;
+export const staticCdnEndpoint = infra.staticCdnEndpoint;
 
-// Phase 1 — Container Registry
+// Container Registry
 export const registryEndpoint = infra.registryEndpoint;
 export const registryName = infra.registryName;
 
-// Phase 2 — Management cluster services
-export const mgmtIngressReady = bootstrap.mgmt.ingressReady;
-export const mgmtIngressEndpoint = bootstrap.mgmt.ingressEndpoint;
-export const certManagerReady = bootstrap.mgmt.certManagerReady;
-export const argoCdReady = bootstrap.mgmt.argoCdReady;
-export const prometheusReady = bootstrap.mgmt.prometheusReady;
-export const grafanaReady = bootstrap.mgmt.grafanaReady;
-export const loopzeroApiReady = bootstrap.mgmt.loopzeroApiReady;
-export const tenantControllerReady = bootstrap.mgmt.tenantControllerReady;
-export const argoWorkflowsReady = bootstrap.build.argoWorkflowsReady;
-
-// Phase 2 — Runtime cluster services
-export const runtimeIngressReady = bootstrap.runtime.ingressReady;
-export const runtimeIngressEndpoint = bootstrap.runtime.ingressEndpoint;
-
-// Phase 3 — DNS
-export const mgmtDnsConfigured = expose.mgmtDnsConfigured;
-export const runtimeDnsConfigured = expose.runtimeDnsConfigured;
-
-// Cloudflare
+// Cloudflare API resources
 export const cfTunnelId = tunnelOutput?.tunnelId;
+// CHG-2026-04-28-LAYERED-BOOTSTRAP — exposed for Helmfile L2 cloudflared release.
+export const cfTunnelToken = tunnelOutput ? pulumi.secret(tunnelOutput.tunnelToken) : undefined;
 export const cfKvNamespaceId = staticDelivery?.kvNamespaceId;
 export const cfWorkerName = staticDelivery?.workerName;
 
-// --- Wiring outputs (connection details for operators) ---
-export const wiring = pulumi.output({
-  gitea: {
-    internalUrl: "http://gitea-http.loopzero-system.svc.cluster.local:3000",
-    publicUrl: `https://git.${config.domain}`,
-  },
-  grafana: {
-    internalUrl: "http://grafana.loopzero-system.svc.cluster.local:3000",
-    publicUrl: `https://grafana.${config.domain}`,
-  },
-  prometheus: {
-    internalUrl: "http://prometheus-server.loopzero-system.svc.cluster.local:80",
-  },
-  registry: {
-    endpoint: infra.registryEndpoint,
-    name: infra.registryName,
-  },
-  database: {
-    privateHost: infra.database.privateHost,
-    port: infra.database.port,
-    database: infra.database.database,
-    user: infra.database.user,
-  },
-  storage: {
-    bucket: infra.bucketName,
-    endpoint: infra.bucketEndpoint,
-  },
-  mgmt: {
-    ingressEndpoint: bootstrap.mgmt.ingressEndpoint,
-    clusterEndpoint: infra.mgmtCluster.endpoint,
-  },
-  build: {
-    clusterEndpoint: infra.buildCluster.endpoint,
-  },
-  runtime: {
-    ingressEndpoint: bootstrap.runtime.ingressEndpoint,
-    clusterEndpoint: infra.runtimeCluster.endpoint,
-  },
-});
+// Harbor managed Redis (DO Valkey) — consumed by L2 Helmfile generate-secrets.sh
+export const harborRedisHost = harborRedis.host;
+export const harborRedisPort = harborRedis.port;
+export const harborRedisPassword = pulumi.secret(harborRedis.password);
+export const harborRedisClusterId = harborRedis.clusterId;

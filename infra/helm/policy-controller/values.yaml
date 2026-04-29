@@ -1,0 +1,16 @@
+# sigstore/policy-controller values used by runtime helmfile.
+# CHG-2026-04-28-LAYERED-BOOTSTRAP — version 0.8.1 (validated existence in repo).
+#
+# NOTE: the chart's values.schema.json rejects podSecurityContext and
+# containerSecurityContext at every path tried — chart ships hardened defaults
+# baked into the controller manager template. DO NOT add securityContext here
+# (B-NEW iter 1: rejected by schema validation).
+webhook:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: loopzero-platform
+  namespace: argocd
+  labels:
+    loopzero.io/managed-by: loopzero-platform
+spec:
+  description: |
+    LoopZero platform App of Apps — Day-2 drift management.
+    Source: docs/plans/infra-layered-bootstrap-plan.md (T6.1).
+
+  sourceRepos:
+    - "*"
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+    - server: "*"
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  orphanedResources:
+    warn: true

@@ -1,0 +1,42 @@
+# Default values for the admission-policies chart.
+# Override per environment via environments/dev.yaml, prod.yaml in helmfile.
+
+# Domain used to derive the Harbor registry hostname.
+domain: dev.loopzero.example
+
+# Approved registry prefixes used by ClusterImagePolicy and the
+# restrict-registries VAP.
+registries:
+  docrPrefix: "registry.digitalocean.com/loopzero-system/"
+  harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
+
+# ClusterImagePolicy — sigstore policy-controller resource (B16).
+# WARNING: policy-controller deny-by-default rejects ALL pods if no
+# ClusterImagePolicy matches. This chart MUST be installed before any
+# tenant workload starts.
+clusterImagePolicy:
+  enabled: true
+  name: loopzero-images-warn
+  # warn  — log audit, admit (Sprint 6 default)
+  # enforce — reject unsigned images (Sprint 9 cosign keyless)
+  mode: warn
+  # static action when no signature can be verified yet
+  staticAction: pass
+  imageGlobs:
+    - "registry.digitalocean.com/loopzero-system/**"
+    - "harbor.dev.loopzero.example/loopzero-platform/**"
+
+# Toggle individual VAPs (enabled by default).
+vaps:
+  disallowLatestTag: true
+  restrictRegistries: true
+  requireResourceLimits: true
+  protectPlatformNetworkpolicies: true
+  argocdManagedBy: true
+  requireImageSignature: true
+
+# Toggle the policy-controller PrometheusRule (alerts).
+alerts:
+  enabled: true
+  namespace: monitoring
+  prometheusReleaseLabel: monitoring
