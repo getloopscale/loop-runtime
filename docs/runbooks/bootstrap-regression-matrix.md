@@ -134,17 +134,20 @@
 | 109| OPERATOR          | "pull secret ensure failed" em loop em standalone-multi (F-09) | dogfood iter 1 | environment_rbac.go switch err.IsNotFound vs default; SourceMissing condition reason em vez de log spam | (a) | TestF09EnsurePullSecretHandlesNotFound | NÃO | SIM |
 | 110| OPERATOR          | OTel exporter RPC error a cada 30s em standalone-multi (F-10) | dogfood iter 1 | overlay-only: tenant-controller values-standalone-multi.yaml seta LOOPZERO_TRACING_ENABLED=false; default values intactos; tracing.go já honra a env | (a) | TestF10TracingDisabledInStandaloneMulti | NÃO | SIM |
 | 111| API               | Argo Workflow pods em Error acumulando na ns argo (F-13) | dogfood iter 1 | workflow_builder.go adiciona PodGC.Strategy=OnPodCompletion + DeleteDelayDuration=5m; pods de step (Success E Error) deletados 5min após completar | (a) + unit test estendido | TestF13WorkflowHasPodGC | NÃO | SIM |
+| 112| OBSERVABILITY     | /metrics arquitetural separation undocumented (F-08) | dogfood iter 2 | Service expõe :9090 metrics port + ServiceMonitor opt-in via .Values.serviceMonitor.enabled (false em standalone-multi sem prometheus-operator); runbook docs/runbooks/observability.md explica :3001 (API plane) vs :9090 (Prometheus exposition) — blast-radius separation | (a) + runbook | TestF08LoopZeroApiServiceMonitorOptIn | NÃO | SIM |
+| 113| INTEGRATION       | ArgoCD app-controller reporta health="" para Traefik IngressRoute / Middleware (F-11) | dogfood iter 2 | argocd values.yaml ganha resource.customizations.health.{traefik.io_IngressRoute, traefik.io_Middleware, traefik.io_TLSOption, cert-manager.io_Certificate} Lua scripts; IngressRoute usa obj.spec.routes (não .status — CRD não tem); Certificate parseia .status.conditions Ready/True | (a) + Lua applied live | TestF11ArgocdLuaHealthChecksDefined | NÃO | SIM |
+| 114| API               | /api/v1/health/deep reporta argocd:auth_failed em standalone-multi (F-12) | dogfood iter 2 | generate-secrets.sh estendido: login admin via REST `/api/v1/session`, capturar JWT, persistir em Secret loopzero-api-tokens (loopzero-system) com chave argocd-token; idempotente (preserva existing token quando login falha mid-bootstrap); loopzero-api Deployment template lê via secretKeyRef opcional | (a) + helmfile script test | TestF12LoopZeroApiTokensSecretGenerated | NÃO | SIM |
 
 ---
 
 ## Coverage Summary
 
-- **Total problems:** 111 (44 originais + 31 mgmt bootstrap iter 22-27 + 8 multi-cluster bootstrap iter 1-5 + 5 product reconcile iter 7-8 + 4 build pipeline iter 9 + 5 deploy completion iter 10-11 + 6 deploy E2E iter 12 + 8 dogfood remediation iter 1 (F-01/F-03/F-05/F-06/F-07/F-09/F-10/F-13))
-- **NÃO recorre (eliminada):** 86
+- **Total problems:** 114 (44 originais + 31 mgmt bootstrap iter 22-27 + 8 multi-cluster bootstrap iter 1-5 + 5 product reconcile iter 7-8 + 4 build pipeline iter 9 + 5 deploy completion iter 10-11 + 6 deploy E2E iter 12 + 8 dogfood iter 1 + 3 dogfood iter 2 (F-08/F-11/F-12))
+- **NÃO recorre (eliminada):** 89
 - **PARCIAL (detecta runtime):** 1 _(B58 — argocd-repo-server OOMKilled em low-resource k3d)_
 - **N/A (low severity / out of scope):** 3 (gitea_pusher wrap, git push race, DOCR QPS)
-- **SIM (sem proteção):** 5 _(B58 partial; T2 redesign Apps L3 governance; F-04 Tenant SoT VAP+migration próxima iteração; F-08 /metrics docs; F-12 argocd auth_failed investigação API)_
-- **CRITÉRIO DE SAÍDA**: para os 44 problemas originais, atingido (0 SIMs). 86/111 (77%) têm proteção permanente. F-04/F-08/F-12 são carry-over honesto para próxima iteração do dogfood remediation.
+- **SIM (sem proteção, governance-blocked):** 3 _(B58 partial environmental; T2 redesign Apps L3 governance meeting; F-04 Tenant SoT — toca tenant isolation per CLAUDE.md Pre-release governance, exige T2 meeting com platform-architect + production-design-reviewer + change-validation-planner antes de implementar VAP + migration script)_
+- **CRITÉRIO DE SAÍDA**: para os 44 problemas originais, atingido (0 SIMs). 89/114 (78%) têm proteção permanente. Único carry-over honesto é F-04 (S1) que aguarda governance T2 — diagnóstico está completo no plano `docs/plans/dogfood-2026-04-29-remediation-plan.md` (ADR D3 + T3.1 + T3.2 + T3.3).
 
 ## Loop Back Checkpoint (per phase)
 

@@ -139,17 +139,28 @@ check_F07() {
   fi
 }
 
-# F-08: /metrics returns 404 on Service port (3001 / 13001).
+# F-08: /metrics architectural decision — port 9090 is the Prometheus
+# exposition endpoint, port 3001 (Service.port http) is the API plane.
+# Pre-fix the runbook didn't exist documenting this. Post-fix: check that
+# (a) docs/runbooks/observability.md exists, (b) chart exposes :9090, and
+# (c) ServiceMonitor opt-in is wired. NOT a check on :3001/metrics — that
+# was a false-positive in the original dogfood report (:3001 never served
+# Prometheus exposition, by design — blast-radius separation).
 check_F08() {
-  local code
-  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:13001/metrics 2>/dev/null || echo "000")
-  if [[ "$code" == "404" ]]; then
-    add_finding F-08 S3 REPRODUCED "/metrics on Service port returned 404 (metrics only on internal :9090)"
-  elif [[ "$code" == "200" ]]; then
-    add_finding F-08 S3 FIXED "/metrics on Service port returned 200"
-  else
-    add_finding F-08 S3 INDETERMINATE "/metrics returned $code"
+  local runbook="docs/runbooks/observability.md"
+  if [[ ! -f "$runbook" ]]; then
+    add_finding F-08 S3 REPRODUCED "runbook $runbook missing — :9090 metrics architecture undocumented"
+    return
   fi
+  if ! grep -q "9090" "$runbook"; then
+    add_finding F-08 S3 REPRODUCED "runbook does not document :9090 metrics endpoint"
+    return
+  fi
+  if ! grep -q "ServiceMonitor" infra/helm/loopzero-api/templates/servicemonitor.yaml 2>/dev/null; then
+    add_finding F-08 S3 REPRODUCED "ServiceMonitor template missing"
+    return
+  fi
+  add_finding F-08 S3 FIXED "runbook + ServiceMonitor opt-in + metrics port wired (architecturally correct: :3001=API, :9090=Prom)"
 }
 
 # F-09: tenant-controller logs "pull secret ensure failed" in loop.

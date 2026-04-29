@@ -1303,6 +1303,119 @@ func TestF10TracingDisabledInStandaloneMulti(t *testing.T) {
 	}
 }
 
+// TestF08LoopZeroApiServiceMonitorOptIn — chart DEVE renderizar metrics port
+// no Service + Deployment + ServiceMonitor opt-in via toggle. Em
+// standalone-multi sem prometheus-operator, ServiceMonitor não renderiza
+// (toggle=false default) — evita erro de CRD missing em kubeconform.
+func TestF08LoopZeroApiServiceMonitorOptIn(t *testing.T) {
+	dep, err := os.ReadFile("../../helm/loopzero-api/templates/deployment.yaml")
+	if err != nil {
+		t.Fatalf("read deployment.yaml: %v", err)
+	}
+	depStr := string(dep)
+	// Container expõe :9090.
+	if !strings.Contains(depStr, "containerPort: 9090") {
+		t.Error("F-08 regression: deployment template must declare containerPort 9090 for metrics scraping")
+	}
+	if !strings.Contains(depStr, "name: metrics") {
+		t.Error("F-08 regression: container port must be named `metrics` (referenced by Service.targetPort)")
+	}
+	// Service expõe metrics port.
+	if !strings.Contains(depStr, "targetPort: metrics") {
+		t.Error("F-08 regression: Service must include port targetPort=metrics so ServiceMonitor scrape works")
+	}
+	// ServiceMonitor template existe + condicional.
+	sm, err := os.ReadFile("../../helm/loopzero-api/templates/servicemonitor.yaml")
+	if err != nil {
+		t.Fatalf("F-08 regression: servicemonitor.yaml missing: %v", err)
+	}
+	smStr := string(sm)
+	if !strings.Contains(smStr, "{{- if .Values.serviceMonitor.enabled }}") {
+		t.Error("F-08 regression: ServiceMonitor must be opt-in via .Values.serviceMonitor.enabled")
+	}
+	if !strings.Contains(smStr, "port: metrics") {
+		t.Error("F-08 regression: ServiceMonitor endpoints must reference port name=metrics")
+	}
+	// Default values.yaml: opt-out (standalone-multi sem prom-operator).
+	values, err := os.ReadFile("../../helm/loopzero-api/values.yaml")
+	if err != nil {
+		t.Fatalf("read values.yaml: %v", err)
+	}
+	if !strings.Contains(string(values), "serviceMonitor:") {
+		t.Error("F-08 regression: values.yaml must declare serviceMonitor block (default enabled=false)")
+	}
+	if !strings.Contains(string(values), "enabled: false") {
+		t.Error("F-08 regression: serviceMonitor.enabled default must be false (opt-in via overlay)")
+	}
+}
+
+// TestF11ArgocdLuaHealthChecksDefined — argocd values.yaml DEVE declarar
+// Lua health checks para Traefik IngressRoute / Middleware / TLSOption +
+// cert-manager Certificate. Sem isso, ArgoCD reporta health="" para esses
+// CRDs e Apps ficam stuck em Progressing infinito.
+func TestF11ArgocdLuaHealthChecksDefined(t *testing.T) {
+	data, err := os.ReadFile("../../helm/argocd/values.yaml")
+	if err != nil {
+		t.Fatalf("read argocd values.yaml: %v", err)
+	}
+	s := string(data)
+	expected := []string{
+		"resource.customizations.health.traefik.io_IngressRoute",
+		"resource.customizations.health.traefik.io_Middleware",
+		"resource.customizations.health.cert-manager.io_Certificate",
+	}
+	for _, key := range expected {
+		if !strings.Contains(s, key) {
+			t.Errorf("F-11 regression: argocd values.yaml must declare %q Lua health check", key)
+		}
+	}
+	// Lua deve usar `obj.spec` para IngressRoute (não `obj.status` — IngressRoute
+	// não tem .status field).
+	if !strings.Contains(s, "obj.spec.routes") {
+		t.Error("F-11 regression: IngressRoute health must check obj.spec.routes (no .status field)")
+	}
+	// Certificate deve parsear .status.conditions Ready type.
+	if !strings.Contains(s, "obj.status.conditions") || !strings.Contains(s, `c.type == "Ready"`) {
+		t.Error("F-11 regression: Certificate health must parse status.conditions Ready type")
+	}
+}
+
+// TestF12LoopZeroApiTokensSecretGenerated — generate-secrets.sh DEVE criar
+// loopzero-api-tokens Secret com argocd-token JWT. Sem isso, /api/v1/health/deep
+// reporta argocd:auth_failed degraded em standalone-multi.
+func TestF12LoopZeroApiTokensSecretGenerated(t *testing.T) {
+	data, err := os.ReadFile("../../helmfile/scripts/generate-secrets.sh")
+	if err != nil {
+		t.Fatalf("read generate-secrets.sh: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "loopzero-api-tokens") {
+		t.Error("F-12 regression: generate-secrets.sh must create loopzero-api-tokens Secret")
+	}
+	if !strings.Contains(s, "argocd-token") {
+		t.Error("F-12 regression: loopzero-api-tokens must include argocd-token key (JWT for /health/deep probe)")
+	}
+	if !strings.Contains(s, "/api/v1/session") {
+		t.Error("F-12 regression: script must POST to argocd /api/v1/session for JWT generation")
+	}
+	// Idempotência: se login falhar, preserve existing token.
+	if !strings.Contains(s, `get_existing loopzero-api-tokens loopzero-system argocd-token`) {
+		t.Error("F-12 regression: script must fall back to existing token when login fails (mid-bootstrap idempotency)")
+	}
+	// loopzero-api template DEVE referenciar o Secret.
+	dep, err := os.ReadFile("../../helm/loopzero-api/templates/deployment.yaml")
+	if err != nil {
+		t.Fatalf("read loopzero-api deployment: %v", err)
+	}
+	depStr := string(dep)
+	if !strings.Contains(depStr, "name: ARGOCD_TOKEN") {
+		t.Error("F-12 regression: loopzero-api Deployment must export env ARGOCD_TOKEN")
+	}
+	if !strings.Contains(depStr, "name: loopzero-api-tokens") {
+		t.Error("F-12 regression: ARGOCD_TOKEN must come from secretKeyRef loopzero-api-tokens")
+	}
+}
+
 // TestF13WorkflowHasPodGC — F-13 fix: workflow_builder.go DEVE setar
 // PodGC.Strategy=OnPodCompletion com DeleteDelayDuration=5m. Sem isso,
 // pods de step com Failed acumulam na ns argo até GC do Workflow (24h).

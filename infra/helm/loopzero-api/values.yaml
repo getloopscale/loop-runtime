@@ -51,6 +51,16 @@ resources:
     cpu: 1000m
     memory: 1Gi
 
+# F-08 (CHG-2026-04-29-DOGFOOD T5.3) — ServiceMonitor opt-in.
+# Default false: standalone-multi sem prometheus-operator não renderiza o
+# manifest (evita erro de CRD missing em kubeconform/helm install).
+# Dev/prod overlays setam true para Prometheus scrape.
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
 env:
   LOOPZERO_API_PORT: "8080"
   LOOPZERO_LOG_LEVEL: "info"

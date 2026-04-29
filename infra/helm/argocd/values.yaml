@@ -163,6 +163,69 @@ configs:
       end
       return hs
 
+    # F-11 (CHG-2026-04-29-DOGFOOD T5.1) — Lua health checks para CRDs
+    # Traefik. Sem isso, ArgoCD reporta `health: ""` para IngressRoute /
+    # Middleware (não conhece o spec), e o App agregado fica em
+    # `Progressing` infinito mesmo após sync completo. Manifests gerados
+    # por api/internal/manifests/renderer.go SEMPRE incluem essas CRDs em
+    # static-frontend deploys, então este check é load-bearing para UI
+    # consolidation pós-deploy.
+    resource.customizations.health.traefik.io_IngressRoute: |
+      hs = {}
+      -- IngressRoute não tem .status field no spec (recurso "applied-only").
+      -- Se o objeto existe e tem spec.routes, considera Healthy.
+      if obj.spec ~= nil and obj.spec.routes ~= nil and #obj.spec.routes > 0 then
+        hs.status = "Healthy"
+        hs.message = "IngressRoute applied with " .. tostring(#obj.spec.routes) .. " route(s)"
+      else
+        hs.status = "Progressing"
+        hs.message = "IngressRoute spec.routes empty or pending"
+      end
+      return hs
+
+    resource.customizations.health.traefik.io_Middleware: |
+      hs = {}
+      -- Middleware é stateless (sem .status). Existência = Healthy.
+      hs.status = "Healthy"
+      hs.message = "Middleware applied"
+      return hs
+
+    resource.customizations.health.traefik.io_TLSOption: |
+      hs = {}
+      hs.status = "Healthy"
+      hs.message = "TLSOption applied"
+      return hs
+
+    # F-11 — cert-manager Certificate health (parse .status.conditions).
+    # Em standalone-multi sem real LE, Certificate fica "Progressing/Issuing"
+    # — comportamento esperado, não é falha. Em dev/prod com LE ACME, vira
+    # "Healthy/Ready=True" após challenge.
+    resource.customizations.health.cert-manager.io_Certificate: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = "Issuing"
+      if obj.status ~= nil and obj.status.conditions ~= nil then
+        for _, c in ipairs(obj.status.conditions) do
+          if c.type == "Ready" then
+            if c.status == "True" then
+              hs.status = "Healthy"
+              hs.message = c.message or "Certificate ready"
+            elseif c.status == "False" then
+              -- Distingue "ainda issuing" (Progressing) de "permanent fail"
+              -- (Degraded). reason "Failed" ou "InvalidConfig" → Degraded.
+              if c.reason == "Failed" or c.reason == "InvalidConfig" then
+                hs.status = "Degraded"
+                hs.message = c.reason .. ": " .. (c.message or "")
+              else
+                hs.status = "Progressing"
+                hs.message = c.message or "Issuing certificate"
+              end
+            end
+          end
+        end
+      end
+      return hs
+
 
 # ArgoCD Notifications — push-based deploy activation.
 # When an Application reaches Synced + Healthy, ArgoCD calls the API
