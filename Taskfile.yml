@@ -1731,6 +1731,19 @@ tasks:
       - cd infra/pulumi && npx vitest run 2>&1 | tail -3
       - echo "✓ All CHG-2026-04-28-LAYERED-BOOTSTRAP validations PASS"
 
+  migrate:tenants:
+    desc: |
+      F-04 (CHG-2026-04-29-DOGFOOD T3.3) — Reconcile Tenant + Environment
+      CRs duplicados entre namespaces para o canônico loopzero-system. Default
+      é dry-run; usar `task migrate:tenants -- --apply` para commit.
+
+      CRITICAL: este é o T1 fix (data cleanup). T3.1 (hard-code do
+      namespace no operator/API code) + T3.2 (ValidatingAdmissionPolicy
+      preventiva) ficam T2 governance per CLAUDE.md Pre-release rule
+      (touches tenant isolation contract).
+    cmds:
+      - bash infra/scripts/migrate-tenant-namespace.sh {{.CLI_ARGS}}
+
   dogfood:repro:
     desc: |
       CHG-2026-04-29-DOGFOOD — Reproduce all 13 dogfood findings (F-01..F-13)

@@ -137,17 +137,18 @@
 | 112| OBSERVABILITY     | /metrics arquitetural separation undocumented (F-08) | dogfood iter 2 | Service expõe :9090 metrics port + ServiceMonitor opt-in via .Values.serviceMonitor.enabled (false em standalone-multi sem prometheus-operator); runbook docs/runbooks/observability.md explica :3001 (API plane) vs :9090 (Prometheus exposition) — blast-radius separation | (a) + runbook | TestF08LoopZeroApiServiceMonitorOptIn | NÃO | SIM |
 | 113| INTEGRATION       | ArgoCD app-controller reporta health="" para Traefik IngressRoute / Middleware (F-11) | dogfood iter 2 | argocd values.yaml ganha resource.customizations.health.{traefik.io_IngressRoute, traefik.io_Middleware, traefik.io_TLSOption, cert-manager.io_Certificate} Lua scripts; IngressRoute usa obj.spec.routes (não .status — CRD não tem); Certificate parseia .status.conditions Ready/True | (a) + Lua applied live | TestF11ArgocdLuaHealthChecksDefined | NÃO | SIM |
 | 114| API               | /api/v1/health/deep reporta argocd:auth_failed em standalone-multi (F-12) | dogfood iter 2 | generate-secrets.sh estendido: login admin via REST `/api/v1/session`, capturar JWT, persistir em Secret loopzero-api-tokens (loopzero-system) com chave argocd-token; idempotente (preserva existing token quando login falha mid-bootstrap); loopzero-api Deployment template lê via secretKeyRef opcional | (a) + helmfile script test | TestF12LoopZeroApiTokensSecretGenerated | NÃO | SIM |
+| 115| STATE_DRIFT       | Tenant + Environment CRs duplicados entre namespaces default ↔ loopzero-system (F-04) — plan enforcement não-determinístico, billing/quota/RBAC indeterminados | dogfood iter 3 | T1 cleanup: `infra/scripts/migrate-tenant-namespace.sh` (NEW) idempotente, dry-run default, decide_winner por creationTimestamp, backup em ~/.loopzero/backups/tenant-migration-*. Hardened com skip-reconcile annotation BEFORE remove finalizer (incident 2026-04-29 iter 3 — cascade delete destruiu shared resources HTTP 200 → 404). T3.1 (hard-code namespace) + T3.2 (ValidatingAdmissionPolicy) registrados em ADR-0018 DRAFT aguardando T2 meeting com platform-architect + production-design-reviewer + change-validation-planner + k8s-controller-engineer. | (a) + ADR pendente T2 | TestF04MigrationScriptExists | NÃO | partial |
 
 ---
 
 ## Coverage Summary
 
-- **Total problems:** 114 (44 originais + 31 mgmt bootstrap iter 22-27 + 8 multi-cluster bootstrap iter 1-5 + 5 product reconcile iter 7-8 + 4 build pipeline iter 9 + 5 deploy completion iter 10-11 + 6 deploy E2E iter 12 + 8 dogfood iter 1 + 3 dogfood iter 2 (F-08/F-11/F-12))
-- **NÃO recorre (eliminada):** 89
-- **PARCIAL (detecta runtime):** 1 _(B58 — argocd-repo-server OOMKilled em low-resource k3d)_
+- **Total problems:** 115 (44 originais + 31 mgmt bootstrap iter 22-27 + 8 multi-cluster bootstrap iter 1-5 + 5 product reconcile iter 7-8 + 4 build pipeline iter 9 + 5 deploy completion iter 10-11 + 6 deploy E2E iter 12 + 8 dogfood iter 1 + 3 dogfood iter 2 + 1 dogfood iter 3 (F-04 partial via T3.3 script))
+- **NÃO recorre (eliminada):** 90 _(F-04 layer-1 data-cleanup shipped; layer-2 + layer-3 prevention pendente T2 ADR-0018)_
+- **PARCIAL (detecta runtime):** 2 _(B58 environmental + F-04 architectural prevention pendente T2)_
 - **N/A (low severity / out of scope):** 3 (gitea_pusher wrap, git push race, DOCR QPS)
-- **SIM (sem proteção, governance-blocked):** 3 _(B58 partial environmental; T2 redesign Apps L3 governance meeting; F-04 Tenant SoT — toca tenant isolation per CLAUDE.md Pre-release governance, exige T2 meeting com platform-architect + production-design-reviewer + change-validation-planner antes de implementar VAP + migration script)_
-- **CRITÉRIO DE SAÍDA**: para os 44 problemas originais, atingido (0 SIMs). 89/114 (78%) têm proteção permanente. Único carry-over honesto é F-04 (S1) que aguarda governance T2 — diagnóstico está completo no plano `docs/plans/dogfood-2026-04-29-remediation-plan.md` (ADR D3 + T3.1 + T3.2 + T3.3).
+- **SIM (sem proteção):** 2 _(B58 environmental + T2 redesign Apps L3 governance)_
+- **CRITÉRIO DE SAÍDA**: para os 44 problemas originais, atingido (0 SIMs). 90/115 (78%) têm proteção permanente; 2 PARCIAL (1 architectural prevention pendente governance T2 com diagnóstico completo em ADR-0018; 1 environmental aceitável); 0 carry-over não-classificado.
 
 ## Loop Back Checkpoint (per phase)
 

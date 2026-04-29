@@ -1416,6 +1416,41 @@ func TestF12LoopZeroApiTokensSecretGenerated(t *testing.T) {
 	}
 }
 
+// TestF04MigrationScriptExists — Tenant SoT fix (T1 partial of F-04).
+// Migration script reconcilia Tenant/Environment CRs duplicados entre
+// namespaces para o canônico loopzero-system. T3.1 (hard-code do namespace
+// no código operator/API) e T3.2 (ValidatingAdmissionPolicy) ficam T2
+// governance per CLAUDE.md Pre-release rule (tenant isolation contract).
+func TestF04MigrationScriptExists(t *testing.T) {
+	const path = "../../scripts/migrate-tenant-namespace.sh"
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("F-04 regression: migration script missing: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read migration script: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "skip-reconcile=true") {
+		t.Error("F-04 regression: script must annotate stale CR with skip-reconcile BEFORE removing finalizer (incident 2026-04-29 iter 3 — cascade delete destroyed shared resources)")
+	}
+	if !strings.Contains(s, "force-reconcile=") {
+		t.Error("F-04 regression: script must trigger force-reconcile on canonical CR after delete to re-validate shared resources")
+	}
+	// DRY_RUN default (não destrutivo sem --apply explícito).
+	if !strings.Contains(s, "DRY_RUN=1") {
+		t.Error("F-04 regression: script must default to DRY_RUN=1 (require explicit --apply for destructive ops)")
+	}
+	// Backup before destructive ops.
+	if !strings.Contains(s, "BACKUP_DIR=") || !strings.Contains(s, "tenant-migration-") {
+		t.Error("F-04 regression: script must backup CR YAML to ~/.loopzero/backups/tenant-migration-* before delete")
+	}
+	// decide_winner logic: prefer canonical (loopzero-system) by creationTimestamp.
+	if !strings.Contains(s, "decide_winner") || !strings.Contains(s, "creationTimestamp") {
+		t.Error("F-04 regression: script must compare creationTimestamp to decide canonical winner")
+	}
+}
+
 // TestF13WorkflowHasPodGC — F-13 fix: workflow_builder.go DEVE setar
 // PodGC.Strategy=OnPodCompletion com DeleteDelayDuration=5m. Sem isso,
 // pods de step com Failed acumulam na ns argo até GC do Workflow (24h).
