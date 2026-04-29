@@ -80,6 +80,10 @@ final=$(wait_build_terminal "$build_v1" 1500)
 HOST="${TENANT_ID}-${PROJECT}-${APP}-${ENV}.loopzero.local"
 wait_http_200 "$HOST" 300 "/health" || journey_fail "v1 HTTP 200 timeout"
 wait_version "$HOST" "v1" 180 || journey_fail "v1 version not visible"
+# Convergence: wait for v1's release row to flip ACTIVE before issuing v2.
+# Otherwise rollback's "previous release" lookup may resolve to a stale row.
+wait_release_active "$PROJECT" "$ENV" "$build_v1" 180 \
+  || journey_fail "v1 release for build=$build_v1 did not reach ACTIVE in DB"
 
 journey_step "Deploy v2"
 echo "v2" > "$WORK_DIR/src/VERSION.txt"
@@ -90,6 +94,11 @@ journey_log "v2 build_id=$build_v2"
 final2=$(wait_build_terminal "$build_v2" 1500)
 [[ "$final2" == "SUCCEEDED" ]] || journey_fail "v2 build did not succeed: $final2"
 wait_version "$HOST" "v2" 180 || journey_fail "v2 version not visible (active release should be v2)"
+# Wait for v2 to be the DB-confirmed ACTIVE release before rolling back.
+# rollback derives "previous" via release ordering, which only stabilizes once
+# v1 has been SUPERSEDED by v2 (state machine: NewReleaseActivated event).
+wait_release_active "$PROJECT" "$ENV" "$build_v2" 180 \
+  || journey_fail "v2 release for build=$build_v2 did not reach ACTIVE in DB"
 
 journey_step "loopzero rollback (auto — no --to, falls back to previous release)"
 # Without --to, rollback automatically targets the release immediately
