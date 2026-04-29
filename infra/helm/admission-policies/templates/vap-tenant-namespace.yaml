@@ -28,12 +28,16 @@ spec:
         operations: ["CREATE", "UPDATE"]
         resources: ["tenants", "environments"]
   matchConditions:
-    # C6 — status subresource bypass. `request.subResource` is empty
-    # string for main resource updates and "status"/"scale"/etc for
-    # subresource updates. We only validate the main resource — status
-    # writes by the controller pass through unchanged.
+    # C6 — status subresource bypass. CEL gotcha: `request.subResource`
+    # is OMITTED (not empty string) for main resource requests. Using
+    # `request.subResource == ""` raises `no such key: subResource`. The
+    # CEL-correct form is `!has(request.subResource)` for "main resource"
+    # detection (verified live against k3d 1.32.13 — see
+    # docs/decisions/MEET-ADR-0018-decision.md C6 amendment iter 6).
+    # We negate: match (run validation) only when there is NO subResource.
+    # Status/scale subresource updates by the controller pass through.
     - name: skip-status-subresource
-      expression: 'request.subResource == ""'
+      expression: '!has(request.subResource)'
   validations:
     - expression: 'object.metadata.namespace == "loopzero-system"'
       messageExpression: '"LoopZero platform CRDs (Tenant, Environment) must be created in the platform namespace, not " + object.metadata.namespace + ". This is a protected namespace boundary; contact your platform admin."'
