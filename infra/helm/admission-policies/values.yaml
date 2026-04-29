@@ -34,6 +34,12 @@ vaps:
   protectPlatformNetworkpolicies: true
   argocdManagedBy: true
   requireImageSignature: true
+  # ADR-0018 v2 / T3.2 — Tenant + Environment CRs MUST live in `loopzero-system`.
+  # Default OFF: toggle on via overlay AFTER T3.3 migration ran successfully
+  # (mandatory deployment order C4 in MEET-ADR-0018 rollout runbook).
+  # Enabling before clearing misplaced CRs causes self-inflicted DoS —
+  # status subresource updates rejected → operator stops reconciling.
+  tenantNamespace: false
 
 # Toggle the policy-controller PrometheusRule (alerts).
 alerts:

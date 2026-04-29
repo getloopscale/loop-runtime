@@ -1416,6 +1416,232 @@ func TestF12LoopZeroApiTokensSecretGenerated(t *testing.T) {
 	}
 }
 
+// TestF04MigrationScriptExists — Tenant SoT fix (T1 partial of F-04).
+// Migration script reconcilia Tenant/Environment CRs duplicados entre
+// namespaces para o canônico loopzero-system. T3.1 (hard-code do namespace
+// no código operator/API) e T3.2 (ValidatingAdmissionPolicy) ficam T2
+// governance per CLAUDE.md Pre-release rule (tenant isolation contract).
+func TestF04MigrationScriptExists(t *testing.T) {
+	const path = "../../scripts/migrate-tenant-namespace.sh"
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("F-04 regression: migration script missing: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read migration script: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "skip-reconcile=true") {
+		t.Error("F-04 regression: script must annotate stale CR with skip-reconcile BEFORE removing finalizer (incident 2026-04-29 iter 3 — cascade delete destroyed shared resources)")
+	}
+	if !strings.Contains(s, "force-reconcile=") {
+		t.Error("F-04 regression: script must trigger force-reconcile on canonical CR after delete to re-validate shared resources")
+	}
+	// DRY_RUN default (não destrutivo sem --apply explícito).
+	if !strings.Contains(s, "DRY_RUN=1") {
+		t.Error("F-04 regression: script must default to DRY_RUN=1 (require explicit --apply for destructive ops)")
+	}
+	// Backup before destructive ops.
+	if !strings.Contains(s, "BACKUP_DIR=") || !strings.Contains(s, "tenant-migration-") {
+		t.Error("F-04 regression: script must backup CR YAML to ~/.loopzero/backups/tenant-migration-* before delete")
+	}
+	// decide_winner logic: prefer canonical (loopzero-system) by creationTimestamp.
+	if !strings.Contains(s, "decide_winner") || !strings.Contains(s, "creationTimestamp") {
+		t.Error("F-04 regression: script must compare creationTimestamp to decide canonical winner")
+	}
+}
+
+// =============================================================================
+// ADR-0018 v2 (MEET-ADR-0018) — Tenant SoT regression tests.
+// Conditions C1-C16 enforced as static code/config invariants where possible.
+// =============================================================================
+
+// TestADR0018C1_NoEnvVarOverride — C1 enforcement at static analysis time.
+// `tenant_cr_manager.go` MUST declare a Go `const` (not `var`) and MUST NOT
+// read TENANT_NAMESPACE env. Without this, future PR could re-introduce the
+// iter 7-8 misplacement vector.
+func TestADR0018C1_NoEnvVarOverride(t *testing.T) {
+	data, err := os.ReadFile("../../../api/internal/k8s/tenant_cr_manager.go")
+	if err != nil {
+		t.Fatalf("read tenant_cr_manager.go: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, `const tenantNamespace = "loopzero-system"`) {
+		t.Error("ADR-0018 C1 regression: tenant_cr_manager.go must declare `const tenantNamespace = \"loopzero-system\"`")
+	}
+	if strings.Contains(s, `os.Getenv("TENANT_NAMESPACE")`) {
+		t.Error("ADR-0018 C1 regression: tenant_cr_manager.go must NOT read TENANT_NAMESPACE env")
+	}
+}
+
+// TestADR0018C9_OperatorCacheScope — C9 enforcement: operator manager
+// declares cache.Options.ByObject restricting Tenant/Environment/
+// PlatformBootstrap/GitRepositoryBinding/ClusterCredential to loopzero-system.
+// LoopZeroApplication/PreviewEnvironment/ExposedRoute remain cluster-wide.
+func TestADR0018C9_OperatorCacheScope(t *testing.T) {
+	data, err := os.ReadFile("../../../operators/cmd/main.go")
+	if err != nil {
+		t.Fatalf("read operators/cmd/main.go: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "cache.Options{") {
+		t.Error("ADR-0018 C9 regression: manager must use cache.Options for per-Kind namespace scoping")
+	}
+	if !strings.Contains(s, "platformCRDNamespaces") {
+		t.Error("ADR-0018 C9 regression: platformCRDNamespaces map missing — required for restricted cache")
+	}
+	for _, crd := range []string{"loopzerov1.Tenant{}", "loopzerov1.Environment{}"} {
+		if !strings.Contains(s, crd) {
+			t.Errorf("ADR-0018 C9 regression: cache.ByObject must include %q with platformCRDNamespaces", crd)
+		}
+	}
+	// LoopZeroApplication MUST stay cluster-wide — assert it's NOT in the
+	// restricted ByObject map. Heuristic: search for the comment that
+	// documents the exclusion.
+	if !strings.Contains(s, "intentionally\n\t\t\t\t// NOT listed") &&
+		!strings.Contains(s, "intentionally") {
+		t.Error("ADR-0018 C9 regression: LoopZeroApplication/PreviewEnvironment must remain cluster-wide; document the exclusion explicitly")
+	}
+}
+
+// TestADR0018C2C5_StartupMisplacementScan — C2 + C5 enforcement: operator
+// runs runMisplacedTenantScan at startup and emits loopzero_misplaced_tenant_total.
+func TestADR0018C2C5_StartupMisplacementScan(t *testing.T) {
+	mainData, err := os.ReadFile("../../../operators/cmd/main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	if !strings.Contains(string(mainData), "runMisplacedTenantScan") {
+		t.Error("ADR-0018 C2 regression: main.go must invoke runMisplacedTenantScan at startup")
+	}
+	if !strings.Contains(string(mainData), "func runMisplacedTenantScan") {
+		t.Error("ADR-0018 C2 regression: runMisplacedTenantScan function must be defined")
+	}
+	metricsData, err := os.ReadFile("../../../operators/internal/metrics/metrics.go")
+	if err != nil {
+		t.Fatalf("read metrics.go: %v", err)
+	}
+	if !strings.Contains(string(metricsData), "MisplacedTenantTotal") {
+		t.Error("ADR-0018 C5 regression: metrics package must export MisplacedTenantTotal")
+	}
+	if !strings.Contains(string(metricsData), "loopzero_misplaced_tenant_total") {
+		t.Error("ADR-0018 C5 regression: metric name must be loopzero_misplaced_tenant_total")
+	}
+}
+
+// TestADR0018T32_VAPTemplateExists — T3.2 chart artifact + opt-in toggle.
+// VAP template MUST exclude status subresource per C6 to avoid blocking
+// operator status writes (self-inflicted DoS).
+func TestADR0018T32_VAPTemplateExists(t *testing.T) {
+	const path = "../../helm/admission-policies/templates/vap-tenant-namespace.yaml"
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ADR-0018 T3.2 regression: VAP template missing: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "{{- if .Values.vaps.tenantNamespace }}") {
+		t.Error("ADR-0018 T3.2 regression: VAP must be opt-in via .Values.vaps.tenantNamespace")
+	}
+	// C6 — status subresource exclusion via matchConditions.
+	if !strings.Contains(s, "matchConditions:") {
+		t.Error("ADR-0018 C6 regression: VAP must declare matchConditions to exclude subresources")
+	}
+	if !strings.Contains(s, `request.subResource == ""`) {
+		t.Error("ADR-0018 C6 regression: matchConditions must skip when subResource != \"\" (status subresource bypass)")
+	}
+	// Validation expression check loopzero-system namespace.
+	if !strings.Contains(s, `object.metadata.namespace == "loopzero-system"`) {
+		t.Error("ADR-0018 T3.2 regression: validation expression must enforce namespace=loopzero-system")
+	}
+	// Default values.yaml: opt-out.
+	values, err := os.ReadFile("../../helm/admission-policies/values.yaml")
+	if err != nil {
+		t.Fatalf("read values: %v", err)
+	}
+	if !strings.Contains(string(values), "tenantNamespace: false") {
+		t.Error("ADR-0018 C4 regression: vaps.tenantNamespace default must be `false` (mandatory deployment order — VAP last)")
+	}
+}
+
+// TestADR0018C7_RolloutRunbookExists — C7 enforcement: runbook with
+// mandatory deployment order T3.3 → T3.1 → T3.2 + abort criteria + rollback.
+func TestADR0018C7_RolloutRunbookExists(t *testing.T) {
+	data, err := os.ReadFile("../../../docs/runbooks/adr-0018-rollout.md")
+	if err != nil {
+		t.Fatalf("ADR-0018 C7 regression: runbook missing: %v", err)
+	}
+	s := string(data)
+	for _, must := range []string{
+		"Step 1: T3.3 migration",
+		"Step 2: Operator upgrade",
+		"Step 3: Apply T3.2 VAP",
+		"Mandatory deployment ORDER",
+		"Rollback Step",
+		"DR / Restore",
+	} {
+		if !strings.Contains(s, must) {
+			t.Errorf("ADR-0018 C7 regression: runbook missing required section %q", must)
+		}
+	}
+}
+
+// TestT12ExitCodeContractTestExists — T1.2 (CHG-2026-04-29-DOGFOOD).
+// Garante que o fork-based exit code contract test exists e cobre matrix
+// mínima de comandos (auth-gated, validate, parse errors, help/version).
+// Sem este test, regressão em F-02 (exit code drift) volta silenciosa.
+func TestT12ExitCodeContractTestExists(t *testing.T) {
+	const path = "../../../cli/tests/integration/exit-code-contract.test.ts"
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("T1.2 regression: contract test missing: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read contract test: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "spawnSync") {
+		t.Error("T1.2 regression: contract test must use child_process.spawnSync to invoke real process")
+	}
+	for _, cmd := range []string{"whoami", "deploy", "validate", "build", "secret", "rollback"} {
+		if !strings.Contains(s, "'"+cmd+"'") && !strings.Contains(s, `"`+cmd+`"`) {
+			t.Errorf("T1.2 regression: contract matrix must cover %q command", cmd)
+		}
+	}
+	// help/version SÃO exit 0, não erros — contract deve testar isso.
+	if !strings.Contains(s, "--help") || !strings.Contains(s, "--version") {
+		t.Error("T1.2 regression: contract test must cover --help / --version (exit 0 expected)")
+	}
+}
+
+// TestT61DogfoodLoopH1TestExists — T6.1 (CHG-2026-04-29-DOGFOOD).
+// Gate de release: dogfood loop H1 valida jornada user-real
+// (login → init → deploy → status → delete) gated em LOOPZERO_E2E_DOGFOOD=1.
+func TestT61DogfoodLoopH1TestExists(t *testing.T) {
+	const path = "../../../infra/tests/e2e/dogfood_loop_h1_test.go"
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("T6.1 regression: dogfood loop H1 test missing: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read dogfood test: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "LOOPZERO_E2E_DOGFOOD") {
+		t.Error("T6.1 regression: gating env var must be LOOPZERO_E2E_DOGFOOD")
+	}
+	if !strings.Contains(s, "func TestDogfoodLoopH1(") {
+		t.Error("T6.1 regression: TestDogfoodLoopH1 function must exist")
+	}
+	// Cleanup: defer project delete é obrigatório (Prova de Morte).
+	if !strings.Contains(s, `"project", "delete"`) {
+		t.Error("T6.1 regression: test must defer project delete for cleanup (Prova de Morte)")
+	}
+	// Rule 3 enforcement scan.
+	if !strings.Contains(s, "ArgoCD") || !strings.Contains(s, "GitOps") {
+		t.Error("T6.1 regression: test must scan output for forbidden internal terms (Rule 3)")
+	}
+}
+
 // TestF13WorkflowHasPodGC — F-13 fix: workflow_builder.go DEVE setar
 // PodGC.Strategy=OnPodCompletion com DeleteDelayDuration=5m. Sem isso,
 // pods de step com Failed acumulam na ns argo até GC do Workflow (24h).

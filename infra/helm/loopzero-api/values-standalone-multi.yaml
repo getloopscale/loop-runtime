@@ -26,3 +26,19 @@ service:
 ingress:
   enabled: true
   localhost: true
+
+# F-NEW (CHG-2026-04-29-DOGFOOD iter 8) — JWT validation via Hydra JWKS.
+# Sem essas envs loopzero-api fallback para validação legacy (que rejeita
+# qualquer JWT RSA emitido pelo Hydra). Rule 10: ambiente local = produção,
+# que SEMPRE tem JWKS apontando para Hydra. Em produção (DOKS) essas vars
+# vêm de Pulumi outputs; em standalone-multi viram do service DNS interno.
+env:
+  # api/cmd/setup_auth.go:24 lê JWKS_URL (não JWKS_ENDPOINT — config.go usa
+  # esse outro nome em outro contexto). audience hardcoded "loopzero-engine"
+  # bate com aud das tokens emitidas pelo loopzero-bootstrap client.
+  JWKS_URL: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
+  # JWT_ISSUER deve casar com `hydra.config.urls.self.issuer` da chart
+  # ory-hydra. Em standalone-multi o helm values ficou em
+  # `http://localhost:4444/` (default da chart). Em dev/prod o overlay
+  # de Pulumi seta para a URL pública real (ex: https://auth.<domain>).
+  JWT_ISSUER: "http://localhost:4444/"

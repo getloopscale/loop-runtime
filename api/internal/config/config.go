@@ -137,9 +137,11 @@ type Config struct {
 	// CORS
 	CORSAllowedOrigin string // CORS_ALLOWED_ORIGIN — required in production, open in dev
 
-	// JWT Authentication (Sprint 11 — Ory Hydra integration)
-	// When set, enables dual validation: JWT (via JWKS) + GitHub PAT (legacy).
-	// When empty, only GitHub PAT validation is used (backward compatible).
+	// JWT Authentication (Sprint 11 — Ory Hydra integration).
+	// JWKS endpoint for validating tokens issued by the platform sign-up flow
+	// (https://app.<domain> account registration). Earlier prototypes
+	// referenced GitHub PAT validation; that path was removed — platform
+	// tokens are the only accepted credential for `loopzero login --token`.
 	// Env: JWKS_ENDPOINT (e.g., "http://ory-hydra-public.ory.svc.cluster.local:4444/.well-known/jwks.json")
 	JWKSEndpoint string
 	// JWTIssuer is the expected issuer in JWT tokens (must match Hydra config).
